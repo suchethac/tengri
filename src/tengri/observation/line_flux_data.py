@@ -52,11 +52,13 @@ class LineFluxData:
     Examples
     --------
     >>> from tengri import LineFluxData
-    >>> lfd = LineFluxData.from_dict({
-    ...     "Halpha": (1.2e-16, 0.1e-16),
-    ...     "Hbeta": (3.5e-17, 0.5e-17),
-    ...     "OIII_5007": (8.0e-17, 0.8e-17),
-    ... })
+    >>> lfd = LineFluxData.from_dict(
+    ...     {
+    ...         "Halpha": (1.2e-16, 0.1e-16),
+    ...         "Hbeta": (3.5e-17, 0.5e-17),
+    ...         "OIII_5007": (8.0e-17, 0.8e-17),
+    ...     }
+    ... )
     >>> lfd.n_lines
     3
     >>> lfd.names
@@ -101,7 +103,14 @@ class LineFluxData:
 
     @property
     def n_lines(self) -> int:
-        """Number of observed lines."""
+        """Number of observed lines.
+
+        Returns
+        -------
+        int
+            Number of lines in this dataset.
+
+        """
         return len(self.names)
 
     def chi2(self, model_fluxes: jnp.ndarray) -> jnp.ndarray:
@@ -110,12 +119,18 @@ class LineFluxData:
         Parameters
         ----------
         model_fluxes : array, shape (n_lines,)
-            Model-predicted line fluxes in erg/s/cm^2.
+            Model-predicted line fluxes [erg/s/cm^2].
 
         Returns
         -------
         jnp.ndarray, scalar
-            Sum of ((obs - model) / error)^2 over detected lines.
+            Sum of ((obs - model) / error)^2 over detected lines
+            [dimensionless].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — uses only jnp primitives.
+        Upper limit lines (where ``is_upper_limit`` is True) are excluded.
 
         """
         residual = (self.fluxes - model_fluxes) / self.errors
@@ -137,12 +152,17 @@ class LineFluxData:
         Parameters
         ----------
         model_fluxes : array, shape (n_lines,)
-            Model-predicted line fluxes in erg/s/cm^2.
+            Model-predicted line fluxes [erg/s/cm^2].
 
         Returns
         -------
         jnp.ndarray, scalar
-            Total log-likelihood summed over all lines.
+            Total log-likelihood summed over all lines [dimensionless].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — uses only jnp primitives.
+        Handles both detections and upper limits (marked via ``is_upper_limit``).
 
         """
         residual = (self.fluxes - model_fluxes) / self.errors
@@ -171,12 +191,13 @@ class LineFluxData:
         ----------
         line_data : dict
             Mapping from line name to ``(flux, error)`` tuple,
-            both in erg/s/cm^2. E.g.
+            both [erg/s/cm^2]. E.g.
             ``{"Halpha": (1.2e-16, 0.1e-16), "Hbeta": (3.5e-17, 0.5e-17)}``.
 
         Returns
         -------
         LineFluxData
+            Line flux data object with names, fluxes, errors, and wavelengths.
 
         Raises
         ------
@@ -206,5 +227,16 @@ class LineFluxData:
         )
 
     def summary(self) -> str:
-        """Return a one-line summary."""
+        """Return a one-line summary.
+
+        Returns
+        -------
+        str
+            Summary string (e.g., "3 lines (Halpha, Hbeta, OIII_5007)").
+
+        Notes
+        -----
+        Intended for logging and diagnostics, not for programmatic parsing.
+
+        """
         return f"{self.n_lines} lines ({', '.join(self.names)})"

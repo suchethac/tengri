@@ -100,10 +100,33 @@ def register_emission_model(name: str) -> Callable:
     -------
     Callable
         Decorator that registers the decorated function and returns it unchanged.
+
+    Notes
+    -----
+    **JIT-compatible**: no — registration happens at factory time before JIT.
+
+    Decorated functions must implement the ``DustEmissionTemplate`` protocol:
+    accept a wavelength array, absorbed luminosity, and keyword arguments,
+    returning an emission SED ``L_ν`` [erg/s/Hz].
     """
 
     def decorator(fn: Callable) -> Callable:
-        """Inner decorator that registers function in DUST_EMISSION_MODELS dict."""
+        """Inner decorator that registers function in DUST_EMISSION_MODELS dict.
+
+        Parameters
+        ----------
+        fn : Callable
+            Dust emission model function matching ``DustEmissionTemplate`` protocol.
+
+        Returns
+        -------
+        Callable
+            The input function unchanged (enables use as a decorator).
+
+        Notes
+        -----
+        **JIT-compatible**: depends on the decorated function.
+        """
         DUST_EMISSION_MODELS[name] = fn
         return fn
 
@@ -128,6 +151,13 @@ def resolve_emission_model(name: str) -> Callable:
     ------
     ValueError
         If *name* is not in the registry.
+
+    Notes
+    -----
+    **JIT-compatible**: no — registry lookup happens at factory time.
+
+    The returned function matches the ``DustEmissionTemplate`` protocol and can
+    be called with wavelengths, absorbed luminosity, and model-specific parameters.
     """
     if name not in DUST_EMISSION_MODELS:
         raise ValueError(
@@ -160,6 +190,13 @@ def preload_emission_model(name: str) -> Callable:
     -------
     Callable
         The loaded (real) emission function — NOT a lazy wrapper.
+
+    Notes
+    -----
+    **JIT-compatible**: no — template loading happens at factory time.
+
+    Safe to call at ``SEDModel.__init__`` time to prevent tracer leaks
+    when models are first called inside a ``@jax.jit`` scope.
     """
     if name not in DUST_EMISSION_MODELS:
         raise ValueError(
@@ -474,6 +511,12 @@ def modified_blackbody(
     -------
     array, shape (n_wave,)
         Dust emission L_nu in ``[L_absorbed units] / Hz``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    **Gradient-safe**: yes — differentiable everywhere.
     """
     # CMB correction: always applied. At z=0 this is a no-op since
     # T_cmb(z=0) terms cancel and B_nu(T_cmb)/B_nu(T_dust) ~ 0.
@@ -587,6 +630,12 @@ def casey2012(
     -------
     array, shape (n_wave,)
         Dust emission L_nu in Lsun/Hz.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    **Gradient-safe**: yes — differentiable everywhere.
 
     References
     ----------
@@ -835,32 +884,112 @@ def _dale_component_temperature(alpha: float) -> tuple[float, float, float]:
 
 
 def draine_li2007(*args, **kwargs):
-    """Draine & Li (2007) — dispatches to the registry (auto-loads templates)."""
+    """Draine & Li (2007) — dispatches to the registry (auto-loads templates).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Dust emission L_ν [erg/s/Hz or L_sun/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes (returned function is JIT-compiled).
+
+    Dispatches to the lazy-loaded tabulated DL07 model. Auto-loads HDF5 templates
+    on first call.
+    """
     return DUST_EMISSION_MODELS["draine_li2007"](*args, **kwargs)
 
 
 def dale2014(*args, **kwargs):
-    """Dale et al. (2014) — dispatches to the registry (auto-loads templates)."""
+    """Dale et al. (2014) — dispatches to the registry (auto-loads templates).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Dust emission L_ν [erg/s/Hz or L_sun/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes (returned function is JIT-compiled).
+
+    Dispatches to the lazy-loaded Dale2014 template model. Auto-loads HDF5
+    templates on first call.
+    """
     return DUST_EMISSION_MODELS["dale2014"](*args, **kwargs)
 
 
 def draine_li2014(*args, **kwargs):
-    """Draine & Li (2014) — dispatches to the registry (auto-loads templates)."""
+    """Draine & Li (2014) — dispatches to the registry (auto-loads templates).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Dust emission L_ν [erg/s/Hz or L_sun/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes (returned function is JIT-compiled).
+
+    Dispatches to the lazy-loaded DL14 template model. Auto-loads HDF5 templates
+    on first call. DL14 is the 2014 update to Draine & Li 2007 with additional
+    alpha (radiation field) dependence.
+    """
     return DUST_EMISSION_MODELS["draine_li2014"](*args, **kwargs)
 
 
 def astrodust(*args, **kwargs):
-    """Astrodust+PAH (Hensley & Draine 2023) — dispatches to the registry."""
+    """Astrodust+PAH (Hensley & Draine 2023) — dispatches to the registry.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Dust emission L_ν [erg/s/Hz or L_sun/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes (returned function is JIT-compiled).
+
+    Dispatches to the lazy-loaded Astrodust+PAH template model. Auto-loads
+    HDF5 templates on first call.
+    """
     return DUST_EMISSION_MODELS["astrodust"](*args, **kwargs)
 
 
 def bosa(*args, **kwargs):
-    """BOSA (Boquien & Salim 2021) — dispatches to the registry."""
+    """BOSA (Boquien & Salim 2021) — dispatches to the registry.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Dust emission L_ν [erg/s/Hz or L_sun/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes (returned function is JIT-compiled).
+
+    Dispatches to the lazy-loaded BOSA template model. Auto-loads HDF5
+    templates on first call. BOSA parameterizes dust by (L_TIR, sSFR).
+    """
     return DUST_EMISSION_MODELS["bosa"](*args, **kwargs)
 
 
 def themis(*args, **kwargs):
-    """THEMIS (Jones+2017) — dispatches to the registry."""
+    """THEMIS (Jones+2017) — dispatches to the registry.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Dust emission L_ν [erg/s/Hz or L_sun/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes (returned function is JIT-compiled).
+
+    Dispatches to the lazy-loaded THEMIS/DustEM template model. Auto-loads
+    HDF5 templates on first call. Uses a-C(:H) aromatic carbon composition
+    rather than PAH fraction.
+    """
     return DUST_EMISSION_MODELS["themis"](*args, **kwargs)
 
 

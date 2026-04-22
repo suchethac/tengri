@@ -706,16 +706,48 @@ def igm_transmission_patchy(
 
 # Lyman-series rest-frame wavelengths and coefficients (Madau 1995, Table 1).
 # 17 lines from Ly-alpha (1216 Å) to Ly-limit.
-_MADAU_LYW = jnp.array([
-    1215.67, 1025.72, 972.537, 949.743, 937.803, 930.748,
-    926.226, 923.150, 920.963, 919.352, 918.129, 917.181,
-    916.429, 915.824, 915.329, 914.919, 914.576,
-])
-_MADAU_COEFF = jnp.array([
-    3.6e-3, 1.7e-3, 1.1846e-3, 9.410e-4, 7.960e-4, 6.967e-4,
-    6.236e-4, 5.665e-4, 5.200e-4, 4.817e-4, 4.487e-4, 4.200e-4,
-    3.947e-4, 3.720e-4, 3.520e-4, 3.334e-4, 3.1644e-4,
-])
+_MADAU_LYW = jnp.array(
+    [
+        1215.67,
+        1025.72,
+        972.537,
+        949.743,
+        937.803,
+        930.748,
+        926.226,
+        923.150,
+        920.963,
+        919.352,
+        918.129,
+        917.181,
+        916.429,
+        915.824,
+        915.329,
+        914.919,
+        914.576,
+    ]
+)
+_MADAU_COEFF = jnp.array(
+    [
+        3.6e-3,
+        1.7e-3,
+        1.1846e-3,
+        9.410e-4,
+        7.960e-4,
+        6.967e-4,
+        6.236e-4,
+        5.665e-4,
+        5.200e-4,
+        4.817e-4,
+        4.487e-4,
+        4.200e-4,
+        3.947e-4,
+        3.720e-4,
+        3.520e-4,
+        3.334e-4,
+        3.1644e-4,
+    ]
+)
 _MADAU_LYLIM = 911.75  # Lyman limit [Angstrom]
 
 
@@ -816,10 +848,10 @@ def igm_transmission_madau(
     xc_hi = jnp.clip(xc_lo, None, xem)
 
     tau_cont = (
-        0.25 * xc_hi ** 3 * (jnp.exp(0.46 * jnp.log(xem)) - jnp.exp(0.46 * jnp.log(xc_hi)))
-        + 9.4 * xc_hi ** 1.5 * (jnp.exp(0.18 * jnp.log(xem)) - jnp.exp(0.18 * jnp.log(xc_hi)))
-        - 0.7 * xc_hi ** 3 * (xc_hi ** (-1.32) - xem ** (-1.32))
-        - 0.023 * (xem ** 1.68 - xc_hi ** 1.68)
+        0.25 * xc_hi**3 * (jnp.exp(0.46 * jnp.log(xem)) - jnp.exp(0.46 * jnp.log(xc_hi)))
+        + 9.4 * xc_hi**1.5 * (jnp.exp(0.18 * jnp.log(xem)) - jnp.exp(0.18 * jnp.log(xc_hi)))
+        - 0.7 * xc_hi**3 * (xc_hi ** (-1.32) - xem ** (-1.32))
+        - 0.023 * (xem**1.68 - xc_hi**1.68)
     )
     # Continuum only applies blueward of Lyman limit in the observed frame
     tau_cont = jnp.where(wave_obs < _MADAU_LYLIM * (1.0 + z), tau_cont, 0.0)

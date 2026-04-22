@@ -29,16 +29,18 @@ def mock(model: SEDModel, params, snr=20.0, key=None) -> MockData:
     model : SEDModel
         Forward model instance.
     params : dict
-        Parameter values.
+        Parameter values (public-space names).
     snr : float, optional
         Signal-to-noise ratio. Default 20.0.
     key : PRNGKey, optional
-        Random key for noise generation. If None, returns noiseless observation.
+        JAX random key for noise generation. If None, returns noiseless observation.
 
     Returns
     -------
     MockData
-        Mock observation with ``flux_true``, ``flux_obs``, ``noise``, and ``params``.
+        Mock observation with ``flux_true`` [erg/s/cm²/Hz],
+        ``flux_obs`` [erg/s/cm²/Hz], ``noise`` [erg/s/cm²/Hz],
+        and ``params`` dict.
 
     Notes
     -----
@@ -70,18 +72,20 @@ def mock_spectrum(model: SEDModel, params, wave_obs, snr=30.0, key=None) -> Mock
     model : SEDModel
         Forward model instance.
     params : dict
-        Parameter values.
+        Parameter values (public-space names).
     wave_obs : array_like, shape (n_pix,)
         Observed wavelength grid [Angstrom].
     snr : float, optional
         Signal-to-noise ratio per pixel. Default 30.0.
     key : PRNGKey, optional
-        Random key for noise generation. If None, returns noiseless observation.
+        JAX random key for noise generation. If None, returns noiseless observation.
 
     Returns
     -------
     MockData
-        Mock observation with ``flux_true``, ``flux_obs``, ``noise``, and ``params``.
+        Mock observation with ``flux_true`` [erg/s/cm²/Hz],
+        ``flux_obs`` [erg/s/cm²/Hz], ``noise`` [erg/s/cm²/Hz],
+        and ``params`` dict.
 
     Notes
     -----
@@ -117,12 +121,14 @@ def mock_batch(model: SEDModel, params_batch, snr=20.0, key=None) -> MockData:
     snr : float, optional
         Signal-to-noise ratio. Default 20.0.
     key : PRNGKey, optional
-        Random key for noise generation. If None, returns noiseless observations.
+        JAX random key for noise generation. If None, returns noiseless observations.
 
     Returns
     -------
     MockData
-        Mock observation batch with stacked ``flux_true``, ``flux_obs``, ``noise``.
+        Mock observation batch with ``flux_true`` shape (N, n_filters) [erg/s/cm²/Hz],
+        ``flux_obs`` shape (N, n_filters) [erg/s/cm²/Hz], ``noise`` shape (N, n_filters)
+        [erg/s/cm²/Hz], and ``params`` dict of arrays.
 
     Notes
     -----
@@ -168,11 +174,12 @@ def predict_photometry_batch(model: SEDModel, params_batch):
     Returns
     -------
     ndarray, shape (N, n_filters)
-        Photometric flux for each galaxy [erg/s/cm^2/Hz].
+        Photometric flux density for each galaxy [erg/s/cm²/Hz].
 
     Notes
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    See :func:`jax.vmap` for vmap internals.
     """
     return jax.vmap(model.predict_photometry)(params_batch)
 
@@ -192,11 +199,12 @@ def predict_spectrum_batch(model: SEDModel, params_batch):
     Returns
     -------
     ndarray, shape (N, n_pix)
-        Spectral flux for each galaxy [erg/s/cm^2/Hz].
+        Spectral flux density for each galaxy [erg/s/cm²/Hz].
 
     Notes
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    See :func:`jax.vmap` for vmap internals.
     """
     return jax.vmap(model.predict_spectrum)(params_batch)
 
@@ -217,15 +225,15 @@ def prior_predictive(model: SEDModel, n: int = 500, seed: int = 42) -> PriorPred
     n : int, optional
         Number of prior draws. Default 500.
     seed : int, optional
-        Random seed. Default 42.
+        Random seed for reproducibility. Default 42.
 
     Returns
     -------
     PriorPredictive
         Object with attributes:
 
-        - ``flux``: ndarray, shape (n, n_filters) or None — photometry draws
-        - ``sfh``: ndarray, shape (n, n_grid) — SFH draws
+        - ``flux``: ndarray, shape (n, n_filters) or None — photometry draws [erg/s/cm²/Hz]
+        - ``sfh``: ndarray, shape (n, n_grid) — SFR on internal time grid [Msun/yr]
         - ``params``: dict of arrays, shape (n,) — parameter draws
 
     Notes
@@ -284,13 +292,13 @@ def fit_batch_map_vmap(
     model : SEDModel
         Forward model with ``Observation(photometry=...)``.
     fluxes : array_like, shape (N, n_filters)
-        Per-galaxy observed fluxes [erg/s/cm^2/Hz].
+        Per-galaxy observed fluxes [erg/s/cm²/Hz].
     noises : array_like, shape (N, n_filters)
-        Per-galaxy 1-sigma noise [erg/s/cm^2/Hz].
+        Per-galaxy 1-sigma noise [erg/s/cm²/Hz].
     n_steps : int, optional
         Adam iterations per galaxy. Default 500.
     learning_rate : float, optional
-        Adam learning rate. Default 0.02.
+        Adam learning rate for optimization. Default 0.02.
     seed : int, optional
         PRNG seed for Adam initialization. Default 0.
     verbose : bool, optional
@@ -416,13 +424,13 @@ def fit_batch(
     catalog : DataFrame, Table, or list of dict
         Input catalog with flux and error columns.
     flux_cols : list of str
-        Column names for per-band flux [erg/s/cm^2/Hz].
+        Column names for per-band flux [erg/s/cm²/Hz].
     err_cols : list of str
-        Column names for per-band 1-sigma uncertainty [erg/s/cm^2/Hz].
+        Column names for per-band 1-sigma uncertainty [erg/s/cm²/Hz].
     redshift_col : str, optional
         Column name for per-row redshift. If None, uses model redshift.
     method : str, optional
-        Inference method. Default ``"vi"``.
+        Inference method (e.g. "vi", "mcmc"). Default ``"vi"``.
     n_workers : int, optional
         Reserved for future multiprocessing. Default 1.
     verbose : bool, optional
@@ -437,7 +445,7 @@ def fit_batch(
     Returns
     -------
     list of Posterior
-        One per input row.
+        One inference result (Posterior) per input catalog row.
 
     Notes
     -----
@@ -565,8 +573,8 @@ def catalog_summary(
     -------
     dict[str, ndarray]
         Keys are ``"{param}_p{pct}"`` (e.g. ``"dust_av_p50"``).
-        Each value is 1-D array of length ``len(results)``.
-        Also includes ``"chi2_dof"`` if available.
+        Each value is 1-D array of length ``len(results)`` [physical units].
+        Also includes ``"chi2_dof"`` if available [dimensionless].
 
     Notes
     -----
@@ -577,12 +585,14 @@ def catalog_summary(
     .. code-block:: python
 
         from tengri import catalog_summary
+
         # results is a list of Posterior objects, one per galaxy
         catalog = catalog_summary(results, percentiles=(16, 50, 84))
         # catalog["dust_av_p50"]  → shape (n_galaxies,)
         # catalog["sfr_100myr_p16"]  → lower 68% CI bound
         import numpy as np
         import astropy.table
+
         t = astropy.table.Table(catalog)
         t.write("catalog.fits", overwrite=True)
     """
@@ -696,18 +706,19 @@ def fit_population(
         Forward model instance.
     observations_list : list
         Each element is either (flux, noise) tuple or dict with
-        ``"flux_obs"`` and ``"noise"`` keys.
+        ``"flux_obs"`` [erg/s/cm²/Hz] and ``"noise"`` [erg/s/cm²/Hz] keys.
     method : str, optional
-        Hierarchical inference method. Default ``"vi"``.
+        Hierarchical inference method (e.g. "vi", "mcmc"). Default ``"vi"``.
     population_prior : dict, optional
-        Hyperpriors on shared PSD parameters.
+        Hyperpriors on shared PSD parameters (e.g. ``psd_sigma``, ``psd_tau_myr``).
     **kwargs
         Forwarded to ``PopulationFitter.run()``.
 
     Returns
     -------
     PopulationPosterior
-        Population-level posterior with shared PSD hyperparameters.
+        Population-level posterior with shared PSD hyperparameters
+        and per-galaxy individual parameters.
 
     Notes
     -----
@@ -807,7 +818,7 @@ def build_model_from_config(
     agn : str or None, optional
         AGN model type. Uses default if unset.
     redshift : float or str, optional
-        Redshift (e.g. 0.5) or "free" to enable free parameter.
+        Redshift value (e.g. 0.5) [dimensionless] or "free" to enable free parameter.
     filters : list of str, optional
         Filter names for photometry. If None, no photometry observation.
     wave_obs : array_like, optional
@@ -820,7 +831,7 @@ def build_model_from_config(
     Returns
     -------
     SEDModel
-        Configured forward model instance.
+        Configured forward model instance with specified physics modules.
 
     Notes
     -----
@@ -954,26 +965,26 @@ def fit_model(
     model : SEDModel
         Forward model instance.
     data : array_like, optional
-        Observed flux [erg/s/cm^2/Hz]. Required unless photometry or spectrum given.
+        Observed flux [erg/s/cm²/Hz]. Required unless photometry or spectrum given.
     noise : array_like, optional
-        1-sigma uncertainty [erg/s/cm^2/Hz]. Required unless photometry or spectrum given.
+        1-sigma uncertainty [erg/s/cm²/Hz]. Required unless photometry or spectrum given.
     method : str, optional
         Inference method (e.g. "vi", "mcmc"). Uses default if unset.
     data_type : str, optional
         Data type ("photometry", "spectroscopy", "joint"). Auto-detected if None.
     photometry : tuple, optional
-        Shorthand for (flux, noise) from photometry.
+        Shorthand for (flux, noise) tuple from photometry [erg/s/cm²/Hz].
     spectrum : tuple, optional
-        Shorthand for (flux, noise) from spectroscopy.
+        Shorthand for (flux, noise) tuple from spectroscopy [erg/s/cm²/Hz].
     init : str, optional
-        Initialization method ("map" runs MAP first).
+        Initialization method ("map" runs MAP first for warm start).
     **kwargs
         Forwarded to ``Fitter.run()``.
 
     Returns
     -------
     Posterior
-        Fitted posterior with samples or MAP estimate.
+        Fitted posterior with posterior samples or MAP point estimate.
 
     Notes
     -----

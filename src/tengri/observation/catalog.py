@@ -77,18 +77,25 @@ class Catalog:
     ids : array, shape (n_galaxies,)
         Galaxy identifiers (string or int).
     redshifts : array, shape (n_galaxies,)
-        Redshifts.
+        Redshifts [dimensionless].
     flux : array, shape (n_galaxies, n_filters)
-        Flux values.  For upper-limit bands, holds the limit value.
+        Flux values [mJy or specified flux_unit].
+        For upper-limit bands, holds the limit value.
     noise : array, shape (n_galaxies, n_filters)
-        1-sigma uncertainties (always positive).
+        1-sigma uncertainties (always positive) [mJy or specified flux_unit].
     mask : array, shape (n_galaxies, n_filters)
-        Per-band type: 0 = detected, 1 = upper limit, -1 = lower limit.
+        Per-band type: 0 = detected, 1 = upper limit, -1 = lower limit
+        [dimensionless].
     filter_names : tuple of str
         Tengri filter names corresponding to flux columns.
     flux_unit : str
-        Unit of flux values (e.g. ``"mJy"``, ``"uJy"``).
+        Unit of flux values (e.g. ``"mJy"``, ``"uJy"``). Default ``"mJy"``.
 
+    Notes
+    -----
+    Immutable: use indexing and helper methods (``galaxy``, ``select_detected``)
+    to extract subset data. Missing data is flagged with very large noise
+    (1e30) to effectively exclude it from likelihood calculations.
     """
 
     ids: np.ndarray
@@ -105,23 +112,29 @@ class Catalog:
         Parameters
         ----------
         idx : int
-            Row index.
+            Row index (0-based).
 
         Returns
         -------
         dict
             Keys: ``id``, ``redshift``, ``flux``, ``noise``, ``mask``,
-            ``filter_names``.
+            ``filter_names``. Arrays have shape ``(n_filters,)``.
+
+        Notes
+        -----
+        Returns an immutable copy view; modifying the returned flux, noise,
+        or mask arrays does not affect the catalog.
 
         Examples
         --------
         .. code-block:: python
 
             from tengri import GalaxyCatalog
+
             cat = GalaxyCatalog.from_fits("my_catalog.fits", filter_names=["sdss_r", "sdss_i"])
             g = cat.galaxy(0)
-            g["id"]            # galaxy identifier
-            g["flux"].shape    # (n_filters,)
+            g["id"]  # galaxy identifier
+            g["flux"].shape  # (n_filters,)
         """
         return {
             "id": self.ids[idx],
@@ -135,16 +148,26 @@ class Catalog:
     def select_detected(self, idx: int) -> tuple[np.ndarray, np.ndarray, tuple[str, ...]]:
         """Return only detected bands for a galaxy.
 
+        Filters out upper and lower limits, returning only bands with
+        ``mask == 0`` (DETECTED).
+
         Parameters
         ----------
         idx : int
-            Row index.
+            Row index (0-based).
 
         Returns
         -------
-        flux, noise, filter_names
-            Arrays and names for detected-only bands.
+        flux : array, shape (n_detected,)
+            Flux values for detected bands [flux_unit].
+        noise : array, shape (n_detected,)
+            Noise for detected bands [flux_unit].
+        filter_names : tuple of str
+            Filter names for detected bands only.
 
+        Notes
+        -----
+        Returns views (not copies) when possible to minimize memory allocation.
         """
         det = self.mask[idx] == DETECTED
         names = tuple(n for n, d in zip(self.filter_names, det) if d)
@@ -152,12 +175,34 @@ class Catalog:
 
     @property
     def n_galaxies(self) -> int:
-        """Number of galaxies in the catalog."""
+        """Number of galaxies in the catalog.
+
+        Returns
+        -------
+        int
+            Number of rows in the catalog.
+
+        Notes
+        -----
+        Computed from the first axis of the ``flux`` array. Constant
+        for the lifetime of the catalog (immutable).
+        """
         return self.flux.shape[0]
 
     @property
     def n_filters(self) -> int:
-        """Number of filters (photometric bands)."""
+        """Number of filters (photometric bands).
+
+        Returns
+        -------
+        int
+            Number of photometric bands (flux columns).
+
+        Notes
+        -----
+        Computed from the second axis of the ``flux`` array. Equal to the
+        length of ``filter_names``.
+        """
         return self.flux.shape[1]
 
     def __repr__(self) -> str:
@@ -192,15 +237,15 @@ def read_catalog(
         Maps catalog column names → tengri filter names.  If ``None``,
         column names are matched directly against ``FILTER_REGISTRY``.
     flux_unit : str
-        Unit label stored in the returned ``Catalog``.
+        Unit label stored in the returned ``Catalog``. Default ``"mJy"``.
     redshift_col : str
-        Name of the redshift column.
+        Name of the redshift column. Default ``"redshift"``.
     id_col : str
-        Name of the ID column.
+        Name of the ID column. Default ``"id"``.
     missing_value : float
-        Value indicating missing data (default ``-9999``).
+        Value indicating missing data. Default ``-9999``.
     delimiter : str
-        CSV delimiter.
+        CSV delimiter. Default ``","``.
 
     Returns
     -------
@@ -212,8 +257,19 @@ def read_catalog(
     FileNotFoundError
         If *filepath* does not exist.
     ValueError
-        If no filter columns are found.
+        If no filter columns are found, or if the catalog is empty.
 
+    Notes
+    -----
+    **Censoring convention**:
+
+    - Missing (both flux and error = -9999) → masked out with large noise (1e30)
+    - Upper limit (flux > 0, error < 0) → mask = 1
+    - Lower limit (flux < 0, error > 0) → mask = -1
+    - Detected (flux > 0, error > 0) → mask = 0
+
+    Filter columns must have corresponding ``_err`` columns. Columns without
+    an ``_err`` counterpart are silently skipped.
     """
     path = Path(filepath)
     if not path.exists():

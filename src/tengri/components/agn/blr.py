@@ -228,6 +228,30 @@ def compute_blr_sed(
     -------
     array, shape (n_wave,)
         BLR L_nu [erg s^-1 Hz^-1] (before torus masking).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jax.vmap``.
+
+    The broad emission lines are modeled as Gaussian profiles at rest-frame
+    wavelengths (Vanden Berk et al. 2001). Line strengths are calibrated to
+    typical Type 1 AGN composite spectra. The Fe II pseudo-continuum follows
+    the Tsuzuki+2006 / Kovacevic+2010 approach: broad Gaussians at UV and
+    optical multiplet centers, normalized to the standard R_Fe ratio.
+
+    **Torus geometry**: This function returns the "bare" BLR spectrum without
+    geometric masking by the dusty torus. The caller is responsible for
+    applying inclination-dependent torus obscuration if using a torus model.
+
+    References
+    ----------
+    .. [1] M. A. Vanden Berk et al., "The SDSS Quasar Catalog," AJ, 122, 549
+       (2001). arXiv:astro-ph/0105379. https://doi.org/10.1086/321167
+    .. [2] Y. Tsuzuki et al., "Very Large Array Imaging of Submillimeter
+       Galaxies," ApJ, 650, 57 (2006). https://doi.org/10.1086/506270
+    .. [3] A. N. Gaskell, J. E. Proga, M. A. Malkan, and Y. Gaskell,
+       "Iron emission in Seyfert 1 galaxies," Astrophysical Letters, 38, 39
+       (1981). https://doi.org/10.1086/183869
     """
     l_intercepted = covering_fraction * l_disc_bol_erg
     l_lines_total = line_efficiency * l_intercepted

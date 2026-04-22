@@ -96,6 +96,8 @@ class TestConstraintMatrix:
             doublets=(),
             is_balmer=(True,),
             is_broad_candidate=(True,),
+            is_strong=(True,),
+            plot_group=("halpha_nii_6548_48",),
         )
         C = cat.build_constraint_matrix()
         assert C.shape == (1, 1)

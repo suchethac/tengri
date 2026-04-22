@@ -72,6 +72,12 @@ def precompute_template_photometry(
     -------
     PreintegratedGrid
         Precomputed filter-integrated photometry with triweight axes/edges.
+
+    Notes
+    -----
+    Unit conversion from L_λ to L_ν (when units="llam") is exact: L_ν = L_λ × λ²/c.
+    Energy normalization (when energy_normalize=True) ensures templates scaled by
+    L_absorbed or L_bol at runtime are correctly normalized.
     """
     templates = np.asarray(templates)
     wave_rest = np.asarray(wave_rest)
@@ -109,6 +115,11 @@ def build_template_photometry_lookup(preint: PreintegratedGrid):
     callable
         ``(scale, *grid_params) -> array (n_filters,)`` where *grid_params*
         are scalar query points along each axis.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — returned function uses triweight interpolation via
+    ``interp_nd_triweight``, providing C²-continuous gradients for inference.
     """
     phot = preint.phot
     axes = preint.axes
@@ -121,14 +132,18 @@ def build_template_photometry_lookup(preint: PreintegratedGrid):
         Parameters
         ----------
         scale : float
-            Luminosity scaling factor (L_absorbed, L_bol, etc.).
+            Luminosity scaling factor (L_absorbed, L_bol, etc.) [erg/s].
         *grid_params : float
-            Per-axis query points for triweight interpolation.
+            Per-axis query points for triweight interpolation (one per free grid axis).
 
         Returns
         -------
         array, shape (n_filters,)
-            Photometry in filter bands.
+            Photometry in filter bands [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — uses ``jnp`` and ``interp_nd_triweight`` primitives.
         """
         normed = interp_nd_triweight(phot, axes, edges, grid_params)
         return scale * normed

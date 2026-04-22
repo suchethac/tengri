@@ -70,6 +70,22 @@ def precompute_skirtor_photometry(
             Filter-integrated L_ν [erg/s/Hz] per L_sun (unit torus fraction).
         ``axes`` : tuple of 5 grid arrays (jnp.ndarray)
         ``_preint`` : :class:`PreintegratedGrid`
+
+    Notes
+    -----
+    **Build-time operation**: This function performs frequency-domain
+    integration via NumPy. The precomputed photometry is grid-independent
+    (depends only on filter curves and redshift, not wavelength grid).
+
+    **Normalization**: Templates are frequency-normalized so that the
+    integration constant equals L_sun / trapz(template, nu). This matches
+    the runtime normalization in ``skirtor.py`` where user luminosity is
+    multiplied by the precomputed template per filter.
+
+    **Redshift handling**: Redshift shifts rest-frame templates into
+    observed frame before integrating against observed-frame filters.
+    For dust-only templates (no redshift effects on the template shape),
+    this is the standard flux-scaling convention.
     """
     from tengri.components.agn.skirtor import _load_grid_arrays
 
@@ -136,6 +152,16 @@ def build_skirtor_photometry_lookup(precomp: dict):
         ``(agn_log_lbol, agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor,
            agn_oa_skirtor, agn_cos_inc, agn_torus_frac) -> array (n_filters,)``
         Returns torus L_ν [erg/s/Hz].  Caller applies
+
+    Notes
+    -----
+    **JIT-compatible**: yes — the returned function uses ``jnp`` and
+    triweight interpolation, which are JAX-native.
+
+    **Interpolation kernel**: Triweight kernel provides C²-continuous
+    gradients for autodiff, unlike nearest-neighbor or linear interpolation.
+    This is important for robust inference when SKIRTOR parameters are
+    fitted via gradient descent.
         ``flux_scale = (1+z) / (4π d_L²)`` to get flux density.
     """
     grid_phot = precomp["grid_phot"]

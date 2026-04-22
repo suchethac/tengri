@@ -49,6 +49,23 @@ def resolve(component_name: str) -> ModuleType | None:
 
     Returns None when the component is unknown (falls back to runtime wavelength
     evaluation in the caller).
+
+    Parameters
+    ----------
+    component_name : str
+        Component identifier used in ModelConfig (e.g., ``"ssp"``, ``"dl07"``,
+        ``"skirtor"``).
+
+    Returns
+    -------
+    ModuleType or None
+        The precompute module implementing :class:`PrecomputeModule` if registered,
+        or None if not found (component uses runtime evaluation only).
+
+    Notes
+    -----
+    Unregistered components fall back to per-call wavelength integration
+    without caching.
     """
     module_path = _REGISTRY.get(component_name)
     if module_path is None:
@@ -60,5 +77,19 @@ def registered_components() -> list[str]:
     """Return the sorted list of component names registered for precompute.
 
     Useful for sanity tests and documentation generation.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    list[str]
+        Sorted list of component identifiers registered in _REGISTRY.
+
+    Notes
+    -----
+    Used by validation and documentation tools to enumerate all precomputable
+    components.
     """
     return sorted(_REGISTRY.keys())

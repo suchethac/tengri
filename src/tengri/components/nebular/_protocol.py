@@ -63,6 +63,10 @@ class NebularBackend(Protocol):
 
     Notes
     -----
+    **JIT-compatible**: Protocol methods may or may not be JIT-compatible
+    depending on backend implementation. Check individual backend docstrings
+    for JIT compatibility statements.
+
     **Composition**: Any callable with these three attributes satisfies the
     protocol at runtime (duck typing via @runtime_checkable). This enables
     rapid prototyping of new backends without modifying the Protocol.

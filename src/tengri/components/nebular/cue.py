@@ -129,7 +129,45 @@ _MAX_NEB_LOG_AGE = 8.0  # log10(100 Myr in yr)
 
 
 class SubNetWeights(NamedTuple):
-    """Weights for a single Speculator sub-network."""
+    """Weights for a single Speculator sub-network.
+
+    Immutable container holding all parameters and learned weights for one
+    sub-network in the Cue ensemble.
+
+    Parameters
+    ----------
+    W : tuple of ndarray
+        Weight matrices per layer, shape (in, out) for each layer.
+    b : tuple of ndarray
+        Bias vectors per layer, shape (out,) for each layer.
+    alphas : tuple of ndarray
+        Learned Swish activation scale parameters (hidden layers only).
+    betas : tuple of ndarray
+        Learned Swish activation offset parameters (hidden layers only).
+    param_shift : ndarray, shape (n_params,)
+        Input normalization offset [dimensionless].
+    param_scale : ndarray, shape (n_params,)
+        Input normalization scale [dimensionless].
+    pca_shift : ndarray, shape (n_pcas,)
+        PCA centering offset [dimensionless].
+    pca_scale : ndarray, shape (n_pcas,)
+        PCA scaling factor [dimensionless].
+    log_spec_shift : ndarray, shape (n_wavelengths,)
+        Log-spectrum shift [dimensionless].
+    log_spec_scale : ndarray, shape (n_wavelengths,)
+        Log-spectrum scale [dimensionless].
+    pca_components : ndarray, shape (n_pcas, n_wavelengths)
+        PCA basis vectors (sklearn convention).
+    pca_mean : ndarray, shape (n_wavelengths,)
+        PCA mean spectrum [log10 Lsun/Hz/Q_H].
+    n_layers : int
+        Total number of layers (including output layer).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all fields are JAX arrays or tuples thereof.
+
+    """
 
     W: tuple  # tuple of (in, out) weight matrices per layer
     b: tuple  # tuple of (out,) bias vectors per layer
@@ -149,9 +187,67 @@ class SubNetWeights(NamedTuple):
 class CueWeights(NamedTuple):
     """All Cue weights for lines + continuum.
 
-    Includes precomputed batched weight arrays for fast inference.
-    The ``batched_*`` fields are computed once at load time from
-    the individual ``line_nets`` and stored as dense JAX arrays.
+    Immutable container holding all neural network weights, precomputed grids,
+    and metadata for fast batch-mode inference. Includes precomputed batched
+    weight arrays for fast line prediction. The ``batched_*`` fields are
+    computed once at load time from individual ``line_nets`` and stored as
+    dense JAX arrays.
+
+    Parameters
+    ----------
+    line_nets : tuple of SubNetWeights
+        16 sub-networks, one per emission line group.
+    cont_net : SubNetWeights
+        Single continuum sub-network.
+    line_names : tuple of str
+        Line group names corresponding to ``line_nets``.
+    line_wav_selections : tuple of ndarray
+        Wavelength selection masks per sub-network.
+    sorted_line_wav : ndarray, shape (n_lines_total,)
+        Sorted emission line wavelengths [Angstrom].
+    nn_line_wav : ndarray, shape (n_nn_lines,)
+        Concatenated NN output wavelengths [Angstrom].
+    line_old_idx : ndarray
+        Indices of CLOUDY/FSPS-matched (old) lines.
+    cont_wav : ndarray, shape (n_wave_cont,)
+        Continuum wavelength grid [Angstrom].
+    batched_param_shifts : ndarray, shape (16, 12)
+        Stacked input normalization offsets.
+    batched_param_scales : ndarray, shape (16, 12)
+        Stacked input normalization scales.
+    batched_W_hidden : tuple of ndarray
+        Stacked weight matrices for hidden layers.
+    batched_b_hidden : tuple of ndarray
+        Stacked bias vectors for hidden layers.
+    batched_alpha_hidden : tuple of ndarray
+        Stacked Swish activation scales (hidden layers).
+    batched_beta_hidden : tuple of ndarray
+        Stacked Swish activation offsets (hidden layers).
+    batched_W_out : ndarray, shape (16, 256, max_pcas)
+        Stacked output weights (zero-padded).
+    batched_b_out : ndarray, shape (16, max_pcas)
+        Stacked output biases.
+    batched_pca_scale : ndarray, shape (16, max_pcas)
+        Stacked PCA scaling factors.
+    batched_pca_shift : ndarray, shape (16, max_pcas)
+        Stacked PCA centering offsets.
+    batched_pca_comp : ndarray, shape (16, max_pcas, max_lines)
+        Stacked PCA basis vectors (zero-padded).
+    batched_pca_mean : ndarray, shape (16, max_lines)
+        Stacked PCA means (zero-padded).
+    batched_spec_scale : ndarray, shape (16, max_lines)
+        Stacked log-spectrum scaling factors (zero-padded).
+    batched_spec_shift : ndarray, shape (16, max_lines)
+        Stacked log-spectrum shifts (zero-padded).
+    batched_n_lines : tuple of int
+        Actual number of output lines per sub-network.
+    batched_sort_idx : ndarray, shape (n_total_lines,)
+        Wavelength sort indices for line ordering.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all fields are JAX arrays or tuples thereof.
+
     """
 
     line_nets: tuple  # tuple of SubNetWeights, one per line sub-network
@@ -232,6 +328,9 @@ def _load_subnet(npz: dict, prefix: str) -> SubNetWeights:
 def load_cue_weights(npz_path: str) -> CueWeights:
     """Load all Cue weights from the npz file.
 
+    Parses the pre-trained Speculator neural network weights from a NumPy
+    archive and constructs batched weight arrays for fast vectorized inference.
+
     Parameters
     ----------
     npz_path : str
@@ -240,7 +339,17 @@ def load_cue_weights(npz_path: str) -> CueWeights:
     Returns
     -------
     CueWeights
-        Immutable container with all weights on JAX arrays.
+        Immutable container with all weights on JAX arrays, including
+        precomputed batched arrays for 16 line sub-networks.
+
+    Notes
+    -----
+    **JIT-compatible**: no — performs file I/O and array padding at load time.
+    Call once per model initialization; results are re-used for all inference.
+
+    **Batching strategy**: Hidden layers are stacked as (16, in, out); output
+    layers and PCA arrays are zero-padded to max dimensions (max_pcas, max_lines)
+    to enable uniform batch matrix multiplication during inference.
 
     """
     npz = dict(np.load(npz_path, allow_pickle=True))
@@ -598,20 +707,28 @@ def predict_all_lines(
     Parameters
     ----------
     nn_params : array, shape (12,)
-        NN-ready parameters.
+        NN-ready parameters [dimensionless].
     weights : CueWeights
         Pre-loaded weights.
     gas_logq : float
-        log10(Q) = logU + log(4*pi*c) + 2*logR + logn.
+        log10(Q) ionization charge parameter [dimensionless].
     gas_logqion : float
-        log10(Q_H) — total ionizing photon rate for normalization.
+        log10(Q_H) total ionizing photon rate [log10(photons/s)].
 
     Returns
     -------
     wavelengths : array, shape (n_lines,)
-        Line wavelengths in Angstrom (sorted).
+        Line wavelengths in Angstrom (sorted, vacuum) [Angstrom].
     luminosities : array, shape (n_lines,)
-        Line luminosities in Lsun.
+        Line luminosities in Lsun [Lsun].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use stacked ``jnp`` primitives.
+
+    **Batching**: Hidden layers process all 16 sub-networks simultaneously via
+    stacked weight arrays. Individual output layers and PCA transforms follow,
+    with zero-padding handling truncated output dimensions.
 
     """
     # --- Fully batched forward pass using precomputed weight arrays ---
@@ -671,23 +788,33 @@ def predict_continuum(
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Predict nebular continuum SED.
 
+    Evaluates the continuum sub-network at the given parameters and rescales
+    from log10(Lsun/Hz/Q_H) to erg/s/Hz via ionization parameter normalization.
+
     Parameters
     ----------
     nn_params : array, shape (12,)
-        NN-ready parameters.
+        NN-ready parameters [dimensionless].
     weights : CueWeights
         Pre-loaded weights.
     gas_logq : float
-        log10(Q).
+        log10(Q) ionization charge parameter [dimensionless].
     gas_logqion : float
-        log10(Q_H) for normalization.
+        log10(Q_H) for normalization [log10(photons/s)].
 
     Returns
     -------
     wavelength : array, shape (n_wave,)
-        Continuum wavelength grid in Angstrom.
+        Continuum wavelength grid in Angstrom (sorted) [Angstrom].
     luminosity : array, shape (n_wave,)
-        Nebular continuum in erg/s/Hz.
+        Nebular continuum in erg/s/Hz [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    **Conversion**: Internal output is log10(Lsun/Hz/Q_H). Rescaled to
+    Lsun/Hz via Q_H, then to erg/s/Hz via L_sun constant (3.839e33 erg/s).
 
     """
     log_spec = _speculator_log_spectrum(nn_params, weights.cont_net)
@@ -717,12 +844,24 @@ class CueWNESSPWarning(UserWarning):
 
     SSP grids labelled 'wNE' (with Nebular Emission) pre-absorb the ionizing
     photons internally, so Q_H computed from the SSP spectrum is effectively
-    zero.  Cue's ionizing spectrum shape fit will be unreliable and nebular
+    zero. Cue's ionizing spectrum shape fit will be unreliable and nebular
     luminosities will be severely under-predicted.
 
-    Use a pure-continuum SSP (no baked-in nebular emission) instead.
-    See https://halos.as.arizona.edu/suchethacooray/ssp-spectra/ for pre-built
-    wC (without Continuum) templates.
+    Parameters
+    ----------
+    None
+
+    Notes
+    -----
+    **When raised**: During CueBackend initialization with ssp_data, if the
+    maximum log10(Q_H) for stellar populations younger than 10 Myr is below
+    47 photons/s (expected for bare stellar populations), the SSP likely has
+    baked-in nebular emission.
+
+    **Resolution**: Use a pure-continuum SSP (no baked-in nebular emission)
+    instead. Suppress this warning by passing ``ssp_data=None`` to CueBackend
+    and providing Q_H externally. Pre-built wC (without Continuum) templates
+    are available at https://halos.as.arizona.edu/suchethacooray/ssp-spectra/
     """
 
 
@@ -754,9 +893,36 @@ class CueBackend:
     Parameters
     ----------
     weights_path : str
-        Path to ``cue_weights.npz``.
-    default_gas_logqion : float
-        Default log10(Q_H) normalization when not specified per call.
+        Path to ``cue_weights.npz`` file containing pre-trained network weights.
+    ssp_data : object, optional
+        SSP data container with fields ``ssp_wave``, ``ssp_flux``,
+        ``ssp_lgmet``, ``ssp_lg_age_gyr``. If provided, ionizing spectrum
+        parameters and Q_H are precomputed for all (metallicity, age) bins
+        and cached for fast interpolation. Default: None (no precomputation).
+    default_gas_logqion : float, optional
+        Default log10(Q_H) normalization [log10(photons/s)] when not specified
+        per call. Default: 49.1 (typical for young stellar populations).
+
+    Notes
+    -----
+    **JIT-compatible**: Methods return JAX arrays suitable for JIT compilation.
+    Neural network forward passes are pure functions with no side effects.
+
+    **Precomputation**: If ``ssp_data`` is provided, ionizing spectrum
+    parameters are precomputed once at init time via
+    ``precompute_ionizing_params_table``. At inference time, values are
+    interpolated bilinearly on the (metallicity, age) grid for fast
+    gradient evaluation. Warnings are emitted if the SSP appears to have
+    baked-in nebular emission (wNE), which violates Cue's assumptions.
+
+    **Calling conventions**: Two modes are supported—
+
+    1. **High-level** (CloudyGridBackend compatible): Pass ``ssp_weights``,
+       ``ssp_log_ages_yr``, ``log_z`` to ``predict_nebular_*`` methods.
+       Q_H and ionizing spectrum are derived from the SSP internally.
+    2. **Low-level** (direct Cue parameters): Pass ``gas_logu``, ``gas_logz``,
+       ``gas_logqion``, and ``ionspec_*`` explicitly. Useful for fitting
+       these parameters as free parameters or using external ionizing spectra.
 
     """
 
@@ -833,7 +999,35 @@ class CueBackend:
     ) -> tuple[jnp.ndarray, float]:
         """Get precomputed ionizing params at (Z, age) via interpolation.
 
-        Returns (ionspec_7, logqion) or (None, None) if not precomputed.
+        Retrieves cached ionizing spectrum parameters and Q_H via bilinear
+        interpolation on the SSP (metallicity, age) grid. Returns (None, None)
+        if precomputation was not requested at initialization.
+
+        Parameters
+        ----------
+        log_z : float
+            Target stellar metallicity log10(Z) [log10(Z)].
+        log_age_yr : float
+            Target stellar age log10(age/yr) [log10(yr)].
+
+        Returns
+        -------
+        ionspec_7 : ndarray, shape (7,) or None
+            Interpolated ionizing spectrum parameters:
+            [ionspec_index1, ionspec_index2, ionspec_index3, ionspec_index4,
+            ionspec_logLratio1, ionspec_logLratio2, ionspec_logLratio3]
+            [dimensionless] or None if not precomputed.
+        logqion : float or None
+            Interpolated log10(Q_H) [log10(photons/s)] or None if not precomputed.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — bilinear interpolation uses ``jnp`` primitives.
+
+        **Caching**: Results are precomputed once at CueBackend.__init__ if
+        ``ssp_data`` is provided. Subsequent calls perform fast interpolation
+        on the cached tables without recomputing power-law fits.
+
         """
         if self._ionspec_table is None:
             return None, None
@@ -1158,8 +1352,28 @@ class CueBackend:
 
         Returns
         -------
-        wavelengths : array
-        luminosities : array (Lsun)
+        wavelengths : ndarray, shape (n_lines,)
+            Emission line wavelengths (vacuum) [Angstrom].
+        luminosities : ndarray, shape (n_lines,)
+            Emission line luminosities [erg/s].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+        **High-level mode**: When ``ssp_weights``, ``ssp_log_ages_yr``,
+        and ``log_z`` are provided, Q_H and ionizing spectrum parameters
+        are interpolated from precomputed SSP tables (or computed on-the-fly
+        if precomputation was not requested). This mode is compatible with
+        the CloudyGridBackend interface.
+
+        **Low-level mode**: When ``gas_logu``, ``gas_logqion``, and
+        ``ionspec_*`` are specified explicitly, they take precedence
+        over SSP-derived values. Useful for direct parameter fitting.
+
+        **Escape fraction**: When ``neb_fesc > 0`` or ``neb_fesc_lya > 0``,
+        line luminosities are suppressed proportionally. This approximation
+        assumes optically thin escape (energy-conserving).
 
         """
         p = self._resolve_cue_params(
@@ -1216,14 +1430,48 @@ class CueBackend:
         """Predict nebular continuum SED.
 
         Supports the same high-level and low-level calling conventions
-        as predict_nebular_line_luminosities.
+        as predict_nebular_line_luminosities. Returns the nebular continuum
+        spectrum on the Cue wavelength grid.
+
+        Parameters
+        ----------
+        ssp_weights : array or None
+            CSP mass weights. If provided, activates high-level mode.
+        ssp_log_ages_yr : array or None
+            log10(age/yr) of SSP age bins.
+        log_z : float or None
+            Stellar metallicity log10(Z) (absolute).
+        neb_logU : float
+            Ionization parameter log10(U). Default -3.0.
+        neb_logZ_gas : float or None
+            Gas metallicity log10(Z) (absolute). None = tie to stellar.
+        neb_fesc : float
+            Escape fraction [0, 1]. Suppresses continuum luminosity.
+        gas_logu, gas_logn, gas_logz, gas_logno, gas_logco : float
+            Cue gas params (low-level). Override high-level derivation.
+        gas_logqion : float or None
+            log10(Q_H) total. Override high-level derivation.
+        ionspec_* : float or None
+            Ionizing spectrum shape. Override high-level derivation.
 
         Returns
         -------
-        wavelength : array, shape (n_wave,)
-            Wavelength grid in Angstrom.
-        luminosity : array, shape (n_wave,)
-            Nebular continuum in erg/s/Hz.
+        wavelength : ndarray, shape (n_wave,)
+            Wavelength grid (sorted) [Angstrom].
+        luminosity : ndarray, shape (n_wave,)
+            Nebular continuum [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+        **Wavelength grid**: Returns the Cue native grid (fixed for all calls).
+        For interpolation to an arbitrary wavelength grid, use
+        ``predict_nebular_sed`` with ``ssp_wave`` argument.
+
+        **Escape fraction**: When ``neb_fesc > 0``, ionizing photons escape
+        without photoionizing nebular gas. The continuum is suppressed by
+        the factor (1 - neb_fesc), assuming optically thin escape.
 
         """
         p = self._resolve_cue_params(
@@ -1293,8 +1541,28 @@ class CueBackend:
 
         Returns
         -------
-        array, shape (n_wave,)
-            Total nebular SED in erg/s/Hz on the SSP wavelength grid.
+        ndarray, shape (n_wave,)
+            Total nebular SED in erg/s/Hz on the user-provided wavelength grid
+            [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+        **Line+Continuum**: This method computes both lines (via
+        ``predict_nebular_line_luminosities``) and continuum (via
+        ``predict_nebular_continuum``), then combines them on the user
+        wavelength grid. For efficiency, parameters are resolved once and
+        reused for both predictions (avoiding double computation).
+
+        **Line profiles**: Emission lines can be placed as Gaussians
+        (``line_sigma_aa > 0``) or delta functions (``line_sigma_aa = 0``).
+        Delta functions use nearest-pixel scatter-add with bin-width
+        averaging to produce proper flux units.
+
+        **Escape fraction**: Controlled via ``neb_fesc`` (continuum and
+        line suppression) and ``neb_fesc_lya`` (Ly-alpha-specific suppression,
+        applied to H-alpha equivalent). Both assume optically thin escape.
 
         """
         # Resolve params once (avoids double computation for lines + continuum)

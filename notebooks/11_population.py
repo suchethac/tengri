@@ -22,8 +22,8 @@
 #
 # **The hierarchical model**: shared hyperparameters ϕ = (σ_PS, τ_PS) govern
 # the burstiness prior for every galaxy. Per-galaxy latent variables include
-# the GP field ξ_i (128 dims) and physical parameters θ_i (7 dims). Total
-# dimensionality: D = N × (128 + 7) + 2 shared.
+# the GP field ξ_i (64 dims) and physical parameters θ_i (7 dims). Total
+# dimensionality: D = N × (64 + 7) + 2 shared.
 #
 # This matches the hierarchical construction in paper **§4** (shared PSD hyperparameters,
 # per-galaxy fields). Prior shapes for $\sigma_{\rm PS}$ and $\tau_{\rm PS}$: [`02_sfh_gallery.py`](02_sfh_gallery.py).
@@ -171,7 +171,7 @@ def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
         dust_slope=Fixed(-0.7),
         redshift=Fixed(0.1),
         mean_sfh_type=["tsnorm", "field"],
-        n_grid=128,
+        n_grid=64,
     )
     return SEDModel(spec, ssp_data, observation=obs)
 
@@ -253,7 +253,7 @@ spec_free = Parameters(
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
     mean_sfh_type=["tsnorm", "field"],
-    n_grid=128,
+    n_grid=64,
 )
 model_free = SEDModel(spec_free, ssp_data, observation=obs)
 
@@ -785,7 +785,7 @@ def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
         dust_slope=Fixed(-0.7),
         redshift=Fixed(0.1),
         mean_sfh_type=["tsnorm", "field"],
-        n_grid=128,
+        n_grid=64,
     )
     obs = Observation(
         photometry=Photometry.from_names(FILTER_NAMES),
@@ -820,10 +820,10 @@ for i in range(N_GAL):
 
     true_params_all.append(params)
 
-print(f"  Per-galaxy: D = {model_gen.spec.n_free} physical + 128 GP")
+print(f"  Per-galaxy: D = {model_gen.spec.n_free} physical + 64 GP")
 print(
-    f"  Total (hierarchical): D = {N_GAL} x {model_gen.spec.n_free + 128}"
-    f" + 2 shared = {N_GAL * (model_gen.spec.n_free + 128) + 2}"
+    f"  Total (hierarchical): D = {N_GAL} x {model_gen.spec.n_free + 64}"
+    f" + 2 shared = {N_GAL * (model_gen.spec.n_free + 64) + 2}"
 )
 
 # %% [markdown]
@@ -903,7 +903,7 @@ spec_free = Parameters(
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
     mean_sfh_type=["tsnorm", "field"],
-    n_grid=128,
+    n_grid=64,
 )
 obs_spec = Observation(
     spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),

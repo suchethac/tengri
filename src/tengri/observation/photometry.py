@@ -265,6 +265,9 @@ def compute_photometry(
 ) -> jnp.ndarray:
     """Compute photometry through multiple filters.
 
+    Convenience wrapper that calls :func:`compute_flux_density` for each filter
+    in sequence and returns stacked flux densities.
+
     Parameters
     ----------
     sed_rest : array, shape (n_wave,)
@@ -272,9 +275,9 @@ def compute_photometry(
     wave_rest : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     filters : list of FilterCurve
-        Filter transmission curves.
+        Filter transmission curves to convolve.
     redshift : float
-        Source redshift.
+        Source redshift [dimensionless].
     dl_cm : float
         Luminosity distance [cm].
 
@@ -285,9 +288,17 @@ def compute_photometry(
 
     Notes
     -----
-    Not JIT-compatible (uses Python list comprehension).
-    Loops over filters and calls compute_flux_density on each.
+    **JIT-compatible**: no — uses Python list comprehension and loops.
+    For JIT-compiled photometry over many filters, use
+    :func:`compute_flux_density_batch` with padded filter arrays.
 
+    **Gradient-safe**: yes — each call to :func:`compute_flux_density`
+    is differentiable w.r.t. ``sed_rest``.
+
+    See Also
+    --------
+    compute_flux_density : Single filter convolution (JIT-compatible).
+    compute_flux_density_batch : Vectorized convolution via vmap.
     """
     fluxes = []
     for filt in filters:

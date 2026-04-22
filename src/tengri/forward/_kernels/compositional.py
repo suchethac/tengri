@@ -32,24 +32,31 @@ def observe_photometry_from_rest_sed(
     Parameters
     ----------
     rest_sed : array, shape (n_wave,)
-        Rest-frame SED in erg/s/Hz.
+        Rest-frame SED [erg/s/Hz].
     wave_rest : array, shape (n_wave,)
-        Rest-frame wavelength grid (Angstrom).
+        Rest-frame wavelength grid [Angstrom].
     z : float
-        Redshift.
+        Redshift [dimensionless].
     dl_cm : float
-        Luminosity distance (cm).
+        Luminosity distance [cm].
     filter_waves : list of arrays
-        Filter wavelength arrays.
+        Filter wavelength arrays [Angstrom].
     filter_trans : list of arrays
-        Filter transmission arrays.
+        Filter transmission arrays (normalized to 1) [dimensionless].
     apply_igm : bool
         Whether to apply IGM absorption.
+    igm_fn : callable, optional
+        IGM transmission function (wave_obs, z) → transmission.
+        If None, defaults to ``igm_transmission``.
 
     Returns
     -------
     array, shape (n_filters,)
-        Observed flux densities in erg/s/cm^2/Hz.
+        Observed flux densities [erg/s/cm^2/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: no — loops over filters (filter integration is fast JAX ops).
     """
     from tengri.observation.photometry import (
         compute_flux_density_batch,
@@ -83,20 +90,24 @@ def observe_spectrum_from_rest_sed(
     Parameters
     ----------
     rest_sed : array, shape (n_wave,)
-        Rest-frame SED in erg/s/Hz.
+        Rest-frame SED [erg/s/Hz].
     wave_rest : array, shape (n_wave,)
-        Rest-frame wavelength grid (Angstrom).
+        Rest-frame wavelength grid [Angstrom].
     wave_obs : array, shape (n_pix,)
-        Observed wavelength grid (Angstrom).
+        Observed wavelength grid [Angstrom].
     z : float
-        Redshift.
+        Redshift [dimensionless].
     dl_cm : float
-        Luminosity distance (cm).
+        Luminosity distance [cm].
 
     Returns
     -------
     array, shape (n_pix,)
-        Spectral flux density in erg/s/cm^2/Hz.
+        Spectral flux density [erg/s/cm^2/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: no — uses log-linear interpolation and cosmological scaling.
     """
     from tengri.observation.spectrum import compute_spectrum
 
@@ -130,8 +141,13 @@ def build_fused_tier2_photometry(model):
     -------
     callable or None
         JIT-compiled function: ``(sfr_on_ssp, params_dict) -> photometry_array``.
-        Returns None if prerequisites are not met (no filters, no
-        fixed z, no Tier 2 kernel).
+        Returns None if prerequisites are not met (no filters, no Tier 2 kernel).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — entire pipeline (parameter translation, metallicity
+    interpolation, compositional SED, filter integration) fused into one ``@jax.jit``
+    scope. SFH evaluation remains outside JIT (caller-computed).
     """
     if model._compositional.rest_sed is None:
         return None
@@ -303,6 +319,13 @@ def build_fused_tier2_spectrum(model):
     -------
     callable or None
         JIT-compiled function: ``(sfr_on_ssp, params_dict) -> spectrum_array``.
+        Returns None if no Tier 2 kernel is available.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — entire pipeline fused into one ``@jax.jit`` scope.
+    Requires precomputed wavelength grid from ``precompute_spectroscopy()`` or
+    Observation config.
     """
     if model._compositional.rest_sed is None:
         return None
@@ -432,8 +455,14 @@ def build_hybrid_spectrum(model):
     Returns
     -------
     callable or None
-        JIT-compiled function: (sfr_on_ssp, params) → spectrum array.
-        Returns None if spectroscopy is not precomputed.
+        JIT-compiled function: (sfr_on_ssp, params) → spectrum array
+        [erg/s/cm^2/Hz]. Returns None if spectroscopy is not precomputed.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — fuses precomputed stellar interpolation (fast, on
+    pixel grid) with exact non-stellar evaluation (full wavelength, then
+    interpolated to pixels). This balances speed and accuracy for science models.
     """
     if model._precomputed.spectroscopy is None:
         return None

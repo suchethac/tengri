@@ -291,6 +291,7 @@ class OperationTimers:
         .. code-block:: python
 
             from tengri import TimingRegistry
+
             reg = TimingRegistry()
             for name, data in reg.items():
                 print(f"{name}: {data['cum_time']:.3f}s ({data['n_calls']} calls)")

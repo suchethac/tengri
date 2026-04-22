@@ -49,6 +49,18 @@ class PrecomputeModule(Protocol):
     This is a runtime-checkable Protocol, so `isinstance(module, PrecomputeModule)`
     validates that a component module exports the right surface. We use module
     objects (not classes) because each file is the natural unit of registration.
+
+    Attributes
+    ----------
+    AXIS_PARAMS : tuple or dict
+        Ordered tuple of parameter names defining preintegration grid axes,
+        or dict mapping model variant to tuple (for multi-variant components).
+        Empty tuple means scalar template (no grid axes).
+
+    Notes
+    -----
+    Implementations live in ``components/<component>/<component>_precompute.py``
+    and are auto-discovered via :mod:`~tengri.forward.precompute.registry`.
     """
 
     AXIS_PARAMS: Any  # tuple[str, ...] or dict[str, tuple[str, ...]] for multi-variant components
@@ -70,7 +82,7 @@ class PrecomputeModule(Protocol):
         filter_trans : list
             Per-filter transmission curves.
         redshift : float
-            Source redshift.
+            Source redshift [dimensionless].
         parameters : Any
             Free and fixed parameter specification.
         **kwargs : Any
@@ -80,6 +92,11 @@ class PrecomputeModule(Protocol):
         -------
         Any
             Preintegrated result (PreintegratedGrid or component-specific dataclass).
+
+        Notes
+        -----
+        Implementations must auto-collapse grid axes whose parameters are Fixed
+        in ``parameters``, reducing dimensionality and lookup cost.
         """
         ...
 
@@ -97,5 +114,10 @@ class PrecomputeModule(Protocol):
         -------
         callable
             JIT-compiled function: (scale, *free_params) -> photometry array.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — returned function must be decorated with ``@jax.jit``
+        and use only ``jnp`` primitives for gradient-safe interpolation.
         """
         ...

@@ -81,6 +81,10 @@ class ParamDef(NamedTuple):
         Error message when bound check fails.
     default : Distribution
         Default prior distribution.
+
+    Notes
+    -----
+    **JIT-compatible**: no — Python dataclass for registry initialization.
     """
 
     description: str
@@ -107,6 +111,10 @@ class SFHModelSpec(NamedTuple):
         Conversion: internal = public * scale + offset.
     composition_type : str
         "additive", "mixture", or "modulator".
+
+    Notes
+    -----
+    **JIT-compatible**: no — Python dataclass for registry initialization.
     """
 
     name: str
@@ -1196,6 +1204,17 @@ def compute_field_gp(
         GP realization on the log-age grid.
     k0_half : float
         Lognormal correction: K(0)/2 = sigma_PS^2 / 4.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``gp_from_xi`` and PSD model functions
+    from the field model registry.
+
+    The Gaussian process realization models burstiness via a correlated
+    random field in log-space. The PSD model (e.g., "drw" for Damped
+    Random Walk) controls temporal correlations. The lognormal correction
+    ``k0_half`` accounts for the bias introduced when exponentiation is
+    applied to the Gaussian latents.
 
     Examples
     --------

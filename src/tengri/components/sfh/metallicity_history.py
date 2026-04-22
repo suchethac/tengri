@@ -217,6 +217,11 @@ def metallicity_bins_continuity_on_ssp_grid(
     -------
     array, shape (n_age,)
         log10(Z) absolute at each SSP age.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives and delegates to
+    :func:`metallicity_bins_on_ssp_grid` for final binning.
     """
     cumulative = jnp.concatenate([jnp.zeros(1), jnp.cumsum(d_log_z)])
     # cumulative[0] = 0 (oldest), cumulative[-1] = sum(d_log_z) (youngest)

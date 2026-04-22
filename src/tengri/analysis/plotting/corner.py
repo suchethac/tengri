@@ -33,6 +33,7 @@ def safe_corner(posterior, **kwargs):
     .. code-block:: python
 
         from tengri import safe_corner
+
         fig = safe_corner(posterior, params=["sfh_dpl_alpha", "dust_tau_bc"])
         if fig is not None:
             fig.savefig("corner.pdf")
@@ -70,6 +71,7 @@ def plot_corner_comparison(posteriors, labels, colors=None, truths=None, params=
     .. code-block:: python
 
         from tengri import plot_corner_comparison
+
         fig = plot_corner_comparison(
             [post_nuts, post_vi],
             labels=["NUTS", "VI"],

@@ -118,6 +118,7 @@ def _get_or_build_map_fns(model, loss_fn, optimizer, learning_rate):
     @jax.jit
     def scan_batch(params, ostate, d_args):
         """Execute _SCAN_BATCH optimizer steps in a single jax.lax.scan."""
+
         def _step_body(carry, _):
             """Execute one optimizer step: compute gradient, update state and params."""
             params, ostate = carry

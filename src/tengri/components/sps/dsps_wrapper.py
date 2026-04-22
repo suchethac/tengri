@@ -27,23 +27,23 @@ class SSPData(NamedTuple):
     needed by the CSP integration engine. Typically loaded once from disk and
     reused across many forward-model evaluations.
 
-    Attributes
+    Parameters
     ----------
     ssp_wave : array, shape (n_wave,)
-        Rest-frame wavelength grid. [Å]
+        Rest-frame wavelength grid [Angstrom].
     ssp_flux : array, shape (n_met, n_age, n_wave)
         Spectral luminosity density of simple stellar populations (SSPs)
-        per unit stellar mass. [erg/s/Hz/Msun]
+        per unit stellar mass [erg/s/Hz/Msun].
         Origin: BC03, BPASS, FSPS, ProGeny, or other DSPS-compatible library.
     ssp_lg_age_gyr : array, shape (n_age,)
-        Age grid in log10 space. [log10(Gyr)]
+        Age grid in log10 space [log10(Gyr)].
     ssp_lgmet : array, shape (n_met,)
-        Metallicity grid (absolute, NOT solar-relative). [log10(Z)]
+        Metallicity grid (absolute, NOT solar-relative) [log10(Z)].
         Offset: log10(Z_sun) ≈ −1.848 (Asplund+2009).
         Do NOT confuse with user-facing log10(Z/Z_sun).
     ssp_mass_remaining : array, shape (n_met, n_age), optional
         Fraction of initial stellar mass still present (living stars + remnants)
-        at each (age, metallicity). [dimensionless, ∈ [0, 1]]
+        at each (age, metallicity) [dimensionless, ∈ [0, 1]].
         Used for stellar mass normalization in CSP integral. Depends on IMF
         and isochrone library; None if unavailable.
     ssp_alpha_fe : array, optional

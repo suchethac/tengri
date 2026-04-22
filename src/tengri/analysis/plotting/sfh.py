@@ -73,6 +73,7 @@ def plot_sfh(
     .. code-block:: python
 
         from tengri import plot_sfh
+
         ax = plot_sfh(model, posterior, true_params=true_params, method="NUTS")
         ax.figure.savefig("sfh_recovery.pdf")
     """
@@ -181,6 +182,7 @@ def plot_sfh_comparison(model, results, true_params=None, methods=None, figsize=
     .. code-block:: python
 
         from tengri import plot_sfh_comparison
+
         results = {"NUTS": posterior_nuts, "VI": posterior_vi}
         fig, axes = plot_sfh_comparison(model, results, true_params=true_params)
         fig.savefig("sfh_comparison.pdf")

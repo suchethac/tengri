@@ -184,7 +184,10 @@ def get_dust_kwargs(model, p):
     Returns
     -------
     dict
-        Keyword arguments for fused dust kernels (law parameters, T, etc.).
+        Keyword arguments for fused dust kernels. Keys may include
+        ``f_obscuration``, ``dust_bump_strength``, ``dust_delta``,
+        ``dust_Rv``, ``alpha_fe``, and (if dust emission enabled)
+        ``dust_T``, ``dust_beta_ir``, ``dust_eta_balance``.
 
     Notes
     -----
@@ -275,7 +278,10 @@ def get_agn_kwargs(model, p):
     Returns
     -------
     dict
-        Keyword arguments for fused AGN kernel (empty dict if AGN disabled).
+        Keyword arguments for fused AGN kernel. If AGN is disabled, returns
+        an empty dict. Otherwise contains keys like ``agn_log_lbol``,
+        ``agn_alpha``, ``agn_T_torus``, ``agn_tau_torus``, ``agn_torus_frac``,
+        ``agn_log_mbh``, ``agn_log_ledd`` [various dimensionless units].
 
     Notes
     -----

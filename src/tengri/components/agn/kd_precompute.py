@@ -56,30 +56,46 @@ class KDPreintegratedData:
     Attributes
     ----------
     planck_table : jnp.ndarray
-        Shape (n_T, n_filters). Filter-integrated Planck B_nu(T) for each
-        temperature grid point and filter.
+        Shape (n_T, n_filters). Filter-integrated Planck B_nu(T) [erg/s/cm^3]
+        for each temperature grid point and filter.
     planck_T_grid : jnp.ndarray
         Shape (n_T,). Temperature grid [K] (log-spaced).
     nthcomp_table : jnp.ndarray or None
         Shape (n_gamma, n_kTe, n_kTbb, n_filters). Filter-integrated
-        nthcomp spectral shape. None if templates not available.
+        nthcomp spectral shape [erg/s/cm^3]. None if templates not available.
     nthcomp_gamma_grid : jnp.ndarray or None
-        Shape (n_gamma,).
+        Shape (n_gamma,). Photon index grid for warm Comptonization.
     nthcomp_kTe_grid : jnp.ndarray or None
-        Shape (n_kTe,).
+        Shape (n_kTe,). Electron temperature grid [keV] for warm zone.
     nthcomp_kTbb_grid : jnp.ndarray or None
-        Shape (n_kTbb,).
+        Shape (n_kTbb,). Seed blackbody temperature grid [keV].
     corona_table : jnp.ndarray
         Shape (n_Gamma, n_kT, n_filters). Filter-integrated cutoff
-        power-law shape for the hot corona.
+        power-law shape [erg/s/cm^3] for the hot corona.
     corona_Gamma_grid : jnp.ndarray
-        Shape (n_Gamma,). Hard X-ray photon index grid.
+        Shape (n_Gamma,). Hard X-ray photon index grid [dimensionless].
     corona_kT_grid : jnp.ndarray
         Shape (n_kT,). Hot corona temperature grid [keV].
     effective_bandwidths_hz : jnp.ndarray
-        Shape (n_filters,). Effective frequency bandwidths for L_bol estimation.
+        Shape (n_filters,). Effective frequency bandwidths [Hz] for L_bol
+        estimation via sum(f_nu * bw).
     n_filters : int
-        Number of photometric filters.
+        Number of photometric filters [dimensionless].
+
+    Notes
+    -----
+    This is an immutable dataclass (``frozen=True``) designed for efficient
+    lookup during K&D AGN photometric inference. All arrays are JAX arrays
+    and thus compatible with JIT compilation and autodiff.
+
+    **Precomputation cost**: One-time at model initialization. The cost
+    scales as O(n_T × n_filters) for Planck, O(n_gamma × n_kTe × n_kTbb
+    × n_filters) for nthcomp, and O(n_Gamma × n_kT × n_filters) for corona.
+    Typical values: n_T=200, n_filters=10–50, n_gamma≈20, n_kTe≈20, n_kTbb≈20.
+
+    **Filter dimensions**: All filter-indexed arrays are ordered by filter
+    index, not by wavelength or frequency. At runtime, these are indexed
+    directly by filter ID, enabling fast lookup without spectral integration.
     """
 
     planck_table: jnp.ndarray
@@ -467,6 +483,30 @@ def preintegrate_kd_components(
     -------
     KDPreintegratedData
         All precomputed tables ready for runtime lookup.
+
+    Notes
+    -----
+    **JIT-compatible**: no — this function performs build-time integration
+    via NumPy. The returned tables are JIT-compatible and can be used in
+    traced functions.
+
+    This function is called once at ``SEDModel.__init__`` when K&D AGN
+    is enabled with photometric filters. The precomputed tables avoid
+    redundant filter integration during inference, providing ~40× speedup
+    for the K&D component by reducing per-ring computation from ~17,000
+    wavelength points to a handful of filter indices.
+
+    **Temperature grid**: The Planck table uses a logarithmic temperature
+    grid spanning [T_min, T_max] to capture the optically thick disc
+    spectrum across all AGN luminosities and black hole masses. Typical
+    outer-disc temperatures range from ~1000 K (cool outer regions) to
+    ~3×10^7 K (hot inner regions).
+
+    **nthcomp availability**: If precomputed nthcomp templates
+    (data/nthcomp_templates.h5) are unavailable, a simplified modified-
+    blackbody proxy is used at runtime (see disc.py:1083-1094). This
+    has ~5–10% shape error but allows offline computation without the
+    external RELAGN dependency.
     """
     n_filters = len(filter_waves)
 
@@ -689,6 +729,32 @@ def kubota_done_disc_preintegrated(
     array, shape (n_filters,)
         Filter-integrated L_nu per filter [erg/s/Hz], NOT flux-scaled.
         Caller must apply flux_scale = (1+z)/(4 pi dL^2).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives and ``jax.vmap``.
+
+    This is the photometric fast-path variant of ``kubota_done_disc()``. It
+    replaces wavelength-level integration with filter-level lookup tables,
+    providing ~40× speedup at the cost of no direct wavelength access.
+
+    **Physics equivalence**: Zone radii, temperature profiles, radiative
+    efficiency, and normalization are identical to the spectroscopic path.
+    The only difference is the integration domain: filters instead of
+    wavelengths. Bolometric luminosity is still computed analytically from
+    radial integration (σT^4 × dA) to remain grid-independent.
+
+    **Precomputed tables**: Requires ``kd_data`` from
+    ``preintegrate_kd_components()``, built once at model initialization.
+    If nthcomp templates are unavailable, falls back to Planck lookup
+    (i.e., no Comptonization). See disc.py:1083-1094 for details.
+
+    References
+    ----------
+    .. [1] A. Kubota and C. Done, "A physical model of the broad-band continuum
+       of AGN and its implications for the UV/X relation and optical variability,"
+       MNRAS, 480, 1247 (2018). arXiv:1804.00171.
+       https://doi.org/10.1093/mnras/sty1890
     """
     from tengri.components.agn.disc import (
         _eddington_luminosity,

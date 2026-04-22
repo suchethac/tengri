@@ -24,6 +24,7 @@ from tengri.observation.eline_priors import (
     marginalize_emission_lines_cloudy,
 )
 from tengri.observation.line_flux_data import LineFluxData
+from tengri.observation.line_mask import build_line_mask
 from tengri.observation.noise import DETECTED, LOWER_LIMIT, UPPER_LIMIT
 from tengri.observation.noise_model import NoiseModel
 from tengri.observation.observation import Observation
@@ -69,6 +70,7 @@ __all__ = [
     "apply_wavelength_mask",
     "blend_emission_lines",
     "build_eline_design_matrix",
+    "build_line_mask",
     "calibration_polynomial",
     "chebyshev_basis",
     "cloudy_line_priors",

@@ -18,10 +18,22 @@ class SEDResult(NamedTuple):
     Attributes
     ----------
     wavelength : jnp.ndarray, shape (n_wave,)
-        Wavelength grid in Angstrom. Rest-frame for ``predict_rest_sed()``,
+        Wavelength grid [Angstrom]. Rest-frame for ``predict_rest_sed()``,
         observed-frame for ``predict_obs_sed()``.
     sed : jnp.ndarray, shape (n_wave,)
-        Spectral luminosity density in erg/s/Hz.
+        Spectral luminosity density [erg/s/Hz] for rest-frame SED,
+        or flux density [erg/s/cm²/Hz] for observed-frame.
+
+    Returns
+    -------
+    This is a NamedTuple (JAX pytree) returned by
+    :meth:`~tengri.forward.sed_model.SEDModel.predict_rest_sed` and
+    :meth:`~tengri.forward.sed_model.SEDModel.predict_obs_sed`.
+
+    Notes
+    -----
+    JAX-compatible container. Fields are JAX arrays compatible with
+    ``jax.jit`` and ``jax.vmap``. Returned by prediction methods.
 
     Examples
     --------

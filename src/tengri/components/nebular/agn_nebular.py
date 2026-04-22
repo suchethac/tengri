@@ -192,6 +192,15 @@ def agn_ionspec_from_alpha_pl(alpha_pl: float) -> dict:
         Keys: ``ionspec_index1..4``, ``ionspec_logLratio1..3``.
         All values are clipped to the valid Cue ranges.
 
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    For a pure power law (single slope across all segments), the wavelength-space
+    slope is ``-alpha_pl``. The log luminosity ratios between adjacent segments
+    are computed from segment-integrated fluxes, which depend on the slope and
+    segment boundaries.
+
     """
     # Cue slope convention: F_nu vs lambda, so index = -alpha_pl
     wavelength_slope = -alpha_pl
@@ -367,6 +376,17 @@ def agn_nlr_cue(
     line_luminosities : array
         Emission line luminosities [Lsun], scaled by covering fraction.
 
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The pipeline consists of:
+    1. Compute ionizing spectrum parameters from power-law slope (via
+       ``agn_ionspec_from_alpha_pl``).
+    2. Estimate the ionizing photon rate Q_H from accretion luminosity and slope.
+    3. Call the Cue neural-network emulator with gas parameters and spectrum params.
+    4. Scale line luminosities by the NLR covering fraction.
+
     """
     # Step 1: ionizing spectrum parameters
     if ionspec_params is None:
@@ -412,22 +432,29 @@ class SynthesizerGridData:
 
     Attributes
     ----------
-    mass_axis : (n,) array
-        log10(mass [kg]).
-    eddington_axis : (n,) array
-        log10(accretion_rate_eddington).
-    cosine_axis : (n,) array
-        cosine_inclination (linear, not log).
-    metallicity_axis : (n,) array
-        log10(metallicities).
-    logU_axis : (n,) array
-        log10(ionisation_parameter).
-    logn_axis : (n,) array
-        log10(hydrogen_density [cm^-3]).
-    line_wavelengths_aa : (n_lines,) array
-        Vacuum wavelengths [Angstrom].
-    log_line_per_qh : (n_mass, n_edd, n_inc, n_met, n_U, n_n, n_lines) array
-        log10(L_line / Q_H) where L_line is in L_sun and Q_H in photons/s.
+    mass_axis : ndarray, shape (n_mass,)
+        Black hole mass in log10 space [log10(kg)].
+    eddington_axis : ndarray, shape (n_edd,)
+        Accretion rate (Eddington ratio) in log10 space [log10(Eddington ratio)].
+    cosine_axis : ndarray, shape (n_inc,)
+        Inclination angle cosine, linear not log [dimensionless].
+    metallicity_axis : ndarray, shape (n_met,)
+        Metallicity in log10 space [log10(Z_sun)].
+    logU_axis : ndarray, shape (n_ionU,)
+        Ionization parameter in log10 space [log10(U)].
+    logn_axis : ndarray, shape (n_nH,)
+        Hydrogen density in log10 space [log10(n_H / cm^-3)].
+    line_wavelengths_aa : ndarray, shape (n_lines,)
+        Emission line vacuum wavelengths [Angstrom].
+    log_line_per_qh : ndarray, shape (n_mass, n_edd, n_inc, n_met, n_ionU, n_nH, n_lines)
+        log10(L_line / Q_H) where L_line is in L_sun and Q_H is in photons/s
+        [log10(L_sun·s/photons)].
+
+    Notes
+    -----
+    Grid data is interpolated using C²-continuous triweight interpolation on all
+    6 parameter axes. All axes except ``cosine_axis`` are stored in log10 space
+    internally for uniform sampling.
 
     """
 
@@ -658,10 +685,20 @@ class SynthesizerNLRBackend:
 
         Returns
         -------
-        wavelengths : (215,) array
-            Vacuum wavelengths [Angstrom].
-        luminosities : (215,) array
-            Emission line luminosities [L_sun].
+        wavelengths : ndarray, shape (n_lines,)
+            Emission line vacuum wavelengths [Angstrom].
+        luminosities : ndarray, shape (n_lines,)
+            Emission line luminosities [L_sun], scaled by ionizing photon
+            rate and escape fraction.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+        Interpolation is performed on all 6 axes (mass, Eddington ratio,
+        inclination, metallicity, ionU, nH) using C²-continuous triweight
+        interpolation. Grid axes are stored in log10 (except cosine_inclination,
+        which is linear) and must be sorted ascending for interpolation.
 
         """
         from tengri.utils.grid_interp import interp_nd_triweight
@@ -723,23 +760,32 @@ class FeltreGridData:
 
     Attributes
     ----------
-    alpha_axis : (4,) array
-        Ionizing power-law slope values (e.g. -1.2, -1.4, -1.7, -2.0).
-    logUs_axis : (4,) array
-        log10(U_S) values (e.g. -1, -2, -3, -4).  May be descending.
-    logn_axis : (3,) array
-        log10(n_H / cm^-3) values.
-    logZ_axis : (16,) array
-        log10(Z) absolute metallicity values.
-    xi_d_axis : (3,) array
-        Dust-to-metal ratio values.
-    line_wavelengths_aa : (n_lines,) array
-        Vacuum wavelengths [Angstrom].
-    logHB_per_logq : (4, 4, 3, 16, 3) array
+    alpha_axis : ndarray, shape (n_alpha,)
+        Ionizing EUV power-law slope values (discrete: -1.2, -1.4, -1.7, -2.0)
+        [dimensionless].
+    logUs_axis : ndarray, shape (n_logUs,)
+        Ionization parameter log10(U_S) values [log10(U)]. May be in descending
+        order.
+    logn_axis : ndarray, shape (n_logn,)
+        Hydrogen density log10(n_H / cm^-3) values [log10(cm^-3)].
+    logZ_axis : ndarray, shape (n_logZ,)
+        Absolute metallicity log10(Z) values [log10(Z_sun)].
+    xi_d_axis : ndarray, shape (n_xi_d,)
+        Dust-to-metal ratio values (discrete: 0.1, 0.3, 0.5)
+        [dimensionless].
+    line_wavelengths_aa : ndarray, shape (n_lines,)
+        Emission line vacuum wavelengths [Angstrom].
+    logHB_per_logq : ndarray, shape (n_alpha, n_logUs, n_logn, n_logZ, n_xi_d)
         log10(L_Hβ / Q_H) where Q_H is ionizing photon rate [photons/s]
-        and L_Hβ is in erg/s.  Dims: (alpha, logUs, logn, logZ, xi_d).
-    line_ratios : (4, 4, 3, 16, 3, n_lines) array
-        L_line / L_Hβ (dimensionless).
+        and L_Hβ is in erg/s [log10(erg/s·s/photons)].
+    line_ratios : ndarray, shape (n_alpha, n_logUs, n_logn, n_logZ, n_xi_d, n_lines)
+        Line-to-Hβ luminosity ratios L_line / L_Hβ [dimensionless].
+
+    Notes
+    -----
+    Grid axes follow the Feltre et al. (2016) CLOUDY c13.03 photoionization
+    calculations. Continuous axes (logUs, logn, logZ) can be interpolated
+    smoothly; discrete axes (alpha, xi_d) use nearest-neighbor lookup.
 
     """
 
@@ -912,10 +958,20 @@ class FeltreNLRBackend:
 
         Returns
         -------
-        wavelengths : (n_lines,) array
-            Vacuum wavelengths [Angstrom].
-        luminosities : (n_lines,) array
-            Emission line luminosities [Lsun].
+        wavelengths : ndarray, shape (n_lines,)
+            Emission line vacuum wavelengths [Angstrom].
+        luminosities : ndarray, shape (n_lines,)
+            Emission line luminosities [L_sun], scaled by ionizing photon
+            rate and escape fraction.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+        Interpolation uses C²-continuous triweight on continuous axes
+        (logU_S, logn, logZ) and nearest-neighbor on discrete axes
+        (alpha, xi_d). The method first selects the nearest grid point for
+        discrete axes, then interpolates smoothly on the 3-D continuous grid.
 
         """
         from tengri.utils.grid_interp import interp_nd_triweight

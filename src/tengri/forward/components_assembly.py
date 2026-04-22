@@ -60,7 +60,28 @@ def build_ssp_component(model):
         _age_dt = model._csp_age_dt.astype(dt)  # precomputed bin widths
 
     def ssp_fn(sfr_on_ssp, log_z_abs, alpha_fe=0.0):
-        """Interpolate SSP at fixed metallicity and integrate SFR profile."""
+        """Interpolate SSP at fixed metallicity and integrate SFR profile.
+
+        Parameters
+        ----------
+        sfr_on_ssp : array_like, shape (n_age,)
+            Star formation rate on SSP age grid [Msun/yr].
+        log_z_abs : float
+            Absolute log10 metallicity [dimensionless].
+        alpha_fe : float, optional
+            Alpha-element enhancement [dex]. Default 0.0.
+
+        Returns
+        -------
+        ssp_at_z : ndarray, shape (n_age, n_wave)
+            Z-interpolated SSP flux [erg/s/Hz].
+        weights : ndarray, shape (n_age,)
+            CSP mass weights [Msun].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        """
         sfr = sfr_on_ssp.astype(dt)
         lz = jnp.asarray(log_z_abs, dtype=dt)
         afe = jnp.asarray(alpha_fe, dtype=dt)
@@ -142,7 +163,42 @@ def build_dust_atten_component(model):
         dust_delta=0.0,
         dust_Rv=3.1,
     ):
-        """Apply two-component dust attenuation and compute absorbed energy."""
+        """Apply two-component dust attenuation and compute absorbed energy.
+
+        Parameters
+        ----------
+        ssp_flux_at_z : array_like, shape (n_age, n_wave)
+            Z-interpolated SSP flux [erg/s/Hz].
+        weights : array_like, shape (n_age,)
+            CSP mass weights [Msun].
+        tau_bc : float
+            Birth-cloud dust optical depth [dimensionless].
+        tau_diff : float
+            Diffuse ISM dust optical depth [dimensionless].
+        dust_slope : float, optional
+            Dust attenuation slope [dimensionless]. Default -0.7.
+        f_obscuration : float, optional
+            Foreground obscuration fraction [dimensionless]. Default 0.0.
+        dust_bump_strength : float, optional
+            Dust bump strength (2175 A feature) [dimensionless]. Default 0.0.
+        dust_delta : float, optional
+            Dust delta parameter [dimensionless]. Default 0.0.
+        dust_Rv : float, optional
+            Dust Rv parameter [dimensionless]. Default 3.1.
+
+        Returns
+        -------
+        sed_atten : ndarray, shape (n_wave,)
+            Attenuated SED [erg/s/Hz].
+        sed_intr : ndarray, shape (n_wave,)
+            Intrinsic (unattenuated) SED [erg/s/Hz].
+        L_absorbed : ndarray, shape ()
+            Integrated absorbed luminosity [erg/s].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        """
         w = weights.astype(dt)
         ssp_z = ssp_flux_at_z.astype(dt)
 
@@ -229,7 +285,38 @@ def build_dust_emission_component(model):
         dust_qpah=2.5,
         dust_eta_balance=1.0,
     ):
-        """Compute dust IR emission SED from absorbed luminosity scaling."""
+        """Compute dust IR emission SED from absorbed luminosity scaling.
+
+        Parameters
+        ----------
+        L_ir : float
+            Absorbed luminosity [erg/s].
+        dust_T : float, optional
+            Dust temperature [K]. Default 35.0.
+        dust_beta_ir : float, optional
+            Dust emissivity index [dimensionless]. Default 1.6.
+        dust_alpha_mir : float, optional
+            MIR slope parameter [dimensionless]. Default 2.0.
+        dust_alpha_dale : float, optional
+            Dale et al. template alpha parameter [dimensionless]. Default 2.0.
+        dust_umin : float, optional
+            Minimum radiation field strength [dimensionless]. Default 1.0.
+        dust_gamma_dl : float, optional
+            DL07 gamma parameter [dimensionless]. Default 0.01.
+        dust_qpah : float, optional
+            PAH mass fraction [%]. Default 2.5.
+        dust_eta_balance : float, optional
+            Energy balance correction factor [dimensionless]. Default 1.0.
+
+        Returns
+        -------
+        dust_ir_sed : ndarray, shape (n_wave,)
+            Dust IR emission SED [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        """
         L_ir_scaled = jnp.maximum(L_ir * dust_eta_balance, 0.0)
         return emission_fn(
             wave,
@@ -291,7 +378,41 @@ def build_agn_component(model):
         agn_log_mbh=7.0,
         agn_log_ledd=-1.0,
     ):
-        """Synthesize AGN spectrum and derive bolometric luminosity."""
+        """Synthesize AGN spectrum and derive bolometric luminosity.
+
+        Parameters
+        ----------
+        sed_so_far : array_like, shape (n_wave,), optional
+            Prior SED for deriving AGN fraction [erg/s/Hz]. Default None.
+        agn_log_lbol : float, optional
+            Log10 AGN bolometric luminosity [log10(Lsun)]. Default 10.0.
+        agn_frac : float, optional
+            AGN fraction in total (stellar + AGN) luminosity [dimensionless].
+            Default 0.0.
+        agn_alpha : float, optional
+            AGN power-law slope [dimensionless]. Default -1.0.
+        agn_T_torus : float, optional
+            Torus dust temperature [K]. Default 1000.0.
+        agn_tau_torus : float, optional
+            Torus dust optical depth [dimensionless]. Default 5.0.
+        agn_torus_frac : float, optional
+            Torus-obscured fraction [dimensionless]. Default 0.5.
+        agn_log_mbh : float, optional
+            Log10 black hole mass [log10(Msun)]. Default 7.0.
+        agn_log_ledd : float, optional
+            Log10 Eddington ratio [dimensionless]. Default -1.0.
+
+        Returns
+        -------
+        agn_sed : ndarray, shape (n_wave,)
+            AGN SED [erg/s/Hz].
+        bol_erg : ndarray, shape ()
+            AGN bolometric luminosity [erg/s].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        """
         if is_parametric:
             frac_for_model = 1.0
             bol_erg = 10.0**agn_log_lbol * 3.828e33  # Lsun → erg/s
@@ -359,7 +480,33 @@ def build_nebular_component(model):
         neb_fesc=0.0,
         neb_fesc_lya=0.0,
     ):
-        """Synthesize nebular lines and continuum emission."""
+        """Synthesize nebular lines and continuum emission.
+
+        Parameters
+        ----------
+        weights : array_like, shape (n_age,)
+            CSP mass weights [Msun].
+        log_z : float
+            Log10 absolute metallicity [dimensionless].
+        neb_logU : float, optional
+            Log10 ionization parameter [dimensionless]. Default -3.0.
+        neb_logZ_gas : float, optional
+            Log10 gas-phase metallicity Z/Zsun [dimensionless].
+            If None, derived from log_z. Default None.
+        neb_fesc : float, optional
+            Ionizing photon escape fraction [dimensionless]. Default 0.0.
+        neb_fesc_lya : float, optional
+            Lyman-alpha escape fraction [dimensionless]. Default 0.0.
+
+        Returns
+        -------
+        neb_sed : ndarray, shape (n_wave,)
+            Nebular emission SED [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        """
         return backend.predict_nebular_sed(
             ssp_weights=weights,
             ssp_wave=ssp_wave,
@@ -413,7 +560,32 @@ def build_radio_component(model):
         radio_loudness=0.0,
         radio_alpha_agn=0.7,
     ):
-        """Synthesize radio SED from synchrotron and free-free sources."""
+        """Synthesize radio SED from synchrotron and free-free sources.
+
+        Parameters
+        ----------
+        L_ir : float
+            Star-formation-related luminosity (IR or bolometric) [erg/s].
+        L_agn_bol : float
+            AGN bolometric luminosity [erg/s].
+        radio_q_ir : float, optional
+            FIR-to-radio luminosity ratio [dimensionless]. Default 2.64.
+        radio_alpha_sf : float, optional
+            Star-formation synchrotron slope [dimensionless]. Default 0.8.
+        radio_loudness : float, optional
+            AGN radio loudness parameter [dimensionless]. Default 0.0.
+        radio_alpha_agn : float, optional
+            AGN radio slope [dimensionless]. Default 0.7.
+
+        Returns
+        -------
+        radio_sed : ndarray, shape (n_wave,)
+            Radio emission SED [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        """
         return radio_total(
             wave,
             L_ir=L_ir,
@@ -465,7 +637,31 @@ def build_xray_component(model):
         xray_gamma_agn=1.8,
         xray_alpha_ox=-1.4,
     ):
-        """Synthesize X-ray SED from XRB and AGN emission."""
+        """Synthesize X-ray SED from XRB and AGN emission.
+
+        Parameters
+        ----------
+        sfr : float
+            Current star formation rate [Msun/yr].
+        stellar_mass : float
+            Total stellar mass [Msun].
+        L_agn_bol : float
+            AGN bolometric luminosity [erg/s].
+        xray_gamma_agn : float, optional
+            AGN X-ray spectral index (photon index) [dimensionless].
+            Default 1.8.
+        xray_alpha_ox : float, optional
+            X-ray to optical slope (alpha_ox) [dimensionless]. Default -1.4.
+
+        Returns
+        -------
+        xray_sed : ndarray, shape (n_wave,)
+            X-ray emission SED [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+        """
         return xray_total(
             wave,
             sfr=sfr,

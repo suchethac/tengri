@@ -67,6 +67,7 @@ def plot_sed_fit(
 
         from tengri import plot_sed_fit
         import numpy as np
+
         wave = np.array([4800.0, 6200.0, 7700.0, 9000.0])
         flux = np.array([1.2e-18, 1.8e-18, 2.1e-18, 1.9e-18])
         noise = flux * 0.05
@@ -195,8 +196,11 @@ def plot_spectrum_fit(
     .. code-block:: python
 
         from tengri import plot_spectrum_fit
+
         fig = plot_spectrum_fit(
-            wave_obs, spec_obs, noise,
+            wave_obs,
+            spec_obs,
+            noise,
             spec_draws=posterior_spec_draws,
             features={"Hα": 6563.0, "Hβ": 4861.0},
             z=0.5,

@@ -233,9 +233,9 @@ class SEDQuantities(NamedTuple):
     .. code-block:: python
 
         pred = model.predict(params)
-        sed = pred.sed   # SEDQuantities NamedTuple
-        print(float(sed.l_bol))       # bolometric luminosity [Lsun]
-        print(float(sed.dn4000))      # 4000 Å break strength
+        sed = pred.sed  # SEDQuantities NamedTuple
+        print(float(sed.l_bol))  # bolometric luminosity [Lsun]
+        print(float(sed.dn4000))  # 4000 Å break strength
         print(float(sed.uv_slope_beta))  # UV slope beta
     """
 
@@ -305,8 +305,8 @@ class EmissionLines(NamedTuple):
     .. code-block:: python
 
         pred = model.predict(params)
-        lines = pred.lines   # EmissionLines NamedTuple
-        print(float(lines.halpha))   # H-alpha luminosity [Lsun]
+        lines = pred.lines  # EmissionLines NamedTuple
+        print(float(lines.halpha))  # H-alpha luminosity [Lsun]
         print(float(lines.oiii_5007))  # [OIII] 5007 Å luminosity [Lsun]
         # BPT diagram
         bpt_x = float(lines.nii_6584 / lines.halpha)
@@ -354,10 +354,11 @@ class DerivedQuantities(NamedTuple):
     .. code-block:: python
 
         from tengri import DerivedQuantities
+
         derived = model.predict_derived(params)
-        print(float(derived.sfh.stellar_mass))   # [Msun]
-        print(float(derived.sed.dn4000))          # 4000 Å break
-        print(float(derived.sed.uv_slope_beta))   # UV slope β
+        print(float(derived.sfh.stellar_mass))  # [Msun]
+        print(float(derived.sed.dn4000))  # 4000 Å break
+        print(float(derived.sed.uv_slope_beta))  # UV slope β
     """
 
     sfh: SFHQuantities
@@ -1785,7 +1786,7 @@ class Prediction:
         .. code-block:: python
 
             pred = model.predict(params)
-            phot = pred.photometry      # ndarray, shape (n_filters,)
-            print(phot.shape)           # e.g. (8,) for 8 photometric bands
+            phot = pred.photometry  # ndarray, shape (n_filters,)
+            print(phot.shape)  # e.g. (8,) for 8 photometric bands
         """
         return self._model.predict_photometry(self._params)

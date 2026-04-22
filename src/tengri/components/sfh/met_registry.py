@@ -44,6 +44,10 @@ class MetParamDef(NamedTuple):
         Error message when bound check fails.
     default : Distribution
         Default prior distribution.
+
+    Notes
+    -----
+    **JIT-compatible**: no — Python dataclass for registry initialization.
     """
 
     description: str
@@ -69,6 +73,10 @@ class MetModelSpec(NamedTuple):
     internal_param_map : dict[str, tuple[str, float, float]]
         public_name -> (internal_name, scale, offset).
         Conversion: internal = public * scale + offset.
+
+    Notes
+    -----
+    **JIT-compatible**: no — Python dataclass for registry initialization.
     """
 
     name: str

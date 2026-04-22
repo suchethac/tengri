@@ -302,18 +302,36 @@ def shock_line_ratios(
     Returns
     -------
     dict[str, float]
-        PyNeb-format line name → luminosity ratio relative to Hβ.
+        PyNeb-format line name → luminosity ratio relative to Hβ
+        [dimensionless].
 
     Raises
     ------
     ValueError
         If any parameter is outside the grid bounds or invalid.
 
+    Notes
+    -----
+    **JIT-compatible**: yes — continuous parameters (velocity, density,
+    B-field) are interpolated via ``interp_nd_triweight``, safe under
+    ``jax.jit``. Discrete parameters (abundance, component) are resolved
+    at call time and not traced.
+
+    **Fallback**: If the MAPPINGS V HDF5 grid is missing, falls back to
+    the Allen+2008 Table 5 hardcoded array (solar abundance, n=1 cm⁻³,
+    8 velocity points) with a ``DeprecationWarning``. To avoid this,
+    download the grid via ``scripts/download_mappings_templates.py``.
+
+    **Interpolation**: Triweight kernel (C²-continuous) jointly interpolates
+    velocity, density, and B-field across all three axes. Grid edges are
+    precomputed at load time to avoid rebuilding inside JIT traces.
+
     Examples
     --------
     >>> ratios = shock_line_ratios(300.0)  # solar, combined, 300 km/s
     >>> ratios = shock_line_ratios(500.0, shock_component="precursor")
-    >>> ratios = shock_line_ratios(400.0, shock_abundance="lmc", shock_log_density=1.0)
+    >>> ratios = shock_line_ratios(400.0, shock_abundance="lmc",
+    ...                            shock_log_density=1.0)
 
     """
     grids = _load_mappings_grids()
@@ -466,8 +484,18 @@ def compute_shock_sed(
 
     Returns
     -------
-    array, shape (n_wave,)
-        Shock emission SED in erg/s/Hz.
+    ndarray, shape (n_wave,)
+        Shock emission SED in erg/s/Hz [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives and
+    calls to ``_shock_line_arrays`` and ``_place_line_profiles``.
+
+    **Line placement**: Emission lines are placed as Gaussian profiles
+    (if ``line_sigma_aa > 0``) or delta functions (if ``line_sigma_aa = 0``).
+    Delta functions scatter energy into the nearest pixel, normalized
+    by pixel width to preserve flux.
 
     """
     line_waves, line_lums = _shock_line_arrays(
@@ -511,7 +539,17 @@ class ShockBackend:
     has_free_params : bool
         Always ``True`` — velocity, density, B-field are differentiable parameters.
     name : str
-        Backend identifier string.
+        Backend identifier string ("shock").
+
+    Notes
+    -----
+    **JIT-compatible**: Methods return JAX arrays suitable for JIT compilation.
+    All computations use pure functions with no side effects.
+
+    **Attributes**: ``has_continuum`` is always False — MAPPINGS V provides
+    shock-associated emission lines only (no underlying continuum).
+    ``has_free_params`` is always True — all parameters (velocity, density,
+    B-field) are differentiable and suitable for optimization.
 
     """
 
@@ -552,8 +590,17 @@ class ShockBackend:
 
         Returns
         -------
-        array, shape (n_wave,)
-            Shock emission SED in erg/s/Hz.
+        ndarray, shape (n_wave,)
+            Shock emission SED [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — delegates to ``compute_shock_sed``.
+
+        **Abundance and component**: These are fixed at backend initialization
+        via ``shock_abundance`` and ``shock_component`` dataclass fields.
+        Continuous parameters (velocity, density, B-field, H-alpha luminosity)
+        are traced and differentiable under ``jax.jit``.
 
         """
         return compute_shock_sed(

@@ -274,6 +274,7 @@ def _ghmc_burnin_scan(
 @functools.partial(jax.jit, static_argnums=(2,))
 def _mclmc_sample_scan(state, keys, kernel, L, step_size):
     """JIT-compiled MCLMC sampling scan over multiple steps."""
+
     def _step(s, k):
         """Execute one MCLMC step, returning state and sample."""
         s, _info = kernel(k, s, L, step_size)
@@ -285,6 +286,7 @@ def _mclmc_sample_scan(state, keys, kernel, L, step_size):
 @functools.partial(jax.jit, static_argnums=(2,))
 def _adjusted_mclmc_sample_scan(state, keys, kernel, step_size, n_integration_steps):
     """JIT-compiled adjusted MCLMC sampling scan over multiple steps."""
+
     def _step(s, k):
         """Execute one adjusted MCLMC step, returning state and sample."""
         s, info = kernel(k, s, step_size, n_integration_steps)

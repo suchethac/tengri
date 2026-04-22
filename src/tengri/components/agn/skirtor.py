@@ -45,11 +45,17 @@ class SKIRTORComponents(NamedTuple):
     Attributes
     ----------
     disk : jnp.ndarray, shape (n_wave,)
-        Accretion disk emission (direct + scattered). [erg s⁻¹ Hz⁻¹]
+        Accretion disk emission (direct + scattered) [erg/s/Hz].
     dust : jnp.ndarray, shape (n_wave,)
-        Dust thermal emission from the torus. [erg s⁻¹ Hz⁻¹]
+        Dust thermal emission from the torus [erg/s/Hz].
     total : jnp.ndarray, shape (n_wave,)
-        Total emission (disk + dust). [erg s⁻¹ Hz⁻¹]
+        Total emission (disk + dust) [erg/s/Hz].
+
+    Notes
+    -----
+    This is a lightweight container for decomposed SKIRTOR output.
+    All arrays are rest-frame rest-frame spectral luminosity densities.
+    The ``total`` field is the sum of ``disk`` and ``dust``.
     """
 
     disk: jnp.ndarray
@@ -449,7 +455,42 @@ def skirtor_analytic(*args, **kwargs):
     This function uses the tabulated Stalevski+2016 template grid
     with 5D triweight interpolation.
 
-    See ``create_skirtor_from_grid`` for parameters.
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid [Angstrom].
+    agn_log_lbol : float, optional
+        AGN bolometric luminosity [log10(L_sun)]. Default: 44.0.
+    agn_tau_skirtor : float, optional
+        V-band optical depth of torus [dimensionless]. Default: 7.0.
+        Range: ~1–15 (grid-dependent).
+    agn_p_skirtor : float, optional
+        Radial dust distribution power-law index [dimensionless].
+        Default: 1.0. Range: ~0–2 (grid-dependent).
+    agn_q_skirtor : float, optional
+        Radial dust distribution power-law index (temperature profile)
+        [dimensionless]. Default: 1.0. Range: ~0–2 (grid-dependent).
+    agn_oa_skirtor : float, optional
+        Half-opening angle of the torus [degrees]. Default: 40.0.
+        Range: ~10–80° (grid-dependent).
+    agn_cos_inc : float, optional
+        Cosine of inclination angle [dimensionless, 0–1].
+        Default: 0.5 (60°).
+    agn_torus_frac : float, optional
+        Fraction of bolometric luminosity from torus [dimensionless, 0–1].
+        Default: 0.5.
+    **kwargs
+        Additional keyword arguments (ignored for compatibility).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Spectral luminosity density L_ν [erg/s/Hz].
+
+    Notes
+    -----
+    See ``create_skirtor_from_grid`` for full parameter documentation and
+    grid-dependent ranges.
     """
     return _load_skirtor_default()(*args, **kwargs)
 
@@ -459,10 +500,35 @@ def skirtor_components(*args, **kwargs) -> SKIRTORComponents:
 
     Requires a v3 grid file. See ``create_skirtor_components_from_grid``.
 
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid [Angstrom].
+    agn_log_lbol : float, optional
+        AGN bolometric luminosity [log10(L_sun)]. Default: 44.0.
+    agn_tau_skirtor : float, optional
+        V-band optical depth of torus [dimensionless]. Default: 7.0.
+    agn_p_skirtor : float, optional
+        Radial dust distribution power-law index [dimensionless].
+        Default: 1.0.
+    agn_q_skirtor : float, optional
+        Temperature profile power-law index [dimensionless]. Default: 1.0.
+    agn_oa_skirtor : float, optional
+        Half-opening angle of the torus [degrees]. Default: 40.0.
+    agn_cos_inc : float, optional
+        Cosine of inclination angle [dimensionless, 0–1].
+        Default: 0.5 (60°).
+    agn_torus_frac : float, optional
+        Fraction of bolometric luminosity from torus [dimensionless, 0–1].
+        Default: 0.5.
+    **kwargs
+        Additional keyword arguments (ignored for compatibility).
+
     Returns
     -------
     SKIRTORComponents
-        Named tuple with ``disk``, ``dust``, ``total`` arrays.
+        Named tuple with ``disk``, ``dust``, ``total`` arrays, each
+        shape (n_wave,) with units [erg/s/Hz].
 
     Raises
     ------

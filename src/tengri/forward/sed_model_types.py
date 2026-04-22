@@ -48,13 +48,19 @@ class MockData(NamedTuple):
         Parameters
         ----------
         filter_names : list of str, optional
-            Filter labels for the x-axis. Falls back to integer indices.
+            Filter labels for the x-axis. Falls back to integer indices if None.
         ax : matplotlib Axes, optional
             Axes to plot on. Creates new figure if None.
 
         Returns
         -------
         fig : matplotlib Figure
+            Matplotlib figure with photometry plotted as error bars
+            (observed with noise) and markers (true noiseless).
+
+        Notes
+        -----
+        **JIT-compatible**: no — uses matplotlib for visualization.
         """
         import matplotlib.pyplot as plt
         import numpy as np
@@ -99,14 +105,22 @@ class PriorPredictive:
     Attributes
     ----------
     flux : jnp.ndarray or None
-        Predicted photometry draws, shape ``(n, n_filters)``.
+        Predicted photometry draws [erg/s/cm²/Hz], shape ``(n, n_filters)``.
         None if the model has no filters.
     sfh : jnp.ndarray
-        SFH draws, shape ``(n, n_grid)``.
+        SFR on log-age grid [Msun/yr], shape ``(n, n_grid)``.
     params : dict
         Drawn parameter samples, each of shape ``(n,)``.
     _model : object
         Back-reference to the parent model.
+
+    Returns
+    -------
+    This is a dataclass returned by :func:`prior_predictive`.
+
+    Notes
+    -----
+    Use :meth:`check_finite` to diagnose NaN/Inf in prior draws before inference.
 
     Examples
     --------
@@ -114,13 +128,14 @@ class PriorPredictive:
 
         import jax
         from tengri import SEDModel, Parameters, Uniform
+
         spec = Parameters(sfh_dpl_alpha=Uniform(0.5, 4.0), sfh_dpl_beta=Uniform(0.5, 4.0))
         model = SEDModel(spec, ssp_data, filter_names=["sdss_r", "sdss_i"])
-        ppc = model.prior_predictive(n=200, key=jax.random.PRNGKey(0))
-        ppc.flux.shape    # (200, 2)
-        ppc.sfh.shape     # (200, n_grid)
+        ppc = model.prior_predictive(n=200, seed=0)
+        ppc.flux.shape  # (200, 2)
+        ppc.sfh.shape  # (200, n_grid)
         check = ppc.check_finite()
-        check["ok"]       # True if no NaN/Inf
+        check["ok"]  # True if no NaN/Inf
     """
 
     flux: jnp.ndarray | None
@@ -134,7 +149,16 @@ class PriorPredictive:
         Returns
         -------
         dict
-            ``{"n_nan": int, "n_inf": int, "frac_bad": float, "ok": bool}``
+            Diagnostic dict with keys:
+
+            - ``"n_nan"``: count of NaN values [dimensionless]
+            - ``"n_inf"``: count of Inf values [dimensionless]
+            - ``"frac_bad"``: fraction of bad (NaN or Inf) values [dimensionless]
+            - ``"ok"``: bool, True if no NaN/Inf found
+
+        Notes
+        -----
+        **JIT-compatible**: no — uses Python-level checking and warnings.
         """
         import numpy as np
 
@@ -165,6 +189,31 @@ class PrecomputedData:
 
     Data only — no JIT kernels. Built once at ``SEDModel.__init__`` and
     updated by ``precompute_spectroscopy()`` / ``precompute_ztable()``.
+
+    Attributes
+    ----------
+    photometry : object or None
+        PhotometricPrecomputation for fixed redshift.
+    photometry_ztable : object or None
+        PhotometricZTable for free redshift mode.
+    spectroscopy : object or None
+        SpectroscopicPrecomputation for spectrum prediction.
+    dust_age_weights : ndarray or None
+        Sigmoid weights [dimensionless] for two-component dust attenuation, shape (n_age,).
+    igm_at_effective_wavelengths : ndarray or None
+        IGM transmission T(λ_eff) at filter effective wavelengths, shape (n_filters,).
+    effective_bandwidths_hz : ndarray or None
+        Effective bandwidth per filter [Hz], shape (n_filters,).
+    dust_ir_lookup : object or None
+        Preintegrated template-based dust IR photometry lookup.
+    kd_preintegrated : object or None
+        KDPreintegratedData for K&D AGN disc model.
+    skirtor_preintegrated : object or None
+        Preintegrated SKIRTOR torus photometry lookup.
+
+    Notes
+    -----
+    This is an internal container used by SEDModel. Users do not construct this directly.
     """
 
     photometry: object | None = None  # PhotometricPrecomputation (fixed z)
@@ -185,6 +234,22 @@ class CompositionalKernels:
     These compute entire SEDs at full wavelength resolution. The ``rest_sed``
     kernel is the compositional engine; ``photometry`` and ``spectrum`` wrap
     it with params translation + filter/wavelength integration.
+
+    Attributes
+    ----------
+    rest_sed : object or None
+        JIT-compiled kernel for full rest-frame SED [erg/s/Hz].
+    photometry : object or None
+        JIT-compiled kernel for photometric predictions [erg/s/cm²/Hz].
+    spectrum : object or None
+        JIT-compiled kernel for spectroscopic predictions [erg/s/cm²/Hz].
+    exact_sed : object or None
+        JIT-compiled exact SED kernel with fused dust+stellar.
+
+    Notes
+    -----
+    This is an internal container used by SEDModel. Users do not construct this directly.
+    All kernels are callables (built via :func:`build_fused_rest_sed`, etc.).
     """
 
     rest_sed: object | None = None  # build_fused_rest_sed
@@ -200,6 +265,20 @@ class HybridKernels:
     Stellar photometry uses the precomputed SSP×filter einsum (fast).
     Non-stellar components use emission_helpers.py at full wavelength
     resolution, then integrate through filters. Populated in PR 2.
+
+    Attributes
+    ----------
+    photometry : object or None
+        Hybrid kernel for fixed-redshift photometry [erg/s/cm²/Hz].
+    photometry_ztable : object or None
+        Hybrid kernel for free-redshift photometry [erg/s/cm²/Hz].
+    spectrum : object or None
+        Hybrid kernel for spectroscopy [erg/s/cm²/Hz].
+
+    Notes
+    -----
+    This is an internal container used by SEDModel. Users do not construct this directly.
+    Hybrid kernels trade speed (precomputed stellar) for accuracy (compositional non-stellar).
     """
 
     photometry: object | None = None

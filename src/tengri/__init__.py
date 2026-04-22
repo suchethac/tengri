@@ -150,6 +150,10 @@ def posteriors_to_dataframe(results: list, params: list[str] | None = None):
         One row per galaxy, columns: ``{param}_median``, ``{param}_lo68``,
         ``{param}_hi68`` for each requested parameter.
 
+    Notes
+    -----
+    **JIT-compatible**: no — pure Python, requires pandas library.
+
     Examples
     --------
     >>> df = tengri.posteriors_to_dataframe(results, params=["met_logzsol", "dust_tau_bc"])

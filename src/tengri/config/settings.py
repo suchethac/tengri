@@ -51,6 +51,25 @@ class AGNConfig:
     fe2 : bool
         Include Fe II pseudo-continuum. Default False.
 
+    Attributes
+    ----------
+    disc : str
+        AGN accretion disc model choice.
+    torus : str
+        AGN torus/obscuration model choice.
+    nlr : str
+        Narrow Line Region emission model choice.
+    blr : bool
+        Whether to include Broad Line Region emission.
+    polar_dust : bool
+        Whether to include SMC polar dust reddening.
+    fe2 : bool
+        Whether to include Fe II pseudo-continuum.
+
+    Notes
+    -----
+    **JIT-compatible**: no — configuration object, frozen dataclass.
+
     Examples
     --------
     >>> from tengri import AGNConfig

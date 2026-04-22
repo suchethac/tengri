@@ -1,0 +1,189 @@
+[
+  {
+    "notebook": "00_quickstart.ipynb",
+    "success": false,
+    "elapsed_seconds": 3.8,
+    "memory_before_mb": 21.4,
+    "memory_after_mb": 21.5,
+    "memory_delta_mb": 0.1,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  },
+  {
+    "notebook": "01_sed_anatomy.ipynb",
+    "success": false,
+    "elapsed_seconds": 2.95,
+    "memory_before_mb": 21.5,
+    "memory_after_mb": 21.6,
+    "memory_delta_mb": 0.1,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  },
+  {
+    "notebook": "02_sfh_gallery.ipynb",
+    "success": false,
+    "elapsed_seconds": 2.98,
+    "memory_before_mb": 21.6,
+    "memory_after_mb": 21.8,
+    "memory_delta_mb": 0.2,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  },
+  {
+    "notebook": "03_dust_gallery.ipynb",
+    "success": false,
+    "elapsed_seconds": 2.95,
+    "memory_before_mb": 21.8,
+    "memory_after_mb": 21.9,
+    "memory_delta_mb": 0.1,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  },
+  {
+    "notebook": "04_nebular_gallery.ipynb",
+    "success": false,
+    "elapsed_seconds": 2.75,
+    "memory_before_mb": 21.9,
+    "memory_after_mb": 22.0,
+    "memory_delta_mb": 0.1,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  },
+  {
+    "notebook": "05_agn_gallery.ipynb",
+    "success": false,
+    "elapsed_seconds": 2.89,
+    "memory_before_mb": 22.0,
+    "memory_after_mb": 22.1,
+    "memory_delta_mb": 0.2,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  },
+  {
+    "notebook": "06_multiwavelength_gallery.ipynb",
+    "success": false,
+    "elapsed_seconds": 2.8,
+    "memory_before_mb": 22.1,
+    "memory_after_mb": 22.2,
+    "memory_delta_mb": 0.1,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  },
+  {
+    "notebook": "07_fitting_photometry.ipynb",
+    "success": false,
+    "elapsed_seconds": 2.9,
+    "memory_before_mb": 22.2,
+    "memory_after_mb": 22.3,
+    "memory_delta_mb": 0.0,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  },
+  {
+    "notebook": "08_fitting_spectra.ipynb",
+    "success": false,
+    "elapsed_seconds": 2.87,
+    "memory_before_mb": 22.3,
+    "memory_after_mb": 22.4,
+    "memory_delta_mb": 0.1,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  },
+  {
+    "notebook": "09_degeneracies.ipynb",
+    "success": false,
+    "elapsed_seconds": 2.87,
+    "memory_before_mb": 22.4,
+    "memory_after_mb": 22.4,
+    "memory_delta_mb": 0.0,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  },
+  {
+    "notebook": "10_real_data.ipynb",
+    "success": false,
+    "elapsed_seconds": 2.95,
+    "memory_before_mb": 22.4,
+    "memory_after_mb": 22.4,
+    "memory_delta_mb": 0.0,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  },
+  {
+    "notebook": "11_population.ipynb",
+    "success": false,
+    "elapsed_seconds": 2.92,
+    "memory_before_mb": 22.4,
+    "memory_after_mb": 22.4,
+    "memory_delta_mb": 0.0,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  },
+  {
+    "notebook": "12_extending_tengri.ipynb",
+    "success": false,
+    "elapsed_seconds": 2.9,
+    "memory_before_mb": 22.4,
+    "memory_after_mb": 22.4,
+    "memory_delta_mb": 0.0,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  },
+  {
+    "notebook": "13_tabulated_sfh_to_mock_sed.ipynb",
+    "success": false,
+    "elapsed_seconds": 2.95,
+    "memory_before_mb": 22.4,
+    "memory_after_mb": 22.6,
+    "memory_delta_mb": 0.2,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  },
+  {
+    "notebook": "14_joint_photometry_spectroscopy.ipynb",
+    "success": false,
+    "elapsed_seconds": 2.93,
+    "memory_before_mb": 22.7,
+    "memory_after_mb": 22.7,
+    "memory_delta_mb": 0.1,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  },
+  {
+    "notebook": "15_emission_line_measurements.ipynb",
+    "success": false,
+    "elapsed_seconds": 2.94,
+    "memory_before_mb": 22.7,
+    "memory_after_mb": 22.8,
+    "memory_delta_mb": 0.1,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  },
+  {
+    "notebook": "demo_jax_compilation_cache.ipynb",
+    "success": false,
+    "elapsed_seconds": 5.33,
+    "memory_before_mb": 22.8,
+    "memory_after_mb": 22.9,
+    "memory_delta_mb": 0.0,
+    "returncode": 1,
+    "stderr": "\u001b[1;32m     24\u001b[0m )\n\u001b[1;32m     26\u001b[0m \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;21;01mtengri\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mutils\u001b[39;00m\u001b[38;5;21;01m.\u001b[39;00m\u001b[38;5;21;01mphysics_constants\u001b[39;00m \u001b[38;5;28;01mimport\u001b[39;00m MPC_CM\n\u001b[1;32m     28\u001b[0m \u001b[38;5;66;03m# Planck 2018 cosmology (tengri default)\u001b[39;00m\n\n\u001b[0;31mImportError\u001b[0m: cannot import name 'differential_comoving_volume' from 'dsps.cosmology.flat_wcdm' (/opt/anaconda3/lib/python3.12/site-packages/dsps/cosmology/flat_wcdm.py)\n\n",
+    "stdout": ""
+  }
+]

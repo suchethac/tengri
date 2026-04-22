@@ -86,10 +86,33 @@ def register_dust_law(name: str) -> Callable:
     -------
     Callable
         Decorator that registers the decorated function and returns it unchanged.
+
+    Notes
+    -----
+    **JIT-compatible**: no — registration happens at factory time before JIT.
+
+    Decorated functions must implement the ``DustAttenuationLaw`` protocol:
+    accept a wavelength array and keyword arguments, returning an attenuation
+    curve ``k(λ)`` [dimensionless].
     """
 
     def decorator(fn: Callable) -> Callable:
-        """Inner decorator that registers function in DUST_LAWS dict."""
+        """Inner decorator that registers function in DUST_LAWS dict.
+
+        Parameters
+        ----------
+        fn : Callable
+            Dust attenuation law function matching ``DustAttenuationLaw`` protocol.
+
+        Returns
+        -------
+        Callable
+            The input function unchanged (enables use as a decorator).
+
+        Notes
+        -----
+        **JIT-compatible**: depends on the decorated function.
+        """
         DUST_LAWS[name] = fn
         return fn
 
@@ -113,6 +136,13 @@ def resolve_dust_law(name: str) -> Callable:
     ------
     ValueError
         If ``name`` is not in the registry.
+
+    Notes
+    -----
+    **JIT-compatible**: no — registry lookup happens at factory time.
+
+    The returned function matches the ``DustAttenuationLaw`` protocol and can
+    be called with wavelengths and law-specific parameters.
     """
     if name not in DUST_LAWS:
         raise ValueError(f"Unknown dust law '{name}'. Available: {list(DUST_LAWS.keys())}")
@@ -813,6 +843,18 @@ def salim(
     -------
     ndarray, shape (n_wave,)
         Attenuation curve k(lambda) normalized to k(5500 A) = 1.
+        [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses only jnp primitives.
+
+    **Gradient-safe**: yes — differentiable everywhere.
+
+    This is the default attenuation law in DSPS and Zacharegkas+2025
+    simulations. It combines Calzetti et al. (2000) optical/NIR continuum
+    with Leitherer et al. (2002) UV extension, plus a variable 2175 Å bump
+    and power-law tilt.
     """
     return kriek_conroy(
         wavelength,

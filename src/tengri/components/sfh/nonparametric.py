@@ -140,6 +140,10 @@ def continuity_prior_logp(
     -------
     scalar
         Total log-probability summed over all ratios.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.scipy.stats`` for Student-t density.
     """
     from jax.scipy.stats import t as student_t
 

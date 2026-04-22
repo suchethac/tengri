@@ -34,7 +34,18 @@ def compute_gradient_sed(forward_model, params, param_name):
     """
 
     def sed_as_fn_of_param(val):
-        """Compute SED with modified parameter value."""
+        """Compute SED with modified parameter value.
+
+        Parameters
+        ----------
+        val : float
+            Parameter value to substitute.
+
+        Returns
+        -------
+        array, shape (n_wave,)
+            SED at the given parameter value.
+        """
         p = dict(params)
         p[param_name] = val
         return forward_model(p)

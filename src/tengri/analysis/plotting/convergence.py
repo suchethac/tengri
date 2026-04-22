@@ -21,11 +21,16 @@ def diagnostics_table(results, names=None):
     names : list of str, optional
         Display order. Defaults to ``list(results.keys())``.
 
+    Returns
+    -------
+    None
+
     Examples
     --------
     .. code-block:: python
 
         from tengri import diagnostics_table
+
         results = {"NUTS": posterior_nuts, "VI": posterior_vi}
         diagnostics_table(results)
         # Method          Wall time   ESS (min)   ESS (med)   Accept %

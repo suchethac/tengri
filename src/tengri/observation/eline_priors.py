@@ -146,14 +146,16 @@ def cloudy_line_priors(
 
     Returns
     -------
-    prior_means : array (n_lines,)
-        Expected line luminosities relative to Hbeta.
-    prior_sigmas : array (n_lines,)
-        Prior standard deviations (in same units as means, i.e. the
-        linear-space scatter corresponding to ``prior_width_dex``).
+    prior_means : array, shape (n_lines,)
+        Expected line luminosities relative to Hbeta [dimensionless].
+    prior_sigmas : array, shape (n_lines,)
+        Prior standard deviations [dimensionless], linear-space scatter
+        corresponding to ``prior_width_dex``.
 
     Notes
     -----
+    **JIT-compatible**: yes — uses only jnp primitives.
+    Performs bilinear interpolation over a 2×2 grid in (Z, logU) space.
     For richer priors using a full CLOUDY grid, use ``cloudy_grid_line_priors()``.
 
     """
@@ -226,14 +228,15 @@ def marginalize_emission_lines_cloudy(
     Returns
     -------
     ln_L_marg : scalar
-        Marginalized log-likelihood.
-    a_hat : array (n_lines,)
-        Posterior-mean line amplitudes.
-    a_cov : array (n_lines, n_lines)
-        Posterior covariance of line amplitudes.
+        Marginalized log-likelihood [dimensionless].
+    a_hat : array, shape (n_lines,)
+        Posterior-mean line amplitudes (same units as ``residual``).
+    a_cov : array, shape (n_lines, n_lines)
+        Posterior covariance of line amplitudes (same units^2 as ``a_hat``).
 
     Notes
     -----
+    **JIT-compatible**: no (calls external function).
     For richer priors using a full CLOUDY grid, use ``cloudy_grid_line_priors()``.
 
     """
@@ -308,13 +311,14 @@ def cloudy_grid_line_priors(
 
     Returns
     -------
-    prior_means : array (n_lines_out,)
-        Line luminosities relative to Hbeta (interpolated from grid, linear).
-    prior_sigmas : array (n_lines_out,)
-        Prior standard deviations in the same units.
+    prior_means : array, shape (n_lines_out,)
+        Line luminosities relative to Hbeta [dimensionless].
+    prior_sigmas : array, shape (n_lines_out,)
+        Prior standard deviations [dimensionless].
 
     Notes
     -----
+    **JIT-compatible**: no (uses NumPy for interpolation).
     The grid stores ``line_luminosity`` in log10 space. The function:
 
     1. Clamps (log_z, neb_logU, log_age_yr) to grid bounds
@@ -323,8 +327,9 @@ def cloudy_grid_line_priors(
     4. Normalises relative to Hbeta (detected by wavelength ~4861 Å)
     5. Applies dex scatter: ``sigma = mean * (10**width - 1)``
 
-    For richer priors using a full CLOUDY grid, prefer this over
-    ``cloudy_line_priors()`` which uses a hardcoded 2×2 table.
+    This function is preferred over ``cloudy_line_priors()`` when a full
+    CLOUDY grid is available, as it provides richer metallicity/age/ionization
+    coverage.
 
     """
     # Clamp to grid bounds
@@ -421,14 +426,16 @@ def balmer_decrement_prior(
 
     Returns
     -------
-    wavelengths : array (4,)
-        Balmer line rest-frame wavelengths [Hα, Hβ, Hγ, Hδ] in Angstrom.
-    predicted_ratios : array (4,)
-        Predicted observed Balmer ratios relative to Hβ = 1.0, after
-        applying nebular dust attenuation.
+    wavelengths : array, shape (4,)
+        Balmer line rest-frame vacuum wavelengths [Hα, Hβ, Hγ, Hδ]
+        [Angstrom].
+    predicted_ratios : array, shape (4,)
+        Predicted observed Balmer ratios relative to Hβ = 1.0 [dimensionless],
+        after applying nebular dust attenuation.
 
     Notes
     -----
+    **JIT-compatible**: yes — uses only jnp primitives.
     The Calzetti nebular E(B-V) is related to the diffuse dust optical
     depth by:
 
@@ -444,8 +451,10 @@ def balmer_decrement_prior(
 
         ratio_obs(λ) = ratio_intrinsic(λ) × 10^{-0.4 × [A(λ) - A(Hβ)]}
 
-    For richer priors using a full CLOUDY grid, prefer this over
-    ``cloudy_line_priors()`` which uses a hardcoded 2×2 table.
+    References
+    ----------
+    Calzetti, D. 2000, ApJ, 533, 682 — nebular attenuation law.
+    Osterbrock, D. E., & Ferland, G. J. 2006 — Case B ratios.
 
     """
     # Intrinsic Case B ratios (Hα, Hβ, Hγ, Hδ) relative to Hβ=1

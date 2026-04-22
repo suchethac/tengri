@@ -344,28 +344,25 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ### Fitting with vi_native (geoVI, JIT-compiled)
+# ### Fitting with vi (NIFTy geoVI)
 #
-# `vi_native` is tengri's fastest inference method: geometric Variational
-# Inference (geoVI; Frank et al. 2021) compiled entirely in JAX — no NIFTy
-# dependency, no Python loops. The JIT engine is background-compiled at
-# `Fitter.__init__` time, so the first `run()` call sees near-zero compile
-# delay. It constructs a coordinate transform that flattens the posterior
-# geometry, straightening curved degeneracies like the age–dust banana, then
-# draws samples in the flattened space.
+# `vi` is tengri's variational inference method using NIFTy geometric Variational
+# Inference (geoVI; Frank et al. 2021). It constructs a coordinate transform that
+# flattens the posterior geometry, straightening curved degeneracies like the
+# age–dust banana, then draws samples in the flattened space.
 
 # %%
-# vi_native (geoVI, pure-JAX) — background-compiled at Fitter init
+# vi (NIFTy geoVI) — variational inference using Information Field Theory
 fitter_param = Fitter(
     model_param,
     mock_param.flux_obs,
     mock_param.noise,
 )
 
-# Inference runtime (JIT engine already compiled in background)
+# Inference runtime
 t0 = time.perf_counter()
 result_geovi_param = fitter_param.run(
-    "vi_native",
+    "vi",
     n_iterations=15,
     n_samples=3,
     n_posterior_samples=500,
@@ -373,7 +370,7 @@ result_geovi_param = fitter_param.run(
 )
 t_geovi = time.perf_counter() - t0
 
-print(f"vi_native (geoVI): {t_geovi:.1f}s  ← runtime per galaxy")
+print(f"vi (NIFTy geoVI): {t_geovi:.1f}s  ← runtime per galaxy")
 
 # %%
 # --- FIGURE 2: Spectral Fit ---
@@ -501,7 +498,7 @@ plt.show()
 # they should agree.
 
 # %%
-# Run NUTS warm-started from vi_native result
+# Run NUTS warm-started from vi result
 t0 = time.perf_counter()
 result_nuts_param = fitter_param.run(
     "mcmc_nuts",
@@ -514,7 +511,7 @@ t_nuts = time.perf_counter() - t0
 print(f"NUTS: {t_nuts:.1f}s")
 
 # Convergence diagnostics
-ct = convergence_table({"vi": result_geovi_param, "NUTS": result_nuts_param})
+ct = convergence_table({"vi (NIFTy)": result_geovi_param, "NUTS": result_nuts_param})
 
 # %% [markdown]
 # ### Parameter recovery
@@ -529,16 +526,16 @@ for name in spec_param.free_params:
     print(f"  {name:<30s} {truth:8.3f} {med:8.3f} {lo:8.3f} {hi:8.3f} {covered:>6s}")
 
 # %%
-# --- FIGURE 5: vi (geoVI) vs NUTS ---
+# --- FIGURE 5: vi (NIFTy) vs NUTS ---
 fig = plot_corner_comparison(
     [result_geovi_param, result_nuts_param],
-    labels=["vi", "NUTS"],
+    labels=["vi (NIFTy)", "NUTS"],
     colors=[COLORS["vi"], COLORS["mcmc_nuts"]],
     truths=true_params_param,
 )
 if fig is not None:
     fig.suptitle(
-        f"vi (geoVI) ({t_geovi:.1f}s) vs NUTS ({t_nuts:.1f}s) — D = 7",
+        f"vi (NIFTy) ({t_geovi:.1f}s) vs NUTS ({t_nuts:.1f}s) — D = 7",
         y=1.02,
     )
     # plt.savefig(os.path.join(FIGDIR, "fig05_geovi_vs_nuts.png"), dpi=150, bbox_inches="tight")
@@ -549,15 +546,15 @@ plt.show()
 print("\n  Method         | Wall Clock | Effective Samples | ESS/sec")
 print("  " + "-" * 60)
 for name, res, t in [
-    ("vi_native", result_geovi_param, t_geovi),
+    ("vi (NIFTy)", result_geovi_param, t_geovi),
     ("NUTS", result_nuts_param, t_nuts),
 ]:
     n_samp = len(next(iter(res.samples.values()))) if res.samples else 0
     print(f"  {name:<16s} | {t:>8.1f} s | {n_samp:>17d} | {n_samp / t:>7.0f}")
 
 # %% [markdown]
-# **Part A Takeaway**: For a 7-parameter model, vi (geoVI) and NUTS give the
-# same answer. vi (geoVI) is an order of magnitude faster. For low-dimensional
+# **Part A Takeaway**: For a 7-parameter model, vi (NIFTy) and NUTS give similar
+# answers. vi (NIFTy) is fast and scales to higher dimensions. For low-dimensional
 # problems where you want exact MCMC guarantees, NUTS works — but it doesn't
 # scale. Now let's see what happens when dimensionality explodes.
 
@@ -575,8 +572,8 @@ for name, res, t in [
 # %% [markdown]
 # This high dimensionality is exactly where standard MCMC methods like NUTS
 # break down — the curse of dimensionality means chains mix too slowly. But
-# because our entire model is differentiable, vi (geoVI) exploits gradient
-# information to navigate this space efficiently.
+# because our entire model is differentiable, vi (NIFTy) with gradient-based
+# optimization can navigate this space efficiently.
 
 # %%
 # Define the stochastic parameter specification
@@ -594,7 +591,7 @@ spec_stoch = Parameters(
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
     mean_sfh_type=["tsnorm", "field"],
-    n_grid=128,
+    n_grid=64,
 )
 print(f"Stochastic model: {spec_stoch.n_free} free parameters")
 print(f"  Physical: {len([p for p in spec_stoch.free_params if 'xi' not in p])}")
@@ -673,7 +670,7 @@ fig.tight_layout()
 plt.show()
 
 # %%
-# vi_native (geoVI) on the stochastic model — 137-D posterior
+# vi (NIFTy) on the stochastic model — 137-D posterior
 fitter_stoch = Fitter(
     model_stoch,
     mock_stoch.flux_obs,
@@ -682,7 +679,7 @@ fitter_stoch = Fitter(
 
 t0 = time.perf_counter()
 result_geovi_stoch = fitter_stoch.run(
-    "vi_native",
+    "vi",
     n_iterations=15,
     n_samples=3,
     n_posterior_samples=500,
@@ -693,7 +690,7 @@ t_geovi_s = time.perf_counter() - t0
 print(f"\n{'=' * 55}")
 print(f"  137-dimensional posterior in {t_geovi_s:.1f}s runtime")
 print(f"{'=' * 55}")
-print(f"  vi_native (geoVI): {t_geovi_s:.1f}s  ← runtime per galaxy")
+print(f"  vi (NIFTy): {t_geovi_s:.1f}s  ← runtime per galaxy")
 
 # %%
 # --- FIGURE 7: Stochastic SFH Recovery (THE MONEY FIGURE) ---
@@ -773,7 +770,7 @@ true_s = np.array(mock_stoch.flux_true)
 ax_fit.errorbar(wave_np, obs_s, yerr=noise_s, fmt=".", ms=2, color=COLORS["data"], alpha=0.4)
 for s in spec_samples_s[:50]:
     ax_fit.plot(wave_np, s, color=COLORS["vi"], alpha=0.03, lw=0.5)
-ax_fit.plot(wave_np, spec_median_s, color=COLORS["vi"], lw=1.5, label="vi (geoVI) median")
+ax_fit.plot(wave_np, spec_median_s, color=COLORS["vi"], lw=1.5, label="vi (NIFTy) median")
 ax_fit.plot(wave_np, true_s, color=COLORS["truth"], lw=1, ls="--", label="Truth")
 ax_fit.legend(fontsize=8)
 ax_fit.set_ylabel("Flux density")
@@ -857,7 +854,7 @@ ax.plot(
 
 # Overlay each method's posterior SFH as 68% CI band
 for result, color, label in [
-    (result_geovi_stoch, COLORS["vi"], f"vi (geoVI) ({t_geovi_s:.1f}s)"),
+    (result_geovi_stoch, COLORS["vi"], f"vi (NIFTy) ({t_geovi_s:.1f}s)"),
     (result_rt_stoch, COLORS["rt"], f"Ray Tracing ({t_rt_s:.1f}s)"),
 ]:
     if result.samples is not None:
@@ -877,7 +874,7 @@ ax.set_ylabel(r"$\mathrm{SFR\ /\ M_\odot\ yr^{-1}}$")
 ax.set_xlim(0, 13.5)
 ax.set_ylim(bottom=0.0)
 ax.legend(loc="upper right")
-ax.set_title("Stochastic SFH Recovery — vi (geoVI) vs Ray Tracing (D = 137)")
+ax.set_title("Stochastic SFH Recovery — vi (NIFTy) vs Ray Tracing (D = 137)")
 
 # 200 Myr inset with both posteriors
 inset = ax.inset_axes([0.55, 0.55, 0.4, 0.4])
@@ -885,7 +882,7 @@ mask_cmp = t_gyr_cmp < 0.2
 if np.any(mask_cmp):
     t_inset = t_gyr_cmp[mask_cmp] * 1e3
     for result, color, label in [
-        (result_geovi_stoch, COLORS["vi"], "geoVI"),
+        (result_geovi_stoch, COLORS["vi"], "NIFTy"),
         (result_rt_stoch, COLORS["rt"], "RT"),
     ]:
         if result.samples is not None:
@@ -926,20 +923,20 @@ print("  " + "=" * 75)
 print(f"  {'Model':<20s} {'D':>4s}  {'Method':<16s} {'Compile':>8s} {'Runtime':>8s}  Notes")
 print("  " + "-" * 75)
 print(
-    f"  {'Parametric':<20s} {'7':>4s}  {'vi (geoVI)':<16s} {'N/A':>7s} {t_geovi:>7.1f}s  Default"
+    f"  {'Parametric':<20s} {'7':>4s}  {'vi (NIFTy)':<16s} {'N/A':>7s} {t_geovi:>7.1f}s  Default"
 )
 print(
     f"  {'Parametric':<20s} {'7':>4s}  {'NUTS':<16s} {'':>8s} {t_nuts:>7.1f}s  Exact, gold standard"
 )
 print(
-    f"  {'Stochastic':<20s} {'137':>4s}  {'vi (geoVI)':<16s} {'N/A':>7s} {t_geovi_s:>7.1f}s  Default"
+    f"  {'Stochastic':<20s} {'137':>4s}  {'vi (NIFTy)':<16s} {'N/A':>7s} {t_geovi_s:>7.1f}s  Default"
 )
 print(
     f"  {'Stochastic':<20s} {'137':>4s}  {'Ray Tracing':<16s} {'':>8s} {t_rt_s:>7.1f}s  Exact (Behroozi 2025)"
 )
 print("  " + "=" * 75)
 print("\n  Compile is one-time (cached on disk). Runtime is per galaxy.")
-print(f"  Headline: 137D posterior in {t_geovi_s:.0f}s runtime with vi (geoVI).")
+print(f"  Headline: 137D posterior in {t_geovi_s:.0f}s runtime with vi (NIFTy).")
 
 # %% [markdown]
 # ## What You Just Did

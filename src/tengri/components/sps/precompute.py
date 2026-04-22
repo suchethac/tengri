@@ -96,26 +96,32 @@ class PhotometricPrecomputation(NamedTuple):
     Attributes
     ----------
     ssp_phot : array, shape (n_met, n_age, n_filters)
-        SSP broadband flux per metallicity, age, and filter.
+        SSP broadband flux per metallicity, age, and filter [erg/s/Hz/Msun].
         Φ_{ijb} = ∫ SSP(Z_i, t_j, λ) T_b(λ) λ dλ / ∫ T_b(λ) λ dλ
     ssp_phot_moment : array or None, shape (n_met, n_age, n_filters)
-        First spectral moment of the SSP within each filter:
+        First spectral moment of the SSP within each filter [Angstrom].
         Ψ_{ijb} = ∫ SSP(Z_i, t_j, λ) (λ - λ_eff) T_b(λ) λ dλ / ∫ T_b(λ) λ dλ
         Used for the Taylor-corrected dust approximation:
         f_b ≈ A(λ_eff)·Φ + A'(λ_eff)·Ψ, which captures the SSP–dust
         covariance to first order and reduces the factorization error by ~5×.
         None when Taylor correction is disabled.
     effective_wavelengths : array, shape (n_filters,)
-        Effective wavelength of each filter (Angstrom, observed frame).
+        Effective wavelength of each filter [Angstrom], observed frame.
         Used for evaluating dust at a single wavelength per band.
     effective_wavelengths_rest : array, shape (n_filters,)
-        Effective wavelength in rest frame (Angstrom).
+        Effective wavelength in rest frame [Angstrom].
     flux_scale : float
-        (1+z) / (4 pi dL^2) geometric factor.
+        Geometric factor (1+z) / (4π dL²) [dimensionless].
     redshift : float
-        Source redshift.
+        Source redshift [dimensionless].
     n_filters : int
-        Number of filters.
+        Number of filters [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: no — this is a data container produced by
+    :func:`precompute_photometry` at startup; data itself is immutable
+    and suitable for use in JAX operations.
     """
 
     ssp_phot: jnp.ndarray
@@ -134,15 +140,21 @@ class SpectroscopicPrecomputation(NamedTuple):
     ----------
     ssp_on_pixels : array, shape (n_met, n_age, n_pix)
         SSP flux interpolated to observed spectral pixel wavelengths
-        (in rest frame).
+        in rest frame [erg/s/Hz/Msun].
     wave_rest_pixels : array, shape (n_pix,)
-        Rest-frame wavelengths of spectral pixels.
+        Rest-frame wavelengths of spectral pixels [Angstrom].
     wave_obs_pixels : array, shape (n_pix,)
-        Observed-frame wavelengths.
+        Observed-frame wavelengths [Angstrom].
     flux_scale : float
-        Geometric scaling factor.
+        Geometric scaling factor (1+z) / (4π dL²) [dimensionless].
     redshift : float
-        Source redshift.
+        Source redshift [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: no — this is a data container produced by
+    :func:`precompute_spectroscopy` at startup; data itself is immutable
+    and suitable for use in JAX operations.
     """
 
     ssp_on_pixels: jnp.ndarray
@@ -304,18 +316,25 @@ class PhotometricZTable(NamedTuple):
     Attributes
     ----------
     ssp_phot_table : array, shape (n_z, n_met, n_age, n_filters)
-        SSP broadband flux at each redshift, metallicity, age, and filter.
+        SSP broadband flux at each redshift, metallicity, age, and filter
+        [erg/s/Hz/Msun].
     eff_waves_rest_table : array, shape (n_z, n_filters)
-        Rest-frame effective wavelengths at each redshift.
+        Rest-frame effective wavelengths at each redshift [Angstrom].
     flux_scale_table : array, shape (n_z,)
-        Geometric factor (1+z)/(4π dL²) at each redshift.
+        Geometric factor (1+z)/(4π dL²) at each redshift [dimensionless].
     z_grid : array, shape (n_z,)
-        Redshift grid.
+        Redshift grid [dimensionless].
     n_filters : int
-        Number of filters.
+        Number of filters [dimensionless].
     igm_trans_table : array, shape (n_z, n_filters)
-        IGM transmission at effective observed wavelengths per redshift.
-        All ones when IGM is not applied.
+        IGM transmission at effective observed wavelengths per redshift
+        [dimensionless]. All ones when IGM is not applied.
+
+    Notes
+    -----
+    **JIT-compatible**: no — this is a data container produced by
+    :func:`precompute_photometry_ztable` at startup; data itself is immutable
+    and suitable for use in JAX operations.
     """
 
     ssp_phot_table: jnp.ndarray

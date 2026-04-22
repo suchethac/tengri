@@ -398,15 +398,20 @@ def compute_effective_wavelength(wave: np.ndarray, trans: np.ndarray) -> float:
 
     Parameters
     ----------
-    wave : array
-        Wavelength in Angstrom.
-    trans : array
-        Transmission (dimensionless).
+    wave : array, shape (n_wave,)
+        Wavelength [Angstrom].
+    trans : array, shape (n_wave,)
+        Transmission (dimensionless [0, 1]).
 
     Returns
     -------
     float
-        Effective wavelength in Angstrom.
+        Effective wavelength [Angstrom].
+
+    Notes
+    -----
+    Not JAX-compatible (uses NumPy). Intended for filter metadata
+    computation, not forward model evaluation.
 
     """
     num = np.trapz(trans * wave, wave)
@@ -421,15 +426,20 @@ def compute_fwhm(wave: np.ndarray, trans: np.ndarray) -> float:
 
     Parameters
     ----------
-    wave : array
-        Wavelength in Angstrom.
-    trans : array
-        Transmission (dimensionless).
+    wave : array, shape (n_wave,)
+        Wavelength [Angstrom].
+    trans : array, shape (n_wave,)
+        Transmission (dimensionless [0, 1]).
 
     Returns
     -------
     float
-        FWHM in Angstrom. Returns 0 if the curve never exceeds half-max.
+        FWHM [Angstrom]. Returns 0 if the curve never exceeds half-max.
+
+    Notes
+    -----
+    Not JAX-compatible (uses NumPy). Intended for filter metadata
+    computation, not forward model evaluation.
 
     """
     peak = np.max(trans)
@@ -643,16 +653,27 @@ def load_filter_set(
     names : list of str
         Short names from ``FILTER_REGISTRY``.
     cache_dir : str
-        Directory for cached filter files.
+        Directory for cached filter files. Default: ``"data/filters"``.
 
     Returns
     -------
     filter_waves : list of jnp.ndarray
-        Wavelength arrays per filter.
+        Wavelength arrays per filter, each shape ``(n_wave,)`` [Angstrom].
     filter_trans : list of jnp.ndarray
-        Transmission arrays per filter.
+        Transmission arrays per filter, each shape ``(n_wave,)``
+        (dimensionless [0, 1]).
     filter_curves : list of FilterCurve
-        Full FilterCurve objects.
+        Full FilterCurve objects with wavelength, transmission, and name.
+
+    Raises
+    ------
+    KeyError
+        If any name is not in ``FILTER_REGISTRY``.
+
+    Notes
+    -----
+    Filters are downloaded from SVO on first use and cached locally.
+    See ``load_filter()`` for single-filter loading.
 
     Examples
     --------
@@ -725,18 +746,23 @@ def load_tophat_filter(
     Parameters
     ----------
     wave_center_aa : float
-        Central wavelength in Angstrom.
+        Central wavelength [Angstrom].
     width_aa : float
-        Full width of the top-hat in Angstrom.
+        Full width of the top-hat [Angstrom].
     name : str
-        Label for this filter (e.g. ``"alma_band6"``).
+        Label for this filter (e.g. ``"alma_band6"``). Default: empty string.
     n_points : int
-        Number of wavelength samples.
+        Number of wavelength samples. Default: 50.
 
     Returns
     -------
     FilterCurve
-        Rectangular transmission curve.
+        Rectangular transmission curve with uniform transmission = 1.0.
+
+    Notes
+    -----
+    Useful for continuum photometry measurements (e.g., ALMA, SCUBA-2)
+    that are defined in frequency space rather than bandpass shape.
 
     """
     wave = jnp.linspace(wave_center_aa - width_aa / 2, wave_center_aa + width_aa / 2, n_points)
@@ -803,19 +829,26 @@ def list_available_filters(
     Parameters
     ----------
     group_by : str
-        Grouping key.  ``"facility"`` (default) groups by telescope/instrument.
+        Grouping key. ``"facility"`` (default) groups by telescope/instrument.
         ``"none"`` lists filters alphabetically without grouping.
+        Default: ``"facility"``.
     compute_properties : bool
         If ``True``, load each filter's transmission curve and display
-        effective wavelength and FWHM columns.  This triggers SVO
-        downloads for any filters not yet cached.
+        effective wavelength and FWHM columns. This triggers SVO
+        downloads for any filters not yet cached. Default: ``False``.
     cache_dir : str, optional
-        Override cache directory for filter downloads.
+        Override cache directory for filter downloads. Default: ``None``.
 
     Returns
     -------
     dict
-        Copy of ``FILTER_REGISTRY`` (short name -> SVO ID).
+        Copy of ``FILTER_REGISTRY`` (short name -> SVO ID). Also prints
+        the registry to stdout in human-readable format.
+
+    Notes
+    -----
+    This function is primarily for interactive exploration of available
+    filters. For programmatic use, access ``FILTER_REGISTRY`` directly.
 
     """
     if group_by == "none":

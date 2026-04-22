@@ -114,7 +114,31 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
         1 over wavelength).  This function converts to L_nu (Lsun/Hz)
         and scales by L_absorbed to enforce energy balance.
 
-        Returns L_nu in Lsun/Hz.
+        Parameters
+        ----------
+        wavelength_aa : array_like, shape (n_wave,)
+            Rest-frame wavelength grid [Å].
+        L_absorbed : float
+            Total absorbed luminosity [Lsun].
+        dust_umin : float
+            Minimum radiation field intensity [dimensionless]. Default: 1.0.
+        dust_gamma_dl : float
+            Mixing fraction for power-law component [dimensionless]. Default: 0.01.
+        dust_qpah : float
+            PAH mass fraction [dimensionless]. Default: 2.5.
+        **_kwargs
+            Extra keyword arguments (ignored).
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Dust emission L_ν [Lsun/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+        **Gradient-safe**: yes — differentiable everywhere.
         """
         dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
         dust_qpah_c = jnp.clip(dust_qpah, qpah_grid[0], qpah_grid[-1])
@@ -310,6 +334,34 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
              + gamma * powerlaw(q_PAH, U_min, alpha)
 
         Normalized to L_absorbed via energy balance.
+
+        Parameters
+        ----------
+        wavelength_aa : array_like, shape (n_wave,)
+            Rest-frame wavelength grid [Å].
+        L_absorbed : float
+            Total absorbed luminosity [Lsun].
+        dust_umin : float
+            Minimum radiation field intensity [dimensionless]. Default: 1.0.
+        dust_gamma_dl : float
+            Mixing fraction for power-law component [dimensionless]. Default: 0.01.
+        dust_qpah : float
+            PAH mass fraction [dimensionless]. Default: 2.5.
+        dust_alpha_dl14 : float
+            Radiation field power-law slope [dimensionless]. Default: 2.0.
+        **_kwargs
+            Extra keyword arguments (ignored).
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Dust emission L_ν [Lsun/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+        **Gradient-safe**: yes — differentiable everywhere.
         """
         # Clip parameters to grid bounds
         dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
@@ -458,6 +510,11 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
     name : str
         Registry name. Default: "dl14_tabulated".
 
+    Returns
+    -------
+    None
+        Model is registered in ``DUST_EMISSION_MODELS`` dict as a side effect.
+
     Notes
     -----
     **JIT-compatible**: no — registration happens at factory time before JIT.
@@ -574,7 +631,30 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
         dust_alpha_dale: float = 2.0,
         **_kwargs,
     ) -> jnp.ndarray:
-        """Dale+2014 emission from tabulated templates."""
+        """Dale+2014 emission from tabulated templates.
+
+        Parameters
+        ----------
+        wavelength_aa : array_like, shape (n_wave,)
+            Rest-frame wavelength grid [Å].
+        L_absorbed : float
+            Total absorbed luminosity [Lsun].
+        dust_alpha_dale : float
+            Radiation field power-law slope [dimensionless]. Default: 2.0.
+        **_kwargs
+            Extra keyword arguments (ignored).
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Dust emission L_ν [Lsun/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+        **Gradient-safe**: yes — differentiable everywhere.
+        """
         dust_alpha_c = jnp.clip(dust_alpha_dale, alpha_grid[0], alpha_grid[-1])
         i_a = jnp.clip(
             jnp.searchsorted(alpha_grid, dust_alpha_c) - 1,
@@ -639,6 +719,11 @@ def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated"
     name : str
         Registry name. Default: "dale2014_tabulated".
 
+    Returns
+    -------
+    None
+        Model is registered in ``DUST_EMISSION_MODELS`` dict as a side effect.
+
     Notes
     -----
     **JIT-compatible**: no — registration happens at factory time before JIT.
@@ -662,6 +747,11 @@ def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> Non
         Path to ``dl07_templates_v2.h5`` or ``dl07_templates.h5``.
     name : str
         Registry name. Default: "dl07_tabulated".
+
+    Returns
+    -------
+    None
+        Model is registered in ``DUST_EMISSION_MODELS`` dict as a side effect.
 
     Notes
     -----
@@ -960,6 +1050,12 @@ def create_astrodust_from_grid(
         -------
         array, shape (n_wave,)
             Dust emission L_nu in Lsun/Hz.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+        **Gradient-safe**: yes — differentiable everywhere.
         """
         dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
         dust_qpah_c = jnp.clip(dust_qpah, qpah_grid[0], qpah_grid[-1])
@@ -1017,6 +1113,11 @@ def register_astrodust_tabulated(grid_path: str, name: str = "astrodust_tabulate
         Path to ``astrodust_templates_v2.h5`` or ``astrodust_templates.h5``.
     name : str
         Registry name. Default: "astrodust_tabulated".
+
+    Returns
+    -------
+    None
+        Model is registered in ``DUST_EMISSION_MODELS`` dict as a side effect.
 
     Notes
     -----
@@ -1187,6 +1288,12 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
         -------
         array, shape (n_wave,)
             Dust emission L_nu in Lsun/Hz.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+        **Gradient-safe**: yes — differentiable everywhere.
         """
         # L_TIR ~ L_absorbed (energy balance)
         log_ltir = jnp.log10(jnp.clip(L_absorbed, 1.0e-30, None))
@@ -1245,6 +1352,11 @@ def register_bosa_tabulated(grid_path: str, name: str = "bosa_tabulated") -> Non
     name : str
         Registry name. Default: "bosa_tabulated".
 
+    Returns
+    -------
+    None
+        Model is registered in ``DUST_EMISSION_MODELS`` dict as a side effect.
+
     Notes
     -----
     **JIT-compatible**: no — registration happens at factory time before JIT.
@@ -1282,6 +1394,11 @@ def load_themis_templates(filepath: str) -> dict:
         All arrays are JAX arrays.  wavelength_aa is in Angstrom.
         single_u and powerlaw have shape (n_qhac, n_umin, n_wave) and are
         normalized in L_nu convention.
+
+    Notes
+    -----
+    **JIT-compatible**: no — file I/O operations not supported in JIT.
+    Call at factory/init time before JIT compilation.
     """
     import numpy as np
 
@@ -1367,6 +1484,10 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
         Model function with signature
         ``(wavelength_aa, L_absorbed, **params) -> L_nu``.
 
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations inside the returned function are ``jnp`` primitives.
+
     References
     ----------
     Jones, A. P. et al. 2017, A&A, 602, A46.
@@ -1418,6 +1539,12 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
         -------
         array, shape (n_wave,)
             Dust emission L_nu in Lsun/Hz.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+        **Gradient-safe**: yes — differentiable everywhere.
         """
         dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
         dust_qhac_c = jnp.clip(dust_qhac, qhac_grid[0], qhac_grid[-1])
@@ -1476,6 +1603,15 @@ def register_themis_tabulated(grid_path: str, name: str = "themis_tabulated") ->
         Path to ``themis_templates_v2.h5`` or ``themis_templates.h5``.
     name : str
         Registry name.  Default ``"themis_tabulated"``.
+
+    Returns
+    -------
+    None
+        Model is registered in ``DUST_EMISSION_MODELS`` dict as a side effect.
+
+    Notes
+    -----
+    **JIT-compatible**: no — registration happens at factory time before JIT.
     """
     from . import emission
 

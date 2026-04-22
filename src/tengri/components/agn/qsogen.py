@@ -694,7 +694,47 @@ def qsogen(
     Thin wrapper around ``compute_qsogen_sed`` matching the AGN_MODELS registry
     signature: ``fn(wavelength, agn_log_lbol, **kwargs) -> L_nu``.
 
-    See ``compute_qsogen_sed`` for full parameter documentation.
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid [Angstrom].
+    agn_log_lbol : float, optional
+        Total AGN bolometric luminosity [log10(L_sun)]. Default: 45.0.
+    agn_frac : float, optional
+        Fraction of bolometric luminosity emitted by this component.
+        Default: 1.0. [dimensionless, 0–1]
+    agn_plslp1 : float, optional
+        Power-law slope for the UV/optical continuum. Default: -0.5.
+        [dimensionless]
+    agn_plslp2 : float, optional
+        Power-law slope for the X-ray continuum. Default: -1.0.
+        [dimensionless]
+    agn_plbrk : float, optional
+        Break wavelength between UV/optical and X-ray slopes [Angstrom].
+        Default: 3000.0.
+    agn_tbb : float, optional
+        Hot dust blackbody temperature [K]. Default: 1000.0.
+    agn_bbnorm : float, optional
+        Hot dust blackbody normalization [dimensionless]. Default: 0.5.
+    agn_emline_scale : float, optional
+        Emission-line template normalization [dimensionless]. Default: 1.0.
+    agn_ebv : float, optional
+        Dust reddening (color excess) [dimensionless, E(B-V)]. Default: 0.0.
+    agn_bcnorm : float, optional
+        Balmer continuum normalization [dimensionless]. Default: 0.0.
+    **_kwargs
+        Additional keyword arguments (ignored, for compatibility with AGN
+        model registry).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Spectral luminosity density L_ν [erg/s/Hz].
+
+    Notes
+    -----
+    See ``compute_qsogen_sed`` for full parameter documentation and physics
+    details.
     """
     return compute_qsogen_sed(
         wavelength,

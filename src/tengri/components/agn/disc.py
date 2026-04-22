@@ -736,10 +736,26 @@ def beloborodov_gamma_hot(
     float
         Hard X-ray photon index, clipped to [1.4, 3.0].
 
+    Notes
+    -----
+    **JIT-compatible**: yes — uses only ``jnp`` primitives.
+
+    This implementation follows Kubota & Done (2018, MNRAS 480 1247, Eq. 6),
+    which rewrites the Beloborodov (1999) Compton-amplification result as a
+    power law in the luminosity ratio. The exponent -0.1 encodes the
+    energy-balance relation between the dissipated power in the corona and
+    the seed photon luminosity intercepted from the disc. Output is clipped
+    to [1.4, 3.0] to match the physical range of typical AGN.
+
     References
     ----------
-    - Beloborodov 1999, ApJ, 510, L123
-    - Kubota & Done 2018, MNRAS, 480, 1247, Eq. 6
+    .. [1] A. M. Beloborodov, "Plasma Ejection from Magnetic Flares and the
+       X-Ray Spectrum of Cygnus X-1," ApJL, 510, L123 (1999).
+       arXiv:astro-ph/9809383. https://doi.org/10.1086/311810
+    .. [2] A. Kubota and C. Done, "A physical model of the broad-band continuum
+       of AGN and its implications for the UV/X relation and optical variability,"
+       MNRAS, 480, 1247 (2018). arXiv:1804.00171.
+       https://doi.org/10.1093/mnras/sty1890
     """
     ratio = jnp.clip(l_diss_hot / jnp.maximum(l_seed, 1e-30), 1e-3, 1e3)
     gamma = (7.0 / 3.0) * ratio ** (-0.1)  # K&D 2018 Eq. 6
@@ -766,6 +782,17 @@ def compute_l2500(
     -------
     float
         L_nu at 2500 A [erg s^-1 Hz^-1].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives.
+
+    The 2500 Å point is a canonical AGN diagnostic wavelength, used to
+    compute the optical-to-X-ray spectral index (alpha_ox) and as a
+    benchmark for intrinsic AGN continuum comparisons. Linear interpolation
+    in wavelength space is sufficient for the optical/UV continuum variability
+    timescales. The wavelength array need not be pre-sorted; this function
+    sorts internally before interpolation.
     """
     sort_idx = jnp.argsort(wavelength)
     return jnp.interp(2500.0, wavelength[sort_idx], l_nu[sort_idx])

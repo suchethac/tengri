@@ -36,6 +36,12 @@ class NonStellarSlot:
     on_ssp_grid : bool
         ``True`` if the component lives on the SSP UV–NIR wavelength grid.
         ``False`` if it lives on the panchromatic (extended) grid.
+
+    Notes
+    -----
+    This dataclass is used internally to organize non-stellar SED components
+    in canonical order (nebular → shock → dust_ir → agn → radio → xray)
+    enforced by energy-balance dependencies. Immutable (frozen=True).
     """
 
     name: str

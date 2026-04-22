@@ -62,17 +62,21 @@ def chebyshev_basis(
     order : int
         Maximum polynomial order (returns order+1 basis functions,
         from T_0 through T_order).
-    wave_min, wave_max : float
-        Wavelength range for normalization to [-1, 1].
+    wave_min : float
+        Minimum wavelength for normalization to [-1, 1] [Angstrom].
+    wave_max : float
+        Maximum wavelength for normalization to [-1, 1] [Angstrom].
 
     Returns
     -------
     ndarray, shape (order+1, n_wave)
-        Chebyshev basis functions T_0(x), T_1(x), ..., T_order(x).
+        Chebyshev basis functions T_0(x), T_1(x), ..., T_order(x)
+        (dimensionless).
 
     Notes
     -----
-    JIT-compatible: yes — `order` is a static argument.
+    **JIT-compatible**: yes — `order` is a static argument.
+    **Gradient-safe**: yes — differentiable w.r.t. wavelength.
 
     """
     x = 2.0 * (wavelength - wave_min) / (wave_max - wave_min) - 1.0

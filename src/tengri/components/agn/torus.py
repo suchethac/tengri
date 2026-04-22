@@ -300,12 +300,15 @@ def nenkova_torus(
     fnu_interp = np.zeros((n_wave, n_tau))
     for k in range(n_tau):
         log_fnu = np.log10(np.maximum(fnu_grid[:, k], 1e-70))
-        log_fnu_model = np.interp(log_wave_model[i1:i2 + 1], log_wave_data, log_fnu)
-        fnu_interp[i1:i2 + 1, k] = 10.0 ** log_fnu_model
+        log_fnu_model = np.interp(log_wave_model[i1 : i2 + 1], log_wave_data, log_fnu)
+        fnu_interp[i1 : i2 + 1, k] = 10.0**log_fnu_model
 
     tau_interp = interp1d(
-        tau_vals, fnu_interp, axis=1,
-        bounds_error=False, fill_value=(fnu_interp[:, 0], fnu_interp[:, -1]),
+        tau_vals,
+        fnu_interp,
+        axis=1,
+        bounds_error=False,
+        fill_value=(fnu_interp[:, 0], fnu_interp[:, -1]),
     )
     fnu_at_tau = tau_interp(float(agn_tau))
 
@@ -315,5 +318,5 @@ def nenkova_torus(
     integral = jnp.trapezoid(fnu_jax[idx_sort], nu[idx_sort])
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
-    l_bol_erg = 10.0 ** agn_log_lbol * _LSUN_ERG
+    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
     return l_bol_erg * agn_torus_frac * fnu_jax / integral_safe

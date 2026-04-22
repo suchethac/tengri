@@ -23,16 +23,27 @@
 # | Model | Best use case | Free params | Stochastic? |
 # |-------|--------------|-------------|-------------|
 # | `tsnorm` | General galaxy; adjustable skew and truncation | 5 | No |
-# | `snorm` | Simple symmetric bell; fast to fit | 2 | No |
-# | `norm` | Gaussian SFH; oldest/simplest | 2 | No |
-# | `lnorm` | Log-normal; naturally skewed toward early times | 2 | No |
+# | `snorm` | Simple symmetric bell; fast to fit | 4 | No |
+# | `norm` | Gaussian SFH; oldest/simplest | 3 | No |
+# | `lnorm` | Log-normal; naturally skewed toward early times | 3 | No |
 # | `dpl` | Double power law; best for quenched galaxies | 4 | No |
-# | `dexp` | Double exponential; classic SED fitting prior | 3 | No |
-# | `exp` | Single exponential (delayed-tau); legacy | 2 | No |
-# | `const` | Constant SFR; null hypothesis | 1 | No |
-# | `triweight_burst` | Recent burst + extended base | 3 | No |
+# | `dexp` | Delayed exponential; classic SED fitting prior | 3 | No |
+# | `exp` | Single exponential; legacy rising-then-flat | 2 | No |
+# | `declining_exp` | Declining tau matching FSPS sfh=1 / bagpipes | 3 | No |
+# | `const` | Constant SFR; null hypothesis | 1-3 | No |
+# | `const_then_exp` | Constant then quenching exponential | 4 | No |
 # | `delayed_tau` | Rising-then-falling; widely used baseline | 2 | No |
+# | `delayed_bq` | Delayed-tau + instantaneous burst/quench | 4 | No |
+# | `powerlaw` | Pure power law; simple slope model | 2-3 | No |
+# | `psb_wild2020` | Post-starburst two-component (Wild+2020) | 7 | No |
+# | `triweight_burst` | Recent burst + extended base | 2 | No |
+# | `snorm_burst` | Skew-normal + flat recent burst (ProSpect port) | 6 | No |
+# | `tsnorm_burst` | Truncated skew-normal + recent burst (ProSpect port) | 7 | No |
+# | `spline_sfh` | PCHIP spline at user-defined nodes (ProSpect port) | N_nodes | No |
+# | `periodic` | Regularly-spaced SF events; mergers/inflows | 4 | No |
+# | `buat08` | Velocity-parameterized chemical-evolution SFH | 1 | No |
 # | `continuity` | Non-parametric piecewise; flexible | N_bins | No |
+# | `psb_continuity` | Non-parametric PSB with quenching epoch (Suess+2021) | N_bins+2 | No |
 # | `dirichlet` | Non-parametric with Dirichlet prior | N_bins | No |
 # | **`dense_basis`** | **GP-SFH via mass-time quantiles (default)** | **5** | **No** |
 # | `dense_basis` + field | **Stochastic GP on top of quantile SFH (default field mode)** | 4 + 2 + N_grid | **Yes** |
@@ -110,12 +121,30 @@ from tengri import (
     norm,
     psd_drw,
     snorm,
+    snorm_burst,
+    spline_sfh,
     triweight_burst,
     tsnorm,
+    tsnorm_burst,
 )
 from tengri.sfh.chemical_evolution import closed_box_metallicity
 from tengri.sfh.dense_basis import dense_basis_sfh
-from tengri.sfh.nonparametric import continuity_sfh, dirichlet_sfh
+from tengri.sfh.mean_sfh import (
+    buat08,
+    constant_then_exponential_sfh,
+    declining_exponential_sfh,
+    delayed_bq,
+    periodic,
+    powerlaw_sfh,
+    psb_wild2020,
+)
+from tengri.sfh.nonparametric import (
+    DEFAULT_BIN_EDGES_GYR,
+    bursty_continuity_prior_logp,
+    continuity_sfh,
+    dirichlet_sfh,
+    psb_continuity_sfh,
+)
 from tengri.sfh.psd_models import psd_extended_regulator, psd_matern
 from tengri.utils.grid import grid_spacing
 
@@ -681,6 +710,53 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
+# ### 1.6b declining_exponential and constant_then_exponential
+#
+# **`declining_exponential_sfh`** matches FSPS `sfh=1` / bagpipes `'exponential'`:
+# in cosmic time $T$, $\mathrm{SFR}(T) = S_0 e^{-T/\tau}$, so in lookback time
+# SFR *increases* toward the past. Distinct from `exponential_sfh` which peaks at $t=0$.
+#
+# **`constant_then_exponential_sfh`** models quenching: constant SFR from formation
+# until $t_\mathrm{quench}$, then exponential decline.
+
+# %%
+fig, axes = plt.subplots(1, 2, figsize=(10, 3.2))
+
+ax = axes[0]
+series_dexp2 = []
+for tau_gyr, age_gyr_val in [(1.0, 12.0), (3.0, 12.0), (6.0, 12.0), (1.0, 6.0)]:
+    sfr = declining_exponential_sfh(t_yr, log_peak_sfr=0.0, tau=tau_gyr * 1e9, age=age_gyr_val * 1e9)
+    sfr = np.array(sfr) / np.max(np.array(sfr) + 1e-30)
+    series_dexp2.append(sfr)
+    ax.plot(t_gyr, sfr, lw=1.5, label=rf"$\tau={tau_gyr}$ Gyr, age={age_gyr_val} Gyr")
+ax.set_xlabel(XLAB_LBT_GYR)
+ax.set_ylabel("Normalised SFR")
+ax.set_title(r"declining\_exponential (FSPS sfh=1)")
+ax.legend(fontsize=7, frameon=False, loc="upper right")
+ax.set_xlim(0.0, float(t_gyr[-1]))
+add_multi_sfh_inset(ax, t_gyr, series_dexp2, ylabel="SFR")
+
+ax = axes[1]
+series_cte = []
+for q_gyr, tau_gyr in [(8.0, 1.0), (5.0, 0.5), (3.0, 2.0)]:
+    sfr = constant_then_exponential_sfh(
+        t_yr, log_sfr=0.0, tau=tau_gyr * 1e9, quench_age=q_gyr * 1e9, age=12e9
+    )
+    sfr = np.array(sfr) / np.max(np.array(sfr) + 1e-30)
+    series_cte.append(sfr)
+    ax.plot(t_gyr, sfr, lw=1.5, label=rf"quench={q_gyr} Gyr, $\tau={tau_gyr}$ Gyr")
+ax.set_xlabel(XLAB_LBT_GYR)
+ax.set_ylabel("Normalised SFR")
+ax.set_title("constant_then_exponential (quenching)")
+ax.legend(fontsize=7, frameon=False, loc="upper right")
+ax.set_xlim(0.0, float(t_gyr[-1]))
+add_multi_sfh_inset(ax, t_gyr, series_cte, ylabel="SFR")
+
+fig.tight_layout()
+# plt.savefig(os.path.join(FIGDIR, "sfh_declining_const_exp.png"), bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
 # ### 1.7 triweight_burst: compact burst kernel
 
 # %%
@@ -701,6 +777,317 @@ ax.set_xlim(0.0, float(t_gyr[-1]))
 add_multi_sfh_inset(ax, t_gyr, series_tw, linestyles=lss, ylabel="Kernel")
 fig.tight_layout()
 # plt.savefig(os.path.join(FIGDIR, "sfh_triweight_burst.png"), bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# ### 1.8 ProSpect burst models: snorm_burst and tsnorm_burst (Robotham+2020)
+#
+# Both models add a **flat recent-burst component** to the base skew-normal SFH:
+# $$\text{SFR}(t) = (1 - f_\mathrm{burst})\,\cdot\,\text{base}(t)
+#   + f_\mathrm{burst}\,\cdot\,\text{burst}(t)$$
+# where $\text{burst}(t) = S / t_\mathrm{burst}$ for $t < t_\mathrm{burst}$, $0$ otherwise,
+# and $S$ is set so the total stellar mass is preserved. Ported from the R package
+# **ProSpect** (Robotham et al. 2020, MNRAS 495 905).
+
+# %%
+fig, axes = plt.subplots(1, 2, figsize=(11, 3.5))
+
+# --- Left panel: snorm_burst — varying burst_sfr ---
+ax = axes[0]
+series_snb = []
+lss_snb = []
+base_snorm = np.array(snorm(t_yr, log_peak_sfr=0.0, peak_lbt=6e9, width=2e9, skew=0.3))
+base_snorm_n = base_snorm / np.max(base_snorm + 1e-30)
+ax.plot(t_gyr, base_snorm_n, "k--", lw=1.3, alpha=0.5, label="snorm (no burst)")
+for burst_sfr, ls in [(0.1, "-"), (0.5, "--"), (1.0, "-.")]:
+    sfr = np.array(
+        snorm_burst(
+            jnp.array(t_yr),
+            log_peak_sfr=0.0,
+            peak_lbt=6e9,
+            width=2e9,
+            skew=0.3,
+            burst_sfr=burst_sfr,
+            burst_age=2e8,
+        )
+    )
+    sfr_n = sfr / np.max(sfr + 1e-30)
+    series_snb.append(sfr_n)
+    lss_snb.append(ls)
+    ax.plot(t_gyr, sfr_n, lw=1.5, ls=ls, label=rf"burst\_sfr = {burst_sfr}")
+ax.set_xlabel(XLAB_LBT_GYR)
+ax.set_ylabel("Normalised SFR")
+ax.set_title("snorm_burst (ProSpect): varying burst_sfr")
+ax.legend(fontsize=7, frameon=False, loc="lower left")
+ax.set_xlim(0.0, float(t_gyr[-1]))
+add_multi_sfh_inset(
+    ax,
+    t_gyr,
+    [base_snorm_n, *series_snb],
+    linestyles=["--", *lss_snb],
+    lws=[1.0, *([1.2] * len(lss_snb))],
+    ylabel="SFR",
+)
+
+# --- Right panel: tsnorm_burst — varying burst_age ---
+ax = axes[1]
+series_tnb = []
+lss_tnb = []
+base_tsnorm = np.array(
+    tsnorm(t_yr, log_peak_sfr=0.0, peak_lbt=6e9, width=2e9, skew=0.3, trunc=3.0)
+)
+base_tsnorm_n = base_tsnorm / np.max(base_tsnorm + 1e-30)
+ax.plot(t_gyr, base_tsnorm_n, "k--", lw=1.3, alpha=0.5, label="tsnorm (no burst)")
+for burst_age_myr, ls in [(100.0, "-"), (300.0, "--"), (600.0, "-.")]:
+    sfr = np.array(
+        tsnorm_burst(
+            jnp.array(t_yr),
+            log_peak_sfr=0.0,
+            peak_lbt=6e9,
+            width=2e9,
+            skew=0.3,
+            trunc=3.0,
+            burst_sfr=0.5,
+            burst_age=burst_age_myr * 1e6,
+        )
+    )
+    sfr_n = sfr / np.max(sfr + 1e-30)
+    series_tnb.append(sfr_n)
+    lss_tnb.append(ls)
+    ax.plot(t_gyr, sfr_n, lw=1.5, ls=ls, label=rf"burst\_age = {burst_age_myr:.0f} Myr")
+ax.set_xlabel(XLAB_LBT_GYR)
+ax.set_ylabel("Normalised SFR")
+ax.set_title("tsnorm_burst (ProSpect): varying burst_age")
+ax.legend(fontsize=7, frameon=False, loc="lower left")
+ax.set_xlim(0.0, float(t_gyr[-1]))
+add_multi_sfh_inset(
+    ax,
+    t_gyr,
+    [base_tsnorm_n, *series_tnb],
+    linestyles=["--", *lss_tnb],
+    lws=[1.0, *([1.2] * len(lss_tnb))],
+    ylabel="SFR",
+)
+
+fig.tight_layout()
+# plt.savefig(os.path.join(FIGDIR, "sfh_prospect_burst.png"), bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# ### 1.9 psb_wild2020: Post-Starburst SFH (Wild+2020)
+#
+# Two-component model: declining exponential (old stellar population) + double
+# power law (recent burst episode). Components are mass-fraction weighted.
+# Reference: Wild et al. 2020, MNRAS 494 529.
+
+# %%
+fig, axes = plt.subplots(1, 2, figsize=(10, 3.5))
+
+ax = axes[0]
+series_psb = []
+for fburst in [0.1, 0.3, 0.5, 0.8]:
+    sfr = np.array(
+        psb_wild2020(
+            jnp.array(t_yr),
+            log_peak_sfr=0.0,
+            age=12e9,
+            tau=3e9,
+            burstage=0.3e9,
+            alpha=2.0,
+            beta=2.0,
+            fburst=fburst,
+        )
+    )
+    sfr = sfr / np.max(sfr + 1e-30)
+    series_psb.append(sfr)
+    ax.plot(t_gyr, sfr, lw=1.5, label=rf"$f_\mathrm{{burst}} = {fburst}$")
+ax.set_xlabel(XLAB_LBT_GYR)
+ax.set_ylabel("Normalised SFR")
+ax.set_title("psb_wild2020: varying burst fraction")
+ax.legend(fontsize=7, frameon=False, loc="upper right")
+ax.set_xlim(0.0, float(t_gyr[-1]))
+add_multi_sfh_inset(ax, t_gyr, series_psb, ylabel="SFR")
+
+ax = axes[1]
+series_psb2 = []
+for burstage_gyr in [0.1, 0.3, 0.5, 1.0]:
+    sfr = np.array(
+        psb_wild2020(
+            jnp.array(t_yr),
+            log_peak_sfr=0.0,
+            age=12e9,
+            tau=3e9,
+            burstage=burstage_gyr * 1e9,
+            alpha=2.0,
+            beta=2.0,
+            fburst=0.4,
+        )
+    )
+    sfr = sfr / np.max(sfr + 1e-30)
+    series_psb2.append(sfr)
+    ax.plot(t_gyr, sfr, lw=1.5, label=rf"burst age = {burstage_gyr} Gyr")
+ax.set_xlabel(XLAB_LBT_GYR)
+ax.set_ylabel("Normalised SFR")
+ax.set_title("psb_wild2020: varying burst age")
+ax.legend(fontsize=7, frameon=False, loc="upper right")
+ax.set_xlim(0.0, float(t_gyr[-1]))
+add_multi_sfh_inset(ax, t_gyr, series_psb2, ylabel="SFR")
+
+fig.tight_layout()
+# plt.savefig(os.path.join(FIGDIR, "sfh_psb_wild2020.png"), bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# ### 1.10 powerlaw_sfh and delayed_bq (Ciesla+2017)
+#
+# **`powerlaw_sfh`**: $\mathrm{SFR}(t) = S_0\,(t/t_{\rm ref})^\alpha$.
+# Positive $\alpha$ → rising toward present; negative $\alpha$ → falling.
+#
+# **`delayed_bq`**: delayed-tau SFH followed by an instantaneous burst or quench
+# at `age_bq_yr`. After the event, SFR is held at $r_\mathrm{sfr}$ times the
+# pre-event SFR. $r < 1$ = quench; $r > 1$ = burst. (Ciesla+2017, A&A 608 41.)
+
+# %%
+fig, axes = plt.subplots(1, 2, figsize=(10, 3.5))
+
+ax = axes[0]
+series_pl = []
+for alpha in [-1.5, -0.5, 0.5, 1.5, 3.0]:
+    sfr = np.array(powerlaw_sfh(jnp.array(t_yr), alpha=alpha, norm=1.0, t_ref=1e8))
+    peak = np.max(np.abs(sfr) + 1e-30)
+    sfr = sfr / peak
+    series_pl.append(np.clip(sfr, 0, None))
+    ax.plot(t_gyr, np.clip(sfr, 0, None), lw=1.5, label=rf"$\alpha = {alpha}$")
+ax.set_xlabel(XLAB_LBT_GYR)
+ax.set_ylabel("Normalised SFR")
+ax.set_title(r"powerlaw\_sfh: $\mathrm{SFR}(t) \propto t^\alpha$")
+ax.legend(fontsize=7, frameon=False, loc="lower left")
+ax.set_xlim(0.0, float(t_gyr[-1]))
+add_multi_sfh_inset(ax, t_gyr, series_pl, ylabel="SFR")
+
+ax = axes[1]
+series_dbq = []
+for r_sfr, ls in [(0.0, "-"), (0.1, "--"), (2.0, "-.")]:
+    sfr = np.array(
+        delayed_bq(
+            jnp.array(t_yr),
+            tau_main_yr=3e9,
+            age_main_yr=12e9,
+            age_bq_yr=1e9,
+            r_sfr=r_sfr,
+        )
+    )
+    sfr = sfr / np.max(sfr + 1e-30)
+    series_dbq.append(sfr)
+    label = rf"$r_\mathrm{{sfr}} = {r_sfr}$ ({'quench' if r_sfr < 1 else 'burst'})"
+    ax.plot(t_gyr, sfr, lw=1.5, ls=ls, label=label)
+ax.set_xlabel(XLAB_LBT_GYR)
+ax.set_ylabel("Normalised SFR")
+ax.set_title("delayed_bq (Ciesla+2017): burst/quench at 1 Gyr")
+ax.legend(fontsize=7, frameon=False, loc="upper right")
+ax.set_xlim(0.0, float(t_gyr[-1]))
+add_multi_sfh_inset(ax, t_gyr, series_dbq, linestyles=["-", "--", "-."], ylabel="SFR")
+
+fig.tight_layout()
+# plt.savefig(os.path.join(FIGDIR, "sfh_powerlaw_delayed_bq.png"), bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# ### 1.11 periodic and buat08
+#
+# **`periodic`**: regularly-spaced SF events (exponential, delayed, or rectangular
+# pulses). Useful for modelling intermittent or merger-triggered star formation.
+#
+# **`buat08`**: chemically-motivated SFH parameterized by galaxy rotational velocity
+# (Buat+2008, A&A 483 107). Polynomial in $\log_{10}(t)$ with velocity-interpolated
+# coefficients.
+
+# %%
+fig, axes = plt.subplots(1, 2, figsize=(10, 3.5))
+
+ax = axes[0]
+series_per = []
+lss_per = []
+for burst_type, ls, label in [(0, "-", "exp pulses"), (1, "--", "delayed pulses"), (2, "-.", "rect pulses")]:
+    sfr = np.array(
+        periodic(
+            jnp.array(t_yr),
+            delta_bursts_yr=1.5e9,
+            tau_bursts_yr=3e8,
+            burst_type=burst_type,
+            age_yr=12e9,
+        )
+    )
+    sfr = sfr / np.max(sfr + 1e-30)
+    series_per.append(sfr)
+    lss_per.append(ls)
+    ax.plot(t_gyr, sfr, lw=1.5, ls=ls, label=label)
+ax.set_xlabel(XLAB_LBT_GYR)
+ax.set_ylabel("Normalised SFR")
+ax.set_title("periodic: regularly-spaced SF events")
+ax.legend(fontsize=7, frameon=False, loc="upper right")
+ax.set_xlim(0.0, float(t_gyr[-1]))
+add_multi_sfh_inset(ax, t_gyr, series_per, linestyles=lss_per, ylabel="SFR")
+
+ax = axes[1]
+series_buat = []
+for v_km_s in [50, 100, 175, 250]:
+    sfr = np.array(buat08(jnp.array(t_yr), velocity_km_s=float(v_km_s)))
+    sfr_valid = np.where(np.isfinite(sfr), sfr, 0.0)
+    sfr_valid = sfr_valid / np.max(sfr_valid + 1e-30)
+    series_buat.append(sfr_valid)
+    ax.plot(t_gyr, sfr_valid, lw=1.5, label=rf"$v = {v_km_s}$ km/s")
+ax.set_xlabel(XLAB_LBT_GYR)
+ax.set_ylabel("Normalised SFR")
+ax.set_title("buat08: velocity-parameterized SFH")
+ax.legend(fontsize=7, frameon=False, loc="upper right")
+ax.set_xlim(0.0, float(t_gyr[-1]))
+add_multi_sfh_inset(ax, t_gyr, series_buat, ylabel="SFR")
+
+fig.tight_layout()
+# plt.savefig(os.path.join(FIGDIR, "sfh_periodic_buat08.png"), bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# ### 1.12 spline_sfh: PCHIP spline interpolation (ProSpect port)
+#
+# User-specified SFR values at fixed lookback-time nodes; smoothly interpolated
+# via **PCHIP** (Piecewise Cubic Hermite Interpolating Polynomial) which preserves
+# monotonicity locally. Ported from ProSpect `massfunc_spline` (Robotham+2020).
+
+# %%
+fig, ax = plt.subplots(figsize=(6.5, 3.5))
+
+node_ages_yr = jnp.array([0.3e9, 1.0e9, 3.0e9, 6.0e9, 10.0e9, 13.0e9])
+scenarios = {
+    "Rising": jnp.array([3.0, 2.0, 1.5, 1.0, 0.5, 0.1]),
+    "Peaked at 6 Gyr": jnp.array([0.5, 1.0, 2.0, 3.0, 1.5, 0.3]),
+    "Two episodes": jnp.array([1.5, 0.3, 2.5, 0.5, 1.0, 0.2]),
+    "Declining": jnp.array([0.1, 0.3, 0.8, 1.5, 2.5, 3.0]),
+}
+series_spl = []
+lss_spl = ["-", "--", "-.", ":"]
+for (label, sfr_nodes), ls in zip(scenarios.items(), lss_spl):
+    sfr = np.array(spline_sfh(jnp.array(t_yr), sfr_nodes, node_ages_yr))
+    sfr = np.clip(sfr, 0, None)
+    sfr = sfr / np.max(sfr + 1e-30)
+    series_spl.append(sfr)
+    ax.plot(t_gyr, sfr, lw=1.8, ls=ls, label=label)
+    ax.scatter(
+        np.array(node_ages_yr) / 1e9,
+        np.array(sfr_nodes) / float(jnp.max(sfr_nodes) + 1e-30),
+        s=20, zorder=5, alpha=0.7,
+    )
+
+ax.set_xlabel(XLAB_LBT_GYR)
+ax.set_ylabel("Normalised SFR")
+ax.set_title("spline_sfh: PCHIP spline (ProSpect port, Robotham+2020)")
+ax.legend(fontsize=7, frameon=False, loc="lower left")
+ax.set_xlim(0.0, float(t_gyr[-1]))
+add_multi_sfh_inset(ax, t_gyr, series_spl, linestyles=lss_spl, ylabel="SFR")
+
+fig.tight_layout()
+# plt.savefig(os.path.join(FIGDIR, "sfh_spline.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -800,6 +1187,172 @@ add_multi_sfh_inset(
 )
 fig.tight_layout()
 # plt.savefig(os.path.join(FIGDIR, "sfh_continuity_sfh.png"), bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# ### 2.1b Bursty Continuity Prior (Tacchella+2022)
+#
+# The **bursty-continuity prior** uses the same `continuity_sfh` bins but applies
+# a wider Student-t scale to young bins ($t_\mathrm{lookback} < t_\mathrm{split}$),
+# allowing more rapid SFR fluctuations in the recent universe.
+#
+# | Regime | Student-t scale |
+# |--------|-----------------|
+# | Young bins ($< t_\mathrm{split}$) | 1.0 (wide / bursty) |
+# | Old bins ($\geq t_\mathrm{split}$) | 0.3 (narrow / smooth) |
+#
+# Reference: Tacchella et al. 2022, ApJ 926 134 (arXiv:2102.11954).
+
+# %%
+from jax.scipy.stats import t as _student_t
+
+bin_edges = DEFAULT_BIN_EDGES_GYR
+n_bins = len(bin_edges) - 1
+n_ratios = n_bins - 1
+
+# Sweep log-SFR ratio values applied to a single bin while others stay at 0.
+ratio_vals = np.linspace(-3.0, 3.0, 200)
+
+# Standard continuity prior: Student-t(df=2, scale=0.3) on all n_ratios
+logp_std = np.array(
+    [float(n_ratios * _student_t.logpdf(r, 2.0, loc=0.0, scale=0.3)) for r in ratio_vals]
+)
+
+# Bursty prior: vary only the youngest ratio (bin 0 → bursty, scale=1.0)
+logp_young = np.array(
+    [
+        float(
+            bursty_continuity_prior_logp(
+                jnp.concatenate([jnp.array([r]), jnp.zeros(n_ratios - 1)]),
+                jnp.array(bin_edges),
+                t_split_gyr=1.0,
+            )
+        )
+        for r in ratio_vals
+    ]
+)
+
+# Bursty prior: vary only the oldest ratio (old bin, scale=0.3 — same as standard)
+logp_old = np.array(
+    [
+        float(
+            bursty_continuity_prior_logp(
+                jnp.concatenate([jnp.zeros(n_ratios - 1), jnp.array([r])]),
+                jnp.array(bin_edges),
+                t_split_gyr=1.0,
+            )
+        )
+        for r in ratio_vals
+    ]
+)
+
+fig, axes = plt.subplots(1, 2, figsize=(10, 3.5))
+
+ax = axes[0]
+ax.plot(ratio_vals, logp_std, lw=1.8, label="Standard continuity (scale=0.3 all bins)")
+ax.plot(
+    ratio_vals,
+    logp_young,
+    lw=1.8,
+    ls="--",
+    label=r"Bursty: young bin ratio varied ($t < 1$ Gyr)",
+)
+ax.plot(
+    ratio_vals,
+    logp_old,
+    lw=1.8,
+    ls="-.",
+    label=r"Bursty: old bin ratio varied ($t \geq 1$ Gyr)",
+)
+ax.set_xlabel(r"log-SFR ratio")
+ax.set_ylabel(r"$\log p$")
+ax.set_title("Bursty vs Standard Continuity Prior\n(Tacchella+2022)")
+ax.legend(fontsize=7, frameon=False)
+ax.set_xlim(-3, 3)
+
+ax = axes[1]
+# Show absolute log-prob difference between bursty young and standard
+diff_young = logp_young - logp_std
+diff_old = logp_old - logp_std
+ax.plot(ratio_vals, diff_young, lw=1.8, ls="--", label=r"Bursty young $-$ standard")
+ax.plot(ratio_vals, diff_old, lw=1.8, ls="-.", label=r"Bursty old $-$ standard")
+ax.axhline(0, color="k", lw=0.6, ls=":")
+ax.set_xlabel(r"log-SFR ratio")
+ax.set_ylabel(r"$\Delta \log p$")
+ax.set_title("Log-prob difference: bursty $-$ standard")
+ax.legend(fontsize=7, frameon=False)
+ax.set_xlim(-3, 3)
+
+fig.tight_layout()
+# plt.savefig(os.path.join(FIGDIR, "sfh_bursty_continuity_prior.png"), bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# ### 2.1c psb_continuity_sfh: Post-Starburst Non-Parametric SFH (Suess+2021)
+#
+# Extends `continuity_sfh` with two extra parameters (`tlast_gyr`, `tflex_gyr`)
+# that pin the quenching epoch. The youngest bin spans $[0, t_\mathrm{last}]$;
+# a flexible zone between $t_\mathrm{last}$ and $t_\mathrm{flex}$ tracks the
+# transition. Ported from Prospector (Johnson+2021).
+
+# %%
+fig, axes = plt.subplots(1, 2, figsize=(10, 3.5))
+
+# Vary tlast: when quenching happened
+ax = axes[0]
+series_psbc = []
+for tlast, ls in [(0.05, "-"), (0.2, "--"), (0.5, "-.")]:
+    sfr = np.array(
+        psb_continuity_sfh(
+            jnp.array(age_yr),
+            log_total_mass=10.0,
+            tlast_gyr=tlast,
+            tflex_gyr=2.0,
+            ratio_young=-1.5,
+            ratio_old_0=0.3,
+            ratio_old_1=0.1,
+            ratio_old_2=0.0,
+        )
+    )
+    series_psbc.append(sfr)
+    ax.plot(age_gyr, sfr, lw=1.5, ls=ls, label=rf"$t_\mathrm{{last}} = {tlast}$ Gyr")
+ax.set_yscale("log")
+ax.set_xlabel(XLAB_LBT_GYR)
+ax.set_ylabel(r"SFR [M$_\odot$/yr]")
+ax.set_title(r"psb\_continuity: varying $t_\mathrm{last}$ (quench epoch)")
+ax.legend(fontsize=7, frameon=False, loc="lower left")
+ax.set_xlim(0.0, float(age_gyr[-1]))
+add_multi_sfh_inset(ax, age_gyr, series_psbc, linestyles=["-", "--", "-."], ylabel="SFR")
+
+# Vary ratio_young: depth of recent quench
+ax = axes[1]
+series_psbc2 = []
+for ry, ls in [(-3.0, "-"), (-1.0, "--"), (0.5, "-.")]:
+    sfr = np.array(
+        psb_continuity_sfh(
+            jnp.array(age_yr),
+            log_total_mass=10.0,
+            tlast_gyr=0.2,
+            tflex_gyr=2.0,
+            ratio_young=ry,
+            ratio_old_0=0.2,
+            ratio_old_1=0.0,
+            ratio_old_2=0.0,
+        )
+    )
+    series_psbc2.append(sfr)
+    label = rf"ratio\_young = {ry} ({'deep quench' if ry < -1 else 'burst' if ry > 0 else 'mild quench'})"
+    ax.plot(age_gyr, sfr, lw=1.5, ls=ls, label=label)
+ax.set_yscale("log")
+ax.set_xlabel(XLAB_LBT_GYR)
+ax.set_ylabel(r"SFR [M$_\odot$/yr]")
+ax.set_title(r"psb\_continuity: varying ratio\_young")
+ax.legend(fontsize=7, frameon=False, loc="lower left")
+ax.set_xlim(0.0, float(age_gyr[-1]))
+add_multi_sfh_inset(ax, age_gyr, series_psbc2, linestyles=["-", "--", "-."], ylabel="SFR")
+
+fig.tight_layout()
+# plt.savefig(os.path.join(FIGDIR, "sfh_psb_continuity.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -1411,6 +1964,8 @@ plt.show()
 # |-------|------|-------------|---------------|
 # | `delayed_tau` | Parametric | 2 ($\tau$, norm) | Classic |
 # | `dexp` | Parametric | 3 (log_peak, $\tau$, start) | Classic |
+# | `declining_exp` | Parametric | 3 (log_peak, $\tau$, age) | FSPS sfh=1 / bagpipes |
+# | `const_then_exp` | Parametric | 4 (log_sfr, $\tau$, quench_age, age) | Classic |
 # | `dpl` | Parametric | 4 ($\alpha$, $\beta$, $\tau$, log_peak) | Carnall+2018 |
 # | `tsnorm` | Parametric | 5 (peak, width, skew, trunc, log_peak) | Bellstedt+2020 |
 # | `snorm` | Parametric | 4 (peak, width, skew, log_peak) | Robotham+2020 |
@@ -1418,10 +1973,20 @@ plt.show()
 # | `lnorm` | Parametric | 3 (peak, width, log_peak) | Log-normal |
 # | `const` | Parametric | 1-3 (log_sfr, start, end) | Constant |
 # | `exp` | Parametric | 2-3 (log_peak, $\tau$, start) | Declining tau |
+# | `powerlaw` | Parametric | 2-3 ($\alpha$, norm, t_ref) | Power law |
+# | `psb_wild2020` | Parametric | 7 (log_peak, age, $\tau$, burstage, $\alpha$, $\beta$, fburst) | Wild+2020 |
+# | `delayed_bq` | Parametric | 4 ($\tau_\mathrm{main}$, age_main, age_bq, r_sfr) | Ciesla+2017 |
 # | `triweight_burst` | Parametric | 2 (log_tpeak, log_tmax) | Zacharegkas+2025 |
+# | `snorm_burst` | Parametric | 6 (peak, width, skew, log_peak, burst_sfr, burst_age) | Robotham+2020 (ProSpect) |
+# | `tsnorm_burst` | Parametric | 7 (peak, width, skew, trunc, log_peak, burst_sfr, burst_age) | Robotham+2020 (ProSpect) |
+# | `spline_sfh` | Parametric | N_nodes (sfr_nodes, node_ages) | Robotham+2020 (ProSpect) |
+# | `periodic` | Parametric | 4 (delta_bursts, $\tau_\mathrm{bursts}$, burst_type, age) | — |
+# | `buat08` | Parametric | 1 (velocity_km_s) | Buat+2008 |
 # | **`dense_basis`** | **Non-parametric** | **5 (log_mass, log_sfr, tx×3)** | **Iyer+2017, 2019 (default)** |
 # | `dense_basis_pure` | Non-parametric | 4 (log_mass, tx×3) | Iyer+2017 (auto for field) |
 # | `continuity` | Non-parametric | 7 (log_mass + 6 ratios) | Leja+2019 |
+# | `continuity` + bursty prior | Non-parametric | 7 + split scale | Tacchella+2022 |
+# | `psb_continuity` | Non-parametric | N_bins + 2 (tlast, tflex) | Suess+2021 |
 # | `dirichlet` | Non-parametric | 7 (log_mass + 6 z_frac) | Leja+2017 |
 # | `field` (DRW) | Stochastic | 2 + $N_{\rm grid}$ ($\sigma$, $\tau$, $\xi$) | Munoz+2026 |
 # | `field` (Matern) | Stochastic | 3 + $N_{\rm grid}$ (var, $\ell$, $\nu$, $\xi$) | Generalized |

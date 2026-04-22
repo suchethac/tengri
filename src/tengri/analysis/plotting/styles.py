@@ -75,6 +75,14 @@ def setup_style():
     - Inward ticks on all four sides
     - No frame on legends
 
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    None
+
     Examples
     --------
     >>> from tengri import setup_style

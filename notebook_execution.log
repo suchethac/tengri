@@ -1,0 +1,5 @@
+Found 17 notebooks
+
+Executing: 00_quickstart.ipynb
+W0422 03:17:44.026888 21788127 cpp_gen_intrinsics.cc:74] Empty bitcode string provided for eigen. Optimizations relying on this IR will be disabled.
+W0422 03:17:59.979177 21788432 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.

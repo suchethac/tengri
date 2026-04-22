@@ -88,7 +88,14 @@ class SpectralIndexDef:
 
     @property
     def wave_min(self) -> float:
-        """Minimum wavelength needed to measure this index."""
+        """Minimum wavelength needed to measure this index.
+
+        Returns
+        -------
+        float
+            Minimum wavelength [Angstrom] across all continuum and feature windows.
+
+        """
         vals = [w for pair in self.continuum for w in pair]
         if self.feature is not None:
             vals.extend(self.feature)
@@ -96,7 +103,14 @@ class SpectralIndexDef:
 
     @property
     def wave_max(self) -> float:
-        """Maximum wavelength needed to measure this index."""
+        """Maximum wavelength needed to measure this index.
+
+        Returns
+        -------
+        float
+            Maximum wavelength [Angstrom] across all continuum and feature windows.
+
+        """
         vals = [w for pair in self.continuum for w in pair]
         if self.feature is not None:
             vals.extend(self.feature)
@@ -192,7 +206,7 @@ def measure_index_jax(
     Parameters
     ----------
     wave_rest : array, shape (n_pix,)
-        Rest-frame wavelengths in Angstrom (must cover the index windows).
+        Rest-frame wavelengths [Angstrom] (must cover the index windows).
     flux : array, shape (n_pix,)
         Flux density (any consistent units — only ratios matter).
     index_def : SpectralIndexDef
@@ -201,7 +215,13 @@ def measure_index_jax(
     Returns
     -------
     jnp.ndarray, scalar
-        Measured index value.
+        Measured index value (units depend on ``index_def.units``:
+        Angstrom for EW, dimensionless for break indices).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses soft sigmoid edges for differentiability
+    rather than hard window boundaries.
 
     """
     if index_def.index_type == "break":
@@ -298,12 +318,24 @@ class SpectralIndexData:
 
     @property
     def n_indices(self) -> int:
-        """Number of spectral indices."""
+        """Number of spectral indices.
+
+        Returns
+        -------
+        int
+            Number of indices in this dataset.
+
+        """
         return len(self.index_defs)
 
     @property
     def names(self) -> tuple[str, ...]:
         """Tuple of spectral index names.
+
+        Returns
+        -------
+        tuple[str, ...]
+            Index names in the same order as ``index_defs``.
 
         Examples
         --------
@@ -316,7 +348,14 @@ class SpectralIndexData:
 
     @property
     def wave_range(self) -> tuple[float, float]:
-        """Rest-frame wavelength range needed to measure all indices."""
+        """Rest-frame wavelength range needed to measure all indices.
+
+        Returns
+        -------
+        tuple[float, float]
+            Tuple (wave_min, wave_max) in Angstrom covering all indices.
+
+        """
         lo = min(d.wave_min for d in self.index_defs)
         hi = max(d.wave_max for d in self.index_defs)
         return (lo, hi)
@@ -336,13 +375,19 @@ class SpectralIndexData:
             Index names from ``STANDARD_INDICES``
             (e.g. ``["Dn4000", "HdA"]``).
         values : list of float
-            Observed index values.
+            Observed index values (units depend on index type).
         errors : list of float
-            1-sigma uncertainties.
+            1-sigma uncertainties (same units as values).
 
         Returns
         -------
         SpectralIndexData
+            Spectral index data object.
+
+        Raises
+        ------
+        ValueError
+            If any name is not in ``STANDARD_INDICES``.
 
         """
         defs = []
@@ -364,12 +409,16 @@ class SpectralIndexData:
         Parameters
         ----------
         model_values : array, shape (n_indices,)
-            Model-predicted index values.
+            Model-predicted index values (same units as ``values``).
 
         Returns
         -------
         jnp.ndarray, scalar
-            Sum of ((obs - model) / error)^2.
+            Sum of ((obs - model) / error)^2 [dimensionless].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — uses only jnp primitives.
 
         """
         residual = (self.values - model_values) / self.errors
@@ -381,17 +430,32 @@ class SpectralIndexData:
         Parameters
         ----------
         model_values : array, shape (n_indices,)
-            Model-predicted index values.
+            Model-predicted index values (same units as ``values``).
 
         Returns
         -------
         jnp.ndarray, scalar
-            Total log-likelihood summed over all indices.
+            Total log-likelihood summed over all indices [dimensionless].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — uses only jnp primitives.
 
         """
         residual = (self.values - model_values) / self.errors
         return jnp.sum(-0.5 * residual**2 - jnp.log(self.errors) - 0.5 * jnp.log(2.0 * jnp.pi))
 
     def summary(self) -> str:
-        """Return a human-readable summary of the spectral indices."""
+        """Return a human-readable summary of the spectral indices.
+
+        Returns
+        -------
+        str
+            Summary string (e.g., "2 indices (Dn4000, HdA)").
+
+        Notes
+        -----
+        Intended for logging and diagnostics, not for programmatic parsing.
+
+        """
         return f"{self.n_indices} indices ({', '.join(self.names)})"

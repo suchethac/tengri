@@ -23,7 +23,7 @@ from jax.typing import ArrayLike
 class PAHFeature(NamedTuple):
     """Parameters of a single PAH Drude profile.
 
-    Parameters
+    Attributes
     ----------
     wave_um : float
         Central wavelength in microns.
@@ -31,6 +31,12 @@ class PAHFeature(NamedTuple):
         Fractional FWHM (Δλ/λ₀).  Absolute FWHM = gamma * wave_um.
     strength : float
         Relative strength (Smith+2007 PAHFIT SINGS median; 7.60 μm = 1.0).
+
+    Notes
+    -----
+    Used to define the 18-feature PAH template from Smith et al. (2007).
+    Each feature can be evaluated as a Drude profile via
+    :func:`drude_profile` or combined via :func:`pah_template`.
     """
 
     wave_um: float

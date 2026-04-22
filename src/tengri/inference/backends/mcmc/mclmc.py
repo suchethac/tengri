@@ -1,6 +1,6 @@
 """MCLMC and Adjusted MCLMC via BlackJAX.
 
-Extracted from mcmc/common.py. Import via ``tengri.inference.backends.mcmc.common``.
+Extracted from mcmc/common.py. Import via ``tengri.inference.backends.mcmc``.
 """
 
 from __future__ import annotations

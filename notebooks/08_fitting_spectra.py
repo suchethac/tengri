@@ -451,7 +451,7 @@ spec_stoch = Parameters(
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
     mean_sfh_type=["dense_basis", "field"],
-    n_grid=128,
+    n_grid=64,
 )
 model_stoch = SEDModel(spec_stoch, ssp_data, observation=obs_joint)
 model_stoch_spec = SEDModel(spec_stoch, ssp_data, observation=obs_spec)

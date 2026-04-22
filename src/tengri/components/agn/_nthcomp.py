@@ -209,6 +209,31 @@ def nthcomp_lnu_interp(
     -------
     lnu_shape : jnp.ndarray, shape (len(nu),)
         Non-negative spectral shape (integrates to ~1 over nu).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives and JAX-registered VJP.
+
+    The underlying templates are precomputed Kompaneets equation solutions
+    in log-space (Kubota & Done 2018, Section 2.2). Trilinear interpolation
+    is performed in log(spectral shape) to improve accuracy for exponentially
+    varying features (Wien seed-BB tail), then exponentiated. Extrapolation
+    beyond grid bounds is clamped to preserve monotonicity at boundaries.
+
+    **Custom VJP**: A finite-difference approximation is used for the gamma
+    gradient to work around JAX autodiff limitations with composed operations
+    involving ``jnp.interp`` and large output scalars. See _nthcomp_lnu_interp_bwd
+    (lines 234–286) for implementation details.
+
+    References
+    ----------
+    .. [1] A. Kubota and C. Done, "A physical model of the broad-band continuum
+       of AGN and its implications for the UV/X relation and optical variability,"
+       MNRAS, 480, 1247 (2018). arXiv:1804.00171.
+       https://doi.org/10.1093/mnras/sty1890
+    .. [2] A. A. Zdziarski, G. M. Johnson, and M. Magdziarz, "Inverse Compton
+       dominance in the torus emission," MNRAS, 283, 193 (1996).
+       https://doi.org/10.1093/mnras/283.1.193
     """
     return _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV)
 

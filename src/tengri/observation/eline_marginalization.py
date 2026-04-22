@@ -92,23 +92,32 @@ def build_eline_design_matrix(
     Parameters
     ----------
     wave_obs : array, shape (n_pix,)
-        Observed-frame wavelength grid (Angstrom).
+        Observed-frame wavelength grid [Angstrom].
     line_wavelengths : array, shape (n_lines,)
-        Rest-frame vacuum wavelengths of the lines (Angstrom).
+        Rest-frame vacuum wavelengths of the lines [Angstrom].
     spectral_resolution : float
-        Instrument spectral resolution R = lambda / delta_lambda.
+        Instrument spectral resolution R = lambda / delta_lambda
+        [dimensionless].
     redshift : float
-        Source redshift.
+        Source redshift [dimensionless].
     eline_sigma_kms : float
-        Intrinsic velocity broadening (km/s). Default 0.
+        Intrinsic velocity broadening [km/s]. Default 0.
     eline_delta_v_kms : float
-        Velocity offset from systemic (km/s). Default 0.
+        Velocity offset from systemic [km/s]. Default 0.
 
     Returns
     -------
     array, shape (n_pix, n_lines)
-        Design matrix *G*.
+        Design matrix *G* [dimensionless].
 
+    Notes
+    -----
+    **JIT-compatible**: yes — delegates to ``_build_eline_design_matrix_jitted``
+    which is JIT-decorated. Differentiable w.r.t. all parameters.
+
+    Each profile is normalized to unit integral (``int G_j dlam = 1``) to
+    enable proper line amplitude marginalization in
+    :func:`marginalize_emission_lines`.
     """
     return _build_eline_design_matrix_jitted(
         wave_obs,
@@ -137,23 +146,31 @@ def build_broad_design_matrix(
     Parameters
     ----------
     wave_obs : array, shape (n_pix,)
-        Observed-frame wavelength grid (Angstrom).
+        Observed-frame wavelength grid [Angstrom].
     line_wavelengths : array, shape (n_lines,)
-        Rest-frame vacuum wavelengths of broad-line candidates (Angstrom).
+        Rest-frame vacuum wavelengths of broad-line candidates [Angstrom].
     spectral_resolution : float
-        Instrument spectral resolution R = lambda/delta_lambda.
+        Instrument spectral resolution R = lambda/delta_lambda
+        [dimensionless].
     redshift : float
-        Source redshift.
+        Source redshift [dimensionless].
     broad_sigma_kms : float
-        Broad component velocity dispersion (km/s), typically 500-5000.
+        Broad component velocity dispersion [km/s]. Typical: 500–5000.
     eline_delta_v_kms : float
-        Velocity offset of broad component from systemic (km/s). Default 0.
+        Velocity offset of broad component from systemic [km/s]. Default 0.
 
     Returns
     -------
     array, shape (n_pix, n_lines)
-        Broad-component design matrix G_broad.
+        Broad-component design matrix G_broad [dimensionless].
 
+    Notes
+    -----
+    **JIT-compatible**: yes — delegates to :func:`build_eline_design_matrix`
+    and is itself JIT-decorated. Differentiable w.r.t. all parameters.
+
+    Used for modeling broad AGN emission lines (e.g., broad H-alpha, H-beta)
+    in conjunction with narrow lines from :func:`build_eline_design_matrix`.
     """
     # Delegate to build_eline_design_matrix with broad_sigma_kms as eline_sigma_kms
     return build_eline_design_matrix(

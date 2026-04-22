@@ -138,6 +138,10 @@ class Spectroscopy:
         int
             Number of wavelength grid points.
 
+        Notes
+        -----
+        Read-only property; computed from the length of ``wave_obs``.
+
         """
         return len(self.wave_obs)
 
@@ -149,6 +153,10 @@ class Spectroscopy:
         -------
         bool
             True if covariance matrix is present.
+
+        Notes
+        -----
+        Read-only property; determined at initialization.
 
         """
         return self._cov_inv is not None
@@ -163,6 +171,11 @@ class Spectroscopy:
             Inverse covariance matrix, shape ``(n_pix, n_pix)``, or None
             if diagonal noise is assumed.
 
+        Notes
+        -----
+        The inverse is precomputed at initialization for efficient likelihood
+        evaluation. This property is read-only.
+
         """
         return self._cov_inv
 
@@ -174,6 +187,11 @@ class Spectroscopy:
         -------
         bool
             True if resolution profile is specified.
+
+        Notes
+        -----
+        Read-only property; determines whether LSF convolution is applied
+        in the forward model.
 
         """
         return self.resolution is not None
@@ -187,6 +205,11 @@ class Spectroscopy:
         bool
             True if calibration order is > 0.
 
+        Notes
+        -----
+        Read-only property; determines whether calibration coefficients
+        are registered as free parameters.
+
         """
         return self.calibration_order > 0
 
@@ -198,6 +221,11 @@ class Spectroscopy:
         -------
         bool
             True if eline_mode is "marginalized" or "fitted".
+
+        Notes
+        -----
+        Read-only property; determines whether emission line amplitudes are
+        treated as free parameters or analytically marginalized.
 
         """
         return self.eline_mode in ("marginalized", "fitted")
@@ -430,13 +458,15 @@ class Spectroscopy:
         Returns
         -------
         str
-            Comma-separated summary with pixel count, resolution, calibration
-            order, emission-line mode, and covariance info.
+            Comma-separated summary (e.g., "500 pixels, R=2500, eline=marginalized").
+            Includes pixel count, resolution, calibration order, emission-line mode,
+            and covariance info.
 
         Notes
         -----
         Used for logging and diagnostics. Provides a compact, human-readable
-        representation of the instrument configuration.
+        representation of the instrument configuration. Intended for display to users,
+        not for programmatic parsing.
 
         """
         parts = [f"{self.n_pixels} pixels"]

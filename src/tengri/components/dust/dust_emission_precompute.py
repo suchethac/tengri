@@ -175,7 +175,32 @@ def build_dl07_photometry_lookup(precomp: dict):
     def dl07_phot(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah):
         """Compute DL07 dust emission photometry via triweight interpolation on precomputed grid.
 
-        Returns filter-integrated L_nu [erg/s/Hz] at runtime.
+        Parameters
+        ----------
+        L_absorbed : float
+            Absorbed luminosity (scaling factor) [Lsun].
+        dust_umin : float
+            Minimum radiation field intensity [dimensionless].
+        dust_gamma_dl : float
+            Mixing fraction for power-law component (gamma parameter)
+            [dimensionless, in [0, 1]].
+        dust_qpah : float
+            PAH mass fraction [dimensionless].
+
+        Returns
+        -------
+        ndarray, shape (n_filters,)
+            Filter-integrated dust emission photometry [erg/s/Hz or L_sun/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — returned from jax.jit decorator.
+
+        **Gradient-safe**: yes — triweight interpolation is C²-continuous.
+
+        Performs 2D triweight interpolation in (qpah, umin) space on the
+        precomputed grid, then mixes single-U and power-law components
+        via the gamma parameter, and finally scales by L_absorbed.
         """
         point = (dust_qpah, dust_umin)
         # 2D triweight interpolation (C²-continuous gradients)

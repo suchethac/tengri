@@ -48,7 +48,7 @@ class PreintegratedGrid:
     Grid dimensions are opaque — the caller knows what they mean
     (e.g. (n_met, n_age) for SSP, (n_logU, n_Z) for CLOUDY).
 
-    Attributes
+    Parameters
     ----------
     phot : jnp.ndarray
         (*grid_dims, n_filters). Filter-integrated photometry.
@@ -86,7 +86,7 @@ class PreintegratedLines:
     A line at λ_line contributes T_b(λ_line_obs) × λ_line_obs / ∫ T_b(λ) λ dλ
     to filter b. This is exact — no numerical integration needed.
 
-    Attributes
+    Parameters
     ----------
     line_filter_weights : jnp.ndarray
         (n_lines, n_filters). Weight of each line in each filter.

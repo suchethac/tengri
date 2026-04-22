@@ -58,6 +58,23 @@ class VIConfig:
     kl_kwargs : dict
         Kwargs for the outer KL minimization.
 
+    Attributes
+    ----------
+    n_samples : int or callable
+        Samples per KL iteration (doubled by NIFTy's ``mirror_samples``).
+    n_iterations : int
+        Number of KL minimization iterations.
+    use_vmap : bool
+        Whether to use ``jax.vmap`` for residual mapping.
+    evi_linear_fraction : float
+        Fraction of iterations to use linear (MGVI) before nonlinear (geoVI).
+    draw_linear_kwargs : dict
+        Conjugate gradient solver configuration for sampling.
+    nonlinearly_update_kwargs : dict
+        Newton-CG configuration for coordinate transform inversion.
+    kl_kwargs : dict
+        Outer KL minimization configuration.
+
     Notes
     -----
     Frozen dataclass configuring the variational inference backend. Key fields:

@@ -35,6 +35,10 @@ def setup_jax(
         If True, pre-allocate all GPU memory at startup (faster but greedy).
         If False (default), allocate on demand (better for shared GPUs).
 
+    Returns
+    -------
+    None
+
     Examples
     --------
     # MacBook (CPU only)
@@ -74,15 +78,15 @@ def setup_jax(
 def device_info() -> dict:
     """Report available JAX devices and their properties.
 
+    Parameters
+    ----------
+    None
+
     Returns
     -------
-    dict with keys:
-        "platform": str (cpu, gpu, tpu)
-        "devices": list of device descriptions
-        "n_devices": int
-        "default_device": str
-        "x64_enabled": bool
-        "gpu_memory_mb": float or None
+    dict
+        Dictionary with keys: "platform" (str), "devices" (list), "n_devices" (int),
+        "default_device" (str), "x64_enabled" (bool), "gpu_memory_mb" (float or None).
     """
     import jax
 
@@ -117,7 +121,16 @@ def device_info() -> dict:
 
 
 def print_device_info():
-    """Print a human-readable summary of JAX configuration."""
+    """Print a human-readable summary of JAX configuration.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    None
+    """
     info = device_info()
     print(f"JAX platform:    {info['platform'].upper()}")
     print(f"Devices:         {info['n_devices']}x {info['devices'][0]}")
@@ -180,6 +193,14 @@ def check_resources():
     """Run a quick diagnostic to verify JAX can use available hardware.
 
     Prints warnings if resources are underutilized.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    None
     """
     import jax
     import jax.numpy as jnp

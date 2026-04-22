@@ -65,16 +65,26 @@ def compute_effective_noise(
     Parameters
     ----------
     noise_obs : array, shape (n_bands,)
-        Observed 1-sigma uncertainties.
+        Observed 1-sigma uncertainties [flux units].
     model_flux : array, shape (n_bands,)
-        Model-predicted fluxes (absolute value used for calibration term).
+        Model-predicted fluxes [flux units] (absolute value used for
+        calibration term).
     f_cal : float or scalar array
-        Fractional calibration uncertainty. Typical range: 0.01-0.15.
+        Fractional calibration uncertainty [dimensionless].
+        Typical range: 0.01–0.15.
 
     Returns
     -------
     array, shape (n_bands,)
-        Effective noise standard deviation.
+        Effective noise standard deviation [same units as inputs].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses only jnp primitives.
+
+    The calibration term ``f_cal * |model|`` adds a flux-dependent
+    floor to the noise budget, preventing zero-noise solutions when
+    measurement uncertainties are very small.
 
     Examples
     --------
@@ -103,16 +113,25 @@ def compute_std_inv(
     Parameters
     ----------
     noise_obs : array, shape (n_bands,)
-        Observed 1-sigma uncertainties.
+        Observed 1-sigma uncertainties [flux units].
     model_flux : array, shape (n_bands,)
-        Model-predicted fluxes.
+        Model-predicted fluxes [flux units].
     f_cal : float or scalar array
-        Fractional calibration uncertainty.
+        Fractional calibration uncertainty [dimensionless].
 
     Returns
     -------
     array, shape (n_bands,)
-        Inverse noise standard deviation τ = 1/σ_eff.
+        Inverse noise standard deviation τ = 1/σ_eff [1/flux_units].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — delegates to :func:`compute_effective_noise`
+    which is pure JAX.
+
+    Used in variable-covariance likelihoods where the noise is a traced
+    parameter. See :func:`variable_noise_hamiltonian` for integration into
+    the likelihood energy function.
 
     Examples
     --------
@@ -255,25 +274,40 @@ def censored_log_likelihood(
     Parameters
     ----------
     data : array, shape (n_bands,)
-        Observed fluxes.  For censored bands, this holds the limit value.
+        Observed fluxes [flux units]. For censored bands, this holds the
+        limit value.
     noise_obs : array, shape (n_bands,)
-        Observed 1-sigma uncertainties.
+        Observed 1-sigma uncertainties [flux units].
     predicted : array, shape (n_bands,)
-        Model-predicted fluxes.
+        Model-predicted fluxes [flux units].
     mask : array, shape (n_bands,)
-        Per-band type: 0=detected, 1=upper limit, -1=lower limit.
+        Per-band type: 0 = detected, 1 = upper limit, -1 = lower limit
+        [dimensionless].
     f_cal : float or scalar array
         Fractional calibration uncertainty (applied to detected bands
-        only).  Default 0.0.
+        only) [dimensionless]. Default 0.0.
     dof : float or None
-        Student-t degrees of freedom for detected bands.  None =
-        Gaussian.
+        Student-t degrees of freedom for detected bands. None = Gaussian
+        (default).
 
     Returns
     -------
     scalar
-        Total energy (negative log-likelihood, up to additive constant).
+        Total energy (negative log-likelihood, up to additive constant)
+        [dimensionless].
 
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.where`` dispatch (no Python
+    control flow). Differentiable w.r.t. predicted fluxes and f_cal.
+
+    **Censoring model**:
+
+    - **Detected** (mask=0): Gaussian or Student-t likelihood of residual.
+    - **Upper limit** (mask=1): ln L = ln Phi((f_upper - m)/σ).
+    - **Lower limit** (mask=-1): ln L = ln Phi((m - f_lower)/σ).
+
+    where Phi is the standard normal CDF.
     """
     sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
 
@@ -330,13 +364,13 @@ def variable_noise_hamiltonian(
     Parameters
     ----------
     data : array, shape (n_bands,)
-        Observed fluxes.
+        Observed fluxes [flux units].
     noise_obs : array, shape (n_bands,)
-        Observed 1-sigma uncertainties.
+        Observed 1-sigma uncertainties [flux units].
     predicted : array, shape (n_bands,)
-        Model-predicted fluxes.
+        Model-predicted fluxes [flux units].
     f_cal : float or scalar array
-        Fractional calibration uncertainty.
+        Fractional calibration uncertainty [dimensionless].
     dof : float or None
         Student-t degrees of freedom. None = Gaussian (default).
         Typical values: 2 (heavy tails, Alsing+2022), 4 (moderate).
@@ -344,7 +378,17 @@ def variable_noise_hamiltonian(
     Returns
     -------
     scalar
-        Likelihood energy (negative log-likelihood up to constant).
+        Likelihood energy (negative log-likelihood up to constant)
+        [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses only jnp primitives.
+
+    The log-determinant term ``Σ log(σ_eff)`` is crucial: it prevents
+    the trivial solution σ → ∞ and makes the likelihood fully specified.
+    Does NOT include any prior term on ``f_cal`` or other parameters;
+    the caller is responsible for adding the ½ξᵀξ prior.
 
     Examples
     --------
@@ -602,8 +646,9 @@ def gp_noise_covariance(
     >>> from tengri import gp_noise_covariance
     >>> wave = jnp.linspace(4000.0, 8000.0, 50)
     >>> noise = jnp.ones(50) * 0.1
-    >>> N = gp_noise_covariance(wave, noise, gp_amplitude=0.5,
-    ...                         gp_length_scale=300.0, kernel="exp_squared")
+    >>> N = gp_noise_covariance(
+    ...     wave, noise, gp_amplitude=0.5, gp_length_scale=300.0, kernel="exp_squared"
+    ... )
     >>> N.shape
     (50, 50)
     """
@@ -616,8 +661,6 @@ def gp_noise_covariance(
     elif kernel == "matern32":
         K_gp = matern32_kernel(wavelength, gp_amplitude, gp_length_scale)
     else:
-        raise ValueError(
-            f"Unknown kernel '{kernel}'. Must be 'exp_squared' or 'matern32'."
-        )
+        raise ValueError(f"Unknown kernel '{kernel}'. Must be 'exp_squared' or 'matern32'.")
 
     return diag_noise + K_gp

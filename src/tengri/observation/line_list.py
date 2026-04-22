@@ -41,71 +41,74 @@ _DOUBLET_RATIOS: dict[tuple[str, str], float] = {
 }
 
 # ── Default ~40 line catalog (rest-frame vacuum wavelengths in Angstrom)
-# Tuple layout: (name, wavelength_angstrom, species, is_balmer, is_broad_candidate)
+# Tuple layout: (name, wavelength_angstrom, species, is_balmer, is_broad_candidate,
+#                is_strong, plot_group)
+# is_strong and plot_group match FastSpecFit emlines.ecsv (Moustakas+2023).
 
-_DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool]] = [
+_DEFAULT_OPTICAL_LINES: list[tuple[str, float, str, bool, bool, bool, str]] = [
     # UV lines (1200-3000 Å)
-    ("Lya", 1215.67, "H1", False, False),
-    ("NV_1240", 1240.81, "N5", False, False),
-    ("OI_1304", 1304.35, "O1", False, False),
-    ("SiIV_1396", 1396.76, "Si4", False, False),
-    ("CIV_1549", 1549.48, "C4", False, True),
-    ("HeII_1640", 1640.42, "He2", False, False),
-    ("AlIII_1857", 1857.40, "Al3", False, False),
-    ("SiIII_1892", 1892.03, "Si3", False, False),
-    ("CIII_1908", 1908.73, "C3", False, True),
-    ("MgII_2796", 2796.35, "Mg2", False, False),  # constrained secondary of MgII_2803
-    ("MgII_2803", 2803.53, "Mg2", False, False),
-    ("NeV_3346", 3347.78, "Ne5", False, False),
-    ("NeV_3426", 3427.94, "Ne5", False, False),
+    ("Lya", 1215.67, "H1", False, False, True, "lya_nv"),
+    ("NV_1240", 1240.81, "N5", False, False, True, "lya_nv"),
+    ("OI_1304", 1304.35, "O1", False, False, False, "oi_1304"),
+    ("SiIV_1396", 1396.76, "Si4", False, False, False, "siliv_1396"),
+    ("CIV_1549", 1549.48, "C4", False, True, True, "civ_1549_heii_1640"),
+    ("HeII_1640", 1640.42, "He2", False, False, False, "civ_1549_heii_1640"),
+    ("AlIII_1857", 1857.40, "Al3", False, False, False, "aliii_1857_siliii_1892_ciii_1908"),
+    ("SiIII_1892", 1892.03, "Si3", False, False, True, "aliii_1857_siliii_1892_ciii_1908"),
+    ("CIII_1908", 1908.73, "C3", False, True, True, "aliii_1857_siliii_1892_ciii_1908"),
+    # constrained secondary of MgII_2803
+    ("MgII_2796", 2796.35, "Mg2", False, False, True, "mgii_2796_2803"),
+    ("MgII_2803", 2803.53, "Mg2", False, False, True, "mgii_2796_2803"),
+    ("NeV_3346", 3347.78, "Ne5", False, False, False, "nev_3346"),
+    ("NeV_3426", 3427.94, "Ne5", False, False, False, "nev_3426"),
     # Optical lines (3700-6800 Å)
-    ("OII_3726", 3727.09, "O2", False, False),
-    ("OII_3729", 3729.88, "O2", False, False),
-    ("NeIII_3869", 3870.16, "Ne3", False, False),
-    ("Hepsilon", 3971.20, "H1", True, True),
-    ("Hdelta", 4102.89, "H1", True, True),
-    ("Hgamma", 4341.68, "H1", True, True),
-    ("OIII_4363", 4364.44, "O3", False, False),
-    ("HeI_4471", 4472.74, "He1", False, False),
-    ("HeII_4686", 4687.02, "He2", False, False),
-    ("Hbeta", 4862.68, "H1", True, True),
-    ("OIII_4959", 4960.30, "O3", False, False),
-    ("OIII_5007", 5008.24, "O3", False, False),
-    ("NII_5755", 5756.19, "N2", False, False),
-    ("HeI_5876", 5877.25, "He1", False, False),
-    ("OI_6300", 6302.05, "O1", False, False),
-    ("SIII_6312", 6313.81, "S3", False, False),
-    ("NII_6548", 6549.86, "N2", False, False),
-    ("Halpha", 6564.61, "H1", True, True),
-    ("NII_6584", 6585.28, "N2", False, False),
+    ("OII_3726", 3727.09, "O2", False, False, True, "oii_3726_29"),
+    ("OII_3729", 3729.88, "O2", False, False, True, "oii_3726_29"),
+    ("NeIII_3869", 3870.16, "Ne3", False, False, False, "neiii_3869_h6"),
+    ("Hepsilon", 3971.20, "H1", True, True, False, "hepsilon"),
+    ("Hdelta", 4102.89, "H1", True, True, False, "hdelta"),
+    ("Hgamma", 4341.68, "H1", True, True, True, "hgamma_oiii_4363"),
+    ("OIII_4363", 4364.44, "O3", False, False, False, "hgamma_oiii_4363"),
+    ("HeI_4471", 4472.74, "He1", False, False, False, "hei_4471"),
+    ("HeII_4686", 4687.02, "He2", False, False, False, "heii_4686"),
+    ("Hbeta", 4862.68, "H1", True, True, True, "hbeta"),
+    ("OIII_4959", 4960.30, "O3", False, False, True, "oiii_doublet"),
+    ("OIII_5007", 5008.24, "O3", False, False, True, "oiii_doublet"),
+    ("NII_5755", 5756.19, "N2", False, False, False, "nii_5755"),
+    ("HeI_5876", 5877.25, "He1", False, False, False, "hei_5876"),
+    ("OI_6300", 6302.05, "O1", False, False, False, "oi_6300_siii_6312"),
+    ("SIII_6312", 6313.81, "S3", False, False, False, "oi_6300_siii_6312"),
+    ("NII_6548", 6549.86, "N2", False, False, True, "halpha_nii_6548_48"),
+    ("Halpha", 6564.61, "H1", True, True, True, "halpha_nii_6548_48"),
+    ("NII_6584", 6585.28, "N2", False, False, True, "halpha_nii_6548_48"),
     # SII 6717/6731 intentionally unconstrained: ratio is density-sensitive
-    ("SII_6717", 6718.29, "S2", False, False),
-    ("SII_6731", 6732.67, "S2", False, False),
+    ("SII_6717", 6718.29, "S2", False, False, True, "sii_6716_31"),
+    ("SII_6731", 6732.67, "S2", False, False, True, "sii_6716_31"),
     # Near-IR lines (7000-10000 Å)
-    ("ArIII_7135", 7137.80, "Ar3", False, False),
-    ("OII_7320", 7321.47, "O2", False, False),
-    ("OII_7330", 7332.21, "O2", False, False),
-    ("SIII_9069", 9071.10, "S3", False, False),
-    ("SIII_9532", 9533.23, "S3", False, False),
+    ("ArIII_7135", 7137.80, "Ar3", False, False, False, "ariii_7135_oii_7320_30"),
+    ("OII_7320", 7321.47, "O2", False, False, False, "ariii_7135_oii_7320_30"),
+    ("OII_7330", 7332.21, "O2", False, False, False, "ariii_7135_oii_7320_30"),
+    ("SIII_9069", 9071.10, "S3", False, False, False, "siii_9069"),
+    ("SIII_9532", 9533.23, "S3", False, False, False, "siii_9532"),
 ]
 
 # ── 13-line catalog matching eline_marginalization.py
 # Same wavelengths and insertion order as DEFAULT_LINE_WAVELENGTHS there.
 
-_DEFAULT_13_LINES: list[tuple[str, float, str, bool, bool]] = [
-    ("Lya", 1215.67, "H1", False, False),
-    ("Hdelta", 4102.89, "H1", True, True),
-    ("Hgamma", 4341.68, "H1", True, True),
-    ("Hbeta", 4862.68, "H1", True, True),
-    ("OIII_4959", 4960.30, "O3", False, False),
-    ("OIII_5007", 5008.24, "O3", False, False),
-    ("Halpha", 6564.61, "H1", True, True),
-    ("NII_6548", 6549.86, "N2", False, False),
-    ("NII_6584", 6585.28, "N2", False, False),
-    ("OII_3726", 3727.09, "O2", False, False),
-    ("OII_3729", 3729.88, "O2", False, False),
-    ("SII_6717", 6718.29, "S2", False, False),
-    ("SII_6731", 6732.67, "S2", False, False),
+_DEFAULT_13_LINES: list[tuple[str, float, str, bool, bool, bool, str]] = [
+    ("Lya", 1215.67, "H1", False, False, True, "lya_nv"),
+    ("Hdelta", 4102.89, "H1", True, True, False, "hdelta"),
+    ("Hgamma", 4341.68, "H1", True, True, True, "hgamma_oiii_4363"),
+    ("Hbeta", 4862.68, "H1", True, True, True, "hbeta"),
+    ("OIII_4959", 4960.30, "O3", False, False, True, "oiii_doublet"),
+    ("OIII_5007", 5008.24, "O3", False, False, True, "oiii_doublet"),
+    ("Halpha", 6564.61, "H1", True, True, True, "halpha_nii_6548_48"),
+    ("NII_6548", 6549.86, "N2", False, False, True, "halpha_nii_6548_48"),
+    ("NII_6584", 6585.28, "N2", False, False, True, "halpha_nii_6548_48"),
+    ("OII_3726", 3727.09, "O2", False, False, True, "oii_3726_29"),
+    ("OII_3729", 3729.88, "O2", False, False, True, "oii_3726_29"),
+    ("SII_6717", 6718.29, "S2", False, False, True, "sii_6716_31"),
+    ("SII_6731", 6732.67, "S2", False, False, True, "sii_6716_31"),
 ]
 
 
@@ -151,6 +154,22 @@ class LineList:
         True for hydrogen Balmer/Lyman series lines.
     is_broad_candidate : tuple[bool, ...]
         True for lines that can carry a broad AGN component.
+    is_strong : tuple[bool, ...]
+        True for lines reliably detected in DESI spectra. Matches the
+        ``isstrong`` column in FastSpecFit ``emlines.ecsv`` [1]_.
+    plot_group : tuple[str, ...]
+        QA plot group label. Lines sharing a group are displayed together in
+        diagnostic panels. Matches the ``plotgroup`` column in FastSpecFit
+        ``emlines.ecsv`` [1]_ (e.g. ``"halpha_nii_6548_48"``,
+        ``"oiii_doublet"``).
+
+    References
+    ----------
+    .. [1] Moustakas, J., Scholte, D., Dey, B., Khederlarian, A., 2023,
+           "FastSpecFit: Fast spectral synthesis and emission-line fitting
+           of DESI spectra", Astrophysics Source Code Library,
+           record ascl:2308.005.
+           https://ui.adsabs.harvard.edu/abs/2023ascl.soft08005M
 
     Examples
     --------
@@ -159,6 +178,16 @@ class LineList:
         cat = LineList.default_optical()
         bpt = cat.select(names=["Halpha", "Hbeta", "OIII_5007", "NII_6584"])
         C = bpt.build_constraint_matrix()  # (n_lines, n_independent)
+
+    Inspect strong-line detections::
+
+        strong_names = [n for n, s in zip(cat.names, cat.is_strong) if s]
+        # ['Lya', 'NV_1240', 'CIV_1549', ...]
+
+    Find lines in the Halpha+NII panel::
+
+        panel = [n for n, g in zip(cat.names, cat.plot_group) if g == "halpha_nii_6548_48"]
+        # ['NII_6548', 'Halpha', 'NII_6584']
 
     Use a custom wavelength subset from a line-finding step::
 
@@ -172,17 +201,33 @@ class LineList:
     doublets: tuple[DoubletConstraint, ...]
     is_balmer: tuple[bool, ...]
     is_broad_candidate: tuple[bool, ...]
+    is_strong: tuple[bool, ...]
+    plot_group: tuple[str, ...]
 
     # ── Properties ────────────────────────────────────────────────
 
     @property
     def n_lines(self) -> int:
-        r"""Total number of lines in the catalog."""
+        r"""Total number of lines in the catalog.
+
+        Returns
+        -------
+        int
+            Number of emission lines.
+
+        """
         return len(self.names)
 
     @property
     def n_independent(self) -> int:
-        r"""Number of independent amplitude parameters after doublet constraints."""
+        r"""Number of independent amplitude parameters after doublet constraints.
+
+        Returns
+        -------
+        int
+            Number of independent parameters (total lines minus doublet secondaries).
+
+        """
         return self.n_lines - len(self.doublets)
 
     @property
@@ -314,6 +359,8 @@ class LineList:
             doublets=doublets,
             is_balmer=is_balmer,
             is_broad_candidate=is_broad,
+            is_strong=tuple(False for _ in names_tuple),
+            plot_group=tuple("" for _ in names_tuple),
         )
 
     # ── Filtering ─────────────────────────────────────────────────
@@ -374,6 +421,12 @@ class LineList:
 
             hydrogen = cat.select(species=["H1"])
 
+        Notes
+        -----
+        Not JIT-compatible (uses Python control flow and set operations).
+        All filtering criteria are combined via AND logic. At least one criterion
+        should be specified to avoid returning an empty catalog.
+
         """
         waves_np = [float(w) for w in self.wavelengths]
 
@@ -428,6 +481,8 @@ class LineList:
                 doublets=(),
                 is_balmer=(),
                 is_broad_candidate=(),
+                is_strong=(),
+                plot_group=(),
             )
 
         # Sort kept indices for consistent ordering
@@ -441,6 +496,8 @@ class LineList:
         new_species = tuple(self.species[i] for i in kept_indices_list)
         new_is_balmer = tuple(self.is_balmer[i] for i in kept_indices_list)
         new_is_broad = tuple(self.is_broad_candidate[i] for i in kept_indices_list)
+        new_is_strong = tuple(self.is_strong[i] for i in kept_indices_list)
+        new_plot_group = tuple(self.plot_group[i] for i in kept_indices_list)
 
         # Rebuild doublets — keep only if both members survived the filter
         new_doublets: list[DoubletConstraint] = []
@@ -461,6 +518,8 @@ class LineList:
             doublets=tuple(new_doublets),
             is_balmer=new_is_balmer,
             is_broad_candidate=new_is_broad,
+            is_strong=new_is_strong,
+            plot_group=new_plot_group,
         )
 
     # ── Constraint matrix ─────────────────────────────────────────
@@ -511,7 +570,7 @@ class LineList:
     @classmethod
     def _from_line_tuples(
         cls,
-        lines: list[tuple[str, float, str, bool, bool]],
+        lines: list[tuple[str, float, str, bool, bool, bool, str]],
     ) -> LineList:
         """Construct a LineList from a list of line property tuples.
 
@@ -522,7 +581,7 @@ class LineList:
         ----------
         lines : list of tuples
             Each tuple: ``(name, wavelength [Angstrom], species, is_balmer,
-            is_broad_candidate)``.
+            is_broad_candidate, is_strong, plot_group)``.
 
         Returns
         -------
@@ -555,6 +614,8 @@ class LineList:
             doublets=tuple(doublets),
             is_balmer=tuple(t[3] for t in lines),
             is_broad_candidate=tuple(t[4] for t in lines),
+            is_strong=tuple(t[5] for t in lines),
+            plot_group=tuple(t[6] for t in lines),
         )
 
 
@@ -700,7 +761,6 @@ def _detect_doublets_by_proximity(
             break
 
     return tuple(doublets)
-
 
 
 # ── Deprecated alias — removed in tengri v1.0 ─────────────────────

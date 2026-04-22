@@ -1440,43 +1440,43 @@ class Fitter:
 
     def _run_raytrace(self, *, key, **kwargs) -> Posterior:
         """Dispatch to Ray Tracing MCMC sampler (Behroozi 2025)."""
-        from tengri.inference.backends.mcmc.common import run_raytrace
+        from tengri.inference.backends.mcmc import run_raytrace
 
         return run_raytrace(self, key=key, **kwargs)
 
     def _run_nuts(self, *, key, **kwargs) -> Posterior:
         """Dispatch to NUTS sampler via BlackJAX for exact posterior sampling."""
-        from tengri.inference.backends.mcmc.common import run_nuts
+        from tengri.inference.backends.mcmc import run_nuts
 
         return run_nuts(self, key=key, **kwargs)
 
     def _run_hmc(self, *, key, **kwargs) -> Posterior:
         """Dispatch to standard Hamiltonian Monte Carlo (fixed trajectory length)."""
-        from tengri.inference.backends.mcmc.common import run_hmc
+        from tengri.inference.backends.mcmc import run_hmc
 
         return run_hmc(self, key=key, **kwargs)
 
     def _run_dynamic_hmc(self, *, key, **kwargs) -> Posterior:
         """Dispatch to dynamic HMC with adaptive trajectory length."""
-        from tengri.inference.backends.mcmc.common import run_dynamic_hmc
+        from tengri.inference.backends.mcmc import run_dynamic_hmc
 
         return run_dynamic_hmc(self, key=key, **kwargs)
 
     def _run_ghmc(self, *, key, **kwargs) -> Posterior:
         """Dispatch to generalized HMC with partial momentum refresh."""
-        from tengri.inference.backends.mcmc.common import run_ghmc
+        from tengri.inference.backends.mcmc import run_ghmc
 
         return run_ghmc(self, key=key, **kwargs)
 
     def _run_mclmc(self, *, key, **kwargs) -> Posterior:
         """Dispatch to micro-canonical Langevin MCMC (microcanonical dynamics)."""
-        from tengri.inference.backends.mcmc.common import run_mclmc
+        from tengri.inference.backends.mcmc import run_mclmc
 
         return run_mclmc(self, key=key, **kwargs)
 
     def _run_adjusted_mclmc(self, *, key, **kwargs) -> Posterior:
         """Dispatch to MCLMC with Metropolis-Hastings correction."""
-        from tengri.inference.backends.mcmc.common import run_adjusted_mclmc
+        from tengri.inference.backends.mcmc import run_adjusted_mclmc
 
         return run_adjusted_mclmc(self, key=key, **kwargs)
 
