@@ -71,42 +71,12 @@ def precompute_skirtor_photometry(
         ``axes`` : tuple of 5 grid arrays (jnp.ndarray)
         ``_preint`` : :class:`PreintegratedGrid`
     """
-    if grid_path.endswith(".npz"):
-        data = np.load(grid_path)
-        grid = np.array(data["grid"])
-        wave_grid = np.asarray(data["wavelength"], dtype=np.float64)
-        axes_np = (
-            np.asarray(data["tau"]),
-            np.asarray(data["p"]),
-            np.asarray(data["q"]),
-            np.asarray(data["oa"]),
-            np.asarray(data["cos_inc"]),
-        )
-    else:
-        import h5py as _h5py
+    from tengri.components.agn.skirtor import _load_grid_arrays
 
-        with _h5py.File(grid_path, "r") as f:
-            if "grid" in f and isinstance(f["grid"], _h5py.Group):
-                # v2 HDF5 layout
-                wave_grid = np.asarray(f["wavelength"][:], dtype=np.float64)
-                grid = np.array(f["spectra/torus_emission"][:])
-                axes_np = (
-                    np.asarray(f["grid/tau_97"][:]),
-                    np.asarray(f["grid/p"][:]),
-                    np.asarray(f["grid/q"][:]),
-                    np.asarray(f["grid/opening_angle"][:]),
-                    np.asarray(f["grid/cos_inclination"][:]),
-                )
-            else:
-                wave_grid = np.asarray(f["wavelength"][:], dtype=np.float64)
-                grid = np.array(f["grid"][:])
-                axes_np = (
-                    np.asarray(f["tau"][:]),
-                    np.asarray(f["p"][:]),
-                    np.asarray(f["q"][:]),
-                    np.asarray(f["oa"][:]),
-                    np.asarray(f["cos_inc"][:]),
-                )
+    raw = _load_grid_arrays(grid_path)
+    grid = np.asarray(raw["total"], dtype=np.float64)
+    wave_grid = np.asarray(raw["wave"], dtype=np.float64)
+    axes_np = tuple(np.asarray(ax) for ax in raw["axes"])
 
     # Convert raw dimensionless templates to L_ν [erg/s/Hz per L_sun of L_bol].
     # This matches the normalization in skirtor.py:
@@ -124,7 +94,7 @@ def precompute_skirtor_photometry(
 
     for i in range(n_pts):
         template = grid_flat[i]
-        integral = np.trapz(template[sort_idx], nu_sorted)
+        integral = np.trapezoid(template[sort_idx], nu_sorted)
         integral_safe = max(abs(integral), 1e-100)
         lnu_flat[i] = _LSUN_ERG * template / integral_safe
 

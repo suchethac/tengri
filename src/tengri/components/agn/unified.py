@@ -97,29 +97,18 @@ import jax.numpy as jnp
 from tengri.components.agn.blr import blr_emission
 from tengri.components.agn.disc import adaf_disc, kubota_done_disc, multicolor_disc, powerlaw_disc
 from tengri.components.agn.nlr import nlr_emission
-from tengri.components.agn.skirtor import create_skirtor_from_grid
+from tengri.components.agn.skirtor import _find_skirtor_grid, create_skirtor_from_grid
 from tengri.components.agn.torus import simple_torus, two_temperature_torus
 
 
 @functools.cache
 def _load_skirtor_fn():
-    """Load SKIRTOR template grid from file."""
-    from pathlib import Path
+    """Load SKIRTOR template grid from file.
 
-    for candidate in [
-        Path(__file__).resolve().parents[4] / "data" / "skirtor_templates_v2.h5",
-        Path(__file__).resolve().parents[4] / "data" / "skirtor_templates.npz",
-        Path("data/skirtor_templates_v2.h5"),
-        Path("data/skirtor_templates.npz"),
-        Path.home() / "Projects/tengri/data/skirtor_templates.npz",
-    ]:
-        if candidate.is_file():
-            return create_skirtor_from_grid(str(candidate))
-    raise FileNotFoundError(
-        "SKIRTOR templates not found. Download from "
-        "https://sites.google.com/site/skirtorus/sed-library "
-        "and convert with scripts/convert_skirtor_templates.py"
-    )
+    Delegates to ``skirtor._find_skirtor_grid()`` which searches v3, v2,
+    and npz formats in priority order.
+    """
+    return create_skirtor_from_grid(_find_skirtor_grid())
 
 
 # ── AGN model registry ────────────────────────────────────────────

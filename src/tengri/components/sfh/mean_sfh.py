@@ -1059,34 +1059,35 @@ def periodic(
     >>> sfr.shape
     (100,)
     """
-    t = t_lookback
     tau = tau_bursts_yr
-    delta = delta_bursts_yr
 
-    def burst_shape(dt: jnp.ndarray) -> jnp.ndarray:
-        """Compute burst kernel for time offset dt from burst start."""
-        exp_decay = jnp.exp(-dt / tau)
-        delayed_exp = (dt / tau**2) * exp_decay
-        rectangular = jnp.where(dt <= tau, 1.0, 0.0)
-
-        btype_0 = jnp.where(burst_type == 0, exp_decay, 0.0)
-        btype_1 = jnp.where(burst_type == 1, delayed_exp, 0.0)
-        btype_2 = jnp.where(burst_type == 2, rectangular, 0.0)
-
-        return btype_0 + btype_1 + btype_2
-
+    # Vectorised: burst_starts shape (n_bursts, 1), t shape (1, n_time)
     n_bursts = 100
+    burst_starts = jnp.arange(n_bursts) * delta_bursts_yr  # (n_bursts,)
+    dt = t_lookback[None, :] - burst_starts[:, None]  # (n_bursts, n_time)
 
-    sfr = jnp.zeros_like(t)
+    exp_decay = jnp.exp(-dt / tau)
+    delayed_exp = (dt / tau**2) * exp_decay
+    rectangular = jnp.where(dt <= tau, 1.0, 0.0)
 
-    for i in range(n_bursts):
-        burst_start = i * delta
-        dt = t - burst_start
-        mask = (dt >= 0) & (t <= age_yr)
-        burst = burst_shape(dt)
-        sfr = sfr + jnp.where(mask, burst, 0.0)
+    burst = (
+        jnp.where(burst_type == 0, exp_decay, 0.0)
+        + jnp.where(burst_type == 1, delayed_exp, 0.0)
+        + jnp.where(burst_type == 2, rectangular, 0.0)
+    )
+
+    mask = (dt >= 0) & (t_lookback[None, :] <= age_yr)
+    sfr = jnp.sum(jnp.where(mask, burst, 0.0), axis=0)
 
     return jnp.maximum(sfr, 0.0)
+
+
+_BUAT08_VELOCITIES = jnp.array(
+    [40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 150.0, 220.0, 290.0, 360.0]
+)
+_BUAT08_A = jnp.array([4.73, 5.28, 5.77, 6.21, 6.62, 6.99, 7.34, 8.74, 10.01, 10.82, 11.35])
+_BUAT08_B = jnp.array([-0.11, 0.029, 0.16, 0.29, 0.41, 0.51, 0.61, 0.98, 1.25, 1.36, 1.37])
+_BUAT08_C = jnp.array([0.79, 0.68, 0.57, 0.46, 0.36, 0.27, 0.18, -0.20, -0.55, -0.74, -0.85])
 
 
 def buat08(
@@ -1160,16 +1161,9 @@ def buat08(
     """
     v = jnp.clip(velocity_km_s, 40.0, 360.0)
 
-    paper_velocities = jnp.array(
-        [40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 150.0, 220.0, 290.0, 360.0]
-    )
-    paper_as = jnp.array([4.73, 5.28, 5.77, 6.21, 6.62, 6.99, 7.34, 8.74, 10.01, 10.82, 11.35])
-    paper_bs = jnp.array([-0.11, 0.029, 0.16, 0.29, 0.41, 0.51, 0.61, 0.98, 1.25, 1.36, 1.37])
-    paper_cs = jnp.array([0.79, 0.68, 0.57, 0.46, 0.36, 0.27, 0.18, -0.20, -0.55, -0.74, -0.85])
-
-    a = jnp.interp(v, paper_velocities, paper_as)
-    b = jnp.interp(v, paper_velocities, paper_bs)
-    c = jnp.interp(v, paper_velocities, paper_cs)
+    a = jnp.interp(v, _BUAT08_VELOCITIES, _BUAT08_A)
+    b = jnp.interp(v, _BUAT08_VELOCITIES, _BUAT08_B)
+    c = jnp.interp(v, _BUAT08_VELOCITIES, _BUAT08_C)
 
     t_gyr = jnp.maximum(t_lookback / 1e9, 1e-9)
     log_sfr = a + b * jnp.log10(t_gyr) + c * jnp.sqrt(t_gyr) - 9.0
