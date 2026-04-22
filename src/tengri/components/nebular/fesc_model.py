@@ -71,11 +71,13 @@ def compute_uv_slope(
 
     References
     ----------
-    .. [1] G. Meurer, M. Heckman, and D. Calzetti, "Dust Absorption and the
-       Ultraviolet Slope in Galaxies," ApJ, 521, 64 (1999).
-       arXiv:astro-ph/9903054. https://doi.org/10.1086/307523
+    .. [1] G. R. Meurer, T. M. Heckman, and D. Calzetti, "Dust Absorption and
+       the Ultraviolet Luminosity Density at z ~ 3 as Calibrated by Local
+       Starburst Galaxies," ApJ, 521, 64 (1999). arXiv:astro-ph/9903054.
+       https://doi.org/10.1086/307523
     .. [2] V. Buat et al., "Far-Infrared Observations of Extremely Luminous
        Infrared Galaxies," A&A, 223, 42 (1989).
+
     """
     c_aa_per_s = 2.99792458e18  # speed of light in Angstrom/s
 
@@ -173,13 +175,13 @@ def fesc_chisholm2022(
 
     References
     ----------
-    .. [1] J. Chisholm et al., "The Low-z Lyman Continuum Survey: Ionizing Photon
-       Production Efficiency and Globular Cluster Populations," ApJ, 931, 37 (2022).
-       arXiv:2202.04728. https://doi.org/10.3847/1538-4357/ac62d4
-    .. [2] R. P. Naidu et al., "The Ionized Gas Kinematics within the FIRE
-       Circumgalactic Medium at z = 0: Simulations versus Observations,"
-       ApJ, 892, 109 (2020). arXiv:1909.06376.
+    .. [1] J. Chisholm et al., "The far-ultraviolet continuum slope as a Lyman
+       Continuum escape estimator at high redshift," MNRAS, 517, 5104 (2022).
+    .. [2] R. P. Naidu et al., "Rapid Reionization by the Oligarchs: The Case
+       for Massive, UV-bright, Star-forming Galaxies with High Escape Fractions,"
+       ApJ, 892, 109 (2020). arXiv:1907.13130.
        https://doi.org/10.3847/1538-4357/ab7cc9
+
     """
     log_fesc_unnormalized = jnp.log10(fesc_0) + a1 * (beta_uv + 2.0) + a2 * (log_ssfr - ssfr_0)
     fesc = 10.0**log_fesc_unnormalized

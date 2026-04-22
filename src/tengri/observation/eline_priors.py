@@ -16,6 +16,7 @@ References
 - Byler+2017: CLOUDY+MESA Isochrones nebular emission predictions.
 - Johnson+2021: Prospector emission line marginalization.
 - Ferland+2017: CLOUDY photoionization code.
+
 """
 
 import jax.numpy as jnp
@@ -154,6 +155,7 @@ def cloudy_line_priors(
     Notes
     -----
     For richer priors using a full CLOUDY grid, use ``cloudy_grid_line_priors()``.
+
     """
     # Bilinear interpolation over all 4 (Z, logU) grid corners.
     # Grid: Z ∈ {sub-solar, solar}, logU ∈ {-3, -2}
@@ -233,6 +235,7 @@ def marginalize_emission_lines_cloudy(
     Notes
     -----
     For richer priors using a full CLOUDY grid, use ``cloudy_grid_line_priors()``.
+
     """
     from tengri.observation.eline_marginalization import marginalize_emission_lines
 
@@ -322,6 +325,7 @@ def cloudy_grid_line_priors(
 
     For richer priors using a full CLOUDY grid, prefer this over
     ``cloudy_line_priors()`` which uses a hardcoded 2×2 table.
+
     """
     # Clamp to grid bounds
     log_z_c = float(jnp.clip(log_z, grid_data.line_log_met.min(), grid_data.line_log_met.max()))
@@ -442,6 +446,7 @@ def balmer_decrement_prior(
 
     For richer priors using a full CLOUDY grid, prefer this over
     ``cloudy_line_priors()`` which uses a hardcoded 2×2 table.
+
     """
     # Intrinsic Case B ratios (Hα, Hβ, Hγ, Hδ) relative to Hβ=1
     intrinsic = jnp.array([2.86, 1.0, 0.468, 0.259])

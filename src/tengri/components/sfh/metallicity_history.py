@@ -103,24 +103,28 @@ def psb_two_step_metallicity(
     """PSB two-step metallicity: step at the post-starburst burst age.
 
     Identical to :func:`two_step_metallicity` but semantically tied to
-    the PSB SFH model.  Stars older than ``burstage`` get ``log_z_abs_old``;
+    the PSB SFH model. Stars older than ``burstage`` get ``log_z_abs_old``;
     burst/younger stars get ``log_z_abs_burst`` (Leung et al. 2024).
 
     Parameters
     ----------
-    ssp_lg_age_gyr : array, shape (n_age,)
-        Log10(age/Gyr) of SSP templates.
+    ssp_lg_age_gyr : array_like, shape (n_age,)
+        Log10(age/Gyr) of SSP templates [dimensionless].
     log_z_abs_old : float
-        log10(Z) absolute for pre-burst stars.
+        log10(Z) absolute for pre-burst stars [dimensionless].
     log_z_abs_burst : float
-        log10(Z) absolute for burst stars.
+        log10(Z) absolute for burst stars [dimensionless].
     burstage_gyr : float
-        Lookback time of the burst (Gyr).
+        Lookback time of the burst [Gyr].
 
     Returns
     -------
-    array, shape (n_age,)
-        log10(Z) absolute at each SSP age.
+    ndarray, shape (n_age,)
+        log10(Z) absolute at each SSP age [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — delegates to :func:`two_step_metallicity`.
     """
     return two_step_metallicity(ssp_lg_age_gyr, log_z_abs_old, log_z_abs_burst, burstage_gyr)
 
@@ -236,19 +240,23 @@ def tabulated_metallicity_on_ssp_grid(
 
     Parameters
     ----------
-    ssp_lg_age_gyr : array, shape (n_age,)
-        Log10(age/Gyr) of SSP templates.
-    met_log_age_yr : array, shape (n_table,)
-        Log10(age/yr) of the tabulated metallicity history,
+    ssp_lg_age_gyr : array_like, shape (n_age,)
+        Log10(age/Gyr) of SSP templates [dimensionless].
+    met_log_age_yr : array_like, shape (n_table,)
+        Log10(age/yr) of the tabulated metallicity history [dimensionless],
         sorted ascending (youngest first).
-    met_log_z_abs : array, shape (n_table,)
-        log10(Z) absolute at each table age.
+    met_log_z_abs : array_like, shape (n_table,)
+        log10(Z) absolute at each table age [dimensionless].
 
     Returns
     -------
-    array, shape (n_age,)
-        log10(Z) absolute at each SSP age (linearly interpolated,
-        clamped to table edges).
+    ndarray, shape (n_age,)
+        log10(Z) absolute at each SSP age [dimensionless], linearly interpolated
+        and clamped to table edge values outside the table range.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.interp`` for linear interpolation.
     """
     ssp_log_yr = ssp_lg_age_gyr + 9.0
     return jnp.interp(ssp_log_yr, met_log_age_yr, met_log_z_abs)

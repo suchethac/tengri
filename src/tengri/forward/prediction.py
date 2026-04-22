@@ -123,20 +123,31 @@ class SFHQuantities(NamedTuple):
     Attributes
     ----------
     stellar_mass : jnp.ndarray
-        Total formed stellar mass (Msun).
+        Total formed stellar mass [Msun].
     stellar_mass_surviving : jnp.ndarray
-        Surviving mass in living stars + remnants (Msun).
-        NaN if the mass-remaining table was not loaded.
+        Surviving mass in living stars + remnants [Msun].
+        Returns NaN if the mass-remaining table was not loaded.
     sfr_100myr : jnp.ndarray
-        Star formation rate averaged over the last 100 Myr (Msun/yr).
+        Star formation rate averaged over the last 100 Myr [Msun/yr].
     sfr_10myr : jnp.ndarray
-        Star formation rate averaged over the last 10 Myr (Msun/yr).
+        Star formation rate averaged over the last 10 Myr [Msun/yr].
     ssfr : jnp.ndarray
-        Specific star formation rate SFR/M* (yr⁻¹).
+        Specific star formation rate SFR/M* [1/yr].
     mass_weighted_age_gyr : jnp.ndarray
-        Mass-weighted stellar age (Gyr).
+        Mass-weighted stellar age [Gyr].
     mass_weighted_metallicity : jnp.ndarray
-        Mass-weighted metallicity log10(Z). Evolving-Z aware.
+        Mass-weighted metallicity log10(Z), evolving-Z aware.
+
+    Returns
+    -------
+    This is a NamedTuple (JAX pytree) returned by
+    :meth:`SEDModel.predict_sfh_quantities`.
+
+    Notes
+    -----
+    JAX-compatible array container. All fields are JAX arrays compatible with
+    ``jax.jit`` and ``jax.vmap``. Returned by :meth:`SEDModel.predict_sfh_quantities`
+    and :attr:`Prediction.sfh` when accessed.
     """
 
     stellar_mass: jnp.ndarray
@@ -156,35 +167,46 @@ class SEDQuantities(NamedTuple):
     Attributes
     ----------
     l_bol : jnp.ndarray
-        Bolometric luminosity (Lsun).
+        Bolometric luminosity [Lsun].
     l_tir : jnp.ndarray
-        Total infrared luminosity 8–1000 μm (Lsun).
+        Total infrared luminosity 8–1000 μm [Lsun].
     l_dust_absorbed : jnp.ndarray
-        Dust-absorbed luminosity (Lsun). NaN if no intrinsic SED.
+        Dust-absorbed luminosity [Lsun]. Returns NaN if no intrinsic SED.
     irx : jnp.ndarray
-        Infrared excess log10(L_TIR / νLν_1600).
+        Infrared excess log10(L_TIR / νLν_1600) [dimensionless].
     uv_slope_beta : jnp.ndarray
-        UV spectral slope β (1250–2600 Å).
+        UV spectral slope β in range 1250–2600 Å [dimensionless].
     dn4000 : jnp.ndarray
-        Narrow 4000 Å break (Balogh et al. 1999).
+        Narrow 4000 Å break, Balogh et al. 1999 [dimensionless].
     balmer_break : jnp.ndarray
-        Modified Balmer break (Wang et al. 2024).
+        Modified Balmer break, Wang et al. 2024 [dimensionless].
     m_uv : jnp.ndarray
-        Absolute UV magnitude at rest-frame 1500 Å (AB).
+        Absolute UV magnitude at rest-frame 1500 Å [AB].
     fuv_flux : jnp.ndarray
-        Mean flux density in FUV 1000–1700 Å (erg/s/Hz).
+        Mean flux density in FUV 1000–1700 Å [erg/s/Hz].
     nuv_flux : jnp.ndarray
-        Mean flux density in NUV 1700–3200 Å (erg/s/Hz).
+        Mean flux density in NUV 1700–3200 Å [erg/s/Hz].
     fuv_flux_intrinsic : jnp.ndarray
-        Dust-free FUV flux (erg/s/Hz). NaN if no intrinsic SED.
+        Dust-free FUV flux [erg/s/Hz]. Returns NaN if no intrinsic SED.
     nuv_flux_intrinsic : jnp.ndarray
-        Dust-free NUV flux (erg/s/Hz). NaN if no intrinsic SED.
+        Dust-free NUV flux [erg/s/Hz]. Returns NaN if no intrinsic SED.
     rest_uv_color : jnp.ndarray
-        Rest-frame U-V color (AB magnitudes).
+        Rest-frame U-V color [AB magnitudes].
     luminosity_weighted_age_gyr : jnp.ndarray
-        Luminosity-weighted age (Gyr).
+        Luminosity-weighted age [Gyr].
     luminosity_weighted_metallicity : jnp.ndarray
         Luminosity-weighted metallicity log10(Z).
+
+    Returns
+    -------
+    This is a NamedTuple (JAX pytree) returned by
+    :meth:`SEDModel.predict_sed_quantities`.
+
+    Notes
+    -----
+    JAX-compatible array container. All fields are JAX arrays compatible with
+    ``jax.jit`` and ``jax.vmap``. Returned by :meth:`SEDModel.predict_sed_quantities`
+    and :attr:`Prediction.sed` when accessed.
     """
 
     l_bol: jnp.ndarray
@@ -205,7 +227,7 @@ class SEDQuantities(NamedTuple):
 
 
 class EmissionLines(NamedTuple):
-    """Key emission line luminosities in Lsun.
+    """Key emission line luminosities.
 
     NaN for all fields when no nebular model is active. For doublets
     ([OII], C IV), the luminosities of both components are summed.
@@ -213,27 +235,38 @@ class EmissionLines(NamedTuple):
     Attributes
     ----------
     lya : jnp.ndarray
-        Lyman-alpha 1216 Å.
+        Lyman-alpha at 1216 Å [Lsun].
     civ_1549 : jnp.ndarray
-        C IV doublet 1548+1551 Å (sum).
+        C IV doublet 1548+1551 Å, summed [Lsun].
     oii : jnp.ndarray
-        [OII] doublet 3726+3729 Å (sum).
+        [OII] doublet 3726+3729 Å, summed [Lsun].
     hbeta : jnp.ndarray
-        H-beta 4861 Å.
+        H-beta at 4861 Å [Lsun].
     oiii_4959 : jnp.ndarray
-        [OIII] 4959 Å.
+        [OIII] at 4959 Å [Lsun].
     oiii_5007 : jnp.ndarray
-        [OIII] 5007 Å.
+        [OIII] at 5007 Å [Lsun].
     nii_6548 : jnp.ndarray
-        [NII] 6548 Å.
+        [NII] at 6548 Å [Lsun].
     halpha : jnp.ndarray
-        H-alpha 6563 Å.
+        H-alpha at 6563 Å [Lsun].
     nii_6584 : jnp.ndarray
-        [NII] 6584 Å.
+        [NII] at 6584 Å [Lsun].
     sii_6717 : jnp.ndarray
-        [SII] 6717 Å.
+        [SII] at 6717 Å [Lsun].
     sii_6731 : jnp.ndarray
-        [SII] 6731 Å.
+        [SII] at 6731 Å [Lsun].
+
+    Returns
+    -------
+    This is a NamedTuple (JAX pytree) returned by
+    :meth:`SEDModel.predict_emission_lines`.
+
+    Notes
+    -----
+    JAX-compatible array container. All fields are JAX arrays compatible with
+    ``jax.jit`` and ``jax.vmap``. Returned by :attr:`Prediction.lines` when
+    accessed. All fields return NaN if no nebular model is active in the SEDModel.
     """
 
     lya: jnp.ndarray
@@ -260,6 +293,17 @@ class DerivedQuantities(NamedTuple):
         Star formation history derived quantities.
     sed : SEDQuantities
         Spectral energy distribution derived quantities.
+
+    Returns
+    -------
+    This is a NamedTuple (JAX pytree) returned by
+    :meth:`SEDModel.predict_derived`.
+
+    Notes
+    -----
+    JAX-compatible array container combining :class:`SFHQuantities` and
+    :class:`SEDQuantities`. Compatible with ``jax.jit`` and ``jax.vmap``.
+    Returned by :meth:`SEDModel.predict_derived`.
     """
 
     sfh: SFHQuantities
@@ -287,11 +331,39 @@ class _CachedBase:
 
 
 class SFHProperties(_CachedBase):
-    """Lazy SFH-derived quantities.
+    """Lazy property accessor for SFH-derived quantities.
 
     Accessing any property triggers SFH computation (SFR, CSP weights)
     if not already cached. Luminosity-weighted quantities additionally
     trigger SED computation.
+
+    Attributes
+    ----------
+    stellar_mass : property
+        Total formed stellar mass [Msun].
+    stellar_mass_surviving : property
+        Surviving stellar mass [Msun].
+    sfr_100myr : property
+        SFR averaged over 100 Myr [Msun/yr].
+    sfr_10myr : property
+        SFR averaged over 10 Myr [Msun/yr].
+    ssfr : property
+        Specific SFR [1/yr].
+    mass_weighted_age_gyr : property
+        Mass-weighted age [Gyr].
+    mass_weighted_metallicity : property
+        Mass-weighted metallicity log10(Z).
+    luminosity_weighted_age_gyr : property
+        Luminosity-weighted age [Gyr].
+    luminosity_weighted_metallicity : property
+        Luminosity-weighted metallicity log10(Z).
+
+    Notes
+    -----
+    JAX-compatible array container. Properties are lazy-cached within a
+    :class:`Prediction` object. Returned by :attr:`Prediction.sfh`.
+    Not JIT-compatible (uses Python caching). For batch computation, use
+    JIT-compatible methods :meth:`SEDModel.predict_sfh_quantities` instead.
 
     Examples
     --------
@@ -304,16 +376,37 @@ class SFHProperties(_CachedBase):
 
     @property
     def stellar_mass(self):
-        """Total formed stellar mass (Msun)."""
+        """Total formed stellar mass.
+
+        Returns
+        -------
+        float
+            Total stellar mass ever formed [Msun].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         self._pred._ensure_sfh()
         return jnp.sum(self._pred._cache["weights"])
 
     @property
     def stellar_mass_surviving(self):
-        """Surviving stellar mass in living stars + remnants (Msun).
+        """Surviving stellar mass in living stars and remnants.
 
         Returns NaN if the mass-remaining table was not loaded in the
         SSP data.
+
+        Returns
+        -------
+        float
+            Surviving stellar mass [Msun], or NaN if mass table unavailable.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
         """
         self._pred._ensure_sfh()
         model = self._pred._model
@@ -327,7 +420,18 @@ class SFHProperties(_CachedBase):
 
     @property
     def sfr_100myr(self):
-        """SFR averaged over the last 100 Myr (Msun/yr)."""
+        """Star formation rate averaged over the last 100 Myr.
+
+        Returns
+        -------
+        float
+            Time-averaged SFR over the last 100 Myr [Msun/yr].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         self._pred._ensure_sfh()
         sfr = self._pred._cache["sfr"]
         model = self._pred._model
@@ -340,7 +444,18 @@ class SFHProperties(_CachedBase):
 
     @property
     def sfr_10myr(self):
-        """SFR averaged over the last 10 Myr (Msun/yr)."""
+        """Star formation rate averaged over the last 10 Myr.
+
+        Returns
+        -------
+        float
+            Time-averaged SFR over the last 10 Myr [Msun/yr].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         self._pred._ensure_sfh()
         sfr = self._pred._cache["sfr"]
         model = self._pred._model
@@ -353,9 +468,19 @@ class SFHProperties(_CachedBase):
 
     @property
     def ssfr(self):
-        """Specific star formation rate SFR/M* (yr⁻¹).
+        """Specific star formation rate normalized by stellar mass.
 
         Uses surviving mass if available, otherwise formed mass.
+
+        Returns
+        -------
+        float
+            Specific star formation rate SFR/M* [1/yr].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
         """
         mass_surv = self.stellar_mass_surviving
         mass = jnp.where(jnp.isnan(mass_surv), self.stellar_mass, mass_surv)
@@ -363,7 +488,18 @@ class SFHProperties(_CachedBase):
 
     @property
     def mass_weighted_age_gyr(self):
-        """Mass-weighted stellar age (Gyr)."""
+        """Mass-weighted stellar age.
+
+        Returns
+        -------
+        float
+            Age weighted by stellar mass [Gyr].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         self._pred._ensure_sfh()
         return compute_mass_weighted_age(
             self._pred._cache["weights"], self._pred._model.ssp_ages_yr
@@ -371,10 +507,20 @@ class SFHProperties(_CachedBase):
 
     @property
     def mass_weighted_metallicity(self):
-        """Mass-weighted metallicity log10(Z).
+        """Mass-weighted metallicity.
 
         For single metallicity models, returns the metallicity parameter.
         For evolving metallicity, computes Σ(w·Z)/Σ(w).
+
+        Returns
+        -------
+        float
+            Metallicity weighted by stellar mass, log10(Z).
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
         """
         self._pred._ensure_sfh()
         p = self._pred._cache["p"]
@@ -388,7 +534,20 @@ class SFHProperties(_CachedBase):
 
     @property
     def luminosity_weighted_age_gyr(self):
-        """Luminosity-weighted age (Gyr). Triggers SED computation."""
+        """Luminosity-weighted stellar age.
+
+        Accessing this property triggers SED computation.
+
+        Returns
+        -------
+        float
+            Age weighted by stellar luminosity [Gyr].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         self._pred._ensure_sed()
         return compute_luminosity_weighted_age(
             self._pred._cache["weights"],
@@ -399,7 +558,20 @@ class SFHProperties(_CachedBase):
 
     @property
     def luminosity_weighted_metallicity(self):
-        """Luminosity-weighted metallicity log10(Z). Triggers SED computation."""
+        """Luminosity-weighted metallicity.
+
+        Accessing this property triggers SED computation.
+
+        Returns
+        -------
+        float
+            Metallicity weighted by stellar luminosity, log10(Z).
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         self._pred._ensure_sed()
         p = self._pred._cache["p"]
         return compute_luminosity_weighted_metallicity(
@@ -417,10 +589,50 @@ class SFHProperties(_CachedBase):
 
 
 class SEDProperties(_CachedBase):
-    """Lazy SED-derived quantities.
+    """Lazy property accessor for SED-derived quantities.
 
     Accessing any property triggers the full SED computation (dust
     attenuation, emission, AGN, etc.) if not already cached.
+
+    Attributes
+    ----------
+    l_bol : property
+        Bolometric luminosity [Lsun].
+    l_tir : property
+        Total infrared luminosity [Lsun].
+    l_dust_absorbed : property
+        Dust-absorbed luminosity [Lsun].
+    irx : property
+        Infrared excess [dimensionless].
+    uv_slope_beta : property
+        UV spectral slope [dimensionless].
+    dn4000 : property
+        4000 Å break [dimensionless].
+    balmer_break : property
+        Balmer break [dimensionless].
+    m_uv : property
+        Absolute UV magnitude [AB].
+    fuv_flux : property
+        FUV flux density [erg/s/Hz].
+    nuv_flux : property
+        NUV flux density [erg/s/Hz].
+    fuv_flux_intrinsic : property
+        Dust-free FUV flux [erg/s/Hz].
+    nuv_flux_intrinsic : property
+        Dust-free NUV flux [erg/s/Hz].
+    rest_uv_color : property
+        Rest-frame U-V color [AB magnitudes].
+    luminosity_weighted_age_gyr : property
+        Luminosity-weighted age [Gyr].
+    luminosity_weighted_metallicity : property
+        Luminosity-weighted metallicity log10(Z).
+
+    Notes
+    -----
+    JAX-compatible array container. Properties are lazy-cached within a
+    :class:`Prediction` object. Returned by :attr:`Prediction.sed`.
+    Not JIT-compatible (uses Python caching). For batch computation,
+    use JIT-compatible methods :meth:`SEDModel.predict_sed_quantities`.
 
     Examples
     --------
@@ -447,17 +659,52 @@ class SEDProperties(_CachedBase):
 
     @property
     def l_bol(self):
-        """Bolometric luminosity (Lsun)."""
+        """Bolometric luminosity.
+
+        Returns
+        -------
+        float
+            Total bolometric luminosity [Lsun].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return compute_bolometric_luminosity(self._sed(), self._wave())
 
     @property
     def l_tir(self):
-        """Total infrared luminosity 8–1000 μm (Lsun)."""
+        """Total infrared luminosity.
+
+        Returns
+        -------
+        float
+            Integrated luminosity in the 8–1000 μm range [Lsun].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return compute_l_tir(self._sed(), self._wave())
 
     @property
     def l_dust_absorbed(self):
-        """Dust-absorbed luminosity (Lsun). NaN if no intrinsic SED."""
+        """Dust-absorbed luminosity.
+
+        Returns NaN if no intrinsic SED is available.
+
+        Returns
+        -------
+        float
+            Luminosity absorbed by dust [Lsun], or NaN if unavailable.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         sed_intr = self._sed_intrinsic()
         if sed_intr is None:
             return jnp.array(jnp.nan)
@@ -466,44 +713,135 @@ class SEDProperties(_CachedBase):
 
     @property
     def irx(self):
-        """Infrared excess IRX = log10(L_TIR / νLν_1600)."""
+        """Infrared excess.
+
+        Returns
+        -------
+        float
+            Infrared excess IRX = log10(L_TIR / νLν_1600) [dimensionless].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         l_tir = self.l_tir
         l_uv = compute_uv_luminosity_1600(self._sed(), self._wave())
         return compute_irx(l_tir, l_uv)
 
     @property
     def uv_slope_beta(self):
-        """UV spectral slope β (1250–2600 Å)."""
+        """UV spectral slope.
+
+        Returns
+        -------
+        float
+            Spectral slope β in the rest-frame range 1250–2600 Å [dimensionless].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return compute_uv_slope_beta(self._sed(), self._wave())
 
     @property
     def dn4000(self):
-        """Narrow 4000 Å break (Balogh et al. 1999)."""
+        """Narrow 4000 Å break.
+
+        Returns
+        -------
+        float
+            Narrow D_n(4000) break from Balogh et al. 1999 [dimensionless].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return compute_dn4000(self._sed(), self._wave())
 
     @property
     def balmer_break(self):
-        """Modified Balmer break (Wang et al. 2024)."""
+        """Modified Balmer break.
+
+        Returns
+        -------
+        float
+            Modified Balmer break from Wang et al. 2024 [dimensionless].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return compute_balmer_break(self._sed(), self._wave())
 
     @property
     def m_uv(self):
-        """Absolute UV magnitude at rest-frame 1500 Å (AB)."""
+        """Absolute UV magnitude.
+
+        Returns
+        -------
+        float
+            Absolute magnitude at rest-frame 1500 Å [AB].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return compute_m_uv(self._sed(), self._wave())
 
     @property
     def fuv_flux(self):
-        """Mean flux density in FUV 1000–1700 Å (erg/s/Hz)."""
+        """Mean flux density in the FUV.
+
+        Returns
+        -------
+        float
+            Mean flux density in the FUV 1000–1700 Å range [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return compute_fuv_flux(self._sed(), self._wave())
 
     @property
     def nuv_flux(self):
-        """Mean flux density in NUV 1700–3200 Å (erg/s/Hz)."""
+        """Mean flux density in the NUV.
+
+        Returns
+        -------
+        float
+            Mean flux density in the NUV 1700–3200 Å range [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return compute_nuv_flux(self._sed(), self._wave())
 
     @property
     def fuv_flux_intrinsic(self):
-        """Dust-free FUV flux (erg/s/Hz). NaN if no intrinsic SED."""
+        """Dust-free FUV flux.
+
+        Returns NaN if no intrinsic SED is available.
+
+        Returns
+        -------
+        float
+            Dust-free flux density in the FUV 1000–1700 Å range [erg/s/Hz],
+            or NaN if unavailable.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         sed_intr = self._sed_intrinsic()
         if sed_intr is None:
             return jnp.array(jnp.nan)
@@ -511,7 +849,21 @@ class SEDProperties(_CachedBase):
 
     @property
     def nuv_flux_intrinsic(self):
-        """Dust-free NUV flux (erg/s/Hz). NaN if no intrinsic SED."""
+        """Dust-free NUV flux.
+
+        Returns NaN if no intrinsic SED is available.
+
+        Returns
+        -------
+        float
+            Dust-free flux density in the NUV 1700–3200 Å range [erg/s/Hz],
+            or NaN if unavailable.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         sed_intr = self._sed_intrinsic()
         if sed_intr is None:
             return jnp.array(jnp.nan)
@@ -519,12 +871,34 @@ class SEDProperties(_CachedBase):
 
     @property
     def rest_uv_color(self):
-        """Rest-frame U-V color (AB mag)."""
+        """Rest-frame U-V color.
+
+        Returns
+        -------
+        float
+            U-V color in rest frame [AB magnitudes].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return compute_rest_uv_color(self._sed(), self._wave())
 
     @property
     def luminosity_weighted_age_gyr(self):
-        """Luminosity-weighted age (Gyr)."""
+        """Luminosity-weighted stellar age.
+
+        Returns
+        -------
+        float
+            Age weighted by stellar luminosity [Gyr].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         self._pred._ensure_sed()
         return compute_luminosity_weighted_age(
             self._pred._cache["weights"],
@@ -535,7 +909,18 @@ class SEDProperties(_CachedBase):
 
     @property
     def luminosity_weighted_metallicity(self):
-        """Luminosity-weighted metallicity log10(Z)."""
+        """Luminosity-weighted metallicity.
+
+        Returns
+        -------
+        float
+            Metallicity weighted by stellar luminosity, log10(Z).
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         self._pred._ensure_sed()
         p = self._pred._cache["p"]
         return compute_luminosity_weighted_metallicity(
@@ -553,14 +938,58 @@ class SEDProperties(_CachedBase):
 
 
 class LineProperties(_CachedBase):
-    """Lazy emission line luminosities and diagnostic ratios.
+    """Lazy property accessor for emission line luminosities and diagnostic ratios.
 
     Accessing any line property triggers the nebular computation
-    if not already cached. All luminosities are in Lsun. Diagnostic
+    if not already cached. All line luminosities are in Lsun. Diagnostic
     ratios are dimensionless log10 values.
 
     If no nebular model is active, all line luminosities return NaN
     and all ratios return NaN.
+
+    Attributes
+    ----------
+    lya : property
+        Lyman-alpha [Lsun].
+    civ_1549 : property
+        C IV doublet [Lsun].
+    oii : property
+        [OII] doublet [Lsun].
+    hbeta : property
+        H-beta [Lsun].
+    oiii_4959 : property
+        [OIII] 4959 [Lsun].
+    oiii_5007 : property
+        [OIII] 5007 [Lsun].
+    nii_6548 : property
+        [NII] 6548 [Lsun].
+    halpha : property
+        H-alpha [Lsun].
+    nii_6584 : property
+        [NII] 6584 [Lsun].
+    sii_6717 : property
+        [SII] 6717 [Lsun].
+    sii_6731 : property
+        [SII] 6731 [Lsun].
+    bpt_nii : property
+        BPT [NII] diagnostic [dimensionless].
+    bpt_sii : property
+        BPT [SII] diagnostic [dimensionless].
+    o3hb : property
+        [OIII]/Hβ diagnostic [dimensionless].
+    r23 : property
+        R23 metallicity diagnostic [dimensionless].
+    o32 : property
+        O32 ionization parameter [dimensionless].
+    balmer_decrement : property
+        Hα/Hβ ratio [dimensionless].
+
+    Notes
+    -----
+    JAX-compatible array container. Properties are lazy-cached within a
+    :class:`Prediction` object. Returned by :attr:`Prediction.lines`.
+    Not JIT-compatible (uses Python caching). For batch computation,
+    use JIT-compatible methods :meth:`SEDModel.predict_emission_lines`.
 
     Examples
     --------
@@ -582,91 +1011,278 @@ class LineProperties(_CachedBase):
 
     @property
     def lya(self):
-        """Lyman-alpha 1216 Å (Lsun)."""
+        """Lyman-alpha at 1216 Å.
+
+        Returns
+        -------
+        float
+            Line luminosity [Lsun], or NaN if no nebular model.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return self._get_line("lya")
 
     @property
     def civ_1549(self):
-        """C IV doublet 1548+1551 Å (Lsun, sum)."""
+        """C IV doublet at 1548+1551 Å.
+
+        Returns
+        -------
+        float
+            Summed line luminosity [Lsun], or NaN if no nebular model.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return self._get_line("civ_1549")
 
     @property
     def oii(self):
-        """[OII] doublet 3726+3729 Å (Lsun, sum)."""
+        """[OII] doublet at 3726+3729 Å.
+
+        Returns
+        -------
+        float
+            Summed line luminosity [Lsun], or NaN if no nebular model.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return self._get_line("oii")
 
     @property
     def hbeta(self):
-        """H-beta 4861 Å (Lsun)."""
+        """H-beta at 4861 Å.
+
+        Returns
+        -------
+        float
+            Line luminosity [Lsun], or NaN if no nebular model.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return self._get_line("hbeta")
 
     @property
     def oiii_4959(self):
-        """[OIII] 4959 Å (Lsun)."""
+        """[OIII] at 4959 Å.
+
+        Returns
+        -------
+        float
+            Line luminosity [Lsun], or NaN if no nebular model.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return self._get_line("oiii_4959")
 
     @property
     def oiii_5007(self):
-        """[OIII] 5007 Å (Lsun)."""
+        """[OIII] at 5007 Å.
+
+        Returns
+        -------
+        float
+            Line luminosity [Lsun], or NaN if no nebular model.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return self._get_line("oiii_5007")
 
     @property
     def nii_6548(self):
-        """[NII] 6548 Å (Lsun)."""
+        """[NII] at 6548 Å.
+
+        Returns
+        -------
+        float
+            Line luminosity [Lsun], or NaN if no nebular model.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return self._get_line("nii_6548")
 
     @property
     def halpha(self):
-        """H-alpha 6563 Å (Lsun)."""
+        """H-alpha at 6563 Å.
+
+        Returns
+        -------
+        float
+            Line luminosity [Lsun], or NaN if no nebular model.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return self._get_line("halpha")
 
     @property
     def nii_6584(self):
-        """[NII] 6584 Å (Lsun)."""
+        """[NII] at 6584 Å.
+
+        Returns
+        -------
+        float
+            Line luminosity [Lsun], or NaN if no nebular model.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return self._get_line("nii_6584")
 
     @property
     def sii_6717(self):
-        """[SII] 6717 Å (Lsun)."""
+        """[SII] at 6717 Å.
+
+        Returns
+        -------
+        float
+            Line luminosity [Lsun], or NaN if no nebular model.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return self._get_line("sii_6717")
 
     @property
     def sii_6731(self):
-        """[SII] 6731 Å (Lsun)."""
+        """[SII] at 6731 Å.
+
+        Returns
+        -------
+        float
+            Line luminosity [Lsun], or NaN if no nebular model.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return self._get_line("sii_6731")
 
     # --- Diagnostic ratios ---
 
     @property
     def bpt_nii(self):
-        """BPT-NII ratio: log10([NII]6584 / Hα)."""
+        """BPT-NII diagnostic ratio.
+
+        Returns
+        -------
+        float
+            log10([NII]6584 / Hα) for BPT diagram [dimensionless].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return jnp.log10(jnp.maximum(self.nii_6584, 1e-50) / jnp.maximum(self.halpha, 1e-50))
 
     @property
     def bpt_sii(self):
-        """BPT-SII ratio: log10(([SII]6717+6731) / Hα)."""
+        """BPT-SII diagnostic ratio.
+
+        Returns
+        -------
+        float
+            log10(([SII]6717+6731) / Hα) for BPT diagram [dimensionless].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         sii_total = self.sii_6717 + self.sii_6731
         return jnp.log10(jnp.maximum(sii_total, 1e-50) / jnp.maximum(self.halpha, 1e-50))
 
     @property
     def o3hb(self):
-        """[OIII]5007/Hβ ratio: log10([OIII]5007 / Hβ). BPT y-axis."""
+        """[OIII]5007/Hβ diagnostic ratio.
+
+        Returns
+        -------
+        float
+            log10([OIII]5007 / Hβ), the BPT diagram y-axis [dimensionless].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return jnp.log10(jnp.maximum(self.oiii_5007, 1e-50) / jnp.maximum(self.hbeta, 1e-50))
 
     @property
     def r23(self):
-        """R23 metallicity indicator: log10(([OII]+[OIII]4959+5007)/Hβ)."""
+        """R23 metallicity diagnostic indicator.
+
+        Returns
+        -------
+        float
+            log10(([OII]+[OIII]4959+5007)/Hβ), metallicity indicator [dimensionless].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         numerator = self.oii + self.oiii_4959 + self.oiii_5007
         return jnp.log10(jnp.maximum(numerator, 1e-50) / jnp.maximum(self.hbeta, 1e-50))
 
     @property
     def o32(self):
-        """O32 ionization parameter: log10([OIII]5007 / [OII])."""
+        """O32 ionization parameter.
+
+        Returns
+        -------
+        float
+            log10([OIII]5007 / [OII]), ionization indicator [dimensionless].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return jnp.log10(jnp.maximum(self.oiii_5007, 1e-50) / jnp.maximum(self.oii, 1e-50))
 
     @property
     def balmer_decrement(self):
-        """Balmer decrement Hα/Hβ. Case B value: 2.86."""
+        """Balmer decrement ratio.
+
+        Returns
+        -------
+        float
+            Hα/Hβ intensity ratio [dimensionless]. Case B intrinsic value: 2.86.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return self.halpha / jnp.maximum(self.hbeta, 1e-50)
 
 
@@ -674,10 +1290,28 @@ class LineProperties(_CachedBase):
 
 
 class RadioProperties(_CachedBase):
-    """Lazy radio-derived quantities from empirical scaling relations.
+    """Lazy property accessor for radio-derived quantities.
 
-    These use the FIR-radio correlation (Bell 2003; Murphy+2011)
-    and free-free emission from the ionizing photon budget.
+    These use empirical scaling relations: the FIR-radio correlation
+    (Bell 2003; Murphy+2011) and free-free emission from the ionizing
+    photon budget.
+
+    Attributes
+    ----------
+    l_1p4ghz : property
+        Radio luminosity at 1.4 GHz [erg/s/Hz].
+    l_thermal : property
+        Thermal free-free luminosity [erg/s/Hz].
+    l_nonthermal : property
+        Non-thermal synchrotron luminosity [erg/s/Hz].
+    q_ir : property
+        FIR-radio correlation parameter [dimensionless].
+
+    Notes
+    -----
+    JAX-compatible array container. Properties are lazy-cached within a
+    :class:`Prediction` object. Returned by :attr:`Prediction.radio`.
+    Not JIT-compatible (uses Python caching).
 
     Examples
     --------
@@ -688,24 +1322,68 @@ class RadioProperties(_CachedBase):
 
     @property
     def l_1p4ghz(self):
-        """Radio luminosity at 1.4 GHz (erg/s/Hz) from SFR."""
+        """Radio luminosity at 1.4 GHz.
+
+        Returns
+        -------
+        float
+            Radio luminosity density at 1.4 GHz [erg/s/Hz], from SFR scaling.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         sfr = self._pred.sfh.sfr_100myr
         return compute_l_radio_1p4ghz_from_sfr(sfr)
 
     @property
     def l_thermal(self):
-        """Thermal (free-free) radio luminosity at 1.4 GHz (erg/s/Hz)."""
+        """Thermal radio luminosity at 1.4 GHz.
+
+        Returns
+        -------
+        float
+            Free-free radio luminosity density at 1.4 GHz [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         q_h = self._pred.ionizing.q_h
         return compute_l_radio_thermal(q_h)
 
     @property
     def l_nonthermal(self):
-        """Non-thermal (synchrotron) radio luminosity (erg/s/Hz)."""
+        """Non-thermal radio luminosity at 1.4 GHz.
+
+        Returns
+        -------
+        float
+            Synchrotron radio luminosity density [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return self.l_1p4ghz - self.l_thermal
 
     @property
     def q_ir(self):
-        """FIR-radio correlation parameter q_TIR."""
+        """FIR-radio correlation parameter.
+
+        Returns
+        -------
+        float
+            FIR-radio correlation parameter q_TIR [dimensionless].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         l_tir = self._pred.sed.l_tir
         return compute_q_ir(l_tir, self.l_1p4ghz)
 
@@ -714,10 +1392,25 @@ class RadioProperties(_CachedBase):
 
 
 class XRayProperties(_CachedBase):
-    """Lazy X-ray derived quantities from empirical scaling relations.
+    """Lazy property accessor for X-ray derived quantities.
 
-    Uses Lehmer et al. (2010, 2016) for XRBs and Duras et al. (2020)
-    for AGN bolometric corrections.
+    Uses empirical scaling relations from Lehmer et al. (2010, 2016) for
+    X-ray binaries and Duras et al. (2020) for AGN bolometric corrections.
+
+    Attributes
+    ----------
+    l_x_xrb : property
+        X-ray binary luminosity [erg/s].
+    l_x_agn : property
+        AGN X-ray luminosity [erg/s].
+    l_x_total : property
+        Total X-ray luminosity [erg/s].
+
+    Notes
+    -----
+    JAX-compatible array container. Properties are lazy-cached within a
+    :class:`Prediction` object. Returned by :attr:`Prediction.xray`.
+    Not JIT-compatible (uses Python caching).
 
     Examples
     --------
@@ -728,21 +1421,54 @@ class XRayProperties(_CachedBase):
 
     @property
     def l_x_xrb(self):
-        """X-ray luminosity from XRBs, 0.5–8 keV (erg/s)."""
+        """X-ray luminosity from X-ray binaries.
+
+        Returns
+        -------
+        float
+            XRB X-ray luminosity in 0.5–8 keV band [erg/s].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         sfr = self._pred.sfh.sfr_100myr
         mstar = self._pred.sfh.stellar_mass
         return compute_l_x_xrb(sfr, mstar)
 
     @property
     def l_x_agn(self):
-        """AGN X-ray luminosity, 2–10 keV (erg/s)."""
+        """AGN X-ray luminosity.
+
+        Returns
+        -------
+        float
+            AGN X-ray luminosity in 2–10 keV band [erg/s].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         self._pred._ensure_sed()
         agn_bol = self._pred._cache.get("agn_bol_erg", 0.0)
         return compute_l_x_agn(agn_bol)
 
     @property
     def l_x_total(self):
-        """Total X-ray luminosity (erg/s)."""
+        """Total X-ray luminosity.
+
+        Returns
+        -------
+        float
+            Combined XRB and AGN X-ray luminosity [erg/s].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         return self.l_x_xrb + self.l_x_agn
 
 
@@ -750,11 +1476,24 @@ class XRayProperties(_CachedBase):
 
 
 class IonizingProperties(_CachedBase):
-    """Lazy ionizing photon budget quantities.
+    """Lazy property accessor for ionizing photon budget quantities.
 
     The ionizing photon rate Q_H is extracted from the nebular model
     backend (Cloudy grid or Cue emulator). If no nebular model is
     active, returns NaN.
+
+    Attributes
+    ----------
+    q_h : property
+        Ionizing photon production rate [photons/s].
+    xi_ion : property
+        Ionizing photon production efficiency [Hz/erg].
+
+    Notes
+    -----
+    JAX-compatible array container. Properties are lazy-cached within a
+    :class:`Prediction` object. Returned by :attr:`Prediction.ionizing`.
+    Not JIT-compatible (uses Python caching).
 
     Examples
     --------
@@ -765,19 +1504,39 @@ class IonizingProperties(_CachedBase):
 
     @property
     def q_h(self):
-        """Total ionizing photon production rate (photons/s).
+        """Total ionizing photon production rate.
 
-        NaN if no nebular model is active.
+        Returns NaN if no nebular model is active.
+
+        Returns
+        -------
+        float
+            Ionizing photon production rate [photons/s], or NaN if unavailable.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
         """
         self._pred._ensure_lines()
         return self._pred._cache.get("q_h_total", jnp.array(jnp.nan))
 
     @property
     def xi_ion(self):
-        """Ionizing photon production efficiency log10(ξ_ion) (Hz/erg).
+        """Ionizing photon production efficiency.
 
         Defined as Q_H / L_UV(1600 Å). Key parameter for cosmic
         reionization studies. Typical values: 25.0–25.6.
+
+        Returns
+        -------
+        float
+            Ionizing photon efficiency log10(ξ_ion) [Hz/erg].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
         """
         q_h = self.q_h
         l_uv = compute_uv_luminosity_1600(self._pred.sed._sed(), self._pred.sed._wave())
@@ -798,10 +1557,40 @@ class Prediction:
 
     Parameters
     ----------
-    model : Model
-        The tengri Model instance.
+    model : SEDModel
+        The tengri SEDModel instance.
     params : dict
         Parameter values (public names).
+
+    Attributes
+    ----------
+    sfh : SFHProperties
+        Star formation history derived quantities. Lazy accessor.
+    sed : SEDProperties
+        Spectral energy distribution derived quantities. Lazy accessor.
+    lines : LineProperties
+        Emission line luminosities and diagnostic ratios. Lazy accessor.
+    radio : RadioProperties
+        Radio-derived quantities from empirical relations. Lazy accessor.
+    xray : XRayProperties
+        X-ray derived quantities from empirical relations. Lazy accessor.
+    ionizing : IonizingProperties
+        Ionizing photon budget quantities. Lazy accessor.
+
+    Returns
+    -------
+    Prediction
+        Lazy prediction object with cached computed quantities.
+
+    Notes
+    -----
+    This class is NOT JIT-compatible due to Python-level caching. For
+    batch computations over many parameter sets (MCMC chains, mock
+    catalogs), use the JIT-compatible methods :meth:`SEDModel.predict_sfh_quantities`,
+    :meth:`SEDModel.predict_sed_quantities`, etc. instead. Those return
+    JAX pytrees (:class:`SFHQuantities`, :class:`SEDQuantities`,
+    :class:`DerivedQuantities`) suitable for :func:`jax.vmap`,
+    :func:`jax.jit`, and :func:`jax.grad`.
 
     Examples
     --------
@@ -908,14 +1697,33 @@ class Prediction:
 
     @property
     def sed_array(self):
-        """Full rest-frame SED array in erg/s/Hz, shape (n_wave,)."""
+        """Full rest-frame SED array.
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Total spectral energy distribution [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
         self._ensure_sed()
         return self._cache["sed_total"]
 
     @property
     def photometry(self):
-        """Observed photometric flux densities, shape (n_filters,).
+        """Observed photometric flux densities.
 
-        Uses the Model's predict_photometry method.
+        Returns
+        -------
+        ndarray, shape (n_filters,)
+            Photometry at the filters defined in the SEDModel [erg/s/cm²/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
         """
         return self._model.predict_photometry(self._params)

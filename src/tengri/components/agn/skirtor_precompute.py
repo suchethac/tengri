@@ -259,12 +259,27 @@ def precompute(
 
 
 def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = None):
-    """Build the runtime lookup.
+    """Build the runtime SKIRTOR photometry lookup from a preintegrated dict.
 
-    When no axes are collapsed, this is :func:`build_skirtor_photometry_lookup`.
-    When some axes are collapsed, the generated function expects fewer axis
-    arguments — caller supplies the remaining free parameters in
-    ``free_param_names`` order.  The default behavior assumes no collapse.
+    When no axes are collapsed, delegates to
+    :func:`build_skirtor_photometry_lookup`.  When some axes are collapsed
+    (fixed at preintegration time), the returned function expects only the
+    remaining free parameter values.
+
+    Parameters
+    ----------
+    preint : dict
+        Preintegrated data dict with keys ``"grid_phot"``, ``"axes"``,
+        and optionally ``"_collapsed_axes"`` and ``"_preint"``.
+    free_param_names : tuple of str or None
+        Names of remaining free axes in the collapsed case.
+        Not used in the default (no-collapse) case.
+
+    Returns
+    -------
+    Callable
+        JIT-compiled photometry lookup function with signature
+        ``(agn_log_lbol, *free_axis_values, agn_torus_frac) -> ndarray``.
     """
     if not preint.get("_collapsed_axes"):
         return build_skirtor_photometry_lookup(preint)

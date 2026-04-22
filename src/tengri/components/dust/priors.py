@@ -27,25 +27,33 @@ def narayanan_prior(z: float) -> dict:
     suitable for direct use in Parameters.
 
     Based on Narayanan et al. (2018, ApJ, 869, 70) cosmological RT simulations:
+
     - Higher-z galaxies have steeper curves (more negative dust_delta)
     - UV bump strength decreases with redshift
 
     Parameters
     ----------
     z : float
-        Source redshift.
+        Source redshift [dimensionless].
 
     Returns
     -------
     dict
         Keys ``"dust_delta"`` and ``"dust_bump_strength"``, each mapping to a
-        ``Gaussian`` distribution.
+        ``Gaussian`` distribution [dimensionless]. Suitable for direct use in
+        ``Parameters(..., **narayanan_prior(z))``.
 
     Examples
     --------
     >>> from tengri import Parameters
     >>> from tengri.components.dust.priors import narayanan_prior
     >>> spec = Parameters(..., **narayanan_prior(z=2.0))
+
+    Notes
+    -----
+    **JIT-compatible**: no — prior specification is a factory-time operation.
+
+    **Gradient-safe**: no — returns static prior distributions.
     """
     from tengri.parameters.priors import Gaussian
 
@@ -70,20 +78,28 @@ def narayanan_tau_prior(z: float, log_mstar: float = 10.0) -> dict:
     Parameters
     ----------
     z : float
-        Source redshift.
+        Source redshift [dimensionless].
     log_mstar : float, optional
-        log10(M_star / Msun). Default is 10.0.
+        log₁₀(M_star / M_sun) [dimensionless]. Default: 10.0.
 
     Returns
     -------
     dict
-        Key ``"dust_tau_diff"`` mapping to a ``Gaussian`` distribution.
+        Key ``"dust_tau_diff"`` mapping to a ``Gaussian`` distribution
+        [dimensionless]. Suitable for direct use in
+        ``Parameters(..., **narayanan_tau_prior(z, log_mstar))``.
 
     Examples
     --------
     >>> from tengri import Parameters
     >>> from tengri.components.dust.priors import narayanan_tau_prior
     >>> spec = Parameters(..., **narayanan_tau_prior(z=1.5, log_mstar=10.5))
+
+    Notes
+    -----
+    **JIT-compatible**: no — prior specification is a factory-time operation.
+
+    **Gradient-safe**: no — returns static prior distributions.
     """
     from tengri.parameters.priors import Gaussian
 

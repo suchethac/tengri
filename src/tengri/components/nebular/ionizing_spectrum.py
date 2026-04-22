@@ -132,6 +132,7 @@ def fit_ionizing_spectrum(
        Predictions of Emission-Line Strengths from Stellar Populations,"
        ApJ, 986, 9 (2025). arXiv:2405.04598.
        https://doi.org/10.3847/1538-4357/ad7fe3
+
     """
     from scipy.optimize import minimize
 
@@ -288,6 +289,7 @@ def precompute_ionizing_params_table(
     **Metadata**: Unfittable SSPs (old ages with zero ionizing flux, corrupted
     data) are left with all parameters = 0 (or −99 for log-space). Downstream
     code handles these gracefully via clipping and default fallback values.
+
     """
     n_met, n_age, _ = ssp_flux.shape
     ionspec_table = np.zeros((n_met, n_age, 7))
@@ -375,6 +377,7 @@ def interpolate_ionizing_params(
     **Bilinear interpolation**: Uses 2×2 neighbourhood of grid points,
     with fractional weights (fz, fa) computed from target position within
     the bracketing cell.
+
     """
     # Bilinear interpolation
     log_z_c = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])

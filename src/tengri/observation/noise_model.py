@@ -28,6 +28,21 @@ class NoiseModel:
         Degrees of freedom for a Student-t likelihood (heavier tails for
         outlier robustness). ``None`` uses a standard Gaussian likelihood.
         Default: None.
+
+    Notes
+    -----
+    A frozen dataclass encapsulating noise model configuration. Replaces
+    the older pattern of manually creating ``noise_frac_cal`` and ``noise_dof``
+    parameters. Primarily used to register observation-level hyperparameters
+    with the inference engine.
+
+    Examples
+    --------
+    >>> from tengri import NoiseModel, Uniform
+    >>> nm = NoiseModel(calibration_floor=Uniform(0.01, 0.1))
+    >>> list(nm.get_params().keys())
+    ['noise_frac_cal']
+
     """
 
     calibration_floor: float | Distribution = 0.0
@@ -39,8 +54,15 @@ class NoiseModel:
         Returns
         -------
         dict
-            Mapping of parameter names to Distribution objects.
-            Empty dict if no noise parameters are needed.
+            Mapping of parameter names (``"noise_frac_cal"``, ``"noise_dof"``)
+            to Distribution objects. Empty dict if no noise parameters are needed.
+
+        Notes
+        -----
+        Called by Observation.get_all_params() to register noise model
+        hyperparameters with the inference engine. Parameters are only included
+        if they are non-trivial (calibration floor > 0 or Student-t dof != None).
+
         """
         params: dict[str, Distribution] = {}
 
@@ -55,7 +77,19 @@ class NoiseModel:
         return params
 
     def summary(self) -> str:
-        """Return a one-line summary of the noise configuration."""
+        """Return a one-line summary of the noise configuration.
+
+        Returns
+        -------
+        str
+            Single-line summary of calibration floor and likelihood settings.
+
+        Notes
+        -----
+        Used for logging and diagnostics. Returns "Gaussian (default)" if
+        no custom noise settings are configured.
+
+        """
         parts = []
         if isinstance(self.calibration_floor, Distribution):
             parts.append(f"cal floor={self.calibration_floor!r} (free)")
@@ -64,4 +98,3 @@ class NoiseModel:
         if self.student_t_dof is not None:
             parts.append(f"Student-t dof={self.student_t_dof}")
         return ", ".join(parts) if parts else "Gaussian (default)"
-

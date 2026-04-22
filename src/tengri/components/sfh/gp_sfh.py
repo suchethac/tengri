@@ -44,6 +44,15 @@ def make_log_age_grid(
     This grid is used as the internal representation for age in GP-based SFH models.
     The log-space parametrization provides better resolution at young ages and
     maps naturally to the logarithmic timescales of stellar evolution.
+
+    Examples
+    --------
+    >>> from tengri import make_log_age_grid
+    >>> grid = make_log_age_grid(n_grid=64)
+    >>> grid.shape
+    (64,)
+    >>> float(grid[0]), float(grid[-1])
+    (6.0, 10.14)
     """
     return jnp.linspace(log_age_min, log_age_max, n_grid)
 
@@ -95,6 +104,19 @@ def gp_from_xi(xi: jnp.ndarray, sqrt_power: jnp.ndarray, n_points: int) -> jnp.n
     .. [1] Selig et al., "NIFTY - Numerical Information Field Theory in Python,"
        A&A, 554, A26 (2013). arXiv:1301.4499.
        https://doi.org/10.1051/0004-6361/201321236
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import gp_from_xi, make_log_age_grid, compute_sqrt_power_drw
+    >>> n = 64
+    >>> grid = make_log_age_grid(n)
+    >>> d = float(grid[1] - grid[0])
+    >>> sqrt_power = compute_sqrt_power_drw(n, d, psd_sigma=1.0, psd_tau_yr=1e8)
+    >>> xi = jnp.zeros(n)
+    >>> sfh = gp_from_xi(xi, sqrt_power, n)
+    >>> sfh.shape
+    (64,)
     """
     xi_hat = jnp.fft.rfft(xi)
     coeffs = sqrt_power * xi_hat
@@ -133,6 +155,19 @@ def generate_gp_fourier(key: jax.Array, sqrt_power: jnp.ndarray, n_points: int) 
     --------
     gp_from_xi : Deterministic GP mapping (used internally).
     generate_gp_batch : Generate multiple independent realizations.
+
+    Examples
+    --------
+    >>> import jax
+    >>> from tengri import generate_gp_fourier, make_log_age_grid, compute_sqrt_power_drw
+    >>> n = 64
+    >>> grid = make_log_age_grid(n)
+    >>> d = float(grid[1] - grid[0])
+    >>> sqrt_power = compute_sqrt_power_drw(n, d, psd_sigma=1.0, psd_tau_yr=1e8)
+    >>> key = jax.random.PRNGKey(0)
+    >>> sfh = generate_gp_fourier(key, sqrt_power, n)
+    >>> sfh.shape
+    (64,)
     """
     xi = random.normal(key, shape=(n_points,))
     return gp_from_xi(xi, sqrt_power, n_points)
@@ -173,6 +208,19 @@ def generate_gp_batch(
     See Also
     --------
     generate_gp_fourier : Single realization.
+
+    Examples
+    --------
+    >>> import jax
+    >>> from tengri import generate_gp_batch, make_log_age_grid, compute_sqrt_power_drw
+    >>> n = 64
+    >>> grid = make_log_age_grid(n)
+    >>> d = float(grid[1] - grid[0])
+    >>> sqrt_power = compute_sqrt_power_drw(n, d, psd_sigma=1.0, psd_tau_yr=1e8)
+    >>> key = jax.random.PRNGKey(0)
+    >>> batch = generate_gp_batch(key, sqrt_power, n_points=n, n_realizations=10)
+    >>> batch.shape
+    (10, 64)
     """
     keys = random.split(key, n_realizations)
     return jax.vmap(lambda k: generate_gp_fourier(k, sqrt_power, n_points))(keys)
@@ -224,6 +272,15 @@ def compute_sqrt_power_drw(
     The reference time scales out in the power spectrum but affects the
     mapping between physical and log-age frequencies. A typical choice is
     the midpoint of the age range (e.g., 100 Myr ~ 8 Gyr cosmic age).
+
+    Examples
+    --------
+    >>> from tengri import compute_sqrt_power_drw, make_log_age_grid
+    >>> grid = make_log_age_grid(n_grid=64)
+    >>> d = float(grid[1] - grid[0])
+    >>> sp = compute_sqrt_power_drw(64, d, psd_sigma=1.0, psd_tau_yr=1e8)
+    >>> sp.shape
+    (33,)
     """
     from tengri.components.sfh.psd_models import psd_drw, psd_to_sqrt_power
 

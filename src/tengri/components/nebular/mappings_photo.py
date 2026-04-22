@@ -41,6 +41,7 @@ References
 - Sutherland & Dopita 2017 (MAPPINGS V)
 - Nicholls et al. 2017 (empirical abundance scaling)
 - Jenkins 2009, 2014 (dust depletion)
+
 """
 
 from __future__ import annotations
@@ -179,6 +180,7 @@ def _load_stellar_grid(filepath: str | Path, model: str, density: str) -> Mappin
         Stellar model: "sb99" or "bpass".
     density : str
         Density structure: "cpr" (isobaric) or "cdn" (isochoric).
+
     """
     with h5py.File(filepath, "r") as f:
         grp = f[f"{model}/{density}"]
@@ -230,6 +232,7 @@ def _load_agn_grid(filepath: str | Path, density: str) -> MappingsAGNGridData:
         Path to flury2024_grids.h5.
     density : str
         "cpr" or "cdn".
+
     """
     with h5py.File(filepath, "r") as f:
         grp = f[f"agn_oxaf/{density}"]
@@ -290,6 +293,7 @@ def _interp_stellar_grid(
     data : (N_z, N_a, N_s, N_u, N_n, ...) array
     sfh_idx : int
         Index along the discrete sfh axis (0=cont, 1=inst, or as stored).
+
     """
     # Slice out the discrete SFH dimension → (N_z, N_a, N_u, N_n, ...)
     sliced = data[:, :, sfh_idx, :, :]
@@ -335,6 +339,7 @@ def _interp_agn_grid(
     Parameters
     ----------
     data : (N_z, N_m, N_e, N_u, N_n, ...) array
+
     """
     iz, wz = _interp_index_weight(zo_val, grid.zo_axis)
     im, wm = _interp_index_weight(logmbh_val, grid.logmbh_axis)
@@ -409,6 +414,7 @@ class MappingsPhotoStellarBackend:
     >>> wave, lum = backend.predict_nebular_line_luminosities(
     ...     ssp_weights, ssp_log_ages_yr, log_z=-2.0, neb_logU=-3.0
     ... )
+
     """
 
     name = "mappings_photo_stellar"
@@ -528,6 +534,7 @@ class MappingsPhotoStellarBackend:
         -------
         wavelengths : array, (n_lines,)   vacuum Angstrom
         luminosities : array, (n_lines,)  Lsun
+
         """
         if neb_logZ_gas is None:
             neb_logZ_gas = log_z
@@ -605,6 +612,7 @@ class MappingsPhotoStellarBackend:
         Returns
         -------
         array, (n_wave,)  erg/s/Hz on the SSP wavelength grid.
+
         """
         line_wave, line_lum = self.predict_nebular_line_luminosities(
             ssp_weights,
@@ -661,6 +669,7 @@ class MappingsPhotoAGNBackend:
     ...     agn_logmbh=7.0,
     ...     agn_logedd=-0.5,
     ... )
+
     """
 
     name = "mappings_photo_agn"
@@ -722,6 +731,7 @@ class MappingsPhotoAGNBackend:
         -------
         wavelengths : array, (n_lines,)   vacuum Angstrom
         luminosities : array, (n_lines,)  Lsun
+
         """
         grid = self.grid
         zo_val = _log_z_abs_to_zo(neb_logZ_gas)

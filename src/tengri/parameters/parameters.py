@@ -143,11 +143,12 @@ class Parameters:
 
     Notes
     -----
-    **Not JAX-traced**: Parameters objects cannot be created or modified inside
-    a JAX gradient tape (jax.grad, jax.vmap, jax.jit). Create all Parameters
-    objects at the Python level before tracing. Once created, a Parameters
-    object is immutable — use the `with_params()` method to create modified
-    copies.
+    **Not JAX-traced**: Parameters is the central user-facing object for
+    configuring model parameters and their priors. Parameters objects cannot be
+    created or modified inside a JAX gradient tape (jax.grad, jax.vmap, jax.jit).
+    Create all Parameters objects at the Python level before tracing. Once created,
+    a Parameters object is immutable — use the `with_params()` method to create
+    modified copies.
 
     **Parameter auto-detection**: If mean_sfh_type is not explicit, it is
     inferred from the parameter name prefixes (e.g., 'sfh_dpl_alpha' implies
@@ -768,47 +769,107 @@ class Parameters:
 
     @property
     def stochastic(self) -> bool:
-        """Whether the model includes a GP field component."""
+        """Whether the model includes a GP field component.
+
+        Returns
+        -------
+        bool
+            True if 'field' is in mean_sfh_type, False otherwise.
+        """
         return "field" in self._mean_sfh_type
 
     @property
     def n_grid(self) -> int:
-        """GP grid size (only relevant when stochastic=True)."""
+        """GP grid size (only relevant when stochastic=True).
+
+        Returns
+        -------
+        int
+            Number of latent dimensions for stochastic SFH field.
+        """
         return self._n_grid
 
     @property
     def mean_sfh_type(self) -> list[str]:
-        """SFH model type(s) as a list of strings."""
+        """SFH model type(s) as a list of strings.
+
+        Returns
+        -------
+        list[str]
+            Normalized, sorted list of active SFH model names
+            (e.g., ['dpl', 'field']).
+        """
         return list(self._mean_sfh_type)
 
     @property
     def all_params(self) -> list[str]:
-        """All parameter names (sorted, excludes settings)."""
+        """All parameter names (sorted, excludes settings).
+
+        Returns
+        -------
+        list[str]
+            Sorted list of all fittable and fixed parameters
+            (free_params + fixed_params).
+        """
         return sorted(self._distributions.keys())
 
     @property
     def free_params(self) -> list[str]:
-        """Names of free (non-fixed) parameters."""
+        """Names of free (non-fixed) parameters.
+
+        Returns
+        -------
+        list[str]
+            Sorted list of parameter names that are not fixed
+            (vary during sampling and inference).
+        """
         return sorted(k for k, d in self._distributions.items() if not d.is_fixed)
 
     @property
     def fixed_params(self) -> list[str]:
-        """Names of fixed parameters."""
+        """Names of fixed parameters.
+
+        Returns
+        -------
+        list[str]
+            Sorted list of parameter names with constant values
+            (not varied during sampling or inference).
+        """
         return sorted(k for k, d in self._distributions.items() if d.is_fixed)
 
     @property
     def n_free(self) -> int:
-        """Number of free parameters (excludes sfh_field_xi)."""
+        """Number of free parameters (excludes sfh_field_xi).
+
+        Returns
+        -------
+        int
+            Count of all non-fixed parameters available for inference.
+        """
         return len(self.free_params)
 
     @property
     def valid_param_names(self) -> frozenset:
-        """Set of valid parameter names for this model configuration."""
+        """Set of valid parameter names for this model configuration.
+
+        Returns
+        -------
+        frozenset
+            Immutable set of all parameter names allowed for this configuration,
+            excluding settings and model configuration keys.
+        """
         return self._valid_param_names
 
     @property
     def mirrors(self) -> dict[str, str]:
-        """Parameter mirrors: {target_name: source_name}."""
+        """Parameter mirrors: {target_name: source_name}.
+
+        Returns
+        -------
+        dict[str, str]
+            Mapping of tied parameter names to their source parameters.
+            When resolved, the target takes the value of the source.
+        """
         return dict(self._mirrors)
 
     # ── Public API ────────────────────────────────────────────────────
@@ -961,6 +1022,12 @@ class Parameters:
         KeyError
             If parameter name is not valid for this model configuration.
 
+        Notes
+        -----
+        For fixed parameters, the returned Distribution has ``is_fixed=True``.
+        For free parameters, the returned Distribution is one of Uniform,
+        Gaussian, LogUniform, LogNormal, StudentT, or other prior types.
+
         Examples
         --------
         >>> from tengri import Parameters, Uniform
@@ -982,6 +1049,10 @@ class Parameters:
         Fixed (non-free) parameters are constants that do not vary during
         inference. This method returns only the numeric ones; categorical
         Fixed parameters (strings) are excluded.
+
+        Parameters
+        ----------
+        None
 
         Returns
         -------
@@ -1166,6 +1237,11 @@ class Parameters:
         params : dict[str, ndarray or float or str]
             Parameter name → value (sampled or optimized).
 
+        Returns
+        -------
+        None
+            Returns nothing. Raises an exception if validation fails.
+
         Raises
         ------
         ValueError
@@ -1200,6 +1276,10 @@ class Parameters:
         Displays SFH type, enabled components (nebular, dust, AGN, etc.),
         dimensionality, and a table of all parameters grouped by category
         (free first, then fixed). Useful for printing model status before fitting.
+
+        Parameters
+        ----------
+        None
 
         Returns
         -------

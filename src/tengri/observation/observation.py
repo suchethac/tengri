@@ -44,6 +44,14 @@ class Observation:
         When provided, the likelihood includes an additive chi-squared
         term comparing model line luminosities against these fluxes.
 
+    Notes
+    -----
+    A frozen, immutable dataclass that serves as a declarative container
+    for all observation metadata. Never enters JAX-traced code; used solely
+    for configuration dispatch to precomputation and inference steps.
+    Inspired by Synthesizer's Instrument pattern, adapted for tengri's
+    differentiable context.
+
     Examples
     --------
     Photometry-only::
@@ -59,6 +67,7 @@ class Observation:
             spectroscopy=Spectroscopy.nirspec_prism(wave_obs),
             noise=NoiseModel(calibration_floor=Uniform(0.01, 0.15)),
         )
+
     """
 
     photometry: Photometry | None = None
@@ -83,27 +92,62 @@ class Observation:
 
     @property
     def can_do_photometry(self) -> bool:
-        """Whether photometric filters are configured."""
+        """Whether photometric filters are configured.
+
+        Returns
+        -------
+        bool
+            True if photometry is configured.
+
+        """
         return self.photometry is not None
 
     @property
     def can_do_spectroscopy(self) -> bool:
-        """Whether a spectroscopic wavelength grid is configured."""
+        """Whether a spectroscopic wavelength grid is configured.
+
+        Returns
+        -------
+        bool
+            True if spectroscopy is configured.
+
+        """
         return self.spectroscopy is not None
 
     @property
     def has_line_fluxes(self) -> bool:
-        """Whether observed emission line fluxes are configured."""
+        """Whether observed emission line fluxes are configured.
+
+        Returns
+        -------
+        bool
+            True if line flux data is configured.
+
+        """
         return self.line_fluxes is not None
 
     @property
     def has_spectral_indices(self) -> bool:
-        """Whether observed spectral indices are configured."""
+        """Whether observed spectral indices are configured.
+
+        Returns
+        -------
+        bool
+            True if spectral index data is configured.
+
+        """
         return self.spectral_indices is not None
 
     @property
     def is_joint(self) -> bool:
-        """Whether both photometry and spectroscopy are configured."""
+        """Whether both photometry and spectroscopy are configured.
+
+        Returns
+        -------
+        bool
+            True if both photometry and spectroscopy are present.
+
+        """
         return self.can_do_photometry and self.can_do_spectroscopy
 
     @property
@@ -114,6 +158,12 @@ class Observation:
         -------
         str
             One of ``"photometry"``, ``"spectroscopy"``, or ``"joint"``.
+
+        Notes
+        -----
+        Returns a string representation of the configured data types,
+        useful for logging and dispatch logic.
+
         """
         if self.is_joint:
             return "joint"
@@ -126,27 +176,63 @@ class Observation:
 
     @property
     def n_data_phot(self) -> int:
-        """Number of photometric data points (filters)."""
+        """Number of photometric data points (filters).
+
+        Returns
+        -------
+        int
+            Number of filters, or 0 if no photometry configured.
+
+        """
         return self.photometry.n_filters if self.photometry else 0
 
     @property
     def n_data_spec(self) -> int:
-        """Number of spectroscopic data points (pixels)."""
+        """Number of spectroscopic data points (pixels).
+
+        Returns
+        -------
+        int
+            Number of spectral pixels, or 0 if no spectroscopy configured.
+
+        """
         return self.spectroscopy.n_pixels if self.spectroscopy else 0
 
     @property
     def n_data_lines(self) -> int:
-        """Number of emission line flux data points."""
+        """Number of emission line flux data points.
+
+        Returns
+        -------
+        int
+            Number of emission lines, or 0 if no line flux data configured.
+
+        """
         return self.line_fluxes.n_lines if self.line_fluxes else 0
 
     @property
     def n_data_indices(self) -> int:
-        """Number of spectral index data points."""
+        """Number of spectral index data points.
+
+        Returns
+        -------
+        int
+            Number of spectral indices, or 0 if no index data configured.
+
+        """
         return self.spectral_indices.n_indices if self.spectral_indices else 0
 
     @property
     def n_data(self) -> int:
-        """Total number of data points."""
+        """Total number of data points.
+
+        Returns
+        -------
+        int
+            Sum of all photometric, spectroscopic, line flux, and
+            spectral index data points.
+
+        """
         return self.n_data_phot + self.n_data_spec + self.n_data_lines + self.n_data_indices
 
     # ── Data packing / unpacking ──────────────────────────────────
@@ -171,12 +257,19 @@ class Observation:
         Returns
         -------
         jnp.ndarray
-            Packed data array.
+            Packed data array, shape ``(n_data,)``.
 
         Raises
         ------
         ValueError
             If array shapes don't match the observation configuration.
+
+        Notes
+        -----
+        Both arrays are optional but at least one must be provided and
+        configured in the Observation. Useful for likelihood evaluation
+        and parameter inference pipelines.
+
         """
         arrays = []
 
@@ -210,6 +303,9 @@ class Observation:
     ) -> dict[str, jnp.ndarray]:
         """Split a concatenated prediction into photometry and spectroscopy.
 
+        Inverse of ``pack_data``: reverses the concatenation to extract
+        predictions for each observation modality.
+
         Parameters
         ----------
         predicted : array
@@ -220,6 +316,12 @@ class Observation:
         dict
             Keys are ``"photometry"`` and/or ``"spectroscopy"``, values
             are the corresponding sub-arrays.
+
+        Notes
+        -----
+        Only keys corresponding to configured observation modalities
+        will be present in the returned dictionary.
+
         """
         result = {}
         idx = 0
@@ -244,8 +346,15 @@ class Observation:
         Returns
         -------
         dict
-            Parameter name → Distribution. Empty if no observation
+            Parameter name → Distribution mapping. Empty if no observation
             params are needed (e.g. photometry-only with no noise config).
+
+        Notes
+        -----
+        This method is called by the inference engine to set up the prior
+        structure. Observation parameters include calibration coefficients
+        and noise model hyperparameters, but not SED or SFH params.
+
         """
         params: dict[str, Distribution] = {}
 
@@ -269,11 +378,19 @@ class Observation:
         z : float
             Redshift.
         dl_cm : float
-            Luminosity distance (cm).
+            Luminosity distance [cm].
 
         Returns
         -------
         jnp.ndarray, shape (n_filters,)
+            Photometric fluxes in each filter [erg/s/Hz].
+
+        Notes
+        -----
+        Requires photometry to be configured. Computes rest-frame wavelengths
+        from the observed-frame input and integrates the SED against each
+        filter transmission curve.
+
         """
         if self.photometry is None:
             raise ValueError("No photometry configured in this Observation.")
@@ -297,11 +414,19 @@ class Observation:
         z : float
             Redshift.
         dl_cm : float
-            Luminosity distance (cm).
+            Luminosity distance [cm].
 
         Returns
         -------
         jnp.ndarray, shape (n_pixels,)
+            Spectroscopic flux at each pixel [erg/s/Hz].
+
+        Notes
+        -----
+        Requires spectroscopy to be configured. Applies LSF convolution
+        if a resolution profile is specified. Returns data ready for
+        likelihood evaluation against observed spectra.
+
         """
         if self.spectroscopy is None:
             raise ValueError("No spectroscopy configured in this Observation.")
@@ -329,7 +454,14 @@ class Observation:
         Returns
         -------
         str
-            Multi-line summary string.
+            Multi-line summary string with filter counts, instrument config,
+            noise settings, and total data point count.
+
+        Notes
+        -----
+        Used for logging and diagnostics. Does not execute any inference;
+        purely informational output.
+
         """
         lines = ["Observation"]
         lines.append("-" * 50)

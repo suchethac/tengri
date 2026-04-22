@@ -76,6 +76,7 @@ def mix_dig_emission(
         [Å]
     **kwargs
         Additional backend-specific keyword arguments (passed to both calls).
+
     Returns
     -------
     array, shape (n_wave,)
@@ -121,14 +122,15 @@ def mix_dig_emission(
 
     References
     ----------
-    .. [1] L. M. Haffner et al., "The Wisconsin Hα Mapper Northern Sky Survey,"
-       Rev. Mod. Phys., 81, 969 (2009). arXiv:0903.3933.
+    .. [1] L. M. Haffner et al., "The warm ionized medium in spiral galaxies,"
+       Rev. Mod. Phys., 81, 969 (2009).
        https://doi.org/10.1103/RevModPhys.81.969
-    .. [2] S. Tacchella et al., "The JWST Emission Line Survey (JELS): Toward
-       a Better Understanding of Star Formation in Galaxies," ApJ, 926, 134 (2022).
-       arXiv:2110.07929. https://doi.org/10.3847/1538-4357/ac439b
+    .. [2] S. Tacchella et al., "H-alpha emission in local galaxies: star
+       formation, time variability, and the diffuse ionized gas," MNRAS, 513,
+       2904 (2022). arXiv:2112.00027. https://doi.org/10.1093/mnras/stac818
     .. [3] S. P. Reynolds, "Supernova Remnants as Cosmic Ray Sources," ApJ,
        282, 191 (1984). https://doi.org/10.1086/162189
+
     """
     common_kw = dict(
         ssp_wave=ssp_wave,

@@ -130,8 +130,22 @@ AGN_MODELS: dict[str, Callable] = {}
 def register_agn_model(name: str) -> Callable:
     """Register an AGN model function (decorator factory).
 
+    Parameters
+    ----------
+    name : str
+        Unique model name for the registry.
+
+    Returns
+    -------
+    callable
+        Decorator that registers the decorated function in AGN_MODELS.
+
+    Notes
+    -----
+    **JIT-compatible**: no — registers at module load time (not JIT-compilable).
+
     The registered function must have signature:
-        fn(wavelength, agn_log_lbol, **kwargs) -> L_nu [erg s^-1 Hz^-1]
+        fn(wavelength, agn_log_lbol, **kwargs) -> L_nu [erg/s/Hz]
     """
 
     def decorator(fn: Callable) -> Callable:
@@ -148,17 +162,21 @@ def resolve_agn_model(name: str) -> Callable:
     Parameters
     ----------
     name : str
-        Model name. One of: "simple", "standard", "kubota_done", "adaf", etc.
+        Model name (e.g., "simple", "standard", "multicolor_agn", "adaf").
 
     Returns
     -------
     callable
-        Model function: fn(wavelength, agn_log_lbol, **kwargs) -> L_nu.
+        Model function: fn(wavelength, agn_log_lbol, **kwargs) -> L_nu [erg/s/Hz].
 
     Raises
     ------
     ValueError
         If name is not registered.
+
+    Notes
+    -----
+    **JIT-compatible**: no — performs dictionary lookup at initialization time.
     """
     if name not in AGN_MODELS:
         raise ValueError(f"Unknown AGN model '{name}'. Available: {list(AGN_MODELS.keys())}")
@@ -195,25 +213,31 @@ def unified_agn(
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
-        log10(L_bol / Lsun). Total AGN bolometric luminosity.
-    disc_model : str
-        Disc model name: "powerlaw" or "multicolor". Default "powerlaw".
-    torus_model : str
-        Torus model name: "simple" or "two_temperature". Default "simple".
-    agn_torus_frac : float
-        Covering factor: fraction of L_bol intercepted and re-emitted by
-        the torus. The disc gets (1 - agn_torus_frac). Default 0.5.
+        log10 of bolometric luminosity [Lsun].
+    disc_model : str, optional
+        Disc model name: "powerlaw", "multicolor", "kubota_done_3zone", "adaf".
+        Default "powerlaw".
+    torus_model : str, optional
+        Torus model name: "simple", "two_temperature", "skirtor".
+        Default "simple".
+    agn_torus_frac : float, optional
+        Torus covering factor [dimensionless], range [0, 1]. Disc gets
+        (1 - agn_torus_frac). Default 0.5.
     **kwargs
-        Passed through to both disc and torus functions (they ignore
-        unrecognized kwargs via **_kwargs).
+        Additional parameters passed to disc and torus functions
+        (they ignore unrecognized kwargs).
 
     Returns
     -------
-    array, shape (n_wave,)
-        Total AGN L_nu [erg s^-1 Hz^-1] = L_disc + L_torus.
+    ndarray, shape (n_wave,)
+        Total AGN L_nu [erg/s/Hz] = L_disc + L_torus.
+
+    Notes
+    -----
+    **JIT-compatible**: depends on disc and torus models (mostly yes for analytic).
     """
     from tengri.components.agn.skirtor import skirtor_analytic
 
@@ -266,31 +290,32 @@ def simple_agn(
 ) -> jnp.ndarray:
     """Simple AGN: power-law disc + single-temperature torus.
 
-    3 free parameters (+ agn_frac scaling):
-    - agn_alpha: disc spectral slope
-    - agn_T_torus: torus temperature
-    - agn_torus_frac: covering factor
+    Minimal 3-parameter model (+ overall luminosity scaling).
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
-        log10(L_bol / Lsun).
-    agn_frac : float
-        AGN luminosity as fraction of total galaxy luminosity.
+        log10 of bolometric luminosity [Lsun].
+    agn_frac : float, optional
+        AGN luminosity fraction of total galaxy SED [dimensionless].
         Applied as overall scaling. Default 0.1.
-    agn_alpha : float
-        Disc spectral slope. Default -1.0.
-    agn_T_torus : float
+    agn_alpha : float, optional
+        Disc spectral slope [dimensionless]. Default -1.0.
+    agn_T_torus : float, optional
         Torus temperature [K]. Default 1000.
-    agn_torus_frac : float
-        Covering factor. Default 0.5.
+    agn_torus_frac : float, optional
+        Torus covering factor [dimensionless], range [0, 1]. Default 0.5.
 
     Returns
     -------
-    array, shape (n_wave,)
-        L_nu [erg s^-1 Hz^-1].
+    ndarray, shape (n_wave,)
+        L_nu [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — delegates to :func:`unified_agn`.
     """
     l_nu = unified_agn(
         wavelength,
@@ -319,38 +344,37 @@ def standard_agn(
 ) -> jnp.ndarray:
     """Standard AGN: multi-color disc + two-temperature torus.
 
-    5-6 free parameters:
-    - agn_log_mbh: black hole mass
-    - agn_log_ledd: Eddington ratio
-    - agn_T_hot, agn_T_warm: torus temperatures
-    - agn_frac_hot: hot/warm ratio
-    - agn_torus_frac: covering factor
+    5-6 free parameters controlling BH accretion physics and dust emission.
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
-        log10(L_bol / Lsun).
-    agn_frac : float
-        Overall AGN fraction. Default 0.1.
-    agn_log_mbh : float
-        log10(M_BH / Msun). Default 8.0.
-    agn_log_ledd : float
-        log10(L/L_Edd). Default -1.0.
-    agn_T_hot : float
+        log10 of bolometric luminosity [Lsun].
+    agn_frac : float, optional
+        AGN luminosity fraction [dimensionless]. Default 0.1.
+    agn_log_mbh : float, optional
+        log10 of black hole mass [Msun]. Default 8.0.
+    agn_log_ledd : float, optional
+        log10 of Eddington ratio [dimensionless]. Default -1.0.
+    agn_T_hot : float, optional
         Hot dust temperature [K]. Default 1200.
-    agn_T_warm : float
+    agn_T_warm : float, optional
         Warm dust temperature [K]. Default 300.
-    agn_frac_hot : float
-        Fraction in hot component. Default 0.3.
-    agn_torus_frac : float
-        Covering factor. Default 0.5.
+    agn_frac_hot : float, optional
+        Hot component mass fraction [dimensionless]. Default 0.3.
+    agn_torus_frac : float, optional
+        Torus covering factor [dimensionless]. Default 0.5.
 
     Returns
     -------
-    array, shape (n_wave,)
-        L_nu [erg s^-1 Hz^-1].
+    ndarray, shape (n_wave,)
+        L_nu [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — delegates to :func:`unified_agn` with multicolor disc.
     """
     l_nu = unified_agn(
         wavelength,
@@ -386,51 +410,46 @@ def multicolor_agn(
     """Multicolor Shakura-Sunyaev disc + two-temperature torus.
 
     Standard thin-disc SED with spin-dependent ISCO and Novikov-Thorne
-    radiative efficiency, combined with a toy two-temperature torus.
-    Note: this is the outer standard disc only — no warm Comptonization
-    or hot corona (for the full 3-zone model, see QSOSED).
-
-    8+ free parameters:
-    - agn_log_mbh: black hole mass
-    - agn_log_ledd: Eddington ratio
-    - agn_a_spin: BH spin
-    - agn_cos_inc: inclination
-    - agn_T_hot, agn_T_warm: torus temperatures
-    - agn_frac_hot: hot/warm ratio
-    - agn_tau_torus: torus optical depth
-    - agn_torus_frac: covering factor
+    radiative efficiency. This is the outer standard disc only — no warm
+    Comptonization or hot corona (for the full 3-zone model, see kubota_done_full).
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
-        log10(L_bol / Lsun).
-    agn_frac : float
-        Overall AGN fraction. Default 0.1.
-    agn_log_mbh : float
-        log10(M_BH / Msun). Default 8.0.
-    agn_log_ledd : float
-        log10(L/L_Edd). Default -1.0.
-    agn_a_spin : float
-        BH spin (0 to 0.998). Default 0.0.
-    agn_cos_inc : float
-        cos(inclination). Default 0.5.
-    agn_T_hot : float
+        log10 of bolometric luminosity [Lsun].
+    agn_frac : float, optional
+        AGN luminosity fraction [dimensionless]. Default 0.1.
+    agn_log_mbh : float, optional
+        log10 of black hole mass [Msun]. Default 8.0.
+    agn_log_ledd : float, optional
+        log10 of Eddington ratio [dimensionless]. Default -1.0.
+    agn_a_spin : float, optional
+        Black hole spin [dimensionless], range [0, 0.998]. Default 0.0.
+    agn_cos_inc : float, optional
+        cos(inclination) [dimensionless], range [0, 1]. Default 0.5.
+    agn_T_hot : float, optional
         Hot dust temperature [K]. Default 1200.
-    agn_T_warm : float
+    agn_T_warm : float, optional
         Warm dust temperature [K]. Default 300.
-    agn_frac_hot : float
-        Fraction in hot component. Default 0.3.
-    agn_tau_torus : float
-        Torus optical depth at 9.7 um. Default 5.
-    agn_torus_frac : float
-        Covering factor. Default 0.5.
+    agn_frac_hot : float, optional
+        Hot dust mass fraction [dimensionless]. Default 0.3.
+    agn_tau_torus : float, optional
+        Torus optical depth at 9.7 um [dimensionless]. Default 5.
+    agn_torus_frac : float, optional
+        Torus covering factor [dimensionless]. Default 0.5.
 
     Returns
     -------
-    array, shape (n_wave,)
-        L_nu [erg s^-1 Hz^-1].
+    ndarray, shape (n_wave,)
+        L_nu [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses :func:`multicolor_disc` and :func:`two_temperature_torus`.
+
+    Also registered as "kubota_done" (deprecated alias).
     """
     l_nu = unified_agn(
         wavelength,
@@ -480,68 +499,55 @@ def kubota_done_full_agn(
 
     Extends ``multicolor_agn`` with the full K&D 3-zone disc model:
     outer standard disc, warm Comptonization (soft X-ray excess), and
-    hot corona (hard X-ray power law). Combined with a two-temperature
-    dust torus.
-
-    Disc parameters (9):
-    - agn_log_mbh: BH mass
-    - agn_log_ledd: Eddington ratio
-    - agn_a_spin: BH spin
-    - agn_cos_inc: inclination
-    - agn_f_hard: coronal luminosity fraction
-    - agn_gamma_warm: warm photon index
-    - agn_kt_warm: warm electron temperature [keV]
-    - agn_gamma_hard: hard X-ray photon index
-    - agn_kt_hot: hot corona temperature [keV]
-
-    Torus parameters (4):
-    - agn_T_hot, agn_T_warm: torus dust temperatures [K]
-    - agn_frac_hot: hot-to-warm dust ratio
-    - agn_tau_torus: torus optical depth
+    hot corona (hard X-ray power law). Combined with a two-temperature dust torus.
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
-        log10(L_bol / Lsun).
-    agn_frac : float
-        Overall AGN fraction scaling. Default 0.1.
-    agn_log_mbh : float
-        log10(M_BH / Msun). Default 8.0.
-    agn_log_ledd : float
-        log10(L/L_Edd). Default -1.0.
-    agn_a_spin : float
-        BH spin (0 to 0.998). Default 0.0.
-    agn_cos_inc : float
-        cos(inclination). Default 0.5.
-    agn_f_hard : float
-        Fraction of L_Edd in corona. Default 0.02.
-    agn_gamma_warm : float
-        Warm Comptonization photon index. Default 2.5.
-    agn_kt_warm : float
+        log10 of bolometric luminosity [Lsun].
+    agn_frac : float, optional
+        AGN luminosity fraction [dimensionless]. Default 0.1.
+    agn_log_mbh : float, optional
+        log10 of black hole mass [Msun]. Default 8.0.
+    agn_log_ledd : float, optional
+        log10 of Eddington ratio [dimensionless]. Default -1.0.
+    agn_a_spin : float, optional
+        Black hole spin [dimensionless], range [0, 0.998]. Default 0.0.
+    agn_cos_inc : float, optional
+        cos(inclination) [dimensionless]. Default 0.5.
+    agn_f_hard : float, optional
+        Fraction of L_Edd in corona [dimensionless]. Default 0.02.
+    agn_gamma_warm : float, optional
+        Warm Comptonization photon index [dimensionless]. Default 2.5.
+    agn_kt_warm : float, optional
         Warm electron temperature [keV]. Default 0.2.
-    agn_gamma_hard : float
-        Hard X-ray photon index. Default 1.8.
-    agn_kt_hot : float
+    agn_gamma_hard : float, optional
+        Hard X-ray photon index [dimensionless]. Default 1.8.
+    agn_kt_hot : float, optional
         Hot corona temperature [keV]. Default 100.0.
-    agn_r_warm_ratio : float
-        R_warm / R_hot. Default 2.0.
-    agn_T_hot : float
+    agn_r_warm_ratio : float, optional
+        R_warm / R_hot ratio [dimensionless]. Default 2.0.
+    agn_T_hot : float, optional
         Hot dust temperature [K]. Default 1200.
-    agn_T_warm : float
+    agn_T_warm : float, optional
         Warm dust temperature [K]. Default 300.
-    agn_frac_hot : float
-        Hot-to-warm dust fraction. Default 0.3.
-    agn_tau_torus : float
-        Torus optical depth at 9.7 um. Default 5.
-    agn_torus_frac : float
-        Covering factor. Default 0.5.
+    agn_frac_hot : float, optional
+        Hot dust mass fraction [dimensionless]. Default 0.3.
+    agn_tau_torus : float, optional
+        Torus optical depth at 9.7 um [dimensionless]. Default 5.
+    agn_torus_frac : float, optional
+        Torus covering factor [dimensionless]. Default 0.5.
 
     Returns
     -------
-    array, shape (n_wave,)
-        L_nu [erg s^-1 Hz^-1].
+    ndarray, shape (n_wave,)
+        L_nu [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses :func:`kubota_done_disc` and :func:`two_temperature_torus`.
     """
     # 3-zone disc gets (1 - covering_factor) of L_bol
     l_disc = kubota_done_disc(
@@ -587,43 +593,40 @@ def skirtor_agn(
     agn_torus_frac: float = 0.5,
     **_kwargs,
 ) -> jnp.ndarray:
-    """SKIRTOR clumpy torus AGN: disc + SKIRTOR torus (analytic).
+    """SKIRTOR clumpy torus AGN: power-law disc + SKIRTOR torus (analytic).
 
     Uses the analytic SKIRTOR approximation (Stalevski et al. 2012, 2016)
     for the torus emission, combined with a power-law accretion disc.
 
-    5 SKIRTOR-specific free parameters:
-    - agn_tau_skirtor: optical depth at 9.7 um (3-11)
-    - agn_p_skirtor: radial density gradient (0-1.5)
-    - agn_q_skirtor: polar density gradient (0-1.5)
-    - agn_oa_skirtor: opening angle in degrees (20-60)
-    - agn_cos_inc: cosine of inclination (0=edge-on, 1=face-on)
-
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    agn_log_lbol : float
-        log10(L_bol / Lsun). Default 44.0.
-    agn_frac : float
-        Overall AGN fraction scaling. Default 0.1.
-    agn_tau_skirtor : float
-        9.7 um optical depth (3-11). Default 7.0.
-    agn_p_skirtor : float
-        Radial density gradient (0-1.5). Default 1.0.
-    agn_q_skirtor : float
-        Polar density gradient (0-1.5). Default 1.0.
-    agn_oa_skirtor : float
-        Opening angle [degrees] (20-60). Default 40.0.
-    agn_cos_inc : float
-        cos(inclination), 0=edge-on, 1=face-on. Default 0.5.
-    agn_torus_frac : float
-        Covering fraction. Default 0.5.
+    agn_log_lbol : float, optional
+        log10 of bolometric luminosity [Lsun]. Default 44.0.
+    agn_frac : float, optional
+        AGN luminosity fraction [dimensionless]. Default 0.1.
+    agn_tau_skirtor : float, optional
+        Optical depth at 9.7 um [dimensionless], range [3, 11]. Default 7.0.
+    agn_p_skirtor : float, optional
+        Radial density gradient [dimensionless], range [0, 1.5]. Default 1.0.
+    agn_q_skirtor : float, optional
+        Polar density gradient [dimensionless], range [0, 1.5]. Default 1.0.
+    agn_oa_skirtor : float, optional
+        Opening angle [degrees], range [20, 60]. Default 40.0.
+    agn_cos_inc : float, optional
+        cos(inclination) [dimensionless], 0=edge-on, 1=face-on. Default 0.5.
+    agn_torus_frac : float, optional
+        Torus covering factor [dimensionless]. Default 0.5.
 
     Returns
     -------
-    array, shape (n_wave,)
-        L_nu [erg s^-1 Hz^-1].
+    ndarray, shape (n_wave,)
+        L_nu [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: no — requires SKIRTOR template interpolation (non-differentiable).
     """
     # Disc gets (1 - covering_factor) of L_bol
     l_disc = powerlaw_disc(
@@ -680,39 +683,37 @@ def adaf_agn(
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
-        log10(L_bol / Lsun).
-    agn_frac : float
-        Overall AGN fraction. Default 0.1.
-    agn_log_mbh : float
-        log10(M_BH / Msun). Default 8.0.
-    agn_log_ledd : float
-        log10(L/L_Edd). Default -3.0.
-    agn_r_tr : float
-        Truncation radius in R_g. Default 100.
-    agn_adaf_beta : float
-        Magnetic pressure fraction (0-1). Default 0.5.
-    agn_adaf_delta : float
-        Electron heating fraction (0-1). Default 0.01.
-    agn_cos_inc : float
-        cos(inclination). Default 0.5.
-    agn_torus_frac : float
-        Torus covering factor. Default 0.3 (lower than standard AGN).
-    agn_T_torus : float
-        Torus temperature [K]. Default 500 (cooler than luminous AGN).
+        log10 of bolometric luminosity [Lsun].
+    agn_frac : float, optional
+        AGN luminosity fraction [dimensionless]. Default 0.1.
+    agn_log_mbh : float, optional
+        log10 of black hole mass [Msun]. Default 8.0.
+    agn_log_ledd : float, optional
+        log10 of Eddington ratio [dimensionless]. Default -3.0.
+    agn_r_tr : float, optional
+        Truncation radius [R_g]. Default 100.
+    agn_adaf_beta : float, optional
+        Magnetic pressure fraction [dimensionless], range [0, 1]. Default 0.5.
+    agn_adaf_delta : float, optional
+        Electron heating fraction [dimensionless], range [0, 1]. Default 0.01.
+    agn_cos_inc : float, optional
+        cos(inclination) [dimensionless]. Default 0.5.
+    agn_torus_frac : float, optional
+        Torus covering factor [dimensionless]. Default 0.3.
+    agn_T_torus : float, optional
+        Torus temperature [K]. Default 500.
 
     Returns
     -------
-    array, shape (n_wave,)
-        L_nu [erg s^-1 Hz^-1].
+    ndarray, shape (n_wave,)
+        L_nu [erg/s/Hz].
 
-    References
-    ----------
-    - Mahadevan 1997, ApJ, 477, 585
-    - Nemmen et al. 2014, MNRAS, 438, 2804
-    - Lopez et al. 2024
+    Notes
+    -----
+    **JIT-compatible**: yes — uses :func:`adaf_disc` and :func:`simple_torus`.
     """
     # ADAF + truncated disc gets (1 - torus_frac) of L_bol
     l_disc = adaf_disc(
@@ -987,9 +988,9 @@ def unified_nlr_blr(
     .. [2] Roper W. J. et al. 2025, arXiv:2506.15811,
            "Synthesizer: Synthetic Observables For Modern Astronomy",
            https://doi.org/10.48550/arXiv.2506.15811
-    .. [3] Yang G. et al. 2020, MNRAS, 491, 740, "CIGALE: a python Code
-           Investigating GALaxy Emission" (skirtor2016 module),
-           https://doi.org/10.1093/mnras/stz2971
+    .. [3] G. Yang et al. 2020, MNRAS, 491, 740, "X-CIGALE: Fitting AGN/galaxy
+           SEDs from X-ray to infrared" (skirtor2016 module),
+           https://doi.org/10.1093/mnras/stz3001
     """
     l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
 
@@ -1071,6 +1072,7 @@ def unified_nlr_blr(
     # --- Total ---
     l_total = l_disc_masked + l_torus + l_nlr + l_blr
     return l_total * agn_frac
+
 
 # ── Pluggable NLR/BLR backend factories ──────────────────────────
 
@@ -1177,6 +1179,7 @@ def make_cue_nlr_fn(
         fwhm_kms: float = 500.0,
         **kw,
     ) -> jnp.ndarray:
+        """Predict narrow-line region emission lines from disc ionizing photon rate."""
         # Infer log10(Q_H) from l_disc_bol_erg if provided.
         # Approximate: log10(Q_H) ~ log10(L_bol_erg) - log10(13.6 eV)
         # For a power-law spectrum with <E> ~ 13.6 eV (1 Ryd).

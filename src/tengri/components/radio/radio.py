@@ -122,21 +122,25 @@ def radio_sfr_bell2003(
 
     Parameters
     ----------
-    wavelength : array (n_wave,)
-        Wavelength in Angstrom.
+    wavelength : array, shape (n_wave,)
+        Wavelength [Angstrom].
     L_ir : float
-        Total infrared luminosity (8-1000 μm) in erg/s.
+        Total infrared luminosity (8-1000 μm) [erg/s].
     q_ir : float
         FIR-radio correlation parameter. Default 2.64 (Bell 2003, z=0).
     alpha_sf : float
         Synchrotron spectral index (S_ν ∝ ν^{-α}). Default 0.8.
     nu_ref : float
-        Reference frequency in Hz. Default 1.4 GHz.
+        Reference frequency [Hz]. Default 1.4 GHz.
 
     Returns
     -------
-    array (n_wave,)
-        L_nu in erg/s/Hz.
+    ndarray, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function.
     """
     nu = _C_AA / wavelength
     L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz at nu_ref
@@ -177,10 +181,10 @@ def radio_sfr_delvecchio2021(
 
     Parameters
     ----------
-    wavelength : array (n_wave,)
-        Wavelength in Angstrom.
+    wavelength : array, shape (n_wave,)
+        Wavelength [Angstrom].
     L_ir : float
-        Total infrared luminosity (8-1000 μm) in erg/s.
+        Total infrared luminosity (8-1000 μm) [erg/s].
     log_mstar : float
         log10(M★ / M⊙). Typical range [8, 12].
     redshift : float
@@ -197,18 +201,20 @@ def radio_sfr_delvecchio2021(
     alpha_sf : float
         Synchrotron spectral index. Default 0.7 (consensus: Novak+2017, SEMPER).
     nu_ref : float
-        Reference frequency in Hz. Default 1.4 GHz (calibration frequency).
+        Reference frequency [Hz]. Default 1.4 GHz (calibration frequency).
     apply_suppression : bool
         Apply Bell+2003 synchrotron suppression for low-SFR galaxies.
         Default True.
 
     Returns
     -------
-    array (n_wave,)
-        L_nu in erg/s/Hz.
+    ndarray, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz].
 
     Notes
     -----
+    **JIT-compatible**: yes — pure JAX function.
+
     q decreases with increasing M★ (radio-brighter per unit IR for massive
     galaxies), consistent with stronger magnetic fields and denser ISM.
     The z_slope = -0.025 implies much more modest redshift evolution than the
@@ -262,10 +268,10 @@ def radio_sfr_mccheyne2022(
 
     Parameters
     ----------
-    wavelength : array (n_wave,)
-        Wavelength in Angstrom.
+    wavelength : array, shape (n_wave,)
+        Wavelength [Angstrom].
     L_ir : float
-        Total infrared luminosity (8-1000 μm) in erg/s.
+        Total infrared luminosity (8-1000 μm) [erg/s].
     log_mstar : float
         log10(M★ / M⊙). Typical range [10.05, 11.4] per McCheyne+2022.
     redshift : float
@@ -283,17 +289,19 @@ def radio_sfr_mccheyne2022(
     alpha_sf : float
         Synchrotron spectral index. Default 0.7.
     nu_ref : float
-        Reference frequency in Hz. Default 150 MHz (calibration frequency).
+        Reference frequency [Hz]. Default 150 MHz (calibration frequency).
     apply_suppression : bool
         Apply Bell+2003 synchrotron suppression. Default True.
 
     Returns
     -------
-    array (n_wave,)
-        L_nu in erg/s/Hz.
+    ndarray, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz].
 
     Notes
     -----
+    **JIT-compatible**: yes — pure JAX function.
+
     McCheyne+2022 reports a steeper mass dependence than Delvecchio+2021.
     The discrepancy is reconciled when using α = -0.59 instead of -0.7 for
     spectral index conversion between 1.4 GHz and 150 MHz.
@@ -338,12 +346,12 @@ def radio_freefree(
 
     Parameters
     ----------
-    wavelength : array (n_wave,)
-        Wavelength in Angstrom.
+    wavelength : array, shape (n_wave,)
+        Wavelength [Angstrom].
     L_ir : float
-        Total infrared luminosity (8-1000 μm) in erg/s.
+        Total infrared luminosity (8-1000 μm) [erg/s].
     T_e : float
-        Electron temperature in K. Default 1e4.
+        Electron temperature [K]. Default 1e4.
         Prior suggestion: LogUniform(5e3, 2e4).
     alpha_ff : float
         Free-free spectral index (L_ν ∝ ν^{α_ff}). Default −0.1 (nearly flat).
@@ -351,11 +359,13 @@ def radio_freefree(
 
     Returns
     -------
-    array (n_wave,)
-        L_nu in erg/s/Hz.
+    ndarray, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz].
 
     Notes
     -----
+    **JIT-compatible**: yes — pure JAX function.
+
     Calibration check: at 1.4 GHz, Te=1e4 K, L_IR=1e10 Lsun (SFR≈0.58 M☉/yr):
     L_ff ≈ 5.49e-7 × 0.58 ≈ 3.2e-7 Lsun/Hz (Murphy+2011 Table 1 consistent).
 
@@ -469,21 +479,25 @@ def radio_agn(
 
     Parameters
     ----------
-    wavelength : array (n_wave,)
-        Wavelength in Angstrom.
+    wavelength : array, shape (n_wave,)
+        Wavelength [Angstrom].
     L_agn_bol : float
-        AGN bolometric luminosity in erg/s.
+        AGN bolometric luminosity [erg/s].
     radio_loudness : float
         log10(L_5GHz / L_B). Default 0 (radio-quiet). Range: -2 to 5.
     alpha_agn : float
         AGN radio spectral index. Default 0.7.
     nu_ref : float
-        Reference frequency. Default 1.4 GHz.
+        Reference frequency [Hz]. Default 1.4 GHz.
 
     Returns
     -------
-    array (n_wave,)
-        L_nu in erg/s/Hz.
+    ndarray, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function.
     """
     nu = _C_AA / wavelength
 
@@ -654,8 +668,12 @@ def radio_total(
 
     Returns
     -------
-    array (n_wave,)
-        L_nu in erg/s/Hz.
+    ndarray, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function.
     """
     sf = _dispatch_sfr(
         wavelength,
@@ -748,8 +766,12 @@ def radio_total_dpl(
 
     Returns
     -------
-    array (n_wave,)
-        L_nu in erg/s/Hz.
+    ndarray, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function.
     """
     sf = _dispatch_sfr(
         wavelength,
@@ -837,6 +859,10 @@ def radio_components(
         ``"freefree"`` : array (n_wave,) — thermal free-free L_nu [erg/s/Hz]
         ``"agn"`` : array (n_wave,) — AGN radio L_nu [erg/s/Hz]
         ``"total"`` : array (n_wave,) — sum of above [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function.
     """
     synchrotron = _dispatch_sfr(
         wavelength,

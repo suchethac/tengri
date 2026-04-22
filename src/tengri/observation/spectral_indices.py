@@ -51,6 +51,7 @@ class SpectralIndexDef:
         None for break indices.
     units : str
         ``"AA"`` for Angstrom (default) or ``"mag"`` for magnitude.
+
     """
 
     name: str
@@ -183,6 +184,7 @@ def measure_index_jax(
     -------
     jnp.ndarray, scalar
         Measured index value.
+
     """
     if index_def.index_type == "break":
         return _measure_break(wave_rest, flux, index_def)
@@ -243,6 +245,7 @@ class SpectralIndexData:
         Observed index values, shape ``(n_indices,)``.
     errors : jnp.ndarray
         1-sigma uncertainties, shape ``(n_indices,)``.
+
     """
 
     index_defs: tuple[SpectralIndexDef, ...]
@@ -301,6 +304,7 @@ class SpectralIndexData:
         Returns
         -------
         SpectralIndexData
+
         """
         defs = []
         for name in names:
@@ -327,6 +331,7 @@ class SpectralIndexData:
         -------
         jnp.ndarray, scalar
             Sum of ((obs - model) / error)^2.
+
         """
         residual = (self.values - model_values) / self.errors
         return jnp.sum(residual**2)
@@ -343,6 +348,7 @@ class SpectralIndexData:
         -------
         jnp.ndarray, scalar
             Total log-likelihood summed over all indices.
+
         """
         residual = (self.values - model_values) / self.errors
         return jnp.sum(-0.5 * residual**2 - jnp.log(self.errors) - 0.5 * jnp.log(2.0 * jnp.pi))

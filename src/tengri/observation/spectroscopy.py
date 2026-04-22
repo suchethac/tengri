@@ -21,13 +21,13 @@ class Spectroscopy:
     Parameters
     ----------
     wave_obs : jnp.ndarray
-        Observed-frame wavelength grid (Angstrom), shape ``(n_pix,)``.
+        Observed-frame wavelength grid [Angstrom], shape ``(n_pix,)``.
     resolution : float, jnp.ndarray, or None
         Spectral resolution ``R = lambda / delta_lambda``.
         Scalar for constant R, per-pixel array for wavelength-dependent,
         or None to skip LSF convolution. Default: None.
     sigma_lib_kms : float
-        SSP library velocity dispersion (km/s) to subtract in quadrature
+        SSP library velocity dispersion [km/s] to subtract in quadrature
         when applying the LSF. Default: 70.0 (MILES).
     lsf_n_bins : int
         Number of bins for piecewise constant approximation of
@@ -63,12 +63,31 @@ class Spectroscopy:
     eline_broad : bool
         Enable broad component for AGN candidate lines. Default: False.
     eline_broad_fwhm_min_kms : float
-        Minimum FWHM for the broad component in km/s. Default: 500.0.
+        Minimum FWHM for the broad component [km/s]. Default: 500.0.
     covariance : jnp.ndarray or None
         Full spectral covariance matrix, shape ``(n_pix, n_pix)``.
         When provided, the likelihood uses ``diff @ C^{-1} @ diff``
         instead of per-pixel ``sum((diff/sigma)^2)``. The inverse is
         precomputed at construction time.  Default: None (diagonal noise).
+
+    Notes
+    -----
+    A frozen dataclass that encapsulates spectroscopic instrument metadata,
+    including wavelength grid, resolution profile, calibration strategy,
+    and emission-line fitting configuration. Precomputes the inverse
+    covariance matrix at initialization for efficient likelihood evaluation.
+    Used by SEDModel to configure spectral prediction and by the inference
+    engine to set up calibration priors.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import Spectroscopy
+    >>> wave = jnp.linspace(4000.0, 9000.0, 500)
+    >>> spec = Spectroscopy(wave_obs=wave, resolution=1000.0)
+    >>> spec.n_pixels
+    500
+
     """
 
     wave_obs: jnp.ndarray = dataclasses.field(hash=False)
@@ -112,32 +131,75 @@ class Spectroscopy:
 
     @property
     def n_pixels(self) -> int:
-        """Number of spectral pixels."""
+        """Number of spectral pixels.
+
+        Returns
+        -------
+        int
+            Number of wavelength grid points.
+
+        """
         return len(self.wave_obs)
 
     @property
     def has_covariance(self) -> bool:
-        """Whether a full covariance matrix is configured."""
+        """Whether a full covariance matrix is configured.
+
+        Returns
+        -------
+        bool
+            True if covariance matrix is present.
+
+        """
         return self._cov_inv is not None
 
     @property
     def cov_inv(self) -> jnp.ndarray | None:
-        """Precomputed inverse covariance matrix, or None."""
+        """Precomputed inverse covariance matrix, or None.
+
+        Returns
+        -------
+        ndarray or None
+            Inverse covariance matrix, shape ``(n_pix, n_pix)``, or None
+            if diagonal noise is assumed.
+
+        """
         return self._cov_inv
 
     @property
     def has_lsf(self) -> bool:
-        """Whether LSF convolution is configured."""
+        """Whether LSF convolution is configured.
+
+        Returns
+        -------
+        bool
+            True if resolution profile is specified.
+
+        """
         return self.resolution is not None
 
     @property
     def has_calibration(self) -> bool:
-        """Whether a calibration polynomial is configured."""
+        """Whether a calibration polynomial is configured.
+
+        Returns
+        -------
+        bool
+            True if calibration order is > 0.
+
+        """
         return self.calibration_order > 0
 
     @property
     def has_eline_fitting(self) -> bool:
-        """True if emission lines are being fit (marginalized or fitted mode)."""
+        """True if emission lines are being fit (marginalized or fitted mode).
+
+        Returns
+        -------
+        bool
+            True if eline_mode is "marginalized" or "fitted".
+
+        """
         return self.eline_mode in ("marginalized", "fitted")
 
     @property
@@ -147,7 +209,13 @@ class Spectroscopy:
         Returns
         -------
         LineList
-            The active line catalog.
+            The active line catalog (either explicitly configured or default).
+
+        Notes
+        -----
+        Provides convenient fallback logic: if eline_catalog is None,
+        automatically returns the default 13-line catalog.
+
         """
         from tengri.observation.line_list import LineList
 
@@ -163,8 +231,15 @@ class Spectroscopy:
         Returns
         -------
         dict
-            Mapping ``cal_c1``, ..., ``cal_cN`` to ``Gaussian(0, 0.1)``
-            priors. Empty dict if ``calibration_order == 0``.
+            Mapping of calibration coefficient names (``cal_c1``, ..., ``cal_cN``)
+            to ``Gaussian(0, 0.1)`` priors. Empty dict if ``calibration_order == 0``.
+
+        Notes
+        -----
+        Called by Observation.get_all_params() to register observation-level
+        parameters with the inference engine. Each coefficient has a weak
+        Gaussian prior centered at unity (in log space: 0).
+
         """
         if self.calibration_order == 0:
             return {}
@@ -185,15 +260,26 @@ class Spectroscopy:
         Parameters
         ----------
         wave_obs : jnp.ndarray
-            Observed wavelength grid (Angstrom).
+            Observed wavelength grid [Angstrom].
         resolution : float, array, or None
             Spectral resolution R(lambda).
         sigma_lib_kms : float
-            SSP library resolution. Default: 70.0.
+            SSP library resolution [km/s]. Default: 70.0.
         calibration_order : int
             Chebyshev calibration order. Default: 0.
         **kwargs
             Passed to ``Spectroscopy``.
+
+        Returns
+        -------
+        Spectroscopy
+            Configured spectroscopy object.
+
+        Notes
+        -----
+        Internal helper used by instrument-specific factories (nirspec_prism,
+        nirspec_g140m, constant_r). Not intended for direct public use.
+
         """
         return Spectroscopy(
             wave_obs=jnp.asarray(wave_obs),
@@ -205,7 +291,27 @@ class Spectroscopy:
 
     @staticmethod
     def nirspec_prism(wave_obs: jnp.ndarray, **kwargs) -> Spectroscopy:
-        """JWST NIRSpec PRISM: variable R ~ 30-330 (Jakobsen+2022)."""
+        """JWST NIRSpec PRISM: variable R ~ 30-330 (Jakobsen+2022).
+
+        Parameters
+        ----------
+        wave_obs : jnp.ndarray
+            Observed-frame wavelength grid [Angstrom].
+        **kwargs
+            Additional arguments passed to Spectroscopy.
+
+        Returns
+        -------
+        Spectroscopy
+            Configured NIRSpec PRISM spectroscopy.
+
+        Notes
+        -----
+        Applies wavelength-dependent resolution appropriate for NIRSpec's
+        PRISM mode. Resolution varies from R~30 in the red to R~330 in
+        the blue (Jakobsen et al. 2022).
+
+        """
         from tengri.observation.spectrum import nirspec_prism_resolution
 
         wave_jax = jnp.asarray(wave_obs)
@@ -214,7 +320,27 @@ class Spectroscopy:
 
     @staticmethod
     def nirspec_g140m(wave_obs: jnp.ndarray, **kwargs) -> Spectroscopy:
-        """JWST NIRSpec G140M: roughly constant R ~ 1000."""
+        """JWST NIRSpec G140M: roughly constant R ~ 1000.
+
+        Parameters
+        ----------
+        wave_obs : jnp.ndarray
+            Observed-frame wavelength grid [Angstrom].
+        **kwargs
+            Additional arguments passed to Spectroscopy.
+
+        Returns
+        -------
+        Spectroscopy
+            Configured NIRSpec G140M spectroscopy.
+
+        Notes
+        -----
+        Applies wavelength-dependent resolution for NIRSpec's medium-resolution
+        G140M mode. Resolution is approximately constant at R~1000 across
+        the wavelength range.
+
+        """
         from tengri.observation.spectrum import nirspec_g140m_resolution
 
         wave_jax = jnp.asarray(wave_obs)
@@ -223,7 +349,29 @@ class Spectroscopy:
 
     @staticmethod
     def constant_r(wave_obs: jnp.ndarray, R: float, **kwargs) -> Spectroscopy:
-        """Constant-resolution spectrograph."""
+        """Constant-resolution spectrograph.
+
+        Parameters
+        ----------
+        wave_obs : jnp.ndarray
+            Observed-frame wavelength grid [Angstrom].
+        R : float
+            Spectral resolution (constant across all wavelengths).
+        **kwargs
+            Additional arguments passed to Spectroscopy.
+
+        Returns
+        -------
+        Spectroscopy
+            Configured spectrograph with constant resolution.
+
+        Notes
+        -----
+        Convenient factory for instruments with wavelength-independent
+        spectral resolution, such as low-resolution JWST NIRSpec PRISM
+        approximations or ideal spectrographs.
+
+        """
         return Spectroscopy._from_resolution(wave_obs, float(R), **kwargs)
 
     @classmethod
@@ -242,7 +390,7 @@ class Spectroscopy:
         Parameters
         ----------
         wave_obs : jnp.ndarray
-            Observed-frame wavelength grid (Angstrom).
+            Observed-frame wavelength grid [Angstrom].
         resolution : float
             Spectral resolution R = lambda/delta_lambda. Default: 2500 (DESI).
         **kwargs
@@ -251,7 +399,15 @@ class Spectroscopy:
         Returns
         -------
         Spectroscopy
-            Configured for DESI-like spectroscopic fitting.
+            Fully configured spectroscopy for DESI-like emission-line fitting.
+
+        Notes
+        -----
+        This configuration mirrors DESI's optical spectroscopy capabilities,
+        including marginalized emission line amplitudes with CLOUDY-based
+        priors and atomic physics constraints. Suitable for large spectroscopic
+        surveys of emission-line galaxies.
+
         """
         from tengri.observation.line_list import LineList
 
@@ -269,7 +425,20 @@ class Spectroscopy:
     # ── Summary ───────────────────────────────────────────────────
 
     def summary(self) -> str:
-        """Return a one-line summary of the spectroscopy configuration."""
+        """Return a one-line summary of the spectroscopy configuration.
+
+        Returns
+        -------
+        str
+            Comma-separated summary with pixel count, resolution, calibration
+            order, emission-line mode, and covariance info.
+
+        Notes
+        -----
+        Used for logging and diagnostics. Provides a compact, human-readable
+        representation of the instrument configuration.
+
+        """
         parts = [f"{self.n_pixels} pixels"]
         if self.has_lsf:
             if isinstance(self.resolution, (int, float)):
@@ -302,17 +471,24 @@ def apply_wavelength_mask(
     Parameters
     ----------
     noise : array, shape (n_pix,)
-        Per-pixel 1-sigma noise.
+        Per-pixel 1-sigma noise [flux units].
     wave_obs : array, shape (n_pix,)
-        Observed-frame wavelength grid (Angstrom).
+        Observed-frame wavelength grid [Angstrom].
     mask_ranges : list of (lo, hi)
-        Wavelength ranges to mask, in Angstrom. Each ``(lo, hi)`` pair
+        Wavelength ranges to mask [Angstrom]. Each ``(lo, hi)`` pair
         defines a region where ``lo <= wave <= hi`` is masked.
 
     Returns
     -------
     jnp.ndarray
         Copy of ``noise`` with masked pixels set to ``inf``.
+
+    Notes
+    -----
+    Immutable operation: returns a new array without modifying the input.
+    Masked pixels contribute zero to the likelihood due to infinite noise.
+    Useful for excluding sky emission lines, detector artifacts, or other
+    unreliable spectral regions from inference.
 
     Examples
     --------
@@ -323,6 +499,7 @@ def apply_wavelength_mask(
             wave_obs,
             mask_ranges=[(5560, 5590), (7580, 7680)],
         )
+
     """
     noise = jnp.array(noise)
     wave_obs = jnp.array(wave_obs)

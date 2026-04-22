@@ -113,7 +113,12 @@ def get_line_wavelengths(group: str | list[str]) -> jnp.ndarray:
     Returns
     -------
     jnp.ndarray
-        Rest-frame wavelengths [Angstrom] in catalog order.
+        Rest-frame vacuum wavelengths [Angstrom] in catalog order.
+
+    Notes
+    -----
+    Not JIT-compatible (uses Python control flow on input group).
+
     """
     if isinstance(group, str):
         names = LINE_GROUPS[group]
@@ -123,7 +128,24 @@ def get_line_wavelengths(group: str | list[str]) -> jnp.ndarray:
 
 
 def get_line_names(group: str) -> tuple[str, ...]:
-    """Return line names for a named group."""
+    """Return emission line names for a named group.
+
+    Parameters
+    ----------
+    group : str
+        Named line group (e.g. ``"bpt"``, ``"optical_narrow"``,
+        ``"uv_narrow"``).
+
+    Returns
+    -------
+    tuple[str, ...]
+        Line names in the group.
+
+    Notes
+    -----
+    Not JIT-compatible (uses Python control flow on input group).
+
+    """
     return tuple(LINE_GROUPS[group])
 
 

@@ -38,20 +38,59 @@ def sigmoid(x: jnp.ndarray, x0: float, k: float, ymin: float, ymax: float) -> jn
 
 @jax.jit
 def inverse_sigmoid(y: jnp.ndarray, x0: float, k: float, ymin: float, ymax: float) -> jnp.ndarray:
-    """Inverse of sigmoid: (ymin, ymax) -> R."""
+    """Inverse of the sigmoid transform: (ymin, ymax) -> R.
+
+    Parameters
+    ----------
+    y : array_like
+        Bounded input in (ymin, ymax).
+    x0 : float
+        Midpoint of the forward sigmoid.
+    k : float
+        Steepness of the forward sigmoid.
+    ymin, ymax : float
+        Bounds used in the forward sigmoid.
+
+    Returns
+    -------
+    ndarray
+        Unbounded output in R.
+    """
     lnarg = (ymax - ymin) / (y - ymin) - 1.0
     return x0 - jnp.log(lnarg) / k
 
 
 @jax.jit
 def softplus(x: jnp.ndarray) -> jnp.ndarray:
-    """Softplus: smooth approximation to max(0, x)."""
+    """Softplus: smooth approximation to max(0, x).
+
+    Parameters
+    ----------
+    x : array_like
+        Input.
+
+    Returns
+    -------
+    ndarray
+        log(1 + exp(x)).
+    """
     return jax.nn.softplus(x)
 
 
 @jax.jit
 def log_softplus(x: jnp.ndarray) -> jnp.ndarray:
-    """Log of softplus (numerically stable)."""
+    """Log of softplus, numerically stable.
+
+    Parameters
+    ----------
+    x : array_like
+        Input.
+
+    Returns
+    -------
+    ndarray
+        log(log(1 + exp(x))), computed as logaddexp(x, 0).
+    """
     return jnp.logaddexp(x, 0.0)
 
 
@@ -62,13 +101,38 @@ def to_bounded(u_param: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
     Centered at x0=0 so that u=0 maps to the midpoint of (lo, hi).
     With k=1.0, u in [-3, +3] covers ~95% of the bounded range,
     matching the scale of standard-normal latent variables.
+
+    Parameters
+    ----------
+    u_param : array_like
+        Unbounded input.
+    lo, hi : float
+        Lower and upper bounds of the target interval.
+
+    Returns
+    -------
+    ndarray
+        Bounded output in (lo, hi).
     """
     return sigmoid(u_param, 0.0, 1.0, lo, hi)
 
 
 @jax.jit
 def to_unbounded(param: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
-    """Map bounded parameter from (lo, hi) to R."""
+    """Map bounded parameter from (lo, hi) to R.
+
+    Parameters
+    ----------
+    param : array_like
+        Bounded input in (lo, hi).
+    lo, hi : float
+        Lower and upper bounds.
+
+    Returns
+    -------
+    ndarray
+        Unbounded output in R.
+    """
     return inverse_sigmoid(param, 0.0, 1.0, lo, hi)
 
 
@@ -115,6 +179,13 @@ def log_det_jacobian_to_unbounded(param: jnp.ndarray, lo: float, hi: float) -> j
     """Log determinant of Jacobian: d(unbounded)/d(bounded).
 
     This is the inverse Jacobian: du/dθ = 1 / (dθ/du)
+
+    Parameters
+    ----------
+    param : array_like
+        Bounded parameter in (lo, hi).
+    lo, hi : float
+        Bounds.
 
     Returns
     -------

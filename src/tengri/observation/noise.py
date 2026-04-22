@@ -42,6 +42,7 @@ Example::
         sfh_dpl_alpha=Uniform(0.5, 4.0),
         ...
     )
+
 """
 
 from __future__ import annotations
@@ -74,6 +75,7 @@ def compute_effective_noise(
     -------
     array, shape (n_bands,)
         Effective noise standard deviation.
+
     """
     cal_noise = f_cal * jnp.abs(model_flux)
     return jnp.sqrt(noise_obs**2 + cal_noise**2)
@@ -102,6 +104,7 @@ def compute_std_inv(
     -------
     array, shape (n_bands,)
         Inverse noise standard deviation τ = 1/σ_eff.
+
     """
     sigma_eff = compute_effective_noise(noise_obs, model_flux, f_cal)
     return 1.0 / sigma_eff
@@ -122,6 +125,7 @@ def has_noise_model(spec) -> bool:
     -------
     bool
         True if the noise model is active.
+
     """
     from tengri.parameters.priors import Fixed
 
@@ -148,6 +152,7 @@ def get_noise_dof(spec) -> float | None:
     -------
     float or None
         Degrees of freedom if noise_dof is set (Fixed or free), None otherwise.
+
     """
     from tengri.parameters.priors import Fixed
 
@@ -174,6 +179,7 @@ def uses_student_t(spec) -> bool:
     -------
     bool
         True if Student-t likelihood should be used.
+
     """
     if "noise_dof" not in spec.all_params:
         return False
@@ -234,6 +240,7 @@ def censored_log_likelihood(
     -------
     scalar
         Total energy (negative log-likelihood, up to additive constant).
+
     """
     sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
 
@@ -305,6 +312,7 @@ def variable_noise_hamiltonian(
     -------
     scalar
         Likelihood energy (negative log-likelihood up to constant).
+
     """
     sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
     r = (data - predicted) / sigma_eff
@@ -357,6 +365,7 @@ def variable_noise_metric_vec(
     -------
     array, shape (n_latent,)
         M @ v = J^T H_E J v + v.
+
     """
     xi_d = unflatten(xi)
     v_d = unflatten(v)

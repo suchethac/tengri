@@ -173,6 +173,28 @@ class Posterior:
 
         For MAP: computed on the single best-fit → dict of scalars.
         For NUTS/geoVI: computed on all samples → dict of arrays.
+
+        Returns
+        -------
+        dict
+            Keys: derived quantity names (``"stellar_mass"``, ``"sfr_100myr"``, etc.).
+            For MAP: values are scalars.
+            For sampling: values are arrays of shape (n_samples,).
+            Units match the forward model convention (stellar mass in [Msun],
+            SFR in [Msun/yr]).
+
+        Notes
+        -----
+        This is a cached property — computed on first access and cached thereafter.
+        Requires ``_model`` to be set (populated automatically by ``Fitter.run()``).
+        For stochastic SFH, unresolved bursts are included in ``sfr_10myr`` and
+        ``sfr_100myr`` outputs.
+
+        Examples
+        --------
+        >>> derived = result.derived
+        >>> stellar_masses = derived["stellar_mass"]  # Shape (n_samples,)
+        >>> med, lo, hi = np.percentile(stellar_masses, [50, 16, 84])
         """
         if self._model is None:
             raise RuntimeError("No model reference — cannot compute derived quantities")
@@ -207,14 +229,20 @@ class Posterior:
         -------
         dict
             ``{line_name: (median, lo_68, hi_68)}`` for each emission line.
-            Flux units match the input data. For MAP results, all three
+            Flux units match the input data [erg/s/cm²]. For MAP results, all three
             values are the same (single-point estimate).
 
         Raises
         ------
         ValueError
             If no emission line fluxes are available. Set
-            ``eline_mode="marginalized"`` in ``Spectroscopy`` to enable.
+            ``eline_mode="marginalized"`` or ``"fitted"`` in ``Spectroscopy`` to enable.
+
+        Notes
+        -----
+        Each line's credible interval is computed as the 16th, 50th, and 84th
+        percentiles of the posterior samples. For single samples (MAP), all three
+        values coincide.
 
         Examples
         --------
@@ -247,15 +275,22 @@ class Posterior:
 
         Returns
         -------
-        log_nii_ha : array (n_samples,) or scalar
-            log10([NII]6584 / Hα)
-        log_oiii_hb : array (n_samples,) or scalar
-            log10([OIII]5007 / Hβ)
+        log_nii_ha : ndarray, shape (n_samples,) or scalar
+            log10([NII]6584 / Hα). For MAP, returns scalar.
+        log_oiii_hb : ndarray, shape (n_samples,) or scalar
+            log10([OIII]5007 / Hβ). For MAP, returns scalar.
 
         Raises
         ------
         ValueError
             If emission line fluxes are not available or BPT lines are missing.
+
+        Notes
+        -----
+        The BPT diagram is a standard AGN/SF diagnostic that uses the ratios
+        [NII]/Hα (x-axis) and [OIII]/Hβ (y-axis). Non-detections (negative
+        or zero fluxes) are returned as NaN and will not be plotted.
+        Diagnostic lines follow Kewley et al. (2001, 2006) conventions.
 
         Examples
         --------
@@ -263,6 +298,7 @@ class Posterior:
 
             x, y = result.bpt_nii()
             plt.scatter(x, y, alpha=0.3)
+            # Overlay diagnostic lines from starburst/Seyfert boundaries
         """
         if self.eline_fluxes is None:
             raise ValueError("No emission line fluxes available.")
@@ -307,13 +343,20 @@ class Posterior:
         Returns
         -------
         tuple
-            ``(median, lo_68, hi_68)`` of Hα/Hβ. For MAP results,
-            all three values are equal.
+            ``(median, lo_68, hi_68)`` of Hα/Hβ (dimensionless ratio).
+            For MAP results, all three values are equal.
 
         Raises
         ------
         ValueError
             If Hα or Hβ fluxes are not available.
+
+        Notes
+        -----
+        The Balmer decrement (Hα/Hβ flux ratio) is insensitive to stellar
+        population age and metallicity; deviations from the intrinsic Case B
+        value of 2.86 (Osterbrock 1989) directly indicate dust attenuation.
+        A Balmer decrement > 3.0 typically indicates significant dust.
 
         Examples
         --------
@@ -349,17 +392,27 @@ class Posterior:
         """Rest-frame emission line equivalent widths.
 
         EW(λ) = F_line / f_cont(λ_line), where f_cont is the continuum
-        flux density at the line center.
+        flux density at the line center [erg/s/Hz].
 
         Returns
         -------
         dict
-            ``{line_name: (median_EW, lo_68, hi_68)}`` in Angstrom.
+            ``{line_name: (median_EW, lo_68, hi_68)}`` in [Angstrom].
 
         Notes
         -----
-        Requires ``_model`` to compute the continuum prediction.
+        Requires ``_model`` to compute the continuum prediction at each
+        emission line's rest-frame wavelength for each posterior sample.
         Not yet implemented — raises ``NotImplementedError``.
+        When implemented, will return 68% credible intervals via percentile
+        computation over posterior samples.
+
+        Examples
+        --------
+        ::
+
+            ew = result.equivalent_widths()  # Not yet available
+            # Expected: ew["Halpha"] = (median_ew, lo, hi) in Angstrom
         """
         raise NotImplementedError(
             "equivalent_widths() not yet implemented. "
@@ -374,8 +427,23 @@ class Posterior:
         Returns
         -------
         dict
-            Keys: parameter names.
-            Values: dict with "median", "lo_68", "hi_68" (or just "value" for MAP).
+            Keys: parameter names (excluding ``"psd_xi"`` latent field).
+            Values: dict with ``"median"``, ``"lo_68"``, ``"hi_68"``
+            for sampling methods, or ``"value"`` for MAP.
+
+        Notes
+        -----
+        For MCMC and VI results, credible intervals are 16th and 84th percentiles.
+        For MAP results, returns point estimates without intervals.
+        Does not include high-dimensional latent fields (``psd_xi``).
+
+        Examples
+        --------
+        >>> stats = result.stats()
+        >>> print(stats["stellar_mass"])
+        {"median": 10.5, "lo_68": 10.3, "hi_68": 10.7}  # sampling
+        # or
+        {"value": 10.5}  # MAP
         """
         result = {}
 
@@ -400,7 +468,6 @@ class Posterior:
 
         return result
 
-
     def summary_table(self) -> str:
         """Return a formatted string table of parameter summaries.
 
@@ -410,7 +477,27 @@ class Posterior:
         Returns
         -------
         str
-            Formatted table string.
+            Formatted table string with method, sample count, wall time,
+            parameter statistics, and diagnostics.
+
+        Notes
+        -----
+        The table includes:
+        - Method name and number of samples (or ``"MAP"``)
+        - Wall-clock time in seconds
+        - Parameter names with median and credible intervals
+        - Effective sample size (ESS) for sampling methods
+        - Method-specific diagnostics (accept rate, divergences, loss, etc.)
+        - Log evidence (if available from nested sampling)
+
+        Examples
+        --------
+        >>> print(result.summary_table())
+        Posterior  method: mcmc_nuts  samples: 1000  wall_time: 5.2s
+        ─────────────────────────────────────────────────────────────
+          Parameter                   Median        16%        84%     ESS
+          ─────────────────────────────────────────────────────────────
+          ...
         """
         sep = "─" * 66
         lines: list[str] = []
@@ -512,7 +599,20 @@ class Posterior:
         -------
         dict
             Keys: parameter names.
-            Values: 1D array of autocorrelation from lag 0 to max_lag.
+            Values: ndarray of autocorrelation from lag 0 to max_lag.
+            ACF[0] = 1.0 by definition.
+
+        Notes
+        -----
+        Uses FFT for O(N log N) efficiency instead of naive O(N * max_lag).
+        Normalized so that ACF[0] = 1 and ACF[k] ∈ [-1, 1].
+        Parameters with zero variance (fixed parameters) return zero ACF.
+
+        Examples
+        --------
+        >>> acf = result.autocorrelation()
+        >>> lag_cutoff = np.argmax(acf["stellar_mass"] < 0.05)
+        >>> print(f"ACF drops below 0.05 at lag {lag_cutoff}")
         """
         if self.samples is None:
             raise ValueError("Autocorrelation requires samples (not MAP)")
@@ -537,6 +637,22 @@ class Posterior:
         -------
         dict
             Keys: parameter names. Values: ESS (float).
+            ESS = N / τ, where N is the total number of samples
+            and τ is the integrated autocorrelation time.
+
+        Notes
+        -----
+        ESS measures the number of independent samples. Low ESS
+        (< 100 for typical analyses) indicates poor mixing.
+        The threshold N > 5τ (equivalently ESS > N/5) indicates
+        adequate sampling for most purposes.
+
+        Examples
+        --------
+        >>> ess = result.effective_sample_size()
+        >>> print(f"Stellar mass ESS: {ess['stellar_mass']:.0f}")
+        >>> if ess["stellar_mass"] < 100:
+        ...     print("Warning: low ESS, may need more samples")
         """
         if self.samples is None:
             raise ValueError("ESS requires samples (not MAP)")
@@ -556,8 +672,27 @@ class Posterior:
         -------
         dict
             Keys: parameter names.
-            Values: dict with 'tau_standard', 'tau_absolute', 'tau_max',
-            'ess', 'chain_converged'.
+            Values: dict with ``'tau_standard'``, ``'tau_absolute'``, ``'tau_max'``
+            (integrated autocorrelation time), ``'ess'`` (effective sample size),
+            ``'chain_converged'`` (bool, True if N > 5τ_max).
+
+        Notes
+        -----
+        Two autocorrelation time estimates are computed:
+        - tau_standard: based on standard ACF
+        - tau_absolute: based on absolute-deviation ACF (robust to mean/variance changes)
+        The maximum is returned (conservative). ESS = N / tau_max.
+        Convergence flag uses the criterion N > 5τ_max from Behroozi (2025).
+
+        Examples
+        --------
+        >>> tau_dict = result.autocorrelation_time()
+        >>> for param, info in tau_dict.items():
+        ...     converged = info["chain_converged"]
+        ...     print(
+        ...         f"{param}: tau_max={info['tau_max']:.1f}, "
+        ...         f"ESS={info['ess']:.0f}, converged={converged}"
+        ...     )
         """
         if self.samples is None:
             raise ValueError("Autocorrelation time requires samples (not MAP)")
@@ -580,7 +715,23 @@ class Posterior:
         Returns
         -------
         dict
-            Keys: 'all_converged', 'params', 'warnings'.
+            Keys: ``'all_converged'`` (bool), ``'params'`` (dict per-parameter
+            convergence info), ``'warnings'`` (list of unconverged parameters).
+
+        Notes
+        -----
+        Convergence criterion: N > 5τ_max for all parameters.
+        If N < 5τ for any parameter, the chain is flagged as unconverged.
+        See Behroozi (2025) for justification of the 5τ threshold.
+
+        Examples
+        --------
+        >>> conv = result.check_convergence()
+        >>> if conv["all_converged"]:
+        ...     print("Chain converged!")
+        ... else:
+        ...     print(f"Unconverged: {conv['warnings']}")
+        ...     print("Run additional samples and use refine()")
         """
         if self.samples is None:
             raise ValueError("Convergence check requires samples (not MAP)")
@@ -593,7 +744,31 @@ class Posterior:
         )
 
     def diagnostics_summary(self) -> str:
-        """Print a diagnostics summary including ESS and R-hat proxy."""
+        """Print a diagnostics summary including ESS and R-hat proxy.
+
+        Returns
+        -------
+        str
+            Formatted table of per-parameter ESS and credible intervals.
+
+        Notes
+        -----
+        For MAP results, returns a simple string indicating no samples are available.
+        For sampling methods, tabulates ESS for each parameter alongside median
+        and 68% credible intervals.
+
+        Examples
+        --------
+        >>> print(result.diagnostics_summary())
+        Method: mcmc_nuts
+        Samples: 1000
+        Wall time: 5.2s
+
+        Parameter                  Median           68% CI          ESS
+        ────────────────────────────────────────────────────────────────
+        stellar_mass               10.500  [10.300, 10.700]        800
+        ...
+        """
         if self.samples is None:
             return f"MAP result (no samples): method={self.method}"
 
@@ -625,7 +800,7 @@ class Posterior:
         Parameters
         ----------
         key : PRNGKey
-            Random key.
+            JAX random key.
         n : int
             Number of resamples.
 
@@ -634,6 +809,20 @@ class Posterior:
         dict
             If n=1: parameter name → scalar value.
             If n>1: parameter name → array of shape (n, ...).
+
+        Notes
+        -----
+        For MAP results, returns the point estimate (repeated n times if n > 1).
+        For sampling results, draws n indices uniformly from [0, n_samples) with
+        replacement. Use for Monte Carlo propagation of posterior uncertainty
+        through forward models.
+
+        Examples
+        --------
+        >>> key = jax.random.PRNGKey(0)
+        >>> sample = result.resample(key, n=1)  # Single draw
+        >>> samples = result.resample(key, n=100)  # 100 resamples
+        >>> sfhs = [model.predict_sfh(samples) for ...]  # Propagate
         """
         if self.samples is None:
             # MAP: just return the point estimate
@@ -661,6 +850,22 @@ class Posterior:
         Returns
         -------
         Parameters
+            New Parameters object with priors fit to the posterior.
+
+        Notes
+        -----
+        For MAP results, all parameters become ``Fixed`` at the MAP value.
+        For sampling methods, each parameter gets a ``Gaussian`` prior with:
+        - mean: median of samples
+        - sigma: standard deviation of samples
+        - bounds: [min, max] from samples (clipping)
+        Inherits ``stochastic`` and ``n_grid`` settings from the original model.
+
+        Examples
+        --------
+        >>> posterior_params = result.to_param_spec()
+        >>> # Use as starting point for next fit
+        >>> refined = fitter.run("mcmc_nuts", init_from=posterior_params)
         """
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed, Gaussian
@@ -700,6 +905,22 @@ class Posterior:
         Returns
         -------
         az.InferenceData
+            ArviZ InferenceData object with posterior group containing
+            all scalar parameters.
+
+        Notes
+        -----
+        Requires arviz to be installed: ``pip install arviz``.
+        High-dimensional latent fields (``psd_xi``) are excluded.
+        Samples are reshaped to (1, n_samples) format (1 chain).
+        Use ArviZ tools for advanced visualization and diagnostics
+        (forest plots, rank plots, etc.).
+
+        Examples
+        --------
+        >>> idata = result.to_arviz()
+        >>> az.plot_forest(idata)
+        >>> az.summary(idata)
         """
         try:
             import arviz as az
@@ -733,6 +954,25 @@ class Posterior:
         ----------
         path : str
             Output HDF5 file path.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        Saves to HDF5 format with groups:
+        - ``samples``: posterior samples (if available)
+        - ``params``: best-fit or MAP parameters
+        - ``loss_history``: optimization loss over iterations (if available)
+        - ``diagnostics``: method-specific convergence metrics
+        - ``eline``: emission line fluxes, covariances, names, wavelengths
+        Use ``load()`` to restore the Posterior from disk.
+
+        Examples
+        --------
+        >>> result.save("posterior_result.h5")
+        >>> later_result = Posterior.load("posterior_result.h5")
         """
         import h5py
 
@@ -798,12 +1038,27 @@ class Posterior:
         ----------
         path : str
             Path to HDF5 file saved by :meth:`save`.
-        model : Model, optional
+        model : SEDModel, optional
             Model reference for derived quantity computation.
+            If provided, enables ``derived``, ``plot_sed()``, ``plot_sfh()``.
 
         Returns
         -------
         Posterior
+            Loaded posterior with all attributes restored.
+
+        Notes
+        -----
+        Reads HDF5 file saved by ``save()``. The ``_fitter`` back-reference
+        is not restored (it is runtime-only). To use ``refine()`` or ``validate()``,
+        set the ``_fitter`` attribute manually or reload using ``model.fit(...)``.
+        Provide ``model`` to enable derived quantity computation.
+
+        Examples
+        --------
+        >>> result = Posterior.load("posterior_result.h5", model=model)
+        >>> print(result.summary_table())
+        >>> derived = result.derived  # If model is provided
         """
         import h5py
 
@@ -892,20 +1147,37 @@ class Posterior:
         ----------
         params : list of str, optional
             Parameter names to include. Defaults to all scalar physical params.
+            Automatically excludes ``psd_xi`` (latent field) and constant parameters.
         truths : dict, optional
-            True values to mark with dashed lines.
+            True values to mark with dashed lines. Keys should match parameter names.
         figsize : tuple, optional
-            Figure size.
+            Figure size (width, height). Default: auto-scaled.
         color : str
             Color for this posterior's contours and histograms.
         fig, axes : matplotlib Figure, ndarray of Axes, optional
             If provided, overlay on existing corner plot (for comparing posteriors).
         label : str, optional
-            Legend label for this posterior.
+            Legend label for this posterior (appears in legend on diagonal).
 
         Returns
         -------
         fig : matplotlib Figure
+            The corner plot figure.
+
+        Notes
+        -----
+        Creates an N×N triangle plot (lower triangle only). Diagonal shows
+        1D marginal distributions with KDE overlay and quantile lines.
+        Off-diagonal shows 2D histograms with credible region contours at
+        68% and 95%. Includes derived quantities (stellar_mass, sfr_100myr,
+        sfr_10myr) if ``_model`` is available. Derived quantities are
+        plotted in log10 space.
+
+        Examples
+        --------
+        >>> fig = result.plot_corner(color="C0", label="VI")
+        >>> fig = result_mcmc.plot_corner(fig=fig, axes=fig.axes, color="C1", label="MCMC")
+        >>> plt.show()
         """
         import matplotlib.pyplot as plt
 
@@ -1122,13 +1394,28 @@ class Posterior:
             Number of posterior draws to use for the band. Ignored for
             MAP results (plots single SED).
         wave_range : (float, float)
-            Wavelength range in Angstrom to display.
+            Wavelength range in [Angstrom] to display.
         ax : matplotlib Axes, optional
             Axes to plot on. Creates new figure if None.
 
         Returns
         -------
         fig : matplotlib Figure
+            The SED plot figure.
+
+        Notes
+        -----
+        Plots λ F_λ (rest-frame spectral energy density) normalized at 5500 Å.
+        For MAP results, shows the single best-fit SED.
+        For sampling methods, draws n_draws random samples and computes
+        percentiles of the SED over those draws.
+        Requires ``_model`` to be available (set by ``model.fit()``).
+        Uses log-log axes for visibility across wavelength range.
+
+        Examples
+        --------
+        >>> fig = result.plot_sed(n_draws=500, wave_range=(1000, 10000))
+        >>> plt.show()
         """
         import matplotlib.pyplot as plt
 
@@ -1212,6 +1499,22 @@ class Posterior:
         Returns
         -------
         fig : matplotlib Figure
+            The SFH plot figure.
+
+        Notes
+        -----
+        Plots both the stochastic SFH (burst component) and smooth component.
+        For MAP: shows single best-fit SFH (both stochastic and smooth).
+        For sampling: draws n_draws random samples and computes 16th–84th
+        percentile bands.
+        X-axis: lookback time [Gyr].
+        Y-axis: SFR [Msun/yr].
+        Requires ``_model`` to be available (set by ``model.fit()``).
+
+        Examples
+        --------
+        >>> fig = result.plot_sfh(n_draws=500)
+        >>> plt.show()
         """
         import matplotlib.pyplot as plt
 
@@ -1314,6 +1617,13 @@ class Posterior:
         RuntimeError
             If ``._fitter`` is not set (Posterior created outside model.fit/fitter.run).
 
+        Notes
+        -----
+        Warm-starts the new inference from this posterior's parameters or samples.
+        Common use cases: VI → MCMC refinement (exact inference on top of variational
+        fit), MCMC → different sampler (e.g. raytrace → nuts), or quick method
+        → expensive method for publication.
+
         Examples
         --------
         >>> result_vi = model.fit(flux, noise)
@@ -1345,14 +1655,32 @@ class Posterior:
         Returns
         -------
         dict
-            Keys: ``"mcmc_result"`` (Posterior), ``"overlap"`` (dict of
-            float per parameter, 1.0 = perfect overlap), ``"passed"``
-            (bool, True when all overlaps > 0.5).
+            Keys: ``"mcmc_result"`` (Posterior from MCMC check),
+            ``"overlap"`` (dict of float per parameter, 1.0 = perfect overlap,
+            0.0 = no overlap), ``"passed"`` (bool, True when all overlaps > 0.5).
 
         Raises
         ------
         RuntimeError
             If ``._fitter`` is not set.
+
+        Notes
+        -----
+        Validation checks whether a quick MCMC run agrees with the current
+        posterior (typically from VI or MAP). High overlap (> 0.5) indicates
+        the method is reliable; low overlap suggests the posterior may be
+        biased or misspecified.
+        Overlap is computed as the histogram intersection at each parameter.
+        For sampling methods (VI, geoVI), validates the approximate posterior.
+        For MCMC methods, serves as a sanity check for chain convergence.
+
+        Examples
+        --------
+        >>> result_vi = model.fit(flux, noise, method="vi")
+        >>> val = result_vi.validate(n_steps=500)
+        >>> print(f"Validation passed: {val['passed']}")
+        >>> for param, ov in val["overlap"].items():
+        ...     print(f"{param}: overlap={ov:.3f}")
         """
         if self._fitter is None:
             raise RuntimeError(

@@ -142,6 +142,7 @@ References
 - Gutkin, Charlot & Bruzual 2016, MNRAS, 462, 1757 (BEAGLE HII grids)
 - Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
 - Lovell et al. 2025, MNRAS (Synthesizer; arXiv:2004.07283)
+
 """
 
 from __future__ import annotations
@@ -282,6 +283,7 @@ def load_cb19_grid(
         to build it.
     KeyError
         If the requested (sed_type, imf, mup) combination is not in the file.
+
     """
     filepath = Path(filepath)
     if not filepath.exists():
@@ -382,6 +384,7 @@ def _interp_6d(
     -------
     array, shape (N_lines,)
         Interpolated log10(ratio) at the query point.
+
     """
     coords = [_frac_idx(v, g) for v, g in zip(vals, grids)]
 
@@ -470,6 +473,7 @@ class CB19Backend:
     ssp_data : SSPData, optional
         SSP templates used to precompute Q_H(Z, age) table. If None, Q_H must
         be provided externally via ``_qh_table``.
+
     """
 
     name = "cb19_grid"
@@ -611,6 +615,7 @@ class CB19Backend:
             Rest-frame vacuum wavelengths in Angstrom.
         luminosities : array, shape (n_lines,)
             Emission line luminosities in Lsun.
+
         """
         if neb_logZ_gas is None:
             neb_logZ_gas = log_z
@@ -685,6 +690,7 @@ class CB19Backend:
         wavelength : array, shape (1,)
         luminosity : array, shape (1,)
             Both are zeros (no continuum from CB_19).
+
         """
         return jnp.array([5000.0]), jnp.array([0.0])
 
@@ -736,6 +742,7 @@ class CB19Backend:
         -------
         array, shape (n_wave,)
             Nebular emission SED in erg/s/Hz on the SSP wavelength grid.
+
         """
         line_wave, line_lum = self.predict_nebular_line_luminosities(
             ssp_weights,

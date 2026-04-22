@@ -27,6 +27,21 @@ class Photometry:
         Filter transmission curves.
     names : tuple of str
         Human-readable filter names (e.g. ``("sdss_r", "sdss_i")``).
+
+    Notes
+    -----
+    A frozen dataclass that encapsulates filter metadata and transmission
+    curves. Provides factory methods (from_names, from_filter_set) for
+    convenient construction. Precomputes derived fields (filter_waves,
+    filter_trans, n_filters) at initialization for efficient SED projection.
+
+    Examples
+    --------
+    >>> from tengri import Photometry
+    >>> phot = Photometry.from_names(["sdss_r", "sdss_i"])
+    >>> phot.n_filters
+    2
+
     """
 
     filters: tuple[FilterCurve, ...] = dataclasses.field(hash=False)
@@ -75,18 +90,25 @@ class Photometry:
             Short names from ``FILTER_REGISTRY`` (e.g. ``"sdss_r"``,
             ``"jwst_f200w"``).
         cache_dir : str
-            Directory for cached SVO filter files.
+            Directory for cached SVO filter files. Default: ``"data/filters"``.
 
         Returns
         -------
         Photometry
             Configured photometry with loaded filters.
 
+        Notes
+        -----
+        Loads filter transmission curves from the SVO filter service or
+        local cache. Filter names are validated against the registry;
+        unrecognized names raise an error.
+
         Examples
         --------
         >>> phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r"])
         >>> phot.n_filters
         3
+
         """
         from tengri.observation.filters import load_filter_set
 
@@ -108,14 +130,26 @@ class Photometry:
 
         Parameters
         ----------
-        filter_set
+        filter_set : tuple or list
             Either a 3-tuple ``(filter_waves, filter_trans, filter_curves)``
             from ``load_filter_set()``, or a list/tuple of ``FilterCurve``.
 
         Returns
         -------
         Photometry
-            Configured photometry.
+            Configured photometry with precomputed fields.
+
+        Notes
+        -----
+        Flexible constructor that accepts pre-loaded filter data. Useful
+        when filters are already loaded or constructed by external code.
+
+        Examples
+        --------
+        >>> from tengri.observation.filters import load_filter_set
+        >>> waves, trans, curves = load_filter_set(["sdss_r", "sdss_i"])
+        >>> phot = Photometry.from_filter_set((waves, trans, curves))
+
         """
         if isinstance(filter_set, (list, tuple)):
             # 3-tuple from load_filter_set()
@@ -137,5 +171,16 @@ class Photometry:
         )
 
     def summary(self) -> str:
-        """Return a one-line summary of the photometry configuration."""
+        """Return a one-line summary of the photometry configuration.
+
+        Returns
+        -------
+        str
+            Filter count and comma-separated filter names.
+
+        Notes
+        -----
+        Provides concise string representation for logging and diagnostics.
+
+        """
         return f"{self.n_filters} filters: {', '.join(self.names)}"

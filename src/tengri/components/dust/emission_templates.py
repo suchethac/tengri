@@ -61,7 +61,7 @@ DUST_EMISSION_MODELS: dict[str, Callable] = {}
 
 
 def create_dl07_from_grid(grid_path: str) -> Callable:
-    """Create a DL07 emission model function backed by tabulated templates.
+    r"""Create a DL07 emission model function backed by tabulated templates.
 
     Loads the HDF5 grid once and returns a function matching the emission
     model registry interface. Use this instead of the analytic approximation
@@ -77,6 +77,10 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
     Callable
         Model function with signature
         ``(wavelength_aa, L_absorbed, **params) -> L_nu``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations inside the returned function are ``jnp`` primitives.
 
     Example
     -------
@@ -156,7 +160,7 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
 
 
 def load_draine_li_templates(filepath: str) -> dict:
-    """Load DL07 template grid from HDF5 or NPZ.
+    r"""Load DL07 template grid from HDF5 or NPZ.
 
     Supports two formats:
     - HDF5 with keys: wavelength, umin_grid, qpah_grid, single_u, powerlaw
@@ -177,6 +181,11 @@ def load_draine_li_templates(filepath: str) -> dict:
     dict with keys: wavelength, umin_grid, qpah_grid, single_u, powerlaw
         All arrays are JAX arrays. single_u and powerlaw have shape
         (n_qpah, n_umin, n_wave).
+
+    Notes
+    -----
+    **JIT-compatible**: no — file I/O operations not supported in JIT.
+    Call at factory/init time before JIT compilation.
     """
     import numpy as np
 
@@ -247,7 +256,7 @@ def load_draine_li_templates(filepath: str) -> dict:
 
 
 def create_dl14_from_grid(grid_path: str) -> Callable:
-    """Create a DL14 emission model function backed by tabulated templates.
+    r"""Create a DL14 emission model function backed by tabulated templates.
 
     Loads the HDF5 grid once and returns a function matching the emission
     model registry interface. The key difference from DL07: the powerlaw
@@ -264,6 +273,10 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
     Callable
         Model function with signature
         ``(wavelength_aa, L_absorbed, **params) -> L_nu``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations inside the returned function are ``jnp`` primitives.
 
     Example
     -------
@@ -329,6 +342,7 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
         # Trilinear interpolation for powerlaw (q_PAH, U_min, alpha)
         def _trilinear(grid):
             """Perform 3D linear interpolation over qpah, Umin, and alpha axes."""
+
             # Interpolate at alpha[i_a] and alpha[i_a+1] via bilinear in (q, u)
             def _bilinear_at_alpha(ia_idx):
                 """Interpolate bilinearly at fixed alpha index."""
@@ -365,9 +379,23 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
 
 
 def load_dl14_templates(filepath: str) -> dict:
-    """Load DL14 template grid from HDF5 file.
+    r"""Load DL14 template grid from HDF5 file.
 
     Must contain keys: wavelength, umin_grid, qpah_grid, alpha_grid, single_u, powerlaw.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to HDF5 template file.
+
+    Returns
+    -------
+    dict
+        Loaded and JAX-wrapped template arrays.
+
+    Notes
+    -----
+    **JIT-compatible**: no — file I/O operations not supported in JIT.
     """
     import h5py as _h5py
     import numpy as _np_dl14
@@ -417,7 +445,7 @@ def load_dl14_templates(filepath: str) -> dict:
 
 
 def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> None:
-    """Load and register the tabulated DL14 model in the emission registry.
+    r"""Load and register the tabulated DL14 model in the emission registry.
 
     After calling this, the model is available via
     ``resolve_emission_model("dl14_tabulated")`` and can be used as the
@@ -428,7 +456,11 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
     grid_path : str
         Path to ``dl14_templates.h5``.
     name : str
-        Registry name. Default ``"dl14_tabulated"``.
+        Registry name. Default: "dl14_tabulated".
+
+    Notes
+    -----
+    **JIT-compatible**: no — registration happens at factory time before JIT.
     """
     from . import emission
 
@@ -440,7 +472,7 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
 
 
 def create_dale2014_from_grid(grid_path: str) -> Callable:
-    """Create a Dale+2014 emission model backed by tabulated templates.
+    r"""Create a Dale+2014 emission model backed by tabulated templates.
 
     Loads the NPZ grid once and returns a function matching the emission
     model registry interface.  The NPZ file must contain:
@@ -465,6 +497,10 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
     Callable
         Model function with signature
         ``(wavelength_aa, L_absorbed, dust_alpha_dale=2.0, **kw) -> L_nu``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations inside the returned function are ``jnp`` primitives.
 
     Example
     -------
@@ -554,7 +590,22 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
 
 
 def load_dale2014_templates(filepath: str) -> dict:
-    """Load Dale+2014 template grid from HDF5."""
+    r"""Load Dale+2014 template grid from HDF5.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to HDF5 template file.
+
+    Returns
+    -------
+    dict
+        Loaded and JAX-wrapped template arrays.
+
+    Notes
+    -----
+    **JIT-compatible**: no — file I/O operations not supported in JIT.
+    """
     import h5py as _h5py
     import numpy as np
 
@@ -575,7 +626,7 @@ def load_dale2014_templates(filepath: str) -> dict:
 
 
 def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated") -> None:
-    """Load and register the tabulated Dale+2014 model in the emission registry.
+    r"""Load and register the tabulated Dale+2014 model in the emission registry.
 
     After calling this, the model is available via
     ``resolve_emission_model("dale2014_tabulated")`` and can be used as the
@@ -586,7 +637,11 @@ def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated"
     grid_path : str
         Path to ``dale2014_templates_v2.h5`` or ``dale2014_templates.h5``.
     name : str
-        Registry name. Default ``"dale2014_tabulated"``.
+        Registry name. Default: "dale2014_tabulated".
+
+    Notes
+    -----
+    **JIT-compatible**: no — registration happens at factory time before JIT.
     """
     from . import emission
 
@@ -595,7 +650,7 @@ def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated"
 
 
 def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> None:
-    """Load and register the tabulated DL07 model in the emission registry.
+    r"""Load and register the tabulated DL07 model in the emission registry.
 
     After calling this, the model is available via
     ``resolve_emission_model("dl07_tabulated")`` and can be used as the
@@ -606,7 +661,11 @@ def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> Non
     grid_path : str
         Path to ``dl07_templates_v2.h5`` or ``dl07_templates.h5``.
     name : str
-        Registry name. Default ``"dl07_tabulated"``.
+        Registry name. Default: "dl07_tabulated".
+
+    Notes
+    -----
+    **JIT-compatible**: no — registration happens at factory time before JIT.
     """
     from . import emission
 
@@ -618,7 +677,7 @@ def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> Non
 
 
 def load_astrodust_templates(filepath: str) -> dict:
-    """Load Astrodust+PAH template grid from NPZ or HDF5.
+    r"""Load Astrodust+PAH template grid from NPZ or HDF5.
 
     The template file must contain:
 
@@ -641,6 +700,10 @@ def load_astrodust_templates(filepath: str) -> dict:
         from microns).  single_u and powerlaw have shape
         (n_qpah, n_umin, n_wave) and are normalized so each template
         integrates to 1 over frequency in L_nu convention.
+
+    Notes
+    -----
+    **JIT-compatible**: no — file I/O operations not supported in JIT.
     """
     import numpy as np
 
@@ -709,7 +772,7 @@ def load_astrodust_templates(filepath: str) -> dict:
 
 
 def _normalize_dl07_like_grid(raw: dict, q_key: str = "qpah_grid") -> dict:
-    """Convert a raw DL07-like grid dict to the processed format.
+    r"""Convert a raw DL07-like grid dict to the processed format.
 
     Raw grids have keys ``spectra_single``, ``spectra_pdr``, and
     ``wavelength_um``; the processed format uses ``single_u``,
@@ -729,6 +792,10 @@ def _normalize_dl07_like_grid(raw: dict, q_key: str = "qpah_grid") -> dict:
     dict
         Processed grid with wavelength_aa, single_u, powerlaw, umin_grid,
         and the composition grid key.
+
+    Notes
+    -----
+    **JIT-compatible**: no — this is a preprocessing step before JIT.
     """
     import numpy as np
 
@@ -764,7 +831,7 @@ def _normalize_dl07_like_grid(raw: dict, q_key: str = "qpah_grid") -> dict:
 
 # Normalize BOSA grid helper
 def _normalize_bosa_grid(raw: dict) -> dict:
-    """Convert a raw BOSA grid dict to the processed format.
+    r"""Convert a raw BOSA grid dict to the processed format.
 
     Raw grids have ``wavelength_um`` and ``spectra``; the processed
     format uses ``wavelength_aa`` (Angstrom) with L_nu-normalized spectra.
@@ -779,6 +846,10 @@ def _normalize_bosa_grid(raw: dict) -> dict:
     -------
     dict
         Processed grid with wavelength_aa and L_nu-normalized spectra.
+
+    Notes
+    -----
+    **JIT-compatible**: no — this is a preprocessing step before JIT.
     """
     import numpy as np
 
@@ -812,7 +883,7 @@ def _normalize_bosa_grid(raw: dict) -> dict:
 def create_astrodust_from_grid(
     template_data: dict | str,
 ) -> Callable:
-    """Create Astrodust+PAH emission function from pre-loaded template grid.
+    r"""Create Astrodust+PAH emission function from pre-loaded template grid.
 
     The mixing formula is identical to DL07::
 
@@ -830,6 +901,10 @@ def create_astrodust_from_grid(
     Callable
         Model function with signature
         ``(wavelength_aa, L_absorbed, **params) -> L_nu``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations inside the returned function are ``jnp`` primitives.
 
     References
     ----------
@@ -934,14 +1009,18 @@ def create_astrodust_from_grid(
 
 
 def register_astrodust_tabulated(grid_path: str, name: str = "astrodust_tabulated") -> None:
-    """Load and register the tabulated Astrodust model.
+    r"""Load and register the tabulated Astrodust model.
 
     Parameters
     ----------
     grid_path : str
         Path to ``astrodust_templates_v2.h5`` or ``astrodust_templates.h5``.
     name : str
-        Registry name.  Default ``"astrodust_tabulated"``.
+        Registry name. Default: "astrodust_tabulated".
+
+    Notes
+    -----
+    **JIT-compatible**: no — registration happens at factory time before JIT.
     """
     from . import emission
 
@@ -953,7 +1032,7 @@ def register_astrodust_tabulated(grid_path: str, name: str = "astrodust_tabulate
 
 
 def load_bosa_templates(filepath: str) -> dict:
-    """Load BOSA template grid from HDF5.
+    r"""Load BOSA template grid from HDF5.
 
     The template file must contain:
 
@@ -974,6 +1053,10 @@ def load_bosa_templates(filepath: str) -> dict:
         All arrays are JAX arrays.  wavelength_aa is in Angstrom.
         spectra have shape (n_ltir, n_ssfr, n_wave) and are normalized
         so each template integrates to 1 over frequency in L_nu convention.
+
+    Notes
+    -----
+    **JIT-compatible**: no — file I/O operations not supported in JIT.
     """
     import numpy as np
 
@@ -1035,7 +1118,7 @@ def load_bosa_templates(filepath: str) -> dict:
 
 # Create BOSA and register
 def create_bosa_from_grid(template_data: dict | str) -> Callable:
-    """Create BOSA emission function from pre-loaded template grid.
+    r"""Create BOSA emission function from pre-loaded template grid.
 
     The BOSA model (Boquien & Salim 2021) parameterizes dust emission
     templates by (L_TIR, sSFR) instead of radiation field parameters.
@@ -1056,6 +1139,10 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
     Callable
         Model function with signature
         ``(wavelength_aa, L_absorbed, **params) -> L_nu``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations inside the returned function are ``jnp`` primitives.
 
     References
     ----------
@@ -1149,14 +1236,18 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
 
 
 def register_bosa_tabulated(grid_path: str, name: str = "bosa_tabulated") -> None:
-    """Load and register the tabulated BOSA model.
+    r"""Load and register the tabulated BOSA model.
 
     Parameters
     ----------
     grid_path : str
         Path to ``bosa_templates_v2.h5`` or ``bosa_templates.h5``.
     name : str
-        Registry name.  Default ``"bosa_tabulated"``.
+        Registry name. Default: "bosa_tabulated".
+
+    Notes
+    -----
+    **JIT-compatible**: no — registration happens at factory time before JIT.
     """
     from . import emission
 

@@ -44,7 +44,18 @@ def hartley(x: jnp.ndarray) -> jnp.ndarray:
 
 @jax.jit
 def inverse_hartley(x: jnp.ndarray) -> jnp.ndarray:
-    """Inverse Hartley transform (same as forward, with 1/N scaling)."""
+    """Inverse Hartley transform (same as forward, with 1/N scaling).
+
+    Parameters
+    ----------
+    x : array_like, shape (N,)
+        Real-valued input.
+
+    Returns
+    -------
+    ndarray, shape (N,)
+        Inverse Hartley transform of x.
+    """
     return hartley(x) / x.shape[0]
 
 
@@ -196,9 +207,22 @@ def precompute_ssp_photometry(
 
 @jax.jit
 def effective_wavelength(filter_wave: jnp.ndarray, filter_trans: jnp.ndarray) -> float:
-    """Effective wavelength of a filter: lambda_eff = int(T*lam^2 dlam) / int(T*lam dlam).
+    """Compute the effective wavelength of a filter curve.
 
-    Zacharegkas+2025 Equation 5.
+    Defined as lambda_eff = int(T * lam^2 dlam) / int(T * lam dlam),
+    which is Eq. 5 of Zacharegkas et al. (2025).
+
+    Parameters
+    ----------
+    filter_wave : array_like, shape (n_wave,)
+        Filter wavelength grid. [Angstrom]
+    filter_trans : array_like, shape (n_wave,)
+        Filter transmission curve. [dimensionless]
+
+    Returns
+    -------
+    float
+        Effective wavelength of the filter. [Angstrom]
     """
     num = jnp.trapezoid(filter_trans * filter_wave**2, filter_wave)
     denom = jnp.trapezoid(filter_trans * filter_wave, filter_wave)

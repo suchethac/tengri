@@ -27,46 +27,63 @@ def precompute(
     parameters: object = None,
     **kwargs: object,
 ) -> object:
-    """CLOUDY precompute is performed inside CloudyGridBackend.__init__.
+    """Protocol marker for CLOUDY preintegration (deferred to backend init).
 
-    This function is a Protocol marker — the actual preintegration runs when
-    the backend is constructed via the normal config path.  Returns None;
-    SEDModel uses this registration only to introspect AXIS_PARAMS.
+    CLOUDY preintegration is performed inside CloudyGridBackend.__init__
+    because the grid shape is determined by the loaded HDF5 file. This function
+    serves as a Protocol marker; SEDModel uses it only to introspect AXIS_PARAMS.
 
     Parameters
     ----------
-    filter_waves, filter_trans : list
-        Filter curves (observed frame).
+    filter_waves : list
+        Filter wavelength arrays [Angstrom] (observed frame).
+    filter_trans : list
+        Filter transmission curves (unitless).
     redshift : float
         Source redshift.
-    parameters : Parameters | None
+    parameters : Parameters, optional
         Parameter spec (unused — CLOUDY backend handles auto-collapse
-        internally).
+        internally). Default: None.
     **kwargs
-        Ignored; accepted for Protocol consistency.
+        Additional arguments (ignored for Protocol consistency).
 
     Returns
     -------
     None
-        CLOUDY preintegration is deferred to CloudyGridBackend init.
+        CLOUDY preintegration is deferred to CloudyGridBackend.__init__.
+
+    Notes
+    -----
+    **JIT-compatible**: no — returns None (metadata function).
+
+    Auto-collapse for fixed parameters (met_logzsol, log_age, neb_logU) is
+    wired inside CloudyGridBackend._preintegrate_photometry().
+
     """
     return None
 
 
 def build_lookup(preint: object, **kwargs: object) -> object:
-    """CLOUDY runtime lookup is internal to CloudyGridBackend; no Protocol-level
-    lookup function is exposed here.
+    """Protocol marker for CLOUDY runtime lookup (handled internally).
+
+    CLOUDY runtime lookup is internal to CloudyGridBackend; no Protocol-level
+    lookup function is exposed here. This function serves as a Protocol marker.
 
     Parameters
     ----------
-    preint : Any
-        Unused (CLOUDY preintegration is handled inside the backend).
+    preint : object
+        Unused — CLOUDY preintegration is handled inside CloudyGridBackend.
     **kwargs
-        Ignored; accepted for Protocol consistency.
+        Additional arguments (ignored for Protocol consistency).
 
     Returns
     -------
     None
-        CLOUDY runtime lookup is performed directly in the CloudyGridBackend.
+        CLOUDY runtime lookup is performed directly in CloudyGridBackend.
+
+    Notes
+    -----
+    **JIT-compatible**: no — returns None (metadata function).
+
     """
     return None

@@ -56,18 +56,24 @@ class DustAttenuationLaw(Protocol):
         Parameters
         ----------
         wavelength : jax.Array, shape (n_wave,)
-            Rest-frame wavelength grid in Angstrom.
+            Rest-frame wavelength grid [Å].
         **kwargs
             Law-specific parameters (e.g., dust_bump_strength, dust_delta,
-            dust_Rv, n_slope, redshift). Unknown kwargs must be accepted
-            but may be ignored via **_kwargs.
+            dust_Rv, n_slope, redshift) [dimensionless]. Unknown kwargs must
+            be accepted but may be ignored via **_kwargs.
 
         Returns
         -------
         jax.Array, shape (n_wave,)
-            Normalized attenuation curve k(λ), typically with k(5500 Å) = 1.0.
-            Values in [0, 1] for physical attenuation curves.
+            Normalized attenuation curve k(λ) [dimensionless], typically with
+            k(5500 Å) = 1.0. Values in [0, 1] for physical attenuation curves.
             Returned array dtype matches input wavelength dtype.
+
+        Notes
+        -----
+        **JIT-compatible**: yes (required for all dust laws).
+
+        **Gradient-safe**: yes (required for likelihood evaluation and inference).
         """
         ...
 
@@ -120,20 +126,27 @@ class DustEmissionTemplate(Protocol):
         Parameters
         ----------
         wavelength : jax.Array, shape (n_wave,)
-            Rest-frame wavelength grid in Angstrom.
+            Rest-frame wavelength grid [Å].
         L_absorbed : float
-            Total bolometric luminosity absorbed by dust (L_sun).
+            Total bolometric luminosity absorbed by dust [L_sun].
             This is computed from the attenuation step as the integral
-            of (1 - transmission) * stellar_luminosity over wavelength.
+            of (1 - transmission) × stellar_luminosity over wavelength.
         **kwargs
             Model-specific parameters (e.g., T_dust, dust_umin, dust_gamma,
-            dust_qpah). Unknown kwargs must be accepted but may be ignored.
+            dust_qpah) [various units]. Unknown kwargs must be accepted but
+            may be ignored.
 
         Returns
         -------
         jax.Array, shape (n_wave,)
-            Dust emission SED L_ν in erg/s/Hz (rest-frame).
-            Must satisfy energy conservation: ∫ L_ν dν ≈ L_absorbed (Lsun)
+            Dust emission SED L_ν [erg/s/Hz] (rest-frame).
+            Must satisfy energy conservation: ∫ L_ν dν ≈ L_absorbed [L_sun]
             when integrated over the full spectral range.
+
+        Notes
+        -----
+        **JIT-compatible**: yes (required for all dust emission models).
+
+        **Gradient-safe**: yes (required for likelihood evaluation and inference).
         """
         ...

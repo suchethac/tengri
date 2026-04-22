@@ -627,6 +627,18 @@ def sample_raytrace(
         Log-likelihood at each accepted sample.
     accept_prob : array, shape (n_steps,)
         Acceptance probability at each step.
+
+    Examples
+    --------
+    >>> import jax
+    >>> import jax.numpy as jnp
+    >>> from tengri import sample_raytrace
+    >>> key = jax.random.PRNGKey(0)
+    >>> log_prob_fn = lambda x: -0.5 * jnp.sum(x**2)
+    >>> chain, lnl, acc = sample_raytrace(key, jnp.zeros(5), log_prob_fn,
+    ...     n_steps=10, n_leapfrog_steps=5, step_size=0.1)
+    >>> chain.shape
+    (10, 5)
     """
     if params_init.size < 2 and not sample_hmc:
         sample_hmc = True

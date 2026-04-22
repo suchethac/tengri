@@ -93,16 +93,22 @@ def drude_profile(
     Parameters
     ----------
     wave_um : array_like, shape (n_wave,)
-        Wavelength grid in microns.
+        Wavelength grid [μm].
     wave0_um : float
-        Central wavelength in microns.
+        Central wavelength [μm].
     gamma : float
-        Fractional FWHM (Δλ/λ₀, dimensionless).
+        Fractional FWHM Δλ/λ₀ [dimensionless].
 
     Returns
     -------
     jnp.ndarray, shape (n_wave,)
         Dimensionless Drude profile normalized to peak = 1.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    **Gradient-safe**: yes.
     """
     lam = jnp.asarray(wave_um)
     # gamma is the fractional FWHM; g_over_l0 = gamma is already Δλ/λ₀.
@@ -123,15 +129,21 @@ def pah_template(
     Parameters
     ----------
     wave_um : array_like, shape (n_wave,)
-        Wavelength grid in microns.
+        Wavelength grid [μm].
     strengths : array_like, shape (18,) or None
-        Per-feature amplitude weights.  If ``None``, the Smith+2007 SINGS
-        median strengths (``SMITH2007_PAH_FEATURES``) are used.
+        Per-feature amplitude weights [dimensionless].  If ``None``, the
+        Smith+2007 SINGS median strengths (``SMITH2007_PAH_FEATURES``) are used.
 
     Returns
     -------
     jnp.ndarray, shape (n_wave,)
         Dimensionless continuum-normalized PAH shape (non-negative everywhere).
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    **Gradient-safe**: yes.
     """
     lam = jnp.asarray(wave_um)
     s = _DEFAULT_STRENGTHS if strengths is None else jnp.asarray(strengths)
@@ -171,19 +183,28 @@ def decompose_pah(
     Parameters
     ----------
     wave_um : array_like, shape (n_wave,)
-        Wavelength grid in microns.
+        Wavelength grid [μm].
     sed : array_like, shape (n_wave,)
-        Observed (or model) SED in arbitrary flux units.
+        Observed (or model) SED [arbitrary units].
     continuum : array_like, shape (n_wave,) or None
-        Underlying continuum to subtract before fitting.  If ``None``, the
-        raw ``sed`` is used.
+        Underlying continuum to subtract before fitting [same units as ``sed``].
+        If ``None``, the raw ``sed`` is used.
 
     Returns
     -------
     dict with keys:
-        ``"strengths"``   — shape (18,), fitted feature amplitudes.
-        ``"fitted_pah"``  — shape (n_wave,), reconstructed PAH profile.
-        ``"residual"``    — shape (n_wave,), ``(sed - continuum) - fitted_pah``.
+        ``"strengths"``   — ndarray, shape (18,), fitted feature amplitudes
+            [dimensionless].
+        ``"fitted_pah"``  — ndarray, shape (n_wave,), reconstructed PAH profile
+            [same units as sed].
+        ``"residual"``    — ndarray, shape (n_wave,),
+            (sed - continuum) - fitted_pah [same units as sed].
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    **Gradient-safe**: yes. Use for warm-starting or sensitivity analysis.
     """
     lam = jnp.asarray(wave_um)
     y = jnp.asarray(sed)

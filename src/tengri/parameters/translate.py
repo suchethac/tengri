@@ -126,7 +126,18 @@ _NEBULAR_IDENTITY_PARAMS = [
 
 
 def identity_param_map(names: list[str]) -> dict[str, tuple[str, float, float]]:
-    """Build param_map entries for params that pass through without conversion."""
+    """Build param_map entries for parameters that pass through without unit conversion.
+
+    Parameters
+    ----------
+    names : list of str
+        Parameter names to include.
+
+    Returns
+    -------
+    dict
+        Mapping of ``{name: (name, 1.0, 0.0)}`` for each name.
+    """
     return {p: (p, 1.0, 0.0) for p in names}
 
 

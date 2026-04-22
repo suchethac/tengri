@@ -48,17 +48,50 @@ def make_log_age_grid(
 
 
 def log_age_to_age_yr(log_age_grid: jnp.ndarray) -> jnp.ndarray:
-    """Convert log10(age/yr) grid to age in years."""
+    """Convert log10(age/yr) grid to age in years.
+
+    Parameters
+    ----------
+    log_age_grid : array_like, shape (n_grid,)
+        Grid of log10(age/yr) values.
+
+    Returns
+    -------
+    ndarray, shape (n_grid,)
+        Age in years. [yr]
+    """
     return 10.0**log_age_grid
 
 
 def log_age_to_age_gyr(log_age_grid: jnp.ndarray) -> jnp.ndarray:
-    """Convert log10(age/yr) grid to age in Gyr."""
+    """Convert log10(age/yr) grid to age in Gyr.
+
+    Parameters
+    ----------
+    log_age_grid : array_like, shape (n_grid,)
+        Grid of log10(age/yr) values.
+
+    Returns
+    -------
+    ndarray, shape (n_grid,)
+        Age in gigayears. [Gyr]
+    """
     return 10.0 ** (log_age_grid - 9.0)
 
 
 def grid_spacing(log_age_grid: jnp.ndarray) -> float:
-    """Get uniform spacing of the log-age grid (dex)."""
+    """Return the uniform spacing of the log-age grid.
+
+    Parameters
+    ----------
+    log_age_grid : array_like, shape (n_grid,)
+        Uniform grid of log10(age/yr) values.
+
+    Returns
+    -------
+    float
+        Grid spacing in dex. [dex]
+    """
     return float(log_age_grid[1] - log_age_grid[0])
 
 

@@ -86,7 +86,21 @@ _always_true = lambda lo, hi: True  # noqa: E731
 
 
 def _register(spec: MetModelSpec) -> None:
-    """Register a metallicity mode spec in the global registry."""
+    """Register a metallicity mode spec in the global registry.
+
+    Parameters
+    ----------
+    spec : MetModelSpec
+        Metallicity mode specification to register.
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    **JIT-compatible**: no — mutates global registry dictionary.
+    """
     MET_REGISTRY[spec.name] = spec
 
 
@@ -347,18 +361,25 @@ def resolve_met(
     Returns
     -------
     spec : MetModelSpec
-        The full model spec.
+        Full model specification.
     params : dict[str, MetParamDef]
-        Fittable parameters.
+        Fittable parameters: public_name -> MetParamDef.
     param_map : dict[str, tuple[str, float, float]]
-        public_name -> (internal_name, scale, offset).
+        public_name -> (internal_name, scale, offset) for unit/offset conversion.
     settings : dict[str, Any]
-        Non-fittable settings.
+        Non-fittable settings (e.g., met_n_bins for binned modes).
 
     Raises
     ------
     KeyError
         If met_mode is not registered.
+
+    Notes
+    -----
+    **JIT-compatible**: no — performs dictionary lookup at initialization time.
+
+    All metallicity inputs are in **log10(Z/Zsun)** (relative to solar).
+    The param_map applies LOG10_ZSUN offset to convert to absolute log10(Z) internally.
     """
     if met_mode not in MET_REGISTRY:
         valid = sorted(MET_REGISTRY.keys())

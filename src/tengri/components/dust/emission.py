@@ -89,7 +89,18 @@ _resolved: set[str] = set()
 
 
 def register_emission_model(name: str) -> Callable:
-    """Register a dust emission model function (decorator factory)."""
+    """Decorator factory that registers a dust emission model under a name.
+
+    Parameters
+    ----------
+    name : str
+        Registry key (e.g. ``"dale2014"``, ``"draine_li2007"``).
+
+    Returns
+    -------
+    Callable
+        Decorator that registers the decorated function and returns it unchanged.
+    """
 
     def decorator(fn: Callable) -> Callable:
         """Inner decorator that registers function in DUST_EMISSION_MODELS dict."""
@@ -172,19 +183,32 @@ def planck_bnu(
     wavelength_aa: jnp.ndarray,
     temperature: float,
 ) -> jnp.ndarray:
-    """Planck function B_nu(T) evaluated at given wavelengths.
+    r"""Planck function B_ν(T) evaluated at given wavelengths.
 
     Parameters
     ----------
-    wavelength_aa : array
-        Wavelength grid in Angstrom.
+    wavelength_aa : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
     temperature : float
-        Blackbody temperature in Kelvin.
+        Blackbody temperature. [K]
 
     Returns
     -------
-    array
-        B_nu in erg / s / cm^2 / Hz / sr.
+    ndarray, shape (n_wave,)
+        Planck brightness. [erg s⁻¹ cm⁻² Hz⁻¹ sr⁻¹]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The Planck function is:
+
+    .. math::
+
+        B_\nu(T) = \frac{2 h \nu^3}{c^2} \frac{1}{\exp(h\nu / k_B T) - 1}
+
+    where :math:`\nu = c / \lambda` is the frequency, :math:`h` is Planck's constant,
+    :math:`k_B` is Boltzmann's constant, and :math:`c` is the speed of light.
     """
     # Cast to float64 before computing nu to prevent nu**3 overflow.
     # float32 max is ~3.4e38; at 5.6 Å, nu = 5.35e17 Hz so nu**3 ~ 1.5e53 —
@@ -211,29 +235,37 @@ def cmb_corrected_temperature(
     redshift: float,
     beta_ir: float = 1.6,
 ) -> float:
-    """Effective dust temperature including CMB heating.
+    r"""Effective dust temperature including CMB heating.
 
     At high redshift the CMB sets a temperature floor on dust grains.
-    The effective equilibrium temperature is (da Cunha et al. 2013)::
-
-        T_eff = (T_dust ^ (4 + beta) + T_CMB(z) ^ (4 + beta) - T_CMB(z=0) ^ (4 + beta)) ^ {
-            1 / (4 + beta)
-        }
+    The effective equilibrium temperature is (da Cunha et al. 2013).
 
     Parameters
     ----------
     T_dust : float
-        Intrinsic dust temperature in Kelvin (what the galaxy would
-        have at z=0 in isolation).
+        Intrinsic dust temperature (what the galaxy would have at z=0 in isolation). [K]
     redshift : float
-        Source redshift.
+        Source redshift. [dimensionless]
     beta_ir : float
-        Dust emissivity index. Default 1.6.
+        Dust emissivity index. [dimensionless] Default: 1.6.
 
     Returns
     -------
     float
-        Effective dust temperature in Kelvin.
+        Effective dust temperature including CMB heating. [K]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The effective temperature is:
+
+    .. math::
+
+        T_{\rm eff} = \left[T_{\rm dust}^{4+\beta} + T_{\rm CMB}(z)^{4+\beta}
+        - T_{\rm CMB}(z=0)^{4+\beta}\right]^{1/(4+\beta)}
+
+    where :math:`T_{\rm CMB}(z) = T_{\rm CMB,0} (1 + z)` with :math:`T_{\rm CMB,0} = 2.725` K.
     """
     exponent = 4.0 + beta_ir
     T_cmb_z = _T_CMB_0 * (1.0 + redshift)
@@ -250,26 +282,36 @@ def cmb_contrast_factor(
     T_eff: float,
     redshift: float,
 ) -> jnp.ndarray:
-    """Flux suppression factor from observing dust against the CMB.
+    r"""Flux suppression factor from observing dust against the CMB.
 
     The observed flux is reduced because the galaxy's dust emission is
-    measured against the CMB background (da Cunha et al. 2013)::
-
-        S_obs / S_intrinsic = 1 - B_nu(T_CMB(z)) / B_nu(T_eff)
+    measured against the CMB background (da Cunha et al. 2013).
 
     Parameters
     ----------
-    wavelength_aa : array
-        Wavelength grid in Angstrom.
+    wavelength_aa : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
     T_eff : float
-        CMB-corrected effective dust temperature (K).
+        CMB-corrected effective dust temperature. [K]
     redshift : float
-        Source redshift.
+        Source redshift. [dimensionless]
 
     Returns
     -------
-    array
-        Multiplicative contrast factor in [0, 1].
+    ndarray, shape (n_wave,)
+        Multiplicative contrast factor in [0, 1]. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The contrast factor is:
+
+    .. math::
+
+        C(\lambda) = 1 - \frac{B_\nu(T_{\rm CMB}(z))}{B_\nu(T_{\rm eff})}
+
+    Since :math:`T_{\rm eff} > T_{\rm CMB}(z)`, we have :math:`0 \leq C(\lambda) \leq 1`.
     """
     T_cmb_z = _T_CMB_0 * (1.0 + redshift)
 
@@ -311,29 +353,37 @@ def compute_absorbed_luminosity(
     L_nu_intrinsic: jnp.ndarray,
     transmission: jnp.ndarray,
 ) -> float:
-    """Compute total luminosity absorbed by dust.
+    r"""Compute total luminosity absorbed by dust.
 
-    This is the energy-balance integral::
-
-        L_absorbed = integral[(1 - T(lambda)) * L_nu_intrinsic * dnu]
-
-    where T(lambda) is the dust transmission fraction (output of the
-    attenuation model, values in [0, 1]).
+    Integrates (1 - transmission) × L_nu over frequency to get the total
+    absorbed energy, which must be re-emitted in the IR (energy balance).
 
     Parameters
     ----------
-    wavelength_aa : array, shape (n_wave,)
-        Rest-frame wavelength grid in Angstrom (must be sorted ascending).
-    L_nu_intrinsic : array, shape (n_wave,)
-        Intrinsic (dust-free) luminosity density in Lsun/Hz.
-    transmission : array, shape (n_wave,)
-        Dust transmission fraction in [0, 1].  For age-dependent models
+    wavelength_aa : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Å] Must be sorted ascending.
+    L_nu_intrinsic : array_like, shape (n_wave,)
+        Intrinsic (dust-free) luminosity density. [Lsun Hz⁻¹]
+    transmission : array_like, shape (n_wave,)
+        Dust transmission fraction in [0, 1]. For age-dependent models
         this should be the SFH-weighted effective transmission.
 
     Returns
     -------
     float
-        Total absorbed luminosity in Lsun (integrated over frequency).
+        Total absorbed luminosity. [Lsun]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The absorbed luminosity is:
+
+    .. math::
+
+        L_{\rm absorbed} = \int [1 - T(\lambda)] L_\nu(\lambda) d\nu
+
+    where the integral is over frequency (ν is descending as λ is ascending).
     """
     wavelength_cm = wavelength_aa * _AA_TO_CM
     nu = _C_CGS / wavelength_cm  # descending (since wave is ascending)
@@ -349,23 +399,30 @@ def compute_absorbed_luminosity_from_tau(
     L_nu_intrinsic: jnp.ndarray,
     tau_lambda: jnp.ndarray,
 ) -> float:
-    """Compute total absorbed luminosity from optical depth.
+    r"""Compute total absorbed luminosity from optical depth.
 
-    Convenience wrapper when you have tau(lambda) rather than transmission.
+    Convenience wrapper when you have τ(λ) rather than transmission T(λ).
 
     Parameters
     ----------
-    wavelength_aa : array, shape (n_wave,)
-        Rest-frame wavelength grid in Angstrom (sorted ascending).
-    L_nu_intrinsic : array, shape (n_wave,)
-        Intrinsic luminosity density in Lsun/Hz.
-    tau_lambda : array, shape (n_wave,)
-        Optical depth as a function of wavelength.
+    wavelength_aa : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Å] Must be sorted ascending.
+    L_nu_intrinsic : array_like, shape (n_wave,)
+        Intrinsic luminosity density. [Lsun Hz⁻¹]
+    tau_lambda : array_like, shape (n_wave,)
+        Optical depth as a function of wavelength. [dimensionless]
 
     Returns
     -------
     float
-        Total absorbed luminosity in Lsun.
+        Total absorbed luminosity. [Lsun]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    Internally converts τ(λ) to transmission via T(λ) = exp(−τ(λ))
+    then calls ``compute_absorbed_luminosity``.
     """
     transmission = jnp.exp(-tau_lambda)
     return compute_absorbed_luminosity(wavelength_aa, L_nu_intrinsic, transmission)
@@ -662,60 +719,67 @@ def energy_balance_split(
     redshift: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Two-temperature energy balance with AGN contribution.
+    r"""Two-temperature energy balance with AGN contribution.
 
     Extends simple eta_balance by decomposing IR into warm (SF-heated)
     and cold (diffuse ISM) components, plus optional AGN IR contribution.
 
-    The total IR luminosity budget is::
-
-        L_IR_total = eta_balance * L_absorbed_stellar + L_agn_ir
-        L_warm = (1 - f_cold) * L_IR_total
-        L_cold = f_cold * L_IR_total
-
-    Each component is a modified blackbody with its own temperature and
-    emissivity index. This allows fitting galaxies where:
-
-    - AGN contributes to IR without UV counterpart (obscured AGN)
-    - Spatial offset between UV and FIR emission regions
-
-    Based on the Stardust approach (Kokorev et al. 2021).
-
     Parameters
     ----------
-    wavelength_aa : array, shape (n_wave,)
-        Wavelength grid in Angstrom (sorted ascending).
+    wavelength_aa : array_like, shape (n_wave,)
+        Wavelength grid. [Å] Must be sorted ascending.
     L_absorbed_stellar : float
-        Total absorbed stellar luminosity in Lsun.
+        Total absorbed stellar luminosity. [Lsun]
     L_agn_ir : float
-        Additional AGN-heated IR luminosity in Lsun (default 0).
+        Additional AGN-heated IR luminosity. [Lsun] Default: 0.0.
     eta_balance : float
-        Energy balance parameter: ratio of re-emitted to absorbed
-        stellar luminosity. eta=1 is strict energy balance.
+        Energy balance parameter: ratio of re-emitted to absorbed stellar luminosity.
+        [dimensionless] Default: 1.0 (strict energy balance).
     f_cold : float
         Fraction of total IR luminosity in the cold component.
-        Must be in [0, 1]. Default 0.5.
+        [dimensionless, in [0, 1]] Default: 0.5.
     dust_T_warm : float
-        Warm dust temperature in Kelvin (default 45 K).
+        Warm dust temperature. [K] Default: 45.0.
     dust_T_cold : float
-        Cold dust temperature in Kelvin (default 20 K).
+        Cold dust temperature. [K] Default: 20.0.
     dust_beta_warm : float
-        Warm component emissivity index (default 1.5).
+        Warm component emissivity index. [dimensionless] Default: 1.5.
     dust_beta_cold : float
-        Cold component emissivity index (default 2.0).
+        Cold component emissivity index. [dimensionless] Default: 2.0.
     redshift : float
-        Source redshift. When > 0, CMB heating correction is applied
-        to both components.
+        Source redshift. [dimensionless] When > 0, CMB heating correction is applied
+        to both components. Default: 0.0.
 
     Returns
     -------
-    array, shape (n_wave,)
-        Dust emission L_nu in Lsun/Hz.
+    ndarray, shape (n_wave,)
+        Dust emission L_ν. [Lsun Hz⁻¹]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The total IR luminosity budget is:
+
+    .. math::
+
+        L_{\rm IR,total} = \eta_{\rm balance} L_{\rm absorbed,\star} + L_{\rm AGN,IR}
+
+        L_{\rm warm} = (1 - f_{\rm cold}) L_{\rm IR,total}
+
+        L_{\rm cold} = f_{\rm cold} L_{\rm IR,total}
+
+    Each component is a modified blackbody (via ``modified_blackbody``).
 
     References
     ----------
-    - Kokorev et al. 2021, ApJ, 921, 40 (Stardust)
-    - da Cunha et al. 2008, MNRAS, 388, 1595 (MAGPHYS)
+    .. [1] V. Kokorev et al., "STARDUST: Spectral Template Analysis and
+       Recovery of Dust and Ultraviolet Spectral features,"
+       ApJ, 921, 40 (2021). https://doi.org/10.3847/1538-4357/ac1aa7
+
+    .. [2] E. da Cunha et al., "MAGPHYS: a new code to compute and interpret
+       the Spectral Energy Distribution of the Galaxy," MNRAS, 388, 1595 (2008).
+       https://doi.org/10.1111/j.1365-2966.2008.13535.x
     """
     L_ir_total = eta_balance * L_absorbed_stellar + L_agn_ir
 
@@ -750,28 +814,34 @@ def apply_dust_emission(
     L_absorbed: float,
     **params,
 ) -> jnp.ndarray:
-    """Apply a named dust emission model.
+    r"""Apply a named dust emission model.
+
+    Dispatches to a registered model function by name.
 
     Parameters
     ----------
     model_name : str
         Registered model name (e.g. "modified_blackbody", "draine_li2007").
-    wavelength_aa : array
-        Wavelength grid in Angstrom.
+    wavelength_aa : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
     L_absorbed : float
-        Absorbed luminosity in Lsun.
+        Absorbed luminosity. [Lsun]
     **params
-        Model-specific keyword arguments.
+        Model-specific keyword arguments (e.g., dust_T, dust_umin, dust_gamma_dl).
 
     Returns
     -------
-    array
-        Dust emission L_nu in Lsun/Hz.
+    ndarray, shape (n_wave,)
+        Dust emission L_ν. [Lsun Hz⁻¹]
 
     Raises
     ------
     ValueError
         If model_name is not registered.
+
+    Notes
+    -----
+    **JIT-compatible**: yes if the underlying model is JIT-compatible.
     """
     fn = resolve_emission_model(model_name)
     return fn(wavelength_aa, L_absorbed, **params)

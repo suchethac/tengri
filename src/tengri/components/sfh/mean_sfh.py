@@ -168,9 +168,20 @@ def truncated_skewnormal_sfh(
        reconstruction of the cosmic star formation history and metallicity evolution
        by galaxy type," MNRAS, 498, 5581 (2020). arXiv:2005.11917.
        https://doi.org/10.1093/mnras/staa2620
-    .. [2] A. S. G. Robotham et al., "ProSpect: Bayesian SED fitting of nearby
-       galaxies with EzGal," MNRAS, 495, 905 (2020). arXiv:2002.06980.
-       https://doi.org/10.1093/mnras/staa1220
+    .. [2] A. S. G. Robotham et al., "ProSpect: generating spectral energy
+       distributions with complex star formation and metallicity histories,"
+       MNRAS, 495, 905 (2020). arXiv:2002.06980.
+       https://doi.org/10.1093/mnras/staa1116
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import truncated_skewnormal_sfh
+    >>> t = jnp.linspace(0.0, 13.7e9, 100)
+    >>> sfr = truncated_skewnormal_sfh(t, log_peak_sfr=1.0, peak_lbt=5e9,
+    ...     width=2e9, skew=0.0, trunc=5.0)
+    >>> sfr.shape
+    (100,)
     """
     age = _clamp_age(t_lookback)
     peak_sfr = 10.0**log_peak_sfr
@@ -201,21 +212,25 @@ def skewnormal_sfh(
 
     Parameters
     ----------
-    t_lookback : array
-        Lookback time (yr).
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
     log_peak_sfr : float
-        log10 of peak SFR (Msun/yr).
+        log10 of peak SFR [Msun/yr].
     peak_lbt : float
-        Peak lookback time (yr).
+        Peak lookback time [yr].
     width : float
-        Gaussian width (yr).
+        Gaussian width [yr].
     skew : float
-        Skewness. 0 = symmetric.
+        Skewness parameter [dimensionless]. 0 = symmetric, >0 skews toward older ages.
 
     Returns
     -------
-    array
-        SFR (Msun/yr), non-negative.
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     age = _clamp_age(t_lookback)
     peak_sfr = 10.0**log_peak_sfr
@@ -237,19 +252,23 @@ def gaussian_sfh(
 
     Parameters
     ----------
-    t_lookback : array
-        Lookback time (yr).
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
     log_peak_sfr : float
-        log10 of peak SFR (Msun/yr).
+        log10 of peak SFR [Msun/yr].
     peak_lbt : float
-        Peak lookback time (yr).
+        Peak lookback time [yr].
     width : float
-        Gaussian width (yr).
+        Gaussian width [yr].
 
     Returns
     -------
-    array
-        SFR (Msun/yr), non-negative.
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     return skewnormal_sfh(t_lookback, log_peak_sfr, peak_lbt, width, skew=0.0)
 
@@ -268,24 +287,28 @@ def lognormal_sfh(
 
     The mode in log10(age) space is peak_lbt, but the peak in linear
     time is shifted: t_peak_linear = peak_lbt * 10^{-w^2 * ln(10)}.
-    For w=0.3, this is a ~15% shift toward younger ages.  peak_lbt is
+    For w=0.3, this is a ~15% shift toward younger ages. peak_lbt is
     best interpreted as the median lookback time, not the linear peak.
 
     Parameters
     ----------
-    t_lookback : array
-        Lookback time (yr).
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
     log_peak_sfr : float
-        log10 of peak SFR (Msun/yr).
+        log10 of peak SFR [Msun/yr].
     peak_lbt : float
-        Peak lookback time (yr). Converted to log10 internally.
+        Peak lookback time [yr]. Converted to log10 internally.
     width : float
-        Width in log10(age) space (dex).
+        Width in log10(age) space [dex].
 
     Returns
     -------
-    array
-        SFR (Msun/yr), non-negative.
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     age = _clamp_age(t_lookback)
     peak_sfr = 10.0**log_peak_sfr
@@ -361,6 +384,15 @@ def double_powerlaw(
     .. [2] P. S. Behroozi, R. H. Wechsler, C. Conroy, "The Average Star Formation
        Histories of Galaxies in Dark Matter Halos from z=0-8," ApJ, 770, 57 (2013).
        arXiv:1207.6105. https://doi.org/10.1088/0004-637X/770/1/57
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import double_powerlaw
+    >>> t = jnp.linspace(1e6, 13.7e9, 100)
+    >>> sfr = double_powerlaw(t, alpha=1.5, beta=2.0, tau=3e9, norm=10.0)
+    >>> sfr.shape
+    (100,)
     """
     x = t_lookback / tau
     return norm / (x**alpha + x ** (-beta))
@@ -401,12 +433,8 @@ def dpl(
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
 
-    This function calls :func:`double_powerlaw` internally with
-    ``norm = 10**log_peak_sfr``. See :func:`double_powerlaw` for physics details.
-
-    See Also
-    --------
-    double_powerlaw : Lower-level implementation with linear normalization.
+    This function wraps :func:`double_powerlaw` with ``norm = 10**log_peak_sfr``.
+    See :func:`double_powerlaw` for physics details.
     """
     peak_sfr = 10.0**log_peak_sfr
     x = t_lookback / tau
@@ -423,31 +451,28 @@ def constant_sfh(
 
     Parameters
     ----------
-    t_lookback : array
-        Lookback time (yr).
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
     log_sfr : float
-        log10 of constant SFR (Msun/yr).
+        log10 of constant SFR [Msun/yr].
     start : float
-        Younger lookback boundary (yr). 0 = present. This is where SF
-        *stopped* (or 0 if still ongoing). Mapped from the user-facing
+        Younger lookback boundary [yr]. Default 0 (present). Maps from user-facing
         ``sfh_const_end_gyr``.
     end : float
-        Older lookback boundary (yr). Default: AGEMAX_YR (Big Bang).
-        This is where SF *began*. Mapped from the user-facing
+        Older lookback boundary [yr]. Default AGEMAX_YR. Maps from user-facing
         ``sfh_const_start_gyr``.
 
     Returns
     -------
-    array
-        SFR (Msun/yr), flat between start and end, zero outside.
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], flat between start and end, zero outside.
 
     Notes
     -----
-    Internal convention: ``start <= t_lookback <= end`` (both in lookback
-    time). The user-facing API swaps the names to be chronologically
-    intuitive: ``sfh_const_start_gyr`` (when SF began, large lookback)
-    maps to ``end``, and ``sfh_const_end_gyr`` (when SF stopped, small
-    lookback) maps to ``start``.
+    **JIT-compatible**: yes — uses ``jnp.where`` and element-wise operations.
+
+    Internal convention: ``start <= t_lookback <= end`` (both in lookback time).
+    The user-facing API names are reversed for chronological intuition.
     """
     sfr = 10.0**log_sfr
     mask = (t_lookback >= start) & (t_lookback <= end)
@@ -466,19 +491,23 @@ def exponential_sfh(
 
     Parameters
     ----------
-    t_lookback : array
-        Lookback time (yr).
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
     log_peak_sfr : float
-        log10 of peak SFR at start (Msun/yr).
+        log10 of peak SFR at start [Msun/yr].
     tau : float
-        e-folding timescale (yr).
+        e-folding timescale [yr].
     start : float
-        Start lookback time (yr). Default: 0 (present).
+        Start lookback time [yr]. Default 0 (present).
 
     Returns
     -------
-    array
-        SFR (Msun/yr).
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives for exponential and masking.
     """
     peak_sfr = 10.0**log_peak_sfr
     dt = t_lookback - start
@@ -499,19 +528,23 @@ def delayed_exponential_sfh(
 
     Parameters
     ----------
-    t_lookback : array
-        Lookback time (yr).
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
     log_peak_sfr : float
-        log10 of peak SFR (Msun/yr). Peak occurs at t = start + tau.
+        log10 of peak SFR [Msun/yr]. Peak occurs at t = start + tau.
     tau : float
-        Timescale (yr). Peak is at start + tau.
+        Timescale [yr]. Peak is at start + tau.
     start : float
-        Start lookback time (yr). Default: 0 (present).
+        Start lookback time [yr]. Default 0 (present).
 
     Returns
     -------
-    array
-        SFR (Msun/yr).
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     peak_sfr = 10.0**log_peak_sfr
     dt = t_lookback - start
@@ -529,35 +562,32 @@ def declining_exponential_sfh(
     """Declining tau SFH in lookback time — matches FSPS sfh=1 / bagpipes 'exponential'.
 
     In cosmic time T, the standard tau model is SFR(T) = peak * exp(-T/tau) for
-    0 <= T <= age.  Converting T = age - t_lb gives:
+    0 <= T <= age. Converting T = age - t_lb gives:
 
         SFR(t_lb) = peak * exp(-(age - t_lb) / tau)  for  0 <= t_lb <= age
 
     The SFR *increases* going back in lookback time (galaxy formed with highest SFR,
-    declining to the present).  This is the *opposite* sign convention to
-    ``exponential_sfh``, which models a rising-to-present exponential.
+    declining to the present). This is opposite to ``exponential_sfh``.
 
     Parameters
     ----------
-    t_lookback : array
-        Lookback time (yr).
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
     log_peak_sfr : float
-        log10 of peak SFR at galaxy formation, i.e. at t_lb = age (Msun/yr).
+        log10 of peak SFR at galaxy formation [Msun/yr] (at t_lb = age).
     tau : float
-        e-folding timescale (yr).  Larger tau → slower decline (more extended SFH).
+        e-folding timescale [yr]. Larger tau = slower decline.
     age : float
-        Galaxy age (yr): lookback time of galaxy formation.  SFR is zero for
-        t_lb > age (before galaxy formed) and for t_lb < 0.
+        Galaxy age [yr] = lookback time of galaxy formation.
 
     Returns
     -------
-    array
-        SFR (Msun/yr).
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr].
 
-    References
-    ----------
-    - Conroy & Gunn (2010) — FSPS sfh=1 (tau model)
-    - Carnall+2018 (bagpipes) — 'exponential' SFH
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives for exponential and masking.
     """
     peak_sfr = 10.0**log_peak_sfr
     dt = age - t_lookback  # cosmic time elapsed since galaxy formation
@@ -582,25 +612,25 @@ def constant_then_exponential_sfh(
 
     Parameters
     ----------
-    t_lookback : array
-        Lookback time (yr).
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
     log_sfr : float
-        log10 of constant SFR before quenching (Msun/yr).
+        log10 of constant SFR before quenching [Msun/yr].
     tau : float
-        e-folding decline timescale (yr) after quenching.
+        e-folding decline timescale [yr] after quenching.
     quench_age : float
-        Lookback time when quenching began (yr).
+        Lookback time when quenching began [yr].
     age : float
-        Galaxy age = lookback time of formation (yr). Must be > quench_age.
+        Galaxy age [yr] = lookback time of formation. Must be > quench_age.
 
     Returns
     -------
-    array
-        SFR (Msun/yr).
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr].
 
-    References
-    ----------
-    - Carnall+2018 (bagpipes) — ``const_exp`` SFH.
+    Notes
+    -----
+    **JIT-compatible**: yes — uses conditional masking via ``jnp.where``.
     """
     sfr_0 = 10.0**log_sfr
     dt_quench = quench_age - t_lookback
@@ -657,9 +687,18 @@ def triweight_burst(
 
     References
     ----------
-    .. [1] A. Zacharegkas et al., "Stochastic Star Formation Histories with Correlated
-       Fields," ApJ, 965, 52 (2025). arXiv:2506.19919.
-       https://doi.org/10.3847/1538-4357/ad2a83
+    .. [1] G. Zacharegkas, A. Hearin, and A. Benson, "Bayesian Posteriors with
+       Stellar Population Synthesis on GPUs," The Open Journal of Astrophysics,
+       8 (2025). arXiv:2506.19919. https://doi.org/10.33232/001c.151255
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import triweight_burst
+    >>> t = jnp.linspace(1e6, 13.7e9, 100)
+    >>> kernel = triweight_burst(t, log_tpeak_myr=2.0, log_tmax_myr=1.0)
+    >>> kernel.shape
+    (100,)
     """
     log_age_myr = jnp.log10(t_lookback / 1e6)  # yr → Myr in log10
     x = (log_age_myr - log_tpeak_myr) / jnp.maximum(log_tmax_myr, 0.01)
@@ -673,7 +712,26 @@ def triweight_burst(
 
 
 def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float) -> jnp.ndarray:
-    """Delayed-tau SFH: SFR(t) = norm * t * exp(-t/tau). Peaks at t=tau."""
+    """Delayed-tau SFH: SFR(t) = norm * t * exp(-t/tau). Peaks at t=tau.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
+    tau : float
+        Timescale [yr].
+    norm : float
+        Normalization factor [Msun/yr].
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives.
+    """
     return norm * t_lookback * jnp.exp(-t_lookback / tau)
 
 
@@ -689,46 +747,38 @@ def psb_wild2020(
 ) -> jnp.ndarray:
     """Post-starburst SFH (Wild+2020).
 
-    Two-component model: declining exponential for the old stellar
-    population plus a double power law for the recent burst episode.
-    Components are combined via mass-fraction weighting.
-
-    SFR(t) = peak_sfr × [(1 - fburst) × SFR_exp(t)/M_exp
-                          + fburst × SFR_burst(t)/M_burst]
-
-    Each component is normalized to unit mass before mixing, so
-    ``fburst`` controls the fraction of total stellar mass formed
-    in the burst.
+    Two-component model: declining exponential for the old stellar population
+    plus a double power law for the recent burst episode. Components are combined
+    via mass-fraction weighting: each normalized to unit mass before mixing.
 
     Parameters
     ----------
-    t_lookback : array
-        Lookback time (yr).
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
     log_peak_sfr : float
-        log10 of overall SFR normalization (Msun/yr).
+        log10 of overall SFR normalization [Msun/yr].
     age : float
-        Galaxy age (yr): lookback time when old component began
-        forming. Exponential is active for burstage < t < age.
+        Galaxy age [yr] = lookback time of old component formation.
+        Exponential is active for burstage < t < age.
     tau : float
-        e-folding timescale of the old exponential component (yr).
+        e-folding timescale of old exponential component [yr].
     burstage : float
-        Lookback time of the burst onset (yr). Burst is active for
-        0 < t < burstage; DPL peaks at cosmic time = age_universe - burstage.
+        Lookback time of burst onset [yr]. Burst active for 0 < t < burstage.
     alpha : float
-        DPL falling slope (post-peak in cosmic time).
+        DPL falling slope [dimensionless] (post-peak in cosmic time).
     beta : float
-        DPL rising slope (pre-peak in cosmic time).
+        DPL rising slope [dimensionless] (pre-peak in cosmic time).
     fburst : float
-        Fraction of total stellar mass in the burst (0-1).
+        Fraction of total stellar mass in burst [dimensionless], range [0, 1].
 
     Returns
     -------
-    array
-        SFR (Msun/yr).
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr].
 
-    References
-    ----------
-    Wild+2020 (MNRAS, 494, 529): PSB SFH parameterization.
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives and logical masking.
     """
     peak_sfr = 10.0**log_peak_sfr
 
@@ -758,5 +808,26 @@ def psb_wild2020(
 def powerlaw_sfh(
     t_lookback: jnp.ndarray, alpha: float, norm: float, t_ref: float = 1e8
 ) -> jnp.ndarray:
-    """Power-law SFH: SFR(t) = norm * (t/t_ref)^alpha."""
+    """Power-law SFH: SFR(t) = norm * (t/t_ref)^alpha.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
+    alpha : float
+        Power-law exponent [dimensionless].
+    norm : float
+        Normalization factor [Msun/yr].
+    t_ref : float
+        Reference timescale [yr]. Default 1e8.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives.
+    """
     return norm * (t_lookback / t_ref) ** alpha

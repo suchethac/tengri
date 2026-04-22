@@ -47,12 +47,12 @@ def continuity_sfh(
     age_yr : array_like, shape (n_age,)
         Lookback time grid [yr].
     log_total_mass : float, optional
-        log10(total stellar mass formed / Msun). Default: 10.0 (10 Gyr Msun).
+        log10 of total stellar mass formed [Msun]. Default 10.0.
     bin_edges_gyr : array_like, shape (n_bins+1,), optional
-        Bin edges in Gyr. Default: 7-edge log-spaced grid from 0 to 13.7 Gyr.
+        Bin edges [Gyr]. Default: 7-edge log-spaced grid from 0 to 13.7 Gyr.
     **ratio_kwargs
         Keyword arguments ``ratio_0``, ``ratio_1``, ..., ``ratio_{N-2}``
-        containing the log10 SFR ratios between adjacent bins [dimensionless].
+        containing log10 SFR ratios between adjacent bins [dimensionless].
 
     Returns
     -------
@@ -63,31 +63,12 @@ def continuity_sfh(
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
 
-    The SFH is piecewise-constant (step function) with N bins. The free parameters
-    are log-ratios between adjacent bins:
+    The SFH is piecewise-constant (step function) with N bins. Free parameters
+    are log-ratios between adjacent bins. The oldest bin is the reference,
+    and each younger bin's absolute log-SFR is the cumulative sum of ratios.
 
-    .. math::
-
-        r_j = \\log_{10}(\\mathrm{SFR}_j / \\mathrm{SFR}_{j+1})
-
-    where :math:`j=0` is the youngest bin. The oldest bin is the reference (:math:`r=0`),
-    and each younger bin's absolute log-SFR is the cumulative sum of ratios from it
-    to the oldest bin.
-
-    Positive :math:`r_j` means the younger bin (j) has higher SFR than the older bin (j+1),
-    representing rising SFH toward the present. Setting all :math:`r_j = 0` gives a flat SFH.
-
-    Total stellar mass is conserved by construction
-    (:math:`M_{\\star} = \\int \\mathrm{SFR}(t)\\,dt = 10^{\\log M_{\\star}}`).
-
-    A Student-t(df=2, scale=0.3) prior is applied to each ratio (via :func:`continuity_prior_logp`)
-    to penalize sharp jumps, encouraging smooth evolution across bins.
-
-    References
-    ----------
-    .. [1] J. Leja et al., "Deriving Physical Properties from Broadband Photometry with
-       Prospector: Description of the Code and Case Studies," ApJ, 876, 3 (2019).
-       arXiv:1905.11997. https://doi.org/10.3847/1538-4357/ab133c
+    A Student-t(df=2, scale=0.3) prior is applied to each ratio (via
+    :func:`continuity_prior_logp`) to penalize sharp jumps.
     """
     if bin_edges_gyr is None:
         bin_edges_gyr = DEFAULT_BIN_EDGES_GYR
@@ -244,12 +225,13 @@ def dirichlet_sfh(
 
     References
     ----------
-    .. [1] J. Leja et al., "The Star Formation Histories of Quiescent Galaxies,"
-       ApJ, 837, 170 (2017). arXiv:1609.09073.
-       https://doi.org/10.3847/1538-4357/aa5ffe
-    .. [2] J. Leja et al., "Deriving Physical Properties from Broadband Photometry with
-       Prospector: Description of the Code and Case Studies," ApJ, 876, 3 (2019).
-       arXiv:1905.11997. https://doi.org/10.3847/1538-4357/ab133c
+    .. [1] J. Leja et al., "Deriving Physical Properties from Broadband
+       Photometry with Prospector: Description of the Model and a Demonstration
+       of its Accuracy Using 129 Galaxies in the Local Universe," ApJ, 837, 170
+       (2017). arXiv:1609.09073. https://doi.org/10.3847/1538-4357/aa5ffe
+    .. [2] J. Leja et al., "How to Measure Galaxy Star Formation Histories.
+       II. Nonparametric Models," ApJ, 876, 3 (2019). arXiv:1811.03637.
+       https://doi.org/10.3847/1538-4357/ab133c
     """
     if bin_edges_gyr is None:
         bin_edges_gyr = DEFAULT_BIN_EDGES_GYR

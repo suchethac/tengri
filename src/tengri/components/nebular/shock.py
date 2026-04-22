@@ -25,6 +25,7 @@ References
 - Allen et al. 2008, ApJS, 178, 20         (MAPPINGS III)
 - Sutherland & Dopita 2017, ApJS, 229, 34  (MAPPINGS V)
 - Alarie & Morisset 2019, RMxAA, 55, 279  (3MdBs / Zenodo 14140949)
+
 """
 
 from __future__ import annotations
@@ -109,6 +110,7 @@ def _resolve_abundance(name: str, available: list[str]) -> int:
     ------
     ValueError
         If *name* (or its alias) is not found in *available*.
+
     """
     resolved = _ABUNDANCE_ALIASES.get(name, name)
     if resolved in available:
@@ -312,6 +314,7 @@ def shock_line_ratios(
     >>> ratios = shock_line_ratios(300.0)  # solar, combined, 300 km/s
     >>> ratios = shock_line_ratios(500.0, shock_component="precursor")
     >>> ratios = shock_line_ratios(400.0, shock_abundance="lmc", shock_log_density=1.0)
+
     """
     grids = _load_mappings_grids()
 
@@ -465,6 +468,7 @@ def compute_shock_sed(
     -------
     array, shape (n_wave,)
         Shock emission SED in erg/s/Hz.
+
     """
     line_waves, line_lums = _shock_line_arrays(
         shock_velocity,
@@ -508,6 +512,7 @@ class ShockBackend:
         Always ``True`` — velocity, density, B-field are differentiable parameters.
     name : str
         Backend identifier string.
+
     """
 
     shock_abundance: str = "solar"
@@ -549,6 +554,7 @@ class ShockBackend:
         -------
         array, shape (n_wave,)
             Shock emission SED in erg/s/Hz.
+
         """
         return compute_shock_sed(
             wavelength,

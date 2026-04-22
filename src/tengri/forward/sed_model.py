@@ -190,6 +190,18 @@ class SEDModel:
         metallicity marginalization), ``"dsps_met_table"`` (time-evolving
         metallicity table). See Appendix A of the forward model paper [2]_.
 
+    Attributes
+    ----------
+    observation : Observation or None
+        Attached observation object containing photometry and/or spectroscopy
+        configuration. Set by constructor if filters or observation= passed.
+    spec : Parameters
+        Parameter specification defining all free/fixed parameters and their priors.
+    ssp_data : SSPData
+        Pre-loaded stellar population synthesis templates (from ``load_ssp_data()``).
+    config : ModelConfig
+        Frozen model configuration (immutable after init).
+
     Notes
     -----
     **JIT-compatible**: yes — all prediction methods (except
@@ -231,6 +243,21 @@ class SEDModel:
        Stellar Population Grids," ApJ, (2025).
     .. [2] S. Cooray et al., "Forward Model for Differentiable SED Fitting
        with Correlated SFH," (2026).
+
+    Examples
+    --------
+    Standard photometric fit with DPL SFH::
+
+        from tengri import SEDModel, Parameters, Uniform, load_ssp_data, Photometry
+
+        ssp = load_ssp_data("data/ssp_miles.h5")
+        phot = Photometry.from_names(["sdss_r", "sdss_i", "sdss_z"])
+        spec = Parameters(
+            redshift=0.1,
+            sfh_dpl_alpha=Uniform(0.5, 4.0),
+            sfh_dpl_beta=Uniform(0.3, 3.0),
+        )
+        model = SEDModel(spec, ssp, observation=phot)
     """
 
     # Default approximation settings (immutable — used as template only)
@@ -1085,6 +1112,16 @@ class SEDModel:
         **Physical units**: Output SFR is in M☉/yr. Lookback time is in Gyr
         (cosmic time before today).
 
+        Examples
+        --------
+        >>> sfh = model.predict_sfh(params)
+        >>> print(sfh.keys())
+        dict_keys(['t_gyr', 'sfr_mean', 'sfr_full'])
+        >>> import matplotlib.pyplot as plt
+        >>> plt.plot(sfh["t_gyr"], sfh["sfr_mean"], label="Smooth")
+        >>> if "sfr_full" in sfh:
+        ...     plt.plot(sfh["t_gyr"], sfh["sfr_full"], alpha=0.5, label="With bursts")
+
         See Also
         --------
         predict_sfh_quantities : Integrated SFH quantities (JIT-compatible).
@@ -1157,6 +1194,14 @@ class SEDModel:
         or single-screen dust law, parameterized by age-dependent optical depth.
         See ``components.dust`` for available laws.
 
+        Examples
+        --------
+        >>> sed = model.predict_rest_sed(params)
+        >>> import matplotlib.pyplot as plt
+        >>> plt.loglog(sed.wavelength, sed.sed)
+        >>> plt.xlabel("Rest-frame wavelength (Angstrom)")
+        >>> plt.ylabel("SED (erg/s/Hz)")
+
         See Also
         --------
         predict_obs_sed : Observed-frame SED (redshifted + IGM).
@@ -1219,6 +1264,12 @@ class SEDModel:
           wavelengths and reduced intensity by :math:`(1+z)` factor from
           cosmological redshift
 
+        Examples
+        --------
+        >>> sed_obs = model.predict_obs_sed(params)
+        >>> # IGM and redshift already applied
+        >>> print(f"z={params['redshift']}: wavelength {sed_obs.wavelength[0]:.0f} Å")
+
         See Also
         --------
         predict_rest_sed : Rest-frame SED (before redshift/IGM).
@@ -1226,16 +1277,18 @@ class SEDModel:
 
         References
         ----------
-        .. [1] A. Inoue et al., "Pale Blue Dot: A Direct Measure of the
-           Small Magnitude of Intergalactic Dust Using z ∼ 0–0.5 Spectra,"
-           ApJ, 780, 116 (2014). arXiv:1309.2389.
-           https://doi.org/10.1088/0004-637X/780/2/116
-        .. [2] R. Asada et al., "Reionization-Era Low-Mass Galaxies and the
-           Ionizing Photon Budget during Cosmic Reionization," ApJ, (2025).
-        .. [3] C. Mason et al., "The Universe is Reionizing at z ~ 7: Bayesian
-           Inference of the IGM Optical Depth Using Ly-alpha Forest Data,"
-           ApJ, 857, 97 (2018). arXiv:1711.11585.
-           https://doi.org/10.3847/1538-4357/aab6a8
+        .. [1] A. K. Inoue et al., "An updated analytic model for attenuation
+           by the intergalactic medium," MNRAS, 442, 1805 (2014).
+           arXiv:1402.0677. https://doi.org/10.1093/mnras/stu936
+        .. [2] Y. Asada et al., "Improving Photometric Redshifts of Epoch of
+           Reionization Galaxies: A New Empirical Transmission Curve with
+           Neutral Hydrogen Damping Wing Ly-alpha Absorption," ApJL, 983, L2
+           (2025). arXiv:2410.21543.
+           https://doi.org/10.3847/2041-8213/adc388
+        .. [3] C. A. Mason et al., "The Universe Is Reionizing at z ~ 7:
+           Bayesian Inference of the IGM Neutral Fraction Using Ly-alpha
+           Emission from Galaxies," ApJ, 856, 2 (2018).
+           https://doi.org/10.3847/1538-4357/aab0a7
         """
         from tengri.forward.result import SEDResult
 
@@ -1269,7 +1322,6 @@ class SEDModel:
                 b_turb_kms=params.get("dla_b_turb", 0.0),
             )
         return SEDResult(wavelength=wave_obs, sed=sed_obs)
-
 
     def predict(self, params):
         """Create a lazy prediction object for all derived physical quantities.
@@ -1426,6 +1478,12 @@ class SEDModel:
         predict_spectrum : Spectral flux at arbitrary wavelengths.
         predict_magnitudes : AB magnitudes (uses photometry internally).
 
+        Examples
+        --------
+        >>> flux = model.predict_photometry(params)
+        >>> mags = model.predict_magnitudes(params)
+        >>> flux_exact = model.predict_photometry(params, mode="exact")
+
         References
         ----------
         .. [1] A. Zacharegkas et al., "Fast Photometry with Precomputed
@@ -1529,6 +1587,15 @@ class SEDModel:
         at initialization to cache spectroscopy kernels. This enables the
         hybrid/compositional paths for ~10× speedup vs. exact.
 
+        Examples
+        --------
+        >>> wave_obs = np.linspace(4000, 5500, 1000)  # observed frame [Å]
+        >>> flux = model.predict_spectrum(params, wave_obs)
+        >>> import matplotlib.pyplot as plt
+        >>> plt.plot(wave_obs, flux)
+        >>> plt.xlabel("Wavelength (Å)")
+        >>> plt.ylabel("Flux (erg/s/cm²/Hz)")
+
         See Also
         --------
         predict_photometry : Filter-integrated flux (simpler, faster).
@@ -1569,7 +1636,25 @@ class SEDModel:
         return self._predict_spectrum_exact(params, wave_obs)
 
     def predict_magnitudes(self, params):
-        """Compute observed AB magnitudes through all filters."""
+        """Compute observed AB magnitudes through all filters.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values using public parameter names.
+
+        Returns
+        -------
+        magnitudes : ndarray, shape (n_filters,)
+            Observed AB magnitudes [mag].
+
+        Notes
+        -----
+        **JIT-compatible**: yes (via ``predict_photometry`` or ``predict_luminosity``).
+
+        Uses :func:`dsps.calc_obs_mag` when available (cosmology-aware),
+        falls back to conversion from photometric flux otherwise.
+        """
         if self.filter_waves is None:
             raise ValueError("No filters set.")
 
@@ -1605,10 +1690,22 @@ class SEDModel:
     def predict_luminosity(self, params):
         """Compute rest-frame luminosity SED in solar units.
 
+        Parameters
+        ----------
+        params : dict
+            Parameter values using public parameter names.
+
         Returns
         -------
         array, shape (n_wave,)
-            Rest-frame luminosity in Lsun/Hz.
+            Rest-frame luminosity [L_sun/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: no — wraps :meth:`predict_rest_sed`.
+
+        Divides rest-frame SED by :math:`L_{\\odot} = 3.828 \\times 10^{33}` erg/s
+        (IAU 2015 definition).
         """
         LSUN_CGS = 3.828e33  # erg/s (IAU 2015)
         sed_erg = self.predict_rest_sed(params).sed
@@ -1639,6 +1736,18 @@ class SEDModel:
         ------
         ValueError
             If no nebular backend is configured.
+
+        Notes
+        -----
+        **JIT-compatible**: no — delegates to nebular backend.
+
+        Observed flux is calculated from luminosity via:
+
+        .. math::
+
+            F = \\frac{L_{\\odot}}{4\\pi d_L^2}
+
+        where :math:`d_L` is the luminosity distance.
         """
         from tengri.utils.physics_constants import L_SUN
 
@@ -1694,6 +1803,13 @@ class SEDModel:
         -------
         jnp.ndarray, shape (n_indices,)
             Predicted index values.
+
+        Notes
+        -----
+        **JIT-compatible**: depends on ``mode`` (``"_traceable"`` by default).
+
+        Measures spectral indices (equivalent width or break ratio) from a
+        rest-frame spectrum covering all wavelength ranges in ``index_defs``.
         """
         from tengri.observation.spectral_indices import measure_index_jax
 
@@ -1757,9 +1873,22 @@ class SEDModel:
         ...     l_hbeta=l_hbeta,
         ... )
 
+        Notes
+        -----
+        **JIT-compatible**: no — wraps :meth:`predict_sfh_quantities`.
+
+        Uses Case B recombination coefficients (Leitherer et al. 1999 [1]_).
+        If SFH computation fails (e.g., invalid params), returns safe fallback of 1 L_sun.
+
         See Also
         --------
         predict_sfh_quantities : JIT-compatible SFH quantities including sfr_10myr.
+
+        References
+        ----------
+        .. [1] C. Leitherer et al., "Starburst99: Synthesis Models for Galaxies
+           with Active Star Formation," ApJS, 123, 3 (1999).
+           arXiv:astro-ph/9807340.
         """
         # Case B: L_Hbeta [Lsun] = 4.76e-13 * Q_H, Q_H = 4.2e53 * SFR [Msun/yr]
         # => L_Hbeta = 4.76e-13 * 4.2e53 / 3.828e33 * SFR ≈ 52.2 * SFR
@@ -1791,13 +1920,21 @@ class SEDModel:
         Returns
         -------
         dict with keys:
-            "stellar_mass": total mass formed (Msun)
+            "stellar_mass": total mass formed [M_sun]
             "stellar_mass_surviving": surviving mass in living stars +
-                remnants (Msun). None if mass-remaining table not loaded.
-            "sfr_100myr": SFR averaged over last 100 Myr (Msun/yr)
-            "sfr_10myr": SFR averaged over last 10 Myr (Msun/yr)
-            "ssfr": specific SFR (yr^-1), uses surviving mass if
+                remnants [M_sun] or None if mass-remaining table not loaded.
+            "sfr_100myr": SFR averaged over last 100 Myr [M_sun/yr]
+            "sfr_10myr": SFR averaged over last 10 Myr [M_sun/yr]
+            "ssfr": specific SFR [yr^-1], uses surviving mass if
                 available, else formed mass.
+
+        Notes
+        -----
+        **JIT-compatible**: no — wraps :meth:`predict`.
+
+        Convenience wrapper around the lazy :meth:`predict` object.
+        For batch operations, use :meth:`predict_sfh_quantities` directly
+        with :func:`jax.vmap`.
         """
         pred = self.predict(params)
         mass_surv = pred.sfh.stellar_mass_surviving
@@ -2199,6 +2336,21 @@ class SEDModel:
         -------
         array, shape (N, n_filters)
             Photometric flux for each galaxy.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — uses :func:`jax.vmap` over
+        :meth:`predict_photometry`.
+
+        Examples
+        --------
+        >>> import jax
+        >>> key = jax.random.PRNGKey(0)
+        >>> params_batch = {
+        ...     k: jnp.tile(v[None], (100,) + (1,) * (len(v.shape)))
+        ...     for k, v in posterior.samples.items()
+        ... }
+        >>> flux_batch = model.predict_photometry_batch(params_batch)
         """
         from tengri.forward.convenience import predict_photometry_batch as _fn
 
@@ -2216,6 +2368,21 @@ class SEDModel:
         -------
         array, shape (N, n_pix)
             Spectral flux for each galaxy.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — uses :func:`jax.vmap` over
+        :meth:`predict_spectrum`.
+
+        Examples
+        --------
+        >>> params_batch = {
+        ...     k: jnp.tile(v[None], (1000,) + (1,) * (len(v.shape)))
+        ...     for k, v in posterior.samples.items()
+        ... }
+        >>> flux_batch = model.predict_spectrum_batch(params_batch)
+        >>> flux_batch.shape
+        (1000, n_pix)
         """
         from tengri.forward.convenience import predict_spectrum_batch as _fn
 
@@ -2662,6 +2829,13 @@ class SEDModel:
         Returns
         -------
         SEDModel
+            Fully initialized model ready for prediction or fitting.
+
+        Notes
+        -----
+        Ellipsis (``...``) placeholders in optional parameters map to
+        defaults from ``defaults.toml``. For example, ``dust=...`` uses
+        the default dust attenuation law.
 
         Examples
         --------
@@ -2714,6 +2888,16 @@ class SEDModel:
         -------
         PriorPredictive
             Object containing flux, SFH, and parameter draws with model reference.
+
+        Notes
+        -----
+        Useful for prior predictive checks: visualizing what the model
+        predicts under the prior without conditioning on data.
+
+        Examples
+        --------
+        >>> pp = model.prior_predictive(n=100, seed=42)
+        >>> # Access photometry, SFH, and parameters from the prior
         """
         from tengri.forward.convenience import prior_predictive as _fn
 
@@ -2765,6 +2949,11 @@ class SEDModel:
         Posterior
             Inference results.  ``._fitter`` is set so ``.refine()`` works.
             After this call, ``self.fitter_`` holds the ``Fitter`` instance.
+
+        Notes
+        -----
+        Convenience wrapper around :class:`Fitter`. For advanced usage
+        (custom loss, multiple refinement steps), use ``Fitter`` directly.
 
         Examples
         --------
@@ -2830,6 +3019,22 @@ class SEDModel:
         -------
         list of Posterior
             One result per galaxy in catalog.
+
+        Notes
+        -----
+        Sequential fitting (no parallelization yet). For 1000+ galaxies,
+        consider using :meth:`fit` in a loop with a multiprocessing pool.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> cat = pd.read_csv("catalog.csv")
+        >>> results = model.fit_batch(
+        ...     cat,
+        ...     flux_cols=["f_u", "f_g", "f_r", "f_i", "f_z"],
+        ...     err_cols=["e_u", "e_g", "e_r", "e_i", "e_z"],
+        ...     redshift_col="z",
+        ... )
         """
         from tengri.forward.convenience import fit_batch as _fn
 
@@ -2846,7 +3051,6 @@ class SEDModel:
             id_col=id_col,
             **kwargs,
         )
-
 
     def fit_population(
         self,
@@ -2871,6 +3075,18 @@ class SEDModel:
         Returns
         -------
         PopulationPosterior
+            Hierarchical inference results with population-level and per-galaxy posteriors.
+
+        Notes
+        -----
+        Enables population-level constraints on shared PSD hyperparameters
+        (e.g., shared burst timescale across a sample). All galaxies must
+        use the same model configuration.
+
+        Examples
+        --------
+        >>> obs_list = [(flux1, noise1), (flux2, noise2), ...]
+        >>> result = model.fit_population(obs_list, method="vi")
         """
         from tengri.forward.convenience import fit_population as _fn
 
@@ -2898,6 +3114,17 @@ class SEDModel:
         -------
         MockData
             Mock photometric observation.
+
+        Notes
+        -----
+        Requires model to have filters configured (``filters=`` or
+        ``observation=`` in constructor).
+
+        Examples
+        --------
+        >>> key = jax.random.PRNGKey(0)
+        >>> mock = model.mock(params, snr=15.0, key=key)
+        >>> print(mock.flux.shape)  # (n_filters,)
         """
         from tengri.forward.convenience import mock as _fn
 
@@ -2921,6 +3148,16 @@ class SEDModel:
         -------
         MockData
             Mock spectroscopic observation.
+
+        Notes
+        -----
+        Noise is drawn from Gaussian distribution with standard deviation = flux/snr.
+
+        Examples
+        --------
+        >>> wave_obs = np.linspace(4000, 5500, 1000)
+        >>> mock = model.mock_spectrum(params, wave_obs, snr=10.0, key=key)
+        >>> print(mock.flux.shape)  # (1000,)
         """
         from tengri.forward.convenience import mock_spectrum as _fn
 
@@ -2942,6 +3179,18 @@ class SEDModel:
         -------
         MockData
             Mock observations with shape (N, n_filters).
+
+        Notes
+        -----
+        Uses :func:`jax.vmap` over :meth:`mock` for vectorized generation.
+
+        Examples
+        --------
+        >>> params_batch = {
+        ...     k: jnp.tile(v[None], (1000,) + (1,) * (len(v.shape)))
+        ...     for k, v in posterior.samples.items()
+        ... }
+        >>> mocks = model.mock_batch(params_batch, snr=15.0, key=key)
         """
         from tengri.forward.convenience import mock_batch as _fn
 
@@ -2950,7 +3199,40 @@ class SEDModel:
     def plot_sfh_posterior(
         self, posterior, true_params=None, ax=None, n_draws=50, color="C0", label="Posterior"
     ):
-        """Plot posterior SFH with percentile fill and sample lines."""
+        """Plot posterior SFH with percentile fill and sample lines.
+
+        Parameters
+        ----------
+        posterior : Posterior
+            Inference results with samples (if available) or params.
+        true_params : dict, optional
+            True parameter values (if known) to overlay on plot.
+        ax : matplotlib.axes.Axes, optional
+            Axes object to plot on. If None, creates new figure.
+        n_draws : int
+            Number of posterior samples to show as thin lines. Default 50.
+        color : str
+            Color for posterior lines. Default "C0" (first color in style).
+        label : str
+            Label for posterior. Default "Posterior".
+
+        Returns
+        -------
+        ax : matplotlib.axes.Axes
+            The matplotlib Axes object with the plot.
+
+        Notes
+        -----
+        Shows 16th and 84th percentiles as filled region, with individual
+        sample curves in light color. If ``true_params`` provided, shows
+        truth in black with dashed line for smooth SFH (parametric part).
+
+        Examples
+        --------
+        >>> result = model.fit(flux, noise)
+        >>> ax = model.plot_sfh_posterior(result)
+        >>> ax.set_yscale("log")
+        """
         import matplotlib.pyplot as plt
 
         if ax is None:
@@ -3007,6 +3289,22 @@ class SEDModel:
 
         Returns the SSP grid by default, or the extended panchromatic grid
         when radio or X-ray emission is enabled.
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Rest-frame wavelength grid [Angstrom].
+
+        Notes
+        -----
+        This is the grid used by :meth:`predict_rest_sed` by default when
+        no custom ``wave=`` is passed. Updated when radio/X-ray components
+        are added to the model.
+
+        Examples
+        --------
+        >>> print(model.wavelengths[0], model.wavelengths[-1])
+        >>> # Default SSP range, e.g. 91.2 to 160000 Å
         """
         return self._rest_wavelength
 
@@ -3051,6 +3349,18 @@ class SEDModel:
         -------
         self
             For chaining: ``model.precompute_spectroscopy(wave_obs)``
+
+        Notes
+        -----
+        Caches precomputed SSP spectra at the fixed redshift,
+        enabling ~10-20× speedup for repeated spectrum predictions.
+        Requires fixed redshift (raises ValueError otherwise).
+
+        Examples
+        --------
+        >>> wave_obs = np.linspace(3500, 7000, 2000)
+        >>> model.precompute_spectroscopy(wave_obs)
+        >>> flux = model.predict_spectrum(params)
         """
         if self._z_fixed is None:
             raise ValueError("Spectroscopy precomputation requires fixed redshift")
@@ -3108,6 +3418,17 @@ class SEDModel:
         -------
         self
             For chaining: ``model.precompute_ztable().predict_photometry(params)``
+
+        Notes
+        -----
+        Enables fast photometry prediction with free redshift (no fixed z).
+        Interpolates precomputed SSP×filter grid to current z at inference time,
+        achieving similar speedup as fixed-z precomputation.
+
+        Examples
+        --------
+        >>> model.precompute_ztable(z_min=0.01, z_max=4.0, n_z=200)
+        >>> flux = model.predict_photometry(params)  # z now free
         """
         if self.filter_waves is None:
             raise ValueError("Z-table precomputation requires filters to be set")
@@ -3164,6 +3485,10 @@ class SEDModel:
         str
             Multi-line formatted tree string.
 
+        Notes
+        -----
+        Useful for inspecting model configuration before fitting or inference.
+
         Examples
         --------
         >>> print(model.tree())
@@ -3182,6 +3507,11 @@ class SEDModel:
         str
             Canonical method name for ``Fitter.run()`` or ``model.fit()``.
 
+        Notes
+        -----
+        Based on model dimensionality, complexity, and available precomputation.
+        Use as input to ``model.fit(method=model.recommend_method())``.
+
         Examples
         --------
         >>> method = model.recommend_method()
@@ -3198,12 +3528,19 @@ class SEDModel:
         str
             Formatted summary showing SSP grid, filters, precomputation,
             fused kernel status, and enabled components.
+
+        Notes
+        -----
+        Similar to :meth:`tree` but focuses on computational configuration
+        and precomputation status rather than physics parameters.
+
+        Examples
+        --------
+        >>> print(model.summary())
         """
         from tengri.config.display import summary as _summary
 
         return _summary(self)
-
-
 
 
 # Backward-compatibility alias

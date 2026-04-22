@@ -51,20 +51,27 @@ def matern32_kernel(
 
     K(r) = σ² (1 + √3 r / ℓ) exp(-√3 r / ℓ)
 
-    Matches ``george.kernels.Matern32Kernel(metric=ℓ²)``.
-
     Parameters
     ----------
-    x1 : array, shape (n1,)
-    x2 : array, shape (n2,)
+    x1 : array_like, shape (n1,)
+        First kernel argument [dimensionless].
+    x2 : array_like, shape (n2,)
+        Second kernel argument [dimensionless].
     variance : float
-        Signal variance σ².
+        Signal variance σ² [dimensionless].
     length_scale : float
-        Length scale ℓ.
+        Length scale ℓ [dimensionless].
 
     Returns
     -------
-    array, shape (n1, n2)
+    ndarray, shape (n1, n2)
+        Covariance matrix [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives throughout.
+
+    Matches ``george.kernels.Matern32Kernel(metric=ℓ²)``.
     """
     r = jnp.abs(x1[:, None] - x2[None, :])
     sqrt3_r_l = _SQRT3 * r / jnp.maximum(length_scale, _LENGTH_SCALE_FLOOR)
@@ -81,6 +88,26 @@ def linear_kernel(
 
     K(x1, x2) = σ² x1 x2 / ℓ²
 
+    Parameters
+    ----------
+    x1 : array_like, shape (n1,)
+        First kernel argument [dimensionless].
+    x2 : array_like, shape (n2,)
+        Second kernel argument [dimensionless].
+    variance : float
+        Signal variance σ² [dimensionless].
+    length_scale : float
+        Length scale ℓ [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape (n1, n2)
+        Covariance matrix [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives throughout.
+
     Matches ``george.kernels.LinearKernel(order=2, log_gamma2=ln(ℓ))``.
     """
     ls_sq = jnp.maximum(length_scale, _LENGTH_SCALE_FLOOR) ** 2
@@ -93,7 +120,28 @@ def combined_kernel(
     variance: float,
     length_scale: float,
 ) -> jnp.ndarray:
-    """Matérn 3/2 + Linear kernel (matches dense_basis george config)."""
+    """Matérn 3/2 + Linear kernel (matches dense_basis george config).
+
+    Parameters
+    ----------
+    x1 : array_like, shape (n1,)
+        First kernel argument [dimensionless].
+    x2 : array_like, shape (n2,)
+        Second kernel argument [dimensionless].
+    variance : float
+        Signal variance σ² [dimensionless].
+    length_scale : float
+        Length scale ℓ [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape (n1, n2)
+        Covariance matrix [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — delegates to ``matern32_kernel`` and ``linear_kernel``.
+    """
     return matern32_kernel(x1, x2, variance, length_scale) + linear_kernel(
         x1, x2, variance, length_scale
     )
@@ -115,15 +163,35 @@ def gp_interpolate(
 ) -> jnp.ndarray:
     """GP conditional mean via Cholesky decomposition.
 
-    Uses Cholesky instead of ``jnp.linalg.solve`` because:
-    1. Cholesky exploits the positive-definite structure of the kernel
-       matrix, giving ~2x speedup and better numerical stability.
-    2. ``solve`` returns NaN silently under JIT for near-singular K
-       (e.g. when SFR constraint points collapse to the same time).
-       Cholesky with a nugget avoids this failure mode.
+    Uses Cholesky instead of ``jnp.linalg.solve`` because it exploits the
+    positive-definite structure of the kernel matrix, giving ~2x speedup and
+    better numerical stability. Cholesky with a nugget avoids NaN failures.
 
-    The 1e-4 nugget adds <0.1% relative error to mass fractions in
-    [0, 1], negligible vs the ~0.001/sqrt(N) yerr on quantile points.
+    Parameters
+    ----------
+    x_train : array_like, shape (n_train,)
+        Training input points [dimensionless].
+    y_train : array_like, shape (n_train,)
+        Training values [dimensionless].
+    y_err : array_like, shape (n_train,)
+        Measurement errors [dimensionless].
+    x_eval : array_like, shape (n_eval,)
+        Evaluation points [dimensionless].
+    variance : float
+        GP signal variance σ² [dimensionless].
+    length_scale : float
+        GP length scale ℓ [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape (n_eval,)
+        GP conditional mean at evaluation points [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.scipy.linalg.cho_factor`` and ``cho_solve``.
+
+    The 1e-4 nugget adds <0.1% relative error, negligible vs measurement noise.
     """
     k_train = combined_kernel(x_train, x_train, variance, length_scale)
     k_train = k_train + jnp.diag(y_err**2) + _NUGGET * jnp.eye(k_train.shape[0])
@@ -145,22 +213,27 @@ def pchip_interpolate(
     """Monotone Piecewise Cubic Hermite Interpolating Polynomial (PCHIP).
 
     Guaranteed monotonic (no overshoots), C1 continuous, no matrix solve.
-    Ideal for cumulative mass curves where monotonicity is a physical
-    constraint. Uses the Fritsch-Carlson (1980) algorithm.
+    Ideal for cumulative mass curves where monotonicity is a physical constraint.
 
     Parameters
     ----------
-    x_train : array, shape (n,)
-        Sorted training x-values (must be strictly increasing).
-    y_train : array, shape (n,)
-        Training y-values.
-    x_eval : array, shape (m,)
-        Evaluation points.
+    x_train : array_like, shape (n,)
+        Sorted training x-values (strictly increasing) [dimensionless].
+    y_train : array_like, shape (n,)
+        Training y-values [dimensionless].
+    x_eval : array_like, shape (m,)
+        Evaluation points [dimensionless].
 
     Returns
     -------
-    array, shape (m,)
-        Interpolated values at x_eval.
+    ndarray, shape (m,)
+        Interpolated values at x_eval [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives and searchsorted.
+
+    Uses the Fritsch-Carlson (1980) algorithm for slope calculation.
     """
     n = x_train.shape[0]
     h = jnp.diff(x_train)

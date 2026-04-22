@@ -509,7 +509,7 @@ def igm_transmission(
     .. [2] Y. Asada et al., "Improving Photometric Redshifts of Epoch of Reionization Galaxies:
        A New Empirical Transmission Curve with Neutral Hydrogen Damping Wing Ly-alpha Absorption,"
        ApJL, 983, L2 (2025).
-       https://doi.org/10.3847/2041-8213/acb27a
+       arXiv:2410.21543. https://doi.org/10.3847/2041-8213/adc388
     """
     tau_total = (
         _tau_ls_laf(wave_obs, z_source)

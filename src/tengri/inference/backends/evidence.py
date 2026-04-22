@@ -143,6 +143,11 @@ def run_nss(
     n_iter = 0
     t0 = time.time()
 
+    # Python while loop: NSS has dynamic termination that can't be
+    # fully compiled with jax.lax.while_loop without losing cache benefit.
+    # The step function is JIT'd and cached; Python handles convergence checks.
+    # Tested: jax.lax.while_loop improved cold time (10.9s vs 28.8s) but
+    # worsened cache speedup (1.4× vs 3.6×) due to per-galaxy recompilation.
     while True:
         key, subkey = jax.random.split(key)
         live, dead = step(subkey, live)

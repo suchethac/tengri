@@ -88,6 +88,7 @@ class Catalog:
         Tengri filter names corresponding to flux columns.
     flux_unit : str
         Unit of flux values (e.g. ``"mJy"``, ``"uJy"``).
+
     """
 
     ids: np.ndarray
@@ -111,6 +112,7 @@ class Catalog:
         dict
             Keys: ``id``, ``redshift``, ``flux``, ``noise``, ``mask``,
             ``filter_names``.
+
         """
         return {
             "id": self.ids[idx],
@@ -133,6 +135,7 @@ class Catalog:
         -------
         flux, noise, filter_names
             Arrays and names for detected-only bands.
+
         """
         det = self.mask[idx] == DETECTED
         names = tuple(n for n, d in zip(self.filter_names, det) if d)
@@ -201,6 +204,7 @@ def read_catalog(
         If *filepath* does not exist.
     ValueError
         If no filter columns are found.
+
     """
     path = Path(filepath)
     if not path.exists():

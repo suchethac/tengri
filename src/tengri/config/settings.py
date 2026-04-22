@@ -47,6 +47,25 @@ class SFHConfig:
     lgmet_scatter : float
         Triweight kernel bandwidth in dex (``met_interp="smooth"``).
         Default: 0.1.
+
+    Attributes
+    ----------
+    mean_type, n_grid, evolving_metallicity, alpha_fe_evolving, chem_evol,
+    met_interp, lgmet_scatter
+        All constructor parameters are read-only frozen attributes.
+
+    Notes
+    -----
+    Frozen dataclass — all fields are immutable after construction. Pass to
+    :class:`~tengri.forward.sed_model.SEDModel` via the ``sfh`` field of
+    :class:`ModelConfig`. Changes require constructing a new instance.
+
+    Examples
+    --------
+    >>> from tengri import SFHConfig
+    >>> cfg = SFHConfig(mean_type=["dpl", "field"], n_grid=128)
+    >>> cfg.mean_type
+    ('dpl', 'field')
     """
 
     mean_type: tuple[str, ...] = ("dpl",)
@@ -87,6 +106,25 @@ class DustConfig:
         ``"draine_li2007"``, ``"draine_li2014"``.
     approx : bool
         Use approximate (fused) photometry path.  Default: ``True``.
+
+    Attributes
+    ----------
+    model, law_bc, law_diff, emission, approx
+        All constructor parameters are read-only frozen attributes.
+
+    Notes
+    -----
+    Frozen dataclass — all fields are immutable after construction. Validated
+    in ``__post_init__``: invalid ``model``, ``law_bc``, ``law_diff``, or
+    ``emission`` strings raise :exc:`ValueError` immediately. Pass to
+    :class:`ModelConfig` via the ``dust`` field.
+
+    Examples
+    --------
+    >>> from tengri import DustConfig
+    >>> cfg = DustConfig(law_bc="calzetti", emission="dale2014")
+    >>> cfg.law_bc
+    'calzetti'
     """
 
     model: str = "two_component"
@@ -160,6 +198,25 @@ class NebularConfig:
         ``"marginalized"`` — analytic marginalization.
     eline_broad : bool
         Enable broad AGN emission line component.  Default: ``False``.
+
+    Attributes
+    ----------
+    backend, grid_path, weights_path, ionization, eline_mode, eline_broad
+        All constructor parameters are read-only frozen attributes.
+
+    Notes
+    -----
+    Frozen dataclass — all fields are immutable after construction. Validated
+    in ``__post_init__``: unsupported ``backend`` or ``eline_mode`` strings raise
+    :exc:`ValueError`; ``grid_path`` is required when ``backend="cloudy"``.
+    Pass to :class:`ModelConfig` via the ``nebular`` field.
+
+    Examples
+    --------
+    >>> from tengri import NebularConfig
+    >>> cfg = NebularConfig(backend="cue")
+    >>> cfg.backend
+    'cue'
     """
 
     backend: str = "off"
@@ -200,6 +257,25 @@ class MultiwavelengthConfig:
         Enable shock emission (MAPPINGS III).  Default: ``False``.
     apply_igm : bool
         Apply Inoue+2014 IGM absorption.  Default: ``True``.
+
+    Attributes
+    ----------
+    radio, xray, shock, apply_igm
+        All constructor parameters are read-only frozen attributes.
+
+    Notes
+    -----
+    Frozen dataclass — all fields are immutable after construction.
+    ``apply_igm=True`` applies Inoue+2014 IGM absorption to the full SED at
+    the galaxy redshift. Pass to :class:`ModelConfig` via the ``multiwavelength``
+    field.
+
+    Examples
+    --------
+    >>> from tengri import MultiwavelengthConfig
+    >>> cfg = MultiwavelengthConfig(radio=True, xray=True)
+    >>> cfg.radio
+    True
     """
 
     radio: bool = False
@@ -231,6 +307,19 @@ class ModelConfig:
     agn_config : AGNConfig or None
         Detailed AGN sub-model choices.  ``None`` = use defaults when
         ``agn_model`` is set.
+
+    Attributes
+    ----------
+    sfh, dust, nebular, multiwavelength, agn_model, agn_config
+        All constructor parameters are read-only frozen attributes.
+
+    Notes
+    -----
+    Frozen dataclass — all fields are immutable after construction.
+    ``ModelConfig()`` with no arguments produces the default smooth parametric
+    SED model (double power-law SFH, power-law dust, no nebular emission, no
+    AGN). Pass a ``ModelConfig`` instance as the ``config`` argument to
+    :class:`~tengri.forward.sed_model.SEDModel`.
 
     Examples
     --------

@@ -97,6 +97,7 @@ References
 Notes
 -----
 All functions are JIT-compatible and differentiable through JAX.
+
 """
 
 import warnings
@@ -240,6 +241,7 @@ def load_cue_weights(npz_path: str) -> CueWeights:
     -------
     CueWeights
         Immutable container with all weights on JAX arrays.
+
     """
     npz = dict(np.load(npz_path, allow_pickle=True))
 
@@ -319,7 +321,30 @@ def load_cue_weights(npz_path: str) -> CueWeights:
 
 
 def _speculator_activation(x: jnp.ndarray, alpha: jnp.ndarray, beta: jnp.ndarray) -> jnp.ndarray:
-    """Learned Swish activation: x * (beta + (1 - beta) * sigmoid(alpha * x))."""
+    """Learned Swish activation for Speculator neural network.
+
+    Implements x * (beta + (1 - beta) * sigmoid(alpha * x)), a learnable variant
+    of the Swish activation.
+
+    Parameters
+    ----------
+    x : array
+        Input activations.
+    alpha : array
+        Scaling parameter (learned during training).
+    beta : array
+        Offset parameter (learned during training).
+
+    Returns
+    -------
+    array
+        Activated output.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    """
     return x * (beta + (1.0 - beta) * jax.nn.sigmoid(alpha * x))
 
 
@@ -340,6 +365,7 @@ def _speculator_forward_pca(
     -------
     array, shape (..., n_pcas)
         Rescaled PCA coefficients (before PCA inverse transform).
+
     """
     # Normalize inputs
     x = (params - net.param_shift) / net.param_scale
@@ -373,6 +399,7 @@ def _speculator_log_spectrum(
     -------
     array, shape (..., n_wavelengths)
         Log10 spectrum (luminosity per Q_H).
+
     """
     pca_coeffs = _speculator_forward_pca(params, net)
 
@@ -392,9 +419,30 @@ def _logq_from_logu(
 ) -> jnp.ndarray:
     """Convert ionization parameter logU to logQ.
 
-    logQ = logU + log(4*pi) + 2*log(R) + logn + log(c)
+    Computes logQ = logU + log(4*pi*c) + 2*log(R) + logn using the Stromgren
+    radius as a reference scale.
 
-    This matches cue.utils.logQ with R=1e19 (default Stromgren radius).
+    Parameters
+    ----------
+    gas_logu : array
+        Ionization parameter [log10(U)].
+    gas_logn : array
+        Gas density [log10(n_H / cm^-3)].
+    log_R : float, optional
+        Reference radius [log10(R / cm)]. Default: 19.0 (Stromgren radius).
+
+    Returns
+    -------
+    array
+        log10(Q) ionizing photon rate.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — simple arithmetic.
+
+    This formula matches Cue's internal convention with R = 1e19 cm
+    (approximately the Stromgren radius for typical HII regions).
+
     """
     return gas_logu + _LOG_4PI + 2.0 * log_R + gas_logn + _LOG_C
 
@@ -413,11 +461,39 @@ def _prepare_nn_params(
     gas_logno: jnp.ndarray,
     gas_logco: jnp.ndarray,
 ) -> jnp.ndarray:
-    """Convert user-facing parameters to the 12-element NN input vector.
+    """Convert user-facing parameters to Cue neural network input vector.
 
-    The network expects:
-    [index1, index2, index3, index4, logLratio1, logLratio2, logLratio3,
-     gas_logq, 10**gas_logn, gas_logz, gas_logno, gas_logco]
+    Stacks 12 Cue parameters into a vector suitable for forward pass through
+    Speculator networks. Converts logU -> logQ and logn -> linear density.
+
+    Parameters
+    ----------
+    ionspec_index1, ionspec_index2, ionspec_index3, ionspec_index4 : array
+        Ionizing spectrum slope per segment.
+    ionspec_logLratio1, ionspec_logLratio2, ionspec_logLratio3 : array
+        Log luminosity ratios between adjacent segment boundaries.
+    gas_logu : array
+        Ionization parameter [log10(U)].
+    gas_logn : array
+        Gas density [log10(n_H / cm^-3)].
+    gas_logz : array
+        Gas metallicity relative to solar [log10(Z/Zsun)].
+    gas_logno, gas_logco : array
+        N/O and C/O abundance offsets [log10(X/X_sun)].
+
+    Returns
+    -------
+    array, shape (..., 12)
+        Stacked NN input vector: [index1..4, logLratio1..3, logq, n_linear,
+        logz, logno, logco].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The network expects logq (not logu) and linear density (not logn).
+    This function handles the conversion via _logq_from_logu().
+
     """
     gas_logq = _logq_from_logu(gas_logu, gas_logn)
     gas_n_linear = 10.0**gas_logn
@@ -442,9 +518,25 @@ def _prepare_nn_params(
 
 
 def prepare_nn_params_from_dict(params: dict) -> jnp.ndarray:
-    """Convert a parameter dictionary to the 12-element NN input vector.
+    """Convert Cue parameter dictionary to neural network input vector.
 
-    Convenience wrapper for _prepare_nn_params.
+    Convenience wrapper around _prepare_nn_params that unpacks parameter keys.
+
+    Parameters
+    ----------
+    params : dict
+        Dictionary with keys: ionspec_index1..4, ionspec_logLratio1..3,
+        gas_logu, gas_logn, gas_logz, gas_logno, gas_logco.
+
+    Returns
+    -------
+    array, shape (12,)
+        NN-ready input vector.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — delegates to _prepare_nn_params.
+
     """
     return _prepare_nn_params(
         ionspec_index1=params["ionspec_index1"],
@@ -476,12 +568,17 @@ def _predict_lines_single_net(
     nn_params : array, shape (12,)
         NN-ready parameters (logq, linear n, etc.).
     net : SubNetWeights
-        One line sub-network's weights.
+        Single line sub-network's weights.
 
     Returns
     -------
     array, shape (n_lines_for_this_net,)
-        Log10(luminosity) in Lsun/Q_H for each line this net predicts.
+        Log10(luminosity) [Lsun/Q_H] for each line predicted by this net.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — delegates to _speculator_log_spectrum.
+
     """
     return _speculator_log_spectrum(nn_params, net)
 
@@ -515,6 +612,7 @@ def predict_all_lines(
         Line wavelengths in Angstrom (sorted).
     luminosities : array, shape (n_lines,)
         Line luminosities in Lsun.
+
     """
     # --- Fully batched forward pass using precomputed weight arrays ---
     # All stacking/padding was done once at load time in load_cue_weights()
@@ -590,6 +688,7 @@ def predict_continuum(
         Continuum wavelength grid in Angstrom.
     luminosity : array, shape (n_wave,)
         Nebular continuum in erg/s/Hz.
+
     """
     log_spec = _speculator_log_spectrum(nn_params, weights.cont_net)
 
@@ -658,6 +757,7 @@ class CueBackend:
         Path to ``cue_weights.npz``.
     default_gas_logqion : float
         Default log10(Q_H) normalization when not specified per call.
+
     """
 
     def __init__(
@@ -928,6 +1028,7 @@ class CueBackend:
         -------
         dict
             Ready-to-use kwargs for the low-level Cue predict methods.
+
         """
         if self._ionspec_table is None:
             raise RuntimeError(
@@ -1059,6 +1160,7 @@ class CueBackend:
         -------
         wavelengths : array
         luminosities : array (Lsun)
+
         """
         p = self._resolve_cue_params(
             ssp_weights=ssp_weights,
@@ -1122,6 +1224,7 @@ class CueBackend:
             Wavelength grid in Angstrom.
         luminosity : array, shape (n_wave,)
             Nebular continuum in erg/s/Hz.
+
         """
         p = self._resolve_cue_params(
             ssp_weights=ssp_weights,
@@ -1192,6 +1295,7 @@ class CueBackend:
         -------
         array, shape (n_wave,)
             Total nebular SED in erg/s/Hz on the SSP wavelength grid.
+
         """
         # Resolve params once (avoids double computation for lines + continuum)
         p = self._resolve_cue_params(
@@ -1249,22 +1353,33 @@ def predict_lines_jit(
     gas_logq: jnp.ndarray,
     gas_logqion: jnp.ndarray,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """JIT-compiled line prediction (functional API).
+    """JIT-compiled emission line prediction (functional API).
+
+    Wrapper around predict_all_lines with @jax.jit decorator for use in
+    inference loops and differentiable workflows.
 
     Parameters
     ----------
     nn_params_12 : array, shape (12,)
         NN-ready parameters (already converted via _prepare_nn_params).
     weights : CueWeights
-        Pre-loaded weights (treated as static by JIT via pytree).
+        Pre-loaded weights (treated static by JIT via pytree).
     gas_logq : scalar
-        log10(Q).
+        log10(Q) ionizing photon rate normalization.
     gas_logqion : scalar
-        log10(Q_H).
+        log10(Q_H) total ionizing photon rate.
 
     Returns
     -------
-    wavelengths, luminosities : arrays
+    wavelengths : array, shape (n_lines,)
+        Line wavelengths [Angstrom].
+    luminosities : array, shape (n_lines,)
+        Line luminosities [Lsun].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — decorated with @jax.jit.
+
     """
     return predict_all_lines(nn_params_12, weights, gas_logq, gas_logqion)
 
@@ -1276,22 +1391,33 @@ def predict_continuum_jit(
     gas_logq: jnp.ndarray,
     gas_logqion: jnp.ndarray,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """JIT-compiled continuum prediction (functional API).
+    """JIT-compiled nebular continuum prediction (functional API).
+
+    Wrapper around predict_continuum with @jax.jit decorator for use in
+    inference loops and differentiable workflows.
 
     Parameters
     ----------
     nn_params_12 : array, shape (12,)
-        NN-ready parameters.
+        NN-ready parameters (already converted via _prepare_nn_params).
     weights : CueWeights
-        Pre-loaded weights.
+        Pre-loaded weights (treated static by JIT via pytree).
     gas_logq : scalar
-        log10(Q).
+        log10(Q) ionizing photon rate normalization.
     gas_logqion : scalar
-        log10(Q_H).
+        log10(Q_H) total ionizing photon rate.
 
     Returns
     -------
-    wavelength, luminosity : arrays
+    wavelength : array, shape (n_wave,)
+        Wavelength grid [Angstrom].
+    luminosity : array, shape (n_wave,)
+        Nebular continuum [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — decorated with @jax.jit.
+
     """
     return predict_continuum(nn_params_12, weights, gas_logq, gas_logqion)
 

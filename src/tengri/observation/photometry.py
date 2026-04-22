@@ -50,6 +50,7 @@ class FilterCurve(NamedTuple):
     load_filter_set : Load filter set from SVO database.
     compute_flux_density : Convolve SED through this filter.
     pad_filters : Stack variable-length filter arrays.
+
     """
 
     wave: jnp.ndarray
@@ -66,7 +67,7 @@ def compute_flux_density(
     redshift: float,
     dl_cm: float,
 ) -> float:
-    """Compute observed flux density through a single photometric filter.
+    r"""Compute observed flux density through a single photometric filter.
 
     Evaluates the rest-frame SED at observed wavelengths (redshifted), convolves
     with filter transmission, and integrates to produce a single observed flux
@@ -132,6 +133,7 @@ def compute_flux_density(
     --------
     FilterCurve : Photometric filter transmission curve.
     pad_filters : Stack variable-length filter arrays.
+
     """
     # Redshift the SED: observed wavelength = rest * (1+z)
     wave_obs = wave_rest * (1.0 + redshift)
@@ -155,18 +157,23 @@ def pad_filters(filter_waves: list, filter_trans: list):
     Parameters
     ----------
     filter_waves : list of arrays
-        Wavelength grid per filter (different lengths).
+        Wavelength grids per filter (different lengths, units [Angstrom]).
     filter_trans : list of arrays
-        Transmission per filter (same lengths as filter_waves).
+        Transmission per filter (same lengths as filter_waves, dimensionless).
 
     Returns
     -------
-    fw_padded : array, shape (n_filters, max_len)
-        Zero-padded filter wavelengths.
-    ft_padded : array, shape (n_filters, max_len)
-        Zero-padded filter transmissions.
-    n_valid : array, shape (n_filters,), int
+    fw_padded : ndarray, shape (n_filters, max_len)
+        Zero-padded filter wavelengths [Angstrom].
+    ft_padded : ndarray, shape (n_filters, max_len)
+        Zero-padded filter transmissions (dimensionless).
+    n_valid : ndarray, shape (n_filters,), dtype int
         Number of valid (non-padded) points per filter.
+
+    Notes
+    -----
+    Not JIT-compatible (uses Python list operations and loops).
+
     """
     max_len = max(len(fw) for fw in filter_waves)
     fw_padded = jnp.zeros((len(filter_waves), max_len))
@@ -184,8 +191,31 @@ def _compute_flux_density_padded(
 ):
     """Compute flux density for a single padded filter.
 
+    Parameters
+    ----------
+    sed_rest : array, shape (n_wave,)
+        Rest-frame SED [erg/s/Hz].
+    wave_rest : array, shape (n_wave,)
+        Rest-frame wavelength [Angstrom].
+    filter_wave_padded : array, shape (max_len,)
+        Zero-padded filter wavelengths [Angstrom].
+    filter_trans_padded : array, shape (max_len,)
+        Zero-padded filter transmission (dimensionless).
+    redshift : float
+        Source redshift.
+    dl_cm : float
+        Luminosity distance [cm].
+
+    Returns
+    -------
+    flux_density : float
+        Observed flux density [erg/s/cm²/Hz].
+
+    Notes
+    -----
     Zero-padded entries contribute zero to the integral (trans=0),
-    so no masking is needed.
+    so no masking is needed. Private helper for compute_flux_density_batch.
+
     """
     wave_obs = wave_rest * (1.0 + redshift)
     sed_on_filter = jnp.interp(filter_wave_padded, wave_obs, sed_rest, left=0.0, right=0.0)
@@ -203,22 +233,27 @@ def compute_flux_density_batch(sed_rest, wave_rest, fw_padded, ft_padded, redshi
     Parameters
     ----------
     sed_rest : array, shape (n_wave,)
-        Rest-frame SED.
+        Rest-frame SED [erg/s/Hz].
     wave_rest : array, shape (n_wave,)
-        Rest-frame wavelength (Angstrom).
+        Rest-frame wavelength [Angstrom].
     fw_padded : array, shape (n_filters, max_len)
-        Zero-padded filter wavelengths (from ``pad_filters``).
+        Zero-padded filter wavelengths [Angstrom] (from ``pad_filters``).
     ft_padded : array, shape (n_filters, max_len)
-        Zero-padded filter transmissions (from ``pad_filters``).
+        Zero-padded filter transmissions (dimensionless, from ``pad_filters``).
     redshift : float
         Source redshift.
     dl_cm : float
-        Luminosity distance (cm).
+        Luminosity distance [cm].
 
     Returns
     -------
-    array, shape (n_filters,)
-        Observed flux density per filter.
+    ndarray, shape (n_filters,)
+        Observed flux density per filter [erg/s/cm²/Hz].
+
+    Notes
+    -----
+    JIT-compatible: yes — vmapped over filters. Gradient-safe: yes.
+
     """
     return jax.vmap(_compute_flux_density_padded, in_axes=(None, None, 0, 0, None, None))(
         sed_rest, wave_rest, fw_padded, ft_padded, redshift, dl_cm
@@ -233,20 +268,26 @@ def compute_photometry(
     Parameters
     ----------
     sed_rest : array, shape (n_wave,)
-        Rest-frame SED.
+        Rest-frame SED [erg/s/Hz].
     wave_rest : array, shape (n_wave,)
-        Rest-frame wavelength (Angstrom).
+        Rest-frame wavelength [Angstrom].
     filters : list of FilterCurve
         Filter transmission curves.
     redshift : float
         Source redshift.
     dl_cm : float
-        Luminosity distance (cm).
+        Luminosity distance [cm].
 
     Returns
     -------
-    array, shape (n_filters,)
-        Observed flux density per filter.
+    ndarray, shape (n_filters,)
+        Observed flux density per filter [erg/s/cm²/Hz].
+
+    Notes
+    -----
+    Not JIT-compatible (uses Python list comprehension).
+    Loops over filters and calls compute_flux_density on each.
+
     """
     fluxes = []
     for filt in filters:
@@ -257,8 +298,22 @@ def compute_photometry(
 
 @jax.jit
 def ab_mag_from_flux(flux_cgs: jnp.ndarray) -> jnp.ndarray:
-    """Convert flux density (erg/s/cm^2/Hz) to AB magnitude.
+    """Convert flux density to AB magnitude.
 
+    Parameters
+    ----------
+    flux_cgs : array, shape (n_band,)
+        Flux density [erg/s/cm²/Hz].
+
+    Returns
+    -------
+    ndarray, shape (n_band,)
+        AB magnitude (dimensionless).
+
+    Notes
+    -----
+    JIT-compatible: yes. Gradient-safe: yes.
     Delegates to :func:`tengri.utils.magnitudes.fnu_to_ab_mag`.
+
     """
     return fnu_to_ab_mag(flux_cgs)

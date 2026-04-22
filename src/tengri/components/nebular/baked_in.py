@@ -11,28 +11,65 @@ import jax.numpy as jnp
 
 
 class BakedInNebularWarning(UserWarning):
-    """Warning raised when BakedInBackend is used with fixed nebular emission.
+    """Warning raised when BakedInBackend is used with SSPs.
 
-    The ionization parameter and escape fraction are NOT free parameters.
-    Fitting nebular emission properties requires switching to a different backend.
+    Indicates that nebular emission is baked into the SSP file at fixed logU
+    and escape fraction. These are NOT free parameters; fitting nebular
+    properties requires switching to a different backend (CueBackend or
+    CloudyGridBackend).
+
+    Notes
+    -----
+    The SSP file's nebular assumptions (typically logU = -3) are determined
+    when the SSP grid was generated and cannot be changed by the model.
+
     """
 
 
 class BakedInBackend:
     """Nebular backend for SSP files with pre-included emission.
 
-    This is the default backend when no CLOUDY grid is specified.
-    It adds zero additional nebular flux, since the SSP templates
-    already contain nebular emission at fixed logU and logZ.
+    A no-op backend that returns zero additional nebular flux because the SSP
+    templates already contain nebular emission at fixed ionization parameter
+    and escape fraction. This is the default backend when no CLOUDY grid is
+    specified.
 
     Parameters
     ----------
-    ionizing_source_warning : str
-        One of ``'raise'``, ``'warn'``, or ``'suppress'``. Controls how the
-        fixed-nebular-emission limitation is communicated. Default ``'warn'``.
+    ionizing_source_warning : str, optional
+        Verbosity control for the fixed-nebular limitation warning. One of
+        'raise' (raise ValueError), 'warn' (emit UserWarning), or 'suppress'
+        (silent). Default: 'warn'.
+
+    Attributes
+    ----------
+    has_continuum : bool
+        True — continuum is baked into the SSP.
+    has_free_params : bool
+        False — ionization parameter and escape fraction are fixed.
+    name : str
+        Identifier "baked_in".
+
+    Notes
+    -----
+    **JIT-compatible**: yes — predict_nebular_sed and
+    predict_nebular_line_fluxes return zero arrays.
+
+    To fit nebular properties, switch to CloudyGridBackend or CueBackend
+    which provide free parameters for ionization parameter, escape fraction,
+    and metallicity.
+
     """
 
     def __init__(self, ionizing_source_warning: str = "warn") -> None:
+        """Initialize BakedInBackend.
+
+        Parameters
+        ----------
+        ionizing_source_warning : str, optional
+            Verbosity control. Default: "warn".
+
+        """
         self.name = "baked_in"
         self.has_free_params = False
         self.has_continuum = True
@@ -62,10 +99,26 @@ class BakedInBackend:
     ) -> jnp.ndarray:
         """Return zero nebular contribution (already in SSP).
 
+        Parameters
+        ----------
+        ssp_weights : array
+            CSP mass weights (unused).
+        ssp_wave : array, shape (n_wave,)
+            Wavelength grid [Angstrom].
+        log_z : float
+            Stellar metallicity (unused).
+        **neb_params
+            Additional nebular parameters (all unused).
+
         Returns
         -------
         array, shape (n_wave,)
             Zero array — nebular emission is baked into the SSP.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — returns jnp.zeros_like.
+
         """
         return jnp.zeros_like(ssp_wave)
 
@@ -77,9 +130,25 @@ class BakedInBackend:
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Return empty line arrays.
 
+        Parameters
+        ----------
+        ssp_weights : array
+            CSP mass weights (unused).
+        log_z : float
+            Stellar metallicity (unused).
+        **neb_params
+            Additional nebular parameters (all unused).
+
         Returns
         -------
         wavelengths : array, shape (0,)
+            Empty array.
         luminosities : array, shape (0,)
+            Empty array.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — returns empty jnp arrays.
+
         """
         return jnp.array([]), jnp.array([])

@@ -36,6 +36,7 @@ To add calibration coefficients as free parameters::
 References
 ----------
 Johnson et al. (2021) — Prospector calibration model.
+
 """
 
 import jax
@@ -57,7 +58,7 @@ def chebyshev_basis(
     Parameters
     ----------
     wavelength : array, shape (n_wave,)
-        Wavelength grid (Angstrom).
+        Wavelength grid [Angstrom].
     order : int
         Maximum polynomial order (returns order+1 basis functions,
         from T_0 through T_order).
@@ -66,8 +67,13 @@ def chebyshev_basis(
 
     Returns
     -------
-    array, shape (order+1, n_wave)
-        Chebyshev basis T_0(x), T_1(x), ..., T_order(x).
+    ndarray, shape (order+1, n_wave)
+        Chebyshev basis functions T_0(x), T_1(x), ..., T_order(x).
+
+    Notes
+    -----
+    JIT-compatible: yes — `order` is a static argument.
+
     """
     x = 2.0 * (wavelength - wave_min) / (wave_max - wave_min) - 1.0
 
@@ -109,17 +115,24 @@ def calibration_polynomial(
     Parameters
     ----------
     wavelength : array, shape (n_wave,)
-        Wavelength grid (Angstrom).
+        Wavelength grid [Angstrom].
     coeffs : array, shape (order,)
-        Chebyshev coefficients a_1, ..., a_order.  Empty array gives
+        Chebyshev coefficients a_1, ..., a_order. Empty array gives
         C(lambda) = 1 everywhere.
     wave_min, wave_max : float
         Wavelength range for normalization to [-1, 1].
 
     Returns
     -------
-    array, shape (n_wave,)
-        Calibration factor at each wavelength.
+    ndarray, shape (n_wave,)
+        Multiplicative calibration factor (dimensionless).
+
+    Notes
+    -----
+    JIT-compatible: yes. Gradient-safe: yes — differentiable w.r.t.
+    coefficients and wavelengths. Uses Clenshaw's backward recurrence
+    for numerically stable evaluation.
+
     """
     x = 2.0 * (wavelength - wave_min) / (wave_max - wave_min) - 1.0
 
@@ -158,30 +171,29 @@ def marginalize_calibration(
 
     Given a model SED m(lambda) and observed spectrum d(lambda) with noise
     sigma(lambda), the calibrated model is C(lambda)*m(lambda) where C is
-    a Chebyshev polynomial.  With a Gaussian prior on the polynomial
+    a Chebyshev polynomial. With a Gaussian prior on the polynomial
     coefficients c ~ N(0, prior_sigma^2 I), the optimal coefficients and
     marginalized log-likelihood are computed in closed form.
 
-    This follows the Prospector approach (Johnson et al. 2021): the
-    calibration polynomial is treated as a nuisance and integrated out
-    analytically at each likelihood evaluation, reducing the dimensionality
-    of the sampling problem.
+    This follows the Prospector approach: the calibration polynomial is
+    treated as a nuisance and integrated out analytically at each likelihood
+    evaluation, reducing the dimensionality of the sampling problem.
 
     Parameters
     ----------
     model_flux : array, shape (n_wave,)
         Physical model spectrum (any flux units, matching obs_flux).
     obs_flux : array, shape (n_wave,)
-        Observed spectrum.
+        Observed spectrum (same units as model_flux).
     obs_err : array, shape (n_wave,)
         1-sigma uncertainties on the observed spectrum (same units).
     wavelength : array, shape (n_wave,)
         Wavelength grid [Angstrom].
-    n_poly : int
+    n_poly : int, optional
         Number of Chebyshev polynomial coefficients (order 1 through
-        n_poly).  The constant term (T_0 = 1) is implicit and fixed.
+        n_poly). The constant term (T_0 = 1) is implicit and fixed.
         Default 3.
-    prior_sigma : float
+    prior_sigma : float, optional
         Standard deviation of the Gaussian prior on each coefficient.
         Default 1.0.
 
@@ -190,26 +202,24 @@ def marginalize_calibration(
     log_likelihood_marginal : scalar
         Marginalized log-likelihood with calibration polynomial
         integrated out.
-    c_hat : array, shape (n_poly,)
+    c_hat : ndarray, shape (n_poly,)
         MAP calibration coefficients (a_1 ... a_n_poly).
-    c_hat_err : array, shape (n_poly,)
-        Posterior standard deviations of the coefficients (sqrt of
-        diagonal of the posterior covariance).
+    c_hat_err : ndarray, shape (n_poly,)
+        Posterior standard deviations of the coefficients.
 
     Notes
     -----
-    The marginalized log-likelihood is:
+    JIT-compatible: yes — `n_poly` is a static argument.
+    Gradient-safe: no — uses matrix inversion (not safe for gradient).
 
-        ln L_marg = -0.5 * [chi2(c_hat) + c_hat^T Lambda^{-1} c_hat
-                            - ln|Sigma_post| + ln|Lambda|]
-
-    where Lambda = prior_sigma^2 * I is the prior covariance and
-    Sigma_post = (A + Lambda^{-1})^{-1} is the posterior covariance.
-    Constant terms (-N/2 * ln(2pi) - sum ln sigma_i) are included.
+    The marginalized log-likelihood integrates the Gaussian likelihood and
+    Gaussian prior on the polynomial coefficients in closed form via the
+    matrix determinant lemma.
 
     References
     ----------
     Johnson et al. 2021, ApJS, 254, 22 (Prospector).
+
     """
     wave_min = wavelength[0]
     wave_max = wavelength[-1]
@@ -309,16 +319,22 @@ def apply_calibration(
     spectrum : array, shape (n_wave,)
         Physical model spectrum (any flux units).
     wavelength : array, shape (n_wave,)
-        Wavelength grid (Angstrom).
+        Wavelength grid [Angstrom].
     coeffs : array, shape (order,)
         Chebyshev coefficients a_1, ..., a_order.
     wave_min, wave_max : float
-        Wavelength range for normalization.
+        Wavelength range for normalization to [-1, 1].
 
     Returns
     -------
-    array, shape (n_wave,)
-        Calibrated spectrum.
+    ndarray, shape (n_wave,)
+        Calibrated spectrum (same units as input spectrum).
+
+    Notes
+    -----
+    JIT-compatible: yes. Gradient-safe: yes — differentiable w.r.t.
+    spectrum and coefficients.
+
     """
     cal = calibration_polynomial(wavelength, coeffs, wave_min, wave_max)
     return spectrum * cal
@@ -335,25 +351,31 @@ def double_calibration_polynomial(
 
     For two-arm spectrographs (e.g. X-SHOOTER, DEIMOS) where a detector
     gap or dichroic split causes a calibration discontinuity, fitting a
-    single polynomial across the full range can bias the result.  This
+    single polynomial across the full range can bias the result. This
     function applies separate polynomials to each half, matched to their
     local wavelength range.
 
     Parameters
     ----------
     wavelength : array, shape (n_wave,)
-        Wavelength grid (Angstrom), must be sorted.
+        Wavelength grid [Angstrom], must be sorted.
     coeffs_blue : array, shape (order_blue,)
-        Chebyshev coefficients for the blue arm (lambda < wave_split).
+        Chebyshev coefficients for the blue arm (wavelength < wave_split).
     coeffs_red : array, shape (order_red,)
-        Chebyshev coefficients for the red arm (lambda >= wave_split).
+        Chebyshev coefficients for the red arm (wavelength >= wave_split).
     wave_split : float
-        Wavelength boundary between blue and red arms (Angstrom).
+        Wavelength boundary between blue and red arms [Angstrom].
 
     Returns
     -------
-    array, shape (n_wave,)
-        Calibration factor at each wavelength.
+    ndarray, shape (n_wave,)
+        Multiplicative calibration factor (dimensionless).
+
+    Notes
+    -----
+    JIT-compatible: yes. Gradient-safe: yes — differentiable w.r.t.
+    coefficients and wavelengths.
+
     """
     wave_min = wavelength[0]
     wave_max = wavelength[-1]
@@ -378,20 +400,26 @@ def apply_double_calibration(
     Parameters
     ----------
     spectrum : array, shape (n_wave,)
-        Physical model spectrum.
+        Physical model spectrum (any flux units).
     wavelength : array, shape (n_wave,)
-        Wavelength grid (Angstrom), must be sorted.
+        Wavelength grid [Angstrom], must be sorted.
     coeffs_blue : array, shape (order_blue,)
-        Chebyshev coefficients for the blue arm.
+        Chebyshev coefficients for the blue arm (wavelength < wave_split).
     coeffs_red : array, shape (order_red,)
-        Chebyshev coefficients for the red arm.
+        Chebyshev coefficients for the red arm (wavelength >= wave_split).
     wave_split : float
-        Wavelength boundary (Angstrom).
+        Wavelength boundary [Angstrom].
 
     Returns
     -------
-    array, shape (n_wave,)
-        Calibrated spectrum.
+    ndarray, shape (n_wave,)
+        Calibrated spectrum (same units as input spectrum).
+
+    Notes
+    -----
+    JIT-compatible: yes. Gradient-safe: yes — differentiable w.r.t.
+    spectrum and coefficients.
+
     """
     cal = double_calibration_polynomial(wavelength, coeffs_blue, coeffs_red, wave_split)
     return spectrum * cal

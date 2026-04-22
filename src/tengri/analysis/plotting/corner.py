@@ -16,7 +16,17 @@ from .styles import COLORS
 def safe_corner(posterior, **kwargs):
     """Wrapper around Posterior.plot_corner that handles degenerate posteriors.
 
-    Returns fig on success, None on failure.
+    Parameters
+    ----------
+    posterior : Posterior
+        Fitted posterior object with a ``plot_corner`` method.
+    **kwargs
+        Additional keyword arguments passed to ``posterior.plot_corner``.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure or None
+        Corner plot figure, or None if generation failed.
     """
     try:
         return posterior.plot_corner(**kwargs)

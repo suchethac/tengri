@@ -120,7 +120,21 @@ _lo_nonneg = lambda lo, hi: lo >= 0  # noqa: E731
 
 
 def _register(spec: SFHModelSpec) -> None:
-    """Register an SFH model spec in the global registry."""
+    """Register an SFH model spec in the global registry.
+
+    Parameters
+    ----------
+    spec : SFHModelSpec
+        Model specification to register.
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    **JIT-compatible**: no — mutates global registry dictionary during initialization.
+    """
     SFH_REGISTRY[spec.name] = spec
 
 
@@ -488,7 +502,24 @@ SFH_REGISTRY["psb_wild2020"] = SFH_REGISTRY["psb"]
 
 
 def _table_sfh_placeholder(t_lookback, **kwargs):
-    """Placeholder — tabulated SFH is handled directly in Model._compute_sed_components."""
+    """Placeholder — tabulated SFH is handled directly in Model._compute_sed_components.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
+    **kwargs
+        Unused; for registry compatibility.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        Zero array (actual tabulated SFH handled separately).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.zeros_like``.
+    """
     return jnp.zeros_like(t_lookback)
 
 
@@ -683,7 +714,29 @@ _register(
 
 
 def _field_fn_placeholder(t_lookback, **kwargs):
-    """Placeholder — field modulation is applied in the composed closure."""
+    """Placeholder — field modulation is applied in the composed closure.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
+    **kwargs
+        Unused.
+
+    Returns
+    -------
+    NotImplemented
+        This function should not be called directly.
+
+    Raises
+    ------
+    RuntimeError
+        Always — field modulation happens in :func:`resolve_sfh`, not here.
+
+    Notes
+    -----
+    **JIT-compatible**: no — raises at runtime.
+    """
     raise RuntimeError("field fn should not be called directly; use resolve_sfh()")
 
 
@@ -728,7 +781,7 @@ def resolve_sfh(
     Returns
     -------
     composed_fn : callable
-        Pure JAX function: fn(t_lookback, **all_internal_kwargs) -> SFR.
+        Pure JAX function: fn(t_lookback, **all_internal_kwargs) -> SFR [Msun/yr].
     merged_params : dict[str, ParamDef]
         All fittable parameters across selected models.
     merged_param_map : dict[str, tuple[str, float, float]]
@@ -741,7 +794,23 @@ def resolve_sfh(
     KeyError
         If a model name is not in the registry.
     ValueError
-        If composition constraints are violated.
+        If composition constraints are violated (e.g., >1 burst, no smooth component).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — returns a JIT-compatible closure (composed_fn).
+
+    Composition rules:
+
+    - **Additive**: smooth models summed. E.g., ``["tsnorm", "dpl"]`` yields
+      ``SFR_total = SFR_tsnorm + SFR_dpl``.
+    - **Mixture** (burst): mass-fraction weighted, replaces smooth. E.g.,
+      ``["tsnorm", "burst"]`` yields ``SFR = (1-f)*SFR_tsnorm + f*burst_shape``.
+    - **Modulator** (field): multiplicative GP modulation. E.g.,
+      ``["tsnorm", "field"]`` yields ``SFR = SFR_tsnorm * exp(gp_x - K_0/2)``.
+
+    Auto-swap: ``dense_basis`` → ``dense_basis_pure`` if burst or field is
+    present (to avoid SFR constraint interference with composition).
     """
     if isinstance(mean_sfh_type, str):
         mean_sfh_type = [mean_sfh_type]
@@ -861,6 +930,18 @@ def compute_field_gp(
         GP realization on the log-age grid.
     k0_half : float
         Lognormal correction: K(0)/2 = sigma_PS^2 / 4.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import compute_field_gp, make_log_age_grid
+    >>> n = 64
+    >>> grid = make_log_age_grid(n)
+    >>> d = float(grid[1] - grid[0])
+    >>> xi = jnp.zeros(n)
+    >>> gp_x, k0_half = compute_field_gp(xi, psd_sigma=1.0, psd_tau_yr=1e8, n_grid=n, d_log_age=d)
+    >>> gp_x.shape
+    (64,)
     """
     sqrt_power_fn = FIELD_MODEL_REGISTRY[field_model]
     sqrt_power = sqrt_power_fn(n_grid, d_log_age, psd_sigma, psd_tau_yr)

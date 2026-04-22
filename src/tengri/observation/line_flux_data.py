@@ -48,6 +48,7 @@ class LineFluxData:
     wavelengths : jnp.ndarray
         Rest-frame vacuum wavelengths in Angstrom, shape ``(n_lines,)``.
         Used to match against the nebular backend's line output.
+
     """
 
     names: tuple[str, ...]
@@ -103,6 +104,7 @@ class LineFluxData:
         -------
         jnp.ndarray, scalar
             Sum of ((obs - model) / error)^2 over detected lines.
+
         """
         residual = (self.fluxes - model_fluxes) / self.errors
         chi2_per_line = residual**2
@@ -129,6 +131,7 @@ class LineFluxData:
         -------
         jnp.ndarray, scalar
             Total log-likelihood summed over all lines.
+
         """
         residual = (self.fluxes - model_fluxes) / self.errors
         ll_gaussian = -0.5 * residual**2 - jnp.log(self.errors) - 0.5 * jnp.log(2.0 * jnp.pi)
@@ -167,6 +170,7 @@ class LineFluxData:
         ------
         ValueError
             If any line name is not found in the standard catalog.
+
         """
         names = []
         fluxes = []

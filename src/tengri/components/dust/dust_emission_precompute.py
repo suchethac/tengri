@@ -76,19 +76,31 @@ def precompute_dl07_photometry(
     ----------
     templates : dict
         DL07 template arrays with keys: ``single_u``, ``powerlaw``,
-        ``wavelength``, ``umin_grid``, ``qpah_grid``.
-    filter_waves : list of array
-        Filter wavelength arrays in Angstrom.
-    filter_trans : list of array
-        Filter transmission arrays.
+        ``wavelength``, ``umin_grid``, ``qpah_grid`` [erg/s/Hz or L_sun/Hz].
+    filter_waves : list of array_like, shape (n_filt,)
+        Filter wavelength arrays [Å].
+    filter_trans : list of array_like, shape (n_filt,)
+        Filter transmission curves [dimensionless].
+    redshift : float
+        Source redshift [dimensionless]. Default: 0.0.
 
     Returns
     -------
-    dict
-        ``single_u_phot`` : array (n_qpah, n_umin, n_filters)
-        ``powerlaw_phot`` : array (n_qpah, n_umin, n_filters)
-        ``umin_grid`` : array (n_umin,)
-        ``qpah_grid`` : array (n_qpah,)
+    dict with keys:
+        ``"single_u_phot"`` — ndarray, shape (n_qpah, n_umin, n_filters),
+            photometry of single-U component [erg/s/Hz or L_sun/Hz].
+        ``"powerlaw_phot"`` — ndarray, shape (n_qpah, n_umin, n_filters),
+            photometry of power-law component [erg/s/Hz or L_sun/Hz].
+        ``"umin_grid"`` — ndarray, shape (n_umin,), minimum radiation field
+            intensity grid [dimensionless].
+        ``"qpah_grid"`` — ndarray, shape (n_qpah,), PAH fraction grid
+            [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: no — precomputation happens at factory time.
+
+    **Gradient-safe**: no — precomputation is a offline preparation step.
     """
     single_u = templates["single_u"]  # (n_qpah, n_umin, n_wave)
     powerlaw = templates["powerlaw"]  # (n_qpah, n_umin, n_wave)
@@ -142,8 +154,15 @@ def build_dl07_photometry_lookup(precomp: dict):
     Returns
     -------
     callable
-        ``(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah) -> array (n_filters,)``
-        Returns L_nu (Lsun/Hz) at each filter.
+        Signature: ``(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah) ->``
+        ``ndarray, shape (n_filters,)``. Returns filter-integrated L_ν
+        [erg/s/Hz or L_sun/Hz] at each filter.
+
+    Notes
+    -----
+    **JIT-compatible**: the returned callable is JIT-compiled via ``@jax.jit``.
+
+    **Gradient-safe**: yes. Use for likelihood evaluation and inference.
     """
     single_u_phot = precomp["single_u_phot"]
     powerlaw_phot = precomp["powerlaw_phot"]
@@ -176,8 +195,28 @@ def build_dl07_photometry_lookup(precomp: dict):
 def _auto_collapse(preint: PreintegratedGrid, axis_params, parameters) -> PreintegratedGrid:
     """Collapse grid axes whose corresponding prior is Fixed.
 
-    Shared helper for every dust-IR adapter.  Returns the input grid unchanged
+    Shared helper for every dust-IR adapter. Returns the input grid unchanged
     if no axis params are fixed.
+
+    Parameters
+    ----------
+    preint : PreintegratedGrid
+        Preintegrated photometry grid.
+    axis_params : tuple[str, ...]
+        Ordered parameter names corresponding to grid axes [dimensionless].
+    parameters : Parameters or None
+        Parameter specification for prior queries.
+
+    Returns
+    -------
+    PreintegratedGrid
+        Grid with axes corresponding to Fixed priors collapsed and removed.
+
+    Notes
+    -----
+    **JIT-compatible**: no — helper for factory-time preprocessing.
+
+    **Gradient-safe**: no — operates on factory-time data structures.
     """
     if parameters is None or not axis_params:
         return preint
@@ -211,29 +250,41 @@ def precompute(
 
     Parameters
     ----------
-    filter_waves, filter_trans : list
-        Filter curves (observed frame).
+    filter_waves : list of array_like, shape (n_filt,)
+        Filter wavelength curves (observed frame) [Å].
+    filter_trans : list of array_like, shape (n_filt,)
+        Filter transmission curves (observed frame) [dimensionless].
     redshift : float
-        Source redshift; filter integrals bake this in.
-    parameters : Parameters | None
-        Parameter spec.  Used only to detect which AXIS_PARAMS are Fixed.
+        Source redshift [dimensionless]; filter integrals bake this in.
+    parameters : Parameters or None
+        Parameter specification. Used only to detect which AXIS_PARAMS are Fixed.
     model_name : str
         One of the keys in :data:`AXIS_PARAMS`.
     templates : dict, optional
-        Required for DL07 (``{"single_u", "powerlaw", "wavelength",
-        "umin_grid", "qpah_grid"}``).
-    grid, axes, wavelength : optional
-        Required for the generic path (Dale2014 / DL14 / Astrodust / BOSA /
-        THEMIS). ``grid`` has shape ``(*grid_dims, n_wave)``.
+        Required for DL07 (``{"single_u"``, ``"powerlaw"``, ``"wavelength"``,
+        ``"umin_grid"``, ``"qpah_grid"}``) [erg/s/Hz].
+    grid : ndarray, optional
+        Template grid array, shape ``(*grid_dims, n_wave)`` [erg/s/Hz or L_sun/Hz].
+        Required for generic path (Dale2014/DL14/Astrodust/BOSA/THEMIS).
+    axes : tuple[ndarray, ...], optional
+        Grid axis coordinate arrays [various dimensionless units].
+        Required for generic path.
+    wavelength : ndarray, optional
+        Template wavelength array [Å]. Required for generic path.
     units : {"lnu", "llam"}
-        Template flux units; ``"llam"`` triggers L_λ → L_ν conversion.
+        Template flux units [dimensionless]; ``"llam"`` triggers L_λ → L_ν conversion.
 
     Returns
     -------
-    dict (for DL07) or PreintegratedGrid (for generic path)
-        The precomputed data. For DL07 this is a plain dict (not a
-        :class:`PreintegratedGrid`); the
-        ``build_lookup`` function accepts both shapes.
+    dict or PreintegratedGrid
+        Precomputed photometry data. For DL07, returns a plain dict (not a
+        :class:`PreintegratedGrid`); the ``build_lookup`` function accepts both.
+
+    Notes
+    -----
+    **JIT-compatible**: no — precomputation happens at factory time.
+
+    **Gradient-safe**: no — precomputation is an offline preparation step.
     """
     if model_name in ("draine_li2007", "dl07"):
         if templates is None:
@@ -264,6 +315,24 @@ def build_lookup(preint, *, model_name: str):
 
     Dispatches on ``model_name`` because DL07's mixing signature differs from
     the generic single-template path.
+
+    Parameters
+    ----------
+    preint : dict or PreintegratedGrid
+        Precomputed photometry grid from ``precompute()``.
+    model_name : str
+        Dust model identifier (same as used in ``precompute()``).
+
+    Returns
+    -------
+    callable
+        JIT-compiled photometry lookup function. Signature depends on ``model_name``.
+
+    Notes
+    -----
+    **JIT-compatible**: the returned callable is JIT-compiled.
+
+    **Gradient-safe**: yes. Use for likelihood evaluation and inference.
     """
     if model_name in ("draine_li2007", "dl07"):
         # preint is a dict from precompute_dl07_photometry
@@ -285,26 +354,36 @@ def precompute_for_model(
 
     Encapsulates template loading + file discovery + preintegration (+
     auto-collapse on Fixed) into a single call so :class:`SEDModel` does not
-    need a per-model switch.  Returns ``None`` when required template data
+    need a per-model switch. Returns ``None`` when required template data
     is not on disk — callers fall back to full-wavelength evaluation.
 
     Parameters
     ----------
     model_name : str
-        One of ``"draine_li2007"``, ``"dale2014"``, ``"draine_li2014"``,
-        ``"astrodust"``, ``"bosa"``, ``"themis"``.  Other names (``"dl07"``
-        alias, ``"modified_blackbody"``, ``"casey2012"``) return ``None``.
-    filter_waves, filter_trans : list
-        Filter curves (observed frame).
+        Dust emission model identifier: ``"draine_li2007"``, ``"dale2014"``,
+        ``"draine_li2014"``, ``"astrodust"``, ``"bosa"``, ``"themis"``.
+        Other names (``"dl07"`` alias, ``"modified_blackbody"``,
+        ``"casey2012"``) return ``None``.
+    filter_waves : list of array_like, shape (n_filt,)
+        Filter wavelength curves (observed frame) [Å].
+    filter_trans : list of array_like, shape (n_filt,)
+        Filter transmission curves (observed frame) [dimensionless].
     redshift : float
-        Source redshift (fixed at init time).
-    parameters : Parameters | None
-        Used for auto-collapse on Fixed parameters (Protocol surface).
+        Source redshift [dimensionless] (fixed at init time).
+    parameters : Parameters or None
+        Parameter specification. Used for auto-collapse on Fixed parameters (Protocol surface).
 
     Returns
     -------
-    dict (DL07) or PreintegratedGrid or None
-        Feed to :func:`build_lookup` with the same ``model_name``.
+    dict or PreintegratedGrid or None
+        Precomputed photometry (feed to :func:`build_lookup` with the same
+        ``model_name``), or ``None`` if template data is unavailable.
+
+    Notes
+    -----
+    **JIT-compatible**: no — template loading and precomputation happen at factory time.
+
+    **Gradient-safe**: no — returns precomputed factory-time data structures.
     """
     # Analytic models have no preintegration
     if model_name in (None, "modified_blackbody", "casey2012"):

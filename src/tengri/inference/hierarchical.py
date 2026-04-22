@@ -33,20 +33,40 @@ from tengri.utils.transforms import to_bounded, to_unbounded
 class PopulationPosterior:
     """Results from hierarchical PSD inference.
 
-    Attributes
+    This class holds the posterior distribution over shared PSD hyperparameters
+    (σ_PSD, τ_PSD) inferred across a population of galaxies, along with optional
+    per-galaxy individual posteriors.
+
+    Parameters
     ----------
     shared_samples : dict
-        Posterior samples for shared PSD params. Shape (n_samples,).
+        Posterior samples for shared PSD params. Keys are param names (e.g.,
+        'psd_sigma', 'psd_tau_myr'), values are arrays of shape (n_samples,).
     shared_params : dict
-        Posterior mean of shared PSD params.
-    individual_samples : list of dict
-        Per-galaxy posterior samples (optional, can be None for memory).
+        Posterior mean of shared PSD params (computed from shared_samples).
+    individual_samples : list of dict, optional
+        Per-galaxy posterior samples. Each element is a dict with per-galaxy
+        parameter names as keys. If None, individual posteriors are not stored
+        (for memory efficiency).
     method : str
-        Inference method used.
+        Inference method used (e.g., "Hierarchical EVI (JIT)").
     wall_time_s : float
-        Total wall-clock time.
+        Total wall-clock time for inference.
     diagnostics : dict
-        Method-specific diagnostics.
+        Method-specific diagnostics (e.g., number of iterations, convergence info).
+
+    Notes
+    -----
+    This dataclass is the return type for PopulationFitter.run(). Access
+    population posteriors via `shared_samples` and `shared_params`, and
+    per-galaxy posteriors via the `individual` property (returns a list of
+    lightweight objects with `.samples` and `.params` attributes).
+
+    Examples
+    --------
+    >>> result = fitter.run("vi", n_iterations=20)
+    >>> result.summary()  # Median and 68% credible intervals
+    >>> ax = result.plot_population(params=("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"))
     """
 
     shared_samples: dict
@@ -57,7 +77,19 @@ class PopulationPosterior:
     diagnostics: dict = field(default_factory=dict)
 
     def summary(self) -> dict:
-        """Median and 68% CI for shared PSD parameters."""
+        """Median and 68% CI for shared PSD parameters.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        dict
+            Dictionary mapping parameter names to summary statistics. Each
+            parameter has keys 'median', 'lo_68' (16th percentile), and
+            'hi_68' (84th percentile).
+        """
         result = {}
         for name, arr in self.shared_samples.items():
             vals = np.array(arr)
@@ -80,11 +112,20 @@ class PopulationPosterior:
     def individual(self):
         """Per-galaxy posterior marginals as a list of lightweight objects.
 
+        Parameters
+        ----------
+        None
+
         Returns
         -------
         list of SimpleNamespace
             Each element has ``.samples`` (dict) and ``.params`` (dict).
             Returns empty list if ``individual_samples`` is None.
+
+        Notes
+        -----
+        Each per-galaxy posterior is marginalized over the shared PSD hyperparameters.
+        The ``.params`` field contains the median of each per-galaxy parameter.
         """
         from types import SimpleNamespace
 
@@ -107,10 +148,16 @@ class PopulationPosterior:
         params : tuple of str
             Two parameter names for x and y axes.
         ax : matplotlib Axes, optional
+            If None, creates a new figure.
 
         Returns
         -------
         matplotlib Axes
+            The axes object with the scatter plot.
+
+        Notes
+        -----
+        Plots posterior samples as a scatter cloud. Each point is one posterior sample.
         """
         import matplotlib.pyplot as plt
 
@@ -140,6 +187,10 @@ class PopulationPosterior:
 class PopulationFitter:
     """Hierarchical inference for shared PSD parameters.
 
+    Manages population-level inference via hierarchical VI, learning the shared
+    PSD hyperparameters (σ_PSD, τ_PSD) across a population of galaxies while
+    preserving per-galaxy latent fields and physical parameters.
+
     Parameters
     ----------
     model_factory : callable
@@ -155,6 +206,18 @@ class PopulationFitter:
         (lo, hi) for uniform prior on τ_PSD (Myr).
     data_type : str
         "photometry" or "spectroscopy".
+
+    Notes
+    -----
+    Wraps all hierarchical inference methods (EVI, VI, MCMC) with automatic
+    initialization via per-galaxy MAP estimation. The class builds a single
+    flat parameter vector [φ_shared, ξ_1, θ_1, ..., ξ_N, θ_N] and optimizes
+    it via the specified method.
+
+    Attributes
+    ----------
+    n_galaxies : int
+        Number of galaxies in the population.
     """
 
     def __init__(
@@ -191,9 +254,24 @@ class PopulationFitter:
             "vi_linear" — MGVI (faster per iteration, for very large N).
             "geovi_flat" — flat parameter vector (geovi on unstandardized space).
             "mcmc_raytrace" — Ray Tracing on flat vector (fast but needs tuning).
-        key : PRNGKey
+            "mcmc_ess" — Ensemble sampling (EVI, fully JIT-compiled).
+        key : PRNGKey, optional
+            Random key for reproducibility. If None, uses PRNGKey(0).
         **kwargs
             Passed to the inference method.
+
+        Returns
+        -------
+        PopulationPosterior
+            Results object with shared_params, shared_samples, individual_samples,
+            and diagnostics.
+
+        Notes
+        -----
+        Automatic initialization: all methods initialize per-galaxy parameters
+        via MAP estimation before starting the hierarchical inference. First call
+        may be slow due to JIT compilation. Subsequent calls are fast.
+        Approximate runtime: ~30 seconds for 10 galaxies on CPU (method-dependent).
         """
         if key is None:
             key = jax.random.PRNGKey(0)
@@ -309,12 +387,29 @@ class PopulationFitter:
 
         # --- Hierarchical signal_response (vmapped) ---
         def signal_response(p):
-            """Compute predicted data from hierarchical parameters."""
+            """Compute predicted data from hierarchical parameters.
+
+            Parameters
+            ----------
+            p : dict
+                Hierarchical parameter dict with keys 'psd_sigma_u', 'psd_tau_u',
+                'gal' (per-galaxy unbounded params), and optionally 'gal_xi'.
+
+            Returns
+            -------
+            ndarray, shape (n_data,)
+                Predicted flux/spectrum for all galaxies concatenated.
+
+            Notes
+            -----
+            Internal method for hierarchical VI update. Not part of the public API.
+            **JIT-compatible**: yes.
+            """
             psd_sigma = to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi)
             psd_tau = to_bounded(p["psd_tau_u"], tau_lo, tau_hi)
 
             def forward_one(ub_scalars, xi):
-                """Evaluate forward model for one galaxy with given unbounded params."""
+                """Evaluate forward model for one galaxy with given unbounded params (Tier 4)."""
                 params = {}
                 for name in free_names:
                     lo, hi = bounds[name]
@@ -354,25 +449,59 @@ class PopulationFitter:
         d_total = len(_init_flat)
 
         def flatten(d):
-            """Flatten parameter tree to 1D vector."""
+            """Flatten parameter tree to 1D vector (Tier 4)."""
             return ravel_pytree(d)[0]
 
         def unflatten(x):
-            """Unflatten 1D vector to parameter tree."""
+            """Unflatten 1D vector to parameter tree (Tier 4)."""
             return unravel_fn(x)
 
         # --- Core EVI primitives (same as single-galaxy) ---
         _eps = 6.0 * jnp.finfo(jnp.float64).eps
 
         def metric_vec(xi, v):
-            """GGN metric: M(xi) @ v = J^T N^{-1} J v + v."""
+            """GGN metric: M(xi) @ v = J^T N^{-1} J v + v.
+
+            Parameters
+            ----------
+            xi : ndarray, shape (d_total,)
+                Flattened hierarchical parameter vector.
+            v : ndarray, shape (d_total,)
+                Vector to apply the metric to.
+
+            Returns
+            -------
+            ndarray, shape (d_total,)
+                M(xi) @ v, the Gauss-Newton metric applied to v.
+
+            Notes
+            -----
+            Internal method for hierarchical EVI. Not part of the public API.
+            **JIT-compatible**: yes.
+            """
             xi_d, v_d = unflatten(xi), unflatten(v)
             _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
             _, vjp_fn = jax.vjp(signal_response, xi_d)
             return flatten(vjp_fn(noise_inv * Jv)[0]) + v
 
         def hamiltonian(xi):
-            """H(xi) = 0.5 chi2 + 0.5 ||xi||^2."""
+            """H(xi) = 0.5 chi2 + 0.5 ||xi||^2.
+
+            Parameters
+            ----------
+            xi : ndarray, shape (d_total,)
+                Flattened hierarchical parameter vector.
+
+            Returns
+            -------
+            float
+                Total Hamiltonian (misfit + Gaussian prior).
+
+            Notes
+            -----
+            Internal method for hierarchical EVI. Not part of the public API.
+            **JIT-compatible**: yes.
+            """
             pred = signal_response(unflatten(xi))
             chi2 = jnp.sum(((all_data - pred) / all_noise) ** 2)
             return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
@@ -380,18 +509,44 @@ class PopulationFitter:
         H_vg = jax.value_and_grad(hamiltonian)
 
         def cg_solve(mat_fn, b, x0, maxiter=30, miniter=6, absdelta=1e-4):
-            """CG solve: mat_fn(x) = b. Energy-based convergence."""
+            """CG solve: mat_fn(x) = b. Energy-based convergence.
+
+            Parameters
+            ----------
+            mat_fn : callable
+                Function that applies the matrix (or operator) to a vector.
+            b : ndarray
+                Right-hand side vector.
+            x0 : ndarray
+                Initial guess.
+            maxiter : int
+                Maximum iterations.
+            miniter : int
+                Minimum iterations before checking convergence.
+            absdelta : float
+                Energy change threshold for convergence.
+
+            Returns
+            -------
+            ndarray
+                Solution x such that mat_fn(x) ≈ b.
+
+            Notes
+            -----
+            Internal method for hierarchical EVI. Not part of the public API.
+            **JIT-compatible**: yes.
+            """
             r = mat_fn(x0) - b
             d, gamma = r, jnp.dot(r, r)
             energy = jnp.dot((r - b) / 2, x0)
             init = (x0, r, d, gamma, energy, jnp.int32(-2), jnp.int32(0))
 
             def cond(s):
-                """Continue CG loop if not converged."""
+                """Continue CG loop if not converged (Tier 4)."""
                 return s[5] < -1
 
             def body(s):
-                """Execute one CG iteration."""
+                """Execute one CG iteration (Tier 4)."""
                 x, r, d, pg, pe, info, i = s
                 i = i + 1
                 q = mat_fn(d)
@@ -418,9 +573,28 @@ class PopulationFitter:
 
         # --- Posterior sampler ---
         def draw_residuals(pos_f, subkeys):
-            """Draw posterior residuals for EVI sampling."""
+            """Draw posterior residuals for EVI sampling.
+
+            Parameters
+            ----------
+            pos_f : ndarray, shape (d_total,)
+                Posterior mode (converged point estimate).
+            subkeys : ndarray, shape (n_samples, 2)
+                Random keys for sampling.
+
+            Returns
+            -------
+            ndarray, shape (n_samples, d_total)
+                Posterior residuals δ ~ N(0, [M(pos_f)]^{-1}).
+
+            Notes
+            -----
+            Internal method for hierarchical EVI. Not part of the public API.
+            **JIT-compatible**: yes.
+            """
+
             def draw_one(subkey):
-                """Sample one residual from the posterior."""
+                """Sample one residual from the posterior (Tier 4)."""
                 k1, k2 = jax.random.split(subkey)
                 eta_pr = jax.random.normal(k1, shape=(d_total,))
                 eta_lh = jax.random.normal(k2, shape=(n_data,))
@@ -439,30 +613,90 @@ class PopulationFitter:
 
         # --- EVI step ---
         def kl_vg(m, residuals):
-            """Compute mean Hamiltonian value and gradient over residual sample."""
+            """Compute mean Hamiltonian value and gradient over residual sample.
+
+            Parameters
+            ----------
+            m : ndarray, shape (d_total,)
+                Mode estimate.
+            residuals : ndarray, shape (n_samples, d_total)
+                Posterior residual samples.
+
+            Returns
+            -------
+            tuple (float, ndarray)
+                (mean Hamiltonian, mean gradient).
+
+            Notes
+            -----
+            Internal method for hierarchical EVI. Not part of the public API.
+            **JIT-compatible**: yes.
+            """
+
             def single_vg(r):
-                """Compute Hamiltonian and gradient for one residual."""
+                """Compute Hamiltonian and gradient for one residual (Tier 4)."""
                 return H_vg(m + r)
 
             vals, grads = jax.vmap(single_vg)(residuals)
             return jnp.mean(vals), jnp.mean(grads, axis=0)
 
         def kl_metric(m, residuals, v):
-            """Compute GGN Hessian-vector product averaged over residuals."""
+            """Compute GGN Hessian-vector product averaged over residuals.
+
+            Parameters
+            ----------
+            m : ndarray, shape (d_total,)
+                Mode estimate.
+            residuals : ndarray, shape (n_samples, d_total)
+                Posterior residual samples.
+            v : ndarray, shape (d_total,)
+                Vector to apply the metric to.
+
+            Returns
+            -------
+            ndarray, shape (d_total,)
+                Mean [M(m + δ) @ v] over residual samples δ.
+
+            Notes
+            -----
+            Internal method for hierarchical EVI. Not part of the public API.
+            **JIT-compatible**: yes.
+            """
+
             def single_met(r):
-                """Apply metric for one residual sample."""
+                """Apply metric for one residual sample (Tier 4)."""
                 return metric_vec(m + r, v)
 
             return jnp.mean(jax.vmap(single_met)(residuals), axis=0)
 
         def evi_step(m, subkey, n_samp):
-            """Execute one EVI step: draw mirrored residuals and find the EVI mode via NCG."""
+            """Execute one EVI step: draw mirrored residuals and find the EVI mode via NCG.
+
+            Parameters
+            ----------
+            m : ndarray, shape (d_total,)
+                Current mode estimate.
+            subkey : PRNGKey
+                Random key for this step.
+            n_samp : int
+                Number of residual samples (doubled by mirroring).
+
+            Returns
+            -------
+            tuple (ndarray, float)
+                (new mode, Hamiltonian value at new mode).
+
+            Notes
+            -----
+            Internal method for hierarchical EVI. Not part of the public API.
+            **JIT-compatible**: yes.
+            """
             sample_keys = jax.random.split(subkey, n_samp)
             residuals = draw_residuals(m, sample_keys)
             residuals = jnp.concatenate([residuals, -residuals], axis=0)
 
             def ncg_body(carry):
-                """Execute one NCG iteration for finding EVI mode."""
+                """Execute one NCG iteration for finding EVI mode (Tier 4)."""
                 m_cur, prev_val, info, i = carry
                 i = i + 1
                 val, grad = kl_vg(m_cur, residuals)
@@ -481,7 +715,7 @@ class PopulationFitter:
                 return (m_new, val, info, i)
 
             def ncg_cond(carry):
-                """Continue NCG if not converged."""
+                """Continue NCG if not converged (Tier 4)."""
                 return carry[2] < -1
 
             val0, _ = kl_vg(m, residuals)
@@ -489,16 +723,40 @@ class PopulationFitter:
             return result[0], result[1]
 
         def run_evi(init_pos, evi_key, n_iter, n_samp, rtol):
-            """Run EVI for specified iterations or until convergence."""
+            """Run EVI for specified iterations or until convergence.
+
+            Parameters
+            ----------
+            init_pos : ndarray, shape (d_total,)
+                Initial position.
+            evi_key : PRNGKey
+                Random key for the EVI run.
+            n_iter : int
+                Maximum number of EVI iterations.
+            n_samp : int
+                Residual samples per iteration.
+            rtol : float
+                Relative tolerance for early stopping on Hamiltonian.
+
+            Returns
+            -------
+            tuple (ndarray, int)
+                (converged mode, number of iterations taken).
+
+            Notes
+            -----
+            Internal method for hierarchical EVI. Not part of the public API.
+            **JIT-compatible**: yes.
+            """
             keys = jax.random.split(evi_key, n_iter)
 
             def cond_fn(state):
-                """Continue EVI if not converged and iterations remain."""
+                """Continue EVI if not converged and iterations remain (Tier 4)."""
                 _m, _prev_kl, i, converged = state
                 return (~converged) & (i < n_iter)
 
             def body_fn(state):
-                """Execute one EVI iteration."""
+                """Execute one EVI iteration (Tier 4)."""
                 m, prev_kl, i, converged = state
                 subkey = jax.lax.dynamic_index_in_dim(keys, i, keepdims=False)
                 m_new, kl_val = evi_step(m, subkey, n_samp)

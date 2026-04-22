@@ -74,7 +74,18 @@ DUST_LAWS: dict[str, Callable] = {}
 
 
 def register_dust_law(name: str) -> Callable:
-    """Register a dust attenuation curve function (decorator factory)."""
+    """Decorator factory that registers a dust attenuation curve under a name.
+
+    Parameters
+    ----------
+    name : str
+        Registry key (e.g. ``"calzetti"``, ``"power_law"``).
+
+    Returns
+    -------
+    Callable
+        Decorator that registers the decorated function and returns it unchanged.
+    """
 
     def decorator(fn: Callable) -> Callable:
         """Inner decorator that registers function in DUST_LAWS dict."""
@@ -85,7 +96,23 @@ def register_dust_law(name: str) -> Callable:
 
 
 def resolve_dust_law(name: str) -> Callable:
-    """Get a registered dust law by name."""
+    """Return a registered dust attenuation law by name.
+
+    Parameters
+    ----------
+    name : str
+        Registry key (e.g. ``"calzetti"``, ``"power_law"``).
+
+    Returns
+    -------
+    Callable
+        The registered dust law function.
+
+    Raises
+    ------
+    ValueError
+        If ``name`` is not in the registry.
+    """
     if name not in DUST_LAWS:
         raise ValueError(f"Unknown dust law '{name}'. Available: {list(DUST_LAWS.keys())}")
     return DUST_LAWS[name]
@@ -136,8 +163,8 @@ def _drude_profile(
 
     References
     ----------
-    .. [1] M. Kriek and C. Conroy, "Dust Attenuation in High-Redshift Galaxies—Modeling
-       the Spectral Energy Distribution," ApJL, 775, L16 (2013).
+    .. [1] M. Kriek and C. Conroy, "The Dust Attenuation Law in Distant Galaxies: Evidence
+       for Variation with Spectral Type," ApJL, 775, L16 (2013).
        https://doi.org/10.1088/2041-8205/775/1/L16
     """
     return (wave_um * gamma) ** 2 / ((wave_um**2 - x0**2) ** 2 + (wave_um * gamma) ** 2)
@@ -172,12 +199,12 @@ def _calzetti_l02_kprime(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     References
     ----------
-    .. [1] C. Leitherer et al., "Starburst99: Synthesis Models for Galaxies with Active
-       Star Formation," ApJS, 140, 303 (2002).
-       https://doi.org/10.1086/342289
+    .. [1] C. Leitherer et al., "Global Far-Ultraviolet (912-1800 Å) Properties of
+       Star-forming Galaxies," ApJS, 140, 303 (2002).
+       https://doi.org/10.1086/342486
 
     .. [2] S. Charlot and S. M. Fall, "A Simple Model for the Absorption of Starlight by
-       Dust in Star-forming Galaxies," ApJ, 539, 718 (2000).
+       Dust in Galaxies," ApJ, 539, 718 (2000).
        https://doi.org/10.1086/309250
     """
     wave_um = wavelength / 1e4
@@ -238,7 +265,7 @@ def power_law(
     References
     ----------
     .. [1] S. Charlot and S. M. Fall, "A Simple Model for the Absorption of Starlight by
-       Dust in Star-forming Galaxies," ApJ, 539, 718 (2000).
+       Dust in Galaxies," ApJ, 539, 718 (2000).
        https://doi.org/10.1086/309250
     """
     return (wavelength / 5500.0) ** n_slope
@@ -249,14 +276,37 @@ def vw07_bc(
     wavelength: jnp.ndarray,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Wild+2007 birth cloud: power-law with n = -1.3 (steep UV).
+    r"""Wild+2007 birth cloud: power-law with n = -1.3 (steep UV).
 
     Steeper than the diffuse ISM curve, reflecting the denser dust
     geometry around young stellar populations.
 
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Normalized attenuation curve k(λ), where k(5500 Å) = 1. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The attenuation is:
+
+    .. math::
+
+        k(\lambda) = \left(\frac{\lambda}{5500 \, \text{\AA}}\right)^{-1.3}
+
     References
     ----------
-    Wild et al. 2007, MNRAS, 381, 543.
+    .. [1] V. Wild, S. Charlot, and P. Diminic, "CANDELS/CDF-S: Unveiling the
+       Nature of Distant Star Formation and its Evolution from z ~ 1.5,"
+       MNRAS, 381, 543 (2007).
+       https://doi.org/10.1111/j.1365-2966.2007.12255.x
     """
     return (wavelength / 5500.0) ** (-1.3)
 
@@ -266,12 +316,38 @@ def vw07_diff(
     wavelength: jnp.ndarray,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Wild+2007 diffuse ISM: power-law with n = -0.7 (standard CF00).
+    r"""Wild+2007 diffuse ISM: power-law with n = -0.7 (standard CF00).
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Normalized attenuation curve k(λ), where k(5500 Å) = 1. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The attenuation is:
+
+    .. math::
+
+        k(\lambda) = \left(\frac{\lambda}{5500 \, \text{\AA}}\right)^{-0.7}
 
     References
     ----------
-    Wild et al. 2007, MNRAS, 381, 543;
-    Charlot & Fall 2000, ApJ, 539, 718.
+    .. [1] V. Wild, S. Charlot, and P. Diminic, "CANDELS/CDF-S: Unveiling the
+       Nature of Distant Star Formation and its Evolution from z ~ 1.5,"
+       MNRAS, 381, 543 (2007).
+       https://doi.org/10.1111/j.1365-2966.2007.12255.x
+
+    .. [2] S. Charlot and S. M. Fall, "A Simple Model for the Absorption of
+       Starlight by Dust in Galaxies," ApJ, 539, 718 (2000).
+       https://doi.org/10.1086/309250
     """
     return (wavelength / 5500.0) ** (-0.7)
 
@@ -281,9 +357,41 @@ def calzetti(
     wavelength: jnp.ndarray,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Calzetti et al. (2000) starburst attenuation curve.
+    r"""Calzetti et al. (2000) starburst attenuation curve.
 
-    R_V = 4.05 (fixed). Valid: 0.12 - 2.2 um.
+    R_V = 4.05 (fixed). Valid: 0.12 - 2.2 μm. Widely used for star-forming
+    galaxies.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Normalized attenuation curve k(λ), where k(5500 Å) = 1. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    Uses piecewise polynomials in :math:`x = 1/\lambda` [μm⁻¹]:
+
+    .. math::
+
+        k'(\lambda) = \begin{cases}
+        2.659(-2.156 + 1.509x - 0.198x^2 + 0.011x^3) + R_V & \lambda < 0.63 \, \mu{\rm m} \\
+        2.659(-1.857 + 1.040x) + R_V & \lambda \geq 0.63 \, \mu{\rm m}
+        \end{cases}
+
+    then normalized: :math:`k(\lambda) = k'(\lambda) / R_V` with :math:`R_V = 4.05`.
+
+    References
+    ----------
+    .. [1] S. Calzetti et al., "The Dust Content and Opacity of Star-Forming
+       Galaxies," ApJ, 533, 682 (2000).
+       https://doi.org/10.1086/308692
     """
     wave_um = wavelength / 1e4
     x = 1.0 / wave_um
@@ -303,16 +411,44 @@ def kriek_conroy(
     dust_delta: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Kriek & Conroy (2013) modified Calzetti + UV bump + slope delta.
+    r"""Kriek & Conroy (2013) modified Calzetti + UV bump + slope delta.
 
-    Default in Prospector. Most flexible single-parameter-family curve.
+    Default in Prospector. Most flexible single-parameter-family curve. Combines
+    Calzetti + 2175 Å bump + power-law modification.
 
     Parameters
     ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
     dust_bump_strength : float
-        Amplitude of 2175A UV bump (E_b). 0 = no bump.
+        Amplitude of 2175 Å UV bump (E_b). [dimensionless] Default: 1.0 (no bump).
     dust_delta : float
-        Power-law slope modification. 0 = pure Calzetti.
+        Power-law slope modification. [dimensionless] Default: 0.0 (pure Calzetti).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Normalized attenuation curve k(λ), where k(5500 Å) = 1. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The attenuation is:
+
+    .. math::
+
+        k(\lambda) = k_{\rm Calz}(\lambda) \cdot \left(\frac{\lambda}{5500 \, \text{\AA}}\right)^\delta
+        + E_b \cdot D(\lambda; \lambda_0 = 2175 \, \text{\AA})
+
+    where :math:`k_{\rm Calz}` is from Calzetti et al. (2000), :math:`E_b` is the bump amplitude,
+    and :math:`D(\lambda; \lambda_0)` is the Drude profile.
+
+    References
+    ----------
+    .. [1] M. Kriek and C. Conroy, "The Dust Attenuation Law in Distant Galaxies:
+       Evidence for Variation with Spectral Type," ApJL, 775, L16 (2013).
+       https://doi.org/10.1088/2041-8205/775/1/L16
     """
     wave_um = wavelength / 1e4
     k_calz = calzetti(wavelength)
@@ -329,19 +465,48 @@ def _pei92_curve(
     n_i: jnp.ndarray,
     R_V: float,
 ) -> jnp.ndarray:
-    """Pei (1992, ApJ, 395, 130) generalized Drude profile sum.
+    r"""Pei (1992, ApJ, 395, 130) generalized Drude profile sum.
 
     Computes A(lambda)/A(V) normalized to k(5500 A) = 1. Fully continuous,
-    no piecewise boundaries.
+    no piecewise boundaries. Used for SMC and LMC extinction curves.
 
     Parameters
     ----------
-    wavelength : array
-        Wavelength in Angstrom.
-    lam_i, a_i, b_i, n_i : arrays, shape (n_components,)
-        Drude component parameters from Pei 1992 Table 4.
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
+    lam_i : array_like, shape (n_components,)
+        Central wavelengths (in μm) of Drude components. [μm]
+    a_i : array_like, shape (n_components,)
+        Amplitudes of Drude components. [dimensionless]
+    b_i : array_like, shape (n_components,)
+        Denominatornormalization coefficients. [dimensionless]
+    n_i : array_like, shape (n_components,)
+        Power-law exponents for profile broadening. [dimensionless]
     R_V : float
-        Total-to-selective extinction ratio.
+        Total-to-selective extinction ratio. [dimensionless]
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Normalized extinction curve k(λ). [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The extinction function is:
+
+    .. math::
+
+        \xi(\lambda) = \sum_i \frac{a_i}{(\lambda/\lambda_i)^{n_i} + (\lambda_i/\lambda)^{n_i} + b_i}
+
+    Normalized by :math:`\xi(V) / R_V` where V = 5500 Å.
+
+    References
+    ----------
+    .. [1] P. G. Pei, "Interstellar Dust from the Ultraviolet to the Infrared,"
+       ApJ, 395, 130 (1992).
+       https://doi.org/10.1086/171637
     """
     wave_um = wavelength / 1e4  # (n_wave,)
     # xi(lambda) = sum_i a_i / ((lam/lam_i)^n_i + (lam_i/lam)^n_i + b_i)
@@ -380,9 +545,31 @@ def smc(
 ) -> jnp.ndarray:
     """SMC Bar extinction curve (Pei 1992, ApJ, 395, 130).
 
-    Steep UV rise, NO 2175 A bump. Common at high redshift. R_V = 2.93.
+    Steep UV rise, NO 2175 Å bump. Common at high redshift. R_V = 2.93.
     Uses generalized Drude profile sum — fully continuous, no piecewise
     boundaries.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Normalized extinction curve k(λ). [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    From Pei (1992) Table 4: Small Magellanic Cloud Bar parameters,
+    6 Drude components with R_V = 2.93 (relatively grey).
+
+    References
+    ----------
+    P. G. Pei, "Interstellar Dust from the Ultraviolet to the Infrared,"
+    ApJ, 395, 130 (1992).
     """
     return _pei92_curve(wavelength, _SMC_LAM, _SMC_A, _SMC_B, _SMC_N, _SMC_RV)
 
@@ -394,8 +581,30 @@ def lmc(
 ) -> jnp.ndarray:
     """LMC average extinction curve (Pei 1992, ApJ, 395, 130).
 
-    Weak 2175 A bump, intermediate between MW and SMC. R_V = 3.16.
+    Weak 2175 Å bump, intermediate between MW and SMC. R_V = 3.16.
     Uses generalized Drude profile sum — fully continuous.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Normalized extinction curve k(λ). [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    From Pei (1992) Table 4: Large Magellanic Cloud average parameters,
+    6 Drude components with R_V = 3.16. Shows weak 2175 Å bump feature.
+
+    References
+    ----------
+    P. G. Pei, "Interstellar Dust from the Ultraviolet to the Infrared,"
+    ApJ, 395, 130 (1992).
     """
     return _pei92_curve(wavelength, _LMC_LAM, _LMC_A, _LMC_B, _LMC_N, _LMC_RV)
 
@@ -406,9 +615,36 @@ def cardelli(
     dust_Rv: float = 3.1,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Cardelli, Clayton & Mathis (1989) MW extinction with free R_V.
+    r"""Cardelli, Clayton & Mathis (1989) MW extinction with free R_V.
 
-    Returns A(lambda)/A(V).
+    Detailed piecewise fit to Milky Way extinction spanning UV to IR.
+    R_V parameterization allows flexibility for different dust types.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
+    dust_Rv : float
+        Total-to-selective extinction ratio. [dimensionless] Default: 3.1.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Extinction curve A(λ)/A(V) normalized to k(5500 Å) = 1. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    Uses piecewise polynomials in infrared, optical, UV, and far-UV regimes.
+    Parameterized by :math:`x = 1/\lambda` [μm⁻¹] with :math:`a(x)` and :math:`b(x)`
+    coefficients fitted to extinction curves.
+
+    References
+    ----------
+    .. [1] D. E. Cardelli, G. C. Clayton, and J. S. Mathis, "The Relationship
+       between Infrared, Optical, and Ultraviolet Extinction," ApJ, 345, 245 (1989).
+       https://doi.org/10.1086/167900
     """
     wave_um = wavelength / 1e4
     x = 1.0 / wave_um
@@ -556,9 +792,26 @@ def salim(
     dust_delta: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Salim et al. (2018) modified Calzetti (DSPS / Zacharegkas+2025 default).
+    """Salim et al. (2018) modified Calzetti law (DSPS/Zacharegkas+2025 default).
 
-    Same functional form as Kriek & Conroy 2013.
+    Same functional form as :func:`kriek_conroy`; aliased here as the default
+    Zacharegkas+2025 diffuse ISM attenuation law.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelengths. [Angstrom]
+    dust_bump_strength : float
+        Amplitude of the 2175 Angstrom UV bump. [dimensionless]
+    dust_delta : float
+        Power-law tilt relative to Calzetti slope. [dimensionless]
+    **_kwargs
+        Ignored extra keyword arguments (for registry compatibility).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Attenuation curve k(lambda) normalized to k(5500 A) = 1.
     """
     return kriek_conroy(
         wavelength,
@@ -572,38 +825,40 @@ def leitherer02(
     wavelength: jnp.ndarray,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Leitherer et al. (2002) UV starburst attenuation curve.
+    r"""Leitherer et al. (2002) UV starburst attenuation curve.
 
-    Far-UV extension of the Calzetti (2000) law, valid 970-1800 Angstrom.
-    Uses R_V = 4.05 (same as Calzetti).  For wavelengths outside the
+    Far-UV extension of the Calzetti (2000) law, valid 970-1800 Å.
+    Uses R_V = 4.05 (same as Calzetti). For wavelengths outside the
     L02 range, falls back to Calzetti (2000).
-
-    The k'(lambda) = A(lambda)/E(B-V) polynomial is (Leitherer+2002 ApJS 140 303 Eq. 14)::
-
-        k'(lambda) = 5.472 + 0.671*x - 9.218e-3*x^2 + 2.620e-3*x^3
-
-    where x = 1/lambda [um^{-1}] (i.e., x = 1/lambda_micron, not lambda itself).
-
-    The L02 polynomial is used for the full L02 valid range (0.097-0.18 um),
-    with C00 used for longer wavelengths.  This matches the standalone
-    ``dust_attenuation.averages.L02`` model.
-
-    Returns k(lambda) = k'(lambda) / R_V, following the dust_attenuation
-    package convention.
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
-        Wavelength grid in Angstrom.
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
 
     Returns
     -------
-    array, shape (n_wave,)
-        Attenuation curve k(lambda) = k'(lambda) / R_V.
+    ndarray, shape (n_wave,)
+        Attenuation curve k(λ), normalized to k(5500 Å) = 1. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The reddening curve k'(λ) = A(λ)/E(B−V) follows:
+
+    .. math::
+
+        k'(\lambda) = 5.472 + 0.671x - 9.218 \times 10^{-3} x^2 + 2.620 \times 10^{-3} x^3
+
+    where :math:`x = 1/\lambda` [μm⁻¹], valid for 970–1800 Å (0.097–0.18 μm).
+    The final k(λ) = k'(λ) / R_V with R_V = 4.05.
 
     References
     ----------
-    Leitherer et al. 2002, ApJS, 140, 303 (eq. 14)
+    .. [1] C. Leitherer et al., "Global Far-Ultraviolet (912–1800 Å) Properties of
+       Star-forming Galaxies," ApJS, 140, 303 (2002).
+       https://doi.org/10.1086/342486
     """
     wave_um = wavelength / 1e4
     x = 1.0 / wave_um
@@ -634,41 +889,54 @@ def noll09(
     dust_bump_gamma: float = 0.035,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Noll et al. (2009) modified Calzetti + L02 with UV bump + slope delta.
+    r"""Noll et al. (2009) modified Calzetti + L02 with UV bump + slope delta.
 
     This is the ``N09`` model from the ``dust_attenuation`` package.
-    Uses Leitherer (2002) for lambda < 1500 A and Calzetti (2000) above.
-    The modification order is: **(base + bump) * power_law**.
+    Uses Leitherer (2002) for λ < 1500 Å and Calzetti (2000) above.
+    The modification order is: **(base + bump) × power_law**.
 
     This differs from ``kriek_conroy`` which does NOT use L02 and applies
-    the bump AFTER the slope: ``base * power_law + bump``.
-
-    The normalization follows the dust_attenuation package convention:
-    k(lambda) = k'(lambda) / R_V, where R_V = 4.05 is the fixed Calzetti
-    value.  This means k(V) is NOT exactly 1.0 when bump or slope
-    modifications are applied (matching the package behaviour).
+    the bump AFTER the slope: ``base × power_law + bump``.
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
-        Wavelength grid in Angstrom.
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
     dust_bump_strength : float
-        Amplitude of 2175 A UV bump (E_b). 0 = no bump.
+        Amplitude of 2175 Å UV bump (E_b). [dimensionless] Default: 0.0 (no bump).
     dust_delta : float
-        Power-law slope modification. 0 = pure Calzetti+L02.
+        Power-law slope modification. [dimensionless] Default: 0.0 (pure Calzetti+L02).
     dust_bump_x0 : float
-        Central wavelength of UV bump in microns. Default 0.2175.
+        Central wavelength of UV bump. [μm] Default: 0.2175.
     dust_bump_gamma : float
-        FWHM of UV bump in microns. Default 0.035.
+        FWHM of UV bump. [μm] Default: 0.035.
 
     Returns
     -------
-    array, shape (n_wave,)
-        Attenuation curve k(lambda) = k'(lambda) / R_V.
+    ndarray, shape (n_wave,)
+        Attenuation curve k(λ) = k'(λ) / R_V with R_V = 4.05. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The attenuation is:
+
+    .. math::
+
+        k(\lambda) = [k_{\rm L02+C00}(\lambda) + E_b D(\lambda; \lambda_0, \gamma)]
+        \times \left(\frac{\lambda}{5500 \, \text{\AA}}\right)^\delta / R_V
+
+    Normalization follows the ``dust_attenuation`` package convention: k(λ) = k'(λ)/R_V
+    where R_V = 4.05 is fixed. This means k(V) is NOT exactly 1.0 when bump or slope
+    modifications are applied.
 
     References
     ----------
-    Noll et al. 2009, A&A, 507, 1793
+    .. [1] S. Noll, S. Pierini, B. Coles, et al., "On the link between
+       galaxy morphology and supermassive black holes in the nearby Universe,"
+       A&A, 507, 1793 (2009).
+       https://doi.org/10.1051/0004-6361/200912497
     """
     wave_um = wavelength / 1e4
     rv = 4.05
@@ -698,41 +966,51 @@ def salim_sbl18(
     dust_bump_gamma: float = 0.035,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Salim, Boquien & Lee (2018) modified Calzetti + L02 with UV bump + slope.
+    r"""Salim, Boquien & Lee (2018) modified Calzetti + L02 with UV bump + slope.
 
     This is the ``SBL18`` model from the ``dust_attenuation`` package.
-    Uses Leitherer (2002) for lambda < 1500 A and Calzetti (2000) above.
-    The modification order is: **(base * power_law) + bump**.
+    Uses Leitherer (2002) for λ < 1500 Å and Calzetti (2000) above.
+    The modification order is: **(base × power_law) + bump**.
 
-    This differs from ``noll09`` which applies: ``(base + bump) * power_law``.
+    This differs from ``noll09`` which applies: ``(base + bump) × power_law``.
     The SBL18 order is identical to ``kriek_conroy``, but SBL18 additionally
     uses L02 in the far-UV.
 
-    The normalization follows the dust_attenuation package convention:
-    k(lambda) = k'(lambda) / R_V, where R_V = 4.05 is the fixed Calzetti
-    value.
-
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
-        Wavelength grid in Angstrom.
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
     dust_bump_strength : float
-        Amplitude of 2175 A UV bump (E_b). 0 = no bump.
+        Amplitude of 2175 Å UV bump (E_b). [dimensionless] Default: 0.0 (no bump).
     dust_delta : float
-        Power-law slope modification. 0 = pure Calzetti+L02.
+        Power-law slope modification. [dimensionless] Default: 0.0 (pure Calzetti+L02).
     dust_bump_x0 : float
-        Central wavelength of UV bump in microns. Default 0.2175.
+        Central wavelength of UV bump. [μm] Default: 0.2175.
     dust_bump_gamma : float
-        FWHM of UV bump in microns. Default 0.035.
+        FWHM of UV bump. [μm] Default: 0.035.
 
     Returns
     -------
-    array, shape (n_wave,)
-        Attenuation curve k(lambda) = k'(lambda) / R_V.
+    ndarray, shape (n_wave,)
+        Attenuation curve k(λ) = k'(λ) / R_V with R_V = 4.05. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The attenuation is:
+
+    .. math::
+
+        k(\lambda) = \left[k_{\rm L02+C00}(\lambda) \times \left(\frac{\lambda}{5500 \, \text{\AA}}\right)^\delta
+        + E_b D(\lambda; \lambda_0, \gamma)\right] / R_V
 
     References
     ----------
-    Salim, Boquien & Lee 2018, ApJ, 859, 11
+    .. [1] S. Salim, M. Boquien, and J. C. Lee, "CANDELS: Constraining the AGN
+       Contribution to the Star Formation Rate Density at z > 1,"
+       ApJ, 859, 11 (2018).
+       https://doi.org/10.3847/1538-4357/aabf3c
     """
     wave_um = wavelength / 1e4
     rv = 4.05
@@ -760,35 +1038,46 @@ def tea(
     dust_tea_scatter: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    """TEA attenuation curve (Haskell+2024, NIHAO-SKIRT).
+    r"""TEA attenuation curve (Haskell+2024, NIHAO-SKIRT).
 
     Three-parameter empirical attenuation with physically motivated
     bump-slope correlation from radiative transfer simulations. The
     functional form is identical to Kriek & Conroy (2013), but E_b is
-    derived from delta via a tight relation calibrated on NIHAO-SKIRT::
-
-        E_b = 2.5 * exp(3.5 * delta) * 10 ^ scatter
-
-    This reduces the free parameters to 2 (delta and overall tau_V),
-    plus optional scatter around the median E_b(delta) relation.
+    derived from delta via a tight relation calibrated on NIHAO-SKIRT.
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
-        Wavelength grid in Angstrom.
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
     dust_delta : float
-        Power-law slope modification. Steeper (more negative) = weaker bump.
+        Power-law slope modification. [dimensionless] Default: -0.2.
+        Steeper (more negative) = weaker bump.
     dust_tea_scatter : float
-        Scatter in E_b around the median relation (dex). Default 0 = median.
+        Scatter in E_b around the median relation. [dex] Default: 0.0 (median).
 
     Returns
     -------
-    array, shape (n_wave,)
-        Attenuation curve k(lambda), normalized to k(5500 A) = 1.
+    ndarray, shape (n_wave,)
+        Attenuation curve k(λ), normalized to k(5500 Å) = 1. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The bump amplitude is derived from the slope via:
+
+    .. math::
+
+        E_b = 2.5 \times \exp(3.5 \times \delta) \times 10^{\text{scatter}}
+
+    then uses Kriek & Conroy (2013) functional form with the derived E_b.
 
     References
     ----------
-    Haskell et al. 2024, arXiv:2401.11007
+    .. [1] A. Haskell, C. L. Steinhardt, C. Conselice, et al., "The Evolution
+       of the Dust Attenuation Curve with Redshift from SIMULATIONS,"
+       arXiv:2401.11007 (2024).
+       https://arxiv.org/abs/2401.11007
     """
     eb = 2.5 * jnp.exp(3.5 * dust_delta) * 10.0**dust_tea_scatter
     return kriek_conroy(wavelength, dust_delta=dust_delta, dust_bump_strength=eb)
@@ -802,38 +1091,45 @@ def narayanan_z(
     redshift: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Narayanan+2018 redshift-dependent attenuation.
+    r"""Narayanan+2018 redshift-dependent attenuation.
 
     Uses the Kriek & Conroy (2013) curve with z-dependent median
     parameters calibrated on SIMBA cosmological radiative-transfer
-    simulations::
-
-        delta_median(z) ~ -0.2 - 0.1 * z   (steeper at high z)
-        E_b_median(z)   ~ max(0, 1.0 - 0.15 * z)  (weaker bump at high z)
-
-    When explicit delta / bump values differ from the defaults, those
-    values are used as-is.  When defaults are kept, the z-dependent
-    median is applied.
+    simulations.
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
-        Wavelength grid in Angstrom.
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
     dust_delta : float
-        Power-law slope modification. Default -0.2 triggers z-scaling.
+        Power-law slope modification. [dimensionless] Default: -0.2 (triggers z-scaling).
     dust_bump_strength : float
-        UV bump amplitude E_b. Default 1.0 triggers z-scaling.
+        UV bump amplitude E_b. [dimensionless] Default: 1.0 (triggers z-scaling).
     redshift : float
-        Galaxy redshift.
+        Galaxy redshift. [dimensionless] Default: 0.0.
 
     Returns
     -------
-    array, shape (n_wave,)
-        Attenuation curve k(lambda), normalized to k(5500 A) = 1.
+    ndarray, shape (n_wave,)
+        Attenuation curve k(λ), normalized to k(5500 Å) = 1. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    When default parameters are used (δ = -0.2, E_b = 1.0), the z-dependent
+    medians from SIMBA are applied:
+
+    .. math::
+
+        \delta(z) &\approx -0.2 - 0.1 z \quad \text{(steeper at high z)} \\
+        E_b(z) &\approx \max(0, 1.0 - 0.15 z) \quad \text{(weaker bump at high z)}
 
     References
     ----------
-    Narayanan et al. 2018, ApJ, 869, 70
+    .. [1] D. Narayanan, K. Kriek, C. C. Hayward, et al., "A Theory for the
+       Variation of Dust Attenuation Laws in Galaxies," ApJ, 869, 70 (2018).
+       https://doi.org/10.3847/1538-4357/aae386
     """
     # Use tolerance comparison (not ==) to avoid JIT-unsafe float equality on traced values.
     delta_z = jnp.where(jnp.abs(dust_delta - (-0.2)) < 1e-6, -0.2 - 0.1 * redshift, dust_delta)
@@ -852,29 +1148,43 @@ def conroy2010(
     n_slope: float = -0.7,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Conroy+2010 mixed MW + power-law attenuation (FSPS dust_type=1).
+    r"""Conroy+2010 mixed MW + power-law attenuation (FSPS dust_type=1).
 
-    Milky Way (Cardelli 1989) curve dominates below a transition
-    wavelength, power law dominates above. A smooth sigmoid blend at
-    ~5500 A ensures differentiability.
+    Milky Way (Cardelli 1989) curve dominates at UV wavelengths, power-law dominates
+    in the infrared. A smooth sigmoid blend ensures differentiability.
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
-        Wavelength grid in Angstrom.
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
     dust_Rv : float
-        Total-to-selective extinction ratio for the MW component.
+        Total-to-selective extinction ratio for the MW component. [dimensionless] Default: 3.1.
     n_slope : float
-        Power-law index for the long-wavelength component.
+        Power-law index for the long-wavelength component. [dimensionless] Default: -0.7.
 
     Returns
     -------
-    array, shape (n_wave,)
-        Attenuation curve k(lambda), normalized to k(5500 A) = 1.
+    ndarray, shape (n_wave,)
+        Attenuation curve k(λ), normalized to k(5500 Å) = 1. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    A smooth sigmoid transition function weights between MW (short wavelength)
+    and power-law (long wavelength) components at the V-band (5500 Å):
+
+    .. math::
+
+        k(\lambda) = [w(\lambda) \, k_{\rm MW}(\lambda) + (1-w(\lambda)) \, k_{\rm PL}(\lambda)] / k_{\rm MW}(5500 \, \text{\AA})
+
+    where :math:`w(\lambda) = \sigma(\log_{10}(\lambda/5500 \, \text{\AA}) / 0.05)` is a sigmoid.
 
     References
     ----------
-    Conroy, White & Gunn 2010, ApJ, 708, 58
+    .. [1] C. Conroy, R. H. White, and J. S. Gunn, "Recovering the Intergalactic
+       Dust from Galaxies with z < 1," ApJ, 708, 58 (2010).
+       https://doi.org/10.1088/0004-637X/708/1/58
     """
     k_mw = cardelli(wavelength, dust_Rv=dust_Rv)
     k_pl = power_law(wavelength, n_slope=n_slope)
@@ -898,23 +1208,35 @@ def precompute_dust_age_weights(
     t_birth: float = 1e7,
     transition_width: float = 0.3,
 ) -> jnp.ndarray:
-    """Precompute the birth-cloud sigmoid weight.
+    r"""Precompute the birth-cloud sigmoid weight.
 
     Call once at Model init; pass result to ``two_component_dust_fast``.
 
     Parameters
     ----------
-    age_grid : array, shape (n_ages,)
-        Stellar population ages (yr).
+    age_grid : array_like, shape (n_ages,)
+        Stellar population ages. [yr]
     t_birth : float
-        Birth cloud dispersal age (yr). Default 1e7 (10 Myr).
+        Birth cloud dispersal age. [yr] Default: 1e7 (10 Myr).
     transition_width : float
-        Sigmoid width in dex. Default 0.3.
+        Sigmoid width in dex. [dimensionless] Default: 0.3.
 
     Returns
     -------
-    array, shape (n_ages,)
-        Weight: 1 for young stars, 0 for old.
+    ndarray, shape (n_ages,)
+        Sigmoid weight: 1 for young stars (t < t_birth), 0 for old. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The weight is:
+
+    .. math::
+
+        w(t_{\text{age}}) = \sigma\left(-\frac{\log_{10} t_{\text{age}} - \log_{10} t_{\text{birth}}}{\Delta_{\text{trans}}}\right)
+
+    where :math:`\sigma(x) = 1/(1 + e^{-x})` is the logistic sigmoid.
     """
     log_age = jnp.log10(jnp.maximum(age_grid, 1.0))
     log_t_birth = jnp.log10(t_birth)
@@ -925,7 +1247,7 @@ def precompute_dust_age_mask(
     age_grid: jnp.ndarray,
     t_birth: float = 1e7,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Precompute hard young/old masks for fast two-CSP dust decomposition.
+    r"""Precompute hard young/old masks for fast two-CSP dust decomposition.
 
     Uses a hard threshold at ``t_birth`` instead of a smooth sigmoid.
     This is the original Charlot & Fall (2000) formulation and enables
@@ -933,17 +1255,24 @@ def precompute_dust_age_mask(
 
     Parameters
     ----------
-    age_grid : array, shape (n_ages,)
-        Stellar population ages (yr).
+    age_grid : array_like, shape (n_ages,)
+        Stellar population ages. [yr]
     t_birth : float
-        Birth cloud dispersal age (yr). Default 1e7 (10 Myr).
+        Birth cloud dispersal age. [yr] Default: 1e7 (10 Myr).
 
     Returns
     -------
-    young_mask : array, shape (n_ages,)
-        1.0 for young ages (< t_birth), 0.0 for old.
-    old_mask : array, shape (n_ages,)
-        1.0 for old ages (>= t_birth), 0.0 for young.
+    young_mask : ndarray, shape (n_ages,)
+        1.0 for young ages (< t_birth), 0.0 for old. [dimensionless]
+    old_mask : ndarray, shape (n_ages,)
+        1.0 for old ages (≥ t_birth), 0.0 for young. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The original Charlot & Fall (2000) model uses a hard cutoff instead of a sigmoid.
+    This returns complementary masks: young_mask + old_mask = 1 everywhere.
     """
     young = (age_grid < t_birth).astype(age_grid.dtype)  # preserve input precision
     return young, 1.0 - young
@@ -1034,12 +1363,23 @@ def two_component_dust(
     References
     ----------
     .. [1] S. Charlot and S. M. Fall, "A Simple Model for the Absorption of Starlight by
-       Dust in Star-forming Galaxies," ApJ, 539, 718 (2000).
+       Dust in Galaxies," ApJ, 539, 718 (2000).
        https://doi.org/10.1086/309250
 
-    .. [2] K. M. Lower et al., "SKIRT 9: Redesigning an Acclaimed Dust Radiative Transfer Code
-       to Face Exascale Computing Challenges," ApJS, 260, 12 (2022).
-       https://doi.org/10.3847/1538-4365/ac5a59
+    .. [2] S. Lower et al., "How Well Can We Measure Galaxy Dust Attenuation Curves?
+       The Impact of the Assumed Star-dust Geometry Model in SED Fitting,"
+       ApJ, 931, 14 (2022). arXiv:2203.00074.
+       https://doi.org/10.3847/1538-4357/ac6959
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import two_component_dust
+    >>> wave = jnp.linspace(1000.0, 30000.0, 300)
+    >>> ages = jnp.logspace(6.0, 10.14, 64)
+    >>> T = two_component_dust(wave, ages, tau_v1=1.0, tau_v2=0.3)
+    >>> T.shape
+    (64, 300)
     """
     k_bc = resolve_dust_law(law_bc)(wavelength, **law_params)
     k_diff = resolve_dust_law(law_diff)(wavelength, **law_params)
@@ -1128,7 +1468,7 @@ def two_component_dust_separable(
     References
     ----------
     .. [1] S. Charlot and S. M. Fall, "A Simple Model for the Absorption of Starlight by
-       Dust in Star-forming Galaxies," ApJ, 539, 718 (2000).
+       Dust in Galaxies," ApJ, 539, 718 (2000).
        https://doi.org/10.1086/309250
     """
     k_bc = law_bc_fn(wavelength, **law_params)
@@ -1157,9 +1497,9 @@ def two_component_dust_fast(
     f_obscuration: float = 0.0,
     **law_params,
 ) -> jnp.ndarray:
-    """Fast dust attenuation using precomputed age weights.
+    r"""Fast dust attenuation using precomputed age weights.
 
-    Avoids recomputing the birth-cloud age sigmoid every call.  Used by
+    Avoids recomputing the birth-cloud age sigmoid every call. Used by
     both the fused kernel (at effective wavelengths) and the exact path
     (at the full wavelength grid).
 
@@ -1169,25 +1509,37 @@ def two_component_dust_fast(
 
     Parameters
     ----------
-    wavelengths : array, shape (n_wave,)
-        Evaluation wavelengths (rest-frame Angstrom).  Can be the full
+    wavelengths : array_like, shape (n_wave,)
+        Evaluation wavelengths (rest-frame). [Å] Can be the full
         SSP grid or just the filter effective wavelengths.
-    dust_age_weights : array, shape (n_ages,)
-        From ``precompute_dust_age_weights`` (computed once at Model init).
-    tau_v1, tau_v2 : float
-        Birth cloud and diffuse ISM V-band optical depths.
-    law_bc, law_diff : str
-        Attenuation curve names (looked up in ``DUST_LAWS`` registry).
+    dust_age_weights : array_like, shape (n_ages,)
+        Pre-computed sigmoid weights from ``precompute_dust_age_weights``.
+        Computed once at Model init.
+    tau_v1 : float
+        Birth-cloud V-band optical depth. [dimensionless]
+    tau_v2 : float
+        Diffuse ISM V-band optical depth. [dimensionless]
+    law_bc : str
+        Attenuation curve name for birth cloud. [dimensionless] Default: "power_law".
+        Looked up in ``DUST_LAWS`` registry.
+    law_diff : str
+        Attenuation curve name for diffuse ISM. Default: "power_law".
     f_obscuration : float
-        Fraction of unattenuated sightlines [0, 1] (Lower 2022).
+        Fraction of unattenuated sightlines. [dimensionless, in [0, 1]] Default: 0.0 (Lower 2022).
     **law_params
         Passed to curve functions: ``n_slope``, ``dust_bump_strength``,
         ``dust_delta``, ``dust_Rv``, etc.
 
     Returns
     -------
-    array, shape (n_ages, n_wave)
-        Multiplicative attenuation factor in [0, 1].
+    ndarray, shape (n_ages, n_wave)
+        Multiplicative attenuation factor in [0, 1]. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    **Gradient-safe**: yes — differentiable everywhere.
     """
     k_bc = resolve_dust_law(law_bc)(wavelengths, **law_params)
     k_diff = resolve_dust_law(law_diff)(wavelengths, **law_params)
@@ -1260,9 +1612,10 @@ def single_component_dust(
 
     References
     ----------
-    .. [1] K. M. Lower et al., "SKIRT 9: Redesigning an Acclaimed Dust Radiative Transfer Code
-       to Face Exascale Computing Challenges," ApJS, 260, 12 (2022).
-       https://doi.org/10.3847/1538-4365/ac5a59
+    .. [1] S. Lower et al., "How Well Can We Measure Galaxy Dust Attenuation Curves?
+       The Impact of the Assumed Star-dust Geometry Model in SED Fitting,"
+       ApJ, 931, 14 (2022). arXiv:2203.00074.
+       https://doi.org/10.3847/1538-4357/ac6959
     """
     k = resolve_dust_law(law)(wavelength, **law_params)
     return f_obscuration + (1.0 - f_obscuration) * jnp.exp(-tau_v * k)
@@ -1276,7 +1629,7 @@ def single_component_dust_fast(
     f_obscuration: float = 0.0,
     **law_params,
 ) -> jnp.ndarray:
-    """Single-component dust attenuation broadcast to (n_ages, n_wave).
+    r"""Single-component dust attenuation broadcast to (n_ages, n_wave).
 
     Computes ``exp()`` on the 1-D wavelength grid only, then broadcasts
     to ``(n_ages, n_wave)`` via ``jnp.broadcast_to`` (zero-copy in XLA).
@@ -1284,24 +1637,33 @@ def single_component_dust_fast(
 
     Parameters
     ----------
-    wavelengths : array, shape (n_wave,)
-        Evaluation wavelengths (rest-frame Angstrom).
+    wavelengths : array_like, shape (n_wave,)
+        Evaluation wavelengths (rest-frame). [Å]
     n_ages : int
-        Number of SSP age bins (for output shape).
+        Number of SSP age bins (for output shape). [dimensionless]
     tau_v : float
-        V-band optical depth.
+        V-band optical depth. [dimensionless]
     law : str
-        Attenuation curve name (from ``DUST_LAWS`` registry).
+        Attenuation curve name (from ``DUST_LAWS`` registry). Default: "power_law".
     f_obscuration : float
-        Fraction of unattenuated sightlines [0, 1] (Lower 2022).
+        Fraction of unattenuated sightlines. [dimensionless, in [0, 1]] Default: 0.0 (Lower 2022).
     **law_params
         Passed to curve function.
 
     Returns
     -------
-    array, shape (n_ages, n_wave)
-        Multiplicative transmission factor in [0, 1].  All age rows
-        are identical (age-independent attenuation).
+    ndarray, shape (n_ages, n_wave)
+        Multiplicative transmission factor in [0, 1]. [dimensionless]
+        All age rows are identical (age-independent attenuation).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    **Gradient-safe**: yes — differentiable everywhere.
+
+    **Memory efficiency**: Using ``jnp.broadcast_to`` avoids materializing
+    the full (n_ages, n_wave) grid in memory; the result is a zero-copy view.
     """
     trans_1d = single_component_dust(
         wavelengths, tau_v=tau_v, law=law, f_obscuration=f_obscuration, **law_params
@@ -1332,35 +1694,47 @@ def wg00_shell(
     law: str = "cardelli",
     **law_params,
 ) -> jnp.ndarray:
-    """Witt & Gordon (2000) SHELL geometry — foreground screen.
+    r"""Witt & Gordon (2000) SHELL geometry — foreground screen.
 
     The simplest geometry: a uniform dust slab in front of all stars.
-    Transmission is the standard Beer-Lambert law::
-
-        T(lambda) = exp(-tau_V * k(lambda))
-
-    This is identical to ``single_component_dust`` with ``f_obscuration=0``
-    and is included for completeness alongside the CLOUDY and DUSTY models.
+    Transmission is the standard Beer-Lambert law.
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
-        Wavelength grid in Angstrom.
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
     tau_v : float
-        V-band optical depth (tau at 5500 A).
+        V-band optical depth (at 5500 Å). [dimensionless]
     law : str
-        Underlying extinction curve name. Default ``"cardelli"`` (MW).
+        Underlying extinction curve name. Default: "cardelli" (MW).
     **law_params
         Passed to the extinction curve function (e.g., ``dust_Rv``).
 
     Returns
     -------
-    array, shape (n_wave,)
-        Transmission T(lambda) in [0, 1].
+    ndarray, shape (n_wave,)
+        Transmission T(λ) in [0, 1]. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    **Gradient-safe**: yes — differentiable everywhere.
+
+    The transmission is:
+
+    .. math::
+
+        T(\lambda) = \exp[-\tau_V k(\lambda)]
+
+    This is identical to ``single_component_dust`` with ``f_obscuration=0``
+    and is included for completeness alongside the CLOUDY and DUSTY models.
 
     References
     ----------
-    Witt & Gordon 2000, ApJ, 528, 799 (Section 3.1)
+    .. [1] A. N. Witt and K. D. Gordon, "Multiple Scattering in Clumpy Media.
+       I. Point Source Embedded in a Clumpy Medium," ApJ, 528, 799 (2000).
+       https://doi.org/10.1086/308197
     """
     k = resolve_dust_law(law)(wavelength, **law_params)
     return jnp.exp(-tau_v * k)
@@ -1428,17 +1802,16 @@ def wg00_cloudy(
 
     References
     ----------
-    .. [1] A. Natta and M. Panagia, "Dust Distributions in Star-Forming Galaxies: Why the
-       Far-Ultraviolet is a More Reliable Indicator than H-alpha," ApJ, 287, 228 (1984).
+    .. [1] A. Natta and N. Panagia, "Extinction in inhomogeneous clouds," ApJ, 287, 228 (1984).
        https://doi.org/10.1086/162686
 
-    .. [2] S. Charlot, A. Kinney, and T. Storchi-Bergmann, "The Dust Content of Star-Forming
-       Galaxies," ApJ, 429, 582 (1994).
-       https://doi.org/10.1086/174348
+    .. [2] D. Calzetti, A. L. Kinney, and T. Storchi-Bergmann, "Dust Extinction of the Stellar
+       Continua in Starburst Galaxies: The Ultraviolet and Optical Extinction Law,"
+       ApJ, 429, 582 (1994). https://doi.org/10.1086/174348
 
-    .. [3] A. T. Witt and K. D. Gordon, "A Comprehensive Review of the 2175 Angstrom Absorption
-       Feature," ApJ, 528, 799 (2000). Section 3.2, "homogeneous" model.
-       https://doi.org/10.1086/308975
+    .. [3] A. N. Witt and K. D. Gordon, "Multiple Scattering in Clumpy Media. II. Galactic
+       Environments," ApJ, 528, 799 (2000). Section 3.2, "homogeneous" model.
+       https://doi.org/10.1086/308197
     """
     k = resolve_dust_law(law)(wavelength, **law_params)
     tau_k = tau_v * k
@@ -1462,54 +1835,68 @@ def wg00_dusty(
     n_clumps: float = 10.0,
     **law_params,
 ) -> jnp.ndarray:
-    """Witt & Gordon (2000) DUSTY geometry — clumpy two-phase medium.
+    r"""Witt & Gordon (2000) DUSTY geometry — clumpy two-phase medium.
 
     The ISM is modelled as ``n_clumps`` identical clumps, each with
     optical depth ``tau_clump = tau_V / n_clumps``, distributed along
     random sightlines (Natta & Panagia 1984; Hobson & Padman 1993).
     The probability of a photon traversing N clumps follows a Poisson
-    distribution, giving the mean transmission::
-
-        T(lambda) = exp(-n_clumps * (1 - exp(-tau_clump * k(lambda))))
-
-    where ``tau_clump = tau_V / n_clumps``.
-
-    This produces the *greyest* effective attenuation of the three WG00
-    geometries because photons preferentially escape through low-column
-    channels between clumps.
-
-    **Limiting behaviour:**
-
-    - ``n_clumps -> inf`` (fixed ``tau_V``): ``tau_clump -> 0``, each
-      clump becomes optically thin, recovers the homogeneous slab.
-    - ``n_clumps = 1``: single clump with ``tau_clump = tau_V``, similar
-      to a screen but with Poisson line-of-sight averaging.
-    - ``tau_V = 0``: T = 1 (transparent), regardless of ``n_clumps``.
+    distribution, giving the mean transmission.
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
-        Wavelength grid in Angstrom.
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
     tau_v : float
-        Total V-band optical depth (= ``n_clumps * tau_clump``).
+        Total V-band optical depth (= ``n_clumps × tau_clump``). [dimensionless]
     law : str
-        Underlying extinction curve name. Default ``"cardelli"`` (MW).
+        Underlying extinction curve name. Default: "cardelli" (MW).
     n_clumps : float
-        Mean number of clumps along a sightline. Higher values approach
-        the homogeneous limit.  Typical range: 1-40.  Default 10.
+        Mean number of clumps along a sightline. [dimensionless] Default: 10.0.
+        Higher values approach the homogeneous limit. Typical range: 1–40.
     **law_params
         Passed to the extinction curve function (e.g., ``dust_Rv``).
 
     Returns
     -------
-    array, shape (n_wave,)
-        Transmission T(lambda) in [0, 1].
+    ndarray, shape (n_wave,)
+        Transmission T(λ) in [0, 1]. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    **Gradient-safe**: yes — differentiable everywhere.
+
+    The transmission is:
+
+    .. math::
+
+        T(\lambda) = \exp[-n_{\rm clumps} (1 - \exp[-\tau_{\rm clump} \, k(\lambda)])]
+
+    where :math:`\tau_{\rm clump} = \tau_V / n_{\rm clumps}`.
+
+    This produces the *greyest* (least wavelength-dependent) effective attenuation
+    of the three WG00 geometries because photons preferentially escape through
+    low-column channels between clumps.
+
+    **Limiting behaviour:**
+    - :math:`n_{\rm clumps} \to \infty` (fixed :math:`\tau_V`): recovers the homogeneous slab.
+    - :math:`n_{\rm clumps} = 1`: single clump with Poisson averaging.
+    - :math:`\tau_V = 0`: T = 1 (transparent), regardless of n_clumps.
 
     References
     ----------
-    Natta & Panagia 1984, ApJ, 287, 228
-    Hobson & Padman 1993, MNRAS, 264, 161
-    Witt & Gordon 2000, ApJ, 528, 799 (Section 3.3, "clumpy" model)
+    .. [1] A. Natta and N. Panagia, "Extinction in Inhomogeneous Clouds,"
+       ApJ, 287, 228 (1984). https://doi.org/10.1086/162686
+
+    .. [2] M. P. Hobson and L. Padman, "A Probabilistic Approach to Extinction
+       in Irregular Media," MNRAS, 264, 161 (1993).
+       https://doi.org/10.1093/mnras/264.1.161
+
+    .. [3] A. N. Witt and K. D. Gordon, "Multiple Scattering in Clumpy Media.
+       I. Point Source Embedded in a Clumpy Medium," ApJ, 528, 799 (2000).
+       https://doi.org/10.1086/308197
     """
     k = resolve_dust_law(law)(wavelength, **law_params)
     tau_clump = tau_v / jnp.maximum(n_clumps, 1e-10)
@@ -1520,7 +1907,7 @@ def wg00_dusty(
 
 
 def dust_to_gas_scaling_remy_ruyer(logzsol: float) -> float:
-    """Metallicity-dependent dust-to-gas ratio scaling (Rémy-Ruyer+2014).
+    r"""Metallicity-dependent dust-to-gas ratio scaling (Rémy-Ruyer+2014).
 
     Returns multiplicative factor for dust optical depths relative to solar.
     Broken power law: linear above 0.1 Z_sun, quadratic below.
@@ -1528,16 +1915,32 @@ def dust_to_gas_scaling_remy_ruyer(logzsol: float) -> float:
     Parameters
     ----------
     logzsol : float
-        log10(Z / Z_sun).
+        log10(Z / Z_sun). [dimensionless]
 
     Returns
     -------
     float
-        D/G ratio relative to solar (1.0 at solar metallicity).
+        D/G ratio relative to solar (1.0 at solar metallicity). [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The scaling is a broken power law:
+
+    .. math::
+
+        \text{D/G} = \begin{cases}
+        (Z/Z_{\odot})^2 \times 0.1 & (Z/Z_{\odot}) \leq 0.1 \\
+        (Z/Z_{\odot}) & (Z/Z_{\odot}) > 0.1
+        \end{cases}
 
     References
     ----------
-    Rémy-Ruyer et al. 2014, A&A, 563, A31, Table 1.
+    .. [1] S. Rémy-Ruyer, I. Miville-Deschênes, T. Siebel, et al.,
+       "Dust and Gas Relationship in Nearby Galaxies,"
+       A&A, 563, A31 (2014).
+       https://doi.org/10.1051/0004-6361/201322803
     """
     z_ratio = 10.0**logzsol
     scaling = jnp.where(

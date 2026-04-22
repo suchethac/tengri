@@ -57,6 +57,21 @@ class VIConfig:
         Kwargs for the Newton-CG that inverts the coordinate transform.
     kl_kwargs : dict
         Kwargs for the outer KL minimization.
+
+    Notes
+    -----
+    Frozen dataclass configuring the variational inference backend. Key fields:
+    ``method`` selects the VI algorithm (``'vi'`` / ``'vi_native'``). The two
+    backends are NOT posterior-equivalent — ``'vi_native'`` is ~19× faster but
+    PSD timescale posteriors differ from the NIFTy path; validate per-problem
+    before swapping.
+
+    Examples
+    --------
+    >>> from tengri import VIConfig
+    >>> cfg = VIConfig(n_samples=4, n_iterations=50)
+    >>> cfg.n_samples
+    4
     """
 
     n_samples: int | Callable = 3
@@ -110,6 +125,11 @@ class BlockStep:
     n_samples : int or None
         Override the default n_samples for this block. ``None`` uses
         the fitter's n_samples.
+
+    Notes
+    -----
+    Immutable step descriptor for one block in a multi-block VI schedule.
+    Consumed by :class:`BlockSchedule`.
     """
 
     sample_mode: str = "nonlinear_resample"
@@ -130,6 +150,12 @@ class BlockSchedule:
     ----------
     blocks : tuple of BlockStep
         The blocks to cycle through per iteration.
+
+    Notes
+    -----
+    Frozen sequence of :class:`BlockStep` objects controlling parameter-group
+    update ordering. Enables block coordinate descent with different optimizers
+    per group.
     """
 
     blocks: tuple[BlockStep, ...]
@@ -141,6 +167,11 @@ class BlockSchedule:
         Block A: Update physical params (geoVI), SFH ξ frozen.
         Block B: Update SFH ξ (MGVI), physical params frozen.
         Alternates A-B every iteration.
+
+        Returns
+        -------
+        BlockSchedule
+            Two-block schedule for alternating physical and SFH parameter updates.
         """
         return BlockSchedule(
             blocks=(
@@ -162,6 +193,11 @@ class BlockSchedule:
         Block 1: Shared PSD params (geoVI), per-galaxy frozen.
         Block 2: Per-galaxy physical (geoVI), shared+ξ frozen.
         Block 3: Per-galaxy ξ (MGVI), shared+physical frozen.
+
+        Returns
+        -------
+        BlockSchedule
+            Three-block schedule for hierarchical parameter inference.
         """
         return BlockSchedule(
             blocks=(
@@ -206,6 +242,11 @@ class OptimizationSchedule:
     description : str
         Human-readable description of the strategy.
 
+    Notes
+    -----
+    Frozen schedule of ``(n_steps, lr)`` tuples for multi-phase learning rate
+    annealing. Used internally by the VI optimizer.
+
     Examples
     --------
     >>> sched = OptimizationSchedule.geovi()  # recommended default
@@ -222,7 +263,18 @@ class OptimizationSchedule:
         return self.get_step(i)
 
     def sample_mode_at(self, i: int) -> str:
-        """NIFTy-compatible sample_mode callable for ``jft.optimize_kl``."""
+        """NIFTy-compatible sample_mode callable for ``jft.optimize_kl``.
+
+        Parameters
+        ----------
+        i : int
+            Iteration index.
+
+        Returns
+        -------
+        str
+            Sample mode at iteration ``i``.
+        """
         return self.get_step(i).sample_mode
 
     @staticmethod
@@ -238,6 +290,20 @@ class OptimizationSchedule:
         All other iterations: ``nonlinear_update`` (deterministic refinement).
 
         This prevents sample staleness while maintaining stable convergence.
+
+        Parameters
+        ----------
+        n_iterations : int
+            Total number of iterations. Default: 15.
+        resample_every : int
+            Resample every this many iterations. Default: 5.
+        n_samples : int
+            Number of samples per iteration. Default: 3.
+
+        Returns
+        -------
+        OptimizationSchedule
+            Configured geoVI schedule.
         """
 
         def _get_step(i: int) -> BlockStep:
@@ -268,6 +334,22 @@ class OptimizationSchedule:
         Iteration transition: ``nonlinear_resample`` (establish geoVI samples).
         Every ``resample_every`` after: ``nonlinear_resample`` (refresh).
         All other iterations: ``nonlinear_update`` (deterministic).
+
+        Parameters
+        ----------
+        n_iterations : int
+            Total number of iterations. Default: 20.
+        transition : int
+            Iteration at which to switch from MGVI to geoVI. Default: 10.
+        resample_every : int
+            Resample every this many iterations after transition. Default: 5.
+        n_samples : int
+            Number of samples per iteration. Default: 3.
+
+        Returns
+        -------
+        OptimizationSchedule
+            Configured EVI schedule.
         """
 
         def _get_step(i: int) -> BlockStep:
@@ -289,7 +371,20 @@ class OptimizationSchedule:
 
     @staticmethod
     def mgvi(n_iterations: int = 15, n_samples: int = 3) -> OptimizationSchedule:
-        """Pure MGVI (linear only)."""
+        """Pure MGVI (linear only).
+
+        Parameters
+        ----------
+        n_iterations : int
+            Total number of iterations. Default: 15.
+        n_samples : int
+            Number of samples per iteration. Default: 3.
+
+        Returns
+        -------
+        OptimizationSchedule
+            Configured MGVI schedule.
+        """
         return OptimizationSchedule(
             get_step=lambda i: BlockStep(sample_mode="linear_resample", n_samples=n_samples),
             n_iterations=n_iterations,
@@ -313,6 +408,15 @@ class OptimizationSchedule:
         blocks : tuple of BlockStep
             Blocks to cycle. Each block specifies which params to
             freeze and which sample mode to use.
+        n_iterations : int
+            Number of full cycles through all blocks. Default: 15.
+        resample_every : int
+            Resample every this many full cycles. Default: 5.
+
+        Returns
+        -------
+        OptimizationSchedule
+            Configured block Gibbs schedule.
         """
         n_blocks = len(blocks)
 
@@ -348,7 +452,23 @@ class OptimizationSchedule:
         n_iterations: int = 15,
         description: str = "custom",
     ) -> OptimizationSchedule:
-        """Fully custom schedule."""
+        """Fully custom schedule.
+
+        Parameters
+        ----------
+        get_step : callable
+            ``get_step(i: int) -> BlockStep`` returning the configuration
+            for iteration ``i``.
+        n_iterations : int
+            Total number of iterations. Default: 15.
+        description : str
+            Human-readable description. Default: ``"custom"``.
+
+        Returns
+        -------
+        OptimizationSchedule
+            Configured custom schedule.
+        """
         return OptimizationSchedule(
             get_step=get_step,
             n_iterations=n_iterations,
@@ -369,6 +489,7 @@ def evi_sample_mode(n_iterations: int, linear_fraction: float = 0.5):
         Total number of KL iterations.
     linear_fraction : float
         Fraction of iterations to run as MGVI (linear_resample).
+        Default: 0.5.
 
     Returns
     -------

@@ -108,6 +108,7 @@ def build_eline_design_matrix(
     -------
     array, shape (n_pix, n_lines)
         Design matrix *G*.
+
     """
     return _build_eline_design_matrix_jitted(
         wave_obs,
@@ -152,6 +153,7 @@ def build_broad_design_matrix(
     -------
     array, shape (n_pix, n_lines)
         Broad-component design matrix G_broad.
+
     """
     # Delegate to build_eline_design_matrix with broad_sigma_kms as eline_sigma_kms
     return build_eline_design_matrix(
@@ -200,6 +202,7 @@ def apply_doublet_constraints(
         C = cat.build_constraint_matrix()
         G = build_eline_design_matrix(wave_obs, cat.wavelengths, R, z)
         G_eff = apply_doublet_constraints(G, C)  # (n_pix, n_independent)
+
     """
     return design_matrix @ constraint_matrix
 
@@ -240,6 +243,7 @@ def expand_constrained_amplitudes(
         G_eff = apply_doublet_constraints(G, C)
         ln_l, a_hat_ind, a_cov_ind = marginalize_emission_lines(resid, noise, G_eff)
         a_hat_full, a_cov_full = expand_constrained_amplitudes(a_hat_ind, a_cov_ind, C)
+
     """
     a_hat_full = constraint_matrix @ a_hat
     a_cov_full = constraint_matrix @ a_cov @ constraint_matrix.T
@@ -277,6 +281,7 @@ def marginalize_emission_lines(
         Posterior-mean (optimal) line amplitudes.
     a_cov : array, shape (n_lines, n_lines)
         Posterior covariance of line amplitudes.
+
     """
     if prior_variance is None:
         prior_variance = jnp.array(1e10)
@@ -350,6 +355,7 @@ def predict_with_marginalized_lines(
     -------
     array, shape (n_pix,)
         Full model: ``model_continuum + G @ a_hat``.
+
     """
     return model_continuum + design_matrix @ a_hat
 
@@ -400,6 +406,7 @@ def build_line_design_matrix(
     Examples
     --------
     >>> A = build_line_design_matrix(wave_obs, DEFAULT_LINE_WAVELENGTHS, redshift=0.1)
+
     """
     A_narrow = build_eline_design_matrix(
         wave_obs,

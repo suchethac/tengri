@@ -112,9 +112,9 @@ def closed_box_metallicity(
        reconstruction of the cosmic star formation history and metallicity evolution
        by galaxy type," MNRAS, 498, 5581 (2020). arXiv:2005.11917.
        https://doi.org/10.1093/mnras/staa2620
-    .. [3] J. Leja et al., "Deriving Physical Properties from Broadband Photometry with
-       Prospector: Description of the Code and Case Studies," ApJ, 876, 3 (2019).
-       arXiv:1905.11997. https://doi.org/10.3847/1538-4357/ab133c
+    .. [3] J. Leja et al., "How to Measure Galaxy Star Formation Histories.
+       II. Nonparametric Models," ApJ, 876, 3 (2019). arXiv:1811.03637.
+       https://doi.org/10.3847/1538-4357/ab133c
     """
     # Reverse to cosmic time order (oldest first)
     sfr_cosmic = sfr[::-1]
@@ -189,27 +189,31 @@ def closed_box_metallicity_anchored(
     ``met_logzsol_final``. This is useful for inference where the observed
     metallicity constrains the endpoint.
 
-    The effective yield is computed from the target metallicity and the
-    implied gas fraction at the final time step.
-
     Parameters
     ----------
-    age_yr : array, shape (n_age,)
-        Lookback time grid in years (youngest first).
-    sfr : array, shape (n_age,)
-        Star formation rate in Msun/yr at each lookback time.
+    age_yr : array_like, shape (n_age,)
+        Lookback time grid [yr] (youngest first).
+    sfr : array_like, shape (n_age,)
+        Star formation rate [Msun/yr] at each lookback time.
     met_logzsol_final : float
-        Target present-day metallicity in log10(Z/Zsun).
-    eta_outflow : float
-        Mass loading factor. Default 0.0 (closed box).
-    return_frac : float
-        Stellar mass return fraction. Default 0.4.
+        Target present-day metallicity [dimensionless], log10(Z/Zsun).
+    eta_outflow : float, optional
+        Mass loading factor [dimensionless]. Default 0.0 (closed box).
+    return_frac : float, optional
+        Stellar mass return fraction [dimensionless]. Default 0.4.
 
     Returns
     -------
-    log_z_solar : array, shape (n_age,)
-        log10(Z/Z_sun) at each lookback time. The youngest element will
+    ndarray, shape (n_age,)
+        log10(Z/Zsun) at each lookback time. The youngest element will
         approximately equal ``met_logzsol_final``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives throughout.
+
+    The effective yield is computed from the target metallicity and the
+    implied gas fraction at the final time step.
     """
     # Target Z at present day
     z_target = Z_SUN * 10.0**met_logzsol_final
@@ -268,26 +272,29 @@ def chem_evol_metallicity_on_ssp_grid(
 
     Parameters
     ----------
-    ssp_log_ages_yr : array, shape (n_ssp_age,)
-        Log10(age/yr) of the SSP templates.
-    log_age_grid : array, shape (n_grid,)
-        Log10(lookback time / yr) grid on which the SFR is defined.
-    sfr : array, shape (n_grid,)
-        Star formation rate at each grid point.
-    yield_y : float
-        Nucleosynthetic yield.
-    eta_outflow : float
-        Mass loading factor.
-    f_gas_init : float
-        Initial gas fraction.
-    return_frac : float
-        Stellar return fraction.
+    ssp_log_ages_yr : array_like, shape (n_ssp_age,)
+        Log10(age/yr) of the SSP templates [dimensionless].
+    log_age_grid : array_like, shape (n_grid,)
+        Log10(lookback time/yr) grid on which the SFR is defined [dimensionless].
+    sfr : array_like, shape (n_grid,)
+        Star formation rate [Msun/yr] at each grid point.
+    yield_y : float, optional
+        Nucleosynthetic yield [dimensionless]. Default 0.03.
+    eta_outflow : float, optional
+        Mass loading factor [dimensionless]. Default 0.0.
+    f_gas_init : float, optional
+        Initial gas fraction [dimensionless]. Default 0.9.
+    return_frac : float, optional
+        Stellar return fraction [dimensionless]. Default 0.4.
 
     Returns
     -------
-    log_z_abs : array, shape (n_ssp_age,)
-        log10(Z) absolute metallicity on the SSP age grid. This is in the
-        same units as ``ssp_lgmet`` (absolute, not solar-relative).
+    ndarray, shape (n_ssp_age,)
+        log10(Z) absolute metallicity on the SSP age grid [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
     # Convert log-age grid to linear years
     age_yr = 10.0**log_age_grid

@@ -15,6 +15,7 @@ References
 - Byler+2017: CLOUDY-FSPS nebular emission line predictions
 - Storey & Zeippen 2000: [OIII] transition probabilities
 - NIST Atomic Spectra Database: doublet ratios
+
 """
 
 from __future__ import annotations
@@ -123,6 +124,7 @@ class DoubletConstraint:
         Index of the secondary (fainter) line in the catalog.
     ratio : float
         Flux ratio primary/secondary, so flux_secondary = flux_primary / ratio.
+
     """
 
     primary_idx: int
@@ -161,6 +163,7 @@ class LineList:
     Use a custom wavelength subset from a line-finding step::
 
         detected = cat.select(wavelengths=[6564.61, 4862.68, 5008.24])
+
     """
 
     names: tuple[str, ...]
@@ -174,17 +177,17 @@ class LineList:
 
     @property
     def n_lines(self) -> int:
-        """Total number of lines in the catalog."""
+        r"""Total number of lines in the catalog."""
         return len(self.names)
 
     @property
     def n_independent(self) -> int:
-        """Number of independent amplitude parameters after doublet constraints."""
+        r"""Number of independent amplitude parameters after doublet constraints."""
         return self.n_lines - len(self.doublets)
 
     @property
     def independent_wavelengths(self) -> jnp.ndarray:
-        """Wavelengths of the independent (non-constrained) amplitude parameters.
+        r"""Wavelengths of the independent (non-constrained) amplitude parameters.
 
         After applying doublet constraints, the design matrix has
         ``n_independent`` columns, one per independent amplitude. This property
@@ -195,6 +198,7 @@ class LineList:
         -------
         jnp.ndarray, shape (n_independent,)
             Rest-frame vacuum wavelengths for independent amplitude columns.
+
         """
         secondary_indices = {dc.secondary_idx for dc in self.doublets}
         kept = [i for i in range(self.n_lines) if i not in secondary_indices]
@@ -204,61 +208,50 @@ class LineList:
 
     @classmethod
     def default_optical(cls) -> LineList:
-        """FastSpecFit-equivalent ~40-line catalog for optical/NIR spectroscopy.
+        r"""FastSpecFit-equivalent ~40-line catalog for optical/NIR spectroscopy.
 
         Returns
         -------
         LineList
-            Catalog of ~40 lines sorted by wavelength with doublet constraints
-            auto-detected from ``_DOUBLET_RATIOS``.
+            Catalog of ~40 lines sorted by wavelength [Angstrom] with
+            doublet constraints auto-detected.
 
-        Examples
-        --------
-        ::
+        Notes
+        -----
+        Not JIT-compatible (uses Python sorting and class method).
 
-            cat = LineList.default_optical()
-            # cat.n_lines == 39, cat.n_independent == 34
         """
         lines = sorted(_DEFAULT_OPTICAL_LINES, key=lambda t: t[1])
         return cls._from_line_tuples(lines)
 
     @classmethod
     def default_13(cls) -> LineList:
-        """Backward-compatible 13-line catalog (existing default).
+        r"""Backward-compatible 13-line catalog (legacy default).
 
         Uses the same wavelengths as ``DEFAULT_LINE_WAVELENGTHS`` in
-        ``eline_marginalization.py``. The insertion order is preserved so
-        that index-based lookups remain valid.
-
-        Lines
-        -----
-        Lya (1215.67), Hdelta (4102.89), Hgamma (4341.68), Hbeta (4862.68),
-        OIII_4959 (4960.30), OIII_5007 (5008.24), Halpha (6564.61),
-        NII_6548 (6549.86), NII_6584 (6585.28), OII_3726 (3727.09),
-        OII_3729 (3729.88), SII_6717 (6718.29), SII_6731 (6732.67).
+        ``eline_marginalization.py``. Insertion order is preserved for
+        index-based lookups.
 
         Returns
         -------
         LineList
             13-line catalog with doublet constraints where applicable.
 
-        Examples
-        --------
-        ::
+        Notes
+        -----
+        Not JIT-compatible (uses Python class method). Kept for
+        backward compatibility with eline_marginalization.py.
 
-            cat = LineList.default_13()
-            # Backward-compatible with DEFAULT_LINE_WAVELENGTHS in eline_marginalization.py
-            # cat.n_lines == 13
         """
         return cls._from_line_tuples(_DEFAULT_13_LINES)
 
     @classmethod
     def from_cloudy_grid(cls, filepath: str) -> LineList:
-        """Load all lines from a CLOUDY HDF5 grid file.
+        r"""Load all lines from a CLOUDY HDF5 grid file.
 
         Reads ``lines/names`` and ``lines/wavelength`` datasets, parses
         species from CLOUDY naming conventions, and auto-detects doublets
-        by species + wavelength proximity.
+        by species + wavelength proximity (< 20 Angstrom).
 
         Parameters
         ----------
@@ -268,7 +261,7 @@ class LineList:
         Returns
         -------
         LineList
-            Catalog populated from the CLOUDY grid.
+            Catalog populated from the CLOUDY grid, sorted by wavelength.
 
         Raises
         ------
@@ -277,7 +270,12 @@ class LineList:
         OSError
             If the file cannot be opened or read.
         KeyError
-            If required datasets (``lines/names``, ``lines/wavelength``) are missing.
+            If required datasets are missing.
+
+        Notes
+        -----
+        Not JIT-compatible (uses Python file I/O and h5py).
+
         """
         try:
             import h5py
@@ -333,18 +331,16 @@ class LineList:
         Parameters
         ----------
         wave_min : float, optional
-            Minimum rest-frame wavelength in Angstrom (inclusive).
+            Minimum rest-frame wavelength [Angstrom] (inclusive).
         wave_max : float, optional
-            Maximum rest-frame wavelength in Angstrom (inclusive).
+            Maximum rest-frame wavelength [Angstrom] (inclusive).
         species : sequence of str, optional
             If given, retain only lines whose species code is in this list.
         names : sequence of str, optional
             If given, retain only lines whose name exactly matches one in this list.
-            Raises ValueError if any name is not found in the catalog.
         wavelengths : sequence of float, optional
             If given, match each wavelength to the nearest line in the catalog
-            within 5 Angstrom tolerance. Raises ValueError if no match is found
-            for any wavelength.
+            within 5 Angstrom tolerance.
 
         Returns
         -------
@@ -377,6 +373,7 @@ class LineList:
         Select hydrogen lines only::
 
             hydrogen = cat.select(species=["H1"])
+
         """
         waves_np = [float(w) for w in self.wavelengths]
 
@@ -469,43 +466,26 @@ class LineList:
     # ── Constraint matrix ─────────────────────────────────────────
 
     def build_constraint_matrix(self) -> jnp.ndarray:
-        """Build the (n_lines, n_independent) constraint matrix C.
+        r"""Build the (n_lines, n_independent) constraint matrix C.
 
         The constraint matrix maps from independent amplitudes to all line
         amplitudes: ``flux = C @ a_independent``.
 
-        Algorithm
-        ---------
-        1. Start with identity ``(n_lines, n_lines)``.
-        2. For each ``DoubletConstraint(primary_idx=i, secondary_idx=j, ratio=r)``:
-
-           - Set column ``j`` to zeros everywhere.
-           - Set row ``j``, column ``i`` to ``1.0 / r``
-             (secondary = primary / ratio).
-
-        3. Remove zero columns (constrained secondaries).
-        4. Result shape: ``(n_lines, n_independent)`` where
-           ``n_independent = n_lines - n_doublets``.
-
         Returns
         -------
-        jnp.ndarray
-            Shape ``(n_lines, n_independent)``.
+        ndarray, shape (n_lines, n_independent)
+            Linear constraint matrix. Each row represents one emission line;
+            each column represents one independent amplitude parameter.
+            Zero columns correspond to constrained secondary lines.
 
-        Examples
-        --------
-        Constrain [OIII] doublet so 5007/4959 ratio is fixed at 2.98::
+        Notes
+        -----
+        Not JIT-compatible (uses NumPy array mutation and slicing).
 
-            cat = LineList.default_optical()
-            C = cat.build_constraint_matrix()  # shape (39, 34)
-            G_eff = G_full @ C  # (n_pix, n_independent)
+        For each doublet constraint with flux_secondary = flux_primary / ratio,
+        the corresponding column is zeroed and a single off-diagonal entry
+        (ratio^{-1}) encodes the constraint relationship.
 
-        For [OIII] 5007 (primary, idx=p) / 4959 (secondary, idx=s), ratio=2.98:
-
-        - Column s is zeroed.
-        - Row s, column p is set to 1/2.98 ≈ 0.336.
-        - Multiplying by independent amplitude ``a`` gives flux_5007 = a and
-          flux_4959 = a / 2.98.
         """
         n = self.n_lines
         # Build as a regular numpy array for mutation, then convert
@@ -533,7 +513,7 @@ class LineList:
         cls,
         lines: list[tuple[str, float, str, bool, bool]],
     ) -> LineList:
-        """Construct a LineList from a list of ``(name, wave, species, balmer, broad)`` tuples.
+        """Construct a LineList from a list of line property tuples.
 
         Doublet constraints are auto-detected from ``_DOUBLET_RATIOS`` by
         matching line names in the list.
@@ -541,11 +521,18 @@ class LineList:
         Parameters
         ----------
         lines : list of tuples
-            Each tuple: ``(name, wavelength_angstrom, species, is_balmer, is_broad_candidate)``.
+            Each tuple: ``(name, wavelength [Angstrom], species, is_balmer,
+            is_broad_candidate)``.
 
         Returns
         -------
         LineList
+            Catalog with constraints auto-detected.
+
+        Notes
+        -----
+        Private helper. Not JIT-compatible (uses Python list operations).
+
         """
         names_list = [t[0] for t in lines]
         name_to_idx: dict[str, int] = {n: i for i, n in enumerate(names_list)}
@@ -590,6 +577,7 @@ def _parse_cloudy_species(name: str) -> str:
     -------
     str
         Compact species code.
+
     """
     parts = name.strip().split()
     if len(parts) >= 2:
@@ -679,6 +667,7 @@ def _detect_doublets_by_proximity(
     Returns
     -------
     tuple of DoubletConstraint
+
     """
     doublets: list[DoubletConstraint] = []
     used: set[int] = set()

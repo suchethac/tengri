@@ -22,6 +22,16 @@ class SEDResult(NamedTuple):
         observed-frame for ``predict_obs_sed()``.
     sed : jnp.ndarray, shape (n_wave,)
         Spectral luminosity density in erg/s/Hz.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import SEDResult
+    >>> wave = jnp.linspace(1000.0, 30000.0, 500)
+    >>> sed = jnp.zeros(500)
+    >>> result = SEDResult(wavelength=wave, sed=sed)
+    >>> result.sed.shape
+    (500,)
     """
 
     wavelength: jnp.ndarray

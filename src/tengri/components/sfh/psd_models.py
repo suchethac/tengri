@@ -54,8 +54,19 @@ def psd_drw(omega: jnp.ndarray, psd_sigma: float, psd_tau_yr: float) -> jnp.ndar
 
     References
     ----------
-    .. [1] Munoz et al., "Correlated Star Formation Histories in Simulated Galaxies,"
-       arXiv:2601.07912 (2026).
+    .. [1] J. B. Munoz and K. G. Iyer, "Measuring the Power Spectral Density
+       of Star Formation Histories," arXiv:2601.07912 (2026).
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import psd_drw
+    >>> omega = jnp.linspace(0.0, 2e-7, 128)  # angular frequencies [rad/yr]
+    >>> psd = psd_drw(omega, psd_sigma=1.0, psd_tau_yr=1e8)
+    >>> psd.shape
+    (128,)
+    >>> float(psd[0])  # peak power at omega=0
+    1e+08
     """
     return psd_sigma**2 * psd_tau_yr / (1.0 + (psd_tau_yr * omega) ** 2)
 
@@ -90,6 +101,17 @@ def drw_acf(delta_t: jnp.ndarray, psd_sigma: float, psd_tau_yr: float) -> jnp.nd
 
     where :math:`\\sigma_{\\rm PS}` is the PSD amplitude, :math:`\\tau_{\\rm PS}`
     is the damping timescale [yr], and :math:`\\Delta t` is the time lag [yr].
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import drw_acf
+    >>> lags = jnp.array([0.0, 1e7, 1e8, 1e9])  # time lags [yr]
+    >>> acf = drw_acf(lags, psd_sigma=1.0, psd_tau_yr=1e8)
+    >>> acf.shape
+    (4,)
+    >>> float(acf[0])  # variance at zero lag = sigma^2 / 2
+    0.5
     """
     return 0.5 * psd_sigma**2 * jnp.exp(-jnp.abs(delta_t) / psd_tau_yr)
 
@@ -118,6 +140,14 @@ def drw_variance(psd_sigma: float) -> float:
         \\sigma_x^2 = \\frac{\\sigma_{\rm PS}^2}{2}
 
     where :math:`\\sigma_{\rm PS}` is the PSD amplitude.
+
+    Examples
+    --------
+    >>> from tengri import drw_variance
+    >>> float(drw_variance(psd_sigma=1.0))
+    0.5
+    >>> float(drw_variance(psd_sigma=2.0))
+    2.0
     """
     return 0.5 * psd_sigma**2
 
@@ -252,12 +282,12 @@ def psd_extended_regulator(
 
     References
     ----------
-    .. [1] Tacchella et al., "Simulating Realistic Star Formation Histories at
-       z > 2 with Dust Continuum Observations," ApJ, 868, 92 (2018).
-       arXiv:1809.01146. https://doi.org/10.3847/1538-4357/aae8e0
-    .. [2] Caplar & Tacchella, "The Chaotic Dynamics of Star-forming Galaxies,"
-       ApJ, 882, 106 (2019). arXiv:1905.05799.
-       https://doi.org/10.3847/1538-4357/ab3522
+    .. [1] S. Tacchella et al., "A Redshift-independent Efficiency Model: Star
+       Formation and Stellar Masses in Dark Matter Halos at z >= 4," ApJ, 868,
+       92 (2018). arXiv:1806.03299. https://doi.org/10.3847/1538-4357/aae8e0
+    .. [2] N. Caplar and S. Tacchella, "Stochastic modelling of star-formation
+       histories I: the scatter of the star-forming main sequence," MNRAS, 487,
+       3845 (2019). arXiv:1901.07556. https://doi.org/10.1093/mnras/stz1449
     """
     two_pi_f = 2.0 * jnp.pi * f
     regulator = s_reg**2 / ((1.0 + (tau_in * two_pi_f) ** 2) * (1.0 + (tau_eq * two_pi_f) ** 2))

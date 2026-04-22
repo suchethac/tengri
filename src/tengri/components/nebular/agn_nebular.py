@@ -139,6 +139,7 @@ References
 - Li et al. 2024, ApJ, 969, 28 (Cue v1)
 - Li et al. 2025, ApJ, 986, 9 (Cue v2, AGN extension)
 - Lovell et al. 2025, MNRAS (Synthesizer; arXiv:2004.07283)
+
 """
 
 from __future__ import annotations
@@ -190,6 +191,7 @@ def agn_ionspec_from_alpha_pl(alpha_pl: float) -> dict:
     dict
         Keys: ``ionspec_index1..4``, ``ionspec_logLratio1..3``.
         All values are clipped to the valid Cue ranges.
+
     """
     # Cue slope convention: F_nu vs lambda, so index = -alpha_pl
     wavelength_slope = -alpha_pl
@@ -273,6 +275,7 @@ def _log_qh_from_lacc(l_acc_erg: float, alpha_pl: float) -> float:
     -------
     float
         log10(Q_H) [photons s^-1].
+
     """
     # Frequency limits for ionizing radiation
     nu_lyman = _NU_LYMAN  # 912 A
@@ -363,6 +366,7 @@ def agn_nlr_cue(
         Emission line wavelengths [Angstrom].
     line_luminosities : array
         Emission line luminosities [Lsun], scaled by covering fraction.
+
     """
     # Step 1: ionizing spectrum parameters
     if ionspec_params is None:
@@ -424,6 +428,7 @@ class SynthesizerGridData:
         Vacuum wavelengths [Angstrom].
     log_line_per_qh : (n_mass, n_edd, n_inc, n_met, n_U, n_n, n_lines) array
         log10(L_line / Q_H) where L_line is in L_sun and Q_H in photons/s.
+
     """
 
     mass_axis: jnp.ndarray
@@ -459,6 +464,7 @@ def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
         If the grid file does not exist.
     KeyError
         If required datasets are missing.
+
     """
     import h5py
 
@@ -574,6 +580,7 @@ class SynthesizerNLRBackend:
     References
     ----------
     Lovell et al. 2025, MNRAS (Synthesizer; arXiv:2004.07283)
+
     """
 
     name = "synthesizer_nlr"
@@ -655,6 +662,7 @@ class SynthesizerNLRBackend:
             Vacuum wavelengths [Angstrom].
         luminosities : (215,) array
             Emission line luminosities [L_sun].
+
         """
         from tengri.forward.precompute.grid import interp_nd_triweight
 
@@ -732,6 +740,7 @@ class FeltreGridData:
         and L_Hβ is in erg/s.  Dims: (alpha, logUs, logn, logZ, xi_d).
     line_ratios : (4, 4, 3, 16, 3, n_lines) array
         L_line / L_Hβ (dimensionless).
+
     """
 
     alpha_axis: jnp.ndarray
@@ -758,6 +767,7 @@ def _load_feltre_grid(filepath: str | Path) -> FeltreGridData:
         If the grid file does not exist.
     KeyError
         If required datasets are missing in the HDF5 file.
+
     """
     import h5py
 
@@ -838,6 +848,7 @@ class FeltreNLRBackend:
     References
     ----------
     Feltre, Charlot & Gutkin 2016, MNRAS 456, 3354.
+
     """
 
     name = "feltre"
@@ -905,6 +916,7 @@ class FeltreNLRBackend:
             Vacuum wavelengths [Angstrom].
         luminosities : (n_lines,) array
             Emission line luminosities [Lsun].
+
         """
         from tengri.forward.precompute.grid import interp_nd_triweight
 
@@ -1036,6 +1048,7 @@ def agn_nlr_emission(
     ------
     ValueError
         If ``backend`` is not recognized or required backend object is missing.
+
     """
     if backend == "cue":
         if cue_backend is None:

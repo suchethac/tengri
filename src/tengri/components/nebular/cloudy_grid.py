@@ -96,6 +96,7 @@ References
 - Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
 - Lovell et al. 2025, MNRAS (Synthesizer; arXiv:2004.07283)
 - diffhtwo (ArgonneCPAC) for JAX grid interpolation patterns
+
 """
 
 import warnings
@@ -177,6 +178,7 @@ def load_cloudy_grid(filepath: str) -> CloudyGridData:
     ----------
     filepath : str
         Path to cloudy_grid_*.h5 file (from convert_fsps_cloudy_grid.py).
+
     """
     _LOG_FLOOR = 1e-95  # FSPS convention to avoid log(0)
 
@@ -242,6 +244,7 @@ def _trilinear_interp(
     -------
     array, shape (...)
         Interpolated value.
+
     """
     iz, wz = _interp_index_weight(z_val, grid_z)
     ia, wa = _interp_index_weight(age_val, grid_age)
@@ -310,6 +313,7 @@ def _trilinear_interp_smooth(
     edges_z, edges_age, edges_u : array or None
         Precomputed bin edges from :func:`edges_for_grid`.  When ``None``,
         edges are computed on the fly.
+
     """
     wz = compute_grid_weights(z_val, grid_z, scatter, edges=edges_z)
     wa = compute_grid_weights(age_val, grid_age, scatter, edges=edges_age)
@@ -350,6 +354,7 @@ class CloudyGridBackend:
     grid_scatter : float
         Triweight kernel bandwidth in the natural units of each axis (dex).
         Only used when ``grid_interp="triweight"``.  Default 0.2.
+
     """
 
     def __init__(
@@ -454,6 +459,7 @@ class CloudyGridBackend:
             - 1: log_age (age in years)
             - 2: log_U (ionization parameter)
             If provided, these axes are collapsed at init time. Default None.
+
         """
         from tengri.forward.precompute.grid import (
             preintegrate_grid,
@@ -669,6 +675,7 @@ class CloudyGridBackend:
         -------
         wavelengths : array, shape (n_lines,)
         luminosities : array, shape (n_lines,)
+
         """
         if neb_logZ_gas is None:
             neb_logZ_gas = log_z
@@ -730,6 +737,7 @@ class CloudyGridBackend:
         wavelength : array, shape (n_wave_cont,)
         luminosity : array, shape (n_wave_cont,)
             Nebular continuum L_nu (Lsun/Hz, converted to erg/s/Hz at SED assembly).
+
         """
         if neb_logZ_gas is None:
             neb_logZ_gas = log_z
@@ -808,6 +816,7 @@ class CloudyGridBackend:
         -------
         array, shape (n_wave,)
             Nebular SED in erg/s/Hz on the SSP wavelength grid.
+
         """
         # Get line luminosities
         line_wave, line_lum = self.predict_nebular_line_luminosities(

@@ -116,15 +116,15 @@ def xray_xrb(
 
     References
     ----------
-    .. [1] A. N. Grimm et al., "The Luminosity-SFR Correlation and the LMXB
-       Fraction," MNRAS, 339, 793 (2003). arXiv:astro-ph/0301231.
+    .. [1] H.-J. Grimm et al., "High-mass X-ray binaries as a star formation
+       rate indicator in distant galaxies," MNRAS, 339, 793 (2003).
        https://doi.org/10.1046/j.1365-8711.2003.06224.x
-    .. [2] M. Gilfanov, "Low-Mass X-Ray Binaries as a Stellar Mass Tracer in
-       Distant Galaxies," MNRAS, 349, 146 (2004). arXiv:astro-ph/0309171.
-       https://doi.org/10.1046/j.1365-2966.2004.07473.x
-    .. [3] R. Yang et al., "CIGALE: Complete Infrared Calibrated Galaxy
-       Luminosity Evolution," ApJ, 927, 42 (2020). arXiv:2106.10268.
-       https://doi.org/10.3847/1538-4357/abb658
+    .. [2] M. Gilfanov, "Low-mass X-ray binaries as a stellar mass indicator
+       for the host galaxy," MNRAS, 349, 146 (2004). arXiv:astro-ph/0309171.
+       https://doi.org/10.1111/j.1365-2966.2004.07473.x
+    .. [3] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
+       CIGALE and improvement of the code," ApJ, 927, 192 (2022).
+       https://doi.org/10.3847/1538-4357/ac4971
     """
     nu = _C_AA / wavelength
     E_keV = _H_PLANCK * nu / (1.6022e-9)  # convert to keV
@@ -164,12 +164,16 @@ def alpha_ox_from_l2500(l_2500_erg_hz: float) -> float:
     Parameters
     ----------
     l_2500_erg_hz : float
-        Monochromatic luminosity density at 2500 A in erg/s/Hz.
+        Monochromatic luminosity density at 2500 A [erg/s/Hz].
 
     Returns
     -------
     float
-        alpha_ox (typically between -2.0 and -1.0).
+        alpha_ox (typically between -2.0 and -1.0) [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function.
 
     References
     ----------
@@ -207,6 +211,10 @@ def xray_anisotropy(
     array
         Anisotropy-corrected L_X, same shape as ``l_x``.
 
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function.
+
     References
     ----------
     Yang et al. 2022, ApJ, 927, 42.
@@ -234,10 +242,10 @@ def xray_agn_corona_from_disc(
 
     Parameters
     ----------
-    wavelength : array (n_wave,)
-        Wavelength in Angstrom.
+    wavelength : array, shape (n_wave,)
+        Wavelength [Angstrom].
     l_2500_erg_hz : float
-        Monochromatic luminosity density at 2500 A (erg/s/Hz).
+        Monochromatic luminosity density at 2500 A [erg/s/Hz].
     cos_inc : float
         Cosine of inclination (1 = face-on). Default 1.0.
     delta_alpha_ox : float
@@ -245,7 +253,7 @@ def xray_agn_corona_from_disc(
     gamma : float
         Photon index. Default 1.8. Range: 1.4-2.4.
     E_cut : float
-        Exponential cutoff energy (keV). Default 300.
+        Exponential cutoff energy [keV]. Default 300.
     apply_anisotropy : bool
         Whether to apply Yang+2022 viewing-angle correction.
     a1 : float
@@ -255,8 +263,12 @@ def xray_agn_corona_from_disc(
 
     Returns
     -------
-    array (n_wave,)
-        L_nu in erg/s/Hz.
+    ndarray, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function.
     """
     # alpha_ox from disc UV luminosity
     alpha_ox = alpha_ox_from_l2500(l_2500_erg_hz) + delta_alpha_ox
@@ -300,21 +312,25 @@ def xray_agn_corona(
 
     Parameters
     ----------
-    wavelength : array (n_wave,)
-        Wavelength in Angstrom.
+    wavelength : array, shape (n_wave,)
+        Wavelength [Angstrom].
     L_agn_bol : float
-        AGN bolometric luminosity (erg/s).
+        AGN bolometric luminosity [erg/s].
     gamma : float
         Photon index. Default 1.8. Range: 1.4-2.4.
     E_cut : float
-        Cutoff energy (keV). Default 300.
+        Cutoff energy [keV]. Default 300.
     alpha_ox : float
         UV-to-X-ray slope. Default -1.4. Range: -2.0 to -1.0.
 
     Returns
     -------
-    array (n_wave,)
-        L_nu in erg/s/Hz.
+    ndarray, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function.
     """
     nu = _C_AA / wavelength
     E_keV = _H_PLANCK * nu / (1.6022e-9)
@@ -357,12 +373,33 @@ def xray_total(
 
     Parameters
     ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength [Angstrom].
     sfr : float
-        Star formation rate (Msun/yr).
+        Star formation rate [Msun/yr].
     stellar_mass : float
-        Stellar mass (Msun).
+        Stellar mass [Msun].
     L_agn_bol : float
-        AGN bolometric luminosity (erg/s). 0 = no AGN X-ray.
+        AGN bolometric luminosity [erg/s]. 0 = no AGN X-ray.
+    gamma_hmxb : float
+        HMXB photon index. Default 2.0.
+    gamma_lmxb : float
+        LMXB photon index. Default 1.6.
+    gamma_agn : float
+        AGN photon index. Default 1.8.
+    E_cut : float
+        Exponential cutoff energy [keV]. Default 300.
+    alpha_ox : float
+        UV-to-X-ray slope. Default -1.4.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function.
     """
     xrb = xray_xrb(wavelength, sfr, stellar_mass, gamma_hmxb, gamma_lmxb, E_cut)
     agn = xray_agn_corona(wavelength, L_agn_bol, gamma_agn, E_cut, alpha_ox)

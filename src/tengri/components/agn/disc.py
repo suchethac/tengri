@@ -519,7 +519,7 @@ def multicolor_disc(
     .. [2] J. M. Bardeen, W. H. Press, and S. A. Teukolsky, "Rotating black holes:
        Locally nonrotating frames, energy extraction, and scalar synchrotron radiation,"
        ApJ, 178, 347 (1972). https://doi.org/10.1086/151796
-    .. [3] A. Laor and H. Netzer, "The infrared torus in active galactic nuclei,"
+    .. [3] A. Laor and H. Netzer, "Massive thin accretion discs – I. Calculated spectra,"
        MNRAS, 238, 897 (1989). https://doi.org/10.1093/mnras/238.3.897
     """
     nu = _wavelength_to_nu(wavelength)
@@ -953,13 +953,12 @@ def kubota_done_disc(
        of AGN and its implications for the UV/X relation and optical variability,"
        MNRAS, 480, 1247 (2018). arXiv:1804.00171.
        https://doi.org/10.1093/mnras/sty1890
-    .. [2] C. Done et al., "Accretion states in the microquasar GX 339-4:
-       Correlated X-ray spectral and timing properties," MNRAS, 420,
-       1848 (2012). arXiv:1108.5618.
-       https://doi.org/10.1111/j.1365-2966.2011.20106.x
-    .. [3] A. M. Beloborodov, "Comptonization of Accretion Disk Radiation
-       by the Hot Corona," ApJ, 510, L123 (1999). arXiv:astro-ph/9811212.
-       https://doi.org/10.1086/311800
+    .. [2] C. Done et al., "Intrinsic disc emission and the soft X-ray excess in
+       active galactic nuclei," MNRAS, 420, 1848 (2012). arXiv:1107.5429.
+       https://doi.org/10.1111/j.1365-2966.2011.19779.x
+    .. [3] A. M. Beloborodov, "Plasma Ejection from Magnetic Flares and the X-Ray
+       Spectrum of Cygnus X-1," ApJL, 510, L123 (1999). arXiv:astro-ph/9809383.
+       https://doi.org/10.1086/311810
     """
     nu = _wavelength_to_nu(wavelength)
 
@@ -1295,11 +1294,12 @@ def adaf_disc(
 
     References
     ----------
-    .. [1] R. Mahadevan, "Measuring Black Hole Spins," ApJ, 477, 585 (1997).
-       arXiv:astro-ph/9707074. https://doi.org/10.1086/303738
-    .. [2] R. Nemmen et al., "A Low-Efficiency, Low-Accretion-Rate
-       Advection-Dominated Accretion Flow in NGC 1052," MNRAS, 438, 2804
-       (2014). arXiv:1312.2948. https://doi.org/10.1093/mnras/stt2432
+    .. [1] R. Mahadevan, "Scaling Laws for Advection-dominated Flows:
+       Applications to Low-Luminosity Galactic Nuclei," ApJ, 477, 585 (1997).
+       https://doi.org/10.1086/303727
+    .. [2] R. Nemmen et al., "Spectral models for low-luminosity active galactic nuclei
+       in LINERs: the role of advection-dominated accretion and jets," MNRAS, 438, 2804
+       (2014). arXiv:1312.1982. https://doi.org/10.1093/mnras/stt2388
     .. [3] G. B. Rybicki and A. P. Lightman, "Radiative Processes in
        Astrophysics," John Wiley & Sons (1979). ISBN: 0-471-82759-2
     """

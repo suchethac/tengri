@@ -73,6 +73,7 @@ def place_line_profiles(
 
     **Upstream**: Implementation adapted from Prospector's line-placement routines
     (Johnson et al. 2021) for JAX differentiability.
+
     """
     n_wave = obs_wavelengths.shape[0]
 
@@ -153,11 +154,6 @@ def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
         trapezoidal accumulation (only relevant for artificially young/pure SSPs
         with Q_H > 1e100). Does not affect physically realistic rates (~1e31).
 
-    References
-    ----------
-    .. [1] C. Conroy, "Modeling the Panchromatic SED Evolution of Galaxies,"
-       ApJ, 647, 201 (2006). arXiv:astro-ph/0604217.
-       https://doi.org/10.1086/504612
     """
     nu = _C_CGS / (ssp_wave * 1e-8)  # Hz
     l_nu = ssp_flux * _LSUN_ERG  # erg/s/Hz/Msun
@@ -186,7 +182,27 @@ def _interp_index_weight(
     x: float,
     grid: jnp.ndarray,
 ) -> tuple[int, float]:
-    """Find bracketing index and linear interpolation weight for a 1D sorted grid."""
+    """Find bracketing index and linear interpolation weight for a 1D grid.
+
+    Parameters
+    ----------
+    x : float
+        Query point.
+    grid : array, shape (n_grid,)
+        Sorted grid points.
+
+    Returns
+    -------
+    idx : int
+        Index of left bracket in ``grid``.
+    w : float
+        Linear interpolation weight [0, 1].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    """
     x_clipped = jnp.clip(x, grid[0], grid[-1])
     idx = jnp.searchsorted(grid, x_clipped, side="right") - 1
     idx = jnp.clip(idx, 0, len(grid) - 2)
@@ -208,17 +224,65 @@ from tengri.utils.interpolation import (
 
 
 def neb_logzsol_to_log_z_abs(logzsol: jnp.ndarray) -> jnp.ndarray:
-    """log10(Z/Zsun) -> log10(Z) absolute (DSPS/CloudyGrid convention)."""
+    """Convert gas metallicity from log10(Z/Zsun) to absolute log10(Z).
+
+    Parameters
+    ----------
+    logzsol : array
+        Gas metallicity relative to solar [log10(Z/Zsun)].
+
+    Returns
+    -------
+    array
+        Absolute gas metallicity [log10(Z)].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — simple addition.
+
+    """
     return logzsol + _LOG10_ZSUN
 
 
 def neb_logzsol_to_cloudy_logoh(logzsol: jnp.ndarray) -> jnp.ndarray:
-    """log10(Z/Zsun) -> log10(O/H) on CLOUDY c17.01 solar scale (CB19 convention)."""
+    """Convert gas metallicity to CLOUDY c17.01 log10(O/H) scale.
+
+    Parameters
+    ----------
+    logzsol : array
+        Gas metallicity relative to solar [log10(Z/Zsun)].
+
+    Returns
+    -------
+    array
+        log10(O/H) on CLOUDY c17.01 solar scale.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — simple addition.
+
+    """
     return logzsol + _LOG10_ZSUN - _LOG_OH_OFFSET
 
 
 def neb_logzsol_to_mappings_zeta(logzsol: jnp.ndarray) -> jnp.ndarray:
-    """log10(Z/Zsun) -> zeta_O solar-relative (MAPPINGS V convention)."""
+    """Convert gas metallicity to MAPPINGS V solar-relative O abundance (zeta_O).
+
+    Parameters
+    ----------
+    logzsol : array
+        Gas metallicity relative to solar [log10(Z/Zsun)].
+
+    Returns
+    -------
+    array
+        Solar-relative O abundance [zeta_O = Z/Zsun].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — simple exponentiation.
+
+    """
     return 10.0**logzsol
 
 
@@ -370,6 +434,7 @@ def compute_analytic_nebular_continuum(
     .. [5] V. Luridiana, C. Morisset, and R. A. Shaw, "PyNeb: A Python Package
        for Analysing Emission Lines from Ionised Nebulae," A&A, 573, A42 (2015).
        arXiv:1412.6345. https://doi.org/10.1051/0004-6361/201323152
+
     """
     nu = _C_CGS / (wave_aa * 1e-8)  # Hz
 
@@ -417,30 +482,28 @@ def compute_analytic_nebular_continuum(
 class NebularContinuumFallback:
     """Wrapper that adds nebular continuum to line-only nebular backends.
 
-    Many nebular backends (CB19, MAPPINGS, Shock) produce emission lines only,
-    without continuum. This wrapper provides missing continuum in a prioritised
-    fallback chain: (1) secondary physics backend, (2) analytic free-free +
-    two-photon (§4.3–4.5 of Osterbrock & Ferland 2006), (3) error or warning
-    graceful degradation.
+    Many nebular backends (CB19, MAPPINGS, Shock) produce emission lines only.
+    This wrapper provides missing continuum via a prioritised fallback chain:
+    (1) secondary physics backend, (2) analytic free-free + two-photon, (3) error
+    or warning.
 
     Parameters
     ----------
     primary : NebularBackend
-        A line-only nebular backend (has_continuum=False). Must implement
-        predict_nebular_sed().
+        Line-only nebular backend (has_continuum=False). Must implement
+        ``predict_nebular_sed()``.
     fallback : NebularBackend, optional
-        A continuum-capable backend (CueBackend, CloudyGridBackend) to use
-        if ``ssp_wave`` and ``gas_logqion`` are unavailable. Default: None.
+        Continuum-capable backend (CueBackend, CloudyGridBackend) for Tier 1
+        fallback. Default: None.
     fallback_mode : str, optional
         Fallback behaviour if neither backend nor analytical continuum is
-        available. One of "error" (raise NebularContinuumUnavailableError)
-        or "warn" (emit warning, return lines only). Default: "error".
+        available. One of "error" (raise NebularContinuumUnavailableError) or
+        "warn" (emit warning, return lines only). Default: "error".
 
     Attributes
     ----------
     has_continuum : bool
-        Always True; this wrapper guarantees continuum provision (via one of
-        three tiers) or graceful failure.
+        Always True; guarantees continuum provision via three-tier chain.
     has_free_params : bool
         Inherited from primary backend.
     name : str
@@ -448,31 +511,20 @@ class NebularContinuumFallback:
 
     Notes
     -----
-    **Continuum supply chain** at prediction time:
+    **JIT-compatible**: no — predict_nebular_sed may invoke non-JIT backends.
 
-    1. **Tier 1 (Secondary backend)**: If ``fallback`` is not None and has
-       ``predict_nebular_sed``, use it to compute full continuum + lines.
-       Integrated with the primary backend's lines.
+    **Continuum supply chain** (at prediction time):
 
-    2. **Tier 2 (Analytic approximation)**: If ``ssp_wave`` and ``gas_logqion``
-       are provided as kwargs to predict_nebular_sed(), compute analytic
-       free-free + two-photon via compute_analytic_nebular_continuum().
-       This requires ``ssp_wave`` [Å] and ``gas_logqion`` [log10(Q_H)].
+    1. **Tier 1 (Secondary backend)**: If ``fallback`` provided and has
+       ``predict_nebular_sed``, use it to compute full continuum.
+    2. **Tier 2 (Analytic)**: If ``ssp_wave`` and ``gas_logqion`` in kwargs,
+       compute analytic free-free + two-photon via
+       ``compute_analytic_nebular_continuum()``. Requires ``ssp_wave`` [Angstrom]
+       and ``gas_logqion`` [log10(Q_H)].
+    3. **Tier 3 (Graceful degradation)**: If neither Tier 1 nor 2 available,
+       either raise ``NebularContinuumUnavailableError`` (fallback_mode="error")
+       or emit UserWarning and return lines only (fallback_mode="warn").
 
-    3. **Tier 3/4 (Graceful degradation)**: If neither Tier 1 nor 2 is
-       available, either raise NebularContinuumUnavailableError (fallback_mode="error")
-       or emit a UserWarning and return lines only (fallback_mode="warn").
-
-    Examples
-    --------
-    >>> from tengri.components.nebular import CB19Backend, CueBackend, NebularContinuumFallback
-    >>> ssp = load_ssp_data(...)
-    >>> cb19 = CB19Backend(ssp_data=ssp)
-    >>> with_continuum = NebularContinuumFallback(cb19, fallback_mode="warn")
-    >>> # Predicts CB19 lines + analytic continuum if ssp_wave provided
-    >>> sed = with_continuum.predict_nebular_sed(
-    ...     neb_logzsol=-0.5, ..., ssp_wave=wave, gas_logqion=49.2
-    ... )
     """
 
     def __init__(
@@ -498,38 +550,49 @@ class NebularContinuumFallback:
         return getattr(self.primary, name)
 
     def predict_nebular_sed(self, *args, **kwargs) -> jnp.ndarray:
-        """Predict nebular SED: lines from primary, continuum from fallback chain.
+        """Predict nebular SED: lines + continuum via fallback chain.
 
         Retrieves emission lines from the primary backend and adds nebular
         continuum via the priority fallback chain (secondary backend, analytic,
         or graceful degradation).
 
+        Parameters
+        ----------
+        *args
+            Positional arguments passed to primary.predict_nebular_sed().
+        **kwargs
+            Keyword arguments passed to primary and fallback backends.
+            Special keywords: ``ssp_wave`` [Angstrom], ``gas_logqion``
+            [log10(Q_H)] for Tier 2 (analytic) continuum.
+
         Returns
         -------
-        jnp.ndarray, shape (n_wave,)
-            Nebular spectral luminosity density on SSP wavelength grid.
-            [erg/s/Hz]
+        array, shape (n_wave,)
+            Nebular spectral luminosity density on SSP wavelength grid
+            [erg/s/Hz].
 
         Raises
         ------
         NebularContinuumUnavailableError
-            If ``fallback_mode="error"`` and neither secondary backend nor
+            If fallback_mode="error" and neither secondary backend nor
             analytic continuum (via ssp_wave + gas_logqion) is available.
 
         Warns
         -----
         UserWarning
-            If ``fallback_mode="warn"`` and continuum is unavailable. Returns
+            If fallback_mode="warn" and continuum is unavailable. Returns
             lines only in this case.
 
         Notes
         -----
-        **Fallback chain execution**:
+        **JIT-compatible**: no — may invoke non-JIT backends.
 
-        1. Call primary.predict_nebular_sed(*args, **kwargs) to get lines
-        2. If fallback backend is available, add its continuum output
-        3. Else if ssp_wave and gas_logqion in kwargs, compute analytic continuum
+        **Execution order**:
+        1. Call primary.predict_nebular_sed(*args, **kwargs) → lines
+        2. If fallback backend available → add its continuum
+        3. Else if ssp_wave and gas_logqion in kwargs → analytic continuum
         4. Else apply fallback_mode (error or warn)
+
         """
         from tengri.components.nebular._protocol import NebularContinuumUnavailableError
 

@@ -91,7 +91,14 @@ class StandardizedForwardModel:
 
     @property
     def domain(self) -> dict:
-        """Standardized parameter domain {name: shape}."""
+        """Standardized parameter domain mapping name to shape.
+
+        Returns
+        -------
+        dict
+            Mapping of parameter name to shape tuple (e.g. ``()`` for scalars,
+            ``(n_grid,)`` for the GP field).
+        """
         d = {}
         for name in self._free_names:
             d[name] = ()  # scalar
@@ -101,7 +108,13 @@ class StandardizedForwardModel:
 
     @property
     def n_latent(self) -> int:
-        """Total number of latent dimensions."""
+        """Total number of latent dimensions.
+
+        Returns
+        -------
+        int
+            Number of scalar latent variables (free params + GP field if stochastic).
+        """
         n = len(self._free_names)
         if self._stochastic:
             n += self._n_grid
@@ -186,7 +199,18 @@ class StandardizedForwardModel:
         return params
 
     def params_to_xi(self, params: dict) -> dict:
-        """Inverse: physical params → standardized (for initialization)."""
+        """Map physical parameters to standardized latents (for initialization).
+
+        Parameters
+        ----------
+        params : dict
+            Physical parameter dictionary, e.g. from a prior sample.
+
+        Returns
+        -------
+        dict
+            Standardized latent variables with keys matching ``self.domain``.
+        """
         xi = {}
         for name in self._free_names:
             if name in params:
@@ -204,7 +228,22 @@ class StandardizedForwardModel:
     # ── Forward pass ──────────────────────────────────────────────
 
     def predict(self, xi: dict, data_type: str = "photometry", wave_obs=None) -> jnp.ndarray:
-        """Full forward model: ξ → predicted observables."""
+        """Map standardized latents to predicted observables.
+
+        Parameters
+        ----------
+        xi : dict
+            Standardized latent variables with keys matching ``self.domain``.
+        data_type : str
+            Observation type: ``"photometry"``, ``"spectroscopy"``, or ``"joint"``.
+        wave_obs : array_like or None
+            Observed-frame wavelengths required for spectroscopy. [Angstrom]
+
+        Returns
+        -------
+        ndarray
+            Predicted flux vector matching the data layout. [erg/s/Hz]
+        """
         params = self.xi_to_params(xi)
 
         if data_type == "photometry":
@@ -234,7 +273,7 @@ def build_standardized_loss(
     wave_obs=None,
     data_mask: jnp.ndarray | None = None,
 ) -> Callable:
-    """Build the unified loss function.
+    """Build the unified loss function H(ξ) for a single galaxy.
 
     When no noise model is active (default):
         H(ξ) = ½ Σ_k ((d_k - m_k(ξ))/σ_k)² + ½ ξᵀξ
@@ -251,6 +290,30 @@ def build_standardized_loss(
 
     No prior penalty terms beyond ½ξᵀξ. The prior is absorbed into the
     transforms.
+
+    Parameters
+    ----------
+    smodel : StandardizedForwardModel
+        Standardized forward model wrapping a ``SEDModel``.
+    data : array_like, shape (n_obs,)
+        Observed fluxes or spectral values. [erg/s/Hz or consistent units]
+    noise : array_like, shape (n_obs,)
+        Observational uncertainties (1-sigma). Same units as ``data``.
+    data_type : str
+        Observation type: ``"photometry"``, ``"spectroscopy"``, or ``"joint"``.
+    wave_obs : array_like or None
+        Observed-frame wavelengths, required when ``data_type != "photometry"``.
+        [Angstrom]
+    data_mask : array_like or None
+        Integer mask for censored data (0=detected, 1=upper limit, -1=lower limit).
+        When provided, upper/lower limits use CDF likelihood instead of chi-squared.
+
+    Returns
+    -------
+    loss_fn : callable
+        Function mapping a flat latent vector ``xi_flat`` to a scalar loss value.
+    unravel_fn : callable
+        Function that reconstructs the structured ``xi`` dict from ``xi_flat``.
     """
     from tengri.observation.noise import (
         censored_log_likelihood,
@@ -320,11 +383,28 @@ def build_standardized_loss(
 def build_hierarchical_loss(
     smodel: StandardizedForwardModel, galaxies: list, shared_names: list | None = None
 ) -> Callable:
-    """Build hierarchical loss with shared parameters.
+    """Build hierarchical loss with shared parameters across a galaxy population.
 
     Supports variable noise model: when ``noise_frac_cal`` is free,
     the effective noise includes a calibration floor and the
     log-determinant penalty.
+
+    Parameters
+    ----------
+    smodel : StandardizedForwardModel
+        Standardized forward model for a single galaxy.
+    galaxies : list of dict
+        List of galaxy data dicts, each with keys ``"flux_obs"`` and ``"noise"``.
+    shared_names : list of str or None
+        Parameter names shared across all galaxies (e.g. PSD hyperparameters).
+        Defaults to all PSD-prefixed free parameters.
+
+    Returns
+    -------
+    loss_fn : callable
+        Function mapping a flat hierarchical latent vector to the total loss.
+    unravel_fn : callable
+        Function reconstructing the structured latent dict from the flat vector.
     """
     from tengri.observation.noise import compute_effective_noise, has_noise_model
 

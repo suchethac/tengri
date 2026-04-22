@@ -57,6 +57,11 @@ class Distribution:
     This benefits all samplers: variational (geoVI/MGVI), MCMC, and gradient-based
     optimization.
 
+    **Abstract base class**: Distribution is an abstract base class defining the
+    interface for all prior distributions. Subclasses must implement ``bounds``,
+    ``sample()``, ``log_prob()``, ``unstandardize()``, and ``standardize()``.
+    All methods are JIT-compatible when implemented using JAX primitives.
+
     Examples
     --------
     Creating custom priors:
@@ -75,20 +80,54 @@ class Distribution:
 
     @property
     def is_fixed(self) -> bool:
-        """Return True if this is a Fixed distribution, False otherwise."""
+        """Return True if this is a Fixed distribution, False otherwise.
+
+        Returns
+        -------
+        bool
+            True if this is a Fixed distribution, False otherwise.
+        """
         return False
 
     @property
     def bounds(self) -> tuple[float, float]:
-        """Lower and upper bounds [lo, hi] for this distribution."""
+        """Lower and upper bounds [lo, hi] for this distribution.
+
+        Returns
+        -------
+        tuple[float, float]
+            Lower and upper bounds (lo, hi).
+        """
         raise NotImplementedError
 
     def sample(self, key: jax.Array) -> jnp.ndarray:
-        """Draw a random sample from the prior distribution."""
+        """Draw a random sample from the prior distribution.
+
+        Parameters
+        ----------
+        key : jax.Array
+            JAX PRNG key for random sampling.
+
+        Returns
+        -------
+        ndarray
+            A single sample drawn from the prior distribution.
+        """
         raise NotImplementedError
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
-        """Evaluate log probability density at parameter value x."""
+        """Evaluate log probability density at parameter value x.
+
+        Parameters
+        ----------
+        x : float or array_like
+            Parameter value in physical (unstandardized) space.
+
+        Returns
+        -------
+        float
+            Log probability density at x.
+        """
         raise NotImplementedError
 
     def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray:
@@ -107,6 +146,17 @@ class Distribution:
         curvature from the prior, making the posterior landscape
         isotropic in the prior directions. This benefits all samplers,
         not just the variational ones (geoVI/MGVI) that require it.
+
+        Parameters
+        ----------
+        xi : float or array_like
+            Standardized latent value, typically from a standard normal
+            distribution.
+
+        Returns
+        -------
+        float or ndarray
+            Physical-space parameter value.
         """
         raise NotImplementedError(f"{type(self).__name__} must implement unstandardize()")
 
@@ -115,6 +165,16 @@ class Distribution:
 
         Inverse of unstandardize. Used for initialization from
         physical parameter values (e.g., from a MAP solution).
+
+        Parameters
+        ----------
+        theta : float or array_like
+            Physical-space parameter value.
+
+        Returns
+        -------
+        float or ndarray
+            Standardized latent-space value.
         """
         raise NotImplementedError(f"{type(self).__name__} must implement standardize()")
 
@@ -124,6 +184,12 @@ class Distribution:
         Returns a callable that maps ξ → θ, compatible with
         NIFTy's CorrelatedFieldMaker and optimize_kl.
         Returns None if nifty8.re is not installed.
+
+        Returns
+        -------
+        callable or None
+            NIFTy8 prior object (callable mapping ξ → θ) if nifty8 is
+            installed, else None.
         """
         import importlib.util
 
@@ -149,6 +215,15 @@ class Uniform(Distribution):
         Lower bound (inclusive).
     hi : float
         Upper bound (inclusive). Must satisfy hi > lo.
+
+    Attributes
+    ----------
+    lo : float
+        Lower bound of the distribution.
+    hi : float
+        Upper bound of the distribution.
+    bounds : tuple[float, float]
+        ``(lo, hi)`` convenience tuple.
 
     Raises
     ------
@@ -188,25 +263,65 @@ class Uniform(Distribution):
 
     @property
     def lo(self) -> float:
-        """Lower bound of the uniform distribution."""
+        """Lower bound of the uniform distribution.
+
+        Returns
+        -------
+        float
+            Lower bound value.
+        """
         return self._lo
 
     @property
     def hi(self) -> float:
-        """Upper bound of the uniform distribution."""
+        """Upper bound of the uniform distribution.
+
+        Returns
+        -------
+        float
+            Upper bound value.
+        """
         return self._hi
 
     @property
     def bounds(self) -> tuple[float, float]:
-        """Lower and upper bounds [lo, hi]."""
+        """Lower and upper bounds [lo, hi].
+
+        Returns
+        -------
+        tuple[float, float]
+            Bounds as (lo, hi) tuple.
+        """
         return (self._lo, self._hi)
 
     def sample(self, key: jax.Array) -> jnp.ndarray:
-        """Draw one sample uniformly from [lo, hi]."""
+        """Draw one sample uniformly from [lo, hi].
+
+        Parameters
+        ----------
+        key : jax.Array
+            JAX PRNG key for random sampling.
+
+        Returns
+        -------
+        ndarray
+            A single sample uniformly distributed in [lo, hi].
+        """
         return jax.random.uniform(key, minval=self._lo, maxval=self._hi)
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
-        """Return log probability: -log(hi-lo) inside bounds, -inf outside."""
+        """Return log probability: -log(hi-lo) inside bounds, -inf outside.
+
+        Parameters
+        ----------
+        x : float or array_like
+            Parameter value in physical space.
+
+        Returns
+        -------
+        float
+            Log probability density at x.
+        """
         in_bounds = (x >= self._lo) & (x <= self._hi)
         return jnp.where(in_bounds, -jnp.log(self._hi - self._lo), -jnp.inf)
 
@@ -216,11 +331,32 @@ class Uniform(Distribution):
         At ξ=0 (prior center), sigmoid(0) = 0.5, so θ = midpoint of [lo, hi].
         At ξ=±3 (~99.7% of N(0,1) mass), θ covers ~95% of [lo, hi].
         The sigmoid naturally respects bounds without clipping.
+
+        Parameters
+        ----------
+        xi : float or array_like
+            Standardized latent value from standard normal distribution.
+
+        Returns
+        -------
+        float or ndarray
+            Physical-space parameter in [lo, hi].
         """
         return self._lo + (self._hi - self._lo) * jax.nn.sigmoid(xi)
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
-        """Uniform(lo, hi) → ξ via logit."""
+        """Uniform(lo, hi) → ξ via logit.
+
+        Parameters
+        ----------
+        theta : float or array_like
+            Physical-space parameter value in [lo, hi].
+
+        Returns
+        -------
+        float or ndarray
+            Standardized latent-space value.
+        """
         u = (theta - self._lo) / (self._hi - self._lo)
         u = jnp.clip(u, 1e-6, 1 - 1e-6)
         return jnp.log(u / (1 - u))  # logit
@@ -249,6 +385,19 @@ class Gaussian(Distribution):
         Lower truncation bound. Default: -∞ (no lower truncation).
     hi : float, optional
         Upper truncation bound. Default: +∞ (no upper truncation).
+
+    Attributes
+    ----------
+    mu : float
+        Mean of the distribution.
+    sigma : float
+        Standard deviation of the distribution.
+    lo : float
+        Lower truncation bound (``-inf`` if unbounded).
+    hi : float
+        Upper truncation bound (``+inf`` if unbounded).
+    bounds : tuple[float, float]
+        ``(lo, hi)`` convenience tuple.
 
     Raises
     ------
@@ -294,46 +443,120 @@ class Gaussian(Distribution):
 
     @property
     def mu(self) -> float:
-        """Mean of the Gaussian distribution."""
+        """Mean of the Gaussian distribution.
+
+        Returns
+        -------
+        float
+            Mean value.
+        """
         return self._mu
 
     @property
     def sigma(self) -> float:
-        """Standard deviation of the Gaussian distribution."""
+        """Standard deviation of the Gaussian distribution.
+
+        Returns
+        -------
+        float
+            Standard deviation value.
+        """
         return self._sigma
 
     @property
     def lo(self) -> float:
-        """Lower truncation bound."""
+        """Lower truncation bound.
+
+        Returns
+        -------
+        float
+            Lower truncation bound (-inf if unbounded).
+        """
         return self._lo
 
     @property
     def hi(self) -> float:
-        """Upper truncation bound."""
+        """Upper truncation bound.
+
+        Returns
+        -------
+        float
+            Upper truncation bound (+inf if unbounded).
+        """
         return self._hi
 
     @property
     def bounds(self) -> tuple[float, float]:
-        """Lower and upper truncation bounds [lo, hi]."""
+        """Lower and upper truncation bounds [lo, hi].
+
+        Returns
+        -------
+        tuple[float, float]
+            Bounds as (lo, hi) tuple.
+        """
         return (self._lo, self._hi)
 
     def sample(self, key: jax.Array) -> jnp.ndarray:
-        """Draw a random sample from the Gaussian distribution."""
+        """Draw a random sample from the Gaussian distribution.
+
+        Parameters
+        ----------
+        key : jax.Array
+            JAX PRNG key for random sampling.
+
+        Returns
+        -------
+        ndarray
+            A single sample from N(mu, sigma²), clipped to [lo, hi].
+        """
         raw = self._mu + self._sigma * jax.random.normal(key)
         return jnp.clip(raw, self._lo, self._hi)
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
-        """Evaluate log probability density, returning -inf outside bounds."""
+        """Evaluate log probability density, returning -inf outside bounds.
+
+        Parameters
+        ----------
+        x : float or array_like
+            Parameter value in physical space.
+
+        Returns
+        -------
+        float
+            Log probability density at x.
+        """
         lp = -0.5 * ((x - self._mu) / self._sigma) ** 2
         in_bounds = (x >= self._lo) & (x <= self._hi)
         return jnp.where(in_bounds, lp, -jnp.inf)
 
     def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray:
-        """ξ ~ N(0,1) → N(μ,σ²) clipped to [lo, hi]."""
+        """ξ ~ N(0,1) → N(μ,σ²) clipped to [lo, hi].
+
+        Parameters
+        ----------
+        xi : float or array_like
+            Standardized latent value from standard normal distribution.
+
+        Returns
+        -------
+        float or ndarray
+            Physical-space parameter in [lo, hi].
+        """
         return jnp.clip(self._mu + self._sigma * xi, self._lo, self._hi)
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
-        """N(μ,σ²) → ξ."""
+        """N(μ,σ²) → ξ.
+
+        Parameters
+        ----------
+        theta : float or array_like
+            Physical-space parameter value.
+
+        Returns
+        -------
+        float or ndarray
+            Standardized latent-space value.
+        """
         return (theta - self._mu) / self._sigma
 
     def __repr__(self) -> str:
@@ -367,6 +590,15 @@ class LogUniform(Distribution):
         Lower bound. Must be strictly positive.
     hi : float
         Upper bound. Must be greater than lo.
+
+    Attributes
+    ----------
+    lo : float
+        Lower bound of the distribution.
+    hi : float
+        Upper bound of the distribution.
+    bounds : tuple[float, float]
+        ``(lo, hi)`` convenience tuple.
 
     Raises
     ------
@@ -414,40 +646,102 @@ class LogUniform(Distribution):
 
     @property
     def lo(self) -> float:
-        """Lower bound of the log-uniform distribution."""
+        """Lower bound of the log-uniform distribution.
+
+        Returns
+        -------
+        float
+            Lower bound value.
+        """
         return self._lo
 
     @property
     def hi(self) -> float:
-        """Upper bound of the log-uniform distribution."""
+        """Upper bound of the log-uniform distribution.
+
+        Returns
+        -------
+        float
+            Upper bound value.
+        """
         return self._hi
 
     @property
     def bounds(self) -> tuple[float, float]:
-        """Lower and upper bounds [lo, hi]."""
+        """Lower and upper bounds [lo, hi].
+
+        Returns
+        -------
+        tuple[float, float]
+            Bounds as (lo, hi) tuple.
+        """
         return (self._lo, self._hi)
 
     def sample(self, key: jax.Array) -> jnp.ndarray:
-        """Draw one sample log-uniformly from [lo, hi]."""
+        """Draw one sample log-uniformly from [lo, hi].
+
+        Parameters
+        ----------
+        key : jax.Array
+            JAX PRNG key for random sampling.
+
+        Returns
+        -------
+        ndarray
+            A single sample log-uniformly distributed in [lo, hi].
+        """
         log_lo = jnp.log10(self._lo)
         log_hi = jnp.log10(self._hi)
         log_val = jax.random.uniform(key, minval=log_lo, maxval=log_hi)
         return 10.0**log_val
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
-        """Return log probability: -log(x * log(hi/lo)) inside bounds, -inf outside."""
+        """Return log probability: -log(x * log(hi/lo)) inside bounds, -inf outside.
+
+        Parameters
+        ----------
+        x : float or array_like
+            Parameter value in physical space.
+
+        Returns
+        -------
+        float
+            Log probability density at x.
+        """
         in_bounds = (x >= self._lo) & (x <= self._hi)
         lp = -jnp.log(x * jnp.log(self._hi / self._lo))
         return jnp.where(in_bounds, lp, -jnp.inf)
 
     def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray:
-        """ξ ~ N(0,1) → LogUniform(lo, hi) via sigmoid in log space."""
+        """ξ ~ N(0,1) → LogUniform(lo, hi) via sigmoid in log space.
+
+        Parameters
+        ----------
+        xi : float or array_like
+            Standardized latent value from standard normal distribution.
+
+        Returns
+        -------
+        float or ndarray
+            Physical-space parameter in [lo, hi].
+        """
         log_lo = jnp.log(self._lo)
         log_hi = jnp.log(self._hi)
         return jnp.exp(log_lo + (log_hi - log_lo) * jax.nn.sigmoid(xi))
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
-        """LogUniform(lo, hi) → ξ via logit in log space."""
+        """LogUniform(lo, hi) → ξ via logit in log space.
+
+        Parameters
+        ----------
+        theta : float or array_like
+            Physical-space parameter value in [lo, hi].
+
+        Returns
+        -------
+        float or ndarray
+            Standardized latent-space value.
+        """
         log_lo = jnp.log(self._lo)
         log_hi = jnp.log(self._hi)
         u = (jnp.log(theta) - log_lo) / (log_hi - log_lo)
@@ -478,6 +772,15 @@ class LogNormal(Distribution):
         Lower truncation bound. Default: 0.0 (ensures θ > 0).
     hi : float, optional
         Upper truncation bound. Default: +∞ (no upper truncation).
+
+    Attributes
+    ----------
+    mu : float
+        Mean of log(theta).
+    sigma : float
+        Standard deviation of log(theta).
+    bounds : tuple[float, float]
+        ``(lo, hi)`` convenience tuple.
 
     Raises
     ------
@@ -530,36 +833,98 @@ class LogNormal(Distribution):
 
     @property
     def mu(self) -> float:
-        """Mean of log(theta)."""
+        """Mean of log(theta).
+
+        Returns
+        -------
+        float
+            Mean of the logarithm of the parameter.
+        """
         return self._mu
 
     @property
     def sigma(self) -> float:
-        """Standard deviation of log(theta)."""
+        """Standard deviation of log(theta).
+
+        Returns
+        -------
+        float
+            Standard deviation of the logarithm of the parameter.
+        """
         return self._sigma
 
     @property
     def bounds(self) -> tuple[float, float]:
-        """Lower and upper truncation bounds [lo, hi]."""
+        """Lower and upper truncation bounds [lo, hi].
+
+        Returns
+        -------
+        tuple[float, float]
+            Bounds as (lo, hi) tuple.
+        """
         return (self._lo, self._hi)
 
     def sample(self, key: jax.Array) -> jnp.ndarray:
-        """Draw a random sample from the log-normal distribution."""
+        """Draw a random sample from the log-normal distribution.
+
+        Parameters
+        ----------
+        key : jax.Array
+            JAX PRNG key for random sampling.
+
+        Returns
+        -------
+        ndarray
+            A single sample from LogNormal(mu, sigma²), clipped to [lo, hi].
+        """
         log_val = self._mu + self._sigma * jax.random.normal(key)
         return jnp.clip(jnp.exp(log_val), self._lo, self._hi)
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
-        """Evaluate log probability density, returning -inf outside bounds."""
+        """Evaluate log probability density, returning -inf outside bounds.
+
+        Parameters
+        ----------
+        x : float or array_like
+            Parameter value in physical space.
+
+        Returns
+        -------
+        float
+            Log probability density at x.
+        """
         lp = -jnp.log(x) - 0.5 * ((jnp.log(x) - self._mu) / self._sigma) ** 2
         in_bounds = (x >= self._lo) & (x <= self._hi)
         return jnp.where(in_bounds, lp, -jnp.inf)
 
     def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray:
-        """ξ ~ N(0,1) → exp(μ + σ·ξ), clipped to [lo, hi]."""
+        """ξ ~ N(0,1) → exp(μ + σ·ξ), clipped to [lo, hi].
+
+        Parameters
+        ----------
+        xi : float or array_like
+            Standardized latent value from standard normal distribution.
+
+        Returns
+        -------
+        float or ndarray
+            Physical-space parameter in [lo, hi].
+        """
         return jnp.clip(jnp.exp(self._mu + self._sigma * xi), self._lo, self._hi)
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
-        """LogNormal → ξ."""
+        """LogNormal → ξ.
+
+        Parameters
+        ----------
+        theta : float or array_like
+            Physical-space parameter value.
+
+        Returns
+        -------
+        float or ndarray
+            Standardized latent-space value.
+        """
         return (jnp.log(jnp.maximum(theta, 1e-30)) - self._mu) / self._sigma
 
     def __repr__(self) -> str:
@@ -599,6 +964,11 @@ class StudentT(Distribution):
         Lower truncation bound. Default: -∞ (no lower truncation).
     hi : float, optional
         Upper truncation bound. Default: +∞ (no upper truncation).
+
+    Attributes
+    ----------
+    bounds : tuple[float, float]
+        ``(lo, hi)`` truncation bounds.
 
     Notes
     -----
@@ -643,11 +1013,28 @@ class StudentT(Distribution):
 
     @property
     def bounds(self) -> tuple[float, float]:
-        """Lower and upper truncation bounds [lo, hi]."""
+        """Lower and upper truncation bounds [lo, hi].
+
+        Returns
+        -------
+        tuple[float, float]
+            Bounds as (lo, hi) tuple.
+        """
         return (self._lo, self._hi)
 
     def sample(self, key: jax.Array) -> jnp.ndarray:
-        """Draw a random sample from the Student's t distribution."""
+        """Draw a random sample from the Student's t distribution.
+
+        Parameters
+        ----------
+        key : jax.Array
+            JAX PRNG key for random sampling.
+
+        Returns
+        -------
+        ndarray
+            A single sample from Student's t distribution, clipped to [lo, hi].
+        """
         # t = normal / sqrt(chi2/df)
         k1, k2 = jax.random.split(key)
         z = jax.random.normal(k1)
@@ -656,7 +1043,18 @@ class StudentT(Distribution):
         return jnp.clip(self._mu + self._sigma * t, self._lo, self._hi)
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
-        """Evaluate log probability density, returning -inf outside bounds."""
+        """Evaluate log probability density, returning -inf outside bounds.
+
+        Parameters
+        ----------
+        x : float or array_like
+            Parameter value in physical space.
+
+        Returns
+        -------
+        float
+            Log probability density at x.
+        """
         z = (x - self._mu) / self._sigma
         lp = -0.5 * (self._df + 1) * jnp.log(1 + z**2 / self._df)
         in_bounds = (x >= self._lo) & (x <= self._hi)
@@ -667,6 +1065,16 @@ class StudentT(Distribution):
 
         For df>2, a Gaussian with matched variance is a reasonable
         approximation for the bulk of the distribution.
+
+        Parameters
+        ----------
+        xi : float or array_like
+            Standardized latent value from standard normal distribution.
+
+        Returns
+        -------
+        float or ndarray
+            Physical-space parameter in [lo, hi].
         """
         # Scale factor: Var(t) = df/(df-2) for df>2
         scale = jnp.where(
@@ -675,7 +1083,18 @@ class StudentT(Distribution):
         return jnp.clip(self._mu + self._sigma * scale * xi, self._lo, self._hi)
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
-        """Map a physical parameter value to a standardized coordinate via the Student-t scale."""
+        """Map a physical parameter value to a standardized coordinate via the Student-t scale.
+
+        Parameters
+        ----------
+        theta : float or array_like
+            Physical-space parameter value.
+
+        Returns
+        -------
+        float or ndarray
+            Standardized latent-space value.
+        """
         scale = jnp.where(self._df > 2, jnp.sqrt(self._df / (self._df - 2)), 3.0)
         return (theta - self._mu) / (self._sigma * scale)
 
@@ -695,6 +1114,13 @@ class Fixed(Distribution):
     value : float, int, or str
         The fixed value. Can be numeric (for quantitative parameters) or
         string (for categorical choices, e.g. "solar" for shock abundance).
+
+    Attributes
+    ----------
+    value : float or str
+        The constant value returned by ``sample()`` and ``unstandardize()``.
+    bounds : tuple[float, float]
+        Always ``(-inf, +inf)`` — Fixed parameters have no bounds.
 
     Notes
     -----
@@ -723,39 +1149,101 @@ class Fixed(Distribution):
 
     @property
     def value(self) -> float | str:
-        """The fixed value (numeric or string)."""
+        """The fixed value (numeric or string).
+
+        Returns
+        -------
+        float or str
+            The constant fixed value.
+        """
         return self._value
 
     @property
     def is_fixed(self) -> bool:
-        """Return True — this is a fixed (non-free) parameter."""
+        """Return True — this is a fixed (non-free) parameter.
+
+        Returns
+        -------
+        bool
+            Always True for Fixed distributions.
+        """
         return True
 
     @property
     def bounds(self) -> tuple[float, float] | tuple[None, None]:
-        """Return (value, value) for numeric, or (None, None) for string."""
+        """Return (value, value) for numeric, or (None, None) for string.
+
+        Returns
+        -------
+        tuple[float, float] or tuple[None, None]
+            For numeric values: (value, value); for string values: (None, None).
+        """
         if isinstance(self._value, str):
             return (None, None)
         return (self._value, self._value)
 
     def sample(self, key: jax.Array) -> jnp.ndarray | str:
-        """Return the fixed value (ignores random key)."""
+        """Return the fixed value (ignores random key).
+
+        Parameters
+        ----------
+        key : jax.Array
+            JAX PRNG key (ignored for fixed parameters).
+
+        Returns
+        -------
+        float, int, or str
+            The constant fixed value.
+        """
         if isinstance(self._value, str):
             return self._value
         return jnp.array(self._value)
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
-        """Return 0.0 (fixed parameters have zero log-likelihood contribution)."""
+        """Return 0.0 (fixed parameters have zero log-likelihood contribution).
+
+        Parameters
+        ----------
+        x : float or array_like
+            Parameter value (ignored for fixed distributions).
+
+        Returns
+        -------
+        float
+            Always 0.0.
+        """
         return jnp.array(0.0)
 
     def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray | str:
-        """Fixed: always returns the fixed value (ignores ξ)."""
+        """Fixed: always returns the fixed value (ignores ξ).
+
+        Parameters
+        ----------
+        xi : float or array_like
+            Standardized latent value (ignored for fixed parameters).
+
+        Returns
+        -------
+        float, int, or str
+            The constant fixed value.
+        """
         if isinstance(self._value, str):
             return self._value
         return jnp.array(self._value)
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
-        """Fixed: returns 0 (no latent variable needed)."""
+        """Fixed: returns 0 (no latent variable needed).
+
+        Parameters
+        ----------
+        theta : float or array_like
+            Physical-space parameter value (ignored for fixed parameters).
+
+        Returns
+        -------
+        float
+            Always 0.0.
+        """
         return jnp.array(0.0)
 
     def __repr__(self) -> str:

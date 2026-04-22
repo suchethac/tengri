@@ -37,36 +37,46 @@ _FWHM_TO_SIGMA = 2.3548200  # 2*sqrt(2*ln(2))
 
 
 def nirspec_prism_resolution(wave_um: jnp.ndarray) -> jnp.ndarray:
-    """JWST NIRSpec PRISM R(lambda) -- ranges from ~30 to ~300.
+    """JWST NIRSpec PRISM R(lambda) — ranges from approximately 30 to 300.
 
-    Approximate from NIRSpec documentation (Jakobsen et al. 2022).
-    R increases roughly linearly from 0.6 to 5.3 um.
+    Approximate from NIRSpec documentation. R increases roughly linearly
+    from 0.6 to 5.3 microns.
 
     Parameters
     ----------
-    wave_um : array
-        Observed wavelength in microns.
+    wave_um : array, shape (n_wave,)
+        Observed wavelength [micron].
 
     Returns
     -------
-    array
-        Spectral resolution R = lambda / delta_lambda at each wavelength.
+    ndarray, shape (n_wave,)
+        Spectral resolution R = lambda / delta_lambda (dimensionless).
+
+    Notes
+    -----
+    Not JIT-compatible (uses Python-side clipping for readability).
+
     """
     return jnp.clip(30.0 + 55.0 * (wave_um - 0.6), 30.0, 330.0)
 
 
 def nirspec_g140m_resolution(wave_um: jnp.ndarray) -> jnp.ndarray:
-    """JWST NIRSpec G140M grating -- roughly constant R~1000.
+    """JWST NIRSpec G140M grating — roughly constant R ≈ 1000.
 
     Parameters
     ----------
-    wave_um : array
-        Observed wavelength in microns.
+    wave_um : array, shape (n_wave,)
+        Observed wavelength [micron].
 
     Returns
     -------
-    array
-        Spectral resolution R ~ 1000 at each wavelength.
+    ndarray, shape (n_wave,)
+        Spectral resolution R ≈ 1000 (dimensionless).
+
+    Notes
+    -----
+    Not JIT-compatible (uses Python ones_like for constant array).
+
     """
     return 1000.0 * jnp.ones_like(wave_um)
 
@@ -75,19 +85,24 @@ def nirspec_g140m_resolution(wave_um: jnp.ndarray) -> jnp.ndarray:
 
 
 def _resolution_to_sigma_kms(resolution: jnp.ndarray) -> jnp.ndarray:
-    """Convert spectral resolution R to velocity dispersion sigma (km/s).
+    """Convert spectral resolution R to velocity dispersion sigma.
 
     sigma = c / (FWHM_TO_SIGMA * R)
 
     Parameters
     ----------
     resolution : array or scalar
-        Spectral resolution R = lambda / delta_lambda.
+        Spectral resolution R = lambda / delta_lambda (dimensionless).
 
     Returns
     -------
     array or scalar
-        Velocity dispersion in km/s.
+        Velocity dispersion [km/s].
+
+    Notes
+    -----
+    Private helper. Not JIT-compatible (may be called with traced values).
+
     """
     return _C_KM_S / (_FWHM_TO_SIGMA * resolution)
 
@@ -106,16 +121,21 @@ def _apply_lsf_constant_r(
     Parameters
     ----------
     spectrum : array, shape (n_pix,)
-        Input spectrum.
+        Input spectral flux.
     wave_obs : array, shape (n_pix,)
-        Observed wavelength grid (Angstrom). Must be uniformly spaced.
+        Observed wavelength grid [Angstrom]. Must be uniformly spaced.
     sigma_eff_kms : float
-        Effective velocity dispersion in km/s (after library subtraction).
+        Effective velocity dispersion [km/s] (after library subtraction).
 
     Returns
     -------
-    array, shape (n_pix,)
-        Smoothed spectrum.
+    ndarray, shape (n_pix,)
+        Smoothed spectrum (same units as input).
+
+    Notes
+    -----
+    JIT-compatible: yes. Private helper for apply_lsf.
+
     """
     sigma_v = sigma_eff_kms / _C_KM_S
     dlnwave = jnp.log(wave_obs[1] / wave_obs[0])
@@ -141,25 +161,31 @@ def _apply_lsf_variable_r(
     Splits the wavelength range into ``n_bins`` segments. Within each
     segment the mean effective sigma is used for an FFT convolution.
     The segments are blended with smooth (raised-cosine) overlap to
-    avoid discontinuities. Accurate to ~1% for typical instrument
+    avoid discontinuities. Accurate to approximately 1% for typical instrument
     profiles and fully differentiable.
 
     Parameters
     ----------
     spectrum : array, shape (n_pix,)
-        Input spectrum.
+        Input spectral flux.
     wave_obs : array, shape (n_pix,)
-        Observed wavelength grid (Angstrom).
+        Observed wavelength grid [Angstrom].
     sigma_eff_kms : array, shape (n_pix,)
-        Effective velocity dispersion at each pixel (km/s).
-    n_bins : int
-        Number of piecewise-constant segments. More bins = better
-        accuracy but more FFTs. 10-20 is usually sufficient.
+        Effective velocity dispersion at each pixel [km/s].
+    n_bins : int, optional
+        Number of piecewise-constant segments. More bins gives better
+        accuracy but requires more FFTs. Typical: 10–20. Default 16.
 
     Returns
     -------
-    array, shape (n_pix,)
-        Smoothed spectrum.
+    ndarray, shape (n_pix,)
+        Smoothed spectrum (same units as input).
+
+    Notes
+    -----
+    JIT-compatible: yes — `n_bins` is a static argument.
+    Gradient-safe: yes. Private helper for apply_lsf.
+
     """
     n_pix = spectrum.shape[0]
     dlnwave = jnp.log(wave_obs[1] / wave_obs[0])
@@ -175,7 +201,7 @@ def _apply_lsf_variable_r(
     pix_idx = jnp.arange(n_pix, dtype=jnp.float64)
 
     def _convolve_bin(carry, bin_center):
-        """Convolve with the mean sigma for one bin, weighted by overlap."""
+        r"""Convolve with the mean sigma for one bin, weighted by overlap."""
         # Pixel index of bin center
         center = bin_center
         half_w = bin_width * 0.75  # overlap region for blending
@@ -205,7 +231,7 @@ def _apply_lsf_variable_r(
 
     # Normalize by total weight at each pixel
     def _weight_bin(carry, bin_center):
-        """Accumulate raised-cosine overlap weights for all bins at each pixel."""
+        r"""Accumulate raised-cosine overlap weights for all bins at each pixel."""
         center = bin_center
         half_w = bin_width * 0.75
         dist = jnp.abs(pix_idx - center) / half_w
@@ -225,7 +251,7 @@ def apply_lsf(
     sigma_lib_kms: float = 0.0,
     n_bins: int = 16,
 ) -> jnp.ndarray:
-    """Apply wavelength-dependent Line Spread Function with library resolution subtraction.
+    r"""Apply wavelength-dependent Line Spread Function with library resolution subtraction.
 
     Convolves the input spectrum with a Gaussian kernel that combines instrument
     line-spread function (LSF) and stellar velocity dispersion, accounting for
@@ -330,6 +356,7 @@ def apply_lsf(
 
     >>> R_custom = 100.0 + 50.0 * (wave_obs / 5000.0)  # increases with wavelength
     >>> spectrum_smoothed = apply_lsf(spectrum, wave_obs, resolution=R_custom)
+
     """
     resolution = jnp.asarray(resolution)
 
@@ -362,55 +389,41 @@ def compute_spectrum(
     Maps observed wavelengths back to rest-frame coordinates (accounting for
     redshift), evaluates the rest-frame SED at those wavelengths via interpolation,
     and scales to observed flux using luminosity distance and (1+z) redshift factor.
-    Returns flux density at each pixel.
 
     Parameters
     ----------
     sed_rest : array, shape (n_wave,)
-        Rest-frame attenuated spectral luminosity density [erg/s/Hz] or [L☉/Hz]
-        on the rest-frame wavelength grid.
+        Rest-frame spectral luminosity density [erg/s/Hz] on the
+        rest-frame wavelength grid.
     wave_rest : array, shape (n_wave,)
-        Rest-frame wavelength grid [Ångstrom].
+        Rest-frame wavelength grid [Angstrom].
     wave_obs : array, shape (n_pix,)
-        Observed-frame wavelength at each spectral pixel [Ångstrom].
+        Observed-frame wavelength at each spectral pixel [Angstrom].
     redshift : float
-        Source redshift z. Used to map observed → rest wavelengths:
-        :math:`\\lambda_\\mathrm{rest} = \\lambda_\\mathrm{obs} / (1+z)`.
+        Source redshift z.
     dl_cm : float
-        Luminosity distance [cm]. Typically from :func:`luminosity_distance`.
+        Luminosity distance [cm].
 
     Returns
     -------
-    flux : array, shape (n_pix,)
-        Model spectral flux density [erg/s/cm²/Hz] at each observed wavelength pixel.
+    ndarray, shape (n_pix,)
+        Model spectral flux density [erg/s/cm²/Hz] at each pixel.
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    JIT-compatible: yes — all operations are ``jnp`` primitives.
+    Gradient-safe: yes — differentiable w.r.t. redshift and dl_cm.
 
-    **Gradient-safe**: yes — differentiable w.r.t. redshift and luminosity distance.
+    Uses linear interpolation (``jnp.interp``) to evaluate the rest-frame
+    SED at rest-frame wavelengths corresponding to observed pixel wavelengths.
+    SED is clamped to zero outside the wavelength domain.
 
-    **Interpolation**: Uses linear interpolation (``jnp.interp``) to evaluate
-    the rest-frame SED at rest-frame wavelengths corresponding to the observed
-    pixel wavelengths. SED is clamped to zero outside the wavelength domain.
+    References
+    ----------
+    Standard cosmological flux conversion: observer-frame flux density is
+    derived from rest-frame spectral luminosity density via (1+z) dimming
+    and inverse-square-law scaling with luminosity distance.
 
-    **Flux formula**:
-
-    .. math::
-
-        f_\\nu^{\\mathrm{obs}}(\\lambda_\\mathrm{obs}) = \\frac{1+z}{4\\pi d_L^2}
-        \\; L_\\nu^{\\mathrm{rest}}\\left(\\frac{\\lambda_\\mathrm{obs}}{1+z}\\right)
-
-    This accounts for:
-
-    - Redshift of wavelength: :math:`\\lambda_\\mathrm{obs} = \\lambda_\\mathrm{rest} (1+z)`
-    - (1+z) flux dimming factor from relativistic Doppler effect
-    - Inverse-square-law scaling with luminosity distance
-
-    See Also
-    --------
-    apply_lsf : Apply instrument LSF and velocity broadening to spectrum.
-    compute_flux_density : Compute single filter-integrated flux (photometry).
     """
     # Map observed wavelengths to rest-frame
     wave_rest_query = wave_obs / (1.0 + redshift)
@@ -437,16 +450,22 @@ def velocity_broaden(
     Parameters
     ----------
     flux : array, shape (n_pix,)
-        Input spectrum on a uniform-in-wavelength grid.
+        Input spectral flux.
     wave : array, shape (n_pix,)
-        Wavelength grid (Angstrom). Must be uniformly spaced.
+        Wavelength grid [Angstrom]. Must be uniformly spaced.
     sigma_km_s : float
-        Velocity dispersion in km/s. Typical range: 50-300 km/s.
+        Velocity dispersion [km/s]. Typical range: 50–300 km/s.
 
     Returns
     -------
-    array, shape (n_pix,)
-        Broadened spectrum.
+    ndarray, shape (n_pix,)
+        Broadened spectrum (same units as input).
+
+    Notes
+    -----
+    JIT-compatible: yes. Gradient-safe: yes.
+    Assumes uniform log-wavelength spacing for FFT accuracy.
+
     """
     sigma_v = sigma_km_s / _C_KM_S  # fractional velocity dispersion
 
@@ -476,23 +495,29 @@ def chebyshev_calibration(
 
     C(lambda) = sum_k c_k * T_k(x)
 
-    where x = (2*lambda - lambda_min - lambda_max) / (lambda_max - lambda_min)
-    maps the wavelength range to [-1, 1], and T_k are Chebyshev polynomials
-    of the first kind. c_0 is fixed to 1.
+    where x maps the wavelength range to [-1, 1], and T_k are Chebyshev
+    polynomials of the first kind. The constant term c_0 is fixed to 1.
 
     Parameters
     ----------
     wave_obs : array, shape (n_pix,)
-        Observed wavelengths (Angstrom).
+        Observed wavelengths [Angstrom].
     coeffs : array, shape (K,)
-        Chebyshev coefficients c_1, ..., c_K (c_0 = 1 is implicit).
+        Chebyshev coefficients c_1, ..., c_K (c_0 = 1 implicit).
     wave_min, wave_max : float
-        Wavelength range for normalization.
+        Wavelength range for normalization to [-1, 1].
 
     Returns
     -------
-    array, shape (n_pix,)
-        Multiplicative calibration factor at each pixel.
+    ndarray, shape (n_pix,)
+        Multiplicative calibration factor (dimensionless).
+
+    Notes
+    -----
+    JIT-compatible: yes. Gradient-safe: yes.
+    Warning: uses Python loop over coefficients; may not JIT-compile
+    with variable K if K is traced.
+
     """
     x = (2.0 * wave_obs - wave_min - wave_max) / (wave_max - wave_min)
 
@@ -532,7 +557,7 @@ def blend_emission_lines(
     Each line is represented as a Gaussian whose width is set by the
     instrument's spectral resolution R = lambda / delta_lambda. Lines
     closer than delta_lambda are effectively blended. The output is in
-    Lsun/Hz, ready to be added to a continuum SED.
+    L_sun/Hz, ready to be added to a continuum SED.
 
     Vectorized over all lines simultaneously using ``jax.vmap`` for
     efficient GPU/TPU execution.
@@ -540,36 +565,38 @@ def blend_emission_lines(
     Parameters
     ----------
     line_wavelengths : array, shape (n_lines,)
-        Rest-frame line wavelengths (Angstrom).
+        Rest-frame line wavelengths [Angstrom].
     line_luminosities : array, shape (n_lines,)
-        Line luminosities (Lsun). Total integrated luminosity per line.
+        Line luminosities [L_sun]. Total integrated luminosity per line.
     spectral_resolution : float
-        Instrument spectral resolution R = lambda / delta_lambda.
-        Typical values: R ~ 100 for photometry, R ~ 1000 for low-res
-        spectroscopy, R ~ 5000 for medium-res.
+        Instrument spectral resolution R = lambda / delta_lambda (dimensionless).
+        Typical values: R ~ 100 (photometry), R ~ 1000 (low-res spectroscopy),
+        R ~ 5000 (medium-res).
     wave_out : array, shape (n_pix,)
-        Output wavelength grid (Angstrom, observed frame).
+        Output wavelength grid [Angstrom] in observed frame.
     redshift : float, optional
-        Source redshift. Default is 0.0.
+        Source redshift. Default 0.0.
 
     Returns
     -------
-    array, shape (n_pix,)
-        Emission-line spectrum in Lsun/Hz on the output grid.
-        Add to a continuum SED (also in Lsun/Hz) before applying
+    ndarray, shape (n_pix,)
+        Emission-line spectrum [L_sun/Hz] on the output grid.
+        Add to a continuum SED (also in L_sun/Hz) before applying
         cosmological dimming.
 
     Notes
     -----
+    JIT-compatible: yes — vmapped over lines. Gradient-safe: yes.
+
     The Gaussian FWHM at each line is FWHM = lambda_obs / R, giving
     sigma = lambda_obs / (2.355 * R). The profile is normalized to
-    integrate to 1 in wavelength space. To convert from Lsun (total
-    line luminosity) to Lsun/Hz (spectral density), we divide by the
-    frequency width delta_nu = c * sigma / lambda_obs^2.
+    integrate to 1 in wavelength space. Luminosity is converted from
+    L_sun (wavelength-integrated) to L_sun/Hz (spectral density).
+
     """
 
     def _single_line(lam_rest, lum):
-        """Compute Gaussian profile for one line.
+        r"""Compute Gaussian profile for one line.
 
         Parameters
         ----------
@@ -582,6 +609,7 @@ def blend_emission_lines(
         -------
         array, shape (n_pix,)
             Contribution to the spectrum (Lsun/Hz).
+
         """
         lam_obs = lam_rest * (1.0 + redshift)
         sigma_aa = lam_obs / (2.355 * spectral_resolution)

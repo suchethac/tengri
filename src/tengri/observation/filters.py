@@ -407,6 +407,7 @@ def compute_effective_wavelength(wave: np.ndarray, trans: np.ndarray) -> float:
     -------
     float
         Effective wavelength in Angstrom.
+
     """
     num = np.trapz(trans * wave, wave)
     den = np.trapz(trans, wave)
@@ -429,6 +430,7 @@ def compute_fwhm(wave: np.ndarray, trans: np.ndarray) -> float:
     -------
     float
         FWHM in Angstrom. Returns 0 if the curve never exceeds half-max.
+
     """
     peak = np.max(trans)
     if peak == 0:
@@ -473,6 +475,7 @@ def filter_info(name: str, *, cache_dir: str | None = None) -> dict:
     ------
     KeyError
         If *name* is not in the registry.
+
     """
     if name not in FILTER_REGISTRY:
         raise KeyError(f"Unknown filter '{name}'. Use list_available_filters() to see options.")
@@ -570,6 +573,7 @@ def download_filter(
         If ``astroquery`` is not installed.
     ValueError
         If SVO returns no data for the given filter ID.
+
     """
     cache_path = Path(cache_dir)
     cache_path.mkdir(parents=True, exist_ok=True)
@@ -615,6 +619,7 @@ def load_filter(
     ------
     KeyError
         If *name* is not in ``FILTER_REGISTRY``.
+
     """
     if name not in FILTER_REGISTRY:
         raise KeyError(
@@ -648,6 +653,7 @@ def load_filter_set(
         Transmission arrays per filter.
     filter_curves : list of FilterCurve
         Full FilterCurve objects.
+
     """
     filter_waves: list[jnp.ndarray] = []
     filter_trans: list[jnp.ndarray] = []
@@ -682,6 +688,7 @@ def load_custom_filter(filepath: str) -> FilterCurve:
         If *filepath* does not exist.
     ValueError
         If the file format is invalid.
+
     """
     path = Path(filepath)
     if not path.exists():
@@ -722,6 +729,7 @@ def load_tophat_filter(
     -------
     FilterCurve
         Rectangular transmission curve.
+
     """
     wave = jnp.linspace(wave_center_aa - width_aa / 2, wave_center_aa + width_aa / 2, n_points)
     trans = jnp.ones(n_points)
@@ -759,6 +767,7 @@ def load_alma_band(band: int, name: str | None = None) -> FilterCurve:
     Wavelengths are in the *observed* frame — the filter should be applied
     at the observed frequency.  For a source at redshift *z*, Band N probes
     rest-frame wavelength λ_rest = λ_obs / (1 + z).
+
     """
     if band not in _ALMA_BANDS_GHZ:
         valid = sorted(_ALMA_BANDS_GHZ)
@@ -799,6 +808,7 @@ def list_available_filters(
     -------
     dict
         Copy of ``FILTER_REGISTRY`` (short name -> SVO ID).
+
     """
     if group_by == "none":
         _print_flat_listing(compute_properties, cache_dir)

@@ -192,8 +192,21 @@ def dla_transmission(
 
     Returns
     -------
-    array, shape (n_wave,)
-        Transmission T = exp(−τ) in [0, 1].
+    ndarray, shape (n_wave,)
+        Transmission T = exp(−τ) [dimensionless, 0–1].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function with ``@jax.jit`` decorator.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import dla_transmission
+    >>> wave = jnp.linspace(1100.0, 1300.0, 200)
+    >>> T = dla_transmission(wave, log_n_hi=21.0)
+    >>> T.shape
+    (200,)
     """
     nu = C_CGS / (wave_rest * 1e-8)
     dnu = _deltanu_doppler(temp, b_turb_kms)
@@ -232,8 +245,21 @@ def dla_transmission_obs(
 
     Returns
     -------
-    array, shape (n_wave,)
-        Transmission T = exp(−τ) in [0, 1].
+    ndarray, shape (n_wave,)
+        Transmission T = exp(−τ) [dimensionless, 0–1].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function with ``@jax.jit`` decorator.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import dla_transmission_obs
+    >>> wave_obs = jnp.linspace(1100.0 * 1.5, 1300.0 * 1.5, 200)
+    >>> T = dla_transmission_obs(wave_obs, z_dla=0.5, log_n_hi=21.0)
+    >>> T.shape
+    (200,)
     """
     wave_rest = wave_obs / (1.0 + z_dla)
     return dla_transmission(wave_rest, log_n_hi, temp, b_turb_kms)
