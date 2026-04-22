@@ -1,14 +1,15 @@
 """Non-parametric star formation history models.
 
-Implements the Continuity (Leja+2019) and Dirichlet (Leja+2017) non-parametric
-SFH priors from the Prospector framework. Both describe piecewise-constant
-SFR in N lookback-time bins, but differ in how the free parameters are
-defined and what priors they imply.
+Implements the Continuity (Leja+2019), Dirichlet (Leja+2017), and Bursty
+Continuity (Tacchella+2022) non-parametric SFH priors from the Prospector
+framework. All describe piecewise-constant SFR in N lookback-time bins.
 
 - **Continuity**: free parameters are log-SFR *ratios* between adjacent bins,
   with a Student-t(df=2, scale=0.3) smoothness prior penalizing sharp jumps.
 - **Dirichlet**: free parameters are auxiliary Beta(1,1) variables that map
   to mass fractions via stick-breaking, giving a symmetric Dirichlet prior.
+- **Bursty continuity**: same continuity SFH, but young bins use a wider
+  Student-t scale (1.0) than old bins (0.3) to permit rapid recent fluctuations.
 
 Convention: t_lookback in years, SFR returned in Msun/yr.
 All functions are pure JAX and JIT-compatible.
@@ -18,6 +19,7 @@ References
 - Leja+2017 (arXiv:1609.09073): Dirichlet SFH prior.
 - Leja+2019 (arXiv:1905.11997): Continuity SFH prior.
 - Johnson+2021: Prospector implementation.
+- Tacchella et al. 2022, ApJ, 926, 134 (arXiv:2102.11954): Bursty continuity.
 - Wang et al. 2024 (arXiv:2401.12198): Prospector-β agebins scheme.
 """
 
@@ -138,6 +140,90 @@ def continuity_prior_logp(
     from jax.scipy.stats import t as student_t
 
     return jnp.sum(student_t.logpdf(log_sfr_ratios, df, loc=0.0, scale=scale))
+
+
+def bursty_continuity_prior_logp(
+    log_sfr_ratios: jnp.ndarray,
+    bin_edges_gyr: jnp.ndarray,
+    t_split_gyr: float = 1.0,
+    scale_young: float = 1.0,
+    scale_old: float = 0.3,
+    df: float = 2.0,
+) -> jnp.ndarray:
+    """Compute the bursty-continuity prior log-probability on log-SFR ratios (Tacchella+2022).
+
+    Same prior structure as :func:`continuity_prior_logp` (Leja+2019), but
+    applies a wider scale to ratios in young bins (lookback time < ``t_split_gyr``)
+    to allow rapid recent SFR fluctuations while keeping old bins smooth.
+
+    Parameters
+    ----------
+    log_sfr_ratios : array_like, shape (n_bins-1,)
+        Log10 SFR ratios between adjacent bins [dimensionless].
+        Ratio ``i`` controls the transition from bin ``i+1`` (older) to bin
+        ``i`` (younger), following the continuity SFH convention.
+    bin_edges_gyr : array_like, shape (n_bins+1,)
+        Age bin edges [Gyr], monotonically increasing. Must match the edges
+        used to construct the SFH (e.g. ``DEFAULT_BIN_EDGES_GYR``).
+    t_split_gyr : float, optional
+        Lookback time split [Gyr] separating the bursty (young) regime from
+        the smooth (old) regime. Default 1.0 Gyr.
+    scale_young : float, optional
+        Student-t scale for ratios whose *younger* bin edge is inside the
+        bursty regime (``bin_edges_gyr[i+1] < t_split_gyr``). Default 1.0 dex.
+    scale_old : float, optional
+        Student-t scale for old-regime ratios. Default 0.3 dex (same as the
+        standard continuity prior).
+    df : float, optional
+        Degrees of freedom for both Student-t distributions. Default 2.
+
+    Returns
+    -------
+    logp : scalar
+        Total log-probability [dimensionless] summed over all ratios.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — ``jnp.where`` selects the scale without branching.
+    ``t_split_gyr``, ``scale_young``, ``scale_old``, and ``df`` must be
+    concrete (non-traced) scalars.
+
+    **Gradient-safe**: yes — differentiable w.r.t. ``log_sfr_ratios`` everywhere.
+
+    Ratio ``i`` is classified as *young* when ``bin_edges_gyr[i+1] < t_split_gyr``,
+    i.e. its younger bin edge lies in the bursty regime. The per-ratio log-prob is:
+
+    .. math::
+
+        \\log p(r_i) = \\log t_{\\nu}\\!\\left(r_i \\mid 0,\\, \\sigma_i\\right),
+        \\quad \\sigma_i = \\begin{cases}
+            \\sigma_{\\rm young} & \\text{if } t_{i+1} < t_{\\rm split} \\\\
+            \\sigma_{\\rm old}   & \\text{otherwise}
+        \\end{cases}
+
+    where :math:`t_\\nu` is the Student-t density with :math:`\\nu = \\mathtt{df}`
+    degrees of freedom, :math:`t_{i+1}` is ``bin_edges_gyr[i+1]``, and
+    :math:`\\sigma_{\\rm young} = 1.0`, :math:`\\sigma_{\\rm old} = 0.3` by default.
+
+    Follows the prior parameterisation in Tacchella et al. 2022 [1]_.
+
+    References
+    ----------
+    .. [1] S. Tacchella et al., "Star Formation Histories from SEDs and Spectra,"
+       ApJ, 926, 134 (2022). arXiv:2102.11954.
+       https://doi.org/10.3847/1538-4357/ac3aca
+    .. [2] J. Leja et al., "How to Measure Galaxy Star Formation Histories.
+       II. Nonparametric Models," ApJ, 876, 3 (2019). arXiv:1811.03637.
+       https://doi.org/10.3847/1538-4357/ab133c
+    """
+    from jax.scipy.stats import t as student_t
+
+    # bin_edges_gyr has n_bins+1 edges; ratio i connects bin i (young) to bin i+1 (old).
+    # The younger edge of ratio i's young bin is bin_edges_gyr[i+1].
+    younger_edges = bin_edges_gyr[1:-1]  # shape (n_bins-1,)
+    is_young = younger_edges < t_split_gyr
+    scales = jnp.where(is_young, scale_young, scale_old)
+    return jnp.sum(student_t.logpdf(log_sfr_ratios, df, loc=0.0, scale=scales))
 
 
 # ── Dirichlet SFH (Leja+2017) ─────────────────────────────────────
@@ -332,8 +418,8 @@ def make_agebins_from_zred(
 
     t_univ_gyr = float(age_at_z(zred, cosmo=cosmo))
 
-    log_30myr = np.log10(30e6)    # 7.477
-    log_100myr = 8.0              # 10^8 yr
+    log_30myr = np.log10(30e6)  # 7.477
+    log_100myr = 8.0  # 10^8 yr
     log_90pct = np.log10(0.9 * t_univ_gyr * 1e9)
     log_tuniv = np.log10(t_univ_gyr * 1e9)
 
@@ -349,7 +435,7 @@ def make_agebins_from_zred(
         log_edges_inner = list(np.linspace(log_amin, log_90pct, n_bins - 1))
         log_edges = [*log_edges_inner, log_tuniv]
 
-    edges_gyr = np.array([0.0, *[10.0 ** le / 1e9 for le in log_edges]])
+    edges_gyr = np.array([0.0, *[10.0**le / 1e9 for le in log_edges]])
     edges_gyr = np.clip(edges_gyr, 0.0, t_univ_gyr)
     edges_gyr = np.maximum.accumulate(edges_gyr)
     return edges_gyr
@@ -419,9 +505,15 @@ def psb_continuity_sfh(
     --------
     >>> import jax.numpy as jnp
     >>> t = jnp.logspace(6.0, 10.14, 256)
-    >>> sfr = psb_continuity_sfh(t, log_total_mass=10.5, tlast_gyr=0.3,
-    ...                          tflex_gyr=2.0, ratio_young=1.0,
-    ...                          ratio_old_0=0.2, ratio_old_1=-0.3)
+    >>> sfr = psb_continuity_sfh(
+    ...     t,
+    ...     log_total_mass=10.5,
+    ...     tlast_gyr=0.3,
+    ...     tflex_gyr=2.0,
+    ...     ratio_young=1.0,
+    ...     ratio_old_0=0.2,
+    ...     ratio_old_1=-0.3,
+    ... )
     >>> sfr.shape
     (256,)
     """
@@ -431,9 +523,7 @@ def psb_continuity_sfh(
     n_fixed_bins = bin_edges_gyr.shape[0] - 1
 
     # Full edge array: [0, tlast, tflex, old_fixed_bins...]
-    all_edges_gyr = jnp.concatenate(
-        [jnp.array([0.0, tlast_gyr, tflex_gyr]), bin_edges_gyr[1:]]
-    )
+    all_edges_gyr = jnp.concatenate([jnp.array([0.0, tlast_gyr, tflex_gyr]), bin_edges_gyr[1:]])
     n_bins_total = all_edges_gyr.shape[0] - 1
 
     # Old bins: log-SFR ratios (oldest = reference = 0)
@@ -441,23 +531,19 @@ def psb_continuity_sfh(
     ratio_old = jnp.array(
         [ratio_kwargs.get(f"ratio_old_{i}", 0.0) for i in range(n_fixed_bins - 1)]
     )
-    log_sfr_old = jnp.concatenate(
-        [jnp.cumsum(ratio_old[::-1])[::-1], jnp.array([0.0])]
-    )
+    log_sfr_old = jnp.concatenate([jnp.cumsum(ratio_old[::-1])[::-1], jnp.array([0.0])])
 
     # Flex bin: same log-SFR as innermost old bin; youngest bin adds ratio_young
     log_sfr_flex = log_sfr_old[0]
     log_sfr_young = log_sfr_flex + ratio_young
 
-    log_sfr_bins = jnp.concatenate(
-        [jnp.array([log_sfr_young, log_sfr_flex]), log_sfr_old]
-    )
+    log_sfr_bins = jnp.concatenate([jnp.array([log_sfr_young, log_sfr_flex]), log_sfr_old])
 
     # Normalize to total mass
     bin_widths_yr = jnp.diff(all_edges_gyr) * 1e9
-    sfr_unnorm = 10.0 ** log_sfr_bins
+    sfr_unnorm = 10.0**log_sfr_bins
     mass_unnorm = jnp.sum(sfr_unnorm * bin_widths_yr)
-    sfr_bins_norm = sfr_unnorm * (10.0 ** log_total_mass) / (mass_unnorm + 1e-30)
+    sfr_bins_norm = sfr_unnorm * (10.0**log_total_mass) / (mass_unnorm + 1e-30)
 
     # Piecewise-constant lookup
     bin_edges_yr = all_edges_gyr * 1e9

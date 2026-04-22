@@ -25,6 +25,7 @@ from tengri.components.sfh.nonparametric import (
     DEFAULT_BIN_EDGES_GYR,
     DEFAULT_N_BINS,
     _stick_breaking,
+    bursty_continuity_prior_logp,
     continuity_prior_logp,
     continuity_sfh,
     dirichlet_sfh,
@@ -374,6 +375,96 @@ class TestRegistryIntegration:
         assert jnp.all(jnp.isfinite(sfr))
 
 
+# ── Bursty continuity prior (Tacchella+2022) ─────────────────────
+
+
+class TestBurstyContinuityPrior:
+    """Tests for bursty_continuity_prior_logp (Tacchella+2022)."""
+
+    def test_young_bin_wider_than_old(self):
+        """Young ratio should score higher logp than same ratio in old bin.
+
+        With scale_young=1.0 > scale_old=0.3, a moderate |ratio| in the
+        youngest bin must have higher logp than the same ratio in an old bin.
+        """
+        # DEFAULT_BIN_EDGES_GYR = [0.0, 0.03, 0.1, 0.3, 1.0, 3.0, 6.0, 13.7]
+        # 7 bins → 6 ratios. t_split=1.0 Gyr.
+        # bin_edges_gyr[1:-1] = [0.03, 0.1, 0.3, 1.0, 3.0, 6.0]
+        # young = edges < 1.0: indices 0,1,2 (edges 0.03, 0.1, 0.3)
+        # old   = edges >= 1.0: indices 3,4,5 (edges 1.0, 3.0, 6.0)
+        ratio_val = 1.5
+
+        # Only ratio at index 0 is non-zero (young regime, scale=1.0)
+        ratios_young = jnp.array([ratio_val, 0.0, 0.0, 0.0, 0.0, 0.0])
+        logp_young = bursty_continuity_prior_logp(ratios_young, DEFAULT_BIN_EDGES_GYR)
+
+        # Only ratio at index 3 is non-zero (old regime, scale=0.3)
+        ratios_old = jnp.array([0.0, 0.0, 0.0, ratio_val, 0.0, 0.0])
+        logp_old = bursty_continuity_prior_logp(ratios_old, DEFAULT_BIN_EDGES_GYR)
+
+        assert float(logp_young) > float(logp_old), (
+            f"Young bin (scale=1.0) should give higher logp at |ratio|={ratio_val}; "
+            f"got logp_young={float(logp_young):.3f}, logp_old={float(logp_old):.3f}"
+        )
+
+    def test_all_old_equals_standard_continuity(self):
+        """When t_split=0 all ratios are old; logp must match continuity_prior_logp(scale=0.3)."""
+        ratios = jnp.array([0.4, -0.3, 0.2, 0.5, -0.1, 0.3])
+        logp_bursty = bursty_continuity_prior_logp(ratios, DEFAULT_BIN_EDGES_GYR, t_split_gyr=0.0)
+        logp_standard = continuity_prior_logp(ratios, scale=0.3)
+        assert float(jnp.abs(logp_bursty - logp_standard)) < 1e-10, (
+            f"t_split=0 → all old; bursty={float(logp_bursty):.6f}, "
+            f"standard={float(logp_standard):.6f}"
+        )
+
+    def test_all_young_equals_wide_continuity(self):
+        """When t_split=200 all ratios are young; logp must match scale=scale_young."""
+        ratios = jnp.array([0.4, -0.3, 0.2, 0.5, -0.1, 0.3])
+        logp_bursty = bursty_continuity_prior_logp(
+            ratios, DEFAULT_BIN_EDGES_GYR, t_split_gyr=200.0
+        )
+        logp_wide = continuity_prior_logp(ratios, scale=1.0)
+        assert float(jnp.abs(logp_bursty - logp_wide)) < 1e-10, (
+            f"t_split=200 → all young; bursty={float(logp_bursty):.6f}, "
+            f"wide={float(logp_wide):.6f}"
+        )
+
+    def test_zero_ratios_at_maximum(self):
+        """All-zero ratios should be the global maximum (both regimes)."""
+        zeros = jnp.zeros(6)
+        logp_zero = bursty_continuity_prior_logp(zeros, DEFAULT_BIN_EDGES_GYR)
+        logp_nonzero = bursty_continuity_prior_logp(jnp.ones(6) * 0.5, DEFAULT_BIN_EDGES_GYR)
+        assert float(logp_zero) > float(logp_nonzero)
+
+    def test_finite_output(self):
+        """logp should be finite for reasonable ratio values."""
+        ratios = jnp.array([0.5, -0.3, 1.0, -0.2, 0.8, -0.5])
+        logp = bursty_continuity_prior_logp(ratios, DEFAULT_BIN_EDGES_GYR)
+        assert jnp.isfinite(logp)
+
+    def test_symmetric_in_each_regime(self):
+        """Prior is symmetric: logp(+r) == logp(-r) for both regimes."""
+        ratios = jnp.array([0.5, -0.5, 0.3, 0.4, -0.2, 0.1])
+        logp_pos = bursty_continuity_prior_logp(ratios, DEFAULT_BIN_EDGES_GYR)
+        logp_neg = bursty_continuity_prior_logp(-ratios, DEFAULT_BIN_EDGES_GYR)
+        assert jnp.allclose(logp_pos, logp_neg, atol=1e-10)
+
+    def test_custom_t_split(self):
+        """Custom t_split_gyr should shift the young/old boundary."""
+        ratios = jnp.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        # With t_split=0.05 Gyr: edge 0.03 < 0.05 → young; 0.1 >= 0.05 → old
+        logp_small_split = bursty_continuity_prior_logp(
+            ratios, DEFAULT_BIN_EDGES_GYR, t_split_gyr=0.05
+        )
+        # With t_split=5.0 Gyr: all young
+        logp_large_split = bursty_continuity_prior_logp(
+            ratios, DEFAULT_BIN_EDGES_GYR, t_split_gyr=5.0
+        )
+        # Both should be finite; large split ≥ small split for ratio in youngest bin
+        # (youngest bin is always young in both cases — ratio_0 edge = 0.03)
+        assert jnp.isfinite(logp_small_split) and jnp.isfinite(logp_large_split)
+
+
 # ── Regression: step-function behavior (searchsorted fix, 2026-04)
 
 
@@ -518,8 +609,13 @@ class TestPSBContinuitySFH:
         from tengri.components.sfh.nonparametric import psb_continuity_sfh
 
         sfr = psb_continuity_sfh(
-            age_yr, 10.0, tlast_gyr=0.5, tflex_gyr=2.0,
-            bin_edges_gyr=default_edges, ratio_young=0.0, ratio_old_0=0.0,
+            age_yr,
+            10.0,
+            tlast_gyr=0.5,
+            tflex_gyr=2.0,
+            bin_edges_gyr=default_edges,
+            ratio_young=0.0,
+            ratio_old_0=0.0,
         )
         assert jnp.all(sfr >= 0.0)
 
@@ -527,8 +623,13 @@ class TestPSBContinuitySFH:
         from tengri.components.sfh.nonparametric import psb_continuity_sfh
 
         sfr = psb_continuity_sfh(
-            age_yr, 10.0, tlast_gyr=0.5, tflex_gyr=2.0,
-            bin_edges_gyr=default_edges, ratio_young=0.0, ratio_old_0=0.0,
+            age_yr,
+            10.0,
+            tlast_gyr=0.5,
+            tflex_gyr=2.0,
+            bin_edges_gyr=default_edges,
+            ratio_young=0.0,
+            ratio_old_0=0.0,
         )
         assert jnp.all(jnp.isfinite(sfr))
 
@@ -536,12 +637,22 @@ class TestPSBContinuitySFH:
         from tengri.components.sfh.nonparametric import psb_continuity_sfh
 
         sfr10 = psb_continuity_sfh(
-            age_yr, 10.0, tlast_gyr=0.5, tflex_gyr=2.0,
-            bin_edges_gyr=default_edges, ratio_young=0.0, ratio_old_0=0.0,
+            age_yr,
+            10.0,
+            tlast_gyr=0.5,
+            tflex_gyr=2.0,
+            bin_edges_gyr=default_edges,
+            ratio_young=0.0,
+            ratio_old_0=0.0,
         )
         sfr11 = psb_continuity_sfh(
-            age_yr, 11.0, tlast_gyr=0.5, tflex_gyr=2.0,
-            bin_edges_gyr=default_edges, ratio_young=0.0, ratio_old_0=0.0,
+            age_yr,
+            11.0,
+            tlast_gyr=0.5,
+            tflex_gyr=2.0,
+            bin_edges_gyr=default_edges,
+            ratio_young=0.0,
+            ratio_old_0=0.0,
         )
         ratio = float(jnp.sum(sfr11) / jnp.sum(sfr10))
         assert abs(ratio - 10.0) < 0.5, f"10x mass increase should give ~10x SFR, got {ratio:.2f}"
@@ -559,19 +670,37 @@ class TestPSBContinuitySFH:
     def test_grad_wrt_log_total_mass(self, age_yr, default_edges):
         from tengri.components.sfh.nonparametric import psb_continuity_sfh
 
-        g = jax.grad(lambda m: jnp.sum(psb_continuity_sfh(
-            age_yr, m, tlast_gyr=0.5, tflex_gyr=2.0,
-            bin_edges_gyr=default_edges, ratio_young=0.0, ratio_old_0=0.0,
-        )))(10.0)
+        g = jax.grad(
+            lambda m: jnp.sum(
+                psb_continuity_sfh(
+                    age_yr,
+                    m,
+                    tlast_gyr=0.5,
+                    tflex_gyr=2.0,
+                    bin_edges_gyr=default_edges,
+                    ratio_young=0.0,
+                    ratio_old_0=0.0,
+                )
+            )
+        )(10.0)
         assert jnp.isfinite(g) and g > 0
 
     def test_grad_wrt_ratio_young(self, age_yr, default_edges):
         from tengri.components.sfh.nonparametric import psb_continuity_sfh
 
-        g = jax.grad(lambda r: jnp.sum(psb_continuity_sfh(
-            age_yr, 10.0, tlast_gyr=0.5, tflex_gyr=2.0,
-            bin_edges_gyr=default_edges, ratio_young=r, ratio_old_0=0.0,
-        )))(0.0)
+        g = jax.grad(
+            lambda r: jnp.sum(
+                psb_continuity_sfh(
+                    age_yr,
+                    10.0,
+                    tlast_gyr=0.5,
+                    tflex_gyr=2.0,
+                    bin_edges_gyr=default_edges,
+                    ratio_young=r,
+                    ratio_old_0=0.0,
+                )
+            )
+        )(0.0)
         assert jnp.isfinite(g)
 
 

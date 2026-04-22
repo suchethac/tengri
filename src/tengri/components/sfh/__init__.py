@@ -47,6 +47,7 @@ from tengri.components.sfh.metallicity_history import (
     two_step_metallicity,
 )
 from tengri.components.sfh.nonparametric import (
+    bursty_continuity_prior_logp,
     continuity_prior_logp,
     continuity_sfh,
     dirichlet_sfh,
@@ -70,8 +71,8 @@ __all__ = [
     "FIELD_MODEL_REGISTRY",
     "MET_REGISTRY",
     "SFH_REGISTRY",
+    "bursty_continuity_prior_logp",
     "chem_evol_metallicity_on_ssp_grid",
-    # Chemical evolution
     "closed_box_metallicity",
     "closed_box_metallicity_anchored",
     "compute_field_gp",
@@ -79,41 +80,33 @@ __all__ = [
     "constant_sfh",
     "constant_then_exponential_sfh",
     "continuity_prior_logp",
-    # Nonparametric
     "continuity_sfh",
-    "make_agebins_from_zred",
     "declining_exponential_sfh",
     "delayed_exponential_sfh",
     "delayed_tau",
     "dense_basis_pure_sfh",
-    # Dense basis
     "dense_basis_sfh",
     "dirichlet_sfh",
-    "psb_continuity_sfh",
     "double_powerlaw",
-    # Mean SFH models
     "dpl",
     "exponential_sfh",
     "gaussian_sfh",
-    # GP and PSD
     "generate_gp_fourier",
     "gp_from_xi",
-    # Wrappers for convenience
     "lnorm",
     "lognormal_sfh",
+    "make_agebins_from_zred",
     "metallicity_bins_continuity_on_ssp_grid",
     "metallicity_bins_on_ssp_grid",
     "norm",
     "powerlaw_sfh",
+    "psb_continuity_sfh",
     "psb_two_step_metallicity",
-    # PSB SFH
     "psb_wild2020",
     "psd_drw",
     "psd_extended_regulator",
     "psd_matern",
-    # Metallicity registry
     "resolve_met",
-    # SFH Registry
     "resolve_sfh",
     "skewnormal_sfh",
     "snorm",
@@ -121,11 +114,10 @@ __all__ = [
     "snorm_burst_sfh",
     "snorm_trunc_burst_sfh",
     "spline_sfh",
-    "tsnorm_burst",
     "tabulated_metallicity_on_ssp_grid",
     "triweight_burst",
     "truncated_skewnormal_sfh",
     "tsnorm",
-    # Metallicity history
+    "tsnorm_burst",
     "two_step_metallicity",
 ]
