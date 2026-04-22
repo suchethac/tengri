@@ -40,18 +40,37 @@ def plot_sed_fit(
 
     Parameters
     ----------
-    wave_eff : array — effective wavelengths (Angstrom)
-    flux_obs : array — observed fluxes
-    noise : array — 1-sigma uncertainties
-    flux_true : array, optional — true fluxes
-    posterior_draws : array, optional — shape (n_draws, n_bands)
-    ax : Axes, optional
+    wave_eff : array_like, shape (n_bands,)
+        Effective filter wavelengths. [Angstrom]
+    flux_obs : array_like, shape (n_bands,)
+        Observed photometric fluxes. [erg/s/cm²/Hz]
+    noise : array_like, shape (n_bands,)
+        1-sigma photometric uncertainties. [erg/s/cm²/Hz]
+    flux_true : array_like, shape (n_bands,), optional
+        True (noiseless) fluxes for mock recovery plots.
+    posterior_draws : array_like, shape (n_draws, n_bands), optional
+        Posterior predictive flux draws for uncertainty shading.
+    ax : matplotlib Axes, optional
+        Axes to plot on. Creates new figure if None.
     band_names : list of str, optional
+        Filter names for axis labels.
     show_residuals : bool
+        If True, adds a residual panel below the main SED panel. Default True.
 
     Returns
     -------
-    fig or ax
+    fig : matplotlib Figure
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from tengri import plot_sed_fit
+        import numpy as np
+        wave = np.array([4800.0, 6200.0, 7700.0, 9000.0])
+        flux = np.array([1.2e-18, 1.8e-18, 2.1e-18, 1.9e-18])
+        noise = flux * 0.05
+        fig = plot_sed_fit(wave, flux, noise, show_residuals=False)
     """
     if show_residuals:
         fig = plt.figure(figsize=(8, 5))
@@ -152,17 +171,37 @@ def plot_spectrum_fit(
 
     Parameters
     ----------
-    wave_obs : array — observed wavelength grid (Angstrom)
-    spec_obs : array — observed spectrum
-    noise : array — 1-sigma uncertainties
-    spec_true : array, optional — true spectrum
-    spec_draws : array, optional — posterior draws, shape (n, n_pix)
-    features : dict, optional — {name: rest_wavelength} for annotation
-    z : float — redshift for feature marking
+    wave_obs : array_like, shape (n_pix,)
+        Observed-frame wavelength grid. [Angstrom]
+    spec_obs : array_like, shape (n_pix,)
+        Observed spectrum flux density. [erg/s/cm²/Hz]
+    noise : array_like, shape (n_pix,)
+        1-sigma per-pixel uncertainties. [erg/s/cm²/Hz]
+    spec_true : array_like, shape (n_pix,), optional
+        True (noiseless) spectrum for mock recovery plots.
+    spec_draws : array_like, shape (n_draws, n_pix), optional
+        Posterior predictive spectrum draws for uncertainty shading.
+    features : dict, optional
+        Rest-frame line/feature wavelengths to annotate, e.g. ``{"Hα": 6563.0}``.
+    z : float
+        Redshift for shifting feature wavelengths to observed frame. Default 0.1.
 
     Returns
     -------
-    fig
+    fig : matplotlib Figure
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from tengri import plot_spectrum_fit
+        fig = plot_spectrum_fit(
+            wave_obs, spec_obs, noise,
+            spec_draws=posterior_spec_draws,
+            features={"Hα": 6563.0, "Hβ": 4861.0},
+            z=0.5,
+        )
+        fig.savefig("spectrum_fit.pdf")
     """
     fig = plt.figure(figsize=(10, 5))
     gs = GridSpec(2, 1, height_ratios=[3, 1], hspace=0.05)

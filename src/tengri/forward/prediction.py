@@ -148,6 +148,24 @@ class SFHQuantities(NamedTuple):
     JAX-compatible array container. All fields are JAX arrays compatible with
     ``jax.jit`` and ``jax.vmap``. Returned by :meth:`SEDModel.predict_sfh_quantities`
     and :attr:`Prediction.sfh` when accessed.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import SFHQuantities
+    >>> q = SFHQuantities(
+    ...     stellar_mass=jnp.array(1e10),
+    ...     stellar_mass_surviving=jnp.array(6e9),
+    ...     sfr_100myr=jnp.array(5.0),
+    ...     sfr_10myr=jnp.array(8.0),
+    ...     ssfr=jnp.array(5e-10),
+    ...     mass_weighted_age_gyr=jnp.array(3.5),
+    ...     mass_weighted_metallicity=jnp.array(-0.5),
+    ... )
+    >>> float(q.stellar_mass)
+    10000000000.0
+    >>> "stellar_mass" in q._fields and "sfr_100myr" in q._fields
+    True
     """
 
     stellar_mass: jnp.ndarray
@@ -207,6 +225,18 @@ class SEDQuantities(NamedTuple):
     JAX-compatible array container. All fields are JAX arrays compatible with
     ``jax.jit`` and ``jax.vmap``. Returned by :meth:`SEDModel.predict_sed_quantities`
     and :attr:`Prediction.sed` when accessed.
+
+    Examples
+    --------
+    Access via :attr:`Prediction.sed` after calling :meth:`SEDModel.predict`:
+
+    .. code-block:: python
+
+        pred = model.predict(params)
+        sed = pred.sed   # SEDQuantities NamedTuple
+        print(float(sed.l_bol))       # bolometric luminosity [Lsun]
+        print(float(sed.dn4000))      # 4000 Å break strength
+        print(float(sed.uv_slope_beta))  # UV slope beta
     """
 
     l_bol: jnp.ndarray
@@ -267,6 +297,20 @@ class EmissionLines(NamedTuple):
     JAX-compatible array container. All fields are JAX arrays compatible with
     ``jax.jit`` and ``jax.vmap``. Returned by :attr:`Prediction.lines` when
     accessed. All fields return NaN if no nebular model is active in the SEDModel.
+
+    Examples
+    --------
+    Access via :attr:`Prediction.lines` after calling :meth:`SEDModel.predict`:
+
+    .. code-block:: python
+
+        pred = model.predict(params)
+        lines = pred.lines   # EmissionLines NamedTuple
+        print(float(lines.halpha))   # H-alpha luminosity [Lsun]
+        print(float(lines.oiii_5007))  # [OIII] 5007 Å luminosity [Lsun]
+        # BPT diagram
+        bpt_x = float(lines.nii_6584 / lines.halpha)
+        bpt_y = float(lines.oiii_5007 / lines.hbeta)
     """
 
     lya: jnp.ndarray
@@ -304,6 +348,16 @@ class DerivedQuantities(NamedTuple):
     JAX-compatible array container combining :class:`SFHQuantities` and
     :class:`SEDQuantities`. Compatible with ``jax.jit`` and ``jax.vmap``.
     Returned by :meth:`SEDModel.predict_derived`.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from tengri import DerivedQuantities
+        derived = model.predict_derived(params)
+        print(float(derived.sfh.stellar_mass))   # [Msun]
+        print(float(derived.sed.dn4000))          # 4000 Å break
+        print(float(derived.sed.uv_slope_beta))   # UV slope β
     """
 
     sfh: SFHQuantities

@@ -74,6 +74,11 @@ def setup_style():
     - Thick lines (2pt data, 1.5pt axes)
     - Inward ticks on all four sides
     - No frame on legends
+
+    Examples
+    --------
+    >>> from tengri import setup_style
+    >>> setup_style()  # call once at start of a plotting script or notebook
     """
     plt.rcParams.update(
         {

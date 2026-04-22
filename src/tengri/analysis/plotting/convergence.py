@@ -16,8 +16,22 @@ def diagnostics_table(results, names=None):
 
     Parameters
     ----------
-    results : dict of {method_name: Posterior}
-    names : list of str, optional — order
+    results : dict
+        Mapping from method name to :class:`Posterior` (e.g. from :meth:`Fitter.run`).
+    names : list of str, optional
+        Display order. Defaults to ``list(results.keys())``.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from tengri import diagnostics_table
+        results = {"NUTS": posterior_nuts, "VI": posterior_vi}
+        diagnostics_table(results)
+        # Method          Wall time   ESS (min)   ESS (med)   Accept %
+        # ----------------------------------------------------------------
+        # NUTS               42.3s         812         934      82.4%
+        # VI                  3.1s           —           —         —
     """
     if names is None:
         names = list(results.keys())

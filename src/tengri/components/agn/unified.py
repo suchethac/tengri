@@ -991,6 +991,17 @@ def unified_nlr_blr(
     .. [3] G. Yang et al. 2020, MNRAS, 491, 740, "X-CIGALE: Fitting AGN/galaxy
            SEDs from X-ray to infrared" (skirtor2016 module),
            https://doi.org/10.1093/mnras/stz3001
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import unified_nlr_blr
+    >>> wave = jnp.linspace(1000.0, 30000.0, 512)
+    >>> sed = unified_nlr_blr(wave, agn_log_lbol=45.0, agn_cos_inc=0.8)
+    >>> sed.shape
+    (512,)
+    >>> bool(jnp.all(sed >= 0))
+    True
     """
     l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
 

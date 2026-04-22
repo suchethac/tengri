@@ -12,7 +12,30 @@ import jax.numpy as jnp
 
 
 class MockData(NamedTuple):
-    """Container for mock galaxy observations."""
+    """Container for mock galaxy observations.
+
+    Attributes
+    ----------
+    flux_true : ndarray, shape (n_filters,)
+        Noiseless model photometry. [erg/s/cm²/Hz]
+    flux_obs : ndarray, shape (n_filters,)
+        Noisy photometry with Gaussian scatter added. [erg/s/cm²/Hz]
+    noise : ndarray, shape (n_filters,)
+        1-sigma photometric uncertainties used to draw the noise. [erg/s/cm²/Hz]
+    params : dict
+        Input physical parameters used to generate the mock.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from tengri import SEDModel, Parameters, Uniform
+        model = SEDModel(spec, ssp_data, filter_names=["hst_acs_f606w", "hst_acs_f814w"])
+        params = {"sfh_dpl_alpha": 2.0, "sfh_dpl_beta": 1.5, ...}
+        mock = model.make_mock(params, snr=20.0)
+        mock.flux_obs.shape    # (n_filters,)
+        mock.plot()            # matplotlib Figure
+    """
 
     flux_true: jnp.ndarray  # noiseless photometry (erg/s/cm²/Hz)
     flux_obs: jnp.ndarray  # noisy photometry
@@ -84,6 +107,20 @@ class PriorPredictive:
         Drawn parameter samples, each of shape ``(n,)``.
     _model : object
         Back-reference to the parent model.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import jax
+        from tengri import SEDModel, Parameters, Uniform
+        spec = Parameters(sfh_dpl_alpha=Uniform(0.5, 4.0), sfh_dpl_beta=Uniform(0.5, 4.0))
+        model = SEDModel(spec, ssp_data, filter_names=["sdss_r", "sdss_i"])
+        ppc = model.prior_predictive(n=200, key=jax.random.PRNGKey(0))
+        ppc.flux.shape    # (200, 2)
+        ppc.sfh.shape     # (200, n_grid)
+        check = ppc.check_finite()
+        check["ok"]       # True if no NaN/Inf
     """
 
     flux: jnp.ndarray | None

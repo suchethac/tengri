@@ -39,22 +39,42 @@ def plot_sfh(
 
     Parameters
     ----------
-    model : Model
+    model : SEDModel
+        Fitted model instance.
     posterior : Posterior
+        Posterior from :meth:`Fitter.run`.
     true_params : dict, optional
-    ax : Axes, optional
-    color : str, optional — defaults to sampler color
+        Ground truth parameters for mock recovery plots.
+    ax : matplotlib Axes, optional
+        Axes to plot on. Creates new figure if None.
+    color : str, optional
+        Line color. Defaults to sampler-specific color from style sheet.
     label : str
-    method : str — "RT", "geoVI", "NUTS", "MAP" for auto-coloring
-    show_draws : bool — show faint sample lines
-    n_draws : int — number of sample draws
-    ci_levels : tuple — percentile levels for fill
-    xlim : tuple — x-axis limits in Gyr
-    show_mean_sfh : bool — show the smooth backbone as dashed
+        Legend label. Default ``"Posterior"``.
+    method : str
+        Sampler name for auto-coloring (``"RT"``, ``"geoVI"``, ``"NUTS"``, ``"MAP"``).
+    show_draws : bool
+        If True, draw faint individual SFH samples. Default True.
+    n_draws : int
+        Number of sample draws to plot. Default 30.
+    ci_levels : tuple of float
+        Percentile levels for the filled credible interval. Default ``(16, 84)``.
+    xlim : tuple of float
+        x-axis limits in lookback time. [Gyr]
+    show_mean_sfh : bool
+        If True, overplot the smooth mean SFH backbone as a dashed line. Default True.
 
     Returns
     -------
-    ax : Axes
+    ax : matplotlib Axes
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from tengri import plot_sfh
+        ax = plot_sfh(model, posterior, true_params=true_params, method="NUTS")
+        ax.figure.savefig("sfh_recovery.pdf")
     """
     if ax is None:
         _, ax = plt.subplots(figsize=(7, 4))
@@ -140,15 +160,30 @@ def plot_sfh_comparison(model, results, true_params=None, methods=None, figsize=
 
     Parameters
     ----------
-    model : Model
-    results : dict of {method_name: Posterior}
+    model : SEDModel
+        Fitted model instance.
+    results : dict
+        Mapping from method name to :class:`Posterior` (e.g. ``{"NUTS": post, "VI": post2}``).
     true_params : dict, optional
-    methods : list of str, optional — order of panels
-    figsize : tuple
+        Ground truth parameters for mock recovery plots.
+    methods : list of str, optional
+        Panel order. Defaults to ``list(results.keys())``.
+    figsize : tuple of float
+        Figure size in inches. Default ``(15, 4)``.
 
     Returns
     -------
-    fig, axes
+    fig : matplotlib Figure
+    axes : list of matplotlib Axes
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from tengri import plot_sfh_comparison
+        results = {"NUTS": posterior_nuts, "VI": posterior_vi}
+        fig, axes = plot_sfh_comparison(model, results, true_params=true_params)
+        fig.savefig("sfh_comparison.pdf")
     """
     if methods is None:
         methods = list(results.keys())

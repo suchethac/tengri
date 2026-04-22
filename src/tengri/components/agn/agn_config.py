@@ -32,6 +32,16 @@ class AGNConfig:
         Include SMC polar dust reddening. Default False.
     fe2 : bool
         Include Fe II pseudo-continuum. Default False.
+
+    Examples
+    --------
+    >>> from tengri import AGNConfig
+    >>> cfg = AGNConfig()
+    >>> cfg.disc, cfg.torus
+    ('multicolor', 'skirtor')
+    >>> cfg_kd = AGNConfig(disc="kubota_done", nlr="cue")
+    >>> cfg_kd.disc
+    'kubota_done'
     """
 
     disc: str = "multicolor"

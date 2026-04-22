@@ -571,6 +571,20 @@ def catalog_summary(
     Notes
     -----
     **JIT-compatible**: no — uses Python loops for aggregation.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from tengri import catalog_summary
+        # results is a list of Posterior objects, one per galaxy
+        catalog = catalog_summary(results, percentiles=(16, 50, 84))
+        # catalog["dust_av_p50"]  → shape (n_galaxies,)
+        # catalog["sfr_100myr_p16"]  → lower 68% CI bound
+        import numpy as np
+        import astropy.table
+        t = astropy.table.Table(catalog)
+        t.write("catalog.fits", overwrite=True)
     """
     if not results:
         return {}

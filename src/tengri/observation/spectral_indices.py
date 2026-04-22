@@ -52,6 +52,24 @@ class SpectralIndexDef:
     units : str
         ``"AA"`` for Angstrom (default) or ``"mag"`` for magnitude.
 
+    Examples
+    --------
+    >>> from tengri import SpectralIndexDef
+    >>> dn4000 = SpectralIndexDef(
+    ...     name="Dn4000",
+    ...     index_type="break",
+    ...     continuum=((3850.0, 3950.0), (4000.0, 4100.0)),
+    ... )
+    >>> dn4000.wave_min, dn4000.wave_max
+    (3850.0, 4100.0)
+    >>> hda = SpectralIndexDef(
+    ...     name="HdA",
+    ...     index_type="EW",
+    ...     continuum=((4041.6, 4079.75), (4128.5, 4161.0)),
+    ...     feature=(4083.5, 4122.25),
+    ... )
+    >>> hda.index_type
+    'EW'
     """
 
     name: str
@@ -246,6 +264,19 @@ class SpectralIndexData:
     errors : jnp.ndarray
         1-sigma uncertainties, shape ``(n_indices,)``.
 
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import SpectralIndexData
+    >>> sid = SpectralIndexData.from_names(
+    ...     names=["Dn4000", "HdA"],
+    ...     values=[1.35, 5.2],
+    ...     errors=[0.05, 0.3],
+    ... )
+    >>> sid.n_indices
+    2
+    >>> sid.names
+    ('Dn4000', 'HdA')
     """
 
     index_defs: tuple[SpectralIndexDef, ...]

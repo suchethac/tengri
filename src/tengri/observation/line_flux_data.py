@@ -49,6 +49,18 @@ class LineFluxData:
         Rest-frame vacuum wavelengths in Angstrom, shape ``(n_lines,)``.
         Used to match against the nebular backend's line output.
 
+    Examples
+    --------
+    >>> from tengri import LineFluxData
+    >>> lfd = LineFluxData.from_dict({
+    ...     "Halpha": (1.2e-16, 0.1e-16),
+    ...     "Hbeta": (3.5e-17, 0.5e-17),
+    ...     "OIII_5007": (8.0e-17, 0.8e-17),
+    ... })
+    >>> lfd.n_lines
+    3
+    >>> lfd.names
+    ('Halpha', 'Hbeta', 'OIII_5007')
     """
 
     names: tuple[str, ...]

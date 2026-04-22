@@ -27,6 +27,15 @@ def safe_corner(posterior, **kwargs):
     -------
     fig : matplotlib.figure.Figure or None
         Corner plot figure, or None if generation failed.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from tengri import safe_corner
+        fig = safe_corner(posterior, params=["sfh_dpl_alpha", "dust_tau_bc"])
+        if fig is not None:
+            fig.savefig("corner.pdf")
     """
     try:
         return posterior.plot_corner(**kwargs)
@@ -41,14 +50,34 @@ def plot_corner_comparison(posteriors, labels, colors=None, truths=None, params=
     Parameters
     ----------
     posteriors : list of Posterior
+        Posterior objects to overlay.
     labels : list of str
+        Legend labels for each posterior (e.g. ``["NUTS", "VI", "MAP"]``).
     colors : list of str, optional
+        Colors for each posterior. Defaults to sampler palette.
     truths : dict, optional
+        True parameter values for recovery plots.
     params : list of str, optional
+        Parameter names to include. Defaults to all free parameters.
 
     Returns
     -------
-    fig or None
+    fig : matplotlib Figure or None
+        Combined corner plot, or None if all posteriors failed.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from tengri import plot_corner_comparison
+        fig = plot_corner_comparison(
+            [post_nuts, post_vi],
+            labels=["NUTS", "VI"],
+            truths=true_params,
+            params=["sfh_dpl_alpha", "dust_tau_bc"],
+        )
+        if fig is not None:
+            fig.savefig("corner_comparison.pdf")
     """
     if colors is None:
         default_colors = [

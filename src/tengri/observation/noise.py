@@ -346,6 +346,16 @@ def variable_noise_hamiltonian(
     scalar
         Likelihood energy (negative log-likelihood up to constant).
 
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri import variable_noise_hamiltonian
+    >>> data = jnp.array([1.0, 2.0, 1.5])
+    >>> noise = jnp.array([0.1, 0.2, 0.15])
+    >>> pred = jnp.array([0.9, 2.1, 1.4])
+    >>> e = variable_noise_hamiltonian(data, noise, pred, f_cal=0.05)
+    >>> float(e) > 0
+    True
     """
     sigma_eff = compute_effective_noise(noise_obs, predicted, f_cal)
     r = (data - predicted) / sigma_eff
