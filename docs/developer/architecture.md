@@ -6,70 +6,110 @@ and the Information Field Theory (IFT) framework that underpins the SFH model.
 ## Package structure
 
 ```
-src/tengri/
-├── __init__.py              # Public API re-exports
+src/tengri/                  # (key files only — not exhaustive)
+├── __init__.py              # Public API re-exports (~35 names)
 ├── defaults.toml            # Default configuration values
 │
 ├── parameters/              # Parameter definitions, priors, translation, defaults
 │   ├── _param_defs.py       # Parameter name registry and default values
-│   ├── _prior_defs.py       # Prior specifications per domain
-│   ├── _param_translate.py  # Public → internal param name and unit conversion
-│   └── parameters.py        # Parameters class: spec + validation
+│   ├── parameters.py        # Parameters class: spec + validation
+│   ├── priors.py            # Prior distributions (Uniform, Gaussian, etc.)
+│   ├── translate.py         # Public → internal param name and unit conversion
+│   └── defaults.py          # Default prior values per parameter
 │
 ├── components/              # Physics modules — pure JAX functions
-│   ├── sfh/                 # SFH models, PSD, GP generation
-│   ├── sps/                 # DSPS wrapper, SSP loading
-│   ├── dust/                # Two-component attenuation + IR emission
-│   ├── nebular/             # Nebular emission (BakedIn, CLOUDY, Cue)
-│   ├── agn/                 # AGN disc + torus (K&D, SKIRTOR, polar dust)
-│   ├── igm/                 # IGM transmission (Inoue+2014)
+│   ├── sfh/                 # SFH models, PSD, GP generation, metallicity history
+│   ├── sps/                 # DSPS wrapper, SSP loading, mass-remaining
+│   ├── dust/                # Two-component attenuation + IR emission templates
+│   ├── nebular/             # Nebular emission (BakedIn, CLOUDY, CB19, Cue, AGN NLR)
+│   ├── agn/                 # AGN disc + torus (K&D, SKIRTOR, polar dust, BLR)
+│   ├── igm/                 # IGM + DLA transmission (Inoue+2014)
 │   ├── radio/               # Radio continuum (SF + AGN)
 │   └── xray/                # X-ray emission (XRBs + AGN)
 │
 ├── forward/                 # Forward SED model and pipeline
 │   ├── sed_model.py         # SEDModel orchestrator
+│   ├── sed_model_types.py   # Typed data containers for SEDModel I/O
 │   ├── pipeline.py          # Non-fused SED engine + component tracking
-│   ├── emission_helpers.py  # Shared emission functions
+│   ├── emission_helpers.py  # Shared emission functions (single source of truth)
+│   ├── components_assembly.py  # Component wiring + dependency injection
+│   ├── prediction.py        # Photometry / spectroscopy prediction utilities
+│   ├── result.py            # SEDResult container
+│   ├── nonstell.py          # Non-stellar SED contributions (AGN, radio, X-ray)
+│   ├── convenience.py       # High-level convenience wrappers
 │   ├── _kernels/            # Fused JIT kernels (private — not user-facing)
-│   └── precompute/          # Precomputation registry
+│   └── precompute/          # Precomputation protocol + registry
 │
-├── observation/             # Data handling
-│   ├── filters.py, photometry.py, spectroscopy.py  # Data containers
-│   └── noise_model.py       # Noise handling
+├── observation/             # Observational data containers and utilities
+│   ├── observation.py       # Unified Observation container
+│   ├── photometry.py        # Photometry data class
+│   ├── photometry_config.py # Photometric band configuration
+│   ├── spectroscopy.py      # Spectroscopy data class
+│   ├── spectrum.py          # Spectrum data container
+│   ├── filters.py           # Filter curve loading + convolution
+│   ├── noise_model.py       # Noise model (Gaussian, Student-t)
+│   ├── noise.py             # Low-level noise utilities
+│   ├── line_list.py         # Emission line catalog (LineList)
+│   ├── line_flux_data.py    # Observed line flux data container
+│   ├── eline_catalog.py     # Emission line catalog I/O
+│   ├── eline_priors.py      # Line-specific prior utilities
+│   ├── eline_marginalization.py  # Analytic line marginalization
+│   ├── spectral_indices.py  # Spectral index definitions + measurement
+│   ├── catalog.py           # Multi-object catalog I/O
+│   └── calibration.py       # Flux calibration utilities
 │
 ├── inference/               # Parameter estimation
 │   ├── fitter.py            # Fitter orchestrator
 │   ├── posterior.py         # Posterior samples + diagnostics
-│   ├── loss.py              # Loss function (chi^2 + prior)
+│   ├── hierarchical.py      # PopulationFitter (hierarchical inference)
+│   ├── loss_functions.py    # Loss function (chi^2 + prior, line marginalization)
+│   ├── standardized.py      # Standardized latent-space utilities
+│   ├── vi_config.py         # VIConfig (variational inference settings)
+│   ├── common.py            # Shared inference utilities
+│   ├── jit_engine.py        # JIT compilation and caching engine
+│   ├── _model_cache.py      # Internal compiled-model cache
+│   ├── _sample_utils.py     # Internal sampling helpers
 │   └── backends/            # Inference engines
-│       ├── map_dispatch.py  # MAP, Laplace, Pathfinder
-│       ├── vi/              # Variational inference
-│       ├── mcmc/            # MCMC (NUTS, Ray Tracing, ESS)
+│       ├── map_dispatch.py  # MAP optimization dispatcher
+│       ├── map_optimizer.py # Gradient descent optimizer loop
+│       ├── laplace.py       # Laplace approximation
+│       ├── pathfinder.py    # Pathfinder (BlackJAX)
+│       ├── evidence.py      # Evidence / marginal likelihood estimation
+│       ├── sbi.py           # Simulation-based inference
+│       ├── vi/              # Variational inference (NIFTy + native JAX)
+│       ├── mcmc/            # MCMC (NUTS, Ray Tracing, ESS, GHMC, MCLMC)
 │       └── nested/          # Nested sampling
 │
 ├── analysis/                # Post-fitting analysis and visualization
-│   ├── diagnostics/         # Posterior diagnostics (ESS, R-hat, etc.)
-│   ├── plotting/            # Visualization (corner, SED, SFH, etc.)
+│   ├── diagnostics/         # Posterior diagnostics (ESS, R-hat, Fisher info)
+│   ├── plotting/            # Visualization (corner, SED, SFH, convergence)
 │   ├── mock.py              # Mock data generation (synthetic observations)
-│   └── simulate.py          # SED generation from SFH
+│   └── simulate.py          # SED generation from posterior SFH samples
 │
 ├── config/                  # Configuration and exceptions
 │   ├── settings.py          # Model configuration (DustConfig, NebularConfig, etc.)
 │   ├── exceptions.py        # Exception hierarchy (TengriError, etc.)
-│   ├── display.py           # Display formatting utilities
-│   └── deprecation.py       # Deprecation warnings
+│   └── display.py           # Display formatting utilities
 │
 ├── profiling/               # Performance measurement
 │   ├── timers.py            # Timing utilities
 │   ├── pipeline.py          # Component-level pipeline profiling
 │   └── memory.py            # Memory usage tracking
 │
-└── utils/                   # Shared utilities (no dependencies on physics)
-    ├── cosmology.py         # Cosmological calculations
+└── utils/                   # Shared utilities (no physics dependencies)
+    ├── cosmology.py         # Cosmological calculations (luminosity distance, etc.)
     ├── conversions.py       # Unit conversions
-    ├── interpolation.py     # Interpolation utilities
+    ├── interpolation.py     # Triweight and N-D grid interpolation
     ├── physics_constants.py # Physical constants (IAU 2015)
-    └── wavelength.py        # Wavelength utilities
+    ├── wavelength.py        # Wavelength grid utilities
+    ├── magnitudes.py        # AB magnitude / flux density conversions
+    ├── sed_quantities.py    # Derived SED quantities (EW, UV slope, etc.)
+    ├── transforms.py        # Parameter transforms (sigmoid, softplus, etc.)
+    ├── grid.py              # Generic N-D grid utilities
+    ├── devices.py           # JAX device selection utilities
+    ├── optimizations.py     # JAX-level optimization helpers
+    ├── jit_logging.py       # JIT-safe logging/tracing utilities
+    └── diffndhist.py        # Differentiable N-D histogram
 ```
 
 ## Class naming conventions
@@ -214,7 +254,7 @@ Parameters.unstandardize() builds xi -> theta mapping:
                     |
                     v
 
-parameters/_param_translate.py maps public -> internal names:
+parameters/translate.py maps public -> internal names:
   met_logzsol           -> log_z_abs      (+ LOG10_ZSUN offset)
   dust_tau_bc           -> tau_bc
   dust_tau_diff         -> tau_diff
