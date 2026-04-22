@@ -373,6 +373,12 @@ class SEDModel:
         """Set up SSP grid, CSP integration, and log-age grid."""
         self._met_interp = getattr(spec, "met_interp", "linear")
         self._lgmet_scatter = float(getattr(spec, "lgmet_scatter", 0.1))
+        # Redshift-table interpolation mode for free-z inference.
+        # "linear" → piecewise-linear (C^0 gradient, kinks at grid nodes).
+        # "smooth" → triweight kernel (C^2 gradient) — recommended for NUTS/HMC
+        # when redshift is a free parameter. See `interpolate_ztable_smooth`
+        # in components/sps/precompute.py.
+        self._z_interp = getattr(spec, "z_interp", "linear")
 
         self.filter_waves = None
         self.filter_trans = None

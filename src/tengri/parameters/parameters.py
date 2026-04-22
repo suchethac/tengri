@@ -697,6 +697,11 @@ class Parameters:
         self.alpha_fe_evolving = kwargs.pop("alpha_fe_evolving", False)
         self.met_interp = kwargs.pop("met_interp", "smooth")
         self.lgmet_scatter = float(kwargs.pop("lgmet_scatter", 0.1))
+        # Redshift-table interpolation mode (used when a precomputed z-table
+        # is enabled via ``model.precompute_ztable()`` AND redshift is free).
+        # "linear" → piecewise-linear (C^0, default).
+        # "smooth" → triweight kernel (C^2) — recommended for HMC/NUTS with free z.
+        self.z_interp = kwargs.pop("z_interp", "linear")
 
     @staticmethod
     def _raise_missing_grid_path():

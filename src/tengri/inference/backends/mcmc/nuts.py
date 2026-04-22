@@ -97,11 +97,17 @@ def run_nuts(
     pathfinder_warmstart : bool, default False
         Use ``blackjax.pathfinder_adaptation`` (L-BFGS mode-finding +
         Hessian-derived inverse mass matrix + short step-size refinement)
-        instead of the default window adaptation. Typically 3-10x faster
-        warmup on high-dimensional problems (D>~30). When enabled,
-        ``dense_mass_matrix`` is ignored — Pathfinder always returns a
-        full inverse-covariance matrix. Consider reducing ``n_warmup``
-        (e.g. to 50) since only step-size refinement remains.
+        instead of the default window adaptation. Expected to be 3-10x
+        faster warmup on *high-dimensional* problems (D>~30). When
+        enabled, ``dense_mass_matrix`` is ignored — Pathfinder always
+        returns a full inverse-covariance matrix.
+
+        **At low D (<~20), window adaptation is faster and produces
+        better posterior geometry.** See
+        ``docs/dev/benchmarks/2026-04-22_pathfinder_vs_window_nuts.md``.
+        If you enable this, keep ``n_warmup >= 300`` — reducing it
+        blindly gives a poorly-conditioned mass matrix that silently
+        saturates NUTS tree depth and slows sampling 10-20x.
 
         References:
 

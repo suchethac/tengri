@@ -225,3 +225,68 @@ All parameters use descriptive, prefixed names with explicit units:
 
 **Core:** JAX, DSPS, h5py, matplotlib
 **Optional:** BlackJAX (NUTS), NIFTy.re (geoVI), optax (MAP), ArviZ (diagnostics)
+
+## JAX / BlackJAX design principles
+
+These are the patterns we follow for any new inference or forward-model code.
+They are distilled from the BlackJAX design-principles doc and the JAX custom
+derivatives guide, and apply to tengri because our forward model and samplers
+live in the same "expensive-likelihood + JIT-traced everything" regime BlackJAX
+was built for.
+
+1. **Stateless kernels.** Sampling kernels must be pure functions with shape
+   ``(key, state) -> (state, info)``. No hidden state, no Python-level side
+   effects. ``src/tengri/inference/backends/mcmc/_shared.py`` follows this
+   contract; new backends must too.
+
+2. **Own the state, not the loop.** Backends return kernels and let callers
+   drive them with ``jax.lax.scan`` / ``jax.vmap``. This is what makes
+   parallel-chain sampling a one-line ``vmap`` instead of a re-implementation.
+   Resist wrapping loops inside backend functions.
+
+3. **Algorithms = composition of kernels.** Window adaptation = HMC kernel +
+   dual-averaging step size + mass-matrix updates. SMC = tempered loop over
+   HMC kernels. Pathfinder warm-start = L-BFGS + HMC kernel. Build by
+   composition; avoid monolithic samplers.
+
+4. **``jax.custom_vjp`` as a physics-surrogate escape hatch.** Autodiff is
+   literal — when your physics is smoother than your code (e.g. triweight
+   reality vs. ``searchsorted`` implementation), assert the smooth gradient
+   via ``custom_vjp`` rather than rewriting the forward pass. Patterns that
+   usually warrant this: ``searchsorted``, ``argmin/argmax``,
+   ``.at[idx].set()`` with traced ``idx``, piecewise-linear lookups in
+   gradient-sensitive paths. Only rewrite when gradients *actually flow*
+   into the op — verify before committing.
+
+5. **Compile-time branches, not runtime conditionals.** When a knob picks
+   between two code paths that both JIT fine (e.g. dense vs. diagonal mass
+   matrix; linear vs. triweight z-table), capture the Python bool in closure
+   scope or as a ``static_argnum`` so you get two separate XLA programs and
+   no runtime ``jax.lax.cond`` overhead. ``_use_smooth_z`` and
+   ``_use_smooth_ztable`` in ``forward/_kernels/hybrid.py`` are the template.
+
+6. **``nondiff_argnums`` when prototyping ``custom_vjp``.** Shape/dtype-like
+   args should be marked ``nondiff_argnums`` so autodiff doesn't try to
+   trace through them.
+
+7. **``jax.debug.print`` inside JIT/scan; never bare ``print``.** Instrumentation
+   in a scanned inference loop must use ``jax.debug.print`` — a bare ``print``
+   silently fires once at trace time and misleads you.
+
+8. **Unroll selectively in ``lax.scan``.** Small inner loops (leapfrog integrator
+   steps) often compile faster with ``unroll=True``. Large outer loops
+   (burn-in, sampling) must stay rolled or compile time explodes.
+
+9. **Never close over JAX arrays in Python.** Creates retracing and shape
+   leakage. Close over shapes/dtypes/bools; pass arrays explicitly as
+   function arguments. This is the root cause of the "never construct
+   ``Model``/``Parameters`` inside a gradient tape" gotcha in CLAUDE.md.
+
+**References**
+
+- BlackJAX design principles:
+  https://blackjax-devs.github.io/blackjax/developer/design_principles.html
+- BlackJAX speed-up guide:
+  https://blackjax-devs.github.io/blackjax/examples/speed_up_guide.html
+- JAX custom derivatives:
+  https://docs.jax.dev/en/latest/notebooks/Custom_derivative_rules_for_Python_code.html

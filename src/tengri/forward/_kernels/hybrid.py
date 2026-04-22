@@ -1562,7 +1562,6 @@ def build_hybrid_photometry_ztable(model):
     from tengri.components.dust.attenuation import resolve_dust_law
     from tengri.components.sfh.registry import compute_field_gp, resolve_sfh
     from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
-    from tengri.components.sps.precompute import interpolate_ztable
     from tengri.forward.emission_helpers import (
         agn_emission,
         attenuate_emission,
@@ -1622,6 +1621,26 @@ def build_hybrid_photometry_ztable(model):
     _lgmet_scat = dt.type(model._lgmet_scatter)
     if _use_smooth_z:
         from tengri.components.sps.dsps_wrapper import compute_lgmet_weights as _clw
+
+    # Smooth redshift-table interpolation (C^2 gradient) — recommended when
+    # redshift is a free parameter and the sampler is gradient-based (NUTS/HMC).
+    # See docs/dev/design_philosophy.md: rough piecewise-linear gradients at
+    # grid nodes hurt HMC acceptance. Auto-derive scatter as 0.5 * mean(dz).
+    _use_smooth_ztable = getattr(model, "_z_interp", "linear") == "smooth"
+    if _use_smooth_ztable:
+        import numpy as _np
+
+        from tengri.components.sps.precompute import (
+            interpolate_ztable_smooth as _interpolate_ztable,
+        )
+
+        _z_scatter = dt.type(0.5 * float(_np.mean(_np.diff(_np.asarray(ztable.z_grid)))))
+    else:
+        from tengri.components.sps.precompute import (
+            interpolate_ztable as _interpolate_ztable,
+        )
+
+        _z_scatter = None
 
     # IGM: z-table kernel applies IGM in two places:
     #   1. Stellar photometry: interpolate igm_trans_table (n_z, n_filters) to current z.
@@ -2031,13 +2050,25 @@ def build_hybrid_photometry_ztable(model):
         weights = _csp_mat @ sfr if _csp_use_matrix else sfr * _age_dt
 
         # === Interpolate z-table to current redshift ===
-        ssp_phot_at_z, eff_waves_rest, _flux_scale = interpolate_ztable(
-            ztable.ssp_phot_table,
-            ztable.eff_waves_rest_table,
-            ztable.flux_scale_table,
-            ztable.z_grid,
-            z,
-        )
+        # Uses smooth (triweight) interpolation when model._z_interp=="smooth"
+        # to give C^2-continuous gradients for HMC/NUTS free-z inference.
+        if _use_smooth_ztable:
+            ssp_phot_at_z, eff_waves_rest, _flux_scale = _interpolate_ztable(
+                ztable.ssp_phot_table,
+                ztable.eff_waves_rest_table,
+                ztable.flux_scale_table,
+                ztable.z_grid,
+                z,
+                _z_scatter,
+            )
+        else:
+            ssp_phot_at_z, eff_waves_rest, _flux_scale = _interpolate_ztable(
+                ztable.ssp_phot_table,
+                ztable.eff_waves_rest_table,
+                ztable.flux_scale_table,
+                ztable.z_grid,
+                z,
+            )
         # ssp_phot_at_z: shape (n_met, n_age, n_filters)
         # eff_waves_rest: shape (n_filters,)
         # _flux_scale: scalar (not used in z-table, photometry already scaled)
@@ -2356,13 +2387,23 @@ def build_hybrid_photometry_ztable(model):
         # === STEP 3: Combine and convert to erg/s/cm²/Hz ===
         # Interpolate z-table to get flux_scale at current z
         _z_arr = jnp.asarray(redshift, dtype=dt)
-        _, _, flux_scale = interpolate_ztable(
-            ztable.ssp_phot_table,
-            ztable.eff_waves_rest_table,
-            ztable.flux_scale_table,
-            ztable.z_grid,
-            _z_arr,
-        )
+        if _use_smooth_ztable:
+            _, _, flux_scale = _interpolate_ztable(
+                ztable.ssp_phot_table,
+                ztable.eff_waves_rest_table,
+                ztable.flux_scale_table,
+                ztable.z_grid,
+                _z_arr,
+                _z_scatter,
+            )
+        else:
+            _, _, flux_scale = _interpolate_ztable(
+                ztable.ssp_phot_table,
+                ztable.eff_waves_rest_table,
+                ztable.flux_scale_table,
+                ztable.z_grid,
+                _z_arr,
+            )
         flux_scale = jnp.asarray(flux_scale, dtype=jnp.float64)
 
         # Stellar contribution: flux_attenuated is in Lsun/Hz (from einsum)
