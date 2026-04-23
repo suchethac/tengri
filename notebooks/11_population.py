@@ -378,16 +378,26 @@ plt.show()
 
 # %%
 def _pop_posterior_sigma_tau(pop_posterior):
-    """Return (sigma_samples, tau_samples) from either EVI or CFM posteriors.
+    """Return (sigma_samples, tau_samples, tau_is_myr) from EVI or CFM posteriors.
 
-    CFM backend (current default via "mgvi") produces ``psd_sigma_eff`` and
-    ``psd_loglogavgslope`` rather than ``psd_sigma``/``psd_tau_myr``. Surface
-    the spectral slope in place of τ for the CFM path so figures populate.
+    The EVI-JIT backend produces ``psd_sigma``/``psd_tau_myr`` (samples
+    directly on the physical grid the mocks were drawn from).
+
+    The CFM backend (CorrelatedFieldMaker, current default via "mgvi")
+    produces ``psd_sigma_eff`` (≈ exp of the fluctuations log-amplitude) and
+    ``psd_loglogavgslope`` (spectral slope of the GP, dimensionless). The
+    slope is *not* τ in Myr — surface it anyway so the figures populate, and
+    return tau_is_myr=False so the caller knows to suppress the TRUE_TAU
+    truth overlay and relabel the axis.
     """
     s = pop_posterior.shared_samples
-    sigma = np.array(s.get("psd_sigma", s.get("psd_sigma_eff")))
-    tau = np.array(s.get("psd_tau_myr", s.get("psd_loglogavgslope")))
-    return sigma, tau
+    if "psd_sigma" in s and "psd_tau_myr" in s:
+        return np.array(s["psd_sigma"]), np.array(s["psd_tau_myr"]), True
+    return (
+        np.array(s["psd_sigma_eff"]),
+        np.array(s["psd_loglogavgslope"]),
+        False,
+    )
 
 
 # %% [markdown]
@@ -420,7 +430,7 @@ if RUN_EXPENSIVE:
     )
     t_hier_spec = time.perf_counter() - t0
 
-    sig_spec, tau_spec = _pop_posterior_sigma_tau(result_hier_spec)
+    sig_spec, tau_spec, tau_spec_is_myr = _pop_posterior_sigma_tau(result_hier_spec)
     print(
         f"  σ_PS = {np.median(sig_spec):.2f} [{np.percentile(sig_spec, 16):.2f}, "
         f"{np.percentile(sig_spec, 84):.2f}]"
@@ -457,15 +467,19 @@ if result_hier_spec is not None:
     ax_sig.hist([], [], alpha=0.2, color=COLORS["vi"], label="Individual (N=1)")
 
     ax_sig.axvline(TRUE_SIGMA, color=COLORS["truth"], lw=2, ls="--", label="Truth")
-    ax_tau.axvline(TRUE_TAU, color=COLORS["truth"], lw=2, ls="--", label="Truth")
+    if tau_spec_is_myr:
+        ax_tau.axvline(TRUE_TAU, color=COLORS["truth"], lw=2, ls="--", label="Truth")
 
     ax_sig.set_xlabel(r"$\sigma_{\rm PS}$")
-    ax_tau.set_xlabel(r"$\tau_{\rm PS}$ [Myr]")
+    ax_tau.set_xlabel(r"$\tau_{\rm PS}$ [Myr]" if tau_spec_is_myr else "PSD log-log avg slope")
     ax_sig.set_ylabel("Density")
     ax_sig.legend(fontsize=8)
     ax_tau.legend(fontsize=8)
     ax_sig.set_title(f"Individual (N=1) vs Hierarchical (N={N_GAL}): σ")
-    ax_tau.set_title(f"Individual (N=1) vs Hierarchical (N={N_GAL}): τ")
+    ax_tau.set_title(
+        f"Individual (N=1) vs Hierarchical (N={N_GAL}): "
+        + ("τ" if tau_spec_is_myr else "slope")
+    )
     fig.tight_layout()
     plt.show()
 
@@ -553,12 +567,15 @@ result_hier_phot = hfitter_phot.run(
 )
 t_hier_phot = time.perf_counter() - t0
 
-sig_phot, tau_phot = _pop_posterior_sigma_tau(result_hier_phot)
+sig_phot, tau_phot, tau_phot_is_myr = _pop_posterior_sigma_tau(result_hier_phot)
+_tau_label = "τ_PS [Myr]" if tau_phot_is_myr else "PSD slope (CFM)"
 print(
-    f"  σ_PS = {np.median(sig_phot):.2f} [{np.percentile(sig_phot, 16):.2f}, {np.percentile(sig_phot, 84):.2f}]"
+    f"  σ_PS = {np.median(sig_phot):.2f} "
+    f"[{np.percentile(sig_phot, 16):.2f}, {np.percentile(sig_phot, 84):.2f}]"
 )
 print(
-    f"  τ_PS = {np.median(tau_phot):.0f} [{np.percentile(tau_phot, 16):.0f}, {np.percentile(tau_phot, 84):.0f}] Myr"
+    f"  {_tau_label} = {np.median(tau_phot):.2f} "
+    f"[{np.percentile(tau_phot, 16):.2f}, {np.percentile(tau_phot, 84):.2f}]"
 )
 print(f"  Wall time: {t_hier_phot:.1f}s")
 
@@ -614,22 +631,27 @@ ax_sig.axvline(
     ls="--",
     label=f"Truth = {TRUE_SIGMA}",
 )
-ax_tau.axvline(
-    TRUE_TAU,
-    color=COLORS["truth"],
-    lw=2,
-    ls="--",
-    label=f"Truth = {TRUE_TAU} Myr",
-)
+if tau_phot_is_myr:
+    ax_tau.axvline(
+        TRUE_TAU,
+        color=COLORS["truth"],
+        lw=2,
+        ls="--",
+        label=f"Truth = {TRUE_TAU} Myr",
+    )
 
 ax_sig.set_xlabel(r"$\sigma_{\rm PS}$", fontsize=13)
 ax_sig.set_ylabel("Density")
 ax_sig.set_title(r"PSD amplitude $\sigma_{\rm PS}$")
 ax_sig.legend(fontsize=9)
 
-ax_tau.set_xlabel(r"$\tau_{\rm PS}$ [Myr]", fontsize=13)
+if tau_phot_is_myr:
+    ax_tau.set_xlabel(r"$\tau_{\rm PS}$ [Myr]", fontsize=13)
+    ax_tau.set_title(r"PSD timescale $\tau_{\rm PS}$")
+else:
+    ax_tau.set_xlabel("PSD log-log avg slope (CFM)", fontsize=13)
+    ax_tau.set_title("PSD spectral slope (CFM backend)")
 ax_tau.set_ylabel("Density")
-ax_tau.set_title(r"PSD timescale $\tau_{\rm PS}$")
 ax_tau.legend(fontsize=9)
 
 fig.suptitle(
@@ -641,7 +663,8 @@ plt.show()
 
 # Quantitative comparison (spec entry included only if that fit ran)
 print("\nPSD recovery summary:")
-print(f"{'Data':<15} {'sigma (med [16,84])':<30} {'tau (med [16,84])':<30}")
+_tau_col = "tau [Myr]" if tau_phot_is_myr else "slope (CFM)"
+print(f"{'Data':<15} {'sigma (med [16,84])':<30} {_tau_col + ' (med [16,84])':<30}")
 print("-" * 75)
 _rows = [("Photometry", sig_phot, tau_phot)]
 if sig_spec is not None and tau_spec is not None:
@@ -651,7 +674,7 @@ for label, s_arr, t_arr in _rows:
     t_lo, t_hi = np.percentile(t_arr, [16, 84])
     print(
         f"{label:<15} {np.median(s_arr):.2f} [{s_lo:.2f}, {s_hi:.2f}]"
-        f"{'':>12} {np.median(t_arr):.0f} [{t_lo:.0f}, {t_hi:.0f}] Myr"
+        f"{'':>12} {np.median(t_arr):.2f} [{t_lo:.2f}, {t_hi:.2f}]"
     )
 print(f"\nTruth: sigma = {TRUE_SIGMA}, tau = {TRUE_TAU} Myr")
 
@@ -775,7 +798,7 @@ if RUN_EXPENSIVE:
         )
         dt = time.perf_counter() - t0
 
-        sig_s, tau_s = _pop_posterior_sigma_tau(res_sub)
+        sig_s, tau_s, _ = _pop_posterior_sigma_tau(res_sub)
 
         sw = np.percentile(sig_s, 84) - np.percentile(sig_s, 16)
         tw = np.percentile(tau_s, 84) - np.percentile(tau_s, 16)
@@ -861,7 +884,7 @@ if RUN_EXPENSIVE:
         )
         pop_results[pop_name] = res
 
-        sig_s, tau_s = _pop_posterior_sigma_tau(res)
+        sig_s, tau_s, _ = _pop_posterior_sigma_tau(res)
         print(
             f"  Recovered: σ = {np.median(sig_s):.2f} [{np.percentile(sig_s, 16):.2f}, "
             f"{np.percentile(sig_s, 84):.2f}]"
@@ -876,7 +899,7 @@ if RUN_EXPENSIVE:
 
     pop_colors = {"Bursty dwarfs": COLORS["vi"], "Smooth disks": COLORS["rt"]}
     for pop_name, res in pop_results.items():
-        sig_s, tau_s = _pop_posterior_sigma_tau(res)
+        sig_s, tau_s, _ = _pop_posterior_sigma_tau(res)
         ax.scatter(tau_s, sig_s, s=2, alpha=0.2, color=pop_colors[pop_name])
         # 68% contour (simple ellipse from percentiles)
         sig_lo, sig_hi = np.percentile(sig_s, [16, 84])
