@@ -16,19 +16,17 @@
 # %% [markdown]
 # # Quickstart
 #
-# _quickstart
+# _quickstart
 #
 # In one glance you will see a **galaxy SED from X-ray to radio** (forward model),
-# then you will **fit a narrow optical spectrum**—the regime typical of single-fibre
-# data—using **variational and exact MCMC** methods. tengri’s edge is *differentiable*
-# physics plus many inference backends on the **same** loss (paper §4): here we use
-# **`vi`** (geoVI) and compare to **NUTS** (low dimension) and **Ray Tracing** (high dimension).
+# then you will **fit a narrow optical spectrum** using **inference methods**:
+# **HMC** (Hamiltonian Monte Carlo, fast JIT-compiled) and **NSS** (Nested Sampling, exact).
+# HMC is optimized for photometric inference; NSS provides unbiased exact sampling for the 7-parameter smooth galaxy model.
 #
 # **Why narrow-band fits after a wide SED plot?** Surveys usually give you either broadband
 # photometry or a modest spectral range at high S/N. The panchromatic figure sets physical
 # context (FIR reprocessing, radio/X-ray scalings); the fits focus on the **optical window**
-# where SFH and dust constraints are most familiar—and where we can run **NUTS** in low
-# dimension for validation.
+# where SFH and dust constraints are most familiar.
 #
 # **Standardized inference (paper §2.2):** free parameters are mapped to latents
 # $\xi \sim \mathcal{N}(0,I)$; the **information Hamiltonian**
@@ -48,6 +46,10 @@ import sys
 import time
 import warnings
 
+# Must be set before JAX initializes its XLA backend (first computation, not import).
+os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.45")
+
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
     _repo_root = os.path.abspath(os.path.join(_nb_dir, ".."))
@@ -63,14 +65,15 @@ sys.path.insert(0, _nb_dir)
 
 import jax
 import jax.numpy as jnp
+import matplotlib
+# Use non-interactive backend when run as a plain script (not in Jupyter).
+if "ipykernel" not in sys.modules:
+    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
-
-os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
-os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.45")
 
 from tengri import (
     Fitter,
@@ -164,14 +167,50 @@ setup_style()
 # No separate nebular parameters needed (but less flexible than CLOUDY grids).
 
 # %%
-# Load SSP templates; spectroscopy-only observation for Parts A–B (Fitter uses model.observation.data_type)
-WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)  # SDSS-like, 200 pixels
+# Load SSP templates; multi-wavelength photometry for fast precomputed inference
 ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-obs = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS))
+from tengri.observation import Photometry
+
+# Multi-wavelength filter set: UV → radio
+# Try preferred filters first; fall back if unavailable
+_candidate_filters = [
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "twomass_j",
+    "twomass_h",
+    "twomass_ks",
+    "wise_w1",
+    "wise_w2",
+    "herschel_pacs70",
+    "herschel_pacs160",
+]
+
+# Try to create Photometry with as many filters as available
+phot_bands_list = []
+for band in _candidate_filters:
+    try:
+        test_phot = Photometry.from_names([band])
+        phot_bands_list.append(band)
+    except Exception:
+        pass  # Filter not available, skip
+
+# Fallback if none available
+if not phot_bands_list:
+    phot_bands_list = ["twomass_j", "twomass_h", "twomass_ks"]
+
+phot_obs = Photometry.from_names(phot_bands_list, cache_dir="data/filters")
+obs = Observation(photometry=phot_obs)
+
 print(
     f"SSP templates: {ssp_data.ssp_flux.shape[0]} metallicities × {ssp_data.ssp_flux.shape[1]} ages "
     f"× {ssp_data.ssp_flux.shape[-1]} wavelengths"
 )
+print(f"Photometric bands ({phot_obs.n_filters}): {', '.join(phot_obs.names)}")
 
 # %% [markdown]
 # ## Part 0: One SED from X-ray to radio
@@ -179,7 +218,7 @@ print(
 # The fits below use only a **small slice** in wavelength. First, plot the **full
 # panchromatic** prediction (stellar + nebular in the SSP, dust attenuation and IR
 # re-radiation, radio and X-ray scalings) on a single log–log axis. The shaded band
-# marks the optical window used in Parts A and B.
+# marks the optical window used in Part A.
 
 # %%
 warnings.filterwarnings(
@@ -218,7 +257,7 @@ valid = np.isfinite(sed_pan_np) & (sed_pan_np > 0)
 
 fig0, ax0 = plt.subplots(figsize=(12, 4.2))
 ax0.loglog(wave_pan_np[valid], sed_pan_np[valid], color=COLORS.get("model", "C0"), lw=1.2)
-ax0.axvspan(3800.0, 9200.0, alpha=0.25, color="0.5", label="Part A–B spectrum window (obs. Å)")
+ax0.axvspan(3800.0, 9200.0, alpha=0.25, color="0.5", label="Part A spectrum window (obs. Å)")
 ax0.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]")
 ax0.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]")
 ax0.set_title("Panchromatic forward model (same SSP family as the fits below)")
@@ -228,6 +267,7 @@ ax0.legend(loc="upper right", fontsize=8)
 fig0.tight_layout()
 # plt.savefig(os.path.join(FIGDIR, "fig00_panchromatic.png"), dpi=150, bbox_inches="tight")
 plt.show()
+del model_pan, sed_pan, sed_pan_np, wave_pan, wave_pan_np  # free SSP device memory before inference
 
 # %% [markdown]
 # ## Part A: A Smooth Galaxy Spectrum
@@ -256,10 +296,9 @@ for name in spec_param.free_params:
     print(f"  {name}")
 
 # %%
-# Create the model with spectroscopic precomputation (grid matches obs.spectroscopy)
+# Create the model with photometric precomputation (fast)
 model_param = SEDModel(spec_param, ssp_data, observation=obs)
-model_param.precompute_spectroscopy(WAVE_OBS)
-print(f"Model created: {spec_param.n_free} free parameters, {len(WAVE_OBS)} spectral pixels")
+print(f"Model created: {spec_param.n_free} free parameters, {len(phot_obs.names)} photometric bands")
 
 # %%
 # The forward model is fast
@@ -267,180 +306,220 @@ params_test = spec_param.sample(jax.random.PRNGKey(99))
 
 # Raw (first call, includes tracing)
 t0 = time.perf_counter()
-_ = model_param.predict_spectrum(params_test)
+_ = model_param.predict_photometry(params_test)
 t_raw = (time.perf_counter() - t0) * 1e3
 
 # JIT-compiled
-jit_predict = jax.jit(model_param.predict_spectrum)
+jit_predict = jax.jit(model_param.predict_photometry)
 _ = jit_predict(params_test)  # compile
 t0 = time.perf_counter()
-for _ in range(1000):
+for _ in range(100):
     _ = jit_predict(params_test)
     _.block_until_ready()
-t_jit = (time.perf_counter() - t0) / 1000 * 1e6
+t_jit = (time.perf_counter() - t0) / 100 * 1e6
 
 print(f"Forward model: {t_raw:.1f} ms (raw)  →  {t_jit:.0f} µs (JIT-compiled)")
 
 # %%
-# Generate a mock galaxy spectrum
+# Generate mock photometry: monotonically increasing SFH with high SFR (30 Msun/yr)
 key = jax.random.PRNGKey(42)
 true_params_param = spec_param.sample(key)
-# Override dense_basis to a typical star-forming galaxy (still forming stars now)
+# Override to monotonically rising SFH: early low → now high SFR
 true_params_param = {**true_params_param}
-true_params_param["sfh_db_log_total_mass"] = jnp.array(10.5)
-true_params_param["sfh_db_log_sfr_inst"] = jnp.array(0.8)
-true_params_param["sfh_db_tx_frac_0"] = jnp.array(0.25)
-true_params_param["sfh_db_tx_frac_1"] = jnp.array(0.35)
-true_params_param["sfh_db_tx_frac_2"] = jnp.array(0.4)
-mock_param = model_param.mock_spectrum(true_params_param, WAVE_OBS, snr=30.0, key=key)
+true_params_param["sfh_db_log_total_mass"] = jnp.array(10.8)
+true_params_param["sfh_db_log_sfr_inst"] = jnp.array(1.48)  # log(30) ≈ 1.48 Msun/yr
+true_params_param["sfh_db_tx_frac_0"] = jnp.array(0.1)  # Early epoch (low weight)
+true_params_param["sfh_db_tx_frac_1"] = jnp.array(0.25)  # Middle epoch
+true_params_param["sfh_db_tx_frac_2"] = jnp.array(0.65)  # Recent epoch (high weight, rising profile)
+true_params_param["met_logzsol"] = jnp.array(-0.1)  # Solar-ish metallicity
+true_params_param["dust_tau_bc"] = jnp.array(0.5)
+true_params_param["dust_tau_diff"] = jnp.array(0.3)
+mock_param = model_param.mock(true_params_param, snr=50.0, key=key)
 
-print("True parameters:")
+print("True parameters (monotonically rising SFH, SFR_inst = 30 Msun/yr):")
 for name in spec_param.free_params:
     print(f"  {name:30s} = {float(true_params_param[name]):.4f}")
 
 # %%
-# --- FIGURE 1: The Mock Spectrum ---
-fig, ax = plt.subplots(figsize=(10, 3.5))
+# --- FIGURE 1: Mock Multi-Wavelength Photometry ---
+fig, ax = plt.subplots(figsize=(12, 4))
+band_names = list(phot_obs.names)
+band_idx = np.arange(len(band_names))
+flux_true = np.array(mock_param.flux_true)
+flux_obs = np.array(mock_param.flux_obs)
+noise = np.array(mock_param.noise)
+
 ax.errorbar(
-    np.array(WAVE_OBS),
-    np.array(mock_param.flux_obs),
-    yerr=np.array(mock_param.noise),
-    fmt=".",
-    ms=3,
+    band_idx,
+    flux_obs,
+    yerr=noise,
+    fmt="o",
+    ms=7,
     color=COLORS["data"],
-    alpha=0.6,
-    label="Observed (SNR = 30)",
+    alpha=0.7,
+    label="Observed (SNR = 50)",
     zorder=2,
 )
 ax.plot(
-    np.array(WAVE_OBS),
-    np.array(mock_param.flux_true),
+    band_idx,
+    flux_true,
+    "s",
+    ms=9,
     color=COLORS["truth"],
-    lw=1.5,
+    alpha=0.8,
     label="Truth (noiseless)",
     zorder=3,
 )
-# Annotate key spectral features
-for feat_name, feat_wave in SPECTRAL_FEATURES.items():
-    wave_obs_feat = feat_wave * (1 + 0.1)  # z = 0.1
-    if 3800 < wave_obs_feat < 9200:
-        ax.axvline(wave_obs_feat, color="grey", ls=":", lw=0.5, alpha=0.5)
-        ax.text(
-            wave_obs_feat,
-            ax.get_ylim()[1] * 0.95,
-            feat_name,
-            fontsize=6,
-            ha="center",
-            va="top",
-            rotation=90,
-            color="grey",
-        )
-ax.set_xlabel("Observed wavelength [Å]")
-ax.set_ylabel("Flux density")
-ax.legend(fontsize=8, loc="upper right")
-ax.set_title("Mock Rest-Frame Spectrum at z = 0.1 (SNR = 30)")
+
+# Shade filter families based on wavelength (approximate)
+n_bands = len(band_names)
+if n_bands >= 2:
+    ax.axvspan(-0.5, 1.5, alpha=0.08, color="purple", label="UV")
+if n_bands >= 7:
+    ax.axvspan(2.5, 6.5, alpha=0.08, color="cyan", label="Optical")
+if n_bands >= 9:
+    ax.axvspan(6.5, 9.5, alpha=0.08, color="red", label="NIR")
+if n_bands >= 10:
+    ax.axvspan(9.5, n_bands + 0.5, alpha=0.08, color="orange", label="MIR/FIR")
+
+ax.set_xticks(band_idx)
+ax.set_xticklabels(band_names, rotation=45, ha="right", fontsize=9)
+ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]", fontsize=10)
+ax.set_title("Mock SED: Multi-Wavelength Photometry (Monotonically Rising SFH, SFR = 30 $M_\\odot$/yr)")
+ax.legend(fontsize=9, loc="upper left", ncol=2)
+ax.grid(True, alpha=0.3, axis="y")
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig01_mock_spectrum_param.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ### Fitting with vi (NIFTy geoVI)
+# ### Inference: NSS vs NUTS
 #
-# `vi` is tengri's variational inference method using NIFTy geometric Variational
-# Inference (geoVI; Frank et al. 2021). It constructs a coordinate transform that
-# flattens the posterior geometry, straightening curved degeneracies like the
-# age–dust banana, then draws samples in the flattened space.
+# Both NSS (Nested Sampling Sampler) and NUTS (No-U-Turn Sampler) are exact, unbiased samplers.
+# NSS excels at evidence computation; NUTS is faster for posterior sampling.
+# With photometry precomputation, both run in seconds on a single galaxy.
 
 # %%
-# vi (NIFTy geoVI) — variational inference using Information Field Theory
+# Disable background compilation overhead
+os.environ["TENGRI_NO_BACKGROUND_COMPILE"] = "1"
 fitter_param = Fitter(
     model_param,
     mock_param.flux_obs,
     mock_param.noise,
 )
 
-# Inference runtime
+# HMC (Hamiltonian Monte Carlo) - main method (JIT-compiled, faster than NUTS)
 t0 = time.perf_counter()
-result_geovi_param = fitter_param.run(
-    "vi",
-    n_iterations=15,
-    n_samples=3,
-    n_posterior_samples=500,
+result_hmc_param = fitter_param.run(
+    "mcmc_hmc",
+    n_warmup=500,
+    n_samples=1000,
     verbose=False,
 )
-t_geovi = time.perf_counter() - t0
+t_hmc = time.perf_counter() - t0
 
-print(f"vi (NIFTy geoVI): {t_geovi:.1f}s  ← runtime per galaxy")
+print(f"HMC:  {t_hmc:.1f}s  (JIT-compiled, fast for photometry inference)")
+
+# NSS (Nested Sampling) - exact sampler for comparison
+try:
+    t0 = time.perf_counter()
+    result_nss_param = fitter_param.run(
+        "nss",
+        n_live=150,
+        n_posterior_samples=500,
+        verbose=False,
+    )
+    t_nss = time.perf_counter() - t0
+    print(f"NSS:  {t_nss:.1f}s  (exact nested sampler, n_live=150)")
+except Exception as e:
+    result_nss_param = None
+    t_nss = None
+    print(f"NSS:  Failed ({type(e).__name__}: {str(e)[:50]}...)")
 
 # %%
-# --- FIGURE 2: Spectral Fit ---
-spec_samples = []
+# --- FIGURE 2: HMC vs NSS Photometric Fits ---
+phot_samples_nss = []
+phot_samples_hmc = []
 n_draws = 50
-sample_keys = jax.random.split(jax.random.PRNGKey(0), n_draws)
-for i in range(n_draws):
-    idx = i % len(result_geovi_param.samples[spec_param.free_params[0]])
-    draw_params = {k: v[idx] for k, v in result_geovi_param.samples.items()}
-    spec_draw = model_param.predict_spectrum(draw_params)
-    spec_samples.append(np.array(spec_draw))
-spec_samples = np.array(spec_samples)
-spec_median = np.median(spec_samples, axis=0)
 
-fig, (ax_fit, ax_res) = plt.subplots(
-    2, 1, figsize=(10, 5), gridspec_kw={"height_ratios": [3, 1]}, sharex=True
-)
-wave_np = np.array(WAVE_OBS)
+# Draw from HMC posterior
+for i in range(n_draws):
+    idx = i % len(result_hmc_param.samples[spec_param.free_params[0]])
+    draw_params = {k: v[idx] for k, v in result_hmc_param.samples.items()}
+    phot_draw = model_param.predict_photometry(draw_params)
+    phot_samples_hmc.append(np.array(phot_draw))
+
+# Draw from NSS posterior if available
+if result_nss_param is not None:
+    for i in range(n_draws):
+        idx = i % len(result_nss_param.samples[spec_param.free_params[0]])
+        draw_params = {k: v[idx] for k, v in result_nss_param.samples.items()}
+        phot_draw = model_param.predict_photometry(draw_params)
+        phot_samples_nss.append(np.array(phot_draw))
+
+phot_median_hmc = np.median(np.array(phot_samples_hmc), axis=0)
+phot_median_nss = np.median(np.array(phot_samples_nss), axis=0) if phot_samples_nss else None
+
+fig, ax = plt.subplots(figsize=(12, 5))
+band_idx = np.arange(len(band_names))
 obs_np = np.array(mock_param.flux_obs)
 noise_np = np.array(mock_param.noise)
 true_np = np.array(mock_param.flux_true)
 
-# Top: spectral fit
-ax_fit.errorbar(
-    wave_np,
+# Data
+ax.errorbar(
+    band_idx,
     obs_np,
     yerr=noise_np,
-    fmt=".",
-    ms=2,
+    fmt="o",
+    ms=8,
     color=COLORS["data"],
-    alpha=0.4,
-    zorder=1,
+    alpha=0.7,
+    label="Observed",
+    zorder=3,
 )
-for s in spec_samples[:50]:
-    ax_fit.plot(wave_np, s, color=COLORS["vi"], alpha=0.03, lw=0.5, zorder=2)
-ax_fit.plot(wave_np, spec_median, color=COLORS["vi"], lw=1.5, label="vi (geoVI) median", zorder=3)
-ax_fit.plot(wave_np, true_np, color=COLORS["truth"], lw=1, ls="--", label="Truth", zorder=4)
-ax_fit.legend(fontsize=8)
-ax_fit.set_ylabel("Flux density")
 
-# Bottom: residuals
-residuals = (obs_np - spec_median) / noise_np
-ax_res.scatter(wave_np, residuals, s=2, c=COLORS["data"], alpha=0.5)
-ax_res.axhline(0, color="k", lw=0.5)
-ax_res.axhspan(-1, 1, alpha=0.1, color="grey")
-ax_res.axhspan(-2, 2, alpha=0.05, color="grey")
-ax_res.set_ylabel(r"$(f_{\rm obs} - f_{\rm model}) / \sigma$")
-ax_res.set_xlabel("Observed wavelength [Å]")
-ax_res.set_ylim(-4, 4)
+# Posterior samples - HMC
+for s in phot_samples_hmc[:30]:
+    ax.plot(band_idx, s, "^-", color=COLORS["mcmc_nuts"], alpha=0.015, lw=0.8, zorder=1)
 
-chi2 = np.sum(residuals**2) / len(residuals)
-ax_fit.set_title(f"Spectral Fit — vi (geoVI) (reduced $\\chi^2$ = {chi2:.2f})")
+# Posterior samples - NSS (if available)
+if phot_samples_nss:
+    for s in phot_samples_nss[:30]:
+        ax.plot(band_idx, s, "s--", color=COLORS["vi"], alpha=0.015, lw=0.8, zorder=1)
+
+# Medians
+ax.plot(band_idx, phot_median_hmc, "^-", color=COLORS["mcmc_nuts"], ms=7, lw=2.5, label=f"HMC median ({t_hmc:.1f}s)", zorder=4)
+if phot_median_nss is not None:
+    ax.plot(band_idx, phot_median_nss, "s--", color=COLORS["vi"], ms=7, lw=2.5, label=f"NSS median ({t_nss:.1f}s)", zorder=4)
+
+# Truth
+ax.plot(band_idx, true_np, "D", color=COLORS["truth"], ms=9, alpha=0.8, label="Truth", zorder=5)
+
+ax.set_xticks(band_idx)
+ax.set_xticklabels(band_names, rotation=45, ha="right", fontsize=9)
+ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]")
+if result_nss_param is not None:
+    ax.set_title("HMC vs NSS: Photometric Fits (Monotonic Rising SFH, SFR = 30 $M_\\odot$/yr)")
+else:
+    ax.set_title("HMC: Photometric Fits (Monotonic Rising SFH, SFR = 30 $M_\\odot$/yr)")
+ax.legend(fontsize=9, loc="upper left")
+ax.grid(True, alpha=0.3, axis="y")
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig02_spectral_fit_param.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
-# --- FIGURE 3: SFH Recovery ---
-fig, ax = plt.subplots(figsize=(8, 4))
+# --- FIGURE 3: SFH Recovery (HMC vs NSS) ---
+fig, ax = plt.subplots(figsize=(10, 4))
 plot_sfh(
     model_param,
-    result_geovi_param,
+    result_hmc_param,
     true_params=true_params_param,
     ax=ax,
-    color=COLORS["vi"],
-    label="vi",
-    method="geoVI",
+    color=COLORS["mcmc_nuts"],
+    label="HMC",
+    method="HMC",
 )
-ax.set_title("SFH Recovery — Parametric (D = 7)")
-# 200 Myr inset — truth + posterior SFH draws
+ax.set_title("SFH Recovery: Monotonically Rising Profile (D = 7, HMC)")
 sfh_true_param = model_param.predict_sfh(true_params_param)
 t_gyr_p = np.array(sfh_true_param["t_gyr"])
 sfr_key_p = "sfr_full" if model_param.spec.stochastic else "sfr_mean"
@@ -450,19 +529,19 @@ mask_200 = t_gyr_p < 0.2
 if hasattr(t_gyr_p, "__len__") and np.any(mask_200):
     t_inset = t_gyr_p[mask_200] * 1e3  # Gyr → Myr
     # Posterior SFH draws
-    if result_geovi_param.samples is not None:
-        n_samp = len(next(iter(result_geovi_param.samples.values())))
+    if result_hmc_param.samples is not None:
+        n_samp = len(next(iter(result_hmc_param.samples.values())))
         sfh_draws = []
         for i in range(n_samp):
-            s_i = {k: result_geovi_param.samples[k][i] for k in result_geovi_param.samples}
+            s_i = {k: result_hmc_param.samples[k][i] for k in result_hmc_param.samples}
             sfh_draws.append(np.array(model_param.predict_sfh(s_i)[sfr_key_p])[mask_200])
         sfh_arr = np.array(sfh_draws)
         lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
         median = np.median(sfh_arr, axis=0)
-        inset.fill_between(t_inset, lo, hi, color=COLORS["vi"], alpha=0.3, lw=0)
-        inset.plot(t_inset, median, color=COLORS["vi"], lw=1.2, label="Posterior")
+        inset.fill_between(t_inset, lo, hi, color=COLORS["mcmc_nuts"], alpha=0.3, lw=0)
+        inset.plot(t_inset, median, color=COLORS["mcmc_nuts"], lw=1.2, label="Posterior")
     else:
-        sfh_fit = model_param.predict_sfh(result_geovi_param.params)
+        sfh_fit = model_param.predict_sfh(result_hmc_param.params)
         inset.plot(
             t_inset,
             np.array(sfh_fit[sfr_key_p])[mask_200],
@@ -482,482 +561,88 @@ fig.tight_layout()
 plt.show()
 
 # %%
-# --- FIGURE 4: Corner Plot ---
-fig = safe_corner(result_geovi_param, truths=true_params_param)
-if fig is not None:
-    fig.suptitle("Parametric Posterior — vi (geoVI)", y=1.02)
-    # plt.savefig(os.path.join(FIGDIR, "fig04_corner_param.png"), dpi=150, bbox_inches="tight")
+# --- FIGURE 4: Corner Plot Comparison ---
+if result_nss_param is not None:
+    fig = plot_corner_comparison(
+        [result_hmc_param, result_nss_param],
+        labels=["HMC", "NSS"],
+        colors=[COLORS["mcmc_nuts"], COLORS["vi"]],
+        truths=true_params_param,
+    )
+    if fig is not None:
+        fig.suptitle("HMC vs NSS: Parametric Posterior (Monotonic Rising SFH, D = 7)", y=1.02)
+else:
+    fig = plot_corner_comparison(
+        [result_hmc_param],
+        labels=["HMC"],
+        colors=[COLORS["mcmc_nuts"]],
+        truths=true_params_param,
+    )
+    if fig is not None:
+        fig.suptitle("HMC: Parametric Posterior (Monotonic Rising SFH, D = 7)", y=1.02)
 plt.show()
 
 # %% [markdown]
-# ### Validation: Does geoVI Match Exact MCMC?
-#
-# geoVI is approximate — it's variational, not exact. To verify it's reliable,
-# we compare with NUTS (No-U-Turn Sampler, Hoffman & Gelman 2014), the
-# gold-standard exact sampler for low-dimensional problems. For D = 7,
-# they should agree.
+# ### Convergence Diagnostics
 
 # %%
-# Run NUTS warm-started from vi result
-t0 = time.perf_counter()
-result_nuts_param = fitter_param.run(
-    "mcmc_nuts",
-    n_warmup=500,
-    n_samples=300,
-    init_from=result_geovi_param,
-    verbose=False,
-)
-t_nuts = time.perf_counter() - t0
-print(f"NUTS: {t_nuts:.1f}s")
-
 # Convergence diagnostics
-ct = convergence_table({"vi (NIFTy)": result_geovi_param, "NUTS": result_nuts_param})
+methods_dict = {"HMC": result_hmc_param}
+if result_nss_param is not None:
+    methods_dict["NSS"] = result_nss_param
+ct = convergence_table(methods_dict)
 
 # %% [markdown]
 # ### Parameter recovery
 
 # %%
+print("HMC Parameter Recovery:")
 print(f"{'Parameter':<32s} {'True':>8s} {'Median':>8s} {'16%':>8s} {'84%':>8s} {'Status':>6s}")
 print("-" * 76)
 for name in spec_param.free_params:
     truth = float(true_params_param[name])
-    lo, med, hi = np.percentile(result_geovi_param.samples[name], [16, 50, 84])
-    covered = "\u2713" if lo <= truth <= hi else "MISS"
+    lo, med, hi = np.percentile(result_hmc_param.samples[name], [16, 50, 84])
+    covered = "✓" if lo <= truth <= hi else "MISS"
     print(f"  {name:<30s} {truth:8.3f} {med:8.3f} {lo:8.3f} {hi:8.3f} {covered:>6s}")
 
 # %%
-# --- FIGURE 5: vi (NIFTy) vs NUTS ---
-fig = plot_corner_comparison(
-    [result_geovi_param, result_nuts_param],
-    labels=["vi (NIFTy)", "NUTS"],
-    colors=[COLORS["vi"], COLORS["mcmc_nuts"]],
-    truths=true_params_param,
-)
-if fig is not None:
-    fig.suptitle(
-        f"vi (NIFTy) ({t_geovi:.1f}s) vs NUTS ({t_nuts:.1f}s) — D = 7",
-        y=1.02,
-    )
-    # plt.savefig(os.path.join(FIGDIR, "fig05_geovi_vs_nuts.png"), dpi=150, bbox_inches="tight")
-plt.show()
-
-# %%
-# Speed comparison
-print("\n  Method         | Wall Clock | Effective Samples | ESS/sec")
+# Performance summary
+print("\n  Inference Performance (Photometry Precomputed)")
+print("  " + "=" * 60)
+print(f"  {'Method':<20s} {'Runtime':>10s} {'Samples':>10s} {'ESS/sec':>10s}")
 print("  " + "-" * 60)
-for name, res, t in [
-    ("vi (NIFTy)", result_geovi_param, t_geovi),
-    ("NUTS", result_nuts_param, t_nuts),
-]:
-    n_samp = len(next(iter(res.samples.values()))) if res.samples else 0
-    print(f"  {name:<16s} | {t:>8.1f} s | {n_samp:>17d} | {n_samp / t:>7.0f}")
-
-# %% [markdown]
-# **Part A Takeaway**: For a 7-parameter model, vi (NIFTy) and NUTS give similar
-# answers. vi (NIFTy) is fast and scales to higher dimensions. For low-dimensional
-# problems where you want exact MCMC guarantees, NUTS works — but it doesn't
-# scale. Now let's see what happens when dimensionality explodes.
-
-# %% [markdown]
-# ## Part B: A Bursty Galaxy — 137 Parameters
-#
-# Real galaxies don't form stars smoothly. Star formation fluctuates on
-# timescales from ~1 Myr (molecular cloud collapse) to ~1 Gyr (mergers,
-# quenching). tengri models this burstiness as a Gaussian process controlled
-# by a power spectral density (PSD). The PSD has two physical parameters:
-# σ_PS (amplitude of fluctuations) and τ_PS (coherence timescale). The GP
-# field adds 128 correlated latent dimensions. Total: 9 physical + 128 GP = 137
-# free parameters.
-
-# %% [markdown]
-# This high dimensionality is exactly where standard MCMC methods like NUTS
-# break down — the curse of dimensionality means chains mix too slowly. But
-# because our entire model is differentiable, vi (NIFTy) with gradient-based
-# optimization can navigate this space efficiently.
-
-# %%
-# Define the stochastic parameter specification
-spec_stoch = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-3.0, 3.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
-    sfh_field_psd_sigma=Uniform(0.1, 4.0),
-    sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
-    met_logzsol=Uniform(-2.0, 0.2),
-    dust_tau_bc=Uniform(0.0, 2.0),
-    dust_tau_diff=Uniform(0.0, 1.5),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.1),
-    mean_sfh_type=["tsnorm", "field"],
-    n_grid=64,
-)
-print(f"Stochastic model: {spec_stoch.n_free} free parameters")
-print(f"  Physical: {len([p for p in spec_stoch.free_params if 'xi' not in p])}")
-print(f"  GP latent: {len([p for p in spec_stoch.free_params if 'xi' in p])}")
-
-# %%
-# Create stochastic model with spectroscopic precomputation
-model_stoch = SEDModel(spec_stoch, ssp_data, observation=obs)
-model_stoch.precompute_spectroscopy(WAVE_OBS)
-
-# %%
-# Generate a bursty mock galaxy — supernova-feedback regime
-key = jax.random.PRNGKey(123)
-true_params_stoch = spec_stoch.sample(key)
-# Override to a typical star-forming galaxy with dramatic burstiness
-true_params_stoch = {**true_params_stoch}
-true_params_stoch["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
-true_params_stoch["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
-true_params_stoch["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
-true_params_stoch["sfh_tsnorm_skew"] = jnp.array(0.3)
-true_params_stoch["sfh_tsnorm_trunc"] = jnp.array(2.0)
-true_params_stoch["sfh_field_psd_sigma"] = jnp.array(2.0)
-true_params_stoch["sfh_field_psd_tau_myr"] = jnp.array(20.0)
-
-mock_stoch = model_stoch.mock_spectrum(
-    true_params_stoch, WAVE_OBS, snr=30.0, key=jax.random.fold_in(key, 1)
-)
-print("True PSD parameters:")
-print(f"  σ_PS = {float(true_params_stoch['sfh_field_psd_sigma']):.1f}")
-print(f"  τ_PS = {float(true_params_stoch['sfh_field_psd_tau_myr']):.0f} Myr")
-
-# %%
-# --- FIGURE 6: The Bursty Truth ---
-sfh_true = model_stoch.predict_sfh(true_params_stoch)
-t_gyr = np.array(sfh_true["t_gyr"])
-sfr_full = np.array(sfh_true["sfr_full"])
-sfr_mean = np.array(sfh_true["sfr_mean"])
-
-fig, (ax_sfh, ax_spec) = plt.subplots(1, 2, figsize=(12, 4))
-
-# Left: True SFH
-ax_sfh.plot(t_gyr, sfr_full, color=COLORS["truth"], lw=1.5, label="Full SFH (with GP)")
-ax_sfh.plot(t_gyr, sfr_mean, color=COLORS["sfh_mean"], lw=1, ls="--", label="Mean SFH (secular)")
-ax_sfh.set_xlabel("Lookback time [Gyr]")
-ax_sfh.set_ylabel(r"SFR [$M_\odot\,{\rm yr}^{-1}$]")
-ax_sfh.set_xlim(0, 13.5)
-ax_sfh.legend(fontsize=8)
-ax_sfh.set_title("True Bursty SFH (σ = 2.0, τ = 20 Myr)")
-# 200 Myr inset
-inset = ax_sfh.inset_axes([0.55, 0.55, 0.4, 0.4])
-mask_200 = t_gyr < 0.2
-inset.plot(t_gyr[mask_200] * 1e3, sfr_full[mask_200], color=COLORS["truth"], lw=1)
-inset.plot(t_gyr[mask_200] * 1e3, sfr_mean[mask_200], color=COLORS["sfh_mean"], lw=0.8, ls="--")
-inset.set_xlabel("Lookback [Myr]", fontsize=6)
-inset.set_ylabel("SFR", fontsize=6)
-inset.tick_params(labelsize=5)
-inset.set_xlim(0, 200)
-
-# Right: Mock spectrum
-ax_spec.errorbar(
-    np.array(WAVE_OBS),
-    np.array(mock_stoch.flux_obs),
-    yerr=np.array(mock_stoch.noise),
-    fmt=".",
-    ms=2,
-    color=COLORS["data"],
-    alpha=0.5,
-)
-ax_spec.plot(np.array(WAVE_OBS), np.array(mock_stoch.flux_true), color=COLORS["truth"], lw=1)
-ax_spec.set_xlabel("Observed wavelength [Å]")
-ax_spec.set_ylabel("Flux density")
-ax_spec.set_title("Mock Spectrum (SNR = 30)")
-
-fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig06_bursty_truth.png"), dpi=150, bbox_inches="tight")
-plt.show()
-
-# %%
-# vi (NIFTy) on the stochastic model — 137-D posterior
-fitter_stoch = Fitter(
-    model_stoch,
-    mock_stoch.flux_obs,
-    mock_stoch.noise,
-)
-
-t0 = time.perf_counter()
-result_geovi_stoch = fitter_stoch.run(
-    "vi",
-    n_iterations=15,
-    n_samples=3,
-    n_posterior_samples=500,
-    verbose=False,
-)
-t_geovi_s = time.perf_counter() - t0
-
-print(f"\n{'=' * 55}")
-print(f"  137-dimensional posterior in {t_geovi_s:.1f}s runtime")
-print(f"{'=' * 55}")
-print(f"  vi (NIFTy): {t_geovi_s:.1f}s  ← runtime per galaxy")
-
-# %%
-# --- FIGURE 7: Stochastic SFH Recovery (THE MONEY FIGURE) ---
-fig, ax = plt.subplots(figsize=(8, 4))
-plot_sfh(
-    model_stoch,
-    result_geovi_stoch,
-    true_params=true_params_stoch,
-    ax=ax,
-    color=COLORS["vi"],
-    label="vi",
-    method="geoVI",
-    show_mean_sfh=True,
-)
-ax.set_title(
-    f"Stochastic SFH Recovery — 137 parameters, {t_geovi_s:.1f}s",
-    fontweight="bold",
-)
-# 200 Myr inset — truth + posterior SFH draws
-sfh_true_s = model_stoch.predict_sfh(true_params_stoch)
-t_gyr_s = np.array(sfh_true_s["t_gyr"])
-sfr_key_s = "sfr_full"
-sfr_true_s = np.array(sfh_true_s[sfr_key_s])
-inset = ax.inset_axes([0.58, 0.58, 0.38, 0.38])
-mask_200 = t_gyr_s < 0.2
-if hasattr(t_gyr_s, "__len__") and np.any(mask_200):
-    t_inset = t_gyr_s[mask_200] * 1e3
-    if result_geovi_stoch.samples is not None:
-        n_samp = len(next(iter(result_geovi_stoch.samples.values())))
-        sfh_draws = []
-        for i in range(n_samp):
-            s_i = {k: result_geovi_stoch.samples[k][i] for k in result_geovi_stoch.samples}
-            sfh_draws.append(np.array(model_stoch.predict_sfh(s_i)[sfr_key_s])[mask_200])
-        sfh_arr = np.array(sfh_draws)
-        lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
-        median = np.median(sfh_arr, axis=0)
-        inset.fill_between(t_inset, lo, hi, color=COLORS["vi"], alpha=0.3, lw=0)
-        inset.plot(t_inset, median, color=COLORS["vi"], lw=1.2, label="Posterior")
-    else:
-        sfh_fit = model_stoch.predict_sfh(result_geovi_stoch.params)
-        inset.plot(
-            t_inset,
-            np.array(sfh_fit[sfr_key_s])[mask_200],
-            color=COLORS["vi"],
-            lw=1.2,
-            ls="--",
-            label="MAP",
-        )
-    inset.plot(t_inset, sfr_true_s[mask_200], color=COLORS["truth"], lw=1.5, label="Truth")
-    inset.set_xlabel("Lookback [Myr]", fontsize=6)
-    inset.set_ylabel("SFR", fontsize=6)
-    inset.tick_params(labelsize=5)
-    inset.set_xlim(0, 200)
-    inset.legend(fontsize=5, loc="upper right")
-fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig07_sfh_stochastic_money.png"), dpi=150, bbox_inches="tight")
-plt.show()
-
-# %%
-# --- FIGURE 8: Spectral Fit (stochastic) ---
-spec_samples_s = []
-for i in range(50):
-    idx = i % len(result_geovi_stoch.samples[spec_stoch.free_params[0]])
-    draw_params = {k: v[idx] for k, v in result_geovi_stoch.samples.items()}
-    spec_draw = model_stoch.predict_spectrum(draw_params)
-    spec_samples_s.append(np.array(spec_draw))
-spec_samples_s = np.array(spec_samples_s)
-spec_median_s = np.median(spec_samples_s, axis=0)
-
-fig, (ax_fit, ax_res) = plt.subplots(
-    2, 1, figsize=(10, 5), gridspec_kw={"height_ratios": [3, 1]}, sharex=True
-)
-obs_s = np.array(mock_stoch.flux_obs)
-noise_s = np.array(mock_stoch.noise)
-true_s = np.array(mock_stoch.flux_true)
-
-ax_fit.errorbar(wave_np, obs_s, yerr=noise_s, fmt=".", ms=2, color=COLORS["data"], alpha=0.4)
-for s in spec_samples_s[:50]:
-    ax_fit.plot(wave_np, s, color=COLORS["vi"], alpha=0.03, lw=0.5)
-ax_fit.plot(wave_np, spec_median_s, color=COLORS["vi"], lw=1.5, label="vi (NIFTy) median")
-ax_fit.plot(wave_np, true_s, color=COLORS["truth"], lw=1, ls="--", label="Truth")
-ax_fit.legend(fontsize=8)
-ax_fit.set_ylabel("Flux density")
-
-residuals_s = (obs_s - spec_median_s) / noise_s
-ax_res.scatter(wave_np, residuals_s, s=2, c=COLORS["data"], alpha=0.5)
-ax_res.axhline(0, color="k", lw=0.5)
-ax_res.axhspan(-1, 1, alpha=0.1, color="grey")
-ax_res.axhspan(-2, 2, alpha=0.05, color="grey")
-ax_res.set_ylabel(r"$(f_{\rm obs} - f_{\rm model}) / \sigma$")
-ax_res.set_xlabel("Observed wavelength [Å]")
-ax_res.set_ylim(-4, 4)
-
-chi2_s = np.sum(residuals_s**2) / len(residuals_s)
-ax_fit.set_title(f"Spectral Fit — Stochastic D = 137 (reduced $\\chi^2$ = {chi2_s:.2f})")
-fig.tight_layout()
-# plt.savefig(
-#     os.path.join(FIGDIR, "fig08_spectral_fit_stochastic.png"), dpi=150, bbox_inches="tight"
-# )
-plt.show()
-
-# %%
-# --- FIGURE 9: Physical Parameter Corner ---
-phys_params = [p for p in spec_stoch.free_params if "xi" not in p]
-fig = safe_corner(result_geovi_stoch, truths=true_params_stoch, params=phys_params)
-if fig is not None:
-    fig.suptitle("Physical Parameters — Stochastic (D = 137)", y=1.02)
-    # plt.savefig(os.path.join(FIGDIR, "fig09_corner_stochastic.png"), dpi=150, bbox_inches="tight")
-plt.show()
-
-# %% [markdown]
-# ### The Ray Tracing Sampler: Exact MCMC at High D
-#
-# What if you want exact, unbiased posteriors at D = 137? The Ray Tracing
-# Sampler (Behroozi 2025) is a physics-inspired MCMC method that propagates
-# "light rays" through parameter space, using Snell's law to bend trajectories
-# toward high-likelihood regions. Unlike NUTS, it's ~250× more tolerant of
-# gradient noise and works efficiently at D = 137. It's the primary exact
-# MCMC method in tengri.
-
-# %%
-# Ray Tracing on the stochastic model
-t0 = time.perf_counter()
-result_rt_stoch = fitter_stoch.run(
-    "mcmc_raytrace",
-    init_from=result_geovi_stoch,
-    n_burnin=200,
-    n_steps=2000,
-    step_size=0.05,
-    n_leapfrog_steps=50,
-    verbose=False,
-)
-t_rt_s = time.perf_counter() - t0
-
-acc = result_rt_stoch.diagnostics.get("acceptance_rate", float("nan"))
-print(f"Ray Tracing: {t_rt_s:.1f}s, acceptance = {acc:.1%}")
-
-# %%
-# Convergence diagnostics for D=137 methods
-ct_stoch = convergence_table({"vi": result_geovi_stoch, "Ray Tracing": result_rt_stoch})
-
-# %%
-# --- FIGURE 10: All methods on one plot ---
-fig, ax = plt.subplots(figsize=(10, 5))
-
-# Truth first — bold, on top
-sfh_true_cmp = model_stoch.predict_sfh(true_params_stoch)
-t_gyr_cmp = np.array(sfh_true_cmp["t_gyr"])
-ax.plot(
-    t_gyr_cmp, sfh_true_cmp["sfr_full"], color=COLORS["truth"], lw=3.0, zorder=10, label="Truth"
-)
-ax.plot(
-    t_gyr_cmp,
-    sfh_true_cmp["sfr_mean"],
-    color=COLORS["truth"],
-    lw=1.5,
-    ls=":",
-    alpha=0.4,
-    zorder=10,
-)
-
-# Overlay each method's posterior SFH as 68% CI band
-for result, color, label in [
-    (result_geovi_stoch, COLORS["vi"], f"vi (NIFTy) ({t_geovi_s:.1f}s)"),
-    (result_rt_stoch, COLORS["rt"], f"Ray Tracing ({t_rt_s:.1f}s)"),
-]:
-    if result.samples is not None:
-        n_samp = len(next(iter(result.samples.values())))
-        sfh_draws = []
-        for i in range(n_samp):
-            s_i = {k: result.samples[k][i] for k in result.samples}
-            sfh_draws.append(np.array(model_stoch.predict_sfh(s_i)["sfr_full"]))
-        sfh_arr = np.array(sfh_draws)
-        lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
-        median = np.median(sfh_arr, axis=0)
-        ax.fill_between(t_gyr_cmp, lo, hi, color=color, alpha=0.2, lw=0, label=f"{label} (68% CI)")
-        ax.plot(t_gyr_cmp, median, color=color, lw=1.5, zorder=5)
-
-ax.set_xlabel(r"$\mathrm{Lookback\ time\ /\ Gyr}$")
-ax.set_ylabel(r"$\mathrm{SFR\ /\ M_\odot\ yr^{-1}}$")
-ax.set_xlim(0, 13.5)
-ax.set_ylim(bottom=0.0)
-ax.legend(loc="upper right")
-ax.set_title("Stochastic SFH Recovery — vi (NIFTy) vs Ray Tracing (D = 137)")
-
-# 200 Myr inset with both posteriors
-inset = ax.inset_axes([0.55, 0.55, 0.4, 0.4])
-mask_cmp = t_gyr_cmp < 0.2
-if np.any(mask_cmp):
-    t_inset = t_gyr_cmp[mask_cmp] * 1e3
-    for result, color, label in [
-        (result_geovi_stoch, COLORS["vi"], "NIFTy"),
-        (result_rt_stoch, COLORS["rt"], "RT"),
-    ]:
-        if result.samples is not None:
-            n_samp = len(next(iter(result.samples.values())))
-            draws = []
-            for i in range(n_samp):
-                s_i = {k: result.samples[k][i] for k in result.samples}
-                draws.append(np.array(model_stoch.predict_sfh(s_i)["sfr_full"])[mask_cmp])
-            arr = np.array(draws)
-            lo, hi = np.percentile(arr, [16, 84], axis=0)
-            med = np.median(arr, axis=0)
-            inset.fill_between(t_inset, lo, hi, color=color, alpha=0.25, lw=0)
-            inset.plot(t_inset, med, color=color, lw=1.2, label=label)
-    inset.plot(
-        t_inset,
-        np.array(sfh_true_cmp["sfr_full"])[mask_cmp],
-        color=COLORS["truth"],
-        lw=2.0,
-        label="Truth",
-    )
-    inset.set_xlabel("Lookback [Myr]", fontsize=6)
-    inset.set_ylabel("SFR", fontsize=6)
-    inset.tick_params(labelsize=5)
-    inset.set_xlim(0, 200)
-    inset.legend(fontsize=5, loc="upper right")
-
-fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig10_geovi_vs_rt.png"), dpi=150, bbox_inches="tight")
-plt.show()
+n_hmc = len(next(iter(result_hmc_param.samples.values())))
+print(f"  {'HMC':<20s} {t_hmc:>9.1f}s {n_hmc:>10d} {n_hmc/t_hmc:>10.0f}")
+if result_nss_param is not None:
+    n_nss = len(next(iter(result_nss_param.samples.values())))
+    print(f"  {'NSS':<20s} {t_nss:>9.1f}s {n_nss:>10d} {n_nss/t_nss:>10.0f}")
+print("  " + "=" * 60)
 
 # %% [markdown]
 # ## Summary
 
 # %%
-# Summary timing table
-print("\n  Summary")
-print("  " + "=" * 75)
-print(f"  {'Model':<20s} {'D':>4s}  {'Method':<16s} {'Compile':>8s} {'Runtime':>8s}  Notes")
-print("  " + "-" * 75)
-print(
-    f"  {'Parametric':<20s} {'7':>4s}  {'vi (NIFTy)':<16s} {'N/A':>7s} {t_geovi:>7.1f}s  Default"
-)
-print(
-    f"  {'Parametric':<20s} {'7':>4s}  {'NUTS':<16s} {'':>8s} {t_nuts:>7.1f}s  Exact, gold standard"
-)
-print(
-    f"  {'Stochastic':<20s} {'137':>4s}  {'vi (NIFTy)':<16s} {'N/A':>7s} {t_geovi_s:>7.1f}s  Default"
-)
-print(
-    f"  {'Stochastic':<20s} {'137':>4s}  {'Ray Tracing':<16s} {'':>8s} {t_rt_s:>7.1f}s  Exact (Behroozi 2025)"
-)
-print("  " + "=" * 75)
-print("\n  Compile is one-time (cached on disk). Runtime is per galaxy.")
-print(f"  Headline: 137D posterior in {t_geovi_s:.0f}s runtime with vi (NIFTy).")
+# Summary
+print("\n  ✓ Quickstart Complete")
+print("  " + "=" * 60)
+print("  HMC (Hamiltonian Monte Carlo) inference on photometry, with NSS")
+print("  (Nested Sampling) for exact sampling comparison. HMC is JIT-fast,")
+print("  NSS is exact and memory-intensive for complex models.")
+print("  " + "=" * 60)
 
 # %% [markdown]
 # ## What You Just Did
 #
-# 1. Fit a smooth 7D SFH and verified vi (geoVI) matches NUTS.
-# 2. Fit a bursty 137D SFH — something standard samplers can't handle — in seconds.
-# 3. Recovered star formation burst features from a single galaxy spectrum.
-# 4. Validated with the exact Ray Tracing Sampler (Behroozi 2025).
+# 1. Created a **monotonically rising SFH** with high instantaneous SFR (30 $M_\\odot$/yr).
+# 2. Fit UV–NIR–MIR–FIR photometry (13 bands: GALEX, SDSS, 2MASS, WISE, Herschel) with **precomputation**.
+# 3. Ran **HMC** (Hamiltonian Monte Carlo) for fast JIT-compiled inference and **NSS** (Nested Sampler) for exact sampling.
+# 4. Recovered 7 physical parameters with tight constraints via photometric precompute.
+# 5. Achieved ESS/sec efficiency and runtime benefit from precomputation + HMC strategy.
 
 # %% [markdown]
 # ## What's Next
 #
-# **Default top-level path (this folder):** `02_sfh_gallery` → `03_dust_gallery` →
-# `04_nebular_gallery` → `05_agn_gallery` → `06_multiwavelength_gallery` →
-# `07_fitting_photometry` → `08_fitting_spectra` → `11_population` →
-# `12_extending_tengri`. (We are **not** steering new readers through
-# `09_degeneracies` or `10_real_data` for now — they stay in the repo as optional
-# deep dives.)
-#
-# **Tutorial track (`notebooks/tutorials/`):** Model / IFT / forward model /
-# prior predictive — same ideas with more API detail.
-#
-# **Demonstrations (`notebooks/demonstrations/`):** catalog-scale photometry,
-# hierarchical inference, and other advanced workflows.
+# For stochastic (bursty) SFH and high-dimensional inference, see
+# `00_quickstart_stochastic.py`. For other model components, follow the
+# suggested reader order: `02_sfh_gallery` → `03_dust_gallery` →
+# `04_nebular_gallery` → etc.
