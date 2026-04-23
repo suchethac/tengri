@@ -5,10 +5,20 @@ type: software
 authors:
   - family-names: Cooray
     given-names: Suchetha
-license: MIT
+license: BSD-3-Clause
 repository-code: "https://github.com/suchethac/tengri"
+url: "https://github.com/suchethac/tengri"
 version: 0.1.0
 date-released: "2026-01-01"
+preferred-citation:
+  type: article
+  authors:
+    - family-names: Cooray
+      given-names: Suchetha
+  title: "tengri: Differentiable SED Fitting with IFT Star Formation History Priors (Paper I)"
+  journal: "in preparation"
+  year: 2026
+  notes: "Methods and mock recovery paper. DOI will be updated on acceptance."
 keywords:
   - galaxy
   - SED fitting

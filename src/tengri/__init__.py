@@ -26,6 +26,7 @@ __version__ = "0.1.0"
 # --- Exception hierarchy ---
 # --- New high-level API ---
 from tengri.analysis.mock import MockData, generate_mock
+from tengri.citations import Citation, cite, cite_all
 from tengri.components.dust.attenuation import two_component_dust
 from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
 from tengri.components.sfh.gp_sfh import (
@@ -90,6 +91,7 @@ from tengri.config.settings import (
     NebularConfig,
     SFHConfig,
 )
+from tengri.facade import Galaxy, doctor
 from tengri.forward.convenience import catalog_summary, fit_batch
 from tengri.forward.prediction import (
     DerivedQuantities,
@@ -128,6 +130,7 @@ from tengri.observation.spectral_indices import SpectralIndexData, SpectralIndex
 from tengri.observation.spectroscopy import Spectroscopy
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
+from tengri.results import FitResult, Provenance
 from tengri.utils import jit_logging
 
 
@@ -203,7 +206,7 @@ def posteriors_to_dataframe(results: list, params: list[str] | None = None):
 # Or:    from tengri.agn import unified_nlr_blr
 import sys
 
-from tengri import components as _components
+from tengri import components as _components, preprocessing, presets
 
 agn = _components.agn
 dust = _components.dust
@@ -227,14 +230,22 @@ sys.modules["tengri.xray"] = xray
 # Observation layer shortcut (already exists in imports above)
 # observation module is imported separately below
 
+# I/O layer
+from tengri import io
+
+sys.modules["tengri.io"] = io
+
 
 __all__ = [
     "AGNConfig",
     "BackendError",
+    "Citation",
     "ConfigError",
     "DustConfig",
+    "FitResult",
     "Fitter",
     "Fixed",
+    "Galaxy",
     "Gaussian",
     "InferenceError",
     "LineFluxData",
@@ -252,6 +263,7 @@ __all__ = [
     "PopulationFitter",
     "PopulationPosterior",
     "Posterior",
+    "Provenance",
     "SEDModel",
     "SFHConfig",
     "SpectralIndexData",
@@ -263,17 +275,23 @@ __all__ = [
     "Uniform",
     "VIConfig",
     "agn",
+    "cite",
+    "cite_all",
+    "doctor",
     "dust",
     "exp_squared_kernel",
     "generate_mock",
     "gp_noise_covariance",
     "igm",
+    "io",
     "load_filter_set",
     "load_ssp_data",
     "matern32_kernel",
     "nebular",
     "observation",
     "posteriors_to_dataframe",
+    "preprocessing",
+    "presets",
     "radio",
     "sfh",
     "sps",
