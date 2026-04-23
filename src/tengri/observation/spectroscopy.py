@@ -498,6 +498,158 @@ class Spectroscopy:
             **kwargs,
         )
 
+    # ── FITS I/O factories ────────────────────────────────────────
+
+    @classmethod
+    def from_jwst_x1d(
+        cls,
+        fits_path: str,
+        *,
+        ext: int | str = 1,
+        resolution: float | jnp.ndarray | None = None,
+        **kwargs,
+    ) -> tuple[Spectroscopy, jnp.ndarray, jnp.ndarray]:
+        """Load from a JWST x1d/x1dints FITS spectrum.
+
+        Reads WAVELENGTH (µm), FLUX (µJy), and FLUX_ERROR (µJy) from the
+        specified extension and converts to tengri internal units
+        (Angstrom, erg/s/cm²/Hz).
+
+        Parameters
+        ----------
+        fits_path : str
+            Path to the x1d FITS file.
+        ext : int or str
+            FITS extension containing the spectrum table. Default: 1.
+        resolution : float, ndarray, or None
+            Spectral resolution override.  If None, auto-selects based on
+            the ``FILTER`` or ``GRATING`` header keyword. Default: None.
+        **kwargs
+            Additional keyword arguments passed to ``Spectroscopy``.
+
+        Returns
+        -------
+        tuple[Spectroscopy, ndarray, ndarray]
+            ``(spec_config, flux_obs, flux_err)`` where flux values are in
+            erg/s/cm²/Hz and wavelengths in Angstrom.
+
+        Notes
+        -----
+        Requires ``astropy``.  NaN pixels are masked by setting their
+        error to infinity.
+
+        Unit conversions:
+        - Wavelength: µm → Å (×10⁴)
+        - Flux: µJy → erg/s/cm²/Hz (×10⁻²⁹)
+
+        """
+        from astropy.io import fits as pyfits
+
+        with pyfits.open(fits_path) as hdul:
+            data = hdul[ext].data
+            header = hdul[ext].header if hasattr(hdul[ext], "header") else {}
+            primary_header = hdul[0].header
+
+            wave_um = jnp.asarray(data["WAVELENGTH"], dtype=jnp.float64)
+            flux_ujy = jnp.asarray(data["FLUX"], dtype=jnp.float64)
+            err_ujy = jnp.asarray(data["FLUX_ERROR"], dtype=jnp.float64)
+
+        wave_aa = wave_um * 1e4
+        flux_cgs = flux_ujy * 1e-29
+        err_cgs = err_ujy * 1e-29
+
+        nan_mask = ~(jnp.isfinite(flux_cgs) & jnp.isfinite(err_cgs) & (err_cgs > 0.0))
+        err_cgs = jnp.where(nan_mask, jnp.inf, err_cgs)
+        flux_cgs = jnp.where(nan_mask, 0.0, flux_cgs)
+
+        if resolution is None:
+            grating = str(
+                header.get("GRATING", primary_header.get("GRATING", ""))
+            ).upper()
+            if "PRISM" in grating:
+                from tengri.observation.spectrum import nirspec_prism_resolution
+
+                resolution = nirspec_prism_resolution(wave_um)
+            elif "G140M" in grating:
+                from tengri.observation.spectrum import nirspec_g140m_resolution
+
+                resolution = nirspec_g140m_resolution(wave_um)
+            else:
+                resolution = None
+
+        spec = cls._from_resolution(wave_aa, resolution, **kwargs)
+        return spec, flux_cgs, err_cgs
+
+    @classmethod
+    def from_fits(
+        cls,
+        fits_path: str,
+        *,
+        wave_col: str = "WAVELENGTH",
+        flux_col: str = "FLUX",
+        err_col: str = "FLUX_ERROR",
+        wave_unit_aa: float = 1.0,
+        flux_unit_cgs: float = 1.0,
+        ext: int | str = 1,
+        resolution: float | jnp.ndarray | None = None,
+        **kwargs,
+    ) -> tuple[Spectroscopy, jnp.ndarray, jnp.ndarray]:
+        """Load from a generic FITS binary table spectrum.
+
+        Parameters
+        ----------
+        fits_path : str
+            Path to the FITS file.
+        wave_col : str
+            Column name for wavelength. Default: ``"WAVELENGTH"``.
+        flux_col : str
+            Column name for flux. Default: ``"FLUX"``.
+        err_col : str
+            Column name for flux error. Default: ``"FLUX_ERROR"``.
+        wave_unit_aa : float
+            Multiplicative factor to convert wavelength column to Angstrom.
+            E.g., 1e4 for µm input. Default: 1.0 (already Å).
+        flux_unit_cgs : float
+            Multiplicative factor to convert flux column to erg/s/cm²/Hz.
+            E.g., 1e-29 for µJy. Default: 1.0 (already CGS).
+        ext : int or str
+            FITS extension. Default: 1.
+        resolution : float, ndarray, or None
+            Spectral resolution. Default: None.
+        **kwargs
+            Additional keyword arguments passed to ``Spectroscopy``.
+
+        Returns
+        -------
+        tuple[Spectroscopy, ndarray, ndarray]
+            ``(spec_config, flux_obs, flux_err)`` in Angstrom and CGS.
+
+        Notes
+        -----
+        Requires ``astropy``.  Generic reader for any FITS binary table
+        spectrum.  For JWST x1d files, prefer ``from_jwst_x1d`` which
+        handles unit conversion and resolution auto-detection.
+
+        """
+        from astropy.io import fits as pyfits
+
+        with pyfits.open(fits_path) as hdul:
+            data = hdul[ext].data
+            wave_raw = jnp.asarray(data[wave_col], dtype=jnp.float64)
+            flux_raw = jnp.asarray(data[flux_col], dtype=jnp.float64)
+            err_raw = jnp.asarray(data[err_col], dtype=jnp.float64)
+
+        wave_aa = wave_raw * wave_unit_aa
+        flux_cgs = flux_raw * flux_unit_cgs
+        err_cgs = err_raw * flux_unit_cgs
+
+        nan_mask = ~(jnp.isfinite(flux_cgs) & jnp.isfinite(err_cgs) & (err_cgs > 0.0))
+        err_cgs = jnp.where(nan_mask, jnp.inf, err_cgs)
+        flux_cgs = jnp.where(nan_mask, 0.0, flux_cgs)
+
+        spec = cls._from_resolution(wave_aa, resolution, **kwargs)
+        return spec, flux_cgs, err_cgs
+
     # ── Summary ───────────────────────────────────────────────────
 
     def summary(self) -> str:
@@ -531,6 +683,72 @@ class Spectroscopy:
         if self.has_covariance:
             parts.append("cov_matrix")
         return ", ".join(parts)
+
+
+# ── Wavelength grid builder ──────────────────────────────────────
+
+
+def build_wavelength_grid(
+    resolution_fn: callable,
+    wave_min_aa: float,
+    wave_max_aa: float,
+    n_pix_per_resel: float = 2.5,
+) -> jnp.ndarray:
+    """Build an optimal wavelength grid from an instrument resolution profile.
+
+    Steps through wavelength space with pixel spacing matched to the local
+    resolution element: Δλ = λ / (n_pix_per_resel · R(λ)).
+
+    Parameters
+    ----------
+    resolution_fn : callable
+        Function R(wave_um) → spectral resolution, where wave_um is in
+        micrometers.  Must accept and return arrays.  Use e.g.
+        ``nirspec_prism_resolution`` or ``nirspec_g140m_resolution``.
+    wave_min_aa : float
+        Minimum wavelength [Å].
+    wave_max_aa : float
+        Maximum wavelength [Å].
+    n_pix_per_resel : float
+        Number of pixels per resolution element (Nyquist = 2.0).
+        Default: 2.5 (slight oversampling for interpolation safety).
+
+    Returns
+    -------
+    ndarray, shape (n_pix,)
+        Wavelength grid in Angstrom, non-uniformly spaced to match the
+        instrument resolution.
+
+    Notes
+    -----
+    Not JIT-compatible (uses a Python while-loop to build the grid).
+
+    The grid construction follows the CIGALE ``new_wavegrid`` approach
+    (Jakobsen+2022 convention of ~2.2 pixels per resolution element for
+    NIRSpec PRISM). Here we allow the user to set this via ``n_pix_per_resel``.
+
+    Examples
+    --------
+    >>> from tengri.observation.spectrum import nirspec_prism_resolution
+    >>> grid = build_wavelength_grid(nirspec_prism_resolution, 6000.0, 53000.0)
+    >>> grid.shape[0]  # ~400-600 pixels depending on sampling
+    ...
+
+    """
+    import numpy as np
+
+    wave_list = [wave_min_aa]
+    while wave_list[-1] < wave_max_aa:
+        lam = wave_list[-1]
+        lam_um = lam / 1e4
+        r_local = float(resolution_fn(jnp.array([lam_um]))[0])
+        r_local = max(r_local, 1.0)
+        step = lam / (n_pix_per_resel * r_local)
+        wave_list.append(lam + step)
+
+    grid = np.array(wave_list, dtype=np.float64)
+    grid = grid[grid <= wave_max_aa]
+    return jnp.asarray(grid)
 
 
 # ── Wavelength masking ────────────────────────────────────────────
