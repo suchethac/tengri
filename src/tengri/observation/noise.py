@@ -481,6 +481,16 @@ def variable_noise_metric_vec(
     array, shape (n_latent,)
         M @ v = J^T H_E J v + v.
 
+    Notes
+    -----
+    **JIT-compatible**: yes — uses only jax primitives (jax.jvp, jax.vjp).
+
+    **Gradient-safe**: yes — differentiable w.r.t. data and model parameters.
+
+    Implements the metric-vector product for the Gauss-Newton approximation
+    of the variational Hessian, used in information field theory inference.
+    The prior metric is assumed to be the identity.
+
     """
     xi_d = unflatten(xi)
     v_d = unflatten(v)

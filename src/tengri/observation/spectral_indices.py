@@ -299,6 +299,29 @@ class SpectralIndexData:
     errors : jnp.ndarray
         1-sigma uncertainties, shape ``(n_indices,)``.
 
+    Returns
+    -------
+    SpectralIndexData
+        Spectral index data container with validation.
+
+    Attributes
+    ----------
+    index_defs : tuple[SpectralIndexDef, ...]
+        Index definitions.
+    values : ndarray, shape (n_indices,)
+        Observed index values [dimensionless].
+    errors : ndarray, shape (n_indices,)
+        1-sigma measurement uncertainties [dimensionless].
+
+    Notes
+    -----
+    **Immutable container**: All fields are read-only by convention. Construct
+    once with validated data, do not modify.
+
+    **Indexing and access**: Use ``names`` property to get human-readable
+    line identifiers, ``n_indices`` for count, and ``index_defs`` for the
+    full definition metadata.
+
     Examples
     --------
     >>> import jax.numpy as jnp
@@ -339,6 +362,11 @@ class SpectralIndexData:
         -------
         int
             Number of indices in this dataset.
+
+        Notes
+        -----
+        Computed from the length of the ``index_defs`` tuple. Constant
+        for the lifetime of the object (immutable).
 
         """
         return len(self.index_defs)

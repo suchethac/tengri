@@ -88,6 +88,11 @@ class AGNModel(Protocol):
         ndarray, shape (n_wave,)
             AGN emission SED L_ν. [erg/s/Hz]
 
+        References
+        ----------
+        .. [1] See :mod:`tengri.components.agn` module documentation for citations
+               to specific AGN physics implementations (disc, torus, NLR, BLR, X-ray).
+
         Notes
         -----
         **Absolute luminosities**: The returned SED is in absolute units

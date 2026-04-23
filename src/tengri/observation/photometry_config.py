@@ -28,6 +28,24 @@ class Photometry:
     names : tuple of str
         Human-readable filter names (e.g. ``("sdss_r", "sdss_i")``).
 
+    Returns
+    -------
+    Photometry
+        Photometry instance with derived fields populated.
+
+    Attributes
+    ----------
+    filters : tuple[FilterCurve, ...]
+        Filter transmission curves.
+    names : tuple[str, ...]
+        Human-readable filter names.
+    filter_waves : tuple[ndarray, ...]
+        Wavelength arrays for each filter [Angstrom].
+    filter_trans : tuple[ndarray, ...]
+        Transmission curves for each filter [dimensionless].
+    n_filters : int
+        Number of filters.
+
     Notes
     -----
     A frozen dataclass that encapsulates filter metadata and transmission

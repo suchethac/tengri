@@ -223,7 +223,16 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
         Returns
         -------
         ndarray, shape (n_wave_rest,)
-            Full SED (stellar + nebular + dust + AGN + radio + X-ray) [erg/s/Hz].
+            Full SED (stellar + nebular + dust + AGN + radio + X-ray)
+            [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations use ``jnp`` primitives
+        and can be traced by ``@jax.jit``.
+
+        **Gradient-safe**: yes — differentiable w.r.t. all parameters
+        in p and input arrays.
         """
         sed = stellar_sed
         L_abs_neb = jnp.float64(0.0)

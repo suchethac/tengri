@@ -348,6 +348,8 @@ def polar_dust_emission(
     Notes
     -----
     **JIT-compatible**: yes — uses ``jnp`` primitives only.
+
+    **Gradient-safe**: yes — fully differentiable.
     """
     # Greybody: L_nu proportional to (1 - exp(-(lambda_0/lambda)^beta)) * B_nu(T)
     opacity_factor = 1.0 - jnp.exp(-((lambda_0 / wavelength) ** beta))

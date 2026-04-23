@@ -254,6 +254,11 @@ class Fitter:
         ``None`` auto-detects from ``Spectroscopy.eline_prior_type``.
         Default ``None``.
 
+    Returns
+    -------
+    Fitter
+        Fitter instance with loss function compiled and ready for inference.
+
     Attributes
     ----------
     model : SEDModel

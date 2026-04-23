@@ -19,6 +19,20 @@ class SEDResult(NamedTuple):
     :meth:`~tengri.forward.sed_model.SEDModel.predict_rest_sed` and
     :meth:`~tengri.forward.sed_model.SEDModel.predict_obs_sed`.
 
+    Parameters
+    ----------
+    wavelength : ndarray, shape (n_wave,)
+        Wavelength grid. [Angstrom]
+    sed : ndarray, shape (n_wave,)
+        Spectral luminosity density for rest-frame SED or flux density for
+        observed-frame. [erg/s/Hz] for rest-frame, [erg/s/cm^2/Hz] for
+        observed-frame.
+
+    Returns
+    -------
+    SEDResult
+        Named tuple with wavelength and SED arrays.
+
     Attributes
     ----------
     wavelength : ndarray, shape (n_wave,)

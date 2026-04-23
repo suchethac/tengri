@@ -76,6 +76,15 @@ def precompute_skirtor_photometry(
         ``_preint`` : PreintegratedGrid
             Internal preintegration data structure.
 
+    References
+    ----------
+    .. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+           torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+           arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
+    .. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
+           IR torus emission with polar dust component," MNRAS, 458, 2288 (2016).
+           arXiv:1602.01954. https://doi.org/10.1093/mnras/stw444
+
     Notes
     -----
     **JIT-compatible**: no — this is a build-time function using NumPy.
@@ -165,10 +174,18 @@ def build_skirtor_photometry_lookup(precomp: dict):
         Returns torus L_ν [erg/s/Hz].  Caller applies
         ``flux_scale = (1+z) / (4π d_L²)`` to get flux density.
 
+    References
+    ----------
+    .. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+           torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+           arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
+
     Notes
     -----
     **JIT-compatible**: yes — the returned function uses ``jnp`` and
     triweight interpolation, which are JAX-native.
+
+    **Gradient-safe**: yes — triweight kernel is fully differentiable.
 
     **Interpolation kernel**: Triweight kernel provides C²-continuous
     gradients for autodiff, unlike nearest-neighbor or linear interpolation.
@@ -241,6 +258,12 @@ def precompute(
         Same shape as :func:`precompute_skirtor_photometry` but with grid
         axes collapsed for any Fixed :data:`AXIS_PARAMS` entry.
 
+    References
+    ----------
+    .. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+           torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+           arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
+
     Notes
     -----
     **JIT-compatible**: no — this is a build-time function using NumPy.
@@ -297,9 +320,17 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
         Returns torus L_ν [erg/s/Hz].
 
+    References
+    ----------
+    .. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+           torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
+           arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
+
     Notes
     -----
     **JIT-compatible**: yes — the returned function is fully JAX-native.
+
+    **Gradient-safe**: yes — triweight interpolation is fully differentiable.
     """
     if not preint.get("_collapsed_axes"):
         return build_skirtor_photometry_lookup(preint)

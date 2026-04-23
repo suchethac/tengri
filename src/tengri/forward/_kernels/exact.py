@@ -206,16 +206,24 @@ def build_fused_rest_sed(model):
         Parameters
         ----------
         weights : array, shape (n_age,)
-            CSP mass weights (Msun).
+            CSP mass weights [Msun].
         ssp_flux_at_z : array, shape (n_age, n_wave)
-            SSP flux interpolated to target metallicity.
+            SSP flux interpolated to target metallicity [erg/s/Hz].
         p : dict
             Internal parameters (dust, AGN, nebular, radio, X-ray).
 
         Returns
         -------
         array, shape (n_wave,)
-            Rest-frame SED in erg/s/Hz.
+            Rest-frame SED [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations are jnp primitives fused
+        in a single ``@jax.jit`` scope.
+
+        **Gradient-safe**: yes — differentiable w.r.t. all parameters
+        in p and input arrays.
         """
         w = weights.astype(dt)
         ssp_z = ssp_flux_at_z.astype(dt)

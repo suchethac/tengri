@@ -70,6 +70,11 @@ class DustAttenuationLaw(Protocol):
             k(5500 Å) = 1.0. Values in [0, 1] for physical attenuation curves.
             Returned array dtype matches input wavelength dtype.
 
+        References
+        ----------
+        .. [1] See :mod:`tengri.components.dust.attenuation` for specific
+               dust law citations (Calzetti, Gordon, SMC, etc.).
+
         Notes
         -----
         **JIT-compatible**: yes (required for all dust laws).
@@ -145,6 +150,11 @@ class DustEmissionTemplate(Protocol):
             Dust emission SED L_ν [erg/s/Hz] (rest-frame).
             Must satisfy energy conservation: ∫ L_ν dν ≈ L_absorbed [L_sun]
             when integrated over the full spectral range.
+
+        References
+        ----------
+        .. [1] See :mod:`tengri.components.dust.emission` for specific
+               dust emission model citations (Dale, Draine & Li, Casey, etc.).
 
         Notes
         -----

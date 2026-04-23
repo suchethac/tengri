@@ -953,6 +953,13 @@ def precompute(filter_waves: list, filter_trans: list, redshift: float, paramete
     KDPreintegratedData
         All precomputed filter-integrated tables for the 3-zone K&D disc.
 
+    References
+    ----------
+    .. [1] A. Kubota and C. Done, "A physical model of the broad-band continuum
+           of AGN and its implications for the UV/X relation and optical variability,"
+           MNRAS, 480, 1247 (2018). arXiv:1804.00171.
+           https://doi.org/10.1093/mnras/sty1890
+
     Notes
     -----
     **JIT-compatible**: no — this is a build-time function using NumPy.

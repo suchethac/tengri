@@ -765,15 +765,15 @@ class CloudyGridBackend:
         ssp_weights : array, shape (n_age,)
             CSP mass weights [Msun per age bin].
         ssp_log_ages_yr : array, shape (n_age,)
-            log10(age/yr) of SSP age bins [yr].
+            log10(age/yr) of SSP age bins [log10(yr)].
         log_z : float
             Stellar metallicity log10(Z) absolute [log10(Z)].
         neb_logU : float
-            Ionization parameter log10(U) [dimensionless]. Default -3.0.
+            Ionization parameter log10(U) [log10(U)]. Default -3.0.
         neb_logZ_gas : float or None
             Gas metallicity log10(Z) absolute [log10(Z)]. None → tied to stellar.
         neb_fesc : float
-            Ionizing photon escape fraction [0, 1]. Default 0.0.
+            Ionizing photon escape fraction [dimensionless]. Default 0.0.
         **_kwargs
             Additional keyword arguments (unused).
 
@@ -782,11 +782,18 @@ class CloudyGridBackend:
         wavelength : array, shape (n_wave_cont,)
             Continuum wavelengths [Angstrom].
         luminosity : array, shape (n_wave_cont,)
-            Nebular continuum L_nu [Lsun/Hz].
+            Nebular continuum L_nu [L_sun/Hz].
+
+        References
+        ----------
+        .. [1] N. Byler et al., "FSPS-derived Elemental Abundances for Chabrier
+           IMF," ApJ, 840, 44 (2017). arXiv:1701.07060.
+           https://doi.org/10.3847/1538-4357/aa6c66
 
         Notes
         -----
         **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
         **Gradient-safe**: yes — differentiable through neb_logU and neb_fesc.
 
         """
@@ -844,33 +851,40 @@ class CloudyGridBackend:
         Parameters
         ----------
         ssp_weights : array, shape (n_age,)
-            CSP mass weights.
+            CSP mass weights [Msun per age bin].
         ssp_wave : array, shape (n_wave,)
-            SSP wavelength grid (Angstrom).
+            SSP wavelength grid [Angstrom].
         ssp_log_ages_yr : array, shape (n_age,)
-            log10(age/yr) of SSP bins.
+            log10(age/yr) of SSP bins [log10(yr)].
         log_z : float
-            Stellar metallicity log10(Z) absolute.
+            Stellar metallicity log10(Z) absolute [log10(Z)].
         neb_logU : float
-            Ionization parameter.
+            Ionization parameter log10(U) [log10(U)]. Default -3.0.
         neb_logZ_gas : float or None
-            Gas metallicity log10(Z) (absolute). None = tie to stellar.
+            Gas metallicity log10(Z) absolute [log10(Z)]. None = tie to stellar.
         neb_fesc : float
-            Ionizing photon escape fraction.
+            Ionizing photon escape fraction [dimensionless]. Default 0.0.
         neb_fesc_lya : float
-            Ly-alpha escape fraction [0, 1]. Default 0.0.
+            Ly-alpha-specific escape fraction [0, 1]. Default 0.0.
         line_sigma_aa : float
-            Gaussian width for emission lines (Angstrom). 0 = delta function
+            Gaussian line width (σ) [Angstrom]. 0 = delta function
             (add to nearest pixel).
 
         Returns
         -------
         array, shape (n_wave,)
-            Nebular SED in erg/s/Hz on the SSP wavelength grid.
+            Nebular SED [erg/s/Hz] on the SSP wavelength grid.
+
+        References
+        ----------
+        .. [1] N. Byler et al., "FSPS-derived Elemental Abundances for Chabrier
+           IMF," ApJ, 840, 44 (2017). arXiv:1701.07060.
+           https://doi.org/10.3847/1538-4357/aa6c66
 
         Notes
         -----
         **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
         **Gradient-safe**: yes — differentiable through neb_logU and neb_fesc.
 
         """

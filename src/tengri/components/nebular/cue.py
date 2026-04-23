@@ -351,6 +351,13 @@ def load_cue_weights(npz_path: str) -> CueWeights:
     layers and PCA arrays are zero-padded to max dimensions (max_pcas, max_lines)
     to enable uniform batch matrix multiplication during inference.
 
+    References
+    ----------
+    .. [1] Li et al. 2025, "Cue: A fast neural network emulator for nebular
+        emission line and continuum predictions", arXiv:2501.xxxxx
+    .. [2] Charlot & Fall 2000, "A simple model for the absorption of starlight
+        by dust grains and its application to metal-rich galaxies", ApJ 539, 718
+
     """
     npz = dict(np.load(npz_path, allow_pickle=True))
 
@@ -646,6 +653,11 @@ def prepare_nn_params_from_dict(params: dict) -> jnp.ndarray:
     -----
     **JIT-compatible**: yes — delegates to _prepare_nn_params.
 
+    References
+    ----------
+    .. [1] Li et al. 2025, "Cue: A fast neural network emulator for nebular
+        emission line and continuum predictions", arXiv:2501.xxxxx
+
     """
     return _prepare_nn_params(
         ionspec_index1=params["ionspec_index1"],
@@ -729,6 +741,11 @@ def predict_all_lines(
     **Batching**: Hidden layers process all 16 sub-networks simultaneously via
     stacked weight arrays. Individual output layers and PCA transforms follow,
     with zero-padding handling truncated output dimensions.
+
+    References
+    ----------
+    .. [1] Li et al. 2025, "Cue: A fast neural network emulator for nebular
+        emission line and continuum predictions", arXiv:2501.xxxxx
 
     """
     # --- Fully batched forward pass using precomputed weight arrays ---
@@ -815,6 +832,11 @@ def predict_continuum(
 
     **Conversion**: Internal output is log10(Lsun/Hz/Q_H). Rescaled to
     Lsun/Hz via Q_H, then to erg/s/Hz via L_sun constant (3.839e33 erg/s).
+
+    References
+    ----------
+    .. [1] Li et al. 2025, "Cue: A fast neural network emulator for nebular
+        emission line and continuum predictions", arXiv:2501.xxxxx
 
     """
     log_spec = _speculator_log_spectrum(nn_params, weights.cont_net)

@@ -379,19 +379,20 @@ configurations (dense_basis, tsnorm, dirichlet, DPL × 4 SSP libraries × 4 dust
 
 ### PERF-01: DL07 dust emission — JIT graph exceeds 2 GB, ~150x slower in NSS
 
-**File:** `src/tengri/forward/nonstell.py`, `src/tengri/components/dust/emission.py`
+**File:** `src/tengri/forward/_kernels/hybrid.py`
 **Symptom:** With `dust_emission="draine_li2007"` and `dust_umin=Uniform(...)` (free), each
 NSS iteration takes ~4-6s instead of ~0.03s. XLA compilation cache reports
 `CompilationResultProto exceeded maximum protobuf size of 2GB: 4758750946`.
-**Root cause:** The DL07 template interpolation embeds the full 2D template array
-into the XLA computation graph when traced. With `dust_umin` free, the interpolation
-can't be collapsed at init time — every likelihood call re-traces the template lookup.
-**Workaround:** Fix `dust_umin` to a constant (`Fixed(1.0)`) so the template collapses
-at model init. Or run without dust emission for optical-only photometry (rest-frame
-< 4 μm at z~1 doesn't constrain dust emission templates anyway).
-**Status:** OPEN — architectural. Would require moving DL07 interpolation outside the
-JIT scope (precompute a lookup table over a umin grid at init, then use simple 1D
-interp inside JIT).
+**Root cause:** `dl07_tabulated` embedded `(n_qpah, n_umin, n_tmpl_wave)` ≈ 18 MB as
+XLA constants AND contained a nested `lax.while_loop` from `jnp.searchsorted` inside
+`jnp.interp`. Under NSS's `vmap(lax.scan(lax.while_loop))`, this triple-nested
+while_loop caused 4.75 GB+ XLA binaries.
+**Status:** OPEN — architectural. Would require moving DL07 interpolation outside
+the JIT scope (precompute a lookup table over a umin grid at init, then use simple
+1D interp inside JIT). The existing `precompute_dl07_photometry` / `build_dl07_photometry_lookup`
+infrastructure already handles the fixed-redshift photometry case via `slice_fixed_axes` /
+`_auto_collapse`. The full-wavelength fallback (free redshift, radio/X-ray extension) has no
+equivalent yet.
 
 ### BUG-NSS-01: `posterior.derived` crashes when `stellar_mass_surviving` is None
 

@@ -37,11 +37,11 @@ def place_line_profiles(
     Parameters
     ----------
     line_wavelengths : array, shape (n_lines,)
-        Rest-frame line centres in Å (vacuum wavelength).
+        Rest-frame line centres in Å (vacuum wavelength). [Å]
     line_luminosities : array, shape (n_lines,)
         Line luminosities in consistent units [erg/s] or [erg/s/Msun].
     obs_wavelengths : array, shape (n_wave,)
-        Output wavelength grid in Å (rest-frame, increasing).
+        Output wavelength grid in Å (rest-frame, increasing). [Å]
     line_sigma_aa : float
         Gaussian line width (FWHM equivalent) in Å. When <= 0, lines are placed as
         delta functions in the nearest pixel. [Å]
@@ -50,6 +50,12 @@ def place_line_profiles(
     -------
     array, shape (n_wave,)
         Spectral luminosity density on ``obs_wavelengths``. [erg/s/Hz] or [erg/s/Hz/Msun]
+
+    References
+    ----------
+    .. [1] B. D. Johnson et al., "Prospector: Stellar Population Inference from
+       Spectra and SEDs," ApJS, 254, 22 (2021).
+       https://doi.org/10.3847/1538-4365/abef67
 
     Notes
     -----
@@ -72,7 +78,7 @@ def place_line_profiles(
         but introduces aliasing artifacts if the wavelength grid is coarse.
 
     **Upstream**: Implementation adapted from Prospector's line-placement routines
-    (Johnson et al. 2021) for JAX differentiability.
+    (Johnson et al. 2021 [1]_) for JAX differentiability.
 
     """
     n_wave = obs_wavelengths.shape[0]

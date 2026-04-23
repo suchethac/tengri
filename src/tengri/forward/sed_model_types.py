@@ -14,6 +14,22 @@ import jax.numpy as jnp
 class MockData(NamedTuple):
     """Container for mock galaxy observations.
 
+    Parameters
+    ----------
+    flux_true : ndarray, shape (n_filters,)
+        Noiseless model photometry. [erg/s/cm²/Hz]
+    flux_obs : ndarray, shape (n_filters,)
+        Noisy photometry with Gaussian scatter added. [erg/s/cm²/Hz]
+    noise : ndarray, shape (n_filters,)
+        1-sigma photometric uncertainties used to draw the noise. [erg/s/cm²/Hz]
+    params : dict
+        Input physical parameters used to generate the mock.
+
+    Returns
+    -------
+    MockData
+        Named tuple containing noiseless and noisy photometry.
+
     Attributes
     ----------
     flux_true : ndarray, shape (n_filters,)
@@ -24,6 +40,13 @@ class MockData(NamedTuple):
         1-sigma photometric uncertainties used to draw the noise. [erg/s/cm²/Hz]
     params : dict
         Input physical parameters used to generate the mock.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — NamedTuple is a JAX pytree.
+
+    **Immutable**: All fields are read-only by design. To create a modified
+    version, use the ``_replace()`` method inherited from NamedTuple.
 
     Examples
     --------
@@ -102,6 +125,21 @@ class MockData(NamedTuple):
 class PriorPredictive:
     """Results of a prior predictive check.
 
+    Parameters
+    ----------
+    flux : jnp.ndarray or None
+        Predicted photometry draws [erg/s/cm²/Hz], shape ``(n, n_filters)``.
+        None if the model has no filters.
+    sfh : jnp.ndarray
+        SFR on log-age grid [Msun/yr], shape ``(n, n_grid)``.
+    params : dict
+        Drawn parameter samples, each of shape ``(n,)``.
+
+    Returns
+    -------
+    PriorPredictive
+        Results container with draws from the prior predictive distribution.
+
     Attributes
     ----------
     flux : jnp.ndarray or None
@@ -113,10 +151,6 @@ class PriorPredictive:
         Drawn parameter samples, each of shape ``(n,)``.
     _model : object
         Back-reference to the parent model.
-
-    Returns
-    -------
-    This is a dataclass returned by :func:`prior_predictive`.
 
     Notes
     -----
@@ -145,6 +179,11 @@ class PriorPredictive:
 
     def check_finite(self) -> dict:
         """Check for NaN/Inf in flux draws.
+
+        Parameters
+        ----------
+        self : PriorPredictive
+            The prior predictive result container.
 
         Returns
         -------

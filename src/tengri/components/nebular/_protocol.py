@@ -75,6 +75,12 @@ class NebularBackend(Protocol):
     continuum. Line-only backends can be wrapped with NebularContinuumFallback
     to add analytic or physics-based continuum automatically.
 
+    References
+    ----------
+    .. [1] This protocol is used internally by tengri to enable swappable
+       nebular emission backends. Backend implementations should document
+       their JIT compatibility and gradient behavior in their own docstrings.
+
     """
 
     has_continuum: bool

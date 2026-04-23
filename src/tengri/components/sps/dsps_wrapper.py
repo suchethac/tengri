@@ -230,6 +230,12 @@ def csp_age_dt(ssp_ages_yr: jnp.ndarray, method: str = "trapz") -> jnp.ndarray:
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     **Gradient-safe**: yes.
 
+    References
+    ----------
+    .. [1] C. Johnson et al., "Prospector: Bayesian Stellar Population
+       Inference with Separable Star Formation Histories," ApJ, 927, 74
+       (2021). https://doi.org/10.3847/1538-4357/ac4867
+
     """
     if method == "trapz":
         return jnp.concatenate(

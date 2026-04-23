@@ -218,6 +218,8 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     **JIT-compatible**: yes — the returned function is pure JAX.
     Grid loading is cached via ``@functools.cache``.
 
+    **Gradient-safe**: yes — triweight interpolation is fully differentiable.
+
     Supports v2 (total-only) and v3 (separate disk/dust) HDF5 layouts.
     When v3 is available, use ``create_skirtor_components_from_grid``
     to access individual disk and dust spectra.
@@ -321,6 +323,8 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
     -----
     **JIT-compatible**: yes — the returned function is pure JAX.
     Grid loading is cached via ``@functools.cache``.
+
+    **Gradient-safe**: yes — triweight interpolation is fully differentiable.
 
     The separate components enable:
 

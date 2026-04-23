@@ -503,19 +503,19 @@ def modified_blackbody(
     Parameters
     ----------
     wavelength_aa : array, shape (n_wave,)
-        Wavelength grid in Angstrom (sorted ascending).
+        Wavelength grid in Angstrom (sorted ascending). [Å]
     L_absorbed : float
         Total absorbed luminosity.  Unit-agnostic: the output L_nu will be
         in the same units per Hz (e.g. pass erg/s → get erg/s/Hz; pass
         Lsun → get Lsun/Hz).  In ``sed_pipeline.py`` the pipeline passes
         erg/s (from a frequency-integrated trapezoid) and receives erg/s/Hz.
     dust_T : float
-        Dust temperature in Kelvin.  Typical range: 20--60 K.
+        Dust temperature in Kelvin.  Typical range: 20--60 K. [K]
     dust_beta_ir : float
-        Emissivity index.  Typical range: 1.5--2.0.
+        Emissivity index.  Typical range: 1.5--2.0. [dimensionless]
     redshift : float
         Source redshift. When > 0, CMB heating correction is applied.
-        Default 0 (no correction).
+        Default 0 (no correction). [dimensionless]
 
     Returns
     -------
@@ -623,19 +623,19 @@ def casey2012(
     Parameters
     ----------
     wavelength_aa : array, shape (n_wave,)
-        Wavelength grid in Angstrom (sorted ascending).
+        Wavelength grid in Angstrom (sorted ascending). [Å]
     L_absorbed : float
-        Total absorbed luminosity in Lsun (sets the normalization).
+        Total absorbed luminosity in Lsun (sets the normalization). [L_sun]
     dust_T : float
-        Dust temperature in Kelvin.  Typical range: 25--60 K.
+        Dust temperature in Kelvin.  Typical range: 25--60 K. [K]
     dust_beta_ir : float
         Dust emissivity index for the MBB component.
-        Typical range: 1.5--2.0.
+        Typical range: 1.5--2.0. [dimensionless]
     dust_alpha_mir : float
-        Mid-IR power-law slope.  Typical range: 1.5--2.5.
+        Mid-IR power-law slope.  Typical range: 1.5--2.5. [dimensionless]
     redshift : float
         Source redshift. When > 0, CMB heating correction is applied.
-        Default 0 (no correction).
+        Default 0 (no correction). [dimensionless]
 
     Returns
     -------
@@ -900,6 +900,16 @@ def _dale_component_temperature(alpha: float) -> tuple[float, float, float]:
 def draine_li2007(*args, **kwargs):
     """Draine & Li (2007) — dispatches to the registry (auto-loads templates).
 
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Å]
+    L_absorbed : float
+        Total absorbed luminosity. [L_sun]
+    **kwargs
+        Model-specific parameters (alpha, U_min, gamma, q_pah). See registered
+        function for details.
+
     Returns
     -------
     ndarray, shape (n_wave,)
@@ -919,6 +929,15 @@ def draine_li2007(*args, **kwargs):
 def dale2014(*args, **kwargs):
     """Dale et al. (2014) — dispatches to the registry (auto-loads templates).
 
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Å]
+    L_absorbed : float
+        Total absorbed luminosity. [L_sun]
+    **kwargs
+        Model-specific parameters (alpha). See registered function for details.
+
     Returns
     -------
     ndarray, shape (n_wave,)
@@ -937,6 +956,16 @@ def dale2014(*args, **kwargs):
 
 def draine_li2014(*args, **kwargs):
     """Draine & Li (2014) — dispatches to the registry (auto-loads templates).
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Å]
+    L_absorbed : float
+        Total absorbed luminosity. [L_sun]
+    **kwargs
+        Model-specific parameters (alpha, U_min, gamma, q_pah). See registered
+        function for details.
 
     Returns
     -------
@@ -958,6 +987,15 @@ def draine_li2014(*args, **kwargs):
 def astrodust(*args, **kwargs):
     """Astrodust+PAH (Hensley & Draine 2023) — dispatches to the registry.
 
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Å]
+    L_absorbed : float
+        Total absorbed luminosity. [L_sun]
+    **kwargs
+        Model-specific parameters. See registered function for details.
+
     Returns
     -------
     ndarray, shape (n_wave,)
@@ -977,6 +1015,15 @@ def astrodust(*args, **kwargs):
 def bosa(*args, **kwargs):
     """BOSA (Boquien & Salim 2021) — dispatches to the registry.
 
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Å]
+    L_absorbed : float
+        Total absorbed luminosity. [L_sun]
+    **kwargs
+        Model-specific parameters. See registered function for details.
+
     Returns
     -------
     ndarray, shape (n_wave,)
@@ -995,6 +1042,15 @@ def bosa(*args, **kwargs):
 
 def themis(*args, **kwargs):
     """THEMIS (Jones+2017) — dispatches to the registry.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Å]
+    L_absorbed : float
+        Total absorbed luminosity. [L_sun]
+    **kwargs
+        Model-specific parameters. See registered function for details.
 
     Returns
     -------

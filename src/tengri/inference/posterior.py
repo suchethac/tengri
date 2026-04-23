@@ -35,6 +35,40 @@ class Posterior:
     derived physical quantities, ArviZ conversion, and refinement via resampling
     or additional fitting iterations.
 
+    Parameters
+    ----------
+    samples : dict or None
+        Posterior samples in physical parameter space (optional, set by inference).
+    params : dict
+        Best-fit or posterior mean parameters.
+    method : str
+        Inference method name (e.g., ``"vi"``, ``"mcmc_nuts"``, ``"map"``).
+    wall_time_s : float
+        Total wall-clock runtime in seconds.
+    diagnostics : dict
+        Method-specific convergence metrics.
+    loss_history : ndarray or None
+        Optimization loss values (optimization methods only).
+    log_evidence : float or None
+        Log Bayesian evidence (NSS only).
+    _model : SEDModel, optional
+        Forward model reference.
+    _fitter : Fitter, optional
+        Fitter reference for refinement methods.
+    eline_fluxes : ndarray or None
+        Emission line fluxes [erg/s/cm²].
+    eline_flux_cov : ndarray or None
+        Emission line flux covariance.
+    eline_names : tuple or None
+        Emission line identifiers.
+    eline_wavelengths : ndarray or None
+        Rest-frame vacuum wavelengths [Angstrom].
+
+    Returns
+    -------
+    Posterior
+        Posterior instance with results populated.
+
     Attributes
     ----------
     samples : dict or None

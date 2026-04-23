@@ -49,6 +49,33 @@ class LineFluxData:
         Rest-frame vacuum wavelengths in Angstrom, shape ``(n_lines,)``.
         Used to match against the nebular backend's line output.
 
+    Returns
+    -------
+    LineFluxData
+        Emission line flux container with validation.
+
+    Attributes
+    ----------
+    names : tuple[str, ...]
+        Line identifiers.
+    fluxes : ndarray, shape (n_lines,)
+        Observed line fluxes [erg/s/cm²].
+    errors : ndarray, shape (n_lines,)
+        1-sigma measurement uncertainties [erg/s/cm²].
+    wavelengths : ndarray, shape (n_lines,)
+        Rest-frame vacuum wavelengths [Angstrom].
+    is_upper_limit : ndarray or None
+        Boolean mask indicating upper limits [dimensionless].
+
+    Notes
+    -----
+    **Immutable container**: All fields are read-only by convention. Construct
+    once with validated data, do not modify.
+
+    **Upper limits**: The ``is_upper_limit`` field marks lines that are
+    non-detections (typically <2-3σ); these are handled separately in the
+    likelihood (censored chi-squared term).
+
     Examples
     --------
     >>> from tengri import LineFluxData
@@ -109,6 +136,11 @@ class LineFluxData:
         -------
         int
             Number of lines in this dataset.
+
+        Notes
+        -----
+        Computed from the length of the ``names`` tuple. Constant for
+        the lifetime of the object (immutable).
 
         """
         return len(self.names)

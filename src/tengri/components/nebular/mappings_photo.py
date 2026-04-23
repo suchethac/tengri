@@ -532,8 +532,30 @@ class MappingsPhotoStellarBackend:
 
         Returns
         -------
-        wavelengths : array, (n_lines,)   vacuum Angstrom
-        luminosities : array, (n_lines,)  Lsun
+        wavelengths : array, shape (n_lines,)
+            Line wavelengths in vacuum [Angstrom].
+        luminosities : array, shape (n_lines,)
+            Line luminosities [Lsun].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all grid interpolations use ``jnp`` primitives.
+
+        **SFH modes**: "inst" (instantaneous), "cont" (continuous) — determines
+        which MAPPINGS grid row is used for logHB_per_logq.
+
+        **Metallicity**: Input neb_logZ_gas is absolute log10(Z); internally
+        converted to solar-relative ζ_O for grid interpolation via
+        _log_z_abs_to_zo.
+
+        References
+        ----------
+        .. [1] Flury et al. 2024, "MAPPINGS V photoionization grids for nebular
+            emission prediction", arXiv:2412.06763
+        .. [2] Sutherland & Dopita 2017, "MAPPINGS V: Photoionisation Models",
+            ApJS 229, 34, https://doi.org/10.3847/1538-4365/aa6541
+        .. [3] Nicholls et al. 2017, "The EAGLE simulations of galaxy formation:
+            calibration of subgrid physics and model variations", MNRAS 466, 4403
 
         """
         if neb_logZ_gas is None:
@@ -609,9 +631,52 @@ class MappingsPhotoStellarBackend:
         Lines are added as Gaussians (if line_sigma_aa > 0) or delta functions
         (nearest pixel). No nebular continuum — use CloudyGridBackend for that.
 
+        Parameters
+        ----------
+        ssp_weights : array, shape (n_age,)
+            CSP mass weights [Msun per age bin].
+        ssp_wave : array, shape (n_wave,)
+            SSP wavelength grid [Angstrom].
+        ssp_log_ages_yr : array, shape (n_age,)
+            log10(age/yr) of SSP age bins.
+        log_z : float
+            Stellar metallicity [log10(Z)].
+        neb_logU : float, optional
+            Ionization parameter [log10(U)]. Default: -3.0.
+        neb_logZ_gas : float or None, optional
+            Gas metallicity [log10(Z)]. None → ties to stellar Z. Default: None.
+        neb_logn : float, optional
+            Hydrogen density [log10(n_H/cm^-3)]. Default: 2.0.
+        neb_fesc : float, optional
+            Ionizing photon escape fraction [0, 1]. Default: 0.0.
+        neb_fesc_lya : float, optional
+            Ly-alpha specific escape fraction [0, 1]. Default: 0.0.
+        line_sigma_aa : float, optional
+            Gaussian line width [Angstrom]. Default: 0.0 (delta function).
+
         Returns
         -------
-        array, (n_wave,)  erg/s/Hz on the SSP wavelength grid.
+        array, shape (n_wave,)
+            Nebular emission line SED [erg/s/Hz] on the SSP wavelength grid.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — delegates to predict_nebular_line_luminosities
+        and place_line_profiles, both JIT-compatible.
+
+        **Continuum**: This backend returns lines only; no nebular continuum.
+        For continuum predictions, use CloudyGridBackend or compose with
+        NebularContinuumFallback.
+
+        **Line profile**: Gaussian width is constant across all wavelengths.
+        For wavelength-dependent broadening, modify place_line_profiles.
+
+        References
+        ----------
+        .. [1] Flury et al. 2024, "MAPPINGS V photoionization grids for nebular
+            emission prediction", arXiv:2412.06763
+        .. [2] Sutherland & Dopita 2017, "MAPPINGS V: Photoionisation Models",
+            ApJS 229, 34, https://doi.org/10.3847/1538-4365/aa6541
 
         """
         line_wave, line_lum = self.predict_nebular_line_luminosities(
@@ -729,8 +794,29 @@ class MappingsPhotoAGNBackend:
 
         Returns
         -------
-        wavelengths : array, (n_lines,)   vacuum Angstrom
-        luminosities : array, (n_lines,)  Lsun
+        wavelengths : array, shape (n_lines,)
+            Line wavelengths in vacuum [Angstrom].
+        luminosities : array, shape (n_lines,)
+            Line luminosities [Lsun].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all grid interpolations use ``jnp`` primitives.
+
+        **Ionizing source**: Q_H is supplied by the caller and derived from
+        the AGN disc model (e.g., Accretion disk spectrum), NOT from SSP spectra.
+        Ensure consistency between the ionizing spectrum shape and the choice of
+        logU and logedd.
+
+        **Metallicity**: Input neb_logZ_gas is absolute log10(Z); internally
+        converted to solar-relative ζ_O for grid interpolation.
+
+        References
+        ----------
+        .. [1] Flury et al. 2024, "MAPPINGS V photoionization grids for nebular
+            emission prediction", arXiv:2412.06763
+        .. [2] Sutherland & Dopita 2017, "MAPPINGS V: Photoionisation Models",
+            ApJS 229, 34, https://doi.org/10.3847/1538-4365/aa6541
 
         """
         grid = self.grid

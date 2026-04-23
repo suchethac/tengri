@@ -486,6 +486,12 @@ def filter_info(name: str, *, cache_dir: str | None = None) -> dict:
     KeyError
         If *name* is not in the registry.
 
+    Notes
+    -----
+    Not JAX-compatible (uses NumPy and file I/O). Intended for filter
+    metadata computation and interactive exploration of the registry,
+    not for forward model evaluation.
+
     """
     if name not in FILTER_REGISTRY:
         raise KeyError(f"Unknown filter '{name}'. Use list_available_filters() to see options.")
@@ -584,6 +590,13 @@ def download_filter(
     ValueError
         If SVO returns no data for the given filter ID.
 
+    Notes
+    -----
+    Not JAX-compatible (uses file I/O and astroquery). Caching avoids
+    redundant SVO downloads. The returned transmission values are not
+    normalized — the absolute scale cancels in the photometry integral
+    ``∫fλTλdλ / ∫Tλdλ``.
+
     """
     cache_path = Path(cache_dir)
     cache_path.mkdir(parents=True, exist_ok=True)
@@ -629,6 +642,12 @@ def load_filter(
     ------
     KeyError
         If *name* is not in ``FILTER_REGISTRY``.
+
+    Notes
+    -----
+    Not JAX-compatible (uses file I/O and astroquery for downloads).
+    Preferred interface over :func:`download_filter` for user code;
+    provides a JAX array return type (FilterCurve) rather than raw NumPy.
 
     """
     if name not in FILTER_REGISTRY:
@@ -717,6 +736,13 @@ def load_custom_filter(filepath: str) -> FilterCurve:
         If *filepath* does not exist.
     ValueError
         If the file format is invalid.
+
+    Notes
+    -----
+    Not JAX-compatible (uses file I/O). Useful when filter profiles
+    are not available in SVO or when using synthetic, custom-defined
+    bandpasses. File format is flexible: trailing whitespace and
+    comment lines (starting with #) are ignored.
 
     """
     path = Path(filepath)

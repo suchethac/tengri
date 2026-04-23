@@ -44,6 +44,24 @@ class Observation:
         When provided, the likelihood includes an additive chi-squared
         term comparing model line luminosities against these fluxes.
 
+    Returns
+    -------
+    Observation
+        Validated observation container with at least one data modality.
+
+    Attributes
+    ----------
+    photometry : Photometry or None
+        Photometric filter configuration.
+    spectroscopy : Spectroscopy or None
+        Spectroscopic instrument configuration.
+    noise : NoiseModel or None
+        Noise model configuration.
+    line_fluxes : LineFluxData or None
+        Observed emission line fluxes.
+    spectral_indices : SpectralIndexData or None
+        Observed spectral indices for fitting.
+
     Notes
     -----
     A frozen, immutable dataclass that serves as a declarative container
@@ -99,6 +117,11 @@ class Observation:
         bool
             True if photometry is configured.
 
+        Notes
+        -----
+        Query method for capability checking. Safe to call even if
+        photometry was not provided to this Observation.
+
         """
         return self.photometry is not None
 
@@ -110,6 +133,11 @@ class Observation:
         -------
         bool
             True if spectroscopy is configured.
+
+        Notes
+        -----
+        Query method for capability checking. Safe to call even if
+        spectroscopy was not provided to this Observation.
 
         """
         return self.spectroscopy is not None
@@ -123,6 +151,11 @@ class Observation:
         bool
             True if line flux data is configured.
 
+        Notes
+        -----
+        Query method for capability checking. Safe to call even if
+        line fluxes were not provided to this Observation.
+
         """
         return self.line_fluxes is not None
 
@@ -135,6 +168,11 @@ class Observation:
         bool
             True if spectral index data is configured.
 
+        Notes
+        -----
+        Query method for capability checking. Safe to call even if
+        spectral indices were not provided to this Observation.
+
         """
         return self.spectral_indices is not None
 
@@ -146,6 +184,11 @@ class Observation:
         -------
         bool
             True if both photometry and spectroscopy are present.
+
+        Notes
+        -----
+        Convenience predicate for detecting joint photometry+spectroscopy
+        fitting (vs. photometry-only or spectroscopy-only).
 
         """
         return self.can_do_photometry and self.can_do_spectroscopy
@@ -183,6 +226,11 @@ class Observation:
         int
             Number of filters, or 0 if no photometry configured.
 
+        Notes
+        -----
+        Returns 0 safely if photometry is not configured; may be used in
+        conditional logic without prior capability checks.
+
         """
         return self.photometry.n_filters if self.photometry else 0
 
@@ -194,6 +242,11 @@ class Observation:
         -------
         int
             Number of spectral pixels, or 0 if no spectroscopy configured.
+
+        Notes
+        -----
+        Returns 0 safely if spectroscopy is not configured; may be used in
+        conditional logic without prior capability checks.
 
         """
         return self.spectroscopy.n_pixels if self.spectroscopy else 0
@@ -207,6 +260,11 @@ class Observation:
         int
             Number of emission lines, or 0 if no line flux data configured.
 
+        Notes
+        -----
+        Returns 0 safely if line flux data is not configured; may be used
+        in conditional logic without prior capability checks.
+
         """
         return self.line_fluxes.n_lines if self.line_fluxes else 0
 
@@ -218,6 +276,11 @@ class Observation:
         -------
         int
             Number of spectral indices, or 0 if no index data configured.
+
+        Notes
+        -----
+        Returns 0 safely if spectral index data is not configured; may be
+        used in conditional logic without prior capability checks.
 
         """
         return self.spectral_indices.n_indices if self.spectral_indices else 0
@@ -231,6 +294,11 @@ class Observation:
         int
             Sum of all photometric, spectroscopic, line flux, and
             spectral index data points.
+
+        Notes
+        -----
+        Aggregates counts across all observation modalities. Useful for
+        data dimensionality checks and prior/posterior shape validation.
 
         """
         return self.n_data_phot + self.n_data_spec + self.n_data_lines + self.n_data_indices

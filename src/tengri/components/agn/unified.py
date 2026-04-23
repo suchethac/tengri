@@ -225,9 +225,16 @@ def unified_agn(
     ndarray, shape (n_wave,)
         Total AGN L_nu [erg/s/Hz] = L_disc + L_torus.
 
+    References
+    ----------
+    .. [1] See :mod:`tengri.components.agn.disc` and
+           :mod:`tengri.components.agn.torus` for individual model references.
+
     Notes
     -----
     **JIT-compatible**: depends on disc and torus models (mostly yes for analytic).
+
+    **Gradient-safe**: yes when using analytic disc and torus models.
     """
     from tengri.components.agn.skirtor import skirtor_analytic
 

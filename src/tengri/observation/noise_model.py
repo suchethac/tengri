@@ -29,7 +29,22 @@ class NoiseModel:
         outlier robustness). ``None`` uses a standard Gaussian likelihood.
         Default: None.
 
+    Returns
+    -------
+    NoiseModel
+        Noise model instance with configuration validated.
+
+    Attributes
+    ----------
+    calibration_floor : float or Distribution
+        Fractional calibration uncertainty floor.
+    student_t_dof : float or None
+        Student-t degrees of freedom (or None for Gaussian).
+
     Notes
+    -----
+    **Immutable container**: A frozen dataclass. Fields are read-only by
+    convention.
     -----
     A frozen dataclass encapsulating noise model configuration. Replaces
     the older pattern of manually creating ``noise_frac_cal`` and ``noise_dof``

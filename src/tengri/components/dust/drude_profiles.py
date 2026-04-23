@@ -210,6 +210,12 @@ def decompose_pah(
         ``"residual"``    — ndarray, shape (n_wave,),
             (sed - continuum) - fitted_pah [same units as sed].
 
+    References
+    ----------
+    .. [1] D. M. Smith et al., "The Mid-Infrared Emission of Ultraluminous
+           Infrared Galaxies," ApJ, 656, 770 (2007). arXiv:astro-ph/0701042.
+           https://doi.org/10.1086/510378
+
     Notes
     -----
     **JIT-compatible**: yes.

@@ -1115,6 +1115,11 @@ class Fixed(Distribution):
         The fixed value. Can be numeric (for quantitative parameters) or
         string (for categorical choices, e.g. "solar" for shock abundance).
 
+    Returns
+    -------
+    Fixed
+        Fixed instance with the given value.
+
     Attributes
     ----------
     value : float or str

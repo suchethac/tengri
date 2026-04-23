@@ -707,9 +707,9 @@ class CB19Backend:
         ssp_weights : array, shape (n_age,)
             SSP mass weights (unused).
         ssp_log_ages_yr : array, shape (n_age,)
-            SSP log-space ages in years (unused).
+            SSP log-space ages in years (unused) [log10(yr)].
         log_z : float
-            Stellar metallicity log10(Z) (unused).
+            Stellar metallicity log10(Z) (unused) [log10(Z)].
         **_kwargs
             Additional keyword arguments (all unused).
 
@@ -719,6 +719,12 @@ class CB19Backend:
             Dummy wavelength [Angstrom].
         luminosity : array, shape (1,)
             Zero array [erg/s/Hz] — no continuum from CB_19.
+
+        References
+        ----------
+        .. [1] M. Martinez-Paredes et al., "The 3MdB stellar and AGN library of
+           CLOUDY models," MNRAS, 527, 11698 (2024). arXiv:2308.05604.
+           https://doi.org/10.1093/mnras/stad3891
 
         Notes
         -----
@@ -756,29 +762,52 @@ class CB19Backend:
         Parameters
         ----------
         ssp_weights : array, shape (n_age,)
+            CSP stellar mass weights (Msun per SSP age bin).
         ssp_wave : array, shape (n_wave,)
-            SSP wavelength grid in Angstrom.
+            SSP wavelength grid [Angstrom].
         ssp_log_ages_yr : array, shape (n_age,)
+            log10(age/yr) of SSP bins [log10(yr)].
         log_z : float
-        neb_logU, neb_logZ_gas, neb_fesc, neb_fesc_lya : float
-            See ``predict_nebular_line_luminosities``.
+            Stellar metallicity log10(Z) absolute [log10(Z)].
+        neb_logU : float
+            Log ionization parameter log10(U). Grid range: [−4, −1.5].
+            Default -3.0 [log10(U)].
+        neb_logZ_gas : float or None
+            Gas metallicity log10(Z) absolute. None → tied to stellar ``log_z``
+            [log10(Z)].
+        neb_fesc : float
+            Ionizing photon escape fraction [0, 1]. Default 0.0.
+        neb_fesc_lya : float
+            Ly-alpha-specific escape fraction [0, 1]. Default 0.0.
         neb_log_nH : float
-            log10(n_H / cm⁻³). Grid range [1, 4]. Default 2.0.
+            log10(n_H / cm⁻³). Grid range [1, 4]. Default 2.0 [log10(cm^-3)].
         neb_co : float
             log10(C/O). Grid range [−1, 0.15]. Default −0.36 (near-solar).
         neb_dno : float
-            ΔN/O offset. Grid range [−0.25, 0.25]. Default 0.0.
+            ΔN/O offset from default N/O scaling. Grid range [−0.25, 0.25].
+            Default 0.0.
         line_sigma_aa : float
-            Gaussian FWHM/2.35 (σ) for line profiles in Å. 0 = nearest-pixel delta.
+            Gaussian line width (σ) for line profiles [Å]. 0 = nearest-pixel
+            delta function. Default 0.0.
 
         Returns
         -------
         array, shape (n_wave,)
-            Nebular emission SED in erg/s/Hz on the SSP wavelength grid.
+            Nebular emission SED [erg/s/Hz] on the SSP wavelength grid.
+
+        References
+        ----------
+        .. [1] M. Martinez-Paredes et al., "The 3MdB stellar and AGN library of
+           CLOUDY models," MNRAS, 527, 11698 (2024). arXiv:2308.05604.
+           https://doi.org/10.1093/mnras/stad3891
+        .. [2] D. E. Osterbrock and G. J. Ferland, "Astrophysics of Gaseous Nebulae
+           and Active Galactic Nuclei," 2nd edn. (University Science Books, 2006).
+           Table 4.4: Case B recombination coefficients.
 
         Notes
         -----
         **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
         **Gradient-safe**: yes — differentiable through neb_logU, neb_fesc,
         neb_log_nH, neb_co, neb_dno parameters.
 

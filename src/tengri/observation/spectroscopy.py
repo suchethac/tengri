@@ -70,6 +70,44 @@ class Spectroscopy:
         instead of per-pixel ``sum((diff/sigma)^2)``. The inverse is
         precomputed at construction time.  Default: None (diagonal noise).
 
+    Returns
+    -------
+    Spectroscopy
+        Spectroscopy instance with covariance matrix inverted and metadata set.
+
+    Attributes
+    ----------
+    wave_obs : ndarray, shape (n_pix,)
+        Observed-frame wavelength grid [Angstrom].
+    resolution : float, ndarray, or None
+        Spectral resolution.
+    sigma_lib_kms : float
+        SSP library velocity dispersion [km/s].
+    lsf_n_bins : int
+        Number of LSF approximation bins.
+    calibration_order : int
+        Chebyshev polynomial order.
+    eline_prior_sigma : float
+        Emission line prior width.
+    eline_mode : str
+        Emission line fitting mode.
+    eline_catalog : LineList or None
+        Emission line catalog.
+    eline_prior_type : str
+        Prior type for line marginalization.
+    eline_prior_width_dex : float
+        Prior scatter [dex].
+    eline_fix_doublets : bool
+        Whether to enforce doublet ratios.
+    eline_broad : bool
+        Whether broad AGN component is enabled.
+    eline_broad_fwhm_min_kms : float
+        Minimum broad component FWHM [km/s].
+    covariance : ndarray, shape (n_pix, n_pix) or None
+        Spectral covariance matrix.
+    covariance_inv : ndarray, shape (n_pix, n_pix) or None
+        Inverse covariance matrix (precomputed).
+
     Notes
     -----
     A frozen dataclass that encapsulates spectroscopic instrument metadata,

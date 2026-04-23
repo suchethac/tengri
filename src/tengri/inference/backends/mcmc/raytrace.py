@@ -628,6 +628,12 @@ def sample_raytrace(
     accept_prob : array, shape (n_steps,)
         Acceptance probability at each step.
 
+    Notes
+    -----
+    **JIT-compatible**: no — wraps blackjax sampler with Python-level loop.
+
+    **Gradient-safe**: no — MCMC sampler, not a differentiable operation.
+
     Examples
     --------
     >>> import jax

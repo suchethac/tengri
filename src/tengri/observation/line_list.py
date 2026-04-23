@@ -163,6 +163,37 @@ class LineList:
         ``emlines.ecsv`` [1]_ (e.g. ``"halpha_nii_6548_48"``,
         ``"oiii_doublet"``).
 
+    Returns
+    -------
+    LineList
+        Immutable line catalog instance.
+
+    Attributes
+    ----------
+    names : tuple[str, ...]
+        Line identifiers.
+    wavelengths : ndarray, shape (n_lines,)
+        Rest-frame vacuum wavelengths [Angstrom].
+    species : tuple[str, ...]
+        CLOUDY species codes.
+    doublets : tuple[DoubletConstraint, ...]
+        Doublet constraints.
+    is_balmer : tuple[bool, ...]
+        Balmer/Lyman series flags.
+    is_broad_candidate : tuple[bool, ...]
+        Broad component candidate flags.
+    is_strong : tuple[bool, ...]
+        Strong line detection flags (DESI context).
+    plot_group : tuple[str, ...]
+        QA plot group labels.
+
+    Notes
+    -----
+    **Immutable container**: A frozen dataclass. All fields are read-only.
+
+    **Wavelength convention**: All wavelengths are vacuum (not air) and
+    rest-frame (not observed-frame).
+
     References
     ----------
     .. [1] Moustakas, J., Scholte, D., Dey, B., Khederlarian, A., 2023,
@@ -214,6 +245,11 @@ class LineList:
         -------
         int
             Number of emission lines.
+
+        Notes
+        -----
+        Computed from the length of the ``names`` tuple. Constant for
+        the lifetime of the object (immutable).
 
         """
         return len(self.names)

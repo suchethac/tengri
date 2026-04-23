@@ -101,19 +101,19 @@ class BakedInBackend:
 
         Parameters
         ----------
-        ssp_weights : array
+        ssp_weights : array, shape (n_age,) or (n_met, n_age)
             CSP mass weights (unused).
         ssp_wave : array, shape (n_wave,)
             Wavelength grid [Angstrom].
         log_z : float
-            Stellar metallicity (unused).
+            Stellar metallicity (unused) [log10(Z)].
         **neb_params
             Additional nebular parameters (all unused).
 
         Returns
         -------
         array, shape (n_wave,)
-            Zero array — nebular emission is baked into the SSP.
+            Zero array — nebular emission is baked into the SSP [erg/s/Hz].
 
         Notes
         -----
@@ -132,19 +132,25 @@ class BakedInBackend:
 
         Parameters
         ----------
-        ssp_weights : array
+        ssp_weights : array, shape (n_age,) or (n_met, n_age)
             CSP mass weights (unused).
         log_z : float
-            Stellar metallicity (unused).
+            Stellar metallicity (unused) [log10(Z)].
         **neb_params
             Additional nebular parameters (all unused).
 
         Returns
         -------
         wavelengths : array, shape (0,)
-            Empty array.
+            Empty array [Angstrom].
         luminosities : array, shape (0,)
-            Empty array.
+            Empty array [erg/s].
+
+        References
+        ----------
+        Nebular emission is pre-calculated in the SSP templates when using
+        this backend; see the SSP file documentation for assumptions about
+        ionization parameter and escape fraction.
 
         Notes
         -----
