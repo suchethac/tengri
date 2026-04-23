@@ -451,59 +451,45 @@ class Galaxy:
 
         return citations
 
-    def cite(self, format: str = "short") -> str:
-        """Return a citation list for components used in this fit.
+    def cite(self, fmt: str = "list") -> list | str:
+        """Return citations for the components this Galaxy is configured to use.
 
         Parameters
         ----------
-        format : str
-            Citation format. One of "short" (one-liners) or "bibtex".
-            Default: "short".
+        fmt : {"list", "short", "bibtex"}
+            - "list" (default): list of ``Citation`` objects (iterable and printable).
+            - "short": newline-joined human-readable lines.
+            - "bibtex": BibTeX entries separated by blank lines.
 
         Returns
         -------
-        str
-            Formatted citation string.
+        list[Citation] or str
+            Citations for the components inferred from model_config and the
+            last backend used, if any. Silently skips keys not registered.
 
         Notes
         -----
-        Base citations always include: tengri, JAX, DSPS.
-        Additional citations added based on model_config:
-        - dust: Calzetti 2000 (SMC attenuation) or Charlot+Fall 2000
-        - nebular: Cue emission line model
-        - IGM: Inoue et al. 2014 (Lya absorption)
-        - AGN: as configured
-        - VI inference: NIFTy (geoVI backend)
-        - MCMC: BlackJax
+        Uses :meth:`_infer_citation_keys` (defensive). Safe to call before
+        :meth:`fit`; backend-specific citations are added only after a fit.
         """
-        # Base components
-        citations = ["tengri", "jax", "dsps"]
+        from tengri.citations import cite as _cite
 
-        # Add based on config
-        if self.model_config.dust is not None:
-            citations.append("calzetti2000")
-        if self.model_config.nebular is not None:
-            citations.append("cue")
-        if self.model_config.igm is not None:
-            citations.append("inoue2014")
-        if self.model_config.agn is not None:
-            citations.append("skirtor")
+        keys = self._infer_citation_keys()
+        cites = []
+        for k in keys:
+            try:
+                cites.append(_cite(k))
+            except KeyError:
+                # key not registered (e.g. stale name) — skip silently
+                continue
 
-        # Add based on inference backend
-        if self.result is not None:
-            backend_name = getattr(self.result, "backend_name", "").lower()
-            if "vi" in backend_name:
-                citations.append("nifty")
-            if "mcmc" in backend_name:
-                citations.append("blackjax")
-
-        if format == "short":
-            return "; ".join(citations)
-        elif format == "bibtex":
-            # Placeholder: in full impl, would expand to BibTeX entries
-            return f"@misc{{{','.join(citations)},year={{2026}}}}"
-        else:
-            raise ValueError(f"Unknown format: {format}")
+        if fmt == "list":
+            return cites
+        if fmt == "short":
+            return "\n".join(str(c) for c in cites)
+        if fmt == "bibtex":
+            return "\n\n".join(c.to_bibtex() for c in cites)
+        raise ValueError(f"Unknown fmt '{fmt}'. Use 'list', 'short', or 'bibtex'.")
 
     def explain(self) -> str:
         """Return a plain-English explanation of what was fit.
@@ -514,13 +500,21 @@ class Galaxy:
             Human-readable paragraph describing the fit.
         """
         n_bands = self.observation.photometry.n_filters if self.observation.photometry else 0
-        z_fixed = self.parameters.get("redshift")
-        z_str = f"z={z_fixed}" if z_fixed is not None else "z (free)"
 
-        backend = "unknown"
-        if self.result is not None:
-            backend = getattr(self.result, "backend_name", "unknown")
+        # Determine redshift handling: check whether it's in free_params vs fixed.
+        if "redshift" in self.parameters.free_params:
+            z_str = "z (free)"
+        else:
+            # Fixed: try the parameter-dict attribute; fall back to "fixed".
+            z_val = None
+            params_dict = getattr(self.parameters, "_params", None) or getattr(
+                self.parameters, "params", None
+            )
+            if isinstance(params_dict, dict):
+                z_val = params_dict.get("redshift")
+            z_str = f"z={z_val}" if z_val is not None else "z (fixed)"
 
+        backend = getattr(self, "_last_backend", None) or "not yet fit"
         n_params = len(self.parameters.free_params)
 
         return (
@@ -712,7 +706,7 @@ def doctor() -> str:
 
     # Summary
     lines.append("=" * 60)
-    lines.append("For issues, see: https://github.com/subarucluster/tengri")
+    lines.append("For issues, see: https://github.com/suchethac/tengri")
     lines.append("=" * 60)
 
     report = "\n".join(lines)
