@@ -640,6 +640,73 @@ def lmc(
     return _pei92_curve(wavelength, _LMC_LAM, _LMC_A, _LMC_B, _LMC_N, _LMC_RV)
 
 
+@register_dust_law("prevot_smc")
+def prevot_smc(
+    wavelength: jnp.ndarray,
+    **_kwargs,
+) -> jnp.ndarray:
+    r"""Prevot et al. (1984) SMC extinction law for AGN obscuration.
+
+    Analytic SMC extinction curve from the UV to near-infrared. Used in
+    AGNfitter for AGN disc reddening. R_V = 2.72. Ramps to zero below
+    62 Å to suppress reddening in the X-ray regime (E > 200 eV).
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Extinction curve k(λ). [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    Implements the functional form from Prevot et al. (1984):
+
+    .. math::
+
+        k(\lambda) = 1.39 \cdot \lambda^{-1.2} - 0.38
+
+    where :math:`\lambda` is in micrometers [μm], with :math:`R_V = 2.72`
+    (total-to-selective extinction ratio).
+
+    For wavelengths below 62 Å, reddening is ramped to zero using a smooth
+    sigmoid (no hard discontinuity) to suppress extinction in the X-ray regime
+    where dust is ineffective.
+
+    **Gradient-compatible**: yes — enables optimization of extinction parameters.
+
+    References
+    ----------
+    .. [1] M. Prevot et al., "The Ultraviolet Extinction Curve in the Small
+       Magellanic Cloud from 1200 Å to 3200 Å," A&A, 132, 389 (1984).
+    .. [2] J. Calistro Rivera et al., "AGNfitter — A Bayesian MCMC approach to
+       fitting spectral energy distributions of Active Galactic Nuclei,"
+       ApJ, 863, 56 (2018). arXiv:1808.04989.
+       https://doi.org/10.3847/1538-4357/aad235
+    """
+    # Convert wavelength from Å to μm
+    wavelength_um = wavelength / 1e4
+    # k(lambda) = 1.39 * lambda^-1.2 - 0.38  (lambda in μm)
+    k_prevot = 1.39 * jnp.power(wavelength_um, -1.2) - 0.38
+
+    # Suppress extinction for lambda < 62 A (X-ray regime, E > 200 eV)
+    # where dust is ineffective. Use a smooth sigmoid ramp to avoid discontinuities.
+    # Sigmoid: f(x) = 1 / (1 + exp(-slope * (x - x_0)))
+    # At x = 62 A: f = 0.5 (half suppression)
+    # At x = 20 A: f ~ 0 (full suppression)
+    # At x = 100 A: f ~ 1 (no suppression)
+    lambda_xray_edge = 62.0  # Å
+    sigmoid_slope = 0.5  # steeper transition for more aggressive ramp-down
+    ramp_factor = 1.0 / (1.0 + jnp.exp(-sigmoid_slope * (wavelength - lambda_xray_edge)))
+
+    return k_prevot * ramp_factor
+
+
 @register_dust_law("cardelli")
 def cardelli(
     wavelength: jnp.ndarray,

@@ -34,6 +34,7 @@ References
 """
 
 from tengri.components.agn.blr import blr_emission, compute_blr_sed
+from tengri.components.agn.cat3d_wind import cat3d_wind_analytic, create_cat3d_wind_from_grid
 from tengri.components.agn.disc import (
     adaf_disc,
     beloborodov_gamma_hot,
@@ -50,6 +51,7 @@ from tengri.components.agn.nlr import (
 
 # QSOgen must be imported after unified (needs register_agn_model)
 from tengri.components.agn.qsogen import compute_qsogen_sed, qsogen, qsogen_sed
+from tengri.components.agn.silva04 import create_silva04_from_grid, silva04_analytic
 from tengri.components.agn.skirtor import create_skirtor_from_grid, skirtor_analytic
 from tengri.components.agn.torus import nenkova_torus, simple_torus, two_temperature_torus
 from tengri.components.agn.unified import (
@@ -70,10 +72,13 @@ __all__ = [
     "adaf_disc",
     "beloborodov_gamma_hot",
     "blr_emission",
+    "cat3d_wind_analytic",
     "compute_blr_sed",
     "compute_l2500",
     "compute_nlr_sed",
     "compute_qsogen_sed",
+    "create_cat3d_wind_from_grid",
+    "create_silva04_from_grid",
     "create_skirtor_from_grid",
     "get_agn_model",
     "kubota_done_disc",
@@ -87,6 +92,7 @@ __all__ = [
     "qsogen_sed",
     "register_agn_model",
     "resolve_agn_model",
+    "silva04_analytic",
     "simple_torus",
     "two_temperature_torus",
     "unified_agn",

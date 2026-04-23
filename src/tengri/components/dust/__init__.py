@@ -29,6 +29,7 @@ from tengri.components.dust.attenuation import (
     lmc as lmc,
     precompute_dust_age_mask,
     precompute_dust_age_weights,
+    prevot_smc as prevot_smc,
     register_dust_law,
     resolve_dust_law,
     single_component_dust,

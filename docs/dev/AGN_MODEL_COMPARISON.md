@@ -330,3 +330,229 @@
 - [SKIRTOR SED library](https://sites.google.com/site/skirtorus/sed-library)
 - [SKIRTOR model description](https://sites.google.com/site/skirtorus/model)
 - [CIGALE low-luminosity AGN module](https://www.aanda.org/articles/aa/full_html/2024/12/aa50510-24/aa50510-24.html)
+
+---
+
+## AGNfitter master + rX — audit and port targets
+
+**Audit date:** 2026-04-22. Scope: `GabrielaCR/AGNfitter` master (Calistro
+Rivera et al. 2016) and branch `AGNfitter-rX_v0.1` (Zhuang / Martínez-Ramírez
+et al. 2024, arXiv:2405.12111). Both branches were read from a discardable
+`/tmp` scratch clone; pickle binaries were inspected via `pickletools.dis`
+only (no `pickle.load` on untrusted data).
+
+### Finding 1 — Template pickles are identical across branches
+
+The entire `models/{TORUS,BBB}/*.pickle` set exists unchanged on both
+master and rX. The branch split lives entirely in `functions/MODEL_AGNfitter.py`
+(which pickles are exposed) and `PRIORS_AGNfitter.py` (which informative
+priors are enabled). The torus / disc SED libraries ported to tengri are
+therefore indistinguishable between the two branches.
+
+### Finding 2 — Grid shapes and parameter axes (from `MODEL_AGNfitter.py`)
+
+| Pickle | Container | Axes | Notes |
+|---|---|---|---|
+| `TORUS/S04.pickle` | dict of lists | `Nh-values` | 1-parameter Silva+04; `SED` and `wavelength` are lists of per-Nh arrays |
+| `TORUS/NK0_mean_{1,2,3}p.pickle` | pandas DataFrame | `incl`, +`oa`, +`tv` | Nenkova+08 CLUMPY averaged |
+| `TORUS/SKIRTOR_mean_{1,2,3}p.pickle` | pandas DataFrame | `incl`, +`oa`, +`tv` | Stalevski+16 |
+| `TORUS/CAT3D_mean_3p.pickle` | pandas DataFrame | `incl`, `a`, `fwd` | Hönig & Kishimoto 17 |
+| `BBB/R06.pickle` | dict | (none; EBV free only) | Richards+06 composite, 1 SED |
+| `BBB/SN12.pickle` | dict of arrays | `logBHmass-values`, `logEddra-values` | Slone & Netzer 12 |
+| `BBB/KD18.pickle` | pandas DataFrame | `logBHmass`, `logEddra` | Kubota & Done 18 AGNSED |
+| `BBB/KD18_warmInd.pickle` | pandas DataFrame | +`warmIndex` | 3-param KD18 variant |
+| `BBB/THB21.pickle` | pandas object | (none; EBV free only) | Temple+21 composite |
+
+All template SEDs are stored as `F_nu` vs `log10(nu)` in the rest frame.
+Frequency grid convention: `16.685 ≈ log10(nu)` marks the 200 eV boundary
+above which X-ray power-law replaces the BBB continuum; `4.83598e17 Hz` is
+2 keV; X-ray cutoff at `7.254e19 Hz` (~300 keV) is hard-coded.
+
+### Finding 3 — Component sum and normalisation
+
+AGNfitter's predicted total, per `PARAMETERSPACE_AGNfitter.ymodel`:
+
+```
+L_nu_total(nu, z) = 10^GA · GALAXY_reddened(nu, E(B-V)_gal)
+                  + 10^SB · STARBURST(nu)
+                  + 10^BB · [BBB_reddened(nu, E(B-V)_bbb) + XRAYS(...)]
+                  + 10^TO · TORUS(nu)
+                  + 10^RAD · AGN_RAD(nu)    (optional)
+```
+
+`GA, SB, BB, TO, RAD` are log-space multiplicative normalisation free
+parameters with hardcoded uniform priors on **[-10, +10]** (clamped to
+`-9.8` when `turn_on_AGN=False`). The per-component template
+re-normalisation factors in `renorm_template` (`TO /= 1e-40`, `BB /= 1e60`,
+`GA /= 1e18`, `SB /= 1e20`, `AGN_RAD *= 1e-30`) are **numerical conditioning
+for emcee**, not physics — they are absorbed by the norm free params.
+Takeaway: for tengri the Silva+04 / CAT3D grid values should be divided
+by these conditioners at build time so the downstream `agn_torus_frac` /
+`agn_log_lbol` normalisation semantics match what AGNfitter fitters report.
+
+### Finding 4 — Grid lookup is nearest-neighbour, not interpolated
+
+In `DICTIONARIES_AGNfitter.get_model.pick_nD`, every `par_type == 'grid'`
+parameter picks the closest grid value via `np.abs(grid - mcmc_value).argmin()`.
+This introduces discontinuities that are invisible to emcee but break HMC /
+NUTS. Tengri must interpolate (triweight / linear) in its ports — this is
+the reason tengri's SKIRTOR grid is precomputed continuously in
+`skirtor_precompute.py`.
+
+### Finding 5 — X-ray α_ox–L_2500: verified parity, two tiny nuances
+
+`MODEL_AGNfitter.XRAYS` implements Just et al. 2007:
+`mean_alpha = -0.137 · log10(L_2500) + 2.638`, with a free `alphaScat`
+adding scatter, and `Gamma` as a grid parameter for the X-ray power-law.
+Directly compared term-by-term against tengri's
+`components/xray/xray.py::alpha_ox_from_l2500` and
+`xray_agn_corona_from_disc` on 2026-04-22:
+
+| Aspect | AGNfitter | tengri | Diff |
+|---|---|---|---|
+| α_ox–L_2500 slope / intercept | `-0.137 · log10(L_2500) + 2.638` | identical coefficients (line 186) | **none** |
+| α_ox → L_2keV constant | `0.3838` | `0.384` | ~0.05 %, both in use in the literature |
+| Photon index default Γ | 1.8 | 1.8 | **none** |
+| High-E cutoff | `exp(-ν / 7.254e19 Hz)` ≈ 300 keV | `E_cut = 300 keV` | **none** |
+| Scatter parameter | `alphaScat` additive | `delta_alpha_ox` additive | equivalent |
+| Low-E extent | starts at 10^16.685 Hz (200 eV) | `λ < 124 Å` (down to 100 eV) | tengri extends lower — superset |
+| Extras | — | α_IRX-based corona (Lopez+24), XRB SFR/M*-scaled | tengri-only |
+
+**Status: verified parity.** The 0.384 vs 0.3838 constant is a literature
+rounding difference (< 0.05 % on the derived L_2keV); tengri's additional
+low-E extent and IRX / XRB modules are strict supersets. No port needed.
+
+### Finding 6 — Informative priors as opt-in penalty terms
+
+`PRIORS_AGNfitter.PRIORS` adds additional log-prior penalties when
+`modelsettings['PRIOR_*'] == True`:
+- `PRIOR_energy_balance` — galaxy attenuated luminosity must match
+  starburst emitted IR luminosity (Flexible vs Restrictive tolerance).
+- `PRIOR_AGNfraction` — AGN fraction in 1–30 μm constrained above some
+  empirical floor.
+- `PRIOR_midIR_UV` — mid-IR torus vs UV disc luminosity tie.
+- `PRIOR_radio` / `prior_UV_xrays` — FIR-radio correlation and
+  X-UV correlation.
+
+All of these are straightforward Gaussian or clipped-Gaussian prior
+additions. Tengri's `parameters/priors.py` could adopt any subset as
+optional flags; current tengri design already handles the same couplings
+through the unified parameter space, but exposing them as named
+informative priors is low-cost and would aid users coming from AGNfitter.
+
+### Finding 7 — Reddening laws
+
+- AGN disc: `BBBred_Prevot` (Prevot SMC, `R_V = 2.72`,
+  `k(λ) = 1.39 (λ_μm/1e-4)^-1.2 - 0.38`).
+- Galaxy: `GALAXYred_Calzetti` (`R_V = 4.05`) and `GALAXYred_CharlotFall`
+  (`R_V = 5.9`).
+
+Tengri's `components/dust/` has Calzetti and Charlot&Fall already. **SMC
+Prevot for the AGN disc is a small gap** — worth adding a Prevot branch to
+`components/dust/` in a follow-up, not a full port.
+
+### Port targets (concrete, for Phases 2–4)
+
+| Phase | Component | Gap? | Port strategy |
+|---|---|---|---|
+| 2 | **Silva+04 smooth torus** (1 param: log N_H) | Yes — unique to AGNfitter | dict-of-lists pickle is the simplest to extract; grid-build script loads it once (with user-approved `pickle.load` in a quarantined venv) and writes `data/silva04_torus_grid.h5`. JAX component reuses `skirtor_precompute.py` pattern (linear/triweight interpolation over log N_H). |
+| 3 | **CAT3D-Wind** (3 params: incl, `a`, `fwd`) | Yes — unique vs tengri | Same pattern; pickle is a pandas DataFrame so build script needs pandas. |
+| 4 | **THB21** (no new component) | Partial — tengri has qsogen/Temple+21 | Audit-only: compare tengri's `components/agn/qsogen.py` continuum + emission-line EWs vs AGNfitter's THB21 pickle at matched redshift. No new file expected unless numerics diverge > 5 %. |
+| (optional) | SMC Prevot reddening for disc | Small | Add a Prevot branch in `components/dust/` alongside Calzetti / CF00. |
+| (optional) | Informative priors (energy balance, AGN fraction, mid-IR–UV tie) | Soft | Add as optional penalty hooks in `parameters/priors.py`. |
+
+### Not porting (parity or by design)
+
+- X-ray α_ox–L_2500, Γ, alphaScat — **already implemented** in tengri's
+  `components/xray/xray.py`.
+- Radio single/double-power-law + blazar cutoff — tengri's `radio.py` is
+  a continuous, differentiable superset.
+- KD18 / SN12 / SKIRTOR / NK08 discs and tori — tengri has differentiable
+  analytic or precomputed equivalents.
+- emcee / ultranest inference — tengri's HMC / NUTS / geoVI stack is
+  gradient-based and does not admit nearest-neighbour grid lookup.
+- BC03 galaxy templates, DH02/CE01 starburst — tengri uses DSPS + DL07.
+- `corner.py`, `triangle.py`, `PLOTandWRITE_AGNfitter.py` — tengri has
+  its own plotting stack.
+
+### Finding 8 — Parity verification of other AGN components (term-by-term)
+
+Checked on 2026-04-22 by reading AGNfitter `MODEL_AGNfitter.py` against the
+named tengri modules. Not taken on faith from earlier iterations of this doc.
+
+**Radio (`AGN_RAD` vs `components/radio/radio.py::radio_agn_dpl`):**
+AGNfitter line 523:
+``agnrad_Fnu = (nu/nu_t)**alpha1 · (1 − exp(−(nu_t/nu)**(alpha1−alpha2))) · exp(−nu/nu_cut)``.
+Tengri's `_dpl_shape` is term-by-term identical (same break, same turnover,
+same exponential aging). AGNfitter hand-tunes grids of (`alpha1`, `alpha2`,
+`nu_t`, `E_cutoff`); tengri exposes these continuously and
+differentiably. **Status: verified parity; tengri is a continuous
+superset.** The single-PL (`nRADdata==1`) and blazar-cutoff (`SPL`)
+branches reduce to specialisations of `radio_agn` / `radio_agn_dpl` with
+defaults pinned. No port needed.
+
+**qsogen (Temple+21) vs `BBB/THB21.pickle`:**
+AGNfitter's THB21 path is just one pre-tabulated composite SED from the
+Temple+21 paper:
+``bbb_nu, bbb_Fnu = THB21dict['nu'].values.item(), THB21dict['SED'].values.item()``,
+with `EBVbbb` as the only continuous parameter (plus optional α_ox scatter
+and X-ray Γ). Tengri's `components/agn/qsogen.py` reimplements the full
+Temple+21 parametric model — 7 continuous parameters (``plslp1``,
+``plslp2``, ``plbrk``, ``tbb``, ``bbnorm``, ``emline``, ``ebv``) plus the
+Baldwin effect (`slope = 0.183`) and 4 emission-line templates
+(median / peaky / windy / narrow). **Status: tengri is a strict superset
+of AGNfitter's THB21.** No port needed; the Phase-4 audit envisaged in the
+original plan is closed in tengri's favour.
+
+**KD18 disc (`BBB/KD18.pickle` vs `components/agn/disc.py::kubota_done_disc`):**
+AGNfitter stores a pre-tabulated AGNSED run on a (`logBHmass`, `logEddra`)
+grid and does nearest-neighbour lookup (see Finding 4). Tengri integrates
+the 3-zone Kubota & Done (2018) disc analytically from SS73 + GR ISCO +
+warm Comptonisation on every forward call. Both compute the same physical
+model; numerical agreement depends on shared assumptions about the hard-
+corona Γ, `kt_warm`, `kt_hot`, and `r_warm_ratio`. **Status: same model,
+different numerics.** A real cross-validation would fit a tengri SEDModel
+to a synthetic SED generated from AGNfitter's KD18.pickle and check the
+recovered (`logBHmass`, `logEddra`) — not done here; recorded as an open
+cross-val task for `tests/crossval/`.
+
+**SKIRTOR (`TORUS/SKIRTOR_mean_{1,2,3}P.pickle` vs
+`components/agn/skirtor.py` + `data/skirtor_templates*.h5`):**
+File names on AGNfitter are literally `SKIRTOR_mean_*P.pickle` — these are
+*per-axis-averaged* SEDs, not the full Stalevski+16 library. Tengri's
+`skirtor.py` consumes the full SKIRTOR grid (separately downloaded from
+the Stalevski site via `scripts/download_skirtor_templates.py`), preserving
+the full 5D (`tau`, `p`, `q`, `oa`, `cos_inc`) resolution with triweight
+interpolation. **Status: tengri uses a richer grid; not numerically
+equivalent at intermediate parameter values.** AGNfitter's 1/2/3-parameter
+flattened libraries are strict projections of the full grid. A future
+regression test could confirm that tengri's full-grid values, when
+averaged over the same axes AGNfitter averaged out, recover the
+`_mean_NP.pickle` values. Filed as a cross-val task, not a port.
+
+**Gaps confirmed as real (all are Phase-2+ port targets):**
+
+- **Silva+04 smooth torus** — no tengri analogue. **Ported in Phase 2**
+  (`components/agn/silva04.py` + `data/silva04_torus_grid.h5` via
+  `scripts/build_silva04_grid.py`). Verified via
+  `tests/unit/components/agn/test_silva04.py` (8/8 pass).
+- **CAT3D-Wind torus** — no tengri analogue. Phase 3 target.
+- **Nenkova+08 CLUMPY torus** (`NK0_mean_*P.pickle`) — no tengri analogue
+  by design (non-differentiable template stack). Do not port unless the
+  user explicitly revises the design philosophy.
+- **SN12 α-disc** — tengri's SS73 `standard` disc covers the same physics
+  analytically; do not port the tabulated library.
+
+### Citation verification TODO
+
+Before any of Silva+04, CAT3D-Wind or Temple+21 text is written into
+tengri source docstrings, the corresponding `.tex` / `.bib` entries in
+`~/writing-workspace/projects/tengri/` must be cross-checked. Specifically:
+
+- Silva, Maiolino & Granato 2004 — verify journal, volume, DOI, arXiv ID.
+- Hönig & Kishimoto 2017 — verify CAT3D-Wind paper reference (ApJL 838,
+  L20) and model parameter definitions (`a`, `fwd` meaning).
+- Just et al. 2007 — confirm exact coefficients of α_ox–L_2500 (currently
+  `-0.137 ... + 2.638` in AGNfitter; tengri's `xray.py` should agree).
+- Temple et al. 2021 — confirm emission-line template structure for the
+  Phase 4 audit.

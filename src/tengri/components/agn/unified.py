@@ -95,11 +95,51 @@ import jax
 import jax.numpy as jnp
 
 from tengri.components.agn.blr import blr_emission
+from tengri.components.agn.cat3d_wind import cat3d_wind_analytic
 from tengri.components.agn.disc import adaf_disc, kubota_done_disc, multicolor_disc, powerlaw_disc
 from tengri.components.agn.nlr import nlr_emission
+from tengri.components.agn.silva04 import silva04_analytic
 from tengri.components.agn.skirtor import _find_skirtor_grid, create_skirtor_from_grid
 from tengri.components.agn.torus import simple_torus, two_temperature_torus
+from tengri.components.dust.attenuation import prevot_smc
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
+
+
+def _redden_disc(
+    wavelength: jnp.ndarray,
+    l_disc: jnp.ndarray,
+    agn_ebv_disc: float,
+) -> jnp.ndarray:
+    """Apply Prévot SMC extinction to the disc SED.
+
+    The Prévot et al. 1984 SMC law with ``R_V = 2.72`` is the standard
+    AGN-disc obscuration prescription used by AGNfitter
+    (``BBBred_Prevot`` in ``MODEL_AGNfitter.py``).  When
+    ``agn_ebv_disc`` is 0.0 this is a no-op (returns the input unchanged).
+
+    Parameters
+    ----------
+    wavelength : ndarray, shape (n_wave,)
+        Rest-frame wavelength grid. [Å]
+    l_disc : ndarray, shape (n_wave,)
+        Unreddened disc SED. [erg/s/Hz]
+    agn_ebv_disc : float
+        Colour excess E(B−V) applied to the disc. [mag]
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Reddened disc SED. [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    **Gradient-safe**: yes — ``prevot_smc`` uses a smooth sigmoid ramp
+    through the X-ray region.
+    """
+    k = prevot_smc(wavelength)
+    return l_disc * jnp.power(10.0, -0.4 * k * agn_ebv_disc)
 
 
 @functools.cache
@@ -194,6 +234,7 @@ def unified_agn(
     disc_model: str = "powerlaw",
     torus_model: str = "simple",
     agn_torus_frac: float = 0.5,
+    agn_ebv_disc: float = 0.0,
     **kwargs,
 ) -> jnp.ndarray:
     """Compute unified AGN SED: disc + torus.
@@ -260,6 +301,7 @@ def unified_agn(
         agn_frac=1.0 - agn_torus_frac,
         **kwargs,
     )
+    l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
 
     # Torus re-emits covering_factor of L_bol
     l_torus = torus_fn(
@@ -490,6 +532,7 @@ def kubota_done_full_agn(
     agn_frac_hot: float = 0.3,
     agn_tau_torus: float = 5.0,
     agn_torus_frac: float = 0.5,
+    agn_ebv_disc: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
     """Full Kubota & Done (2018) 3-zone disc + two-temperature torus.
@@ -562,6 +605,7 @@ def kubota_done_full_agn(
         agn_kt_hot=agn_kt_hot,
         agn_r_warm_ratio=agn_r_warm_ratio,
     )
+    l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
 
     # Torus re-emits covering_factor of L_bol
     l_torus = two_temperature_torus(
@@ -588,6 +632,7 @@ def skirtor_agn(
     agn_oa_skirtor: float = 40.0,
     agn_cos_inc: float = 0.5,
     agn_torus_frac: float = 0.5,
+    agn_ebv_disc: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
     """SKIRTOR clumpy torus AGN: power-law disc + SKIRTOR torus (analytic).
@@ -631,6 +676,7 @@ def skirtor_agn(
         agn_log_lbol=agn_log_lbol,
         agn_frac=1.0 - agn_torus_frac,
     )
+    l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
 
     # SKIRTOR torus re-emits covering_factor of L_bol
     # Auto-load tabulated templates on first call
@@ -648,6 +694,127 @@ def skirtor_agn(
     return (l_disc + l_torus) * agn_frac
 
 
+@register_agn_model("silva04")
+def silva04_agn(
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float = 44.0,
+    agn_frac: float = 0.1,
+    agn_log_nh_silva: float = 23.0,
+    agn_torus_frac: float = 0.5,
+    agn_ebv_disc: float = 0.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Silva+04 smooth-torus AGN: power-law disc + Silva+04 torus.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength. [Å]
+    agn_log_lbol : float, optional
+        ``log10(L_bol / L_sun)``. Default 44.0.
+    agn_frac : float, optional
+        Overall AGN luminosity fraction applied on top of the
+        disc-plus-torus sum. Default 0.1.
+    agn_log_nh_silva : float, optional
+        Hydrogen column density, ``log10(N_H / cm^-2)``. Default 23.0.
+    agn_torus_frac : float, optional
+        Fraction of L_bol reprocessed by the torus. Disc receives
+        ``1 - agn_torus_frac``. Default 0.5.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Combined AGN SED. [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — both the power-law disc and the Silva+04
+    grid interpolation are pure JAX.
+
+    Grid templates ported from AGNfitter (Calistro Rivera et al. 2016);
+    see :mod:`tengri.components.agn.silva04` and
+    ``scripts/build_silva04_grid.py``.
+    """
+    l_disc = powerlaw_disc(
+        wavelength,
+        agn_log_lbol=agn_log_lbol,
+        agn_frac=1.0 - agn_torus_frac,
+    )
+    l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
+    l_torus = silva04_analytic(
+        wavelength,
+        agn_log_lbol=agn_log_lbol,
+        agn_log_nh_silva=agn_log_nh_silva,
+        agn_torus_frac=agn_torus_frac,
+    )
+    return (l_disc + l_torus) * agn_frac
+
+
+@register_agn_model("cat3d_wind")
+def cat3d_wind_agn(
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float = 44.0,
+    agn_frac: float = 0.1,
+    agn_cos_inc: float = 0.5,
+    agn_a_cat3d: float = -2.0,
+    agn_fwd_cat3d: float = 0.45,
+    agn_torus_frac: float = 0.5,
+    agn_ebv_disc: float = 0.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """CAT3D-Wind AGN: power-law disc + clumpy-disc + polar-wind torus.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength. [Å]
+    agn_log_lbol : float, optional
+        ``log10(L_bol / L_sun)``. Default 44.0.
+    agn_frac : float, optional
+        Overall AGN luminosity fraction applied on top of the
+        disc-plus-torus sum. Default 0.1.
+    agn_cos_inc : float, optional
+        Cosine of inclination. Default 0.5.
+    agn_a_cat3d : float, optional
+        Radial power-law index of the clumpy-cloud distribution. Default
+        −2.0.
+    agn_fwd_cat3d : float, optional
+        Polar-wind mass fraction. Default 0.2.
+    agn_torus_frac : float, optional
+        Fraction of L_bol reprocessed by the torus. Disc receives
+        ``1 - agn_torus_frac``. Default 0.5.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Combined AGN SED. [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    Grid templates ported from AGNfitter-rX (Zhuang et al. 2024) —
+    Hönig & Kishimoto 2017 CAT3D-Wind three-parameter projection.  See
+    :mod:`tengri.components.agn.cat3d_wind` and
+    ``scripts/build_cat3d_wind_grid.py``.
+    """
+    l_disc = powerlaw_disc(
+        wavelength,
+        agn_log_lbol=agn_log_lbol,
+        agn_frac=1.0 - agn_torus_frac,
+    )
+    l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
+    l_torus = cat3d_wind_analytic(
+        wavelength,
+        agn_log_lbol=agn_log_lbol,
+        agn_cos_inc=agn_cos_inc,
+        agn_a_cat3d=agn_a_cat3d,
+        agn_fwd_cat3d=agn_fwd_cat3d,
+        agn_torus_frac=agn_torus_frac,
+    )
+    return (l_disc + l_torus) * agn_frac
+
+
 @register_agn_model("adaf")
 def adaf_agn(
     wavelength: jnp.ndarray,
@@ -661,6 +828,7 @@ def adaf_agn(
     agn_cos_inc: float = 0.5,
     agn_torus_frac: float = 0.3,
     agn_T_torus: float = 500.0,
+    agn_ebv_disc: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
     """ADAF + truncated disc + simple torus for low-luminosity AGN.
@@ -724,6 +892,7 @@ def adaf_agn(
         agn_adaf_delta=agn_adaf_delta,
         agn_cos_inc=agn_cos_inc,
     )
+    l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
 
     # Simple torus re-emits torus_frac of L_bol
     l_torus = simple_torus(
