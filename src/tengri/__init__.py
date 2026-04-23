@@ -230,6 +230,12 @@ sys.modules["tengri.xray"] = xray
 # Observation layer shortcut (already exists in imports above)
 # observation module is imported separately below
 
+# Filter discovery helpers
+from tengri import filters as _filters_module
+
+filters = _filters_module
+sys.modules["tengri.filters"] = filters
+
 # I/O layer
 from tengri import io
 
@@ -280,6 +286,7 @@ __all__ = [
     "doctor",
     "dust",
     "exp_squared_kernel",
+    "filters",
     "generate_mock",
     "gp_noise_covariance",
     "igm",

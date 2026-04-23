@@ -195,3 +195,135 @@ def test_galaxy_from_arrays_smoke():
     )
     assert g is not None
     assert g.model is None  # Not built yet
+
+
+def test_save_without_fit_raises():
+    """Galaxy.save() should raise RuntimeError if .fit() not called."""
+    pytest.importorskip("h5py")
+    from tengri import Galaxy, Observation, Photometry
+    from tengri.presets import resolve_preset
+
+    obs = Observation(photometry=Photometry.from_names(["sdss_r"]))
+    params, config = resolve_preset("starforming", redshift=0.1)
+
+    class MockSSP:
+        pass
+
+    g = Galaxy(
+        ssp=MockSSP(),
+        observation=obs,
+        parameters=params,
+        model_config=config,
+    )
+
+    with pytest.raises(RuntimeError, match="not been fitted"):
+        g.save("/tmp/unused.h5")
+
+
+def test_load_result_roundtrip(tmp_path):
+    """Galaxy.load_result should restore a FitResult from HDF5."""
+    pytest.importorskip("h5py")
+    from tengri import Galaxy
+    from tengri.results import FitResult, Provenance
+
+    # Construct a minimal FitResult and save/load it
+    fr = FitResult(
+        inner={"samples": {"x": [1.0, 2.0, 3.0]}},
+        provenance=Provenance.capture(),
+        citation_keys=["jax", "dsps"],
+        backend="map",
+        preset="starforming",
+    )
+    path = tmp_path / "roundtrip.h5"
+    fr.save(str(path))
+
+    # Load via Galaxy.load_result
+    loaded = Galaxy.load_result(str(path))
+
+    assert loaded.backend == "map"
+    assert loaded.preset == "starforming"
+    assert "jax" in loaded.citation_keys
+    assert "dsps" in loaded.citation_keys
+
+
+def test_infer_citation_keys_contains_core():
+    """_infer_citation_keys should always include core citations."""
+    from tengri import Galaxy, Observation, Photometry
+    from tengri.presets import resolve_preset
+
+    obs = Observation(photometry=Photometry.from_names(["sdss_r"]))
+    params, config = resolve_preset("starforming", redshift=0.1)
+
+    class MockSSP:
+        pass
+
+    g = Galaxy(
+        ssp=MockSSP(),
+        observation=obs,
+        parameters=params,
+        model_config=config,
+    )
+
+    keys = g._infer_citation_keys()
+
+    assert "tengri" in keys
+    assert "dsps" in keys
+    assert "jax" in keys
+
+
+def test_infer_citation_keys_dust_adds_citations():
+    """_infer_citation_keys should add dust citations when dust config is set."""
+    from tengri import Galaxy, Observation, Photometry
+    from tengri.config.settings import DustConfig
+    from tengri.presets import resolve_preset
+
+    obs = Observation(photometry=Photometry.from_names(["sdss_r"]))
+    params, config = resolve_preset("starforming", redshift=0.1)
+
+    # Enable dust
+    if config.dust is None:
+        config.dust = DustConfig()
+
+    class MockSSP:
+        pass
+
+    g = Galaxy(
+        ssp=MockSSP(),
+        observation=obs,
+        parameters=params,
+        model_config=config,
+    )
+
+    keys = g._infer_citation_keys()
+
+    assert "calzetti2000" in keys
+    assert "charlot_fall2000" in keys
+
+
+def test_infer_citation_keys_backend_adds_citations():
+    """_infer_citation_keys should add backend-specific citations."""
+    from tengri import Galaxy, Observation, Photometry
+    from tengri.presets import resolve_preset
+
+    obs = Observation(photometry=Photometry.from_names(["sdss_r"]))
+    params, config = resolve_preset("starforming", redshift=0.1)
+
+    class MockSSP:
+        pass
+
+    g = Galaxy(
+        ssp=MockSSP(),
+        observation=obs,
+        parameters=params,
+        model_config=config,
+    )
+
+    # Simulate a VI backend
+    g._last_backend = "vi"
+    keys = g._infer_citation_keys()
+    assert "nifty" in keys
+
+    # Simulate a MCMC backend
+    g._last_backend = "mcmc_nuts"
+    keys = g._infer_citation_keys()
+    assert "blackjax" in keys

@@ -1,0 +1,7 @@
+# Default owner for all files
+*       @suchethac
+
+# Citations and verification — physics correctness gatekeeping
+/src/tengri/citations/  @suchethac
+/VERIFICATION.md        @suchethac
+/docs/adr/              @suchethac

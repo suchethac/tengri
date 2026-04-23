@@ -16,6 +16,9 @@ Preset Gallery
 - ``starforming()`` — Main sequence galaxies (z ~ 0–3): moderate dust, solar metallicity
 - ``quiescent()`` — Red/dead galaxies (z ~ 0–2): minimal dust, low metallicity spread
 - ``high_z()`` — Young galaxies (z > 4): strong nebular, younger ages, SMC-like dust
+- ``photoz()`` — Photometric-redshift surveys: wide z prior, uninformative SFH/dust
+- ``jwst_spec()`` — JWST NIRSpec spectroscopy: known/constrained z, moderate-high dust
+- ``agn_host()`` — AGN host galaxies: high dust for Type 2 AGN, no torus component
 
 References
 ----------
@@ -37,9 +40,12 @@ from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
 
 __all__ = [
+    "agn_host",
     "describe",
     "high_z",
+    "jwst_spec",
     "list_presets",
+    "photoz",
     "quiescent",
     "starforming",
 ]
@@ -271,10 +277,252 @@ def high_z(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
     return params, config
 
 
+def photoz(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
+    """Photometric-redshift galaxy preset (redshift-unconstrained survey).
+
+    Photometric-redshift (photo-z) surveys estimate galaxy redshifts from
+    broad-band photometry. This preset prioritizes redshift as the primary
+    parameter of interest, with broad uninformative priors on other galaxy
+    properties to avoid prior-driven biases.
+
+    If redshift is not specified, it remains a free parameter with very wide
+    bounds (Uniform(0.01, 12)) to support self-consistent photo-z inference
+    across the full observable universe. This preset is almost always invoked
+    with redshift=None.
+
+    Parameters
+    ----------
+    redshift : float or None, optional
+        Redshift of the galaxy. If None (default), redshift is a free parameter
+        with Uniform(0.01, 12). If specified, redshift is fixed.
+
+    Returns
+    -------
+    tuple[Parameters, ModelConfig]
+        (params, config) — fully configured Parameter spec and model settings.
+
+    Notes
+    -----
+    **JIT-compatible**: no — returns configuration objects, not arrays.
+
+    **Physics:**
+    - SFH model: double power-law (flexible timescales for mixed populations)
+    - Dust: Calzetti (birth cloud) + power-law (diffuse ISM, two-component)
+    - Attenuation: Av ~ Uniform(0, 3) mag (wide range for photo-z degeneracies)
+    - Age range: extended to 13.8 Gyr (tau_gyr up to 13.0 Gyr)
+    - Metallicity: Uniform(-1.0, 0.5) [Z/Zsun] (wide to cover all populations)
+    - Nebular emission: off (not constrained by broad photometry)
+
+    Examples
+    --------
+    >>> params, config = presets.photoz()  # redshift free
+    >>> assert "redshift" in params.free_params
+    >>> assert params.get("redshift").bounds[0] < 0.1
+    """
+    if redshift is None:
+        z_prior = Uniform(0.01, 12.0)
+    else:
+        z_prior = Fixed(redshift)
+
+    params = Parameters(
+        mean_sfh_type="dpl",
+        sfh_dpl_alpha=Uniform(0.5, 3.0),
+        sfh_dpl_beta=Uniform(0.3, 2.0),
+        sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
+        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        met_logzsol=Uniform(-1.0, 0.5),
+        dust_tau_bc=Uniform(0.0, 3.0),
+        dust_tau_diff=Uniform(0.0, 2.0),
+        dust_slope=Fixed(-0.7),
+        redshift=z_prior,
+    )
+
+    config = ModelConfig(
+        sfh=SFHConfig(mean_type=("dpl",)),
+        dust=DustConfig(
+            model="two_component",
+            law_bc="calzetti",
+            law_diff="power_law",
+            emission=None,
+        ),
+        nebular=NebularConfig(backend="off"),
+    )
+
+    return params, config
+
+
+def jwst_spec(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
+    """JWST NIRSpec spectroscopic fitting preset (known or constrained redshift).
+
+    JWST NIRSpec provides high signal-to-noise spectroscopy with excellent
+    wavelength resolution and sensitivity from 0.6 to 5.3 μm. This preset
+    assumes redshift is either known from previous measurements or constrained
+    via emission lines (H-alpha, [OIII], etc.) visible in the spectrum.
+
+    Dust attenuation is allowed to be moderate-to-high (Av up to 3 mag) to
+    accommodate dust-obscured star-forming galaxies. Metallicity priors are
+    broad to allow inference from emission-line diagnostics when available.
+
+    Parameters
+    ----------
+    redshift : float or None, optional
+        Redshift of the galaxy. If None (default), redshift is a free parameter
+        with Uniform(0.01, 15) to cover ground-based and space-based spectroscopy.
+        If specified, redshift is fixed.
+
+    Returns
+    -------
+    tuple[Parameters, ModelConfig]
+        (params, config) — fully configured Parameter spec and model settings.
+
+    Notes
+    -----
+    **JIT-compatible**: no — returns configuration objects, not arrays.
+
+    **Physics:**
+    - SFH model: double power-law (same as starforming for consistency)
+    - Dust: Calzetti (birth cloud) + power-law (diffuse ISM, two-component)
+    - Attenuation: Av ~ Uniform(0, 3) mag (moderate-to-high for obscured sources)
+    - Metallicity: Uniform(-0.5, 0.3) [Z/Zsun]
+    - Nebular emission: off (will be handled separately by emission-line fitting)
+    - Redshift: free Uniform(0.01, 15) unless specified
+
+    Examples
+    --------
+    >>> params, config = presets.jwst_spec(redshift=2.5)
+    >>> model = SEDModel(params, ssp_data, config, observation)
+
+    Free-redshift fit (e.g., redshift from emission lines):
+
+    >>> params, config = presets.jwst_spec()
+    >>> assert "redshift" in params.free_params
+    """
+    if redshift is None:
+        z_prior = Uniform(0.01, 15.0)
+    else:
+        z_prior = Fixed(redshift)
+
+    params = Parameters(
+        mean_sfh_type="dpl",
+        sfh_dpl_alpha=Uniform(0.5, 3.0),
+        sfh_dpl_beta=Uniform(0.3, 2.0),
+        sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
+        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        met_logzsol=Uniform(-0.5, 0.3),
+        dust_tau_bc=Uniform(0.0, 3.0),
+        dust_tau_diff=Uniform(0.0, 2.0),
+        dust_slope=Fixed(-0.7),
+        redshift=z_prior,
+    )
+
+    config = ModelConfig(
+        sfh=SFHConfig(mean_type=("dpl",)),
+        dust=DustConfig(
+            model="two_component",
+            law_bc="calzetti",
+            law_diff="power_law",
+            emission=None,
+        ),
+        nebular=NebularConfig(backend="off"),
+    )
+
+    return params, config
+
+
+def agn_host(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
+    """AGN host galaxy preset (Type 1/2 AGN).
+
+    This preset models the stellar population and dust properties of galaxies
+    hosting active galactic nuclei (AGN). It is optimized for decomposing the
+    host galaxy contribution to the SED while the AGN itself is modeled
+    separately (e.g., via torus or accretion disk templates).
+
+    Dust attenuation is widened (Av up to 4 mag) to accommodate Type 2 (obscured)
+    AGN hosts, which often exhibit significant dust columns from both the ISM
+    and circumnuclear material. The SFH and metallicity priors are similar to
+    starforming galaxies but allow broader flexibility.
+
+    **Future enhancement:** A dedicated ``agn_unified`` preset will add explicit
+    torus emission (K&D disc, SKIRTOR) and NLR modeling once ModelConfig supports
+    AGN-specific knobs. This version focuses purely on the host stellar population.
+
+    Parameters
+    ----------
+    redshift : float or None, optional
+        Redshift of the galaxy. If None (default), redshift is a free parameter
+        with Uniform(0.01, 6.0). If specified, redshift is fixed.
+
+    Returns
+    -------
+    tuple[Parameters, ModelConfig]
+        (params, config) — fully configured Parameter spec and model settings.
+
+    Notes
+    -----
+    **JIT-compatible**: no — returns configuration objects, not arrays.
+
+    **Physics:**
+    - SFH model: double power-law (inherits from starforming)
+    - Dust: Calzetti (birth cloud) + power-law (diffuse ISM, two-component)
+    - Attenuation: Av ~ Uniform(0, 4) mag (high dust for Type 2 AGN hosts)
+    - Metallicity: Uniform(-0.5, 0.3) [Z/Zsun]
+    - Nebular emission: off (AGN dominates ionization, modeled separately)
+    - Redshift: free Uniform(0.01, 6.0) unless specified
+
+    **Limitations:**
+    This preset does NOT include AGN torus or narrow-line region (NLR) components.
+    Host decomposition should be performed post-inference by subtracting the
+    best-fit SED from the observed photometry before fitting the AGN SED.
+
+    Examples
+    --------
+    >>> params, config = presets.agn_host(redshift=0.5)
+    >>> model = SEDModel(params, ssp_data, config, observation)
+
+    Free-redshift fit:
+
+    >>> params, config = presets.agn_host()
+    >>> assert "redshift" in params.free_params
+    """
+    if redshift is None:
+        z_prior = Uniform(0.01, 6.0)
+    else:
+        z_prior = Fixed(redshift)
+
+    params = Parameters(
+        mean_sfh_type="dpl",
+        sfh_dpl_alpha=Uniform(0.5, 3.0),
+        sfh_dpl_beta=Uniform(0.3, 2.0),
+        sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
+        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        met_logzsol=Uniform(-0.5, 0.3),
+        dust_tau_bc=Uniform(0.0, 4.0),
+        dust_tau_diff=Uniform(0.0, 2.5),
+        dust_slope=Fixed(-0.7),
+        redshift=z_prior,
+    )
+
+    config = ModelConfig(
+        sfh=SFHConfig(mean_type=("dpl",)),
+        dust=DustConfig(
+            model="two_component",
+            law_bc="calzetti",
+            law_diff="power_law",
+            emission=None,
+        ),
+        nebular=NebularConfig(backend="off"),
+    )
+
+    return params, config
+
+
 PRESETS: dict[str, callable] = {
-    "starforming": starforming,
-    "quiescent": quiescent,
+    "agn_host": agn_host,
     "high_z": high_z,
+    "jwst_spec": jwst_spec,
+    "photoz": photoz,
+    "quiescent": quiescent,
+    "starforming": starforming,
 }
 
 
@@ -305,9 +553,7 @@ def resolve_preset(
         If ``name`` is not a known preset.
     """
     if name not in PRESETS:
-        raise ValueError(
-            f"Unknown preset '{name}'. Available: {sorted(PRESETS.keys())}"
-        )
+        raise ValueError(f"Unknown preset '{name}'. Available: {sorted(PRESETS.keys())}")
     params, config = PRESETS[name](redshift=redshift)
     if model_config is not None:
         config = model_config
@@ -329,7 +575,7 @@ def list_presets() -> list[str]:
     Examples
     --------
     >>> presets.list_presets()
-    ['high_z', 'quiescent', 'starforming']
+    ['agn_host', 'high_z', 'jwst_spec', 'photoz', 'quiescent', 'starforming']
     """
     return sorted(PRESETS.keys())
 
@@ -395,6 +641,41 @@ High-redshift galaxies (z > 4, young starburst):
 - Redshift: free Uniform(3.5, 10.0) unless specified
 
 Use for: z > 4 Lyman-break galaxies, JWST/HST high-z samples, young starbursts.
+""",
+        "photoz": """\
+photoz preset: photometric-redshift surveys (z unconstrained):
+- SFH: double power-law (flexible timescales)
+- Dust: Calzetti (birth cloud) + power-law (diffuse ISM), two-component
+- Av: Uniform(0, 3) mag (wide range for photo-z degeneracies)
+- Age range: τ up to 13 Gyr (includes all populations)
+- Metallicity: Uniform(−1.0, +0.5) [Z/Zsun] (wide, uninformative)
+- Nebular: off (broad photometry insensitive)
+- Redshift: free Uniform(0.01, 12.0) unless specified
+
+Use for: photo-z surveys, self-consistent redshift inference, low-resolution photometry.
+""",
+        "jwst_spec": """\
+jwst_spec preset: JWST NIRSpec spectroscopy (known/constrained redshift):
+- SFH: double power-law (same as starforming)
+- Dust: Calzetti (birth cloud) + power-law (diffuse ISM), two-component
+- Av: Uniform(0, 3) mag (moderate-to-high for obscured sources)
+- Metallicity: Uniform(−0.5, +0.3) [Z/Zsun]
+- Nebular: off (handled by separate emission-line fitting)
+- Redshift: free Uniform(0.01, 15.0) unless specified
+
+Use for: JWST NIRSpec spectroscopy, known-z SED fitting, dust-obscured starbursts.
+""",
+        "agn_host": """\
+agn_host preset: AGN host galaxies (Type 1 & 2):
+- SFH: double power-law (inherits from starforming)
+- Dust: Calzetti (birth cloud) + power-law (diffuse ISM), two-component
+- Av: Uniform(0, 4) mag (high dust for Type 2 AGN)
+- Metallicity: Uniform(−0.5, +0.3) [Z/Zsun]
+- Nebular: off (AGN dominates ionization)
+- Redshift: free Uniform(0.01, 6.0) unless specified
+
+Use for: AGN host decomposition, Type 2 AGN (Compton-thick), ignoring torus/NLR.
+Note: Torus/NLR modeled separately; future agn_unified preset will integrate them.
 """,
     }
 

@@ -1,0 +1,39 @@
+# ADR 0003: Treat AI-assisted development as the primary mode
+
+**Status:** Accepted
+
+**Date:** 2026-04-23
+
+## Context
+
+The initial tengri codebase was drafted largely with AI tools (Claude Code). Denying this is dishonest and tactically weak. Industry retrospectives (2024–2025) report AI code is correct approximately 2/3 of the time. This creates a verification burden, not a taboo.
+
+## Decision
+
+Acknowledge AI assistance openly. Compensate with stricter verification discipline than typical hand-written code.
+
+**Four rules:**
+
+1. **Primary sources.** Every physics module must cite a primary paper and include a regression test validating against it (see docs/dev/VERIFICATION.md).
+
+2. **Ported-over-invented.** When an upstream reference implementation exists (Prospector, DSPS, bagpipes, Cue, NIFTy), tengri's version should be a port with a verifiable comment block, not a reinvention. Header example:
+   ```python
+   # Ported from bagpipes (Carnall et al. 2019 [1]_) — modified for JAX differentiability
+   ```
+
+3. **PR transparency.** Every PR includes an AI-use disclosure checkbox in the PR template (see .github/pull_request_template.md).
+
+4. **Human governance.** Releases are cut by humans. AI is never listed as an author.
+
+## Consequences
+
+**Positive:**
+- Visible honesty. This turns the riskiest part of the story into its most credible.
+- Enables stricter verification standards than typical projects.
+- Attracts contributors who respect transparency.
+
+**Negative:**
+- Slower velocity than a vibe-coded project.
+- Higher documentation burden (citations, regression tests).
+
+**Mitigation:** Automate test scaffolding and citation linting. Reserve AI for exploration phases, humans for architecture and verification.

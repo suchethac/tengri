@@ -1,0 +1,44 @@
+tengri - Differentiable SED fitting with IFT star formation history priors
+Copyright (c) 2026 Suchetha Cooray and the tengri developers.
+Licensed under BSD-3-Clause. See LICENSE.
+
+This product includes or depends on software written by third parties:
+
+  JAX
+    https://github.com/google/jax
+    Apache-2.0
+
+  DSPS (Differentiable Stellar Population Synthesis)
+    https://github.com/ArgonneCPAC/dsps
+    BSD-3-Clause
+
+  NumPy
+    https://github.com/numpy/numpy
+    BSD-3-Clause
+
+  Matplotlib
+    https://github.com/matplotlib/matplotlib
+    PSF License (BSD-compatible)
+
+  h5py
+    https://github.com/h5py/h5py
+    BSD-3-Clause
+
+  NIFTy (Numerical Information Field Theory)
+    https://gitlab.mpcdf.mpg.de/ift/nifty
+    BSD-2-Clause
+
+  astroquery
+    https://github.com/astropy/astroquery
+    BSD-3-Clause
+
+  BlackJAX
+    https://github.com/blackjax-devs/blackjax
+    Apache-2.0
+
+Data products (filter curves, SSP grids, nebular grids) shipped under their
+respective upstream licenses; see data/README.md for details.
+
+Please cite upstream authors when publishing results that use tengri.
+See CITATION.cff for this package, and call tengri.cite_all() for the full
+citation set for a given fit.

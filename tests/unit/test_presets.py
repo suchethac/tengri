@@ -10,9 +10,12 @@ import pytest
 from tengri.config.settings import ModelConfig
 from tengri.parameters.parameters import Parameters
 from tengri.presets import (
+    agn_host,
     describe,
     high_z,
+    jwst_spec,
     list_presets,
+    photoz,
     quiescent,
     starforming,
 )
@@ -30,7 +33,7 @@ class TestListPresets:
     def test_list_presets_contains_expected(self):
         """list_presets() contains expected preset names."""
         presets = list_presets()
-        expected = {"starforming", "quiescent", "high_z"}
+        expected = {"starforming", "quiescent", "high_z", "photoz", "jwst_spec", "agn_host"}
         assert set(presets) == expected
 
     def test_list_presets_sorted(self):
@@ -44,7 +47,7 @@ class TestEachPresetReturnsValidTuple:
 
     @pytest.mark.parametrize(
         "preset_func",
-        [starforming, quiescent, high_z],
+        [starforming, quiescent, high_z, photoz, jwst_spec, agn_host],
     )
     def test_preset_returns_tuple(self, preset_func):
         """Each preset returns a 2-tuple."""
@@ -54,7 +57,7 @@ class TestEachPresetReturnsValidTuple:
 
     @pytest.mark.parametrize(
         "preset_func",
-        [starforming, quiescent, high_z],
+        [starforming, quiescent, high_z, photoz, jwst_spec, agn_host],
     )
     def test_preset_returns_parameters_and_model_config(self, preset_func):
         """First element is Parameters, second is ModelConfig."""
@@ -75,6 +78,12 @@ class TestRedshiftPassthrough:
             (quiescent, 1.0),
             (high_z, 5.0),
             (high_z, 8.0),
+            (photoz, 0.5),
+            (photoz, 5.0),
+            (jwst_spec, 2.0),
+            (jwst_spec, 10.0),
+            (agn_host, 0.3),
+            (agn_host, 1.5),
         ],
     )
     def test_redshift_fixed_when_provided(self, preset_func, redshift_val):
@@ -87,7 +96,7 @@ class TestRedshiftPassthrough:
 
     @pytest.mark.parametrize(
         "preset_func",
-        [starforming, quiescent, high_z],
+        [starforming, quiescent, high_z, photoz, jwst_spec, agn_host],
     )
     def test_redshift_free_when_none(self, preset_func):
         """When redshift=None, it is a free parameter in the preset."""
@@ -102,7 +111,7 @@ class TestDescribe:
 
     @pytest.mark.parametrize(
         "preset_name",
-        ["starforming", "quiescent", "high_z"],
+        ["starforming", "quiescent", "high_z", "photoz", "jwst_spec", "agn_host"],
     )
     def test_describe_returns_string(self, preset_name):
         """describe() returns non-empty string for each valid preset."""
@@ -112,7 +121,7 @@ class TestDescribe:
 
     @pytest.mark.parametrize(
         "preset_name",
-        ["starforming", "quiescent", "high_z"],
+        ["starforming", "quiescent", "high_z", "photoz", "jwst_spec", "agn_host"],
     )
     def test_describe_contains_preset_name(self, preset_name):
         """describe() output mentions the preset name or concept."""
@@ -137,7 +146,7 @@ class TestDescribe:
             describe("invalid")
         msg = str(exc_info.value)
         # Should mention available presets
-        for name in ["starforming", "quiescent", "high_z"]:
+        for name in ["starforming", "quiescent", "high_z", "photoz", "jwst_spec", "agn_host"]:
             assert name in msg
 
 
@@ -146,7 +155,7 @@ class TestPresetsConsistency:
 
     @pytest.mark.parametrize(
         "preset_func",
-        [starforming, quiescent, high_z],
+        [starforming, quiescent, high_z, photoz, jwst_spec, agn_host],
     )
     def test_preset_free_params_nonempty(self, preset_func):
         """Each preset has at least one free parameter."""
@@ -155,7 +164,7 @@ class TestPresetsConsistency:
 
     @pytest.mark.parametrize(
         "preset_func",
-        [starforming, quiescent, high_z],
+        [starforming, quiescent, high_z, photoz, jwst_spec, agn_host],
     )
     def test_preset_can_sample(self, preset_func):
         """Each preset can be sampled (assumes SSP data not required for constructor)."""

@@ -311,6 +311,9 @@ class Galaxy:
         # Run inference
         self.result = fitter.run(backend, verbose=verbose, **kwargs)
 
+        # Record the backend used for later save/load
+        self._last_backend = backend
+
         return self
 
     def summary(self) -> Any:
@@ -411,6 +414,43 @@ class Galaxy:
 
         return fig
 
+    def _infer_citation_keys(self) -> list[str]:
+        """Infer citation keys based on model configuration and fit backend.
+
+        Returns
+        -------
+        list of str
+            Citation registry keys applicable to this Galaxy.
+
+        Notes
+        -----
+        Base citations always include: "tengri", "dsps", "jax".
+        Additional keys added based on model_config and inference backend.
+        Designed defensively — handles missing config fields gracefully.
+        """
+        # Base components
+        citations = ["tengri", "dsps", "jax"]
+
+        # Add based on config (defensive: use getattr to handle missing fields)
+        if self.model_config is not None:
+            if getattr(self.model_config, "dust", None) is not None:
+                citations.append("calzetti2000")
+                citations.append("charlot_fall2000")
+            if getattr(self.model_config, "nebular", None) is not None:
+                citations.append("cue")
+            if getattr(self.model_config, "igm", None) is not None:
+                citations.append("inoue2014")
+
+        # Add based on inference backend
+        last_backend = getattr(self, "_last_backend", None)
+        if last_backend is not None:
+            if "vi" in last_backend.lower():
+                citations.append("nifty")
+            if "nuts" in last_backend.lower() or "mcmc" in last_backend.lower():
+                citations.append("blackjax")
+
+        return citations
+
     def cite(self, format: str = "short") -> str:
         """Return a citation list for components used in this fit.
 
@@ -488,6 +528,70 @@ class Galaxy:
             f"Data: {n_bands} photometric bands. Model: {n_params} free parameters. "
             f"Inference: {backend}."
         )
+
+    def save(self, path: str) -> None:
+        """Save this Galaxy's fit to an HDF5 file.
+
+        Requires ``.fit()`` to have been called. Wraps FitResult.save()
+        with a Provenance snapshot plus a minimal record of the Galaxy
+        configuration (preset name, backend used, flux/err arrays if present).
+
+        Parameters
+        ----------
+        path : str
+            Target HDF5 path.
+
+        Raises
+        ------
+        RuntimeError
+            If .fit() has not been called.
+        ImportError
+            If h5py is not installed.
+        """
+        if self.result is None:
+            raise RuntimeError("Galaxy has not been fitted. Call .fit(...) first.")
+
+        from tengri.results import FitResult, Provenance
+
+        # Citation keys for this run — mirror the logic in self._infer_citation_keys()
+        citation_keys = self._infer_citation_keys()
+
+        fr = FitResult(
+            inner=self.result,
+            provenance=Provenance.capture(),
+            citation_keys=citation_keys,
+            backend=getattr(self, "_last_backend", None),
+            preset=getattr(self, "preset_name", None),
+        )
+        fr.save(path)
+
+    @classmethod
+    def load_result(cls, path: str):
+        """Load a FitResult previously saved by Galaxy.save.
+
+        Returns the FitResult directly (not a reconstructed Galaxy — the
+        underlying SEDModel and Observation are not part of the HDF5 schema).
+
+        Parameters
+        ----------
+        path : str
+            Path to HDF5 file.
+
+        Returns
+        -------
+        FitResult
+            The loaded result wrapper with provenance and citations.
+
+        Raises
+        ------
+        ImportError
+            If h5py is not installed.
+        KeyError
+            If HDF5 schema is invalid.
+        """
+        from tengri.results import FitResult
+
+        return FitResult.load(path)
 
     @property
     def flux_obs(self) -> np.ndarray:
