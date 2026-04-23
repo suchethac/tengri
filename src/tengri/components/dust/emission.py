@@ -575,6 +575,7 @@ def casey2012(
     dust_T: float = 35.0,
     dust_beta_ir: float = 1.8,
     dust_alpha_mir: float = 2.0,
+    optically_thin: bool = False,
     redshift: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -583,6 +584,10 @@ def casey2012(
     Combines a modified blackbody (FIR peak from cold/warm dust) with a
     mid-IR power law (Wien-side excess from warm dust continuum), joined
     by a smooth sigmoid transition function.
+
+    When ``optically_thin=True``, the mid-IR power-law component is zeroed,
+    leaving only the modified blackbody.  This variant is useful for cold
+    dust-dominated galaxies where the power law is unphysical.
 
     .. note::
 
@@ -633,6 +638,9 @@ def casey2012(
         Typical range: 1.5--2.0. [dimensionless]
     dust_alpha_mir : float
         Mid-IR power-law slope.  Typical range: 1.5--2.5. [dimensionless]
+    optically_thin : bool
+        If True, zero the mid-IR power-law component, leaving only the
+        modified blackbody.  Default: False. [dimensionless]
     redshift : float
         Source redshift. When > 0, CMB heating correction is applied.
         Default 0 (no correction). [dimensionless]
@@ -679,6 +687,7 @@ def casey2012(
     # power law implicitly operates only in the IR regime.
     wien_cutoff = jnp.exp(-x)
     power_law = (nu / nu_ref) ** dust_alpha_mir * f_transition * wien_cutoff
+    power_law = power_law * (1.0 - optically_thin)
 
     # --- Modified blackbody component ---
     # S_bb(ν) ~ ν^(3+β) / (exp(hν/kT) - 1) * (1 - f(ν))

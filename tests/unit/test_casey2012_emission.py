@@ -263,3 +263,49 @@ class TestCasey2012Differentiability:
                 rtol=1e-3,
                 err_msg=f"{name}: autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
             )
+
+
+class TestCasey2012OpticallyThin:
+    """Optically thin variant zeros the mid-IR power-law component."""
+
+    def test_optically_thin_no_power_law(self, ir_wave):
+        """With optically_thin=True, mid-IR power law is absent."""
+        sed_full = casey2012(ir_wave, 1e10)
+        sed_ot = casey2012(ir_wave, 1e10, optically_thin=True)
+        assert not jnp.allclose(sed_full, sed_ot, rtol=1e-6), (
+            "Optically thin SED must differ from full model"
+        )
+
+    def test_optically_thin_energy_balance(self, ir_wave):
+        """Energy conservation holds for the optically thin variant."""
+        L_abs = 1e10
+        sed = casey2012(ir_wave, L_abs, optically_thin=True)
+        nu = _C_AA_S / ir_wave
+        L_total = float(-jnp.trapezoid(sed, nu))
+        ratio = L_total / L_abs
+        assert 0.7 < ratio < 1.5, (
+            f"Optically thin energy balance: L_emitted/L_absorbed = {ratio:.3f}"
+        )
+
+    def test_optically_thin_non_negative(self, ir_wave):
+        """Optically thin emission is non-negative everywhere."""
+        sed = casey2012(ir_wave, 1e10, optically_thin=True)
+        assert jnp.all(sed >= 0.0)
+        assert float(jnp.max(sed)) > 0.0
+
+    def test_optically_thin_less_mir(self, mir_wave):
+        """Optically thin has less mid-IR flux than the full model."""
+        sed_full = casey2012(mir_wave, 1e10, dust_T=80.0)
+        sed_ot = casey2012(mir_wave, 1e10, dust_T=80.0, optically_thin=True)
+        mir_full = float(jnp.sum(sed_full))
+        mir_ot = float(jnp.sum(sed_ot))
+        assert mir_ot <= mir_full, (
+            f"Optically thin should have less mid-IR: {mir_ot:.3e} vs {mir_full:.3e}"
+        )
+
+    def test_optically_thin_jit(self, ir_wave):
+        """JIT-compatible with optically_thin flag."""
+        fn = jax.jit(lambda T: casey2012(ir_wave, 1e10, dust_T=T, optically_thin=True))
+        sed = fn(35.0)
+        assert sed.shape == ir_wave.shape
+        assert jnp.all(jnp.isfinite(sed))
