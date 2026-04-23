@@ -431,11 +431,13 @@ plt.show()
 # %% [markdown]
 # ## Full Posterior Inference on Joint Data
 #
-# MAP gives a single best-fit point but no uncertainty. Now we run three
-# posterior methods on the joint fitter: `vi` (geoVI), Laplace, Pathfinder.
+# MAP gives a single best-fit point but no uncertainty. Here we run geoVI
+# (variational inference via NIFTy.re) on the joint fitter, then repeat on
+# phot-only and spec-only observations to compare posterior widths.
+# `posterior_chunk_size=64` caps peak memory by drawing CG samples in chunks.
 
 # %%
-k_post, k_lap, k_pf = jax.random.split(jax.random.PRNGKey(99), 3)
+k_post = jax.random.PRNGKey(99)
 
 t0 = time.perf_counter()
 result_geovi = fitter.run(
@@ -444,33 +446,26 @@ result_geovi = fitter.run(
     n_iterations=8,
     n_samples=4,
     n_posterior_samples=400,
+    posterior_chunk_size=64,
     verbose=False,
 )
 t_geovi = time.perf_counter() - t0
 
-t0 = time.perf_counter()
-result_laplace = fitter.run(
-    "laplace",
-    key=k_lap,
-    init_from=result_map,
-    n_samples=300,
-    verbose=False,
-)
-t_laplace = time.perf_counter() - t0
-
-t0 = time.perf_counter()
-result_pathfinder = fitter.run(
-    "pathfinder",
-    key=k_pf,
-    n_samples=2000,
-    maxiter=30,
-    verbose=False,
-)
-t_pathfinder = time.perf_counter() - t0
-
 print(f"vi (geoVI): {t_geovi:.1f}s")
-print(f"Laplace:      {t_laplace:.1f}s")
-print(f"Pathfinder:   {t_pathfinder:.1f}s")
+# Laplace / Pathfinder comparison fits removed — they blow CPU memory on the
+# joint spec+phot likelihood. See 08_fitting_spectra for a spec-only multi-method
+# comparison; this notebook keeps the focus on phot-vs-spec-vs-joint posteriors.
+result_laplace = None
+result_pathfinder = None
+t_laplace = 0.0
+t_pathfinder = 0.0
+
+# Drop the joint fitter's internal caches before compiling the phot-only and
+# spec-only models (each compilation holds ~GB of XLA buffers otherwise).
+import gc as _gc
+
+del fitter
+_gc.collect()
 
 # %%
 # --- SFH recovery from joint posterior ---
@@ -490,44 +485,35 @@ plt.savefig(os.path.join(FIGDIR, "fig11_sfh_joint.png"), dpi=150, bbox_inches="t
 plt.show()
 
 # %%
-# --- Corner: Laplace vs geoVI (joint posteriors) ---
+# Laplace-vs-geoVI corner removed (Laplace fit disabled above to keep memory
+# bounded). truths_dict is defined here for use in the Phot/Spec/Joint corner.
 truths_dict = {p: float(true_params[p]) for p in spec.free_params}
 
-fig = plot_corner_comparison(
-    [result_laplace, result_geovi],
-    labels=["Laplace", "vi"],
-    colors=[COLORS["laplace"], COLORS["vi"]],
-    truths=truths_dict,
-)
-if fig is not None:
-    fig.suptitle("Laplace vs geoVI — Joint Fit", y=1.02)
-    plt.savefig(
-        os.path.join(FIGDIR, "fig11_corner_laplace_vs_geovi.png"),
-        dpi=150,
-        bbox_inches="tight",
-    )
-plt.show()
-
 # %%
-# --- Corner: Phot-only vs Spec-only vs Joint ---
-k_phot_vi, k_spec_vi = jax.random.split(jax.random.PRNGKey(77), 2)
+# --- Corner: Phot-only vs Spec-only vs Joint (geoVI with chunked draws) ---
+k_phot, k_spec = jax.random.split(jax.random.PRNGKey(77), 2)
 
 result_geovi_phot = fitter_phot.run(
     "vi",
-    key=k_phot_vi,
+    key=k_phot,
     n_iterations=8,
     n_samples=4,
     n_posterior_samples=400,
+    posterior_chunk_size=64,
     verbose=False,
 )
+_gc.collect()
+
 result_geovi_spec = fitter_spec.run(
     "vi",
-    key=k_spec_vi,
+    key=k_spec,
     n_iterations=8,
     n_samples=4,
     n_posterior_samples=400,
+    posterior_chunk_size=64,
     verbose=False,
 )
+_gc.collect()
 
 fig = plot_corner_comparison(
     [result_geovi_phot, result_geovi_spec, result_geovi],
@@ -536,7 +522,7 @@ fig = plot_corner_comparison(
     truths=truths_dict,
 )
 if fig is not None:
-    fig.suptitle("Phot-only vs Spec-only vs Joint (vi)", y=1.02)
+    fig.suptitle("Phot-only vs Spec-only vs Joint (geoVI, chunked)", y=1.02)
     plt.savefig(
         os.path.join(FIGDIR, "fig11_corner_data_comparison.png"),
         dpi=150,
@@ -548,11 +534,9 @@ plt.show()
 # Convergence diagnostics
 convergence_table(
     {
-        "Laplace (joint)": result_laplace,
-        "Pathfinder (joint)": result_pathfinder,
         "geoVI (joint)": result_geovi,
-        "geoVI (phot)": result_geovi_phot,
-        "geoVI (spec)": result_geovi_spec,
+        "geoVI (phot-only)": result_geovi_phot,
+        "geoVI (spec-only)": result_geovi_spec,
     }
 )
 

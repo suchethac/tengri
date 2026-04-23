@@ -70,6 +70,10 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.45")
 
+# Gate expensive fits (batch of 100 galaxies, filter sweep). Default off so the
+# notebook executes in <2 min on CPU. Flip to True to reproduce the full figures.
+RUN_EXPENSIVE = False
+
 from tengri import (
     Fitter,
     Fixed,
@@ -208,6 +212,7 @@ result = fitter.run(
     n_iterations=8,
     n_samples=4,
     n_posterior_samples=512,
+    posterior_chunk_size=64,
     verbose=False,
 )
 t_fit = time.perf_counter() - t0
@@ -325,6 +330,7 @@ result_joint = fitter_joint.run(
     n_iterations=8,
     n_samples=4,
     n_posterior_samples=512,
+    posterior_chunk_size=64,
     verbose=False,
 )
 
@@ -341,6 +347,7 @@ result_phot = fitter_phot.run(
     n_iterations=8,
     n_samples=4,
     n_posterior_samples=512,
+    posterior_chunk_size=64,
     verbose=False,
 )
 
@@ -391,108 +398,109 @@ plt.show()
 #
 # tengri's vmap architecture scales to large catalogs; this cell uses a **small N** so the
 # notebook finishes under typical CI memory limits. Increase ``N_GAL`` for timing studies.
+# **Gated** behind ``RUN_EXPENSIVE`` — set at the top of the notebook. Default off.
 
 # %%
-N_GAL = 24
+if RUN_EXPENSIVE:
+    N_GAL = 24
+    keys = jax.random.split(jax.random.PRNGKey(0), N_GAL)
+    true_params_batch = jax.vmap(spec.sample)(keys)
 
-# Generate 100 mock galaxies
-keys = jax.random.split(jax.random.PRNGKey(0), N_GAL)
-true_params_batch = jax.vmap(spec.sample)(keys)
+    mocks_batch = []
+    for i in range(N_GAL):
+        p_i = {k: v[i] for k, v in true_params_batch.items()}
+        m = model.mock(p_i, snr=15.0, key=jax.random.fold_in(jax.random.PRNGKey(0), i))
+        mocks_batch.append(m)
 
-# Generate mocks (MAP-only for speed)
-mocks_batch = []
-for i in range(N_GAL):
-    p_i = {k: v[i] for k, v in true_params_batch.items()}
-    m = model.mock(p_i, snr=15.0, key=jax.random.fold_in(jax.random.PRNGKey(0), i))
-    mocks_batch.append(m)
+    print(f"Generated {N_GAL} mocks with SNR=15")
 
-print(f"Generated {N_GAL} mocks with SNR=15")
+    fitter_batch = Fitter(model, mocks_batch[0].flux_obs, mocks_batch[0].noise)
+    galaxy_list = [{"flux_obs": m.flux_obs, "noise": m.noise} for m in mocks_batch]
 
-# Batch fitting
-fitter_batch = Fitter(model, mocks_batch[0].flux_obs, mocks_batch[0].noise)
-galaxy_list = [{"flux_obs": m.flux_obs, "noise": m.noise} for m in mocks_batch]
-
-t0 = time.perf_counter()
-results_batch = fitter_batch.fit_batch(
-    galaxy_list,
-    method="vi",
-    n_iterations=5,
-    n_samples=3,
-    n_posterior_samples=128,
-    verbose=False,
-)
-t_batch = time.perf_counter() - t0
-print(f"Batch fit {N_GAL} galaxies in {t_batch:.1f}s ({t_batch / N_GAL:.2f}s per galaxy)")
+    t0 = time.perf_counter()
+    results_batch = fitter_batch.fit_batch(
+        galaxy_list,
+        method="vi",
+        n_iterations=5,
+        n_samples=3,
+        n_posterior_samples=128,
+        verbose=False,
+    )
+    t_batch = time.perf_counter() - t0
+    print(f"Batch fit {N_GAL} galaxies in {t_batch:.1f}s ({t_batch / N_GAL:.2f}s per galaxy)")
+else:
+    print(
+        "Batch fit skipped (RUN_EXPENSIVE=False). "
+        "Set RUN_EXPENSIVE=True to fit 24 galaxies (~60–90 s on CPU)."
+    )
+    N_GAL = 0
+    true_params_batch = None
+    mocks_batch = None
+    results_batch = None
 
 # %%
-# Figure 5: Stellar mass recovery with dust coding
-fig, ax = plt.subplots(figsize=(8, 8))
+# Figure 5: Stellar mass recovery with dust coding (gated by RUN_EXPENSIVE above)
+if not RUN_EXPENSIVE or results_batch is None:
+    print("Figure 5 skipped (batch fit not run).")
+else:
+    fig5, ax = plt.subplots(figsize=(8, 8))
 
-# Compute true and recovered stellar masses
-true_mstar = []
-recovered_mstar_med = []
-recovered_mstar_lo = []
-recovered_mstar_hi = []
-dust_tau_bc_vals = []
+    true_mstar = []
+    recovered_mstar_med = []
+    recovered_mstar_lo = []
+    recovered_mstar_hi = []
+    dust_tau_bc_vals = []
 
-for i, res in enumerate(results_batch):
-    # True stellar mass
-    p_i = {k: v[i] for k, v in true_params_batch.items()}
-    pred_true = model.predict_photometry(p_i)
-    # Use median of posterior for stellar mass estimate
-    _ns = min(64, len(next(iter(res.samples.values()))))
-    _sub = {k: v[:_ns] for k, v in res.samples.items()}
-    pred_med = np.median(np.array(jax.vmap(model.predict_photometry)(_sub)), axis=0)
+    for i, res in enumerate(results_batch):
+        p_i = {k: v[i] for k, v in true_params_batch.items()}
+        true_mstar.append(float(p_i["sfh_tsnorm_log_peak_sfr"]))
+        recovered_mstar_med.append(float(np.median(res.samples["sfh_tsnorm_log_peak_sfr"])))
+        recovered_mstar_lo.append(float(np.percentile(res.samples["sfh_tsnorm_log_peak_sfr"], 16)))
+        recovered_mstar_hi.append(float(np.percentile(res.samples["sfh_tsnorm_log_peak_sfr"], 84)))
+        dust_tau_bc_vals.append(float(np.median(res.samples["dust_tau_bc"])))
 
-    # Approximate via chi2 scaling (simplified for illustration)
-    true_mstar.append(float(p_i["sfh_tsnorm_log_peak_sfr"]))
-    recovered_mstar_med.append(float(np.median(res.samples["sfh_tsnorm_log_peak_sfr"])))
-    recovered_mstar_lo.append(float(np.percentile(res.samples["sfh_tsnorm_log_peak_sfr"], 16)))
-    recovered_mstar_hi.append(float(np.percentile(res.samples["sfh_tsnorm_log_peak_sfr"], 84)))
-    dust_tau_bc_vals.append(float(np.median(res.samples["dust_tau_bc"])))
+    true_mstar = np.array(true_mstar)
+    recovered_mstar_med = np.array(recovered_mstar_med)
+    recovered_mstar_lo = np.array(recovered_mstar_lo)
+    recovered_mstar_hi = np.array(recovered_mstar_hi)
+    dust_tau_bc_vals = np.array(dust_tau_bc_vals)
 
-true_mstar = np.array(true_mstar)
-recovered_mstar_med = np.array(recovered_mstar_med)
-recovered_mstar_lo = np.array(recovered_mstar_lo)
-recovered_mstar_hi = np.array(recovered_mstar_hi)
-dust_tau_bc_vals = np.array(dust_tau_bc_vals)
+    sc = ax.scatter(
+        true_mstar,
+        recovered_mstar_med,
+        c=dust_tau_bc_vals,
+        s=40,
+        alpha=0.7,
+        cmap="viridis",
+        edgecolors="k",
+        linewidth=0.3,
+    )
+    ax.errorbar(
+        true_mstar,
+        recovered_mstar_med,
+        yerr=[
+            recovered_mstar_med - recovered_mstar_lo,
+            recovered_mstar_hi - recovered_mstar_med,
+        ],
+        fmt="none",
+        ecolor="grey",
+        alpha=0.3,
+        elinewidth=0.5,
+    )
 
-# Scatter with dust coding
-sc = ax.scatter(
-    true_mstar,
-    recovered_mstar_med,
-    c=dust_tau_bc_vals,
-    s=40,
-    alpha=0.7,
-    cmap="viridis",
-    edgecolors="k",
-    linewidth=0.3,
-)
-ax.errorbar(
-    true_mstar,
-    recovered_mstar_med,
-    yerr=[recovered_mstar_med - recovered_mstar_lo, recovered_mstar_hi - recovered_mstar_med],
-    fmt="none",
-    ecolor="grey",
-    alpha=0.3,
-    elinewidth=0.5,
-)
-
-lim = [
-    min(true_mstar.min(), recovered_mstar_lo.min()),
-    max(true_mstar.max(), recovered_mstar_hi.max()),
-]
-ax.plot(lim, lim, "k--", lw=1, label="1:1")
-
-ax.set_xlabel("True log SFR peak")
-ax.set_ylabel("Recovered log SFR peak (median ± 68%)")
-ax.set_title(f"Batch Fitting: {N_GAL} Galaxies")
-cbar = plt.colorbar(sc, ax=ax)
-cbar.set_label(r"$\tau_{BC}$")
-ax.legend()
-fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "07_batch_recovery.png"), dpi=150, bbox_inches="tight")
-plt.show()
+    lim = [
+        min(true_mstar.min(), recovered_mstar_lo.min()),
+        max(true_mstar.max(), recovered_mstar_hi.max()),
+    ]
+    ax.plot(lim, lim, "k--", lw=1, label="1:1")
+    ax.set_xlabel("True log SFR peak")
+    ax.set_ylabel("Recovered log SFR peak (median ± 68%)")
+    ax.set_title(f"Batch Fitting: {N_GAL} Galaxies")
+    cbar = plt.colorbar(sc, ax=ax)
+    cbar.set_label(r"$\tau_{BC}$")
+    ax.legend()
+    fig5.tight_layout()
+    plt.show()
 
 # %% [markdown]
 # ## Section 4: Choosing Your Filter Set
@@ -532,56 +540,61 @@ configs = {
 
 posteriors_by_config = {}
 
-for config_name, filter_names in configs.items():
-    obs_cfg = Observation(photometry=Photometry.from_names(filter_names))
-    model_cfg = SEDModel(spec, ssp_data, observation=obs_cfg)
+if RUN_EXPENSIVE:
+    for config_name, filter_names in configs.items():
+        obs_cfg = Observation(photometry=Photometry.from_names(filter_names))
+        model_cfg = SEDModel(spec, ssp_data, observation=obs_cfg)
 
-    # Generate mock with all filters, then fit with subset
-    key_cfg = jax.random.PRNGKey(99)
-    true_params_cfg = spec.sample(key_cfg)
-    mock_cfg = model_cfg.mock(true_params_cfg, snr=15.0, key=key_cfg)
+        key_cfg = jax.random.PRNGKey(99)
+        true_params_cfg = spec.sample(key_cfg)
+        mock_cfg = model_cfg.mock(true_params_cfg, snr=15.0, key=key_cfg)
 
-    # Quick fit (fewer iterations for speed)
-    fitter_cfg = Fitter(model_cfg, mock_cfg.flux_obs, mock_cfg.noise)
-    fitter_cfg.compile(verbose=False)
-    _ = fitter_cfg.run("map", n_steps=200, verbose=False)
-    result_cfg = fitter_cfg.run(
-        "vi",
-        n_iterations=6,
-        n_samples=3,
-        n_posterior_samples=256,
-        verbose=False,
+        fitter_cfg = Fitter(model_cfg, mock_cfg.flux_obs, mock_cfg.noise)
+        fitter_cfg.compile(verbose=False)
+        _ = fitter_cfg.run("map", n_steps=200, verbose=False)
+        result_cfg = fitter_cfg.run(
+            "vi",
+            n_iterations=6,
+            n_samples=3,
+            n_posterior_samples=256,
+            verbose=False,
+        )
+        posteriors_by_config[config_name] = result_cfg
+else:
+    print(
+        "Filter sweep skipped (RUN_EXPENSIVE=False). "
+        "Set RUN_EXPENSIVE=True to fit three filter configurations (~45 s)."
     )
 
-    posteriors_by_config[config_name] = result_cfg
-
 # %%
-# Figure 6: Posterior width by filter config
-fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+# Figure 6: Posterior width by filter config (gated by RUN_EXPENSIVE)
+if not RUN_EXPENSIVE or not posteriors_by_config:
+    print("Figure 6 skipped (filter sweep not run).")
+else:
+    fig6, axes = plt.subplots(1, 3, figsize=(15, 4))
 
-for ax, (config_name, result) in zip(axes, posteriors_by_config.items()):
-    params_to_plot = [
-        "sfh_tsnorm_log_peak_sfr",
-        "dust_tau_bc",
-        "met_logzsol",
-    ]
-    labels_plot = ["log SFR peak", r"$\tau_{BC}$", "log Z/Z☉"]
+    for ax, (config_name, result) in zip(axes, posteriors_by_config.items()):
+        params_to_plot = [
+            "sfh_tsnorm_log_peak_sfr",
+            "dust_tau_bc",
+            "met_logzsol",
+        ]
+        labels_plot = ["log SFR peak", r"$\tau_{BC}$", "log Z/Z☉"]
 
-    widths = []
-    for pname in params_to_plot:
-        lo = float(np.percentile(result.samples[pname], 16))
-        hi = float(np.percentile(result.samples[pname], 84))
-        widths.append(hi - lo)
+        widths = []
+        for pname in params_to_plot:
+            lo = float(np.percentile(result.samples[pname], 16))
+            hi = float(np.percentile(result.samples[pname], 84))
+            widths.append(hi - lo)
 
-    ax.bar(labels_plot, widths, color=COLORS.get("vi", "C1"), alpha=0.7, edgecolor="k")
-    ax.set_ylabel("68% CI Width")
-    ax.set_title(config_name)
-    ax.grid(axis="y", alpha=0.3)
+        ax.bar(labels_plot, widths, color=COLORS.get("vi", "C1"), alpha=0.7, edgecolor="k")
+        ax.set_ylabel("68% CI Width")
+        ax.set_title(config_name)
+        ax.grid(axis="y", alpha=0.3)
 
-fig.suptitle("Posterior Width vs Filter Configuration", fontsize=13)
-fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "07_filter_comparison.png"), dpi=150, bbox_inches="tight")
-plt.show()
+    fig6.suptitle("Posterior Width vs Filter Configuration", fontsize=13)
+    fig6.tight_layout()
+    plt.show()
 
 # %% [markdown]
 # ## Key Takeaways

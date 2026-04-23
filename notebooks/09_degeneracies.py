@@ -241,7 +241,7 @@ if HAS_DATA:
     t_compile = time.perf_counter() - t0_compile
 
     t0_run = time.perf_counter()
-    result_sdss = fitter.run("vi", n_iterations=10, n_samples=6,  verbose=False)
+    result_sdss = fitter.run("vi", n_iterations=10, n_samples=6, verbose=False)
     t_run = time.perf_counter() - t0_run
 
     print(f"XLA compile: {t_compile:.1f}s | runtime: {t_run:.1f}s")

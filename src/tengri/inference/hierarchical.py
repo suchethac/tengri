@@ -338,6 +338,8 @@ class PopulationFitter:
         n_iterations=20,
         n_samples=3,
         n_posterior_samples=500,
+        posterior_chunk_size=None,
+        memory_mode="low",
         kl_rtol=1e-2,
         n_seeds=3,
         verbose=True,
@@ -439,12 +441,15 @@ class PopulationFitter:
                 params = spec.resolve_mirrors(params)
                 return _predict(params)
 
+            # memory_mode="low" wraps per-galaxy forward in jax.checkpoint so
+            # the reverse-mode tape inside jvp/vjp does not materialise
+            # activations for all n_gal galaxies simultaneously. Trades a
+            # recomputation for a 2–3x peak-memory reduction during CG.
+            fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
             if stochastic:
-                predictions = jax.vmap(forward_one)(p["gal"], p["gal_xi"])
+                predictions = jax.vmap(fwd)(p["gal"], p["gal_xi"])
             else:
-                predictions = jax.vmap(lambda ub, _: forward_one(ub, None))(
-                    p["gal"], jnp.zeros(n_gal)
-                )
+                predictions = jax.vmap(lambda ub, _: fwd(ub, None))(p["gal"], jnp.zeros(n_gal))
             return predictions.reshape(-1)
 
         # --- Build init structure ---
@@ -806,6 +811,8 @@ class PopulationFitter:
         if verbose:
             print("  Initializing per-galaxy params via MAP...")
 
+        import gc
+
         gal_param_lists = {name: [] for name in free_names}
         gal_xi_list = []
         for i in range(n_gal):
@@ -823,6 +830,9 @@ class PopulationFitter:
                 gal_param_lists[name].append(init_u.get(name, jnp.array(0.0)))
             if stochastic:
                 gal_xi_list.append(init_u.get("psd_xi", jnp.zeros(n_grid)))
+            # Free per-galaxy MAP buffers before the next iteration.
+            del fitter_i, map_i, init_u
+        gc.collect()
 
         map_init = {
             "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
@@ -871,12 +881,36 @@ class PopulationFitter:
                 best_iters = n_iters
 
         # --- Draw posterior samples ---
+        # Chunked draws: peak memory of draw_residuals is
+        # O(chunk · d_total) instead of O(n_posterior_samples · d_total).
+        # The JIT cache is shared across chunks of equal size, so the extra
+        # dispatches are ~free. posterior_chunk_size=None preserves the
+        # original fully-vmapped behaviour.
         if verbose:
             print(f"  Drawing {n_posterior_samples} posterior samples...")
 
         draw_key = jax.random.fold_in(key, 12345)
         draw_keys = jax.random.split(draw_key, n_posterior_samples)
-        residuals_flat = draw_residuals_jit(best_flat, draw_keys)
+
+        chunk = posterior_chunk_size if posterior_chunk_size else n_posterior_samples
+        chunk = min(int(chunk), int(n_posterior_samples))
+        if chunk >= n_posterior_samples:
+            residuals_flat = draw_residuals_jit(best_flat, draw_keys)
+        else:
+            residual_chunks = []
+            for start in range(0, n_posterior_samples, chunk):
+                end = min(start + chunk, n_posterior_samples)
+                # Pad the final chunk to `chunk` so the JIT cache hits.
+                keys_chunk = draw_keys[start:end]
+                pad = chunk - (end - start)
+                if pad:
+                    keys_chunk = jnp.concatenate([keys_chunk, draw_keys[:pad]])
+                r = draw_residuals_jit(best_flat, keys_chunk)
+                jax.block_until_ready(r)
+                if pad:
+                    r = r[: end - start]
+                residual_chunks.append(r)
+            residuals_flat = jnp.concatenate(residual_chunks, axis=0)
 
         wall_time = time.time() - t0
 
@@ -940,6 +974,8 @@ class PopulationFitter:
         n_posterior_samples=60,
         sample_mode="nonlinear_resample",
         vi_config=None,
+        memory_mode="low",
+        posterior_chunk_size=None,
         verbose=True,
     ):
         """Hierarchical geoVI using NIFTy's CorrelatedFieldMaker.
@@ -1014,6 +1050,9 @@ class PopulationFitter:
         corr_field_template = cfm.finalize()
 
         # ── Build NIFTy domain ────────────────────────────────
+        # Batched-leaf layout (see _run_geovi for rationale): one (n_gal,...)
+        # array per per-galaxy param instead of N separate scalar leaves.
+        # Collapses the NIFTy pytree from O(n_gal·n_free) leaves to O(n_free).
         domain = {}
 
         # Shared PSD hyperparameters (from CFM)
@@ -1021,11 +1060,10 @@ class PopulationFitter:
             if k != "psd_xi":  # xi is per-galaxy
                 domain[k] = v
 
-        # Per-galaxy: own xi + own physical params
-        for i in range(n_gal):
-            domain[f"g{i}_xi"] = jft.ShapeWithDtype((n_grid,))
-            for name in free_names:
-                domain[f"g{i}_{name}"] = jft.ShapeWithDtype(())
+        # Per-galaxy: batched xi + batched physical params
+        domain["gal_xi"] = jft.ShapeWithDtype((n_gal, n_grid))
+        for name in free_names:
+            domain[f"gal_{name}"] = jft.ShapeWithDtype((n_gal,))
 
         # Precompute data
         all_data = []
@@ -1048,12 +1086,9 @@ class PopulationFitter:
                 if k != "psd_xi":
                     cfm_primals[k] = primals[k]
 
-            # Stack per-galaxy params into batched arrays (compile-time)
-            gal_xi = jnp.stack([primals[f"g{i}_xi"] for i in range(n_gal)])
-            gal_ub = {
-                name: jnp.stack([primals[f"g{i}_{name}"] for i in range(n_gal)])
-                for name in free_names
-            }
+            # Batched per-galaxy primals are already (n_gal, ...) — no stacking.
+            gal_xi = primals["gal_xi"]
+            gal_ub = {name: primals[f"gal_{name}"] for name in free_names}
 
             # Single-galaxy forward (vmapped over galaxy axis)
             def forward_one(ub_scalars, xi):
@@ -1080,7 +1115,8 @@ class PopulationFitter:
                 params = spec.resolve_mirrors(params)
                 return _predict_cfm(params)
 
-            predictions = jax.vmap(forward_one)(gal_ub, gal_xi)
+            fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
+            predictions = jax.vmap(fwd)(gal_ub, gal_xi)
             return predictions.reshape(-1)
 
         signal_response_jit = jax.jit(signal_response)
@@ -1095,7 +1131,11 @@ class PopulationFitter:
             if k != "psd_xi":
                 init[k] = jnp.zeros_like(v)  # start at prior mean
 
-        # Per-galaxy: MAP initialization
+        # Per-galaxy: MAP initialization (sequential; compiled grad_fn is
+        # cached per-model so only one XLA compile happens). Stack into
+        # batched arrays to match the batched-leaf domain layout.
+        import gc
+
         from tengri import Fitter
 
         keys = jax.random.split(key, n_gal + 1)
@@ -1103,6 +1143,8 @@ class PopulationFitter:
         if verbose:
             print("  Initializing per-galaxy params via MAP...")
 
+        gal_param_lists = {name: [] for name in free_names}
+        gal_xi_list = []
         for i in range(n_gal):
             gal = self.galaxies[i]
             fitter_i = Fitter(model, gal["flux_obs"], gal["noise"], data_type=self.data_type)
@@ -1111,8 +1153,16 @@ class PopulationFitter:
             )
             init_u = fitter_i._unbounded_from_posterior(map_i)
             for name in free_names:
-                init[f"g{i}_{name}"] = init_u.get(name, jnp.array(0.0))
-            init[f"g{i}_xi"] = init_u.get("psd_xi", jnp.zeros(n_grid))
+                gal_param_lists[name].append(init_u.get(name, jnp.array(0.0)))
+            gal_xi_list.append(init_u.get("psd_xi", jnp.zeros(n_grid)))
+            # Drop references to the per-galaxy MAP result so its buffers are
+            # reclaimable — prevents N live Posterior/loss_history arrays.
+            del fitter_i, map_i, init_u
+        gc.collect()
+
+        for name in free_names:
+            init[f"gal_{name}"] = jnp.stack(gal_param_lists[name])
+        init["gal_xi"] = jnp.stack(gal_xi_list)
 
         init_pos = jft.Vector(init)
 
@@ -1246,6 +1296,8 @@ class PopulationFitter:
         n_posterior_samples=100,
         sample_mode="nonlinear_resample",
         vi_config=None,
+        memory_mode="low",
+        posterior_chunk_size=None,
         verbose=True,
     ):
         """Hierarchical geoVI via NIFTy.re.
@@ -1291,18 +1343,17 @@ class PopulationFitter:
         t0 = time.time()
 
         # ── Build NIFTy domain ────────────────────────────────
+        # Batched-leaf layout: one (n_gal,)-shaped array per per-galaxy param
+        # instead of N separate scalar leaves. Collapses the NIFTy pytree from
+        # O(n_gal·n_free) leaves to O(n_free) — compile time, trace time, and
+        # optimize_kl's per-sample pytree copies all drop by ~n_gal.
         domain = {}
-
-        # Shared PSD params (unbounded)
         domain["psd_sigma_u"] = jft.ShapeWithDtype(())
         domain["psd_tau_u"] = jft.ShapeWithDtype(())
-
-        # Per-galaxy params
-        for i in range(n_gal):
-            for name in free_names:
-                domain[f"g{i}_{name}"] = jft.ShapeWithDtype(())
-            if stochastic:
-                domain[f"g{i}_psd_xi"] = jft.ShapeWithDtype((n_grid,))
+        for name in free_names:
+            domain[f"gal_{name}"] = jft.ShapeWithDtype((n_gal,))
+        if stochastic:
+            domain["gal_psd_xi"] = jft.ShapeWithDtype((n_gal, n_grid))
 
         # ── Build signal response ─────────────────────────────
         galaxies = self.galaxies
@@ -1344,13 +1395,9 @@ class PopulationFitter:
             psd_sigma = to_bounded(primals["psd_sigma_u"], sigma_lo, sigma_hi)
             psd_tau = to_bounded(primals["psd_tau_u"], tau_lo, tau_hi)
 
-            # Stack per-galaxy params into batched arrays (compile-time)
-            gal_ub = {
-                name: jnp.stack([primals[f"g{i}_{name}"] for i in range(n_gal)])
-                for name in free_names
-            }
-            if stochastic:
-                gal_xi = jnp.stack([primals[f"g{i}_psd_xi"] for i in range(n_gal)])
+            # Batched per-galaxy primals are already (n_gal, ...) — no stacking.
+            gal_ub = {name: primals[f"gal_{name}"] for name in free_names}
+            gal_xi = primals["gal_psd_xi"] if stochastic else jnp.zeros(n_gal)
 
             # Single-galaxy forward (vmapped over galaxy axis)
             def forward_one(ub_scalars, xi):
@@ -1369,12 +1416,11 @@ class PopulationFitter:
                 params = spec.resolve_mirrors(params)
                 return _predict_single(params)
 
+            fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
             if stochastic:
-                predictions = jax.vmap(forward_one)(gal_ub, gal_xi)
+                predictions = jax.vmap(fwd)(gal_ub, gal_xi)
             else:
-                predictions = jax.vmap(lambda ub, _: forward_one(ub, None))(
-                    gal_ub, jnp.zeros(n_gal)
-                )
+                predictions = jax.vmap(lambda ub, _: fwd(ub, None))(gal_ub, jnp.zeros(n_gal))
 
             return predictions.reshape(-1)
 
@@ -1385,19 +1431,18 @@ class PopulationFitter:
         likelihood = jft.Gaussian(data_concat, noise_inv_concat).amend(nifty_model)
 
         # ── Initialize ────────────────────────────────────────
+        # Batched initialisation: one (n_gal,) draw per param instead of a
+        # Python loop over N galaxies. Same statistics as before (N(0, 0.1)
+        # per galaxy), just vectorised.
         init = {}
-        # Shared: start near middle of prior
         init["psd_sigma_u"] = jnp.array(0.0)
         init["psd_tau_u"] = jnp.array(0.0)
 
-        # Per-galaxy: small random perturbations
-        keys = jax.random.split(key, n_gal + 1)
-        for i in range(n_gal):
-            gal_keys = jax.random.split(keys[i], len(free_names) + 1)
-            for j, name in enumerate(free_names):
-                init[f"g{i}_{name}"] = 0.1 * jax.random.normal(gal_keys[j])
-            if stochastic:
-                init[f"g{i}_psd_xi"] = 0.1 * jax.random.normal(gal_keys[-1], shape=(n_grid,))
+        keys = jax.random.split(key, len(free_names) + 2)
+        for j, name in enumerate(free_names):
+            init[f"gal_{name}"] = 0.1 * jax.random.normal(keys[j], shape=(n_gal,))
+        if stochastic:
+            init["gal_psd_xi"] = 0.1 * jax.random.normal(keys[-2], shape=(n_gal, n_grid))
 
         init_pos = jft.Vector(init)
 
@@ -1511,7 +1556,16 @@ class PopulationFitter:
         )
 
     def _run_raytrace(
-        self, *, key, n_burnin=200, n_steps=500, n_leapfrog_steps=10, step_size=None, verbose=True
+        self,
+        *,
+        key,
+        n_burnin=200,
+        n_steps=500,
+        n_leapfrog_steps=10,
+        step_size=None,
+        memory_mode="low",
+        posterior_chunk_size=None,
+        verbose=True,
     ):
         """Hierarchical Ray Tracing (flat parameter vector).
 
@@ -1551,6 +1605,8 @@ class PopulationFitter:
         if verbose:
             print("  Initializing per-galaxy params via MAP...")
 
+        import gc
+
         gal_param_lists = {name: [] for name in free_names}
         gal_xi_list = []
 
@@ -1565,6 +1621,8 @@ class PopulationFitter:
                 gal_param_lists[name].append(init_u.get(name, jnp.array(0.0)))
             if stochastic:
                 gal_xi_list.append(init_u.get("psd_xi", jnp.zeros(n_grid)))
+            del fitter_i, map_i, init_u
+        gc.collect()
 
         if verbose:
             print("  MAP initialization complete")
@@ -1621,12 +1679,11 @@ class PopulationFitter:
                 params = spec.resolve_mirrors(params)
                 return _predict_rt(params)
 
+            fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
             if stochastic:
-                predictions = jax.vmap(forward_one)(p["gal"], p["gal_xi"])
+                predictions = jax.vmap(fwd)(p["gal"], p["gal_xi"])
             else:
-                predictions = jax.vmap(lambda ub, _: forward_one(ub, None))(
-                    p["gal"], jnp.zeros(n_gal)
-                )
+                predictions = jax.vmap(lambda ub, _: fwd(ub, None))(p["gal"], jnp.zeros(n_gal))
 
             pred_all = predictions.reshape(-1)
             chi2 = jnp.sum(((all_data - pred_all) / all_noise) ** 2)

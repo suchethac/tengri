@@ -14,17 +14,29 @@
 # ---
 
 # %% [markdown]
-# # Fitting Real Data
+# # Fitting "Real" Data — a workflow sketch
 #
-# **Tour:** Optional notebook — left out of the default `00_quickstart` sequence
-# for now; open when you want an end-to-end “my spectrum” workflow sketch.
+# **What problem this solves.** Every astronomer's first question on picking up a new SED code
+# is *how do I fit my own data?* — not a synthetic mock, not the tutorial's prebuilt sample,
+# but a FITS spectrum they already have on disk. This notebook walks that path end-to-end:
+# wavelength grid, noise vector, redshift, masking, calibration, and an inference call.
 #
-# Every astronomer's first question: how do I fit *my* data? This notebook
-# shows the complete workflow from loading observed data to posterior analysis.
+# **What you'll see.** A synthetic "SDSS-like" optical spectrum (built here so the notebook
+# runs with no external data dependency) fitted with `Fitter.run("vi", ...)`, with
+# residuals, posterior corner, and SFH recovery. At the end, a reference block shows the
+# exact edits needed to swap the synthetic data for a real FITS file.
 #
-# **Note**: This is a workflow demo, not a scientific analysis. For real
-# science, you'd also consider noise models, calibration systematics, and
-# emission line treatment.
+# **Why tengri is different.** The full chain — wavelength response, noise, calibration,
+# spectral line masking — is a single pure-JAX function. Gradients flow through every step,
+# so swapping your FITS loader in does not break the inference path.
+#
+# > ⚠ **This notebook is a workflow sketch.** The "observed" spectrum here is synthesised
+# > from a known truth so the recovery diagnostics are meaningful. Production work needs a
+# > real noise model, calibration systematics, and emission-line treatment.
+#
+# **Prereqs:** [`00_quickstart.py`](00_quickstart.py), [`08_fitting_spectra.py`](08_fitting_spectra.py).
+# **Continue with:** [`14_joint_photometry_spectroscopy.py`](14_joint_photometry_spectroscopy.py),
+# [`15_emission_line_measurements.py`](15_emission_line_measurements.py).
 
 # %%
 import os

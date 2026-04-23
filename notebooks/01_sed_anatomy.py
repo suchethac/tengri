@@ -14,20 +14,35 @@
 # ---
 
 # %% [markdown]
-# # SED Anatomy
+# # SED Anatomy: Wavelength → Physics
 #
-# _sed_anatomy
+# ## Three questions answered here
 #
-# This notebook is a map from **wavelength to physics**: panchromatic plots use
-# the full forward model (IR re-radiation, radio, X-ray). **Optical spectroscopic
-# fitting** should use a narrower model—SSP starlight + **baked-in** nebular
-# (this grid’s ``wNE`` file) + Charlot–Fall attenuation only—so the likelihood
-# matches the data vector (extra components can drive NaNs or meaningless χ²).
-# **Spine path:** `notebooks/01_sed_anatomy.py`.
+# **What problem does this solve?**
+# You know your galaxy's star-formation history and want to predict its spectrum across
+# X-ray to radio. Tengri computes this in one differentiable JAX function, handling
+# stellar synthesis, nebular emission, dust attenuation, and multiwavelength components
+# all at once—no hand-stitching separate codes.
 #
-# **Related:** SFH parametrization and stochastic-field theory — [`02_sfh_gallery.py`](02_sfh_gallery.py)
-# (especially §0). Mock SEDs from **known** tabulated SFHs (no `Parameters`) —
-# [`13_tabulated_sfh_to_mock_sed.py`](13_tabulated_sfh_to_mock_sed.py).
+# **What will you see at the end?**
+# A panchromatic SED figure showing how each component (stellar, nebular, dust IR,
+# X-ray, radio) dominates different wavelength ranges. Then we build the same SED
+# step-by-step using public API calls, redshift it, check IGM absorption, and show
+# how to set up a fit-safe optical-only model.
+#
+# **Why does tengri do it differently?**
+# In Prospector, BAGPIPES, or CIGALE, you pick a fixed set of component modules at startup
+# and fit them as a black box. In tengri, the entire forward chain (SSP → SFH → dust →
+# nebular/AGN/radio/X-ray) is **one pure JAX function**, so derivatives flow through
+# every step. You can toggle components on/off easily, understand the math exactly,
+# and combine inference methods (MAP, MCMC, Variational) without rewriting the model.
+#
+# ---
+#
+# **Prereqs:** [`00_quickstart.py`](00_quickstart.py) (optional; introduces HMC + fit workflow).
+#
+# **Spine path:** `notebooks/01_sed_anatomy.py`
+
 
 # %% [markdown]
 # ## Setup: imports and model configuration
@@ -65,7 +80,6 @@ warnings.filterwarnings(
 
 from tengri import (
     Fixed,
-    Model,
     Observation,
     Parameters,
     SEDModel,
@@ -169,17 +183,18 @@ params = spec_full.sample(jax.random.PRNGKey(42))
 # %% [markdown]
 # ## Section 1: Panchromatic SED decomposition (X-ray → radio)
 #
-# We use `SEDModel._compute_sed_components()` to obtain each physical emission
-# channel in a **single** consistent pipeline call.  All outputs are in
+# We use the forward pipeline's `compute_sed_components()` to obtain each physical
+# emission channel in a **single** consistent call. All outputs are in
 # erg s⁻¹ Hz⁻¹ (CGS); we convert to νL_ν [L☉] for the plot so different
 # wavelength decades are directly comparable.
 #
-# The figure style follows `analysis/multiwavelength_sed_v2.py`:
+# The figure style follows standard multi-wavelength plots:
 # electromagnetic band shading, filled component areas, twin frequency axis,
 # and annotated spectral breaks.
 
 # %%
 import matplotlib.ticker as ticker
+from tengri.forward.pipeline import compute_sed_components
 
 # ── Wavelength / frequency grids ────────────────────────────────────────────
 _C_AA_S = 2.99792458e18  # speed of light in Å s⁻¹
@@ -192,8 +207,8 @@ _NU_HZ = _C_AA_S / _WAVE_AA  # Hz
 
 # ── Compute all SED components at z = 0 (rest-frame) ────────────────────────
 _params_z0 = {**params, "redshift": jnp.array(0.0)}
-_comp = model_full._compute_sed_components(
-    _params_z0, need_intrinsic=True, rest_wavelength=jnp.array(_WAVE_AA)
+_comp = compute_sed_components(
+    model_full, _params_z0, need_intrinsic=True, rest_wavelength=jnp.array(_WAVE_AA)
 )
 
 
@@ -536,10 +551,10 @@ plt.show()
 # %% [markdown]
 # ## Section 4: Optical spectrum — baked-in nebular only (fit-safe)
 #
-# For MAP / MCMC / VI on an optical spectrum, build `SEDModel` with
+# For fitting on an optical spectrum only, build `SEDModel` with
 # ``spec_baked_optical`` and `Observation(spectroscopy=Spectroscopy(...))`.
 # Omitting IR/radio/X-ray matches the information in the data and avoids
-# invalid Gaussian likelihoods from mis-sized or non-finite predictions.
+# NaN or invalid likelihoods from extraneous SED components.
 
 # %%
 WAVE_FIT = jnp.linspace(3800.0, 9200.0, 200)
@@ -552,43 +567,34 @@ mock_optical = sed_optical.mock_spectrum(
     params_optical, WAVE_FIT, snr=40.0, key=jax.random.fold_in(_key_opt, 1)
 )
 
-# Use the high-level Model.from_config() API for fitting. Short-name priors
-# (log_total_mass, log_sfr_inst, tx_frac_*, logzsol, etc.) are auto-expanded to their full prefixed names.
-# wave_obs is passed directly so Model builds the Observation internally.
-model_fit = Model.from_config(
-    ssp=SSP_PATH,
-    sfh="dense_basis",
-    redshift=0.05,
-    wave_obs=WAVE_FIT,
-    priors=dict(
-        log_total_mass=Uniform(8, 12),
-        log_sfr_inst=Uniform(-2, 3),
-        tx_frac_0=Uniform(0.05, 0.95),
-        tx_frac_1=Uniform(0.05, 0.95),
-        tx_frac_2=Uniform(0.05, 0.95),
-        logzsol=Uniform(-2.0, 0.4),
-        dust_tau_bc=Uniform(0.0, 3.0),
-        dust_tau_diff=Uniform(0.0, 1.5),
-    ),
-)
-result_optical = model_fit.fit(
-    spectrum=(mock_optical.flux_obs, mock_optical.noise),
-    method="map",
-    n_steps=300,
-    verbose=False,
-)
-
+# Verify that the forward model is finite at the true parameters
 pred_truth = sed_optical.predict_spectrum(params_optical, WAVE_FIT)
 resid_sigma = (mock_optical.flux_obs - pred_truth) / mock_optical.noise
 log_gauss_truth = float(-0.5 * jnp.sum(resid_sigma**2))
 print(
-    "Optical-only model: log (Gaussian) at generating params =",
+    "Optical-only forward model: log (Gaussian) at truth =",
     log_gauss_truth,
     "(finite:",
     jnp.isfinite(log_gauss_truth).item(),
     ")",
 )
 
-print(
-    "→ Next: SFH gallery `02_sfh_gallery.py`, dust `03_dust_gallery.py`, multi-λ `06_multiwavelength_gallery.py`."
-)
+# %% [markdown]
+# ---
+#
+# ## Summary
+#
+# We have shown:
+#
+# 1. **Panchromatic anatomy:** How stellar + nebular + dust IR + X-ray + radio combine
+#    into a single rest-frame SED using `compute_sed_components()`.
+# 2. **Component buildup:** Using separate `SEDModel` instances to isolate each physical process
+#    (stars, nebular, dust attenuation, multiwavelength).
+# 3. **Redshift handling:** The same physical SED at different redshifts, with IGM
+#    absorption and luminosity distance applied automatically.
+# 4. **Optical-only fit safety:** Building an `Observation` with spectroscopy only ensures
+#    the forward model outputs match the data dimensionality.
+#
+# **Continue with:** [`02_sfh_gallery.py`](02_sfh_gallery.py) for parametric and stochastic SFH models,
+# [`03_dust_gallery.py`](03_dust_gallery.py) for attenuation and emission templates,
+# or [`06_multiwavelength_gallery.py`](06_multiwavelength_gallery.py) for AGN, radio, and X-ray.

@@ -22,7 +22,9 @@ COLORS = {
     "map": "#888888",  # grey — point estimate
     "rt": "#1f77b4",  # blue — Ray Tracing (exact MCMC)
     "vi": "#ff7f0e",  # orange — VI (variational)
+    "geovi": "#ff7f0e",  # alias for "vi" (geoVI)
     "mcmc_nuts": "#2ca02c",  # green — NUTS (gold standard)
+    "nuts": "#2ca02c",  # alias for "mcmc_nuts"
     "vi_linear": "#9467bd",  # purple — VI Linear (linear VI)
     "pathfinder": "#8c564b",  # brown — Pathfinder (approximate)
     "ess": "#e377c2",  # pink — Elliptical Slice Sampling
@@ -626,7 +628,8 @@ def plot_corner_comparison(posteriors, labels, colors=None, truths=None, params=
         for post in posteriors:
             if post.samples is not None:
                 params = [
-                    k for k in sorted(post.samples.keys())
+                    k
+                    for k in sorted(post.samples.keys())
                     if k != "psd_xi"
                     and np.asarray(post.samples[k]).ndim == 1
                     and float(np.std(np.asarray(post.samples[k]))) > 1e-10
@@ -638,15 +641,19 @@ def plot_corner_comparison(posteriors, labels, colors=None, truths=None, params=
     for post, label, color in zip(posteriors, labels, colors):
         try:
             fig = post.plot_corner(
-                params=params, truths=truths, color=color,
-                label=label, fig=fig, axes=axes,
+                params=params,
+                truths=truths,
+                color=color,
+                label=label,
+                fig=fig,
+                axes=axes,
             )
             # Extract axes grid from fig so the next posterior overlays
             if fig is not None and axes is None:
                 n = len(params)
                 # fig.axes may have more axes than n*n (derived quantities)
                 # Take only the first n*n
-                grid_axes = fig.axes[:n * n]
+                grid_axes = fig.axes[: n * n]
                 if len(grid_axes) == n * n:
                     axes = np.array(grid_axes).reshape(n, n)
         except (ValueError, np.linalg.LinAlgError, IndexError):
@@ -662,8 +669,14 @@ def plot_corner_comparison(posteriors, labels, colors=None, truths=None, params=
                     handles.append(h)
                     leg_labels.append(l)
         if handles:
-            fig.legend(handles, leg_labels, loc="upper right",
-                       fontsize=14, framealpha=0.9, edgecolor="grey")
+            fig.legend(
+                handles,
+                leg_labels,
+                loc="upper right",
+                fontsize=14,
+                framealpha=0.9,
+                edgecolor="grey",
+            )
 
     return fig
 

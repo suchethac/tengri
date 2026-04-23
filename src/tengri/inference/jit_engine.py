@@ -163,6 +163,14 @@ def build_jit_engine(fitter, pos_dict):
     # NIFTy and eager use; this unwrapped copy is for the native VI path.
     signal_response, _primals_to_params = _build_signal_response(fitter)
 
+    # memory_mode="low": rematerialize the forward model on the backward
+    # pass instead of caching activations. Cuts the autodiff-tape peak
+    # for `metric_vec` (jvp+vjp) and `hamiltonian` (value_and_grad) at
+    # the cost of recomputing the forward once per gradient evaluation.
+    # Targets the high-D stochastic-SFH case where the tape blows up.
+    if getattr(fitter, "_memory_mode", "fast") == "low":
+        signal_response = jax.checkpoint(signal_response)
+
     # --- Signal + noise response for variable noise ---
     if use_variable_noise:
 

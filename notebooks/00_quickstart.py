@@ -66,6 +66,7 @@ sys.path.insert(0, _nb_dir)
 import jax
 import jax.numpy as jnp
 import matplotlib
+
 # Use non-interactive backend when run as a plain script (not in Jupyter).
 if "ipykernel" not in sys.modules:
     matplotlib.use("Agg")
@@ -267,7 +268,13 @@ ax0.legend(loc="upper right", fontsize=8)
 fig0.tight_layout()
 # plt.savefig(os.path.join(FIGDIR, "fig00_panchromatic.png"), dpi=150, bbox_inches="tight")
 plt.show()
-del model_pan, sed_pan, sed_pan_np, wave_pan, wave_pan_np  # free SSP device memory before inference
+del (
+    model_pan,
+    sed_pan,
+    sed_pan_np,
+    wave_pan,
+    wave_pan_np,
+)  # free SSP device memory before inference
 
 # %% [markdown]
 # ## Part A: A Smooth Galaxy Spectrum
@@ -298,7 +305,9 @@ for name in spec_param.free_params:
 # %%
 # Create the model with photometric precomputation (fast)
 model_param = SEDModel(spec_param, ssp_data, observation=obs)
-print(f"Model created: {spec_param.n_free} free parameters, {len(phot_obs.names)} photometric bands")
+print(
+    f"Model created: {spec_param.n_free} free parameters, {len(phot_obs.names)} photometric bands"
+)
 
 # %%
 # The forward model is fast
@@ -330,7 +339,9 @@ true_params_param["sfh_db_log_total_mass"] = jnp.array(10.8)
 true_params_param["sfh_db_log_sfr_inst"] = jnp.array(1.48)  # log(30) ≈ 1.48 Msun/yr
 true_params_param["sfh_db_tx_frac_0"] = jnp.array(0.1)  # Early epoch (low weight)
 true_params_param["sfh_db_tx_frac_1"] = jnp.array(0.25)  # Middle epoch
-true_params_param["sfh_db_tx_frac_2"] = jnp.array(0.65)  # Recent epoch (high weight, rising profile)
+true_params_param["sfh_db_tx_frac_2"] = jnp.array(
+    0.65
+)  # Recent epoch (high weight, rising profile)
 true_params_param["met_logzsol"] = jnp.array(-0.1)  # Solar-ish metallicity
 true_params_param["dust_tau_bc"] = jnp.array(0.5)
 true_params_param["dust_tau_diff"] = jnp.array(0.3)
@@ -385,7 +396,9 @@ if n_bands >= 10:
 ax.set_xticks(band_idx)
 ax.set_xticklabels(band_names, rotation=45, ha="right", fontsize=9)
 ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]", fontsize=10)
-ax.set_title("Mock SED: Multi-Wavelength Photometry (Monotonically Rising SFH, SFR = 30 $M_\\odot$/yr)")
+ax.set_title(
+    "Mock SED: Multi-Wavelength Photometry (Monotonically Rising SFH, SFR = 30 $M_\\odot$/yr)"
+)
 ax.legend(fontsize=9, loc="upper left", ncol=2)
 ax.grid(True, alpha=0.3, axis="y")
 fig.tight_layout()
@@ -488,9 +501,27 @@ if phot_samples_nss:
         ax.plot(band_idx, s, "s--", color=COLORS["vi"], alpha=0.015, lw=0.8, zorder=1)
 
 # Medians
-ax.plot(band_idx, phot_median_hmc, "^-", color=COLORS["mcmc_nuts"], ms=7, lw=2.5, label=f"HMC median ({t_hmc:.1f}s)", zorder=4)
+ax.plot(
+    band_idx,
+    phot_median_hmc,
+    "^-",
+    color=COLORS["mcmc_nuts"],
+    ms=7,
+    lw=2.5,
+    label=f"HMC median ({t_hmc:.1f}s)",
+    zorder=4,
+)
 if phot_median_nss is not None:
-    ax.plot(band_idx, phot_median_nss, "s--", color=COLORS["vi"], ms=7, lw=2.5, label=f"NSS median ({t_nss:.1f}s)", zorder=4)
+    ax.plot(
+        band_idx,
+        phot_median_nss,
+        "s--",
+        color=COLORS["vi"],
+        ms=7,
+        lw=2.5,
+        label=f"NSS median ({t_nss:.1f}s)",
+        zorder=4,
+    )
 
 # Truth
 ax.plot(band_idx, true_np, "D", color=COLORS["truth"], ms=9, alpha=0.8, label="Truth", zorder=5)
@@ -612,10 +643,10 @@ print("  " + "=" * 60)
 print(f"  {'Method':<20s} {'Runtime':>10s} {'Samples':>10s} {'ESS/sec':>10s}")
 print("  " + "-" * 60)
 n_hmc = len(next(iter(result_hmc_param.samples.values())))
-print(f"  {'HMC':<20s} {t_hmc:>9.1f}s {n_hmc:>10d} {n_hmc/t_hmc:>10.0f}")
+print(f"  {'HMC':<20s} {t_hmc:>9.1f}s {n_hmc:>10d} {n_hmc / t_hmc:>10.0f}")
 if result_nss_param is not None:
     n_nss = len(next(iter(result_nss_param.samples.values())))
-    print(f"  {'NSS':<20s} {t_nss:>9.1f}s {n_nss:>10d} {n_nss/t_nss:>10.0f}")
+    print(f"  {'NSS':<20s} {t_nss:>9.1f}s {n_nss:>10d} {n_nss / t_nss:>10.0f}")
 print("  " + "=" * 60)
 
 # %% [markdown]

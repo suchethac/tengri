@@ -56,27 +56,29 @@ jupyter lab notebooks/              # 14 demonstration notebooks, 5 tutorial not
 
 ```python
 from tengri import (
-    Model, ParamSpec, Uniform, Gaussian, Fixed, Fitter, Posterior,
-    HierarchicalFitter, load_ssp_data, load_filter_set, sample_raytrace,
+    SEDModel, Parameters, Uniform, Gaussian, Fixed, Fitter, Posterior,
+    PopulationFitter, Observation, Photometry, Spectroscopy,
+    load_ssp_data, load_filter_set,
 )
 
 # Define model
-spec = ParamSpec(
+spec = Parameters(
     sfh_dpl_alpha=Uniform(0.5, 3.0), sfh_dpl_beta=Uniform(0.3, 2.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 10.0), sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
     sfh_field_psd_sigma=Uniform(0.1, 3.0), sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
     met_logzsol=Gaussian(-0.3, 0.2, lo=-2.0, hi=0.2),
-    dust_tau_bc=Uniform(0.0, 3.0), dust_tau_diff=0.3, dust_slope=-0.7,
-    redshift=0.1, stochastic=True, n_grid=128,
+    dust_tau_bc=Uniform(0.0, 3.0), dust_tau_diff=Fixed(0.3), dust_slope=Fixed(-0.7),
+    redshift=Fixed(0.1), mean_sfh_type=["dpl", "field"], n_grid=128,
 )
-model = Model(spec, load_ssp_data("data/ssp.h5"), filters=load_filter_set([...]))
+obs = Observation(photometry=Photometry.from_names([...]))
+model = SEDModel(spec, load_ssp_data("data/ssp.h5"), observation=obs)
 mock = model.mock(spec.sample(key), snr=20.0, key=noise_key)
 
-# Fit: MAP → Ray Tracing or geoVI (equal-priority primaries)
+# Fit: MAP → HMC (NUTS) or NSS (exact) — canonical pair for 7-D smooth model
 fitter = Fitter(model, mock.flux_obs, mock.noise)
 result_map = fitter.run("map", n_steps=2000, learning_rate=0.03)
-result_rt  = fitter.run("raytrace", init_from=result_map, n_burnin=100, n_steps=300)
-result_vi  = fitter.run("geovi", init_from=result_map, n_iterations=15, n_posterior_samples=80)
+result_rt  = fitter.run("mcmc_raytrace", init_from=result_map, n_burnin=100, n_steps=300)
+result_vi  = fitter.run("vi", init_from=result_map, n_iterations=15, n_posterior_samples=80)
 
 # Results
 posterior.summary()                        # median ± 68% CI
@@ -86,8 +88,8 @@ posterior.plot_corner(truths=true_params)   # KDE contour triangle plot
 model.plot_sfh_posterior(posterior, ...)    # SFH with 16-84% fill
 
 # Hierarchical: shared PSD across N galaxies
-hfitter = HierarchicalFitter(model_factory, galaxies)
-result = hfitter.run("raytrace", n_burnin=100, n_steps=300)
+hfitter = PopulationFitter(model_factory, galaxies)
+result = hfitter.run("mgvi", n_iterations=10)
 result.summary()  # posterior on shared (σ_PSD, τ_PSD)
 ```
 

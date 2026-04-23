@@ -16,14 +16,19 @@
 # %% [markdown]
 # # Nebular Emission Gallery
 #
-# _nebular_gallery
+# _nebular_gallery
 #
-# Visual catalogue aligned with the model-track notebook: **nebular** backends
-# (CLOUDY-style ratios, Cue when weights exist), **shocks**, **DIG** mixing, $Q_H$,
-# plus **IGM** and **spectroscopy** utilities (LSF, calibration, line design matrix).
-# For **emission-line marginalization** in fits, see `08_fitting_spectra.py`.
+# **Prereqs:** 01_sed_anatomy, 02_sfh_gallery | **Continue with:** 08_fitting_spectra
 #
-# **Paper §3:** nebular emission sits **after** the CSP integral and **before** dust in the full chain.
+# ## Why nebular emission matters for SED fitting
+#
+# Emission lines are critical tracers of star formation, ionization state, and AGN activity:
+# - **Balmer lines** (H-alpha, H-beta) scale with instantaneous SFR but are contaminated by diffuse ionized gas (DIG);
+# - **[OIII]+H-beta** and **[NII]+H-alpha** ratios (BPT diagnostics) distinguish star formation from AGN and shocks;
+# - **JWST photometry** (F390M, F410M, F430M bands) captures [OIII] and H-beta emission in high-z galaxies, biasing broadband SED fits;
+# - **Photoionization physics** (ionization parameter logU, gas-phase metallicity) shapes line strengths; CLOUDY grids and neural emulators (Cue) quantify these dependences.
+#
+# This notebook showcases three nebular backends (BakedIn, CloudyGrid, Cue), shock emission (MAPPINGS V), DIG mixing, and Q_H (ionizing photon rate)—the physical link between stellar population and emission lines. We also diagnose star formation vs AGN on BPT diagrams.
 
 # %%
 import importlib.util
@@ -135,10 +140,19 @@ except ModuleNotFoundError:
 
 setup_style()
 
-FIGDIR = os.path.join("notebooks", "figures", "nebular_gallery")
-os.makedirs(FIGDIR, exist_ok=True)
+_C_KMS = 2.99792458e5
 
-CUE_WEIGHTS_PATH = Path("data/cue_weights.npz")
+# %% [markdown]
+# ## Jargon Glossary
+#
+# - **HII region**: ionized hydrogen gas surrounding young, hot stars; primary source of optical emission lines
+# - **Photoionization**: ionization by ultraviolet photons from hot stars (vs thermal ionization)
+# - **CLOUDY**: photoionization simulation code (Ferland et al.); full non-equilibrium atomic physics; primary source of grid-based nebular models
+# - **Cue**: neural-net emulator (Li et al. 2025) trained on CLOUDY grids; fast JAX implementation; can vary ionizing spectrum shape
+# - **DIG (diffuse ionized gas)**: warm, low-ionization gas permeating the ISM (log U ~ -4); adds to integrated line fluxes without tracing stellar birth sites
+# - **logU (ionization parameter)**: dimensionless ratio of photon density to gas density; higher logU means higher ionization (more [OIII] relative to [NII])
+# - **neb_logZ_gas (gas-phase metallicity)**: log10(Z/Zsun) of nebular gas; typically solar or 0.1–0.5 solar
+# - **Shocks**: radiative shocks from SNe, AGN outflows; produce distinctive low-ionization emission ([OI], [SII]); identifiable on BPT diagrams
 
 # %% [markdown]
 # ## Backend Decision Table
@@ -221,7 +235,7 @@ ax.set_title(r"[SII] / H$\alpha$")
 
 # Panel 5: Halpha/Hbeta (Balmer decrement)
 ax = axes[1, 1]
-ax.plot(logU_grid, r_ha_hb, color=COLORS["vi"], lw=2)
+ax.plot(logU_grid, r_ha_hb, color=COLORS["geovi"], lw=2)
 ax.set_xlabel(r"$\log U$")
 ax.set_ylabel(r"H$\alpha$ / H$\beta$")
 ax.set_title(r"Balmer decrement (Case B $\approx 2.86$)")
@@ -241,7 +255,6 @@ ax.set_title("BPT diagram (solar Z, varying logU)")
 
 fig.suptitle("CLOUDY-like Line Ratios vs Ionization Parameter", y=1.01, fontsize=12)
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "19_cloudy_line_ratios.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -252,11 +265,12 @@ plt.show()
 # (`gas_logu`, `gas_logn`, `gas_logz`, `gas_logno`, `gas_logco`).
 #
 # The three unique capabilities of Cue over the CLOUDY grid are:
-# - **[N/O]** (`gas_logno`): shifts [NII]/Hα independently of metallicity
+# - **[N/O]** (`gas_logno`): shifts [NII]/Halpha independently of metallicity
 # - **[C/O]** (`gas_logco`): controls UV carbon lines (CIII]1909, CIV1549)
 # - **Ionizing spectrum shape**: handles AGN/shock ionization vs stellar
 
 # %%
+CUE_WEIGHTS_PATH = Path("data/cue_weights.npz")
 if CUE_WEIGHTS_PATH.exists():
     from tengri.nebular.cue import (
         load_cue_weights,
@@ -294,15 +308,15 @@ if CUE_WEIGHTS_PATH.exists():
         i2 = int(np.argmin(np.abs(wav_np - wav2)))
         return float(lum_np[i1]) / float(lum_np[i2])
 
-    # Panel 1: N/O effect — sweep gas_logno, track [NII]6583/Hα
+    # Panel 1: N/O effect — sweep gas_logno, track [NII]6583/Halpha
     logno_grid = np.linspace(-1.5, 0.5, 18)
     nii_ha = [_line_ratio({**_base, "gas_logno": float(v)}, 6583.0, 6563.0) for v in logno_grid]
 
-    # Panel 2: C/O effect — sweep gas_logco, track CIII]1909/Hβ
+    # Panel 2: C/O effect — sweep gas_logco, track CIII]1909/Hbeta
     logco_grid = np.linspace(-1.0, 0.5, 18)
     ciii_hb = [_line_ratio({**_base, "gas_logco": float(v)}, 1909.0, 4861.0) for v in logco_grid]
 
-    # Panel 3: Ionizing spectrum shape → BPT position (log [OIII]/Hβ vs log [NII]/Hα)
+    # Panel 3: Ionizing spectrum shape → BPT position (log [OIII]/Hbeta vs log [NII]/Halpha)
     ionspec_configs = {
         "Stellar (O-star)": {
             "ionspec_index1": -1.0,
@@ -333,7 +347,7 @@ if CUE_WEIGHTS_PATH.exists():
         },
     }
     ionspec_markers = ["o", "s", "^"]
-    ionspec_colors = [COLORS["rt"], COLORS["vi"], COLORS.get("mcmc_nuts", "#888888")]
+    ionspec_colors = [COLORS["rt"], COLORS["geovi"], COLORS.get("nuts", "#888888")]
 
     bpt_nii_ha = {}
     bpt_oiii_hb = {}
@@ -350,7 +364,7 @@ if CUE_WEIGHTS_PATH.exists():
     axes[0].set_ylabel(r"[NII]6583 / H$\alpha$", fontsize=9)
     axes[0].set_title(r"N/O effect on [NII]/H$\alpha$")
 
-    axes[1].plot(logco_grid, ciii_hb, color=COLORS["vi"], lw=2.0)
+    axes[1].plot(logco_grid, ciii_hb, color=COLORS["geovi"], lw=2.0)
     axes[1].set_xlabel("[C/O] = log(C/O)", fontsize=9)
     axes[1].set_ylabel(r"[CIII]1909 / H$\beta$", fontsize=9)
     axes[1].set_title(r"C/O effect on [CIII]1909/H$\beta$")
@@ -372,14 +386,13 @@ if CUE_WEIGHTS_PATH.exists():
 
     fig.suptitle("Cue Neural Emulator: Unique Capabilities vs CLOUDY Grid", y=1.01)
     fig.tight_layout()
-    # plt.savefig(os.path.join(FIGDIR, "19_cue_parameter_sweeps.png"), bbox_inches="tight")
     plt.show()
 else:
     print(f"Cue weights not found at: {CUE_WEIGHTS_PATH}")
     print("Generate with: python scripts/convert_cue_weights.py")
     print()
     print("Cue adds 12 parameters over the CLOUDY grid:")
-    print("  gas_logno  ([N/O]): shifts [NII]/Hα independently of metallicity")
+    print("  gas_logno  ([N/O]): shifts [NII]/Halpha independently of metallicity")
     print("  gas_logco  ([C/O]): controls UV carbon lines (CIII]1909, CIV1549)")
     print("  ionspec_index1..4: AGN/shock vs stellar ionizing spectrum shape")
 
@@ -404,7 +417,7 @@ _r_sii = np.array([r["SII_6716A"] + r["SII_6731A"] for r in _shock_grid])
 _r_oii = np.array([r["OII_3726A"] + r["OII_3729A"] for r in _shock_grid])
 _r_oi = np.array([r["OI_6300A"] for r in _shock_grid])
 _r_ha = np.array([r["HA_6563A"] for r in _shock_grid])
-_r_hb = np.ones(len(_shock_velocities))  # ratios already relative to Hβ
+_r_hb = np.ones(len(_shock_velocities))  # ratios already relative to Hbeta
 
 # Panel A: Line ratios vs velocity
 ax = axes[0]
@@ -466,7 +479,6 @@ ax.set_xlim(-1.5, 0.5)
 ax.set_ylim(-1.0, 1.5)
 
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "19_shock_emission.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -528,7 +540,6 @@ ax.set_xlim(-0.8, 0.3)
 ax.set_ylim(-0.5, 0.5)
 
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "19_dig_mixing.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -565,8 +576,10 @@ if SSP_WNE_PATH.exists():
         "dust_slope": -0.7,
         "redshift": 0.0,
     }
-    sed_with_neb = _model.predict_rest_sed(_params)
-    wave = _ssp.ssp_wave
+    _rest_result = _model.predict_rest_sed(_params)
+    # predict_rest_sed returns a SEDResult NamedTuple (wavelength, sed)
+    sed_with_neb = np.array(_rest_result.sed)
+    wave = np.array(_rest_result.wavelength)
 else:
     sed_with_neb = None
     wave = None
@@ -574,10 +587,10 @@ else:
 # %% [markdown]
 # ### 2.1 Q_H: Ionizing Photon Rate
 #
-# The key physical link between the SSP and nebular emission is $Q_H$ --
-# the rate of hydrogen-ionizing photons (below the Lyman limit at 911.8 A):
+# The key physical link between the SSP and nebular emission is Q_H—the rate of
+# hydrogen-ionizing photons (below the Lyman limit at 911.8 Angstrom):
 #
-# $$Q_H = \int_0^{912\,\AA} \frac{L_\nu}{h\nu}\,d\nu$$
+# $$Q_H = \int_0^{912\,\text{Angstrom}} \frac{L_\nu}{h\nu}\,d\nu$$
 #
 # `compute_qh()` is JIT-compiled and vectorized over the SSP grid.
 
@@ -659,7 +672,7 @@ panels = [
 
 for ax, ratio, ylabel, hii_val in panels:
     ax.plot(velocities, ratio, color=COLORS["rt"], lw=2.0, label="Shock (MAPPINGS V)")
-    ax.axhline(hii_val, color=COLORS["vi"], ls="--", lw=1.5, label="HII region (typical)")
+    ax.axhline(hii_val, color=COLORS["geovi"], ls="--", lw=1.5, label="HII region (typical)")
     ax.set_ylabel(ylabel)
     ax.legend(fontsize=7, frameon=False)
 
@@ -667,7 +680,6 @@ axes[1, 0].set_xlabel("Shock velocity [km/s]")
 axes[1, 1].set_xlabel("Shock velocity [km/s]")
 fig.suptitle("Shock Diagnostic Line Ratios (Allen+2008, Solar, $n=1$ cm$^{-3}$)", y=1.01)
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "05_shock_line_ratios.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -740,7 +752,6 @@ if wave is not None and sed_with_neb is not None:
     ax.set_title(f"Composite Shock + HII Emission ($v_s = {shock_v:.0f}$ km/s)")
     ax.legend(fontsize=8, frameon=False)
     fig.tight_layout()
-    # plt.savefig(os.path.join(FIGDIR, "05_shock_hii_mixing.png"), bbox_inches="tight")
     plt.show()
 else:
     print("SSP data not available — skipping shock-HII mixing figure.")
@@ -811,7 +822,7 @@ panels_dig = [
 
 for ax, ratio, ylabel in panels_dig:
     ax.plot(dig_fracs, ratio, "o-", color=COLORS["rt"], lw=2.0, ms=5)
-    ax.axhline(ratio[0], ls="--", color=COLORS["vi"], lw=1.0, alpha=0.6, label="Pure HII")
+    ax.axhline(ratio[0], ls="--", color=COLORS["geovi"], lw=1.0, alpha=0.6, label="Pure HII")
     ax.set_xlabel("$f_{\\rm DIG}$")
     ax.set_ylabel(ylabel)
     ax.legend(fontsize=7, frameon=False)
@@ -821,7 +832,6 @@ fig.suptitle(
     y=1.02,
 )
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "05_dig_mixing.png"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -847,6 +857,127 @@ plt.show()
 # (default), it returns pure HII emission with zero overhead.
 
 # %% [markdown]
+# ## 6. BPT Line-Ratio Diagnostics
+#
+# The Baldwin-Phillips-Terlevich (BPT) diagram uses emission line ratios
+# [OIII]/Hbeta (y-axis) vs [NII]/Halpha (x-axis) to distinguish ionization
+# sources: star-forming regions, AGN, and shocks occupy distinct regions.
+
+# %%
+# Build a grid of mock galaxies with varying ionization parameter
+# (star-forming sequence: log U increases → higher [OIII]/Hbeta, lower [NII]/Halpha)
+n_gal = 80
+rng_bpt = np.random.default_rng(1)
+
+# Star-forming sequence parametrized by ionization parameter log_U
+log_U = np.linspace(-3.8, -2.0, n_gal)
+
+# Approximate BPT track (Kewley+2001 / Kauffmann+2003 empirical)
+log_nii_ha_sf = -0.3 + 0.15 * (log_U + 3.0) + rng_bpt.normal(0, 0.08, n_gal)
+log_oiii_hb_sf = 0.6 * (log_U + 3.0) - 0.5 + rng_bpt.normal(0, 0.10, n_gal)
+
+# AGN sequence (high [OIII]/Hbeta at all [NII]/Halpha)
+log_nii_ha_agn = np.linspace(-0.8, 0.4, 20)
+log_oiii_hb_agn = 0.73 / (log_nii_ha_agn - 0.32) + 1.30 + rng_bpt.normal(0, 0.08, 20)
+
+# Kewley+2001 maximum starburst demarcation (theoretical upper envelope)
+x_kewley = np.linspace(-2.0, 0.35, 200)
+y_kewley = 0.61 / (x_kewley - 0.47) + 1.19
+
+# Kauffmann+2003 empirical SF/AGN dividing line
+x_kauff = np.linspace(-2.0, 0.0, 200)
+y_kauff = 0.61 / (x_kauff - 0.05) + 1.30
+
+# --- FIGURE: BPT diagram with physically labeled regions ---
+fig, ax = plt.subplots(figsize=(8, 7))
+
+ax.scatter(
+    log_nii_ha_sf,
+    log_oiii_hb_sf,
+    s=20,
+    color=COLORS["rt"],
+    alpha=0.7,
+    label="Star-forming",
+    zorder=3,
+)
+ax.scatter(
+    log_nii_ha_agn,
+    log_oiii_hb_agn,
+    s=20,
+    color=COLORS["model"],
+    alpha=0.7,
+    label="AGN",
+    zorder=3,
+    marker="s",
+)
+
+# Shock track from earlier section
+nii_ha_shock = _r_nii / _r_ha
+oiii_hb_shock = _r_oiii
+ax.plot(
+    np.log10(nii_ha_shock),
+    np.log10(oiii_hb_shock),
+    color=COLORS["nuts"],
+    lw=2.5,
+    label="Shocks (Allen+2008)",
+    zorder=5,
+)
+
+# Demarcation lines
+ax.plot(x_kewley, y_kewley, "k--", lw=1.2, label="Kewley+2001 (theoretical)")
+ax.plot(x_kauff, y_kauff, "k:", lw=1.2, label="Kauffmann+2003 (empirical)")
+
+# Region labels
+ax.text(
+    -1.5,
+    -0.8,
+    "Star-forming\n(H II)",
+    fontsize=11,
+    color=COLORS["rt"],
+    ha="center",
+    va="center",
+    style="italic",
+    weight="bold",
+)
+ax.text(
+    0.1,
+    0.7,
+    "AGN",
+    fontsize=11,
+    color=COLORS["model"],
+    ha="center",
+    va="center",
+    style="italic",
+    weight="bold",
+)
+ax.text(-0.3, -0.4, "Composite", fontsize=9, color="0.5", ha="center", va="center", style="italic")
+ax.text(
+    -1.2,
+    0.8,
+    "Shocks",
+    fontsize=10,
+    color=COLORS["nuts"],
+    ha="center",
+    va="center",
+    style="italic",
+    weight="bold",
+)
+
+# Shading
+ax.fill_between(x_kauff, y_kauff, -1.5, alpha=0.08, color=COLORS["rt"])
+ax.fill_between(x_kewley, y_kewley, 1.5, alpha=0.08, color=COLORS["model"])
+
+ax.set_xlabel(r"$\log$ [N II] $\lambda$6584 / H$\alpha$", fontsize=12)
+ax.set_ylabel(r"$\log$ [O III] $\lambda$5007 / H$\beta$", fontsize=12)
+ax.set_title("BPT Diagnostic: Star Formation vs AGN vs Shocks", fontsize=13)
+ax.legend(fontsize=9, loc="lower left")
+ax.set_xlim(-2.2, 0.7)
+ax.set_ylim(-1.4, 1.5)
+ax.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# %% [markdown]
 # ## Summary
 #
 # Nebular emission is critical for accurate SED fitting, especially for:
@@ -859,10 +990,9 @@ plt.show()
 #   shock velocities, composable with HII via a mixing fraction
 # - **DIG mixing**: diffuse ionized gas with lower ionization parameter,
 #   enhancing [NII], [SII], [OI] relative to pure HII regions
+# - **BPT diagnostics**: physically labeled regions for star formation,
+#   AGN, and shocks
 #
 # The BakedIn backend requires no extra data files and is the recommended
 # starting point. Switch to CloudyGrid or Cue when you need to fit
 # ionization parameter or detailed abundances.
-#
-# For detailed CloudyGrid grid inspection, Cue emulator architecture, and backend
-# comparison, see the specialist track notebook `07_advanced_spectroscopy`.

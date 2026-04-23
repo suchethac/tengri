@@ -569,7 +569,13 @@ class Fitter:
             """Background thread that compiles the JIT engine."""
             try:
                 with self._compilation_lock:
-                    cache_key = self._engine_cache_key()
+                    # Mirror the full cache key shape used in
+                    # _get_or_build_engine so we don't double-compile when
+                    # a Fitter later runs with the default memory_mode.
+                    cache_key = (
+                        self._engine_cache_key(),
+                        getattr(self, "_memory_mode", "fast"),
+                    )
                     cache = get_model_cache(self.model).setdefault("jit_engine", {})
                     if cache_key not in cache:
                         self.compile(
@@ -639,7 +645,12 @@ class Fitter:
         if self._jit_sampler is not None:
             return self._jit_sampler
 
-        cache_key = self._engine_cache_key()
+        # Engine-specific key includes memory_mode — a "low" engine wraps
+        # signal_response in jax.checkpoint, so it must not collide with
+        # a "fast" engine. Other caches (grad_fn, logdensity_fn) use the
+        # base _engine_cache_key() because they don't go through
+        # build_jit_engine and are unaffected by memory_mode.
+        cache_key = (self._engine_cache_key(), getattr(self, "_memory_mode", "fast"))
         cache = get_model_cache(self.model).setdefault("jit_engine", {})
         if cache_key in cache:
             self._jit_sampler = cache[cache_key]
@@ -1334,6 +1345,28 @@ class Fitter:
         # Strip any stale vi_flavor kwarg that callers may pass (no longer used)
         kwargs.pop("vi_flavor", None)
 
+        # Extract memory/chunking controls. They are orthogonal to inference
+        # method, so we pluck them from kwargs here and stash on the Fitter
+        # rather than plumbing them through every _run_* backend signature.
+        # - memory_mode="auto" picks "low" for stochastic (high-D field)
+        #   models, "fast" otherwise. "low" wraps signal_response in
+        #   jax.checkpoint — 2-3x peak memory reduction inside CG at a
+        #   modest wall-time cost. Used via _engine_cache_key so different
+        #   modes get separate cached engines.
+        # - posterior_chunk_size controls peak memory of _draw_jit_samples
+        #   (see _draw_posterior_samples docstring).
+        memory_mode = kwargs.pop("memory_mode", "auto")
+        if memory_mode == "auto":
+            memory_mode = "low" if self.spec.stochastic else "fast"
+        if memory_mode not in ("fast", "low"):
+            raise ValueError(f"memory_mode must be 'auto', 'fast', or 'low' (got {memory_mode!r})")
+        if getattr(self, "_memory_mode", None) != memory_mode:
+            # Invalidate the per-instance engine reference — a different
+            # memory_mode needs a different cached engine.
+            self._jit_sampler = None
+        self._memory_mode = memory_mode
+        self._posterior_chunk_size = kwargs.pop("posterior_chunk_size", None)
+
         # --- "auto" method: dimensionality-based selection ---
         if method == "auto":
             d = self.spec.n_free
@@ -1655,6 +1688,7 @@ class Fitter:
         existing_samples,
         *,
         method="jit",
+        posterior_chunk_size=None,
         verbose=True,
     ):
         """Draw posterior samples from the converged geoVI approximation.
@@ -1665,10 +1699,19 @@ class Fitter:
             "jit" (default) — JIT-compiled CG solve, ~0.2ms/sample.
             "blackjax" — BlackJAX NUTS (independent MCMC, not geoVI).
             "nifty" — NIFTy draw_linear_residual (slow, ~540ms/sample).
+        posterior_chunk_size : int, optional
+            If set, process CG draws in chunks of this size — peak memory
+            becomes O(chunk · D) instead of O(n_samples · D). JIT cache
+            hits across chunks, so wall-time overhead is negligible.
         """
         if method == "jit":
             return self._draw_jit_samples(
-                pos_dict, key, n_samples, existing_samples, verbose=verbose
+                pos_dict,
+                key,
+                n_samples,
+                existing_samples,
+                posterior_chunk_size=posterior_chunk_size,
+                verbose=verbose,
             )
         if method == "blackjax":
             try:
@@ -1679,13 +1722,27 @@ class Fitter:
                 if verbose:
                     logger.info("  blackjax not installed, falling back to JIT sampling")
                 return self._draw_jit_samples(
-                    pos_dict, key, n_samples, existing_samples, verbose=verbose
+                    pos_dict,
+                    key,
+                    n_samples,
+                    existing_samples,
+                    posterior_chunk_size=posterior_chunk_size,
+                    verbose=verbose,
                 )
         return self._draw_nifty_samples(
             likelihood, pos_dict, key, n_samples, existing_samples, verbose=verbose
         )
 
-    def _draw_jit_samples(self, pos_dict, key, n_samples, existing_samples, *, verbose=True):
+    def _draw_jit_samples(
+        self,
+        pos_dict,
+        key,
+        n_samples,
+        existing_samples,
+        *,
+        posterior_chunk_size=None,
+        verbose=True,
+    ):
         """Draw geoVI linear residual samples via JIT-compiled CG.
 
         Same math as NIFTy's draw_linear_residual but fully JIT-compiled:
@@ -1694,6 +1751,11 @@ class Fitter:
         3. Sample = pos + residual
 
         ~2000x faster than NIFTy's Python-loop CG.
+
+        When ``posterior_chunk_size`` is set, the call to
+        ``engine["draw_samples"]`` is split into fixed-size chunks so peak
+        memory is O(chunk · D) instead of O(n_samples · D). Chunks are
+        padded to stable size so the JIT cache hits across calls.
         """
         if verbose:
             logger.info("  Drawing %d posterior samples (JIT CG)...", n_samples)
@@ -1705,7 +1767,28 @@ class Fitter:
         flatten, unflatten = engine["flatten"], engine["unflatten"]
         pos_flat = flatten(pos_dict)
         draw_keys = jax.random.split(key, n_samples)
-        residuals_flat = engine["draw_samples"](pos_flat, draw_keys, self._data_args)
+        data_args = self._data_args
+
+        if posterior_chunk_size is None:
+            posterior_chunk_size = getattr(self, "_posterior_chunk_size", None)
+        chunk = posterior_chunk_size if posterior_chunk_size else n_samples
+        chunk = min(int(chunk), int(n_samples))
+        if chunk >= n_samples:
+            residuals_flat = engine["draw_samples"](pos_flat, draw_keys, data_args)
+        else:
+            parts = []
+            for start in range(0, n_samples, chunk):
+                end = min(start + chunk, n_samples)
+                keys_chunk = draw_keys[start:end]
+                pad = chunk - (end - start)
+                if pad:
+                    keys_chunk = jnp.concatenate([keys_chunk, draw_keys[:pad]])
+                r = engine["draw_samples"](pos_flat, keys_chunk, data_args)
+                jax.block_until_ready(r)
+                if pad:
+                    r = r[: end - start]
+                parts.append(r)
+            residuals_flat = jnp.concatenate(parts, axis=0)
 
         for i in range(n_samples):
             res = unflatten(residuals_flat[i])
@@ -1715,7 +1798,14 @@ class Fitter:
         return existing_samples
 
     def _draw_nonlinear_jit_samples(
-        self, pos_dict, key, n_samples, existing_samples, *, verbose=True
+        self,
+        pos_dict,
+        key,
+        n_samples,
+        existing_samples,
+        *,
+        posterior_chunk_size=None,
+        verbose=True,
     ):
         """Draw geoVI nonlinear posterior samples via JIT engine.
 
@@ -1737,8 +1827,12 @@ class Fitter:
         pos_flat = flatten(pos_dict)
         data_args = self._data_args
 
-        # Draw in batches to avoid OOM for large n_samples
-        batch_size = min(n_samples, 50)
+        # Draw in batches to avoid OOM for large n_samples. Default 50 is
+        # the pre-existing safety cap; posterior_chunk_size overrides it.
+        if posterior_chunk_size is None:
+            posterior_chunk_size = getattr(self, "_posterior_chunk_size", None)
+        batch_size = int(posterior_chunk_size) if posterior_chunk_size else 50
+        batch_size = min(n_samples, batch_size)
         draw_keys = jax.random.split(key, n_samples)
 
         for batch_start in range(0, n_samples, batch_size):

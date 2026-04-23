@@ -61,10 +61,9 @@ from tengri import (
     load_ssp_data,
 )
 from tengri.parameters.priors import Distribution
-from tengri.sfh.psd_models import psd_drw
-from tengri.sfh.gp_sfh import compute_sqrt_power_drw
-from tengri.sfh.gp_sfh import gp_from_xi
-from tengri.utils.grid import make_log_age_grid, grid_spacing
+from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
+from tengri.components.sfh.psd_models import psd_drw
+from tengri.utils.grid import grid_spacing, make_log_age_grid
 
 # Locate ``notebooks/_plot_style.py`` and ``data/`` root (nbclient cwd is often wrong).
 
@@ -307,7 +306,7 @@ plt.show()
 # ## Mean SFH Shapes
 
 # %%
-from tengri.sfh.mean_sfh import tsnorm
+from tengri.components.sfh.mean_sfh import tsnorm
 
 ages_yr = 10**log_ages
 ages_gyr = ages_yr / 1e9
