@@ -14,6 +14,8 @@ import argparse
 import sys
 from collections.abc import Sequence
 
+from tengri._logo import print_logo
+
 
 def build_parser() -> argparse.ArgumentParser:
     """Build and return the argument parser.
@@ -74,6 +76,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         import tengri
 
         version = getattr(tengri, "__version__", "unknown")
+        print_logo(compact=True)
         print(version)
         return 0
 

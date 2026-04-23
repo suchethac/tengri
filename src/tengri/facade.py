@@ -15,6 +15,7 @@ from typing import Any
 import jax
 import numpy as np
 
+from tengri._logo import logo_str
 from tengri.components.sps.dsps_wrapper import load_ssp_data
 from tengri.config.settings import ModelConfig
 from tengri.forward.sed_model import SEDModel
@@ -623,6 +624,12 @@ def doctor() -> str:
         Health check report (also printed).
     """
     lines = []
+
+    # Logo (respects TENGRI_NO_LOGO env var)
+    logo_output = logo_str(compact=False)
+    if logo_output:
+        lines.append(logo_output)
+        lines.append("")
 
     # Header
     lines.append("=" * 60)

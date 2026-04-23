@@ -125,6 +125,7 @@ Forward model timings on Apple M-series CPU:
    :caption: Getting Started
 
    spine/00_quickstart
+   spine/17_galaxy_facade
 
 .. toctree::
    :maxdepth: 1

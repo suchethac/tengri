@@ -25,6 +25,7 @@ __version__ = "0.1.0"
 
 # --- Exception hierarchy ---
 # --- New high-level API ---
+from tengri._logo import LOGO, LOGO_BANNER, print_logo
 from tengri.analysis.mock import MockData, generate_mock
 from tengri.citations import Citation, cite, cite_all
 from tengri.components.dust.attenuation import two_component_dust
@@ -243,6 +244,8 @@ sys.modules["tengri.io"] = io
 
 
 __all__ = [
+    "LOGO",
+    "LOGO_BANNER",
     "AGNConfig",
     "BackendError",
     "Citation",
@@ -299,6 +302,7 @@ __all__ = [
     "posteriors_to_dataframe",
     "preprocessing",
     "presets",
+    "print_logo",
     "radio",
     "sfh",
     "sps",

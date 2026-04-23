@@ -8,6 +8,9 @@
 # %% [code]
 import tengri as tg
 
+tg.print_logo()
+print(f"tengri {tg.__version__}")
+
 tg.doctor()
 
 # %% [markdown]
