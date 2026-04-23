@@ -234,6 +234,98 @@ def irx(l_dust: float, l_fuv: float) -> float:
 # ── Rest-frame Photometry ──────────────────────────────────────────
 
 
+# ── Equivalent Width ──────────────────────────────────────────────
+
+
+def equivalent_width(
+    wavelength_aa: jnp.ndarray,
+    l_nu: jnp.ndarray,
+    line_center_aa: float,
+    window_aa: float = 20.0,
+    continuum_width_aa: float = 50.0,
+) -> float:
+    r"""Rest-frame equivalent width of a spectral feature.
+
+    Estimates the continuum from symmetric sidebands flanking the line
+    and integrates (F - F_cont) / F_cont over the line window.
+
+    Parameters
+    ----------
+    wavelength_aa : array_like, shape (n_wave,)
+        Rest-frame wavelength grid [Å].
+    l_nu : array_like, shape (n_wave,)
+        Luminosity density L_ν [erg s⁻¹ Hz⁻¹].
+    line_center_aa : float
+        Central wavelength of the feature [Å].
+    window_aa : float
+        Half-width of the line integration window [Å].
+        Default: 20.0.
+    continuum_width_aa : float
+        Width of each sideband used for continuum estimation [Å].
+        Sidebands are placed at ``[line_center ± window ± continuum_width]``.
+        Default: 50.0.
+
+    Returns
+    -------
+    float
+        Equivalent width [Å].  Positive for emission, negative for
+        absorption (astronomical convention).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    The equivalent width is:
+
+    .. math::
+
+        \mathrm{EW} = \int_{\lambda_0 - w}^{\lambda_0 + w}
+        \frac{F(\lambda) - F_{\mathrm{cont}}}{F_{\mathrm{cont}}} \, d\lambda
+
+    where :math:`F_{\mathrm{cont}}` is estimated as the mean flux in two
+    symmetric sidebands flanking the line window.
+
+    References
+    ----------
+    .. [1] Vollmann, K. & Eversberg, T., 2006, AN, 327, 862.
+           Standard definition of spectroscopic equivalent width.
+    """
+    c_aa_s = 2.99792458e18
+
+    f_lambda = l_nu * (c_aa_s / (wavelength_aa**2))
+
+    line_mask = (
+        (wavelength_aa >= line_center_aa - window_aa)
+        & (wavelength_aa <= line_center_aa + window_aa)
+    )
+
+    blue_lo = line_center_aa - window_aa - continuum_width_aa
+    blue_hi = line_center_aa - window_aa
+    red_lo = line_center_aa + window_aa
+    red_hi = line_center_aa + window_aa + continuum_width_aa
+
+    blue_mask = (wavelength_aa >= blue_lo) & (wavelength_aa <= blue_hi)
+    red_mask = (wavelength_aa >= red_lo) & (wavelength_aa <= red_hi)
+
+    n_blue = jnp.sum(blue_mask)
+    n_red = jnp.sum(red_mask)
+    f_cont = (
+        jnp.sum(jnp.where(blue_mask, f_lambda, 0.0))
+        + jnp.sum(jnp.where(red_mask, f_lambda, 0.0))
+    ) / jnp.maximum(n_blue + n_red, 1.0)
+
+    integrand = jnp.where(
+        line_mask,
+        (f_lambda - f_cont) / jnp.maximum(f_cont, 1e-40),
+        0.0,
+    )
+
+    return jnp.trapezoid(integrand, wavelength_aa)
+
+
+# ── Rest-frame Photometry ──────────────────────────────────────────
+
+
 def rest_frame_luminosity(
     wavelength_aa: jnp.ndarray,
     l_nu: jnp.ndarray,
