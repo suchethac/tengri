@@ -786,8 +786,8 @@ class CloudyGridBackend:
 
         References
         ----------
-        .. [1] N. Byler et al., "FSPS-derived Elemental Abundances for Chabrier
-           IMF," ApJ, 840, 44 (2017). arXiv:1701.07060.
+        .. [1] N. Byler et al., "Nebular Continuum and Line Emission in Stellar
+           Population Synthesis Models," ApJ, 840, 44 (2017).
            https://doi.org/10.3847/1538-4357/aa6c66
 
         Notes
@@ -877,8 +877,8 @@ class CloudyGridBackend:
 
         References
         ----------
-        .. [1] N. Byler et al., "FSPS-derived Elemental Abundances for Chabrier
-           IMF," ApJ, 840, 44 (2017). arXiv:1701.07060.
+        .. [1] N. Byler et al., "Nebular Continuum and Line Emission in Stellar
+           Population Synthesis Models," ApJ, 840, 44 (2017).
            https://doi.org/10.3847/1538-4357/aa6c66
 
         Notes

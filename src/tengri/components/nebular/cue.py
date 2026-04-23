@@ -354,7 +354,8 @@ def load_cue_weights(npz_path: str) -> CueWeights:
     References
     ----------
     .. [1] Li et al. 2025, "Cue: A fast neural network emulator for nebular
-        emission line and continuum predictions", arXiv:2501.xxxxx
+        emission line and continuum predictions", ApJ, 986, 9 (2025).
+        arXiv:2405.04598. https://doi.org/10.3847/1538-4357/ad7fe3
     .. [2] Charlot & Fall 2000, "A simple model for the absorption of starlight
         by dust grains and its application to metal-rich galaxies", ApJ 539, 718
 
@@ -656,7 +657,8 @@ def prepare_nn_params_from_dict(params: dict) -> jnp.ndarray:
     References
     ----------
     .. [1] Li et al. 2025, "Cue: A fast neural network emulator for nebular
-        emission line and continuum predictions", arXiv:2501.xxxxx
+        emission line and continuum predictions", ApJ, 986, 9 (2025).
+        arXiv:2405.04598. https://doi.org/10.3847/1538-4357/ad7fe3
 
     """
     return _prepare_nn_params(
@@ -745,7 +747,8 @@ def predict_all_lines(
     References
     ----------
     .. [1] Li et al. 2025, "Cue: A fast neural network emulator for nebular
-        emission line and continuum predictions", arXiv:2501.xxxxx
+        emission line and continuum predictions", ApJ, 986, 9 (2025).
+        arXiv:2405.04598. https://doi.org/10.3847/1538-4357/ad7fe3
 
     """
     # --- Fully batched forward pass using precomputed weight arrays ---
@@ -836,7 +839,8 @@ def predict_continuum(
     References
     ----------
     .. [1] Li et al. 2025, "Cue: A fast neural network emulator for nebular
-        emission line and continuum predictions", arXiv:2501.xxxxx
+        emission line and continuum predictions", ApJ, 986, 9 (2025).
+        arXiv:2405.04598. https://doi.org/10.3847/1538-4357/ad7fe3
 
     """
     log_spec = _speculator_log_spectrum(nn_params, weights.cont_net)

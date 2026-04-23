@@ -552,10 +552,9 @@ class MappingsPhotoStellarBackend:
         ----------
         .. [1] Flury et al. 2024, "MAPPINGS V photoionization grids for nebular
             emission prediction", arXiv:2412.06763
-        .. [2] Sutherland & Dopita 2017, "MAPPINGS V: Photoionisation Models",
-            ApJS 229, 34, https://doi.org/10.3847/1538-4365/aa6541
-        .. [3] Nicholls et al. 2017, "The EAGLE simulations of galaxy formation:
-            calibration of subgrid physics and model variations", MNRAS 466, 4403
+        .. [2] R. S. Sutherland & M. A. Dopita 2017, "Effects of Preionization
+            in Radiative Shocks. I. Self-consistent Models," ApJS, 229, 34.
+            https://doi.org/10.3847/1538-4365/aa6541
 
         """
         if neb_logZ_gas is None:
@@ -675,8 +674,9 @@ class MappingsPhotoStellarBackend:
         ----------
         .. [1] Flury et al. 2024, "MAPPINGS V photoionization grids for nebular
             emission prediction", arXiv:2412.06763
-        .. [2] Sutherland & Dopita 2017, "MAPPINGS V: Photoionisation Models",
-            ApJS 229, 34, https://doi.org/10.3847/1538-4365/aa6541
+        .. [2] R. S. Sutherland & M. A. Dopita 2017, "Effects of Preionization
+            in Radiative Shocks. I. Self-consistent Models," ApJS, 229, 34.
+            https://doi.org/10.3847/1538-4365/aa6541
 
         """
         line_wave, line_lum = self.predict_nebular_line_luminosities(
@@ -815,8 +815,9 @@ class MappingsPhotoAGNBackend:
         ----------
         .. [1] Flury et al. 2024, "MAPPINGS V photoionization grids for nebular
             emission prediction", arXiv:2412.06763
-        .. [2] Sutherland & Dopita 2017, "MAPPINGS V: Photoionisation Models",
-            ApJS 229, 34, https://doi.org/10.3847/1538-4365/aa6541
+        .. [2] R. S. Sutherland & M. A. Dopita 2017, "Effects of Preionization
+            in Radiative Shocks. I. Self-consistent Models," ApJS, 229, 34.
+            https://doi.org/10.3847/1538-4365/aa6541
 
         """
         grid = self.grid
