@@ -189,6 +189,7 @@ axes[0].set(
     ylabel=r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]",
     title=rf"K&D 3-zone vs multi-color (M$_{{\rm BH}}=10^{{{log_mbh}}} M_\odot$, L/L$_{{\rm Edd}}=10^{{{log_ledd}}}$)",
     xlim=(1e-3, 1000),
+    ylim=(1e27, 1e32),
 )
 axes[0].legend(fontsize=10)
 axes[0].grid(alpha=0.3)
@@ -215,6 +216,7 @@ axes[1].set(
     ylabel=r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]",
     title=rf"K&D spectrum vs Eddington ratio (M$_{{\rm BH}}=10^{{{log_mbh}}} M_\odot$)",
     xlim=(1e-3, 1000),
+    ylim=(1e27, 1e32),
 )
 axes[1].legend(fontsize=10)
 axes[1].grid(alpha=0.3)
@@ -265,6 +267,7 @@ axes[0].set(
     ylabel=r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]",
     title=rf"ADAF spectrum (LLAGN, M$_{{\rm BH}}=10^{{{log_mbh_llagn}}} M_\odot$, $L_{{\rm bol}}=10^{{{log_lbol_llagn}}} L_\odot$)",
     xlim=(1e-3, 1000),
+    ylim=(1e26, 1e31),
 )
 axes[0].legend(fontsize=10)
 axes[0].grid(alpha=0.3)
@@ -294,6 +297,7 @@ axes[1].set(
     ylabel=r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]",
     title=r"ADAF spectrum vs M$_{\rm BH}$ (L/L$_{\rm Edd}=10^{-2}$)",
     xlim=(1e-3, 1000),
+    ylim=(1e26, 1e31),
 )
 axes[1].legend(fontsize=10)
 axes[1].grid(alpha=0.3)
@@ -342,6 +346,7 @@ try:
         ylabel=r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]",
         title=r"SKIRTOR torus: varying covering fraction",
         xlim=(0.1, 1000),
+        ylim=(1e28, 1e33),
     )
     axes[0].legend(fontsize=10)
     axes[0].grid(alpha=0.3)
@@ -366,6 +371,7 @@ try:
         ylabel=r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]",
         title=r"SKIRTOR torus: silicate absorption feature",
         xlim=(0.5, 20),
+        ylim=(1e29, 1e32),
     )
     axes[1].legend(fontsize=10)
     axes[1].grid(alpha=0.3)
@@ -410,6 +416,7 @@ try:
         ylabel=r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]",
         title=r"Advanced AGN SED: Kubota & Done 3-zone + SKIRTOR torus ($\log L_{\rm bol}=44$)",
         xlim=(1e-3, 1000),
+        ylim=(1e27, 1e33),
     )
     ax.grid(alpha=0.3)
     ax.legend(fontsize=10)
@@ -418,6 +425,61 @@ try:
 
 except Exception as e:
     print(f"Advanced model not fully available: {e}")
+
+# %% [markdown]
+# ## From X-ray Flux to L_bol
+#
+# Many AGN observers have **X-ray fluxes** (2–10 keV) from XMM, Chandra, or eROSITA,
+# but need **bolometric luminosity** to use the SED fitting pipeline.
+# The **bolometric correction** κ_X relates the two:
+#
+# $$L_{\rm bol} = \kappa_X \times L_X$$
+#
+# Where L_X is the 2–10 keV intrinsic (absorption-corrected) luminosity.
+#
+# **Standard values** (from Hopkins+2007, Duras+2020):
+# - **κ_X ≈ 20–30** for typical quasars (L/L_Edd ~ 0.1–1)
+# - **κ_X ≈ 40–100** for luminous AGN
+# - Uncertainty: ±0.3 dex due to spectral shape (photon index Γ) and accretion state
+
+# %%
+# Example: Convert observed X-ray flux to bolometric luminosity
+
+# Observed X-ray flux from XMM or Chandra (2–10 keV), erg/s/cm²
+flux_x_obs = 1e-12  # erg/s/cm²
+
+# Redshift and distance — for real data use astropy.cosmology.Planck18.luminosity_distance
+z = 0.5
+# z=0.5 in flat ΛCDM (h=0.7, Ωm=0.3): d_L ≈ 2.8 Gpc.
+# 1 Mpc = 3.086e24 cm, so 2.8 Gpc = 2.8e3 × 3.086e24 = 8.64e27 cm.
+MPC_CM = 3.086e24
+d_L_cm = 2.8e3 * MPC_CM
+
+# Rest-frame 2–10 keV luminosity. The (1+z) factor k-corrects for a Γ≈1.8 power-law
+# spectrum, which is standard for unobscured AGN; obscured sources need a larger factor.
+L_x_erg = 4 * np.pi * d_L_cm**2 * flux_x_obs / (1 + z)
+L_x_lsun = L_x_erg / 3.828e33
+
+# Bolometric correction (choose based on AGN type)
+kappa_x = 25.0  # Hopkins+2007 typical value
+L_bol_lsun = kappa_x * L_x_lsun
+agn_log_lbol = np.log10(L_bol_lsun)
+
+print(f"X-ray flux (2–10 keV): {flux_x_obs:.2e} erg/s/cm²")
+print(f"Rest-frame L_X (2–10 keV): {L_x_lsun:.2e} Lsun")
+print(f"Bolometric correction κ_X = {kappa_x}")
+print(f"Bolometric luminosity: {L_bol_lsun:.2e} Lsun")
+print(f"log10(L_bol/Lsun) = {agn_log_lbol:.2f}")
+print(f"\nUse agn_log_lbol={agn_log_lbol:.1f} in SEDModel fitting.")
+
+# %%
+# **For real data:**
+# 1. Measure intrinsic 2–10 keV flux from spectral fitting (account for absorption).
+# 2. Choose κ_X based on literature or Duras+2020 luminosity-dependent fit.
+# 3. Set agn_log_lbol = log10(κ_X * L_X).
+# 4. Run SEDModel fitting with this prior (Fixed or Gaussian depending on X-ray error).
+#
+# See papers: Hopkins+2007 (Eq. 5), Duras+2020 (Fig. 5).
 
 # %% [markdown]
 # ## 5. Summary: Advanced AGN Physics in tengri

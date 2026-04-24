@@ -25,8 +25,8 @@ for p in [
         break
 
 if _grid_path is None:
-    raise FileNotFoundError(
-        "SKIRTOR grid not found. Run: python scripts/build_skirtor_grid.py"
+    raise SystemExit(
+        "Skipping: SKIRTOR grid not found. Run: python scripts/build_skirtor_grid.py"
     )
 
 from tengri.analysis.plotting import setup_style

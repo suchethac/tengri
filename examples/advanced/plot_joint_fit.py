@@ -80,8 +80,10 @@ phot = Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
     cache_dir=_FILTER_DIR,
 )
-wave_obs = jnp.linspace(3800.0, 9200.0, 200) * 1.1  # observed frame at z=0.1
-spec_config = Spectroscopy(wave_obs=wave_obs, resolution=100.0)
+wave_rest = jnp.linspace(3800.0, 9200.0, 200)
+z = 0.1
+wave_obs = wave_rest * (1 + z)
+spec_config = Spectroscopy(wave_obs=wave_obs)
 obs = Observation(photometry=phot, spectroscopy=spec_config)
 
 # %%
@@ -117,13 +119,23 @@ true_params = {
 }
 
 key = jax.random.PRNGKey(42)
-mock = generate_mock(model, true_params, key=key, snr=20.0)
+# Generate photometry and spectroscopy separately, then concatenate
+flux_phot_true = model.predict_photometry(true_params)
+flux_spec_true = model.predict_spectrum(true_params, wave_obs)
+flux_true = jnp.concatenate([flux_phot_true, flux_spec_true])
+noise = flux_true / 20.0  # SNR = 20
+flux_obs = flux_true + noise * jax.random.normal(key, shape=flux_true.shape)
+mock = {
+    "flux_true": flux_true,
+    "flux_obs": flux_obs,
+    "noise": noise,
+}
 
 # %%
 # Fit with MAP
 # -------------
 
-fitter = Fitter(model, mock["flux_obs"], mock["noise"])
+fitter = Fitter(model, mock["flux_obs"], mock["noise"], data_type="joint")
 posterior = fitter.run("map", optimizer="adam")
 
 # %%

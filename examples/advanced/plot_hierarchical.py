@@ -104,11 +104,10 @@ hfitter = PopulationFitter(
 
 t0 = time.perf_counter()
 result = hfitter.run(
-    "evi",
+    "vi_linear",
     n_iterations=20,
     n_samples=4,
     n_posterior_samples=500,
-    n_seeds=5,
     verbose=False,
     key=jax.random.PRNGKey(0),
 )
@@ -141,6 +140,6 @@ fig.tight_layout()
 outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
 outdir.mkdir(parents=True, exist_ok=True)
 plt.savefig(
-    str(outdir / "hierarchical.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight"
+    str(outdir / "hierarchical.png"), dpi=150, bbox_inches="tight"
 )
 plt.show()

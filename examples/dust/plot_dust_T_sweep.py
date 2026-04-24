@@ -45,7 +45,7 @@ ssp = load_ssp_data(SSP_PATH)
 
 # --- Build model with dust emission (modified blackbody) ---
 spec = Parameters(
-    dust_emission="mbb",
+    dust_emission="modified_blackbody",
     sfh_tsnorm_log_peak_sfr=Fixed(1.0),
     sfh_tsnorm_peak_lbt_gyr=Fixed(1.5),
     sfh_tsnorm_width_gyr=Fixed(1.0),
@@ -75,6 +75,7 @@ fig, ax = sweep_parameter(
 )
 ax.set_yscale("log")
 ax.set_xscale("log")
+ax.set_ylim(1e-2, 1e3)
 ax.set_title("Dust Temperature: Far-IR Peak Position and Shape", fontsize=12)
 ax.set_ylabel(r"$\lambda F_\lambda$ (not normalized)")
 plt.tight_layout()

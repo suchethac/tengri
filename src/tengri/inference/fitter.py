@@ -359,6 +359,18 @@ class Fitter:
         # ── Data arguments ─────────────────────────────────────────
         self._data_args = self._build_data_args(model)
 
+        # ── Memory-mode auto-detect ─────────────────────────────────
+        # Pre-set _memory_mode before spawning the background compile
+        # thread so that thread builds the correct engine variant the
+        # first time. Without this, the thread reads the default "fast"
+        # and compiles the wrong engine; run() then flips the mode and
+        # triggers a second compile, holding both engines in the
+        # model-level cache simultaneously.
+        # The user can still override at run() time via memory_mode=...
+        # (doing so invalidates _jit_sampler and triggers a rebuild).
+        self._memory_mode = "low" if self.spec.stochastic else "fast"
+        self._posterior_chunk_size = None
+
         # ── Background compilation ─────────────────────────────────
         self._jit_sampler = None
         self._compilation_event = threading.Event()
@@ -1769,8 +1781,19 @@ class Fitter:
         draw_keys = jax.random.split(key, n_samples)
         data_args = self._data_args
 
+        # Resolve the effective chunk size. Precedence:
+        #   1. explicit kwarg (caller wins)
+        #   2. stashed on self by Fitter.run(posterior_chunk_size=...)
+        #   3. auto-chunk of 64 when memory_mode="low"
+        #      (jax.checkpoint + jax.vmap(N_large) holds all N
+        #      recomputed forwards simultaneously — negating most
+        #      of the memory saving. Chunking keeps that to
+        #      O(64 · activations) regardless of n_samples.)
+        #   4. otherwise unchunked (preserves prior behaviour)
         if posterior_chunk_size is None:
             posterior_chunk_size = getattr(self, "_posterior_chunk_size", None)
+        if posterior_chunk_size is None and getattr(self, "_memory_mode", "fast") == "low":
+            posterior_chunk_size = 64
         chunk = posterior_chunk_size if posterior_chunk_size else n_samples
         chunk = min(int(chunk), int(n_samples))
         if chunk >= n_samples:
@@ -1829,8 +1852,13 @@ class Fitter:
 
         # Draw in batches to avoid OOM for large n_samples. Default 50 is
         # the pre-existing safety cap; posterior_chunk_size overrides it.
+        # With memory_mode="low" we tighten the default to 64 to match the
+        # linear-draw path (checkpoint+vmap anti-pattern, see
+        # _draw_jit_samples docstring).
         if posterior_chunk_size is None:
             posterior_chunk_size = getattr(self, "_posterior_chunk_size", None)
+        if posterior_chunk_size is None and getattr(self, "_memory_mode", "fast") == "low":
+            posterior_chunk_size = 64
         batch_size = int(posterior_chunk_size) if posterior_chunk_size else 50
         batch_size = min(n_samples, batch_size)
         draw_keys = jax.random.split(key, n_samples)

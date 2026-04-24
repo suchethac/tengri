@@ -265,7 +265,9 @@ plt.show()
 
 # %%
 # Photometry-only observation
-obs_phot = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
+obs_phot = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+)
 model_phot = SEDModel(spec, ssp_data, observation=obs_phot)
 
 # Fit with NUTS
@@ -285,6 +287,43 @@ t_fit_phot = time.perf_counter() - t0
 
 print(f"Photometry-only fit: {t_fit_phot:.1f}s (NUTS)")
 _ = convergence_table({"NUTS": result_phot}, verbose=True)
+
+# %% [markdown]
+# ### Handling Photometric Redshift Uncertainty
+#
+# Real photometric surveys have redshift uncertainties (photo-z errors), typically σ_z ~ 0.02–0.05.
+# Instead of fixing redshift as `Fixed(0.1)`, you can marginalize over a photo-z prior.
+# This weakens parameter constraints but makes the fit robust to photo-z errors.
+#
+# The posterior then marginalizes over z, folding redshift uncertainty into stellar mass and SFH posteriors.
+
+# %%
+# Example: replace Fixed(0.1) with a Gaussian photo-z prior σ_z = 0.02
+from tengri import Gaussian
+
+# Re-define the spec with a photo-z prior (instead of Fixed)
+spec_with_photoz = Parameters(
+    sfh_db_log_total_mass=Uniform(8, 12),
+    sfh_db_log_sfr_inst=Uniform(-2, 3),
+    sfh_db_tx_frac_0=Uniform(0.05, 0.95),
+    sfh_db_tx_frac_1=Uniform(0.05, 0.95),
+    sfh_db_tx_frac_2=Uniform(0.05, 0.95),
+    met_logzsol=Uniform(-2.0, 0.2),
+    dust_tau_bc=Uniform(0.0, 2.0),
+    dust_tau_diff=Uniform(0.0, 1.5),
+    dust_slope=Fixed(-0.7),
+    redshift=Gaussian(REDSHIFT, 0.02),  # Photo-z prior: μ=0.1, σ=0.02
+    mean_sfh_type="dense_basis",
+)
+
+# Fit with the photo-z prior (optional; commented out to save time)
+# Note: This fit will be slower (extra free parameter) and posteriors wider.
+# model_photoz = SEDModel(spec_with_photoz, ssp_data, observation=obs_phot)
+# fitter_photoz = Fitter(model_photoz, mock_phot.flux_obs, mock_phot.noise)
+# result_photoz = fitter_photoz.run("mcmc_nuts", n_warmup=500, n_samples=1000, verbose=False)
+
+print("Photo-z prior: redshift marginalized with σ_z=0.02")
+print("Posterior would be wider than fixed-z fit, but robust to photo-z errors.")
 
 # %%
 # Figure 2: Photometric corner plot

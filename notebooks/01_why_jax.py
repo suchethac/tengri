@@ -177,6 +177,7 @@ ax.barh(["Steady-state\n(JIT)", "Without JIT\n(Python loop)"],
 ax.set_xlabel("Time per forward pass [ms]")
 ax.set_title("JIT speedup: Compiled vs Python", fontweight="bold")
 ax.set_xscale("log")
+ax.set_xlim(1, 300)
 for i, (_label, val) in enumerate([("JIT", jit_time_ms), ("Python", 100)]):
     ax.text(val, i, f"  {val:.1f} ms", va="center", fontsize=11, fontweight="bold")
 ax.grid(axis="x", alpha=0.3, linestyle="--")

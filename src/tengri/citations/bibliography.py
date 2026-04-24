@@ -51,7 +51,25 @@ class Bibliography:
     def add(self, *keys: str) -> Bibliography:
         """Add one or more citation keys. Duplicates are silently ignored.
 
-        Returns ``self`` for chaining.
+        Parameters
+        ----------
+        *keys : str
+            Registry keys (e.g. ``"calzetti2000"``). Empty strings and
+            keys already present are skipped.
+
+        Returns
+        -------
+        Bibliography
+            ``self``, to allow chaining (``bib.add("a").add("b")``).
+
+        Examples
+        --------
+        >>> bib = Bibliography().add("tengri", "jax").add("dsps")
+        >>> bib.keys
+        ['tengri', 'jax', 'dsps']
+        >>> bib.add("tengri")  # duplicate silently ignored
+        >>> bib.keys
+        ['tengri', 'jax', 'dsps']
         """
         for k in keys:
             if not k:
@@ -62,7 +80,25 @@ class Bibliography:
         return self
 
     def extend(self, other: Bibliography | Iterable[str]) -> Bibliography:
-        """Absorb keys from another Bibliography or iterable of keys."""
+        """Absorb keys from another Bibliography or iterable of keys.
+
+        Parameters
+        ----------
+        other : Bibliography | Iterable[str]
+            Source bibliography or plain iterable of registry keys.
+
+        Returns
+        -------
+        Bibliography
+            ``self``.
+
+        Examples
+        --------
+        >>> bib = Bibliography().add("tengri")
+        >>> other = Bibliography().add("jax", "dsps")
+        >>> bib.extend(other).keys
+        ['tengri', 'jax', 'dsps']
+        """
         if isinstance(other, Bibliography):
             self.add(*other.keys)
         else:
@@ -70,7 +106,20 @@ class Bibliography:
         return self
 
     def remove(self, key: str) -> None:
-        """Remove a key (silently no-op if not present)."""
+        """Remove a key. Silently no-op if the key is not present.
+
+        Parameters
+        ----------
+        key : str
+            Registry key to drop.
+
+        Examples
+        --------
+        >>> bib = Bibliography().add("tengri", "jax")
+        >>> bib.remove("jax")
+        >>> bib.keys
+        ['tengri']
+        """
         if key in self._seen:
             self._seen.discard(key)
             self.keys = [k for k in self.keys if k != key]
@@ -101,7 +150,27 @@ class Bibliography:
         return list(self)
 
     def by_category(self) -> dict[str, list[Citation]]:
-        """Group citations by :attr:`Citation.category`, preserving insertion order."""
+        """Group citations by :attr:`Citation.category`, preserving insertion order.
+
+        Returns
+        -------
+        dict of (str, list[Citation])
+            Mapping from category name (``"ssp"``, ``"dust_attenuation"``,
+            …) to the list of records in that category. Keys appear in the
+            order their first member was added to the bibliography.
+
+        Examples
+        --------
+        >>> from tengri.config.settings import ModelConfig, DustConfig
+        >>> bib = Bibliography.from_config(
+        ...     ModelConfig(dust=DustConfig(law_bc="calzetti"))
+        ... )
+        >>> grouped = bib.by_category()
+        >>> sorted(grouped)
+        ['dust_attenuation', 'framework', 'ssp']
+        >>> [c.key for c in grouped["dust_attenuation"]]
+        ['charlot_fall2000', 'calzetti2000']
+        """
         groups: dict[str, list[Citation]] = {}
         for c in self:
             groups.setdefault(c.category or "other", []).append(c)
@@ -145,10 +214,39 @@ class Bibliography:
 
         Parameters
         ----------
-        group_by_category : bool
+        group_by_category : bool, optional
             If True (default), citations are grouped under category headings
             (Stellar populations / Dust / Nebular / Inference …). If False,
             print one flat numbered list.
+
+        Returns
+        -------
+        str
+            Multi-line report suitable for terminal or notebook output.
+
+        Notes
+        -----
+        **JIT-compatible**: no — pure Python string formatting.
+
+        Each citation renders as ``short — role`` on the first line, title
+        on the second, and DOI / arXiv / upstream-code links on the third.
+        The category ordering is stable (framework → ssp → dust → nebular
+        → agn → igm → preprocessing → inference → reference_code → other).
+
+        Examples
+        --------
+        >>> from tengri.config.settings import ModelConfig, DustConfig
+        >>> mc = ModelConfig(dust=DustConfig(law_bc="calzetti"))
+        >>> bib = Bibliography.from_config(mc)
+        >>> print(bib.report())  # doctest: +SKIP
+        Please cite the following when publishing results:
+          ── Framework & theory ─────────────────────────────
+            • Cooray et al. (2026, Paper I) — ...
+          ── Stellar populations ────────────────────────────
+            • Hearin et al. (2023) — ...
+          ── Dust attenuation ───────────────────────────────
+            • Charlot & Fall (2000) — ...
+            • Calzetti et al. (2000) — ...
         """
         cites = self.to_list()
         if not cites:
@@ -193,7 +291,24 @@ class Bibliography:
         return out
 
     def to_bibtex(self) -> str:
-        """BibTeX block of every citation, ready to paste into a .bib file."""
+        """BibTeX block of every citation, ready to paste into a .bib file.
+
+        Returns
+        -------
+        str
+            Concatenated BibTeX entries separated by blank lines.
+
+        Examples
+        --------
+        >>> bib = Bibliography().add("calzetti2000")
+        >>> print(bib.to_bibtex())  # doctest: +SKIP
+        @article{Calzetti_2000,
+          author = {{Calzetti}, Daniela and ...},
+          title = {...},
+          year = {2000},
+          ...
+        }
+        """
         return "\n\n".join(c.to_bibtex() for c in self)
 
     def __str__(self) -> str:  # short summary, e.g. in repr-heavy REPLs
@@ -213,6 +328,39 @@ class Bibliography:
         returned verbatim), otherwise falls back to inspecting
         ``model_config``, the last inference backend used, and any
         ``@cites``-annotated callables found on the object.
+
+        Parameters
+        ----------
+        obj : Any
+            Galaxy, SEDModel, Fitter, ModelConfig, FitResult, or any other
+            object whose configuration can be inspected for component choices.
+        include_backend : bool, optional
+            Include inference-backend citations from ``obj._last_backend``
+            or ``obj.backend_name``. Default ``True``.
+
+        Returns
+        -------
+        Bibliography
+            Newly constructed (or the object's existing :attr:`bibliography`
+            attribute, if present).
+
+        Notes
+        -----
+        **JIT-compatible**: no — performs attribute introspection.
+
+        Examples
+        --------
+        >>> import numpy as np, tengri as tg
+        >>> g = tg.Galaxy.from_arrays(
+        ...     filters=["sdss_g", "sdss_r"],
+        ...     flux=np.array([1e-28, 2e-28]),
+        ...     flux_err=np.array([1e-29]*2),
+        ...     redshift=0.1, ssp_path="data/ssp.h5",
+        ...     preset="starforming",
+        ... )  # doctest: +SKIP
+        >>> bib = Bibliography.from_object(g)  # doctest: +SKIP
+        >>> bib.keys  # doctest: +SKIP
+        ['tengri', 'jax', 'dsps', 'charlot_fall2000', 'calzetti2000']
         """
         existing = getattr(obj, "bibliography", None)
         if isinstance(existing, Bibliography):
@@ -259,9 +407,39 @@ class Bibliography:
     def from_config(cls, model_config: Any, *, source: str = "") -> Bibliography:
         """Build a Bibliography from a :class:`ModelConfig`-like object.
 
-        Inspects ``dust``, ``nebular``, ``igm`` sub-configs and adds the
-        citations implied by their values. Core citations (``tengri``,
-        ``jax``, ``dsps``) are always included.
+        Inspects ``dust``, ``nebular``, ``igm``, and ``agn`` sub-configs
+        and adds the citations implied by their values. Core citations
+        (``tengri``, ``jax``, ``dsps``) are always included.
+
+        Parameters
+        ----------
+        model_config : ModelConfig or None
+            Configuration whose dust law, nebular backend, IGM model, and
+            AGN sub-components are inspected. ``None`` yields just the
+            core citations.
+        source : str, optional
+            Label recorded on the returned Bibliography for display in
+            :meth:`report`.
+
+        Returns
+        -------
+        Bibliography
+
+        Notes
+        -----
+        **JIT-compatible**: no.
+
+        The lookup tables live in :mod:`tengri.citations.associations`.
+        Adding a new dust law or backend? Extend the appropriate table
+        there so this method surfaces the right citation automatically.
+
+        Examples
+        --------
+        >>> from tengri.config.settings import ModelConfig, DustConfig
+        >>> mc = ModelConfig(dust=DustConfig(law_bc="kriek_conroy"))
+        >>> bib = Bibliography.from_config(mc, source="my model")
+        >>> "kriek_conroy2013" in bib.keys
+        True
         """
         from tengri.citations.associations import (
             CORE_CITATIONS,
@@ -316,7 +494,28 @@ class Bibliography:
         return bib
 
     def add_backend(self, backend: str | None) -> Bibliography:
-        """Append citations for an inference backend (``"vi"``, ``"mcmc_nuts"``, …)."""
+        """Append citations for an inference backend.
+
+        Parameters
+        ----------
+        backend : str or None
+            Name as passed to :meth:`tengri.Fitter.run` — e.g. ``"map"``,
+            ``"vi"``, ``"mcmc_nuts"``, ``"mcmc_raytrace"``, ``"evidence"``,
+            ``"ess"``, ``"pathfinder"``. ``None`` is a silent no-op.
+
+        Returns
+        -------
+        Bibliography
+            ``self`` for chaining.
+
+        Examples
+        --------
+        >>> bib = Bibliography()
+        >>> bib.add_backend("mcmc_nuts").keys
+        ['blackjax']
+        >>> bib.add_backend("vi").keys
+        ['blackjax', 'nifty', 'ift']
+        """
         if not backend:
             return self
         from tengri.citations.associations import BACKEND_CITATIONS

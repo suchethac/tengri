@@ -238,6 +238,7 @@ ax.set_ylabel(r"1$\sigma$ uncertainty")
 ax.set_title("Parameter Errors: Fisher vs Posterior")
 ax.legend()
 ax.set_yscale("log")
+ax.set_ylim(1e-3, 10)
 
 # Correlation matrix (FIM)
 ax = axes[1]
@@ -298,6 +299,7 @@ for idx, (pname, grad_sed) in enumerate(gradients.items()):
     ax.axhline(0, color="k", lw=0.5, alpha=0.3)
     ax.fill_between(wave_rest, 0, norm_grad, alpha=0.3, color=COLORS["model"])
     ax.set_xscale("log")
+    ax.set_xlim(wave_rest.min(), wave_rest.max())
     ax.set_xlabel(r"Rest-frame wavelength [$\AA$]")
     ax.set_ylabel(r"$\partial \text{SED} / \partial \theta$")
     ax.set_title(pname)

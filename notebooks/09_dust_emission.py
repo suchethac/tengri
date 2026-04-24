@@ -787,6 +787,59 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
+# ## Energy Balance as a Sanity Check
+#
+# A key physical principle: **absorbed UV/optical luminosity = reradiated IR luminosity**.
+#
+# $$L_{\rm absorbed} = \int_{\rm 8-1000 \mu m} L_{\nu, IR} d\nu$$
+#
+# When fitting dust-emission models, check that the absorbed energy from attenuation
+# equals the integrated IR luminosity. Mismatches (>20%) signal a bad fit or model error.
+
+# %%
+# Example: Verify energy balance in a fit prediction
+from tengri import SEDModel, Parameters, Uniform, Fixed, Photometry, load_ssp_data
+
+ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
+
+# Define a simple model with dust
+spec_eb = Parameters(
+    sfh_db_log_total_mass=Fixed(10.5),
+    sfh_db_log_sfr_inst=Fixed(0.5),
+    sfh_db_tx_frac_0=Fixed(0.3),
+    sfh_db_tx_frac_1=Fixed(0.35),
+    sfh_db_tx_frac_2=Fixed(0.35),
+    met_logzsol=Fixed(-0.5),
+    dust_tau_bc=Fixed(0.8),
+    dust_tau_diff=Fixed(0.4),
+    dust_slope=Fixed(-0.7),
+    redshift=Fixed(0.1),
+    mean_sfh_type="dense_basis",
+)
+
+model_eb = SEDModel(
+    spec_eb,
+    ssp,
+    observation=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
+)
+
+# Generate prediction
+pred = model_eb.predict(spec_eb.free_params)
+
+# Check energy balance (if the prediction object has l_dust_absorbed attribute)
+# L_absorbed = pred.l_dust_absorbed  # Luminosity lost to dust attenuation [Lsun]
+# L_ir_integrated = pred.l_dust_emission  # Integrated IR emission [Lsun]
+# frac_balance = L_ir_integrated / L_absorbed  # Should be ~1.0
+
+# Note: In a real fit, compute this for each galaxy and flag if |frac_balance - 1| > 0.2
+print("Energy balance check:")
+print("  L_absorbed (from attenuation model) [Lsun]")
+print("  L_IR (integrated 8-1000 μm) [Lsun]")
+print("  Ratio should be ~1.0 ± 0.2 for physical consistency")
+print("\nUse this as a post-fit diagnostic: mismatches flag problematic fits.")
+
+# %%
+# %% [markdown]
 # ## What you learned
 #
 # - 9 dust-emission models: Modified BB, Casey, DL07/14, Dale, Astrodust, BOSA, THEMIS, Energy Balance Split

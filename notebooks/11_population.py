@@ -699,6 +699,8 @@ if RUN_EXPENSIVE:
     ax.set_ylabel(r"$\sigma_{\rm PS}$ posterior 68% width")
     ax.set_xscale("log")
     ax.set_yscale("log")
+    ax.set_xlim(1, 15)
+    ax.set_ylim(0.01, 1)
     ax.legend()
     ax.set_title(r"Posterior Shrinkage: $\propto 1/\sqrt{N}$")
     fig.tight_layout()

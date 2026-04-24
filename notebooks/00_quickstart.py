@@ -232,6 +232,8 @@ ax0.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]")
 ax0.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]")
 ax0.set_title("Panchromatic forward model (same SSP family as the fits below)")
 ax0.set_xlim(float(wave_pan_np.min()), float(wave_pan_np.max()))
+y_valid = sed_pan_np[valid]
+ax0.set_ylim(float(y_valid.min()) * 0.5, float(y_valid.max()) * 2.0)
 ax0.grid(True, alpha=0.3)
 ax0.legend(loc="upper right", fontsize=10)
 fig0.tight_layout()

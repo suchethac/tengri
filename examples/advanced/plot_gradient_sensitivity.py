@@ -119,7 +119,7 @@ fig.tight_layout()
 outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
 outdir.mkdir(parents=True, exist_ok=True)
 plt.savefig(
-    str(outdir / "gradient_sensitivity.png", dpi=300, bbox_inches="tight"),
+    str(outdir / "gradient_sensitivity.png"),
     dpi=150,
     bbox_inches="tight",
 )

@@ -186,6 +186,46 @@ obs_spec = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS))
 # line-spread function (LSF) FWHM in Å. The model convolves predictions
 # to match before computing the likelihood.
 
+# %% [markdown]
+# ### Masking Telluric Absorption
+#
+# Optical and NIR spectra contain atmospheric absorption bands (Earth's O₂, H₂O, etc.)
+# that bias continuum and line measurements. These bands are *not* part of the galaxy spectrum
+# and must be masked before fitting.
+#
+# Common telluric features (vacuum wavelengths, Å):
+# - **B-band (O₂):** 6860–6900 Å
+# - **A-band (O₂):** 7580–7700 Å
+# - **H₂O bands:** 7150–7350, 8100–8350, 9300–9650 Å
+#
+# Pass a boolean `mask` array to `Spectroscopy(mask=...)` to flag bad pixels.
+# The fitter skips masked pixels when computing the likelihood.
+
+# %%
+# Example: Create telluric mask for optical spectrum
+telluric_bands = [
+    (6860, 6900),  # B-band O2
+    (7150, 7350),  # H2O
+    (7580, 7700),  # A-band O2
+    (8100, 8350),  # H2O
+    (9300, 9650),  # H2O
+]
+
+# Create boolean mask: True = good pixel, False = bad (telluric)
+mask_telluric = np.ones(len(WAVE_OBS), dtype=bool)
+for w_lo, w_hi in telluric_bands:
+    mask_telluric = mask_telluric & ~((w_lo <= WAVE_OBS) & (w_hi >= WAVE_OBS))
+
+# Count masked pixels
+n_masked = np.sum(~mask_telluric)
+print(
+    f"Telluric masking: {n_masked}/{len(WAVE_OBS)} pixels masked ({100 * n_masked / len(WAVE_OBS):.1f}%)"
+)
+
+# Pass mask to Spectroscopy object (optional in this example; real data would use it)
+# obs_spec_masked = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS, mask=mask_telluric))
+# Fitter will skip masked wavelengths in likelihood computation
+
 # %%
 # Parametric model (D = 7)
 spec_param = Parameters(

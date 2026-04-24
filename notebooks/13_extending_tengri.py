@@ -251,6 +251,8 @@ ax1.loglog(
 )
 ax1.set_xlabel("Frequency")
 ax1.set_ylabel("P(ω)")
+ax1.set_xlim(freqs[1], freqs[-1])
+ax1.set_ylim(1e-2, 1e3)
 ax1.legend(fontsize=10)
 ax1.set_title("PSD: DRW vs Matérn")
 

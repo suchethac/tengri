@@ -37,10 +37,11 @@ References
 ----------
 .. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active
    galaxies. II. From clumpy torus models to a unified model," ApJL 838,
-   L20 (2017).  arXiv:1702.08691.  Citation details must be verified
-   against ``~/writing-workspace`` before publication.
-.. [2] Z. Zhuang, Martínez-Ramírez et al., "AGNfitter-rx: ..."
-   arXiv:2405.12111.
+   L20 (2017). arXiv:1702.08691.
+.. [2] L. N. Martínez-Ramírez, G. Calistro Rivera, E. Lusso, et al.,
+   "AGNfitter-rx: Modeling the radio-to-X-ray spectral energy
+   distributions of AGNs," A&A 688, A46 (2024). arXiv:2405.12111.
+   DOI: 10.1051/0004-6361/202449329.
 """
 
 from __future__ import annotations

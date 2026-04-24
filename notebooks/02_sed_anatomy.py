@@ -437,6 +437,10 @@ ax = axes[0, 0]
 ax.loglog(
     wv, np.array(sed_stars_only), color=COLORS["seq"][2], lw=1.2, label="Stars (+ dust att.)"
 )
+ax.set_xlim(wv.min(), wv.max())
+y_data = np.array(sed_stars_only)
+y_valid = y_data[np.isfinite(y_data) & (y_data > 0)]
+ax.set_ylim(y_valid.min() * 0.3, y_valid.max() * 3)
 ax.set_ylabel(r"$f_\nu$ [cgs]", fontsize=10)
 ax.set_title("Step 1: Stellar continuum (no SSP nebular)", fontsize=10, fontweight="bold")
 ax.grid(True, alpha=0.3)
@@ -447,6 +451,10 @@ ax.loglog(
     wv, np.array(sed_stars_only), color=COLORS["seq"][2], lw=0.8, alpha=0.5, label="Previous"
 )
 ax.loglog(wv, np.array(sed_stars_nebular), color=COLORS["seq"][3], lw=1.2, label="+ Nebular (SSP)")
+ax.set_xlim(wv.min(), wv.max())
+y_data = np.concatenate([np.array(sed_stars_only), np.array(sed_stars_nebular)])
+y_valid = y_data[np.isfinite(y_data) & (y_data > 0)]
+ax.set_ylim(y_valid.min() * 0.3, y_valid.max() * 3)
 ax.set_title("Step 2: + Nebular emission", fontsize=10, fontweight="bold")
 ax.grid(True, alpha=0.3)
 ax.legend(fontsize=10)
@@ -454,6 +462,10 @@ ax.legend(fontsize=10)
 ax = axes[1, 0]
 ax.loglog(wv, np.array(sed_no_dust), color=COLORS["seq"][1], lw=0.8, alpha=0.5, label="Intrinsic")
 ax.loglog(wv, np.array(sed_with_atten), color="darkred", lw=1.2, label="+ Dust attenuation")
+ax.set_xlim(wv.min(), wv.max())
+y_data = np.concatenate([np.array(sed_no_dust), np.array(sed_with_atten)])
+y_valid = y_data[np.isfinite(y_data) & (y_data > 0)]
+ax.set_ylim(y_valid.min() * 0.3, y_valid.max() * 3)
 ax.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]", fontsize=10)
 ax.set_ylabel(r"$f_\nu$ [cgs]", fontsize=10)
 ax.set_title("Step 3: Charlot–Fall attenuation", fontsize=10, fontweight="bold")
@@ -463,6 +475,10 @@ ax.legend(fontsize=10)
 ax = axes[1, 1]
 ax.loglog(wv, np.array(sed_with_atten), color="darkred", lw=0.8, alpha=0.5, label="Attenuated")
 ax.loglog(wv, np.array(sed_complete), color=COLORS["seq"][4], lw=1.2, label="+ IR + radio + X-ray")
+ax.set_xlim(wv.min(), wv.max())
+y_data = np.concatenate([np.array(sed_with_atten), np.array(sed_complete)])
+y_valid = y_data[np.isfinite(y_data) & (y_data > 0)]
+ax.set_ylim(y_valid.min() * 0.3, y_valid.max() * 3)
 ax.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]", fontsize=10)
 ax.set_title("Step 4: IR + radio + X-ray", fontsize=10, fontweight="bold")
 ax.grid(True, alpha=0.3)
@@ -507,6 +523,7 @@ ax.set_title(
 ax.legend(fontsize=10, loc="upper right")
 ax.grid(True, alpha=0.3)
 ax.set_xlim(1e3, 1e7)
+ax.set_ylim(1e-18, 1e-12)
 
 sdss_bands = {"u": 3600, "g": 4700, "r": 6200, "i": 7500, "z": 9100}
 for _band_name, band_center in sdss_bands.items():
@@ -534,6 +551,7 @@ for z, c in zip([1.0, 3.0, 6.0], plt.cm.plasma([0.2, 0.55, 0.85])):
     t = igm_transmission(wave_obs_igm, z)
     ax.plot(np.array(wave_obs_igm), np.array(t), color=c, lw=1.2, label=f"z = {z:.0f}")
 ax.set_xscale("log")
+ax.set_xlim(500.0, 25000.0)
 ax.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$T_{\rm IGM}$")
 ax.set_ylim(-0.05, 1.05)

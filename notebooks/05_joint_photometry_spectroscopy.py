@@ -218,6 +218,39 @@ noise_joint = obs.pack_data(phot=mock_phot.noise, spec=mock_spec.noise)
 
 print(f"Joint data vector shape: {data_joint.shape}")
 
+# %% [markdown]
+# ### SDSS Aperture Mismatch Example
+#
+# SDSS photometry uses a **3″ Kron aperture**, but spectroscopic fibers are **2″** (BOSS) or **3″** (spectroscopic survey).
+# The `fibermag` (fiber magnitude) approximates flux within the fiber; `cmodelmag` estimates total flux.
+# When fitting joint phot+spec, the spectroscopic flux should match the photometric aperture.
+#
+# **Quick fix:** Scale spectroscopic flux to match photometric aperture, or increase photo errors.
+
+# %%
+# Example: SDSS-like aperture correction
+# (Real data: load `fibermag` from SDSS FITS and compare to `cmodelmag`; compute correction factor)
+
+# Synthetic case: assume spectrum was within 3" fiber, photometry is 3" Kron
+# Correction factor κ_apert = F_Kron / F_fiber ≈ 1.1–1.5 (typical for galaxies)
+kappa_apert = 1.15  # Example: 15% flux loss in fiber
+
+# Option 1: Scale spectroscopic flux UP to match photometric aperture
+mock_spec_corrected = {
+    "flux_obs": mock_spec.flux_obs * kappa_apert,
+    "flux_true": mock_spec.flux_true * kappa_apert,
+    "noise": mock_spec.noise * kappa_apert,
+}
+
+print(f"Aperture correction: κ = {kappa_apert}")
+print(f'  Spectrum flux scaled by ×{kappa_apert} to match 3" photometry')
+
+# Option 2: Increase photometric errors to absorb mismatch (conservative)
+# noise_joint_expanded = obs.pack_data(
+#     phot=np.sqrt(mock_phot.noise**2 + (0.15 * mock_phot.flux_obs)**2),
+#     spec=mock_spec.noise
+# )
+
 # %%
 # --- FIGURE 1: Two-panel mock data ---
 fig, (ax_p, ax_s) = plt.subplots(1, 2, figsize=(12, 3.5), gridspec_kw={"width_ratios": [1, 3]})
@@ -266,7 +299,11 @@ ax_s.legend(fontsize=10)
 
 fig.suptitle("Joint Mock Galaxy at z = 0.1", fontsize=13)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "fig11_joint_mock_data.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
+plt.savefig(
+    os.path.join(FIGDIR, "fig11_joint_mock_data.png", dpi=300, bbox_inches="tight"),
+    dpi=150,
+    bbox_inches="tight",
+)
 plt.show()
 
 # %% [markdown]
@@ -365,7 +402,11 @@ fig.suptitle(
     fontsize=13,
 )
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "fig11_joint_map_fit.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
+plt.savefig(
+    os.path.join(FIGDIR, "fig11_joint_map_fit.png", dpi=300, bbox_inches="tight"),
+    dpi=150,
+    bbox_inches="tight",
+)
 plt.show()
 
 # %% [markdown]
@@ -424,7 +465,11 @@ for i, pname in enumerate(param_names):
 
 fig.suptitle("Parameter Recovery: MAP Error by Data Combination", fontsize=12)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "fig11_constraint_comparison.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
+plt.savefig(
+    os.path.join(FIGDIR, "fig11_constraint_comparison.png", dpi=300, bbox_inches="tight"),
+    dpi=150,
+    bbox_inches="tight",
+)
 plt.show()
 
 # %% [markdown]
@@ -476,7 +521,11 @@ plot_sfh(
 )
 ax.set_title("SFH Recovery: Joint Phot + Spec (NUTS)")
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "fig11_sfh_joint.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
+plt.savefig(
+    os.path.join(FIGDIR, "fig11_sfh_joint.png", dpi=300, bbox_inches="tight"),
+    dpi=150,
+    bbox_inches="tight",
+)
 plt.show()
 
 # %%
