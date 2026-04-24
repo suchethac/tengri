@@ -48,7 +48,6 @@ SPINE_SLUGS = [
     "12_extending_tengri",
     "13_tabulated_sfh_to_mock_sed",
     "14_joint_photometry_spectroscopy",
-    "17_galaxy_facade",
 ]
 
 # Human-readable titles for Sphinx sidebar (keyed by slug).
@@ -68,7 +67,6 @@ SPINE_TITLES: dict[str, str] = {
     "12_extending_tengri": "Extending tengri",
     "13_tabulated_sfh_to_mock_sed": "Tabulated SFH to Mock SED",
     "14_joint_photometry_spectroscopy": "Joint Photometry + Spectroscopy",
-    "17_galaxy_facade": "One-Liner Galaxy API",
 }
 
 
