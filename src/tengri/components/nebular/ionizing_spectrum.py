@@ -21,6 +21,139 @@ _np_trapz = getattr(np, "trapezoid", np.trapz)
 # Physical constants
 from tengri.utils.physics_constants import L_SUN as _LSUN
 
+
+def _fit_segment(
+    seg_wave: np.ndarray,
+    seg_flux: np.ndarray,
+    norm: float,
+) -> np.ndarray:
+    """Fit power-law model to a single ionization-regime segment.
+
+    **Internal helper** — fits L_ν ∝ λ^α to one wavelength segment using
+    least-squares regression with a photon-count constraint to preserve Q_H.
+
+    Parameters
+    ----------
+    seg_wave : array, shape (n_seg,)
+        Segment wavelength grid [Å]
+    seg_flux : array, shape (n_seg,)
+        Normalized segment flux (already multiplied by norm factor for stability)
+    norm : float
+        Normalization factor applied to flux (used to denormalize log_A later)
+
+    Returns
+    -------
+    coeff : array, shape (2,)
+        [slope, log_norm_denormalized] — power-law parameters α and log10(A).
+        If segment has no positive flux, returns [0.0, -inf].
+
+    Notes
+    -----
+    Uses scipy L-BFGS-B optimization to minimize:
+        0.5 * ||log_flux - pred||^2 + 0.5 * len(seg) * (log_Q - log_Q_pred)^2
+
+    Constraint term ensures photon rate Q_H matches the input SED, preventing
+    slope-fitting from drifting when flux amplitude is small or noisy.
+
+    """
+    from scipy.optimize import minimize
+
+    pos = seg_flux > 0
+    if not np.any(pos):
+        return np.array([0.0, -np.inf])
+
+    log_wave = np.log10(seg_wave)
+    log_flux = np.log10(np.maximum(seg_flux, 1e-99))
+
+    # Initial guess: linear fit in log-log
+    init_slope = (log_flux[-1] - log_flux[0]) / max(log_wave[-1] - log_wave[0], 1e-10)
+    init_norm = log_flux[-1] - init_slope * log_wave[-1]
+
+    # Q_H for this segment
+    nu = _C_AA / seg_wave
+    integrand = seg_flux / (_H_PLANCK * nu)
+    Q_seg = np.abs(_np_trapz(integrand[::-1], x=nu[::-1]))
+    log_Q = np.log10(max(Q_seg, 1e-99))
+
+    def objective(
+        params,
+        _log_wave=log_wave,
+        _seg_wave=seg_wave,
+        _log_flux=log_flux,
+        _log_Q=log_Q,
+    ):
+        """Compute power-law residual and Q_H constraint for ionizing spectrum fitting."""
+        pred = params[1] + params[0] * _log_wave
+        log_Q_pred = (
+            params[1]
+            - np.log10(_H_PLANCK)
+            + np.log10(
+                np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
+            )
+        )
+        return (
+            0.5 * np.sum((_log_flux - pred) ** 2)
+            + 0.5 * len(_seg_wave) * (_log_Q - log_Q_pred) ** 2
+        )
+
+    res = minimize(
+        objective,
+        [init_slope, init_norm],
+        method="L-BFGS-B",
+        bounds=[(-40, 100), (-200, 100)],
+    )
+    coeff = np.array(res.x)
+    coeff[1] -= np.log10(norm)
+    return coeff
+
+
+def _compute_segment_luminosities(
+    coeff: np.ndarray,
+    edges: np.ndarray,
+) -> np.ndarray:
+    """Compute integrated luminosity per segment from power-law parameters.
+
+    **Internal helper** — integrates L_ν ∝ λ^α over wavelength for each
+    of the 4 ionization segments, handling the special case α ≈ 1.
+
+    Parameters
+    ----------
+    coeff : array, shape (4, 2)
+        [slope, log_norm] pairs for each segment [Å, dimensionless]
+    edges : array, shape (5,)
+        Segment boundaries [Å]: [1, HeII, OII, HeI, HI_limit]
+
+    Returns
+    -------
+    log_L : array, shape (4,)
+        log10(integrated luminosity) for each segment [log10(erg/s)]
+
+    Notes
+    -----
+    For α ≠ 1:
+        L = A ∫_λ_lo^λ_hi λ^α dλ = A (λ_hi^(α+1) - λ_lo^(α+1)) / (α + 1)
+
+    For α ≈ 1 (handled specially to avoid division by zero):
+        L = A ∫_λ_lo^λ_hi λ dλ = A ln(λ_hi / λ_lo)
+
+    """
+    log_L = np.zeros(4)
+    for i in range(4):
+        lam_lo, lam_hi = edges[i], edges[i + 1]
+        alpha = coeff[i, 0]
+        log_A = coeff[i, 1]
+        if abs(alpha - 1.0) > 1e-8:
+            log_L[i] = (
+                log_A
+                + np.log10(_C_AA * _LSUN)
+                + np.log10(np.abs((lam_hi ** (alpha - 1) - lam_lo ** (alpha - 1)) / (alpha - 1)))
+            )
+        else:
+            log_L[i] = (
+                log_A + np.log10(_C_AA * _LSUN) + np.log10(np.abs(np.log(lam_hi) - np.log(lam_lo)))
+            )
+    return log_L
+
 # Ionization edges (Angstrom) — from cue/constants.py
 HEII_EDGE = 1e8 / 438908.8789  # 227.84 A
 OII_EDGE = 1e8 / 283270.9  # 353.07 A
@@ -134,8 +267,6 @@ def fit_ionizing_spectrum(
        https://doi.org/10.3847/1538-4357/ad7fe3
 
     """
-    from scipy.optimize import minimize
-
     wave = np.asarray(wave)
     flux = np.asarray(flux)
 
@@ -150,75 +281,14 @@ def fit_ionizing_spectrum(
     norm = 1e-18 / max(ref_flux, 1e-99)
     normalized = np.clip(flux * norm, 1e-70 * norm, np.inf)
 
+    # Fit each segment independently
     for i in range(4):
         seg_wave = wave[ind_bin[i] : ind_bin[i + 1]]
         seg_flux = normalized[ind_bin[i] : ind_bin[i + 1]]
-
-        pos = seg_flux > 0
-        if not np.any(pos):
-            coeff[i] = [0.0, -np.inf]
-            continue
-
-        log_wave = np.log10(seg_wave)
-        log_flux = np.log10(np.maximum(seg_flux, 1e-99))
-
-        # Initial guess: linear fit in log-log
-        init_slope = (log_flux[-1] - log_flux[0]) / max(log_wave[-1] - log_wave[0], 1e-10)
-        init_norm = log_flux[-1] - init_slope * log_wave[-1]
-
-        # Q_H for this segment
-        nu = _C_AA / seg_wave
-        integrand = seg_flux / (_H_PLANCK * nu)
-        Q_seg = np.abs(_np_trapz(integrand[::-1], x=nu[::-1]))
-        log_Q = np.log10(max(Q_seg, 1e-99))
-
-        def objective(
-            params,
-            _log_wave=log_wave,
-            _seg_wave=seg_wave,
-            _log_flux=log_flux,
-            _log_Q=log_Q,
-        ):
-            """Compute power-law residual and Q_H constraint for ionizing spectrum fitting."""
-            pred = params[1] + params[0] * _log_wave
-            log_Q_pred = (
-                params[1]
-                - np.log10(_H_PLANCK)
-                + np.log10(
-                    np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-                )
-            )
-            return (
-                0.5 * np.sum((_log_flux - pred) ** 2)
-                + 0.5 * len(_seg_wave) * (_log_Q - log_Q_pred) ** 2
-            )
-
-        res = minimize(
-            objective,
-            [init_slope, init_norm],
-            method="L-BFGS-B",
-            bounds=[(-40, 100), (-200, 100)],
-        )
-        coeff[i] = res.x
-        coeff[i, 1] -= np.log10(norm)
+        coeff[i] = _fit_segment(seg_wave, seg_flux, norm)
 
     # Compute integrated luminosities per segment
-    log_L = np.zeros(4)
-    for i in range(4):
-        lam_lo, lam_hi = edges[i], edges[i + 1]
-        alpha = coeff[i, 0]
-        log_A = coeff[i, 1]
-        if abs(alpha - 1.0) > 1e-8:
-            log_L[i] = (
-                log_A
-                + np.log10(_C_AA * _LSUN)
-                + np.log10(np.abs((lam_hi ** (alpha - 1) - lam_lo ** (alpha - 1)) / (alpha - 1)))
-            )
-        else:
-            log_L[i] = (
-                log_A + np.log10(_C_AA * _LSUN) + np.log10(np.abs(np.log(lam_hi) - np.log(lam_lo)))
-            )
-
+    log_L = _compute_segment_luminosities(coeff, edges)
     logLratios = np.diff(log_L)
 
     # Total Q_H — integrate photon rate over frequency.
