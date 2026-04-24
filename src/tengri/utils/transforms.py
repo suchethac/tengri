@@ -78,23 +78,6 @@ def softplus(x: jnp.ndarray) -> jnp.ndarray:
 
 
 @jax.jit
-def log_softplus(x: jnp.ndarray) -> jnp.ndarray:
-    """Log of softplus, numerically stable.
-
-    Parameters
-    ----------
-    x : array_like
-        Input.
-
-    Returns
-    -------
-    ndarray
-        log(log(1 + exp(x))), computed as logaddexp(x, 0).
-    """
-    return jnp.logaddexp(x, 0.0)
-
-
-@jax.jit
 def to_bounded(u_param: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
     """Map unbounded parameter to (lo, hi) via sigmoid.
 

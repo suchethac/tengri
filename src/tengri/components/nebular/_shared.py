@@ -217,15 +217,6 @@ def _interp_index_weight(
     return idx, w
 
 
-# ── Grid interpolation — triweight kernel (smooth, C²) ────────────
-# Re-exported from utils.interpolation for convenience.
-
-from tengri.utils.interpolation import (
-    compute_grid_weights,  # noqa: F401
-    edges_for_grid,  # noqa: F401
-    tw_cuml_kern as _tw_cuml_kern,  # noqa: F401
-)
-
 # ── Metallicity convention converters ─────────────────────────────
 
 

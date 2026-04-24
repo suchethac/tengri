@@ -409,8 +409,9 @@ class PopulationFitter:
             Parameters
             ----------
             p : dict
-                Hierarchical parameter dict with keys 'psd_sigma_u', 'psd_tau_u',
-                'gal' (per-galaxy unbounded params), and optionally 'gal_xi'.
+                Hierarchical parameter dict. Keys 'psd_sigma' and 'psd_tau' map to
+                unbounded optimizer space internally; 'gal' contains per-galaxy unbounded
+                params; 'gal_xi' present if stochastic field is enabled.
 
             Returns
             -------

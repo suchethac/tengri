@@ -18,6 +18,8 @@ Coefficient tables from eazy-py (Brammer et al.):
 import jax
 import jax.numpy as jnp
 
+from tengri.utils.physics_constants import C_CGS
+
 # ── Lyman series wavelengths (Angstrom) for lines j=2 (Ly-alpha) to j=40
 _N_LINES = 39
 
@@ -312,9 +314,8 @@ def _tau_lc_dla(
 # ── CGM damping wing absorption (Asada et al. 2025) ───────────────
 
 # Physical constants for damping wing calculation
-_C_CGS_IGM = 2.99792458e10  # cm/s
 _LAMBDA_LYA = 1215.67  # Angstrom (Ly-alpha rest wavelength)
-_NU_LYA = _C_CGS_IGM / (_LAMBDA_LYA * 1e-8)  # Hz
+_NU_LYA = C_CGS / (_LAMBDA_LYA * 1e-8)  # Hz
 _GAMMA_LYA = 6.265e8  # s^-1 (Ly-alpha natural line width)
 _SIGMA_0 = 5.9e-14  # cm^2 Hz (Ly-alpha cross-section constant: pi*e^2/(m_e*c)*f_12)
 
@@ -378,8 +379,8 @@ def _cgm_damping_wing_tau(
     # Frequency offset from Ly-alpha at the source
     # nu_obs = c / (wave_obs * 1e-8), nu_lya_obs = c / (lya_obs * 1e-8)
     # Delta_nu = nu_obs - nu_lya_obs (positive = blueward of Ly-alpha)
-    nu_obs = _C_CGS_IGM / (wave_obs * 1e-8)
-    nu_lya_obs = _C_CGS_IGM / (lya_obs * 1e-8)
+    nu_obs = C_CGS / (wave_obs * 1e-8)
+    nu_lya_obs = C_CGS / (lya_obs * 1e-8)
     delta_nu = nu_obs - nu_lya_obs
 
     # Damping wing cross-section (Lorentzian far-wing approximation)
@@ -591,7 +592,7 @@ def _damping_wing_tau(
     # Damping constant: Lambda = Gamma_alpha / (4*pi*nu_alpha)
     # nu_alpha = c / (lambda_alpha * 1e-8)
     lambda_alpha = _LAMBDA_LYA * 1e-8  # cm
-    nu_alpha = _C_CGS_IGM / lambda_alpha
+    nu_alpha = C_CGS / lambda_alpha
     lambda_damp = _GAMMA_LYA / (4.0 * jnp.pi * nu_alpha)
 
     # Bubble edge in dimensionless frequency offset:

@@ -81,7 +81,7 @@ def tree(model: SEDModel) -> str:
     sfh_params = [
         p
         for p in model.spec.free_params
-        if p.startswith("sfh_") or p in ("psd_sigma", "psd_tau_myr")
+        if p.startswith("sfh_")
     ]
     for i, name in enumerate(sfh_params):
         prefix = last if i == len(sfh_params) - 1 else branch
