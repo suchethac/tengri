@@ -34,9 +34,16 @@ class CatalogPosterior:
     method : str
         Inference method used.
     wall_time_s : float
-        Total wall-clock time for all galaxies.
+        Total wall-clock time for all galaxies. [s]
     n_galaxies : int
         Number of galaxies.
+    diagnostics : dict
+        Method-specific diagnostics (e.g. ``mean_n_iterations`` for native VI).
+
+    Raises
+    ------
+    IndexError
+        If ``__getitem__`` is called with an out-of-range index.
 
     Examples
     --------
@@ -82,11 +89,18 @@ class CatalogFitter:
     model : SEDModel
         Forward model shared across all galaxies.
     galaxies : list of dict
-        Each dict must contain ``'flux_obs'`` and ``'noise'`` arrays.
+        Each dict must contain ``'flux_obs'`` array, shape ``(n_data,)`` [erg/s/Hz],
+        and ``'noise'`` array, shape ``(n_data,)`` [erg/s/Hz] (per-band 1-sigma errors).
         For ``forward_chunk_size > 1`` with native methods, all galaxies must
-        have the same number of data points.
+        have the same ``n_data``.
     data_type : str
         ``"photometry"`` (default), ``"spectroscopy"``, or ``"joint"``.
+
+    Raises
+    ------
+    ValueError
+        If ``forward_chunk_size > 1`` and galaxies have different ``n_data``
+        (raised by :meth:`_validate_uniform_data`).
 
     Notes
     -----
@@ -97,8 +111,11 @@ class CatalogFitter:
 
     For non-native methods (e.g. ``vi_nonlinear``, ``map``, ``mcmc``),
     ``CatalogFitter`` delegates to sequential :class:`Fitter` instances.
-    JAX's XLA persistent cache means only the first galaxy pays the
-    compilation cost.
+    JAX's XLA persistent cache means only the first galaxy pays the compilation cost.
+
+    **Not JIT-compatible at the Python level** — ``CatalogFitter`` is a Python
+    orchestrator; the individual catalog VI engine callables it dispatches to are
+    JIT-compiled and vmap-compatible.
 
     Examples
     --------
@@ -150,6 +167,13 @@ class CatalogFitter:
         Returns
         -------
         CatalogPosterior
+
+        Raises
+        ------
+        ValueError
+            If ``forward_chunk_size > 1`` and galaxies have heterogeneous ``n_data``.
+        UserWarning
+            If ``forward_chunk_size != 1`` is passed for a non-native method (ignored).
         """
         from tengri.inference.fitter import resolve_method
 

@@ -1245,7 +1245,24 @@ def build_native_vi_catalog_linear_engine(signal_response, flatten, unflatten):
     these Python closures, so the traced values become XLA graph nodes — making the
     returned callables fully vmappable across different galaxies.
 
-    **JIT-compatible**: the returned callables are pre-JIT'd.
+    The Fisher metric at position :math:`\\xi` in the linearised approximation is
+
+    .. math::
+
+        M(\\xi) = J^T \\Sigma^{-1} J + I,
+
+    where :math:`J` is the Jacobian of ``signal_response``, :math:`\\Sigma =
+    \\mathrm{diag}(\\sigma_i^2)` is the per-band noise covariance, and :math:`I` is the
+    prior precision.  This is identical to the per-galaxy MGVI metric; the catalog
+    variant makes :math:`\\Sigma` a runtime argument.
+
+    **JIT-compatible** and **vmap-compatible**: the returned callables are pre-JIT'd and
+    safe to wrap with :func:`jax.vmap` over ``(init_flat, vi_key, data, noise)``.
+
+    References
+    ----------
+    .. [1] Knollmüller, J. & Enßlin, T. A. (2019). "Metric Gaussian Variational
+       Inference." arXiv:1901.11033.
     """
 
     def hamiltonian_fn(xi, data, noise):
@@ -1397,12 +1414,32 @@ def build_native_vi_catalog_nonlinear_engine(signal_response, flatten, unflatten
 
     Notes
     -----
-    Identical algorithm to ``build_native_vi_nonlinear_engine``. The only
-    structural difference is that ``noise_inv``, ``sqrt_noise_inv``, and ``n_data``
-    are derived from the runtime ``noise`` argument inside each callable rather than
-    being captured in the outer closure.
+    Implements the geometric Variational Inference (geoVI) algorithm, which uses a
+    non-linear coordinate transformation to account for posterior curvature.  The
+    transformation :math:`T(\\xi)` maps the standardised parameter space to the
+    likelihood-weighted data space:
 
-    **JIT-compatible**: the returned callables are pre-JIT'd.
+    .. math::
+
+        T(\\xi) = \\Sigma^{-1/2} f(\\xi),
+
+    where :math:`f` is ``signal_response`` and :math:`\\Sigma^{-1/2} =
+    \\mathrm{diag}(1/\\sigma_i)`.  Residual samples drawn from ``draw_fn`` come in
+    mirrored pairs ``(+r, -r)`` to reduce variance in the KL estimate; ``draw_fn``
+    therefore returns ``2 * n_keys`` residuals for ``n_keys`` input subkeys.
+
+    Identical algorithm to ``build_native_vi_nonlinear_engine``. The only structural
+    difference is that ``noise_inv``, ``sqrt_noise_inv``, and ``n_data`` are derived
+    from the runtime ``noise`` argument inside each callable rather than being captured
+    in the outer closure.
+
+    **JIT-compatible** and **vmap-compatible**: the returned callables are pre-JIT'd and
+    safe to wrap with :func:`jax.vmap` over ``(init_flat, vi_key, data, noise)``.
+
+    References
+    ----------
+    .. [1] Frank, P. et al. (2021). "Geometric Variational Inference." Entropy 23(7), 853.
+       doi:10.3390/e23070853.
     """
 
     def hamiltonian_fn(xi, data, noise):
