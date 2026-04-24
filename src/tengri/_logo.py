@@ -1,100 +1,132 @@
-"""ASCII-art logo for tengri (shown in doctor() header and CLI banner).
+"""ASCII-art logo for tengri — three sizes of the hex+spiral mark.
 
-Three sizes:
-    LOGO         : default ~10-line compact rendition (used in doctor(), print_logo())
-    LOGO_FULL    : full ~40-line sunburst; opt-in via print_logo(size="full")
-    LOGO_BANNER  : one-liner for CLI --version
+The three art constants are stippled renderings of the official tengri logo
+(hexagon containing a spiral). Sizes:
 
-All three are plain Unicode block characters; no ANSI colour codes.
+    LOGO         : default, 21 lines, ~32 cols
+    LOGO_MEDIUM  : 26 lines, ~40 cols — opt-in via print_logo(size="medium")
+    LOGO_FULL    : 32 lines, ~50 cols — opt-in via print_logo(size="full")
+    LOGO_BANNER  : plain "tengri" text — no logo below the 21-line threshold
+
 Design credit: Suchetha Cooray.
 """
 
 from __future__ import annotations
 
-# Default: hexagon with nested spiral — matches the official tengri mark.
-# 7 lines, ~18 cols. Reads well in monospaced terminals.
-LOGO = r"""    ╱▔▔▔▔▔▔▔▔▔╲
-   ╱  ╭─────╮  ╲
-  │  │ ╭───╮ │  │
-  │  │ │ @ │ │  │
-  │  │ ╰───╯ │  │
-   ╲  ╰─────╯  ╱
-    ╲▁▁▁▁▁▁▁▁▁╱"""
+# Default: 21-line stippled hex+spiral. This is the smallest supported size —
+# for any narrower context we fall back to the text banner (no fake-logo art).
+LOGO = r"""            ▗▖▛▟▙▜▗▖
+         ▗▖█▝▝    ▀▝▛▄▖
+      ▗▗▚▌▘          ▘▚▛▖▖
+   ▗▗▚▌▀  ▗▄▗▞▛▟▚▌▖▗▖   ▀▐▞▗▖
+ ▖▌▌▀   ▖█▝▝       ▝▘▟ ▖   ▀▗▝▖
+▐▐▘   ▖▙▀  ▖▖▟▞▟▞▟▗▗  ▝▗▘▖   ▝▞▌
+▌▌   ▞▛ ▖▌▀ ▗▖▖▖▖▖▖▘▙▗  ▝▝▖   ▐▟
+▌▌  ▞▞ ▌▘ ▖▜▝▝  ▝▀▐▖▖▚▚   ▚▘  ▗▜
+▌▌  ▟▐▀  ▐▞▗▞▛▀▀▝▞▗▝▞▖▘▚   ▌▖ ▝█
+▌▌ ▗▚▘  ▐▞ ▌▘▖▘  ▀▐ ▐▗▝▐   ▞▖ ▐▟
+▌▌ ▗▜   ▞▖▝▞▝▜    ▚▌▞▞▝▄   ▀▖ ▐▐
+▌▌ ▗▙   ▞▖▐▗▝▚▘▖▄▄▀▗▚▘▞▖  ▖▜  ▝█
+▌▌  ▞▖  ▝▄ ▙▚▝▐▞▖▄▚▀▗▚▛ ▗▗▘▙  ▐▟
+▌▌  ▝▞▖  ▚▚ ▘▙▖▄▖▄▗▚▌▘▗▗▞ ▟   ▐▟
+▌▘   ▝▐▗  ▝▝▌▖▝▝▝▘▘▄▗▞▝ ▗▐▝   ▗▀
+▝▜     ▘▞▖   ▀▘▀▝▝▝▝  ▗▄▀▘   ▗▜
+ ▝▜▞▖▖   ▀▚▌▖▄     ▄▄▐▞   ▗▗▜▞▘
+    ▀▐▞▄▖   ▝▘▘▘▀▘▀▝   ▗▖▛▞▝
+       ▘▚▜▗         ▗▄▜▞▝
+          ▀▜▙▄▖  ▗▖▛▙▀
+             ▘▜▟█▙▀▘            """
 
 
-# Medium size — stronger spiral impression, 9 lines.
-LOGO_MEDIUM = r"""     ╱▔▔▔▔▔▔▔▔▔▔▔╲
-    ╱ ╭─────────╮ ╲
-   ╱  │ ╭─────╮ │  ╲
-  │   │ │ ╭─╮ │ │   │
-  │   │ │ │@│ │ │   │
-  │   │ │ ╰─╯ │ │   │
-   ╲  │ ╰─────╯ │  ╱
-    ╲ ╰─────────╯ ╱
-     ╲▁▁▁▁▁▁▁▁▁▁▁╱"""
+# Medium: 26-line rendering.
+LOGO_MEDIUM = r"""                ▖▞▜▞▙▜▄▗
+             ▖▞▟▞▀▘  ▝▝▚▜▚▗
+          ▖▞▟▞▀          ▘▜▞▌▄
+       ▖▞▟▞▀                ▀▗▌▌▄
+    ▖▞▞▞▀    ▗▗▞▟▟▄▙▞▟▞▌▖▄     ▘▗▘▘▖
+ ▗▐▚▌▀    ▗▗▙▀▘         ▀▘▄▘▄    ▝▘▟▐▗
+▗▚▛▘    ▗▚▛▘   ▖▖▗  ▖▗▗▗   ▝▚▞▗     ▝▚▜▖
+▞▐     ▟▄▘  ▖▟▝▝▀    ▘▀▗▌▌▖   ▘▙▖     ▚▘
+▌▜    ▐▞ ▗▞▝▘ ▖▖▙▜▞▛▟▞▌▄ ▘▟▗    ▞▌    ▜▜
+▌▚   ▝▛▗▐▝  ▗▚▙▀▘▗▗▖▖ ▀▗▌▄▝▐▗   ▝▞▌   ▙▜
+▌▜   ▙▚▝▘  ▟▐▘▗▐▐▞▘▀▐▚▚ ▝▖▌ ▌▖   ▝▞▖  ▞█
+▌▚   ▙▚   ▗▚▘▗▚▌▚▖▀▝▘ ▘▜ ▀▞ ▐▐    ▞▖  ▙▜
+▌▜  ▌▌▘   ▚▀ ▌▌ ▌▌    ▐▝▌▝▞ ▗▚    ▀▐  ▞█
+▌▙  ▚▛    ▌▌ ▞▖▐▐▗    ▖▛ ▞▟ ▛▞   ▐▗▘  ▛▟
+▌▞  ▐▀▖   ▚▚ ▌▛ ▚▚▀▗▄▘▀▗▐▞▘▞▟    ▌▐   ▙▜
+▌▜   ▜▄   ▝▞▖▝▞▄ ▘▙▚▚▛▟▞▘▗▞▟   ▐▞▗▚▘  ▙▜
+▛▞   ▝▖▙   ▚▞▖▝▐▚▌▄▖  ▖▖▞▙▀  ▖▛▘ ▙▘   ▙▜
+▌▙    ▝▄▚    ▙▚▗▝▝▝▟▟▙▀▀▘ ▗▗▚▀ ▗▜▞    ▙▜
+▚▚▖     ▚▚▄   ▘▚▀▌▖▖▖▖▖▗▐▞▘▘  ▄▚▘    ▗▞▛
+▝▟▞▄     ▝▗▞▖▖    ▀▀▝▀▝     ▖█▞▘    ▄▚▜
+  ▝▙▜▄▗     ▀▐▚▖▄▄     ▗▄▖▛█▝    ▄▐▚▌▘
+     ▘█▞▄▖     ▀▘▘▘▙▄▙▝▘▘▀    ▄▝▌▟▝▘
+       ▝▘▜▜▄▖              ▗▝▙▞▝▘
+           ▘▜▜▄▖        ▗▄▜▙▀
+             ▝▝▟▜▄▄▖▄▖▄▜▙▀▘
+                ▝▚▙█▙█▛▘                """
 
 
-# Full detailed sunburst (original design) — opt-in via print_logo(size="full").
-LOGO_FULL = r"""                         ▗▄▞▛▛▜▜▐▗▖
-                      ▄▐▀▙▚▙▛▝▘▜▙▛▟▜▄▖
-                   ▄▐▚▚▙▛▘▘       ▀▐▞▟▜▄▖
-                ▗▞▜▐▐▞▀             ▝▝▙▚▜▜▄▖
-             ▗▄▀▌▙▙▀                   ▝▀▟▖▛▜▄▖
-          ▗▖▜▐▗▛▀▘                        ▝▀▙▄▚▜▗▖
-       ▗▖▜▗▚▙▀▘       ▄▖▖▛▞▌▙▜▐▚▀▄▗▖▖        ▝▘▙▚▗▚▗▖
-     ▄▜▖▌▙▀▘      ▖▖▛▙▚▙▀▘▀▀▝▘▀▘▀▝▚▟▞▜▝▄        ▝▚▙▘▞▚▄
-  ▗▞▛▞▟▞▀      ▗▞▌▟▞▀                ▀▀▄▛▞▖▖       ▝▚▄▖▜▗▖
- ▗▌▙▙▀       ▗▐▄▙▀         ▗▗▗▗         ▝▐▟▝▄         ▀▄▚▐▖
-▗▚▜▞        ▞▞▙▀     ▖▖▌▌▙▞▄▚▞▄▜▞▞▞▖▖      ▀▄▀▄         ▚▚▜
-▐▐▐       ▗▚▚▛    ▖▙▚▙▀▝▀       ▝▀▝▟▐▞▚      ▀▄▀▖        ▌▛▌
-▚▗▛      ▗▚█▘  ▗▗▜▞▝   ▗▗▗▞▙▜▐▚▜▗▗▖ ▝▐▚▚▚     ▝▚▐▚       ▚▜▟
-▚▗▛      ▌▙▘ ▗▐▞▀   ▗▗▚▌▛▟▟▝▝▘▀▙▚▙▐▐▗ ▝▚▚▀▖     ▚▚▚      ▀▙▘
-▚▗▙     ▞▜▘ ▞▞▘    ▟▞▛▟▝▘        ▝▚▙▚▚▖ ▚▚▚      ▀▞▄     ▜▐▀
-▚▘▄     ▙▛▗▐▞▘   ▗▙▚▟▀ ▗▗▚▌▙▙▚▌▙▚▗ ▝▐▞▞▖ ▚▚▀      ▙▘▌    ▐▚▛
-▌▞▌    ▚▌▗▚▛    ▗▌▙▀  ▞▞▙▛▝▘▘▀▘▚▚▚▚▖ ▐▐▐  ▚▀▘     ▗▜▝    ▀▙▘
-▌▖▌   ▗▐▖▞▌     ▙▚▛ ▗▜▐▘▘▗▗▛▀▝▘▘▞▘▌▙ ▝▞▞▖ ▐▝▙      ▚▝▘   ▜▐▀
-▌▞▞    ▛▞▀     ▝▞▟  ▌▙▀ ▖▌▌      ▝▐▗▘ ▚▚▜ ▗▀▄      ▌▝▘   ▐▙▜
-▌▞▞   ▖▌▛▘     ▜▐▖ ▐▐▐▘▗▚▜        ▚▚▘ ▌▌▙ ▝▌▌     ▗▐▐▗   ▚▌█
-▌▞▞   ▐▐▟      ▚▜▖ ▞▞▙ ▐▐▗▖       ▌▙▘▗▚▚▘ ▐▐▞     ▖▛▗    ▟▞█
-▌▞▖   ▐▚▚      ▌▙▘ ▐▞▞ ▝▞▞▞▖    ▖▌▙▘ ▌▌▛ ▗▜▐     ▗▐ ▌▖   ▐▟▟
-▌▞▞   ▝▞▛▖     ▐▝▌  ▌▛▌ ▜▐▝▞▀▐▟▟▝▝ ▖▙▚▛ ▗▚▚▛    ▗▚▘▐▖▘   ▜▄▜
-▌▚▚    ▚▜▄     ▝▚▜  ▜▐▐  ▘▛▞▞▄▗▗▗▜▞▟▞▘ ▖▟▞▛    ▖▌▘ ▙▐    ▚▙▜
-▌▌▌    ▝▙▐▖     ▚▚▜▖ ▚▌▛▄▖ ▀▀▐▙▜▞▘▀▘ ▗▞▌▙▀   ▗▐▟▘ ▟▐▘    ▜▞█
-▚▐▞     ▝▟▞▖     ▚▚▚▖ ▝▞▄▚▚▖▖    ▄▗▄▀▙▚▀    ▄▚▌  ▞▌▌     ▜▟▟
-▚▚▚       ▛▞▄     ▘▌▌▙  ▝▀▟▞▟▚▜▞▛▄▛▟▀▝   ▖▞▟▞▘  ▄▚▛      ▜▄▘
-▚▚▚       ▝▚▌▙     ▝▐▄▀▌▄   ▝▀▘▀▀▘   ▗▄▐▚▜▝▘   ▞▙▛       ▛▞▛
-▐▚▀▖        ▀▟▐▄      ▀▟▐▐▚▚▄▗▖▖▖▖▞▞▌▙▚▀▘    ▗▜▞▘       ▗▜▞▌
- ▙▜▜▖        ▝▚▄▀▄       ▀▝▘▚▙▚▛▟▝▝▀▘      ▄▞▙▛▘       ▗▜▐▞
-  ▜▚▙▚▄        ▝▀▟▐▚▖                   ▗▄▜▄▌▘       ▄▞▌▌▛
-   ▀▐▙▚▜▄▖        ▀▚▜▞▛▗▖▖          ▗▄▄▜▚▟▝▘      ▗▄▜▗▚▌▀
-      ▀▙▌▛▜▗▖        ▀▝▙▜▄▜▜▀▙▀▚▜▜▀▛▄▙▌▀▘      ▗▄▜▚▚▌▀▘
-        ▝▀▚▛▞▛▖▖          ▝▀▀▘▀▀▀▀▀▘        ▗▖▛▌▌▙▀
-           ▝▀▟▞▌▛▄                       ▗▗▜▐▐▟▝▘
-              ▝▀▟▞▛▙▄                  ▄▞▌▛▟▞▘
-                 ▝▚▙▚▛▙▄            ▄▞▛▟▟▀▀
-                    ▀▚▙▚▛▙▄▖    ▗▄▐▜▟▟▀▘
-                       ▀▜▟▟▟▜▜▜▚█▞█▌▘
-                          ▝█████▙▀"""
+# Full: 32-line rendering.
+LOGO_FULL = r"""                    ▗▖▞▛▜▀▛▄▄
+                 ▗▖▛▞▟▘▀▀▀▀▝▟▀▙▄
+              ▗▖▜▖▙▀▘        ▝▘▙▜▚▄
+           ▗▖▜▗▛▞▘              ▀▘▙▜▚▄
+        ▗▖▟▗▙▀▘                    ▀▚▞▌▛▄
+      ▄▐▖▙▌▀     ▗▖▖▛▞▛▙▜▟▞▞▚▗▄▖      ▀▐▖▌▌▄
+   ▄▐▜▐▞▀     ▄▝▜▄▀▀▝      ▝▀▘▗▄▀▚▗      ▀▐▖▀▖▖
+ ▗▚▙▙▀      ▖▙▚▀▘               ▝▘▙▀▗       ▀▐▞▚▖
+▗▀▙▘      ▖▌▛     ▗ ▖▙▚▌▙▚▚▚▗▗▖    ▀▚▞▄       ▝▞▟
+▝▞▌      ▄▙▀  ▗▖▌▙▘▀▀      ▀▘▚▞▞▖    ▝▄▀▖      ▐▞▌
+▌▞▖    ▗▚▙▘ ▗▐▞▝▘  ▖▄▚▌▌▌▛▞▚▗▖ ▀▞▀▖    ▚▞▄     ▗▜▟
+▌▞▌    ▗▛▘▗▐▞▘  ▗▐▞▛▞▘▀▘▀▀▝▚▙▐▚ ▝▚▚▚    ▝▞▄    ▐▐▟
+▌▖▌   ▐▐▘▄▐    ▞▙▜▝ ▗▗▐▜▐▖▖▖ ▘▌▛▖ ▚▚▖    ▝▄▘   ▝▟▟
+▌▞▖   ▐▘▟▞    ▄▚▛ ▄▜▞▛▝▝▘▀▟▐▗▖▝▞▞  ▄▐     ▚▞▖  ▐▗█
+▌▞▖   ▛▐▘    ▄▚▛ ▐▐▞▘▖▟▀▝▘▘▞▞▞ ▐▝▙ ▗▚▘    ▝▖▌  ▝▞▟
+▌▞▖  ▖▙▜    ▗▞▟ ▝▞▞ ▗▜     ▝▝▞▌ ▚▞ ▗▚▘    ▐▖▄  ▐▐▜
+▌▚▘  ▙▐▘    ▗▚▘ ▚▀▌▝▌▌      ▖▌▘ ▌▟ ▗▚▘    ▖▚▗  ▗▚█
+▌▌▘  ▝▞▌    ▗▚▘ ▌▛▖▐▐▐▗    ▖▟▞ ▞▞▘ ▌▛    ▗▀▝   ▐▐▟
+▙▐   ▐▜▄    ▝▞▌ ▚▚▚ ▚▚▚▞▐▟▞▝▘▗▜▐▀ ▞▞▘   ▗▐ ▛▌  ▗▚█
+▌▞▘   ▚▚▖    ▚▀▖ ▌▌▌ ▘▙▞▞▖▖▛▞▙▀▘ ▙▞▀   ▞▞▘▐▄   ▐▐▟
+▌▌▌   ▝▙▜     ▛▞▖ ▜▐▀▖ ▝▀▝▀▝▘ ▖▄▙▌▘  ▗▚▀ ▝▚▘   ▝▙▜
+▌▌▘    ▝▞▄▖   ▝▐▐▄ ▝▚▜▚▌▚▗ ▞▙▙▚▌▘  ▖▞▞▘ ▗▜▞    ▐▞█
+▚▚▌     ▝▙▚▖    ▘▄▀▖▖ ▀▝▘▀▀▝▝   ▖▄▚▛▘  ▄▚▌     ▐▐▟
+▚▚▚       ▚▌▙▖    ▀▐▐▚▚▗▄▗▗▖▄▞▛▟▞▝   ▗▐▞▘      ▞▌▛
+ █▐▄       ▝▗▞▘▄     ▝▘▘▘▘▘▀▝▝     ▗▐▄▛▘      ▞▞▟▘
+  ▜▞▛▌▖      ▝▀▄▜▗▖             ▗▄▜▚▌▘     ▄▐▜▐▀
+   ▝▘▜▞▛▄▖      ▝▘█▞▛▌▗▄▄▄▄▄▄ ▛▛▟▖▀     ▗▞▌▌▌▀
+      ▝▀▐▞▛▄▖       ▝▀▀▝▝▝▝▝▝▀▀      ▗▖▛▞▞▝▘
+         ▝▘▙▚▛▄▖                  ▗▖▛▞▟▝▘
+            ▝▘▙▚▜▗▖            ▗▖▛▟▟▝▘
+               ▀▀▟▞▟▗▖      ▗▖▛▟▟▀▝
+                  ▀▀▙▙▜▄▄▗▟▜▞█▞▘
+                     ▀▜█▟█▟▛▀                     """
 
 
-# Compact one-line banner for routine prints (e.g. CLI --version, logs).
-# Uses the U+2B21 WHITE HEXAGON glyph to echo the official mark.
-LOGO_BANNER = "⬡ tengri ⬡"
+# Compact banner — plain text. Logo art is never drawn below LOGO's size.
+LOGO_BANNER = "tengri"
 
 
 def _resolve(size: str) -> str:
-    """Dispatch ``size`` to one of the logo constants."""
+    """Map ``size`` to one of the logo constants.
+
+    Recognised values:
+        "default", "small"     → LOGO (21 lines)
+        "medium"               → LOGO_MEDIUM (26 lines)
+        "full", "large"        → LOGO_FULL (32 lines)
+        "compact", "banner"    → LOGO_BANNER (plain text, no art)
+    """
     if size in ("default", "small", None):
         return LOGO
     if size == "medium":
         return LOGO_MEDIUM
-    if size == "full":
+    if size in ("full", "large"):
         return LOGO_FULL
-    if size in ("banner", "compact"):
+    if size in ("compact", "banner"):
         return LOGO_BANNER
     raise ValueError(
         f"Unknown logo size '{size}'. "
-        "Use 'default', 'medium', 'full', or 'compact'."
+        "Use 'default' (small), 'medium', 'full', or 'compact'."
     )
 
 
@@ -103,16 +135,17 @@ def print_logo(size: str = "default", *, compact: bool | None = None) -> None:
 
     Parameters
     ----------
-    size : {"default", "full", "compact"}
-        Which size to print. "default" is the small ~10-line version.
-        "full" is the detailed sunburst. "compact" is the one-line banner.
+    size : {"default", "medium", "full", "compact"}
+        Which rendering to print. "default" is the 21-line stippled version,
+        the smallest rendered size. "compact" prints plain text ("tengri")
+        because rendering the logo any smaller would misrepresent the mark.
     compact : bool or None
         Deprecated alias for ``size="compact"``. Kept for backward compatibility.
 
     Notes
     -----
-    Respects the ``TENGRI_NO_LOGO`` environment variable: if set to anything
-    truthy, the function prints nothing.
+    Respects the ``TENGRI_NO_LOGO`` environment variable. If set to anything
+    truthy, this function writes nothing.
     """
     import os
     import sys
@@ -126,18 +159,19 @@ def print_logo(size: str = "default", *, compact: bool | None = None) -> None:
 
 
 def logo_str(size: str = "default", *, compact: bool | None = None) -> str:
-    """Return the logo as a string (no trailing newline).
+    """Return the logo string (no trailing newline).
 
     Parameters
     ----------
-    size : {"default", "full", "compact"}
+    size : {"default", "medium", "full", "compact"}
     compact : bool or None
         Deprecated alias for ``size="compact"``.
 
     Returns
     -------
     str
-        The requested logo, or ``""`` if ``TENGRI_NO_LOGO`` is set.
+        The requested logo (or plain text for "compact"), or ``""`` if
+        ``TENGRI_NO_LOGO`` is set.
     """
     import os
 

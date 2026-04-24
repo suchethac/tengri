@@ -46,18 +46,29 @@ def test_print_logo_default(capsys, monkeypatch):
     print_logo()
     out = capsys.readouterr().out
     assert "\n" in out
-    assert len(out) > 50   # small logo is ~140 chars
-    assert len(out) < 500  # but not the huge full one
+    assert 100 < len(out) < 1500  # 21-line art, not the ~3000-char full
 
 
 def test_print_logo_full(capsys, monkeypatch):
-    """print_logo(size='full') should print the full ~40-line logo."""
+    """print_logo(size='full') should print the 32-line full logo."""
     monkeypatch.delenv("TENGRI_NO_LOGO", raising=False)
     from tengri import print_logo
 
     print_logo(size="full")
     out = capsys.readouterr().out
-    assert len(out) > 1000  # full logo is ~2200 chars
+    assert len(out) > 1500  # 32-line art is ~2000+ chars
+
+
+def test_print_logo_medium(capsys, monkeypatch):
+    """print_logo(size='medium') should print the 26-line medium logo."""
+    monkeypatch.delenv("TENGRI_NO_LOGO", raising=False)
+    from tengri import print_logo
+
+    print_logo(size="medium")
+    out = capsys.readouterr().out
+    # Medium is between default and full
+    default_len = len(str.__import__ if False else "")  # noop
+    assert 500 < len(out) < 2000
 
 
 def test_logo_str_respects_env(monkeypatch):
