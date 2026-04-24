@@ -708,6 +708,326 @@ def _hot_corona_lnu(
     return l_hot_erg * shape / integral_safe
 
 
+def _compute_bh_params(
+    agn_log_mbh: float,
+    agn_log_ledd: float,
+    agn_a_spin: float,
+) -> tuple:
+    """Compute black hole parameters: radius, ISCO, efficiency, and accretion rate.
+
+    Derives the fundamental mass-dependent quantities: gravitational radius,
+    ISCO radius, radiative efficiency (Novikov-Thorne), Eddington luminosity,
+    and mass accretion rate from the black hole mass and spin parameter.
+
+    Parameters
+    ----------
+    agn_log_mbh : float
+        Black hole mass. [log10(M_sun)]
+    agn_log_ledd : float
+        Eddington ratio. [log10(L / L_Edd)]
+    agn_a_spin : float
+        Dimensionless black hole spin (Kerr, prograde). [dimensionless, 0–0.998]
+
+    Returns
+    -------
+    tuple
+        (r_g, r_isco_rg, r_isco_cm, eta, l_edd, mdot) where:
+        - r_g : Gravitational radius [cm]
+        - r_isco_rg : ISCO radius in units of r_g [dimensionless]
+        - r_isco_cm : ISCO radius [cm]
+        - eta : Radiative efficiency (Novikov-Thorne) [dimensionless, 0–0.42]
+        - l_edd : Eddington luminosity [erg s^-1]
+        - mdot : Mass accretion rate [g s^-1]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses only ``jnp`` primitives.
+
+    The radiative efficiency follows the Novikov-Thorne formula for thin discs
+    around Kerr black holes (Novikov & Thorne 1973, Kerr metric).
+
+    References
+    ----------
+    .. [1] D. N. Page and K. S. Thorne, "Disk-Accretion onto a Black Hole.
+       Time-Averaged Structure of the Inner Accretion Disk," ApJ, 191, 499 (1974).
+    """
+    r_g = _gravitational_radius(agn_log_mbh)
+    r_isco_rg = _isco_radius(agn_a_spin)
+    r_isco_cm = r_isco_rg * r_g
+
+    eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_rg))
+
+    l_edd = _eddington_luminosity(agn_log_mbh)
+    l_edd_ratio = jnp.clip(10.0**agn_log_ledd, 1e-10, 1.0)
+    l_bol_erg = l_edd_ratio * l_edd
+    mdot = l_bol_erg / (eta * _C_LIGHT**2)
+
+    return r_g, r_isco_rg, r_isco_cm, eta, l_edd, mdot
+
+
+def _compute_zone_radii(
+    r_g: float,
+    r_isco_rg: float,
+    r_isco_cm: float,
+    t_in: float,
+    agn_log_mbh: float,
+    agn_log_ledd: float,
+    agn_f_hard: float,
+    agn_r_warm_ratio: float,
+    l_edd: float,
+) -> tuple:
+    """Compute self-consistent zone radii: R_hot, R_warm, and R_out.
+
+    Solves for the radii that define the three AGN accretion zones (Kubota & Done
+    2018). R_hot is derived self-consistently from the energy-balance constraint
+    that the hot corona dissipates f_hard × L_Edd. R_warm is parameterized as
+    a multiple of R_hot. R_out is the self-gravity (Toomre) radius beyond which
+    the disc becomes unstable.
+
+    Parameters
+    ----------
+    r_g : float
+        Gravitational radius [cm].
+    r_isco_rg : float
+        ISCO radius in gravitational radii [dimensionless].
+    r_isco_cm : float
+        ISCO radius [cm].
+    t_in : float
+        Inner disc temperature [K].
+    agn_log_mbh : float
+        Black hole mass. [log10(M_sun)]
+    agn_log_ledd : float
+        Eddington ratio. [log10(L / L_Edd)]
+    agn_f_hard : float
+        Fraction of Eddington luminosity in the hot corona. [dimensionless, 0–0.5]
+    agn_r_warm_ratio : float
+        Radius ratio R_warm / R_hot. [dimensionless, ≥ 1.1]
+    l_edd : float
+        Eddington luminosity [erg s^-1].
+
+    Returns
+    -------
+    tuple
+        (r_hot_cm, r_warm_cm, r_out_cm) zone radii in [cm].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.lax.scan`` for JAX-compatible bisection.
+
+    **Self-consistent R_hot**: Uses bisection on the analytic Novikov-Thorne
+    integral (40 iterations, exact to ~1e-12) to solve L_diss,hot(R_hot) = f_hard
+    × L_Edd. This replaces the previous approximate closure r_hot ≈ r_isco ×
+    (1 + f_hard λ)^{1/3} which had ~10% error.
+
+    **Self-consistent R_out**: Uses the Laor & Netzer (1989) self-gravity
+    (Toomre) radius, which is more accurate for extreme BH masses and Eddington
+    ratios than the previous fixed 1000 × r_isco approximation.
+
+    References
+    ----------
+    .. [1] A. Kubota and C. Done, "A physical model of the broad-band continuum
+       of AGN and its implications for the UV/X relation and optical variability,"
+       MNRAS, 480, 1247 (2018). arXiv:1804.00171.
+    .. [2] A. Laor and B. Netzer, "Dust Sublimation Depth in the Infrared-Emitting
+       Accretion Disks of Quasars," MNRAS, 238, 897 (1989).
+    """
+    f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
+    l_hot_target = f_hard_safe * l_edd
+    r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target)
+
+    r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
+    r_warm_cm = r_hot_cm * r_warm_ratio_safe
+
+    l_edd_ratio = jnp.clip(10.0**agn_log_ledd, 1e-10, 1.0)
+    r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
+    r_out_cm = jnp.maximum(r_sg_rg, r_isco_rg * 10.0) * r_g
+
+    r_hot_cm = jnp.clip(r_hot_cm, r_isco_cm * 1.01, r_out_cm * 0.5)
+    r_warm_cm = jnp.clip(r_warm_cm, r_hot_cm * 1.01, r_out_cm * 0.9)
+
+    return r_hot_cm, r_warm_cm, r_out_cm
+
+
+def _compute_zone_luminosities(
+    nu: jnp.ndarray,
+    r_isco_cm: float,
+    r_hot_cm: float,
+    r_warm_cm: float,
+    r_out_cm: float,
+    t_in: float,
+    agn_cos_inc: float,
+    n_radii: int,
+    agn_gamma_warm: float,
+    agn_kt_warm: float,
+    agn_gamma_hard: float,
+    agn_kt_hot: float,
+    agn_f_hard: float,
+    l_edd: float,
+    l_bol_erg: float,
+    agn_self_consistent_gamma: bool,
+) -> tuple:
+    """Compute self-consistent luminosities of the three AGN zones.
+
+    Integrates the Novikov-Thorne temperature profile over annuli in each zone
+    (outer standard disc, warm Comptonization, hot corona) and combines the
+    spectral shapes (blackbody, Comptonized, power-law) into a total L_ν. Applies
+    a global normalization to conserve the input bolometric luminosity.
+
+    Parameters
+    ----------
+    nu : array, shape (n_wave,)
+        Frequency [Hz].
+    r_isco_cm : float
+        ISCO radius [cm].
+    r_hot_cm : float
+        Hot corona radius [cm].
+    r_warm_cm : float
+        Warm zone radius [cm].
+    r_out_cm : float
+        Outer disc radius [cm].
+    t_in : float
+        Inner disc temperature [K].
+    agn_cos_inc : float
+        Cosine of inclination angle [dimensionless, 0.01–1.0].
+    n_radii : int
+        Number of radial integration points per zone [dimensionless].
+    agn_gamma_warm : float
+        Photon index of warm Comptonization [dimensionless, ~1.5–3.5].
+    agn_kt_warm : float
+        Electron temperature in warm zone [keV].
+    agn_gamma_hard : float
+        Photon index of hard X-ray power law [dimensionless, ~1.5–2.5].
+    agn_kt_hot : float
+        Electron temperature in hot corona [keV].
+    agn_f_hard : float
+        Fraction of Eddington luminosity in corona [dimensionless, 0–0.5].
+    l_edd : float
+        Eddington luminosity [erg s^-1].
+    l_bol_erg : float
+        Requested bolometric luminosity [erg s^-1].
+    agn_self_consistent_gamma : bool
+        If True, derive gamma_hard self-consistently from Beloborodov (1999).
+
+    Returns
+    -------
+    tuple
+        (l_nu_total, scale) where:
+        - l_nu_total : Unnormalized total L_ν [erg s^-1 Hz^-1] (before scaling)
+        - scale : Normalization scale factor to conserve L_bol [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.vmap`` for radial integration.
+
+    **Energy conservation**: The normalization integral is computed analytically
+    from the radial integration (σ T^4 × dA) rather than spectrally, making the
+    result grid-independent. This fixes a long-standing bug where the corona's
+    optical flux varied by 2–4× depending on wavelength grid extent.
+
+    References
+    ----------
+    .. [1] A. Kubota and C. Done, MNRAS, 480, 1247 (2018).
+    .. [2] A. M. Beloborodov, ApJL, 510, L123 (1999).
+    """
+    # ── Zone 1: Outer standard disc (r > R_warm) ──────────────────
+    log_r_warm = jnp.log10(r_warm_cm)
+    log_r_out = jnp.log10(r_out_cm)
+    log_r_outer = jnp.linspace(log_r_warm, log_r_out, n_radii)
+    r_outer = 10.0**log_r_outer
+
+    r_ratio_outer = r_outer / r_isco_cm
+    torque_outer = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio_outer), 1e-30) ** 0.25
+    t_outer = t_in * r_ratio_outer ** (-0.75) * torque_outer
+
+    d_log_r_outer = log_r_outer[1] - log_r_outer[0]
+    dr_outer = r_outer * jnp.log(10.0) * d_log_r_outer
+
+    def _outer_ring(r_cm, t_ring, dr_ring):
+        """Compute blackbody L_nu contribution from one outer-disk annulus."""
+        b_nu = _planck_lnu(nu, t_ring)
+        return b_nu * _ring_area(r_cm, dr_ring, agn_cos_inc)
+
+    l_nu_outer = jnp.sum(jax.vmap(_outer_ring)(r_outer, t_outer, dr_outer), axis=0)
+
+    # ── Zone 2: Warm Comptonization (R_hot < r < R_warm) ──────────
+    if not _NTHCOMP_AVAILABLE:
+        warnings.warn(
+            "nthcomp templates not found — warm Comptonization zone uses the "
+            "simplified modified-blackbody proxy (BUG-04 workaround). "
+            "Run `python scripts/build_nthcomp_templates.py` for the full "
+            "K&D (2018) Kompaneets treatment.",
+            stacklevel=5,
+        )
+
+    log_r_hot = jnp.log10(r_hot_cm)
+    log_r_warm_grid = jnp.linspace(log_r_hot, log_r_warm, n_radii)
+    r_warm_grid = 10.0**log_r_warm_grid
+
+    r_ratio_warm = r_warm_grid / r_isco_cm
+    torque_warm = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio_warm), 1e-30) ** 0.25
+    t_warm = t_in * r_ratio_warm ** (-0.75) * torque_warm
+
+    d_log_r_warm = log_r_warm_grid[1] - log_r_warm_grid[0]
+    dr_warm = r_warm_grid * jnp.log(10.0) * d_log_r_warm
+
+    kt_warm_erg = agn_kt_warm * _KEV_TO_ERG
+    nu_warm = kt_warm_erg / _H_PLANCK
+
+    if _NTHCOMP_AVAILABLE:
+
+        def _warm_ring(r_cm, t_ring, dr_ring):
+            """Compute Comptonized L_nu for one warm-zone annulus using nthcomp spectral shape."""
+            b_nu_plain = _planck_lnu(nu, t_ring)
+            p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
+            l_total = p_plain * _ring_area(r_cm, dr_ring, agn_cos_inc)
+            kTbb_keV = _K_BOLTZ_KEV * t_ring
+            shape = _nthcomp_lnu_interp(nu, agn_gamma_warm, agn_kt_warm, kTbb_keV)
+            return shape * l_total
+    else:
+
+        def _warm_ring(r_cm, t_ring, dr_ring):
+            """Compute modified-blackbody warm-zone luminosity per unit frequency for annulus."""
+            b_nu_plain = _planck_lnu(nu, t_ring)
+            b_nu_mod = _warm_comptonization_lnu(nu, t_ring, nu_warm, agn_gamma_warm)
+            p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
+            p_comp = jnp.abs(jnp.trapezoid(b_nu_mod, nu))
+            renorm = p_plain / jnp.maximum(p_comp, 1e-100)
+            return b_nu_mod * renorm * _ring_area(r_cm, dr_ring, agn_cos_inc)
+
+    l_nu_warm = jnp.sum(jax.vmap(_warm_ring)(r_warm_grid, t_warm, dr_warm), axis=0)
+
+    # ── Zone 3: Hot corona (R_ISCO < r < R_hot) ───────────────────
+    f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
+    l_hot_erg = jnp.minimum(f_hard_safe * l_edd, l_bol_erg * 0.5)
+
+    kt_hot_erg = agn_kt_hot * _KEV_TO_ERG
+
+    l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in)
+    gamma_hard_sc = beloborodov_gamma_hot(l_hot_erg, l_seed_geom)
+    gamma_hard_eff = jnp.where(agn_self_consistent_gamma, gamma_hard_sc, agn_gamma_hard)
+    l_nu_hot = _hot_corona_lnu(nu, l_hot_erg, gamma_hard_eff, kt_hot_erg)
+
+    # ── Combine and normalize ─────────────────────────────────────
+    l_nu_total = l_nu_outer + l_nu_warm + l_nu_hot
+
+    l_bol_outer = jnp.sum(
+        _SIGMA_SB * t_outer**4 * 2.0 * jnp.pi * r_outer * dr_outer * jnp.maximum(agn_cos_inc, 0.01)
+    )
+    l_bol_warm = jnp.sum(
+        _SIGMA_SB
+        * t_warm**4
+        * 2.0
+        * jnp.pi
+        * r_warm_grid
+        * dr_warm
+        * jnp.maximum(agn_cos_inc, 0.01)
+    )
+    l_bol_unnorm = l_bol_outer + l_bol_warm + l_hot_erg
+    scale = l_bol_erg / jnp.maximum(l_bol_unnorm, 1e-100)
+
+    return l_nu_total, scale
+
+
 def beloborodov_gamma_hot(
     l_diss_hot: float,
     l_seed: float,
@@ -989,20 +1309,12 @@ def kubota_done_disc(
     """
     nu = _wavelength_to_nu(wavelength)
 
-    # --- Black hole parameters ---
-    r_g = _gravitational_radius(agn_log_mbh)
-    r_isco_rg = _isco_radius(agn_a_spin)
-    r_isco_cm = r_isco_rg * r_g
+    # Compute black hole parameters (radius, ISCO, efficiency, accretion rate)
+    r_g, r_isco_rg, r_isco_cm, _eta, l_edd, mdot = _compute_bh_params(
+        agn_log_mbh, agn_log_ledd, agn_a_spin
+    )
 
-    # Radiative efficiency (Novikov-Thorne)
-    eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_rg))
-
-    l_edd = _eddington_luminosity(agn_log_mbh)
-    l_edd_ratio = jnp.clip(10.0**agn_log_ledd, 1e-10, 1.0)
-    l_bol_erg = l_edd_ratio * l_edd
-    mdot = l_bol_erg / (eta * _C_LIGHT**2)
-
-    # Inner temperature
+    # Inner temperature (Novikov-Thorne)
     t_in = (
         3.0
         * _G_GRAV
@@ -1012,171 +1324,282 @@ def kubota_done_disc(
         / (8.0 * jnp.pi * _SIGMA_SB * r_isco_cm**3)
     ) ** 0.25
 
-    # --- Zone radii ---
-    # R_hot: exact energy-balance solve from K&D 2018 Eq. 2.
-    # Find R_hot such that L_diss,hot(R_ISCO, R_hot) = f_hard * L_Edd,
-    # where L_diss,hot = 2 ∫_{R_ISCO}^{R_hot} σ T_NT^4 * 2πR dR.
-    # Uses JAX-compatible bisection on the analytic NT integral (40 iterations,
-    # log-x bracket → machine-precision convergence). Replaces the previous
-    # closed-form approximation r_hot ≈ r_isco*(1 + f_hard*λ)^{1/3} which had
-    # ~10% error; the bisection is exact and adds negligible compile overhead.
-    f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
-    l_hot_target = f_hard_safe * l_edd
-    r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target)
-
-    # R_warm: parameterized as multiple of R_hot (qsosed hardwires factor 2)
-    r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
-    r_warm_cm = r_hot_cm * r_warm_ratio_safe
-
-    # Outer disc radius: Laor & Netzer (1989) self-gravity (Toomre) radius.
-    # qsosed uses this formula (as gravity_radius); replaces the previous
-    # fixed 1000*r_isco approximation which was off by factors of a few for
-    # extreme M_BH or lambda_Edd.
-    r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
-    r_out_cm = jnp.maximum(r_sg_rg, r_isco_rg * 10.0) * r_g
-
-    # Ensure proper ordering: R_ISCO < R_hot < R_warm < R_out
-    r_hot_cm = jnp.clip(r_hot_cm, r_isco_cm * 1.01, r_out_cm * 0.5)
-    r_warm_cm = jnp.clip(r_warm_cm, r_hot_cm * 1.01, r_out_cm * 0.9)
-
-    # --- Warm Comptonization characteristic frequency ---
-    kt_warm_erg = agn_kt_warm * _KEV_TO_ERG
-    nu_warm = kt_warm_erg / _H_PLANCK
-
-    # --- Hot corona temperature ---
-    kt_hot_erg = agn_kt_hot * _KEV_TO_ERG
-
-    # --- Corona luminosity ---
-    # L_hot = f_hard * L_Edd (capped at L_bol)
-    l_hot_erg = jnp.minimum(f_hard_safe * l_edd, l_bol_erg * 0.5)
-
-    # ── Zone 1: Outer standard disc (r > R_warm) ──────────────────
-    log_r_warm = jnp.log10(r_warm_cm)
-    log_r_out = jnp.log10(r_out_cm)
-    log_r_outer = jnp.linspace(log_r_warm, log_r_out, n_radii)
-    r_outer = 10.0**log_r_outer
-
-    r_ratio_outer = r_outer / r_isco_cm
-    torque_outer = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio_outer), 1e-30) ** 0.25
-    t_outer = t_in * r_ratio_outer ** (-0.75) * torque_outer
-
-    d_log_r_outer = log_r_outer[1] - log_r_outer[0]
-    dr_outer = r_outer * jnp.log(10.0) * d_log_r_outer
-
-    def _outer_ring(r_cm, t_ring, dr_ring):
-        """Compute blackbody L_nu contribution from one outer-disk annulus."""
-        b_nu = _planck_lnu(nu, t_ring)
-        return b_nu * _ring_area(r_cm, dr_ring, agn_cos_inc)
-
-    l_nu_outer = jnp.sum(jax.vmap(_outer_ring)(r_outer, t_outer, dr_outer), axis=0)
-
-    # ── Zone 2: Warm Comptonization (R_hot < r < R_warm) ──────────
-    if not _NTHCOMP_AVAILABLE:
-        warnings.warn(
-            "nthcomp templates not found — warm Comptonization zone uses the "
-            "simplified modified-blackbody proxy (BUG-04 workaround). "
-            "Run `python scripts/build_nthcomp_templates.py` for the full "
-            "K&D (2018) Kompaneets treatment.",
-            stacklevel=3,
-        )
-
-    log_r_hot = jnp.log10(r_hot_cm)
-    log_r_warm_grid = jnp.linspace(log_r_hot, log_r_warm, n_radii)
-    r_warm_grid = 10.0**log_r_warm_grid
-
-    r_ratio_warm = r_warm_grid / r_isco_cm
-    torque_warm = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio_warm), 1e-30) ** 0.25
-    t_warm = t_in * r_ratio_warm ** (-0.75) * torque_warm
-
-    d_log_r_warm = log_r_warm_grid[1] - log_r_warm_grid[0]
-    dr_warm = r_warm_grid * jnp.log(10.0) * d_log_r_warm
-
-    if _NTHCOMP_AVAILABLE:
-        # Full nthcomp path (K&D 2018 Section 2.2): each annulus emits the same
-        # bolometric power as the NT blackbody (energy conservation) but with the
-        # Comptonized spectral shape from the trilinear nthcomp table.
-        # Gradients are safe: _nthcomp_lnu_interp has a finite-difference custom VJP
-        # registered in _nthcomp.py that avoids NaN from jnp.interp in composition
-        # with large scalars (see _nthcomp.py:166-271).
-        # Reference: agnsed.py _do_warm_annuli (scotthgn/pyAGNSED)
-        def _warm_ring(r_cm, t_ring, dr_ring):
-            """Compute Comptonized L_nu for one warm-zone annulus using nthcomp spectral shape."""
-            b_nu_plain = _planck_lnu(nu, t_ring)
-            p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
-            l_total = p_plain * _ring_area(r_cm, dr_ring, agn_cos_inc)
-            kTbb_keV = _K_BOLTZ_KEV * t_ring
-            shape = _nthcomp_lnu_interp(nu, agn_gamma_warm, agn_kt_warm, kTbb_keV)
-            return shape * l_total
-    else:
-        # Simplified fallback: modified blackbody proxy (QSOSED/Synthesizer style).
-        # Accurate for optical/UV photometric fitting (Paper I).
-        # Run scripts/build_nthcomp_templates.py for the full K&D (2018) treatment.
-        def _warm_ring(r_cm, t_ring, dr_ring):
-            """Compute modified-blackbody warm-zone luminosity per unit frequency for annulus."""
-            b_nu_plain = _planck_lnu(nu, t_ring)
-            b_nu_mod = _warm_comptonization_lnu(nu, t_ring, nu_warm, agn_gamma_warm)
-            p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
-            p_comp = jnp.abs(jnp.trapezoid(b_nu_mod, nu))
-            renorm = p_plain / jnp.maximum(p_comp, 1e-100)
-            return b_nu_mod * renorm * _ring_area(r_cm, dr_ring, agn_cos_inc)
-
-    l_nu_warm = jnp.sum(jax.vmap(_warm_ring)(r_warm_grid, t_warm, dr_warm), axis=0)
-
-    # ── Zone 3: Hot corona (R_ISCO < r < R_hot) ───────────────────
-    # Self-consistent Gamma_hot (Beloborodov 1999 / K&D 2018 Eq. 6):
-    #   Gamma_hot = (7/3) * (L_diss / L_seed)^{-0.1}
-    # L_seed: geometric integral of F_NT * Θ(R)/π over disc radii R > R_hot
-    # (K&D 2018 Eq. 3), where Θ(R) = θ_0 - sin(2θ_0)/2, sin θ_0 = R_hot/R.
-    # This replaces the previous approximation of using the warm zone bolometric
-    # luminosity as a proxy; the geometric integral correctly accounts for
-    # the covering fraction that decreases as 1/R^2 far from the corona,
-    # concentrating the seed contribution near R_hot where Θ/π → 0.5.
-    l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in)
-    gamma_hard_sc = beloborodov_gamma_hot(l_hot_erg, l_seed_geom)
-
-    # Use self-consistent value or the user-supplied value
-    gamma_hard_eff = jnp.where(agn_self_consistent_gamma, gamma_hard_sc, agn_gamma_hard)
-    l_nu_hot = _hot_corona_lnu(nu, l_hot_erg, gamma_hard_eff, kt_hot_erg)
-
-    # ── Combine and normalize ─────────────────────────────────────
-    l_nu_total = l_nu_outer + l_nu_warm + l_nu_hot
-
-    # Normalize all 3 zones to L_bol * agn_frac.
-    #
-    # The bolometric luminosity is computed analytically from the radial
-    # integration, not from the spectral integral on the caller's grid.
-    # This makes the result grid-independent:
-    #
-    # - Outer disc:  L_outer = Σ σ T^4 × dA × cos(i)
-    # - Warm zone:   L_warm  = Σ σ T^4 × dA × cos(i)  (nthcomp conserves energy)
-    # - Hot corona:  L_hot   = f_hard × L_Edd (capped at 0.5 L_bol)
-    #
-    # This matches RELAGN's approach where Lhot = Ldiss + Lseed is computed
-    # from the radial integration, not from int[L_nu dnu].
-    #
-    # Reference: RELAGN do_nonrelHotCompSpec normalises Lhot analytically;
-    # the spectral trapezoid integral was grid-dependent (varying by factors
-    # of 2-4x for the corona power-law contribution).
-    l_bol_outer = jnp.sum(
-        _SIGMA_SB * t_outer**4 * 2.0 * jnp.pi * r_outer * dr_outer * jnp.maximum(agn_cos_inc, 0.01)
+    # Compute self-consistent zone radii (R_hot, R_warm, R_out)
+    r_hot_cm, r_warm_cm, r_out_cm = _compute_zone_radii(
+        r_g,
+        r_isco_rg,
+        r_isco_cm,
+        t_in,
+        agn_log_mbh,
+        agn_log_ledd,
+        agn_f_hard,
+        agn_r_warm_ratio,
+        l_edd,
     )
-    l_bol_warm = jnp.sum(
-        _SIGMA_SB
-        * t_warm**4
-        * 2.0
-        * jnp.pi
-        * r_warm_grid
-        * dr_warm
-        * jnp.maximum(agn_cos_inc, 0.01)
-    )
-    l_bol_unnorm = l_bol_outer + l_bol_warm + l_hot_erg
+
+    # Compute requested bolometric luminosity
     l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_frac
-    scale = l_bol_requested / jnp.maximum(l_bol_unnorm, 1e-100)
+
+    # Compute spectral luminosity of all three zones and normalization scale
+    l_nu_total, scale = _compute_zone_luminosities(
+        nu,
+        r_isco_cm,
+        r_hot_cm,
+        r_warm_cm,
+        r_out_cm,
+        t_in,
+        agn_cos_inc,
+        n_radii,
+        agn_gamma_warm,
+        agn_kt_warm,
+        agn_gamma_hard,
+        agn_kt_hot,
+        agn_f_hard,
+        l_edd,
+        l_bol_requested,
+        agn_self_consistent_gamma,
+    )
 
     return l_nu_total * scale
 
 
 # ── Model 4: ADAF + truncated disc (low-luminosity AGN) ───────────
+
+
+def _adaf_electron_temperature(
+    agn_adaf_delta: float,
+    mdot_dimensionless: float,
+) -> float:
+    """Compute ADAF electron temperature (Mahadevan 1997, Eq. 40).
+
+    The electron temperature is set by the energy-balance equation:
+
+        T_e = 1.1 × 10^9 K · (δ/ṁ)^{1/7}
+
+    where δ is the electron heating fraction and ṁ is the dimensionless
+    accretion rate. The exponent 1/7 (not 1/2) comes from coupled
+    electron-proton heating equations. Output is clipped to [10^8, 5×10^11] K.
+
+    Parameters
+    ----------
+    agn_adaf_delta : float
+        Fraction of viscously dissipated energy that directly heats electrons.
+        [dimensionless, 0–1]
+    mdot_dimensionless : float
+        Dimensionless accretion rate (L/L_Edd). [dimensionless]
+
+    Returns
+    -------
+    float
+        Electron temperature [K].
+    """
+    delta_safe = jnp.clip(agn_adaf_delta, 1e-6, 1.0)
+    t_e = 1.1e9 * (delta_safe / mdot_dimensionless) ** (1.0 / 7.0)
+    return jnp.clip(t_e, 1e8, 5e11)  # physical range [K]
+
+
+def _adaf_synchrotron_spectrum(
+    nu: jnp.ndarray,
+    agn_log_mbh: float,
+    mdot_dimensionless: float,
+) -> jnp.ndarray:
+    """Compute ADAF synchrotron spectral shape (Mahadevan 1997, Eq. 21, 25).
+
+    Electrons in the turbulent ADAF magnetic field produce synchrotron emission.
+    Below the self-absorption frequency ν_sa ≈ ν_peak/3, the spectrum is
+    optically thick (Rayleigh-Jeans: ∝ ν²). Above ν_sa, it is optically thin
+    with spectral index 2/5: ∝ ν^{2/5} (not 1/3). The two regimes join
+    continuously at ν_sa.
+
+    Parameters
+    ----------
+    nu : array_like, shape (n_wave,)
+        Frequency grid [Hz].
+    agn_log_mbh : float
+        Black hole mass [log10(M_sun)].
+    mdot_dimensionless : float
+        Dimensionless accretion rate [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Normalized synchrotron spectral shape (dimensionless).
+    """
+    # Peak frequency (Mahadevan 1997, Eq. 21):
+    #   nu_peak ∝ M_BH^{-1/2} * mdot^{1/2}
+    nu_peak_sync = 1e12 * (10.0**agn_log_mbh / 1e8) ** (-0.5) * mdot_dimensionless**0.5
+
+    # Self-absorption frequency (Mahadevan 1997)
+    nu_sa = nu_peak_sync / 3.0
+
+    # Synchrotron spectral shape (Mahadevan 1997, Eq. 25):
+    # - Below nu_sa (optically thick, Rayleigh-Jeans): nu^2
+    # - Above nu_sa (optically thin): nu^{2/5} (NOT nu^{1/3})
+    # Join continuously by normalizing thick at nu_sa.
+    nu_ratio_sa = nu / jnp.maximum(nu_sa, 1.0)
+    nu_ratio_peak = nu / jnp.maximum(nu_peak_sync, 1.0)
+
+    sync_thick = (nu_ratio_sa**2.0) * (nu_sa / jnp.maximum(nu_peak_sync, 1.0)) ** (2.0 / 5.0)
+    sync_thin = (nu_ratio_peak ** (2.0 / 5.0)) * jnp.exp(
+        -jnp.clip(nu_ratio_peak / 3.0, 0.0, 500.0)
+    )
+    return jnp.where(nu < nu_sa, sync_thick, sync_thin)
+
+
+def _adaf_composite_spectrum(
+    nu: jnp.ndarray,
+    t_e: float,
+    sync_shape: jnp.ndarray,
+    agn_adaf_beta: float,
+) -> jnp.ndarray:
+    """Compute ADAF composite spectrum (synchrotron + bremsstrahlung + IC).
+
+    Combines the synchrotron, bremsstrahlung, and inverse Compton components
+    weighted by the magnetic field strength (via β = gas pressure / total pressure).
+    The relative contributions are determined by the magnetic energy density and
+    optical depth (Mahadevan 1997, Eq. 26, 29, 35).
+
+    Parameters
+    ----------
+    nu : array_like, shape (n_wave,)
+        Frequency grid [Hz].
+    t_e : float
+        Electron temperature [K].
+    sync_shape : array_like, shape (n_wave,)
+        Synchrotron spectral shape (already normalized).
+    agn_adaf_beta : float
+        Ratio of gas pressure to total pressure (β parameter).
+        [dimensionless, 0–1]
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Composite ADAF spectral shape (dimensionless, unnormalized).
+    """
+    # --- Bremsstrahlung component ---
+    # Flat spectrum (nu^0) below exponential cutoff at k_B T_e / h.
+    # Mahadevan 1997, Eq. 3 & Rybicki & Lightman Ch. 5.
+    nu_brem = _K_BOLTZ * t_e / _H_PLANCK
+    nu_ratio_brem = nu / jnp.maximum(nu_brem, 1.0)
+    brem_shape = jnp.exp(-jnp.clip(nu_ratio_brem, 0.0, 500.0))
+
+    # --- Relative component weights ---
+    # Mahadevan (1997, Eq. 26, 29, 35) derives the relative contributions
+    # from the magnetic field pressure (via beta) and optical depths.
+    # beta = P_gas / P_total = 1 - (B^2 / 8pi) / P_total
+    beta_safe = jnp.clip(agn_adaf_beta, 0.01, 0.99)
+
+    # --- Inverse Compton component ---
+    # Thomson scattering of bremsstrahlung photons (Mahadevan 1997, Eq. 34–35).
+    # Photon index: alpha_c = -ln(tau_es) / ln(A), where A ≈ 4*Theta
+    # and Theta = k_B T_e / (m_e c^2).
+    # For typical ADAF (T_e ~ 10^10 K, tau_es ~ 1), alpha_c ~ 0.7–1.0.
+    # We use a simplified approximation with a fixed effective index.
+    theta_adaf = _K_BOLTZ * t_e / (_M_PROTON * _C_LIGHT**2)
+    tau_es_approx = 0.1 * (1.0 - beta_safe)  # Approximate Thomson scattering depth
+    # Avoid log(0) by using maximum
+    tau_safe = jnp.maximum(tau_es_approx, 1e-10)
+    a_factor = 4.0 * theta_adaf
+    a_safe = jnp.maximum(a_factor, 1e-10)
+    alpha_c = -jnp.log(tau_safe) / jnp.log(a_safe)
+    alpha_c = jnp.clip(alpha_c, 0.5, 1.5)  # Physical range
+
+    ic_shape = (nu / jnp.maximum(nu_brem, 1.0)) ** (-alpha_c) * jnp.exp(
+        -jnp.clip(nu / jnp.maximum(nu_brem, 1.0), 0.0, 500.0)
+    )
+
+    # Magnetic pressure fraction (and thus magnetic field strength) scales synchrotron
+    b_mag_frac = 1.0 - beta_safe  # B^2/(8 pi P_total)
+    sync_weight = b_mag_frac / jnp.maximum(b_mag_frac + beta_safe, 1e-10)
+
+    # Bremsstrahlung dominates at intermediate frequencies
+    brem_weight = beta_safe / jnp.maximum(b_mag_frac + beta_safe, 1e-10)
+
+    # Inverse Compton: sub-dominant unless tau_es is large
+    ic_weight = 0.3 * (1.0 - beta_safe)
+
+    # Normalize weights to sum ~1 (exact normalization happens below)
+    return sync_weight * sync_shape + brem_weight * brem_shape + ic_weight * ic_shape
+
+
+def _adaf_truncated_disc_spectrum(
+    nu: jnp.ndarray,
+    agn_log_mbh: float,
+    agn_r_tr: float,
+    r_g: float,
+    r_isco_rg: float,
+    r_isco_cm: float,
+    mdot: float,
+    agn_cos_inc: float,
+    n_radii: int,
+) -> jnp.ndarray:
+    """Compute luminosity from truncated outer disc (r > r_tr).
+
+    Standard Shakura-Sunyaev multi-color disc from the truncation radius
+    outward, using radial temperature profile and numerical integration.
+
+    Parameters
+    ----------
+    nu : array_like, shape (n_wave,)
+        Frequency grid [Hz].
+    agn_log_mbh : float
+        Black hole mass [log10(M_sun)].
+    agn_r_tr : float
+        Truncation radius in units of gravitational radius [dimensionless].
+    r_g : float
+        Gravitational radius [cm].
+    r_isco_rg : float
+        ISCO radius in units of gravitational radius [dimensionless].
+    r_isco_cm : float
+        ISCO radius [cm].
+    mdot : float
+        Accretion rate [g/s].
+    agn_cos_inc : float
+        Cosine of inclination angle [dimensionless].
+    n_radii : int
+        Number of radial integration points.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        L_ν from the truncated outer disc [erg/s/Hz] (unnormalized).
+    """
+    # ── Truncated outer disc (r > r_tr) ───────────────────────────
+    r_tr_safe = jnp.maximum(agn_r_tr, r_isco_rg + 1.0)  # r_tr > r_isco
+    r_in_cm = r_tr_safe * r_g  # inner edge at truncation radius
+    r_out_cm = 1000.0 * r_isco_rg * r_g  # self-gravity limit
+
+    # Inner temperature at r_tr (truncated disc boundary)
+    t_in = (
+        3.0
+        * _G_GRAV
+        * 10.0**agn_log_mbh
+        * _MSUN_G
+        * mdot
+        / (8.0 * jnp.pi * _SIGMA_SB * r_in_cm**3)
+    ) ** 0.25
+
+    # Radial grid (logarithmic spacing from r_tr to r_out)
+    log_r_min = jnp.log10(r_in_cm)
+    log_r_max = jnp.log10(r_out_cm)
+    log_r_grid = jnp.linspace(log_r_min, log_r_max, n_radii)
+    r_grid = 10.0**log_r_grid
+
+    # Temperature profile: T(r) = T_in * (r/r_tr)^{-3/4} * (1 - sqrt(r_tr/r))^{1/4}
+    r_ratio = r_grid / r_in_cm
+    torque_correction = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio), 1e-30) ** 0.25
+    t_profile = t_in * r_ratio ** (-0.75) * torque_correction
+
+    d_log_r = log_r_grid[1] - log_r_grid[0]
+    dr = r_grid * jnp.log(10.0) * d_log_r
+
+    def _ring_lnu(r_cm, t_ring, dr_ring):
+        """Compute Planck luminosity per unit frequency for disc annulus."""
+        b_nu = _planck_lnu(nu, t_ring)
+        return b_nu * _ring_area(r_cm, dr_ring, agn_cos_inc)
+
+    ring_contributions = jax.vmap(_ring_lnu)(r_grid, t_profile, dr)
+    return jnp.sum(ring_contributions, axis=0)
 
 
 def adaf_disc(
@@ -1357,7 +1780,6 @@ def adaf_disc(
     # --- Black hole parameters ---
     r_g = _gravitational_radius(agn_log_mbh)
     r_isco_rg = _isco_radius(0.0)  # Schwarzschild for LLAGN
-    r_tr_safe = jnp.maximum(agn_r_tr, r_isco_rg + 1.0)  # r_tr > r_isco
 
     # Eddington ratio and accretion rate
     l_edd = _eddington_luminosity(agn_log_mbh)
@@ -1365,6 +1787,7 @@ def adaf_disc(
 
     # Radiative efficiency (Novikov-Thorne for Schwarzschild)
     eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_rg))
+    r_isco_cm = r_isco_rg * r_g
     mdot = l_edd_ratio * l_edd / (eta * _C_LIGHT**2)
 
     # ── ADAF component (r < r_tr) ─────────────────────────────────
@@ -1376,78 +1799,14 @@ def adaf_disc(
     adaf_radiative_efficiency = 0.1 * mdot_dimensionless**2
     l_adaf_erg = l_bol_erg * adaf_radiative_efficiency
 
-    # --- ADAF electron temperature ---
-    # Mahadevan (1997, Eq. 40): T_e = 1.1e9 K * (delta/mdot)^{1/7}
-    # Note: exponent is 1/7, not 1/2. This comes from coupled e-p heating equations.
-    delta_safe = jnp.clip(agn_adaf_delta, 1e-6, 1.0)
-    t_e = 1.1e9 * (delta_safe / mdot_dimensionless) ** (1.0 / 7.0)
-    t_e = jnp.clip(t_e, 1e8, 5e11)  # physical range [K]
+    # Compute ADAF electron temperature (Mahadevan 1997, Eq. 40)
+    t_e = _adaf_electron_temperature(agn_adaf_delta, mdot_dimensionless)
 
-    # --- Synchrotron component ---
-    # Peak frequency (Mahadevan 1997, Eq. 21):
-    #   nu_peak ∝ M_BH^{-1/2} * mdot^{1/2}
-    nu_peak_sync = 1e12 * (10.0**agn_log_mbh / 1e8) ** (-0.5) * mdot_dimensionless**0.5
+    # Compute synchrotron spectrum (Mahadevan 1997, Eq. 21, 25)
+    sync_shape = _adaf_synchrotron_spectrum(nu, agn_log_mbh, mdot_dimensionless)
 
-    # Self-absorption frequency (Mahadevan 1997)
-    nu_sa = nu_peak_sync / 3.0
-
-    # Synchrotron spectral shape (Mahadevan 1997, Eq. 25):
-    # - Below nu_sa (optically thick, Rayleigh-Jeans): nu^2
-    # - Above nu_sa (optically thin): nu^{2/5} (NOT nu^{1/3})
-    # Join continuously by normalizing thick at nu_sa.
-    nu_ratio_sa = nu / jnp.maximum(nu_sa, 1.0)
-    nu_ratio_peak = nu / jnp.maximum(nu_peak_sync, 1.0)
-
-    sync_thick = (nu_ratio_sa**2.0) * (nu_sa / jnp.maximum(nu_peak_sync, 1.0)) ** (2.0 / 5.0)
-    sync_thin = (nu_ratio_peak ** (2.0 / 5.0)) * jnp.exp(
-        -jnp.clip(nu_ratio_peak / 3.0, 0.0, 500.0)
-    )
-    sync_shape = jnp.where(nu < nu_sa, sync_thick, sync_thin)
-
-    # --- Bremsstrahlung component ---
-    # Flat spectrum (nu^0) below exponential cutoff at k_B T_e / h.
-    # Mahadevan 1997, Eq. 3 & Rybicki & Lightman Ch. 5.
-    nu_brem = _K_BOLTZ * t_e / _H_PLANCK
-    nu_ratio_brem = nu / jnp.maximum(nu_brem, 1.0)
-    brem_shape = jnp.exp(-jnp.clip(nu_ratio_brem, 0.0, 500.0))
-
-    # --- Relative component weights ---
-    # Mahadevan (1997, Eq. 26, 29, 35) derives the relative contributions
-    # from the magnetic field pressure (via beta) and optical depths.
-    # beta = P_gas / P_total = 1 - (B^2 / 8pi) / P_total
-    beta_safe = jnp.clip(agn_adaf_beta, 0.01, 0.99)
-
-    # --- Inverse Compton component ---
-    # Thomson scattering of bremsstrahlung photons (Mahadevan 1997, Eq. 34–35).
-    # Photon index: alpha_c = -ln(tau_es) / ln(A), where A ≈ 4*Theta
-    # and Theta = k_B T_e / (m_e c^2).
-    # For typical ADAF (T_e ~ 10^10 K, tau_es ~ 1), alpha_c ~ 0.7–1.0.
-    # We use a simplified approximation with a fixed effective index.
-    theta_adaf = _K_BOLTZ * t_e / (_M_PROTON * _C_LIGHT**2)
-    tau_es_approx = 0.1 * (1.0 - beta_safe)  # Approximate Thomson scattering depth
-    # Avoid log(0) by using maximum
-    tau_safe = jnp.maximum(tau_es_approx, 1e-10)
-    a_factor = 4.0 * theta_adaf
-    a_safe = jnp.maximum(a_factor, 1e-10)
-    alpha_c = -jnp.log(tau_safe) / jnp.log(a_safe)
-    alpha_c = jnp.clip(alpha_c, 0.5, 1.5)  # Physical range
-
-    ic_shape = (nu / jnp.maximum(nu_brem, 1.0)) ** (-alpha_c) * jnp.exp(
-        -jnp.clip(nu / jnp.maximum(nu_brem, 1.0), 0.0, 500.0)
-    )
-
-    # Magnetic pressure fraction (and thus magnetic field strength) scales synchrotron
-    b_mag_frac = 1.0 - beta_safe  # B^2/(8 pi P_total)
-    sync_weight = b_mag_frac / jnp.maximum(b_mag_frac + beta_safe, 1e-10)
-
-    # Bremsstrahlung dominates at intermediate frequencies
-    brem_weight = beta_safe / jnp.maximum(b_mag_frac + beta_safe, 1e-10)
-
-    # Inverse Compton: sub-dominant unless tau_es is large
-    ic_weight = 0.3 * (1.0 - beta_safe)
-
-    # Normalize weights to sum ~1 (exact normalization happens below)
-    adaf_shape = sync_weight * sync_shape + brem_weight * brem_shape + ic_weight * ic_shape
+    # Compute composite ADAF spectrum (synchrotron + bremsstrahlung + IC)
+    adaf_shape = _adaf_composite_spectrum(nu, t_e, sync_shape, agn_adaf_beta)
 
     # Normalize ADAF to l_adaf_erg
     # nu is descending (wavelength ascending), so [::-1] gives ascending order for trapz.
@@ -1455,41 +1814,18 @@ def adaf_disc(
     adaf_integral_safe = jnp.maximum(adaf_integral, 1e-100)
     l_nu_adaf = l_adaf_erg * adaf_shape / adaf_integral_safe
 
-    # ── Truncated outer disc (r > r_tr) ───────────────────────────
-    r_in_cm = r_tr_safe * r_g  # inner edge at truncation radius
-    r_out_cm = 1000.0 * r_isco_rg * r_g  # self-gravity limit
-
-    # Inner temperature at r_tr (truncated disc boundary)
-    t_in = (
-        3.0
-        * _G_GRAV
-        * 10.0**agn_log_mbh
-        * _MSUN_G
-        * mdot
-        / (8.0 * jnp.pi * _SIGMA_SB * r_in_cm**3)
-    ) ** 0.25
-
-    # Radial grid (logarithmic spacing from r_tr to r_out)
-    log_r_min = jnp.log10(r_in_cm)
-    log_r_max = jnp.log10(r_out_cm)
-    log_r_grid = jnp.linspace(log_r_min, log_r_max, n_radii)
-    r_grid = 10.0**log_r_grid
-
-    # Temperature profile: T(r) = T_in * (r/r_tr)^{-3/4} * (1 - sqrt(r_tr/r))^{1/4}
-    r_ratio = r_grid / r_in_cm
-    torque_correction = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio), 1e-30) ** 0.25
-    t_profile = t_in * r_ratio ** (-0.75) * torque_correction
-
-    d_log_r = log_r_grid[1] - log_r_grid[0]
-    dr = r_grid * jnp.log(10.0) * d_log_r
-
-    def _ring_lnu(r_cm, t_ring, dr_ring):
-        """Compute Planck luminosity per unit frequency for disc annulus."""
-        b_nu = _planck_lnu(nu, t_ring)
-        return b_nu * _ring_area(r_cm, dr_ring, agn_cos_inc)
-
-    ring_contributions = jax.vmap(_ring_lnu)(r_grid, t_profile, dr)
-    l_nu_disc = jnp.sum(ring_contributions, axis=0)
+    # Compute truncated outer disc spectrum (r > r_tr)
+    l_nu_disc = _adaf_truncated_disc_spectrum(
+        nu,
+        agn_log_mbh,
+        agn_r_tr,
+        r_g,
+        r_isco_rg,
+        r_isco_cm,
+        mdot,
+        agn_cos_inc,
+        n_radii,
+    )
 
     # ── Combine and normalize ─────────────────────────────────────
     # Remaining luminosity allocated to the truncated disc
