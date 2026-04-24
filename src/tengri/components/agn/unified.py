@@ -96,7 +96,13 @@ import jax.numpy as jnp
 
 from tengri.components.agn.blr import blr_emission
 from tengri.components.agn.cat3d_wind import cat3d_wind_analytic
-from tengri.components.agn.disc import adaf_disc, kubota_done_disc, multicolor_disc, powerlaw_disc
+from tengri.components.agn.disc import (
+    adaf_disc,
+    create_relagn_disc_from_grid,
+    kubota_done_disc,
+    multicolor_disc,
+    powerlaw_disc,
+)
 from tengri.components.agn.nlr import nlr_emission
 from tengri.components.agn.silva04 import silva04_analytic
 from tengri.components.agn.skirtor import _find_skirtor_grid, create_skirtor_from_grid
@@ -150,6 +156,38 @@ def _load_skirtor_fn():
     and npz formats in priority order.
     """
     return create_skirtor_from_grid(_find_skirtor_grid())
+
+
+def _find_relagn_grid() -> str:
+    """Locate the RELAGN outer-disc grid file.
+
+    Searches ``data/relagn_disc_grid.h5`` relative to the repository root.
+
+    Raises
+    ------
+    FileNotFoundError
+        If no grid file is found. Run ``scripts/build_relagn_disc_grid.py``.
+    """
+    from pathlib import Path
+
+    base = Path(__file__).resolve().parents[4]
+    candidates = [
+        base / "data" / "relagn_disc_grid.h5",
+        Path("data/relagn_disc_grid.h5"),
+    ]
+    for p in candidates:
+        if p.is_file():
+            return str(p)
+    raise FileNotFoundError(
+        "RELAGN disc grid not found. Run: "
+        "conda run -n henv python scripts/build_relagn_disc_grid.py"
+    )
+
+
+@functools.cache
+def _load_relagn_fn():
+    """Load RELAGN outer-disc grid from HDF5 (cached)."""
+    return create_relagn_disc_from_grid(_find_relagn_grid())
 
 
 # ── AGN model registry ────────────────────────────────────────────
@@ -904,6 +942,114 @@ def adaf_agn(
     )
 
     return (l_disc + l_torus) * agn_frac
+
+
+@register_agn_model("relagn")
+def relagn_agn(
+    wavelength: jnp.ndarray,
+    agn_log_mbh: float = 8.0,
+    agn_log_mdot: float = -1.0,
+    agn_astar: float = 0.0,
+    agn_cos_inc: float = 0.5,
+    agn_torus_frac: float = 0.5,
+    agn_T_hot: float = 1200.0,
+    agn_T_warm: float = 300.0,
+    agn_frac_hot: float = 0.3,
+    agn_ebv_disc: float = 0.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """RELAGN relativistic outer disc + two-temperature dust torus.
+
+    Uses the precomputed RELAGN grid (Hagen & Done 2023) with KYCONV
+    (Dovciak, Karas & Yaqoob 2004) per-annulus Kerr ray-tracing for the
+    disc, and a two-temperature modified blackbody for the torus.
+
+    The disc luminosity is self-consistent with BH mass and accretion rate;
+    the torus re-emits ``agn_torus_frac`` of the disc bolometric output.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength. [Å]
+    agn_log_mbh : float, optional
+        ``log10(M_BH / M_sun)``, range [7, 10]. Default 8.0.
+    agn_log_mdot : float, optional
+        ``log10(Ṁ / Ṁ_Edd)``, range [−1.5, 0.3]. Default −1.0.
+    agn_astar : float, optional
+        Dimensionless BH spin, prograde only, range [0, 0.998]. Default 0.0.
+    agn_cos_inc : float, optional
+        Cosine of inclination (1 = face-on). Default 0.5.
+    agn_torus_frac : float, optional
+        Torus covering factor; torus re-emits this fraction of disc L_bol.
+        Disc is attenuated by ``(1 − agn_torus_frac)``. Default 0.5.
+    agn_T_hot : float, optional
+        Hot dust temperature [K]. Default 1200.
+    agn_T_warm : float, optional
+        Warm dust temperature [K]. Default 300.
+    agn_frac_hot : float, optional
+        Hot dust mass fraction. Default 0.3.
+    agn_ebv_disc : float, optional
+        SMC-law colour excess applied to disc [mag]. Default 0.0.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Total AGN L_ν. [erg s⁻¹ Hz⁻¹]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — disc interpolation is pure JAX triweight kernel.
+
+    **Gradient-safe**: yes — C²-continuous triweight kernel on all grid axes.
+
+    **Grid required**: ``data/relagn_disc_grid.h5`` built by
+    ``scripts/build_relagn_disc_grid.py`` (requires HEASOFT/XSPEC + KYCONV).
+
+    **Torus normalization**: derived by integrating the disc L_ν over the
+    output wavelength grid via ``jnp.trapezoid`` — no separate ``agn_log_lbol``
+    parameter needed.
+
+    References
+    ----------
+    .. [1] Dovciak, M., Karas, V., & Yaqoob, T. (2004).
+       ApJS, 153, 205. doi:10.1086/421115  [KYCONV]
+
+    .. [2] Hagen, S. & Done, C. (2023).
+       MNRAS, 521, 251. doi:10.1093/mnras/stad478  [RELAGN]
+    """
+    disc_fn = _load_relagn_fn()
+
+    # Full disc at reference inclination from precomputed KYCONV grid
+    l_disc_full = disc_fn(
+        wavelength,
+        agn_log_mbh=agn_log_mbh,
+        agn_log_mdot=agn_log_mdot,
+        agn_astar=agn_astar,
+        agn_cos_inc=agn_cos_inc,
+    )
+    l_disc_full = _redden_disc(wavelength, l_disc_full, agn_ebv_disc)
+
+    # Attenuate disc by torus covering factor
+    l_disc = l_disc_full * (1.0 - agn_torus_frac)
+
+    # Derive disc L_bol by integrating L_ν over ν (trapezoid in JAX)
+    _c_aa = 2.99792458e18  # Å/s
+    nu = _c_aa / wavelength  # decreasing
+    # Sort ascending for trapezoid
+    lbol_disc_erg = jnp.trapezoid(jnp.flip(l_disc_full), jnp.flip(nu))
+    log_lbol_lsun = jnp.log10(jnp.maximum(lbol_disc_erg, 1e30)) - jnp.log10(3.839e33)
+
+    # Torus re-emits agn_torus_frac of disc L_bol
+    l_torus = two_temperature_torus(
+        wavelength,
+        agn_log_lbol=log_lbol_lsun,
+        agn_torus_frac=agn_torus_frac,
+        agn_T_hot=agn_T_hot,
+        agn_T_warm=agn_T_warm,
+        agn_frac_hot=agn_frac_hot,
+    )
+
+    return l_disc + l_torus
 
 
 # ── Geometric masking (smooth sigmoid for differentiability) ──────

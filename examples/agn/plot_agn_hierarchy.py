@@ -28,10 +28,12 @@ log_lbol = 12.0  # log10(L_bol / Lsun); typical QSO
 # Evaluate each registered AGN model
 # ------------------------------------
 # The registry contains: simple, standard, kubota_done, skirtor,
-# unified_nlr_blr, qsogen. Some may need external data; skip gracefully.
+# unified_nlr_blr, qsogen, relagn. Some may need external data; skip gracefully.
 
-model_order = ["simple", "standard", "kubota_done", "skirtor", "unified_nlr_blr", "qsogen"]
-colors = plt.cm.Set1(np.linspace(0.0, 0.8, len(model_order)))
+model_order = [
+    "simple", "standard", "kubota_done", "skirtor", "unified_nlr_blr", "qsogen", "relagn",
+]
+colors = plt.cm.Set1(np.linspace(0.0, 0.9, len(model_order)))
 param_counts = {
     "simple": 3,
     "standard": 6,
@@ -39,6 +41,12 @@ param_counts = {
     "skirtor": 7,
     "unified_nlr_blr": "12+",
     "qsogen": 7,
+    "relagn": 8,
+}
+
+# Model-specific kwargs: relagn is self-normalizing (no agn_log_lbol)
+model_kwargs = {
+    "relagn": dict(agn_log_mbh=8.5, agn_log_mdot=0.0, agn_astar=0.9),
 }
 
 fig, ax = plt.subplots(figsize=(10, 6))
@@ -48,7 +56,8 @@ for name, color in zip(model_order, colors):
         continue
     try:
         model_fn = get_agn_model(name)
-        l_nu = model_fn(wavelength, agn_log_lbol=log_lbol)
+        kwargs = model_kwargs.get(name, {"agn_log_lbol": log_lbol})
+        l_nu = model_fn(wavelength, **kwargs)
         l_nu_np = np.array(l_nu)
         # Skip if all zeros or NaN
         if np.all(l_nu_np <= 0) or np.any(np.isnan(l_nu_np)):
@@ -59,19 +68,17 @@ for name, color in zip(model_order, colors):
             label=f"{name} ({n_params} params)",
         )
     except Exception:
-        # SEDModel may require external data (e.g. SKIRTOR grids)
         continue
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title(
     rf"AGN SEDModel Hierarchy at $\log L_{{\mathrm{{bol}}}} = {log_lbol:.0f}$"
 )
 ax.set_xlim(0.01, 50)
+ax.set_ylim(1e20, 1e32)
 ax.legend(frameon=False, fontsize=10)
 fig.tight_layout()
-
-# %%
 # Each tier adds physical complexity:
 #
 # - **simple**: power-law disc + single-T torus (fast, 3 free params)
@@ -80,6 +87,7 @@ fig.tight_layout()
 # - **skirtor**: power-law disc + SKIRTOR clumpy torus (Stalevski+2012, 7 params)
 # - **unified_nlr_blr**: kubota_done + NLR/BLR line regions (12+ params)
 # - **qsogen**: Temple, Hewett & Banerji (2021) empirical quasar SED (7 params)
+# - **relagn**: RELAGN outer disc (Hagen & Done 2023) + KYCONV Kerr ray-tracing (8 params)
 
 plt.savefig("agn_hierarchy.png", dpi=150, bbox_inches="tight")
 plt.show()

@@ -31,8 +31,10 @@ References
 - Beloborodov 1999, ApJ, 510, L123 (self-consistent Gamma_hot)
 """
 
-import warnings
+import functools
+from collections.abc import Callable
 
+import h5py
 import jax
 import jax.numpy as jnp
 
@@ -49,6 +51,8 @@ from tengri.components.agn._phys import (
     ring_area as _ring_area,
     wavelength_to_nu as _wavelength_to_nu,
 )
+from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight
+from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
 from tengri.utils.physics_constants import (
     G_GRAV as _G_GRAV,
     K_BOLTZ_KEV as _K_BOLTZ_KEV,
@@ -951,12 +955,10 @@ def _compute_zone_luminosities(
 
     # ── Zone 2: Warm Comptonization (R_hot < r < R_warm) ──────────
     if not _NTHCOMP_AVAILABLE:
-        warnings.warn(
-            "nthcomp templates not found — warm Comptonization zone uses the "
-            "simplified modified-blackbody proxy (BUG-04 workaround). "
-            "Run `python scripts/build_nthcomp_templates.py` for the full "
-            "K&D (2018) Kompaneets treatment.",
-            stacklevel=5,
+        raise RuntimeError(
+            "kubota_done_disc requires precomputed nthcomp templates. "
+            "Build them with:\n"
+            "  python scripts/build_nthcomp_templates.py"
         )
 
     log_r_hot = jnp.log10(r_hot_cm)
@@ -970,29 +972,14 @@ def _compute_zone_luminosities(
     d_log_r_warm = log_r_warm_grid[1] - log_r_warm_grid[0]
     dr_warm = r_warm_grid * jnp.log(10.0) * d_log_r_warm
 
-    kt_warm_erg = agn_kt_warm * _KEV_TO_ERG
-    nu_warm = kt_warm_erg / _H_PLANCK
-
-    if _NTHCOMP_AVAILABLE:
-
-        def _warm_ring(r_cm, t_ring, dr_ring):
-            """Compute Comptonized L_nu for one warm-zone annulus using nthcomp spectral shape."""
-            b_nu_plain = _planck_lnu(nu, t_ring)
-            p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
-            l_total = p_plain * _ring_area(r_cm, dr_ring, agn_cos_inc)
-            kTbb_keV = _K_BOLTZ_KEV * t_ring
-            shape = _nthcomp_lnu_interp(nu, agn_gamma_warm, agn_kt_warm, kTbb_keV)
-            return shape * l_total
-    else:
-
-        def _warm_ring(r_cm, t_ring, dr_ring):
-            """Compute modified-blackbody warm-zone luminosity per unit frequency for annulus."""
-            b_nu_plain = _planck_lnu(nu, t_ring)
-            b_nu_mod = _warm_comptonization_lnu(nu, t_ring, nu_warm, agn_gamma_warm)
-            p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
-            p_comp = jnp.abs(jnp.trapezoid(b_nu_mod, nu))
-            renorm = p_plain / jnp.maximum(p_comp, 1e-100)
-            return b_nu_mod * renorm * _ring_area(r_cm, dr_ring, agn_cos_inc)
+    def _warm_ring(r_cm, t_ring, dr_ring):
+        """Compute Comptonized L_nu for one warm-zone annulus using nthcomp spectral shape."""
+        b_nu_plain = _planck_lnu(nu, t_ring)
+        p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
+        l_total = p_plain * _ring_area(r_cm, dr_ring, agn_cos_inc)
+        kTbb_keV = _K_BOLTZ_KEV * t_ring
+        shape = _nthcomp_lnu_interp(nu, agn_gamma_warm, agn_kt_warm, kTbb_keV)
+        return shape * l_total
 
     l_nu_warm = jnp.sum(jax.vmap(_warm_ring)(r_warm_grid, t_warm, dr_warm), axis=0)
 
@@ -1838,3 +1825,161 @@ def adaf_disc(
 
     # Both components are already normalized to their energies
     return l_nu_total * agn_frac
+
+
+# ── Model 5: RELAGN relativistic disc from precomputed grid ──────────────────
+
+
+@functools.cache
+def _load_relagn_disc_grid(grid_path: str) -> dict:
+    """Load and cache the RELAGN outer-disc grid from HDF5.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``data/relagn_disc_grid.h5``.
+
+    Returns
+    -------
+    dict with keys:
+        grid_jax : jnp.ndarray, shape (n_mass, n_mdot, n_astar, n_wave)
+        axes : tuple of jnp.ndarray  (log_mbh, log_mdot, astar)
+        edges : tuple of jnp.ndarray
+        scatters : tuple of float
+        wave_grid : jnp.ndarray, shape (n_wave,)
+    """
+    with h5py.File(grid_path, "r") as f:
+        grid_np = f["lnu_disc"][()]
+        log_mbh = f["log_mbh"][()]
+        log_mdot = f["log_mdot"][()]
+        astar = f["astar"][()]
+        wave_grid = f["wavelength_aa"][()]
+
+    axes = (
+        jnp.array(log_mbh),
+        jnp.array(log_mdot),
+        jnp.array(astar),
+    )
+    edges = tuple(_edges_for_grid(ax) for ax in axes)
+
+    # For non-uniform astar, use max half-spacing: triweight has compact support
+    # (zero beyond one bandwidth), so the bandwidth must cover the largest gap.
+    # Uniform axes use the single node spacing.
+    import numpy as _np
+
+    scatter_lm = 0.5 * float(log_mbh[1] - log_mbh[0])
+    scatter_ld = 0.5 * float(log_mdot[1] - log_mdot[0])
+    scatter_as = 0.5 * float(_np.max(_np.diff(astar)))
+    scatters = (scatter_lm, scatter_ld, scatter_as)
+
+    return {
+        "grid_jax": jnp.array(grid_np),
+        "axes": axes,
+        "edges": edges,
+        "scatters": scatters,
+        "wave_grid": jnp.array(wave_grid),
+    }
+
+
+def create_relagn_disc_from_grid(grid_path: str) -> Callable:
+    """Return a JIT-compatible RELAGN disc SED function from a precomputed grid.
+
+    The grid was built with the real RELAGN Python class (Hagen & Done 2023)
+    using KYCONV (Dovciak, Karas & Yaqoob 2004) per-annulus Kerr ray-tracing.
+    It stores absolute L_ν (erg/s/Hz) at cos_inc = 0.5; the inclination
+    correction is applied analytically as 2·cos_inc (valid for the
+    non-relativistic outer disc; approximate for the GR inner disc).
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``data/relagn_disc_grid.h5``.
+
+    Returns
+    -------
+    callable
+        Function with signature::
+
+            fn(wavelength, agn_log_mbh, agn_log_mdot, agn_astar,
+               agn_cos_inc, **kwargs) -> L_nu [erg s^-1 Hz^-1]
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``grid_path`` does not exist.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — the returned function is pure JAX.
+    Grid loading is cached via ``@functools.cache``.
+
+    **Gradient-safe**: yes — triweight interpolation is C²-continuous.
+
+    **Inclination**: grid stored at cos_inc = 0.5; scaled by 2·cos_inc.
+    This is exact for r > 1000 r_g (non-relativistic regime) and approximate
+    for the GR inner disc where KYCONV applies full Kerr ray-tracing.
+
+    **Grid axes**: log_mbh ∈ [7, 10], log_mdot ∈ [−1.5, 0.3], astar ∈ [0, 0.998]
+    (prograde only; KYCONV rejects retrograde spins).
+
+    References
+    ----------
+    .. [1] Dovciak, M., Karas, V., & Yaqoob, T. (2004).
+       ApJS, 153, 205. doi:10.1086/421115
+
+    .. [2] Hagen, S. & Done, C. (2023).
+       MNRAS, 521, 251. doi:10.1093/mnras/stad478
+    """
+    if not __import__("pathlib").Path(grid_path).exists():
+        raise FileNotFoundError(f"RELAGN disc grid not found: {grid_path}")
+
+    cached = _load_relagn_disc_grid(grid_path)
+    grid_jax = cached["grid_jax"]
+    axes = cached["axes"]
+    edges = cached["edges"]
+    scatters = cached["scatters"]
+    wave_grid = cached["wave_grid"]
+
+    def relagn_disc(
+        wavelength: jnp.ndarray,
+        agn_log_mbh: float = 8.0,
+        agn_log_mdot: float = -1.0,
+        agn_astar: float = 0.0,
+        agn_cos_inc: float = 0.5,
+        **_kwargs,
+    ) -> jnp.ndarray:
+        """RELAGN outer disc from relativistic template grid.
+
+        Parameters
+        ----------
+        wavelength : ndarray, shape (n_wave,)
+            Rest-frame wavelength. [Å]
+        agn_log_mbh : float
+            log₁₀(M_BH / M_sun). [dimensionless]
+        agn_log_mdot : float
+            log₁₀(Ṁ / Ṁ_Edd). [dimensionless]
+        agn_astar : float
+            Dimensionless BH spin, prograde only (0 to 0.998). [dimensionless]
+        agn_cos_inc : float
+            Cosine of inclination angle (1 = face-on). [dimensionless]
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Specific luminosity L_ν. [erg s⁻¹ Hz⁻¹]
+
+        Notes
+        -----
+        **JIT-compatible**: yes.
+        **Gradient-safe**: yes — triweight kernel, C²-continuous.
+        """
+        point = (agn_log_mbh, agn_log_mdot, agn_astar)
+        lnu_template = _interp_nd_triweight(
+            grid_jax, axes, edges, point, scatters=scatters
+        )
+        # Interpolate grid wavelength → observation wavelength
+        lnu_interp = jnp.interp(wavelength, wave_grid, lnu_template, left=0.0, right=0.0)
+        # Inclination scaling from reference cos_inc = 0.5
+        return lnu_interp * (2.0 * agn_cos_inc)
+
+    return relagn_disc
