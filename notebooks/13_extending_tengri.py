@@ -14,15 +14,22 @@
 # ---
 
 # %% [markdown]
-# # Extending tengri
+# # Extending tengri: Custom Priors, PSD Models & Dust Laws
 #
-# **Why extend?** Survey science often needs a prior that encodes your specific selection (e.g. a
-# truncated IMF-related parameter), a dust law tied to radiative-transfer mocks, or an SFH kernel
-# motivated by simulations. tengri keeps those choices **outside** the core JIT pipeline where
-# possible: subclass `Distribution`, register PSD helpers, or pass new attenuation curves as pure
-# JAX functions.
+# Survey science often requires custom priors, dust laws, or SFH kernels. Extend tengri's
+# core physics while keeping the inference pipeline JIT-compatible.
 #
-# Below are minimal **patterns**—not production defaults—so you can copy-paste and adapt.
+# ## What you'll learn
+#
+# - **Custom Distributions** — subclass `Distribution` for truncated/exotic priors
+# - **Custom PSD models** — add new power-spectral-density kernels for GP fields
+# - **Custom dust laws** — attenuation curves as pure JAX functions
+# - **Custom SSP templates** — load different stellar population synthesis grids
+#
+# ## Prerequisites
+#
+# [`04_fitting_spectra.py`](04_fitting_spectra.py) (single-galaxy fitting basics).
+# Minimal patterns designed for copy-paste adaptation to your science.
 
 # %%
 import os
@@ -193,7 +200,7 @@ ax2.plot(theta_dense, np.exp(lp - np.max(lp)), color=COLORS["vi"], lw=1.5, label
 ax2.axhline(1.0 / 2.2, color="grey", ls="--", lw=0.8, label="Uniform")
 ax2.set_xlabel("θ")
 ax2.set_ylabel("Density (normalized)")
-ax2.legend(fontsize=8)
+ax2.legend(fontsize=10)
 ax2.set_title("Implied Prior Density")
 
 fig.tight_layout()
@@ -244,7 +251,7 @@ ax1.loglog(
 )
 ax1.set_xlabel("Frequency")
 ax1.set_ylabel("P(ω)")
-ax1.legend(fontsize=8)
+ax1.legend(fontsize=10)
 ax1.set_title("PSD: DRW vs Matérn")
 
 # GP realizations
@@ -258,7 +265,7 @@ ax2.plot(ages_gyr, gp_m05, color=COLORS["mcmc_nuts"], lw=1, label="Matérn ν=0.
 ax2.set_xlim(0, 13.5)
 ax2.set_xlabel("Lookback time [Gyr]")
 ax2.set_ylabel("GP field x(t)")
-ax2.legend(fontsize=8)
+ax2.legend(fontsize=10)
 ax2.set_title("GP Realizations (same ξ)")
 
 fig.tight_layout()
@@ -296,7 +303,7 @@ ax.plot(wave, atten_pl, color=COLORS["rt"], lw=1.5, label="Power-law (n=−0.7)"
 ax.plot(wave, atten_calz, color=COLORS["vi"], lw=1.5, label="Calzetti (2000)")
 ax.set_xlabel("Wavelength [Å]")
 ax.set_ylabel("Transmission (e^{-τ})")
-ax.legend(fontsize=8)
+ax.legend(fontsize=10)
 ax.set_title("Attenuation Curves at τ_V = 1.0")
 fig.tight_layout()
 # plt.savefig(os.path.join(FIGDIR, "fig03_dust_curves.png"), dpi=150, bbox_inches="tight")
@@ -329,7 +336,7 @@ ax.plot(ages_gyr, np.array(sfr_broad), lw=1, ls=":", label="Broad history")
 ax.set_xlim(0, 13.5)
 ax.set_xlabel("Lookback time [Gyr]")
 ax.set_ylabel(r"SFR [$M_\odot$/yr]")
-ax.legend(fontsize=8)
+ax.legend(fontsize=10)
 ax.set_title("Mean SFH Shapes (Truncated Skew-Normal)")
 fig.tight_layout()
 # plt.savefig(os.path.join(FIGDIR, "fig04_mean_sfh_shapes.png"), dpi=150, bbox_inches="tight")
@@ -349,3 +356,13 @@ plt.show()
 #
 # The inference code never changes — `fitter.run("vi")` works
 # with any combination of components.
+#
+# ## What you learned
+#
+# - Extension points are minimal: subclass, register, or pass as callable
+# - Inference machinery is agnostic to component choices
+# - Custom priors enable domain-specific constraints (IMF, mass loss, etc.)
+# - All extensions remain JIT-compatible if implemented in pure JAX
+#
+# **Next:** [`14_stochastic_sfh.py`](14_stochastic_sfh.py) (stochastic SFH preview) or
+# [`11_population.py`](11_population.py) (hierarchical population inference).

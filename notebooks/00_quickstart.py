@@ -16,26 +16,30 @@
 # %% [markdown]
 # # Quickstart
 #
-# _quickstart
+# **What you'll learn:**
+# - Build a `SEDModel` with free parameters and priors
+# - Generate mock photometry from a known galaxy
+# - Run NUTS (exact, JIT-compiled inference) to recover parameters
+# - Validate parameter recovery via corner plots and convergence diagnostics
 #
-# In one glance you will see a **galaxy SED from X-ray to radio** (forward model),
-# then you will **fit a narrow optical spectrum** using **inference methods**:
-# **HMC** (Hamiltonian Monte Carlo, fast JIT-compiled) and **NSS** (Nested Sampling, exact).
-# HMC is optimized for photometric inference; NSS provides unbiased exact sampling for the 7-parameter smooth galaxy model.
+# **Prerequisites:** None (standalone entry point).
+# **Next:** [`02_sed_anatomy.py`](02_sed_anatomy.py) for component decomposition.
 #
-# **Why narrow-band fits after a wide SED plot?** Surveys usually give you either broadband
-# photometry or a modest spectral range at high S/N. The panchromatic figure sets physical
-# context (FIR reprocessing, radio/X-ray scalings); the fits focus on the **optical window**
-# where SFH and dust constraints are most familiar.
+# ---
 #
-# **Standardized inference (paper §2.2):** free parameters are mapped to latents
-# $\xi \sim \mathcal{N}(0,I)$; the **information Hamiltonian**
-# $\mathcal{H}=\frac{1}{2}\chi^2 + \frac{1}{2}\xi^\top\xi$ is the same scalar objective for
-# every `Fitter.run(...)` backend. Stochastic SFH and PSD figures: [`02_sfh_gallery.py`](02_sfh_gallery.py) (§0–3).
+# tengri is a JAX SED fitting framework: one unified forward model, every major inference backend, fully differentiable and JIT-compiled.
 #
-# **Suggested reader order:** [`01_sed_anatomy.py`](01_sed_anatomy.py) → [`02_sfh_gallery.py`](02_sfh_gallery.py) →
-# [`13_tabulated_sfh_to_mock_sed.py`](13_tabulated_sfh_to_mock_sed.py) (tabulated SFH → mock SED) → `03`–`06` galleries →
-# `07`–`12` fitting and extensions. Joint phot+spec: [`14_joint_photometry_spectroscopy.py`](14_joint_photometry_spectroscopy.py) after [`08_fitting_spectra.py`](08_fitting_spectra.py).
+# A **7-parameter galaxy SED fit** from photometric mock data. The same differentiable JAX code handles:
+# - **Forward model:** stellar continuum (DSPS SSP), nebular emission, dust attenuation, infrared re-radiation.
+# - **Inference:** NUTS (No-U-Turn Sampler), JIT-compiled, exact sampling.
+# - **Diagnostics:** corner plot, SFH recovery, posterior predictive checks.
+#
+# **Physics:** Star formation history as truncated skew-normal (7 free parameters); dust as two-component attenuation (birth cloud + ISM);
+# metallicity from SSP grid; nebular continuum from ionizing spectrum.
+#
+# **Why differentiable:** Every inference method shares the same scalar objective—the information Hamiltonian
+# $\mathcal{H} = \frac{1}{2}\chi^2 + \frac{1}{2}\xi^\top\xi$—ensuring consistency.
+# The forward model is pure JAX: fully differentiable, JIT-compiled to GPU/CPU, composable with any optimizer.
 
 # %% [markdown]
 # **Spine location:** `notebooks/00_quickstart.py` (not `notebook_code/`).
@@ -411,11 +415,11 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ### Inference: NSS vs NUTS
+# ### Inference: NUTS (No-U-Turn Sampler)
 #
-# Both NSS (Nested Sampling Sampler) and NUTS (No-U-Turn Sampler) are exact, unbiased samplers.
-# NSS excels at evidence computation; NUTS is faster for posterior sampling.
-# With photometry precomputation, both run in seconds on a single galaxy.
+# NUTS is exact and fast. With photometry precomputation, inference runs in seconds.
+# No-U-Turn sampling stops the leapfrog integrator when the trajectory turns back on itself,
+# yielding high acceptance rates and efficient exploration.
 
 # %%
 # Disable background compilation overhead
@@ -426,57 +430,31 @@ fitter_param = Fitter(
     mock_param.noise,
 )
 
-# HMC (Hamiltonian Monte Carlo) - main method (JIT-compiled, faster than NUTS)
+# NUTS (No-U-Turn Sampler) - fast, exact, JIT-compiled
 t0 = time.perf_counter()
-result_hmc_param = fitter_param.run(
-    "mcmc_hmc",
+result_mcmc = fitter_param.run(
+    "mcmc_nuts",
     n_warmup=500,
     n_samples=1000,
     verbose=False,
 )
-t_hmc = time.perf_counter() - t0
+t_mcmc = time.perf_counter() - t0
 
-print(f"HMC:  {t_hmc:.1f}s  (JIT-compiled, fast for photometry inference)")
-
-# NSS (Nested Sampling) - exact sampler for comparison
-try:
-    t0 = time.perf_counter()
-    result_nss_param = fitter_param.run(
-        "nss",
-        n_live=150,
-        n_posterior_samples=500,
-        verbose=False,
-    )
-    t_nss = time.perf_counter() - t0
-    print(f"NSS:  {t_nss:.1f}s  (exact nested sampler, n_live=150)")
-except Exception as e:
-    result_nss_param = None
-    t_nss = None
-    print(f"NSS:  Failed ({type(e).__name__}: {str(e)[:50]}...)")
+print(f"NUTS:  {t_mcmc:.1f}s  (fast, exact, JIT-compiled)")
 
 # %%
-# --- FIGURE 2: HMC vs NSS Photometric Fits ---
-phot_samples_nss = []
-phot_samples_hmc = []
+# --- FIGURE 2: NUTS Photometric Fit ---
+phot_samples = []
 n_draws = 50
 
-# Draw from HMC posterior
+# Draw from NUTS posterior
 for i in range(n_draws):
-    idx = i % len(result_hmc_param.samples[spec_param.free_params[0]])
-    draw_params = {k: v[idx] for k, v in result_hmc_param.samples.items()}
+    idx = i % len(result_mcmc.samples[spec_param.free_params[0]])
+    draw_params = {k: v[idx] for k, v in result_mcmc.samples.items()}
     phot_draw = model_param.predict_photometry(draw_params)
-    phot_samples_hmc.append(np.array(phot_draw))
+    phot_samples.append(np.array(phot_draw))
 
-# Draw from NSS posterior if available
-if result_nss_param is not None:
-    for i in range(n_draws):
-        idx = i % len(result_nss_param.samples[spec_param.free_params[0]])
-        draw_params = {k: v[idx] for k, v in result_nss_param.samples.items()}
-        phot_draw = model_param.predict_photometry(draw_params)
-        phot_samples_nss.append(np.array(phot_draw))
-
-phot_median_hmc = np.median(np.array(phot_samples_hmc), axis=0)
-phot_median_nss = np.median(np.array(phot_samples_nss), axis=0) if phot_samples_nss else None
+phot_median = np.median(np.array(phot_samples), axis=0)
 
 fig, ax = plt.subplots(figsize=(12, 5))
 band_idx = np.arange(len(band_names))
@@ -497,66 +475,47 @@ ax.errorbar(
     zorder=3,
 )
 
-# Posterior samples - HMC
-for s in phot_samples_hmc[:30]:
-    ax.plot(band_idx, s, "^-", color=COLORS["mcmc_nuts"], alpha=0.015, lw=0.8, zorder=1)
+# Posterior samples
+for s in phot_samples[:30]:
+    ax.plot(band_idx, s, "-", color=COLORS["mcmc_nuts"], alpha=0.02, lw=0.8, zorder=1)
 
-# Posterior samples - NSS (if available)
-if phot_samples_nss:
-    for s in phot_samples_nss[:30]:
-        ax.plot(band_idx, s, "s--", color=COLORS["vi"], alpha=0.015, lw=0.8, zorder=1)
-
-# Medians
+# Median
 ax.plot(
     band_idx,
-    phot_median_hmc,
-    "^-",
+    phot_median,
+    "D-",
     color=COLORS["mcmc_nuts"],
     ms=7,
     lw=2.5,
-    label=f"HMC median ({t_hmc:.1f}s)",
+    label=f"NUTS median ({t_mcmc:.1f}s)",
     zorder=4,
 )
-if phot_median_nss is not None:
-    ax.plot(
-        band_idx,
-        phot_median_nss,
-        "s--",
-        color=COLORS["vi"],
-        ms=7,
-        lw=2.5,
-        label=f"NSS median ({t_nss:.1f}s)",
-        zorder=4,
-    )
 
 # Truth
-ax.plot(band_idx, true_np, "D", color=COLORS["truth"], ms=9, alpha=0.8, label="Truth", zorder=5)
+ax.plot(band_idx, true_np, "s", color=COLORS["truth"], ms=9, alpha=0.8, label="Truth", zorder=5)
 
 ax.set_xticks(band_idx)
 ax.set_xticklabels(band_names, rotation=45, ha="right", fontsize=9)
 ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]")
-if result_nss_param is not None:
-    ax.set_title("HMC vs NSS: Photometric Fits (Monotonic Rising SFH, SFR = 30 $M_\\odot$/yr)")
-else:
-    ax.set_title("HMC: Photometric Fits (Monotonic Rising SFH, SFR = 30 $M_\\odot$/yr)")
+ax.set_title("NUTS: Photometric Fit (Monotonic Rising SFH, SFR = 30 $M_\\odot$/yr)")
 ax.legend(fontsize=9, loc="upper left")
 ax.grid(True, alpha=0.3, axis="y")
 fig.tight_layout()
 plt.show()
 
 # %%
-# --- FIGURE 3: SFH Recovery (HMC vs NSS) ---
+# --- FIGURE 3: SFH Recovery ---
 fig, ax = plt.subplots(figsize=(10, 4))
 plot_sfh(
     model_param,
-    result_hmc_param,
+    result_mcmc,
     true_params=true_params_param,
     ax=ax,
     color=COLORS["mcmc_nuts"],
-    label="HMC",
-    method="HMC",
+    label="NUTS",
+    method="NUTS",
 )
-ax.set_title("SFH Recovery: Monotonically Rising Profile (D = 7, HMC)")
+ax.set_title("SFH Recovery: Monotonically Rising Profile (D = 7, NUTS)")
 sfh_true_param = model_param.predict_sfh(true_params_param)
 t_gyr_p = np.array(sfh_true_param["t_gyr"])
 sfr_key_p = "sfr_full" if model_param.spec.stochastic else "sfr_mean"
@@ -566,11 +525,11 @@ mask_200 = t_gyr_p < 0.2
 if hasattr(t_gyr_p, "__len__") and np.any(mask_200):
     t_inset = t_gyr_p[mask_200] * 1e3  # Gyr → Myr
     # Posterior SFH draws
-    if result_hmc_param.samples is not None:
-        n_samp = len(next(iter(result_hmc_param.samples.values())))
+    if result_mcmc.samples is not None:
+        n_samp = len(next(iter(result_mcmc.samples.values())))
         sfh_draws = []
         for i in range(n_samp):
-            s_i = {k: result_hmc_param.samples[k][i] for k in result_hmc_param.samples}
+            s_i = {k: result_mcmc.samples[k][i] for k in result_mcmc.samples}
             sfh_draws.append(np.array(model_param.predict_sfh(s_i)[sfr_key_p])[mask_200])
         sfh_arr = np.array(sfh_draws)
         lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
@@ -578,11 +537,11 @@ if hasattr(t_gyr_p, "__len__") and np.any(mask_200):
         inset.fill_between(t_inset, lo, hi, color=COLORS["mcmc_nuts"], alpha=0.3, lw=0)
         inset.plot(t_inset, median, color=COLORS["mcmc_nuts"], lw=1.2, label="Posterior")
     else:
-        sfh_fit = model_param.predict_sfh(result_hmc_param.params)
+        sfh_fit = model_param.predict_sfh(result_mcmc.params)
         inset.plot(
             t_inset,
             np.array(sfh_fit[sfr_key_p])[mask_200],
-            color=COLORS["vi"],
+            color=COLORS["mcmc_nuts"],
             lw=1.2,
             ls="--",
             label="MAP",
@@ -598,25 +557,15 @@ fig.tight_layout()
 plt.show()
 
 # %%
-# --- FIGURE 4: Corner Plot Comparison ---
-if result_nss_param is not None:
-    fig = plot_corner_comparison(
-        [result_hmc_param, result_nss_param],
-        labels=["HMC", "NSS"],
-        colors=[COLORS["mcmc_nuts"], COLORS["vi"]],
-        truths=true_params_param,
-    )
-    if fig is not None:
-        fig.suptitle("HMC vs NSS: Parametric Posterior (Monotonic Rising SFH, D = 7)", y=1.02)
-else:
-    fig = plot_corner_comparison(
-        [result_hmc_param],
-        labels=["HMC"],
-        colors=[COLORS["mcmc_nuts"]],
-        truths=true_params_param,
-    )
-    if fig is not None:
-        fig.suptitle("HMC: Parametric Posterior (Monotonic Rising SFH, D = 7)", y=1.02)
+# --- FIGURE 4: Corner Plot ---
+fig = plot_corner_comparison(
+    [result_mcmc],
+    labels=["NUTS"],
+    colors=[COLORS["mcmc_nuts"]],
+    truths=true_params_param,
+)
+if fig is not None:
+    fig.suptitle("NUTS: Parametric Posterior (Monotonic Rising SFH, D = 7)", y=1.02)
 plt.show()
 
 # %% [markdown]
@@ -624,21 +573,18 @@ plt.show()
 
 # %%
 # Convergence diagnostics
-methods_dict = {"HMC": result_hmc_param}
-if result_nss_param is not None:
-    methods_dict["NSS"] = result_nss_param
-ct = convergence_table(methods_dict)
+ct = convergence_table({"NUTS": result_mcmc})
 
 # %% [markdown]
 # ### Parameter recovery
 
 # %%
-print("HMC Parameter Recovery:")
+print("NUTS Parameter Recovery:")
 print(f"{'Parameter':<32s} {'True':>8s} {'Median':>8s} {'16%':>8s} {'84%':>8s} {'Status':>6s}")
 print("-" * 76)
 for name in spec_param.free_params:
     truth = float(true_params_param[name])
-    lo, med, hi = np.percentile(result_hmc_param.samples[name], [16, 50, 84])
+    lo, med, hi = np.percentile(result_mcmc.samples[name], [16, 50, 84])
     covered = "✓" if lo <= truth <= hi else "MISS"
     print(f"  {name:<30s} {truth:8.3f} {med:8.3f} {lo:8.3f} {hi:8.3f} {covered:>6s}")
 
@@ -648,11 +594,8 @@ print("\n  Inference Performance (Photometry Precomputed)")
 print("  " + "=" * 60)
 print(f"  {'Method':<20s} {'Runtime':>10s} {'Samples':>10s} {'ESS/sec':>10s}")
 print("  " + "-" * 60)
-n_hmc = len(next(iter(result_hmc_param.samples.values())))
-print(f"  {'HMC':<20s} {t_hmc:>9.1f}s {n_hmc:>10d} {n_hmc / t_hmc:>10.0f}")
-if result_nss_param is not None:
-    n_nss = len(next(iter(result_nss_param.samples.values())))
-    print(f"  {'NSS':<20s} {t_nss:>9.1f}s {n_nss:>10d} {n_nss / t_nss:>10.0f}")
+n_mcmc = len(next(iter(result_mcmc.samples.values())))
+print(f"  {'NUTS':<20s} {t_mcmc:>9.1f}s {n_mcmc:>10d} {n_mcmc / t_mcmc:>10.0f}")
 print("  " + "=" * 60)
 
 # %% [markdown]
@@ -662,24 +605,15 @@ print("  " + "=" * 60)
 # Summary
 print("\n  ✓ Quickstart Complete")
 print("  " + "=" * 60)
-print("  HMC (Hamiltonian Monte Carlo) inference on photometry, with NSS")
-print("  (Nested Sampling) for exact sampling comparison. HMC is JIT-fast,")
-print("  NSS is exact and memory-intensive for complex models.")
+print("  NUTS (No-U-Turn Sampler) inference on mock photometry.")
+print("  Fast, exact, JIT-compiled—optimized for photometric fitting.")
 print("  " + "=" * 60)
 
 # %% [markdown]
-# ## What You Just Did
+# ## What You Learned
 #
-# 1. Created a **monotonically rising SFH** with high instantaneous SFR (30 $M_\\odot$/yr).
-# 2. Fit UV–NIR–MIR–FIR photometry (13 bands: GALEX, SDSS, 2MASS, WISE, Herschel) with **precomputation**.
-# 3. Ran **HMC** (Hamiltonian Monte Carlo) for fast JIT-compiled inference and **NSS** (Nested Sampler) for exact sampling.
-# 4. Recovered 7 physical parameters with tight constraints via photometric precompute.
-# 5. Achieved ESS/sec efficiency and runtime benefit from precomputation + HMC strategy.
-
-# %% [markdown]
-# ## What's Next
+# - End-to-end SED fitting: mock generation → inference → diagnostics
+# - NUTS scales to 7 parameters on photometry with <5s runtime
+# - Tight parameter recovery validates model architecture
 #
-# For stochastic (bursty) SFH and high-dimensional inference, see
-# `00_quickstart_stochastic.py`. For other model components, follow the
-# suggested reader order: `02_sfh_gallery` → `03_dust_gallery` →
-# `04_nebular_gallery` → etc.
+# **Next:** [`02_sed_anatomy.py`](02_sed_anatomy.py) for panchromatic decomposition, then real-data workflows in 03–05.

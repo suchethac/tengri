@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 jax.config.update("jax_enable_x64", True)
 
 from tengri import Fixed, Parameters, SEDModel, load_ssp_data
-from tengri.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
+from tengri.analysis.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
 
 setup_style()
 

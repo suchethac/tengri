@@ -11,14 +11,12 @@ small β gives a gentle tail.
 from pathlib import Path
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
-import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
 from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp_data, setup_style
-from tengri.plotting import sfh_sed_comparison
+from tengri.analysis.plotting import sfh_sed_comparison
 
 setup_style()
 

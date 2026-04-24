@@ -79,7 +79,8 @@ class TestRegistry:
         some_cites = [cite("calzetti2000")]
         formatted = format_list(some_cites, fmt="bibtex")
         assert "@article" in formatted
-        assert "Calzetti2000" in formatted
+        # BibTeX key follows ADS convention (e.g. "Calzetti_2000")
+        assert "Calzetti" in formatted
 
     def test_format_list_invalid_format_raises(self) -> None:
         """format_list() must raise ValueError for unknown format."""

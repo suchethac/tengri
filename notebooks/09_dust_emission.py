@@ -16,39 +16,20 @@
 # %% [markdown]
 # # Dust Emission Gallery
 #
-# **Problem:** Dust absorbed stellar and AGN light is re-emitted in the infrared. The exact
-# SED shape (MIR vs FIR peak wavelength, PAH feature strength, submillimeter slope) encodes
-# dust temperature, grain composition, and radiation-field hardness — three dimensions of
-# information independent from stellar age, metallicity, and star-formation history. `tengri`
-# implements 10 dust-emission models: simple modified blackbodies (CMB-corrected), analytic
-# templates (Casey 2012, MAGPHYS), and physically-motivated grids (Draine & Li 2007/2014,
-# Dale+2014, Astrodust, BOSA, THEMIS). All enforce **energy balance** (IR emission = absorbed
-# UV/optical) and are fully differentiable. This notebook shows every model, explores their
-# parameter effects, demonstrates how PAH features are treated, and illustrates energy-balance
-# constraints on fitting.
+# Infrared re-radiation encodes dust temperature, grain composition, and radiation-field hardness.
+# Compare 10 dust-emission models (blackbody, templates, grids) all enforcing energy balance.
 #
-# **Prereqs:** 03_dust_gallery | **Continue with:** 06_multiwavelength_gallery
+# ## What you'll learn
 #
-# ---
+# - **10 dust-emission models** — analytic (modified blackbody, Casey 2012, MAGPHYS) vs. grid-based (DL07/14, Dale+2014, Astrodust, BOSA, THEMIS)
+# - **Energy balance principle** — IR luminosity = absorbed stellar/AGN UV
+# - **Physical parameters** — temperature, emissivity, dust mass, PAH fraction
+# - **Advanced features** — warm/cold decomposition, CMB corrections at high redshift
 #
-# **Key concepts:** Emissivity is the fraction of absorbed energy re-emitted per wavelength;
-# **Drude profiles** are analytical representations of PAH aromatic features at 3.3, 6.2, 7.7,
-# 8.6, 11.3, 12.7, 14 μm (amorphous carbon and silicates; Smith et al. 2007). Energy balance:
-# $\int_0^\infty L_\nu(\text{emission}) d\nu = L_\text{absorbed}$ (total luminosity absorbed
-# in UV/optical attenuation step).
+# ## Prerequisites
 #
-# **Sections:**
-#
-# 1. Overview — all models at canonical temperature (T=35 K)
-# 2. Analytic models (modified blackbody, Casey 2012, MAGPHYS 4-component)
-# 3. Template-based models (DL07, DL14, Dale+2014, Astrodust, BOSA, THEMIS)
-# 4. Energy-balance constraints (warm/cold decomposition, eta_balance parameter)
-# 5. CMB corrections (redshift-dependent; da Cunha et al. 2013)
-# 6. Summary table (model registry, parameters, references)
-# enforce energy balance: total IR luminosity = total absorbed luminosity.
-#
-# This notebook showcases every model, compares their SEDs, and
-# demonstrates the effect of each parameter.
+# [`03_fitting_photometry.py`](03_fitting_photometry.py) and [`02_sed_anatomy.py`](02_sed_anatomy.py)
+# (dust attenuation basics). Advanced: requires understanding of dust radiative transfer.
 # %%
 import importlib.util
 import os
@@ -328,7 +309,7 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title("All Dust Emission Models (overview)")
 ax.set_xlim(1, 1000)
-ax.legend(fontsize=7, ncol=2, loc="upper right")
+ax.legend(fontsize=10, ncol=2, loc="upper right")
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.xaxis.set_minor_formatter(ticker.NullFormatter())
 ax.set_xticks([1, 3, 10, 30, 100, 300, 1000])
@@ -506,7 +487,7 @@ for feat in SMITH2007_PAH_FEATURES:
         f"{center:.1f}",
         ha="center",
         va="bottom",
-        fontsize=8,
+        fontsize=10,
         color="#555555",
     )
 
@@ -968,7 +949,7 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title(r"Energy Balance: $\eta$ and AGN contribution")
 ax.set_xlim(1, 1000)
-ax.legend(fontsize=8)
+ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
 _set_reasonable_log_ylim(ax)
@@ -1170,3 +1151,13 @@ plt.show()
 #   with warm/cold decomposition and optional AGN IR contribution.
 #   The `eta_balance` parameter allows departures from strict energy
 #   balance (spatial offsets between UV and FIR emission regions).
+#
+# ## What you learned
+#
+# - 10 dust-emission models spanning analytic (fast) to physically-grounded (slow)
+# - Energy balance: IR flux must equal total absorbed UV/optical energy
+# - Warm vs. cold dust and PAH features encode radiation-field properties
+# - CMB corrections essential for high-redshift fitting (z > 2)
+#
+# **Next:** [`10_agn_advanced.py`](10_agn_advanced.py) (AGN accretion discs & tori) or
+# [`05_joint_photometry_spectroscopy.py`](05_joint_photometry_spectroscopy.py) (multiwavelength fitting).

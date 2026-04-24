@@ -13,14 +13,12 @@ optical.
 from pathlib import Path
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
-import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp_data
-from tengri.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
+from tengri import Fixed, Parameters, SEDModel, load_ssp_data
+from tengri.analysis.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
 
 setup_style()
 

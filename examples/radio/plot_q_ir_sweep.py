@@ -18,7 +18,7 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.plotting import SWEEP_CMAPS, setup_style
+from tengri.analysis.plotting import SWEEP_CMAPS, setup_style
 from tengri.radio import radio_star_forming
 
 setup_style()

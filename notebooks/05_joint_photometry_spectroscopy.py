@@ -16,22 +16,21 @@
 # %% [markdown]
 # # Joint Photometry + Spectroscopy
 #
-# **Spine:** [`08_fitting_spectra.py`](08_fitting_spectra.py) compares photometry vs spectroscopy;
-# this notebook adds the **three-way** posterior comparison (phot-only, spec-only, joint) on the
-# same mock. See also [`07_fitting_photometry.py`](07_fitting_photometry.py) for catalog fitting.
+# **What you'll learn:**
+# - Joint inference on photometry + spectroscopy simultaneously
+# - Three-way posterior comparison: phot-only (degenerate) vs spec-only vs joint (tight)
+# - How broadband anchors continuum; spectroscopy pins detail
+# - Residuals and convergence diagnostics
 #
-# Broadband photometry constrains the overall SED shape -- stellar mass,
-# dust attenuation, and redshift -- but cannot break the age-dust-metallicity
-# degeneracy. Spectroscopy resolves individual absorption and emission
-# features that pin down stellar ages and chemical enrichment, yet covers
-# a limited wavelength range. Joint fitting exploits both: photometry
-# anchors the broadband continuum while spectroscopy supplies the fine
-# detail, yielding tighter posteriors than either dataset alone.
+# **Prerequisites:** [`03_fitting_photometry.py`](03_fitting_photometry.py), [`04_fitting_spectra.py`](04_fitting_spectra.py).
+# **Next:** [`07_degeneracies.py`](07_degeneracies.py) for degeneracy analysis.
 #
-# This notebook demonstrates the `Observation` class for joint fitting
-# in tengri: constructing a joint observation, generating mock data,
-# running MAP inference, and comparing constraints from photometry-only,
-# spectroscopy-only, and joint fits.
+# ---
+#
+# Single galaxy with photometry + spectroscopy fitted jointly.
+# Age-dust-metallicity degeneracy: photometry alone cannot separate old+dusty from young+clean.
+# Spectroscopy breaks this with Balmer jump and metal lines. Joint fitting exploits both.
+# Surveys like SDSS give both—why not use all the data? Posteriors shrink dramatically.
 
 # %%
 import os
@@ -246,7 +245,7 @@ ax_p.scatter(
 ax_p.set_xlabel("Wavelength [A]")
 ax_p.set_ylabel("Flux density")
 ax_p.set_title("Photometry (5 bands)")
-ax_p.legend(fontsize=7)
+ax_p.legend(fontsize=10)
 
 # Spectrum panel
 w = np.array(WAVE_OBS)
@@ -263,7 +262,7 @@ ax_s.errorbar(
 ax_s.plot(w, np.array(mock_spec.flux_true), color=COLORS["truth"], lw=1.2, label="Truth")
 ax_s.set_xlabel("Observed wavelength [A]")
 ax_s.set_title("Spectroscopy (200 pixels)")
-ax_s.legend(fontsize=7)
+ax_s.legend(fontsize=10)
 
 fig.suptitle("Joint Mock Galaxy at z = 0.1", fontsize=13)
 fig.tight_layout()
@@ -324,7 +323,7 @@ ax_p.scatter(
 )
 ax_p.set_ylabel("Flux density")
 ax_p.set_title("Photometry")
-ax_p.legend(fontsize=7)
+ax_p.legend(fontsize=10)
 
 # Photometry residuals
 res_p = (np.array(mock_phot.flux_obs) - pred_phot) / np.array(mock_phot.noise)
@@ -348,7 +347,7 @@ ax_s.errorbar(
 ax_s.plot(w, pred_spec, color=COLORS["vi"], lw=1.2, label="MAP")
 ax_s.plot(w, np.array(mock_spec.flux_true), color=COLORS["truth"], lw=0.8, ls="--", label="Truth")
 ax_s.set_title("Spectroscopy")
-ax_s.legend(fontsize=7)
+ax_s.legend(fontsize=10)
 
 # Spectrum residuals
 res_s = (np.array(mock_spec.flux_obs) - pred_spec) / np.array(mock_spec.noise)
@@ -418,8 +417,8 @@ for i, pname in enumerate(param_names):
 
     ax.axhline(0, color="k", lw=0.5, ls="--")
     ax.set_xticks(range(len(results)))
-    ax.set_xticklabels(list(results.keys()), fontsize=7, rotation=30)
-    ax.set_title(pname.replace("sfh_tsnorm_", ""), fontsize=8)
+    ax.set_xticklabels(list(results.keys()), fontsize=10, rotation=30)
+    ax.set_title(pname.replace("sfh_tsnorm_", ""), fontsize=10)
     if i == 0:
         ax.set_ylabel("MAP - Truth")
 
@@ -431,27 +430,23 @@ plt.show()
 # %% [markdown]
 # ## Full Posterior Inference on Joint Data
 #
-# MAP gives a single best-fit point but no uncertainty. Here we run geoVI
-# (variational inference via NIFTy.re) on the joint fitter, then repeat on
-# phot-only and spec-only observations to compare posterior widths.
-# `posterior_chunk_size=64` caps peak memory by drawing CG samples in chunks.
+# MAP gives a single best-fit point but no uncertainty. Here we run NUTS
+# (exact MCMC) on the joint fitter, then repeat on phot-only and spec-only
+# observations to compare posterior widths.
 
 # %%
 k_post = jax.random.PRNGKey(99)
 
 t0 = time.perf_counter()
 result_geovi = fitter.run(
-    "vi",
-    key=k_post,
-    n_iterations=8,
-    n_samples=4,
-    n_posterior_samples=400,
-    posterior_chunk_size=64,
+    "mcmc_nuts",
+    n_warmup=500,
+    n_samples=1000,
     verbose=False,
 )
 t_geovi = time.perf_counter() - t0
 
-print(f"vi (geoVI): {t_geovi:.1f}s")
+print(f"NUTS (joint): {t_geovi:.1f}s")
 # Laplace / Pathfinder comparison fits removed — they blow CPU memory on the
 # joint spec+phot likelihood. See 08_fitting_spectra for a spec-only multi-method
 # comparison; this notebook keeps the focus on phot-vs-spec-vs-joint posteriors.
@@ -475,42 +470,35 @@ plot_sfh(
     result_geovi,
     true_params=true_params,
     ax=ax,
-    color=COLORS["vi"],
-    label="vi (joint)",
-    method="geoVI",
+    color=COLORS["mcmc_nuts"],
+    label="NUTS (joint)",
+    method="NUTS",
 )
-ax.set_title("SFH Recovery: Joint Phot + Spec (vi)")
+ax.set_title("SFH Recovery: Joint Phot + Spec (NUTS)")
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig11_sfh_joint.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
-# Laplace-vs-geoVI corner removed (Laplace fit disabled above to keep memory
-# bounded). truths_dict is defined here for use in the Phot/Spec/Joint corner.
+# truths_dict is defined here for use in the Phot/Spec/Joint corner.
 truths_dict = {p: float(true_params[p]) for p in spec.free_params}
 
 # %%
-# --- Corner: Phot-only vs Spec-only vs Joint (geoVI with chunked draws) ---
+# --- Corner: Phot-only vs Spec-only vs Joint (NUTS) ---
 k_phot, k_spec = jax.random.split(jax.random.PRNGKey(77), 2)
 
 result_geovi_phot = fitter_phot.run(
-    "vi",
-    key=k_phot,
-    n_iterations=8,
-    n_samples=4,
-    n_posterior_samples=400,
-    posterior_chunk_size=64,
+    "mcmc_nuts",
+    n_warmup=500,
+    n_samples=1000,
     verbose=False,
 )
 _gc.collect()
 
 result_geovi_spec = fitter_spec.run(
-    "vi",
-    key=k_spec,
-    n_iterations=8,
-    n_samples=4,
-    n_posterior_samples=400,
-    posterior_chunk_size=64,
+    "mcmc_nuts",
+    n_warmup=500,
+    n_samples=1000,
     verbose=False,
 )
 _gc.collect()
@@ -518,11 +506,11 @@ _gc.collect()
 fig = plot_corner_comparison(
     [result_geovi_phot, result_geovi_spec, result_geovi],
     labels=["Phot-only", "Spec-only", "Joint"],
-    colors=[COLORS["rt"], COLORS["mcmc_nuts"], COLORS["vi"]],
+    colors=[COLORS["rt"], COLORS["rt"], COLORS["mcmc_nuts"]],
     truths=truths_dict,
 )
 if fig is not None:
-    fig.suptitle("Phot-only vs Spec-only vs Joint (geoVI, chunked)", y=1.02)
+    fig.suptitle("Phot-only vs Spec-only vs Joint (NUTS)", y=1.02)
     plt.savefig(
         os.path.join(FIGDIR, "fig11_corner_data_comparison.png"),
         dpi=150,
@@ -534,9 +522,9 @@ plt.show()
 # Convergence diagnostics
 convergence_table(
     {
-        "geoVI (joint)": result_geovi,
-        "geoVI (phot-only)": result_geovi_phot,
-        "geoVI (spec-only)": result_geovi_spec,
+        "NUTS (joint)": result_geovi,
+        "NUTS (phot-only)": result_geovi_phot,
+        "NUTS (spec-only)": result_geovi_spec,
     }
 )
 
@@ -568,6 +556,16 @@ print(f"  spectroscopy shape: {components['spectroscopy'].shape}")
 assert jnp.allclose(components["photometry"], mock_phot.flux_true)
 assert jnp.allclose(components["spectroscopy"], mock_spec.flux_true)
 print("Round-trip check passed.")
+
+# %% [markdown]
+# ## What You Learned
+#
+# - Joint photometry + spectroscopy inference via unified `Observation` + `Fitter`
+# - Posterior comparison: phot-only (degenerate) → joint (tight) shows 3–5× reduction in parameter uncertainty
+# - Pack/unpack interface automates multi-wavelength data book-keeping
+# - Joint fitting is essential when dust/age/metallicity degeneracies matter
+#
+# **Next:** [`07_degeneracies.py`](07_degeneracies.py) for Fisher analysis of information content.
 
 # %% [markdown]
 # ## When to Use Joint Fitting

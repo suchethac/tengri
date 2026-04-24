@@ -27,7 +27,7 @@ __version__ = "0.1.0"
 # --- New high-level API ---
 from tengri._logo import LOGO, LOGO_BANNER, print_logo
 from tengri.analysis.mock import MockData, generate_mock
-from tengri.citations import Citation, cite, cite_all
+from tengri.citations import Citation, cite, cite_all, paper_citation, print_paper_citation
 from tengri.components.dust.attenuation import two_component_dust
 from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
 from tengri.components.sfh.gp_sfh import (
@@ -299,10 +299,12 @@ __all__ = [
     "matern32_kernel",
     "nebular",
     "observation",
+    "paper_citation",
     "posteriors_to_dataframe",
     "preprocessing",
     "presets",
     "print_logo",
+    "print_paper_citation",
     "radio",
     "sfh",
     "sps",

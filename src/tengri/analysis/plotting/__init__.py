@@ -16,7 +16,14 @@ Usage::
 # ═══════════════════════════════════════════════════════════════════
 # Convergence diagnostics
 # ═══════════════════════════════════════════════════════════════════
-from tengri.analysis.plotting.convergence import diagnostics_table, posterior_plot_sfh
+from tengri.analysis.plotting.convergence import (
+    CONVERGENCE_THRESHOLDS,
+    convergence_check,
+    convergence_table,
+    diagnostics_table,
+    plot_autocorrelation,
+    posterior_plot_sfh,
+)
 
 # ═══════════════════════════════════════════════════════════════════
 # Corner plot utilities
@@ -48,7 +55,7 @@ from tengri.analysis.plotting.sed import (
 # ═══════════════════════════════════════════════════════════════════
 # SFH plotting
 # ═══════════════════════════════════════════════════════════════════
-from tengri.analysis.plotting.sfh import plot_sfh, plot_sfh_comparison
+from tengri.analysis.plotting.sfh import add_sfh_inset, plot_sfh, plot_sfh_comparison
 from tengri.analysis.plotting.styles import (
     COLORS,
     GALAXY_ANNOTATIONS,
@@ -71,6 +78,7 @@ from tengri.analysis.plotting.styles import (
 
 __all__ = [
     "COLORS",
+    "CONVERGENCE_THRESHOLDS",
     "GALAXY_ANNOTATIONS",
     "REFERENCE_STYLE",
     "SAMPLER_STYLE",
@@ -86,10 +94,14 @@ __all__ = [
     "SFH_YLABEL",
     "SPECTRAL_FEATURES",
     "SWEEP_CMAPS",
+    "add_sfh_inset",
     "compare_filter_sets",
+    "convergence_check",
+    "convergence_table",
     "diagnostics_table",
     "mock_plot",
     "parameter_gallery",
+    "plot_autocorrelation",
     "plot_corner_comparison",
     "plot_filter_coverage",
     "plot_filter_curves",

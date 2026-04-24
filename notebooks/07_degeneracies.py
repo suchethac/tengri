@@ -14,25 +14,23 @@
 # ---
 
 # %% [markdown]
-# # Age-Dust-Metallicity Degeneracies
+# # Age-Dust-Metallicity Degeneracies & Fisher Analysis
 #
-# **Tour:** Optional notebook — left out of the default `00_quickstart` sequence
-# for now; open when you want the dedicated age–dust–metallicity story.
+# **What you'll learn:**
+# - The age-dust-metallicity degeneracy: old+clean = young+dusty in photometry
+# - Fisher Information Matrix quantifies how each filter/spectral line breaks degeneracy
+# - Banana-shaped posteriors; why SDSS 5-band fails; why WISE/spectroscopy wins
+# - Data-driven path to constraint (more bands → spectroscopy → joint)
 #
-# The single most important systematic in SED fitting is the
-# **age-dust-metallicity degeneracy**. An older stellar population with less
-# dust can produce nearly identical broadband photometry to a younger, dustier
-# one. Separately, a metal-rich population reddens the SED in ways that mimic
-# dust attenuation. These three effects conspire to create correlated,
-# banana-shaped posteriors that no amount of MCMC sampling can eliminate ---
-# only additional data can break the degeneracy.
+# **Prerequisites:** [`05_joint_photometry_spectroscopy.py`](05_joint_photometry_spectroscopy.py).
+# **Next:** Advanced topics in [`11_population.py`](11_population.py) and [`14_stochastic_sfh.py`](14_stochastic_sfh.py).
 #
-# This notebook demonstrates:
+# ---
 #
-# 1. How the degeneracy appears in posterior space from 5-band SDSS photometry
-# 2. How adding NIR and MIR bands progressively tightens constraints
-# 3. Why spectroscopy provides the strongest leverage
-# 4. Practical guidance for survey design and parameter interpretation
+# The single largest systematic in SED fitting.
+# Fisher matrix analysis shows how each dataset (photometry bands, spectral features) constrains the degeneracy.
+# No amount of MCMC sampling breaks it—only new data (more filters, spectroscopy) resolves the ambiguity.
+# Visualize as banana-shaped posteriors; trace how each filter or spectral line tips the balance.
 
 # %%
 import os
@@ -241,7 +239,7 @@ if HAS_DATA:
     t_compile = time.perf_counter() - t0_compile
 
     t0_run = time.perf_counter()
-    result_sdss = fitter.run("vi", n_iterations=10, n_samples=6, verbose=False)
+    result_sdss = fitter.run("mcmc_nuts", n_warmup=500, n_samples=1000, verbose=False)
     t_run = time.perf_counter() - t0_run
 
     print(f"XLA compile: {t_compile:.1f}s | runtime: {t_run:.1f}s")
@@ -632,19 +630,11 @@ if HAS_DATA:
 #    photometry alone is insufficient
 
 # %% [markdown]
-# ## Summary
+# ## What You Learned
 #
-# The age-dust-metallicity degeneracy is a fundamental limitation of broadband
-# SED fitting, not an algorithmic failure. tengri's differentiable forward
-# model makes it straightforward to diagnose via Fisher analysis and to
-# quantify how additional data (filters, spectroscopy, redshift priors)
-# progressively breaks the degeneracy.
+# - Age-dust-metallicity degeneracy: old+clean ≡ young+dusty in photometry alone
+# - Fisher Information Matrix quantifies constraint power of each filter/spectral line
+# - SDSS 5-band fails; NIR (WISE) and spectroscopy progressively break degeneracy
+# - Real physics: no MCMC sampling breaks fundamental information limits
 #
-# **Next steps:**
-#
-# - Use `result.check_convergence()` or `convergence_table({"method": result})`
-#   from `_plot_style.py` for convergence diagnostics.
-# - Use `diagnostics.fisher_matrix()` to forecast how additional observations
-#   (redshift priors, spectroscopy, narrow filters) break degeneracies.
-# - Use `diagnostics.gradient_jacobian()` to map parameter sensitivity
-#   per wavelength band.
+# **Next:** Apply to real data in advanced notebooks, or see stochastic SFH (Paper II).

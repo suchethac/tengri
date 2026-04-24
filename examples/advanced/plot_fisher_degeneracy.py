@@ -27,7 +27,7 @@ from tengri import (
     load_ssp_data,
     setup_style,
 )
-from tengri.diagnostics.fisher import compute_fisher_matrix, fisher_parameter_errors
+from tengri.analysis.diagnostics.fisher import compute_fisher_matrix, fisher_parameter_errors
 
 setup_style()
 

@@ -16,32 +16,26 @@
 # %% [markdown]
 # # SED Anatomy: Wavelength → Physics
 #
-# ## Three questions answered here
+# **What you'll learn:**
+# - How stellar + nebular + dust + AGN/radio/X-ray combine into a panchromatic SED
+# - Component isolation: toggle modules on/off to understand each wavelength decade
+# - Redshift handling and IGM absorption at high z
+# - Safe optical-only forward models for spectroscopic fitting
 #
-# **What problem does this solve?**
-# You know your galaxy's star-formation history and want to predict its spectrum across
-# X-ray to radio. Tengri computes this in one differentiable JAX function, handling
-# stellar synthesis, nebular emission, dust attenuation, and multiwavelength components
-# all at once—no hand-stitching separate codes.
-#
-# **What will you see at the end?**
-# A panchromatic SED figure showing how each component (stellar, nebular, dust IR,
-# X-ray, radio) dominates different wavelength ranges. Then we build the same SED
-# step-by-step using public API calls, redshift it, check IGM absorption, and show
-# how to set up a fit-safe optical-only model.
-#
-# **Why does tengri do it differently?**
-# In Prospector, BAGPIPES, or CIGALE, you pick a fixed set of component modules at startup
-# and fit them as a black box. In tengri, the entire forward chain (SSP → SFH → dust →
-# nebular/AGN/radio/X-ray) is **one pure JAX function**, so derivatives flow through
-# every step. You can toggle components on/off easily, understand the math exactly,
-# and combine inference methods (MAP, MCMC, Variational) without rewriting the model.
+# **Prerequisites:** [`00_quickstart.py`](00_quickstart.py) (optional context).
+# **Next:** [`03_fitting_photometry.py`](03_fitting_photometry.py) for real-data workflows.
 #
 # ---
 #
-# **Prereqs:** [`00_quickstart.py`](00_quickstart.py) (optional; introduces HMC + fit workflow).
+# Panchromatic SED from X-ray to radio. Trace how each physical ingredient
+# (stellar continuum, nebular lines, dust attenuation, IR re-radiation, radio, X-ray) shapes different wavelengths.
+# Then build the same SED by hand, piece by piece, using the tengri API.
 #
-# **Spine path:** `notebooks/01_sed_anatomy.py`
+# **Physics:** Stellar population synthesis (DSPS), nebular emission from ionizing photons, two-component dust (birth cloud + diffuse ISM),
+# infrared templates, radio scalings, X-ray from XRBs. All in one JAX function.
+#
+# **Architecture difference:** In tengri, the full forward model (SSP → SFH → dust → nebular/AGN/radio/X-ray) is one differentiable JAX function,
+# not a black-box pipeline. Toggle components, understand every equation, derivatives flow everywhere.
 
 
 # %% [markdown]
@@ -529,7 +523,7 @@ plt.show()
 # intergalactic medium suppresses observed flux blueward of the Lyman series
 # (Inoue+2014). `igm_transmission(wave_obs, z)` expects **observed-frame**
 # wavelengths in Å — the same convention as photometry through bandpasses.
-# See `06_multiwavelength_gallery.py` for a longer tour.
+# See `examples/multiwavelength/` and `examples/igm/` for a longer tour.
 
 # %%
 from tengri.igm import igm_transmission
@@ -580,21 +574,11 @@ print(
 )
 
 # %% [markdown]
-# ---
+# ## What You Learned
 #
-# ## Summary
+# - Panchromatic anatomy via `compute_sed_components()`
+# - Component isolation: stars, nebular, dust attenuation, IR/radio/X-ray
+# - Redshift + IGM handling is automatic in `predict_spectrum()`
+# - Safe optical-only models for inference
 #
-# We have shown:
-#
-# 1. **Panchromatic anatomy:** How stellar + nebular + dust IR + X-ray + radio combine
-#    into a single rest-frame SED using `compute_sed_components()`.
-# 2. **Component buildup:** Using separate `SEDModel` instances to isolate each physical process
-#    (stars, nebular, dust attenuation, multiwavelength).
-# 3. **Redshift handling:** The same physical SED at different redshifts, with IGM
-#    absorption and luminosity distance applied automatically.
-# 4. **Optical-only fit safety:** Building an `Observation` with spectroscopy only ensures
-#    the forward model outputs match the data dimensionality.
-#
-# **Continue with:** [`02_sfh_gallery.py`](02_sfh_gallery.py) for parametric and stochastic SFH models,
-# [`03_dust_gallery.py`](03_dust_gallery.py) for attenuation and emission templates,
-# or [`06_multiwavelength_gallery.py`](06_multiwavelength_gallery.py) for AGN, radio, and X-ray.
+# **Next:** [`03_fitting_photometry.py`](03_fitting_photometry.py) for real-data workflows.

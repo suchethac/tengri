@@ -16,23 +16,18 @@
 # %% [markdown]
 # # Star Formation History — Advanced Topics
 #
-# _sfh_advanced
+# Combine multiple SFH components and evolve metallicity self-consistently from the SFH.
 #
-# ## Overview
+# ## What you'll learn
 #
-# This notebook extends [`02_sfh_gallery.py`](02_sfh_gallery.py) with advanced topics
-# in SFH modelling:
+# - **Composition system** — additive (multi-component), burst mixture, GP field modulation
+# - **Closed-box and leaky-box metallicity evolution** — how Z(t) depends on SFH shape and mass loss
+# - **Physical interpretation** — why late-forming histories produce shallower Z(t) gradients
 #
-# - **Composition system** — combining multiple SFH components (additive, burst mixture, GP field modulation).
-# - **Chemical evolution** — deriving metallicity $Z(t)$ self-consistently from an SFH using closed-box
-#   and leaky-box models.
+# ## Prerequisites
 #
-# **Audience:** This notebook assumes you're already familiar with parametric, non-parametric, and
-# stochastic SFH models from `02_sfh_gallery.py`. These features are useful for galaxy populations
-# with complex assembly histories or when metallicity evolution is part of your science goal.
-#
-# **Prereqs:** `02_sfh_gallery.py` (core SFH models). **Continue with:** `03_dust_gallery.py` (dust attenuation)
-# or `11_population.py` (hierarchical fitting).
+# [`02_sed_anatomy.py`](02_sed_anatomy.py) for the forward model; `examples/sfh/` for parametric / non-parametric SFH shapes.
+# Useful for galaxy populations with complex assembly histories or when metallicity is a science goal.
 
 # %%
 import importlib.util
@@ -420,4 +415,12 @@ plt.show()
 # lower final metallicity.
 
 # %%
-print("SFH advanced notebook complete.")
+# %% [markdown]
+# ## What you learned
+#
+# - SFH composition combines smooth, burst, and field-modulated components
+# - Chemical evolution via closed-box/leaky-box: Z(t) depends on SFH shape and η_outflow
+# - Late-forming histories (DPL) produce shallower [Z/H] gradients; peaked histories produce steeper ones
+#
+# **Next:** [`09_dust_emission.py`](09_dust_emission.py) (dust IR emission models) or
+# [`11_population.py`](11_population.py) (hierarchical inference across galaxy samples).

@@ -14,26 +14,21 @@
 # ---
 
 # %% [markdown]
-# # AGN Advanced: Deep Dives into Disc & Torus Physics
+# # AGN Advanced: Accretion Discs, Coronae & Clumpy Tori
 #
-# _agn_advanced
+# Deep dives into Kubota & Done 3-zone discs, ADAF flows, and SKIRTOR radiative-transfer tori.
 #
-# **What:** Explore advanced AGN accretion models (Kubota & Done 3-zone disc,
-# ADAF for low-luminosity AGN, and SKIRTOR clumpy torus) beyond the "simple"
-# and "standard" models from `05_agn_gallery.py`.
+# ## What you'll learn
 #
-# **What you'll see:** Full K&D (2018) disc physics with radial zones, hot/warm/cold
-# temperature profiles, X-ray corona spectra, ADAF optically-thin flow for LLAGN,
-# and clumpy torus templates from 3D radiative transfer. Detailed parameter
-# sensitivity and physical limits.
+# - **Kubota & Done (K&D) 3-zone disc** — outer cool + warm soft-excess + hot X-ray corona
+# - **ADAF (Advection-Dominated Accretion Flows)** — low-accretion optically-thin inner flows (Sgr A*, M87)
+# - **SKIRTOR clumpy torus** — 3D radiative transfer with silicate features and wavelength-dependent opacity
+# - **Physical constraints** — black hole mass, Eddington ratio, and accretion-state signatures
 #
-# **Why this matters:** AGN accretion is a multi-zone plasma. High-accretion
-# systems (quasars) need hot coronae and soft X-ray excess. Low-accretion systems
-# (Sgr A*, M87) enter the ADAF regime. A single power law or two blackbodies
-# cannot capture this diversity.
+# ## Prerequisites
 #
-# **Prerequisites:** `05_agn_gallery.py` (unified model + named models).
-# **Audience:** AGN specialists, high-accretion-rate fits.
+# [`02_sed_anatomy.py`](02_sed_anatomy.py) (SED basics) and [`05_multiwavelength_gallery.py`](05_multiwavelength_gallery.py)
+# (simple and standard AGN models). For AGN specialists fitting high-accretion systems or LLAGN.
 
 # %%
 import importlib.util
@@ -441,6 +436,16 @@ except Exception as e:
 # black hole mass, accretion rate, and torus structure simultaneously.
 #
 # **See also:**
-# - `05_agn_gallery.py` for simple models and geometric masking.
-# - `06_multiwavelength_gallery.py` for X-ray and radio extension.
+# - `05_multiwavelength_gallery.py` for simple models and geometric masking.
+# - `06_inference_methods.py` for X-ray and radio extension.
 # - Paper §3 for full AGN model taxonomy.
+#
+# ## What you learned
+#
+# - K&D captures multi-zone accretion disc structure and soft-excess physics
+# - ADAF dominates at L/L_Edd < 0.01, essential for understanding LLAGN
+# - SKIRTOR provides realistic clumpy-torus 3D RT with silicate features and covering-fraction effects
+# - All AGN models are fully differentiable (JAX); fit jointly with host and IGM
+#
+# **Next:** [`11_population.py`](11_population.py) (hierarchical inference) or
+# [`06_inference_methods.py`](06_inference_methods.py) (X-ray/radio extensions).

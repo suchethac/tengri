@@ -1,0 +1,395 @@
+%% tengri canonical citation database.
+%%
+%% This file is the SINGLE SOURCE OF TRUTH for every citation registered in
+%% tengri.citations. Python code parses this file at import time and builds
+%% the REGISTRY dict from it. Do not hard-code citation data in Python —
+%% add or edit entries here.
+%%
+%% Every entry below is sourced from an authoritative ADS BibTeX export
+%% (copied from the tengri Paper I bibliography), not written from memory.
+%%
+%% Custom fields (non-standard BibTeX but accepted by our parser):
+%%   registry_key   — the short key used by tengri.cite(registry_key)
+%%   short          — one-line display string ("Author et al. (Year)")
+%%   role           — human-readable description of what tengri uses this for
+%%   upstream_code  — the URL path (e.g. "bd-j/prospector") when we port code
+%%
+%% Standard fields beyond ADS default set (doi, archivePrefix, eprint) are
+%% preserved verbatim.
+%%
+%% See also:
+%%   CITATION.bib at the repo root — the tengri papers (Paper I/II/III)
+%%   VERIFICATION.md — component-to-paper verification status
+
+%% =====================================================================
+%%  The tengri papers (in preparation). The authoritative versions of
+%%  these entries live in /CITATION.bib at the repo root; the entries
+%%  here are a minimal mirror so tengri.cite("tengri") works. Update
+%%  CITATION.bib first, then reflect any changes here.
+%% =====================================================================
+
+@article{Cooray_2026,
+  author = {{Cooray}, Suchetha},
+  title  = {{tengri: Differentiable SED fitting with Information-Field-Theory star formation history priors. I. Framework and mock recovery}},
+  journal = {in preparation},
+  year   = 2026,
+  registry_key = {tengri},
+  short  = {Cooray et al. (2026, Paper I)},
+  role   = {SED fitting framework — methods paper (this package)},
+}
+
+@article{Cooray_2026a,
+  author = {{Cooray}, Suchetha},
+  title  = {{tengri: Differentiable SED fitting with Information-Field-Theory star formation history priors. II. Stochastic SFHs and hierarchical population inference}},
+  journal = {in preparation},
+  year   = 2026,
+  registry_key = {tengri_paper2},
+  short  = {Cooray et al. (2026, Paper II)},
+  role   = {IFT stochastic SFH + geoVI — Paper II},
+}
+
+@article{Cooray_2026b,
+  author = {{Cooray}, Suchetha},
+  title  = {{tengri: Differentiable SED fitting with Information-Field-Theory star formation history priors. III. Application to deep JWST surveys}},
+  journal = {in preparation},
+  year   = 2026,
+  registry_key = {tengri_paper3},
+  short  = {Cooray et al. (2026, Paper III)},
+  role   = {Application to real JWST data — Paper III},
+}
+
+%% =====================================================================
+%%  Stellar population synthesis
+%% =====================================================================
+
+@article{Hearin_2023,
+  author        = {{Hearin}, Andrew P. and {Chaves-Montero}, Jon{\'a}s and {Alarcon}, Alex and {Becker}, Matthew R. and {Benson}, Andrew},
+  title         = {{DSPS: Differentiable stellar population synthesis}},
+  journal       = {\mnras},
+  keywords      = {software: data analysis, galaxies: stellar content, cosmology: large-scale structure of Universe},
+  year          = 2023,
+  month         = may,
+  volume        = {521},
+  number        = {2},
+  pages         = {1741-1756},
+  doi           = {10.1093/mnras/stad456},
+  archiveprefix = {arXiv},
+  eprint        = {2112.06830},
+  primaryclass  = {astro-ph.GA},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/2023MNRAS.521.1741H},
+  adsnote       = {Provided by the SAO/NASA Astrophysics Data System},
+  registry_key  = {dsps},
+  short         = {Hearin et al. (2023)},
+  role          = {Differentiable stellar population synthesis engine},
+  upstream_code = {ArgonneCPAC/dsps},
+}
+
+@article{Conroy_2010a,
+  author        = {{Conroy}, Charlie and {Gunn}, James E.},
+  title         = {{The Propagation of Uncertainties in Stellar Population Synthesis Modeling. III. Model Calibration, Comparison, and Evaluation}},
+  journal       = {\apj},
+  keywords      = {galaxies: evolution, galaxies: stellar content, stars: evolution},
+  year          = 2010,
+  month         = apr,
+  volume        = {712},
+  number        = {2},
+  pages         = {833-857},
+  doi           = {10.1088/0004-637X/712/2/833},
+  archiveprefix = {arXiv},
+  eprint        = {0911.3151},
+  primaryclass  = {astro-ph.CO},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/2010ApJ...712..833C},
+  adsnote       = {Provided by the SAO/NASA Astrophysics Data System},
+  registry_key  = {fsps},
+  short         = {Conroy & Gunn (2010)},
+  role          = {Stellar population synthesis (reference implementation)},
+  upstream_code = {cconroy20/fsps},
+}
+
+@article{Choi_2016,
+  author        = {{Choi}, Jieun and {Dotter}, Aaron and {Conroy}, Charlie and {Cantiello}, Matteo and {Paxton}, Bill and {Johnson}, Benjamin D.},
+  title         = {{Mesa Isochrones and Stellar Tracks (MIST). I. Solar-scaled Models}},
+  journal       = {\apj},
+  keywords      = {stars: evolution, stars: general, stars: interiors},
+  year          = 2016,
+  month         = jun,
+  volume        = {823},
+  number        = {2},
+  eid           = {102},
+  pages         = {102},
+  doi           = {10.3847/0004-637X/823/2/102},
+  archiveprefix = {arXiv},
+  eprint        = {1604.08592},
+  primaryclass  = {astro-ph.SR},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/2016ApJ...823..102C},
+  adsnote       = {Provided by the SAO/NASA Astrophysics Data System},
+  registry_key  = {mist},
+  short         = {Choi et al. (2016)},
+  role          = {Stellar isochrones},
+}
+
+@ARTICLE{Falco_2011,
+  author        = {{Falc{\'o}n-Barroso}, J. and {S{\'a}nchez-Bl{\'a}zquez}, P. and {Vazdekis}, A. and {Ricciardelli}, E. and {Cardiel}, N. and {Cenarro}, A.~J. and {Gorgas}, J. and {Peletier}, R.~F.},
+  title         = {{An updated MILES stellar library and stellar population models}},
+  journal       = {\aap},
+  keywords      = {catalogs, methods: data analysis, techniques: spectroscopic},
+  year          = 2011,
+  month         = aug,
+  volume        = {532},
+  eid           = {A95},
+  pages         = {A95},
+  doi           = {10.1051/0004-6361/201116842},
+  archiveprefix = {arXiv},
+  eprint        = {1107.2303},
+  primaryclass  = {astro-ph.CO},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/2011A&A...532A..95F},
+  adsnote       = {Provided by the SAO/NASA Astrophysics Data System},
+  registry_key  = {miles},
+  short         = {Falc{\'o}n-Barroso et al. (2011)},
+  role          = {Empirical stellar spectral library (MILES)},
+}
+
+%% =====================================================================
+%%  Dust
+%% =====================================================================
+
+@article{Calzetti_2000,
+  author        = {{Calzetti}, Daniela and {Armus}, Lee and {Bohlin}, Ralph C. and {Kinney}, Anne L. and {Koornneef}, Jan and {Storchi-Bergmann}, Thaisa},
+  title         = {{The Dust Content and Opacity of Actively Star-forming Galaxies}},
+  journal       = {\apj},
+  keywords      = {GALAXIES: STARBURST, INFRARED: GALAXIES, INFRARED: ISM: CONTINUUM, ISM: DUST, EXTINCTION},
+  year          = 2000,
+  month         = apr,
+  volume        = {533},
+  number        = {2},
+  pages         = {682-695},
+  doi           = {10.1086/308692},
+  archiveprefix = {arXiv},
+  eprint        = {astro-ph/9911459},
+  primaryclass  = {astro-ph},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/2000ApJ...533..682C},
+  adsnote       = {Provided by the SAO/NASA Astrophysics Data System},
+  registry_key  = {calzetti2000},
+  short         = {Calzetti et al. (2000)},
+  role          = {Starburst dust attenuation law},
+}
+
+@article{Charlot_2000,
+  author        = {{Charlot}, St{\'e}phane and {Fall}, S. Michael},
+  title         = {{A Simple Model for the Absorption of Starlight by Dust in Galaxies}},
+  journal       = {\apj},
+  keywords      = {ISM: Dust, Extinction, Galaxies: ISM, Galaxies: Starburst},
+  year          = 2000,
+  month         = aug,
+  volume        = {539},
+  number        = {2},
+  pages         = {718-731},
+  doi           = {10.1086/309250},
+  archiveprefix = {arXiv},
+  eprint        = {astro-ph/0003128},
+  primaryclass  = {astro-ph},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/2000ApJ...539..718C},
+  adsnote       = {Provided by the SAO/NASA Astrophysics Data System},
+  registry_key  = {charlot_fall2000},
+  short         = {Charlot & Fall (2000)},
+  role          = {Two-component dust attenuation (BC+ISM)},
+}
+
+@ARTICLE{Edenhofer_2024a,
+  author        = {{Edenhofer}, Gordian and {Zucker}, Catherine and {Frank}, Philipp and {Saydjari}, Andrew K. and {Speagle}, Joshua S. and {Finkbeiner}, Douglas and {En{\ss}lin}, Torsten A.},
+  title         = {{A parsec-scale Galactic 3D dust map out to 1.25 kpc from the Sun}},
+  journal       = {\aap},
+  keywords      = {ISM: clouds, ISM: structure, dust, extinction, Galaxy: structure, methods: statistical},
+  year          = 2024,
+  month         = may,
+  volume        = {685},
+  eid           = {A82},
+  pages         = {A82},
+  doi           = {10.1051/0004-6361/202347628},
+  archiveprefix = {arXiv},
+  eprint        = {2308.01295},
+  primaryclass  = {astro-ph.GA},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/2024A&A...685A..82E},
+  adsnote       = {Provided by the SAO/NASA Astrophysics Data System},
+  registry_key  = {dustmaps_edenhofer},
+  short         = {Edenhofer et al. (2024)},
+  role          = {3D Galactic dust map (MW extinction preprocessing)},
+}
+
+%% =====================================================================
+%%  Nebular emission
+%% =====================================================================
+
+@ARTICLE{Li_2024a,
+  author        = {{Li}, Yijia and {Leja}, Joel and {Johnson}, Benjamin D. and {Tacchella}, Sandro and {Davies}, Rebecca and {Belli}, Sirio and {Park}, Minjung and {Emami}, Razieh},
+  title         = {{Cue: A Fast and Flexible Photoionization Emulator for Modeling Nebular Emission Powered By Almost Any Ionizing Source}},
+  journal       = {arXiv e-prints},
+  keywords      = {Astrophysics - Astrophysics of Galaxies},
+  year          = 2024,
+  month         = may,
+  eid           = {arXiv:2405.04598},
+  pages         = {arXiv:2405.04598},
+  doi           = {10.48550/arXiv.2405.04598},
+  archiveprefix = {arXiv},
+  eprint        = {2405.04598},
+  primaryclass  = {astro-ph.GA},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/2024arXiv240504598L},
+  adsnote       = {Provided by the SAO/NASA Astrophysics Data System},
+  registry_key  = {cue},
+  short         = {Li et al. (2024)},
+  role          = {Nebular emission-line emulator},
+  upstream_code = {yi-jia-li/cue},
+}
+
+%% =====================================================================
+%%  Intergalactic medium
+%% =====================================================================
+
+@ARTICLE{Inoue_2014,
+  author        = {{Inoue}, Akio K. and {Shimizu}, Ikkoh and {Iwata}, Ikuru and {Tanaka}, Masayuki},
+  title         = {{An updated analytic model for attenuation by the intergalactic medium}},
+  journal       = {\mnras},
+  keywords      = {galaxies: high-redshift, intergalactic medium, cosmology: observations},
+  year          = 2014,
+  month         = aug,
+  volume        = {442},
+  number        = {2},
+  pages         = {1805-1820},
+  doi           = {10.1093/mnras/stu936},
+  archiveprefix = {arXiv},
+  eprint        = {1402.0677},
+  primaryclass  = {astro-ph.CO},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/2014MNRAS.442.1805I},
+  adsnote       = {Provided by the SAO/NASA Astrophysics Data System},
+  registry_key  = {inoue2014},
+  short         = {Inoue et al. (2014)},
+  role          = {IGM Lyman series attenuation},
+}
+
+@ARTICLE{Madau_1995,
+  author        = {{Madau}, Piero},
+  title         = {{Radiative Transfer in a Clumpy Universe: The Colors of High-Redshift Galaxies}},
+  journal       = {\apj},
+  keywords      = {Cosmology, Galactic Evolution, Radiative Transfer, Red Shift},
+  year          = 1995,
+  month         = mar,
+  volume        = {441},
+  pages         = {18},
+  doi           = {10.1086/175332},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/1995ApJ...441...18M},
+  adsnote       = {Provided by the SAO/NASA Astrophysics Data System},
+  registry_key  = {madau1995},
+  short         = {Madau (1995)},
+  role          = {IGM attenuation (legacy)},
+}
+
+%% =====================================================================
+%%  Inference infrastructure
+%% =====================================================================
+
+@article{Edenhofer_2024,
+  author        = {{Edenhofer}, Gordian and {Frank}, Philipp and {Roth}, Jakob and {Leike}, Reimar H. and {Guerdi}, Massin and {Scheel-Platz}, Lukas I. and {Guardiani}, Matteo and {Eberle}, Vincent and {Westerkamp}, Margret and {En{\ss}lin}, Torsten A.},
+  title         = {{Re-Envisioning Numerical Information Field Theory (NIFTy.re): A Library for Gaussian Processes and Variational Inference}},
+  journal       = {Journal of Open Source Software},
+  year          = 2024,
+  archiveprefix = {arXiv},
+  eprint        = {2402.16683},
+  primaryclass  = {astro-ph.IM},
+  adsurl        = {https://arxiv.org/abs/2402.16683},
+  adsnote       = {Preprint},
+  registry_key  = {nifty},
+  short         = {Edenhofer et al. (2024)},
+  role          = {Variational inference engine (NIFTy.re / geoVI backend)},
+  upstream_code = {NIFTy-PPL/NIFTy},
+}
+
+@article{Ensslin_2019,
+  author        = {{En{\ss}lin}, Torsten A.},
+  title         = {{Information field theory}},
+  journal       = {Annalen der Physik},
+  year          = 2019,
+  volume        = {531},
+  number        = {3},
+  pages         = {1800127},
+  doi           = {10.1002/andp.201800127},
+  archiveprefix = {arXiv},
+  eprint        = {1804.03350},
+  primaryclass  = {astro-ph.IM},
+  registry_key  = {ift},
+  short         = {En{\ss}lin (2019)},
+  role          = {Information Field Theory (theoretical foundation for IFT priors)},
+}
+
+@misc{Jamesbradbury_2018,
+  author        = {James Bradbury and Roy Frostig and Peter Hawkins and Matthew James Johnson and Chris Leary and Dougal Maclaurin and George Necula and Adam Paszke and Jake Vander{P}las and Skye Wanderman-{M}ilne and Qiao Zhang},
+  title         = {{JAX}: composable transformations of {P}ython+{N}um{P}y programs},
+  url           = {http://github.com/jax-ml/jax},
+  version       = {0.3.13},
+  year          = 2018,
+  registry_key  = {jax},
+  short         = {Bradbury et al. (2018)},
+  role          = {Autodiff framework and XLA compiler integration},
+  upstream_code = {jax-ml/jax},
+}
+
+@article{Cabezas_2024,
+  author        = {{Cabezas}, Alberto and {Corenflos}, Adrien and {Lao}, Junpeng and {Louf}, R{\'e}mi and {Carnec}, Antoine and {Chaudhari}, Kaustubh and {Cohn-Gordon}, Reuben and {Coullon}, Jeremie and {Deng}, Wei and {Duffield}, Sam and others},
+  title         = {{BlackJAX: composable Bayesian inference in JAX}},
+  journal       = {arXiv preprint arXiv:2402.10797},
+  year          = 2024,
+  archiveprefix = {arXiv},
+  eprint        = {2402.10797},
+  registry_key  = {blackjax},
+  short         = {Cabezas et al. (2024)},
+  role          = {MCMC inference (NUTS sampler)},
+  upstream_code = {blackjax-devs/blackjax},
+}
+
+%% =====================================================================
+%%  Reference SED-fitting frameworks (for comparison and porting credit)
+%% =====================================================================
+
+@article{Johnson_2021b,
+  author        = {{Johnson}, Benjamin D. and {Leja}, Joel and {Conroy}, Charlie and {Speagle}, Joshua S.},
+  title         = {{Stellar Population Inference with Prospector}},
+  journal       = {\apjs},
+  keywords      = {Galaxy evolution, Spectral energy distribution, Astronomy data modeling},
+  year          = 2021,
+  month         = jun,
+  volume        = {254},
+  number        = {2},
+  eid           = {22},
+  pages         = {22},
+  doi           = {10.3847/1538-4365/abef67},
+  archiveprefix = {arXiv},
+  eprint        = {2012.01426},
+  primaryclass  = {astro-ph.GA},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/2021ApJS..254...22J},
+  adsnote       = {Provided by the SAO/NASA Astrophysics Data System},
+  registry_key  = {prospector},
+  short         = {Johnson et al. (2021)},
+  role          = {Reference Bayesian SED inference framework},
+  upstream_code = {bd-j/prospector},
+}
+
+@article{Carnall_2018,
+  author        = {{Carnall}, A.~C. and {McLure}, R.~J. and {Dunlop}, J.~S. and {Dav{\'e}}, R.},
+  title         = {{Inferring the star formation histories of massive quiescent galaxies with BAGPIPES: evidence for multiple quenching mechanisms}},
+  journal       = {\mnras},
+  keywords      = {methods: statistical, galaxies: evolution, galaxies: star formation},
+  year          = 2018,
+  month         = nov,
+  volume        = {480},
+  number        = {4},
+  pages         = {4379-4401},
+  doi           = {10.1093/mnras/sty2169},
+  archiveprefix = {arXiv},
+  eprint        = {1712.04452},
+  primaryclass  = {astro-ph.GA},
+  adsurl        = {https://ui.adsabs.harvard.edu/abs/2018MNRAS.480.4379C},
+  adsnote       = {Provided by the SAO/NASA Astrophysics Data System},
+  registry_key  = {bagpipes},
+  short         = {Carnall et al. (2018)},
+  role          = {Reference SED fitting framework (BAGPIPES)},
+  upstream_code = {ACCarnall/bagpipes},
+}

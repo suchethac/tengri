@@ -154,6 +154,49 @@ def plot_sfh(
     return ax
 
 
+def add_sfh_inset(ax, t_gyr, sfr, inset_range_myr=200, **kwargs):
+    """Add a zoom inset showing recent SFH (last 200 Myr by default).
+
+    Parameters
+    ----------
+    ax : matplotlib Axes
+        Parent axes to attach the inset to.
+    t_gyr : array_like
+        Lookback time in Gyr. [Gyr]
+    sfr : array_like
+        Star formation rate. [Msun/yr]
+    inset_range_myr : float, optional
+        Maximum lookback time to show in the inset. [Myr] Default 200 Myr.
+    **kwargs
+        Passed to ax_in.plot() (e.g., ``color``, ``lw``).
+
+    Returns
+    -------
+    ax_in : matplotlib Axes
+        The inset axes (for further customization).
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from tengri import add_sfh_inset
+
+        ax_in = add_sfh_inset(ax, t_gyr, sfr_median, color="blue", lw=1.5)
+    """
+    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+
+    ax_in = inset_axes(ax, width="35%", height="40%", loc="upper right", borderpad=1.5)
+    t_myr = np.asarray(t_gyr) * 1e3
+    mask = t_myr <= inset_range_myr
+    if mask.sum() > 2:
+        ax_in.plot(t_myr[mask], np.asarray(sfr)[mask], **kwargs)
+    ax_in.set_xlim(0, inset_range_myr)
+    ax_in.set_xlabel("Lookback (Myr)", fontsize=6)
+    ax_in.set_ylabel("SFR", fontsize=6)
+    ax_in.tick_params(labelsize=5)
+    return ax_in
+
+
 def plot_sfh_comparison(model, results, true_params=None, methods=None, figsize=(15, 4)):
     """Side-by-side SFH recovery for multiple methods.
 

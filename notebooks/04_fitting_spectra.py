@@ -16,28 +16,20 @@
 # %% [markdown]
 # # Fitting Spectra
 #
-# **Why spectra matter.** A 200-pixel spectrum constrains ~40× more information
-# than 5-band photometry, breaking the age–dust–metallicity degeneracy that
-# plagues broadband fits. Absorption features (Balmer jump, metal indices) and
-# Balmer decrement isolate dust, age, and Z separately — something photometry
-# alone cannot do. This notebook shows you end-to-end spectroscopic SED fitting
-# with tengri: mock generation, parametric and stochastic SFH recovery,
-# photometry-vs-spectroscopy comparison, SNR sensitivity, and redshift effects.
+# **What you'll learn:**
+# - Spectroscopy breaks age-dust-metallicity degeneracy (40× more information than 5-band photometry)
+# - Absorption features (Balmer jump, metal indices) isolate physical parameters
+# - SNR sensitivity and redshift effects on parameter recovery
+# - SFH recovery at 10–100 Myr timescales
 #
-# **What you'll see:** posterior corner plots with tight constraints on age,
-# dust, and metallicity; residuals that reveal systematics; SFH recovery at
-# 10–100 Myr timescales; and why stochastic burstiness matters for young systems.
+# **Prerequisites:** [`00_quickstart.py`](00_quickstart.py), [`03_fitting_photometry.py`](03_fitting_photometry.py).
+# **Next:** [`05_joint_photometry_spectroscopy.py`](05_joint_photometry_spectroscopy.py) for joint analysis.
 #
-# **Why tengri.** The same differentiable SED model handles photometry,
-# spectroscopy, and multi-wavelength data jointly — avoiding code duplication
-# and drift between fitting paths. See [`07_fitting_photometry.py`](07_fitting_photometry.py)
-# for photometry-only, [`14_joint_photometry_spectroscopy.py`](14_joint_photometry_spectroscopy.py)
-# for joint fitting, and [`11_population.py`](11_population.py) for hierarchical stacks.
+# ---
 #
-# **Prereqs:** [`00_quickstart.py`](00_quickstart.py) (HMC + NSS basics),
-# [`07_fitting_photometry.py`](07_fitting_photometry.py) (photometry setup).
-# **Continue with:** [`09_degeneracies.py`](09_degeneracies.py) (Fisher analysis),
-# [`11_population.py`](11_population.py) (hierarchical inference).
+# A 200-pixel spectrum constrains ~40× more information than 5-band photometry.
+# Absorption features and Balmer decrement isolate dust, age, and Z separately—something photometry alone cannot do.
+# End-to-end spectroscopic fitting: mock generation → NUTS inference → diagnostics → comparison with photometry-only.
 
 # %%
 import os
@@ -249,7 +241,7 @@ for feat_name, feat_wave in SPECTRAL_FEATURES.items():
             w_obs,
             ax.get_ylim()[1] * 0.92,
             feat_name,
-            fontsize=6,
+            fontsize=9,
             ha="center",
             va="top",
             rotation=90,
@@ -258,7 +250,7 @@ for feat_name, feat_wave in SPECTRAL_FEATURES.items():
 
 ax.set_xlabel("Observed wavelength [Å]")
 ax.set_ylabel("Flux density")
-ax.legend(fontsize=8)
+ax.legend(fontsize=10)
 ax.set_title("Mock Galaxy Spectrum at z = 0.1")
 fig.tight_layout()
 # plt.savefig(os.path.join(FIGDIR, "fig01_mock_spectrum.png"), dpi=150, bbox_inches="tight")
@@ -275,23 +267,22 @@ t_compile = time.perf_counter() - t0_compile
 result_map = fitter_spec.run("map", n_steps=500, verbose=False)
 
 t0 = time.perf_counter()
-result_geovi_spec = fitter_spec.run(
-    "vi",
-    n_iterations=8,
-    n_samples=4,
-    n_posterior_samples=500,
+result_mcmc_spec = fitter_spec.run(
+    "mcmc_nuts",
+    n_warmup=400,
+    n_samples=800,
     verbose=False,
 )
 t_run = time.perf_counter() - t0
 print(f"XLA compile: {t_compile:.1f}s (one-time, cached on disk)")
-print(f"vi (geoVI): {t_run:.1f}s <- runtime per galaxy")
+print(f"mcmc_nuts: {t_run:.1f}s <- runtime per galaxy")
 
 # %%
 # --- FIGURE 2: Spectral fit + residuals ---
 spec_draws = []
 for i in range(50):
-    idx = i % len(result_geovi_spec.samples[spec_param.free_params[0]])
-    draw = {k: v[idx] for k, v in result_geovi_spec.samples.items()}
+    idx = i % len(result_mcmc_spec.samples[spec_param.free_params[0]])
+    draw = {k: v[idx] for k, v in result_mcmc_spec.samples.items()}
     spec_draws.append(np.array(model_param.predict_spectrum(draw)))
 spec_draws = np.array(spec_draws)
 spec_med = np.median(spec_draws, axis=0)
@@ -310,10 +301,10 @@ ax_f.errorbar(
     alpha=0.4,
 )
 for s in spec_draws[:50]:
-    ax_f.plot(w, s, color=COLORS["vi"], alpha=0.03, lw=0.5)
-ax_f.plot(w, spec_med, color=COLORS["vi"], lw=1.5, label="Posterior median")
+    ax_f.plot(w, s, color=COLORS["mcmc_nuts"], alpha=0.03, lw=0.5)
+ax_f.plot(w, spec_med, color=COLORS["mcmc_nuts"], lw=1.5, label="Posterior median")
 ax_f.plot(w, np.array(mock_spec.flux_true), color=COLORS["truth"], lw=1, ls="--", label="Truth")
-ax_f.legend(fontsize=8)
+ax_f.legend(fontsize=10)
 ax_f.set_ylabel("Flux density")
 
 res = (np.array(mock_spec.flux_obs) - spec_med) / np.array(mock_spec.noise)
@@ -336,12 +327,12 @@ plt.show()
 fig, ax = plt.subplots(figsize=(8, 4))
 plot_sfh(
     model_param,
-    result_geovi_spec,
+    result_mcmc_spec,
     true_params=true_param,
     ax=ax,
-    color=COLORS["vi"],
+    color=COLORS["mcmc_nuts"],
     label="Spectroscopy",
-    method="geoVI",
+    method="NUTS",
 )
 ax.set_title("SFH Recovery from Spectroscopy")
 # 200 Myr inset
@@ -352,8 +343,8 @@ inset = ax.inset_axes([0.6, 0.6, 0.35, 0.35])
 mask_200 = t_gyr_p < 0.2
 if hasattr(t_gyr_p, "__len__") and np.any(mask_200):
     inset.plot(t_gyr_p[mask_200] * 1e3, sfr_p[mask_200], color=COLORS["truth"], lw=1)
-    inset.set_xlabel("Lookback [Myr]", fontsize=6)
-    inset.set_ylabel("SFR", fontsize=6)
+    inset.set_xlabel("Lookback [Myr]", fontsize=9)
+    inset.set_ylabel("SFR", fontsize=9)
     inset.tick_params(labelsize=5)
     inset.set_xlim(0, 200)
 fig.tight_layout()
@@ -362,9 +353,9 @@ plt.show()
 
 # %%
 # --- FIGURE 4: Corner plot ---
-fig = safe_corner(result_geovi_spec, truths=true_param)
+fig = safe_corner(result_mcmc_spec, truths=true_param)
 if fig is not None:
-    fig.suptitle("Parametric Posterior — Spectroscopy", y=1.02)
+    fig.suptitle("Parametric Posterior — Spectroscopy (NUTS)", y=1.02)
     # plt.savefig(os.path.join(FIGDIR, "fig04_corner_spec.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
@@ -394,17 +385,17 @@ if RUN_EXPENSIVE:
     )
     print(f"Laplace:    {result_laplace.wall_time_s:.1f}s")
     print(f"Pathfinder: {result_pathfinder.wall_time_s:.1f}s")
-    print(f"geoVI:      {result_geovi_spec.wall_time_s:.1f}s")
+    print(f"NUTS:       {result_mcmc_spec.wall_time_s:.1f}s")
 
-    # --- FIGURE 4b: Corner — Laplace vs Pathfinder vs geoVI ---
+    # --- FIGURE 4b: Corner — Laplace vs Pathfinder vs NUTS ---
     fig = plot_corner_comparison(
-        [result_laplace, result_pathfinder, result_geovi_spec],
-        labels=["Laplace", "Pathfinder", "geoVI"],
-        colors=[COLORS["laplace"], COLORS["pathfinder"], COLORS["vi"]],
+        [result_laplace, result_pathfinder, result_mcmc_spec],
+        labels=["Laplace", "Pathfinder", "NUTS"],
+        colors=[COLORS["laplace"], COLORS["pathfinder"], COLORS["mcmc_nuts"]],
         truths=true_param,
     )
     if fig is not None:
-        fig.suptitle("Laplace vs Pathfinder vs geoVI (Spectroscopy)", y=1.02)
+        fig.suptitle("Laplace vs Pathfinder vs NUTS (Spectroscopy)", y=1.02)
     plt.show()
 
     # --- FIGURE 4c: 1D marginals comparison ---
@@ -417,7 +408,7 @@ if RUN_EXPENSIVE:
     for ax, pname in zip(_axes, _free):
         tv = float(true_param[pname])
         for label, res, color, ls in [
-            ("geoVI", result_geovi_spec, COLORS["vi"], "-"),
+            ("NUTS", result_mcmc_spec, COLORS["mcmc_nuts"], "-"),
             ("Laplace", result_laplace, COLORS["laplace"], "--"),
             ("Pathfinder", result_pathfinder, COLORS["pathfinder"], "-."),
         ]:
@@ -432,12 +423,12 @@ if RUN_EXPENSIVE:
                 label=label,
             )
         ax.axvline(tv, color=COLORS["truth"], lw=1.5, ls=":")
-        ax.set_xlabel(pname.replace("sfh_tsnorm_", ""), fontsize=8)
+        ax.set_xlabel(pname.replace("sfh_tsnorm_", ""), fontsize=10)
         ax.set_yticks([])
     for ax in _axes[len(_free) :]:
         ax.set_visible(False)
-    _axes[0].legend(fontsize=7, loc="upper right")
-    fig.suptitle("1D Marginals: Laplace vs Pathfinder vs geoVI", fontsize=11)
+    _axes[0].legend(fontsize=10, loc="upper right")
+    fig.suptitle("1D Marginals: Laplace vs Pathfinder vs NUTS", fontsize=11)
     fig.tight_layout()
     plt.show()
 
@@ -445,7 +436,7 @@ if RUN_EXPENSIVE:
     print(
         convergence_table(
             {
-                "geoVI": result_geovi_spec,
+                "NUTS": result_mcmc_spec,
                 "Laplace": result_laplace,
                 "Pathfinder": result_pathfinder,
             },
@@ -459,7 +450,7 @@ print(f"\n{'Parameter':<32s} {'True':>8s} {'Median':>8s} {'16%':>8s} {'84%':>8s}
 print("-" * 76)
 for name in spec_param.free_params:
     truth = float(true_param[name])
-    lo, med, hi = np.percentile(result_geovi_spec.samples[name], [16, 50, 84])
+    lo, med, hi = np.percentile(result_mcmc_spec.samples[name], [16, 50, 84])
     covered = "ok" if lo <= truth <= hi else "MISS"
     print(f"  {name:<30s} {truth:8.3f} {med:8.3f} {lo:8.3f} {hi:8.3f} {covered:>6s}")
 
@@ -518,16 +509,15 @@ if RUN_EXPENSIVE:
 
     t0 = time.perf_counter()
     result_stoch_spec = fitter_stoch_spec.run(
-        "vi",
-        n_iterations=8,
-        n_samples=4,
-        n_posterior_samples=500,
+        "mcmc_nuts",
+        n_warmup=400,
+        n_samples=800,
         verbose=False,
     )
     t_run = time.perf_counter() - t0
     print(f"Stochastic spectroscopic fit (D = {spec_stoch.n_free}):")
     print(f"  XLA compile: {t_compile:.1f}s (one-time, cached on disk)")
-    print(f"  vi (geoVI): {t_run:.1f}s <- runtime per galaxy")
+    print(f"  mcmc_nuts: {t_run:.1f}s <- runtime per galaxy")
 
     # --- FIGURE 5: Bursty SFH recovery from spectroscopy ---
     fig, ax = plt.subplots(figsize=(8, 4))
@@ -536,9 +526,9 @@ if RUN_EXPENSIVE:
         result_stoch_spec,
         true_params=true_stoch,
         ax=ax,
-        color=COLORS["vi"],
+        color=COLORS["mcmc_nuts"],
         label="Spectroscopy",
-        method="geoVI",
+        method="NUTS",
         show_mean_sfh=True,
     )
     ax.set_title(f"Bursty SFH Recovery from Spectroscopy (D = {spec_stoch.n_free})")
@@ -550,8 +540,8 @@ if RUN_EXPENSIVE:
     mask_200 = t_gyr_s < 0.2
     if hasattr(t_gyr_s, "__len__") and np.any(mask_200):
         inset.plot(t_gyr_s[mask_200] * 1e3, sfr_full_s[mask_200], color=COLORS["truth"], lw=1)
-        inset.set_xlabel("Lookback [Myr]", fontsize=6)
-        inset.set_ylabel("SFR", fontsize=6)
+        inset.set_xlabel("Lookback [Myr]", fontsize=9)
+        inset.set_ylabel("SFR", fontsize=9)
         inset.tick_params(labelsize=5)
         inset.set_xlim(0, 200)
     fig.tight_layout()
@@ -569,10 +559,9 @@ if RUN_EXPENSIVE:
     fitter_stoch_phot = Fitter(model_stoch_phot, mock_phot_s.flux_obs, mock_phot_s.noise)
     _ = fitter_stoch_phot.run("map", n_steps=500, verbose=False)
     result_stoch_phot = fitter_stoch_phot.run(
-        "vi",
-        n_iterations=8,
-        n_samples=4,
-        n_posterior_samples=500,
+        "mcmc_nuts",
+        n_warmup=400,
+        n_samples=800,
         verbose=False,
     )
 
@@ -580,23 +569,23 @@ if RUN_EXPENSIVE:
     fig = plot_corner_comparison(
         [result_stoch_phot, result_stoch_spec],
         labels=["Photometry (5 bands)", "Spectroscopy (200 px)"],
-        colors=[COLORS["rt"], COLORS["vi"]],
+        colors=[COLORS["mcmc_nuts"], COLORS["mcmc_nuts"]],
         truths=true_stoch,
         params=phys_params,
     )
     if fig is not None:
-        fig.suptitle("Photometry vs Spectroscopy — Physical Parameters", y=1.02)
+        fig.suptitle("Photometry vs Spectroscopy — Physical Parameters (NUTS)", y=1.02)
     plt.show()
 
     fig = plot_corner_comparison(
         [result_stoch_phot, result_stoch_spec],
         labels=["Photometry", "Spectroscopy"],
-        colors=[COLORS["rt"], COLORS["vi"]],
+        colors=[COLORS["mcmc_nuts"], COLORS["mcmc_nuts"]],
         truths=true_stoch,
         params=psd_params,
     )
     if fig is not None:
-        fig.suptitle("PSD Recovery: Spectroscopy Breaks the σ–τ Degeneracy", y=1.02)
+        fig.suptitle("PSD Recovery: Spectroscopy Breaks the σ–τ Degeneracy (NUTS)", y=1.02)
     plt.show()
 
     # CI width comparison table
@@ -623,10 +612,9 @@ if RUN_EXPENSIVE:
         fitter_snr = Fitter(model_param_spec, mock_snr.flux_obs, mock_snr.noise)
         _ = fitter_snr.run("map", n_steps=500, verbose=False)
         res_snr = fitter_snr.run(
-            "vi",
-            n_iterations=8,
-            n_samples=4,
-            n_posterior_samples=400,
+            "mcmc_nuts",
+            n_warmup=400,
+            n_samples=800,
             verbose=False,
         )
         snr_results[snr] = res_snr
@@ -640,12 +628,12 @@ if RUN_EXPENSIVE:
             snr_results[snr],
             true_params=true_param,
             ax=ax,
-            color=COLORS["vi"],
+            color=COLORS["mcmc_nuts"],
             label=f"SNR = {snr}",
-            method="geoVI",
+            method="NUTS",
         )
         ax.set_title(f"SNR = {snr}")
-    fig.suptitle("SFH Recovery vs Signal-to-Noise Ratio", fontsize=11)
+    fig.suptitle("SFH Recovery vs Signal-to-Noise Ratio (NUTS)", fontsize=11)
     fig.tight_layout()
     plt.show()
 
@@ -681,7 +669,7 @@ if RUN_EXPENSIVE:
                     color="grey",
                 )
 
-        ax.axvspan(wlo, whi, alpha=0.1, color=COLORS["vi"])
+        ax.axvspan(wlo, whi, alpha=0.1, color=COLORS["mcmc_nuts"])
         ax.set_xlabel("Observed wavelength [Å]")
         ax.set_title(f"z = {z} — {survey}", fontsize=9)
         ax.set_xlim(wlo * 0.9, whi * 1.1)

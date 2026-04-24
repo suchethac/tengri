@@ -14,28 +14,24 @@
 # ---
 
 # %% [markdown]
-# # Quickstart: Stochastic Star Formation Histories
+# # Paper II Preview: Stochastic Star Formation Histories
 #
-# _quickstart_stochastic
+# Scale from smooth 7-D to stochastic 137-D SFH inference using VI and MCMC samplers.
 #
-# You've seen the smooth star formation history (SFH) story in [`00_quickstart.py`](00_quickstart.py)
-# and learned the PSD theory in [`02_sfh_gallery.py`](02_sfh_gallery.py). Now turn on **tengri's**
-# **distinctive feature: the Gaussian process (GP) stochastic field** — and watch bursts emerge from noisy data.
+# ## What you'll learn
 #
-# Same mock, same inference machinery — but 137 dimensions instead of 7. Standard MCMC (NUTS) becomes
-# glacial; tengri handles it in seconds via **vi (NIFTy geoVI)** and validates with the **Ray Tracing Sampler**
-# (exact MCMC tolerant of gradient noise). This is the paper §4 centerpiece: differentiable physics
-# at scale.
+# - **Gaussian process (GP) stochastic field** — add burstiness as traceable random field atop smooth mean
+# - **137-dimensional inference** — scale from 7 to 64-D GP + 7 physical parameters
+# - **Variational inference (VI)** — why geoVI dominates for high-D; seconds instead of hours
+# - **Ray Tracing Sampler** — exact MCMC tolerant of gradient noise for validation
+# - **SFR fluctuations at 10–100 Myr** — recover feedback-driven burstiness invisible to parametric models
 #
-# **What you'll see:** SFR fluctuations at ~10–100 Myr timescales recovered from a single spectrum,
-# revealing feedback-driven burstiness invisible to parametric models.
-
-# %% [markdown]
-# **Spine location:** `notebooks/16_quickstart_stochastic.py` (not `notebook_code/`).
+# ## Prerequisites
 #
-# **Prereqs:** [`00_quickstart.py`](00_quickstart.py) (smooth 7D baseline) and [`02_sfh_gallery.py`](02_sfh_gallery.py) (PSD theory).
+# [`00_quickstart.py`](00_quickstart.py) (smooth 7-D baseline). For PSD priors and
+# burstiness, see `examples/sfh/` gallery scripts (`plot_psd_*.py`).
 #
-# **Continue with:** [`12_extending_tengri.py`](12_extending_tengri.py) (custom inference engines), or the full gallery spine.
+# **Paper II preview:** Advanced optional material; first-time users should finish Paper I spine first.
 
 # %%
 import os
@@ -243,15 +239,15 @@ ax_sfh.plot(t_gyr, sfr_mean, color=COLORS["sfh_mean"], lw=1, ls="--", label="Mea
 ax_sfh.set_xlabel("Lookback time [Gyr]")
 ax_sfh.set_ylabel(r"SFR [$M_\odot\,{\rm yr}^{-1}$]")
 ax_sfh.set_xlim(0, 13.5)
-ax_sfh.legend(fontsize=8)
+ax_sfh.legend(fontsize=10)
 ax_sfh.set_title("True Bursty SFH (σ_PS = 2.0, τ_PS = 20 Myr)")
 # 200 Myr inset to highlight burst structure
 inset = ax_sfh.inset_axes([0.55, 0.55, 0.4, 0.4])
 mask_200 = t_gyr < 0.2
 inset.plot(t_gyr[mask_200] * 1e3, sfr_full[mask_200], color=COLORS["truth"], lw=1)
 inset.plot(t_gyr[mask_200] * 1e3, sfr_mean[mask_200], color=COLORS["sfh_mean"], lw=0.8, ls="--")
-inset.set_xlabel("Lookback [Myr]", fontsize=6)
-inset.set_ylabel("SFR", fontsize=6)
+inset.set_xlabel("Lookback [Myr]", fontsize=9)
+inset.set_ylabel("SFR", fontsize=9)
 inset.tick_params(labelsize=5)
 inset.set_xlim(0, 200)
 
@@ -341,8 +337,8 @@ if hasattr(t_gyr_s, "__len__") and np.any(mask_200):
         inset.fill_between(t_inset, lo, hi, color=COLORS["vi"], alpha=0.3, lw=0)
         inset.plot(t_inset, median, color=COLORS["vi"], lw=1.2, label="Posterior median")
     inset.plot(t_inset, sfr_true_s[mask_200], color=COLORS["truth"], lw=1.5, label="Truth")
-    inset.set_xlabel("Lookback [Myr]", fontsize=6)
-    inset.set_ylabel("SFR", fontsize=6)
+    inset.set_xlabel("Lookback [Myr]", fontsize=9)
+    inset.set_ylabel("SFR", fontsize=9)
     inset.tick_params(labelsize=5)
     inset.set_xlim(0, 200)
     inset.legend(fontsize=5, loc="upper right")
@@ -373,7 +369,7 @@ for s in spec_samples_s[:50]:
     ax_fit.plot(wave_np, s, color=COLORS["vi"], alpha=0.03, lw=0.5)
 ax_fit.plot(wave_np, spec_median_s, color=COLORS["vi"], lw=1.5, label="vi (geoVI) median")
 ax_fit.plot(wave_np, true_s, color=COLORS["truth"], lw=1, ls="--", label="Truth")
-ax_fit.legend(fontsize=8)
+ax_fit.legend(fontsize=10)
 ax_fit.set_ylabel("Flux density")
 
 residuals_s = (obs_s - spec_median_s) / noise_s
@@ -505,8 +501,8 @@ if RUN_EXPENSIVE:
             lw=2.0,
             label="Truth",
         )
-        inset.set_xlabel("Lookback [Myr]", fontsize=6)
-        inset.set_ylabel("SFR", fontsize=6)
+        inset.set_xlabel("Lookback [Myr]", fontsize=9)
+        inset.set_ylabel("SFR", fontsize=9)
         inset.tick_params(labelsize=5)
         inset.set_xlim(0, 200)
         inset.legend(fontsize=5, loc="upper right")
@@ -549,9 +545,19 @@ print("Validation via exact MCMC (Ray Tracing) confirms reliability.")
 # ## What's Next
 #
 # - **Smooth SFH baseline:** [`00_quickstart.py`](00_quickstart.py) — the 7-parameter story you built from.
-# - **PSD theory and priors:** [`02_sfh_gallery.py`](02_sfh_gallery.py) — mathematical foundations.
-# - **Extending tengri:** [`12_extending_tengri.py`](12_extending_tengri.py) — custom inference and SFH forms.
+# - **PSD theory and priors:** `examples/sfh/plot_psd_*.py` — mathematical foundations.
+# - **Extending tengri:** [`13_extending_tengri.py`](13_extending_tengri.py) — custom inference and SFH forms.
 # - **Full gallery spine:** `03` (dust) → `04` (nebular) → `05` (AGN) → ... → `15` (emission lines).
 #
-# The stochastic model is the paper's centerpiece. You now understand how differentiable physics
+# The stochastic model is Paper II's centerpiece. You now understand how differentiable physics
 # enables exact inference in dimensions where traditional samplers fail.
+#
+# ## What you learned
+#
+# - Stochastic SFH adds 64-D GP field encoding burst morphology (timescale tau_PS, amplitude sigma_PS)
+# - VI scaling: 137-D fits in seconds; NUTS would run for hours
+# - Ray Tracing Sampler validates VI posteriors without full sampling cost
+# - Individual galaxies cannot constrain tau_PS; population hierarchical priors solve this (see 11_population.py)
+#
+# **Next:** [`15_vi_inference.py`](15_vi_inference.py) (VI scaling theory and benchmarks) or
+# [`16_simulation_interface.py`](16_simulation_interface.py) (forward-modeling simulation outputs).

@@ -14,24 +14,22 @@
 # ---
 
 # %% [markdown]
-# # Population Inference
+# # Population Inference: Shared Hyperpriors on Burstiness
 #
-# Individual galaxies weakly constrain the PSD timescale τ_PS. A population
-# sharing the same burstiness physics can break this degeneracy. **No other
-# SED-fitting code does this.**
+# Break the PSD timescale degeneracy by pooling N galaxies under shared hyperpriors.
 #
-# **The hierarchical model**: shared hyperparameters ϕ = (σ_PS, τ_PS) govern
-# the burstiness prior for every galaxy. Per-galaxy latent variables include
-# the GP field ξ_i (64 dims) and physical parameters θ_i (7 dims). Hierarchical
-# inference (MGVI) pools information about the shared PSD hyperparameters,
-# dramatically tightening τ_PS as N grows.
+# ## What you'll learn
 #
-# **What you'll see**: shared posterior on σ_PS and τ_PS narrows from N=5 to
-# N=30 galaxies as 1/√N — the Bayesian central-limit theorem. Spectroscopy
-# breaks the σ–τ degeneracy that photometry alone cannot.
+# - **Hierarchical Bayesian model** — shared hyperparameters ϕ = (σ_PS, τ_PS) across galaxy sample
+# - **Central-limit theorem scaling** — posterior width narrows as 1/√N
+# - **Multi-modal VI (MGVI)** — scalable inference for 100+ galaxies × 64-D GP fields
+# - **Spectroscopy breaks degeneracies** — how data breaks the σ–τ degeneracy photometry alone cannot resolve
 #
-# **Prerequisites**: [`02_sfh_gallery.py`](02_sfh_gallery.py) for PSD theory;
-# [`08_fitting_spectra.py`](08_fitting_spectra.py) for single-galaxy fitting.
+# ## Prerequisites
+#
+# [`14_stochastic_sfh.py`](14_stochastic_sfh.py) (PSD theory and burstiness) and
+# [`04_fitting_spectra.py`](04_fitting_spectra.py) (single-galaxy spectroscopic fitting).
+# Advanced topic; first understand Paper I single-galaxy workflow.
 
 # %%
 import os
@@ -369,8 +367,8 @@ ax_tau.axvline(TRUE_TAU, color=COLORS["truth"], lw=2, ls="--", label="Truth")
 ax_sig.set_xlabel(r"$\sigma_{\rm PS}$")
 ax_tau.set_xlabel(r"$\tau_{\rm PS}$ [Myr]")
 ax_sig.set_ylabel("Density")
-ax_sig.legend(fontsize=7)
-ax_tau.legend(fontsize=7)
+ax_sig.legend(fontsize=10)
+ax_tau.legend(fontsize=10)
 ax_sig.set_title("Individual: σ roughly constrained")
 ax_tau.set_title("Individual: τ nearly unconstrained")
 fig.tight_layout()
@@ -473,8 +471,8 @@ if result_hier_spec is not None:
     ax_sig.set_xlabel(r"$\sigma_{\rm PS}$")
     ax_tau.set_xlabel(r"$\tau_{\rm PS}$ [Myr]" if tau_spec_is_myr else "PSD log-log avg slope")
     ax_sig.set_ylabel("Density")
-    ax_sig.legend(fontsize=8)
-    ax_tau.legend(fontsize=8)
+    ax_sig.legend(fontsize=10)
+    ax_tau.legend(fontsize=10)
     ax_sig.set_title(f"Individual (N=1) vs Hierarchical (N={N_GAL}): σ")
     ax_tau.set_title(
         f"Individual (N=1) vs Hierarchical (N={N_GAL}): "
@@ -533,7 +531,7 @@ if result_hier_spec is not None:
         if idx % 2 == 0:
             ax.set_ylabel(r"$f_\nu$")
         if idx == 0:
-            ax.legend(fontsize=8)
+            ax.legend(fontsize=10)
 
     fig.suptitle("Posterior predictive spectra (hierarchical MGVI)", fontsize=11)
     fig.tight_layout()
@@ -750,7 +748,7 @@ for i, ax in enumerate(axes.flat):
         ax.set_ylabel(r"SFR [$M_\odot\,{\rm yr}^{-1}$]")
     ax.set_title(f"Galaxy {i}", fontsize=10)
     if i == 0:
-        ax.legend(fontsize=8)
+        ax.legend(fontsize=10)
 
 fig.suptitle(
     "SFH recovery from hierarchical fit (photometry by default; spectroscopy if RUN_EXPENSIVE)",
@@ -956,3 +954,13 @@ else:
 # independently, leaving τ_PS unconstrained per galaxy. Here, PopulationFitter
 # turns a population into a hierarchical prior that sharpens both individual-
 # and population-level inference.
+#
+# ## What you learned
+#
+# - Hierarchical Bayesian structure dramatically constrains per-galaxy burstiness (σ_PS, τ_PS)
+# - Population-level inference scales to 100+ galaxies in seconds via MGVI
+# - Spectroscopy breaks σ–τ degeneracies; photometry alone leaves timescale unconstrained
+# - Posterior widths narrow as 1/√N (Bayesian central-limit theorem)
+#
+# **Next:** [`14_stochastic_sfh.py`](14_stochastic_sfh.py) (single-galaxy stochastic SFH) or
+# [`08_sfh_advanced.py`](08_sfh_advanced.py) (composition and chemical evolution).
