@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import time
+import warnings
 from dataclasses import dataclass, field
 
 __all__ = ["PopulationFitter", "PopulationPosterior"]
@@ -259,17 +260,29 @@ class PopulationFitter:
             if n not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr")
         ]
 
-    def run(self, method="vi", *, key=None, **kwargs):
+    def run(self, method="vi_nonlinear_fast", *, key=None, **kwargs):
         """Run hierarchical inference.
 
         Parameters
         ----------
         method : str
-            "vi" — geoVI with CorrelatedFieldMaker for native PSD learning.
-            "vi_linear" — MGVI (faster per iteration, for very large N).
-            "geovi_flat" — flat parameter vector (geovi on unstandardized space).
-            "mcmc_raytrace" — Ray Tracing on flat vector (fast but needs tuning).
-            "mcmc_ess" — Ensemble sampling (EVI, fully JIT-compiled).
+            **NIFTy-backed (CorrelatedFieldMaker, native PSD learning)**
+
+            - ``"vi_nonlinear_fast"`` — geoVI via NIFTy ``optimize_kl`` (default).
+            - ``"vi_nonlinear"`` — geoVI; same runner as fast, kept for API symmetry.
+            - ``"vi_linear_fast"`` — MGVI via NIFTy ``optimize_kl``.
+            - ``"vi_linear"`` — MGVI; same runner as fast, kept for API symmetry.
+
+            **Pure-JAX (lax.while_loop, no NIFTy)**
+
+            - ``"native_vi_linear"`` — MGVI inside ``lax.while_loop``; fastest on CPU,
+              no NIFTy required.
+            - ``"native_vi_nonlinear"`` — geoVI; not yet implemented.
+
+            **MCMC**
+
+            - ``"mcmc_raytrace"`` — Ray Tracing on flat vector.
+            - ``"mcmc_ess"`` — Ensemble sampling (alias for native_vi_linear).
         key : PRNGKey, optional
             Random key for reproducibility. If None, uses PRNGKey(0).
         **kwargs
@@ -300,44 +313,59 @@ class PopulationFitter:
         # Resolve old method names to canonical names, emitting deprecation warnings
         method = resolve_method(method, emit_warning=True)
 
-        # Map canonical names to internal PopulationFitter method names
+        # Hierarchical-specific overrides applied after resolve_method:
+        #   mcmc_ess → native_vi_linear  (ESS is a Fitter-only method)
+        # vi_native / vi_native_linear are already resolved to canonical names by
+        # resolve_method above, so they need no explicit entry in _method_map.
+        _HIERARCHICAL_OVERRIDES = {
+            "mcmc_ess": "native_vi_linear",
+        }
+        method = _HIERARCHICAL_OVERRIDES.get(method, method)
+
+        # 6 canonical VI methods for PopulationFitter (no CFM in this table):
+        #   vi_nonlinear / vi_nonlinear_fast → _run_geovi (standard NIFTy optimize_kl)
+        #   vi_linear / vi_linear_fast       → _run_geovi with linear_resample mode
+        #   native_vi_linear                 → _run_native_vi_linear (pure-JAX MGVI)
+        #   native_vi_nonlinear              → _run_native_vi_nonlinear (pure-JAX geoVI)
+        # vi_nonlinear_fast / vi_linear_fast use the same runner as their non-fast counterparts
+        # because CFM is a different model (different parameter space) and must not be used as
+        # a speed variant.  _run_geovi_cfm stays as a private method callable via "evi_nifty".
         _method_map = {
             "vi": ("geovi", None),
-            "vi_linear": ("mgvi", "linear_resample"),
+            "vi_nonlinear": ("geovi", None),
+            "vi_nonlinear_fast": ("geovi", None),
+            "vi_linear": ("geovi", "linear_resample"),
+            "vi_linear_fast": ("geovi", "linear_resample"),
+            "native_vi_linear": ("native_vi_linear", None),
+            "native_vi_nonlinear": ("native_vi_nonlinear", None),
             "mcmc_raytrace": ("raytrace", None),
-            "mcmc_ess": ("evi", None),
         }
 
         if method not in _method_map:
-            # Handle flat-vector methods (geovi_flat)
-            if method == "geovi_flat":
-                return self._run_geovi(key=key, **kwargs)
-            elif method == "evi":
-                return self._run_evi_jit(key=key, **kwargs)
-            elif method == "evi_nifty":
+            if method == "evi_nifty":
                 return self._run_geovi_cfm(key=key, sample_mode="evi", **kwargs)
             else:
                 raise ValueError(
-                    f"Unknown method: {method}. "
-                    f"Use 'vi', 'vi_linear', 'geovi_flat', or 'mcmc_raytrace'."
+                    f"Unknown method: {method!r}. "
+                    f"Supported: 'vi_nonlinear_fast' (default), 'vi_nonlinear', "
+                    f"'vi_linear_fast', 'vi_linear', 'native_vi_linear', "
+                    f"'native_vi_nonlinear', 'mcmc_raytrace'."
                 )
 
         cfm_method, sample_mode = _method_map[method]
         if cfm_method == "geovi":
-            if sample_mode is None:
-                return self._run_geovi_cfm(key=key, **kwargs)
-            else:
-                return self._run_geovi_cfm(key=key, sample_mode=sample_mode, **kwargs)
-        elif cfm_method == "mgvi":
-            return self._run_geovi_cfm(key=key, sample_mode="linear_resample", **kwargs)
+            extra = {"sample_mode": sample_mode} if sample_mode is not None else {}
+            return self._run_geovi(key=key, **extra, **kwargs)
         elif cfm_method == "raytrace":
             return self._run_raytrace(key=key, **kwargs)
-        elif cfm_method == "evi":
-            return self._run_evi_jit(key=key, **kwargs)
+        elif cfm_method == "native_vi_linear":
+            return self._run_native_vi_linear(key=key, **kwargs)
+        elif cfm_method == "native_vi_nonlinear":
+            return self._run_native_vi_nonlinear(key=key, **kwargs)
         else:
-            raise ValueError(f"Unmapped method: {method}")
+            raise ValueError(f"Unmapped method: {method!r}")
 
-    def _run_evi_jit(
+    def _run_native_vi_nonlinear(
         self,
         *,
         key,
@@ -350,16 +378,339 @@ class PopulationFitter:
         n_seeds=3,
         verbose=True,
     ):
-        """Fully JIT-compiled hierarchical EVI.
+        """Fully JIT-compiled hierarchical native VI (nonlinear / geoVI).
 
-        Adapts the single-galaxy EVI engine (Fitter._run_evi_jit) for
-        hierarchical inference: shared PSD parameters + per-galaxy
-        latent vectors and physical params, all in a single flat array
-        optimized via Newton-CG with automatic convergence detection.
+        Pure-JAX equivalent of ``vi_nonlinear``: shared PSD parameters + per-galaxy
+        latent vectors and physical params in a single flat array optimized via
+        geoVI with nonlinear residual curving. Uses the same
+        ``build_native_vi_nonlinear_engine`` factory as ``Fitter``.
 
-        The forward model is vmapped over galaxies, giving O(1) graph
-        size regardless of N_gal. The entire optimization loop runs
-        inside ``jax.lax.while_loop`` with zero Python overhead.
+        Parameters
+        ----------
+        n_iterations : int
+            Maximum KL iterations. Auto-stops when converged.
+        n_samples : int
+            Samples per iteration (doubled by mirror_samples).
+        n_posterior_samples : int
+            Posterior samples drawn after convergence.
+        kl_rtol : float
+            Relative KL tolerance for early stopping.
+        n_seeds : int
+            Number of random seeds. Best result (lowest H) is kept.
+        verbose : bool
+            Print progress.
+
+        Notes
+        -----
+        Each key passed to ``draw_nonlinear_residuals_jit`` produces one
+        mirrored pair (2 residuals), so ``n_posterior_samples // 2`` keys yield
+        ``n_posterior_samples`` total draws.
+        **JIT-compatible**: yes.
+        """
+        if n_samples > 12:
+            warnings.warn(
+                f"n_samples={n_samples} is unusually high for native_vi_nonlinear. "
+                f"vmap over draw_linear_residual (which contains a while_loop) across "
+                f"{n_samples} samples may cause XLA compilation issues. "
+                f"Recommended: n_samples <= 6.",
+                stacklevel=2,
+            )
+
+        from jax.flatten_util import ravel_pytree
+
+        from tengri.inference.backends.vi.native import build_native_vi_nonlinear_engine
+
+        n_gal = self.n_galaxies
+        spec = self._spec
+        stochastic = spec.stochastic
+        n_grid = spec.n_grid
+        free_names = self._free_names
+        sigma_lo, sigma_hi = self.psd_sigma_bounds
+        tau_lo, tau_hi = self.psd_tau_bounds
+
+        bounds = {}
+        for name in free_names:
+            dist = spec.get_distribution(name)
+            bounds[name] = dist.bounds
+        fixed_values = spec.get_fixed_values()
+
+        # Precompute data
+        all_data = jnp.concatenate([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
+        all_noise = jnp.concatenate([jnp.asarray(g["noise"]) for g in self.galaxies])
+
+        # Build model once
+        model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
+        data_type = self.data_type
+
+        def _predict(params):
+            """Predict data from parameters for single or batch mode."""
+            if data_type == "photometry":
+                return model.predict_photometry(params, mode="_traceable")
+            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+
+        # --- Hierarchical signal_response (lax.map, O(1) memory in N_gal) ---
+        def signal_response(p):
+            """Compute predicted data from hierarchical parameters.
+
+            Parameters
+            ----------
+            p : dict
+                Hierarchical parameter dict with shared PSD + per-galaxy params.
+
+            Returns
+            -------
+            ndarray, shape (n_data,)
+                Predicted flux/spectrum for all galaxies concatenated.
+
+            Notes
+            -----
+            **JIT-compatible**: yes.
+            """
+            psd_sigma = to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi)
+            psd_tau = to_bounded(p["psd_tau_u"], tau_lo, tau_hi)
+
+            def forward_one(ub_scalars, xi):
+                """Evaluate forward model for one galaxy (Tier 4)."""
+                params = {}
+                for name in free_names:
+                    lo, hi = bounds[name]
+                    params[name] = to_bounded(ub_scalars[name], lo, hi)
+                for name, val in fixed_values.items():
+                    if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
+                        params[name] = val
+                params["sfh_field_psd_sigma"] = psd_sigma
+                params["sfh_field_psd_tau_myr"] = psd_tau
+                if stochastic:
+                    params["sfh_field_xi"] = xi
+                params = spec.resolve_mirrors(params)
+                return _predict(params)
+
+            fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
+            if stochastic:
+                gal_inputs = (p["gal"], p["gal_xi"])
+                predictions = jax.lax.map(lambda args: fwd(args[0], args[1]), gal_inputs)
+            else:
+                predictions = jax.lax.map(lambda ub: fwd(ub, None), p["gal"])
+            return predictions.reshape(-1)
+
+        # --- Build init structure ---
+        sigma_mid = 0.5 * (sigma_lo + sigma_hi)
+        tau_mid = 0.5 * (tau_lo + tau_hi)
+
+        init_template = {
+            "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
+            "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
+            "gal": {name: jnp.zeros(n_gal) for name in free_names},
+        }
+        if stochastic:
+            init_template["gal_xi"] = jnp.zeros((n_gal, n_grid))
+
+        _init_flat, unravel_fn = ravel_pytree(init_template)
+        d_total = len(_init_flat)
+
+        def flatten(d):
+            """Flatten parameter tree to 1D vector (Tier 4)."""
+            return ravel_pytree(d)[0]
+
+        def unflatten(x):
+            """Unflatten 1D vector to parameter tree (Tier 4)."""
+            return unravel_fn(x)
+
+        # --- Build shared native_vi_nonlinear backend ---
+        run_native_vi_nonlinear_jit, draw_nonlinear_residuals_jit, hamiltonian = (
+            build_native_vi_nonlinear_engine(
+                signal_response, all_data, all_noise, flatten, unflatten
+            )
+        )
+
+        if verbose:
+            print(
+                f"Hierarchical native_vi_nonlinear: {n_gal} galaxies, "
+                f"D={d_total}, {n_iterations} max iterations, "
+                f"{n_samples} samples/iter, {n_seeds} seeds"
+            )
+            print("  Compiling JIT engine...")
+
+        t0 = time.time()
+
+        # --- Initialize per-galaxy params via MAP ---
+        from tengri import Fitter
+
+        init_keys = jax.random.split(key, n_gal + n_seeds + 2)
+
+        if verbose:
+            print("  Initializing per-galaxy params via MAP...")
+
+        import gc
+
+        gal_param_lists = {name: [] for name in free_names}
+        gal_xi_list = []
+        for i in range(n_gal):
+            gal = self.galaxies[i]
+            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"], data_type=self.data_type)
+            map_i = fitter_i.run(
+                "map",
+                n_steps=500,
+                learning_rate=0.03,
+                verbose=False,
+                key=init_keys[i],
+            )
+            init_u = fitter_i._unbounded_from_posterior(map_i)
+            for name in free_names:
+                gal_param_lists[name].append(init_u.get(name, jnp.array(0.0)))
+            if stochastic:
+                gal_xi_list.append(init_u.get("psd_xi", jnp.zeros(n_grid)))
+            del fitter_i, map_i, init_u
+        gc.collect()
+
+        map_init = {
+            "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
+            "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
+            "gal": {name: jnp.stack(vals) for name, vals in gal_param_lists.items()},
+        }
+        if stochastic:
+            map_init["gal_xi"] = jnp.stack(gal_xi_list)
+
+        if verbose:
+            print("  MAP init done. Running multi-seed optimization...")
+
+        # --- Multi-seed optimization ---
+        seed_keys = init_keys[n_gal:]
+        best_flat = None
+        best_loss = jnp.inf
+        best_iters = 0
+
+        for s in range(n_seeds):
+            if s == 0:
+                init_flat = flatten(map_init)
+            else:
+                perturb = 0.3 * jax.random.normal(seed_keys[s], shape=(d_total,))
+                init_flat = flatten(map_init) + perturb
+
+            opt_key = jax.random.fold_in(seed_keys[s], 999)
+            converged_flat, n_iters = run_native_vi_nonlinear_jit(
+                init_flat,
+                opt_key,
+                n_iter=n_iterations,
+                n_samp=n_samples,
+                rtol=kl_rtol,
+            )
+            n_iters = int(n_iters)
+
+            loss = float(hamiltonian(converged_flat))
+
+            if verbose and n_seeds > 1:
+                print(f"    Seed {s + 1}/{n_seeds}: H={loss:.1f}, {n_iters} iters")
+
+            if loss < best_loss:
+                best_flat = converged_flat
+                best_loss = loss
+                best_iters = n_iters
+
+        # --- Draw posterior samples ---
+        # Each key produces one mirrored pair (2 residuals), so n // 2 keys
+        # yields n total posterior samples.
+        if verbose:
+            print(f"  Drawing {n_posterior_samples} geoVI posterior samples...")
+
+        draw_key = jax.random.fold_in(key, 12345)
+        n_draw_keys = max(1, n_posterior_samples // 2)
+        draw_keys = jax.random.split(draw_key, n_draw_keys)
+
+        chunk = posterior_chunk_size if posterior_chunk_size else n_draw_keys
+        chunk = min(int(chunk), int(n_draw_keys))
+        if chunk >= n_draw_keys:
+            residuals_flat = draw_nonlinear_residuals_jit(best_flat, draw_keys)
+        else:
+            residual_chunks = []
+            for start in range(0, n_draw_keys, chunk):
+                end = min(start + chunk, n_draw_keys)
+                keys_chunk = draw_keys[start:end]
+                pad = chunk - (end - start)
+                if pad:
+                    keys_chunk = jnp.concatenate([keys_chunk, draw_keys[:pad]])
+                r = draw_nonlinear_residuals_jit(best_flat, keys_chunk)
+                jax.block_until_ready(r)
+                if pad:
+                    r = r[: 2 * (end - start)]
+                residual_chunks.append(r)
+            residuals_flat = jnp.concatenate(residual_chunks, axis=0)
+
+        residuals_flat = residuals_flat[:n_posterior_samples]
+        wall_time = time.time() - t0
+
+        # --- Extract posteriors (vectorized) ---
+        converged_p = unflatten(best_flat)
+        all_res_p = jax.vmap(unflatten)(residuals_flat)
+
+        shared_samples = {
+            "psd_sigma": to_bounded(
+                converged_p["psd_sigma_u"] + all_res_p["psd_sigma_u"], sigma_lo, sigma_hi
+            ),
+            "psd_tau_myr": to_bounded(
+                converged_p["psd_tau_u"] + all_res_p["psd_tau_u"], tau_lo, tau_hi
+            ),
+        }
+        shared_params = {k: float(jnp.mean(v)) for k, v in shared_samples.items()}
+
+        individual_samples = []
+        for g in range(n_gal):
+            gal_samples = {}
+            for name in free_names:
+                lo, hi = bounds[name]
+                combined = converged_p["gal"][name][g] + all_res_p["gal"][name][:, g]
+                gal_samples[name] = to_bounded(combined, lo, hi)
+            if stochastic:
+                gal_samples["psd_xi"] = converged_p["gal_xi"][g] + all_res_p["gal_xi"][:, g]
+            individual_samples.append(gal_samples)
+
+        if verbose:
+            s = shared_params
+            print(
+                f"  Hierarchical native_vi_nonlinear complete in {wall_time:.1f}s, "
+                f"{best_iters}/{n_iterations} iterations, "
+                f"{n_posterior_samples} posterior samples"
+            )
+            print(f"  σ_PSD = {s['psd_sigma']:.2f}, τ_PSD = {s['psd_tau_myr']:.1f} Myr")
+
+        return PopulationPosterior(
+            shared_samples=shared_samples,
+            shared_params=shared_params,
+            individual_samples=individual_samples,
+            method="Hierarchical native_vi_nonlinear",
+            wall_time_s=wall_time,
+            diagnostics={
+                "n_galaxies": n_gal,
+                "n_iterations": best_iters,
+                "n_iterations_max": n_iterations,
+                "n_samples_posterior": n_posterior_samples,
+                "n_seeds": n_seeds,
+                "best_hamiltonian": float(best_loss),
+                "D_total": d_total,
+            },
+        )
+
+    def _run_native_vi_linear(
+        self,
+        *,
+        key,
+        n_iterations=20,
+        n_samples=3,
+        n_posterior_samples=500,
+        posterior_chunk_size=None,
+        memory_mode="low",
+        kl_rtol=1e-2,
+        n_seeds=3,
+        verbose=True,
+    ):
+        """Fully JIT-compiled hierarchical native VI (linear / MGVI).
+
+        Pure-JAX equivalent of ``vi_linear``: shared PSD parameters + per-galaxy
+        latent vectors and physical params in a single flat array optimized via
+        Newton-CG. The entire loop runs inside ``jax.lax.while_loop`` — no NIFTy
+        overhead, O(1) XLA graph size regardless of N_gal.
+
+        Mirrors ``Fitter._run_vi_native_linear`` for the single-galaxy case.
 
         Parameters
         ----------
@@ -395,8 +746,6 @@ class PopulationFitter:
         # Precompute data
         all_data = jnp.concatenate([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
         all_noise = jnp.concatenate([jnp.asarray(g["noise"]) for g in self.galaxies])
-        noise_inv = 1.0 / all_noise**2
-        n_data = len(all_data)
 
         # Build model once
         model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
@@ -408,7 +757,7 @@ class PopulationFitter:
                 return model.predict_photometry(params, mode="_traceable")
             return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
 
-        # --- Hierarchical signal_response (vmapped) ---
+        # --- Hierarchical signal_response (lax.map, O(1) memory in N_gal) ---
         def signal_response(p):
             """Compute predicted data from hierarchical parameters.
 
@@ -452,11 +801,16 @@ class PopulationFitter:
             # the reverse-mode tape inside jvp/vjp does not materialise
             # activations for all n_gal galaxies simultaneously. Trades a
             # recomputation for a 2–3x peak-memory reduction during CG.
+            #
+            # lax.map (not vmap) keeps the XLA compiled artifact O(1) in N_gal.
+            # vmap replicates the graph N times → XLA protobuf exceeds 2 GB for
+            # complex SEDs with N ≥ 3.  lax.map compiles one galaxy and loops.
             fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
             if stochastic:
-                predictions = jax.vmap(fwd)(p["gal"], p["gal_xi"])
+                gal_inputs = (p["gal"], p["gal_xi"])
+                predictions = jax.lax.map(lambda args: fwd(args[0], args[1]), gal_inputs)
             else:
-                predictions = jax.vmap(lambda ub, _: fwd(ub, None))(p["gal"], jnp.zeros(n_gal))
+                predictions = jax.lax.map(lambda ub: fwd(ub, None), p["gal"])
             return predictions.reshape(-1)
 
         # --- Build init structure ---
@@ -483,326 +837,16 @@ class PopulationFitter:
             """Unflatten 1D vector to parameter tree (Tier 4)."""
             return unravel_fn(x)
 
-        # --- Core EVI primitives (same as single-galaxy) ---
-        _eps = 6.0 * jnp.finfo(jnp.float64).eps
+        # --- Build shared native_vi_linear backend ---
+        from tengri.inference.backends.vi.native import build_native_vi_linear_engine
 
-        def metric_vec(xi, v):
-            """GGN metric: M(xi) @ v = J^T N^{-1} J v + v.
-
-            Parameters
-            ----------
-            xi : ndarray, shape (d_total,)
-                Flattened hierarchical parameter vector.
-            v : ndarray, shape (d_total,)
-                Vector to apply the metric to.
-
-            Returns
-            -------
-            ndarray, shape (d_total,)
-                M(xi) @ v, the Gauss-Newton metric applied to v.
-
-            Notes
-            -----
-            Internal method for hierarchical EVI. Not part of the public API.
-            **JIT-compatible**: yes.
-            """
-            xi_d, v_d = unflatten(xi), unflatten(v)
-            _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
-            _, vjp_fn = jax.vjp(signal_response, xi_d)
-            return flatten(vjp_fn(noise_inv * Jv)[0]) + v
-
-        def hamiltonian(xi):
-            """H(xi) = 0.5 chi2 + 0.5 ||xi||^2.
-
-            Parameters
-            ----------
-            xi : ndarray, shape (d_total,)
-                Flattened hierarchical parameter vector.
-
-            Returns
-            -------
-            float
-                Total Hamiltonian (misfit + Gaussian prior).
-
-            Notes
-            -----
-            Internal method for hierarchical EVI. Not part of the public API.
-            **JIT-compatible**: yes.
-            """
-            pred = signal_response(unflatten(xi))
-            chi2 = jnp.sum(((all_data - pred) / all_noise) ** 2)
-            return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
-
-        H_vg = jax.value_and_grad(hamiltonian)
-
-        def cg_solve(mat_fn, b, x0, maxiter=30, miniter=6, absdelta=1e-4):
-            """CG solve: mat_fn(x) = b. Energy-based convergence.
-
-            Parameters
-            ----------
-            mat_fn : callable
-                Function that applies the matrix (or operator) to a vector.
-            b : ndarray
-                Right-hand side vector.
-            x0 : ndarray
-                Initial guess.
-            maxiter : int
-                Maximum iterations.
-            miniter : int
-                Minimum iterations before checking convergence.
-            absdelta : float
-                Energy change threshold for convergence.
-
-            Returns
-            -------
-            ndarray
-                Solution x such that mat_fn(x) ≈ b.
-
-            Notes
-            -----
-            Internal method for hierarchical EVI. Not part of the public API.
-            **JIT-compatible**: yes.
-            """
-            r = mat_fn(x0) - b
-            d, gamma = r, jnp.dot(r, r)
-            energy = jnp.dot((r - b) / 2, x0)
-            init = (x0, r, d, gamma, energy, jnp.int32(-2), jnp.int32(0))
-
-            def cond(s):
-                """Continue CG loop if not converged (Tier 4)."""
-                return s[5] < -1
-
-            def body(s):
-                """Execute one CG iteration (Tier 4)."""
-                x, r, d, pg, pe, info, i = s
-                i = i + 1
-                q = mat_fn(d)
-                curv = jnp.dot(d, q)
-                alpha = pg / curv
-                info = jnp.where(curv <= 0.0, jnp.int32(-1), info)
-                alpha = jnp.where(curv <= 0.0, 0.0, alpha)
-                x = x - alpha * d
-                r = jnp.where((i % 20 == 0) & (info < -1), mat_fn(x) - b, r - alpha * q)
-                gamma = jnp.dot(r, r)
-                energy = jnp.dot((r - b) / 2, x)
-                ed = pe - energy
-                info = jnp.where(ed < -_eps * jnp.abs(energy), jnp.int32(-1), info)
-                info = jnp.where(
-                    (ed < absdelta) & (i >= miniter) & (info < -1),
-                    jnp.int32(0),
-                    info,
-                )
-                info = jnp.where((i >= maxiter) & (info < -1), i, info)
-                d = d * jnp.maximum(0.0, gamma / (pg + 1e-30)) + r
-                return (x, r, d, gamma, energy, info, i)
-
-            return jax.lax.while_loop(cond, body, init)[0]
-
-        # --- Posterior sampler ---
-        def draw_residuals(pos_f, subkeys):
-            """Draw posterior residuals for EVI sampling.
-
-            Parameters
-            ----------
-            pos_f : ndarray, shape (d_total,)
-                Posterior mode (converged point estimate).
-            subkeys : ndarray, shape (n_samples, 2)
-                Random keys for sampling.
-
-            Returns
-            -------
-            ndarray, shape (n_samples, d_total)
-                Posterior residuals δ ~ N(0, [M(pos_f)]^{-1}).
-
-            Notes
-            -----
-            Internal method for hierarchical EVI. Not part of the public API.
-            **JIT-compatible**: yes.
-            """
-
-            def draw_one(subkey):
-                """Sample one residual from the posterior (Tier 4)."""
-                k1, k2 = jax.random.split(subkey)
-                eta_pr = jax.random.normal(k1, shape=(d_total,))
-                eta_lh = jax.random.normal(k2, shape=(n_data,))
-                _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
-                jt = flatten(vjp_fn(jnp.sqrt(noise_inv) * eta_lh)[0])
-                return cg_solve(
-                    lambda v: metric_vec(pos_f, v),
-                    jt + eta_pr,
-                    eta_pr,
-                    maxiter=30,
-                    miniter=6,
-                    absdelta=1e-4,
-                )
-
-            return jax.vmap(draw_one)(subkeys)
-
-        # --- EVI step ---
-        def kl_vg(m, residuals):
-            """Compute mean Hamiltonian value and gradient over residual sample.
-
-            Parameters
-            ----------
-            m : ndarray, shape (d_total,)
-                Mode estimate.
-            residuals : ndarray, shape (n_samples, d_total)
-                Posterior residual samples.
-
-            Returns
-            -------
-            tuple (float, ndarray)
-                (mean Hamiltonian, mean gradient).
-
-            Notes
-            -----
-            Internal method for hierarchical EVI. Not part of the public API.
-            **JIT-compatible**: yes.
-            """
-
-            def single_vg(r):
-                """Compute Hamiltonian and gradient for one residual (Tier 4)."""
-                return H_vg(m + r)
-
-            vals, grads = jax.vmap(single_vg)(residuals)
-            return jnp.mean(vals), jnp.mean(grads, axis=0)
-
-        def kl_metric(m, residuals, v):
-            """Compute GGN Hessian-vector product averaged over residuals.
-
-            Parameters
-            ----------
-            m : ndarray, shape (d_total,)
-                Mode estimate.
-            residuals : ndarray, shape (n_samples, d_total)
-                Posterior residual samples.
-            v : ndarray, shape (d_total,)
-                Vector to apply the metric to.
-
-            Returns
-            -------
-            ndarray, shape (d_total,)
-                Mean [M(m + δ) @ v] over residual samples δ.
-
-            Notes
-            -----
-            Internal method for hierarchical EVI. Not part of the public API.
-            **JIT-compatible**: yes.
-            """
-
-            def single_met(r):
-                """Apply metric for one residual sample (Tier 4)."""
-                return metric_vec(m + r, v)
-
-            return jnp.mean(jax.vmap(single_met)(residuals), axis=0)
-
-        def evi_step(m, subkey, n_samp):
-            """Execute one EVI step: draw mirrored residuals and find the EVI mode via NCG.
-
-            Parameters
-            ----------
-            m : ndarray, shape (d_total,)
-                Current mode estimate.
-            subkey : PRNGKey
-                Random key for this step.
-            n_samp : int
-                Number of residual samples (doubled by mirroring).
-
-            Returns
-            -------
-            tuple (ndarray, float)
-                (new mode, Hamiltonian value at new mode).
-
-            Notes
-            -----
-            Internal method for hierarchical EVI. Not part of the public API.
-            **JIT-compatible**: yes.
-            """
-            sample_keys = jax.random.split(subkey, n_samp)
-            residuals = draw_residuals(m, sample_keys)
-            residuals = jnp.concatenate([residuals, -residuals], axis=0)
-
-            def ncg_body(carry):
-                """Execute one NCG iteration for finding EVI mode (Tier 4)."""
-                m_cur, prev_val, info, i = carry
-                i = i + 1
-                val, grad = kl_vg(m_cur, residuals)
-                step = cg_solve(
-                    lambda v: kl_metric(m_cur, residuals, v),
-                    -grad,
-                    jnp.zeros_like(m_cur),
-                    maxiter=10,
-                    miniter=3,
-                    absdelta=1e-3,
-                )
-                m_new = m_cur + step
-                ed = prev_val - val
-                info = jnp.where((ed < 1e-3) & (i >= 3) & (info < -1), jnp.int32(0), info)
-                info = jnp.where((i >= 10) & (info < -1), i, info)
-                return (m_new, val, info, i)
-
-            def ncg_cond(carry):
-                """Continue NCG if not converged (Tier 4)."""
-                return carry[2] < -1
-
-            val0, _ = kl_vg(m, residuals)
-            result = jax.lax.while_loop(ncg_cond, ncg_body, (m, val0, jnp.int32(-2), jnp.int32(0)))
-            return result[0], result[1]
-
-        def run_evi(init_pos, evi_key, n_iter, n_samp, rtol):
-            """Run EVI for specified iterations or until convergence.
-
-            Parameters
-            ----------
-            init_pos : ndarray, shape (d_total,)
-                Initial position.
-            evi_key : PRNGKey
-                Random key for the EVI run.
-            n_iter : int
-                Maximum number of EVI iterations.
-            n_samp : int
-                Residual samples per iteration.
-            rtol : float
-                Relative tolerance for early stopping on Hamiltonian.
-
-            Returns
-            -------
-            tuple (ndarray, int)
-                (converged mode, number of iterations taken).
-
-            Notes
-            -----
-            Internal method for hierarchical EVI. Not part of the public API.
-            **JIT-compatible**: yes.
-            """
-            keys = jax.random.split(evi_key, n_iter)
-
-            def cond_fn(state):
-                """Continue EVI if not converged and iterations remain (Tier 4)."""
-                _m, _prev_kl, i, converged = state
-                return (~converged) & (i < n_iter)
-
-            def body_fn(state):
-                """Execute one EVI iteration (Tier 4)."""
-                m, prev_kl, i, converged = state
-                subkey = jax.lax.dynamic_index_in_dim(keys, i, keepdims=False)
-                m_new, kl_val = evi_step(m, subkey, n_samp)
-                rel_change = jnp.abs(prev_kl - kl_val) / (jnp.abs(prev_kl) + 1e-10)
-                converged = (rel_change < rtol) & (i >= 5)
-                return (m_new, kl_val, i + 1, converged)
-
-            m0, kl0 = evi_step(init_pos, keys[0], n_samp)
-            init_state = (m0, kl0, jnp.int32(1), jnp.bool_(False))
-            m_final, _kl_final, n_iters, _ = jax.lax.while_loop(cond_fn, body_fn, init_state)
-            return m_final, n_iters
-
-        # --- JIT-compile ---
-        run_evi_jit = jax.jit(run_evi, static_argnames=("n_iter", "n_samp"))
-        draw_residuals_jit = jax.jit(draw_residuals)
+        run_native_vi_linear_jit, draw_residuals_jit, hamiltonian = build_native_vi_linear_engine(
+            signal_response, all_data, all_noise, flatten, unflatten
+        )
 
         if verbose:
             print(
-                f"Hierarchical EVI (JIT): {n_gal} galaxies, "
+                f"Hierarchical vi_native_linear: {n_gal} galaxies, "
                 f"D={d_total}, {n_iterations} max iterations, "
                 f"{n_samples} samples/iter, {n_seeds} seeds"
             )
@@ -867,7 +911,7 @@ class PopulationFitter:
                 init_flat = flatten(map_init) + perturb
 
             opt_key = jax.random.fold_in(seed_keys[s], 999)
-            converged_flat, n_iters = run_evi_jit(
+            converged_flat, n_iters = run_native_vi_linear_jit(
                 init_flat,
                 opt_key,
                 n_iter=n_iterations,
@@ -949,7 +993,7 @@ class PopulationFitter:
         if verbose:
             s = shared_params
             print(
-                f"  Hierarchical EVI (JIT) complete in {wall_time:.1f}s, "
+                f"  Hierarchical vi_native_linear complete in {wall_time:.1f}s, "
                 f"{best_iters}/{n_iterations} iterations, "
                 f"{n_posterior_samples} posterior samples"
             )
@@ -959,7 +1003,7 @@ class PopulationFitter:
             shared_samples=shared_samples,
             shared_params=shared_params,
             individual_samples=individual_samples,
-            method="Hierarchical EVI (JIT)",
+            method="Hierarchical vi_native_linear",
             wall_time_s=wall_time,
             diagnostics={
                 "n_galaxies": n_gal,
@@ -1122,8 +1166,9 @@ class PopulationFitter:
                 params = spec.resolve_mirrors(params)
                 return _predict_cfm(params)
 
+            # lax.map keeps compiled graph O(1) in N_gal — see _run_vi_native_linear.
             fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
-            predictions = jax.vmap(fwd)(gal_ub, gal_xi)
+            predictions = jax.lax.map(lambda args: fwd(args[0], args[1]), (gal_ub, gal_xi))
             return predictions.reshape(-1)
 
         signal_response_jit = jax.jit(signal_response)
@@ -1423,11 +1468,12 @@ class PopulationFitter:
                 params = spec.resolve_mirrors(params)
                 return _predict_single(params)
 
+            # lax.map keeps compiled graph O(1) in N_gal — see _run_vi_native_linear.
             fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
             if stochastic:
-                predictions = jax.vmap(fwd)(gal_ub, gal_xi)
+                predictions = jax.lax.map(lambda args: fwd(args[0], args[1]), (gal_ub, gal_xi))
             else:
-                predictions = jax.vmap(lambda ub, _: fwd(ub, None))(gal_ub, jnp.zeros(n_gal))
+                predictions = jax.lax.map(lambda ub: fwd(ub, None), gal_ub)
 
             return predictions.reshape(-1)
 
@@ -1686,11 +1732,13 @@ class PopulationFitter:
                 params = spec.resolve_mirrors(params)
                 return _predict_rt(params)
 
+            # lax.map keeps compiled graph O(1) in N_gal — see _run_vi_native_linear.
             fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
             if stochastic:
-                predictions = jax.vmap(fwd)(p["gal"], p["gal_xi"])
+                gal_inputs = (p["gal"], p["gal_xi"])
+                predictions = jax.lax.map(lambda args: fwd(args[0], args[1]), gal_inputs)
             else:
-                predictions = jax.vmap(lambda ub, _: fwd(ub, None))(p["gal"], jnp.zeros(n_gal))
+                predictions = jax.lax.map(lambda ub: fwd(ub, None), p["gal"])
 
             pred_all = predictions.reshape(-1)
             chi2 = jnp.sum(((all_data - pred_all) / all_noise) ** 2)

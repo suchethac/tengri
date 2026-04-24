@@ -50,22 +50,27 @@ from tengri.parameters.priors import Gaussian, Uniform
 # Maps deprecated/old method strings → new canonical names.
 _DEPRECATED_METHOD_ALIASES: dict[str, str] = {
     # Old nifty-qualified names → clean canonical
-    "vi_nifty": "vi",
+    "vi_nifty": "vi_nonlinear",
     "vi_nifty_linear": "vi_linear",
-    # Old geoVI names → vi
-    "geovi": "vi",
-    "fast_geovi": "vi",
-    "nifty_geovi": "vi",
-    "geovi_nuts": "vi",
+    # Old fast nifty names → canonical fast names
+    "vi_nifty_fast": "vi_nonlinear_fast",
+    "vi_nifty_fast_linear": "vi_linear_fast",
+    # Old geoVI names → vi_nonlinear
+    "geovi": "vi_nonlinear",
+    "fast_geovi": "vi_nonlinear_fast",
+    "nifty_geovi": "vi_nonlinear",
+    "geovi_nuts": "vi_nonlinear",
     # Old MGVI / linear names → vi_linear
     "mgvi": "vi_linear",
-    "fast_mgvi": "vi_linear",
+    "fast_mgvi": "vi_linear_fast",
     "nifty_mgvi": "vi_linear",
     "evi": "vi_linear",
-    # Old native names → native variants (were wrongly mapping to nifty)
-    "native_geovi": "vi_native",
-    "native_mgvi": "vi_native_linear",
-    "native_evi": "vi_native_linear",
+    # Old native names → canonical native variants
+    "native_geovi": "native_vi_nonlinear",
+    "vi_native": "native_vi_nonlinear",
+    "vi_native_linear": "native_vi_linear",
+    "native_mgvi": "native_vi_linear",
+    "native_evi": "native_vi_linear",
     # MCMC
     "raytrace": "mcmc_raytrace",
     "nuts": "mcmc_nuts",
@@ -87,12 +92,15 @@ _MCMC_AUTO_D_THRESHOLD = 20
 
 # Canonical method names (public API)
 _CANONICAL_METHODS = {
-    "vi",  # geoVI via NIFTy optimize_kl — default
-    "vi_linear",  # MGVI via NIFTy optimize_kl
-    "vi_nifty_fast",  # geoVI via NIFTy OptimizeVI.update (no logging)
-    "vi_nifty_fast_linear",  # MGVI via NIFTy OptimizeVI.update
-    "vi_native",  # Native JAX geoVI (experimental)
-    "vi_native_linear",  # Native JAX MGVI (experimental)
+    # --- Variational inference: 6 canonical names ---
+    "vi_nonlinear_fast",  # NIFTy geoVI, no logging overhead — default
+    "vi_linear_fast",  # NIFTy MGVI, no logging overhead
+    "vi_nonlinear",  # NIFTy geoVI, standard (with logging)
+    "vi_linear",  # NIFTy MGVI, standard (with logging)
+    "native_vi_nonlinear",  # Pure-JAX geoVI (not yet implemented)
+    "native_vi_linear",  # Pure-JAX MGVI (lax.while_loop, fastest)
+    # "vi" kept as canonical synonym for vi_nonlinear (backward compat)
+    "vi",
     "mcmc",  # auto: NUTS (D≤20) or Ray Tracing (D>20)
     "mcmc_raytrace",
     "mcmc_nuts",
@@ -1139,7 +1147,7 @@ class Fitter:
 
     # ── Inference dispatch ────────────────────────────────────────────
 
-    def run(self, method: str = "vi", *, init_from=None, key=None, **kwargs):
+    def run(self, method: str = "vi_nonlinear_fast", *, init_from=None, key=None, **kwargs):
         """Run inference using the specified method.
 
         Dispatches to the underlying inference backend (variational, MCMC,
@@ -1389,34 +1397,34 @@ class Fitter:
             except (ImportError, FileNotFoundError, OSError, KeyError, ValueError):
                 # Config unavailable, missing key, or non-integer value — use hardcoded fallback
                 threshold = _AUTO_D_THRESHOLD
-            method = "mcmc_nuts" if d <= threshold else "vi"
+            method = "mcmc_nuts" if d <= threshold else "vi_nonlinear_fast"
 
         # --- Dispatch to underlying _run_* methods ---
         if method == "map":
             result = self._run_map(key=key, init_from=init_from, **kwargs)
 
-        elif method == "vi":
-            # geoVI via NIFTy optimize_kl (default)
+        elif method in ("vi", "vi_nonlinear"):
+            # NIFTy geoVI standard (with logging/pickling)
             result = self._run_vi(key=key, init_from=init_from, **kwargs)
 
-        elif method == "vi_linear":
-            # MGVI via NIFTy optimize_kl
-            result = self._run_vi_linear(key=key, init_from=init_from, **kwargs)
-
-        elif method == "vi_nifty_fast":
-            # geoVI fast path — NIFTy OptimizeVI.update, no logging
+        elif method == "vi_nonlinear_fast":
+            # NIFTy geoVI, no Python logging overhead (~35% faster)
             result = self._run_nifty_fast_vi(key=key, init_from=init_from, **kwargs)
 
-        elif method == "vi_nifty_fast_linear":
-            # MGVI fast path — NIFTy OptimizeVI.update, no logging
+        elif method == "vi_linear":
+            # NIFTy MGVI standard (with logging/pickling)
+            result = self._run_vi_linear(key=key, init_from=init_from, **kwargs)
+
+        elif method == "vi_linear_fast":
+            # NIFTy MGVI, no Python logging overhead
             result = self._run_nifty_fast_vi_linear(key=key, init_from=init_from, **kwargs)
 
-        elif method == "vi_native":
-            # Native JAX geoVI — experimental, not production-ready
+        elif method == "native_vi_nonlinear":
+            # Pure-JAX geoVI (experimental)
             result = self._run_vi_native(key=key, init_from=init_from, **kwargs)
 
-        elif method == "vi_native_linear":
-            # Native JAX MGVI — experimental, not production-ready
+        elif method == "native_vi_linear":
+            # Pure-JAX MGVI via lax.while_loop (fastest on CPU)
             result = self._run_vi_native_linear(key=key, init_from=init_from, **kwargs)
 
         elif method == "mcmc":

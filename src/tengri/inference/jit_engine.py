@@ -729,12 +729,10 @@ def build_jit_engine(fitter, pos_dict):
 
         Returns (m_new, kl_value).
         """
-        # Draw linear residual samples + mirror
         sample_keys = jax.random.split(subkey, n_samples)
         residuals = draw_residuals(m, sample_keys, data_args)
         residuals = jnp.concatenate([residuals, -residuals], axis=0)
 
-        # Newton-CG KL minimization (same path as evi_step_full)
         def _evi_kl_vg(m_cur):
             """Compute KL value and gradient at current point."""
             return kl_vg(m_cur, residuals, data_args)
@@ -749,19 +747,14 @@ def build_jit_engine(fitter, pos_dict):
             m,
             maxiter=10,
             miniter=0,
-            xtol=1e-3,  # match NIFTy default (vi_config.py)
+            xtol=1e-3,
             energy_reduction_factor=0.1,
         )
         return m_opt, kl_val
 
     def run_evi(init_pos, key, data_args, n_iterations, n_samples, kl_rtol):
-        """Run EVI with automatic convergence detection.
+        """Run EVI with automatic convergence detection via ``jax.lax.while_loop``."""
 
-        ``n_iterations`` is dynamic — uses ``jax.random.fold_in``
-        for per-iteration keys so no pre-split is needed.
-        """
-
-        # State: (m, prev_kl, iteration, converged)
         def cond_fn(state):
             """Continue EVI if not converged and iterations remain."""
             _m, _prev_kl, i, converged = state
@@ -772,13 +765,10 @@ def build_jit_engine(fitter, pos_dict):
             m, prev_kl, i, converged = state
             subkey = jax.random.fold_in(key, i)
             m_new, kl_val = evi_step(m, subkey, n_samples, data_args)
-            # Relative KL change
             rel_change = jnp.abs(prev_kl - kl_val) / (jnp.abs(prev_kl) + 1e-10)
-            # Converge if relative change < rtol and at least 5 iterations done
             converged = (rel_change < kl_rtol) & (i >= 5)
             return (m_new, kl_val, i + 1, converged)
 
-        # First iteration (no convergence check)
         first_key = jax.random.fold_in(key, 0)
         m0, kl0 = evi_step(init_pos, first_key, n_samples, data_args)
         init_state = (m0, kl0, jnp.int32(1), jnp.bool_(False))
@@ -1043,9 +1033,11 @@ def build_jit_engine(fitter, pos_dict):
 
     return {
         "run_evi": run_evi_jit,
+        "native_vi_linear_run": run_evi_jit,  # canonical name (data_args variant)
         "run_evi_geovi": run_evi_geovi_jit,
         "nifty_model": _nifty_model,
         "draw_samples": draw_samples_jit,
+        "native_vi_linear_draw": draw_samples_jit,  # canonical name
         "draw_nonlinear_samples": jax.jit(draw_nonlinear_residuals),
         "draw_batch": draw_batch,
         "flatten": flatten,

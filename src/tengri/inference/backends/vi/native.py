@@ -13,6 +13,338 @@ import jax.numpy as jnp
 
 from tengri.inference._sample_utils import _mean_params
 
+# NIFTy-faithful CG convergence constants (6 * machine epsilon / tiny).
+_EPS_F64 = 6.0 * jnp.finfo(jnp.float64).eps
+_TINY_F64 = 6.0 * jnp.finfo(jnp.float64).tiny
+
+
+def _cg_solve(
+    mat_fn,
+    b,
+    x0,
+    maxiter=30,
+    miniter=6,
+    absdelta=None,
+    resnorm=None,
+    tol=1e-5,
+    atol=0.0,
+    norm_ord=None,
+):
+    """Conjugate-gradient solver (NIFTy ``_static_cg`` port).
+
+    Exact port of NIFTy ``_static_cg``
+    (``nifty8.re.conjugate_gradient._static_cg``, Gordian Edenhofer,
+    Philipp Frank, GPL-2.0+).  Deviations from upstream: (1) flat-array
+    API (no pytree / Vector wrapper); (2) ``mat_fn`` is a plain callable
+    rather than a ``jax.tree_util.Partial``; (3) no callback/logging;
+    (4) returns the solution array directly rather than a ``CGResults``
+    namedtuple.
+
+    Convergence criteria (evaluated in order, matching NIFTy exactly):
+
+    1. ``gamma <= tiny`` — solution is numerically zero.
+    2. ``||r||_{norm_ord} < resnorm`` after ``miniter`` iterations
+       (primary; disabled when ``resnorm is None``).
+    3. ``energy_diff < absdelta`` after ``miniter`` iterations
+       (secondary; disabled when ``absdelta is None``).
+    4. ``i >= maxiter`` — hard cap.
+
+    When both ``absdelta`` and ``resnorm`` are ``None``, falls back to
+    ``resnorm = max(tol * ||b||_{norm_ord}, atol)``, matching NIFTy's
+    default ``tol``-based convergence.
+
+    Parameters
+    ----------
+    mat_fn : callable
+        ``(x) -> Ax``. Symmetric positive-definite matrix-vector product.
+    b : ndarray, shape (d,)
+        Right-hand side.
+    x0 : ndarray, shape (d,)
+        Initial guess.
+    maxiter : int
+        Hard iteration cap.  NIFTy default: ``max(min(200, 20*d), miniter)``.
+    miniter : int
+        Minimum iterations before convergence is checked.
+        NIFTy default: ``min(6, maxiter)``.
+    absdelta : float or None
+        Energy-improvement convergence threshold (secondary).
+        ``None`` (default) disables this criterion — matching NIFTy's
+        default for all internal CG calls.
+    resnorm : float or None
+        Absolute residual-norm threshold (primary).
+        ``None`` (default) disables unless ``absdelta`` is also ``None``,
+        in which case ``tol``-based fallback activates.
+    tol : float
+        Relative tolerance for ``tol``-based fallback: ``tol * ||b||``.
+        Used only when both ``absdelta`` and ``resnorm`` are ``None``.
+        NIFTy default: ``1e-5``.
+    atol : float
+        Absolute tolerance for fallback.  NIFTy default: ``0.0``.
+    norm_ord : int or None
+        Norm order for residual and gradient norms.
+        NIFTy default (CG): ``2`` (``None`` → 2).
+
+    Returns
+    -------
+    ndarray, shape (d,)
+        Solution x ≈ A^{-1} b.
+
+    References
+    ----------
+    .. [1] Edenhofer G., Frank P. et al., "NIFTy.re: Towards a JAX-native
+       library for variational inference at the petascale," arXiv:2402.16683
+       (2024).  ``nifty8/re/conjugate_gradient.py``, ``_static_cg``.
+    """
+    norm_ord = 2 if norm_ord is None else norm_ord
+
+    # Fallback when neither criterion is specified (NIFTy tol-based default).
+    if absdelta is None and resnorm is None:
+        b_norm = jnp.sum(jnp.abs(b)) if norm_ord == 1 else jnp.sqrt(jnp.dot(b, b))
+        resnorm = jnp.maximum(tol * b_norm, atol)
+
+    r = mat_fn(x0) - b
+    d = r
+    gamma = jnp.dot(r, r)
+    energy = jnp.dot((r - b) / 2, x0)
+    init_info = jnp.where(gamma == 0.0, jnp.int32(0), jnp.int32(-2))
+    init = (x0, r, d, gamma, energy, init_info, jnp.int32(0))
+
+    def cond(s):
+        return s[5] < -1
+
+    def body(s):
+        pos, r, d, prev_gamma, prev_energy, info, i = s
+        i = i + 1
+        q = mat_fn(d)
+        curv = jnp.dot(d, q)
+        alpha = prev_gamma / curv
+        info = jnp.where(curv <= 0.0, jnp.int32(0), info)
+        alpha = jnp.where(curv <= 0.0, 0.0, alpha)
+        pos = pos - alpha * d
+        pos = jnp.where((curv < 0.0) & (i <= 1), prev_energy / (-curv) * (-b), pos)
+        r_reset = mat_fn(pos) - b
+        r_step = r - q * alpha
+        r = jnp.where((i % 20 == 0) & (info < -1), r_reset, r_step)
+        gamma = jnp.dot(r, r)
+        info = jnp.where(
+            (gamma >= 0.0) & (gamma <= _TINY_F64) & (info != -1), jnp.int32(0), info
+        )
+        if norm_ord == 1:
+            r_norm = jnp.sum(jnp.abs(r))
+        else:
+            r_norm = jnp.sqrt(gamma)
+        if resnorm is not None:
+            info = jnp.where(
+                (r_norm < resnorm) & (i >= miniter) & (info != -1),
+                jnp.int32(0),
+                info,
+            )
+        energy = jnp.dot((r - b) / 2, pos)
+        energy_diff = prev_energy - energy
+        info = jnp.where(
+            energy_diff < -_EPS_F64 * jnp.abs(energy),
+            jnp.where(info < -1, i, info),
+            info,
+        )
+        if absdelta is not None:
+            info = jnp.where(
+                (energy_diff < absdelta) & (i >= miniter) & (info != -1),
+                jnp.int32(0),
+                info,
+            )
+        info = jnp.where((i >= maxiter) & (info != -1), i, info)
+        d = d * jnp.maximum(0.0, gamma / prev_gamma) + r
+        return (pos, r, d, gamma, energy, info, i)
+
+    return jax.lax.while_loop(cond, body, init)[0]
+
+
+def _newton_cg_flat(
+    fun_and_grad,
+    hessp,
+    x0,
+    *,
+    miniter=0,
+    maxiter=200,
+    energy_reduction_factor=0.1,
+    old_fval=None,
+    absdelta=None,
+    norm_ord=None,
+    xtol=1e-5,
+    custom_gradnorm=None,
+):
+    """Newton-CG with successive-halving line search (NIFTy ``_static_newton_cg`` port).
+
+    Exact port of NIFTy ``_static_newton_cg``
+    (``nifty8.re.optimize._static_newton_cg``, Gordian Edenhofer,
+    Philipp Frank, GPL-2.0+).  Deviations from upstream: (1) flat-array
+    API (no pytree); (2) combined ``fun_and_grad`` rather than separate
+    ``fun``/``jac``; (3) no callback/logging; (4) returns ``(pos, energy)``
+    rather than ``OptimizeResults``.
+
+    Parameters
+    ----------
+    fun_and_grad : callable
+        ``(x) -> (value, grad)``.
+    hessp : callable
+        ``(x, v) -> Hessian-vector product``.
+    x0 : ndarray, shape (d,)
+        Initial guess.  ``d = x0.shape[0]`` used for convergence scaling
+        (``ncg_xtol = xtol * d``).
+    miniter : int
+        Minimum Newton iterations before convergence is checked.
+        NIFTy default: ``0``.
+    maxiter : int
+        Newton iteration limit.  NIFTy default: ``200``.
+    energy_reduction_factor : float
+        Fraction of expected energy decrease used as CG ``absdelta``.
+        NIFTy default: ``0.1``.
+    old_fval : float or None
+        Energy at a previous position for warm-starting the old-energy
+        tracker.  ``None`` → ``inf`` (NIFTy default).
+    absdelta : float or None
+        Energy-improvement convergence threshold.  ``None`` (default)
+        disables this criterion — matching NIFTy's default for
+        ``nonlinearly_update_residual`` (no ``absdelta`` is passed).
+    norm_ord : int or None
+        Norm order for gradient norm.  NIFTy default: ``1`` (L1).
+    xtol : float
+        Descent-norm convergence threshold (scaled by ``d``).
+        NIFTy default: ``1e-5``.
+    custom_gradnorm : callable or None
+        Custom gradient norm ``(v) -> scalar``.  Overrides ``norm_ord``
+        when provided (used by ``curve_residual`` for Fisher-metric norm).
+
+    Returns
+    -------
+    pos : ndarray, shape (d,)
+        Converged position.
+    energy : float
+        Final objective value.
+
+    References
+    ----------
+    .. [1] Edenhofer G., Frank P. et al., "NIFTy.re: Towards a JAX-native
+       library for variational inference at the petascale," arXiv:2402.16683
+       (2024).  ``nifty8/re/optimize.py``, ``_static_newton_cg``.
+    """
+    norm_ord = 1 if norm_ord is None else norm_ord
+    d_total = x0.shape[0]
+    ncg_xtol = xtol * d_total
+
+    def gradnorm(v):
+        if custom_gradnorm is not None:
+            return custom_gradnorm(v)
+        return jnp.sum(jnp.abs(v)) if norm_ord == 1 else jnp.sqrt(jnp.dot(v, v))
+
+    energy, g = fun_and_grad(x0)
+    init_state = (
+        x0,
+        energy,
+        jnp.array(old_fval if old_fval is not None else jnp.inf),
+        g,
+        jnp.where(maxiter == 0, jnp.int32(0), jnp.int32(-2)),
+        jnp.int32(0),
+    )
+
+    def ncg_cond(state):
+        return state[4] < -1
+
+    def ncg_body(state):
+        pos, energy, old_energy, g, status, i = state
+        i = i + 1
+
+        cg_abd_fallback = jnp.array(0.0, dtype=energy.dtype)
+        cg_absdelta = jnp.where(
+            ~jnp.isinf(old_energy),
+            energy_reduction_factor * (old_energy - energy),
+            cg_abd_fallback,
+        )
+        cg_absdelta = jnp.array(cg_absdelta, dtype=energy.dtype)
+        mag_g = jnp.sum(jnp.abs(g))
+        cg_resnorm = jnp.minimum(0.5, jnp.sqrt(mag_g)) * mag_g
+
+        nat_g = _cg_solve(
+            lambda v: hessp(pos, v),
+            g,
+            jnp.zeros_like(pos),
+            maxiter=min(200, 20 * d_total),
+            miniter=min(6, min(200, 20 * d_total)),
+            absdelta=cg_absdelta,
+            resnorm=cg_resnorm,
+        )
+
+        ls_init = (
+            jnp.int32(-2),
+            jnp.int32(0),
+            pos,
+            jnp.array(jnp.inf),
+            g,
+            nat_g,
+            1.0,
+            jnp.bool_(False),
+            jnp.int32(0),
+        )
+
+        def ls_cond(ls):
+            return ls[0] < -1
+
+        def ls_body(ls):
+            ls_st, ls_i, _np, _ne, _ng, dd, gs, reset, nhev = ls
+            new_pos = pos - gs * dd
+            new_e, new_g = fun_and_grad(new_pos)
+            ls_st = jnp.where(new_e <= energy, jnp.int32(0), ls_st)
+            gs = jnp.where(ls_st < -1, gs / 2.0, gs)
+            do_reset = (ls_i == 5) & (ls_st < -1)
+            reset = jnp.where(do_reset, jnp.bool_(True), reset)
+            gs = jnp.where(do_reset, 1.0, gs)
+            # NIFTy uses lax.cond here to avoid computing hessp when not resetting.
+            dd = jax.lax.cond(
+                do_reset,
+                lambda _: jnp.dot(g, g) / jnp.dot(g, hessp(pos, g)) * g,
+                lambda _: dd,
+                None,
+            )
+            nhev = nhev + do_reset.astype(jnp.int32)
+            do_abort = (ls_i == 8) & (ls_st < -1)
+            ls_st = jnp.where(do_abort, jnp.int32(-1), ls_st)
+            return (ls_st, ls_i + 1, new_pos, new_e, new_g, dd, gs, reset, nhev)
+
+        ls_result = jax.lax.while_loop(ls_cond, ls_body, ls_init)
+        ls_status, ls_iter, new_pos, new_energy, new_g, dd, gs, _reset, _nhev = ls_result
+
+        status = jnp.where(ls_status != 0, jnp.int32(-1), status)
+        success = status < -1
+        old_energy = jnp.where(success, energy, old_energy)
+        energy_out = jnp.where(success, new_energy, energy)
+        energy_diff = jnp.where(success, old_energy - energy_out, 0.0)
+        pos_out = jnp.where(success, new_pos, pos)
+        g_out = jnp.where(success, new_g, g)
+        gs_out = jnp.where(success, gs, 0.0)
+        descent_norm = gs_out * gradnorm(dd)
+
+        # NaN guard (NIFTy: status = jnp.where(jnp.isnan(energy), -1, status)).
+        status = jnp.where(jnp.isnan(energy_out), jnp.int32(-1), status)
+        min_cond = (ls_iter < 2) & (i > miniter)
+        # Energy-diff criterion: only active when absdelta is not None
+        # (NIFTy default: disabled for nonlinearly_update_residual).
+        if absdelta is not None:
+            status = jnp.where(
+                (energy_diff >= 0.0) & (energy_diff < absdelta) & min_cond & (status != -1),
+                jnp.int32(0),
+                status,
+            )
+        status = jnp.where(
+            (descent_norm <= ncg_xtol) & (i > miniter) & (status != -1),
+            jnp.int32(0),
+            status,
+        )
+        status = jnp.where((i == maxiter) & (status < -1), i, status)
+        return (pos_out, energy_out, old_energy, g_out, status, i)
+
+    result = jax.lax.while_loop(ncg_cond, ncg_body, init_state)
+    return result[0], result[1]
+
 
 def run_native_vi(
     fitter,
@@ -127,6 +459,22 @@ def run_native_vi(
     unflatten = engine["unflatten"]
     data_args = fitter._data_args
 
+    # Build/cache the native nonlinear engine for the geoVI path.
+    # The engine captures data/noise in its closure; it is cached on the fitter
+    # so the JIT compilation cost is paid once per Fitter instance.
+    if not hasattr(fitter, "_native_vi_nonlinear_engine"):
+        fitter._native_vi_nonlinear_engine = None
+    if fitter._native_vi_nonlinear_engine is None:
+        from tengri.inference.jit_engine import get_or_build_signal_response
+
+        _sr, _ = get_or_build_signal_response(fitter)
+        fitter._native_vi_nonlinear_engine = build_native_vi_nonlinear_engine(
+            _sr, jnp.asarray(fitter.data), jnp.asarray(fitter.noise), flatten, unflatten
+        )
+    _nonlinear_run_fn, _nonlinear_draw_fn, _nonlinear_hamiltonian = (
+        fitter._native_vi_nonlinear_engine
+    )
+
     n_total = len(fitter._free_names) + (fitter.spec.n_grid if fitter.spec.stochastic else 0)
     n_seeds = max(1, n_seeds)
 
@@ -229,17 +577,15 @@ def run_native_vi(
         init_batch = jnp.stack(init_flats)  # (n_seeds, d_total)
 
         if _use_geovi:
-            # vmap over (init_pos, key), static (n_iterations, n_samples, kl_rtol, mode)
+            # vmap over (init_pos, key); factory closure captures data/noise
             def _run_single_geovi(pos, k):
-                """Run geoVI on a single initial position."""
-                return engine["run_evi_geovi"](
+                """Run native geoVI on a single initial position."""
+                return _nonlinear_run_fn(
                     pos,
                     k,
-                    data_args,
-                    n_iterations=n_iterations,
-                    n_samples=n_samples,
-                    kl_rtol=kl_rtol,
-                    sample_mode=mode_str,
+                    n_iter=n_iterations,
+                    n_samp=n_samples,
+                    rtol=kl_rtol,
                 )
 
             vmapped_run = jax.vmap(_run_single_geovi)
@@ -247,7 +593,7 @@ def run_native_vi(
 
             def _run_single_evi(pos, k):
                 """Run EVI (linear VI) on a single initial position."""
-                return engine["run_evi"](
+                return engine["native_vi_linear_run"](
                     pos,
                     k,
                     data_args,
@@ -262,21 +608,25 @@ def run_native_vi(
         all_converged, all_n_iters = vmapped_run(init_batch, opt_keys)
         # all_converged: (n_seeds, d_total), all_n_iters: (n_seeds,)
 
-        # Batch Hamiltonian evaluation
-        def _eval_hamiltonian(converged_flat):
-            """Compute log prior + log likelihood (Hamiltonian) at converged position."""
-            phys = fitter._to_physical(unflatten(converged_flat))
-            if fitter.data_type == "photometry":
-                pred = fitter.model.predict_photometry(phys)
-            elif fitter.data_type == "spectroscopy":
-                pred = fitter.model.predict_spectrum(phys)
-            else:
-                pred = jnp.zeros_like(fitter.data)
-            chi2 = jnp.sum(((fitter.data - pred) / fitter.noise) ** 2)
-            prior = jnp.sum(converged_flat**2)
-            return 0.5 * chi2 + 0.5 * prior
+        # Batch Hamiltonian evaluation via the nonlinear factory (closure captures data/noise)
+        if _use_geovi:
+            seed_losses_arr = jax.vmap(_nonlinear_hamiltonian)(all_converged)
+        else:
 
-        seed_losses_arr = jax.vmap(_eval_hamiltonian)(all_converged)
+            def _eval_hamiltonian_linear(converged_flat):
+                """Compute Hamiltonian for linear (MGVI) seeds."""
+                phys = fitter._to_physical(unflatten(converged_flat))
+                if fitter.data_type == "photometry":
+                    pred = fitter.model.predict_photometry(phys)
+                elif fitter.data_type == "spectroscopy":
+                    pred = fitter.model.predict_spectrum(phys)
+                else:
+                    pred = jnp.zeros_like(fitter.data)
+                chi2 = jnp.sum(((fitter.data - pred) / fitter.noise) ** 2)
+                prior = jnp.sum(converged_flat**2)
+                return 0.5 * chi2 + 0.5 * prior
+
+            seed_losses_arr = jax.vmap(_eval_hamiltonian_linear)(all_converged)
         best_idx = jnp.argmin(seed_losses_arr)
         best_flat = all_converged[best_idx]
         best_iters = int(all_n_iters[best_idx])
@@ -302,17 +652,15 @@ def run_native_vi(
             opt_key = opt_keys[s]
 
             if _use_geovi:
-                converged_flat, n_iters = engine["run_evi_geovi"](
+                converged_flat, n_iters = _nonlinear_run_fn(
                     pos_flat,
                     opt_key,
-                    data_args,
-                    n_iterations=n_iterations,
-                    n_samples=n_samples,
-                    kl_rtol=kl_rtol,
-                    sample_mode=mode_str,
+                    n_iter=n_iterations,
+                    n_samp=n_samples,
+                    rtol=kl_rtol,
                 )
             else:
-                converged_flat, n_iters = engine["run_evi"](
+                converged_flat, n_iters = engine["native_vi_linear_run"](
                     pos_flat,
                     opt_key,
                     data_args,
@@ -323,16 +671,19 @@ def run_native_vi(
             n_iters = int(n_iters)
 
             # Evaluate Hamiltonian to pick best seed
-            phys = fitter._to_physical(unflatten(converged_flat))
-            if fitter.data_type == "photometry":
-                pred = fitter.model.predict_photometry(phys)
-            elif fitter.data_type == "spectroscopy":
-                pred = fitter.model.predict_spectrum(phys)
+            if _use_geovi:
+                loss = float(_nonlinear_hamiltonian(converged_flat))
             else:
-                pred = jnp.zeros_like(fitter.data)
-            chi2 = float(jnp.sum(((fitter.data - pred) / fitter.noise) ** 2))
-            prior = float(jnp.sum(converged_flat**2))
-            loss = 0.5 * chi2 + 0.5 * prior
+                phys = fitter._to_physical(unflatten(converged_flat))
+                if fitter.data_type == "photometry":
+                    pred = fitter.model.predict_photometry(phys)
+                elif fitter.data_type == "spectroscopy":
+                    pred = fitter.model.predict_spectrum(phys)
+                else:
+                    pred = jnp.zeros_like(fitter.data)
+                chi2 = float(jnp.sum(((fitter.data - pred) / fitter.noise) ** 2))
+                prior = float(jnp.sum(converged_flat**2))
+                loss = 0.5 * chi2 + 0.5 * prior
             seed_losses.append(loss)
 
             if loss < best_loss:
@@ -376,7 +727,9 @@ def run_native_vi(
                 verbose=verbose,
             )
         else:
-            # Use nonlinear draws for geoVI modes, linear for MGVI
+            # Use nonlinear draws for geoVI modes, linear for MGVI.
+            # For native_vi_nonlinear, use the factory's draw_nonlinear_residuals_jit.
+            # Each key produces one mirrored pair (2 residuals), so pass n // 2 keys.
             use_nonlinear = sample_mode in (
                 "geovi",
                 "nonlinear_resample",
@@ -384,18 +737,24 @@ def run_native_vi(
                 "nonlinear_sample",
             )
             if use_nonlinear:
-                all_sample_dicts = fitter._draw_nonlinear_jit_samples(
-                    converged_dict,
-                    draw_key,
-                    n_posterior_samples,
-                    all_sample_dicts,
-                    verbose=verbose,
-                )
+                if verbose:
+                    print(f"  Drawing {n_posterior_samples} geoVI posterior samples (JIT)...")
+                n_draw_keys = max(1, n_posterior_samples // 2)
+                draw_keys = jax.random.split(draw_key, n_draw_keys)
+                residuals_flat = _nonlinear_draw_fn(converged_flat, draw_keys)
+                # residuals_flat: (2*n_draw_keys, d_total); trim to n_posterior_samples
+                residuals_flat = residuals_flat[:n_posterior_samples]
+                for i in range(residuals_flat.shape[0]):
+                    res = unflatten(residuals_flat[i])
+                    combined = {k: converged_dict[k] + res[k] for k in converged_dict}
+                    all_sample_dicts.append(combined)
             else:
                 if verbose:
                     print(f"  Drawing {n_posterior_samples} posterior samples (JIT CG)...")
                 draw_keys = jax.random.split(draw_key, n_posterior_samples)
-                residuals_flat = engine["draw_samples"](converged_flat, draw_keys, data_args)
+                residuals_flat = engine["native_vi_linear_draw"](
+                    converged_flat, draw_keys, data_args
+                )
                 for i in range(n_posterior_samples):
                     res = unflatten(residuals_flat[i])
                     combined = {k: converged_dict[k] + res[k] for k in converged_dict}
@@ -478,3 +837,369 @@ def run_native_vi(
         loss_history=None,
         _model=fitter.model,
     )
+
+
+def build_native_vi_linear_engine(signal_response, data, noise, flatten, unflatten):
+    """Build JIT-compiled native_vi_linear primitives for a fixed signal_response.
+
+    Shared backend used by both Fitter (via jit_engine) and PopulationFitter
+    (directly from hierarchical._run_native_vi_linear). Implements pure-JAX
+    linear MGVI without NIFTy — the full optimization loop runs inside
+    ``jax.lax.while_loop`` with zero Python overhead.
+
+    Parameters
+    ----------
+    signal_response : callable
+        ``(pytree) -> ndarray, shape (n_data,)``. Differentiable forward model.
+    data : ndarray, shape (n_data,)
+        Observed data vector.
+    noise : ndarray, shape (n_data,)
+        Per-datum noise standard deviations.
+    flatten : callable
+        ``pytree -> 1D ndarray``.
+    unflatten : callable
+        ``1D ndarray -> pytree``.
+
+    Returns
+    -------
+    run_native_vi_linear_jit : callable
+        ``(init_flat, vi_key, n_iter, n_samp, rtol) -> (best_flat, n_iters)``.
+        JIT-compiled with ``static_argnames=("n_iter", "n_samp")``.
+    draw_residuals_jit : callable
+        ``(pos_flat, subkeys) -> residuals_flat``, shape ``(n_samples, d_total)``.
+    hamiltonian_fn : callable
+        ``(flat) -> scalar``. Useful for seed selection.
+
+    Notes
+    -----
+    The CG solver is a faithful port of NIFTy ``_static_cg`` with residual-norm
+    as the primary convergence criterion and energy-based ``absdelta`` as
+    secondary. This matches ``jit_engine.py``'s ``cg_solve`` and is superior
+    to the energy-only variant previously inlined in ``hierarchical.py``.
+
+    **JIT-compatible**: the returned callables are pre-JIT'd.
+    """
+    noise_inv = 1.0 / noise**2
+    sqrt_noise_inv = jnp.sqrt(noise_inv)
+
+    def metric_vec(xi, v):
+        xi_d, v_d = unflatten(xi), unflatten(v)
+        _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
+        _, vjp_fn = jax.vjp(signal_response, xi_d)
+        return flatten(vjp_fn(noise_inv * Jv)[0]) + v
+
+    def hamiltonian(xi):
+        pred = signal_response(unflatten(xi))
+        chi2 = jnp.sum(((data - pred) / noise) ** 2)
+        return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
+
+    H_vg = jax.value_and_grad(hamiltonian)
+
+    def draw_residuals(pos_f, subkeys):
+        def draw_one(subkey):
+            k1, k2 = jax.random.split(subkey)
+            eta_pr = jax.random.normal(k1, shape=pos_f.shape)
+            eta_lh = jax.random.normal(k2, shape=data.shape)
+            _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
+            jt = flatten(vjp_fn(sqrt_noise_inv * eta_lh)[0])
+            return _cg_solve(
+                lambda v: metric_vec(pos_f, v),
+                jt + eta_pr,
+                eta_pr,
+                maxiter=30,
+                miniter=6,
+                absdelta=1e-4,
+            )
+
+        return jax.vmap(draw_one)(subkeys)
+
+    def kl_vg(m, residuals):
+        vals, grads = jax.vmap(lambda r: H_vg(m + r))(residuals)
+        return jnp.mean(vals), jnp.mean(grads, axis=0)
+
+    def kl_metric(m, residuals, v):
+        return jnp.mean(jax.vmap(lambda r: metric_vec(m + r, v))(residuals), axis=0)
+
+    def vi_linear_step(m, subkey, n_samp):
+        sample_keys = jax.random.split(subkey, n_samp)
+        residuals = draw_residuals(m, sample_keys)
+        residuals = jnp.concatenate([residuals, -residuals], axis=0)
+
+        def ncg_body(carry):
+            m_cur, prev_val, info, i = carry
+            i = i + 1
+            val, grad = kl_vg(m_cur, residuals)
+            step = _cg_solve(
+                lambda v: kl_metric(m_cur, residuals, v),
+                -grad,
+                jnp.zeros_like(m_cur),
+                maxiter=10,
+                miniter=3,
+                absdelta=1e-3,
+            )
+            m_new = m_cur + step
+            ed = prev_val - val
+            info = jnp.where((ed < 1e-3) & (i >= 3) & (info < -1), jnp.int32(0), info)
+            info = jnp.where((i >= 10) & (info < -1), i, info)
+            return (m_new, val, info, i)
+
+        val0, _ = kl_vg(m, residuals)
+        result = jax.lax.while_loop(
+            lambda s: s[2] < -1,
+            ncg_body,
+            (m, val0, jnp.int32(-2), jnp.int32(0)),
+        )
+        return result[0], result[1]
+
+    def run_vi_linear(init_pos, vi_key, n_iter, n_samp, rtol):
+        keys = jax.random.split(vi_key, n_iter)
+
+        def cond_fn(state):
+            _m, _prev_kl, i, converged = state
+            return (~converged) & (i < n_iter)
+
+        def body_fn(state):
+            m, prev_kl, i, converged = state
+            subkey = jax.lax.dynamic_index_in_dim(keys, i, keepdims=False)
+            m_new, kl_val = vi_linear_step(m, subkey, n_samp)
+            rel_change = jnp.abs(prev_kl - kl_val) / (jnp.abs(prev_kl) + 1e-10)
+            converged = (rel_change < rtol) & (i >= 5)
+            return (m_new, kl_val, i + 1, converged)
+
+        m0, kl0 = vi_linear_step(init_pos, keys[0], n_samp)
+        init_state = (m0, kl0, jnp.int32(1), jnp.bool_(False))
+        m_final, _kl_final, n_iters, _ = jax.lax.while_loop(cond_fn, body_fn, init_state)
+        return m_final, n_iters
+
+    run_native_vi_linear_jit = jax.jit(run_vi_linear, static_argnames=("n_iter", "n_samp"))
+    draw_residuals_jit = jax.jit(draw_residuals)
+
+    return run_native_vi_linear_jit, draw_residuals_jit, hamiltonian
+
+
+def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unflatten):
+    """Build JIT-compiled native_vi_nonlinear (geoVI) primitives.
+
+    Pure-JAX implementation of geometric variational inference (geoVI /
+    nonlinear MGVI). Shared backend used by both ``Fitter`` (via
+    ``run_native_vi``) and ``PopulationFitter`` (via
+    ``hierarchical._run_native_vi_nonlinear``).
+
+    Each KL iteration draws fresh nonlinear residuals by:
+
+    1. Drawing a CG-inverted linear residual (same as MGVI).
+    2. Curving each residual via Newton-CG (``curve_residual``) to follow the
+       nonlinear coordinate geometry — exact port of NIFTy's
+       ``nonlinearly_update_residual``.
+    3. Mirroring: both ``+r`` and ``-r`` are curved, giving ``2*n_samp``
+       effective samples with zero first-order bias.
+
+    Parameters
+    ----------
+    signal_response : callable
+        ``(pytree) -> ndarray, shape (n_data,)``. Differentiable forward model.
+    data : ndarray, shape (n_data,)
+        Observed data vector.
+    noise : ndarray, shape (n_data,)
+        Per-datum noise standard deviations.
+    flatten : callable
+        ``pytree -> 1D ndarray``.
+    unflatten : callable
+        ``1D ndarray -> pytree``.
+
+    Returns
+    -------
+    run_native_vi_nonlinear_jit : callable
+        ``(init_flat, vi_key, n_iter, n_samp, rtol) -> (best_flat, n_iters)``.
+        JIT-compiled with ``static_argnames=("n_iter", "n_samp")``.
+    draw_nonlinear_residuals_jit : callable
+        ``(pos_flat, subkeys) -> residuals_flat``, shape
+        ``(2*n_samples, d_total)``. Each key produces one mirrored pair.
+    hamiltonian_fn : callable
+        ``(flat) -> scalar``. Useful for seed selection.
+
+    Notes
+    -----
+    ``curve_residual`` is a faithful port of NIFTy
+    ``nonlinearly_update_residual`` (evi.py:136-217). The inner Newton-CG runs
+    with ``maxiter=3`` matching NIFTy's default for sample curving.
+
+    **JIT-compatible**: all returned callables are pre-JIT'd.
+
+    .. math::
+
+        \\phi(x) = \\tfrac{1}{2} \\| m_s - g(x) \\|^2, \\quad
+        g(x) = (x - m) + L(m)[t(x) - t(m)]
+
+    where :math:`m_s` is the metric sample, :math:`t(x) = \\sqrt{N^{-1}} f(x)`
+    is the whitened transform, and :math:`L(m)` is the left square-root metric.
+    """
+    noise_inv = 1.0 / noise**2
+    sqrt_noise_inv = jnp.sqrt(noise_inv)
+    n_data = data.shape[0]
+
+    def metric_vec(xi, v):
+        xi_d, v_d = unflatten(xi), unflatten(v)
+        _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
+        _, vjp_fn = jax.vjp(signal_response, xi_d)
+        return flatten(vjp_fn(noise_inv * Jv)[0]) + v
+
+    def hamiltonian(xi):
+        pred = signal_response(unflatten(xi))
+        chi2 = jnp.sum(((data - pred) / noise) ** 2)
+        return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
+
+    H_vg = jax.value_and_grad(hamiltonian)
+
+    def transformation(xi):
+        """t(x) = sqrt(N^-1) @ f(x): whitened data-space transform."""
+        return sqrt_noise_inv * signal_response(unflatten(xi))
+
+    def left_sqrt_metric(xi, v_data):
+        """J^T(xi) @ sqrt(N^-1) @ v_data."""
+        _, vjp_fn = jax.vjp(signal_response, unflatten(xi))
+        return flatten(vjp_fn(sqrt_noise_inv * v_data)[0])
+
+    def right_sqrt_metric(xi, v_param):
+        """sqrt(N^-1) @ J(xi) @ v_param."""
+        _, Jv = jax.jvp(signal_response, (unflatten(xi),), (unflatten(v_param),))
+        return sqrt_noise_inv * Jv
+
+    def draw_metric_sample(xi, subkey):
+        """Metric sample (NOT CG-inverted): J^T sqrt_N^-1 eta_lh + eta_pr."""
+        k1, k2 = jax.random.split(subkey)
+        eta_pr = jax.random.normal(k1, shape=xi.shape)
+        eta_lh = jax.random.normal(k2, shape=(n_data,))
+        _, vjp_fn = jax.vjp(signal_response, unflatten(xi))
+        jt = flatten(vjp_fn(sqrt_noise_inv * eta_lh)[0])
+        return jt + eta_pr
+
+    def draw_linear_residual(pos_f, subkey):
+        """Draw one CG-inverted linear residual (same as MGVI draw)."""
+        k1, k2 = jax.random.split(subkey)
+        eta_pr = jax.random.normal(k1, shape=pos_f.shape)
+        eta_lh = jax.random.normal(k2, shape=(n_data,))
+        _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
+        jt = flatten(vjp_fn(sqrt_noise_inv * eta_lh)[0])
+        return _cg_solve(
+            lambda v: metric_vec(pos_f, v),
+            jt + eta_pr,
+            eta_pr,
+            maxiter=30,
+            miniter=6,
+            absdelta=1e-4,
+        )
+
+    def curve_residual(m, r_linear, metric_key, sign):
+        """Nonlinearly curve a linear residual (geoVI).
+
+        Port of NIFTy ``nonlinearly_update_residual`` (evi.py:136-217).
+        Finds x* minimising phi(x) = 0.5||m_s - g(x)||^2 via Newton-CG,
+        then returns x* - m as the curved residual.
+        """
+        x0 = m + r_linear
+        ms = sign * draw_metric_sample(m, metric_key)
+        trafo_at_m = transformation(m)
+
+        def phi_vg(x):
+            trafo_x = transformation(x)
+            delta_trafo = trafo_x - trafo_at_m
+            g_x = (x - m) + left_sqrt_metric(m, delta_trafo)
+            r = ms - g_x
+            val = 0.5 * jnp.dot(r, r)
+            ngrad = r + left_sqrt_metric(x, right_sqrt_metric(m, r))
+            return val, -ngrad
+
+        def phi_metric(x, v):
+            tm = left_sqrt_metric(m, right_sqrt_metric(x, v)) + v
+            return left_sqrt_metric(x, right_sqrt_metric(m, tm)) + tm
+
+        def sampnorm(natgrad):
+            fpp = right_sqrt_metric(m, natgrad)
+            return jnp.sqrt(jnp.dot(natgrad, natgrad) + jnp.dot(fpp, fpp))
+
+        x_opt, _ = _newton_cg_flat(
+            phi_vg,
+            phi_metric,
+            x0,
+            custom_gradnorm=sampnorm,
+            maxiter=3,
+            miniter=0,
+            xtol=1e-3,
+            energy_reduction_factor=0.1,
+        )
+        return x_opt - m
+
+    def draw_nonlinear_residuals(m, subkeys):
+        """Draw geoVI residuals: ``(2*n_samp, d_total)`` with mirrored pairs."""
+        linear_residuals = jax.vmap(lambda sk: draw_linear_residual(m, sk))(subkeys)
+
+        def curve_pair(r, subkey):
+            r_pos = curve_residual(m, r, subkey, sign=1.0)
+            r_neg = curve_residual(m, -r, subkey, sign=-1.0)
+            return r_pos, r_neg
+
+        pos_curved, neg_curved = jax.vmap(curve_pair)(linear_residuals, subkeys)
+        return jnp.concatenate([pos_curved, neg_curved], axis=0)
+
+    def kl_vg(m, residuals):
+        vals, grads = jax.vmap(lambda r: H_vg(m + r))(residuals)
+        return jnp.mean(vals), jnp.mean(grads, axis=0)
+
+    def kl_metric(m, residuals, v):
+        return jnp.mean(jax.vmap(lambda r: metric_vec(m + r, v))(residuals), axis=0)
+
+    def vi_nonlinear_step(m, subkey, n_samp):
+        sample_keys = jax.random.split(subkey, n_samp)
+        residuals = draw_nonlinear_residuals(m, sample_keys)
+
+        def ncg_body(carry):
+            m_cur, prev_val, info, i = carry
+            i = i + 1
+            val, grad = kl_vg(m_cur, residuals)
+            step = _cg_solve(
+                lambda v: kl_metric(m_cur, residuals, v),
+                -grad,
+                jnp.zeros_like(m_cur),
+                maxiter=10,
+                miniter=3,
+                absdelta=1e-3,
+            )
+            m_new = m_cur + step
+            ed = prev_val - val
+            info = jnp.where((ed < 1e-3) & (i >= 3) & (info < -1), jnp.int32(0), info)
+            info = jnp.where((i >= 10) & (info < -1), i, info)
+            return (m_new, val, info, i)
+
+        val0, _ = kl_vg(m, residuals)
+        result = jax.lax.while_loop(
+            lambda s: s[2] < -1,
+            ncg_body,
+            (m, val0, jnp.int32(-2), jnp.int32(0)),
+        )
+        return result[0], result[1]
+
+    def run_vi_nonlinear(init_pos, vi_key, n_iter, n_samp, rtol):
+        keys = jax.random.split(vi_key, n_iter)
+
+        def cond_fn(state):
+            _m, _prev_kl, i, converged = state
+            return (~converged) & (i < n_iter)
+
+        def body_fn(state):
+            m, prev_kl, i, converged = state
+            subkey = jax.lax.dynamic_index_in_dim(keys, i, keepdims=False)
+            m_new, kl_val = vi_nonlinear_step(m, subkey, n_samp)
+            rel_change = jnp.abs(prev_kl - kl_val) / (jnp.abs(prev_kl) + 1e-10)
+            converged = (rel_change < rtol) & (i >= 5)
+            return (m_new, kl_val, i + 1, converged)
+
+        m0, kl0 = vi_nonlinear_step(init_pos, keys[0], n_samp)
+        init_state = (m0, kl0, jnp.int32(1), jnp.bool_(False))
+        m_final, _kl_final, n_iters, _ = jax.lax.while_loop(cond_fn, body_fn, init_state)
+        return m_final, n_iters
+
+    run_native_vi_nonlinear_jit = jax.jit(run_vi_nonlinear, static_argnames=("n_iter", "n_samp"))
+    draw_nonlinear_residuals_jit = jax.jit(draw_nonlinear_residuals)
+
+    return run_native_vi_nonlinear_jit, draw_nonlinear_residuals_jit, hamiltonian
