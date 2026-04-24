@@ -207,7 +207,7 @@ def precompute_ssp_photometry(
 
 @jax.jit
 def effective_wavelength(filter_wave: jnp.ndarray, filter_trans: jnp.ndarray) -> float:
-    """Compute the effective wavelength of a filter curve.
+    """Compute the power-weighted effective wavelength of a filter curve.
 
     Defined as lambda_eff = int(T * lam^2 dlam) / int(T * lam dlam),
     which is Eq. 5 of Zacharegkas et al. (2025).
@@ -222,7 +222,19 @@ def effective_wavelength(filter_wave: jnp.ndarray, filter_trans: jnp.ndarray) ->
     Returns
     -------
     float
-        Effective wavelength of the filter. [Angstrom]
+        Power-weighted effective wavelength of the filter. [Angstrom]
+
+    Notes
+    -----
+    This function computes a **power-weighted** effective wavelength,
+    intended for optimization and approximate photometry calculations.
+    It is NOT the same as the standard astronomical **photon-counting**
+    effective wavelength (pivot wavelength).
+
+    For the photon-counting definition, see
+    :func:`~tengri.observation.filters.compute_effective_wavelength`.
+
+    JIT-compatible.
     """
     num = jnp.trapezoid(filter_trans * filter_wave**2, filter_wave)
     denom = jnp.trapezoid(filter_trans * filter_wave, filter_wave)

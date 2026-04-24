@@ -108,7 +108,7 @@ def _infer_facility(name: str) -> str:
 
 
 def compute_effective_wavelength(wave: np.ndarray, trans: np.ndarray) -> float:
-    """Photon-counting effective wavelength: λ_eff = ∫T·λ·dλ / ∫T·dλ.
+    """Photon-counting effective wavelength (pivot wavelength): λ_eff = ∫T·λ·dλ / ∫T·dλ.
 
     Parameters
     ----------
@@ -120,10 +120,19 @@ def compute_effective_wavelength(wave: np.ndarray, trans: np.ndarray) -> float:
     Returns
     -------
     float
-        Effective wavelength [Angstrom].
+        Photon-counting effective wavelength (pivot wavelength) [Angstrom].
 
     Notes
     -----
+    This function computes the **standard astronomical photon-counting**
+    effective wavelength, also known as the **pivot wavelength**. It is
+    used for filter metadata, observational work, and validation against
+    external codes (e.g., FSPS).
+
+    NOT the same as the power-weighted effective wavelength used in
+    approximate photometry. See :func:`~tengri.utils.optimizations.effective_wavelength`
+    for the alternative definition.
+
     Not JAX-compatible (uses NumPy). Intended for filter metadata
     computation, not forward model evaluation.
 
