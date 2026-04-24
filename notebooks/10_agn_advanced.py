@@ -154,7 +154,7 @@ fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 
 # (a) K&D disc at fixed M_BH, L/L_Edd; vary contribution of hot zone
 # (parameter: fraction of power in corona vs disc)
-log_lbol = 44.0
+log_lbol = 11.0  # log10(L_bol / Lsun); typical QSO
 log_mbh = 8.0
 log_ledd = -0.5  # Sub-Eddington
 
@@ -242,7 +242,7 @@ plt.show()
 fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 
 # (a) LLAGN: low L/L_Edd where ADAF dominates
-log_lbol_llagn = 40.0  # Dim LLAGN
+log_lbol_llagn = 7.0  # log10(L_bol / Lsun); dim LLAGN (M87-like)
 log_mbh_llagn = 8.0
 
 # At low L/L_Edd, ADAF takes over
@@ -327,7 +327,7 @@ try:
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
 
     # (a) SKIRTOR at different opening angles (torus covering)
-    log_lbol = 44.0
+    log_lbol = 11.0  # log10(L_bol / Lsun); typical QSO
     agn_torus_fracs = [0.2, 0.4, 0.6, 0.8]
     frac_colors = [COLORS["rt"], "C2", COLORS["model"], "C1"]
 
@@ -397,7 +397,7 @@ try:
     lnu_full = np.asarray(
         kubota_done_fn(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=11.0,
             agn_log_mbh=9.0,
             agn_log_ledd=0.0,  # Eddington-limited
             agn_torus_frac=0.6,

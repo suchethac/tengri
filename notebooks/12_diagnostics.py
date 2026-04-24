@@ -98,92 +98,54 @@ except Exception:
     setup_style()
 
 # %% [markdown]
-# Build a smooth 7-parameter model and generate mock photometry.
+# Build a smooth 7-parameter model and generate mock photometry. We reuse the
+# exact setup pattern from ``00_quickstart.py`` so every diagnostic below is
+# computed on the same model the tutorial user learned on.
 
 # %%
-# Load SSP library
-ssp_data = load_ssp_data("bc03", "chabrier")
+# Load SSP library (path convention matches the rest of the spine).
+SSP_PATH = "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+if not os.path.exists(SSP_PATH):
+    SSP_PATH = "data/ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+ssp_data = load_ssp_data(SSP_PATH)
 
-# Define the model
-config = ModelConfig(
-    sfh_model="psd_field",
-    sps_model="bc03",
-    dust_model="two_component",
-    dust_emission=False,
-    nebular_emission=True,
-    agn_model=None,
+# 5-band SDSS photometry observation
+BANDS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+obs = Observation(photometry=Photometry.from_names(BANDS))
+
+# 7-D smooth-SFH parameter spec (tsnorm shape + dust + metallicity, fixed z).
+spec = Parameters(
+    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
+    sfh_tsnorm_skew=Fixed(0.0),
+    sfh_tsnorm_trunc=Fixed(3.0),
+    met_logzsol=Uniform(-2.0, 0.2),
+    dust_tau_bc=Uniform(0.0, 2.0),
+    dust_tau_diff=Uniform(0.0, 1.5),
+    dust_slope=Fixed(-0.7),
+    redshift=Fixed(0.05),
 )
+model = SEDModel(spec, ssp_data, observation=obs)
 
-model = SEDModel(ssp_data, config)
+# Ground-truth parameters and a mock observation at SNR = 20.
+truth = spec.sample(jax.random.PRNGKey(42))
+mock = generate_mock(model, truth, snr=20.0, key=jax.random.PRNGKey(43))
 
-# Free parameters: 7-D smooth galaxy (no bursts, no AGN)
-params_free = Parameters(
-    psd_sigma=Uniform(0.1, 1.0),
-    psd_tau_yr=LogUniform(1e6, 5e9),
-    alpha=Uniform(0.5, 3.0),
-    beta=Uniform(0.5, 3.0),
-    tau_sfh=LogUniform(1e7, 1e10),
-    sfr_norm=LogUniform(0.01, 100.0),
-    log_z_abs=Uniform(-2.5, 0.5),
-    tau_bc=Fixed(10.0),
-    tau_diff=Fixed(100.0),
-    dust_slope=Fixed(1.0),
-)
-
-# Generate mock data: 5 broadband photometry at z=0.05
-truth = {
-    "psd_sigma": 0.3,
-    "psd_tau_yr": 2e8,
-    "alpha": 1.5,
-    "beta": 1.2,
-    "tau_sfh": 1e9,
-    "sfr_norm": 5.0,
-    "log_z_abs": -0.7,
-    "tau_bc": 10.0,
-    "tau_diff": 100.0,
-    "dust_slope": 1.0,
-}
-
-z = 0.05
-bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-mock_data = generate_mock(
-    model,
-    truth,
-    redshift=z,
-    bands=bands,
-    snr=20,
-    seed=42,
-)
-print(f"Mock photometry (SNR=20): {bands}")
-print(f"Fluxes [erg/s/cm²/Hz]: {mock_data.flux}")
-print(f"Errors [erg/s/cm²/Hz]: {mock_data.error}")
+print(f"Mock photometry (SNR=20): {BANDS}")
+print(f"Fluxes [erg/s/cm²/Hz]: {np.asarray(mock.flux_obs)}")
+print(f"Noise  [erg/s/cm²/Hz]: {np.asarray(mock.noise)}")
 
 # %% [markdown]
-# Run a quick NUTS fit on the mock data (or skip to diagnostics if pre-computed).
+# Run a quick NUTS fit so the diagnostics below operate on a real posterior.
 
 # %%
-obs = Observation(
-    photometry=Photometry(
-        flux=mock_data.flux,
-        error=mock_data.error,
-        bands=bands,
-    ),
-    redshift=z,
-)
+fitter = Fitter(model, mock.flux_obs, mock.noise)
+result = fitter.run("mcmc_nuts", n_warmup=300, n_samples=600, verbose=False)
 
-fitter = Fitter(model, obs, params_free)
-
-# Run brief NUTS fit
-result = fitter.run(
-    method="hmc",
-    n_samples=1000,
-    n_warmup=500,
-    seed=43,
-    verbose=False,
-)
-
-print(f"\nFit completed. Chain shape: {result.chain.shape}")
-print(f"Acceptance rate: {result.stats.get('acceptance_rate', 'N/A')}")
+# Free-parameter names (in the order ``Fisher`` and saliency helpers expect)
+PARAM_NAMES = list(spec.free_params)
+print(f"\nFit completed. Free parameters: {PARAM_NAMES}")
 
 # %% [markdown]
 # ## 1. Fisher Information Matrix

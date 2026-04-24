@@ -66,18 +66,27 @@ SDSS_BAND_COLORS = [COLORS["u"], COLORS["g"], COLORS["r"], COLORS["i"], COLORS["
 # ═══════════════════════════════════════════════════════════════════
 
 
-def setup_style():
+def setup_style(style="tengri"):
     """Configure matplotlib for publication-quality astronomy figures.
 
-    Follows BAGPIPES (Carnall+2018) styling closely:
-    - Large axis labels (18pt) and tick labels (14pt)
-    - Thick lines (2pt data, 1.5pt axes)
-    - Inward ticks on all four sides
-    - No frame on legends
+    Defaults to a single cohesive style across every tengri notebook and example,
+    built on top of the `scienceplots` ``science`` preset — the standard
+    Nature/PRL/ApJ-compatible look (serif fonts, thin inward ticks on all
+    four sides, frameless legends, no grid).
 
     Parameters
     ----------
-    None
+    style : str
+        Which composite style to apply. One of:
+
+        - ``"tengri"`` (default) — ``scienceplots.science`` + ``no-latex`` +
+          tengri-specific tick and font-size overrides. Safe everywhere (no
+          system LaTeX required).
+        - ``"tengri-nature"`` — Nature-journal variant (single-column width,
+          sans-serif Arial). Use for slide decks.
+        - ``"tengri-minimal"`` — same tengri overrides but skip scienceplots
+          so the style works when ``scienceplots`` is unavailable. Keeps the
+          BAGPIPES-inspired look as a fallback.
 
     Returns
     -------
@@ -85,9 +94,25 @@ def setup_style():
 
     Examples
     --------
-    >>> from tengri import setup_style
-    >>> setup_style()  # call once at start of a plotting script or notebook
+    >>> from tengri.analysis.plotting import setup_style
+    >>> setup_style()                 # default: science + tengri overrides
+    >>> setup_style("tengri-minimal") # fallback if scienceplots absent
     """
+    # Composite-style block: layer scienceplots presets first, then tengri
+    # overrides. Falls back gracefully if scienceplots is not installed.
+    if style != "tengri-minimal":
+        try:
+            import scienceplots  # noqa: F401  (import registers styles)
+
+            base_styles = ["science", "no-latex"]
+            if style == "tengri-nature":
+                base_styles.append("nature")
+            plt.style.use(base_styles)
+        except (ImportError, OSError):
+            # scienceplots not installed or style name not found: fall through
+            # to the minimal (BAGPIPES-inspired) overrides below.
+            pass
+
     plt.rcParams.update(
         {
             # Figure
@@ -96,40 +121,44 @@ def setup_style():
             "savefig.dpi": 300,
             "savefig.bbox": "tight",
             "savefig.pad_inches": 0.05,
-            # Font — BAGPIPES uses Helvetica/sans-serif; we use DejaVu Serif
-            # for journal compatibility without requiring LaTeX installation
-            "font.size": 14,
+            # Font — scienceplots uses Times; we keep DejaVu Serif so plots
+            # render identically on systems without Times installed.
+            "font.size": 13,
             "font.family": "serif",
             "mathtext.fontset": "dejavuserif",
-            # Axes labels — BAGPIPES: 18pt labels, 14pt ticks
-            "axes.labelsize": 18,
-            "axes.titlesize": 16,
-            "xtick.labelsize": 14,
-            "ytick.labelsize": 14,
-            "legend.fontsize": 12,
-            # Axes frame — BAGPIPES: 1.5pt
-            "axes.linewidth": 1.5,
+            # Axes labels and ticks: readable in publications and slides.
+            "axes.labelsize": 14,
+            "axes.titlesize": 14,
+            "xtick.labelsize": 12,
+            "ytick.labelsize": 12,
+            "legend.fontsize": 11,
+            # Axes frame and grid
+            "axes.linewidth": 1.0,
             "axes.grid": False,
-            # Ticks — BAGPIPES: inward, all four sides
+            # Ticks — inward, all four sides, minor ticks visible
             "xtick.direction": "in",
             "ytick.direction": "in",
             "xtick.top": True,
             "ytick.right": True,
-            "xtick.major.width": 1.0,
-            "ytick.major.width": 1.0,
-            "xtick.major.size": 5,
-            "ytick.major.size": 5,
+            "xtick.major.width": 0.9,
+            "ytick.major.width": 0.9,
+            "xtick.major.size": 4,
+            "ytick.major.size": 4,
             "xtick.minor.visible": True,
             "ytick.minor.visible": True,
-            "xtick.minor.width": 0.7,
-            "ytick.minor.width": 0.7,
-            "xtick.minor.size": 3,
-            "ytick.minor.size": 3,
-            # Legend — BAGPIPES: no frame
+            "xtick.minor.width": 0.6,
+            "ytick.minor.width": 0.6,
+            "xtick.minor.size": 2.5,
+            "ytick.minor.size": 2.5,
+            # Legend — no frame
             "legend.frameon": False,
             "legend.handlelength": 1.5,
-            # Lines — BAGPIPES: 2pt
-            "lines.linewidth": 2.0,
+            # Lines
+            "lines.linewidth": 1.6,
+            # Image colormap — perceptually-uniform default. Specific plots
+            # can override (e.g. cividis, rocket) but the default must be
+            # colorblind-safe and monotonic.
+            "image.cmap": "viridis",
         }
     )
 
