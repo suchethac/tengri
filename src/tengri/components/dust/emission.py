@@ -568,6 +568,123 @@ _CASEY_B1_UM = 26.68  # μm
 _CASEY_B2_UM_PER_K = 6.246e-3  # μm / K
 
 
+def _casey_transition_function(
+    wavelength_cm: jnp.ndarray,
+    T_eff: float,
+) -> jnp.ndarray:
+    """Compute Casey (2012) transition function between power law and MBB.
+
+    Parameters
+    ----------
+    wavelength_cm : array, shape (n_wave,)
+        Wavelength grid in cm. [cm]
+    T_eff : float
+        Effective dust temperature (already CMB-corrected). [K]
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Transition function f(λ) = 1 / (1 + (λ/λ_0)^2).
+        f→1 at short λ (power law), f→0 at long λ (MBB). [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    """
+    # Empirical turnover wavelength (Casey 2012, Eq. 3 with errata)
+    lambda0_cm = (_CASEY_B1_UM + _CASEY_B2_UM_PER_K * T_eff) * 1.0e-4  # μm -> cm
+
+    # Transition function: f(λ) = 1 / (1 + (λ/λ_0)^2)
+    # f→1 at short λ (mid-IR power law dominates), f→0 at long λ (MBB dominates)
+    # Casey 2012 convention: power law for Wien side, MBB for Rayleigh-Jeans
+    return 1.0 / (1.0 + (wavelength_cm / lambda0_cm) ** 2)
+
+
+def _casey_powerlaw_component(
+    nu: jnp.ndarray,
+    nu_ref: float,
+    f_transition: jnp.ndarray,
+    x: jnp.ndarray,
+    dust_alpha_mir: float,
+    optically_thin: bool,
+) -> jnp.ndarray:
+    """Compute Casey (2012) mid-IR power-law component.
+
+    Parameters
+    ----------
+    nu : array, shape (n_wave,)
+        Frequency in Hz (descending). [Hz]
+    nu_ref : float
+        Reference frequency (100 μm pivot). [Hz]
+    f_transition : array, shape (n_wave,)
+        Transition function from _casey_transition_function. [dimensionless]
+    x : array, shape (n_wave,)
+        Planck argument h*nu/(k*T). [dimensionless]
+    dust_alpha_mir : float
+        Mid-IR power-law slope. [dimensionless]
+    optically_thin : bool
+        If True, return zero (power law suppressed). [dimensionless]
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Mid-IR power-law component S_pl(ν). [erg/s/Hz] (before normalization)
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    The exponential cutoff prevents the power law from diverging at
+    UV/optical wavelengths. This follows Casey (2012) Eq. 2 where the
+    power law implicitly operates only in the IR regime.
+
+    """
+    # S_pl(ν) ~ ν^α_mid * f(ν) * exp(-hν/kT) [Wien cutoff]
+    wien_cutoff = jnp.exp(-x)
+    power_law = (nu / nu_ref) ** dust_alpha_mir * f_transition * wien_cutoff
+    power_law = power_law * (1.0 - optically_thin)
+    return power_law
+
+
+def _casey_mbb_component(
+    nu: jnp.ndarray,
+    nu_ref: float,
+    f_transition: jnp.ndarray,
+    x: jnp.ndarray,
+    dust_beta_ir: float,
+) -> jnp.ndarray:
+    """Compute Casey (2012) modified blackbody component.
+
+    Parameters
+    ----------
+    nu : array, shape (n_wave,)
+        Frequency in Hz (descending). [Hz]
+    nu_ref : float
+        Reference frequency (100 μm pivot). [Hz]
+    f_transition : array, shape (n_wave,)
+        Transition function from _casey_transition_function. [dimensionless]
+    x : array, shape (n_wave,)
+        Planck argument h*nu/(k*T). [dimensionless]
+    dust_beta_ir : float
+        Dust emissivity index. [dimensionless]
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Modified blackbody component S_bb(ν). [erg/s/Hz] (before normalization)
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    """
+    # S_bb(ν) ~ ν^(3+β) / (exp(hν/kT) - 1) * (1 - f(ν))
+    mbb = (nu / nu_ref) ** (3.0 + dust_beta_ir) / (jnp.exp(x) - 1.0)
+    mbb = mbb * (1.0 - f_transition)
+    return mbb
+
+
 @register_emission_model("casey2012")
 def casey2012(
     wavelength_aa: jnp.ndarray,
@@ -668,31 +785,18 @@ def casey2012(
     wavelength_cm = wavelength_aa * _AA_TO_CM
     nu = _C_CGS / wavelength_cm  # Hz, descending
 
-    # Empirical turnover wavelength (Casey 2012, Eq. 3 with errata)
-    lambda0_cm = (_CASEY_B1_UM + _CASEY_B2_UM_PER_K * T_eff) * 1.0e-4  # μm -> cm
-
-    # Transition function: f(λ) = 1 / (1 + (λ/λ_0)^2)
-    # f→1 at short λ (mid-IR power law dominates), f→0 at long λ (MBB dominates)
-    # Casey 2012 convention: power law for Wien side, MBB for Rayleigh-Jeans
-    f_transition = 1.0 / (1.0 + (wavelength_cm / lambda0_cm) ** 2)
-
     # Planck argument (shared by both components)
     x = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * T_eff), 0.0, 500.0)
     nu_ref = _C_CGS / (100.0e-4)  # 100 μm pivot in Hz
 
-    # --- Mid-IR power-law component ---
-    # S_pl(ν) ~ ν^α_mid * f(ν) * exp(-hν/kT) [Wien cutoff]
-    # The exponential cutoff prevents the power law from diverging at
-    # UV/optical wavelengths. This follows Casey (2012) Eq. 2 where the
-    # power law implicitly operates only in the IR regime.
-    wien_cutoff = jnp.exp(-x)
-    power_law = (nu / nu_ref) ** dust_alpha_mir * f_transition * wien_cutoff
-    power_law = power_law * (1.0 - optically_thin)
+    # Compute transition function between power law and MBB
+    f_transition = _casey_transition_function(wavelength_cm, T_eff)
 
-    # --- Modified blackbody component ---
-    # S_bb(ν) ~ ν^(3+β) / (exp(hν/kT) - 1) * (1 - f(ν))
-    mbb = (nu / nu_ref) ** (3.0 + dust_beta_ir) / (jnp.exp(x) - 1.0)
-    mbb = mbb * (1.0 - f_transition)
+    # Compute mid-IR power-law and modified blackbody components
+    power_law = _casey_powerlaw_component(
+        nu, nu_ref, f_transition, x, dust_alpha_mir, optically_thin
+    )
+    mbb = _casey_mbb_component(nu, nu_ref, f_transition, x, dust_beta_ir)
 
     # Combined unnormalized shape
     shape = power_law + mbb
@@ -871,34 +975,6 @@ def schreiber2016(
     contrast = cmb_contrast_factor(wavelength_aa, T_eff, redshift)
 
     return result * contrast
-
-
-# ── Model 2: Dale et al. 2014 (1 parameter) ───────────────────────
-
-
-def _dale_component_temperature(alpha: float) -> tuple[float, float, float]:
-    """Map Dale alpha to warm/cold modified-blackbody temperatures.
-
-    The Dale et al. (2014) templates span alpha = [0.0625, 4.0].
-    Low alpha -> intense radiation field -> warmer dust.
-    High alpha -> weak radiation field -> cooler dust.
-
-    We approximate the full template library as a two-component model:
-    a cold (diffuse ISM) component and a warm (PDR/HII) component whose
-    temperature ratio and mixing fraction vary with alpha.
-
-    Returns (T_cold, T_warm, f_warm) where f_warm is the warm fraction.
-    """
-    # Cold component: 15-25 K, rising gently at low alpha
-    T_cold = 20.0 + 5.0 * jnp.exp(-0.5 * alpha)
-
-    # Warm component: 40-70 K
-    T_warm = 70.0 - 10.0 * alpha
-
-    # Warm fraction: dominant at low alpha, negligible at high alpha
-    f_warm = jnp.clip(0.8 * jnp.exp(-0.6 * alpha), 0.01, 0.99)
-
-    return T_cold, T_warm, f_warm
 
 
 # ── Backward-compatible module-level aliases for direct imports ───
