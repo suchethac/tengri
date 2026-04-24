@@ -33,9 +33,25 @@ CORE_CITATIONS: list[str] = ["tengri", "jax", "dsps"]
 DUST_LAW_CITATIONS: dict[str, list[str]] = {
     "calzetti": ["calzetti2000"],
     "power_law": [],
-    "smc": [],
-    "mw": [],
+    "kriek_conroy": ["kriek_conroy2013"],
+    "smc": ["gordon2003_smc"],
+    "cardelli": ["cardelli1989"],
+    "mw": ["cardelli1989"],
+    "salim": ["noll2009"],  # Salim+ law is a Noll+2009 generalization of Calzetti
+    "li08": ["witt_gordon2000"],  # clumpy radiative-transfer (closest match)
+    "vw07_bc": ["witt_gordon2000"],
+    "vw07_diff": ["witt_gordon2000"],
     "cf00": ["charlot_fall2000"],
+}
+
+# Dust emission templates (DustConfig.emission).
+DUST_EMISSION_CITATIONS: dict[str, list[str]] = {
+    "modified_blackbody": ["casey2012"],
+    "casey2012": ["casey2012"],
+    "dale2014": ["dale2014"],
+    "draine_li2007": [],      # not yet verified against workspace; leave blank
+    "draine_li2014": [],
+    None: [],
 }
 
 # Additional citation(s) triggered by the dust *model* wrapper, independent
@@ -48,8 +64,32 @@ DUST_MODEL_CITATIONS: dict[str, list[str]] = {
 # Nebular-emission backends. Keys match tengri.config.settings.NebularConfig.backend.
 NEBULAR_BACKEND_CITATIONS: dict[str, list[str]] = {
     "cue": ["cue"],
+    "cloudy": ["cloudy"],
     "baked_in": [],
     "off": [],
+    None: [],
+}
+
+
+# AGN components — keyed by AGNConfig.disc / torus / blr values.
+AGN_DISC_CITATIONS: dict[str, list[str]] = {
+    "powerlaw": [],
+    "multicolor": ["shakura_sunyaev1973"],
+    "shakura_sunyaev": ["shakura_sunyaev1973"],
+    "kubota_done": ["kubota_done2018"],
+    "adaf": ["mahadevan1997"],
+    None: [],
+}
+
+AGN_TORUS_CITATIONS: dict[str, list[str]] = {
+    "skirtor": ["skirtor", "skirtor_2012"],
+    "stalevski": ["skirtor", "skirtor_2012"],
+    None: [],
+}
+
+AGN_BLR_CITATIONS: dict[str, list[str]] = {
+    "temple": ["temple2021_qsogen"],
+    "qsogen": ["temple2021_qsogen"],
     None: [],
 }
 
@@ -66,12 +106,14 @@ IGM_CITATIONS: dict[str, list[str]] = {
 BACKEND_CITATIONS: dict[str, list[str]] = {
     "map": [],
     "laplace": [],
-    "pathfinder": [],
+    "pathfinder": ["pathfinder"],
     "mcmc_nuts": ["blackjax"],
     "nuts": ["blackjax"],
-    "mcmc_raytrace": [],
-    "raytrace": [],
-    "evidence": [],
+    "mcmc_raytrace": ["raytrace_behroozi"],
+    "raytrace": ["raytrace_behroozi"],
+    "evidence": ["nss"],
+    "nss": ["nss"],
+    "nested_slice": ["nss"],
     "vi": ["nifty", "ift"],
     "vi_native": ["nifty", "ift"],
 }

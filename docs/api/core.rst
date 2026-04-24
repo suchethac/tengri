@@ -4,10 +4,10 @@ Core API
 The core classes that form tengri's high-level interface: defining models,
 specifying parameters, generating predictions, and creating mock data.
 
-Model
------
+SEDModel
+--------
 
-.. autoclass:: tengri.Model
+.. autoclass:: tengri.SEDModel
    :members:
    :show-inheritance:
 

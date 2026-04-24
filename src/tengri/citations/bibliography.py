@@ -284,6 +284,11 @@ class Bibliography:
             for law_attr in ("law", "law_bc", "law_diff"):
                 law = getattr(dust, law_attr, None)
                 bib.add(*DUST_LAW_CITATIONS.get(law, []))
+            # Dust emission template.
+            from tengri.citations.associations import DUST_EMISSION_CITATIONS
+
+            emission = getattr(dust, "emission", None)
+            bib.add(*DUST_EMISSION_CITATIONS.get(emission, []))
 
         neb = getattr(model_config, "nebular", None)
         if neb is not None:
@@ -294,6 +299,19 @@ class Bibliography:
         if igm is not None:
             igm_model = getattr(igm, "model", None)
             bib.add(*IGM_CITATIONS.get(igm_model, []))
+
+        # AGN sub-components (disc / torus / BLR) — optional on ModelConfig.
+        agn = getattr(model_config, "agn", None)
+        if agn is not None:
+            from tengri.citations.associations import (
+                AGN_BLR_CITATIONS,
+                AGN_DISC_CITATIONS,
+                AGN_TORUS_CITATIONS,
+            )
+
+            bib.add(*AGN_DISC_CITATIONS.get(getattr(agn, "disc", None), []))
+            bib.add(*AGN_TORUS_CITATIONS.get(getattr(agn, "torus", None), []))
+            bib.add(*AGN_BLR_CITATIONS.get(getattr(agn, "blr", None), []))
 
         return bib
 

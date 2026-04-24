@@ -291,41 +291,19 @@ plt.show()
 
 
 # %%
-# Helper: fit N galaxies individually with free PSD
 def fit_individual_galaxies(galaxies, model, data_type="spectroscopy", n_gal_fit=4):
-    """Fit individual galaxies with free PSD parameters.
-
-    Args:
-        galaxies: list of {'flux_obs', 'noise'} dicts
-        model: SEDModel with free PSD priors
-        data_type: 'spectroscopy' or 'photometry'
-        n_gal_fit: number of galaxies to fit (default 4)
-
-    Returns:
-        list of FitterResult objects
-    """
+    """Fit individual galaxies with free PSD parameters. Returns FitterResult list."""
     results = []
     print(f"Fitting {n_gal_fit} galaxies individually (PSD free)...")
     for i in range(min(n_gal_fit, len(galaxies))):
-        fitter_i = Fitter(
-            model,
-            galaxies[i]["flux_obs"],
-            galaxies[i]["noise"],
-            data_type=data_type,
-        )
+        fitter_i = Fitter(model, galaxies[i]["flux_obs"], galaxies[i]["noise"], data_type=data_type)
         t0 = time.perf_counter()
-        res_i = fitter_i.run(
-            "vi",
-            n_iterations=8,
-            n_samples=6,
-            n_posterior_samples=500,
-            verbose=False,
-        )
+        res_i = fitter_i.run("vi", n_iterations=8, n_samples=6, n_posterior_samples=500, verbose=False)
         dt = time.perf_counter() - t0
         results.append(res_i)
         sig_med = float(jnp.median(res_i.samples["sfh_field_psd_sigma"]))
         tau_med = float(jnp.median(res_i.samples["sfh_field_psd_tau_myr"]))
-        print(f"  Galaxy {i}: sigma = {sig_med:.2f}, tau = {tau_med:.0f} Myr  ({dt:.1f}s)")
+        print(f"  Galaxy {i}: σ={sig_med:.2f}, τ={tau_med:.0f} Myr ({dt:.1f}s)")
     return results
 
 
@@ -344,8 +322,7 @@ spec_free = Parameters(
     dust_tau_diff=Uniform(0.0, 1.5),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    mean_sfh_type=["tsnorm", "field"],
-    n_grid=64,
+    mean_sfh_type=["tsnorm", "field"], n_grid=64,
 )
 model_free = SEDModel(spec_free, ssp_data, observation=obs)
 
@@ -401,42 +378,23 @@ def _pop_posterior_sigma_tau(pop_posterior):
 # %% [markdown]
 # ## 2. Hierarchical Inference: Spectroscopy (gated)
 #
-# The spectroscopic hierarchical fit is the memory-heaviest piece (each galaxy
-# adds a 200-pixel likelihood to the batched forward map). `PopulationFitter`
-# doesn't currently forward the `posterior_chunk_size` plumbing, so we gate
-# this cell behind `RUN_EXPENSIVE = True` at the top of the notebook. The
-# photometric hierarchical fit in §3 runs unconditionally.
+# Spectroscopic hierarchical fit (200-pixel likelihood) is memory-heavy, gated behind RUN_EXPENSIVE.
 
 # %%
 if RUN_EXPENSIVE:
     print(f"\nHierarchical fit: {N_GAL} galaxies (spectroscopy)...")
     t0 = time.perf_counter()
     hfitter_spec = PopulationFitter(
-        model_factory,
-        galaxies_spec,
-        psd_sigma_prior=(0.1, 4.0),
-        psd_tau_prior=(1.0, 300.0),
-        data_type="spectroscopy",
+        model_factory, galaxies_spec,
+        psd_sigma_prior=(0.1, 4.0), psd_tau_prior=(1.0, 300.0), data_type="spectroscopy",
     )
     result_hier_spec = hfitter_spec.run(
-        "mgvi",
-        n_iterations=N_HIER_ITERS,
-        n_samples=4,
-        n_posterior_samples=200,
-        verbose=False,
-        key=jax.random.PRNGKey(0),
+        "mgvi", n_iterations=N_HIER_ITERS, n_samples=4, n_posterior_samples=200, verbose=False, key=jax.random.PRNGKey(0),
     )
     t_hier_spec = time.perf_counter() - t0
-
     sig_spec, tau_spec, tau_spec_is_myr = _pop_posterior_sigma_tau(result_hier_spec)
-    print(
-        f"  σ_PS = {np.median(sig_spec):.2f} [{np.percentile(sig_spec, 16):.2f}, "
-        f"{np.percentile(sig_spec, 84):.2f}]"
-    )
-    print(
-        f"  τ_PS = {np.median(tau_spec):.0f} [{np.percentile(tau_spec, 16):.0f}, "
-        f"{np.percentile(tau_spec, 84):.0f}] Myr"
-    )
+    print(f"  σ_PS = {np.median(sig_spec):.2f} [{np.percentile(sig_spec, 16):.2f}, {np.percentile(sig_spec, 84):.2f}]")
+    print(f"  τ_PS = {np.median(tau_spec):.0f} [{np.percentile(tau_spec, 16):.0f}, {np.percentile(tau_spec, 84):.0f}] Myr")
     print(f"  Wall time: {t_hier_spec:.1f}s")
 else:
     print("Spectroscopic hierarchical fit gated (RUN_EXPENSIVE=False).")

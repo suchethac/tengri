@@ -113,6 +113,11 @@ exclude_patterns = [
     # Sphinx-gallery internal outputs that shouldn't be picked up as source
     "auto_examples/index.rst.new",
     "sg_execution_times.rst",
+    "auto_examples/**/*.py",
+    "auto_examples/**/*.md5",
+    "auto_examples/**/*.codeobj.json",
+    "auto_examples/**/*.zip",
+    "auto_examples/**/*.ipynb",
     # Narrative sections superseded by repo root notebooks/ spine
     "getting_started/**",
     "forward_model/**",

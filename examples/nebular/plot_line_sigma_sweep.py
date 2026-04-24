@@ -45,6 +45,7 @@ ssp = load_ssp_data(SSP_PATH)
 
 # --- Build model: young star-forming galaxy ---
 spec = Parameters(
+    nebular_cue=True,
     sfh_tsnorm_log_peak_sfr=Fixed(1.0),
     sfh_tsnorm_peak_lbt_gyr=Fixed(0.5),  # Peak ~500 Myr ago (young)
     sfh_tsnorm_width_gyr=Fixed(0.3),

@@ -157,71 +157,30 @@ import tengri as tg
 tg.print_logo()
 print(f"tengri {tg.__version__}")
 
-# %% [markdown]
-# ## Key Concepts
-#
-# **IFT correlated fields** — Information Field Theory prior that generates smooth,
-# continuous star formation histories by correlating SFR values across adjacent
-# time bins. This avoids unphysical step-function SFHs.
-#
-# **PSD burstiness** — The Power Spectral Density (PSD) controls the temporal
-# roughness of the SFH. High PSD amplitude (σ) = bursty (rapid SFR fluctuations);
-# low σ = smooth secular evolution. The PSD timescale (τ) sets the characteristic
-# duration of bursts.
-#
-# **logU (ionization parameter)** — log₁₀ of the ratio of ionizing photon density to
-# gas density, Q(H⁰)/n_H. Ranges from ~−4 (diffuse ISM) to ~−1 (dense H II regions).
-# Higher logU produces stronger high-ionization lines ([O III], [Ne III]).
-#
-# **Baked-in nebular** — Nebular continuum and line emission pre-computed from the
-# ionizing spectrum of the stellar population, assuming photoionization equilibrium.
-# No separate nebular parameters needed (but less flexible than CLOUDY grids).
-
 # %%
-# Load SSP templates; multi-wavelength photometry for fast precomputed inference
+# Load SSP templates and multi-wavelength photometry
 ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 from tengri.observation import Photometry
 
-# Multi-wavelength filter set: UV → radio
-# Try preferred filters first; fall back if unavailable
+# Try to load candidate filters (UV to radio); fall back to 2MASS if unavailable
 _candidate_filters = [
-    "galex_fuv",
-    "galex_nuv",
-    "sdss_u",
-    "sdss_g",
-    "sdss_r",
-    "sdss_i",
-    "sdss_z",
-    "twomass_j",
-    "twomass_h",
-    "twomass_ks",
-    "wise_w1",
-    "wise_w2",
-    "herschel_pacs70",
-    "herschel_pacs160",
+    "galex_fuv", "galex_nuv", "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
+    "twomass_j", "twomass_h", "twomass_ks", "wise_w1", "wise_w2", "herschel_pacs70", "herschel_pacs160",
 ]
-
-# Try to create Photometry with as many filters as available
 phot_bands_list = []
 for band in _candidate_filters:
     try:
-        test_phot = Photometry.from_names([band])
+        Photometry.from_names([band])
         phot_bands_list.append(band)
     except Exception:
-        pass  # Filter not available, skip
-
-# Fallback if none available
+        pass
 if not phot_bands_list:
     phot_bands_list = ["twomass_j", "twomass_h", "twomass_ks"]
 
 phot_obs = Photometry.from_names(phot_bands_list, cache_dir="data/filters")
 obs = Observation(photometry=phot_obs)
-
-print(
-    f"SSP templates: {ssp_data.ssp_flux.shape[0]} metallicities × {ssp_data.ssp_flux.shape[1]} ages "
-    f"× {ssp_data.ssp_flux.shape[-1]} wavelengths"
-)
-print(f"Photometric bands ({phot_obs.n_filters}): {', '.join(phot_obs.names)}")
+print(f"SSP: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]} ages × {ssp_data.ssp_flux.shape[-1]} λ")
+print(f"Photometry ({phot_obs.n_filters} bands): {', '.join(phot_obs.names)}")
 
 # %% [markdown]
 # ## Part 0: One SED from X-ray to radio
@@ -286,15 +245,8 @@ del (
     wave_pan_np,
 )  # free SSP device memory before inference
 
-# %% [markdown]
-# ## Part A: A Smooth Galaxy Spectrum
-#
-# We start with the simplest useful model: a truncated skew-normal SFH
-# (Bellstedt+2020) with 7 free parameters. This is comparable to what
-# Prospector or BAGPIPES would fit — but fully differentiable and much faster.
-
 # %%
-# Define the parameter specification
+# Define 7-parameter model (dense basis SFH + stellar mass, metallicity, dust)
 spec_param = Parameters(
     sfh_db_log_total_mass=Uniform(8, 12),
     sfh_db_log_sfr_inst=Uniform(-2, 3),
@@ -308,36 +260,24 @@ spec_param = Parameters(
     redshift=Fixed(0.1),
     mean_sfh_type="dense_basis",
 )
-print(f"Free parameters ({spec_param.n_free}):")
-for name in spec_param.free_params:
-    print(f"  {name}")
+print(f"Free parameters ({spec_param.n_free}): {', '.join(spec_param.free_params)}")
 
-# %%
-# Create the model with photometric precomputation (fast)
+# Create model with photometric precomputation
 model_param = SEDModel(spec_param, ssp_data, observation=obs)
-print(
-    f"Model created: {spec_param.n_free} free parameters, {len(phot_obs.names)} photometric bands"
-)
 
-# %%
-# The forward model is fast
+# Benchmark: forward model is fast
 params_test = spec_param.sample(jax.random.PRNGKey(99))
-
-# Raw (first call, includes tracing)
 t0 = time.perf_counter()
 _ = model_param.predict_photometry(params_test)
 t_raw = (time.perf_counter() - t0) * 1e3
-
-# JIT-compiled
 jit_predict = jax.jit(model_param.predict_photometry)
-_ = jit_predict(params_test)  # compile
+_ = jit_predict(params_test)
 t0 = time.perf_counter()
 for _ in range(100):
     _ = jit_predict(params_test)
     _.block_until_ready()
 t_jit = (time.perf_counter() - t0) / 100 * 1e6
-
-print(f"Forward model: {t_raw:.1f} ms (raw)  →  {t_jit:.0f} µs (JIT-compiled)")
+print(f"Forward model: {t_raw:.1f} ms (raw) → {t_jit:.0f} µs (JIT)")
 
 # %%
 # Generate mock photometry: monotonically increasing SFH with high SFR (30 Msun/yr)
@@ -414,33 +354,14 @@ ax.grid(True, alpha=0.3, axis="y")
 fig.tight_layout()
 plt.show()
 
-# %% [markdown]
-# ### Inference: NUTS (No-U-Turn Sampler)
-#
-# NUTS is exact and fast. With photometry precomputation, inference runs in seconds.
-# No-U-Turn sampling stops the leapfrog integrator when the trajectory turns back on itself,
-# yielding high acceptance rates and efficient exploration.
-
 # %%
-# Disable background compilation overhead
+# Run NUTS (No-U-Turn Sampler) inference
 os.environ["TENGRI_NO_BACKGROUND_COMPILE"] = "1"
-fitter_param = Fitter(
-    model_param,
-    mock_param.flux_obs,
-    mock_param.noise,
-)
-
-# NUTS (No-U-Turn Sampler) - fast, exact, JIT-compiled
+fitter_param = Fitter(model_param, mock_param.flux_obs, mock_param.noise)
 t0 = time.perf_counter()
-result_mcmc = fitter_param.run(
-    "mcmc_nuts",
-    n_warmup=500,
-    n_samples=1000,
-    verbose=False,
-)
+result_mcmc = fitter_param.run("mcmc_nuts", n_warmup=500, n_samples=1000, verbose=False)
 t_mcmc = time.perf_counter() - t0
-
-print(f"NUTS:  {t_mcmc:.1f}s  (fast, exact, JIT-compiled)")
+print(f"NUTS: {t_mcmc:.1f}s (fast, exact, JIT-compiled)")
 
 # %%
 # --- FIGURE 2: NUTS Photometric Fit ---
@@ -568,46 +489,23 @@ if fig is not None:
     fig.suptitle("NUTS: Parametric Posterior (Monotonic Rising SFH, D = 7)", y=1.02)
 plt.show()
 
-# %% [markdown]
-# ### Convergence Diagnostics
-
 # %%
-# Convergence diagnostics
+# Convergence diagnostics and parameter recovery
 ct = convergence_table({"NUTS": result_mcmc})
-
-# %% [markdown]
-# ### Parameter recovery
-
-# %%
-print("NUTS Parameter Recovery:")
-print(f"{'Parameter':<32s} {'True':>8s} {'Median':>8s} {'16%':>8s} {'84%':>8s} {'Status':>6s}")
-print("-" * 76)
+print("\nParameter Recovery:")
+print(f"{'Parameter':<30s} {'True':>8s} {'Median':>8s} {'16–84%':>12s} {'Status':>6s}")
+print("-" * 70)
 for name in spec_param.free_params:
     truth = float(true_params_param[name])
     lo, med, hi = np.percentile(result_mcmc.samples[name], [16, 50, 84])
     covered = "✓" if lo <= truth <= hi else "MISS"
-    print(f"  {name:<30s} {truth:8.3f} {med:8.3f} {lo:8.3f} {hi:8.3f} {covered:>6s}")
+    print(f"  {name:<28s} {truth:8.3f} {med:8.3f} [{lo:6.3f}, {hi:6.3f}] {covered:>6s}")
 
-# %%
-# Performance summary
-print("\n  Inference Performance (Photometry Precomputed)")
-print("  " + "=" * 60)
-print(f"  {'Method':<20s} {'Runtime':>10s} {'Samples':>10s} {'ESS/sec':>10s}")
-print("  " + "-" * 60)
 n_mcmc = len(next(iter(result_mcmc.samples.values())))
-print(f"  {'NUTS':<20s} {t_mcmc:>9.1f}s {n_mcmc:>10d} {n_mcmc / t_mcmc:>10.0f}")
-print("  " + "=" * 60)
-
-# %% [markdown]
-# ## Summary
+print(f"\nNUTS: {t_mcmc:.1f}s, {n_mcmc} samples, {n_mcmc/t_mcmc:.0f} ESS/s")
 
 # %%
-# Summary
-print("\n  ✓ Quickstart Complete")
-print("  " + "=" * 60)
-print("  NUTS (No-U-Turn Sampler) inference on mock photometry.")
-print("  Fast, exact, JIT-compiled—optimized for photometric fitting.")
-print("  " + "=" * 60)
+print("\n✓ Quickstart complete: NUTS inference on mock photometry (7 parameters, <5s)")
 
 # %% [markdown]
 # ## What You Learned

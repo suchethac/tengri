@@ -326,51 +326,23 @@ plt.show()
 #
 # ### 2a. Modified Blackbody
 #
-# The simplest dust emission model: $S_\nu \propto \nu^\beta B_\nu(T)$.
-# Two free parameters: temperature $T$ and emissivity index $\beta$.
+# Simplest model: $S_\nu \propto \nu^\beta B_\nu(T)$ with temperature $T$ and emissivity $\beta$.
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+fig, ax = plt.subplots(figsize=(7, 4))
 
-# --- Panel 1: Vary temperature ---
-ax = axes[0]
-temps = [20, 30, 40, 50, 60]
+temps = [20, 35, 50]
 cmap = plt.cm.inferno
 for i, T in enumerate(temps):
     lnu = modified_blackbody(wave_aa, L_ABS, dust_T=float(T), dust_beta_ir=1.8)
-    color = cmap(0.2 + 0.7 * i / (len(temps) - 1))
+    color = cmap(0.2 + 0.6 * i / (len(temps) - 1))
     ax.plot(wave_um, np.array(lnu), lw=2.0, color=color, label=f"T = {T} K")
-
-    # Mark Wien peak: lambda_peak ~ 2898 / T um (Wien's law, approximate for MBB)
-    # Actual peak of nu^beta * B_nu shifts from the simple Wien peak
-    peak_idx = int(np.argmax(np.array(lnu)))
-    ax.plot(wave_um[peak_idx], np.array(lnu)[peak_idx], "o", color=color, ms=6, zorder=5)
 
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title(r"Modified Blackbody: vary $T$ ($\beta = 1.8$)")
-ax.set_xlim(1, 1000)
-ax.legend(fontsize=10)
-ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
-ax.set_xticks([1, 10, 100, 1000])
-_set_reasonable_log_ylim(ax)
-
-# --- Panel 2: Vary beta ---
-ax = axes[1]
-betas = [1.0, 1.5, 2.0, 2.5]
-cmap = plt.cm.viridis
-for i, beta in enumerate(betas):
-    lnu = modified_blackbody(wave_aa, L_ABS, dust_T=35.0, dust_beta_ir=beta)
-    color = cmap(0.2 + 0.7 * i / (len(betas) - 1))
-    ax.plot(wave_um, np.array(lnu), lw=2.0, color=color, label=rf"$\beta$ = {beta:.1f}")
-
-ax.set_xscale("log")
-ax.set_yscale("log")
-ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
-ax.set_title(r"Modified Blackbody: vary $\beta$ ($T = 35$ K)")
 ax.set_xlim(1, 1000)
 ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
@@ -384,41 +356,17 @@ plt.show()
 # %% [markdown]
 # ### 2b. Casey (2012)
 #
-# Extends the modified blackbody with a mid-IR power-law component
-# to capture the 8--40 um excess from warm dust continuum emission.
-# The two components are joined by a smooth sigmoid transition function.
+# Mid-IR power-law component captures 8--40 μm excess from warm dust.
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+fig, ax = plt.subplots(figsize=(7, 4))
 
-# --- Panel 1: Casey vs MBB comparison ---
-ax = axes[0]
 lnu_mbb = modified_blackbody(wave_aa, L_ABS, dust_T=35.0, dust_beta_ir=1.8)
 lnu_c12 = casey2012(wave_aa, L_ABS, dust_T=35.0, dust_beta_ir=1.8, dust_alpha_mir=2.0)
 
-ax.plot(
-    wave_um,
-    np.array(lnu_mbb),
-    lw=2.0,
-    ls="--",
-    color=MODEL_COLORS["modified_blackbody"],
-    label="Modified BB",
-)
+ax.plot(wave_um, np.array(lnu_mbb), lw=2.0, ls="--",
+        color=MODEL_COLORS["modified_blackbody"], label="Modified BB")
 ax.plot(wave_um, np.array(lnu_c12), lw=2.0, color=MODEL_COLORS["casey2012"], label="Casey (2012)")
-
-# Shade the mid-IR excess region
-lnu_mbb_arr = np.array(lnu_mbb)
-lnu_c12_arr = np.array(lnu_c12)
-wave_um_arr = np.array(wave_um)
-mask_excess = (wave_um_arr >= 3) & (wave_um_arr <= 60)
-ax.fill_between(
-    wave_um_arr[mask_excess],
-    lnu_mbb_arr[mask_excess],
-    lnu_c12_arr[mask_excess],
-    alpha=0.2,
-    color=MODEL_COLORS["casey2012"],
-    label="Mid-IR excess",
-)
 
 ax.set_xscale("log")
 ax.set_yscale("log")
@@ -431,97 +379,27 @@ ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
 _set_reasonable_log_ylim(ax)
 
-# --- Panel 2: Vary alpha_mir ---
-ax = axes[1]
-alphas = [1.5, 2.0, 2.5]
-cmap = plt.cm.Reds
-for i, alpha in enumerate(alphas):
-    lnu = casey2012(wave_aa, L_ABS, dust_T=35.0, dust_beta_ir=1.8, dust_alpha_mir=alpha)
-    color = cmap(0.35 + 0.55 * i / (len(alphas) - 1))
-    ax.plot(wave_um, np.array(lnu), lw=2.0, color=color, label=rf"$\alpha_{{MIR}}$ = {alpha:.1f}")
-
-# Reference MBB
-ax.plot(wave_um, np.array(lnu_mbb), lw=1.5, ls=":", color="grey", label="MBB (no power law)")
-
-ax.set_xscale("log")
-ax.set_yscale("log")
-ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
-ax.set_title(r"Casey (2012): vary $\alpha_{\mathrm{MIR}}$")
-ax.set_xlim(1, 1000)
-ax.legend(fontsize=10)
-ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
-ax.set_xticks([1, 10, 100, 1000])
-_set_reasonable_log_ylim(ax)
-
 fig.tight_layout()
 # fig.savefig(os.path.join(FIGDIR, "16_casey2012.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
-plt.show()
-
-# %% [markdown]
-# ### 2c. PAH Drude Profiles (Smith+2007)
-#
-# The PAH spectrum itself — discrete resonant features on top of a continuum — is
-# exposed as `pah_template` in the dust module. We show the feature positions and
-# how the public `SMITH2007_PAH_FEATURES` tuple is laid out. A full MAGPHYS-style
-# four-component decomposition (PAH + hot MIR + warm BC + cold ISM) is not yet
-# implemented as a single model in tengri — users needing that can compose it from
-# `pah_template` plus `modified_blackbody` components and set their own fractions.
-
-# %%
-fig, ax = plt.subplots(figsize=(8, 5))
-
-# Fine wavelength grid for PAH features (2--15 um)
-wave_pah_aa = jnp.linspace(2e4, 15e4, 1000)
-wave_pah_um = wave_pah_aa * 1e-4
-pah_emission = pah_template(wave_pah_aa * 1e-4)
-ax.plot(wave_pah_um, np.array(pah_emission), lw=2.0, color="#d62728")
-
-# Annotate each Smith+2007 feature from the public tuple
-for feat in SMITH2007_PAH_FEATURES:
-    center = float(feat.wave_um)
-    ax.axvline(center, color="grey", ls=":", lw=0.8, alpha=0.7)
-    ax.text(
-        center,
-        np.max(np.array(pah_emission)) * 1.05,
-        f"{center:.1f}",
-        ha="center",
-        va="bottom",
-        fontsize=10,
-        color="#555555",
-    )
-
-ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel("PAH emission (arbitrary units)")
-ax.set_title(r"PAH Drude Profiles — Smith+2007 features")
-ax.set_xlim(2, 15)
-_emax = float(np.max(np.array(pah_emission)))
-ax.set_ylim(0, _emax * 1.2)
-
-fig.tight_layout()
 plt.show()
 
 # %% [markdown]
 # ---
 # ## 3. Template-Based Models
 #
-# Template-based models auto-load tabulated grids from `data/` on first
-# call.
+# Template grids auto-load from `data/` on first call.
 #
 # ### 3a. Draine & Li 2007
 #
-# Three parameters: `qPAH` (PAH mass fraction), `Umin` (minimum
-# radiation field intensity), `gamma` (fraction in PDR component).
+# PAH mass fraction `qPAH`, radiation field intensity `Umin`, PDR fraction `gamma`.
 
 # %%
-fig, axes = plt.subplots(1, 3, figsize=(12, 4.5))
+fig, ax = plt.subplots(figsize=(7, 4))
 
-# --- Panel 1: Vary qPAH ---
-ax = axes[0]
-qpah_values = [0.47, 1.5, 2.5, 4.58]
+qpah_values = [1.0, 2.5, 4.0]
 cmap = plt.cm.YlOrRd
 for i, qp in enumerate(qpah_values):
-    color = cmap(0.25 + 0.65 * i / (len(qpah_values) - 1))
+    color = cmap(0.25 + 0.5 * i / (len(qpah_values) - 1))
     lnu = draine_li2007(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=qp)
     ax.plot(wave_um, np.array(lnu), lw=2.0, color=color, label=f"$q_{{PAH}}$ = {qp}%")
 
@@ -529,47 +407,7 @@ ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
-ax.set_title(r"DL07: vary $q_{\mathrm{PAH}}$")
-ax.set_xlim(1, 1000)
-ax.legend(fontsize=10)
-ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
-ax.set_xticks([1, 10, 100, 1000])
-_set_reasonable_log_ylim(ax)
-
-# --- Panel 2: Vary Umin ---
-ax = axes[1]
-umin_values = [0.5, 1.0, 5.0, 10.0]
-cmap = plt.cm.Blues
-for i, um in enumerate(umin_values):
-    color = cmap(0.3 + 0.6 * i / (len(umin_values) - 1))
-    lnu = draine_li2007(wave_aa, L_ABS, dust_umin=um, dust_gamma_dl=0.01, dust_qpah=2.5)
-    ax.plot(wave_um, np.array(lnu), lw=2.0, color=color, label=f"$U_{{min}}$ = {um}")
-
-ax.set_xscale("log")
-ax.set_yscale("log")
-ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
-ax.set_title(r"DL07: vary $U_{\mathrm{min}}$")
-ax.set_xlim(1, 1000)
-ax.legend(fontsize=10)
-ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
-ax.set_xticks([1, 10, 100, 1000])
-_set_reasonable_log_ylim(ax)
-
-# --- Panel 3: Vary gamma (single-U vs PDR mix) ---
-ax = axes[2]
-gamma_values = [0.001, 0.01, 0.05, 0.20]
-cmap = plt.cm.Greens
-for i, gam in enumerate(gamma_values):
-    color = cmap(0.3 + 0.6 * i / (len(gamma_values) - 1))
-    lnu = draine_li2007(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=gam, dust_qpah=2.5)
-    ax.plot(wave_um, np.array(lnu), lw=2.0, color=color, label=rf"$\gamma$ = {gam}")
-
-ax.set_xscale("log")
-ax.set_yscale("log")
-ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
-ax.set_title(r"DL07: vary $\gamma$ (PDR fraction)")
+ax.set_title(r"DL07: PAH fraction variation")
 ax.set_xlim(1, 1000)
 ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
@@ -583,24 +421,18 @@ plt.show()
 # %% [markdown]
 # ### 3b. Draine & Li 2014
 #
-# Extension of DL07 with a free `alpha` parameter controlling the
-# distribution of radiation field intensities in the PDR component.
-# DL07 uses a fixed alpha=2.0.
+# Extension of DL07 with free `alpha` parameter.
 
 # %%
 fig, ax = plt.subplots(figsize=(7, 4))
 
-# DL07 reference
 lnu_dl07 = draine_li2007(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.05, dust_qpah=2.5)
-ax.plot(
-    wave_um, np.array(lnu_dl07), lw=2.5, color="k", ls="--", label=r"DL07 ($\alpha$ = 2.0 fixed)"
-)
+ax.plot(wave_um, np.array(lnu_dl07), lw=2.5, color="k", ls="--", label=r"DL07 ($\alpha$ = 2.0)")
 
-# DL14 with varying alpha
-alpha_values = [1.5, 2.0, 2.5, 3.0]
+alpha_values = [1.5, 2.5, 3.0]
 cmap = plt.cm.plasma
 for i, alpha in enumerate(alpha_values):
-    color = cmap(0.15 + 0.7 * i / (len(alpha_values) - 1))
+    color = cmap(0.15 + 0.6 * i / (len(alpha_values) - 1))
     lnu = draine_li2014(
         wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.05, dust_qpah=2.5, dust_alpha_dl14=alpha
     )
@@ -610,7 +442,7 @@ ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
-ax.set_title("DL14 vs DL07: effect of free alpha parameter")
+ax.set_title("DL14 vs DL07")
 ax.set_xlim(1, 1000)
 ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
@@ -624,15 +456,12 @@ plt.show()
 # %% [markdown]
 # ### 3c. Dale+2014
 #
-# One-parameter family of IR templates parameterized by alpha, which
-# controls the power-law distribution of dust heating intensities.
-# Low alpha = intense radiation field (warmer). High alpha = weak
-# radiation field (cooler).
+# Alpha parameter controls dust heating intensity distribution.
 
 # %%
 fig, ax = plt.subplots(figsize=(7, 4))
 
-alpha_dale_values = [1.0, 1.5, 2.0, 2.5, 3.0]
+alpha_dale_values = [1.0, 2.0, 3.0]
 cmap = plt.cm.RdYlBu_r
 for i, alpha in enumerate(alpha_dale_values):
     color = cmap(0.1 + 0.8 * i / (len(alpha_dale_values) - 1))
@@ -643,33 +472,11 @@ ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
-ax.set_title(r"Dale+2014: vary $\alpha$ (radiation field distribution)")
+ax.set_title(r"Dale+2014: radiation field variation")
 ax.set_xlim(1, 1000)
 ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
-
-# Annotate warm/cold trend
-ax.annotate(
-    "warm (intense UV)",
-    xy=(
-        30,
-        np.max(np.array(dale2014(wave_aa, L_ABS, dust_alpha_dale=1.0))) * 0.8,
-    ),
-    fontsize=10,
-    color=cmap(0.1),
-    style="italic",
-)
-ax.annotate(
-    "cold (weak UV)",
-    xy=(
-        200,
-        np.max(np.array(dale2014(wave_aa, L_ABS, dust_alpha_dale=3.0))) * 0.5,
-    ),
-    fontsize=10,
-    color=cmap(0.9),
-    style="italic",
-)
 _set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
