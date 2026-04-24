@@ -147,6 +147,12 @@ from _plot_style import (
 
 setup_style()
 
+# %%
+# tengri logo banner — prints the hex-spiral mark (default size).
+import tengri as tg
+tg.print_logo()
+print(f"tengri {tg.__version__}")
+
 # %% [markdown]
 # ## Key Concepts
 #
