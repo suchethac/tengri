@@ -1,10 +1,29 @@
-"""ASCII-art logo for tengri (shown in doctor() header and CLI banner)."""
+"""ASCII-art logo for tengri (shown in doctor() header and CLI banner).
+
+Three sizes:
+    LOGO         : default ~10-line compact rendition (used in doctor(), print_logo())
+    LOGO_FULL    : full ~40-line sunburst; opt-in via print_logo(size="full")
+    LOGO_BANNER  : one-liner for CLI --version
+
+All three are plain Unicode block characters; no ANSI colour codes.
+Design credit: Suchetha Cooray.
+"""
 
 from __future__ import annotations
 
-# Unicode ASCII-art logo for tengri.
-# Design credit: Suchetha Cooray.
-LOGO = r"""                         ▗▄▞▛▛▜▜▐▗▖
+# Default: a compact, recognisable sunburst, ~10 lines, ~42 cols.
+LOGO = r"""       ▄▟▛▛▜▙▄
+     ▟▀   ▘   ▀▙
+   ▟▀  ▗▄▟▛▜▙▄  ▀▙
+  ▛   ▟▀  ●  ▀▙   ▜
+  ▜   ▜▄     ▄▟   ▛
+   ▀▙  ▝▀▙▜▛▀▘  ▟▀
+     ▀▙▄     ▄▙▀
+        ▀▜▙▛▀"""
+
+
+# Full detailed sunburst (original design) — opt-in via print_logo(size="full").
+LOGO_FULL = r"""                         ▗▄▞▛▛▜▜▐▗▖
                       ▄▐▀▙▚▙▛▝▘▜▙▛▟▜▄▖
                    ▄▐▚▚▙▛▘▘       ▀▐▞▟▜▄▖
                 ▗▞▜▐▐▞▀             ▝▝▙▚▜▜▄▖
@@ -43,53 +62,71 @@ LOGO = r"""                         ▗▄▞▛▛▜▜▐▗▖
                  ▝▚▙▚▛▙▄            ▄▞▛▟▟▀▀
                     ▀▚▙▚▛▙▄▖    ▗▄▐▜▟▟▀▘
                        ▀▜▟▟▟▜▜▜▚█▞█▌▘
-                          ▝█████▙▀                          """
+                          ▝█████▙▀"""
 
 
-# Compact one-line banner for routine prints (e.g., CLI --version, logs).
+# Compact one-line banner for routine prints (e.g. CLI --version, logs).
 LOGO_BANNER = "  ▗▖▛▟▞▘ tengri ▝▚▙▛▖▖"
 
 
-def print_logo(compact: bool = False) -> None:
+def _resolve(size: str) -> str:
+    """Dispatch ``size`` to one of ``LOGO`` / ``LOGO_FULL`` / ``LOGO_BANNER``."""
+    if size in ("default", "small", None):
+        return LOGO
+    if size == "full":
+        return LOGO_FULL
+    if size in ("banner", "compact"):
+        return LOGO_BANNER
+    raise ValueError(
+        f"Unknown logo size '{size}'. Use 'default' (small), 'full', or 'compact'."
+    )
+
+
+def print_logo(size: str = "default", *, compact: bool | None = None) -> None:
     """Print the tengri logo.
 
     Parameters
     ----------
-    compact : bool
-        If True, print the one-line banner. Default is the full logo.
+    size : {"default", "full", "compact"}
+        Which size to print. "default" is the small ~10-line version.
+        "full" is the detailed sunburst. "compact" is the one-line banner.
+    compact : bool or None
+        Deprecated alias for ``size="compact"``. Kept for backward compatibility.
 
     Notes
     -----
-    Respects the TENGRI_NO_LOGO environment variable. If set, suppresses output.
+    Respects the ``TENGRI_NO_LOGO`` environment variable: if set to anything
+    truthy, the function prints nothing.
     """
     import os
     import sys
 
-    # Respect TENGRI_NO_LOGO env var for quiet runs.
     if os.environ.get("TENGRI_NO_LOGO"):
         return
-    if compact:
-        sys.stdout.write(LOGO_BANNER + "\n")
-    else:
-        sys.stdout.write(LOGO + "\n")
+    if compact is not None:
+        size = "compact" if compact else "default"
+    sys.stdout.write(_resolve(size) + "\n")
     sys.stdout.flush()
 
 
-def logo_str(compact: bool = False) -> str:
-    """Return the logo as a string (no newline at end).
+def logo_str(size: str = "default", *, compact: bool | None = None) -> str:
+    """Return the logo as a string (no trailing newline).
 
     Parameters
     ----------
-    compact : bool
-        If True, return the one-line banner. Default is the full logo.
+    size : {"default", "full", "compact"}
+    compact : bool or None
+        Deprecated alias for ``size="compact"``.
 
     Returns
     -------
     str
-        The logo string, respecting TENGRI_NO_LOGO environment variable.
+        The requested logo, or ``""`` if ``TENGRI_NO_LOGO`` is set.
     """
     import os
 
     if os.environ.get("TENGRI_NO_LOGO"):
         return ""
-    return LOGO_BANNER if compact else LOGO
+    if compact is not None:
+        size = "compact" if compact else "default"
+    return _resolve(size)

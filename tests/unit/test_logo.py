@@ -38,15 +38,26 @@ def test_print_logo_without_env(capsys, monkeypatch):
     assert out.endswith("\n")
 
 
-def test_print_logo_full(capsys, monkeypatch):
-    """print_logo(compact=False) should print full logo."""
+def test_print_logo_default(capsys, monkeypatch):
+    """Default print_logo() should print the small logo (multi-line, > banner)."""
     monkeypatch.delenv("TENGRI_NO_LOGO", raising=False)
     from tengri import print_logo
 
-    print_logo(compact=False)
+    print_logo()
     out = capsys.readouterr().out
-    # Full logo is much longer than banner
-    assert len(out) > 1000
+    assert "\n" in out
+    assert len(out) > 50   # small logo is ~140 chars
+    assert len(out) < 500  # but not the huge full one
+
+
+def test_print_logo_full(capsys, monkeypatch):
+    """print_logo(size='full') should print the full ~40-line logo."""
+    monkeypatch.delenv("TENGRI_NO_LOGO", raising=False)
+    from tengri import print_logo
+
+    print_logo(size="full")
+    out = capsys.readouterr().out
+    assert len(out) > 1000  # full logo is ~2200 chars
 
 
 def test_logo_str_respects_env(monkeypatch):
