@@ -107,6 +107,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.nebular._constants import _LOG10_ZSUN
+
 # ── Physical constants ────────────────────────────────────────────
 from tengri.utils.physics_constants import (
     C_CGS as _C_CGS,
@@ -116,10 +118,6 @@ from tengri.utils.physics_constants import (
 _LOG_LSUN = jnp.log10(_LSUN_ERG)
 _LOG_4PI = jnp.log10(4.0 * jnp.pi)
 _LOG_C = jnp.log10(_C_CGS)
-
-# Solar metallicity (Asplund+2009).
-# SSP ssp_lgmet stores absolute log10(Z); Cue uses log10(Z/Zsun).
-_LOG10_ZSUN = -1.8477116556169435
 
 # Maximum SSP age contributing to nebular emission
 _MAX_NEB_LOG_AGE = 8.0  # log10(100 Myr in yr)
@@ -678,32 +676,6 @@ def prepare_nn_params_from_dict(params: dict) -> jnp.ndarray:
 
 
 # ── Line prediction ───────────────────────────────────────────────
-
-
-def _predict_lines_single_net(
-    nn_params: jnp.ndarray,
-    net: SubNetWeights,
-) -> jnp.ndarray:
-    """Predict log10 line luminosities from a single line sub-network.
-
-    Parameters
-    ----------
-    nn_params : array, shape (12,)
-        NN-ready parameters (logq, linear n, etc.).
-    net : SubNetWeights
-        Single line sub-network's weights.
-
-    Returns
-    -------
-    array, shape (n_lines_for_this_net,)
-        Log10(luminosity) [Lsun/Q_H] for each line predicted by this net.
-
-    Notes
-    -----
-    **JIT-compatible**: yes — delegates to _speculator_log_spectrum.
-
-    """
-    return _speculator_log_spectrum(nn_params, net)
 
 
 def predict_all_lines(
