@@ -171,14 +171,15 @@ class FitResult:
 
     A thin, non-invasive wrapper that bundles any result object (Posterior,
     SEDResult, or list of Posteriors) with execution provenance and citation
-    metadata. Downstream code accesses the original result via ``.inner``,
-    preserving its exact structure and behavior.
+    metadata. Downstream code can access the result's attributes (e.g., ``.samples``,
+    ``.params``) directly on the FitResult object via attribute forwarding.
+    For direct access to the result object, use ``.inner``.
 
     Parameters
     ----------
     inner : Any
         The underlying result object (Posterior, SEDResult, or list[Posterior]).
-        Accessed by downstream code without modification.
+        Attributes are forwarded via __getattr__ for transparent access.
     provenance : Provenance
         Execution environment and timing metadata.
     citation_keys : list[str], optional
@@ -214,9 +215,10 @@ class FitResult:
     Notes
     -----
     FitResult is not frozen, allowing backends to populate it
-    incrementally during inference. The wrapper itself is non-invasive:
-    code that expects a bare Posterior or SEDResult can still call
-    ``result.inner.samples`` or ``result.inner.params`` directly.
+    incrementally during inference. The wrapper itself is transparent:
+    accessing ``result.samples`` or ``result.params`` automatically forwards
+    to ``result.inner.samples`` or ``result.inner.params`` via ``__getattr__``.
+    For backward compatibility, ``result.inner`` is always available.
 
     Examples
     --------
@@ -229,6 +231,8 @@ class FitResult:
     ...     preset="starforming",
     ... )
     >>> print(fit_result.summary())
+    >>> # Access result attributes directly; forwarding is transparent
+    >>> print(fit_result.samples)  # forwards to fit_result.inner.samples
     >>> fit_result.save("/data/result.h5")
     >>> loaded = FitResult.load("/data/result.h5")
     """
@@ -238,6 +242,42 @@ class FitResult:
     citation_keys: list[str] = field(default_factory=list)
     backend: str | None = None
     preset: str | None = None
+
+    def __getattr__(self, name: str) -> Any:
+        """Forward attribute access to inner result object.
+
+        Allows transparent access to result attributes (e.g., ``.samples``,
+        ``.params``) without explicit ``.inner`` reference.
+
+        Parameters
+        ----------
+        name : str
+            Attribute name.
+
+        Returns
+        -------
+        Any
+            Attribute value from inner result object.
+
+        Raises
+        ------
+        AttributeError
+            If the attribute does not exist on inner.
+
+        Notes
+        -----
+        This is called only for attributes not found on FitResult itself.
+        Attributes like ``inner``, ``provenance``, ``citations``, etc.
+        are resolved normally without calling this method.
+        """
+        # Avoid infinite recursion on dataclass initialization
+        if name in ("inner", "provenance", "citation_keys", "backend", "preset"):
+            raise AttributeError(f"FitResult has no attribute {name!r}")
+        try:
+            inner = object.__getattribute__(self, "inner")
+        except AttributeError:
+            raise AttributeError(f"FitResult has no attribute {name!r}") from None
+        return getattr(inner, name)
 
     @property
     def citations(self) -> list[Citation]:

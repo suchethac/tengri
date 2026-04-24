@@ -1,20 +1,55 @@
-"""User-facing filter discovery helpers.
+"""DEPRECATED: Filter discovery helpers — use tengri.observation.filters instead.
 
-Thin wrappers around tengri.observation.filters.load_filter_set plus an
-in-memory directory of the curated filter library. No network calls.
+This module is a backward-compatibility shim. All symbols have been consolidated
+into tengri.observation.filters. Importing from this module emits a DeprecationWarning.
 
-Functions
----------
-list_filters(instrument=None) -> list[str]
-    Names of filters shipped with tengri. Filter by instrument prefix.
-load(names) -> filter objects
-    Alias for ``tengri.observation.filters.load_filter_set`` for discoverability.
-describe(name) -> str
-    One-line description of a filter (wavelength range, instrument).
-suggest(redshift, coverage='visible_to_nir') -> list[str]
-    Filter names that cover the requested rest-frame span at this redshift.
+Direct imports from tengri.observation.filters do NOT trigger the warning.
 """
 
-from tengri.filters.core import describe, list_filters, load, suggest
+import warnings
 
-__all__ = ["describe", "list_filters", "load", "suggest"]
+# Emit deprecation warning on module import (happens once per Python session)
+warnings.warn(
+    "The tengri.filters module is deprecated and will be removed in a future version. "
+    "Please use tengri.observation.filters instead. "
+    "Direct imports from tengri.observation.filters do not trigger this warning.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+# Re-export all public symbols from the canonical location
+from tengri.observation.filters import (
+    FILTER_REGISTRY,
+    compute_effective_wavelength,
+    compute_fwhm,
+    describe,
+    download_filter,
+    filter_info,
+    list_available_filters,
+    list_filters,
+    load,
+    load_alma_band,
+    load_custom_filter,
+    load_filter,
+    load_filter_set,
+    load_tophat_filter,
+    suggest,
+)
+
+__all__ = [
+    "FILTER_REGISTRY",
+    "compute_effective_wavelength",
+    "compute_fwhm",
+    "describe",
+    "download_filter",
+    "filter_info",
+    "list_available_filters",
+    "list_filters",
+    "load",
+    "load_alma_band",
+    "load_custom_filter",
+    "load_filter",
+    "load_filter_set",
+    "load_tophat_filter",
+    "suggest",
+]

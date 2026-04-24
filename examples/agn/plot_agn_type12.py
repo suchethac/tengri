@@ -36,7 +36,7 @@ wave_jnp = jnp.array(wave_aa)
 for cfg in configs:
     lnu = unified_nlr_blr(
         wave_jnp,
-        agn_log_lbol=44.0,
+        agn_log_lbol=11.0,
         agn_cos_inc=cfg["cos_inc"],
         agn_theta_torus=30.0,
         agn_log_mbh=8.0,

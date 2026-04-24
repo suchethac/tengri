@@ -4,7 +4,9 @@ Computes observed flux densities by convolving the rest-frame SED
 (redshifted) through filter transmission curves.
 """
 
-from typing import NamedTuple
+from __future__ import annotations
+
+import dataclasses
 
 import jax
 import jax.numpy as jnp
@@ -13,7 +15,8 @@ from tengri.utils.conversions import lnu_to_fnu
 from tengri.utils.magnitudes import fnu_to_ab_mag
 
 
-class FilterCurve(NamedTuple):
+@dataclasses.dataclass(frozen=True)
+class FilterCurve:
     """Photometric filter transmission curve.
 
     Represents a single broad-band photometric filter via its wavelength-dependent
@@ -53,8 +56,8 @@ class FilterCurve(NamedTuple):
 
     """
 
-    wave: jnp.ndarray
-    trans: jnp.ndarray
+    wave: jnp.ndarray = dataclasses.field(hash=False)
+    trans: jnp.ndarray = dataclasses.field(hash=False)
     name: str = ""
 
 

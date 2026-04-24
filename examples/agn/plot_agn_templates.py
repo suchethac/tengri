@@ -20,8 +20,8 @@ wavelength = jnp.logspace(np.log10(100), np.log10(1e6), 1000)
 wave_um = np.array(wavelength) / 1e4  # convert to micron for plotting
 
 # --- Figure 1: Component anatomy at fixed luminosity ---
-disc = powerlaw_disc(wavelength, agn_log_lbol=44.0, agn_slope=-1.5)
-torus = simple_torus(wavelength, agn_log_lbol=44.0, agn_torus_temp=1500.0)
+disc = powerlaw_disc(wavelength, agn_log_lbol=11.0, agn_slope=-1.5)
+torus = simple_torus(wavelength, agn_log_lbol=11.0, agn_torus_temp=1500.0)
 combined = disc + 0.5 * torus
 
 fig, axes = plt.subplots(1, 2, figsize=(13, 5))

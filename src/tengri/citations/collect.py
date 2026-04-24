@@ -133,31 +133,82 @@ def collect_citations(
 ) -> list[Citation]:
     """Return citations for everything ``obj`` is configured to use.
 
+    Inspects the object's model configuration (dust law, nebular backend,
+    IGM model, AGN sub-components), the last inference backend if a fit has
+    been run, and any ``@cites``-annotated callables exposed as attributes.
+    Returns *only* the citations that apply to this specific run — no
+    dust-emission citation if dust emission is off, no Cue citation if
+    nebular emission is off, no NUTS citation if MAP was the backend.
+
     Parameters
     ----------
     obj : Galaxy | SEDModel | Fitter | ModelConfig | FitResult | Any
-        Any object whose configuration can be inspected for dust, nebular,
-        IGM, and inference-backend choices. Unknown objects return just
-        the core citations (``tengri``, ``jax``, ``dsps``).
-    include_backend : bool
-        If ``True`` (default), also include citations for the last inference
-        backend used (``_last_backend`` on Galaxy, or ``backend_name`` on
-        Fitter/FitResult). Set to ``False`` to get citations for the model
+        Object whose configuration is inspected. If ``obj`` exposes a
+        ``bibliography`` attribute, its contents are returned verbatim; for
+        plain objects the citations are reconstructed from ``model_config``.
+        Unknown objects yield only the core citations (``tengri``, ``jax``,
+        ``dsps``).
+    include_backend : bool, optional
+        Include citations for the last inference backend used. Default
+        ``True``. Pass ``False`` to get citations for the model
         configuration alone, independent of how it will be fit.
 
     Returns
     -------
-    list[Citation]
-        Deduplicated, registry-resolved citations. Any key that is not
-        registered in ``references.bib`` is silently skipped.
+    list of Citation
+        Deduplicated, registry-resolved records, ordered by first use.
+        Keys that are not in :data:`tengri.citations.registry.REGISTRY` are
+        silently skipped rather than raising.
+
+    Raises
+    ------
+    No exceptions are raised for missing citation keys. A missing ``obj``
+    attribute is also not an error — the function degrades gracefully.
+
+    Notes
+    -----
+    **JIT-compatible**: no — pure Python, does attribute introspection.
+
+    The static association tables live in
+    :mod:`tengri.citations.associations`:
+
+    - ``DUST_LAW_CITATIONS`` / ``DUST_MODEL_CITATIONS`` / ``DUST_EMISSION_CITATIONS``
+    - ``NEBULAR_BACKEND_CITATIONS``
+    - ``IGM_CITATIONS``
+    - ``AGN_DISC_CITATIONS`` / ``AGN_TORUS_CITATIONS`` / ``AGN_BLR_CITATIONS``
+    - ``BACKEND_CITATIONS``
+    - ``FUNCTION_CITATIONS`` (populated by the :func:`cites` decorator)
+
+    Adding a new component value? Extend the corresponding table so this
+    function picks it up automatically.
+
+    See Also
+    --------
+    tengri.citations.Bibliography.from_object : the class method this wraps.
+    citations_report : formatted grouped text version.
+    citations_bibtex : BibTeX version of the same list.
 
     Examples
     --------
-    >>> import tengri as tg
-    >>> g = tg.Galaxy.from_arrays(..., preset="starforming")
-    >>> cites = tg.collect_citations(g)
-    >>> [c.short for c in cites]
-    ['Cooray et al. (2026, Paper I)', 'Bradbury et al. (2018)', ...]
+    Galaxy-level — only cites what this galaxy uses:
+
+    >>> import numpy as np, tengri as tg
+    >>> g = tg.Galaxy.from_arrays(
+    ...     filters=["sdss_u", "sdss_g", "sdss_r"],
+    ...     flux=np.array([1e-28, 2e-28, 3e-28]),
+    ...     flux_err=np.array([1e-29]*3),
+    ...     redshift=0.1, ssp_path="data/ssp.h5",
+    ...     preset="starforming",
+    ... )  # doctest: +SKIP
+    >>> [c.key for c in tg.collect_citations(g)]  # doctest: +SKIP
+    ['tengri', 'jax', 'dsps', 'charlot_fall2000', 'calzetti2000']
+
+    Config-only, no backend:
+
+    >>> from tengri.config.settings import ModelConfig, DustConfig
+    >>> mc = ModelConfig(dust=DustConfig(law_bc="kriek_conroy"))
+    >>> [c.key for c in tg.collect_citations(mc, include_backend=False)]
+    ['tengri', 'jax', 'dsps', 'charlot_fall2000', 'kriek_conroy2013']
     """
     keys = _collect_keys(obj, include_backend=include_backend)
     out: list[Citation] = []
@@ -170,10 +221,43 @@ def collect_citations(
 
 
 def citations_report(obj: Any, *, include_backend: bool = True) -> str:
-    """Return a multi-line human-readable citation list for ``obj``.
+    """Build a multi-line human-readable citation list for ``obj``.
 
-    The format is designed for a terminal / notebook — one paragraph per
-    citation with short name, full title, and a DOI/arXiv link if available.
+    Parameters
+    ----------
+    obj : Any
+        Any object understood by :func:`collect_citations` (Galaxy,
+        ModelConfig, Fitter, FitResult, ...).
+    include_backend : bool, optional
+        Include inference-backend citations. Default ``True``.
+
+    Returns
+    -------
+    str
+        Multi-line report. One paragraph per citation: short name and role
+        on the first line, title on the second, DOI / arXiv / upstream code
+        links on the third. Intended for terminal or notebook display.
+
+    Notes
+    -----
+    **JIT-compatible**: no — pure Python string formatting.
+
+    The default report is flat and numbered. For a category-grouped layout
+    (Stellar populations / Dust / Nebular / Inference …) use
+    :meth:`tengri.citations.Bibliography.report` directly.
+
+    See Also
+    --------
+    print_citations : same output, printed to stdout.
+    citations_bibtex : BibTeX-formatted companion.
+
+    Examples
+    --------
+    >>> from tengri.config.settings import ModelConfig, DustConfig
+    >>> mc = ModelConfig(dust=DustConfig(law_bc="calzetti"))
+    >>> report = tg.citations_report(mc, include_backend=False)  # doctest: +SKIP
+    >>> "Calzetti" in report  # doctest: +SKIP
+    True
     """
     cites = collect_citations(obj, include_backend=include_backend)
     if not cites:
@@ -201,18 +285,102 @@ def citations_report(obj: Any, *, include_backend: bool = True) -> str:
 
 
 def citations_bibtex(obj: Any, *, include_backend: bool = True) -> str:
-    """Return a BibTeX block containing every citation applicable to ``obj``."""
+    """Build a BibTeX block containing every citation applicable to ``obj``.
+
+    Parameters
+    ----------
+    obj : Any
+        Any object understood by :func:`collect_citations`.
+    include_backend : bool, optional
+        Include inference-backend citations. Default ``True``.
+
+    Returns
+    -------
+    str
+        Concatenated BibTeX entries separated by blank lines. Ready to
+        paste into a paper's ``.bib`` file.
+
+    Notes
+    -----
+    **JIT-compatible**: no — pure Python string formatting.
+
+    See Also
+    --------
+    tengri.citations.Citation.to_bibtex : single-entry BibTeX formatter.
+    print_bibtex : same output printed to stdout.
+
+    Examples
+    --------
+    >>> from tengri.config.settings import ModelConfig, DustConfig
+    >>> mc = ModelConfig(dust=DustConfig(law_bc="calzetti"))
+    >>> bibtex = tg.citations_bibtex(mc, include_backend=False)  # doctest: +SKIP
+    >>> "@article{Calzetti_2000" in bibtex  # doctest: +SKIP
+    True
+    """
     cites = collect_citations(obj, include_backend=include_backend)
     return "\n\n".join(c.to_bibtex() for c in cites)
 
 
 def print_citations(obj: Any, *, include_backend: bool = True) -> None:
-    """Print the human-readable citation report for ``obj``."""
+    """Print the human-readable citation report for ``obj`` to stdout.
+
+    Convenience wrapper around :func:`citations_report`.
+
+    Parameters
+    ----------
+    obj : Any
+        Any object understood by :func:`collect_citations`.
+    include_backend : bool, optional
+        Include inference-backend citations. Default ``True``.
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    **JIT-compatible**: no — performs I/O.
+
+    Examples
+    --------
+    >>> import numpy as np, tengri as tg
+    >>> g = tg.Galaxy.from_arrays(..., preset="starforming")  # doctest: +SKIP
+    >>> tg.print_citations(g)  # doctest: +SKIP
+    Please cite the following when publishing results that use tengri:
+      [1] Cooray et al. (2026, Paper I) — SED fitting framework ...
+      ...
+    """
     print(citations_report(obj, include_backend=include_backend))
 
 
 def print_bibtex(obj: Any, *, include_backend: bool = True) -> None:
-    """Print the BibTeX block for every citation applicable to ``obj``."""
+    """Print the BibTeX block for every citation applicable to ``obj``.
+
+    Convenience wrapper around :func:`citations_bibtex`.
+
+    Parameters
+    ----------
+    obj : Any
+        Any object understood by :func:`collect_citations`.
+    include_backend : bool, optional
+        Include inference-backend citations. Default ``True``.
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    **JIT-compatible**: no — performs I/O.
+
+    Examples
+    --------
+    >>> import tengri as tg
+    >>> tg.print_bibtex(my_galaxy)  # doctest: +SKIP
+    @article{Cooray_2026, ... }
+    @article{Bradbury2018_JAX, ... }
+    ...
+    """
     print(citations_bibtex(obj, include_backend=include_backend))
 
 

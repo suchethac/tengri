@@ -56,7 +56,7 @@ for ax, cos_inc, title in [
         try:
             sed = skirtor_fn(
                 wavelength,
-                agn_log_lbol=44.0,
+                agn_log_lbol=11.0,
                 agn_log_tau_97=np.log10(tau_97_thick),
                 agn_p_frac=p_frac,
                 agn_q_ratio=2.0,
@@ -87,7 +87,7 @@ for ax, p_frac, title in [
         try:
             sed = skirtor_fn(
                 wavelength,
-                agn_log_lbol=44.0,
+                agn_log_lbol=11.0,
                 agn_log_tau_97=np.log10(tau_97),
                 agn_p_frac=p_frac,
                 agn_q_ratio=2.0,
@@ -115,7 +115,7 @@ for row, cos_inc in enumerate([0.9, 0.3]):
         try:
             sed = skirtor_fn(
                 wavelength,
-                agn_log_lbol=44.0,
+                agn_log_lbol=11.0,
                 agn_log_tau_97=np.log10(tau_97),
                 agn_p_frac=1.5,
                 agn_q_ratio=2.0,

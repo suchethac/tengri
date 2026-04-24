@@ -149,7 +149,7 @@ class TestSuggest:
         """suggest() returns filters sorted by effective wavelength."""
         import numpy as np
 
-        from tengri.filters.core import compute_effective_wavelength
+        from tengri.observation.filters import compute_effective_wavelength
 
         result = suggest(redshift=0.0, coverage="visible_to_nir")
         if len(result) < 2:

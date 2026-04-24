@@ -22,7 +22,7 @@ wavelength = jnp.logspace(np.log10(100), np.log10(5e5), 1000)
 wave_um = np.array(wavelength) / 1e4  # micron for plotting
 
 # Fixed bolometric luminosity: L_bol = 10^45 erg/s ~ 10^{11.6} Lsun
-log_lbol = 45.0
+log_lbol = 12.0  # log10(L_bol / Lsun); typical QSO
 
 # %%
 # Evaluate each registered AGN model

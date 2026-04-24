@@ -49,7 +49,7 @@ ax.set_xlim(1, 500)
 ax = axes[0, 1]
 
 for temp in [800.0, 1200.0, 1500.0, 2000.0]:
-    sed = simple_torus(wavelength, agn_log_lbol=44.0, agn_torus_temp=temp)
+    sed = simple_torus(wavelength, agn_log_lbol=11.0, agn_torus_temp=temp)
     ax.loglog(wave_um, np.array(sed), lw=1.5, label=f"T={temp:.0f} K")
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
@@ -62,7 +62,7 @@ ax.set_xlim(1, 500)
 ax = axes[1, 0]
 
 for frac in [0.2, 0.5, 0.8]:
-    sed = two_temperature_torus(wavelength, agn_log_lbol=44.0, agn_torus_frac=frac)
+    sed = two_temperature_torus(wavelength, agn_log_lbol=11.0, agn_torus_frac=frac)
     ax.loglog(wave_um, np.array(sed), lw=1.5, label=f"Covering Frac={frac:.1f}")
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
@@ -91,7 +91,7 @@ if _silva04_path is not None:
 
     # Silva04 varies column density (NH)
     for log_nh in [22.0, 23.0, 24.0, 25.0]:
-        sed = silva04_fn(wavelength, agn_log_lbol=44.0, agn_log_nh_silva=log_nh)
+        sed = silva04_fn(wavelength, agn_log_lbol=11.0, agn_log_nh_silva=log_nh)
         ax.loglog(wave_um, np.array(sed), lw=1.5, label=f"log(NH)={log_nh:.1f}")
 
     ax.set_xlabel(r"Wavelength [$\mu$m]")
@@ -101,9 +101,9 @@ if _silva04_path is not None:
     ax.set_xlim(1, 500)
 else:
     # If Silva04 not available, show nenkova comparison
-    sed1 = simple_torus(wavelength, agn_log_lbol=43.0, agn_torus_temp=1500.0)
-    sed2 = simple_torus(wavelength, agn_log_lbol=44.0, agn_torus_temp=1500.0)
-    sed3 = simple_torus(wavelength, agn_log_lbol=45.0, agn_torus_temp=1500.0)
+    sed1 = simple_torus(wavelength, agn_log_lbol=10.0, agn_torus_temp=1500.0)
+    sed2 = simple_torus(wavelength, agn_log_lbol=11.0, agn_torus_temp=1500.0)
+    sed3 = simple_torus(wavelength, agn_log_lbol=12.0, agn_torus_temp=1500.0)
 
     ax.loglog(wave_um, np.array(sed1), lw=1.5, label="log(L_bol)=43")
     ax.loglog(wave_um, np.array(sed2), lw=1.5, label="log(L_bol)=44")

@@ -26,10 +26,10 @@ fig, axes = plt.subplots(1, 3, figsize=(14, 4.5))
 ax = axes[0]
 
 # Base disc component
-l_disc = powerlaw_disc(wavelength, agn_log_lbol=44.0, agn_slope=-1.5)
+l_disc = powerlaw_disc(wavelength, agn_log_lbol=11.0, agn_slope=-1.5)
 
 # Equatorial torus
-l_equat_torus = simple_torus(wavelength, agn_log_lbol=44.0, agn_torus_temp=1200.0)
+l_equat_torus = simple_torus(wavelength, agn_log_lbol=11.0, agn_torus_temp=1200.0)
 
 ax.loglog(wave_um, np.array(l_disc), "C0--", lw=1.5, label="Disc", alpha=0.7)
 ax.loglog(wave_um, np.array(l_equat_torus), "C1--", lw=1.5, label="Equatorial Torus", alpha=0.7)
@@ -86,7 +86,7 @@ ax = axes[2]
 
 # Polar dust should be geometrically more visible at edge-on (high inclination)
 # Simulate via covering fraction modulation
-log_lbol = 44.0
+log_lbol = 11.0  # log10(L_bol / Lsun); typical QSO
 
 for cos_inc in [0.9, 0.5, 0.1]:
     # Polar dust visibility increases toward edge-on

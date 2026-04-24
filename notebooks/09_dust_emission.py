@@ -137,14 +137,7 @@ from tengri.components.dust import (
     themis,
 )
 
-# %% [markdown]
-# ## Shared Setup
-#
-# All models are evaluated on a common rest-frame wavelength grid from
-# 1 to 1000 um (10000 to 10000000 Angstrom) with logarithmic spacing.
-
 # %%
-# Wavelength grid: 1--1000 um in Angstrom
 wave_aa = jnp.logspace(np.log10(1e4), np.log10(1e7), 2000)
 wave_um = wave_aa * 1e-4  # for plotting in microns
 
@@ -163,20 +156,6 @@ MODEL_COLORS = {
     "bosa": "#17becf",
     "themis": "#bcbd22",
     "energy_balance_split": "#7f7f7f",
-}
-
-# Consistent line styling
-MODEL_LABELS = {
-    "modified_blackbody": "Modified BB",
-    "casey2012": "Casey (2012)",
-    "magphys": "MAGPHYS (dC+08)",
-    "draine_li2007": "DL07",
-    "draine_li2014": "DL14",
-    "dale2014": "Dale+2014",
-    "astrodust": "Astrodust+PAH",
-    "bosa": "BOSA (B&S21)",
-    "themis": "THEMIS (J+17)",
-    "energy_balance_split": "Energy Balance Split",
 }
 
 
@@ -212,95 +191,79 @@ def _set_reasonable_log_ylim(ax, pad_log=0.12):
 # %%
 fig, ax = plt.subplots(figsize=(9, 5.5))
 
-# --- Analytic models ---
-# Modified blackbody
-lnu_mbb = modified_blackbody(wave_aa, L_ABS, dust_T=35.0, dust_beta_ir=1.8)
+# Analytic models
 ax.plot(
     wave_um,
-    np.array(lnu_mbb),
+    np.array(modified_blackbody(wave_aa, L_ABS, dust_T=35.0, dust_beta_ir=1.8)),
     color=MODEL_COLORS["modified_blackbody"],
     lw=2.0,
-    label=MODEL_LABELS["modified_blackbody"],
+    label="Modified BB",
 )
-
-# Casey 2012
-lnu_casey = casey2012(wave_aa, L_ABS, dust_T=35.0, dust_beta_ir=1.8, dust_alpha_mir=2.0)
 ax.plot(
     wave_um,
-    np.array(lnu_casey),
+    np.array(casey2012(wave_aa, L_ABS, dust_T=35.0, dust_beta_ir=1.8, dust_alpha_mir=2.0)),
     color=MODEL_COLORS["casey2012"],
     lw=2.0,
-    label=MODEL_LABELS["casey2012"],
+    label="Casey (2012)",
 )
-
-# Energy balance split
-lnu_ebs = energy_balance_split(wave_aa, L_ABS, dust_T_warm=35.0, dust_T_cold=20.0)
 ax.plot(
     wave_um,
-    np.array(lnu_ebs),
+    np.array(energy_balance_split(wave_aa, L_ABS, dust_T_warm=35.0, dust_T_cold=20.0)),
     color=MODEL_COLORS["energy_balance_split"],
     lw=2.0,
     ls="--",
-    label=MODEL_LABELS["energy_balance_split"],
+    label="Energy Balance Split",
 )
 
-# --- Template-based models ---
-lnu_dl07 = draine_li2007(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
+# Template-based models
 ax.plot(
     wave_um,
-    np.array(lnu_dl07),
+    np.array(draine_li2007(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)),
     color=MODEL_COLORS["draine_li2007"],
     lw=2.0,
-    label=MODEL_LABELS["draine_li2007"],
-)
-
-lnu_dl14 = draine_li2014(
-    wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5, dust_alpha_dl14=2.0
+    label="DL07",
 )
 ax.plot(
     wave_um,
-    np.array(lnu_dl14),
+    np.array(
+        draine_li2014(
+            wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5, dust_alpha_dl14=2.0
+        )
+    ),
     color=MODEL_COLORS["draine_li2014"],
     lw=2.0,
-    label=MODEL_LABELS["draine_li2014"],
+    label="DL14",
 )
-
-lnu_dale = dale2014(wave_aa, L_ABS, dust_alpha_dale=2.0)
 ax.plot(
     wave_um,
-    np.array(lnu_dale),
+    np.array(dale2014(wave_aa, L_ABS, dust_alpha_dale=2.0)),
     color=MODEL_COLORS["dale2014"],
     lw=2.0,
-    label=MODEL_LABELS["dale2014"],
+    label="Dale+2014",
 )
-
-lnu_astro = astrodust(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=3.0)
 ax.plot(
     wave_um,
-    np.array(lnu_astro),
+    np.array(astrodust(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=3.0)),
     color=MODEL_COLORS["astrodust"],
     lw=2.0,
     ls="-.",
-    label=MODEL_LABELS["astrodust"],
+    label="Astrodust+PAH",
 )
-
-lnu_bosa = bosa(wave_aa, L_ABS, dust_log_ssfr=-10.0)
 ax.plot(
     wave_um,
-    np.array(lnu_bosa),
+    np.array(bosa(wave_aa, L_ABS, dust_log_ssfr=-10.0)),
     color=MODEL_COLORS["bosa"],
     lw=2.0,
-    label=MODEL_LABELS["bosa"],
+    label="BOSA (B&S21)",
 )
 
-lnu_themis = themis(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qhac=0.17)
 ax.plot(
     wave_um,
-    np.array(lnu_themis),
+    np.array(themis(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qhac=0.17)),
     color=MODEL_COLORS["themis"],
     lw=2.0,
     ls="--",
-    label=MODEL_LABELS["themis"],
+    label="THEMIS (J+17)",
 )
 
 ax.set_xscale("log")
@@ -364,8 +327,14 @@ fig, ax = plt.subplots(figsize=(7, 4))
 lnu_mbb = modified_blackbody(wave_aa, L_ABS, dust_T=35.0, dust_beta_ir=1.8)
 lnu_c12 = casey2012(wave_aa, L_ABS, dust_T=35.0, dust_beta_ir=1.8, dust_alpha_mir=2.0)
 
-ax.plot(wave_um, np.array(lnu_mbb), lw=2.0, ls="--",
-        color=MODEL_COLORS["modified_blackbody"], label="Modified BB")
+ax.plot(
+    wave_um,
+    np.array(lnu_mbb),
+    lw=2.0,
+    ls="--",
+    color=MODEL_COLORS["modified_blackbody"],
+    label="Modified BB",
+)
 ax.plot(wave_um, np.array(lnu_c12), lw=2.0, color=MODEL_COLORS["casey2012"], label="Casey (2012)")
 
 ax.set_xscale("log")
@@ -484,17 +453,13 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ### 3d. Astrodust+PAH (Hensley & Draine 2023)
+# ### 3d. Astrodust (Hensley & Draine 2023)
 #
-# Updated grain model from the Draine group. Uses observationally-derived
-# grain opacities (the "astrodust" model) rather than a mix of silicate
-# and graphite grains. Same mixing formula as DL07 but with different
-# underlying grain physics.
+# Observationally-derived grain opacities; same mixing as DL07 but different grain physics.
 
 # %%
 fig, ax = plt.subplots(figsize=(7, 4))
 
-# Compare DL07 and Astrodust at same parameters
 lnu_dl07 = draine_li2007(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
 lnu_astro = astrodust(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=3.0)
 
@@ -513,23 +478,11 @@ ax.plot(
     label="Astrodust ($q_{PAH}$=3.0%)",
 )
 
-# Show qPAH variation for Astrodust
-for qp, ls in [(1.0, ":"), (5.0, "-.")]:
-    lnu = astrodust(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=qp)
-    ax.plot(
-        wave_um,
-        np.array(lnu),
-        lw=1.5,
-        ls=ls,
-        color=MODEL_COLORS["astrodust"],
-        label=f"Astrodust ($q_{{PAH}}$={qp}%)",
-    )
-
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
-ax.set_title("Astrodust+PAH vs DL07")
+ax.set_title("Astrodust vs DL07")
 ax.set_xlim(1, 1000)
 ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
@@ -543,29 +496,23 @@ plt.show()
 # %% [markdown]
 # ### 3e. BOSA (Boquien & Salim 2021)
 #
-# Parameterized by (L_TIR, sSFR) rather than radiation field parameters.
-# High sSFR galaxies have warmer dust. This provides a direct
-# connection between star formation activity and dust temperature.
+# SFR-dependent model: higher sSFR yields warmer dust.
 
 # %%
 fig, ax = plt.subplots(figsize=(7, 4))
 
-ssfr_values = [-11.0, -10.0, -9.5, -9.0, -8.5]
+ssfr_values = [-10.5, -10.0, -9.5]
 cmap = plt.cm.hot_r
 for i, ssfr in enumerate(ssfr_values):
-    color = cmap(0.15 + 0.7 * i / (len(ssfr_values) - 1))
+    color = cmap(0.2 + 0.6 * i / (len(ssfr_values) - 1))
     lnu = bosa(wave_aa, L_ABS, dust_log_ssfr=ssfr)
     ax.plot(wave_um, np.array(lnu), lw=2.0, color=color, label=f"log sSFR = {ssfr:.1f}")
-
-# Reference DL07
-lnu_dl07 = draine_li2007(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
-ax.plot(wave_um, np.array(lnu_dl07), lw=1.5, ls="--", color="grey", label="DL07 reference")
 
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
-ax.set_title(r"BOSA: sSFR dependence (higher sSFR $\rightarrow$ warmer)")
+ax.set_title("BOSA: sSFR dependence")
 ax.set_xlim(1, 1000)
 ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
@@ -579,15 +526,11 @@ plt.show()
 # %% [markdown]
 # ### 3f. THEMIS (Jones et al. 2017)
 #
-# Based on the THEMIS/DustEM grain model. Uses `qhac` (a-C(:H) aromatic
-# carbon mass fraction) instead of `qPAH`. Different grain compositions
-# lead to different aromatic feature profiles and FIR/submm slopes.
+# DustEM grain model using aromatic carbon fraction `qhac`.
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+fig, ax = plt.subplots(figsize=(7, 4))
 
-# --- Panel 1: THEMIS vs DL07 ---
-ax = axes[0]
 lnu_dl07 = draine_li2007(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
 lnu_themis = themis(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qhac=0.17)
 
@@ -611,26 +554,6 @@ ax.set_yscale("log")
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title("THEMIS vs DL07")
-ax.set_xlim(1, 1000)
-ax.legend(fontsize=10)
-ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
-ax.set_xticks([1, 10, 100, 1000])
-_set_reasonable_log_ylim(ax)
-
-# --- Panel 2: Vary qhac ---
-ax = axes[1]
-qhac_values = [0.05, 0.10, 0.17, 0.25, 0.30]
-cmap = plt.cm.Oranges
-for i, qh in enumerate(qhac_values):
-    color = cmap(0.25 + 0.65 * i / (len(qhac_values) - 1))
-    lnu = themis(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qhac=qh)
-    ax.plot(wave_um, np.array(lnu), lw=2.0, color=color, label=f"$q_{{hac}}$ = {qh:.2f}")
-
-ax.set_xscale("log")
-ax.set_yscale("log")
-ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
-ax.set_title(r"THEMIS: vary $q_{\mathrm{hac}}$")
 ax.set_xlim(1, 1000)
 ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
@@ -767,49 +690,16 @@ plt.show()
 
 # %% [markdown]
 # ---
-# ## 5. CMB Corrections
+# ## 5. CMB Corrections at High Redshift
 #
-# At high redshift, the CMB sets a temperature floor on dust grains
-# and suppresses the observed Rayleigh-Jeans tail (da Cunha+2013).
-# The effective dust temperature becomes:
-#
-# $$T_{\mathrm{eff}} = \left(T_{\mathrm{dust}}^{4+\beta} + T_{\mathrm{CMB}}(z)^{4+\beta} - T_{\mathrm{CMB}}(0)^{4+\beta}\right)^{1/(4+\beta)}$$
+# At high redshift, CMB sets a temperature floor (da Cunha+2013) and suppresses RJ tail.
 
 # %%
-fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+fig, ax = plt.subplots(figsize=(7, 4))
 
-# --- Panel 1: T_eff vs T_dust at various redshifts ---
-ax = axes[0]
-T_dust_arr = np.linspace(10, 60, 100)
-redshifts = [0, 3, 5, 7]
-cmap = plt.cm.cool
-for i, z in enumerate(redshifts):
-    T_eff_arr = np.array(
-        [float(cmb_corrected_temperature(float(T), float(z))) for T in T_dust_arr]
-    )
-    color = cmap(0.1 + 0.8 * i / (len(redshifts) - 1))
-    ax.plot(T_dust_arr, T_eff_arr, lw=2.0, color=color, label=f"z = {z}")
-
-ax.plot([10, 60], [10, 60], ls=":", color="grey", lw=1.0, alpha=0.7, label="T_eff = T_dust")
-
-# Mark T_CMB(z) floor
-for i, z in enumerate(redshifts):
-    T_cmb = 2.725 * (1 + z)
-    if T_cmb < 60:
-        color = cmap(0.1 + 0.8 * i / (len(redshifts) - 1))
-        ax.axhline(T_cmb, color=color, ls="--", lw=0.8, alpha=0.5)
-
-ax.set_xlabel(r"Intrinsic $T_{\mathrm{dust}}$ [K]")
-ax.set_ylabel(r"Effective $T_{\mathrm{eff}}$ [K]")
-ax.set_title(r"CMB heating: $T_{\mathrm{eff}}$ vs $T_{\mathrm{dust}}$")
-ax.legend(fontsize=10)
-ax.set_xlim(10, 60)
-ax.set_ylim(10, 60)
-
-# --- Panel 2: Effect on FIR SED ---
-ax = axes[1]
 T_dust_ref = 30.0
-
+redshifts = [0, 2, 4, 6]
+cmap = plt.cm.cool
 for i, z in enumerate(redshifts):
     color = cmap(0.1 + 0.8 * i / (len(redshifts) - 1))
     lnu = modified_blackbody(
@@ -821,7 +711,7 @@ ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
-ax.set_title(r"CMB suppression: MBB at $T_{\mathrm{dust}}$ = 30 K")
+ax.set_title(r"CMB effect on MBB SED ($T_{\mathrm{dust}}$ = 30 K)")
 ax.set_xlim(10, 1000)
 ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
@@ -840,73 +730,31 @@ plt.show()
 
 # %%
 summary_data = [
-    ["modified_blackbody", "Analytic", "dust_T, dust_beta_ir", "None", "Hildebrand (1983)"],
-    [
-        "casey2012",
-        "Analytic",
-        "dust_T, dust_beta_ir, dust_alpha_mir",
-        "None (MIR power law)",
-        "Casey (2012)",
-    ],
-    [
-        "magphys",
-        "Analytic",
-        "T_warm, T_cold, T_hot, xi_pah, xi_mir, xi_warm",
-        "Drude profiles (Smith+07)",
-        "da Cunha+2008",
-    ],
-    [
-        "draine_li2007",
-        "Tabulated",
-        "dust_umin, dust_gamma_dl, dust_qpah",
-        "Full treatment (silicate+graphite)",
-        "Draine & Li (2007)",
-    ],
+    ["modified_blackbody", "Analytic", "dust_T, dust_beta_ir", "Hildebrand (1983)"],
+    ["casey2012", "Analytic", "dust_T, dust_beta_ir, dust_alpha_mir", "Casey (2012)"],
+    ["draine_li2007", "Tabulated", "dust_umin, dust_gamma_dl, dust_qpah", "Draine & Li (2007)"],
     [
         "draine_li2014",
         "Tabulated",
         "dust_umin, dust_gamma_dl, dust_qpah, dust_alpha_dl14",
-        "Full treatment (updated)",
         "Draine & Li (2014)",
     ],
-    ["dale2014", "Tabulated", "dust_alpha_dale", "Embedded in templates", "Dale+2014"],
-    [
-        "astrodust",
-        "Tabulated",
-        "dust_umin, dust_gamma_dl, dust_qpah",
-        "Astrodust+PAH grains",
-        "Hensley & Draine (2023)",
-    ],
-    ["bosa", "Tabulated", "dust_log_ssfr", "Embedded in templates", "Boquien & Salim (2021)"],
-    [
-        "themis",
-        "Tabulated",
-        "dust_umin, dust_gamma_dl, dust_qhac",
-        "a-C(:H) aromatics (DustEM)",
-        "Jones+2017",
-    ],
+    ["dale2014", "Tabulated", "dust_alpha_dale", "Dale+2014"],
+    ["astrodust", "Tabulated", "dust_umin, dust_gamma_dl, dust_qpah", "Hensley & Draine (2023)"],
+    ["bosa", "Tabulated", "dust_log_ssfr", "Boquien & Salim (2021)"],
+    ["themis", "Tabulated", "dust_umin, dust_gamma_dl, dust_qhac", "Jones+2017"],
     [
         "energy_balance_split",
         "Analytic",
         "eta_balance, f_cold, T_warm, T_cold, L_agn_ir",
-        "None (two MBBs)",
         "Kokorev+2021",
     ],
 ]
 
-headers = ["Model", "Type", "Parameters", "PAH Treatment", "Reference"]
-
-# Print table
-print(
-    f"{'Model':<22s} {'Type':<11s} {'Parameters':<50s} {'PAH Treatment':<30s} {'Reference':<25s}"
-)
-print("-" * 138)
-for row in summary_data:
-    print(f"{row[0]:<22s} {row[1]:<11s} {row[2]:<50s} {row[3]:<30s} {row[4]:<25s}")
+headers = ["Model", "Type", "Parameters", "Reference"]
 
 # %%
-# Also display as a formatted figure table
-fig, ax = plt.subplots(figsize=(13, 4.0))
+fig, ax = plt.subplots(figsize=(12, 4.0))
 ax.axis("off")
 
 table = ax.table(
@@ -914,7 +762,7 @@ table = ax.table(
     colLabels=headers,
     cellLoc="left",
     loc="center",
-    colWidths=[0.14, 0.07, 0.32, 0.22, 0.16],
+    colWidths=[0.18, 0.12, 0.45, 0.25],
 )
 table.auto_set_font_size(False)
 table.set_fontsize(8)
@@ -939,32 +787,12 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ---
-# ## Notes
-#
-# - Template-based models (DL07, DL14, Dale+2014, Astrodust, BOSA, THEMIS)
-#   auto-load tabulated grids from `data/` on first call. Templates are
-#   required; see `scripts/download_*.py` for the download scripts.
-#
-# - All models enforce energy balance: the frequency integral of the
-#   emission SED equals `L_absorbed` (the total luminosity absorbed by
-#   dust in the UV/optical attenuation step).
-#
-# - CMB corrections (da Cunha+2013) are applied automatically when
-#   `redshift > 0`. This affects the effective dust temperature and
-#   suppresses the Rayleigh-Jeans tail.
-#
-# - The `energy_balance_split` model extends simple energy balance
-#   with warm/cold decomposition and optional AGN IR contribution.
-#   The `eta_balance` parameter allows departures from strict energy
-#   balance (spatial offsets between UV and FIR emission regions).
-#
 # ## What you learned
 #
-# - 10 dust-emission models spanning analytic (fast) to physically-grounded (slow)
-# - Energy balance: IR flux must equal total absorbed UV/optical energy
-# - Warm vs. cold dust and PAH features encode radiation-field properties
-# - CMB corrections essential for high-redshift fitting (z > 2)
+# - 9 dust-emission models: Modified BB, Casey, DL07/14, Dale, Astrodust, BOSA, THEMIS, Energy Balance Split
+# - Energy balance: IR luminosity = absorbed UV/optical energy
+# - PAH features and dust temperature encode radiation field properties
+# - CMB corrections critical for high-z (z > 2) fitting
+# - Templates auto-load from `data/`; see `scripts/download_*.py`
 #
-# **Next:** [`10_agn_advanced.py`](10_agn_advanced.py) (AGN accretion discs & tori) or
-# [`05_joint_photometry_spectroscopy.py`](05_joint_photometry_spectroscopy.py) (multiwavelength fitting).
+# **Next:** [`10_agn_advanced.py`](10_agn_advanced.py) or [`05_joint_photometry_spectroscopy.py`](05_joint_photometry_spectroscopy.py)

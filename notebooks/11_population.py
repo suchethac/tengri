@@ -498,41 +498,25 @@ if result_hier_spec is not None:
 # %% [markdown]
 # ## 3. Spectroscopy vs Photometry
 #
-# The same population fit with photometry only (5 bands) vs spectroscopy
-# (200 pixels). Spectral features (D4000, Balmer lines, UV slope) encode
-# burstiness at multiple timescales; photometry cannot resolve them.
+# Same population fit: photometry only (5 bands) vs spectroscopy (200 pixels).
+# Spectral features (D4000, Balmer, UV slope) encode burstiness; photometry cannot resolve them.
 
 # %%
 # Hierarchical MGVI on PHOTOMETRIC data
 print(f"\nHierarchical fit: {N_GAL} galaxies (photometry)...")
 t0 = time.perf_counter()
 hfitter_phot = PopulationFitter(
-    model_factory,
-    galaxies_phot,
-    psd_sigma_prior=(0.1, 4.0),
-    psd_tau_prior=(1.0, 300.0),
-    data_type="photometry",
+    model_factory, galaxies_phot,
+    psd_sigma_prior=(0.1, 4.0), psd_tau_prior=(1.0, 300.0), data_type="photometry",
 )
 result_hier_phot = hfitter_phot.run(
-    "mgvi",
-    n_iterations=N_HIER_ITERS,
-    n_samples=4,
-    n_posterior_samples=200,
-    verbose=False,
-    key=jax.random.PRNGKey(1),
+    "mgvi", n_iterations=N_HIER_ITERS, n_samples=4, n_posterior_samples=200, verbose=False, key=jax.random.PRNGKey(1),
 )
 t_hier_phot = time.perf_counter() - t0
-
 sig_phot, tau_phot, tau_phot_is_myr = _pop_posterior_sigma_tau(result_hier_phot)
 _tau_label = "τ_PS [Myr]" if tau_phot_is_myr else "PSD slope (CFM)"
-print(
-    f"  σ_PS = {np.median(sig_phot):.2f} "
-    f"[{np.percentile(sig_phot, 16):.2f}, {np.percentile(sig_phot, 84):.2f}]"
-)
-print(
-    f"  {_tau_label} = {np.median(tau_phot):.2f} "
-    f"[{np.percentile(tau_phot, 16):.2f}, {np.percentile(tau_phot, 84):.2f}]"
-)
+print(f"  σ_PS = {np.median(sig_phot):.2f} [{np.percentile(sig_phot, 16):.2f}, {np.percentile(sig_phot, 84):.2f}]")
+print(f"  {_tau_label} = {np.median(tau_phot):.2f} [{np.percentile(tau_phot, 16):.2f}, {np.percentile(tau_phot, 84):.2f}]")
 print(f"  Wall time: {t_hier_phot:.1f}s")
 
 # %%
@@ -637,25 +621,20 @@ print(f"\nTruth: sigma = {TRUE_SIGMA}, tau = {TRUE_TAU} Myr")
 # %% [markdown]
 # ## 4. SFH Recovery
 #
-# The hierarchical spectroscopic posterior recovers individual galaxy SFHs.
-# The shared PSD prior acts as a physically-motivated regularizer.
+# Hierarchical posterior recovers individual galaxy SFHs. Shared PSD prior acts as a physically-motivated regularizer.
 
 # %%
-# --- FIGURE 6: SFH recovery from hierarchical fit (4 galaxies) ---
+# SFH recovery from hierarchical fit (4 galaxies)
 fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-
 for i, ax in enumerate(axes.flat):
     if i >= min(4, N_GAL):
         ax.set_visible(False)
         continue
-
-    # True SFH
     sfh_true = model_gen.predict_sfh(true_params_all[i])
     t_gyr = np.array(sfh_true["t_gyr"])
     sfr_true = np.array(sfh_true["sfr_full"])
     sfr_mean_true = np.array(sfh_true["sfr_mean"])
 
-    # Posterior SFH draws — use spec fit if available, otherwise phot
     sfr_draws = []
     _src = result_hier_spec if result_hier_spec is not None else result_hier_phot
     if _src is not None and _src.individual_samples is not None:
@@ -670,36 +649,13 @@ for i, ax in enumerate(axes.flat):
                 sfr_draws.append(np.array(sfh_draw["sfr_full"]))
             except Exception:
                 pass
-
     if sfr_draws:
         sfr_arr = np.array(sfr_draws)
         lo, hi = np.percentile(sfr_arr, [16, 84], axis=0)
-        ax.fill_between(
-            t_gyr,
-            lo,
-            hi,
-            alpha=0.25,
-            color=COLORS["vi"],
-            label="68% CI",
-        )
-        ax.plot(
-            t_gyr,
-            np.median(sfr_arr, axis=0),
-            color=COLORS["vi"],
-            lw=1.2,
-            ls="--",
-            label="Median",
-        )
-
+        ax.fill_between(t_gyr, lo, hi, alpha=0.25, color=COLORS["vi"], label="68% CI")
+        ax.plot(t_gyr, np.median(sfr_arr, axis=0), color=COLORS["vi"], lw=1.2, ls="--", label="Median")
     ax.plot(t_gyr, sfr_true, color=COLORS["truth"], lw=1.5, label="Truth")
-    ax.plot(
-        t_gyr,
-        sfr_mean_true,
-        color=COLORS["sfh_mean"],
-        lw=0.8,
-        ls=":",
-        alpha=0.4,
-    )
+    ax.plot(t_gyr, sfr_mean_true, color=COLORS["sfh_mean"], lw=0.8, ls=":", alpha=0.4)
     ax.set_xlim(0, 13.5)
     ax.set_xlabel("Lookback time [Gyr]")
     if i % 2 == 0:
@@ -707,79 +663,38 @@ for i, ax in enumerate(axes.flat):
     ax.set_title(f"Galaxy {i}", fontsize=10)
     if i == 0:
         ax.legend(fontsize=10)
-
-fig.suptitle(
-    "SFH recovery from hierarchical fit (photometry by default; spectroscopy if RUN_EXPENSIVE)",
-    fontsize=11,
-)
+fig.suptitle("SFH recovery from hierarchical fit (photometry by default; spectroscopy if RUN_EXPENSIVE)", fontsize=11)
 fig.tight_layout()
 plt.show()
 
 # %% [markdown]
 # ## 5. √N Convergence (Gated: RUN_EXPENSIVE = False)
 #
-# The shared PSD posterior shrinks as 1/√N — the Bayesian central limit
-# theorem. Each galaxy contributes independent information about burstiness.
+# Shared PSD posterior shrinks as 1/√N — the Bayesian central limit theorem in action.
 
 # %%
 if RUN_EXPENSIVE:
-    # Scaling experiment
     N_VALUES = [2, 4, 6, 8, 10]
     sigma_widths = []
-    tau_widths = []
-
-    print(
-        f"\n{'N':>4s}  {'sigma_med':>9s}  {'sigma_CI':>14s}  "
-        f"{'tau_med':>9s}  {'tau_CI':>14s}  {'Time':>6s}"
-    )
-    print("-" * 70)
-
+    print(f"\n{'N':>4s}  {'sigma_med':>9s}  {'sigma_CI':>14s}  {'Time':>6s}")
+    print("-" * 50)
     for n_sub in N_VALUES:
         gals_sub = galaxies_spec[:n_sub]
-        hf_sub = PopulationFitter(
-            model_factory,
-            gals_sub,
-            psd_sigma_prior=(0.1, 4.0),
-            psd_tau_prior=(1.0, 300.0),
-            data_type="spectroscopy",
-        )
+        hf_sub = PopulationFitter(model_factory, gals_sub, psd_sigma_prior=(0.1, 4.0), psd_tau_prior=(1.0, 300.0), data_type="spectroscopy")
         t0 = time.perf_counter()
-        res_sub = hf_sub.run(
-            "mgvi",
-            n_iterations=10,
-            n_samples=6,
-            n_posterior_samples=500,
-            verbose=False,
-            key=jax.random.PRNGKey(n_sub),
-        )
+        res_sub = hf_sub.run("mgvi", n_iterations=10, n_samples=6, n_posterior_samples=500, verbose=False, key=jax.random.PRNGKey(n_sub))
         dt = time.perf_counter() - t0
-
-        sig_s, tau_s, _ = _pop_posterior_sigma_tau(res_sub)
-
+        sig_s, _, _ = _pop_posterior_sigma_tau(res_sub)
         sw = np.percentile(sig_s, 84) - np.percentile(sig_s, 16)
-        tw = np.percentile(tau_s, 84) - np.percentile(tau_s, 16)
         sigma_widths.append(sw)
-        tau_widths.append(tw)
-
-        print(
-            f"  {n_sub:>2d}   {np.median(sig_s):>5.2f}   {sw:>7.2f}   "
-            f"{np.median(tau_s):>5.0f}   {tw:>7.0f}   {dt:>5.1f}s"
-        )
-
-    # --- FIGURE 7: √N scaling ---
+        print(f"  {n_sub:>2d}   {np.median(sig_s):>5.2f}   {sw:>7.2f}      {dt:>5.1f}s")
     ns = np.array(N_VALUES, dtype=float)
     sigma_widths = np.array(sigma_widths)
-
     fig, ax = plt.subplots(figsize=(6, 4))
-    ax.scatter(
-        ns, sigma_widths, s=60, color=COLORS["vi"], zorder=3, label=r"$\sigma_{\rm PS}$ 68% width"
-    )
-
-    # 1/sqrt(N) reference
+    ax.scatter(ns, sigma_widths, s=60, color=COLORS["vi"], zorder=3, label=r"$\sigma_{\rm PS}$ 68% width")
     n_ref = np.linspace(1.5, 12, 50)
     scale = sigma_widths[0] * np.sqrt(ns[0])
     ax.plot(n_ref, scale / np.sqrt(n_ref), ls="--", color="grey", label=r"$\propto 1/\sqrt{N}$")
-
     ax.set_xlabel("Number of galaxies N")
     ax.set_ylabel(r"$\sigma_{\rm PS}$ posterior 68% width")
     ax.set_xscale("log")
@@ -794,85 +709,39 @@ else:
 # %% [markdown]
 # ## 6. Population Distinction (Gated: RUN_EXPENSIVE = False)
 #
-# The hierarchical framework can separate galaxy populations with different
-# burstiness properties — bursty dwarfs vs smooth disk galaxies.
+# Hierarchical framework separates populations with different burstiness — bursty dwarfs vs smooth disks.
 
 # %%
 if RUN_EXPENSIVE:
-    # Two populations with different PSD
-    POP_CONFIGS = {
-        "Bursty dwarfs": {"sigma": 2.5, "tau": 10.0},
-        "Smooth disks": {"sigma": 0.5, "tau": 100.0},
-    }
+    POP_CONFIGS = {"Bursty dwarfs": {"sigma": 2.5, "tau": 10.0}, "Smooth disks": {"sigma": 0.5, "tau": 100.0}}
     N_PER_POP = 8
-
     pop_results = {}
     for pop_name, cfg in POP_CONFIGS.items():
         print(f"\n{pop_name}: σ = {cfg['sigma']}, τ = {cfg['tau']} Myr")
-
-        # Generate mock population
         model_pop = model_factory(psd_sigma=cfg["sigma"], psd_tau_myr=cfg["tau"])
         gals = []
         for i in range(N_PER_POP):
-            k = jax.random.fold_in(
-                jax.random.PRNGKey(int(hashlib.sha256(pop_name.encode()).hexdigest(), 16) % 2**31),
-                i,
-            )
+            k = jax.random.fold_in(jax.random.PRNGKey(int(hashlib.sha256(pop_name.encode()).hexdigest(), 16) % 2**31), i)
             p = model_pop.spec.sample(k)
             mock = model_pop.mock_spectrum(p, WAVE_OBS, snr=SPEC_SNR, key=jax.random.fold_in(k, 1))
             gals.append({"flux_obs": mock.flux_obs, "noise": mock.noise})
-
-        # Hierarchical fit
-        hf = PopulationFitter(
-            model_factory,
-            gals,
-            psd_sigma_prior=(0.1, 4.0),
-            psd_tau_prior=(1.0, 300.0),
-            data_type="spectroscopy",
-        )
-        res = hf.run(
-            "mgvi",
-            n_iterations=10,
-            n_samples=6,
-            n_posterior_samples=500,
-            verbose=False,
-            key=jax.random.PRNGKey(int(hashlib.sha256(pop_name.encode()).hexdigest(), 16) % 2**31),
-        )
+        hf = PopulationFitter(model_factory, gals, psd_sigma_prior=(0.1, 4.0), psd_tau_prior=(1.0, 300.0), data_type="spectroscopy")
+        res = hf.run("mgvi", n_iterations=10, n_samples=6, n_posterior_samples=500, verbose=False, key=jax.random.PRNGKey(int(hashlib.sha256(pop_name.encode()).hexdigest(), 16) % 2**31))
         pop_results[pop_name] = res
-
         sig_s, tau_s, _ = _pop_posterior_sigma_tau(res)
-        print(
-            f"  Recovered: σ = {np.median(sig_s):.2f} [{np.percentile(sig_s, 16):.2f}, "
-            f"{np.percentile(sig_s, 84):.2f}]"
-        )
-        print(
-            f"             τ-proxy = {np.median(tau_s):.2f} [{np.percentile(tau_s, 16):.2f}, "
-            f"{np.percentile(tau_s, 84):.2f}]"
-        )
-
-    # --- FIGURE 8: Population distinction ---
+        print(f"  Recovered: σ = {np.median(sig_s):.2f} [{np.percentile(sig_s, 16):.2f}, {np.percentile(sig_s, 84):.2f}]")
+        print(f"             τ-proxy = {np.median(tau_s):.2f} [{np.percentile(tau_s, 16):.2f}, {np.percentile(tau_s, 84):.2f}]")
     fig, ax = plt.subplots(figsize=(7, 5))
-
     pop_colors = {"Bursty dwarfs": COLORS["vi"], "Smooth disks": COLORS["rt"]}
     for pop_name, res in pop_results.items():
         sig_s, tau_s, _ = _pop_posterior_sigma_tau(res)
         ax.scatter(tau_s, sig_s, s=2, alpha=0.2, color=pop_colors[pop_name])
-        # 68% contour (simple ellipse from percentiles)
         sig_lo, sig_hi = np.percentile(sig_s, [16, 84])
         tau_lo, tau_hi = np.percentile(tau_s, [16, 84])
         from matplotlib.patches import Ellipse
-
-        ell = Ellipse(
-            (np.median(tau_s), np.median(sig_s)),
-            width=(tau_hi - tau_lo),
-            height=(sig_hi - sig_lo),
-            edgecolor=pop_colors[pop_name],
-            facecolor="none",
-            linewidth=2,
-            label=pop_name,
-        )
+        ell = Ellipse((np.median(tau_s), np.median(sig_s)), width=(tau_hi - tau_lo), height=(sig_hi - sig_lo),
+                      edgecolor=pop_colors[pop_name], facecolor="none", linewidth=2, label=pop_name)
         ax.add_patch(ell)
-
     ax.set_xlabel(r"$\tau_{\rm PS}$ [Myr]", fontsize=12)
     ax.set_ylabel(r"$\sigma_{\rm PS}$", fontsize=12)
     ax.set_title("Population Distinction in PSD Parameter Space")
@@ -885,40 +754,16 @@ else:
 # %% [markdown]
 # ## Summary
 #
-# **Hierarchical inference on population data:**
+# **Key findings:**
 #
-# 1. **Individual fits (N=1)** constrain σ_PS roughly but leave τ_PS nearly
-#    unconstrained — a signature of weak per-galaxy information.
+# 1. **Individual fits (N=1)** constrain σ_PS but leave τ_PS nearly unconstrained.
+# 2. **Hierarchical pooling (N=10)** breaks the degeneracy by sharing PSD hyperpriors.
+# 3. **Spectroscopy breaks σ–τ**: D4000, Balmer, UV slope encode burstiness; photometry (5 bands) cannot.
+# 4. **√N convergence**: Posterior width ∝ 1/√N (Bayesian central limit theorem).
+# 5. **Population separation**: Bursty dwarfs vs smooth disks separable in (σ, τ) space.
 #
-# 2. **Hierarchical pooling (N=10)** breaks this degeneracy by sharing the
-#    PSD hyperpriors across all galaxies. The posterior on τ_PS narrows
-#    dramatically, recovering the true value.
+# **Why tengri?** No other SED-fitting code pools burstiness timescales across populations. Prospector, BAGPIPES, CIGALE fit galaxies independently; here, PopulationFitter turns a sample into a hierarchical prior that sharpens both individual and population-level inference.
 #
-# 3. **Spectroscopy vs photometry**: Spectral features (D4000, Balmer lines,
-#    UV slope) encode burstiness at multiple timescales. Photometry (5 bands)
-#    cannot resolve τ_PS alone. Spectroscopy (200 pixels) breaks the σ–τ
-#    degeneracy that photometry leaves open.
+# **What you learned:** Hierarchical structure constrains per-galaxy burstiness; population inference scales to 100+ galaxies via MGVI; spectroscopy breaks photometric degeneracies; Bayesian √N convergence.
 #
-# 4. **√N convergence**: The posterior width shrinks as 1/√N — the Bayesian
-#    central limit theorem in action. Each galaxy contributes independent
-#    information.
-#
-# 5. **Population distinction**: Different galaxy populations (bursty dwarfs
-#    vs smooth disks) are separable in (σ, τ) space with sufficient N, enabling
-#    population-level burstiness demographics.
-#
-# **Why tengri?** No other SED-fitting code pools information about burstiness
-# timescales across a population. Prospector, BAGPIPES, and CIGALE fit galaxies
-# independently, leaving τ_PS unconstrained per galaxy. Here, PopulationFitter
-# turns a population into a hierarchical prior that sharpens both individual-
-# and population-level inference.
-#
-# ## What you learned
-#
-# - Hierarchical Bayesian structure dramatically constrains per-galaxy burstiness (σ_PS, τ_PS)
-# - Population-level inference scales to 100+ galaxies in seconds via MGVI
-# - Spectroscopy breaks σ–τ degeneracies; photometry alone leaves timescale unconstrained
-# - Posterior widths narrow as 1/√N (Bayesian central-limit theorem)
-#
-# **Next:** [`14_stochastic_sfh.py`](14_stochastic_sfh.py) (single-galaxy stochastic SFH) or
-# [`08_sfh_advanced.py`](08_sfh_advanced.py) (composition and chemical evolution).
+# **Next:** [`14_stochastic_sfh.py`](14_stochastic_sfh.py) or [`08_sfh_advanced.py`](08_sfh_advanced.py).

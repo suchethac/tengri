@@ -37,10 +37,10 @@ DUST_LAW_CITATIONS: dict[str, list[str]] = {
     "smc": ["gordon2003_smc"],
     "cardelli": ["cardelli1989"],
     "mw": ["cardelli1989"],
-    "salim": ["noll2009"],  # Salim+ law is a Noll+2009 generalization of Calzetti
-    "li08": ["witt_gordon2000"],  # clumpy radiative-transfer (closest match)
-    "vw07_bc": ["witt_gordon2000"],
-    "vw07_diff": ["witt_gordon2000"],
+    "salim": ["salim2018"],           # Salim+2018 modified-Calzetti (ADS-verified)
+    "li08": ["li2008_ext"],           # Li+2008 four-coefficient analytical curve (ADS-verified)
+    "vw07_bc": ["witt_gordon2000"],   # tengri source notes Wild+2007; closest workspace match
+    "vw07_diff": ["witt_gordon2000"], # see above; update once Wild+2007 is in the workspace bib
     "cf00": ["charlot_fall2000"],
 }
 
@@ -49,8 +49,8 @@ DUST_EMISSION_CITATIONS: dict[str, list[str]] = {
     "modified_blackbody": ["casey2012"],
     "casey2012": ["casey2012"],
     "dale2014": ["dale2014"],
-    "draine_li2007": [],      # not yet verified against workspace; leave blank
-    "draine_li2014": [],
+    "draine_li2007": ["draine_li2007"],   # ADS-verified 2026-04-23
+    "draine_li2014": ["draine2014"],      # Draine+2014 Andromeda's Dust (ADS-verified)
     None: [],
 }
 
@@ -84,12 +84,16 @@ AGN_DISC_CITATIONS: dict[str, list[str]] = {
 AGN_TORUS_CITATIONS: dict[str, list[str]] = {
     "skirtor": ["skirtor", "skirtor_2012"],
     "stalevski": ["skirtor", "skirtor_2012"],
+    "clumpy": ["clumpy_nenkova2008"],         # Nenkova+2008 Paper I (ADS-verified)
+    "nenkova": ["clumpy_nenkova2008"],
     None: [],
 }
 
 AGN_BLR_CITATIONS: dict[str, list[str]] = {
     "temple": ["temple2021_qsogen"],
     "qsogen": ["temple2021_qsogen"],
+    "vanden_berk": ["vandenberk2001"],        # SDSS composite (ADS-verified)
+    "sdss_composite": ["vandenberk2001"],
     None: [],
 }
 
@@ -114,6 +118,9 @@ BACKEND_CITATIONS: dict[str, list[str]] = {
     "evidence": ["nss"],
     "nss": ["nss"],
     "nested_slice": ["nss"],
+    "ess": ["ess_murray2010"],                # Murray, Adams & MacKay (2010, ADS-verified)
+    "elliptical_slice": ["ess_murray2010"],
+    "mcmc_ess": ["ess_murray2010"],
     "vi": ["nifty", "ift"],
     "vi_native": ["nifty", "ift"],
 }
