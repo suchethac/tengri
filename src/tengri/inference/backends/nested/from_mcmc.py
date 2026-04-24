@@ -30,13 +30,6 @@ from tengri.inference.backends.nested.adaptive import build_kernel as build_adap
 from tengri.inference.backends.nested.base import delete_fn as default_delete_fn
 
 
-class MCMCUpdateInfo(NamedTuple):
-    """Info from the MCMC update step."""
-
-    mcmc_states: NamedTuple
-    mcmc_infos: NamedTuple
-
-
 class ConstrainedMCMCInfo(NamedTuple):
     """Info for a constrained MCMC proposal.
 
