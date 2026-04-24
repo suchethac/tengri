@@ -86,8 +86,8 @@ def test_doctor_includes_logo(monkeypatch, capsys):
 
     doctor()
     out = capsys.readouterr().out
-    # Logo contains Unicode block characters — check for one
-    assert "▜" in out or "█" in out or "▗" in out
+    # Logo contains distinctive Unicode glyphs — check any of them
+    assert any(ch in out for ch in ("╱", "╲", "╭", "╰", "▔", "▁", "⬡", "▜", "█"))
 
 
 def test_doctor_no_logo_env(monkeypatch, capsys):
@@ -99,5 +99,5 @@ def test_doctor_no_logo_env(monkeypatch, capsys):
     out = capsys.readouterr().out
     # Report should still print (with header and checks)
     assert "Environment Health Check" in out
-    # But logo should be absent (no block characters from logo)
-    assert "▜" not in out
+    # But logo glyphs should be absent
+    assert not any(ch in out for ch in ("╱", "╲", "╭", "╰", "▔", "▁", "⬡"))

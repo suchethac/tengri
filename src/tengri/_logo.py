@@ -11,15 +11,27 @@ Design credit: Suchetha Cooray.
 
 from __future__ import annotations
 
-# Default: a compact, recognisable sunburst, ~10 lines, ~42 cols.
-LOGO = r"""       ▄▟▛▛▜▙▄
-     ▟▀   ▘   ▀▙
-   ▟▀  ▗▄▟▛▜▙▄  ▀▙
-  ▛   ▟▀  ●  ▀▙   ▜
-  ▜   ▜▄     ▄▟   ▛
-   ▀▙  ▝▀▙▜▛▀▘  ▟▀
-     ▀▙▄     ▄▙▀
-        ▀▜▙▛▀"""
+# Default: hexagon with nested spiral — matches the official tengri mark.
+# 7 lines, ~18 cols. Reads well in monospaced terminals.
+LOGO = r"""    ╱▔▔▔▔▔▔▔▔▔╲
+   ╱  ╭─────╮  ╲
+  │  │ ╭───╮ │  │
+  │  │ │ @ │ │  │
+  │  │ ╰───╯ │  │
+   ╲  ╰─────╯  ╱
+    ╲▁▁▁▁▁▁▁▁▁╱"""
+
+
+# Medium size — stronger spiral impression, 9 lines.
+LOGO_MEDIUM = r"""     ╱▔▔▔▔▔▔▔▔▔▔▔╲
+    ╱ ╭─────────╮ ╲
+   ╱  │ ╭─────╮ │  ╲
+  │   │ │ ╭─╮ │ │   │
+  │   │ │ │@│ │ │   │
+  │   │ │ ╰─╯ │ │   │
+   ╲  │ ╰─────╯ │  ╱
+    ╲ ╰─────────╯ ╱
+     ╲▁▁▁▁▁▁▁▁▁▁▁╱"""
 
 
 # Full detailed sunburst (original design) — opt-in via print_logo(size="full").
@@ -66,19 +78,23 @@ LOGO_FULL = r"""                         ▗▄▞▛▛▜▜▐▗▖
 
 
 # Compact one-line banner for routine prints (e.g. CLI --version, logs).
-LOGO_BANNER = "  ▗▖▛▟▞▘ tengri ▝▚▙▛▖▖"
+# Uses the U+2B21 WHITE HEXAGON glyph to echo the official mark.
+LOGO_BANNER = "⬡ tengri ⬡"
 
 
 def _resolve(size: str) -> str:
-    """Dispatch ``size`` to one of ``LOGO`` / ``LOGO_FULL`` / ``LOGO_BANNER``."""
+    """Dispatch ``size`` to one of the logo constants."""
     if size in ("default", "small", None):
         return LOGO
+    if size == "medium":
+        return LOGO_MEDIUM
     if size == "full":
         return LOGO_FULL
     if size in ("banner", "compact"):
         return LOGO_BANNER
     raise ValueError(
-        f"Unknown logo size '{size}'. Use 'default' (small), 'full', or 'compact'."
+        f"Unknown logo size '{size}'. "
+        "Use 'default', 'medium', 'full', or 'compact'."
     )
 
 
