@@ -117,6 +117,7 @@ from tengri.forward.prediction import (
 from tengri.forward.result import SEDResult
 from tengri.forward.sed_model import PriorPredictive, SEDModel
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
+from tengri.inference.catalog_fitter import CatalogFitter, CatalogPosterior
 from tengri.inference.fitter import Fitter
 from tengri.inference.hierarchical import (
     PopulationFitter,
@@ -262,6 +263,8 @@ __all__ = [
     "AGNConfig",
     "BackendError",
     "Bibliography",
+    "CatalogFitter",
+    "CatalogPosterior",
     "Citation",
     "ConfigError",
     "DustConfig",

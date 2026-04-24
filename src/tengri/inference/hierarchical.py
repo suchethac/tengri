@@ -260,24 +260,25 @@ class PopulationFitter:
             if n not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr")
         ]
 
-    def run(self, method="vi_nonlinear_fast", *, key=None, **kwargs):
+    def run(self, method="native_vi_linear", *, key=None, **kwargs):
         """Run hierarchical inference.
 
         Parameters
         ----------
         method : str
+            **Pure-JAX (lax.while_loop, no NIFTy; recommended)**
+
+            - ``"native_vi_linear"`` — MGVI inside ``lax.while_loop`` (default).
+              3–4× faster than NIFTy MGVI on CPU; O(1) memory in N.
+            - ``"native_vi_nonlinear"`` — geoVI inside ``lax.while_loop``.
+              Comparable speed to NIFTy geoVI; prefers lower N (≤20).
+
             **NIFTy-backed (CorrelatedFieldMaker, native PSD learning)**
 
-            - ``"vi_nonlinear_fast"`` — geoVI via NIFTy ``optimize_kl`` (default).
+            - ``"vi_nonlinear_fast"`` — geoVI via NIFTy ``optimize_kl``.
             - ``"vi_nonlinear"`` — geoVI; same runner as fast, kept for API symmetry.
             - ``"vi_linear_fast"`` — MGVI via NIFTy ``optimize_kl``.
             - ``"vi_linear"`` — MGVI; same runner as fast, kept for API symmetry.
-
-            **Pure-JAX (lax.while_loop, no NIFTy)**
-
-            - ``"native_vi_linear"`` — MGVI inside ``lax.while_loop``; fastest on CPU,
-              no NIFTy required.
-            - ``"native_vi_nonlinear"`` — geoVI; not yet implemented.
 
             **MCMC**
 
@@ -373,6 +374,7 @@ class PopulationFitter:
         n_samples=3,
         n_posterior_samples=500,
         posterior_chunk_size=None,
+        forward_chunk_size=1,
         memory_mode="low",
         kl_rtol=1e-2,
         n_seeds=3,
@@ -393,6 +395,12 @@ class PopulationFitter:
             Samples per iteration (doubled by mirror_samples).
         n_posterior_samples : int
             Posterior samples drawn after convergence.
+        forward_chunk_size : int
+            Number of galaxies to evaluate in parallel per ``lax.map`` step (K).
+            ``K=1`` (default) gives pure sequential lax.map, O(1) peak memory.
+            ``K>1`` vmaps K galaxies per iteration for K-way parallelism.
+            Must divide ``n_gal`` evenly after padding; all galaxies must have the
+            same number of data points when ``K>1``.
         kl_rtol : float
             Relative KL tolerance for early stopping.
         n_seeds : int
@@ -416,11 +424,27 @@ class PopulationFitter:
                 stacklevel=2,
             )
 
+        import math
+
         from jax.flatten_util import ravel_pytree
 
         from tengri.inference.backends.vi.native import build_native_vi_nonlinear_engine
 
         n_gal = self.n_galaxies
+        K = max(1, int(forward_chunk_size))
+        n_padded = math.ceil(n_gal / K) * K
+        n_chunks = n_padded // K
+        n_pad = n_padded - n_gal
+        if K > 1:
+            n_data_per_gal = len(self.galaxies[0]["flux_obs"])
+            for g in self.galaxies[1:]:
+                if len(g["flux_obs"]) != n_data_per_gal:
+                    raise ValueError(
+                        "forward_chunk_size > 1 requires all galaxies to have the same "
+                        f"number of data points; got {n_data_per_gal} and {len(g['flux_obs'])}."
+                    )
+        else:
+            n_data_per_gal = None
         spec = self._spec
         stochastic = spec.stochastic
         n_grid = spec.n_grid
@@ -486,12 +510,28 @@ class PopulationFitter:
                 return _predict(params)
 
             fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
-            if stochastic:
-                gal_inputs = (p["gal"], p["gal_xi"])
-                predictions = jax.lax.map(lambda args: fwd(args[0], args[1]), gal_inputs)
+            if K == 1:
+                if stochastic:
+                    gal_inputs = (p["gal"], p["gal_xi"])
+                    predictions = jax.lax.map(lambda args: fwd(args[0], args[1]), gal_inputs)
+                else:
+                    predictions = jax.lax.map(lambda ub: fwd(ub, None), p["gal"])
+                return predictions.reshape(-1)
             else:
-                predictions = jax.lax.map(lambda ub: fwd(ub, None), p["gal"])
-            return predictions.reshape(-1)
+                # K-way parallel chunks via lax.map(vmap_K); O(1) XLA graph in N_gal.
+                chunked_gal = jax.tree.map(lambda arr: arr.reshape(n_chunks, K), p["gal"])
+                if stochastic:
+                    chunked_xi = p["gal_xi"].reshape(n_chunks, K, n_grid)
+                    predictions = jax.lax.map(
+                        lambda args: jax.vmap(fwd)(args[0], args[1]),
+                        (chunked_gal, chunked_xi),
+                    )
+                else:
+                    predictions = jax.lax.map(
+                        lambda chunk: jax.vmap(lambda ub: fwd(ub, None))(chunk),
+                        chunked_gal,
+                    )
+                return predictions.reshape(n_padded, n_data_per_gal)[:n_gal].reshape(-1)
 
         # --- Build init structure ---
         sigma_mid = 0.5 * (sigma_lo + sigma_hi)
@@ -500,10 +540,10 @@ class PopulationFitter:
         init_template = {
             "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
             "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
-            "gal": {name: jnp.zeros(n_gal) for name in free_names},
+            "gal": {name: jnp.zeros(n_padded) for name in free_names},
         }
         if stochastic:
-            init_template["gal_xi"] = jnp.zeros((n_gal, n_grid))
+            init_template["gal_xi"] = jnp.zeros((n_padded, n_grid))
 
         _init_flat, unravel_fn = ravel_pytree(init_template)
         d_total = len(_init_flat)
@@ -563,13 +603,22 @@ class PopulationFitter:
             del fitter_i, map_i, init_u
         gc.collect()
 
+        _gal_stacked = {name: jnp.stack(vals) for name, vals in gal_param_lists.items()}
+        if n_pad > 0:
+            _gal_stacked = {
+                name: jnp.concatenate([arr, jnp.zeros(n_pad)])
+                for name, arr in _gal_stacked.items()
+            }
         map_init = {
             "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
             "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
-            "gal": {name: jnp.stack(vals) for name, vals in gal_param_lists.items()},
+            "gal": _gal_stacked,
         }
         if stochastic:
-            map_init["gal_xi"] = jnp.stack(gal_xi_list)
+            _xi_stacked = jnp.stack(gal_xi_list)
+            if n_pad > 0:
+                _xi_stacked = jnp.concatenate([_xi_stacked, jnp.zeros((n_pad, n_grid))], axis=0)
+            map_init["gal_xi"] = _xi_stacked
 
         if verbose:
             print("  MAP init done. Running multi-seed optimization...")
@@ -698,6 +747,7 @@ class PopulationFitter:
         n_samples=3,
         n_posterior_samples=500,
         posterior_chunk_size=None,
+        forward_chunk_size=1,
         memory_mode="low",
         kl_rtol=1e-2,
         n_seeds=3,
@@ -720,6 +770,12 @@ class PopulationFitter:
             Samples per iteration (doubled by mirror_samples).
         n_posterior_samples : int
             Posterior samples drawn after convergence.
+        forward_chunk_size : int
+            Number of galaxies to evaluate in parallel per ``lax.map`` step (K).
+            ``K=1`` (default) gives pure sequential lax.map, O(1) peak memory.
+            ``K>1`` vmaps K galaxies per iteration for K-way parallelism.
+            Must divide ``n_gal`` evenly after padding; all galaxies must have the
+            same number of data points when ``K>1``.
         kl_rtol : float
             Relative KL tolerance for early stopping.
         n_seeds : int
@@ -727,9 +783,25 @@ class PopulationFitter:
         verbose : bool
             Print progress.
         """
+        import math
+
         from jax.flatten_util import ravel_pytree
 
         n_gal = self.n_galaxies
+        K = max(1, int(forward_chunk_size))
+        n_padded = math.ceil(n_gal / K) * K
+        n_chunks = n_padded // K
+        n_pad = n_padded - n_gal
+        if K > 1:
+            n_data_per_gal = len(self.galaxies[0]["flux_obs"])
+            for g in self.galaxies[1:]:
+                if len(g["flux_obs"]) != n_data_per_gal:
+                    raise ValueError(
+                        "forward_chunk_size > 1 requires all galaxies to have the same "
+                        f"number of data points; got {n_data_per_gal} and {len(g['flux_obs'])}."
+                    )
+        else:
+            n_data_per_gal = None
         spec = self._spec
         stochastic = spec.stochastic
         n_grid = spec.n_grid
@@ -806,12 +878,28 @@ class PopulationFitter:
             # vmap replicates the graph N times → XLA protobuf exceeds 2 GB for
             # complex SEDs with N ≥ 3.  lax.map compiles one galaxy and loops.
             fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
-            if stochastic:
-                gal_inputs = (p["gal"], p["gal_xi"])
-                predictions = jax.lax.map(lambda args: fwd(args[0], args[1]), gal_inputs)
+            if K == 1:
+                if stochastic:
+                    gal_inputs = (p["gal"], p["gal_xi"])
+                    predictions = jax.lax.map(lambda args: fwd(args[0], args[1]), gal_inputs)
+                else:
+                    predictions = jax.lax.map(lambda ub: fwd(ub, None), p["gal"])
+                return predictions.reshape(-1)
             else:
-                predictions = jax.lax.map(lambda ub: fwd(ub, None), p["gal"])
-            return predictions.reshape(-1)
+                # K-way parallel chunks via lax.map(vmap_K); O(1) XLA graph in N_gal.
+                chunked_gal = jax.tree.map(lambda arr: arr.reshape(n_chunks, K), p["gal"])
+                if stochastic:
+                    chunked_xi = p["gal_xi"].reshape(n_chunks, K, n_grid)
+                    predictions = jax.lax.map(
+                        lambda args: jax.vmap(fwd)(args[0], args[1]),
+                        (chunked_gal, chunked_xi),
+                    )
+                else:
+                    predictions = jax.lax.map(
+                        lambda chunk: jax.vmap(lambda ub: fwd(ub, None))(chunk),
+                        chunked_gal,
+                    )
+                return predictions.reshape(n_padded, n_data_per_gal)[:n_gal].reshape(-1)
 
         # --- Build init structure ---
         sigma_mid = 0.5 * (sigma_lo + sigma_hi)
@@ -820,10 +908,10 @@ class PopulationFitter:
         init_template = {
             "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
             "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
-            "gal": {name: jnp.zeros(n_gal) for name in free_names},
+            "gal": {name: jnp.zeros(n_padded) for name in free_names},
         }
         if stochastic:
-            init_template["gal_xi"] = jnp.zeros((n_gal, n_grid))
+            init_template["gal_xi"] = jnp.zeros((n_padded, n_grid))
 
         # Use ravel_pytree for flatten/unflatten
         _init_flat, unravel_fn = ravel_pytree(init_template)
@@ -885,13 +973,22 @@ class PopulationFitter:
             del fitter_i, map_i, init_u
         gc.collect()
 
+        _gal_stacked = {name: jnp.stack(vals) for name, vals in gal_param_lists.items()}
+        if n_pad > 0:
+            _gal_stacked = {
+                name: jnp.concatenate([arr, jnp.zeros(n_pad)])
+                for name, arr in _gal_stacked.items()
+            }
         map_init = {
             "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
             "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
-            "gal": {name: jnp.stack(vals) for name, vals in gal_param_lists.items()},
+            "gal": _gal_stacked,
         }
         if stochastic:
-            map_init["gal_xi"] = jnp.stack(gal_xi_list)
+            _xi_stacked = jnp.stack(gal_xi_list)
+            if n_pad > 0:
+                _xi_stacked = jnp.concatenate([_xi_stacked, jnp.zeros((n_pad, n_grid))], axis=0)
+            map_init["gal_xi"] = _xi_stacked
 
         if verbose:
             print("  MAP init done. Running multi-seed optimization...")

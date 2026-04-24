@@ -126,9 +126,7 @@ def _cg_solve(
         r_step = r - q * alpha
         r = jnp.where((i % 20 == 0) & (info < -1), r_reset, r_step)
         gamma = jnp.dot(r, r)
-        info = jnp.where(
-            (gamma >= 0.0) & (gamma <= _TINY_F64) & (info != -1), jnp.int32(0), info
-        )
+        info = jnp.where((gamma >= 0.0) & (gamma <= _TINY_F64) & (info != -1), jnp.int32(0), info)
         if norm_ord == 1:
             r_norm = jnp.sum(jnp.abs(r))
         else:
@@ -1131,15 +1129,22 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
         return x_opt - m
 
     def draw_nonlinear_residuals(m, subkeys):
-        """Draw geoVI residuals: ``(2*n_samp, d_total)`` with mirrored pairs."""
-        linear_residuals = jax.vmap(lambda sk: draw_linear_residual(m, sk))(subkeys)
+        """Draw geoVI residuals: ``(2*n_samp, d_total)`` with mirrored pairs.
 
-        def curve_pair(r, subkey):
+        Uses ``lax.map`` (not ``vmap``) over both ``draw_linear_residual`` and
+        ``curve_pair`` so that the compiled XLA graph is O(1) in n_samp.
+        ``vmap`` over functions containing ``while_loop`` materialises O(n_samp)
+        graph copies; ``lax.map`` compiles one body and sequences over the batch.
+        """
+        linear_residuals = jax.lax.map(lambda sk: draw_linear_residual(m, sk), subkeys)
+
+        def curve_pair(args):
+            r, subkey = args
             r_pos = curve_residual(m, r, subkey, sign=1.0)
             r_neg = curve_residual(m, -r, subkey, sign=-1.0)
             return r_pos, r_neg
 
-        pos_curved, neg_curved = jax.vmap(curve_pair)(linear_residuals, subkeys)
+        pos_curved, neg_curved = jax.lax.map(curve_pair, (linear_residuals, subkeys))
         return jnp.concatenate([pos_curved, neg_curved], axis=0)
 
     def kl_vg(m, residuals):
@@ -1203,3 +1208,433 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
     draw_nonlinear_residuals_jit = jax.jit(draw_nonlinear_residuals)
 
     return run_native_vi_nonlinear_jit, draw_nonlinear_residuals_jit, hamiltonian
+
+
+def build_native_vi_catalog_linear_engine(signal_response, flatten, unflatten):
+    """Like ``build_native_vi_linear_engine`` but ``data``/``noise`` are runtime arguments.
+
+    Enables ``jax.vmap`` over independent per-galaxy fits in :class:`CatalogFitter`.
+    The forward model (``signal_response``) is shared across all galaxies; each
+    galaxy's observed data and noise are passed at call time.
+
+    Parameters
+    ----------
+    signal_response : callable
+        ``(pytree) -> ndarray, shape (n_data,)``. Must NOT capture any galaxy-specific
+        data — depends only on the model and parameter structure.
+    flatten : callable
+        ``pytree -> 1D ndarray``.
+    unflatten : callable
+        ``1D ndarray -> pytree``.
+
+    Returns
+    -------
+    run_fn : callable
+        ``(init_flat, vi_key, data, noise, n_iter, n_samp, rtol) -> (best_flat, n_iters)``.
+        JIT-compiled; vmappable over ``(init_flat, vi_key, data, noise)``.
+    draw_fn : callable
+        ``(pos_flat, subkeys, noise) -> residuals``, shape ``(n_samples, d_total)``.
+        JIT-compiled; vmappable.
+    hamiltonian_fn : callable
+        ``(flat, data, noise) -> scalar``. Vmappable for seed selection.
+
+    Notes
+    -----
+    Inner functions (metric_vec, draw_residuals, etc.) close over ``noise_inv`` and
+    ``sqrt_noise_inv`` computed from the runtime ``noise`` argument.  JAX traces through
+    these Python closures, so the traced values become XLA graph nodes — making the
+    returned callables fully vmappable across different galaxies.
+
+    **JIT-compatible**: the returned callables are pre-JIT'd.
+    """
+
+    def hamiltonian_fn(xi, data, noise):
+        pred = signal_response(unflatten(xi))
+        chi2 = jnp.sum(((data - pred) / noise) ** 2)
+        return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
+
+    def _metric_vec_with_noise_inv(xi, v, noise_inv):
+        xi_d, v_d = unflatten(xi), unflatten(v)
+        _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
+        _, vjp_fn = jax.vjp(signal_response, xi_d)
+        return flatten(vjp_fn(noise_inv * Jv)[0]) + v
+
+    def run_fn(init_pos, vi_key, data, noise, n_iter, n_samp, rtol):
+        noise_inv = 1.0 / noise**2
+        sqrt_noise_inv = jnp.sqrt(noise_inv)
+        H_vg = jax.value_and_grad(lambda xi: hamiltonian_fn(xi, data, noise))
+
+        def metric_vec(xi, v):
+            return _metric_vec_with_noise_inv(xi, v, noise_inv)
+
+        def draw_residuals(pos_f, subkeys):
+            def draw_one(subkey):
+                k1, k2 = jax.random.split(subkey)
+                eta_pr = jax.random.normal(k1, shape=pos_f.shape)
+                eta_lh = jax.random.normal(k2, shape=noise.shape)
+                _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
+                jt = flatten(vjp_fn(sqrt_noise_inv * eta_lh)[0])
+                return _cg_solve(
+                    lambda v: metric_vec(pos_f, v),
+                    jt + eta_pr,
+                    eta_pr,
+                    maxiter=30,
+                    miniter=6,
+                    absdelta=1e-4,
+                )
+
+            return jax.vmap(draw_one)(subkeys)
+
+        def kl_vg(m, residuals):
+            vals, grads = jax.vmap(lambda r: H_vg(m + r))(residuals)
+            return jnp.mean(vals), jnp.mean(grads, axis=0)
+
+        def kl_metric(m, residuals, v):
+            return jnp.mean(jax.vmap(lambda r: metric_vec(m + r, v))(residuals), axis=0)
+
+        def vi_linear_step(m, subkey, n_samp):
+            sample_keys = jax.random.split(subkey, n_samp)
+            residuals = draw_residuals(m, sample_keys)
+            residuals = jnp.concatenate([residuals, -residuals], axis=0)
+
+            def ncg_body(carry):
+                m_cur, prev_val, info, i = carry
+                i = i + 1
+                val, grad = kl_vg(m_cur, residuals)
+                step = _cg_solve(
+                    lambda v: kl_metric(m_cur, residuals, v),
+                    -grad,
+                    jnp.zeros_like(m_cur),
+                    maxiter=10,
+                    miniter=3,
+                    absdelta=1e-3,
+                )
+                m_new = m_cur + step
+                ed = prev_val - val
+                info = jnp.where((ed < 1e-3) & (i >= 3) & (info < -1), jnp.int32(0), info)
+                info = jnp.where((i >= 10) & (info < -1), i, info)
+                return (m_new, val, info, i)
+
+            val0, _ = kl_vg(m, residuals)
+            result = jax.lax.while_loop(
+                lambda s: s[2] < -1,
+                ncg_body,
+                (m, val0, jnp.int32(-2), jnp.int32(0)),
+            )
+            return result[0], result[1]
+
+        keys = jax.random.split(vi_key, n_iter)
+
+        def cond_fn(state):
+            _m, _prev_kl, i, converged = state
+            return (~converged) & (i < n_iter)
+
+        def body_fn(state):
+            m, prev_kl, i, converged = state
+            subkey = jax.lax.dynamic_index_in_dim(keys, i, keepdims=False)
+            m_new, kl_val = vi_linear_step(m, subkey, n_samp)
+            rel_change = jnp.abs(prev_kl - kl_val) / (jnp.abs(prev_kl) + 1e-10)
+            converged = (rel_change < rtol) & (i >= 5)
+            return (m_new, kl_val, i + 1, converged)
+
+        m0, kl0 = vi_linear_step(init_pos, keys[0], n_samp)
+        init_state = (m0, kl0, jnp.int32(1), jnp.bool_(False))
+        m_final, _kl_final, n_iters, _ = jax.lax.while_loop(cond_fn, body_fn, init_state)
+        return m_final, n_iters
+
+    def draw_fn(pos_f, subkeys, noise):
+        noise_inv = 1.0 / noise**2
+        sqrt_noise_inv = jnp.sqrt(noise_inv)
+
+        def draw_one(subkey):
+            k1, k2 = jax.random.split(subkey)
+            eta_pr = jax.random.normal(k1, shape=pos_f.shape)
+            eta_lh = jax.random.normal(k2, shape=noise.shape)
+            _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
+            jt = flatten(vjp_fn(sqrt_noise_inv * eta_lh)[0])
+            return _cg_solve(
+                lambda v: _metric_vec_with_noise_inv(pos_f, v, noise_inv),
+                jt + eta_pr,
+                eta_pr,
+                maxiter=30,
+                miniter=6,
+                absdelta=1e-4,
+            )
+
+        return jax.vmap(draw_one)(subkeys)
+
+    run_jit = jax.jit(run_fn, static_argnames=("n_iter", "n_samp"))
+    draw_jit = jax.jit(draw_fn)
+    return run_jit, draw_jit, hamiltonian_fn
+
+
+def build_native_vi_catalog_nonlinear_engine(signal_response, flatten, unflatten):
+    """Like ``build_native_vi_nonlinear_engine`` but ``data``/``noise`` are runtime arguments.
+
+    Enables ``jax.vmap`` over independent per-galaxy geoVI fits in
+    :class:`CatalogFitter`. The forward model is shared; per-galaxy data and noise
+    are passed at call time.
+
+    Parameters
+    ----------
+    signal_response : callable
+        ``(pytree) -> ndarray, shape (n_data,)``. Must not capture galaxy data.
+    flatten : callable
+        ``pytree -> 1D ndarray``.
+    unflatten : callable
+        ``1D ndarray -> pytree``.
+
+    Returns
+    -------
+    run_fn : callable
+        ``(init_flat, vi_key, data, noise, n_iter, n_samp, rtol) -> (best_flat, n_iters)``.
+        JIT-compiled; vmappable over ``(init_flat, vi_key, data, noise)``.
+    draw_fn : callable
+        ``(pos_flat, subkeys, noise) -> residuals``, shape ``(2*n_keys, d_total)``.
+        Each key produces one mirrored pair (geoVI). JIT-compiled; vmappable.
+    hamiltonian_fn : callable
+        ``(flat, data, noise) -> scalar``. Vmappable.
+
+    Notes
+    -----
+    Identical algorithm to ``build_native_vi_nonlinear_engine``. The only
+    structural difference is that ``noise_inv``, ``sqrt_noise_inv``, and ``n_data``
+    are derived from the runtime ``noise`` argument inside each callable rather than
+    being captured in the outer closure.
+
+    **JIT-compatible**: the returned callables are pre-JIT'd.
+    """
+
+    def hamiltonian_fn(xi, data, noise):
+        pred = signal_response(unflatten(xi))
+        chi2 = jnp.sum(((data - pred) / noise) ** 2)
+        return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
+
+    def _metric_vec_with_noise_inv(xi, v, noise_inv):
+        xi_d, v_d = unflatten(xi), unflatten(v)
+        _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
+        _, vjp_fn = jax.vjp(signal_response, xi_d)
+        return flatten(vjp_fn(noise_inv * Jv)[0]) + v
+
+    def _make_geometry(sqrt_noise_inv):
+        """Return geometry helpers closed over a single sqrt_noise_inv trace."""
+
+        def transformation(xi):
+            return sqrt_noise_inv * signal_response(unflatten(xi))
+
+        def left_sqrt_metric(xi, v_data):
+            _, vjp_fn = jax.vjp(signal_response, unflatten(xi))
+            return flatten(vjp_fn(sqrt_noise_inv * v_data)[0])
+
+        def right_sqrt_metric(xi, v_param):
+            _, Jv = jax.jvp(signal_response, (unflatten(xi),), (unflatten(v_param),))
+            return sqrt_noise_inv * Jv
+
+        return transformation, left_sqrt_metric, right_sqrt_metric
+
+    def run_fn(init_pos, vi_key, data, noise, n_iter, n_samp, rtol):
+        noise_inv = 1.0 / noise**2
+        sqrt_noise_inv = jnp.sqrt(noise_inv)
+        n_data = noise.shape[0]
+        H_vg = jax.value_and_grad(lambda xi: hamiltonian_fn(xi, data, noise))
+        transformation, left_sqrt_metric, right_sqrt_metric = _make_geometry(sqrt_noise_inv)
+
+        def metric_vec(xi, v):
+            return _metric_vec_with_noise_inv(xi, v, noise_inv)
+
+        def draw_metric_sample(xi, subkey):
+            k1, k2 = jax.random.split(subkey)
+            eta_pr = jax.random.normal(k1, shape=xi.shape)
+            eta_lh = jax.random.normal(k2, shape=(n_data,))
+            _, vjp_fn = jax.vjp(signal_response, unflatten(xi))
+            jt = flatten(vjp_fn(sqrt_noise_inv * eta_lh)[0])
+            return jt + eta_pr
+
+        def draw_linear_residual(pos_f, subkey):
+            k1, k2 = jax.random.split(subkey)
+            eta_pr = jax.random.normal(k1, shape=pos_f.shape)
+            eta_lh = jax.random.normal(k2, shape=(n_data,))
+            _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
+            jt = flatten(vjp_fn(sqrt_noise_inv * eta_lh)[0])
+            return _cg_solve(
+                lambda v: metric_vec(pos_f, v),
+                jt + eta_pr,
+                eta_pr,
+                maxiter=30,
+                miniter=6,
+                absdelta=1e-4,
+            )
+
+        def curve_residual(m, r_linear, metric_key, sign):
+            x0 = m + r_linear
+            ms = sign * draw_metric_sample(m, metric_key)
+            trafo_at_m = transformation(m)
+
+            def phi_vg(x):
+                delta_trafo = transformation(x) - trafo_at_m
+                g_x = (x - m) + left_sqrt_metric(m, delta_trafo)
+                r = ms - g_x
+                val = 0.5 * jnp.dot(r, r)
+                ngrad = r + left_sqrt_metric(x, right_sqrt_metric(m, r))
+                return val, -ngrad
+
+            def phi_metric(x, v):
+                tm = left_sqrt_metric(m, right_sqrt_metric(x, v)) + v
+                return left_sqrt_metric(x, right_sqrt_metric(m, tm)) + tm
+
+            def sampnorm(natgrad):
+                fpp = right_sqrt_metric(m, natgrad)
+                return jnp.sqrt(jnp.dot(natgrad, natgrad) + jnp.dot(fpp, fpp))
+
+            x_opt, _ = _newton_cg_flat(
+                phi_vg,
+                phi_metric,
+                x0,
+                custom_gradnorm=sampnorm,
+                maxiter=3,
+                miniter=0,
+                xtol=1e-3,
+                energy_reduction_factor=0.1,
+            )
+            return x_opt - m
+
+        def draw_nonlinear_residuals(m, subkeys):
+            linear_residuals = jax.lax.map(lambda sk: draw_linear_residual(m, sk), subkeys)
+
+            def curve_pair(args):
+                r, subkey = args
+                return curve_residual(m, r, subkey, 1.0), curve_residual(m, -r, subkey, -1.0)
+
+            pos_curved, neg_curved = jax.lax.map(curve_pair, (linear_residuals, subkeys))
+            return jnp.concatenate([pos_curved, neg_curved], axis=0)
+
+        def kl_vg(m, residuals):
+            vals, grads = jax.lax.map(lambda r: H_vg(m + r), residuals)
+            return jnp.mean(vals), jnp.mean(grads, axis=0)
+
+        def kl_metric(m, residuals, v):
+            return jnp.mean(jax.lax.map(lambda r: metric_vec(m + r, v), residuals), axis=0)
+
+        def vi_nonlinear_step(m, subkey, n_samp):
+            sample_keys = jax.random.split(subkey, n_samp)
+            residuals = draw_nonlinear_residuals(m, sample_keys)
+
+            def ncg_body(carry):
+                m_cur, prev_val, info, i = carry
+                i = i + 1
+                val, grad = kl_vg(m_cur, residuals)
+                step = _cg_solve(
+                    lambda v: kl_metric(m_cur, residuals, v),
+                    -grad,
+                    jnp.zeros_like(m_cur),
+                    maxiter=10,
+                    miniter=3,
+                    absdelta=1e-3,
+                )
+                m_new = m_cur + step
+                ed = prev_val - val
+                info = jnp.where((ed < 1e-3) & (i >= 3) & (info < -1), jnp.int32(0), info)
+                info = jnp.where((i >= 10) & (info < -1), i, info)
+                return (m_new, val, info, i)
+
+            val0, _ = kl_vg(m, residuals)
+            result = jax.lax.while_loop(
+                lambda s: s[2] < -1,
+                ncg_body,
+                (m, val0, jnp.int32(-2), jnp.int32(0)),
+            )
+            return result[0], result[1]
+
+        keys = jax.random.split(vi_key, n_iter)
+
+        def cond_fn(state):
+            _m, _prev_kl, i, converged = state
+            return (~converged) & (i < n_iter)
+
+        def body_fn(state):
+            m, prev_kl, i, converged = state
+            subkey = jax.lax.dynamic_index_in_dim(keys, i, keepdims=False)
+            m_new, kl_val = vi_nonlinear_step(m, subkey, n_samp)
+            rel_change = jnp.abs(prev_kl - kl_val) / (jnp.abs(prev_kl) + 1e-10)
+            converged = (rel_change < rtol) & (i >= 5)
+            return (m_new, kl_val, i + 1, converged)
+
+        m0, kl0 = vi_nonlinear_step(init_pos, keys[0], n_samp)
+        init_state = (m0, kl0, jnp.int32(1), jnp.bool_(False))
+        m_final, _kl_final, n_iters, _ = jax.lax.while_loop(cond_fn, body_fn, init_state)
+        return m_final, n_iters
+
+    def draw_fn(pos_f, subkeys, noise):
+        noise_inv = 1.0 / noise**2
+        sqrt_noise_inv = jnp.sqrt(noise_inv)
+        n_data = noise.shape[0]
+        transformation, left_sqrt_metric, right_sqrt_metric = _make_geometry(sqrt_noise_inv)
+
+        def draw_metric_sample(xi, subkey):
+            k1, k2 = jax.random.split(subkey)
+            eta_pr = jax.random.normal(k1, shape=xi.shape)
+            eta_lh = jax.random.normal(k2, shape=(n_data,))
+            _, vjp_fn = jax.vjp(signal_response, unflatten(xi))
+            jt = flatten(vjp_fn(sqrt_noise_inv * eta_lh)[0])
+            return jt + eta_pr
+
+        def draw_linear_residual(subkey):
+            k1, k2 = jax.random.split(subkey)
+            eta_pr = jax.random.normal(k1, shape=pos_f.shape)
+            eta_lh = jax.random.normal(k2, shape=(n_data,))
+            _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
+            jt = flatten(vjp_fn(sqrt_noise_inv * eta_lh)[0])
+            return _cg_solve(
+                lambda v: _metric_vec_with_noise_inv(pos_f, v, noise_inv),
+                jt + eta_pr,
+                eta_pr,
+                maxiter=30,
+                miniter=6,
+                absdelta=1e-4,
+            )
+
+        def curve_residual(m, r_linear, metric_key, sign):
+            x0 = m + r_linear
+            ms = sign * draw_metric_sample(m, metric_key)
+            trafo_at_m = transformation(m)
+
+            def phi_vg(x):
+                delta_trafo = transformation(x) - trafo_at_m
+                g_x = (x - m) + left_sqrt_metric(m, delta_trafo)
+                r = ms - g_x
+                val = 0.5 * jnp.dot(r, r)
+                ngrad = r + left_sqrt_metric(x, right_sqrt_metric(m, r))
+                return val, -ngrad
+
+            def phi_metric(x, v):
+                tm = left_sqrt_metric(m, right_sqrt_metric(x, v)) + v
+                return left_sqrt_metric(x, right_sqrt_metric(m, tm)) + tm
+
+            def sampnorm(natgrad):
+                fpp = right_sqrt_metric(m, natgrad)
+                return jnp.sqrt(jnp.dot(natgrad, natgrad) + jnp.dot(fpp, fpp))
+
+            x_opt, _ = _newton_cg_flat(
+                phi_vg,
+                phi_metric,
+                x0,
+                custom_gradnorm=sampnorm,
+                maxiter=3,
+                miniter=0,
+                xtol=1e-3,
+                energy_reduction_factor=0.1,
+            )
+            return x_opt - m
+
+        linear_residuals = jax.lax.map(draw_linear_residual, subkeys)
+
+        def curve_pair(args):
+            r, subkey = args
+            return curve_residual(pos_f, r, subkey, 1.0), curve_residual(pos_f, -r, subkey, -1.0)
+
+        pos_curved, neg_curved = jax.lax.map(curve_pair, (linear_residuals, subkeys))
+        return jnp.concatenate([pos_curved, neg_curved], axis=0)
+
+    run_jit = jax.jit(run_fn, static_argnames=("n_iter", "n_samp"))
+    draw_jit = jax.jit(draw_fn)
+    return run_jit, draw_jit, hamiltonian_fn
