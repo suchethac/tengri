@@ -6,7 +6,10 @@ Demonstrate the effect of BH spin on the relativistic outer-disc SED using
 the RELAGN model (Hagen & Done 2023) with KYCONV Kerr-metric ray-tracing
 (Dovciak, Karas & Yaqoob 2004).
 
-Higher spin → smaller ISCO → hotter inner disc → bluer UV peak.
+Higher spin → smaller ISCO → hotter inner-disc boundary → harder UV spectral
+slope.  The UV slope α (where L_ν ∝ ν^α in 912–3000 Å) is a direct observable
+of the spin-dependent inner boundary condition.
+
 Requires the precomputed grid ``data/relagn_disc_grid.h5``.
 """
 
@@ -22,13 +25,15 @@ setup_style()
 # %%
 # Wavelength grid: 100 Å (UV) to 3 µm (NIR)
 wavelength = jnp.logspace(np.log10(100), np.log10(3e4), 800)
-wave_um = np.array(wavelength) / 1e4
+wave_aa = np.array(wavelength)
+wave_um = wave_aa / 1e4
+nu = 2.99792458e18 / wave_aa  # Hz
 
-# Fixed BH properties
-log_mbh = 8.5    # log10(M / Msun)
-log_mdot = -0.5  # log10(Mdot / Mdot_Edd)
+# Fixed BH properties: 10^8.5 Msun, 0.3× Eddington
+log_mbh = 8.5
+log_mdot = -0.5
 
-# Spin nodes to plot — prograde range [0, 0.998]
+# Spin nodes — prograde range [0, 0.998]
 astar_values = [0.0, 0.3, 0.6, 0.9, 0.998]
 colors = plt.cm.plasma(np.linspace(0.1, 0.9, len(astar_values)))
 
@@ -39,11 +44,9 @@ try:
 except KeyError as exc:
     raise SystemExit("relagn model not registered — rebuild grid first.") from exc
 
-fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-ax_sed, ax_peak = axes
+fig, (ax_sed, ax_slope) = plt.subplots(1, 2, figsize=(12, 5))
 
-peak_wave = []
-peak_lnu = []
+uv_slopes = []
 
 for astar, color in zip(astar_values, colors):
     l_nu = np.array(relagn_fn(
@@ -56,47 +59,47 @@ for astar, color in zip(astar_values, colors):
     ))
     mask = l_nu > 0
     if not mask.any():
+        uv_slopes.append(np.nan)
         continue
 
     ax_sed.loglog(
         wave_um[mask], l_nu[mask], lw=1.8, color=color,
         label=rf"$a_* = {astar:.3f}$",
     )
-    # UV peak (shortest wavelength at maximum L_nu)
-    uv_mask = (np.array(wavelength) < 3000) & mask
-    if uv_mask.any():
-        i_pk = np.argmax(l_nu[uv_mask])
-        peak_wave.append(wave_um[uv_mask][i_pk])
-        peak_lnu.append(l_nu[uv_mask][i_pk])
+
+    # UV spectral slope: fit L_nu ~ nu^alpha in the 912–3000 Å band
+    uv = (wave_aa >= 912) & (wave_aa <= 3000) & mask
+    if uv.sum() > 5:
+        slope = np.polyfit(np.log10(nu[uv]), np.log10(l_nu[uv]), 1)[0]
     else:
-        peak_wave.append(np.nan)
-        peak_lnu.append(np.nan)
+        slope = np.nan
+    uv_slopes.append(slope)
 
 ax_sed.set_xlabel(r"Wavelength [$\mu$m]")
 ax_sed.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax_sed.set_title(
-    rf"RELAGN disc: $\log M = {log_mbh}$, $\log \dot{{m}} = {log_mdot}$"
+    rf"RELAGN outer disc: $\log M = {log_mbh}$, $\log \dot{{m}} = {log_mdot}$"
 )
 ax_sed.set_xlim(0.01, 3)
 ax_sed.legend(frameon=False, fontsize=9)
 
 # %%
-# Panel 2: UV peak shift vs spin
-ax_peak.plot(
-    astar_values[:len(peak_wave)],
-    [pw * 1e4 for pw in peak_wave],  # back to Angstrom
+# Panel 2: UV spectral slope α vs spin
+# α becomes less negative (harder) as spin increases because the shrinking ISCO
+# pushes the inner-disc temperature blueward, contributing more flux at
+# 912–3000 Å.  α = d log L_ν / d log ν; Rayleigh-Jeans limit → α = +2.
+ax_slope.plot(
+    astar_values, uv_slopes,
     "o-", color="royalblue", lw=2, ms=7,
 )
-ax_peak.set_xlabel(r"BH spin $a_*$")
-ax_peak.set_ylabel(r"UV peak wavelength [$\AA$]")
-ax_peak.set_title("Disc UV peak shifts blueward with spin")
-ax_peak.invert_yaxis()
+ax_slope.set_xlabel(r"BH spin $a_*$")
+ax_slope.set_ylabel(r"UV slope $\alpha$  ($L_\nu \propto \nu^\alpha$, 912–3000 Å)")
+ax_slope.set_title("Harder UV slope at high spin")
 
 fig.tight_layout()
-# Higher spin concentrates emission at smaller ISCO radii.
-# KYCONV Kerr-metric ray-tracing (Dovciak+2004) computes the photon orbit
-# correction per annulus up to r = 1000 Rg; beyond that RELAGN uses the
-# non-relativistic formula.
+# Higher spin concentrates disc emission at smaller ISCO radii.  KYCONV
+# (Dovciak+2004) applies full Kerr ray-tracing per annulus up to r = 1000 Rg;
+# the Novikov-Thorne outer disc uses the non-relativistic formula beyond that.
 
 plt.savefig("relagn_spin_sweep.png", dpi=150, bbox_inches="tight")
 plt.show()

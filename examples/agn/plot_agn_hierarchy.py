@@ -21,22 +21,22 @@ setup_style()
 wavelength = jnp.logspace(np.log10(100), np.log10(5e5), 1000)
 wave_um = np.array(wavelength) / 1e4  # micron for plotting
 
-# Fixed bolometric luminosity: L_bol = 10^45 erg/s ~ 10^{11.6} Lsun
-log_lbol = 12.0  # log10(L_bol / Lsun); typical QSO
+# Fixed bolometric luminosity: L_bol = 10^12 Lsun ~ 10^45.6 erg/s (typical QSO)
+log_lbol = 12.0
 
 # %%
 # Evaluate each registered AGN model
 # ------------------------------------
-# The registry contains: simple, standard, kubota_done, skirtor,
-# unified_nlr_blr, qsogen, relagn. Some may need external data; skip gracefully.
+# Models shown in order of increasing physical complexity.
+# "standard" is omitted because at the same log_Lbol it is degenerate with
+# "kubota_done" (same disc defaults, same torus parameterization).
+# "relagn" is self-normalizing from BH physics (M, Mdot, spin): parameters
+# chosen so that log_Lbol ≈ 12.1 Lsun matches the reference.
 
-model_order = [
-    "simple", "standard", "kubota_done", "skirtor", "unified_nlr_blr", "qsogen", "relagn",
-]
+model_order = ["simple", "kubota_done", "skirtor", "unified_nlr_blr", "qsogen", "relagn"]
 colors = plt.cm.Set1(np.linspace(0.0, 0.9, len(model_order)))
 param_counts = {
     "simple": 3,
-    "standard": 6,
     "kubota_done": 8,
     "skirtor": 7,
     "unified_nlr_blr": "12+",
@@ -44,9 +44,10 @@ param_counts = {
     "relagn": 8,
 }
 
-# Model-specific kwargs: relagn is self-normalizing (no agn_log_lbol)
+# Model-specific kwargs: relagn is self-normalizing (no agn_log_lbol).
+# log_mbh=8.5, log_mdot=-1.0, a=0.5 gives log_Lbol ≈ 12.1 Lsun.
 model_kwargs = {
-    "relagn": dict(agn_log_mbh=8.5, agn_log_mdot=0.0, agn_astar=0.9),
+    "relagn": dict(agn_log_mbh=8.5, agn_log_mdot=-1.0, agn_astar=0.5),
 }
 
 fig, ax = plt.subplots(figsize=(10, 6))
@@ -59,7 +60,6 @@ for name, color in zip(model_order, colors):
         kwargs = model_kwargs.get(name, {"agn_log_lbol": log_lbol})
         l_nu = model_fn(wavelength, **kwargs)
         l_nu_np = np.array(l_nu)
-        # Skip if all zeros or NaN
         if np.all(l_nu_np <= 0) or np.any(np.isnan(l_nu_np)):
             continue
         n_params = param_counts.get(name, "?")
@@ -76,18 +76,18 @@ ax.set_title(
     rf"AGN SEDModel Hierarchy at $\log L_{{\mathrm{{bol}}}} = {log_lbol:.0f}$"
 )
 ax.set_xlim(0.01, 50)
-ax.set_ylim(1e20, 1e32)
+ax.set_ylim(1e27, 1e32)
 ax.legend(frameon=False, fontsize=10)
 fig.tight_layout()
 # Each tier adds physical complexity:
 #
 # - **simple**: power-law disc + single-T torus (fast, 3 free params)
-# - **standard**: multi-color Shakura-Sunyaev disc + two-T torus (6 params)
-# - **kubota_done**: Kubota & Done (2018) disc with BH spin + clumpy torus (8+ params)
-# - **skirtor**: power-law disc + SKIRTOR clumpy torus (Stalevski+2012, 7 params)
-# - **unified_nlr_blr**: kubota_done + NLR/BLR line regions (12+ params)
+# - **kubota_done**: Kubota & Done (2018) 3-zone disc + two-T torus (8 params)
+# - **skirtor**: power-law disc + SKIRTOR Monte Carlo torus (Stalevski+2012, 7 params)
+# - **unified_nlr_blr**: kubota_done disc + NLR/BLR line regions (12+ params)
 # - **qsogen**: Temple, Hewett & Banerji (2021) empirical quasar SED (7 params)
-# - **relagn**: RELAGN outer disc (Hagen & Done 2023) + KYCONV Kerr ray-tracing (8 params)
+# - **relagn**: RELAGN outer disc (Hagen & Done 2023) + KYCONV Kerr ray-tracing;
+#   self-normalizing from BH physics — shown at log_Lbol ≈ 12.1 (8 params)
 
 plt.savefig("agn_hierarchy.png", dpi=150, bbox_inches="tight")
 plt.show()
