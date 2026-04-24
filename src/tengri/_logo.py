@@ -1,21 +1,106 @@
-"""ASCII-art logo for tengri — three sizes of the hex+spiral mark.
+"""ASCII-art logo for tengri — the hex+spiral mark in several renderings.
 
-The three art constants are stippled renderings of the official tengri logo
-(hexagon containing a spiral). Sizes:
+Size/style variants (pass via ``print_logo(size=...)`` / ``logo_str(size=...)``):
 
-    LOGO         : default, 21 lines, ~32 cols
-    LOGO_MEDIUM  : 26 lines, ~40 cols — opt-in via print_logo(size="medium")
-    LOGO_FULL    : 32 lines, ~50 cols — opt-in via print_logo(size="full")
-    LOGO_BANNER  : plain "tengri" text — no logo below the 21-line threshold
+    LOGO           : default, 37-line solid-block rendering (universally
+                     readable, matches the official mark most faithfully)
+    LOGO_STIPPLE   : same dimensions, stippled with ``}[)`` etc. — more
+                     textured on fonts that render those glyphs well
+    LOGO_SMALL     : 21-line compact stippled rendering (smallest supported
+                     size; used when space is tight)
+    LOGO_BANNER    : plain text ``tengri`` — no art below the smallest size
 
 Design credit: Suchetha Cooray.
 """
 
 from __future__ import annotations
 
-# Default: 21-line stippled hex+spiral. This is the smallest supported size —
-# for any narrower context we fall back to the text banner (no fake-logo art).
-LOGO = r"""            ▗▖▛▟▙▜▗▖
+# Default: 37-line solid-block hex+spiral. Bold and universally legible in any
+# monospaced terminal font.
+LOGO = r"""                            ████████
+                        ████████████████
+                     ██████          ██████
+                 ███████                ███████
+              ██████                        ██████
+           ██████                              ██████
+        ██████         █████████████████          ██████
+     ██████        ██████            ███████         ██████
+  █████         █████                     █████          █████
+ ████         ████        ██████████         ████          ████
+████        ████     ████████   ████████       ████         ████
+███        ███    ████       ████     █████      ████        ███
+███       ███  ████     ██████████████   ████      ███       ███
+███      ███ ███     █████         █████   ███      ███      ███
+███     ███ ██     ████    ████████   ████  ███      ███     ███
+███     ██ ██     ███   ██████  █████  ████  ███      ███    ███
+███    ██ █      ███  ████  ██████ ███  ███  ███      ███    ███
+███    ████     ███  ███  ███      ████  ███ ███      ███    ███
+███    ███      ███  ███ ███        ███  ███ ███      ███    ███
+███    ███      ███ ███  ███        ███ ███  ███      ███    ███
+███    ███      ███  ███ ████     ███  ████ ███      █ ██    ███
+███    ███      ███  ███  ████ ████  ████  ███      ██ ██    ███
+███     ███      ███  ███   ███████████   ███     ██  ██     ███
+███      ██       ███  ████    ████    █████     ██  ███     ███
+███       ███      ███   ███████  ████████    ███   ███      ███
+███        ███      ████    ██████████     ████    ███       ███
+███         ████      ██████           █████      ███        ███
+ ███          ████       ████████████████       ███         ███
+ █████          ████                         ████         █████
+   █████          ██████                  █████         █████
+     ███████          █████████    █████████        ███████
+         ██████            ████████████          ██████
+            ██████                            ██████
+               ██████                      ██████
+                  ███████              ███████
+                      ██████        ██████
+                         ██████████████
+                           ██████████                           """
+
+
+# Textured stippled rendering — same 37-line layout, character mix gives a
+# lighter, more organic feel in fonts that render ASCII punctuation tightly.
+LOGO_STIPPLE = r"""                            })]]]])[
+                        ))]]]}}[}[}]]]])
+                     })))}}          [}]]]}
+                 <}<))}>                <})))}]
+              <><<<}                        }<))))
+           }><<)}                              }><<<]
+        #<<<##         [[)<)))]]))<>>[[[          #}>>>}
+     #)))}]        [>)[[}            :}[*>[[         )#**>}
+  )]))#         [>>}:                     }}>[[          }**><
+ #)]#         [)}#        ]))<<<<<])         }*=[          [*][
+<<))        }]}:     ])<)]][[   :[]]]><<       []+[         >)]<
+}*[        ]>}    )<)]       ][[]     ]]<<[      ]>[[        )]}
+}*[       >}:  [)][     ]]]]<][[]<)))}   ]<<]      ]<]       )]}
+}*[      )}- })]     []][[         }])<]   )>)      ]<)      ]]}
+}*[     <<] ]]     []<[    ]))))))}   ]<<[  )>)      ])]     ]]}
+}*[     <[ >]     ]][   ]))]})  [))<)  ))<[  )<<      ]=[    []}
+}*]    +[ )      ]][  [)]}  }[[[[[ )<<  [>)  )><      ]]<    []}
+}*]    >>)<     ])]  }<]  })[      [<>)  )<[ ]><      )]>    []}
+}*]    )}]      ))]  )>[ }))        )>)  )<} ]><      )[>    []}
+}*]    )[]      )>[ [<)  ]<)        ><} [>)  ))]      <=>    []}
+}>]    ][]      )<[  )>> [<>}     <<)  ]>)[ [*]      < ]=    []}
+}>]    }<[      ]<]  ]<]  ]<<] }[[}  ]))]  [[]      )[ >)    }]}
+}>]     ]]}      )<[  ]<]   ]))))))]])]   [][     [)  })     }]}
+}>]      ))       )>[  ]))]    [}}}    :[*]}     )]  [)[     }]}
+}<]       ])*      )<[   ]))]][+  =[[[*][}    []]   }>}      }]}
+}<)        [)[      ])>[    []]]]]][[}     :])]    }]}       []}
+[<<         [>)[      ])<][<           }]])]      }[}        )]]
+ <)}          [)>[       ]))<<)]]]]))))][       }[}         }])
+ ])]}>          }*<}                         )}[}         <})))
+   #]]]}          [[)<}}                  }}<)}         })<<}
+     ]#]]][>          }]]]>}}}]    +}}}}[][}        >#<<<}<
+         #]]]}}            [}}}]])]}}}}          }})<<}
+            [)]]][                            #))))]
+               ]}]])}                      #]))#)
+                  )#]]]}>              <}]]]#]
+                      #]]]]}        }]][[#
+                         [[}[[[[[[[}[[[
+                           **}}##}}>>                           """
+
+
+# Small: 21-line stippled rendering, for space-constrained contexts.
+LOGO_SMALL = r"""            ▗▖▛▟▙▜▗▖
          ▗▖█▝▝    ▀▝▛▄▖
       ▗▗▚▌▘          ▘▚▛▖▖
    ▗▗▚▌▀  ▗▄▗▞▛▟▚▌▖▗▖   ▀▐▞▗▖
@@ -38,95 +123,34 @@ LOGO = r"""            ▗▖▛▟▙▜▗▖
              ▘▜▟█▙▀▘            """
 
 
-# Medium: 26-line rendering.
-LOGO_MEDIUM = r"""                ▖▞▜▞▙▜▄▗
-             ▖▞▟▞▀▘  ▝▝▚▜▚▗
-          ▖▞▟▞▀          ▘▜▞▌▄
-       ▖▞▟▞▀                ▀▗▌▌▄
-    ▖▞▞▞▀    ▗▗▞▟▟▄▙▞▟▞▌▖▄     ▘▗▘▘▖
- ▗▐▚▌▀    ▗▗▙▀▘         ▀▘▄▘▄    ▝▘▟▐▗
-▗▚▛▘    ▗▚▛▘   ▖▖▗  ▖▗▗▗   ▝▚▞▗     ▝▚▜▖
-▞▐     ▟▄▘  ▖▟▝▝▀    ▘▀▗▌▌▖   ▘▙▖     ▚▘
-▌▜    ▐▞ ▗▞▝▘ ▖▖▙▜▞▛▟▞▌▄ ▘▟▗    ▞▌    ▜▜
-▌▚   ▝▛▗▐▝  ▗▚▙▀▘▗▗▖▖ ▀▗▌▄▝▐▗   ▝▞▌   ▙▜
-▌▜   ▙▚▝▘  ▟▐▘▗▐▐▞▘▀▐▚▚ ▝▖▌ ▌▖   ▝▞▖  ▞█
-▌▚   ▙▚   ▗▚▘▗▚▌▚▖▀▝▘ ▘▜ ▀▞ ▐▐    ▞▖  ▙▜
-▌▜  ▌▌▘   ▚▀ ▌▌ ▌▌    ▐▝▌▝▞ ▗▚    ▀▐  ▞█
-▌▙  ▚▛    ▌▌ ▞▖▐▐▗    ▖▛ ▞▟ ▛▞   ▐▗▘  ▛▟
-▌▞  ▐▀▖   ▚▚ ▌▛ ▚▚▀▗▄▘▀▗▐▞▘▞▟    ▌▐   ▙▜
-▌▜   ▜▄   ▝▞▖▝▞▄ ▘▙▚▚▛▟▞▘▗▞▟   ▐▞▗▚▘  ▙▜
-▛▞   ▝▖▙   ▚▞▖▝▐▚▌▄▖  ▖▖▞▙▀  ▖▛▘ ▙▘   ▙▜
-▌▙    ▝▄▚    ▙▚▗▝▝▝▟▟▙▀▀▘ ▗▗▚▀ ▗▜▞    ▙▜
-▚▚▖     ▚▚▄   ▘▚▀▌▖▖▖▖▖▗▐▞▘▘  ▄▚▘    ▗▞▛
-▝▟▞▄     ▝▗▞▖▖    ▀▀▝▀▝     ▖█▞▘    ▄▚▜
-  ▝▙▜▄▗     ▀▐▚▖▄▄     ▗▄▖▛█▝    ▄▐▚▌▘
-     ▘█▞▄▖     ▀▘▘▘▙▄▙▝▘▘▀    ▄▝▌▟▝▘
-       ▝▘▜▜▄▖              ▗▝▙▞▝▘
-           ▘▜▜▄▖        ▗▄▜▙▀
-             ▝▝▟▜▄▄▖▄▖▄▜▙▀▘
-                ▝▚▙█▙█▛▘                """
+# Backwards-compatibility alias: some earlier code imported LOGO_FULL.
+LOGO_FULL = LOGO
 
-
-# Full: 32-line rendering.
-LOGO_FULL = r"""                    ▗▖▞▛▜▀▛▄▄
-                 ▗▖▛▞▟▘▀▀▀▀▝▟▀▙▄
-              ▗▖▜▖▙▀▘        ▝▘▙▜▚▄
-           ▗▖▜▗▛▞▘              ▀▘▙▜▚▄
-        ▗▖▟▗▙▀▘                    ▀▚▞▌▛▄
-      ▄▐▖▙▌▀     ▗▖▖▛▞▛▙▜▟▞▞▚▗▄▖      ▀▐▖▌▌▄
-   ▄▐▜▐▞▀     ▄▝▜▄▀▀▝      ▝▀▘▗▄▀▚▗      ▀▐▖▀▖▖
- ▗▚▙▙▀      ▖▙▚▀▘               ▝▘▙▀▗       ▀▐▞▚▖
-▗▀▙▘      ▖▌▛     ▗ ▖▙▚▌▙▚▚▚▗▗▖    ▀▚▞▄       ▝▞▟
-▝▞▌      ▄▙▀  ▗▖▌▙▘▀▀      ▀▘▚▞▞▖    ▝▄▀▖      ▐▞▌
-▌▞▖    ▗▚▙▘ ▗▐▞▝▘  ▖▄▚▌▌▌▛▞▚▗▖ ▀▞▀▖    ▚▞▄     ▗▜▟
-▌▞▌    ▗▛▘▗▐▞▘  ▗▐▞▛▞▘▀▘▀▀▝▚▙▐▚ ▝▚▚▚    ▝▞▄    ▐▐▟
-▌▖▌   ▐▐▘▄▐    ▞▙▜▝ ▗▗▐▜▐▖▖▖ ▘▌▛▖ ▚▚▖    ▝▄▘   ▝▟▟
-▌▞▖   ▐▘▟▞    ▄▚▛ ▄▜▞▛▝▝▘▀▟▐▗▖▝▞▞  ▄▐     ▚▞▖  ▐▗█
-▌▞▖   ▛▐▘    ▄▚▛ ▐▐▞▘▖▟▀▝▘▘▞▞▞ ▐▝▙ ▗▚▘    ▝▖▌  ▝▞▟
-▌▞▖  ▖▙▜    ▗▞▟ ▝▞▞ ▗▜     ▝▝▞▌ ▚▞ ▗▚▘    ▐▖▄  ▐▐▜
-▌▚▘  ▙▐▘    ▗▚▘ ▚▀▌▝▌▌      ▖▌▘ ▌▟ ▗▚▘    ▖▚▗  ▗▚█
-▌▌▘  ▝▞▌    ▗▚▘ ▌▛▖▐▐▐▗    ▖▟▞ ▞▞▘ ▌▛    ▗▀▝   ▐▐▟
-▙▐   ▐▜▄    ▝▞▌ ▚▚▚ ▚▚▚▞▐▟▞▝▘▗▜▐▀ ▞▞▘   ▗▐ ▛▌  ▗▚█
-▌▞▘   ▚▚▖    ▚▀▖ ▌▌▌ ▘▙▞▞▖▖▛▞▙▀▘ ▙▞▀   ▞▞▘▐▄   ▐▐▟
-▌▌▌   ▝▙▜     ▛▞▖ ▜▐▀▖ ▝▀▝▀▝▘ ▖▄▙▌▘  ▗▚▀ ▝▚▘   ▝▙▜
-▌▌▘    ▝▞▄▖   ▝▐▐▄ ▝▚▜▚▌▚▗ ▞▙▙▚▌▘  ▖▞▞▘ ▗▜▞    ▐▞█
-▚▚▌     ▝▙▚▖    ▘▄▀▖▖ ▀▝▘▀▀▝▝   ▖▄▚▛▘  ▄▚▌     ▐▐▟
-▚▚▚       ▚▌▙▖    ▀▐▐▚▚▗▄▗▗▖▄▞▛▟▞▝   ▗▐▞▘      ▞▌▛
- █▐▄       ▝▗▞▘▄     ▝▘▘▘▘▘▀▝▝     ▗▐▄▛▘      ▞▞▟▘
-  ▜▞▛▌▖      ▝▀▄▜▗▖             ▗▄▜▚▌▘     ▄▐▜▐▀
-   ▝▘▜▞▛▄▖      ▝▘█▞▛▌▗▄▄▄▄▄▄ ▛▛▟▖▀     ▗▞▌▌▌▀
-      ▝▀▐▞▛▄▖       ▝▀▀▝▝▝▝▝▝▀▀      ▗▖▛▞▞▝▘
-         ▝▘▙▚▛▄▖                  ▗▖▛▞▟▝▘
-            ▝▘▙▚▜▗▖            ▗▖▛▟▟▝▘
-               ▀▀▟▞▟▗▖      ▗▖▛▟▟▀▝
-                  ▀▀▙▙▜▄▄▗▟▜▞█▞▘
-                     ▀▜█▟█▟▛▀                     """
-
-
-# Compact banner — plain text. Logo art is never drawn below LOGO's size.
+# Compact banner — plain text. Logo art is never drawn below LOGO_SMALL's size.
 LOGO_BANNER = "tengri"
 
 
 def _resolve(size: str) -> str:
-    """Map ``size`` to one of the logo constants.
+    """Map a ``size`` keyword to a logo constant.
 
     Recognised values:
-        "default", "small"     → LOGO (21 lines)
-        "medium"               → LOGO_MEDIUM (26 lines)
-        "full", "large"        → LOGO_FULL (32 lines)
-        "compact", "banner"    → LOGO_BANNER (plain text, no art)
+        "default", "large"    → LOGO (37-line solid blocks)
+        "stipple", "textured" → LOGO_STIPPLE (37-line ``}[)`` stipple)
+        "small"               → LOGO_SMALL (21-line compact)
+        "full"                → LOGO (alias for default)
+        "compact", "banner"   → LOGO_BANNER (plain text, no art)
     """
-    if size in ("default", "small", None):
+    if size in ("default", "large", "full", None):
         return LOGO
-    if size == "medium":
-        return LOGO_MEDIUM
-    if size in ("full", "large"):
-        return LOGO_FULL
+    if size in ("stipple", "textured"):
+        return LOGO_STIPPLE
+    if size == "small":
+        return LOGO_SMALL
     if size in ("compact", "banner"):
         return LOGO_BANNER
     raise ValueError(
         f"Unknown logo size '{size}'. "
-        "Use 'default' (small), 'medium', 'full', or 'compact'."
+        "Use 'default', 'small', 'stipple', or 'compact'."
     )
 
 
@@ -135,16 +159,17 @@ def print_logo(size: str = "default", *, compact: bool | None = None) -> None:
 
     Parameters
     ----------
-    size : {"default", "medium", "full", "compact"}
-        Which rendering to print. "default" is the 21-line stippled version,
-        the smallest rendered size. "compact" prints plain text ("tengri")
-        because rendering the logo any smaller would misrepresent the mark.
+    size : {"default", "small", "stipple", "compact"}
+        Which rendering to print. "default" is the 37-line solid-block mark.
+        "small" is the 21-line compact stipple. "stipple" is the 37-line
+        textured variant. "compact" prints plain text ("tengri") because
+        rendering the logo any smaller would misrepresent the mark.
     compact : bool or None
         Deprecated alias for ``size="compact"``. Kept for backward compatibility.
 
     Notes
     -----
-    Respects the ``TENGRI_NO_LOGO`` environment variable. If set to anything
+    Respects the ``TENGRI_NO_LOGO`` environment variable: if set to anything
     truthy, this function writes nothing.
     """
     import os
@@ -163,15 +188,14 @@ def logo_str(size: str = "default", *, compact: bool | None = None) -> str:
 
     Parameters
     ----------
-    size : {"default", "medium", "full", "compact"}
+    size : {"default", "small", "stipple", "compact"}
     compact : bool or None
         Deprecated alias for ``size="compact"``.
 
     Returns
     -------
     str
-        The requested logo (or plain text for "compact"), or ``""`` if
-        ``TENGRI_NO_LOGO`` is set.
+        The requested rendering, or ``""`` if ``TENGRI_NO_LOGO`` is set.
     """
     import os
 
