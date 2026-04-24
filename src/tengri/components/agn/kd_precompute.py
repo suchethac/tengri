@@ -692,6 +692,272 @@ def _lookup_corona_filter(
     return s0 * (1 - fT) + s1 * fT
 
 
+# ───────────────────────────────────────────────────────────────────
+# Private helpers for kubota_done_disc_preintegrated
+# ───────────────────────────────────────────────────────────────────
+
+
+def _compute_bh_and_radii(
+    agn_log_mbh: float,
+    agn_a_spin: float,
+    agn_log_ledd: float,
+    agn_f_hard: float,
+    agn_r_warm_ratio: float,
+    l_edd: jnp.ndarray,
+    r_isco_cm: jnp.ndarray,
+    _G_GRAV: float,
+    _MSUN_G: float,
+    _SIGMA_SB: float,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, float]:
+    """Compute black hole parameters and zone radii for K&D disc.
+
+    Computes accretion rate, inner disc temperature, and zone boundaries
+    (hot, warm, outer). Returns all quantities needed for radial integration
+    in subsequent zones.
+
+    Parameters
+    ----------
+    agn_log_mbh : float
+        log10(M_bh / Msun).
+    agn_a_spin : float
+        Dimensionless spin parameter [0, 1].
+    agn_log_ledd : float
+        log10(L_edd_ratio) where L_edd_ratio = L_bol / L_edd ∈ [1e-10, 1].
+    agn_f_hard : float
+        Fractional hard X-ray luminosity [0, 0.5].
+    agn_r_warm_ratio : float
+        Warm-to-hot radius ratio [1.1, 10].
+    l_edd : ndarray
+        Eddington luminosity [erg/s].
+    r_isco_cm : ndarray
+        ISCO radius [cm].
+    _G_GRAV : float
+        Gravitational constant [cm^3 g^-1 s^-2].
+    _MSUN_G : float
+        Solar mass [g].
+    _SIGMA_SB : float
+        Stefan-Boltzmann constant [erg cm^-2 K^-4 s^-1].
+
+    Returns
+    -------
+    tuple
+        (r_hot_cm, r_warm_cm, r_out_cm, t_in, eta) — hot zone radius, warm
+        zone radius, outer disc radius, inner disc temperature, accretion
+        efficiency [all in CGS units].
+    """
+    from tengri.components.agn.disc import (
+        _gravitational_radius,
+        _isco_radius,
+        _r_hot_bisect,
+        _self_gravity_radius,
+    )
+
+    r_g = _gravitational_radius(agn_log_mbh)
+    r_isco_rg = _isco_radius(agn_a_spin)
+
+    eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_rg))
+    l_edd_ratio = jnp.clip(10.0**agn_log_ledd, 1e-10, 1.0)
+    l_bol_erg = l_edd_ratio * l_edd
+    mdot = l_bol_erg / (eta * _C_LIGHT**2)
+
+    t_in = (
+        3.0
+        * _G_GRAV
+        * 10.0**agn_log_mbh
+        * _MSUN_G
+        * mdot
+        / (8.0 * jnp.pi * _SIGMA_SB * r_isco_cm**3)
+    ) ** 0.25
+
+    # Zone radii
+    f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
+    l_hot_target = f_hard_safe * l_edd
+    r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target)
+
+    r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
+    r_warm_cm = r_hot_cm * r_warm_ratio_safe
+
+    r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
+    r_out_cm = jnp.maximum(r_sg_rg, r_isco_rg * 10.0) * r_g
+
+    r_hot_cm = jnp.clip(r_hot_cm, r_isco_cm * 1.01, r_out_cm * 0.5)
+    r_warm_cm = jnp.clip(r_warm_cm, r_hot_cm * 1.01, r_out_cm * 0.9)
+
+    return r_hot_cm, r_warm_cm, r_out_cm, t_in, eta
+
+
+def _integrate_outer_zone(
+    r_warm_cm: jnp.ndarray,
+    r_out_cm: jnp.ndarray,
+    r_isco_cm: jnp.ndarray,
+    t_in: jnp.ndarray,
+    n_radii: int,
+    kd_data: KDPreintegratedData,
+    agn_cos_inc: float,
+    _SIGMA_SB: float,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Integrate outer standard disc via filter-level Planck lookup.
+
+    Computes photometric and bolometric contributions from the optically
+    thick outer disc (temperature-integrated, from r_warm to r_out).
+
+    Parameters
+    ----------
+    r_warm_cm : ndarray, scalar
+        Warm-zone boundary radius [cm].
+    r_out_cm : ndarray, scalar
+        Outer disc boundary radius [cm].
+    r_isco_cm : ndarray, scalar
+        ISCO radius [cm].
+    t_in : ndarray, scalar
+        Inner disc temperature [K].
+    n_radii : int
+        Number of radial rings [dimensionless].
+    kd_data : KDPreintegratedData
+        Precomputed Planck filter table.
+    agn_cos_inc : float
+        cos(inclination angle).
+    _SIGMA_SB : float
+        Stefan-Boltzmann constant [erg cm^-2 K^-4 s^-1].
+
+    Returns
+    -------
+    tuple
+        (outer_phot, outer_bol) — filter-integrated photometry (n_filters,)
+        and bolometric luminosity [erg/s] [scalar].
+    """
+    log_r_warm = jnp.log10(r_warm_cm)
+    log_r_out = jnp.log10(r_out_cm)
+    log_r_outer = jnp.linspace(log_r_warm, log_r_out, n_radii)
+    r_outer = 10.0**log_r_outer
+
+    r_ratio_outer = r_outer / r_isco_cm
+    torque_outer = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio_outer), 1e-30) ** 0.25
+    t_outer = t_in * r_ratio_outer ** (-0.75) * torque_outer
+
+    d_log_r_outer = log_r_outer[1] - log_r_outer[0]
+    dr_outer = r_outer * jnp.log(10.0) * d_log_r_outer
+
+    def _outer_ring_phot(r_cm, t_ring, dr_ring):
+        """Compute filter-integrated Planck photometry for outer-disc annulus."""
+        b_filt = _lookup_planck_filter(t_ring, kd_data.planck_T_grid, kd_data.planck_table)
+        return b_filt * _ring_area(r_cm, dr_ring, agn_cos_inc)
+
+    outer_phot = jnp.sum(
+        jax.vmap(_outer_ring_phot)(r_outer, t_outer, dr_outer), axis=0
+    )  # (n_filters,)
+
+    outer_bol = jnp.sum(
+        _SIGMA_SB * t_outer**4 * 2.0 * jnp.pi * r_outer * dr_outer * jnp.maximum(agn_cos_inc, 0.01)
+    )
+
+    return outer_phot, outer_bol
+
+
+def _integrate_warm_zone(
+    r_hot_cm: jnp.ndarray,
+    r_warm_cm: jnp.ndarray,
+    r_isco_cm: jnp.ndarray,
+    t_in: jnp.ndarray,
+    n_radii: int,
+    kd_data: KDPreintegratedData,
+    agn_cos_inc: float,
+    agn_gamma_warm: float,
+    agn_kt_warm: float,
+    _SIGMA_SB: float,
+    _K_BOLTZ_KEV: float,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Integrate warm Comptonization zone via filter-level nthcomp/Planck lookup.
+
+    Computes photometric and bolometric contributions from the warm
+    Comptonization zone. Uses nthcomp templates if available; falls back
+    to Planck for unavailable templates.
+
+    Parameters
+    ----------
+    r_hot_cm : ndarray, scalar
+        Hot-zone boundary radius [cm].
+    r_warm_cm : ndarray, scalar
+        Warm-zone boundary radius [cm].
+    r_isco_cm : ndarray, scalar
+        ISCO radius [cm].
+    t_in : ndarray, scalar
+        Inner disc temperature [K].
+    n_radii : int
+        Number of radial rings [dimensionless].
+    kd_data : KDPreintegratedData
+        Precomputed nthcomp and Planck filter tables.
+    agn_cos_inc : float
+        cos(inclination angle).
+    agn_gamma_warm : float
+        Photon index for warm Comptonization [dimensionless].
+    agn_kt_warm : float
+        Electron temperature for warm zone [keV].
+    _SIGMA_SB : float
+        Stefan-Boltzmann constant [erg cm^-2 K^-4 s^-1].
+    _K_BOLTZ_KEV : float
+        Boltzmann constant [keV/K].
+
+    Returns
+    -------
+    tuple
+        (warm_phot, warm_bol) — filter-integrated photometry (n_filters,)
+        and bolometric luminosity [erg/s] [scalar].
+    """
+    log_r_hot = jnp.log10(r_hot_cm)
+    log_r_warm_grid = jnp.linspace(log_r_hot, jnp.log10(r_warm_cm), n_radii)
+    r_warm_grid = 10.0**log_r_warm_grid
+
+    r_ratio_warm = r_warm_grid / r_isco_cm
+    torque_warm = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio_warm), 1e-30) ** 0.25
+    t_warm = t_in * r_ratio_warm ** (-0.75) * torque_warm
+
+    d_log_r_warm = log_r_warm_grid[1] - log_r_warm_grid[0]
+    dr_warm = r_warm_grid * jnp.log(10.0) * d_log_r_warm
+
+    has_nthcomp = kd_data.nthcomp_table is not None
+
+    if has_nthcomp:
+
+        def _warm_ring_phot(r_cm, t_ring, dr_ring):
+            """Compute per-filter flux for one warm-zone annulus via nthcomp lookup."""
+            l_total = _SIGMA_SB * t_ring**4 / jnp.pi * _ring_area(r_cm, dr_ring, agn_cos_inc)
+
+            kTbb_keV = _K_BOLTZ_KEV * t_ring
+            nthcomp_filt = _lookup_nthcomp_filter(
+                agn_gamma_warm,
+                agn_kt_warm,
+                kTbb_keV,
+                kd_data.nthcomp_gamma_grid,
+                kd_data.nthcomp_kTe_grid,
+                kd_data.nthcomp_kTbb_grid,
+                kd_data.nthcomp_table,
+            )
+            return nthcomp_filt * l_total
+    else:
+
+        def _warm_ring_phot(r_cm, t_ring, dr_ring):
+            """Compute per-filter flux for one warm-zone annulus via Planck fallback."""
+            b_filt = _lookup_planck_filter(t_ring, kd_data.planck_T_grid, kd_data.planck_table)
+            return b_filt * _ring_area(r_cm, dr_ring, agn_cos_inc)
+
+    warm_phot = jnp.sum(
+        jax.vmap(_warm_ring_phot)(r_warm_grid, t_warm, dr_warm), axis=0
+    )  # (n_filters,)
+
+    warm_bol = jnp.sum(
+        _SIGMA_SB
+        * t_warm**4
+        * 2.0
+        * jnp.pi
+        * r_warm_grid
+        * dr_warm
+        * jnp.maximum(agn_cos_inc, 0.01)
+    )
+
+    return warm_phot, warm_bol
+
+
 def kubota_done_disc_preintegrated(
     kd_data: KDPreintegratedData,
     agn_log_lbol: float,
@@ -761,8 +1027,6 @@ def kubota_done_disc_preintegrated(
         _gravitational_radius,
         _isco_radius,
         _l_seed_geometric,
-        _r_hot_bisect,
-        _self_gravity_radius,
         beloborodov_gamma_hot,
     )
     from tengri.utils.physics_constants import (
@@ -772,123 +1036,56 @@ def kubota_done_disc_preintegrated(
         SIGMA_SB as _SIGMA_SB,
     )
 
-    # --- Black hole parameters (identical to kubota_done_disc) ---
+    # --- Black hole parameters and zone radii ---
     r_g = _gravitational_radius(agn_log_mbh)
     r_isco_rg = _isco_radius(agn_a_spin)
     r_isco_cm = r_isco_rg * r_g
-
-    eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_rg))
     l_edd = _eddington_luminosity(agn_log_mbh)
     l_edd_ratio = jnp.clip(10.0**agn_log_ledd, 1e-10, 1.0)
     l_bol_erg = l_edd_ratio * l_edd
-    mdot = l_bol_erg / (eta * _C_LIGHT**2)
 
-    t_in = (
-        3.0
-        * _G_GRAV
-        * 10.0**agn_log_mbh
-        * _MSUN_G
-        * mdot
-        / (8.0 * jnp.pi * _SIGMA_SB * r_isco_cm**3)
-    ) ** 0.25
+    r_hot_cm, r_warm_cm, r_out_cm, t_in, _eta = _compute_bh_and_radii(
+        agn_log_mbh,
+        agn_a_spin,
+        agn_log_ledd,
+        agn_f_hard,
+        agn_r_warm_ratio,
+        l_edd,
+        r_isco_cm,
+        _G_GRAV,
+        _MSUN_G,
+        _SIGMA_SB,
+    )
 
-    # --- Zone radii (identical) ---
+    # ── Zone 1: Outer standard disc ──
+    outer_phot, outer_bol = _integrate_outer_zone(
+        r_warm_cm,
+        r_out_cm,
+        r_isco_cm,
+        t_in,
+        n_radii,
+        kd_data,
+        agn_cos_inc,
+        _SIGMA_SB,
+    )
+
+    # ── Zone 2: Warm Comptonization ──
+    warm_phot, warm_bol = _integrate_warm_zone(
+        r_hot_cm,
+        r_warm_cm,
+        r_isco_cm,
+        t_in,
+        n_radii,
+        kd_data,
+        agn_cos_inc,
+        agn_gamma_warm,
+        agn_kt_warm,
+        _SIGMA_SB,
+        _K_BOLTZ_KEV,
+    )
+
+    # ── Zone 3: Hot corona ──
     f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
-    l_hot_target = f_hard_safe * l_edd
-    r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target)
-
-    r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
-    r_warm_cm = r_hot_cm * r_warm_ratio_safe
-
-    r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
-    r_out_cm = jnp.maximum(r_sg_rg, r_isco_rg * 10.0) * r_g
-
-    r_hot_cm = jnp.clip(r_hot_cm, r_isco_cm * 1.01, r_out_cm * 0.5)
-    r_warm_cm = jnp.clip(r_warm_cm, r_hot_cm * 1.01, r_out_cm * 0.9)
-
-    # ── Zone 1: Outer standard disc — filter-level Planck lookup ──
-    log_r_warm = jnp.log10(r_warm_cm)
-    log_r_out = jnp.log10(r_out_cm)
-    log_r_outer = jnp.linspace(log_r_warm, log_r_out, n_radii)
-    r_outer = 10.0**log_r_outer
-
-    r_ratio_outer = r_outer / r_isco_cm
-    torque_outer = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio_outer), 1e-30) ** 0.25
-    t_outer = t_in * r_ratio_outer ** (-0.75) * torque_outer
-
-    d_log_r_outer = log_r_outer[1] - log_r_outer[0]
-    dr_outer = r_outer * jnp.log(10.0) * d_log_r_outer
-
-    def _outer_ring_phot(r_cm, t_ring, dr_ring):
-        """Compute filter-integrated Planck photometry for outer-disc annulus."""
-        b_filt = _lookup_planck_filter(t_ring, kd_data.planck_T_grid, kd_data.planck_table)
-        return b_filt * _ring_area(r_cm, dr_ring, agn_cos_inc)
-
-    outer_phot = jnp.sum(
-        jax.vmap(_outer_ring_phot)(r_outer, t_outer, dr_outer), axis=0
-    )  # (n_filters,)
-
-    # Bolometric from outer disc: sigma*T^4 * dA * cos(i)
-    # This matches the spectral integral of pi*B_nu*dA*cos(i) over all nu.
-    outer_bol = jnp.sum(
-        _SIGMA_SB * t_outer**4 * 2.0 * jnp.pi * r_outer * dr_outer * jnp.maximum(agn_cos_inc, 0.01)
-    )
-
-    # ── Zone 2: Warm Comptonization — filter-level nthcomp lookup ─
-    log_r_hot = jnp.log10(r_hot_cm)
-    log_r_warm_grid = jnp.linspace(log_r_hot, log_r_warm, n_radii)
-    r_warm_grid = 10.0**log_r_warm_grid
-
-    r_ratio_warm = r_warm_grid / r_isco_cm
-    torque_warm = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio_warm), 1e-30) ** 0.25
-    t_warm = t_in * r_ratio_warm ** (-0.75) * torque_warm
-
-    d_log_r_warm = log_r_warm_grid[1] - log_r_warm_grid[0]
-    dr_warm = r_warm_grid * jnp.log(10.0) * d_log_r_warm
-
-    has_nthcomp = kd_data.nthcomp_table is not None
-
-    if has_nthcomp:
-
-        def _warm_ring_phot(r_cm, t_ring, dr_ring):
-            """Compute per-filter flux for one warm-zone annulus via nthcomp lookup."""
-            # Bolometric power: sigma*T^4/pi * ring_area = sigma*T^4 * 2*pi*r*dr * cos(i)
-            l_total = _SIGMA_SB * t_ring**4 / jnp.pi * _ring_area(r_cm, dr_ring, agn_cos_inc)
-
-            kTbb_keV = _K_BOLTZ_KEV * t_ring
-            nthcomp_filt = _lookup_nthcomp_filter(
-                agn_gamma_warm,
-                agn_kt_warm,
-                kTbb_keV,
-                kd_data.nthcomp_gamma_grid,
-                kd_data.nthcomp_kTe_grid,
-                kd_data.nthcomp_kTbb_grid,
-                kd_data.nthcomp_table,
-            )
-            return nthcomp_filt * l_total
-    else:
-        # Fallback: use Planck lookup (no Comptonization enhancement)
-        def _warm_ring_phot(r_cm, t_ring, dr_ring):
-            """Compute per-filter flux for one warm-zone annulus via Planck fallback."""
-            b_filt = _lookup_planck_filter(t_ring, kd_data.planck_T_grid, kd_data.planck_table)
-            return b_filt * _ring_area(r_cm, dr_ring, agn_cos_inc)
-
-    warm_phot = jnp.sum(
-        jax.vmap(_warm_ring_phot)(r_warm_grid, t_warm, dr_warm), axis=0
-    )  # (n_filters,)
-
-    # Bolometric from warm zone: same energy conservation (nthcomp preserves bolometric)
-    warm_bol = jnp.sum(
-        _SIGMA_SB
-        * t_warm**4
-        * 2.0
-        * jnp.pi
-        * r_warm_grid
-        * dr_warm
-        * jnp.maximum(agn_cos_inc, 0.01)
-    )
-
-    # ── Zone 3: Hot corona — single filter lookup ─────────────────
     l_hot_erg = jnp.minimum(f_hard_safe * l_edd, l_bol_erg * 0.5)
 
     # Self-consistent Gamma (same as full-wavelength path)
