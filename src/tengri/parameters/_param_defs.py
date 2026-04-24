@@ -756,22 +756,7 @@ _AGN_PARAMS = {
     ),
 }
 
-# ── Short-form parameter name aliases (accepted as user input) ──────────
-
-_LEGACY_PARAM_ALIASES = {
-    "sfh_alpha": "sfh_dpl_alpha",
-    "sfh_beta": "sfh_dpl_beta",
-    "sfh_tau_peak_gyr": "sfh_dpl_tau_gyr",
-    # NOTE: sfh_peak_sfr (linear) has NO alias to sfh_dpl_log_peak_sfr (log10).
-    # These have different units. Users must migrate to log10 manually.
-    "psd_sigma": "sfh_field_psd_sigma",
-    "psd_tau_myr": "sfh_field_psd_tau_myr",
-}
-
-# SFH type short-form aliases
-_LEGACY_SFH_TYPE_ALIASES = {
-    "double_powerlaw": "dpl",
-}
+# (Legacy alias tables now managed in _aliases.py — imported at top)
 
 # Settings keys that are not model parameters
 SETTINGS_KEYS = frozenset(

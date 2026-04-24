@@ -56,12 +56,14 @@ import copy
 import jax
 import jax.numpy as jnp
 
+from tengri.parameters._aliases import (
+    resolve_param_name,
+    resolve_sfh_type,
+)
 from tengri.parameters._param_defs import (
     _CUE_GAS_EXTRA_PARAMS,
     _CUE_IONSPEC_PARAMS,
     _DUST_EMISSION_PARAMS,
-    _LEGACY_PARAM_ALIASES,
-    _LEGACY_SFH_TYPE_ALIASES,
     _NEBULAR_PARAMS,
     SETTINGS_KEYS,
     _build_param_registry,
@@ -419,7 +421,7 @@ class Parameters:
         resolved_kwargs = {}
         detected_models = set()
         for name, val in kwargs.items():
-            new_name = _LEGACY_PARAM_ALIASES.get(name, name)
+            new_name = resolve_param_name(name)
             resolved_kwargs[new_name] = val
             # Auto-detect model from param name prefixes
             if new_name.startswith("sfh_dpl_"):
@@ -731,11 +733,7 @@ class Parameters:
             detected_models = set()
 
         if raw_sfh_type is not None:
-            if isinstance(raw_sfh_type, str):
-                raw_sfh_type = _LEGACY_SFH_TYPE_ALIASES.get(raw_sfh_type, raw_sfh_type)
-                result = [raw_sfh_type]
-            else:
-                result = [_LEGACY_SFH_TYPE_ALIASES.get(s, s) for s in raw_sfh_type]
+            result = resolve_sfh_type(raw_sfh_type)
 
             # Honor stochastic kwarg
             if explicit_stochastic is True and "field" not in result:

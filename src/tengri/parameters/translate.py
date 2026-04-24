@@ -33,6 +33,11 @@ from __future__ import annotations
 
 import warnings
 
+from tengri.parameters._aliases import (
+    _REVERSE_ALIASES,
+    find_short_param,
+)
+
 # ── Constants ─────────────────────────────────────────────────────
 
 # Solar metallicity: log10(Zsun) = log10(0.0142) ≈ -1.848 (Asplund 2009)
@@ -158,17 +163,7 @@ _NON_SFH_PARAM_MAP = {
     "noise_dof": ("noise_dof", 1.0, 0.0),
 }
 
-# Reverse alias map: canonical name → short-form alias
-# Used by find_short_param to resolve short parameter names.
-
-_REVERSE_ALIASES = {
-    "sfh_dpl_alpha": "sfh_alpha",
-    "sfh_dpl_beta": "sfh_beta",
-    "sfh_dpl_tau_gyr": "sfh_tau_peak_gyr",
-    "sfh_dpl_log_peak_sfr": "sfh_peak_sfr",
-    "sfh_field_psd_sigma": "psd_sigma",
-    "sfh_field_psd_tau_myr": "psd_tau_myr",
-}
+# (Reverse alias map now managed in _aliases.py — imported at top)
 
 # ── High-level API: short name → full prefixed name ──────────────
 
@@ -335,25 +330,7 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
 # ── Translation functions ──────────────────────────────────────────
 
 
-def find_short_param(params, target_public_name):
-    """Check if params contains a short-form alias for target_public_name.
-
-    Parameters
-    ----------
-    params : dict
-        Parameter dict (may contain old-style names).
-    target_public_name : str
-        The canonical public name to look up, e.g. ``"sfh_dpl_alpha"``.
-
-    Returns
-    -------
-    float or None
-        The value from params under the short-form alias, or ``None`` if not found.
-    """
-    old_name = _REVERSE_ALIASES.get(target_public_name)
-    if old_name and old_name in params:
-        return params[old_name]
-    return None
+# (find_short_param moved to _aliases.py — imported at top)
 
 
 def get_internal_params(params, param_map, spec, has_field):
