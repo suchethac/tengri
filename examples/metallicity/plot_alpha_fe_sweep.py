@@ -8,7 +8,7 @@ by core-collapse supernovae before Type Ia SNe can dilute the alpha
 elements. In the SED, enhanced alpha suppresses iron absorption features
 and alters the optical mass-to-light ratio.
 
-Enable with ``alpha_enhancement=True`` in ``Parameters``.
+Set via ``met_alpha_fe`` parameter in ``Parameters``.
 """
 
 # sphinx_gallery_thumbnail_number = 1
@@ -59,7 +59,6 @@ spec = Parameters(
     dust_tau_diff=Fixed(0.1),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    alpha_enhancement=True,
 )
 model = SEDModel(spec, ssp)
 
@@ -75,6 +74,7 @@ fig, ax = sweep_parameter(
 )
 ax.set_title(r"$\alpha$-element Enhancement: Impact on Optical Absorption Features", fontsize=12)
 ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)")
+ax.set_ylim(0, 2.5e4)
 plt.tight_layout()
 plt.savefig("plot_alpha_fe_sweep.png", dpi=150, bbox_inches="tight")
 plt.show()

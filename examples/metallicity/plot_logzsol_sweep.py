@@ -71,6 +71,7 @@ fig, ax = sweep_parameter(
 )
 ax.set_title(r"Stellar Metallicity: $\log\,Z/Z_\odot$ sweep", fontsize=12)
 ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)")
+ax.set_ylim(0, 7.5e4)
 plt.tight_layout()
 plt.savefig("plot_logzsol_sweep.png", dpi=150, bbox_inches="tight")
 plt.show()

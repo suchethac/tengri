@@ -41,10 +41,10 @@ if ssp_path is None:
 ssp_data = load_ssp_data(ssp_path)
 
 # Extract grid properties
-age_gyr = np.array(ssp_data.age_gyr)
-log_z = np.array(ssp_data.log_z_array)
+age_gyr = 10**np.array(ssp_data.ssp_lg_age_gyr)  # Convert log10(age) to age
+log_z = np.array(ssp_data.ssp_lgmet)
 ssp_wave = np.array(ssp_data.ssp_wave)
-ssp_spec = np.array(ssp_data.ssp_spec)  # Shape: (n_age, n_z, n_wave)
+ssp_spec = np.array(ssp_data.ssp_flux)  # Shape: (n_z, n_age, n_wave)
 
 fig, axes = plt.subplots(2, 2, figsize=(13, 9))
 
@@ -65,7 +65,7 @@ age_labels = ["10 Myr", "1 Gyr", "10 Gyr"]
 colors = ["C0", "C1", "C2"]
 
 for age_idx, age_lbl, color in zip(age_indices, age_labels, colors):
-    spec = ssp_spec[age_idx, z_idx_solar, :]
+    spec = ssp_spec[z_idx_solar, age_idx, :]
     ax.loglog(ssp_wave / 10.0, spec, lw=1.8, color=color, label=f"Age={age_lbl}")
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
@@ -73,6 +73,7 @@ ax.set_ylabel(r"$L_\nu$ [arbitrary]")
 ax.set_title(f"SSP Spectra: Age Sequence (Z={10**log_z_solar:.2f} Z$_\\odot$)")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.01, 10)
+ax.set_ylim(1e-72, 1e-12)
 ax.grid(True, alpha=0.3, which="both")
 
 # --- Panel 2: Metallicity dependence (fixed age) ---
@@ -92,7 +93,7 @@ z_labels = [f"{10**log_z[zi]:.2f}Z$_\\odot$" for zi in z_indices]
 colors_z = ["C3", "C4", "C5"]
 
 for z_idx, z_lbl, color in zip(z_indices, z_labels, colors_z):
-    spec = ssp_spec[age_idx_mid, z_idx, :]
+    spec = ssp_spec[z_idx, age_idx_mid, :]
     ax.loglog(ssp_wave / 10.0, spec, lw=1.8, color=color, label=f"Z={z_lbl}")
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
@@ -100,6 +101,7 @@ ax.set_ylabel(r"$L_\nu$ [arbitrary]")
 ax.set_title(f"SSP Spectra: Metallicity Sequence (Age={age_gyr_mid:.2f} Gyr)")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.01, 10)
+ax.set_ylim(1e-72, 1e-14)
 ax.grid(True, alpha=0.3, which="both")
 
 # --- Panel 3: Narrow-band photometry grid (UV, optical, IR) ---
@@ -116,21 +118,22 @@ bands = {
 band_fluxes = {}
 for band_name, (wl_center, _, color) in bands.items():
     band_flux = []
-    for age_idx in range(len(age_gyr)):
-        for z_idx in range(len(log_z)):
-            spec = ssp_spec[age_idx, z_idx, :]
+    for z_idx in range(len(log_z)):
+        for age_idx in range(len(age_gyr)):
+            spec = ssp_spec[z_idx, age_idx, :]
             # Find flux at closest wavelength
             closest_idx = np.argmin(np.abs(ssp_wave - wl_center))
             band_flux.append(spec[closest_idx])
 
     # Reshape to grid
-    band_flux = np.array(band_flux).reshape(len(age_gyr), len(log_z))
+    band_flux = np.array(band_flux).reshape(len(log_z), len(age_gyr)).T
     ax.loglog(age_gyr, band_flux[:, z_idx_solar], lw=2.0, marker="o", label=band_name, color=color)
 
 ax.set_xlabel("Age [Gyr]")
 ax.set_ylabel(r"Flux [arbitrary]")
 ax.set_title(f"Broad-Band Colors vs Age (Z={10**log_z_solar:.2f}Z$_\\odot$)")
 ax.legend(fontsize=10, frameon=False)
+ax.set_ylim(1e-22, 1e-16)
 ax.grid(True, alpha=0.3, which="both")
 
 # --- Panel 4: Color-color diagram (B-V vs V-K) ---
@@ -152,7 +155,7 @@ for age_val, color in zip(age_sample, colors_sample):
     nir_idx = np.argmin(np.abs(ssp_wave - 10000))
 
     for z_idx in range(len(log_z)):
-        spec = ssp_spec[age_idx, z_idx, :]
+        spec = ssp_spec[z_idx, age_idx, :]
         color_blue = -2.5 * np.log10(spec[uv_idx] / spec[opt_idx])  # Mock magnitude
         color_red = -2.5 * np.log10(spec[opt_idx] / spec[nir_idx])
 

@@ -41,9 +41,10 @@ for q_ir, color in zip(q_ir_values, colors):
     ax.loglog(nu_ghz, np.array(L_nu), color=color, lw=2.0, label=rf"$q_{{\rm IR}}={q_ir}$")
 
 ax.set_xlabel("Frequency [GHz]", fontsize=12)
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]", fontsize=12)
-ax.set_xlim(0.1, 200)
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]", fontsize=12)
 ax.invert_xaxis()
+ax.set_xlim(200, 0.1)
+ax.set_ylim(1e-8, 1e2)
 ax.legend(fontsize=10, frameon=False)
 ax.set_title(
     r"FIR-Radio Correlation: $q_{\rm IR}$ sweep ($L_{\rm IR}=10^{11}\,L_\odot$)",
