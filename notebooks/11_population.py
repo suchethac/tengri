@@ -273,7 +273,7 @@ for i, ax in enumerate(axes.flat):
     )
     true_spec = model_gen.predict_spectrum(true_params_all[i])
     ax.plot(np.array(WAVE_OBS), np.array(true_spec), color=COLORS["truth"], lw=0.8)
-    ax.set_title(f"Galaxy {i}", fontsize=9)
+    ax.set_title(f"Galaxy {i}", fontsize=10)
     if i >= 3:
         ax.set_xlabel("Wavelength [Å]")
     if i % 3 == 0:
@@ -641,7 +641,7 @@ if tau_phot_is_myr:
 ax_sig.set_xlabel(r"$\sigma_{\rm PS}$", fontsize=13)
 ax_sig.set_ylabel("Density")
 ax_sig.set_title(r"PSD amplitude $\sigma_{\rm PS}$")
-ax_sig.legend(fontsize=9)
+ax_sig.legend(fontsize=10)
 
 if tau_phot_is_myr:
     ax_tau.set_xlabel(r"$\tau_{\rm PS}$ [Myr]", fontsize=13)
@@ -650,7 +650,7 @@ else:
     ax_tau.set_xlabel("PSD log-log avg slope (CFM)", fontsize=13)
     ax_tau.set_title("PSD spectral slope (CFM backend)")
 ax_tau.set_ylabel("Density")
-ax_tau.legend(fontsize=9)
+ax_tau.legend(fontsize=10)
 
 fig.suptitle(
     f"Hierarchical PSD recovery (N = {N_GAL}, photometry)",

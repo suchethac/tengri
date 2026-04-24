@@ -19,6 +19,10 @@ from tengri import (
     make_log_age_grid,
     tsnorm,
 )
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+
 
 # --- Grid setup ---
 n_grid = 256
@@ -58,7 +62,7 @@ for ax, cfg in zip(axes, configs):
     ax.set_ylim(0, None)
 
 axes[0].set_ylabel("SFR [M$_\\odot$/yr]")
-axes[0].legend(fontsize=8, frameon=False)
+axes[0].legend(fontsize=10, frameon=False)
 fig.suptitle("Stochastic SFHs from GP Correlated Fields", fontsize=12, y=1.02)
 fig.tight_layout()
 plt.savefig("plot_stochastic_sfh.png", dpi=150, bbox_inches="tight")

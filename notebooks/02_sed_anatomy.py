@@ -261,7 +261,7 @@ for _lo, _hi, _lbl, _col, _yfrac in _BANDS:
         _lbl,
         ha="center",
         va="top",
-        fontsize=8,
+        fontsize=10,
         color="#444444",
         style="italic",
         zorder=5,
@@ -355,7 +355,7 @@ _in_range = (_lam_ticks >= _XLIM_UM[0]) & (_lam_ticks <= _XLIM_UM[1])
 _ax_top.set_xticks(_lam_ticks[_in_range])
 _ax_top.set_xticklabels(
     [rf"$10^{{{int(np.log10(nu))}}}$" for nu in _nu_ticks[_in_range]],
-    fontsize=9,
+    fontsize=10,
 )
 _ax_top.set_xlabel(r"Rest-frame frequency $\nu$ [Hz]", fontsize=11, labelpad=8)
 
@@ -382,7 +382,7 @@ for _wbreak, _wlabel, _xside in [
         _xoff,
         10**5.4,
         _wlabel,
-        fontsize=8,
+        fontsize=10,
         color="#555555",
         va="bottom",
         ha=_xside,
@@ -390,7 +390,7 @@ for _wbreak, _wlabel, _xside in [
     )
 
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "01_sed_decomposition.png"), dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "01_sed_decomposition.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 print("→ Next: build the SED in steps using separate forward models (same SSP, toggled modules).")
@@ -440,7 +440,7 @@ ax.loglog(
 ax.set_ylabel(r"$f_\nu$ [cgs]", fontsize=10)
 ax.set_title("Step 1: Stellar continuum (no SSP nebular)", fontsize=10, fontweight="bold")
 ax.grid(True, alpha=0.3)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 
 ax = axes[0, 1]
 ax.loglog(
@@ -449,7 +449,7 @@ ax.loglog(
 ax.loglog(wv, np.array(sed_stars_nebular), color=COLORS["seq"][3], lw=1.2, label="+ Nebular (SSP)")
 ax.set_title("Step 2: + Nebular emission", fontsize=10, fontweight="bold")
 ax.grid(True, alpha=0.3)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 
 ax = axes[1, 0]
 ax.loglog(wv, np.array(sed_no_dust), color=COLORS["seq"][1], lw=0.8, alpha=0.5, label="Intrinsic")
@@ -458,7 +458,7 @@ ax.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]", fontsize=10)
 ax.set_ylabel(r"$f_\nu$ [cgs]", fontsize=10)
 ax.set_title("Step 3: Charlot–Fall attenuation", fontsize=10, fontweight="bold")
 ax.grid(True, alpha=0.3)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 
 ax = axes[1, 1]
 ax.loglog(wv, np.array(sed_with_atten), color="darkred", lw=0.8, alpha=0.5, label="Attenuated")
@@ -466,7 +466,7 @@ ax.loglog(wv, np.array(sed_complete), color=COLORS["seq"][4], lw=1.2, label="+ I
 ax.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]", fontsize=10)
 ax.set_title("Step 4: IR + radio + X-ray", fontsize=10, fontweight="bold")
 ax.grid(True, alpha=0.3)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 
 fig.suptitle(
     "Progressive SED assembly (public predict_spectrum only)",
@@ -475,7 +475,7 @@ fig.suptitle(
     y=1.0,
 )
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "01_sed_anatomy_components.png"), dpi=150, bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "01_sed_anatomy_components.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -504,7 +504,7 @@ ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]", fontsize=11)
 ax.set_title(
     "Same physical SED at different redshifts (observed frame)", fontsize=12, fontweight="bold"
 )
-ax.legend(fontsize=9, loc="upper right")
+ax.legend(fontsize=10, loc="upper right")
 ax.grid(True, alpha=0.3)
 ax.set_xlim(1e3, 1e7)
 
@@ -513,7 +513,7 @@ for _band_name, band_center in sdss_bands.items():
     ax.axvspan(band_center * 0.8, band_center * 1.2, alpha=0.06, color="gray")
 
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "01_sed_anatomy_redshift.png"), dpi=150, bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "01_sed_anatomy_redshift.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

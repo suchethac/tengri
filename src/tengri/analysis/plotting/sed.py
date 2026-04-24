@@ -337,13 +337,10 @@ def sweep_parameter(
         try:
             wave, lnu = model.sed(override)
         except (AttributeError, TypeError, ValueError):
-            # AttributeError: sed() method doesn't exist
-            # TypeError: sed() signature mismatch
-            # ValueError: sed() failed with invalid parameters
-            # Fallback: try predict interface
+            # Fallback: use the public predict() accessor.
             pred = model.predict(override)
-            wave = np.asarray(pred.wavelengths)
-            lnu = np.asarray(pred.lnu)
+            wave = np.asarray(model.ssp_data.ssp_wave)
+            lnu = np.asarray(pred.sed_array)
 
         wave = np.asarray(wave)
         lnu = np.asarray(lnu)
@@ -630,7 +627,7 @@ def posterior_plot_sed(result, mock=None, ax=None):
         sed_array = np.array(sed_samples)
 
         # Get wavelengths
-        wave_rest = np.array(result._model.wavelengths)
+        wave_rest = np.array(result._model.ssp_data.ssp_wave)
 
         # Plot posterior band (16th to 84th percentile)
         sed_lo = np.percentile(sed_array, 16, axis=0)
@@ -644,7 +641,7 @@ def posterior_plot_sed(result, mock=None, ax=None):
         ax_sed.plot(wave_rest, sed_map, "-", color="C0", lw=2, label="MAP SED")
     else:
         # MAP only: just plot the best fit
-        wave_rest = np.array(result._model.wavelengths)
+        wave_rest = np.array(result._model.ssp_data.ssp_wave)
         sed_map = result._model.predict_rest_sed(result.params).sed
         ax_sed.plot(wave_rest, sed_map, "-", color="C0", lw=2, label="Best fit")
 

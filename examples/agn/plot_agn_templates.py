@@ -11,6 +11,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri.agn import powerlaw_disc, simple_torus
+from tengri.analysis.plotting import setup_style
+
+setup_style()
 
 # Wavelength grid: 100 Angstrom to 100 micron
 wavelength = jnp.logspace(np.log10(100), np.log10(1e6), 1000)
@@ -50,7 +53,7 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title("AGN Luminosity Sequence")
 ax.set_xlim(0.01, 100)
-ax.legend(frameon=False, fontsize=8)
+ax.legend(frameon=False, fontsize=10)
 
 fig.tight_layout()
 plt.savefig("agn_templates.png", dpi=150, bbox_inches="tight")

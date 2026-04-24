@@ -11,7 +11,10 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.analysis.plotting import setup_style
 from tengri.sfh import psd_drw
+
+setup_style()
 
 # %%
 # Frequency grid (angular frequency in rad/yr)
@@ -70,7 +73,7 @@ except ImportError:
 ax.set_xlabel(r"Angular frequency $\omega$ [rad yr$^{-1}$]")
 ax.set_ylabel(r"PSD $P(\omega)$")
 ax.set_title(r"PSD Models ($\sigma=0.3$, $\tau=200$ Myr)")
-ax.legend(frameon=False, fontsize=9)
+ax.legend(frameon=False, fontsize=10)
 fig.tight_layout()
 
 plt.savefig("psd_alternatives.png", dpi=150, bbox_inches="tight")

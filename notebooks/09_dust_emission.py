@@ -317,7 +317,7 @@ ax.get_xaxis().set_major_formatter(ticker.ScalarFormatter())
 _set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
-# fig.savefig(os.path.join(FIGDIR, "16_overview_all_models.png"), dpi=150, bbox_inches="tight")
+# fig.savefig(os.path.join(FIGDIR, "16_overview_all_models.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -352,7 +352,7 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title(r"Modified Blackbody: vary $T$ ($\beta = 1.8$)")
 ax.set_xlim(1, 1000)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
 _set_reasonable_log_ylim(ax)
@@ -372,13 +372,13 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title(r"Modified Blackbody: vary $\beta$ ($T = 35$ K)")
 ax.set_xlim(1, 1000)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
 _set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
-# fig.savefig(os.path.join(FIGDIR, "16_modified_blackbody.png"), dpi=150, bbox_inches="tight")
+# fig.savefig(os.path.join(FIGDIR, "16_modified_blackbody.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -426,7 +426,7 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title("Casey (2012) vs Modified Blackbody")
 ax.set_xlim(1, 1000)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
 _set_reasonable_log_ylim(ax)
@@ -449,13 +449,13 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title(r"Casey (2012): vary $\alpha_{\mathrm{MIR}}$")
 ax.set_xlim(1, 1000)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
 _set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
-# fig.savefig(os.path.join(FIGDIR, "16_casey2012.png"), dpi=150, bbox_inches="tight")
+# fig.savefig(os.path.join(FIGDIR, "16_casey2012.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -531,7 +531,7 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title(r"DL07: vary $q_{\mathrm{PAH}}$")
 ax.set_xlim(1, 1000)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
 _set_reasonable_log_ylim(ax)
@@ -551,7 +551,7 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title(r"DL07: vary $U_{\mathrm{min}}$")
 ax.set_xlim(1, 1000)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
 _set_reasonable_log_ylim(ax)
@@ -571,13 +571,13 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title(r"DL07: vary $\gamma$ (PDR fraction)")
 ax.set_xlim(1, 1000)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
 _set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
-# fig.savefig(os.path.join(FIGDIR, "16_draine_li2007.png"), dpi=150, bbox_inches="tight")
+# fig.savefig(os.path.join(FIGDIR, "16_draine_li2007.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -612,13 +612,13 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title("DL14 vs DL07: effect of free alpha parameter")
 ax.set_xlim(1, 1000)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
 _set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
-# fig.savefig(os.path.join(FIGDIR, "16_draine_li2014.png"), dpi=150, bbox_inches="tight")
+# fig.savefig(os.path.join(FIGDIR, "16_draine_li2014.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -645,7 +645,7 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title(r"Dale+2014: vary $\alpha$ (radiation field distribution)")
 ax.set_xlim(1, 1000)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
 
@@ -656,7 +656,7 @@ ax.annotate(
         30,
         np.max(np.array(dale2014(wave_aa, L_ABS, dust_alpha_dale=1.0))) * 0.8,
     ),
-    fontsize=9,
+    fontsize=10,
     color=cmap(0.1),
     style="italic",
 )
@@ -666,14 +666,14 @@ ax.annotate(
         200,
         np.max(np.array(dale2014(wave_aa, L_ABS, dust_alpha_dale=3.0))) * 0.5,
     ),
-    fontsize=9,
+    fontsize=10,
     color=cmap(0.9),
     style="italic",
 )
 _set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
-# fig.savefig(os.path.join(FIGDIR, "16_dale2014.png"), dpi=150, bbox_inches="tight")
+# fig.savefig(os.path.join(FIGDIR, "16_dale2014.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -724,13 +724,13 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title("Astrodust+PAH vs DL07")
 ax.set_xlim(1, 1000)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
 _set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
-# fig.savefig(os.path.join(FIGDIR, "16_astrodust.png"), dpi=150, bbox_inches="tight")
+# fig.savefig(os.path.join(FIGDIR, "16_astrodust.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -760,13 +760,13 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title(r"BOSA: sSFR dependence (higher sSFR $\rightarrow$ warmer)")
 ax.set_xlim(1, 1000)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
 _set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
-# fig.savefig(os.path.join(FIGDIR, "16_bosa.png"), dpi=150, bbox_inches="tight")
+# fig.savefig(os.path.join(FIGDIR, "16_bosa.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -805,7 +805,7 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title("THEMIS vs DL07")
 ax.set_xlim(1, 1000)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
 _set_reasonable_log_ylim(ax)
@@ -825,13 +825,13 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title(r"THEMIS: vary $q_{\mathrm{hac}}$")
 ax.set_xlim(1, 1000)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
 _set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
-# fig.savefig(os.path.join(FIGDIR, "16_themis.png"), dpi=150, bbox_inches="tight")
+# fig.savefig(os.path.join(FIGDIR, "16_themis.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -902,7 +902,7 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title("Energy Balance Split: warm + cold")
 ax.set_xlim(1, 1000)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([1, 10, 100, 1000])
 _set_reasonable_log_ylim(ax)
@@ -955,7 +955,7 @@ ax.set_xticks([1, 10, 100, 1000])
 _set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
-# fig.savefig(os.path.join(FIGDIR, "16_energy_balance.png"), dpi=150, bbox_inches="tight")
+# fig.savefig(os.path.join(FIGDIR, "16_energy_balance.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -995,7 +995,7 @@ for i, z in enumerate(redshifts):
 ax.set_xlabel(r"Intrinsic $T_{\mathrm{dust}}$ [K]")
 ax.set_ylabel(r"Effective $T_{\mathrm{eff}}$ [K]")
 ax.set_title(r"CMB heating: $T_{\mathrm{eff}}$ vs $T_{\mathrm{dust}}$")
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 ax.set_xlim(10, 60)
 ax.set_ylim(10, 60)
 
@@ -1016,13 +1016,13 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [L$_\odot$ / Hz]")
 ax.set_title(r"CMB suppression: MBB at $T_{\mathrm{dust}}$ = 30 K")
 ax.set_xlim(10, 1000)
-ax.legend(fontsize=9)
+ax.legend(fontsize=10)
 ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
 ax.set_xticks([10, 100, 1000])
 _set_reasonable_log_ylim(ax)
 
 fig.tight_layout()
-# fig.savefig(os.path.join(FIGDIR, "16_cmb_corrections.png"), dpi=150, bbox_inches="tight")
+# fig.savefig(os.path.join(FIGDIR, "16_cmb_corrections.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -1128,7 +1128,7 @@ for i in range(1, len(summary_data) + 1):
 ax.set_title("tengri Dust Emission Models", fontsize=14, fontweight="bold", pad=20)
 
 fig.tight_layout()
-# fig.savefig(os.path.join(FIGDIR, "16_summary_table.png"), dpi=150, bbox_inches="tight")
+# fig.savefig(os.path.join(FIGDIR, "16_summary_table.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

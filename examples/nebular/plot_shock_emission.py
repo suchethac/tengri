@@ -10,7 +10,10 @@ and can mimic AGN-like emission in diagnostic diagrams.
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.analysis.plotting import setup_style
 from tengri.nebular import shock_line_ratios
+
+setup_style()
 
 # --- Panel structure ---
 fig, axes = plt.subplots(2, 2, figsize=(12, 9))
@@ -49,7 +52,7 @@ ax.grid(True, alpha=0.3)
 x_bpt = np.linspace(-1.5, 0.5, 100)
 y_bpt_agn = 0.61 / (x_bpt - 0.05) + 1.3  # Kewley+2001 AGN line
 ax.plot(x_bpt, y_bpt_agn, "k--", lw=1.5, alpha=0.4, label="AGN/SF boundary")
-ax.legend(fontsize=8, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(-1.5, 0.5)
 ax.set_ylim(-0.5, 1.5)
 
@@ -120,7 +123,7 @@ for label, ratios in line_flux_dict.items():
 ax.set_xlabel(r"Shock Velocity [km/s]")
 ax.set_ylabel("Line Flux Ratio")
 ax.set_title("Shock Emission: Line Ratios vs Velocity")
-ax.legend(fontsize=8, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.grid(True, alpha=0.3, which="both")
 
 # --- Panel 4: Magnetic field dependence ---

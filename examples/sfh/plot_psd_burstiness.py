@@ -18,6 +18,10 @@ from tengri import (
     make_log_age_grid,
     tsnorm,
 )
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+
 
 # --- Grid setup ---
 n_grid = 256
@@ -56,7 +60,7 @@ for i, sigma in enumerate(sigmas):
             ax.set_title(rf"$\tau = {tau}$ Myr", fontsize=10)
         if j == 0:
             ax.set_ylabel(rf"$\sigma = {sigma}$" + "\nSFR [M$_\\odot$/yr]",
-                          fontsize=9)
+                          fontsize=10)
         if i == 2:
             ax.set_xlabel("Lookback time [Gyr]")
 

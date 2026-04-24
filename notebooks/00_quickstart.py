@@ -274,9 +274,9 @@ ax0.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]")
 ax0.set_title("Panchromatic forward model (same SSP family as the fits below)")
 ax0.set_xlim(float(wave_pan_np.min()), float(wave_pan_np.max()))
 ax0.grid(True, alpha=0.3)
-ax0.legend(loc="upper right", fontsize=8)
+ax0.legend(loc="upper right", fontsize=10)
 fig0.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig00_panchromatic.png"), dpi=150, bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "fig00_panchromatic.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 del (
     model_pan,
@@ -404,12 +404,12 @@ if n_bands >= 10:
     ax.axvspan(9.5, n_bands + 0.5, alpha=0.08, color="orange", label="MIR/FIR")
 
 ax.set_xticks(band_idx)
-ax.set_xticklabels(band_names, rotation=45, ha="right", fontsize=9)
+ax.set_xticklabels(band_names, rotation=45, ha="right", fontsize=10)
 ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]", fontsize=10)
 ax.set_title(
     "Mock SED: Multi-Wavelength Photometry (Monotonically Rising SFH, SFR = 30 $M_\\odot$/yr)"
 )
-ax.legend(fontsize=9, loc="upper left", ncol=2)
+ax.legend(fontsize=10, loc="upper left", ncol=2)
 ax.grid(True, alpha=0.3, axis="y")
 fig.tight_layout()
 plt.show()
@@ -495,10 +495,10 @@ ax.plot(
 ax.plot(band_idx, true_np, "s", color=COLORS["truth"], ms=9, alpha=0.8, label="Truth", zorder=5)
 
 ax.set_xticks(band_idx)
-ax.set_xticklabels(band_names, rotation=45, ha="right", fontsize=9)
+ax.set_xticklabels(band_names, rotation=45, ha="right", fontsize=10)
 ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]")
 ax.set_title("NUTS: Photometric Fit (Monotonic Rising SFH, SFR = 30 $M_\\odot$/yr)")
-ax.legend(fontsize=9, loc="upper left")
+ax.legend(fontsize=10, loc="upper left")
 ax.grid(True, alpha=0.3, axis="y")
 fig.tight_layout()
 plt.show()
@@ -547,13 +547,13 @@ if hasattr(t_gyr_p, "__len__") and np.any(mask_200):
             label="MAP",
         )
     inset.plot(t_inset, sfr_true_p[mask_200], color=COLORS["truth"], lw=1.5, label="Truth")
-    inset.set_xlabel("Lookback [Myr]", fontsize=6)
-    inset.set_ylabel("SFR", fontsize=6)
+    inset.set_xlabel("Lookback [Myr]", fontsize=10)
+    inset.set_ylabel("SFR", fontsize=10)
     inset.tick_params(labelsize=5)
     inset.set_xlim(0, 200)
-    inset.legend(fontsize=5, loc="upper right")
+    inset.legend(fontsize=10, loc="upper right")
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig03_sfh_param.png"), dpi=150, bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "fig03_sfh_param.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%

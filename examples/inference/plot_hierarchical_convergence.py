@@ -127,7 +127,7 @@ for ax, samples, truth, label, unit in [
     ax.set_xlabel(f"{label}{unit}")
     ax.set_ylabel("Posterior density")
     ax.set_title(f"Population posterior on {label}")
-    ax.legend(fontsize=8, frameon=False)
+    ax.legend(fontsize=10, frameon=False)
 
 fig.suptitle(f"Hierarchical PSD Recovery: N = {N_GAL} galaxies", fontsize=11, y=1.02)
 fig.tight_layout()

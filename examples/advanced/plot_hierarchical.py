@@ -35,8 +35,12 @@ setup_style()
 def _find_ssp():
     """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
     name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [Path("data") / name, Path("../data") / name,
-              Path("../../data") / name, Path("../../../data") / name]:
+    for p in [
+        Path("data") / name,
+        Path("../data") / name,
+        Path("../../data") / name,
+        Path("../../../data") / name,
+    ]:
         if p.exists():
             return str(p)
     return None
@@ -136,5 +140,7 @@ fig.tight_layout()
 
 outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
 outdir.mkdir(parents=True, exist_ok=True)
-plt.savefig(str(outdir / "hierarchical.png"), dpi=150, bbox_inches="tight")
+plt.savefig(
+    str(outdir / "hierarchical.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight"
+)
 plt.show()

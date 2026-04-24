@@ -51,13 +51,13 @@ for cfg in configs:
 for wl, lbl in [(0.1216, r"Ly$\alpha$"), (0.6563, r"H$\alpha$"), (9.7, "Silicate")]:
     ax.axvline(wl, color="grey", ls=":", lw=0.7, alpha=0.5)
     ax.text(wl * 1.05, ax.get_ylim()[0] if ax.get_ylim()[0] > 0 else 1e35,
-            lbl, fontsize=7, color="grey", va="bottom", rotation=90)
+            lbl, fontsize=10, color="grey", va="bottom", rotation=90)
 
 ax.set_xlim(1e-3, 100)
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$\nu L_\nu$ [arb.]")
 ax.set_title("Type 1 vs Type 2 AGN: Same Physics, Different Viewing Angle")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 fig.tight_layout()
 plt.savefig("plot_agn_type12.png", dpi=150, bbox_inches="tight")
 plt.show()

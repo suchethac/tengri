@@ -204,7 +204,7 @@ ax2.legend(fontsize=10)
 ax2.set_title("Implied Prior Density")
 
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig01_custom_prior.png"), dpi=150, bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "fig01_custom_prior.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -269,7 +269,7 @@ ax2.legend(fontsize=10)
 ax2.set_title("GP Realizations (same ξ)")
 
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig02_custom_psd.png"), dpi=150, bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "fig02_custom_psd.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -306,7 +306,7 @@ ax.set_ylabel("Transmission (e^{-τ})")
 ax.legend(fontsize=10)
 ax.set_title("Attenuation Curves at τ_V = 1.0")
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig03_dust_curves.png"), dpi=150, bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "fig03_dust_curves.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -339,7 +339,7 @@ ax.set_ylabel(r"SFR [$M_\odot$/yr]")
 ax.legend(fontsize=10)
 ax.set_title("Mean SFH Shapes (Truncated Skew-Normal)")
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig04_mean_sfh_shapes.png"), dpi=150, bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "fig04_mean_sfh_shapes.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

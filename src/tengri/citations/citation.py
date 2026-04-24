@@ -4,6 +4,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+# Canonical component-type categories. Any string is allowed in a Citation's
+# ``category`` field, but these are the ones tengri uses for grouping output.
+CATEGORIES: tuple[str, ...] = (
+    "framework",          # this code + theoretical foundations (tengri, JAX, IFT)
+    "ssp",                # stellar population synthesis (DSPS, FSPS, MIST, MILES)
+    "sfh",                # star formation history priors / models
+    "dust_attenuation",   # attenuation laws
+    "dust_emission",      # dust emission templates
+    "nebular",            # nebular emission
+    "igm",                # intergalactic medium
+    "agn",                # AGN components
+    "inference",          # inference backends
+    "preprocessing",      # data hygiene (MW extinction, zero points, ...)
+    "reference_code",     # peer SED-fitting codes (ported or compared to)
+    "other",              # anything that doesn't fit a canonical bucket
+)
+
 
 @dataclass(frozen=True)
 class Citation:
@@ -17,6 +34,10 @@ class Citation:
         Human-readable short form (e.g., "Calzetti et al. (2000)").
     role : str
         Purpose in tengri (e.g., "Starburst dust attenuation law").
+    category : str
+        Component-type category (one of :data:`CATEGORIES` — "framework",
+        "ssp", "dust_attenuation", "nebular", "igm", "inference", ...).
+        Used by ``Bibliography.by_category()`` to group the report.
     authors : str
         Full author list in BibTeX style.
     year : int
@@ -51,6 +72,7 @@ class Citation:
     doi: str | None
     arxiv: str | None
     bibtex_key: str
+    category: str = "other"
     upstream_code: str | None = None
     license: str | None = None
     note: str | None = None

@@ -190,7 +190,7 @@ axes[0].set(
     title=rf"K&D 3-zone vs multi-color (M$_{{\rm BH}}=10^{{{log_mbh}}} M_\odot$, L/L$_{{\rm Edd}}=10^{{{log_ledd}}}$)",
     xlim=(1e-3, 1000),
 )
-axes[0].legend(fontsize=9)
+axes[0].legend(fontsize=10)
 axes[0].grid(alpha=0.3)
 
 # (b) Accretion rate dependence of K&D spectrum
@@ -216,7 +216,7 @@ axes[1].set(
     title=rf"K&D spectrum vs Eddington ratio (M$_{{\rm BH}}=10^{{{log_mbh}}} M_\odot$)",
     xlim=(1e-3, 1000),
 )
-axes[1].legend(fontsize=9)
+axes[1].legend(fontsize=10)
 axes[1].grid(alpha=0.3)
 
 fig.tight_layout()
@@ -266,7 +266,7 @@ axes[0].set(
     title=rf"ADAF spectrum (LLAGN, M$_{{\rm BH}}=10^{{{log_mbh_llagn}}} M_\odot$, $L_{{\rm bol}}=10^{{{log_lbol_llagn}}} L_\odot$)",
     xlim=(1e-3, 1000),
 )
-axes[0].legend(fontsize=9)
+axes[0].legend(fontsize=10)
 axes[0].grid(alpha=0.3)
 
 # (b) Transition: thin disc → ADAF
@@ -295,7 +295,7 @@ axes[1].set(
     title=r"ADAF spectrum vs M$_{\rm BH}$ (L/L$_{\rm Edd}=10^{-2}$)",
     xlim=(1e-3, 1000),
 )
-axes[1].legend(fontsize=9)
+axes[1].legend(fontsize=10)
 axes[1].grid(alpha=0.3)
 
 fig.tight_layout()
@@ -343,7 +343,7 @@ try:
         title=r"SKIRTOR torus: varying covering fraction",
         xlim=(0.1, 1000),
     )
-    axes[0].legend(fontsize=9)
+    axes[0].legend(fontsize=10)
     axes[0].grid(alpha=0.3)
 
     # (b) Zoom on silicate feature
@@ -367,7 +367,7 @@ try:
         title=r"SKIRTOR torus: silicate absorption feature",
         xlim=(0.5, 20),
     )
-    axes[1].legend(fontsize=8)
+    axes[1].legend(fontsize=10)
     axes[1].grid(alpha=0.3)
 
     fig.tight_layout()
@@ -412,7 +412,7 @@ try:
         xlim=(1e-3, 1000),
     )
     ax.grid(alpha=0.3)
-    ax.legend(fontsize=9)
+    ax.legend(fontsize=10)
     fig.tight_layout()
     plt.show()
 

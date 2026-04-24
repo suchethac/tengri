@@ -274,7 +274,7 @@ if HAS_DATA:
     fig = safe_corner(result_sdss, truths=true_params, params=degen_params)
     fig.suptitle("SDSS 5-Band: Age-Dust-Metallicity Degeneracy", y=1.02)
     # plt.savefig(
-    # os.path.join(FIGDIR, "fig01_degeneracy_corner_sdss.png"),
+    # os.path.join(FIGDIR, "fig01_degeneracy_corner_sdss.png", dpi=300, bbox_inches="tight"),
     # dpi=150,
     # bbox_inches="tight",
     # )
@@ -377,7 +377,7 @@ if HAS_DATA:
     ax.legend()
     fig.tight_layout()
     # plt.savefig(
-    # os.path.join(FIGDIR, "fig02_fisher_filter_comparison.png"),
+    # os.path.join(FIGDIR, "fig02_fisher_filter_comparison.png", dpi=300, bbox_inches="tight"),
     # dpi=150,
     # bbox_inches="tight",
     # )
@@ -504,7 +504,7 @@ if HAS_DATA:
         label="Truth",
     )
     ax_top.set_ylabel(r"$f_\nu$")
-    ax_top.legend(loc="upper right", fontsize=9)
+    ax_top.legend(loc="upper right", fontsize=10)
     ax_top.set_title("SDSS 5-Band: Posterior Predictive Photometry")
 
     residuals = (np.array(mock.flux_obs) - median_pred) / np.array(mock.noise)
@@ -518,7 +518,7 @@ if HAS_DATA:
     plt.setp(ax_top.get_xticklabels(), visible=False)
 
     # plt.savefig(
-    # os.path.join(FIGDIR, "fig03_posterior_predictive_sdss.png"),
+    # os.path.join(FIGDIR, "fig03_posterior_predictive_sdss.png", dpi=300, bbox_inches="tight"),
     # dpi=150,
     # bbox_inches="tight",
     # )
@@ -561,10 +561,10 @@ if HAS_DATA:
     ax.set_xticklabels([r"$\log(Z/Z_\odot)$", r"$\tau_{\rm bc}$", r"$\tau_{\rm diff}$"])
     ax.set_ylabel(r"$1\sigma$ width")
     ax.set_title("Fisher Bound vs Actual Posterior Width (SDSS 5-Band)")
-    ax.legend(fontsize=9)
+    ax.legend(fontsize=10)
     fig.tight_layout()
     # plt.savefig(
-    # os.path.join(FIGDIR, "fig04_fisher_vs_posterior.png"),
+    # os.path.join(FIGDIR, "fig04_fisher_vs_posterior.png", dpi=300, bbox_inches="tight"),
     # dpi=150,
     # bbox_inches="tight",
     # )
@@ -586,7 +586,7 @@ if HAS_DATA:
     ax.set_title("SFH Recovery: SDSS 5-Band Only")
     fig.tight_layout()
     # plt.savefig(
-    # os.path.join(FIGDIR, "fig05_sfh_recovery_sdss.png"),
+    # os.path.join(FIGDIR, "fig05_sfh_recovery_sdss.png", dpi=300, bbox_inches="tight"),
     # dpi=150,
     # bbox_inches="tight",
     # )

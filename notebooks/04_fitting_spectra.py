@@ -241,7 +241,7 @@ for feat_name, feat_wave in SPECTRAL_FEATURES.items():
             w_obs,
             ax.get_ylim()[1] * 0.92,
             feat_name,
-            fontsize=9,
+            fontsize=10,
             ha="center",
             va="top",
             rotation=90,
@@ -253,7 +253,7 @@ ax.set_ylabel("Flux density")
 ax.legend(fontsize=10)
 ax.set_title("Mock Galaxy Spectrum at z = 0.1")
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig01_mock_spectrum.png"), dpi=150, bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "fig01_mock_spectrum.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -319,7 +319,7 @@ ax_r.set_xlabel("Observed wavelength [Å]")
 chi2 = np.sum(res**2) / len(res)
 ax_f.set_title(f"Spectral Fit (reduced $\\chi^2$ = {chi2:.2f})")
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig02_spectral_fit.png"), dpi=150, bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "fig02_spectral_fit.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -343,12 +343,12 @@ inset = ax.inset_axes([0.6, 0.6, 0.35, 0.35])
 mask_200 = t_gyr_p < 0.2
 if hasattr(t_gyr_p, "__len__") and np.any(mask_200):
     inset.plot(t_gyr_p[mask_200] * 1e3, sfr_p[mask_200], color=COLORS["truth"], lw=1)
-    inset.set_xlabel("Lookback [Myr]", fontsize=9)
-    inset.set_ylabel("SFR", fontsize=9)
+    inset.set_xlabel("Lookback [Myr]", fontsize=10)
+    inset.set_ylabel("SFR", fontsize=10)
     inset.tick_params(labelsize=5)
     inset.set_xlim(0, 200)
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig03_sfh_spec.png"), dpi=150, bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "fig03_sfh_spec.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -356,7 +356,7 @@ plt.show()
 fig = safe_corner(result_mcmc_spec, truths=true_param)
 if fig is not None:
     fig.suptitle("Parametric Posterior — Spectroscopy (NUTS)", y=1.02)
-    # plt.savefig(os.path.join(FIGDIR, "fig04_corner_spec.png"), dpi=150, bbox_inches="tight")
+    # plt.savefig(os.path.join(FIGDIR, "fig04_corner_spec.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -540,8 +540,8 @@ if RUN_EXPENSIVE:
     mask_200 = t_gyr_s < 0.2
     if hasattr(t_gyr_s, "__len__") and np.any(mask_200):
         inset.plot(t_gyr_s[mask_200] * 1e3, sfr_full_s[mask_200], color=COLORS["truth"], lw=1)
-        inset.set_xlabel("Lookback [Myr]", fontsize=9)
-        inset.set_ylabel("SFR", fontsize=9)
+        inset.set_xlabel("Lookback [Myr]", fontsize=10)
+        inset.set_ylabel("SFR", fontsize=10)
         inset.tick_params(labelsize=5)
         inset.set_xlim(0, 200)
     fig.tight_layout()
@@ -661,7 +661,7 @@ if RUN_EXPENSIVE:
                     w_obs,
                     0.95,
                     feat_name,
-                    fontsize=5,
+                    fontsize=10,
                     ha="center",
                     va="top",
                     rotation=90,
@@ -671,7 +671,7 @@ if RUN_EXPENSIVE:
 
         ax.axvspan(wlo, whi, alpha=0.1, color=COLORS["mcmc_nuts"])
         ax.set_xlabel("Observed wavelength [Å]")
-        ax.set_title(f"z = {z} — {survey}", fontsize=9)
+        ax.set_title(f"z = {z} — {survey}", fontsize=10)
         ax.set_xlim(wlo * 0.9, whi * 1.1)
 
     fig.suptitle("Spectral Feature Accessibility vs Redshift", fontsize=11)

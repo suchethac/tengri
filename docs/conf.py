@@ -25,7 +25,25 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx_copybutton",
     "sphinx_design",
+    "sphinx_gallery.gen_gallery",
 ]
+
+# -- Sphinx-Gallery ----------------------------------------------------------
+
+sphinx_gallery_conf = {
+    "examples_dirs": ["../examples"],
+    "gallery_dirs": ["auto_examples"],
+    "filename_pattern": r"plot_.+\.py$",
+    "download_all_examples": False,
+    "plot_gallery": "True",
+    "remove_config_comments": True,
+    "within_subsection_order": "FileNameSortKey",
+    "thumbnail_size": (320, 224),
+    "default_thumb_file": None,
+    "matplotlib_animations": False,
+    "abort_on_example_error": False,
+    "min_reported_time": 2,
+}
 
 # -- MyST configuration ------------------------------------------------------
 
@@ -92,8 +110,8 @@ exclude_patterns = [
     "**.ipynb_checkpoints",
     "superpowers",
     "specs",
-    # Gallery output (optional local builds); not part of the published doc tree
-    "auto_examples/**",
+    # Sphinx-gallery internal outputs that shouldn't be picked up as source
+    "auto_examples/index.rst.new",
     "sg_execution_times.rst",
     # Narrative sections superseded by repo root notebooks/ spine
     "getting_started/**",
@@ -103,7 +121,6 @@ exclude_patterns = [
     "advanced/**",
     "developer/**",
     "dev/**",
-    "examples.md",
     "install.md",
     "known_bugs.md",
     "NEBULAR_REFACTOR.md",

@@ -107,7 +107,7 @@ axes[0].barh(short_names, ess_vals, color=colors)
 axes[0].axvline(100, color="k", ls="--", lw=0.8, label="ESS = 100 threshold")
 axes[0].set_xlabel("Effective sample size")
 axes[0].set_title("ESS per parameter")
-axes[0].legend(fontsize=7)
+axes[0].legend(fontsize=10)
 
 # Right: trace plot for first 3 params
 for i, name in enumerate(names[:3]):
@@ -116,7 +116,7 @@ for i, name in enumerate(names[:3]):
 axes[1].set_xlabel("Sample index")
 axes[1].set_ylabel("Parameter value")
 axes[1].set_title("Trace plots (first 3 parameters)")
-axes[1].legend(fontsize=7)
+axes[1].legend(fontsize=10)
 
 # Right: SFH truth vs inferred
 sfh_true = model.predict_sfh(true_params)
@@ -128,10 +128,12 @@ axes[2].plot(t_gyr[mask], np.array(sfh_fit["sfr_mean"])[mask], "r--", lw=1.2, la
 axes[2].set_xlabel("Lookback [Gyr]")
 axes[2].set_ylabel("SFR [Msun/yr]")
 axes[2].set_title("SFH recovery")
-axes[2].legend(fontsize=7)
+axes[2].legend(fontsize=10)
 
 fig.tight_layout()
 outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
 outdir.mkdir(parents=True, exist_ok=True)
-plt.savefig(str(outdir / "convergence.png"), dpi=150, bbox_inches="tight")
+plt.savefig(
+    str(outdir / "convergence.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight"
+)
 plt.show()

@@ -10,7 +10,10 @@ shape the history of metal enrichment in galaxies.
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.analysis.plotting import setup_style
 from tengri.components.sfh import closed_box_metallicity, closed_box_metallicity_anchored
+
+setup_style()
 
 fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
@@ -45,7 +48,7 @@ ax.plot(t_gyr, np.array(z_anchored) / Z_sun, lw=2.0, label="Closed-box anchored"
 ax.set_xlabel("Look-back Time [Gyr]")
 ax.set_ylabel(r"Metallicity (Z / Z$_\odot$)")
 ax.set_title("Closed-Box Chemical Evolution")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.grid(True, alpha=0.3)
 ax.set_xlim(0, 14)
 
@@ -67,7 +70,7 @@ for tau_gyr in tau_values:
 ax.set_xlabel("Look-back Time [Gyr]")
 ax.set_ylabel(r"Metallicity (Z / Z$_\odot$)")
 ax.set_title("Chemical Evolution: Varying SFR Timescales")
-ax.legend(fontsize=8, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.grid(True, alpha=0.3)
 ax.set_xlim(0, 14)
 
@@ -87,7 +90,7 @@ for eta, color in zip(outflow_rates, colors):
 ax.set_xlabel("Look-back Time [Gyr]")
 ax.set_ylabel(r"Metallicity (Z / Z$_\odot$)")
 ax.set_title("Leaky-Box Model: Outflow Rate Dependence")
-ax.legend(fontsize=8, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.grid(True, alpha=0.3)
 ax.set_xlim(0, 14)
 
@@ -114,7 +117,7 @@ ax.plot(ages_interp, z_interp / Z_sun, "k--", lw=1.5, alpha=0.4, label="Age-Meta
 ax.set_xlabel("Galaxy Age [Gyr]")
 ax.set_ylabel(r"Metallicity (Z / Z$_\odot$)")
 ax.set_title("Age-Metallicity Relation")
-ax.legend(fontsize=8, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.grid(True, alpha=0.3)
 ax.set_xlim(-0.5, 14)
 ax.set_ylim(0, 0.4)

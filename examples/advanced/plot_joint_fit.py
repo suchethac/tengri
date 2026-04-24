@@ -169,10 +169,10 @@ inset = axes[0].inset_axes([0.55, 0.55, 0.40, 0.40])
 mask = t_gyr < 5.0
 inset.plot(t_gyr[mask], np.array(sfh_true["sfr_mean"])[mask], "k-", lw=1.5, label="Truth")
 inset.plot(t_gyr[mask], np.array(sfh_fit["sfr_mean"])[mask], "r--", lw=1.2, label="MAP")
-inset.set_xlabel("Lookback [Gyr]", fontsize=6)
-inset.set_ylabel("SFR", fontsize=6)
+inset.set_xlabel("Lookback [Gyr]", fontsize=10)
+inset.set_ylabel("SFR", fontsize=10)
 inset.tick_params(labelsize=5)
-inset.legend(fontsize=5)
+inset.legend(fontsize=10)
 
 fig.suptitle("Joint Photometry + Spectroscopy Mock", fontsize=13, y=1.02)
 fig.tight_layout()

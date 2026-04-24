@@ -24,6 +24,10 @@ from tengri import (
     Uniform,
     load_ssp_data,
 )
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+
 
 
 # --- Load SSP data ---
@@ -121,7 +125,7 @@ ax.plot(
 ax.set_xlabel("Wavelength [A]")
 ax.set_ylabel("Flux density [erg/s/cm$^2$/Hz]")
 ax.set_title("First Photometric Fit with tengri")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 
 # --- SFH inset: truth vs MAP ---
 sfh_true = model.predict_sfh(true_params)
@@ -131,10 +135,10 @@ inset = ax.inset_axes([0.58, 0.58, 0.38, 0.38])
 mask = t_gyr < 5.0
 inset.plot(t_gyr[mask], np.array(sfh_true["sfr_mean"])[mask], "k-", lw=1.5, label="Truth")
 inset.plot(t_gyr[mask], np.array(sfh_fit["sfr_mean"])[mask], "r--", lw=1.2, label="MAP")
-inset.set_xlabel("Lookback [Gyr]", fontsize=6)
-inset.set_ylabel("SFR", fontsize=6)
+inset.set_xlabel("Lookback [Gyr]", fontsize=10)
+inset.set_ylabel("SFR", fontsize=10)
 inset.tick_params(labelsize=5)
-inset.legend(fontsize=5)
+inset.legend(fontsize=10)
 
 fig.tight_layout()
 plt.savefig("plot_first_fit.png", dpi=150, bbox_inches="tight")

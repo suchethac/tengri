@@ -183,8 +183,8 @@ def add_multi_sfh_inset(ax, t_gyr, y_series, colors=None, lws=None, linestyles=N
         if mask.sum() > 2:
             ax_in.plot(t_myr[mask], np.asarray(y)[mask], color=c, lw=lw, ls=ls)
     ax_in.set_xlim(0, 200)
-    ax_in.set_xlabel("Lookback (Myr)", fontsize=6)
-    ax_in.set_ylabel(ylabel, fontsize=6)
+    ax_in.set_xlabel("Lookback (Myr)", fontsize=10)
+    ax_in.set_ylabel(ylabel, fontsize=10)
     ax_in.tick_params(labelsize=5)
     return ax_in
 
@@ -222,7 +222,7 @@ ax.plot(t_gyr, sfr_sum, lw=2, color=COLORS["sfh_full"], label="DPL + constant")
 ax.set_xlabel(XLAB_LBT_GYR)
 ax.set_ylabel(r"SFR [M$_\odot$/yr]")
 ax.set_title("Additive Composition: DPL + Constant")
-ax.legend(fontsize=8, frameon=False, loc="lower left")
+ax.legend(fontsize=10, frameon=False, loc="lower left")
 ax.set_xlim(0.0, float(t_gyr[-1]))
 add_multi_sfh_inset(
     ax,
@@ -234,7 +234,7 @@ add_multi_sfh_inset(
     ylabel="SFR",
 )
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "sfh_composition_additive.png"), bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "sfh_composition_additive.png", dpi=300, bbox_inches="tight"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -271,7 +271,7 @@ for f_burst, ax in zip([0.01, 0.1, 0.3], axes, strict=True):
     ax.set_xlabel(XLAB_LBT_GYR)
     ax.set_ylabel(r"SFR [M$_\odot$/yr]")
     ax.set_title(rf"$f_{{\rm burst}} = {f_burst}$")
-    ax.legend(fontsize=7, frameon=False, loc="lower left")
+    ax.legend(fontsize=10, frameon=False, loc="lower left")
     ax.set_xlim(0.0, float(t_gyr[-1]))
     add_multi_sfh_inset(
         ax,
@@ -285,7 +285,7 @@ for f_burst, ax in zip([0.01, 0.1, 0.3], axes, strict=True):
 
 fig.suptitle("Burst Mixture: tsnorm + triweight burst", y=1.02, fontsize=11)
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "sfh_composition_burst.png"), bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "sfh_composition_burst.png", dpi=300, bbox_inches="tight"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -327,11 +327,11 @@ ax.set_ylabel(r"SFR [M$_\odot$/yr]")
 ax.set_title(
     rf"Field Modulation: 6 GP draws ($\sigma={sigma_field}$, $\tau={int(tau_field_yr / 1e6)}$ Myr)"
 )
-ax.legend(fontsize=8, frameon=False, loc="lower left")
+ax.legend(fontsize=10, frameon=False, loc="lower left")
 ax.set_xlim(0.0, float(ages_gyr_lin[-1]))
 add_multi_sfh_inset(ax, ages_gyr_lin, [mean_base_lin, *field_draws_lin], ylabel="SFR")
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "sfh_composition_field.png"), bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "sfh_composition_field.png", dpi=300, bbox_inches="tight"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -368,7 +368,7 @@ for eta, ls, label in eta_specs:
 ax.set_xlabel(XLAB_LBT_GYR)
 ax.set_ylabel(r"$\log_{10}(Z/Z_\odot)$")
 ax.set_title("Closed-box vs Leaky-box")
-ax.legend(fontsize=7, frameon=False, loc="lower left")
+ax.legend(fontsize=10, frameon=False, loc="lower left")
 ax.axhline(0.0, color="grey", lw=0.5, ls=":")
 ax.set_xlim(0.0, float(ages_gyr_lin[-1]))
 add_multi_sfh_inset(ax, ages_gyr_lin, series_z_eta, ylabel=r"$\log Z$")
@@ -393,13 +393,13 @@ for name, sfr_i in sfh_set.items():
 ax.set_xlabel(XLAB_LBT_GYR)
 ax.set_ylabel(r"$\log_{10}(Z/Z_\odot)$")
 ax.set_title(r"$Z(t)$ from different SFH shapes ($\eta=0.5$)")
-ax.legend(fontsize=7, frameon=False, loc="lower left")
+ax.legend(fontsize=10, frameon=False, loc="lower left")
 ax.axhline(0.0, color="grey", lw=0.5, ls=":")
 ax.set_xlim(0.0, float(ages_gyr_lin[-1]))
 add_multi_sfh_inset(ax, ages_gyr_lin, series_z_shape, ylabel=r"$\log Z$")
 
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "sfh_chemical_evolution.png"), bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "sfh_chemical_evolution.png", dpi=300, bbox_inches="tight"), bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

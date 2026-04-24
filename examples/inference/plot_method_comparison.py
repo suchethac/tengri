@@ -107,12 +107,16 @@ if fig is not None:
         for j in range(i):
             axes[i, j].axhline(map_vals[i], color="C3", ls="--", lw=0.8)
             axes[i, j].axvline(map_vals[j], color="C3", ls="--", lw=0.8)
-    axes[0, 0].legend(fontsize=7)
+    axes[0, 0].legend(fontsize=10)
     fig.suptitle("MAP (dashed red) vs geoVI posteriors", y=1.02)
 
 outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
 outdir.mkdir(parents=True, exist_ok=True)
-plt.savefig(str(outdir / "method_comparison_corner.png"), dpi=150, bbox_inches="tight")
+plt.savefig(
+    str(outdir / "method_comparison_corner.png", dpi=300, bbox_inches="tight"),
+    dpi=150,
+    bbox_inches="tight",
+)
 
 # --- SFH: truth vs MAP vs geoVI ---
 sfh_true = model.predict_sfh(true_params)
@@ -132,7 +136,11 @@ ax_sfh.plot(
 ax_sfh.set_xlabel("Lookback time [Gyr]")
 ax_sfh.set_ylabel("SFR [Msun/yr]")
 ax_sfh.set_title("SFH recovery: MAP vs geoVI")
-ax_sfh.legend(fontsize=8, frameon=False)
+ax_sfh.legend(fontsize=10, frameon=False)
 fig_sfh.tight_layout()
-plt.savefig(str(outdir / "method_comparison_sfh.png"), dpi=150, bbox_inches="tight")
+plt.savefig(
+    str(outdir / "method_comparison_sfh.png", dpi=300, bbox_inches="tight"),
+    dpi=150,
+    bbox_inches="tight",
+)
 plt.show()

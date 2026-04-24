@@ -34,8 +34,12 @@ setup_style()
 def _find_ssp():
     """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
     name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [Path("data") / name, Path("../data") / name,
-              Path("../../data") / name, Path("../../../data") / name]:
+    for p in [
+        Path("data") / name,
+        Path("../data") / name,
+        Path("../../data") / name,
+        Path("../../../data") / name,
+    ]:
         if p.exists():
             return str(p)
     return None
@@ -103,7 +107,7 @@ fig, ax = plt.subplots(figsize=(8, 4))
 short_names = [n.replace("sfh_tsnorm_", "").replace("_", " ") for n in free_names]
 im = ax.imshow(J_norm, aspect="auto", cmap="RdBu_r", vmin=-1, vmax=1)
 ax.set_xticks(range(len(free_names)))
-ax.set_xticklabels(short_names, rotation=45, ha="right", fontsize=8)
+ax.set_xticklabels(short_names, rotation=45, ha="right", fontsize=10)
 ax.set_yticks(range(len(bands)))
 ax.set_yticklabels([b.replace("sdss_", "") for b in bands])
 ax.set_xlabel("Parameter")
@@ -114,5 +118,9 @@ fig.tight_layout()
 
 outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
 outdir.mkdir(parents=True, exist_ok=True)
-plt.savefig(str(outdir / "gradient_sensitivity.png"), dpi=150, bbox_inches="tight")
+plt.savefig(
+    str(outdir / "gradient_sensitivity.png", dpi=300, bbox_inches="tight"),
+    dpi=150,
+    bbox_inches="tight",
+)
 plt.show()

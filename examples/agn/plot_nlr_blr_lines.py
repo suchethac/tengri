@@ -11,7 +11,10 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.analysis.plotting import setup_style
 from tengri.components.agn import blr_emission, nlr_emission
+
+setup_style()
 
 # Solar luminosity in cgs
 LSUN_ERG = 3.828e33
@@ -59,12 +62,12 @@ ax.semilogy(
 lines = {"Ly-α": 1216, "C IV": 1549, "H-β": 4861, "[O III]": 5007, "H-α": 6563}
 for lbl, wl in lines.items():
     ax.axvline(wl, color="gray", ls=":", alpha=0.5, lw=0.7)
-    ax.text(wl, ax.get_ylim()[0] * 1.5, lbl, fontsize=7, rotation=90, color="gray", va="bottom")
+    ax.text(wl, ax.get_ylim()[0] * 1.5, lbl, fontsize=10, rotation=90, color="gray", va="bottom")
 
 ax.set_xlabel(r"Wavelength [$\AA$]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title("NLR vs BLR Spectral Comparison")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(1000, 7000)
 
 # --- Panel 2: BLR strength sweep ---
@@ -84,7 +87,7 @@ for covering_frac in [0.05, 0.10, 0.20]:
 ax.set_xlabel(r"Wavelength [$\AA$]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title("BLR: Covering Fraction Sensitivity")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(1000, 7000)
 
 # --- Panel 3: Fe II strength in BLR ---
@@ -105,7 +108,7 @@ for fe2_strength in [0.0, 0.5, 1.0, 2.0]:
 ax.set_xlabel(r"Wavelength [$\AA$]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title("BLR: Iron Multiplet Strength")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(1000, 7000)
 
 # --- Panel 4: NLR FWHM variations ---
@@ -122,7 +125,7 @@ for fwhm in [300.0, 500.0, 800.0, 1200.0]:
 ax.set_xlabel(r"Wavelength [$\AA$]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title("NLR: Line Width Sensitivity")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(1000, 7000)
 
 fig.suptitle("AGN Emission Lines: NLR vs BLR Behavior", fontsize=12)

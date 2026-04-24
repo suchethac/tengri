@@ -220,7 +220,7 @@ ax_spec.plot(w, np.array(mock_spec.flux_true), color=COLORS["truth"], lw=1.2, la
 ax_spec.set_xlabel("Observed wavelength [Å]")
 ax_spec.set_ylabel("Flux density")
 ax_spec.set_title(f"Galaxy Spectrum at z = {REDSHIFT}")
-ax_spec.legend(fontsize=8)
+ax_spec.legend(fontsize=10)
 ax_spec.grid(True, alpha=0.3)
 
 # Right: photometry
@@ -246,15 +246,15 @@ ax_phot.plot(
     label="Truth",
 )
 ax_phot.set_xticks(band_idx)
-ax_phot.set_xticklabels(band_names, rotation=45, ha="right", fontsize=9)
+ax_phot.set_xticklabels(band_names, rotation=45, ha="right", fontsize=10)
 ax_phot.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]")
 ax_phot.set_title("Mock Photometry (5 SDSS bands)")
-ax_phot.legend(fontsize=8)
+ax_phot.legend(fontsize=10)
 ax_phot.grid(True, alpha=0.3, axis="y")
 
 fig.suptitle("Mock Data: Spectrum + Photometry", fontsize=12)
 fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig01_mock_data.png"), dpi=150, bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "fig01_mock_data.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -294,7 +294,7 @@ result_phot.plot_corner(
 )
 fig = plt.gcf()
 fig.suptitle("Photometry-Only Posterior (5 SDSS bands, NUTS)", fontsize=12, y=0.995)
-# plt.savefig(os.path.join(FIGDIR, "fig02_corner_phot.png"), dpi=150, bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "fig02_corner_phot.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -368,7 +368,7 @@ for i, pname in enumerate(params_list):
     ax_p.axvline(tv, color="red", lw=1.5, label="Truth")
     ax_p.set_ylabel("Density")
     ax_p.set_title(f"{pname.replace('sfh_db_', '')} (phot-only)")
-    ax_p.legend(fontsize=7)
+    ax_p.legend(fontsize=10)
 
     # Spectroscopy-only
     ax_s = fig.add_subplot(gs[i, 1])
@@ -382,7 +382,7 @@ for i, pname in enumerate(params_list):
     ax_s.axvline(tv, color="red", lw=1.5, label="Truth")
     ax_s.set_ylabel("Density")
     ax_s.set_title(f"{pname.replace('sfh_db_', '')} (spec-only)")
-    ax_s.legend(fontsize=7)
+    ax_s.legend(fontsize=10)
 
     # Joint
     ax_j = fig.add_subplot(gs[i, 2])
@@ -396,10 +396,10 @@ for i, pname in enumerate(params_list):
     ax_j.axvline(tv, color="red", lw=1.5, label="Truth")
     ax_j.set_ylabel("Density")
     ax_j.set_title(f"{pname.replace('sfh_db_', '')} (joint)")
-    ax_j.legend(fontsize=7)
+    ax_j.legend(fontsize=10)
 
 fig.suptitle("Degeneracies: Photometry-Only vs Spectroscopy vs Joint (NUTS)", fontsize=14)
-# plt.savefig(os.path.join(FIGDIR, "fig03_posteriors_comparison.png"), dpi=150, bbox_inches="tight")
+# plt.savefig(os.path.join(FIGDIR, "fig03_posteriors_comparison.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

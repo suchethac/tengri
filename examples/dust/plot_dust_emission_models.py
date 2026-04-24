@@ -88,12 +88,12 @@ ax.set_xlim(1, 1000)
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title(r"Dust Emission Models ($L_{\rm abs} = 10^{10}\,L_\odot$, $T = 35$ K)")
-ax.legend(fontsize=8, frameon=False, ncol=2)
+ax.legend(fontsize=10, frameon=False, ncol=2)
 
 # Mark key wavelengths
 for wl_um, name in [(8, "PAH"), (25, "mid-IR"), (100, "far-IR peak"), (850, "submm")]:
     ax.axvline(wl_um, color="grey", ls=":", lw=0.5, alpha=0.5)
-    ax.text(wl_um * 1.05, ax.get_ylim()[1] * 0.6, name, fontsize=7, color="grey", rotation=90)
+    ax.text(wl_um * 1.05, ax.get_ylim()[1] * 0.6, name, fontsize=10, color="grey", rotation=90)
 
 fig.tight_layout()
 plt.savefig("plot_dust_emission_models.png", dpi=150, bbox_inches="tight")

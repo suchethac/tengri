@@ -13,6 +13,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import load_filter_set
+from tengri.analysis.plotting import setup_style
+
+setup_style()
 
 # Locate filter cache — works from project root or sphinx-gallery cwd
 _FILTER_DIRS = [Path("data/filters"), Path("../data/filters"),

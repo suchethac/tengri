@@ -160,3 +160,5 @@ The spine is written for astronomers — physics framing, copy-paste-able code c
 
    examples
 ```
+
+The thumbnailed [examples gallery](examples.md) collects 70+ short scripts that each produce one figure — ideal starting points for your own plots.

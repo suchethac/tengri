@@ -20,8 +20,8 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.igm import igm_transmission
 from tengri.analysis.plotting import SWEEP_CMAPS, setup_style
+from tengri.igm import igm_transmission
 
 setup_style()
 
@@ -49,7 +49,7 @@ ax.set_ylabel("IGM transmission", fontsize=12)
 ax.set_xlim(500, 50000)
 ax.set_xscale("log")
 ax.set_ylim(-0.05, 1.1)
-ax.legend(fontsize=9, frameon=False, ncol=2, loc="upper right")
+ax.legend(fontsize=10, frameon=False, ncol=2, loc="upper right")
 ax.set_title("IGM Transmission Curves (Inoue+2014)", fontsize=12)
 
 # --- Right: Lyman-break dropout colour vs redshift ---

@@ -12,6 +12,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri.agn import AGN_MODELS, get_agn_model
+from tengri.analysis.plotting import setup_style
+
+setup_style()
 
 # %%
 # Wavelength grid: 100 Angstrom (UV) to 500 micron (MIR)
@@ -65,7 +68,7 @@ ax.set_title(
     rf"AGN SEDModel Hierarchy at $\log L_{{\mathrm{{bol}}}} = {log_lbol:.0f}$"
 )
 ax.set_xlim(0.01, 50)
-ax.legend(frameon=False, fontsize=9)
+ax.legend(frameon=False, fontsize=10)
 fig.tight_layout()
 
 # %%

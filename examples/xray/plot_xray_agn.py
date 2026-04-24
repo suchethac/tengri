@@ -11,7 +11,10 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.analysis.plotting import setup_style
 from tengri.xray import xray_agn_corona
+
+setup_style()
 
 # Wavelength grid: hard X-ray (keV) to soft X-ray and UV
 wavelength = jnp.logspace(np.log10(0.1), np.log10(1e4), 512)  # Angstrom
@@ -30,7 +33,7 @@ for log_lbol in [43.0, 44.0, 45.0, 46.0]:
 ax.set_xlabel("Energy [keV]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title("AGN X-ray Corona: Luminosity Sequence")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.1, 1000)
 ax.set_ylim(1e28, 1e35)
 
@@ -58,7 +61,7 @@ ax.axvline(6.4, color="red", ls="--", lw=1.0, alpha=0.7, label="Fe K-α (6.4 keV
 ax.set_xlabel("Energy [keV]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title("AGN X-ray Spectral Features")
-ax.legend(fontsize=8, frameon=False, ncol=2)
+ax.legend(fontsize=10, frameon=False, ncol=2)
 ax.set_xlim(0.1, 1000)
 ax.set_ylim(1e28, 1e35)
 
@@ -73,7 +76,7 @@ for log_lbol in [45.0, 45.5, 46.0, 46.5]:
 ax.set_xlabel("Energy [keV]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title("AGN X-ray: Ultra-Luminous Range")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.1, 1000)
 
 # --- Panel 4: Spectral index vs luminosity (implicit) ---

@@ -23,6 +23,10 @@ from tengri import (
     Uniform,
     load_ssp_data,
 )
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+
 
 
 # --- Check for SSP data ---
@@ -98,7 +102,7 @@ for name, lam_rest in features.items():
     lam_obs = lam_rest * (1 + REDSHIFT)
     if wave[0] < lam_obs < wave[-1]:
         ax.axvline(lam_obs, ls=":", color="grey", lw=0.6, alpha=0.5)
-        ax.text(lam_obs, ax.get_ylim()[1] * 0.92, name, fontsize=7, ha="center", color="grey")
+        ax.text(lam_obs, ax.get_ylim()[1] * 0.92, name, fontsize=10, ha="center", color="grey")
 
 residuals = (np.array(mock.flux_obs) - np.array(best_spec)) / np.array(mock.noise)
 ax_res.axhline(0, color="0.5", ls="--", lw=0.8)

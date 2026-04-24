@@ -97,6 +97,14 @@ class Galaxy:
         self.result = None
         self.preset_name = preset_name
 
+        # Live citation accumulator. Populated from the configured components
+        # at construction and extended with the inference-backend citation(s)
+        # on every call to .fit(). See tengri.citations.Bibliography.
+        from tengri.citations.bibliography import Bibliography
+
+        src = f"Galaxy(preset={preset_name})" if preset_name else "Galaxy"
+        self.bibliography = Bibliography.from_config(model_config, source=src)
+
     @classmethod
     def from_arrays(
         cls,
@@ -314,6 +322,8 @@ class Galaxy:
 
         # Record the backend used for later save/load
         self._last_backend = backend
+        # Record the inference backend citation(s) now that a fit has run.
+        self.bibliography.add_backend(backend)
 
         return self
 
@@ -452,45 +462,35 @@ class Galaxy:
 
         return citations
 
-    def cite(self, fmt: str = "list") -> list | str:
+    def cite(self, fmt: str = "list"):
         """Return citations for the components this Galaxy is configured to use.
+
+        Thin wrapper around :attr:`bibliography`. Prefer the Bibliography
+        attribute directly for new code.
 
         Parameters
         ----------
-        fmt : {"list", "short", "bibtex"}
-            - "list" (default): list of ``Citation`` objects (iterable and printable).
-            - "short": newline-joined human-readable lines.
-            - "bibtex": BibTeX entries separated by blank lines.
-
-        Returns
-        -------
-        list[Citation] or str
-            Citations for the components inferred from model_config and the
-            last backend used, if any. Silently skips keys not registered.
-
-        Notes
-        -----
-        Uses :meth:`_infer_citation_keys` (defensive). Safe to call before
-        :meth:`fit`; backend-specific citations are added only after a fit.
+        fmt : {"list", "short", "bibtex", "report", "bibliography"}
+            - "list" (default): list of ``Citation`` records.
+            - "short": newline-joined one-line forms.
+            - "bibtex": BibTeX blocks separated by blank lines.
+            - "report": grouped human-readable report.
+            - "bibliography": the :class:`Bibliography` container itself.
         """
-        from tengri.citations import cite as _cite
-
-        keys = self._infer_citation_keys()
-        cites = []
-        for k in keys:
-            try:
-                cites.append(_cite(k))
-            except KeyError:
-                # key not registered (e.g. stale name) — skip silently
-                continue
-
+        if fmt == "bibliography":
+            return self.bibliography
         if fmt == "list":
-            return cites
+            return self.bibliography.to_list()
         if fmt == "short":
-            return "\n".join(str(c) for c in cites)
+            return "\n".join(str(c) for c in self.bibliography)
         if fmt == "bibtex":
-            return "\n\n".join(c.to_bibtex() for c in cites)
-        raise ValueError(f"Unknown fmt '{fmt}'. Use 'list', 'short', or 'bibtex'.")
+            return self.bibliography.to_bibtex()
+        if fmt == "report":
+            return self.bibliography.report()
+        raise ValueError(
+            f"Unknown fmt '{fmt}'. Use one of "
+            "'list' / 'short' / 'bibtex' / 'report' / 'bibliography'."
+        )
 
     def explain(self) -> str:
         """Return a plain-English explanation of what was fit.

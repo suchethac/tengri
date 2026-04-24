@@ -11,8 +11,11 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.analysis.plotting import setup_style
 from tengri.radio import radio_agn, radio_star_forming
 from tengri.xray import xray_agn_corona, xray_xrb
+
+setup_style()
 
 # %%
 # Wavelength grid: 1 Angstrom (hard X-ray) to 10^10 Angstrom (30 cm radio)
@@ -76,13 +79,13 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title("Panchromatic Galaxy SED: X-ray to Radio Components")
 ax.set_xlim(1e-4, 1e6)
-ax.legend(frameon=False, fontsize=9, ncol=2)
+ax.legend(frameon=False, fontsize=10, ncol=2)
 
 # %%
 # Annotate wavelength regime boundaries
 for x, label in [(1.24e-4, "X-ray"), (3e4, "Radio")]:
     ax.axvline(x, color="grey", ls=":", lw=0.7, alpha=0.5)
-    ax.text(x * 1.3, ax.get_ylim()[1] * 0.3, label, fontsize=8, color="grey")
+    ax.text(x * 1.3, ax.get_ylim()[1] * 0.3, label, fontsize=10, color="grey")
 
 fig.tight_layout()
 plt.savefig("radio_xray_sed.png", dpi=150, bbox_inches="tight")

@@ -13,6 +13,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import Fixed, Parameters, SEDModel, load_ssp_data
+from tengri.analysis.plotting import setup_style
+
+setup_style()
 
 
 # --- Check for SSP data ---
@@ -96,14 +99,14 @@ for ax, wmin, wmax, title, lines in regions:
             lam + 5,
             ax.get_ylim()[1] if ax.get_ylim()[1] > 0 else 1.0,
             lbl,
-            fontsize=8,
+            fontsize=10,
             color="C3",
             va="top",
         )
     ax.set_xlabel(r"Rest Wavelength [$\AA$]")
     ax.set_ylabel(r"$L_\nu$ [arbitrary]")
     ax.set_title(title)
-    ax.legend(frameon=False, fontsize=8)
+    ax.legend(frameon=False, fontsize=10)
 
 fig.suptitle("Nebular Emission: Backend Comparison", fontsize=12)
 fig.tight_layout(rect=[0, 0, 1, 0.95])

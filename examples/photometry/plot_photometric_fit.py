@@ -23,6 +23,10 @@ from tengri import (
     Uniform,
     load_ssp_data,
 )
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+
 
 
 # --- Check for SSP data ---
@@ -145,10 +149,10 @@ inset = ax.inset_axes([0.58, 0.58, 0.38, 0.38])
 mask = t_gyr < 5.0
 inset.plot(t_gyr[mask], np.array(sfh_true["sfr_mean"])[mask], "k-", lw=1.5, label="Truth")
 inset.plot(t_gyr[mask], np.array(sfh_fit["sfr_mean"])[mask], "r--", lw=1.2, label="MAP")
-inset.set_xlabel("Lookback [Gyr]", fontsize=6)
-inset.set_ylabel("SFR", fontsize=6)
+inset.set_xlabel("Lookback [Gyr]", fontsize=10)
+inset.set_ylabel("SFR", fontsize=10)
 inset.tick_params(labelsize=5)
-inset.legend(fontsize=5)
+inset.legend(fontsize=10)
 
 fig.tight_layout()
 plt.savefig("photometric_fit.png", dpi=150, bbox_inches="tight")

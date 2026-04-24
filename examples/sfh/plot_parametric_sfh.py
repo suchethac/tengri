@@ -21,6 +21,10 @@ from tengri import (
     snorm,
     tsnorm,
 )
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+
 
 t_lookback = jnp.linspace(1e5, 14e9, 1000)
 t_gyr = np.array(t_lookback) / 1e9
@@ -66,7 +70,7 @@ ax.set_ylabel("SFR [M$_\\odot$/yr]")
 ax.set_title("Parametric SFH Models in tengri")
 ax.set_xlim(0, 14)
 ax.set_ylim(0, None)
-ax.legend(fontsize=8, frameon=False, ncol=2, loc="upper right")
+ax.legend(fontsize=10, frameon=False, ncol=2, loc="upper right")
 fig.tight_layout()
 plt.savefig("plot_parametric_sfh.png", dpi=150, bbox_inches="tight")
 plt.show()

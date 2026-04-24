@@ -12,6 +12,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import dla_transmission_obs
+from tengri.analysis.plotting import setup_style
+
+setup_style()
 
 # Wavelength grid: UV to optical
 wavelength_rest = jnp.logspace(np.log10(500), np.log10(5000), 512)  # Angstrom
@@ -37,7 +40,7 @@ for z in [2.0, 2.5, 3.0, 4.0]:
 ax.set_xlabel(r"Rest Wavelength [$\AA$]")
 ax.set_ylabel(r"Transmission (1 - $\tau_{DLA}$)")
 ax.set_title("DLA Transmission: Redshift Evolution")
-ax.legend(fontsize=8, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(500, 5000)
 ax.set_ylim(0, 1.1)
 ax.grid(True, alpha=0.3)
@@ -60,7 +63,7 @@ for log_nh in [19.0, 19.5, 20.0, 20.3, 20.8]:
 ax.set_xlabel(r"Rest Wavelength [$\AA$]")
 ax.set_ylabel(r"Transmission")
 ax.set_title(f"DLA Transmission: Column Density (z={z})")
-ax.legend(fontsize=8, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(500, 5000)
 ax.set_ylim(0, 1.1)
 ax.grid(True, alpha=0.3)
@@ -88,7 +91,7 @@ ax.plot(np.array(wavelength_rest), trans_none, "k--", lw=1.0, alpha=0.3)
 ax.set_xlabel(r"Rest Wavelength [$\AA$]")
 ax.set_ylabel(r"Transmission")
 ax.set_title(f"DLA: Single vs Stacked Systems (z={z})")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(500, 5000)
 ax.set_ylim(0, 1.1)
 ax.grid(True, alpha=0.3)
@@ -120,7 +123,7 @@ ax.semilogy(np.array(wavelength_rest), galaxy_sed, "k--", lw=1.0, alpha=0.3, lab
 ax.set_xlabel(r"Rest Wavelength [$\AA$]")
 ax.set_ylabel(r"Observed Flux")
 ax.set_title(f"DLA Impact on Galaxy SED (z={z})")
-ax.legend(fontsize=8, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(500, 5000)
 ax.grid(True, alpha=0.3, which="both")
 

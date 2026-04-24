@@ -11,7 +11,10 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.analysis.plotting import setup_style
 from tengri.components.agn import powerlaw_disc, simple_torus
+
+setup_style()
 
 # Wavelength grid: optical to far-IR
 wavelength = jnp.logspace(np.log10(100), np.log10(1e6), 512)
@@ -35,7 +38,7 @@ ax.loglog(wave_um, np.array(l_disc + l_equat_torus), "k-", lw=1.8, label="Total 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title("Baseline: Disc + Equatorial Torus")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.01, 100)
 
 # --- Panel 2: Add polar dust (parametrically) ---
@@ -75,7 +78,7 @@ ax.loglog(wave_um, np.array(l_disc + l_equat_torus), "k--", lw=1.5, alpha=0.5, l
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title("Effect of Polar Dust on IR SED")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.01, 100)
 
 # --- Panel 3: Polar dust covering fraction vs inclination ---
@@ -103,7 +106,7 @@ for cos_inc in [0.9, 0.5, 0.1]:
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title("Polar Dust: Inclination Dependence")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.01, 100)
 
 title_str = "Polar Dust Torus: Geometry Decoupled from Equatorial Dust (Stalevski+2016)"

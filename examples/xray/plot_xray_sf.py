@@ -11,7 +11,10 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.analysis.plotting import setup_style
 from tengri.xray import xray_xrb
+
+setup_style()
 
 # Wavelength grid: hard X-ray (keV) to soft X-ray
 wavelength = jnp.logspace(np.log10(0.1), np.log10(100), 512)  # Angstrom
@@ -30,7 +33,7 @@ for sfr in [0.1, 1.0, 10.0, 100.0]:
 ax.set_xlabel("Energy [keV]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title(f"X-ray Binary SFR Dependence (M_*={stellar_mass:.0e} M_sun)")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.1, 100)
 
 # --- Panel 2: Stellar mass dependence (fixed SFR) ---
@@ -44,7 +47,7 @@ for m_star in [1e9, 1e10, 1e11, 1e12]:
 ax.set_xlabel("Energy [keV]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title(f"X-ray Binary Mass Dependence (SFR={sfr:.1f} M_sun/yr)")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.1, 100)
 
 # --- Panel 3: HMXB vs LMXB ratio ---
@@ -62,7 +65,7 @@ for sfr in sfr_vals:
 ax.set_xlabel("Energy [keV]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title("X-ray Binary Spectral Shape")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.1, 100)
 
 # --- Panel 4: L_X vs SFR and M_* (heatmap via lines) ---

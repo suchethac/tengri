@@ -13,6 +13,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import two_component_dust
+from tengri.analysis.plotting import setup_style
+
+setup_style()
 
 # --- Setup ---
 wavelength = jnp.linspace(1000.0, 10000.0, 500)
@@ -43,11 +46,11 @@ for cfg, color in zip(configs, colors):
 
 ax.axvline(7.0, ls=":", color="grey", lw=0.8, alpha=0.6)
 ax.annotate("10 Myr", xy=(7.05, 0.05), xycoords=("data", "axes fraction"),
-            fontsize=8, color="grey")
+            fontsize=10, color="grey")
 ax.set_xlabel(r"log$_{10}$(stellar age / yr)")
 ax.set_ylabel("Transmission at V-band")
 ax.set_title("Age-Dependent Dust Transmission")
-ax.legend(fontsize=8, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 
 # --- Panel B: Transmission spectrum for young vs old stars ---
 ax = axes[1]
@@ -68,7 +71,7 @@ ax.plot(wave_um, np.array(trans[i_old, :]), color="#1f77b4", lw=1.5,
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel("Transmission")
 ax.set_title(r"Birth Cloud + Diffuse ISM ($\tau_{\rm bc}=1.5$, $\tau_{\rm diff}=0.3$)")
-ax.legend(fontsize=8, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 
 fig.tight_layout()
 plt.savefig("plot_two_component.png", dpi=150, bbox_inches="tight")

@@ -27,7 +27,20 @@ __version__ = "0.1.0"
 # --- New high-level API ---
 from tengri._logo import LOGO, LOGO_BANNER, print_logo
 from tengri.analysis.mock import MockData, generate_mock
-from tengri.citations import Citation, cite, cite_all, paper_citation, print_paper_citation
+from tengri.citations import (
+    Bibliography,
+    Citation,
+    citations_bibtex,
+    citations_report,
+    cite,
+    cite_all,
+    cites,
+    collect_citations,
+    paper_citation,
+    print_bibtex,
+    print_citations,
+    print_paper_citation,
+)
 from tengri.components.dust.attenuation import two_component_dust
 from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
 from tengri.components.sfh.gp_sfh import (
@@ -248,6 +261,7 @@ __all__ = [
     "LOGO_BANNER",
     "AGNConfig",
     "BackendError",
+    "Bibliography",
     "Citation",
     "ConfigError",
     "DustConfig",
@@ -284,8 +298,12 @@ __all__ = [
     "Uniform",
     "VIConfig",
     "agn",
+    "citations_bibtex",
+    "citations_report",
     "cite",
     "cite_all",
+    "cites",
+    "collect_citations",
     "doctor",
     "dust",
     "exp_squared_kernel",
@@ -303,6 +321,8 @@ __all__ = [
     "posteriors_to_dataframe",
     "preprocessing",
     "presets",
+    "print_bibtex",
+    "print_citations",
     "print_logo",
     "print_paper_citation",
     "radio",

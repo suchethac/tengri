@@ -29,7 +29,10 @@ if _grid_path is None:
         "SKIRTOR grid not found. Run: python scripts/build_skirtor_grid.py"
     )
 
+from tengri.analysis.plotting import setup_style
 from tengri.components.agn import create_skirtor_from_grid
+
+setup_style()
 
 # Load the SKIRTOR interpolator
 skirtor_fn = create_skirtor_from_grid(_grid_path)
@@ -71,7 +74,7 @@ for ax, cos_inc, title in [
     ax.set_xlabel(r"Wavelength [$\mu$m]")
     ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
     ax.set_title(f"{title} (τ_97={tau_97_thick:.0f})")
-    ax.legend(fontsize=8, frameon=False)
+    ax.legend(fontsize=10, frameon=False)
     ax.set_xlim(0.5, 500)
 
 # Middle column: fixed inclination, vary tau_97
@@ -98,7 +101,7 @@ for ax, p_frac, title in [
     ax.set_xlabel(r"Wavelength [$\mu$m]")
     ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
     ax.set_title(title)
-    ax.legend(fontsize=8, frameon=False)
+    ax.legend(fontsize=10, frameon=False)
     ax.set_xlim(0.5, 500)
 
 # Right column: Total SED landscape (3D heatmap as color)
@@ -132,7 +135,7 @@ for row, cos_inc in enumerate([0.9, 0.3]):
     ax.set_xlabel(r"Wavelength [$\mu$m]")
     ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
     ax.set_title(f"Luminosity landscape (θ={np.degrees(np.arccos(cos_inc)):.0f}°)")
-    ax.legend(fontsize=7, frameon=False, ncol=2)
+    ax.legend(fontsize=10, frameon=False, ncol=2)
     ax.set_xlim(0.5, 500)
 
 fig.suptitle("SKIRTOR Clumpy Torus: Inclination, Optical Depth, and Clumping Effects", fontsize=12)

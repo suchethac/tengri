@@ -14,6 +14,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import load_ssp_data
+from tengri.analysis.plotting import setup_style
+
+setup_style()
 
 
 # --- Locate SSP data ---
@@ -68,7 +71,7 @@ for age_idx, age_lbl, color in zip(age_indices, age_labels, colors):
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [arbitrary]")
 ax.set_title(f"SSP Spectra: Age Sequence (Z={10**log_z_solar:.2f} Z$_\\odot$)")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.01, 10)
 ax.grid(True, alpha=0.3, which="both")
 
@@ -95,7 +98,7 @@ for z_idx, z_lbl, color in zip(z_indices, z_labels, colors_z):
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [arbitrary]")
 ax.set_title(f"SSP Spectra: Metallicity Sequence (Age={age_gyr_mid:.2f} Gyr)")
-ax.legend(fontsize=8, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.01, 10)
 ax.grid(True, alpha=0.3, which="both")
 
@@ -127,7 +130,7 @@ for band_name, (wl_center, _, color) in bands.items():
 ax.set_xlabel("Age [Gyr]")
 ax.set_ylabel(r"Flux [arbitrary]")
 ax.set_title(f"Broad-Band Colors vs Age (Z={10**log_z_solar:.2f}Z$_\\odot$)")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.grid(True, alpha=0.3, which="both")
 
 # --- Panel 4: Color-color diagram (B-V vs V-K) ---

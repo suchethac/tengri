@@ -17,7 +17,10 @@ import numpy as np
 wavelength = jnp.logspace(np.log10(1e4), np.log10(5e6), 512)
 wave_um = np.array(wavelength) / 1e4
 
+from tengri.analysis.plotting import setup_style
 from tengri.components.agn import simple_torus, two_temperature_torus
+
+setup_style()
 
 fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
@@ -39,7 +42,7 @@ for torus_model, label, color in [
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title("Nenkova Simple vs Two-Temperature")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(1, 500)
 
 # --- Panel 2: Temperature sweep (Simple MBB) ---
@@ -52,7 +55,7 @@ for temp in [800.0, 1200.0, 1500.0, 2000.0]:
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title("Simple Torus: Temperature Sensitivity")
-ax.legend(fontsize=8, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(1, 500)
 
 # --- Panel 3: Covering fraction sweep ---
@@ -65,7 +68,7 @@ for frac in [0.2, 0.5, 0.8]:
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title("Two-Temperature Torus: Covering Fraction")
-ax.legend(fontsize=8, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(1, 500)
 
 # --- Panel 4: Silva04 (if available) ---
@@ -94,7 +97,7 @@ if _silva04_path is not None:
     ax.set_xlabel(r"Wavelength [$\mu$m]")
     ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
     ax.set_title("Silva+04 Smooth Torus: Column Density")
-    ax.legend(fontsize=8, frameon=False)
+    ax.legend(fontsize=10, frameon=False)
     ax.set_xlim(1, 500)
 else:
     # If Silva04 not available, show nenkova comparison
@@ -109,7 +112,7 @@ else:
     ax.set_xlabel(r"Wavelength [$\mu$m]")
     ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
     ax.set_title("Torus Luminosity Dependence")
-    ax.legend(fontsize=8, frameon=False)
+    ax.legend(fontsize=10, frameon=False)
     ax.set_xlim(1, 500)
 
 fig.suptitle("AGN Torus Models: Parametric vs Template-Based", fontsize=12)

@@ -94,7 +94,7 @@ for ax, title, ylabel in [
     ax.set_xlabel(r"$\log_{10}$(Age / Gyr)")
     ax.set_ylabel(ylabel)
     ax.set_title(title)
-    ax.legend(fontsize=8, frameon=False)
+    ax.legend(fontsize=10, frameon=False)
 
 fig.suptitle("Spectral Features: Age and Metallicity Probes", fontsize=11, y=1.02)
 fig.tight_layout()

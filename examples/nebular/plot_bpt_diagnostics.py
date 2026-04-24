@@ -51,9 +51,9 @@ ax.plot(log_nii_ha_grid[mask_kauff], log_oiii_hb_kauff[mask_kauff],
         "k--", lw=1.2, label="Kauffmann+2003 (empirical SF)")
 
 # Region labels
-ax.text(-1.3, -0.5, "Star\nForming", fontsize=9, color="#1f77b4", ha="center")
-ax.text(0.1, 0.8, "Composite", fontsize=9, color="#ff7f0e", ha="center")
-ax.text(0.4, 1.2, "Seyfert/\nLINER", fontsize=9, color="#d62728", ha="center")
+ax.text(-1.3, -0.5, "Star\nForming", fontsize=10, color="#1f77b4", ha="center")
+ax.text(0.1, 0.8, "Composite", fontsize=10, color="#ff7f0e", ha="center")
+ax.text(0.4, 1.2, "Seyfert/\nLINER", fontsize=10, color="#d62728", ha="center")
 
 # Shock track
 if shock_nii_ha:
@@ -71,7 +71,7 @@ ax.set_ylabel(r"log [OIII]5007 / H$\beta$")
 ax.set_title("BPT Diagram: Shocks Move Galaxies into AGN Region")
 ax.set_xlim(-1.6, 0.7)
 ax.set_ylim(-1.2, 1.6)
-ax.legend(fontsize=8, frameon=False, loc="lower left")
+ax.legend(fontsize=10, frameon=False, loc="lower left")
 fig.tight_layout()
 plt.savefig("plot_bpt_diagnostics.png", dpi=150, bbox_inches="tight")
 plt.show()

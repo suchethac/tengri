@@ -50,6 +50,7 @@ def _entry_to_citation(entry: dict) -> Citation:
         key=registry_key,
         short=entry.get("short") or f"{bibtex_key} ({year})",
         role=entry.get("role") or "",
+        category=entry.get("category") or "other",
         authors=entry.get("author") or "",
         year=year,
         title=entry.get("title") or "",

@@ -23,6 +23,10 @@ from tengri import (
     SEDModel,
     load_ssp_data,
 )
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+
 
 
 # --- Load SSP data ---
@@ -104,7 +108,7 @@ ax.set_title("SED Components: Intrinsic vs Dust-Attenuated")
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlim(0.09, 3.0)
-ax.legend(fontsize=9, frameon=False, loc="upper right")
+ax.legend(fontsize=10, frameon=False, loc="upper right")
 fig.tight_layout()
 plt.savefig("plot_sed_components.png", dpi=150, bbox_inches="tight")
 plt.show()

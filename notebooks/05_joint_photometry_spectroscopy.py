@@ -266,7 +266,7 @@ ax_s.legend(fontsize=10)
 
 fig.suptitle("Joint Mock Galaxy at z = 0.1", fontsize=13)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "fig11_joint_mock_data.png"), dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig11_joint_mock_data.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -365,7 +365,7 @@ fig.suptitle(
     fontsize=13,
 )
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "fig11_joint_map_fit.png"), dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig11_joint_map_fit.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -424,7 +424,7 @@ for i, pname in enumerate(param_names):
 
 fig.suptitle("Parameter Recovery: MAP Error by Data Combination", fontsize=12)
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "fig11_constraint_comparison.png"), dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig11_constraint_comparison.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -476,7 +476,7 @@ plot_sfh(
 )
 ax.set_title("SFH Recovery: Joint Phot + Spec (NUTS)")
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "fig11_sfh_joint.png"), dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "fig11_sfh_joint.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
@@ -512,7 +512,7 @@ fig = plot_corner_comparison(
 if fig is not None:
     fig.suptitle("Phot-only vs Spec-only vs Joint (NUTS)", y=1.02)
     plt.savefig(
-        os.path.join(FIGDIR, "fig11_corner_data_comparison.png"),
+        os.path.join(FIGDIR, "fig11_corner_data_comparison.png", dpi=300, bbox_inches="tight"),
         dpi=150,
         bbox_inches="tight",
     )

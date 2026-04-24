@@ -12,7 +12,10 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.analysis.plotting import setup_style
 from tengri.components.agn import qsogen
+
+setup_style()
 
 # Wavelength grid: 100 - 10000 Angstrom (UV to near-IR)
 wavelength = jnp.logspace(np.log10(100), np.log10(1e4), 512)
@@ -31,7 +34,7 @@ for log_lbol in [43.0, 44.0, 45.0, 46.0]:
 ax.set_xlabel(r"Rest Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title(f"QSOgen Luminosity Sequence (z={z})")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.01, 10)
 
 # --- Panel 2: Redshift evolution (fixed luminosity) ---
@@ -45,7 +48,7 @@ for z in [0.0, 0.5, 1.0, 2.0]:
 ax.set_xlabel(r"Rest Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
 ax.set_title(f"QSOgen Redshift Evolution (log L_bol={log_lbol})")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.01, 10)
 
 # --- Panel 3: νLν space (luminosity-normalized) ---
@@ -61,7 +64,7 @@ for log_lbol in [43.5, 44.0, 44.5, 45.0]:
 ax.set_xlabel(r"Rest Wavelength [$\mu$m]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
 ax.set_title(f"Quasar SED Shape Consistency (z={z})")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.01, 10)
 
 # --- Panel 4: Extreme luminosity range ---

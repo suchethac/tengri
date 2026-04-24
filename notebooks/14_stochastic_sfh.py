@@ -246,8 +246,8 @@ inset = ax_sfh.inset_axes([0.55, 0.55, 0.4, 0.4])
 mask_200 = t_gyr < 0.2
 inset.plot(t_gyr[mask_200] * 1e3, sfr_full[mask_200], color=COLORS["truth"], lw=1)
 inset.plot(t_gyr[mask_200] * 1e3, sfr_mean[mask_200], color=COLORS["sfh_mean"], lw=0.8, ls="--")
-inset.set_xlabel("Lookback [Myr]", fontsize=9)
-inset.set_ylabel("SFR", fontsize=9)
+inset.set_xlabel("Lookback [Myr]", fontsize=10)
+inset.set_ylabel("SFR", fontsize=10)
 inset.tick_params(labelsize=5)
 inset.set_xlim(0, 200)
 
@@ -337,11 +337,11 @@ if hasattr(t_gyr_s, "__len__") and np.any(mask_200):
         inset.fill_between(t_inset, lo, hi, color=COLORS["vi"], alpha=0.3, lw=0)
         inset.plot(t_inset, median, color=COLORS["vi"], lw=1.2, label="Posterior median")
     inset.plot(t_inset, sfr_true_s[mask_200], color=COLORS["truth"], lw=1.5, label="Truth")
-    inset.set_xlabel("Lookback [Myr]", fontsize=9)
-    inset.set_ylabel("SFR", fontsize=9)
+    inset.set_xlabel("Lookback [Myr]", fontsize=10)
+    inset.set_ylabel("SFR", fontsize=10)
     inset.tick_params(labelsize=5)
     inset.set_xlim(0, 200)
-    inset.legend(fontsize=5, loc="upper right")
+    inset.legend(fontsize=10, loc="upper right")
 fig.tight_layout()
 plt.show()
 
@@ -501,11 +501,11 @@ if RUN_EXPENSIVE:
             lw=2.0,
             label="Truth",
         )
-        inset.set_xlabel("Lookback [Myr]", fontsize=9)
-        inset.set_ylabel("SFR", fontsize=9)
+        inset.set_xlabel("Lookback [Myr]", fontsize=10)
+        inset.set_ylabel("SFR", fontsize=10)
         inset.tick_params(labelsize=5)
         inset.set_xlim(0, 200)
-        inset.legend(fontsize=5, loc="upper right")
+        inset.legend(fontsize=10, loc="upper right")
 
     fig.tight_layout()
     plt.show()

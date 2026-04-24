@@ -108,7 +108,7 @@ ax.plot(t_gyr, sfh_fit["sfr_mean"], color="#1f77b4", lw=2.0, ls="--",
 ax.set_xlabel("Lookback time [Gyr]")
 ax.set_ylabel(r"SFR [$M_\odot$ yr$^{-1}$]")
 ax.set_title("SFH: True vs Smooth SEDModel Fit")
-ax.legend(fontsize=9, frameon=False)
+ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0, 13)
 
 # Right: residuals χ

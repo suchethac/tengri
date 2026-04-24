@@ -1,6 +1,6 @@
 # Tengri
 
-Tengri is a differentiable JAX framework for SED fitting with Information Field Theory correlated-field star formation history priors. Pre-1.0 research code. Fully JIT-compiled, GPU-native, with gradients enabling modern inference backends (geoVI, Ray Tracing, NUTS, hierarchical population fitting).
+Tengri is a JAX framework for differentiable galaxy SED fitting. One modular forward model spans stars, dust, nebular emission, AGN, and IGM — X-ray to radio. Every inference method (MAP, Laplace, Pathfinder, NUTS, Ray Tracing, Bayesian evidence, hierarchical population) runs on the same model, with gradients available everywhere. Pre-1.0 research code; JIT-compiled and GPU/TPU-native. Information-Field-Theory stochastic SFH priors and geoVI are Paper II preview material.
 
 **Documentation:** [https://suchethacooray.github.io/tengri/](https://suchethacooray.github.io/tengri/) · **Notebooks:** [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) · **Paper:** [In preparation]
 
@@ -38,31 +38,43 @@ wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/ssp_fsps_v3.2.h5 -P
 ## Quick Start
 
 ```python
-import tengri as tg
-
-g = tg.Galaxy.from_arrays(
-    filters=["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
-    flux=[1e-28, 2e-28, 3e-28, 2.5e-28, 2e-28],
-    flux_err=[1e-29]*5,
-    flux_unit="erg/s/cm2/Hz",
-    redshift=0.1,
-    ssp_path="data/ssp_fsps_v3.2.h5",
-    preset="starforming",
+from tengri import (
+    SEDModel, Parameters, Fitter,
+    Uniform, Gaussian,
+    Observation, Photometry, load_ssp_data,
 )
 
-g.fit(backend="map")
-print(g.summary())
-print(g.cite())
+ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
+obs = Observation(photometry=Photometry.from_names(
+    ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+))
+
+spec = Parameters(
+    sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+    sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
+    sfh_tsnorm_width_gyr=Uniform(0.5, 5),
+    met_logzsol=Gaussian(-0.3, 0.2),
+    dust_tau_bc=Uniform(0, 4),
+    redshift=0.1,
+)
+
+model = SEDModel(spec, ssp, observation=obs)
+fitter = Fitter(model, obs_flux, obs_noise)
+result = fitter.run("mcmc_nuts")   # or "map", "laplace", "pathfinder", "mcmc_raytrace"
+print(result.summary_table())
 ```
+
+Full walkthrough in [`notebooks/00_quickstart.py`](notebooks/00_quickstart.py).
 
 ## Features
 
-- **Galaxy facade:** One-liner setup with sensible presets (`starforming`, `quiescent`, `high_z`, `photoz`, `jwst_spec`, `agn_host`).
+- **JIT-compiled, fully differentiable:** pure JAX end-to-end. Forward model ~140 μs, gradient ~56 μs on CPU for a smooth 7-D model. JIT + `vmap` + `grad` compose — one forward model powers every inference backend.
+- **Modular physics:** stars (DSPS SSPs), SFH (parametric, non-parametric, stochastic IFT), dust attenuation (15+ laws) and emission, nebular (BakedIn / CloudyGrid / Cue), unified AGN (disc + torus + BLR/NLR), IGM absorption, radio and X-ray. Each is a swappable pure function.
+- **Every inference method, same model:** `fitter.run("map" | "laplace" | "pathfinder" | "mcmc_nuts" | "mcmc_raytrace" | "evidence")`; `PopulationFitter` for hierarchical fits across catalogues.
 - **Per-component citations:** `tengri.cite_all()` returns citations for every upstream SSP grid, paper, and code contributing to your fit.
-- **FitResult with provenance:** Posterior samples, summary statistics, convergence diagnostics, and full parameter/forward-model history.
 - **Survey data readers:** SDSS/DESI/generic FITS readers; specutils bridge for flexible spectroscopy input.
 - **CLI utilities:** `tengri doctor` (dependency check), `tengri cite KEY` (targeted citations), preprocessing helpers.
-- **Systematic utilities:** Zero-point registry, systematic floor, upper limit handling.
+- **GPU/TPU native:** same code runs on CPU, GPU, TPU without modification.
 
 ## How It Works
 
@@ -70,14 +82,14 @@ Parameters declare free parameters and priors (SFH shape, dust, metallicity, red
 
 | Inference Method | Command | Best For |
 |------------------|---------|----------|
-| MAP | `fitter.run("map")` | Point estimates |
-| geoVI | `fitter.run("vi")` | **Default.** Nonlinear posteriors via NIFTy |
-| Ray Tracing | `fitter.run("mcmc_raytrace")` | Exact MCMC, stochastic-gradient robust |
-| NUTS | `fitter.run("mcmc_nuts")` | Gold-standard (D ≲ 30) |
-| Laplace | `fitter.run("laplace")` | Instant Gaussian posterior from Hessian |
-| Pathfinder | `fitter.run("pathfinder")` | Fast approximate posterior |
-| Evidence | `fitter.run("evidence")` | Bayesian evidence (D ≲ 30) |
-| Population | `model.fit_population(observations)` | Hierarchical fits with shared PSD |
+| MAP | `fitter.run("map")` | Point estimates, initialization |
+| Laplace | `fitter.run("laplace")` | Gaussian posterior from Hessian at MAP |
+| Pathfinder | `fitter.run("pathfinder")` | Fast approximate posterior; good NUTS warm-start |
+| NUTS | `fitter.run("mcmc_nuts")` | Gold-standard posterior (D ≲ 30) |
+| Ray Tracing | `fitter.run("mcmc_raytrace")` | Exact MCMC, noise-robust, scales past D = 30 |
+| Evidence (NSS) | `fitter.run("evidence")` | Bayesian evidence for model comparison |
+| Population | `PopulationFitter(...)` | Shared hyperparameters across galaxy samples |
+| geoVI / vi_native | `fitter.run("vi")` / `"vi_native"` | **Paper II preview.** High-D stochastic SFHs (D ≈ 137+) |
 
 ## Status
 
