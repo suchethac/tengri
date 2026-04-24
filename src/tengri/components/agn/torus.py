@@ -95,9 +95,10 @@ def simple_torus(
     **JIT-compatible**: yes — uses ``jnp`` primitives only.
     """
     warnings.warn(
-        "simple_torus is a toy model (single-temperature MBB, not radiative transfer) "
-        "and should NOT be used for science. Use skirtor_analytic from "
-        "tengri.components.agn.skirtor for production work.",
+        "simple_torus is deprecated (single-temperature MBB, not radiative transfer). "
+        "Use the 'skirtor' AGN model instead (Monte Carlo radiative transfer): "
+        "resolve_agn_model('skirtor') or skirtor_analytic() "
+        "from tengri.components.agn.skirtor.",
         DeprecationWarning,
         stacklevel=2,
     )
@@ -187,9 +188,10 @@ def two_temperature_torus(
     **JIT-compatible**: yes — uses ``jnp`` primitives only.
     """
     warnings.warn(
-        "two_temperature_torus is a toy model (two-temperature MBB, not radiative transfer) "
-        "and should NOT be used for science. Use skirtor_analytic from "
-        "tengri.components.agn.skirtor for production work.",
+        "two_temperature_torus is deprecated (two-temperature MBB, not radiative transfer). "
+        "Use the 'skirtor' AGN model instead (Monte Carlo radiative transfer): "
+        "resolve_agn_model('skirtor') or skirtor_analytic() "
+        "from tengri.components.agn.skirtor.",
         DeprecationWarning,
         stacklevel=2,
     )
