@@ -283,6 +283,12 @@ class PopulationFitter:
 
         Notes
         -----
+        Unlike ``Fitter.run()``, ``PopulationFitter.run()`` does not support
+        warm-start initialization via ``init_from`` because hierarchical
+        inference methods (EVI, CFM-based geoVI, Ray Tracing) initialize
+        per-galaxy parameters via MAP estimation automatically. The ``init_from``
+        parameter is not meaningful in the hierarchical context.
+
         Automatic initialization: all methods initialize per-galaxy parameters
         via MAP estimation before starting the hierarchical inference. First call
         may be slow due to JIT compilation. Subsequent calls are fast.
