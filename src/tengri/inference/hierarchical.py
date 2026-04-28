@@ -307,6 +307,20 @@ class PopulationFitter:
         via MAP estimation before starting the hierarchical inference. First call
         may be slow due to JIT compilation. Subsequent calls are fast.
         Approximate runtime: ~30 seconds for 10 galaxies on CPU (method-dependent).
+
+        Compile-cost amortization across catalog sizes
+        ----------------------------------------------
+        Unlike :class:`~tengri.inference.catalog_fitter.CatalogFitter`,
+        ``PopulationFitter`` does **not** expose an ``n_pad`` argument:
+        the hierarchical population field couples all N galaxies, so
+        padding with dummy galaxies would contribute spurious prior
+        mass to the population hyperparameters (e.g. ``psd_sigma``,
+        ``psd_tau_myr``) even with masked likelihoods. To amortize XLA
+        compile cost across notebook restarts, slurm tasks, or sweeps
+        over different catalog sizes, rely on the persistent
+        compilation cache instead — see
+        :func:`tengri.enable_persistent_cache` and
+        ``docs/inference/compilation_cache.md``.
         """
         if key is None:
             key = jax.random.PRNGKey(0)

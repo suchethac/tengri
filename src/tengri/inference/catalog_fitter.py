@@ -23,6 +23,50 @@ from jax.flatten_util import ravel_pytree
 from tengri.inference._sample_utils import _mean_params
 
 
+def _resolve_n_padded(n_gal: int, K: int, n_pad: int | str | None) -> int:
+    """Resolve the padded catalog size for the catalog VI engine.
+
+    The native VI engine requires the catalog to be a multiple of K (so
+    galaxies can be reshaped to ``(n_chunks, K, ...)`` for the inner
+    vmap). ``n_pad`` lets the caller pad further so different catalog
+    sizes share an XLA compile cache key.
+
+    Parameters
+    ----------
+    n_gal : int
+        Real galaxy count.
+    K : int
+        ``forward_chunk_size`` (>=1).
+    n_pad : int, "auto", or None
+        ``None`` → multiple-of-K minimum (existing behavior).
+        ``"auto"`` → next power of 2 (also at least multiple of K).
+        ``int`` → exact target (must be ``>= n_gal``).
+
+    Returns
+    -------
+    int
+        Padded catalog size, always a multiple of ``K`` and ``>= n_gal``.
+
+    Raises
+    ------
+    ValueError
+        If ``n_pad`` is an int below ``n_gal``, or an invalid string.
+    """
+    base = math.ceil(n_gal / K) * K  # multiple-of-K floor
+    if n_pad is None:
+        return base
+    if isinstance(n_pad, str):
+        if n_pad != "auto":
+            raise ValueError(f"n_pad must be 'auto', None, or int; got {n_pad!r}")
+        # Smallest power of 2 >= n_gal, then round up to multiple of K.
+        pow2 = 1 if n_gal <= 1 else 1 << (n_gal - 1).bit_length()
+        return max(base, math.ceil(pow2 / K) * K)
+    target = int(n_pad)
+    if target < n_gal:
+        raise ValueError(f"n_pad={target} must be >= n_galaxies={n_gal} (cannot drop galaxies)")
+    return max(base, math.ceil(target / K) * K)
+
+
 @dataclass
 class CatalogPosterior:
     """Container for N independent per-galaxy posteriors.
@@ -145,6 +189,7 @@ class CatalogFitter:
         *,
         key,
         forward_chunk_size=1,
+        n_pad: int | str | None = None,
         **kwargs,
     ):
         """Fit all galaxies independently.
@@ -161,6 +206,22 @@ class CatalogFitter:
             K galaxies evaluated in parallel per ``lax.map`` step.
             Only applies to ``native_vi_linear`` / ``native_vi_nonlinear``.
             ``K=1`` (default) = sequential; ``K=N`` = fully vmapped.
+        n_pad : int, "auto", or None
+            Pad the catalog up to this many galaxies before running. The
+            extra slots are dummy galaxies whose results are discarded
+            after the run; their only purpose is to make the XLA program
+            shape match a previously-cached compile so different catalog
+            sizes share an artifact.
+
+            - ``None`` (default) — pad only to the next multiple of K
+              (existing behavior).
+            - ``"auto"`` — pad to the next power of 2.
+            - ``int`` — pad to exactly this many galaxies (must be
+              ``>= n_galaxies``).
+
+            Only applies to native methods. Ignored with a warning for
+            sequential paths (each galaxy is fit in its own jit, so
+            shape-bucketing has no effect).
         **kwargs
             Forwarded to the underlying inference method.
 
@@ -171,9 +232,21 @@ class CatalogFitter:
         Raises
         ------
         ValueError
-            If ``forward_chunk_size > 1`` and galaxies have heterogeneous ``n_data``.
+            If ``forward_chunk_size > 1`` and galaxies have heterogeneous ``n_data``,
+            or if ``n_pad`` is an int below ``n_galaxies``.
         UserWarning
             If ``forward_chunk_size != 1`` is passed for a non-native method (ignored).
+
+        Notes
+        -----
+        Padding is safe in :class:`CatalogFitter` because the catalog VI
+        engine is fully per-galaxy: each galaxy's ``run_fn`` operates on
+        only its own ``(init_pos, key, data, noise)`` with no cross-galaxy
+        reduction. Dummy padded galaxies converge to their own (irrelevant)
+        posteriors and are trimmed off the result. The same trick is
+        **not** safe for :class:`PopulationFitter`, where the hierarchical
+        population field couples all galaxies — there, rely on
+        :func:`tengri.enable_persistent_cache` instead.
         """
         from tengri.inference.fitter import resolve_method
 
@@ -183,6 +256,7 @@ class CatalogFitter:
                 resolved,
                 key=key,
                 forward_chunk_size=forward_chunk_size,
+                n_pad=n_pad,
                 **kwargs,
             )
         else:
@@ -191,6 +265,14 @@ class CatalogFitter:
                     f"forward_chunk_size={forward_chunk_size} is ignored for "
                     f"method={method!r}. Only native_vi_linear and "
                     "native_vi_nonlinear support chunked parallelism.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            if n_pad is not None:
+                warnings.warn(
+                    f"n_pad={n_pad!r} is ignored for method={method!r}. "
+                    "Sequential per-galaxy fits don't benefit from "
+                    "shape-bucketing — each galaxy is its own jit.",
                     UserWarning,
                     stacklevel=2,
                 )
@@ -270,6 +352,7 @@ class CatalogFitter:
         *,
         key,
         forward_chunk_size=1,
+        n_pad: int | str | None = None,
         n_iterations=20,
         n_samples=3,
         n_posterior_samples=500,
@@ -281,9 +364,9 @@ class CatalogFitter:
         t0 = time.time()
         K = max(1, int(forward_chunk_size))
         n_gal = self.n_galaxies
-        n_padded = math.ceil(n_gal / K) * K
+        n_padded = _resolve_n_padded(n_gal, K, n_pad)
         n_chunks = n_padded // K
-        n_pad = n_padded - n_gal
+        n_pad_extra = n_padded - n_gal
 
         n_data = self._validate_uniform_data()
 
@@ -312,10 +395,10 @@ class CatalogFitter:
         all_data_orig = jnp.stack([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
         all_noise_orig = jnp.stack([jnp.asarray(g["noise"]) for g in self.galaxies])
 
-        if n_pad > 0:
-            all_data = jnp.concatenate([all_data_orig, jnp.zeros((n_pad, n_data))], axis=0)
+        if n_pad_extra > 0:
+            all_data = jnp.concatenate([all_data_orig, jnp.zeros((n_pad_extra, n_data))], axis=0)
             # Use noise=1 for padded slots to avoid division by zero; their outputs are trimmed.
-            all_noise = jnp.concatenate([all_noise_orig, jnp.ones((n_pad, n_data))], axis=0)
+            all_noise = jnp.concatenate([all_noise_orig, jnp.ones((n_pad_extra, n_data))], axis=0)
         else:
             all_data = all_data_orig
             all_noise = all_noise_orig
@@ -323,8 +406,8 @@ class CatalogFitter:
         # Random per-galaxy init (sequential MAP would be N×compilation cost)
         init_keys = jax.random.split(key, n_padded)
         all_init = jnp.stack([flatten(fitter._initialize_unbounded(k)) for k in init_keys[:n_gal]])
-        if n_pad > 0:
-            all_init = jnp.concatenate([all_init, jnp.zeros((n_pad, d_params))], axis=0)
+        if n_pad_extra > 0:
+            all_init = jnp.concatenate([all_init, jnp.zeros((n_pad_extra, d_params))], axis=0)
 
         run_keys = jax.random.split(jax.random.fold_in(key, 1), n_padded)
 
