@@ -31,6 +31,27 @@ cd notebooks && jupytext --sync *.py
 .venv/bin/pytest -m crossval tests/crossval/
 ```
 
+## JAX persistent compilation cache
+
+`import tengri` auto-enables a persistent on-disk JAX compile cache at
+`~/.cache/tengri_jax_cache` so notebook restarts, slurm tasks, and benchmark
+worker subprocesses all skip the expensive first compile (geoVI ~75 s, MGVI
+~10 s). Configure via env:
+
+```bash
+export TENGRI_JAX_CACHE_DIR=/scratch/$USER/jax_cache  # custom location
+export TENGRI_DISABLE_JAX_CACHE=1                     # opt out
+```
+
+After upgrading JAX (`pip install -U jax`), wipe stale entries:
+
+```python
+import tengri; tengri.clear_cache()
+```
+
+Default `min_compile_time_secs=5.0` keeps small SSP/dust kernels out of
+the cache. See `docs/inference/compilation_cache.md` for full details.
+
 ## Naming contract (MANDATORY)
 
 **Read `docs/dev/NAMING_CONTRACT.md` before writing any new code, renames, or refactors.**

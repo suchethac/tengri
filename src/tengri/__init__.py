@@ -10,16 +10,24 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-# Enable persistent XLA compilation cache — avoids re-compilation
-# across sessions/restarts. ~10x first-call speedup on subsequent runs.
-# ~/.cache persists across reboots (unlike /tmp on macOS).
-import os as _os
+# Enable persistent XLA compilation cache. Universal speedup across
+# notebook restarts, slurm tasks, benchmark workers — first compile is
+# persisted to disk, every later process loads it in ~100 ms.
+# Override location via TENGRI_JAX_CACHE_DIR; opt out via
+# TENGRI_DISABLE_JAX_CACHE=1. See tengri.utils.jax_cache for details.
+import logging as _logging
 
-jax.config.update(
-    "jax_compilation_cache_dir",
-    _os.path.join(_os.path.expanduser("~"), ".cache", "tengri_jax_cache"),
+from tengri.utils.jax_cache import (
+    cache_size_bytes,
+    clear_cache,
+    enable_persistent_cache,
+    is_cache_enabled,
 )
-jax.config.update("jax_persistent_cache_min_entry_size_bytes", 0)
+
+try:
+    enable_persistent_cache()
+except Exception as _cache_err:  # never break import
+    _logging.getLogger(__name__).warning("Failed to enable persistent JAX cache: %s", _cache_err)
 
 __version__ = "0.1.0"
 
@@ -301,20 +309,24 @@ __all__ = [
     "Uniform",
     "VIConfig",
     "agn",
+    "cache_size_bytes",
     "citations_bibtex",
     "citations_report",
     "cite",
     "cite_all",
     "cites",
+    "clear_cache",
     "collect_citations",
     "doctor",
     "dust",
+    "enable_persistent_cache",
     "exp_squared_kernel",
     "filters",
     "generate_mock",
     "gp_noise_covariance",
     "igm",
     "io",
+    "is_cache_enabled",
     "load_filter_set",
     "load_ssp_data",
     "matern32_kernel",
