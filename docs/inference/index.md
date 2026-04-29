@@ -15,6 +15,7 @@ tengri exposes one standardized objective to **MAP**, **variational**, and **MCM
 - [Hierarchical fitting](../advanced/hierarchical.md)
 - [Population VI scaling](scaling.md)
 - [Persistent compilation cache](compilation_cache.md)
+- [JIT compile cost in population inference](jit_compile.md)
 - [API: inference](../api/inference.rst)
 
 ```{toctree}
@@ -25,5 +26,6 @@ tengri exposes one standardized objective to **MAP**, **variational**, and **MCM
 ../advanced/hierarchical
 scaling
 compilation_cache
+jit_compile
 ../api/inference
 ```
