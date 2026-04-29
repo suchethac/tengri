@@ -222,7 +222,7 @@ class PriorPredictive:
 # ── Kernel hierarchy dataclasses ──────────────────────────────────
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class PrecomputedData:
     """Level 1: Precomputed SSP tensors pre-integrated through filters.
 
@@ -328,3 +328,69 @@ class HybridKernels:
     photometry: object | None = None
     photometry_ztable: object | None = None
     spectrum: object | None = None
+
+
+# ── Forward-kernel runtime bundle ─────────────────────────────────
+
+
+@dataclasses.dataclass(frozen=True)
+class SEDModelState:
+    """Frozen runtime bundle of everything the forward kernels need.
+
+    This is the kernel-layer seam: ``hybrid``, ``compositional``, and ``exact``
+    builders accept ``state: SEDModelState`` instead of the full ``SEDModel``
+    instance. Built once at ``SEDModel.__init__`` and updated immutably via
+    ``dataclasses.replace`` when ``precompute_spectroscopy`` /
+    ``precompute_ztable`` are called.
+
+    Future ``SpatialModelState`` and composed ``SpatialSEDModelState`` will
+    follow the same pattern for spatially-resolved SED fitting.
+
+    Notes
+    -----
+    Frozen dataclass; share by reference. To update a field, use
+    ``dataclasses.replace(state, field=new_value)``.
+    """
+
+    spec: object  # Parameters
+    ssp_data: object  # SSPData
+    precomputed: PrecomputedData
+    filter_waves: object | None  # list of jnp.ndarray
+    filter_trans: object | None  # list of jnp.ndarray
+    rest_wavelength: jnp.ndarray
+    log_age_grid: jnp.ndarray
+    age_yr: jnp.ndarray
+    d_log_age: float
+    n_grid: int
+    ssp_log_ages_yr: jnp.ndarray
+    ssp_ages_yr: jnp.ndarray
+    csp_matrix: jnp.ndarray | None
+    csp_age_dt: jnp.ndarray | None
+    csp_integration: str
+    forward_dtype: object  # jnp.dtype
+    met_interp: str
+    z_interp: str
+    lgmet_scatter: float
+    sfh_fn: object
+    sfh_internal_names: object  # set[str]
+    uses_stochastic_sfh: bool
+    gp_kernel: str
+    dust_model: str
+    dust_law_bc: str
+    dust_law_diff: str
+    dust_law_bc_fn: object
+    dust_law_diff_fn: object
+    dust_emission_model: str | None
+    nebular_backend: object
+    agn_model: str | None
+    agn_luminosity_mode: bool
+    uses_igm: bool
+    uses_radio: bool
+    uses_xray: bool
+    radio_include_freefree: bool | None
+    radio_sfr_mode: str | None
+    z_fixed: float | None
+    dl_cm_fixed: float | None
+    param_map: object
+    igm_fn: object | None
+    wave_obs: jnp.ndarray | None = None

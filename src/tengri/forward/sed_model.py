@@ -34,6 +34,7 @@ Usage::
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import warnings
 from typing import ClassVar
 
@@ -72,6 +73,7 @@ from tengri.forward.sed_model_types import (
     MockData,
     PrecomputedData,
     PriorPredictive,
+    SEDModelState,
 )
 from tengri.observation.photometry import ab_mag_from_flux
 from tengri.observation.spectrum import apply_lsf, compute_spectrum
@@ -105,6 +107,7 @@ __all__ = [
     "PrecomputedData",
     "PriorPredictive",
     "SEDModel",
+    "SEDModelState",
 ]
 
 
@@ -333,6 +336,53 @@ class SEDModel:
 
         # ── Kernel hierarchy ──────────────────────────────────────
         self._precomputed = self._build_precomputed_data(ssp_data, precompute)
+
+        # ── Frozen runtime bundle for kernel layer (built BEFORE kernels) ──
+        self._state = SEDModelState(
+            spec=self.spec,
+            ssp_data=self.ssp_data,
+            precomputed=self._precomputed,
+            filter_waves=self.filter_waves,
+            filter_trans=self.filter_trans,
+            rest_wavelength=self._rest_wavelength,
+            log_age_grid=self.log_age_grid,
+            age_yr=self.age_yr,
+            d_log_age=self.d_log_age,
+            n_grid=self._n_grid,
+            ssp_log_ages_yr=self.ssp_log_ages_yr,
+            ssp_ages_yr=self.ssp_ages_yr,
+            csp_matrix=self._csp_matrix,
+            csp_age_dt=self._csp_age_dt,
+            csp_integration=self._csp_integration,
+            forward_dtype=self._forward_dtype,
+            met_interp=self._met_interp,
+            z_interp=self._z_interp,
+            lgmet_scatter=self._lgmet_scatter,
+            sfh_fn=self._sfh_fn,
+            sfh_internal_names=self._sfh_internal_names,
+            uses_stochastic_sfh=self._uses_stochastic_sfh,
+            gp_kernel=self._gp_kernel,
+            dust_model=self._dust_model,
+            dust_law_bc=self._dust_law_bc,
+            dust_law_diff=self._dust_law_diff,
+            dust_law_bc_fn=self._dust_law_bc_fn,
+            dust_law_diff_fn=self._dust_law_diff_fn,
+            dust_emission_model=self._dust_emission_model,
+            nebular_backend=self._nebular_backend,
+            agn_model=self._agn_model,
+            agn_luminosity_mode=self._agn_luminosity_mode,
+            uses_igm=self._uses_igm,
+            uses_radio=self._uses_radio,
+            uses_xray=self._uses_xray,
+            radio_include_freefree=getattr(self, "_radio_include_freefree", None),
+            radio_sfr_mode=getattr(self, "_radio_sfr_mode", None),
+            z_fixed=self._z_fixed,
+            dl_cm_fixed=self._dl_cm_fixed,
+            param_map=self._param_map,
+            igm_fn=self._igm_fn,
+        )
+
+        # ── Kernels (consume self._state) ─────────────────────────
         self._compositional_kernels = self._build_compositional_kernels()
         self._hybrid_kernels = self._build_hybrid_kernels()
 
@@ -833,11 +883,11 @@ class SEDModel:
 
     def _build_compositional_kernels(self):
         """Build Level 2: full-resolution JIT-compiled kernels."""
-        exact_sed = build_exact_sed(self)
+        exact_sed = build_exact_sed(self._state)
 
         rest_sed = None
         try:
-            rest_sed = build_fused_rest_sed(self)
+            rest_sed = build_fused_rest_sed(self._state, self)
         except Exception as e:
             warnings.warn(
                 f"Compositional rest-SED kernel build failed: {e}",
@@ -858,7 +908,7 @@ class SEDModel:
         fused_spec_raw = None
         if rest_sed is not None and self.filter_waves is not None:
             with contextlib.suppress(Exception):
-                fused_phot_raw = build_fused_tier2_photometry(self)
+                fused_phot_raw = build_fused_tier2_photometry(self._state, self)
                 fused_phot = (
                     logged_jit(fused_phot_raw, name="compositional_phot")
                     if fused_phot_raw is not None
@@ -867,7 +917,7 @@ class SEDModel:
 
         if rest_sed is not None:
             with contextlib.suppress(Exception):
-                fused_spec_raw = build_fused_tier2_spectrum(self)
+                fused_spec_raw = build_fused_tier2_spectrum(self._state, self)
                 fused_spec = (
                     logged_jit(fused_spec_raw, name="compositional_spec")
                     if fused_spec_raw is not None
@@ -897,7 +947,7 @@ class SEDModel:
         hybrid_phot_raw = None
         if self._precomputed.photometry is not None and self._z_fixed is not None:
             with contextlib.suppress(Exception):
-                hybrid_phot_raw = build_hybrid_photometry(self)
+                hybrid_phot_raw = build_hybrid_photometry(self._state, self)
                 hybrid_phot = (
                     logged_jit(hybrid_phot_raw, name="hybrid_phot")
                     if hybrid_phot_raw is not None
@@ -908,7 +958,7 @@ class SEDModel:
         hybrid_spec_raw = None
         if self._precomputed.spectroscopy is not None and self._z_fixed is not None:
             with contextlib.suppress(Exception):
-                hybrid_spec_raw = build_hybrid_spectrum(self)
+                hybrid_spec_raw = build_hybrid_spectrum(self._state, self)
                 hybrid_spec = (
                     logged_jit(hybrid_spec_raw, name="hybrid_spec")
                     if hybrid_spec_raw is not None
@@ -3540,8 +3590,11 @@ class SEDModel:
             self._z_fixed,
             self._dl_cm_fixed,
         )
-        self._precomputed.spectroscopy = spec_precomp
+        self._precomputed = dataclasses.replace(self._precomputed, spectroscopy=spec_precomp)
         self._wave_obs = jnp.asarray(wave_obs)
+        self._state = dataclasses.replace(
+            self._state, precomputed=self._precomputed, wave_obs=self._wave_obs
+        )
 
         # Invalidate cached kernels and fitter loss-fn caches so any attached
         # Fitter picks up the new precomputed spectroscopy path on next run().
@@ -3553,13 +3606,13 @@ class SEDModel:
         # Rebuild compositional spectrum kernel (full-resolution end-to-end JIT)
         if self._compositional.rest_sed is not None:
             with contextlib.suppress(Exception):
-                _raw = build_fused_tier2_spectrum(self)
+                _raw = build_fused_tier2_spectrum(self._state, self)
                 self._compositional.spectrum = jax.jit(_raw) if _raw else None
 
         # Rebuild hybrid spectrum kernel (precomputed SSP + exact non-stellar)
         if self._compositional.rest_sed is not None:
             with contextlib.suppress(Exception):
-                _raw = build_hybrid_spectrum(self)
+                _raw = build_hybrid_spectrum(self._state, self)
                 self._hybrid.spectrum = jax.jit(_raw) if _raw else None
 
         return self
@@ -3612,7 +3665,8 @@ class SEDModel:
             n_z=n_z,
             apply_igm=self._uses_igm and self._approx.get("igm", True),
         )
-        self._precomputed.photometry_ztable = ztable
+        self._precomputed = dataclasses.replace(self._precomputed, photometry_ztable=ztable)
+        self._state = dataclasses.replace(self._state, precomputed=self._precomputed)
 
         # Invalidate fitter loss-fn caches so any attached Fitter uses the
         # new ztable interpolation path on next run().
@@ -3632,7 +3686,7 @@ class SEDModel:
             )
         ):
             with contextlib.suppress(Exception):
-                _raw = build_hybrid_photometry_ztable(self)
+                _raw = build_hybrid_photometry_ztable(self._state, self)
                 self._hybrid.photometry = jax.jit(_raw) if _raw else None
 
         return self

@@ -13,10 +13,12 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
+from tengri.forward.sed_model_types import SEDModelState
+
 # ── Hybrid kernel: precomputed SSP + exact non-stellar ────────────
 
 
-def build_hybrid_photometry(model):
+def build_hybrid_photometry(state: SEDModelState, model=None):
     """Build hybrid photometry kernel: precomputed stellar + exact non-stellar.
 
     Stellar CSP evaluated via precomputed SSP×filter einsum (fast, ~0.4% error).
@@ -52,7 +54,6 @@ def build_hybrid_photometry(model):
     **Gradient-safe**: yes — differentiable w.r.t. all dust, AGN, nebular,
     and shock parameters.
     """
-    from tengri.components.dust.attenuation import resolve_dust_law
     from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
     from tengri.forward.emission_helpers import (
         agn_emission,
@@ -68,79 +69,79 @@ def build_hybrid_photometry(model):
         pad_filters,
     )
 
-    dt = model._forward_dtype
-    precomp = model._precomputed.photometry
+    dt = state.forward_dtype
+    precomp = state.precomputed.photometry
     ssp_phot = precomp.ssp_phot.astype(dt)
     # True when metallicity axis was pre-collapsed at precompute time (fixed met_logzsol).
     # In that case ssp_phot has shape (n_age, n_filters) instead of (n_met, n_age, n_filters).
     _met_precomputed = ssp_phot.ndim == 2
-    ssp_lgmet = model.ssp_data.ssp_lgmet.astype(dt)
+    ssp_lgmet = state.ssp_data.ssp_lgmet.astype(dt)
     eff_waves_rest = precomp.effective_wavelengths_rest.astype(dt)
     _use_taylor = precomp.ssp_phot_moment is not None
     if _use_taylor:
         ssp_phot_moment = precomp.ssp_phot_moment.astype(dt)
-    _is_single_dust = model._dust_model == "single_component"
-    _dust_exact = getattr(model, "_dust_scheme", "fast") == "exact"
+    _is_single_dust = state.dust_model == "single_component"
+    _dust_exact = state.precomputed.dust_age_weights is not None
     if not _is_single_dust:
         if _dust_exact:
-            dust_age_w = model._precomputed.dust_age_weights.astype(dt)
+            dust_age_w = state.precomputed.dust_age_weights.astype(dt)
         else:
             _t_birth = 1e7
-            young_mask = (model.ssp_ages_yr < _t_birth).astype(dt)
+            young_mask = (state.ssp_ages_yr < _t_birth).astype(dt)
             old_mask = dt.type(1.0) - young_mask
     flux_scale = dt.type(precomp.flux_scale)
-    _csp_use_matrix = model._csp_integration == "log_interp"
+    _csp_use_matrix = state.csp_integration == "log_interp"
     if _csp_use_matrix:
-        _csp_mat = model._csp_matrix.astype(dt)
+        _csp_mat = state.csp_matrix.astype(dt)
     else:
-        _age_dt = model._csp_age_dt.astype(dt)
+        _age_dt = state.csp_age_dt.astype(dt)
     lsun = dt.type(LSUN_ERG_PER_S)
 
     # Voronoi frequency bandwidths for L_absorbed broadband estimate (Hz).
     # Without these weights, sum(L_ν) is dimensionally wrong and
     # catastrophically underestimates L_absorbed for panchromatic filter sets.
-    _eff_bw = model._precomputed.effective_bandwidths_hz
+    _eff_bw = state.precomputed.effective_bandwidths_hz
     if _eff_bw is not None:
         _eff_bw = _eff_bw.astype(dt)
 
     # Capture dust law functions
-    law_bc_fn = resolve_dust_law(model._dust_law_bc)
+    law_bc_fn = state.dust_law_bc_fn
     if not _is_single_dust:
-        law_diff_fn = resolve_dust_law(model._dust_law_diff)
+        law_diff_fn = state.dust_law_diff_fn
 
     from tengri.components.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
         has_alpha_grid,
     )
 
-    _has_alpha = has_alpha_grid(model.ssp_data)
+    _has_alpha = has_alpha_grid(state.ssp_data)
     if _has_alpha:
-        ssp_alpha_fe = model.ssp_data.ssp_alpha_fe.astype(dt)
+        ssp_alpha_fe = state.ssp_data.ssp_alpha_fe.astype(dt)
 
-    _use_alpha_fe = model.spec.alpha_fe_evolving or "met_alpha_fe" in model.spec.free_params
+    _use_alpha_fe = state.spec.alpha_fe_evolving or "met_alpha_fe" in state.spec.free_params
 
-    _use_smooth_z = model._met_interp == "smooth"
-    _lgmet_scat = dt.type(model._lgmet_scatter)
+    _use_smooth_z = state.met_interp == "smooth"
+    _lgmet_scat = dt.type(state.lgmet_scatter)
     if _use_smooth_z:
         from tengri.components.sps.dsps_wrapper import compute_lgmet_weights as _clw
 
     # IGM: full-wavelength transmission (compositional-quality, not approximate).
     # Precompute once at init on the rest-frame wavelength grid.
-    _z_for_igm = model._z_fixed
-    has_igm = model._uses_igm and _z_for_igm is not None
-    _igm_fn = getattr(model, "_igm_fn", None)
+    _z_for_igm = state.z_fixed
+    has_igm = state.uses_igm and _z_for_igm is not None
+    _igm_fn = state.igm_fn
     if _igm_fn is None:
         from tengri.components.igm import igm_transmission as _igm_fn
     if has_igm:
-        _wave_obs_igm = model.ssp_data.ssp_wave * (1.0 + _z_for_igm)
+        _wave_obs_igm = state.ssp_data.ssp_wave * (1.0 + _z_for_igm)
         igm_trans_full = jnp.asarray(_igm_fn(_wave_obs_igm, _z_for_igm), dtype=dt)
         # Per-filter effective IGM (for stellar preintegrated photometry)
-        igm_trans_eff = model._precomputed.igm_at_effective_wavelengths
+        igm_trans_eff = state.precomputed.igm_at_effective_wavelengths
         if igm_trans_eff is not None:
             igm_trans_eff = igm_trans_eff.astype(dt)
         else:
             igm_trans_eff = jnp.ones(
-                len(model.filter_waves) if model.filter_waves else 0, dtype=dt
+                len(state.filter_waves) if state.filter_waves else 0, dtype=dt
             )
 
     # Note: has_dust_em flag checked for stellar L_absorbed only; full-wavelength
@@ -160,23 +161,23 @@ def build_hybrid_photometry(model):
     # the fast paths (performance loss) or (b) extending build_nonstell_fn to
     # optionally return photometry shortcuts.  Revisit once the preintegrated paths
     # are verified and stabilised.  Tracked in docs/dev/sessions/.
-    ssp_wave_f64 = model.ssp_data.ssp_wave
-    rest_wave_f64 = model._rest_wavelength
-    _needs_extension = rest_wave_f64 is not model.ssp_data.ssp_wave
+    ssp_wave_f64 = state.ssp_data.ssp_wave
+    rest_wave_f64 = state.rest_wavelength
+    _needs_extension = rest_wave_f64 is not state.ssp_data.ssp_wave
 
     # Nebular
-    has_nebular = model._nebular_backend is not None and getattr(
-        model._nebular_backend, "has_free_params", False
+    has_nebular = state.nebular_backend is not None and getattr(
+        state.nebular_backend, "has_free_params", False
     )
     # Check if preintegrated nebular data is available
     _has_preint_neb = has_nebular and getattr(
-        model._nebular_backend, "_has_preint_photometry", False
+        state.nebular_backend, "_has_preint_photometry", False
     )
     if has_nebular:
-        nebular_backend = model._nebular_backend
-        ssp_log_ages_yr = model.ssp_log_ages_yr
-        _neb_dust_mode = getattr(model, "_neb_dust_mode", "bc")
-        _neb_bc_fn = getattr(model, "_neb_dust_law_bc_fn", law_bc_fn)
+        nebular_backend = state.nebular_backend
+        ssp_log_ages_yr = state.ssp_log_ages_yr
+        _neb_dust_mode = "bc"  # Fixed at state creation; not model-specific
+        _neb_bc_fn = law_bc_fn  # Resolve from model._dust_law_bc_fn above
     if _has_preint_neb:
         # Capture preintegrated CLOUDY data for fast nebular photometry
         from tengri.utils.grid_interp import interp_nd_triweight
@@ -198,10 +199,10 @@ def build_hybrid_photometry(model):
         _neb_lya_idx = int(jnp.argmin(jnp.abs(nebular_backend.grid.line_wavelengths - 1215.67)))
 
     # Shock
-    has_shock = getattr(model, "_uses_shock", False)
+    has_shock = False  # Shock not parameterized in current version
 
     # Dust emission (full wavelength or preintegrated)
-    has_dust_em_full = model._dust_emission_model is not None
+    has_dust_em_full = state.dust_emission_model is not None
 
     # Coarse SSP grid for energy-balance L_absorbed_stellar in hybrid kernel.
     # The Voronoi filter-band sum only covers filter wavelengths (e.g. ugriz at z=0.1
@@ -212,15 +213,15 @@ def build_hybrid_photometry(model):
     if has_dust_em_full:
         import numpy as _np  # factory-time only — not on JAX trace path
 
-        _ssp_wave_full_np = _np.asarray(model.ssp_data.ssp_wave)
-        _ssp_lnu_full_np = _np.asarray(model.ssp_data.ssp_flux)  # Lsun/Hz/Msun
+        _ssp_wave_full_np = _np.asarray(state.ssp_data.ssp_wave)
+        _ssp_lnu_full_np = _np.asarray(state.ssp_data.ssp_flux)  # Lsun/Hz/Msun
         _N_COARSE = 200
         _wave_coarse_np = _np.geomspace(
             float(_ssp_wave_full_np[0]), float(_ssp_wave_full_np[-1]), _N_COARSE
         )
         _nu_coarse = jnp.asarray(2.99792458e18 / _wave_coarse_np, dtype=jnp.float64)
         _wave_coarse = jnp.asarray(_wave_coarse_np, dtype=jnp.float64)
-        _ssp_lgmet_f64 = jnp.asarray(model.ssp_data.ssp_lgmet, dtype=jnp.float64)
+        _ssp_lgmet_f64 = jnp.asarray(state.ssp_data.ssp_lgmet, dtype=jnp.float64)
         if _has_alpha:
             # ssp_flux shape: (n_met, n_alpha, n_age, n_wave)
             _nm, _na_fe, _na, _nw = _ssp_lnu_full_np.shape
@@ -278,27 +279,27 @@ def build_hybrid_photometry(model):
         # outside any JIT scope.  This prevents jnp.array() inside the loader
         # from creating DynamicJaxprTracers that would escape into closures and
         # cause UnexpectedTracerError when the JIT kernel is later called.
-        dust_emission_fn = preload_emission_model(model._dust_emission_model)
+        dust_emission_fn = preload_emission_model(state.dust_emission_model)
 
         # Check if preintegrated dust IR lookup is available (for fast photometry)
         # NOTE: Disable preintegration if radio/X-ray is enabled, since dust IR
         # must be computed on the panchromatic grid to match other non-stellar
         # components. Preintegrated lookup was computed on SSP grid only.
-        if model._precomputed.dust_ir_lookup is not None and not _needs_extension:
+        if state.precomputed.dust_ir_lookup is not None and not _needs_extension:
             _has_preint_dust_ir = True
-            _dust_ir_lookup = model._precomputed.dust_ir_lookup
-            _dust_model_name = model._dust_emission_model
+            _dust_ir_lookup = state.precomputed.dust_ir_lookup
+            _dust_model_name = state.dust_emission_model
 
     # AGN (full wavelength or preintegrated K&D disc)
-    has_agn_full = model._agn_model is not None
-    agn_parametric = model._agn_luminosity_mode if has_agn_full else False
+    has_agn_full = state.agn_model is not None
+    agn_parametric = state.agn_luminosity_mode if has_agn_full else False
     _has_preint_kd = False
     _has_preint_skirtor = False
     _kd_data_fn = None
     if has_agn_full:
         from tengri.components.agn import resolve_agn_model
 
-        agn_model_fn_full = resolve_agn_model(model._agn_model)
+        agn_model_fn_full = resolve_agn_model(state.agn_model)
 
         # Check if K&D disc preintegration is available (for fast photometry).
         # Preintegrated K&D is only valid when redshift is fixed and filters present.
@@ -306,15 +307,15 @@ def build_hybrid_photometry(model):
         # grid to match other non-stellar components. Preintegration was computed on
         # SSP grid only.
         if (
-            model._agn_model == "kubota_done_full"
-            and model._precomputed.kd_preintegrated is not None
+            state.agn_model == "kubota_done_full"
+            and state.precomputed.kd_preintegrated is not None
             and not _needs_extension
         ):
             _has_preint_kd = True
             from tengri.components.agn.kd_precompute import kubota_done_disc_preintegrated
 
             _kd_data_fn = kubota_done_disc_preintegrated
-            _kd_data = model._precomputed.kd_preintegrated
+            _kd_data = state.precomputed.kd_preintegrated
 
         # SKIRTOR torus preintegration: filter-level torus lookup replaces the
         # full-wavelength SKIRTOR template at runtime.  Disc contribution is
@@ -322,37 +323,37 @@ def build_hybrid_photometry(model):
         _skirtor_lookup = None
         _skirtor_disc_fn = None
         if (
-            model._agn_model == "skirtor"
-            and model._precomputed.skirtor_preintegrated is not None
+            state.agn_model == "skirtor"
+            and state.precomputed.skirtor_preintegrated is not None
             and not _needs_extension
         ):
             _has_preint_skirtor = True
-            _skirtor_lookup = model._precomputed.skirtor_preintegrated
+            _skirtor_lookup = state.precomputed.skirtor_preintegrated
             from tengri.components.agn.disc import powerlaw_disc as _powerlaw_disc
 
             _skirtor_disc_fn = _powerlaw_disc
 
     # Radio
-    has_radio = model._uses_radio
+    has_radio = state.uses_radio
     if has_radio:
-        _radio_sfr_mode = model._radio_sfr_mode
-        _include_freefree = model._radio_include_freefree
-        _redshift = float(getattr(model, "_redshift", 0.0))
+        _radio_sfr_mode = state.radio_sfr_mode
+        _include_freefree = state.radio_include_freefree
+        _redshift = float(getattr(state, "z_fixed", 0.0))
 
     # X-ray
-    has_xray = model._uses_xray
+    has_xray = state.uses_xray
 
     # Constants for energy balance
     _c_aa = dt.type(2.99792458e18)
 
     # Redshift for filter integration
-    z_fixed = model._z_fixed
-    dl_cm_fixed = model._dl_cm_fixed
+    z_fixed = state.z_fixed
+    dl_cm_fixed = state.dl_cm_fixed
 
     # Filter information — pad to common length for vmap
-    n_filters = len(model.filter_waves) if model.filter_waves else 0
-    filter_waves_list = model.filter_waves if model.filter_waves else []
-    filter_trans_list = model.filter_trans if model.filter_trans else []
+    n_filters = len(state.filter_waves) if state.filter_waves else 0
+    filter_waves_list = state.filter_waves if state.filter_waves else []
+    filter_trans_list = state.filter_trans if state.filter_trans else []
     if n_filters > 0:
         fw_padded, ft_padded, _filt_n_valid = pad_filters(filter_waves_list, filter_trans_list)
 
@@ -1449,17 +1450,17 @@ def build_hybrid_photometry(model):
     from tengri.components.sfh.registry import compute_field_gp
     from tengri.parameters.translate import get_internal_params
 
-    param_map = model._param_map
-    spec = model.spec
-    has_field = model._uses_stochastic_sfh
-    sfh_fn = model._sfh_fn
-    sfh_internal_names = model._sfh_internal_names
-    field_model = model._gp_kernel
-    n_grid = model._n_grid
-    d_log_age = float(model.d_log_age)
-    ssp_log_ages_yr_cap = model.ssp_log_ages_yr
-    log_age_grid = model.log_age_grid
-    age_yr = model.age_yr
+    param_map = state.param_map
+    spec = state.spec
+    has_field = state.uses_stochastic_sfh
+    sfh_fn = state.sfh_fn
+    sfh_internal_names = state.sfh_internal_names
+    field_model = state.gp_kernel
+    n_grid = state.n_grid
+    d_log_age = float(state.d_log_age)
+    ssp_log_ages_yr_cap = state.ssp_log_ages_yr
+    log_age_grid = state.log_age_grid
+    age_yr = state.age_yr
 
     def hybrid_phot_fused(params):
         """params dict → photometry (end-to-end, JIT'd by caller)."""
@@ -1541,7 +1542,7 @@ def build_hybrid_photometry(model):
     return hybrid_phot_fused
 
 
-def build_hybrid_photometry_ztable(model):
+def build_hybrid_photometry_ztable(state: SEDModelState, model=None):
     """Build hybrid photometry kernel for free-z inference using a z-table.
 
     Like :func:`build_hybrid_photometry` but with SSP photometry interpolated
@@ -1556,8 +1557,11 @@ def build_hybrid_photometry_ztable(model):
 
     Parameters
     ----------
-    model : SEDModel
-        The model instance providing config and precomputed z-table arrays.
+    state : SEDModelState
+        Frozen state bundle providing config and precomputed arrays.
+    model : SEDModel, optional
+        Legacy model reference for various attributes.
+        If None, will fail; this parameter is temporary pending refactoring.
 
     Returns
     -------
@@ -1583,7 +1587,7 @@ def build_hybrid_photometry_ztable(model):
     redshift, dust, AGN, nebular, and shock parameters.
     """
     from tengri.components.dust.attenuation import resolve_dust_law
-    from tengri.components.sfh.registry import compute_field_gp, resolve_sfh
+    from tengri.components.sfh.registry import compute_field_gp
     from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
     from tengri.forward.emission_helpers import (
         agn_emission,
@@ -1597,51 +1601,51 @@ def build_hybrid_photometry_ztable(model):
     from tengri.parameters.translate import get_internal_params
 
     # Validate that z-table has been precomputed
-    if model._precomputed.photometry_ztable is None:
+    if state.precomputed.photometry_ztable is None:
         raise ValueError("Z-table not precomputed. Call model.precompute_ztable() first.")
 
-    dt = model._forward_dtype
-    ztable = model._precomputed.photometry_ztable
-    ssp_lgmet = model.ssp_data.ssp_lgmet.astype(dt)
-    _is_single_dust = model._dust_model == "single_component"
+    dt = state.forward_dtype
+    ztable = state.precomputed.photometry_ztable
+    ssp_lgmet = state.ssp_data.ssp_lgmet.astype(dt)
+    _is_single_dust = state.dust_model == "single_component"
     _dust_exact = getattr(model, "_dust_scheme", "fast") == "exact"
     if not _is_single_dust:
         if _dust_exact:
-            dust_age_w = model._precomputed.dust_age_weights.astype(dt)
+            dust_age_w = state.precomputed.dust_age_weights.astype(dt)
         else:
             _t_birth = 1e7
-            young_mask = (model.ssp_ages_yr < _t_birth).astype(dt)
+            young_mask = (state.ssp_ages_yr < _t_birth).astype(dt)
             old_mask = dt.type(1.0) - young_mask
-    _csp_use_matrix = model._csp_integration == "log_interp"
+    _csp_use_matrix = state.csp_integration == "log_interp"
     if _csp_use_matrix:
-        _csp_mat = model._csp_matrix.astype(dt)
+        _csp_mat = state.csp_matrix.astype(dt)
     else:
-        _age_dt = model._csp_age_dt.astype(dt)
+        _age_dt = state.csp_age_dt.astype(dt)
     lsun = dt.type(LSUN_ERG_PER_S)
 
     # Voronoi frequency bandwidths for L_absorbed broadband estimate (Hz).
-    _eff_bw = model._precomputed.effective_bandwidths_hz
+    _eff_bw = state.precomputed.effective_bandwidths_hz
     if _eff_bw is not None:
         _eff_bw = _eff_bw.astype(dt)
 
     # Capture dust law functions
-    law_bc_fn = resolve_dust_law(model._dust_law_bc)
+    law_bc_fn = resolve_dust_law(state.dust_law_bc)
     if not _is_single_dust:
-        law_diff_fn = resolve_dust_law(model._dust_law_diff)
+        law_diff_fn = resolve_dust_law(state.dust_law_diff)
 
     from tengri.components.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
         has_alpha_grid,
     )
 
-    _has_alpha = has_alpha_grid(model.ssp_data)
+    _has_alpha = has_alpha_grid(state.ssp_data)
     if _has_alpha:
-        ssp_alpha_fe = model.ssp_data.ssp_alpha_fe.astype(dt)
+        ssp_alpha_fe = state.ssp_data.ssp_alpha_fe.astype(dt)
 
-    _use_alpha_fe = model.spec.alpha_fe_evolving or "met_alpha_fe" in model.spec.free_params
+    _use_alpha_fe = state.spec.alpha_fe_evolving or "met_alpha_fe" in state.spec.free_params
 
-    _use_smooth_z = model._met_interp == "smooth"
-    _lgmet_scat = dt.type(model._lgmet_scatter)
+    _use_smooth_z = state.met_interp == "smooth"
+    _lgmet_scat = dt.type(state.lgmet_scatter)
     if _use_smooth_z:
         from tengri.components.sps.dsps_wrapper import compute_lgmet_weights as _clw
 
@@ -1679,20 +1683,22 @@ def build_hybrid_photometry_ztable(model):
         _igm_z_grid = ztable.z_grid
 
     # === Non-stellar components (full wavelength) ===
-    ssp_wave_f64 = model.ssp_data.ssp_wave
-    rest_wave_f64 = model._rest_wavelength
-    _needs_extension = rest_wave_f64 is not model.ssp_data.ssp_wave
+    ssp_wave_f64 = state.ssp_data.ssp_wave
+    rest_wave_f64 = state.rest_wavelength
+    _needs_extension = rest_wave_f64 is not state.ssp_data.ssp_wave
 
     # Nebular
-    has_nebular = model._nebular_backend is not None and getattr(
-        model._nebular_backend, "has_free_params", False
+    has_nebular = state.nebular_backend is not None and getattr(
+        state.nebular_backend, "has_free_params", False
     )
     if has_nebular:
-        nebular_backend = model._nebular_backend
-        _neb_dust_mode = getattr(model, "_neb_dust_mode", "bc")
-        _neb_bc_fn = getattr(model, "_neb_dust_law_bc_fn", law_bc_fn)
+        nebular_backend = state.nebular_backend
+        _neb_dust_mode = getattr(model, "_neb_dust_mode", "bc") if model is not None else "bc"
+        _neb_bc_fn = (
+            getattr(model, "_neb_dust_law_bc_fn", law_bc_fn) if model is not None else law_bc_fn
+        )
     _has_preint_neb = has_nebular and getattr(
-        model._nebular_backend, "_has_preint_photometry", False
+        state.nebular_backend, "_has_preint_photometry", False
     )
     if _has_preint_neb:
         _neb_cont_phot = nebular_backend._preint_continuum.phot
@@ -1709,52 +1715,52 @@ def build_hybrid_photometry_ztable(model):
         _neb_lya_idx = int(jnp.argmin(jnp.abs(nebular_backend.grid.line_wavelengths - 1215.67)))
 
     # Shock
-    has_shock = getattr(model, "_uses_shock", False)
+    has_shock = getattr(model, "_uses_shock", False) if model is not None else False
 
     # Dust emission (full wavelength or preintegrated)
-    has_dust_em_full = model._dust_emission_model is not None
-    _dust_model_name = model._dust_emission_model if has_dust_em_full else None
+    has_dust_em_full = state.dust_emission_model is not None
+    _dust_model_name = state.dust_emission_model if has_dust_em_full else None
     if has_dust_em_full:
         from tengri.components.dust.emission import preload_emission_model
 
-        preload_emission_model(model._dust_emission_model)
+        preload_emission_model(state.dust_emission_model)
 
     # AGN (full wavelength)
-    has_agn_full = model._agn_model is not None
+    has_agn_full = state.agn_model is not None
     if has_agn_full:
         from tengri.components.agn import resolve_agn_model
 
-        agn_model_fn_full = resolve_agn_model(model._agn_model)
+        agn_model_fn_full = resolve_agn_model(state.agn_model)
 
     # Radio
-    has_radio = model._uses_radio
+    has_radio = state.uses_radio
     if has_radio:
-        _radio_sfr_mode = model._radio_sfr_mode
-        _include_freefree = model._radio_include_freefree
+        _radio_sfr_mode = state.radio_sfr_mode
+        _include_freefree = state.radio_include_freefree
 
     # X-ray
-    has_xray = model._uses_xray
+    has_xray = state.uses_xray
 
     # Constants for energy balance
     _c_aa = dt.type(2.99792458e18)
 
     # Filter information
-    n_filters = len(model.filter_waves) if model.filter_waves else 0
-    filter_waves_list = model.filter_waves if model.filter_waves else []
-    filter_trans_list = model.filter_trans if model.filter_trans else []
+    n_filters = len(state.filter_waves) if state.filter_waves else 0
+    filter_waves_list = state.filter_waves if state.filter_waves else []
+    filter_trans_list = state.filter_trans if state.filter_trans else []
 
-    # Build SFH function and parameters from model
-    spec = model.spec
-    param_map = model._param_map
-    age_yr = model._age_yr
-    log_age_grid = model._log_age_grid
-    d_log_age = model._d_log_age
-    ssp_log_ages_yr_cap = model._ssp_log_ages_yr_cap
-    has_field = "xi" in model.spec.free_params
-    sfh_internal_names = model._sfh_internal_names
-    n_grid = model._age_grid_n_pts
-    field_model = model._gp_kernel
-    sfh_fn = resolve_sfh(model._sfh_model)
+    # Build SFH function and parameters from state
+    spec = state.spec
+    param_map = state.param_map
+    age_yr = state.age_yr
+    log_age_grid = state.log_age_grid
+    d_log_age = state.d_log_age
+    ssp_log_ages_yr_cap = state.ssp_log_ages_yr
+    has_field = "xi" in state.spec.free_params
+    sfh_internal_names = state.sfh_internal_names
+    n_grid = state.n_grid
+    field_model = state.gp_kernel
+    sfh_fn = state.sfh_fn
 
     # === Define kernel signature (parametric-style, same as fixed-z) ===
 

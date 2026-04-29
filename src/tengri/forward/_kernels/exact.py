@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.forward.sed_model_types import SEDModelState
 
-def build_exact_sed(model):
+
+def build_exact_sed(state: SEDModelState):
     """Build a JIT-compiled function for exact-path dust + CSP SED.
 
     Without JIT, the exact path dispatches ~15 JAX operations through
@@ -35,8 +37,9 @@ def build_exact_sed(model):
 
     Parameters
     ----------
-    model : SEDModel
-        The model instance providing config and precomputed arrays.
+    state : SEDModelState
+        Frozen kernel-layer bundle providing config flags, SSP arrays,
+        precomputed dust age weights, and resolved attenuation laws.
 
     Returns
     -------
@@ -58,23 +61,23 @@ def build_exact_sed(model):
     """
     from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
 
-    dt = model._forward_dtype
-    ssp_wave = model.ssp_data.ssp_wave.astype(dt)
-    _is_single_dust_exact = model._dust_model == "single_component"
-    _dust_exact_sed = getattr(model, "_dust_scheme", "fast") == "exact"
+    dt = state.forward_dtype
+    ssp_wave = state.ssp_data.ssp_wave.astype(dt)
+    _is_single_dust_exact = state.dust_model == "single_component"
+    _dust_exact_sed = getattr(state, "dust_scheme", "fast") == "exact"
     if not _is_single_dust_exact:
         if _dust_exact_sed:
-            dust_age_w = model._precomputed.dust_age_weights.astype(dt)
+            dust_age_w = state.precomputed.dust_age_weights.astype(dt)
         else:
             _t_birth_exact = 1e7
-            young_mask_exact = (model.ssp_ages_yr < _t_birth_exact).astype(dt)
+            young_mask_exact = (state.ssp_ages_yr < _t_birth_exact).astype(dt)
             old_mask_exact = dt.type(1.0) - young_mask_exact
     lsun = dt.type(LSUN_ERG_PER_S)
 
-    law_bc_fn = model._dust_law_bc_fn
+    law_bc_fn = state.dust_law_bc_fn
     if not _is_single_dust_exact:
-        law_diff_fn = model._dust_law_diff_fn
-        same_law = model._dust_law_bc == model._dust_law_diff
+        law_diff_fn = state.dust_law_diff_fn
+        same_law = state.dust_law_bc == state.dust_law_diff
 
     def exact_sed(
         weights,
@@ -132,7 +135,7 @@ def build_exact_sed(model):
     return exact_sed
 
 
-def build_fused_rest_sed(model):
+def build_fused_rest_sed(state: SEDModelState, model):
     """Build a JIT'd function: internal params → rest-frame SED.
 
     Composes all enabled physics components into a single JIT'd function.
@@ -146,8 +149,13 @@ def build_fused_rest_sed(model):
 
     Parameters
     ----------
+    state : SEDModelState
+        Frozen kernel-layer bundle providing config flags, SSP arrays,
+        and resolved attenuation laws.
     model : SEDModel
-        The model instance providing config and precomputed arrays.
+        Transitional argument required by ``build_nonstell_fn``, which
+        still consumes the full model. Will be dropped once that helper
+        is migrated to take ``state``.
 
     Returns
     -------
@@ -167,29 +175,29 @@ def build_fused_rest_sed(model):
     from tengri.components.dust.attenuation import resolve_dust_law
     from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
 
-    dt = model._forward_dtype
-    ssp_wave = model.ssp_data.ssp_wave.astype(dt)
-    _is_single_dust = model._dust_model == "single_component"
-    _dust_exact = getattr(model, "_dust_scheme", "fast") == "exact"
+    dt = state.forward_dtype
+    ssp_wave = state.ssp_data.ssp_wave.astype(dt)
+    _is_single_dust = state.dust_model == "single_component"
+    _dust_exact = getattr(state, "dust_scheme", "fast") == "exact"
     if not _is_single_dust:
         if _dust_exact:
-            dust_age_w = model._precomputed.dust_age_weights.astype(dt)
+            dust_age_w = state.precomputed.dust_age_weights.astype(dt)
         else:
             _t_birth = 1e7  # 10 Myr — Charlot & Fall (2000)
-            young_mask = (model.ssp_ages_yr < _t_birth).astype(dt)
+            young_mask = (state.ssp_ages_yr < _t_birth).astype(dt)
             old_mask = dt.type(1.0) - young_mask
     lsun = dt.type(LSUN_ERG_PER_S)
 
     # Capture dust law functions (pure JAX, JIT-traceable)
-    law_bc_fn = resolve_dust_law(model._dust_law_bc)
+    law_bc_fn = resolve_dust_law(state.dust_law_bc)
     if not _is_single_dust:
-        law_diff_fn = resolve_dust_law(model._dust_law_diff)
-        same_law = model._dust_law_bc == model._dust_law_diff
+        law_diff_fn = resolve_dust_law(state.dust_law_diff)
+        same_law = state.dust_law_bc == state.dust_law_diff
 
     # Full-precision wavelength arrays for non-stellar components
-    ssp_wave_f64 = model.ssp_data.ssp_wave
-    rest_wave_f64 = model._rest_wavelength
-    _needs_extension = rest_wave_f64 is not model.ssp_data.ssp_wave
+    ssp_wave_f64 = state.ssp_data.ssp_wave
+    rest_wave_f64 = state.rest_wavelength
+    _needs_extension = rest_wave_f64 is not state.ssp_data.ssp_wave
 
     # Build the non-stellar sub-closure once (outside JIT).
     # All per-component flags, imports, and callables are captured inside.

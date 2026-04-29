@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.forward._kernels.exact import build_fused_rest_sed
+from tengri.forward.sed_model_types import SEDModelState
+
 
 def observe_photometry_from_rest_sed(
     rest_sed,
@@ -117,7 +120,7 @@ def observe_spectrum_from_rest_sed(
 # ── Fused Tier 2 end-to-end kernels (params → photometry/spectrum)
 
 
-def build_fused_tier2_photometry(model):
+def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kernel=None):
     """Build a single JIT function: (sfr_on_ssp, params dict) → observed photometry.
 
     Fuses the Tier 2 pipeline into one ``@jax.jit`` scope.  SFH is evaluated
@@ -134,8 +137,15 @@ def build_fused_tier2_photometry(model):
 
     Parameters
     ----------
-    model : SEDModel
-        Fully initialized model with filters and fixed redshift.
+    state : SEDModelState
+        Frozen state bundle providing config and precomputed arrays.
+    model : SEDModel, optional
+        Legacy model reference for metallicity interpolation functions.
+        If None, interpolation will fail; this parameter is temporary
+        pending pipeline.py refactoring.
+    rest_sed_kernel : callable, optional
+        Pre-built rest-frame SED kernel (from build_fused_rest_sed).
+        If None, built from state.
 
     Returns
     -------
@@ -153,9 +163,11 @@ def build_fused_tier2_photometry(model):
 
     **Gradient-safe**: yes — differentiable w.r.t. all parameters and sfr_on_ssp.
     """
-    if model._compositional.rest_sed is None:
+    if rest_sed_kernel is None:
+        rest_sed_kernel = build_fused_rest_sed(state, model)
+    if rest_sed_kernel is None:
         return None
-    if model.filter_waves is None:
+    if state.filter_waves is None:
         return None
 
     from tengri.components.sps.dsps_wrapper import compute_csp_weights
@@ -166,39 +178,38 @@ def build_fused_tier2_photometry(model):
     )
     from tengri.parameters.translate import get_internal_params
 
-    _use_dsps_native = model._csp_integration == "dsps_native"
+    _use_dsps_native = state.csp_integration == "dsps_native"
     if _use_dsps_native:
         from tengri.components.sps.dsps_wrapper import compute_dsps_native_weights
 
     # effective_metallicity correction is opt-in (see fused_kernels tier1 note).
-    _use_alpha_fe_t2 = model.spec.alpha_fe_evolving or "met_alpha_fe" in model.spec.free_params
+    _use_alpha_fe_t2 = state.spec.alpha_fe_evolving or "met_alpha_fe" in state.spec.free_params
 
-    # Capture model state at build time
-    rest_sed_kernel = model._compositional.rest_sed
-    param_map = model._param_map
-    spec = model.spec
-    has_field = model._uses_stochastic_sfh
-    ssp_ages_yr = model.ssp_ages_yr
+    # Capture state at build time
+    param_map = state.param_map
+    spec = state.spec
+    has_field = state.uses_stochastic_sfh
+    ssp_ages_yr = state.ssp_ages_yr
     # Panchromatic wavelength grid (extended if radio/xray enabled)
-    rest_wave = model._rest_wavelength
+    rest_wave = state.rest_wavelength
 
-    filter_waves = model.filter_waves
-    filter_trans = model.filter_trans
-    apply_igm = model._uses_igm
+    filter_waves = state.filter_waves
+    filter_trans = state.filter_trans
+    apply_igm = state.uses_igm
     # Pad filters for vectorized integration
     fw_padded_t2, ft_padded_t2, _filt_nv_t2 = pad_filters(filter_waves, filter_trans)
 
     # dsps_native: capture SSP arrays for DSPS triweight kernel
     if _use_dsps_native:
-        _ssp_lgmet = model.ssp_data.ssp_lgmet
-        _ssp_lg_age_gyr = model.ssp_data.ssp_lg_age_gyr
-        _ssp_flux = model.ssp_data.ssp_flux
-        _lgmet_scatter_native = float(model._lgmet_scatter)
+        _ssp_lgmet = state.ssp_data.ssp_lgmet
+        _ssp_lg_age_gyr = state.ssp_data.ssp_lg_age_gyr
+        _ssp_flux = state.ssp_data.ssp_flux
+        _lgmet_scatter_native = float(state.lgmet_scatter)
         from tengri.utils.cosmology import age_at_z as _age_at_z_fn
 
     # Redshift: fixed (precompute IGM once) or free (traced through)
-    z_fixed = model._z_fixed
-    dl_cm_fixed = model._dl_cm_fixed
+    z_fixed = state.z_fixed
+    dl_cm_fixed = state.dl_cm_fixed
     is_free_z = z_fixed is None
 
     # For dsps_native + fixed z: precompute t_obs_gyr once at closure build
@@ -206,8 +217,8 @@ def build_fused_tier2_photometry(model):
     if _use_dsps_native and not is_free_z:
         _t_obs_gyr_fixed = float(_age_at_z_fn(z_fixed))
 
-    # Resolve IGM function once at factory build time based on model config.
-    _igm_fn = getattr(model, "_igm_fn", None)
+    # Resolve IGM function once at factory build time based on state config.
+    _igm_fn = state.igm_fn
     if _igm_fn is None:
         from tengri.components.igm import igm_transmission as _igm_fn
 
@@ -304,7 +315,7 @@ def build_fused_tier2_photometry(model):
     return fused_tier2_phot
 
 
-def build_fused_tier2_spectrum(model):
+def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel=None):
     """Build a single JIT function: (sfr_on_ssp, params dict) → observed spectrum.
 
     Like :func:`build_fused_tier2_photometry` but for spectroscopy.
@@ -316,8 +327,15 @@ def build_fused_tier2_spectrum(model):
 
     Parameters
     ----------
-    model : SEDModel
-        Fully initialized model with spectroscopy config.
+    state : SEDModelState
+        Frozen state bundle providing config and precomputed arrays.
+    model : SEDModel, optional
+        Legacy model reference for metallicity interpolation functions.
+        If None, interpolation will fail; this parameter is temporary
+        pending pipeline.py refactoring.
+    rest_sed_kernel : callable, optional
+        Pre-built rest-frame SED kernel (from build_fused_rest_sed).
+        If None, built from state.
 
     Returns
     -------
@@ -335,7 +353,9 @@ def build_fused_tier2_spectrum(model):
 
     **Gradient-safe**: yes — differentiable w.r.t. all parameters and sfr_on_ssp.
     """
-    if model._compositional.rest_sed is None:
+    if rest_sed_kernel is None:
+        rest_sed_kernel = build_fused_rest_sed(state, model)
+    if rest_sed_kernel is None:
         return None
 
     from tengri.components.sps.dsps_wrapper import compute_csp_weights
@@ -343,41 +363,40 @@ def build_fused_tier2_spectrum(model):
     from tengri.observation.spectrum import compute_spectrum
     from tengri.parameters.translate import get_internal_params
 
-    _use_dsps_native_spec = model._csp_integration == "dsps_native"
+    _use_dsps_native_spec = state.csp_integration == "dsps_native"
     if _use_dsps_native_spec:
         from tengri.components.sps.dsps_wrapper import compute_dsps_native_weights
 
     # effective_metallicity correction is opt-in: only applied when the user
     # explicitly makes met_alpha_fe (or evolving variant) a free parameter.
-    _use_alpha_fe_spec2 = model.spec.alpha_fe_evolving or "met_alpha_fe" in model.spec.free_params
+    _use_alpha_fe_spec2 = state.spec.alpha_fe_evolving or "met_alpha_fe" in state.spec.free_params
 
     # Must have a wavelength grid
     wave_obs = None
-    if model._precomputed.spectroscopy is not None:
-        wave_obs = model._precomputed.spectroscopy.wave_obs_pixels
-    elif hasattr(model, "_wave_obs"):
-        wave_obs = model._wave_obs
+    if state.precomputed.spectroscopy is not None:
+        wave_obs = state.precomputed.spectroscopy.wave_obs_pixels
+    elif state.wave_obs is not None:
+        wave_obs = state.wave_obs
     if wave_obs is None:
         return None
 
-    # Capture model state
-    rest_sed_kernel = model._compositional.rest_sed
-    param_map = model._param_map
-    spec = model.spec
-    has_field = model._uses_stochastic_sfh
-    ssp_ages_yr = model.ssp_ages_yr
+    # Capture state
+    param_map = state.param_map
+    spec = state.spec
+    has_field = state.uses_stochastic_sfh
+    ssp_ages_yr = state.ssp_ages_yr
     # Panchromatic wavelength grid (extended if radio/xray enabled)
-    rest_wave = model._rest_wavelength
+    rest_wave = state.rest_wavelength
 
     if _use_dsps_native_spec:
-        _ssp_lgmet_spec = model.ssp_data.ssp_lgmet
-        _ssp_lg_age_gyr_spec = model.ssp_data.ssp_lg_age_gyr
-        _ssp_flux_spec = model.ssp_data.ssp_flux
-        _lgmet_scatter_spec = float(model._lgmet_scatter)
+        _ssp_lgmet_spec = state.ssp_data.ssp_lgmet
+        _ssp_lg_age_gyr_spec = state.ssp_data.ssp_lg_age_gyr
+        _ssp_flux_spec = state.ssp_data.ssp_flux
+        _lgmet_scatter_spec = float(state.lgmet_scatter)
         from tengri.utils.cosmology import age_at_z as _age_at_z_spec
 
-    z_fixed = model._z_fixed
-    dl_cm_fixed = model._dl_cm_fixed
+    z_fixed = state.z_fixed
+    dl_cm_fixed = state.dl_cm_fixed
     is_free_z = z_fixed is None
 
     _t_obs_gyr_fixed_spec = None
@@ -441,7 +460,7 @@ def build_fused_tier2_spectrum(model):
     return fused_tier2_spec
 
 
-def build_hybrid_spectrum(model):
+def build_hybrid_spectrum(state: SEDModelState, model=None):
     """Build hybrid spectrum kernel: precomputed SSP stellar + exact non-stellar.
 
     Stellar spectrum evaluated via precomputed SSP interpolated to spectral
@@ -457,8 +476,12 @@ def build_hybrid_spectrum(model):
 
     Parameters
     ----------
-    model : SEDModel
-        The model instance with spectroscopy precomputation.
+    state : SEDModelState
+        Frozen state bundle providing config and precomputed arrays.
+    model : SEDModel, optional
+        Legacy model reference for metallicity interpolation functions.
+        If None, interpolation will fail; this parameter is temporary
+        pending pipeline.py refactoring.
 
     Returns
     -------
@@ -476,7 +499,7 @@ def build_hybrid_spectrum(model):
 
     **Gradient-safe**: yes — differentiable w.r.t. all parameters and sfr_on_ssp.
     """
-    if model._precomputed.spectroscopy is None:
+    if state.precomputed.spectroscopy is None:
         return None
 
     from tengri.components.dust.attenuation import resolve_dust_law
@@ -489,34 +512,41 @@ def build_hybrid_spectrum(model):
     from tengri.utils.conversions import lnu_to_fnu
 
     # Precomputed spectroscopic data
-    precomp_spec = model._precomputed.spectroscopy
-    ssp_on_pixels = precomp_spec.ssp_on_pixels.astype(model._forward_dtype)
+    precomp_spec = state.precomputed.spectroscopy
+    ssp_on_pixels = precomp_spec.ssp_on_pixels.astype(state.forward_dtype)
     wave_rest_pixels = precomp_spec.wave_rest_pixels
-    z_fixed = model._z_fixed
-    dl_cm_fixed = model._dl_cm_fixed
+    z_fixed = state.z_fixed
+    dl_cm_fixed = state.dl_cm_fixed
 
     # Model configuration
-    ssp_ages_yr = model.ssp_ages_yr
-    _is_single_dust = model._dust_model == "single_component"
-    law_bc_fn = resolve_dust_law(model._dust_law_bc)
+    ssp_ages_yr = state.ssp_ages_yr
+    _is_single_dust = state.dust_model == "single_component"
+    law_bc_fn = resolve_dust_law(state.dust_law_bc)
     if not _is_single_dust:
-        law_diff_fn = resolve_dust_law(model._dust_law_diff)
+        law_diff_fn = resolve_dust_law(state.dust_law_diff)
 
     # Alpha enhancement
-    _use_alpha_fe = model.spec.alpha_fe_evolving or "met_alpha_fe" in model.spec.free_params
+    _use_alpha_fe = state.spec.alpha_fe_evolving or "met_alpha_fe" in state.spec.free_params
     if _use_alpha_fe:
         from tengri.components.sps.dsps_wrapper import has_alpha_grid
 
-        _has_alpha = has_alpha_grid(model.ssp_data)
+        _has_alpha = has_alpha_grid(state.ssp_data)
     else:
         _has_alpha = False
 
-    # Non-stellar kernel
-    rest_sed_kernel = model._compositional.rest_sed
-    param_map = model._param_map
-    spec = model.spec
-    has_field = model._uses_stochastic_sfh
-    rest_wave = model._rest_wavelength
+    # Non-stellar kernel (build if not provided)
+    if (
+        model is not None
+        and hasattr(model, "_compositional")
+        and model._compositional.rest_sed is not None
+    ):
+        rest_sed_kernel = model._compositional.rest_sed
+    else:
+        rest_sed_kernel = build_fused_rest_sed(state, model)
+    param_map = state.param_map
+    spec = state.spec
+    has_field = state.uses_stochastic_sfh
+    rest_wave = state.rest_wavelength
 
     # Redshift handling
     is_free_z = z_fixed is None
@@ -560,7 +590,7 @@ def build_hybrid_spectrum(model):
 
         # Non-stellar SED at full wavelength
         p_ns = p.copy()
-        if model._uses_xray:
+        if state.uses_xray:
             p_ns["_sfr_current"] = sfr_on_ssp[-1]
         rest_sed_full = rest_sed_kernel(weights, ssp_flux_at_z, p_ns)
 
