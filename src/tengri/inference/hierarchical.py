@@ -594,8 +594,8 @@ class PopulationFitter:
         )
         map_solve_one = build_vectorized_map_solver(
             _template_fitter,
-            n_steps=200,
-            learning_rate=0.03,
+            n_steps=80,
+            learning_rate=0.05,
         )
 
         all_flux_init = jnp.stack([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
@@ -960,8 +960,8 @@ class PopulationFitter:
         )
         map_solve_one = build_vectorized_map_solver(
             _template_fitter,
-            n_steps=200,
-            learning_rate=0.03,
+            n_steps=80,
+            learning_rate=0.05,
         )
 
         # Stack per-galaxy data; lax.map streams them through map_solve_one.
@@ -1303,8 +1303,8 @@ class PopulationFitter:
         )
         map_solve_one = build_vectorized_map_solver(
             _template_fitter,
-            n_steps=200,
-            learning_rate=0.03,
+            n_steps=80,
+            learning_rate=0.05,
         )
 
         all_flux_init = jnp.stack([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
@@ -1779,8 +1779,8 @@ class PopulationFitter:
         )
         map_solve_one = build_vectorized_map_solver(
             _template_fitter,
-            n_steps=200,
-            learning_rate=0.03,
+            n_steps=80,
+            learning_rate=0.05,
         )
 
         all_flux_init = jnp.stack([jnp.asarray(g["flux_obs"]) for g in self.galaxies])

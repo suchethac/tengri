@@ -428,8 +428,8 @@ def run_map(
 def build_vectorized_map_solver(
     fitter,
     *,
-    n_steps: int = 200,
-    learning_rate: float = 0.03,
+    n_steps: int = 80,
+    learning_rate: float = 0.05,
     optimizer: str = "adam",
 ):
     """Return a JIT-friendly per-galaxy MAP solver for population fitting.

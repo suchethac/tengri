@@ -1,0 +1,162 @@
+[
+  {
+    "cell": {
+      "n_gal": 1024,
+      "method": "native_vi_linear",
+      "K": 1
+    },
+    "n_iterations": 15,
+    "n_samples": 3,
+    "wall_s": 39.42,
+    "wall_s_warm": 37.69,
+    "rss_delta_gb": 5.62,
+    "n_iters_used_warm": 6,
+    "converged": true,
+    "psd_sigma_summary": {
+      "median": 2.10698997817797,
+      "mean": 2.025611287454981,
+      "std": 0.8061576069677665,
+      "p16": 1.0420843249443759,
+      "p84": 2.807227206987853
+    },
+    "psd_tau_summary": {
+      "median": 139.77703423467705,
+      "mean": 146.82522794915792,
+      "std": 61.97043185521818,
+      "p16": 83.21510236264103,
+      "p84": 218.661590908741
+    },
+    "error": null,
+    "wall_outer_s": 86.36847615242004,
+    "baseline_wall_s": 72.17,
+    "baseline_psd_sigma_summary": null,
+    "baseline_psd_tau_summary": null,
+    "wall_speedup": 1.8307965499746321
+  },
+  {
+    "cell": {
+      "n_gal": 1024,
+      "method": "native_vi_linear",
+      "K": 64
+    },
+    "n_iterations": 15,
+    "n_samples": 3,
+    "wall_s": 21.98,
+    "wall_s_warm": 22.05,
+    "rss_delta_gb": 6.1,
+    "n_iters_used_warm": 6,
+    "converged": true,
+    "psd_sigma_summary": {
+      "median": 2.10698997817797,
+      "mean": 2.025611287454981,
+      "std": 0.8061576069677665,
+      "p16": 1.0420843249443759,
+      "p84": 2.807227206987853
+    },
+    "psd_tau_summary": {
+      "median": 139.77703423467705,
+      "mean": 146.82522794915792,
+      "std": 61.97043185521818,
+      "p16": 83.21510236264103,
+      "p84": 218.661590908741
+    },
+    "error": null,
+    "wall_outer_s": 52.714436769485474,
+    "baseline_wall_s": 75.39,
+    "baseline_psd_sigma_summary": {
+      "median": 2.10698997817797,
+      "mean": 2.025611287454981,
+      "std": 0.8061576069677665,
+      "p16": 1.0420843249443759,
+      "p84": 2.807227206987853
+    },
+    "baseline_psd_tau_summary": {
+      "median": 139.77703423467705,
+      "mean": 146.8252279491579,
+      "std": 61.970431855218195,
+      "p16": 83.21510236264103,
+      "p84": 218.661590908741
+    },
+    "wall_speedup": 3.429936305732484
+  },
+  {
+    "cell": {
+      "n_gal": 8192,
+      "method": "native_vi_linear",
+      "K": 1
+    },
+    "n_iterations": 15,
+    "n_samples": 3,
+    "wall_s": 245.53,
+    "wall_s_warm": 256.1,
+    "rss_delta_gb": 5.9,
+    "n_iters_used_warm": 6,
+    "converged": true,
+    "psd_sigma_summary": {
+      "median": 2.0424540279974925,
+      "mean": 1.9749549616298359,
+      "std": 0.7032665409427091,
+      "p16": 1.1359997194453428,
+      "p84": 2.76570552882637
+    },
+    "psd_tau_summary": {
+      "median": 139.75585502741583,
+      "mean": 147.65459364812463,
+      "std": 62.78878732108557,
+      "p16": 82.73346822671712,
+      "p84": 217.08819675193595
+    },
+    "error": null,
+    "wall_outer_s": 527.5318579673767,
+    "baseline_wall_s": 433.09,
+    "baseline_psd_sigma_summary": null,
+    "baseline_psd_tau_summary": null,
+    "wall_speedup": 1.7638985052743044
+  },
+  {
+    "cell": {
+      "n_gal": 8192,
+      "method": "native_vi_linear",
+      "K": 64
+    },
+    "n_iterations": 15,
+    "n_samples": 3,
+    "wall_s": 86.15,
+    "wall_s_warm": 87.35,
+    "rss_delta_gb": 10.79,
+    "n_iters_used_warm": 6,
+    "converged": true,
+    "psd_sigma_summary": {
+      "median": 2.0424540279974925,
+      "mean": 1.9749549616298359,
+      "std": 0.7032665409427091,
+      "p16": 1.1359997194453428,
+      "p84": 2.76570552882637
+    },
+    "psd_tau_summary": {
+      "median": 139.75585502741583,
+      "mean": 147.65459364812463,
+      "std": 62.78878732108557,
+      "p16": 82.73346822671712,
+      "p84": 217.08819675193595
+    },
+    "error": null,
+    "wall_outer_s": 197.58684396743774,
+    "baseline_wall_s": 229.3,
+    "baseline_psd_sigma_summary": {
+      "median": 2.0424540279974925,
+      "mean": 1.9749549616298359,
+      "std": 0.7032665409427091,
+      "p16": 1.1359997194453428,
+      "p84": 2.76570552882637
+    },
+    "baseline_psd_tau_summary": {
+      "median": 139.75585502741583,
+      "mean": 147.65459364812463,
+      "std": 62.78878732108557,
+      "p16": 82.73346822671712,
+      "p84": 217.08819675193595
+    },
+    "wall_speedup": 2.6616366802089377
+  }
+]
