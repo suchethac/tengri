@@ -132,28 +132,28 @@ def test_compositional_spectrum_raw_built(model_with_spec):
 
 
 def test_precompute_spectroscopy_clears_fitter_cache(model_with_spec):
-    """precompute_spectroscopy() must clear any stale fitter loss-fn cache.
+    """precompute_spectroscopy() must clear the model's compiled-fn cache.
 
-    If the cache is not cleared, a Fitter that compiled its loss function
-    before precompute_spectroscopy() was called will keep using the slow
-    full-SED path even after spectroscopy is precomputed.
+    Phase 3 of the refactor moved the cache from monkey-patched per-attr
+    private dicts (``model._loss_fn_cache`` etc.) to a centralized
+    WeakKeyDictionary keyed on the model. The contract: after
+    ``precompute_spectroscopy``, any cached compiled functions for this
+    model are dropped, so a Fitter that compiled before the call will
+    re-trace against the new spectroscopy path on next run.
     """
+    from tengri.inference._model_cache import _caches, get_model_cache
+
     model, wave_obs = model_with_spec
 
-    # Simulate a previously cached loss function on the model object.
-    model._loss_fn_cache = {"some_key": lambda p, d: 0.0}
-    model._jit_engine_cache = {"some_key": object()}
-    model._loglik_fn_cache = {"some_key": lambda p, d: 0.0}
+    cache = get_model_cache(model)
+    cache["loss_fn"] = lambda p, d: 0.0
+    cache["jit_engine"] = object()
+    cache["loglik_fn"] = lambda p, d: 0.0
+    assert _caches.get(model) is cache
 
-    # Calling precompute_spectroscopy again should clear all three caches.
     model.precompute_spectroscopy(wave_obs)
 
-    assert not hasattr(model, "_loss_fn_cache"), (
-        "_loss_fn_cache not cleared after precompute_spectroscopy"
-    )
-    assert not hasattr(model, "_jit_engine_cache"), (
-        "_jit_engine_cache not cleared after precompute_spectroscopy"
-    )
-    assert not hasattr(model, "_loglik_fn_cache"), (
-        "_loglik_fn_cache not cleared after precompute_spectroscopy"
+    assert _caches.get(model) is None, (
+        "model entry survived precompute_spectroscopy — stale compiled "
+        "functions would be reused on the next Fitter run"
     )

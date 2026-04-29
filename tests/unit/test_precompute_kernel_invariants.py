@@ -69,92 +69,66 @@ def _make_phot_model():
 
 
 class TestCacheInvalidation:
-    """precompute_* methods must wipe all compiled loss-fn caches."""
+    """precompute_* methods must drop the model's compiled-fn cache.
+
+    Phase 3 of the SEDModel refactor moved the cache from per-attribute
+    private dicts (``model._loss_fn_cache`` etc., monkey-patched by
+    inference code) to a centralized ``WeakKeyDictionary`` keyed on the
+    model in ``tengri.inference._model_cache``. The contract these tests
+    verify: after ``precompute_*``, an entry that was present in the
+    cache before the call is gone afterwards.
+    """
 
     @_needs_ssp
-    def test_precompute_spectroscopy_clears_loss_fn_cache(self):
-        """_loss_fn_cache removed after precompute_spectroscopy."""
+    def test_precompute_spectroscopy_clears_model_cache(self):
+        """get_model_cache(model) is empty after precompute_spectroscopy."""
+        from tengri.inference._model_cache import _caches, get_model_cache
+
         model, wave_obs = _make_spec_model()
-        model._loss_fn_cache = {"stale": object()}
+        cache = get_model_cache(model)
+        cache["stale_loss_fn"] = object()
+        cache["stale_jit_engine"] = object()
+        cache["stale_loglik"] = object()
+        assert _caches.get(model) is cache  # sanity
 
         model.precompute_spectroscopy(wave_obs)
 
-        assert not hasattr(model, "_loss_fn_cache"), (
-            "_loss_fn_cache survives precompute_spectroscopy — "
-            "a Fitter built before precompute would use a stale loss fn"
+        assert _caches.get(model) is None, (
+            "model entry survived precompute_spectroscopy — a Fitter built "
+            "before precompute would reuse stale compiled functions"
         )
 
     @_needs_ssp
-    def test_precompute_spectroscopy_clears_jit_engine_cache(self):
-        """_jit_engine_cache removed after precompute_spectroscopy."""
-        model, wave_obs = _make_spec_model()
-        model._jit_engine_cache = {"stale": object()}
+    def test_precompute_ztable_clears_model_cache(self):
+        """get_model_cache(model) is empty after precompute_ztable."""
+        from tengri.inference._model_cache import _caches, get_model_cache
 
-        model.precompute_spectroscopy(wave_obs)
-
-        assert not hasattr(model, "_jit_engine_cache")
-
-    @_needs_ssp
-    def test_precompute_spectroscopy_clears_loglik_cache(self):
-        """_loglik_fn_cache removed after precompute_spectroscopy."""
-        model, wave_obs = _make_spec_model()
-        model._loglik_fn_cache = {"stale": object()}
-
-        model.precompute_spectroscopy(wave_obs)
-
-        assert not hasattr(model, "_loglik_fn_cache")
-
-    @_needs_ssp
-    def test_precompute_ztable_clears_loss_fn_cache(self):
-        """_loss_fn_cache removed after precompute_ztable."""
         model = _make_phot_model()
-        model._loss_fn_cache = {"stale": object()}
+        cache = get_model_cache(model)
+        cache["stale_loss_fn"] = object()
+        cache["stale_jit_engine"] = object()
+        cache["stale_loglik"] = object()
+        assert _caches.get(model) is cache  # sanity
 
         model.precompute_ztable()
 
-        assert not hasattr(model, "_loss_fn_cache"), (
-            "_loss_fn_cache survives precompute_ztable — "
-            "a Fitter built before precompute_ztable would use a stale loss fn"
+        assert _caches.get(model) is None, (
+            "model entry survived precompute_ztable — a Fitter built before "
+            "precompute_ztable would reuse stale compiled functions"
         )
-
-    @_needs_ssp
-    def test_precompute_ztable_clears_jit_engine_cache(self):
-        """_jit_engine_cache removed after precompute_ztable."""
-        model = _make_phot_model()
-        model._jit_engine_cache = {"stale": object()}
-
-        model.precompute_ztable()
-
-        assert not hasattr(model, "_jit_engine_cache")
-
-    @_needs_ssp
-    def test_precompute_ztable_clears_loglik_cache(self):
-        """_loglik_fn_cache removed after precompute_ztable."""
-        model = _make_phot_model()
-        model._loglik_fn_cache = {"stale": object()}
-
-        model.precompute_ztable()
-
-        assert not hasattr(model, "_loglik_fn_cache")
 
     @_needs_ssp
     def test_no_error_when_caches_absent(self):
-        """precompute_* must not raise if caches were never populated."""
+        """precompute_* must not raise if no cache entry exists for the model."""
+        from tengri.inference._model_cache import _caches
+
         model, wave_obs = _make_spec_model()
-        # Caches may not exist yet — this must not raise AttributeError.
-        for attr in ("_loss_fn_cache", "_jit_engine_cache", "_loglik_fn_cache"):
-            if hasattr(model, attr):
-                delattr(model, attr)
+        _caches.pop(model, None)
+        model.precompute_spectroscopy(wave_obs)  # must not raise
 
-        # Should not raise.
-        model.precompute_spectroscopy(wave_obs)
-
-        # ztable requires filters; use a phot model for that branch.
         phot_model = _make_phot_model()
-        for attr in ("_loss_fn_cache", "_jit_engine_cache", "_loglik_fn_cache"):
-            if hasattr(phot_model, attr):
-                delattr(phot_model, attr)
-        phot_model.precompute_ztable()
+        _caches.pop(phot_model, None)
+        phot_model.precompute_ztable()  # must not raise
 
     @_needs_ssp
     def test_double_precompute_spectroscopy_idempotent(self):

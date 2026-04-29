@@ -3568,10 +3568,21 @@ class SEDModel:
         Returns
         -------
         self
-            For chaining: ``model.precompute_spectroscopy(wave_obs)``
+            The same model instance, with ``_state.precomputed.spectroscopy``
+            and ``_state.wave_obs`` updated immutably via
+            ``dataclasses.replace``. Returned for chaining; both
+            ``model.precompute_spectroscopy(wave); model.fit(data)`` and
+            ``fit = model.precompute_spectroscopy(wave).fit(data)`` work.
 
         Notes
         -----
+        State internals (``_precomputed``, ``_state``) are frozen
+        dataclasses; this method swaps them via ``dataclasses.replace``
+        rather than mutating their fields. The model object itself is
+        the controller and is not replaced — see Phase 3 of the
+        refactor: cached compiled artefacts are dropped via
+        ``clear_model_cache(self)`` and lazily rebuilt on next use.
+
         Caches precomputed SSP spectra at the fixed redshift,
         enabling ~10-20× speedup for repeated spectrum predictions.
         Requires fixed redshift (raises ValueError otherwise).
@@ -3641,7 +3652,9 @@ class SEDModel:
         Returns
         -------
         self
-            For chaining: ``model.precompute_ztable().predict_photometry(params)``
+            The same model instance, with ``_state.precomputed.photometry_ztable``
+            updated immutably via ``dataclasses.replace``. Returned for
+            chaining; cache cleared via ``clear_model_cache(self)``.
 
         Notes
         -----
