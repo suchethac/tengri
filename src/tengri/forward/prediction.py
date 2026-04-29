@@ -1649,12 +1649,22 @@ class Prediction:
 
     Examples
     --------
-    **Single-galaxy exploration:**
+    **Two equivalent ways to access derived quantities:**
 
     >>> pred = model.predict(params)
-    >>> pred.sfh.stellar_mass  # only SFH computed
-    >>> pred.sed.l_bol  # full SED now computed
-    >>> pred.lines.bpt_nii  # nebular lines now computed
+    >>> pred.stellar_mass  # flat shortcut
+    >>> pred.sfh.stellar_mass  # grouped form (same value)
+    >>> pred.dn4000  # flat
+    >>> pred.sed.dn4000  # grouped
+    >>> pred.halpha  # flat
+    >>> pred.lines.halpha  # grouped
+
+    The grouped form (``pred.sfh``, ``pred.sed``, ``pred.lines``,
+    ``pred.radio``, ``pred.xray``, ``pred.ionizing``) exposes every
+    derived quantity. The top-level shortcuts cover the most-used
+    quantities for quick access; for less-common ones use the grouped
+    form. Both share the same lazy cache, so accessing a quantity by
+    either route triggers computation only once.
 
     **Accessing the full SED or photometry:**
 
@@ -1790,3 +1800,167 @@ class Prediction:
             print(phot.shape)  # e.g. (8,) for 8 photometric bands
         """
         return self._model.predict_photometry(self._params)
+
+    # ── Top-level shortcuts to grouped derived quantities ───────────────
+    # ``pred.stellar_mass`` and ``pred.sfh.stellar_mass`` return the same value;
+    # the flat form is for tab-completion convenience and aligns with how
+    # astronomers typically refer to derived quantities (no domain prefix).
+    # Where two groups expose the same name (e.g. luminosity_weighted_*),
+    # the flat shortcut points to the SED version — that's the canonical
+    # "luminosity-weighted" meaning (uses attenuated SED, not stellar-only).
+
+    # --- SFH-derived (forward to pred.sfh) ---
+
+    @property
+    def stellar_mass(self):
+        """Total stellar mass formed [M☉]. Same as ``pred.sfh.stellar_mass``."""
+        return self.sfh.stellar_mass
+
+    @property
+    def stellar_mass_surviving(self):
+        """Surviving stellar + remnant mass [M☉]. Same as ``pred.sfh.stellar_mass_surviving``."""
+        return self.sfh.stellar_mass_surviving
+
+    @property
+    def sfr_100myr(self):
+        """SFR averaged over last 100 Myr [M☉/yr]. Same as ``pred.sfh.sfr_100myr``."""
+        return self.sfh.sfr_100myr
+
+    @property
+    def sfr_10myr(self):
+        """SFR averaged over last 10 Myr [M☉/yr]. Same as ``pred.sfh.sfr_10myr``."""
+        return self.sfh.sfr_10myr
+
+    @property
+    def ssfr(self):
+        """Specific SFR [yr⁻¹]. Same as ``pred.sfh.ssfr``."""
+        return self.sfh.ssfr
+
+    @property
+    def mass_weighted_age_gyr(self):
+        """Mass-weighted stellar age [Gyr]. Same as ``pred.sfh.mass_weighted_age_gyr``."""
+        return self.sfh.mass_weighted_age_gyr
+
+    @property
+    def mass_weighted_metallicity(self):
+        """Mass-weighted log₁₀(Z/Z☉). Same as ``pred.sfh.mass_weighted_metallicity``."""
+        return self.sfh.mass_weighted_metallicity
+
+    # --- SED-derived (forward to pred.sed) ---
+
+    @property
+    def l_bol(self):
+        """Bolometric luminosity [L☉]. Same as ``pred.sed.l_bol``."""
+        return self.sed.l_bol
+
+    @property
+    def l_tir(self):
+        """Total infrared (8–1000 μm) luminosity [L☉]. Same as ``pred.sed.l_tir``."""
+        return self.sed.l_tir
+
+    @property
+    def l_dust_absorbed(self):
+        """Dust-absorbed luminosity [L☉]. Same as ``pred.sed.l_dust_absorbed``."""
+        return self.sed.l_dust_absorbed
+
+    @property
+    def irx(self):
+        """Infrared excess L_TIR / L_UV(1600 Å). Same as ``pred.sed.irx``."""
+        return self.sed.irx
+
+    @property
+    def uv_slope_beta(self):
+        """UV slope β in f_λ ∝ λ^β. Same as ``pred.sed.uv_slope_beta``."""
+        return self.sed.uv_slope_beta
+
+    @property
+    def dn4000(self):
+        """D_n(4000) break ratio. Same as ``pred.sed.dn4000``."""
+        return self.sed.dn4000
+
+    @property
+    def balmer_break(self):
+        """Balmer break flux ratio. Same as ``pred.sed.balmer_break``."""
+        return self.sed.balmer_break
+
+    @property
+    def m_uv(self):
+        """Absolute magnitude at 1500 Å. Same as ``pred.sed.m_uv``."""
+        return self.sed.m_uv
+
+    @property
+    def fuv_flux(self):
+        """FUV flux at 1500 Å [erg/s/cm²]. Same as ``pred.sed.fuv_flux``."""
+        return self.sed.fuv_flux
+
+    @property
+    def nuv_flux(self):
+        """NUV flux at 2300 Å [erg/s/cm²]. Same as ``pred.sed.nuv_flux``."""
+        return self.sed.nuv_flux
+
+    @property
+    def fuv_flux_intrinsic(self):
+        """Dust-free FUV flux. Same as ``pred.sed.fuv_flux_intrinsic``."""
+        return self.sed.fuv_flux_intrinsic
+
+    @property
+    def nuv_flux_intrinsic(self):
+        """Dust-free NUV flux. Same as ``pred.sed.nuv_flux_intrinsic``."""
+        return self.sed.nuv_flux_intrinsic
+
+    @property
+    def rest_uv_color(self):
+        """Rest-frame UV color (f_1500 − f_2300). Same as ``pred.sed.rest_uv_color``."""
+        return self.sed.rest_uv_color
+
+    @property
+    def luminosity_weighted_age_gyr(self):
+        """Luminosity-weighted age [Gyr]. Same as ``pred.sed.luminosity_weighted_age_gyr``.
+
+        Both ``pred.sfh`` and ``pred.sed`` define this; the top-level shortcut
+        forwards to the SED version (canonical "luminosity-weighted" using the
+        attenuated stellar SED).
+        """
+        return self.sed.luminosity_weighted_age_gyr
+
+    @property
+    def luminosity_weighted_metallicity(self):
+        """Luminosity-weighted log₁₀(Z/Z☉).
+
+        Same as ``pred.sed.luminosity_weighted_metallicity``.
+        """
+        return self.sed.luminosity_weighted_metallicity
+
+    # --- Emission lines (forward to pred.lines) ---
+
+    @property
+    def halpha(self):
+        """Hα 6564 Å luminosity [erg/s]. Same as ``pred.lines.halpha``."""
+        return self.lines.halpha
+
+    @property
+    def hbeta(self):
+        """Hβ 4862 Å luminosity [erg/s]. Same as ``pred.lines.hbeta``."""
+        return self.lines.hbeta
+
+    @property
+    def oiii_5007(self):
+        """[O III] 5007 Å luminosity [erg/s]. Same as ``pred.lines.oiii_5007``."""
+        return self.lines.oiii_5007
+
+    @property
+    def balmer_decrement(self):
+        """Hα/Hβ flux ratio. Same as ``pred.lines.balmer_decrement``."""
+        return self.lines.balmer_decrement
+
+    # --- Ionizing budget (forward to pred.ionizing) ---
+
+    @property
+    def q_h(self):
+        """Total ionizing photon production rate [s⁻¹]. Same as ``pred.ionizing.q_h``."""
+        return self.ionizing.q_h
+
+    @property
+    def xi_ion(self):
+        """Ionizing photon production efficiency [Hz·erg⁻¹]. Same as ``pred.ionizing.xi_ion``."""
+        return self.ionizing.xi_ion
