@@ -3598,10 +3598,11 @@ class SEDModel:
 
         # Invalidate cached kernels and fitter loss-fn caches so any attached
         # Fitter picks up the new precomputed spectroscopy path on next run().
+        # Compiled artefacts can always be regenerated, so we just drop them.
+        from tengri.inference._model_cache import clear_model_cache
+
         self._invalidate_kernels()
-        for _attr in ("_loss_fn_cache", "_jit_engine_cache", "_loglik_fn_cache"):
-            if hasattr(self, _attr):
-                delattr(self, _attr)
+        clear_model_cache(self)
 
         # Rebuild compositional spectrum kernel (full-resolution end-to-end JIT)
         if self._compositional.rest_sed is not None:
@@ -3669,10 +3670,11 @@ class SEDModel:
         self._state = dataclasses.replace(self._state, precomputed=self._precomputed)
 
         # Invalidate fitter loss-fn caches so any attached Fitter uses the
-        # new ztable interpolation path on next run().
-        for _attr in ("_loss_fn_cache", "_jit_engine_cache", "_loglik_fn_cache"):
-            if hasattr(self, _attr):
-                delattr(self, _attr)
+        # new ztable interpolation path on next run(). Compiled artefacts can
+        # always be regenerated, so we just drop them.
+        from tengri.inference._model_cache import clear_model_cache
+
+        clear_model_cache(self)
 
         # Build hybrid z-table kernel if using hybrid mode
         if self._hybrid.photometry is not None or any(
