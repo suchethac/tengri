@@ -11,9 +11,9 @@ Basic usage
 
 >>> import tengri as tg
 >>> g = tg.Galaxy.from_arrays(..., preset="starforming")
->>> print(g.bibliography.report())       # human-readable list
->>> print(g.bibliography.to_bibtex())    # copy-paste BibTeX block
->>> g.bibliography.keys                  # ['tengri', 'jax', 'dsps', ...]
+>>> print(g.bibliography.report())  # human-readable list
+>>> print(g.bibliography.to_bibtex())  # copy-paste BibTeX block
+>>> g.bibliography.keys  # ['tengri', 'jax', 'dsps', ...]
 
 The container is intentionally small: it is an ordered, deduplicated list
 of registry keys plus helpers for human / BibTeX output.
@@ -161,10 +161,8 @@ class Bibliography:
 
         Examples
         --------
-        >>> from tengri.config.settings import ModelConfig, DustConfig
-        >>> bib = Bibliography.from_config(
-        ...     ModelConfig(dust=DustConfig(law_bc="calzetti"))
-        ... )
+        >>> from tengri.config.settings import SEDModelConfig, DustConfig
+        >>> bib = Bibliography.from_config(SEDModelConfig(dust=DustConfig(law_bc="calzetti")))
         >>> grouped = bib.by_category()
         >>> sorted(grouped)
         ['dust_attenuation', 'framework', 'ssp']
@@ -235,8 +233,8 @@ class Bibliography:
 
         Examples
         --------
-        >>> from tengri.config.settings import ModelConfig, DustConfig
-        >>> mc = ModelConfig(dust=DustConfig(law_bc="calzetti"))
+        >>> from tengri.config.settings import SEDModelConfig, DustConfig
+        >>> mc = SEDModelConfig(dust=DustConfig(law_bc="calzetti"))
         >>> bib = Bibliography.from_config(mc)
         >>> print(bib.report())  # doctest: +SKIP
         Please cite the following when publishing results:
@@ -332,7 +330,7 @@ class Bibliography:
         Parameters
         ----------
         obj : Any
-            Galaxy, SEDModel, Fitter, ModelConfig, FitResult, or any other
+            Galaxy, SEDModel, Fitter, SEDModelConfig, FitResult, or any other
             object whose configuration can be inspected for component choices.
         include_backend : bool, optional
             Include inference-backend citations from ``obj._last_backend``
@@ -354,8 +352,9 @@ class Bibliography:
         >>> g = tg.Galaxy.from_arrays(
         ...     filters=["sdss_g", "sdss_r"],
         ...     flux=np.array([1e-28, 2e-28]),
-        ...     flux_err=np.array([1e-29]*2),
-        ...     redshift=0.1, ssp_path="data/ssp.h5",
+        ...     flux_err=np.array([1e-29] * 2),
+        ...     redshift=0.1,
+        ...     ssp_path="data/ssp.h5",
         ...     preset="starforming",
         ... )  # doctest: +SKIP
         >>> bib = Bibliography.from_object(g)  # doctest: +SKIP
@@ -405,7 +404,7 @@ class Bibliography:
 
     @classmethod
     def from_config(cls, model_config: Any, *, source: str = "") -> Bibliography:
-        """Build a Bibliography from a :class:`ModelConfig`-like object.
+        """Build a Bibliography from a :class:`SEDModelConfig`-like object.
 
         Inspects ``dust``, ``nebular``, ``igm``, and ``agn`` sub-configs
         and adds the citations implied by their values. Core citations
@@ -413,7 +412,7 @@ class Bibliography:
 
         Parameters
         ----------
-        model_config : ModelConfig or None
+        model_config : SEDModelConfig or None
             Configuration whose dust law, nebular backend, IGM model, and
             AGN sub-components are inspected. ``None`` yields just the
             core citations.
@@ -435,8 +434,8 @@ class Bibliography:
 
         Examples
         --------
-        >>> from tengri.config.settings import ModelConfig, DustConfig
-        >>> mc = ModelConfig(dust=DustConfig(law_bc="kriek_conroy"))
+        >>> from tengri.config.settings import SEDModelConfig, DustConfig
+        >>> mc = SEDModelConfig(dust=DustConfig(law_bc="kriek_conroy"))
         >>> bib = Bibliography.from_config(mc, source="my model")
         >>> "kriek_conroy2013" in bib.keys
         True
@@ -478,7 +477,7 @@ class Bibliography:
             igm_model = getattr(igm, "model", None)
             bib.add(*IGM_CITATIONS.get(igm_model, []))
 
-        # AGN sub-components (disc / torus / BLR) — optional on ModelConfig.
+        # AGN sub-components (disc / torus / BLR) — optional on SEDModelConfig.
         agn = getattr(model_config, "agn", None)
         if agn is not None:
             from tengri.citations.associations import (

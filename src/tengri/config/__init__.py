@@ -11,9 +11,9 @@ from tengri.config.exceptions import (
 from tengri.config.settings import (
     AGNConfig,
     DustConfig,
-    ModelConfig,
     MultiwavelengthConfig,
     NebularConfig,
+    SEDModelConfig,
     SFHConfig,
 )
 
@@ -23,10 +23,10 @@ __all__ = [
     "ConfigError",
     "DustConfig",
     "InferenceError",
-    "ModelConfig",
     "MultiwavelengthConfig",
     "NebularConfig",
     "ParameterError",
+    "SEDModelConfig",
     "SFHConfig",
     "TengriError",
     "TengriIOError",

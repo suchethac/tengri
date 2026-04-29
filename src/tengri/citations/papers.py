@@ -4,8 +4,8 @@ The tengri paper series lives in :file:`CITATION.bib` at the repository
 root (ADS-formatted). These helpers load that file so users can do:
 
     >>> import tengri as tg
-    >>> print(tg.paper_citation())          # full BibTeX block, all papers
-    >>> print(tg.paper_citation(paper=1))   # just Paper I
+    >>> print(tg.paper_citation())  # full BibTeX block, all papers
+    >>> print(tg.paper_citation(paper=1))  # just Paper I
     >>> print(tg.paper_citation(paper="II"))
 
 The same content is mirrored into the main registry (see

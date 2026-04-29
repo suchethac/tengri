@@ -108,9 +108,9 @@ from tengri.config.exceptions import (
 from tengri.config.settings import (
     AGNConfig,
     DustConfig,
-    ModelConfig,
     MultiwavelengthConfig,
     NebularConfig,
+    SEDModelConfig,
     SFHConfig,
 )
 from tengri.facade import Galaxy, doctor
@@ -287,7 +287,6 @@ __all__ = [
     "LogNormal",
     "LogUniform",
     "MockData",
-    "ModelConfig",
     "NebularConfig",
     "NoiseModel",
     "Observation",
@@ -299,6 +298,7 @@ __all__ = [
     "Posterior",
     "Provenance",
     "SEDModel",
+    "SEDModelConfig",
     "SFHConfig",
     "SpectralIndexData",
     "SpectralIndexDef",

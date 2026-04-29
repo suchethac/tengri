@@ -81,7 +81,7 @@ def _scan_quoted(text: str, start: int) -> tuple[str, int]:
             return "".join(out), i + 1
         out.append(ch)
         i += 1
-    raise ValueError('Unterminated \'"\' in BibTeX value')
+    raise ValueError("Unterminated '\"' in BibTeX value")
 
 
 _ENTRY_HEAD_RE = re.compile(r"@(\w+)\s*\{", re.UNICODE)
@@ -118,8 +118,7 @@ def parse_bibtex(text: str) -> list[dict]:
         comma = text.find(",", pos)
         if comma == -1:
             raise ValueError(
-                f"Malformed @{entry_type} entry at position {pos}: "
-                "expected ',' after citation key"
+                f"Malformed @{entry_type} entry at position {pos}: expected ',' after citation key"
             )
         bibtex_key = text[pos:comma].strip()
         pos = comma + 1
@@ -140,7 +139,7 @@ def parse_bibtex(text: str) -> list[dict]:
             if not fmatch:
                 raise ValueError(
                     f"Expected field name in entry {bibtex_key} at position {pos}: "
-                    f"found {text[pos:pos + 30]!r}"
+                    f"found {text[pos : pos + 30]!r}"
                 )
             field = fmatch.group(1).lower()
             pos = fmatch.end()

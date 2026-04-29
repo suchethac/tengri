@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from tengri.config.settings import ModelConfig
+from tengri.config.settings import SEDModelConfig
 from tengri.parameters.parameters import Parameters
 from tengri.presets import (
     agn_host,
@@ -43,7 +43,7 @@ class TestListPresets:
 
 
 class TestEachPresetReturnsValidTuple:
-    """Test that each preset returns a valid (Parameters, ModelConfig) tuple."""
+    """Test that each preset returns a valid (Parameters, SEDModelConfig) tuple."""
 
     @pytest.mark.parametrize(
         "preset_func",
@@ -60,10 +60,10 @@ class TestEachPresetReturnsValidTuple:
         [starforming, quiescent, high_z, photoz, jwst_spec, agn_host],
     )
     def test_preset_returns_parameters_and_model_config(self, preset_func):
-        """First element is Parameters, second is ModelConfig."""
+        """First element is Parameters, second is SEDModelConfig."""
         params, config = preset_func()
         assert isinstance(params, Parameters), f"{preset_func.__name__} returned wrong types"
-        assert isinstance(config, ModelConfig), f"{preset_func.__name__} returned wrong types"
+        assert isinstance(config, SEDModelConfig), f"{preset_func.__name__} returned wrong types"
 
 
 class TestRedshiftPassthrough:

@@ -17,7 +17,7 @@ import numpy as np
 
 from tengri._logo import logo_str
 from tengri.components.sps.dsps_wrapper import load_ssp_data
-from tengri.config.settings import ModelConfig
+from tengri.config.settings import SEDModelConfig
 from tengri.forward.sed_model import SEDModel
 from tengri.inference.fitter import Fitter
 from tengri.observation.noise_model import NoiseModel
@@ -52,7 +52,7 @@ class Galaxy:
         Observation configuration (photometry, spectroscopy, noise).
     parameters : Parameters
         Parameter specification with priors.
-    model_config : ModelConfig
+    model_config : SEDModelConfig
         Model configuration (dust, nebular, AGN, etc.).
     model : SEDModel or None
         Forward model (lazily constructed on first forward pass or before fit).
@@ -117,7 +117,7 @@ class Galaxy:
         ssp: Any | None = None,
         preset: str = "starforming",
         flux_unit: str = "erg/s/cm2/Hz",
-        model_config: ModelConfig | None = None,
+        model_config: SEDModelConfig | None = None,
     ) -> Galaxy:
         """Build a Galaxy from plain arrays — the common entry point.
 
@@ -140,7 +140,7 @@ class Galaxy:
         flux_unit : str
             Flux unit. One of "erg/s/cm2/Hz", "uJy", "mJy", "Jy", "nJy", "maggies".
             Default: "erg/s/cm2/Hz".
-        model_config : ModelConfig or None
+        model_config : SEDModelConfig or None
             Model configuration. If None, uses preset defaults.
 
         Returns
@@ -213,7 +213,7 @@ class Galaxy:
         ssp_path: str | None = None,
         preset: str = "starforming",
         redshift: float | None = None,
-        model_config: ModelConfig | None = None,
+        model_config: SEDModelConfig | None = None,
     ) -> Galaxy:
         """Build a Galaxy from an existing Observation object.
 
@@ -229,7 +229,7 @@ class Galaxy:
             Preset name.
         redshift : float or None
             Redshift (overrides any fixed redshift in preset).
-        model_config : ModelConfig or None
+        model_config : SEDModelConfig or None
             Model configuration.
 
         Returns

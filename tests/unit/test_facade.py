@@ -69,7 +69,7 @@ def test_presets_are_importable():
 
 
 def test_resolve_preset_starforming():
-    """resolve_preset('starforming') should return (Parameters, ModelConfig)."""
+    """resolve_preset('starforming') should return (Parameters, SEDModelConfig)."""
     from tengri.presets import resolve_preset
 
     params, config = resolve_preset("starforming", redshift=0.1)

@@ -159,14 +159,14 @@ def test_from_config_none_yields_core_only():
 
 
 def test_from_config_calzetti_two_component():
-    from tengri.config.settings import DustConfig, ModelConfig
+    from tengri.config.settings import DustConfig, SEDModelConfig
 
-    mc = ModelConfig(
+    mc = SEDModelConfig(
         dust=DustConfig(model="two_component", law_bc="calzetti", law_diff="power_law")
     )
     bib = Bibliography.from_config(mc)
     assert "charlot_fall2000" in bib.keys  # from two_component
-    assert "calzetti2000" in bib.keys      # from law_bc
+    assert "calzetti2000" in bib.keys  # from law_bc
 
 
 def test_from_config_source_label_preserved():
@@ -243,10 +243,10 @@ def test_from_object_falls_back_to_model_config():
 
 
 def test_from_object_picks_up_backend_citation():
-    from tengri.config.settings import ModelConfig
+    from tengri.config.settings import SEDModelConfig
 
     class Fake:
-        model_config = ModelConfig()
+        model_config = SEDModelConfig()
         _last_backend = "mcmc_nuts"
 
     bib = Bibliography.from_object(Fake())
@@ -254,10 +254,10 @@ def test_from_object_picks_up_backend_citation():
 
 
 def test_from_object_honors_include_backend_false():
-    from tengri.config.settings import ModelConfig
+    from tengri.config.settings import SEDModelConfig
 
     class Fake:
-        model_config = ModelConfig()
+        model_config = SEDModelConfig()
         _last_backend = "mcmc_nuts"
 
     bib = Bibliography.from_object(Fake(), include_backend=False)

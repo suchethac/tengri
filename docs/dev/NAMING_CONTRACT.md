@@ -50,6 +50,7 @@ These are the **canonical** names. Old names are deprecated aliases that emit `D
 | `LineList` | `LineCatalog` | `models/observation/line_list.py` |
 | `PopulationFitter` | `HierarchicalFitter` | `inference/hierarchical.py` |
 | `PopulationPosterior` | `HierarchicalResult` | `inference/hierarchical.py` |
+| `SEDModelConfig` | `ModelConfig` | `config/settings.py` |
 
 **File path stability rule:** Module filenames must match the canonical class name in `snake_case`. If a class is renamed, the file is renamed in the same commit. The table above is the ground truth; if it conflicts with the filesystem, the filesystem is wrong.
 

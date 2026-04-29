@@ -7,18 +7,18 @@ from dataclasses import dataclass
 # Canonical component-type categories. Any string is allowed in a Citation's
 # ``category`` field, but these are the ones tengri uses for grouping output.
 CATEGORIES: tuple[str, ...] = (
-    "framework",          # this code + theoretical foundations (tengri, JAX, IFT)
-    "ssp",                # stellar population synthesis (DSPS, FSPS, MIST, MILES)
-    "sfh",                # star formation history priors / models
-    "dust_attenuation",   # attenuation laws
-    "dust_emission",      # dust emission templates
-    "nebular",            # nebular emission
-    "igm",                # intergalactic medium
-    "agn",                # AGN components
-    "inference",          # inference backends
-    "preprocessing",      # data hygiene (MW extinction, zero points, ...)
-    "reference_code",     # peer SED-fitting codes (ported or compared to)
-    "other",              # anything that doesn't fit a canonical bucket
+    "framework",  # this code + theoretical foundations (tengri, JAX, IFT)
+    "ssp",  # stellar population synthesis (DSPS, FSPS, MIST, MILES)
+    "sfh",  # star formation history priors / models
+    "dust_attenuation",  # attenuation laws
+    "dust_emission",  # dust emission templates
+    "nebular",  # nebular emission
+    "igm",  # intergalactic medium
+    "agn",  # AGN components
+    "inference",  # inference backends
+    "preprocessing",  # data hygiene (MW extinction, zero points, ...)
+    "reference_code",  # peer SED-fitting codes (ported or compared to)
+    "other",  # anything that doesn't fit a canonical bucket
 )
 
 

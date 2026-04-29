@@ -7,14 +7,14 @@ Usage
 -----
 ::
 
-    from tengri.config.settings import DustConfig, NebularConfig, ModelConfig
+    from tengri.config.settings import DustConfig, NebularConfig, SEDModelConfig
 
-    cfg = ModelConfig(
+    cfg = SEDModelConfig(
         nebular=NebularConfig(backend="cloudy", grid_path="/data/cloudy.h5"),
         dust=DustConfig(law_bc="calzetti"),
     )
 
-All fields have defaults so a bare ``ModelConfig()`` is equivalent to the
+All fields have defaults so a bare ``SEDModelConfig()`` is equivalent to the
 standard smooth parametric model.
 """
 
@@ -141,7 +141,7 @@ class SFHConfig:
     -----
     Frozen dataclass — all fields are immutable after construction. Pass to
     :class:`~tengri.forward.sed_model.SEDModel` via the ``sfh`` field of
-    :class:`ModelConfig`. Changes require constructing a new instance.
+    :class:`SEDModelConfig`. Changes require constructing a new instance.
 
     Examples
     --------
@@ -200,7 +200,7 @@ class DustConfig:
     Frozen dataclass — all fields are immutable after construction. Validated
     in ``__post_init__``: invalid ``model``, ``law_bc``, ``law_diff``, or
     ``emission`` strings raise :exc:`ValueError` immediately. Pass to
-    :class:`ModelConfig` via the ``dust`` field.
+    :class:`SEDModelConfig` via the ``dust`` field.
 
     Examples
     --------
@@ -292,7 +292,7 @@ class NebularConfig:
     Frozen dataclass — all fields are immutable after construction. Validated
     in ``__post_init__``: unsupported ``backend`` or ``eline_mode`` strings raise
     :exc:`ValueError`; ``grid_path`` is required when ``backend="cloudy"``.
-    Pass to :class:`ModelConfig` via the ``nebular`` field.
+    Pass to :class:`SEDModelConfig` via the ``nebular`` field.
 
     Examples
     --------
@@ -354,7 +354,7 @@ class MultiwavelengthConfig:
     Frozen dataclass — all fields are immutable after construction.
     ``apply_igm=True`` applies IGM absorption to the full SED at the galaxy
     redshift.  The model is selected via ``igm_model``.  Pass to
-    :class:`ModelConfig` via the ``multiwavelength`` field.
+    :class:`SEDModelConfig` via the ``multiwavelength`` field.
 
     Examples
     --------
@@ -372,7 +372,7 @@ class MultiwavelengthConfig:
 
 
 @dataclass(frozen=True)
-class ModelConfig:
+class SEDModelConfig:
     """Top-level frozen configuration collecting all sub-model settings.
 
     Groups structural choices (which physics modules are active) separately
@@ -403,20 +403,20 @@ class ModelConfig:
     Notes
     -----
     Frozen dataclass — all fields are immutable after construction.
-    ``ModelConfig()`` with no arguments produces the default smooth parametric
+    ``SEDModelConfig()`` with no arguments produces the default smooth parametric
     SED model (double power-law SFH, power-law dust, no nebular emission, no
-    AGN). Pass a ``ModelConfig`` instance as the ``config`` argument to
+    AGN). Pass a ``SEDModelConfig`` instance as the ``config`` argument to
     :class:`~tengri.forward.sed_model.SEDModel`.
 
     Examples
     --------
     Standard photometric fit::
 
-        cfg = ModelConfig()
+        cfg = SEDModelConfig()
 
     With cloudy nebular emission and radio extension::
 
-        cfg = ModelConfig(
+        cfg = SEDModelConfig(
             nebular=NebularConfig(backend="cloudy", grid_path="/data/cloudy.h5"),
             multiwavelength=MultiwavelengthConfig(radio=True),
         )
@@ -428,3 +428,17 @@ class ModelConfig:
     multiwavelength: MultiwavelengthConfig = field(default_factory=MultiwavelengthConfig)
     agn_model: str | None = None
     agn_config: AGNConfig | None = None
+
+
+# Deprecated alias — removed in v1.0 per docs/dev/NAMING_CONTRACT.md
+def __getattr__(name: str):
+    if name == "ModelConfig":
+        import warnings
+        warnings.warn(
+            "ModelConfig is deprecated; use SEDModelConfig instead. "
+            "ModelConfig will be removed in v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return SEDModelConfig
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

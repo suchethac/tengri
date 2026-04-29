@@ -1,8 +1,8 @@
 """Vetted factory functions for common galaxy types.
 
-This module provides preset Parameter + ModelConfig tuples for typical galaxy
+This module provides preset Parameter + SEDModelConfig tuples for typical galaxy
 populations, avoiding the 10-line setup ritual. Each preset is a callable that
-returns a fully-configured (Parameters, ModelConfig) pair ready for forward
+returns a fully-configured (Parameters, SEDModelConfig) pair ready for forward
 modeling or inference.
 
 Usage
@@ -32,8 +32,8 @@ from __future__ import annotations
 
 from tengri.config.settings import (
     DustConfig,
-    ModelConfig,
     NebularConfig,
+    SEDModelConfig,
     SFHConfig,
 )
 from tengri.parameters.parameters import Parameters
@@ -51,7 +51,7 @@ __all__ = [
 ]
 
 
-def starforming(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
+def starforming(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     """Star-forming galaxy preset (main sequence, z ~ 0–3).
 
     Star-forming galaxies typically have:
@@ -71,7 +71,7 @@ def starforming(redshift: float | None = None) -> tuple[Parameters, ModelConfig]
 
     Returns
     -------
-    tuple[Parameters, ModelConfig]
+    tuple[Parameters, SEDModelConfig]
         (params, config) — fully configured Parameter spec and model settings.
 
     Notes
@@ -114,7 +114,7 @@ def starforming(redshift: float | None = None) -> tuple[Parameters, ModelConfig]
         redshift=z_prior,
     )
 
-    config = ModelConfig(
+    config = SEDModelConfig(
         sfh=SFHConfig(mean_type=("dpl",)),
         dust=DustConfig(
             model="two_component",
@@ -128,7 +128,7 @@ def starforming(redshift: float | None = None) -> tuple[Parameters, ModelConfig]
     return params, config
 
 
-def quiescent(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
+def quiescent(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     """Quiescent / early-type galaxy preset (z ~ 0–2).
 
     Quiescent (red) galaxies typically have:
@@ -147,7 +147,7 @@ def quiescent(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
 
     Returns
     -------
-    tuple[Parameters, ModelConfig]
+    tuple[Parameters, SEDModelConfig]
         (params, config) — fully configured Parameter spec and model settings.
 
     Notes
@@ -187,7 +187,7 @@ def quiescent(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
         redshift=z_prior,
     )
 
-    config = ModelConfig(
+    config = SEDModelConfig(
         sfh=SFHConfig(mean_type=("dexp",)),
         dust=DustConfig(
             model="two_component",
@@ -201,7 +201,7 @@ def quiescent(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
     return params, config
 
 
-def high_z(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
+def high_z(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     """High-redshift galaxy preset (z > 4, young starburst).
 
     High-redshift galaxies typically have:
@@ -220,7 +220,7 @@ def high_z(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
 
     Returns
     -------
-    tuple[Parameters, ModelConfig]
+    tuple[Parameters, SEDModelConfig]
         (params, config) — fully configured Parameter spec and model settings.
 
     Notes
@@ -263,7 +263,7 @@ def high_z(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
         redshift=z_prior,
     )
 
-    config = ModelConfig(
+    config = SEDModelConfig(
         sfh=SFHConfig(mean_type=("tsnorm",)),
         dust=DustConfig(
             model="two_component",
@@ -277,7 +277,7 @@ def high_z(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
     return params, config
 
 
-def photoz(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
+def photoz(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     """Photometric-redshift galaxy preset (redshift-unconstrained survey).
 
     Photometric-redshift (photo-z) surveys estimate galaxy redshifts from
@@ -298,7 +298,7 @@ def photoz(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
 
     Returns
     -------
-    tuple[Parameters, ModelConfig]
+    tuple[Parameters, SEDModelConfig]
         (params, config) — fully configured Parameter spec and model settings.
 
     Notes
@@ -337,7 +337,7 @@ def photoz(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
         redshift=z_prior,
     )
 
-    config = ModelConfig(
+    config = SEDModelConfig(
         sfh=SFHConfig(mean_type=("dpl",)),
         dust=DustConfig(
             model="two_component",
@@ -351,7 +351,7 @@ def photoz(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
     return params, config
 
 
-def jwst_spec(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
+def jwst_spec(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     """JWST NIRSpec spectroscopic fitting preset (known or constrained redshift).
 
     JWST NIRSpec provides high signal-to-noise spectroscopy with excellent
@@ -372,7 +372,7 @@ def jwst_spec(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
 
     Returns
     -------
-    tuple[Parameters, ModelConfig]
+    tuple[Parameters, SEDModelConfig]
         (params, config) — fully configured Parameter spec and model settings.
 
     Notes
@@ -415,7 +415,7 @@ def jwst_spec(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
         redshift=z_prior,
     )
 
-    config = ModelConfig(
+    config = SEDModelConfig(
         sfh=SFHConfig(mean_type=("dpl",)),
         dust=DustConfig(
             model="two_component",
@@ -429,7 +429,7 @@ def jwst_spec(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
     return params, config
 
 
-def agn_host(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
+def agn_host(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     """AGN host galaxy preset (Type 1/2 AGN).
 
     This preset models the stellar population and dust properties of galaxies
@@ -443,7 +443,7 @@ def agn_host(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
     starforming galaxies but allow broader flexibility.
 
     **Future enhancement:** A dedicated ``agn_unified`` preset will add explicit
-    torus emission (K&D disc, SKIRTOR) and NLR modeling once ModelConfig supports
+    torus emission (K&D disc, SKIRTOR) and NLR modeling once SEDModelConfig supports
     AGN-specific knobs. This version focuses purely on the host stellar population.
 
     Parameters
@@ -454,7 +454,7 @@ def agn_host(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
 
     Returns
     -------
-    tuple[Parameters, ModelConfig]
+    tuple[Parameters, SEDModelConfig]
         (params, config) — fully configured Parameter spec and model settings.
 
     Notes
@@ -502,7 +502,7 @@ def agn_host(redshift: float | None = None) -> tuple[Parameters, ModelConfig]:
         redshift=z_prior,
     )
 
-    config = ModelConfig(
+    config = SEDModelConfig(
         sfh=SFHConfig(mean_type=("dpl",)),
         dust=DustConfig(
             model="two_component",
@@ -529,8 +529,8 @@ PRESETS: dict[str, callable] = {
 def resolve_preset(
     name: str,
     redshift: float | None = None,
-    model_config: ModelConfig | None = None,
-) -> tuple[Parameters, ModelConfig]:
+    model_config: SEDModelConfig | None = None,
+) -> tuple[Parameters, SEDModelConfig]:
     """Look up a preset by name and invoke its factory.
 
     Parameters
@@ -539,13 +539,13 @@ def resolve_preset(
         Preset name, one of :func:`list_presets`.
     redshift : float or None
         Redshift to pass through to the preset factory.
-    model_config : ModelConfig or None
-        Optional override for the returned ModelConfig. If provided, it is
-        returned verbatim; the preset's own ModelConfig is discarded.
+    model_config : SEDModelConfig or None
+        Optional override for the returned SEDModelConfig. If provided, it is
+        returned verbatim; the preset's own SEDModelConfig is discarded.
 
     Returns
     -------
-    tuple[Parameters, ModelConfig]
+    tuple[Parameters, SEDModelConfig]
 
     Raises
     ------

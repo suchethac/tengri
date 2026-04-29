@@ -1,6 +1,6 @@
 """Per-object citation collection — the public ``collect_citations()`` API.
 
-Inspects a Galaxy / SEDModel / Fitter / ModelConfig / Parameters instance and
+Inspects a Galaxy / SEDModel / Fitter / SEDModelConfig / Parameters instance and
 returns the subset of the citation registry that applies to *that specific
 configuration*. Users only cite what they actually use.
 """
@@ -142,7 +142,7 @@ def collect_citations(
 
     Parameters
     ----------
-    obj : Galaxy | SEDModel | Fitter | ModelConfig | FitResult | Any
+    obj : Galaxy | SEDModel | Fitter | SEDModelConfig | FitResult | Any
         Object whose configuration is inspected. If ``obj`` exposes a
         ``bibliography`` attribute, its contents are returned verbatim; for
         plain objects the citations are reconstructed from ``model_config``.
@@ -196,8 +196,9 @@ def collect_citations(
     >>> g = tg.Galaxy.from_arrays(
     ...     filters=["sdss_u", "sdss_g", "sdss_r"],
     ...     flux=np.array([1e-28, 2e-28, 3e-28]),
-    ...     flux_err=np.array([1e-29]*3),
-    ...     redshift=0.1, ssp_path="data/ssp.h5",
+    ...     flux_err=np.array([1e-29] * 3),
+    ...     redshift=0.1,
+    ...     ssp_path="data/ssp.h5",
     ...     preset="starforming",
     ... )  # doctest: +SKIP
     >>> [c.key for c in tg.collect_citations(g)]  # doctest: +SKIP
@@ -205,8 +206,8 @@ def collect_citations(
 
     Config-only, no backend:
 
-    >>> from tengri.config.settings import ModelConfig, DustConfig
-    >>> mc = ModelConfig(dust=DustConfig(law_bc="kriek_conroy"))
+    >>> from tengri.config.settings import SEDModelConfig, DustConfig
+    >>> mc = SEDModelConfig(dust=DustConfig(law_bc="kriek_conroy"))
     >>> [c.key for c in tg.collect_citations(mc, include_backend=False)]
     ['tengri', 'jax', 'dsps', 'charlot_fall2000', 'kriek_conroy2013']
     """
@@ -227,7 +228,7 @@ def citations_report(obj: Any, *, include_backend: bool = True) -> str:
     ----------
     obj : Any
         Any object understood by :func:`collect_citations` (Galaxy,
-        ModelConfig, Fitter, FitResult, ...).
+        SEDModelConfig, Fitter, FitResult, ...).
     include_backend : bool, optional
         Include inference-backend citations. Default ``True``.
 
