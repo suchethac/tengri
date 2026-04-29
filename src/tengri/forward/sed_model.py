@@ -3680,11 +3680,11 @@ class SEDModel:
         if self._hybrid.photometry is not None or any(
             (
                 getattr(self._nebular_backend, "has_free_params", False),
-                getattr(self._shock_backend, "has_free_params", False),
-                self._has_dust_ir_full,
-                self._has_agn_full,
-                self._has_radio,
-                self._has_xray,
+                getattr(getattr(self, "_shock_backend", None), "has_free_params", False),
+                getattr(self, "_has_dust_ir_full", False),
+                getattr(self, "_has_agn_full", False),
+                getattr(self, "_has_radio", False),
+                getattr(self, "_has_xray", False),
             )
         ):
             with contextlib.suppress(Exception):
