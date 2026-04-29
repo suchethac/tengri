@@ -425,6 +425,109 @@ def run_map(
     )
 
 
+def build_vectorized_map_solver(
+    fitter,
+    *,
+    n_steps: int = 200,
+    learning_rate: float = 0.03,
+    optimizer: str = "adam",
+):
+    """Return a JIT-friendly per-galaxy MAP solver for population fitting.
+
+    The returned ``map_solve_one(flux, noise, key) -> dict`` runs ``n_steps``
+    optax updates via ``jax.lax.scan`` (zero Python overhead per step) and
+    returns the final unbounded-parameter dict. Wrap in
+    ``jax.lax.map(map_solve_one, (all_flux, all_noise, all_keys), batch_size=K)``
+    for vectorized population MAP-init: compile cost stays O(K) regardless
+    of catalog size, replacing the O(N) Python dispatch loop.
+
+    Parameters
+    ----------
+    fitter : Fitter
+        Template fitter — its model, observation, spec, and ``_data_args``
+        layout are reused for every galaxy. The galaxy-varying fields
+        (``data``, ``noise``, ``noise_inv``, ``sqrt_noise_inv``) are
+        replaced inside the scan; all other fields (filter curves, masks,
+        spec covariance) are shared from the template.
+    n_steps : int, optional
+        Number of optax steps (default 200).  No early stopping — the
+        scan length is static, so compile cost is independent of n_steps.
+    learning_rate : float, optional
+        Adam learning rate (default 0.03).
+    optimizer : str, optional
+        ``"adam"`` (default), ``"adamw"``, or ``"sgd"``.
+
+    Returns
+    -------
+    map_solve_one : callable
+        ``map_solve_one(flux, noise, key) -> dict`` of unbounded params.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.  The body is one ``lax.scan`` over ``n_steps``
+    optax updates.  All galaxy-varying state (flux, noise) is passed as
+    arguments, not closures, so a single compiled artifact is reused
+    across galaxies.
+    """
+    import optax
+
+    loss_fn = fitter._get_or_build_loss_fn()
+    template_data_args = fitter._data_args
+    spec = fitter.spec
+    free_names = list(fitter._free_names)
+
+    opt, _opt_name = _build_optax_optimizer(optimizer, learning_rate)
+
+    def _make_data_args(flux, noise):
+        """Per-galaxy data_args with shared filter/obs fields preserved."""
+        noise_inv = 1.0 / noise**2
+        out = dict(template_data_args)
+        out["data"] = flux
+        out["noise"] = noise
+        out["noise_inv"] = noise_inv
+        out["sqrt_noise_inv"] = jnp.sqrt(noise_inv)
+        return out
+
+    def _initial_unbounded(key):
+        """Pure-JAX init mirroring Fitter._initialize_unbounded (avoids closing
+        over self for cleaner tracing)."""
+        from tengri.parameters.priors import Gaussian
+
+        keys = jax.random.split(key, len(free_names) + 1)
+        params: dict = {}
+        for i, name in enumerate(free_names):
+            dist = spec.get_distribution(name)
+            if isinstance(dist, Gaussian):
+                params[name] = dist.standardize(jnp.array(dist.mu))
+            else:
+                params[name] = 0.1 * jax.random.normal(keys[i])
+        if spec.stochastic:
+            params["psd_xi"] = 0.1 * jax.random.normal(keys[-1], shape=(spec.n_grid,))
+        return params
+
+    def map_solve_one(flux, noise, key):
+        data_args = _make_data_args(flux, noise)
+        init_params = _initial_unbounded(key)
+        opt_state = opt.init(init_params)
+
+        def step(carry, _):
+            params, ostate = carry
+            _loss, grads = jax.value_and_grad(lambda p: loss_fn(p, data_args))(params)
+            updates, new_ostate = opt.update(grads, ostate, params)
+            new_params = optax.apply_updates(params, updates)
+            return (new_params, new_ostate), None
+
+        (final_params, _), _ = jax.lax.scan(
+            step,
+            (init_params, opt_state),
+            None,
+            length=n_steps,
+        )
+        return final_params
+
+    return map_solve_one
+
+
 def run_laplace(fitter, *, key, init_from=None, n_map_steps=1000, **kwargs):
     """Laplace approximation: Gaussian posterior from Hessian at MAP."""
     from tengri.inference.backends.laplace import run_laplace

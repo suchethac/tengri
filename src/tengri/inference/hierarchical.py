@@ -438,17 +438,13 @@ class PopulationFitter:
                 stacklevel=2,
             )
 
-        import math
-
         from jax.flatten_util import ravel_pytree
 
         from tengri.inference.backends.vi.native import build_native_vi_nonlinear_engine
 
         n_gal = self.n_galaxies
         K = max(1, int(forward_chunk_size))
-        n_padded = math.ceil(n_gal / K) * K
-        n_chunks = n_padded // K
-        n_pad = n_padded - n_gal
+        # batch_size=K in lax.map handles non-divisible N internally — no padding needed.
         if K > 1:
             n_data_per_gal = len(self.galaxies[0]["flux_obs"])
             for g in self.galaxies[1:]:
@@ -524,28 +520,21 @@ class PopulationFitter:
                 return _predict(params)
 
             fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
-            if K == 1:
-                if stochastic:
-                    gal_inputs = (p["gal"], p["gal_xi"])
-                    predictions = jax.lax.map(lambda args: fwd(args[0], args[1]), gal_inputs)
-                else:
-                    predictions = jax.lax.map(lambda ub: fwd(ub, None), p["gal"])
-                return predictions.reshape(-1)
+            # Unified path: lax.map(..., batch_size=K) handles K=1 (sequential) and
+            # K>1 (vmap-K-then-scan) with no padding required for non-divisible N.
+            if stochastic:
+                predictions = jax.lax.map(
+                    lambda args: fwd(args[0], args[1]),
+                    (p["gal"], p["gal_xi"]),
+                    batch_size=K,
+                )
             else:
-                # K-way parallel chunks via lax.map(vmap_K); O(1) XLA graph in N_gal.
-                chunked_gal = jax.tree.map(lambda arr: arr.reshape(n_chunks, K), p["gal"])
-                if stochastic:
-                    chunked_xi = p["gal_xi"].reshape(n_chunks, K, n_grid)
-                    predictions = jax.lax.map(
-                        lambda args: jax.vmap(fwd)(args[0], args[1]),
-                        (chunked_gal, chunked_xi),
-                    )
-                else:
-                    predictions = jax.lax.map(
-                        lambda chunk: jax.vmap(lambda ub: fwd(ub, None))(chunk),
-                        chunked_gal,
-                    )
-                return predictions.reshape(n_padded, n_data_per_gal)[:n_gal].reshape(-1)
+                predictions = jax.lax.map(
+                    lambda ub: fwd(ub, None),
+                    p["gal"],
+                    batch_size=K,
+                )
+            return predictions.reshape(-1)
 
         # --- Build init structure ---
         sigma_mid = 0.5 * (sigma_lo + sigma_hi)
@@ -554,10 +543,10 @@ class PopulationFitter:
         init_template = {
             "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
             "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
-            "gal": {name: jnp.zeros(n_padded) for name in free_names},
+            "gal": {name: jnp.zeros(n_gal) for name in free_names},
         }
         if stochastic:
-            init_template["gal_xi"] = jnp.zeros((n_padded, n_grid))
+            init_template["gal_xi"] = jnp.zeros((n_gal, n_grid))
 
         _init_flat, unravel_fn = ravel_pytree(init_template)
         d_total = len(_init_flat)
@@ -587,52 +576,54 @@ class PopulationFitter:
 
         t0 = time.time()
 
-        # --- Initialize per-galaxy params via MAP ---
+        # --- Initialize per-galaxy params via vectorized MAP ---
         from tengri import Fitter
+        from tengri.inference.backends.map_dispatch import build_vectorized_map_solver
 
         init_keys = jax.random.split(key, n_gal + n_seeds + 2)
 
         if verbose:
-            print("  Initializing per-galaxy params via MAP...")
+            print("  Initializing per-galaxy params via vectorized MAP...")
 
-        import gc
+        _template_gal = self.galaxies[0]
+        _template_fitter = Fitter(
+            model,
+            _template_gal["flux_obs"],
+            _template_gal["noise"],
+            data_type=self.data_type,
+        )
+        map_solve_one = build_vectorized_map_solver(
+            _template_fitter,
+            n_steps=200,
+            learning_rate=0.03,
+        )
 
-        gal_param_lists = {name: [] for name in free_names}
-        gal_xi_list = []
-        for i in range(n_gal):
-            gal = self.galaxies[i]
-            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"], data_type=self.data_type)
-            map_i = fitter_i.run(
-                "map",
-                n_steps=500,
-                learning_rate=0.03,
-                verbose=False,
-                key=init_keys[i],
-            )
-            init_u = fitter_i._unbounded_from_posterior(map_i)
-            for name in free_names:
-                gal_param_lists[name].append(init_u.get(name, jnp.array(0.0)))
-            if stochastic:
-                gal_xi_list.append(init_u.get("psd_xi", jnp.zeros(n_grid)))
-            del fitter_i, map_i, init_u
-        gc.collect()
+        all_flux_init = jnp.stack([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
+        all_noise_init = jnp.stack([jnp.asarray(g["noise"]) for g in self.galaxies])
+        gal_keys = init_keys[:n_gal]
 
-        _gal_stacked = {name: jnp.stack(vals) for name, vals in gal_param_lists.items()}
-        if n_pad > 0:
-            _gal_stacked = {
-                name: jnp.concatenate([arr, jnp.zeros(n_pad)])
-                for name, arr in _gal_stacked.items()
-            }
+        all_init_unbounded = jax.lax.map(
+            lambda args: map_solve_one(args[0], args[1], args[2]),
+            (all_flux_init, all_noise_init, gal_keys),
+            batch_size=K,
+        )
+        jax.block_until_ready(
+            all_init_unbounded["psd_xi"] if stochastic else next(iter(all_init_unbounded.values()))
+        )
+
+        _gal_stacked = {
+            name: all_init_unbounded.get(name, jnp.zeros(n_gal)) for name in free_names
+        }
         map_init = {
             "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
             "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
             "gal": _gal_stacked,
         }
         if stochastic:
-            _xi_stacked = jnp.stack(gal_xi_list)
-            if n_pad > 0:
-                _xi_stacked = jnp.concatenate([_xi_stacked, jnp.zeros((n_pad, n_grid))], axis=0)
-            map_init["gal_xi"] = _xi_stacked
+            map_init["gal_xi"] = all_init_unbounded.get(
+                "psd_xi",
+                jnp.zeros((n_gal, n_grid)),
+            )
 
         if verbose:
             print("  MAP init done. Running multi-seed optimization...")
@@ -797,15 +788,12 @@ class PopulationFitter:
         verbose : bool
             Print progress.
         """
-        import math
 
         from jax.flatten_util import ravel_pytree
 
         n_gal = self.n_galaxies
         K = max(1, int(forward_chunk_size))
-        n_padded = math.ceil(n_gal / K) * K
-        n_chunks = n_padded // K
-        n_pad = n_padded - n_gal
+        # batch_size=K in lax.map handles non-divisible N internally — no padding needed.
         if K > 1:
             n_data_per_gal = len(self.galaxies[0]["flux_obs"])
             for g in self.galaxies[1:]:
@@ -892,28 +880,21 @@ class PopulationFitter:
             # vmap replicates the graph N times → XLA protobuf exceeds 2 GB for
             # complex SEDs with N ≥ 3.  lax.map compiles one galaxy and loops.
             fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
-            if K == 1:
-                if stochastic:
-                    gal_inputs = (p["gal"], p["gal_xi"])
-                    predictions = jax.lax.map(lambda args: fwd(args[0], args[1]), gal_inputs)
-                else:
-                    predictions = jax.lax.map(lambda ub: fwd(ub, None), p["gal"])
-                return predictions.reshape(-1)
+            # Unified path: lax.map(..., batch_size=K) handles K=1 (sequential) and
+            # K>1 (vmap-K-then-scan) with no padding required for non-divisible N.
+            if stochastic:
+                predictions = jax.lax.map(
+                    lambda args: fwd(args[0], args[1]),
+                    (p["gal"], p["gal_xi"]),
+                    batch_size=K,
+                )
             else:
-                # K-way parallel chunks via lax.map(vmap_K); O(1) XLA graph in N_gal.
-                chunked_gal = jax.tree.map(lambda arr: arr.reshape(n_chunks, K), p["gal"])
-                if stochastic:
-                    chunked_xi = p["gal_xi"].reshape(n_chunks, K, n_grid)
-                    predictions = jax.lax.map(
-                        lambda args: jax.vmap(fwd)(args[0], args[1]),
-                        (chunked_gal, chunked_xi),
-                    )
-                else:
-                    predictions = jax.lax.map(
-                        lambda chunk: jax.vmap(lambda ub: fwd(ub, None))(chunk),
-                        chunked_gal,
-                    )
-                return predictions.reshape(n_padded, n_data_per_gal)[:n_gal].reshape(-1)
+                predictions = jax.lax.map(
+                    lambda ub: fwd(ub, None),
+                    p["gal"],
+                    batch_size=K,
+                )
+            return predictions.reshape(-1)
 
         # --- Build init structure ---
         sigma_mid = 0.5 * (sigma_lo + sigma_hi)
@@ -922,10 +903,10 @@ class PopulationFitter:
         init_template = {
             "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
             "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
-            "gal": {name: jnp.zeros(n_padded) for name in free_names},
+            "gal": {name: jnp.zeros(n_gal) for name in free_names},
         }
         if stochastic:
-            init_template["gal_xi"] = jnp.zeros((n_padded, n_grid))
+            init_template["gal_xi"] = jnp.zeros((n_gal, n_grid))
 
         # Use ravel_pytree for flatten/unflatten
         _init_flat, unravel_fn = ravel_pytree(init_template)
@@ -956,53 +937,60 @@ class PopulationFitter:
 
         t0 = time.time()
 
-        # --- Initialize per-galaxy params via MAP ---
+        # --- Initialize per-galaxy params via vectorized MAP ---
+        # One JIT'd map_solve_one(flux, noise, key) compiled once, run for all
+        # N galaxies via lax.map(batch_size=K). Compile time O(K), no Python
+        # per-galaxy dispatch — replaces the prior O(N) Python loop.
         from tengri import Fitter
+        from tengri.inference.backends.map_dispatch import build_vectorized_map_solver
 
         init_keys = jax.random.split(key, n_gal + n_seeds + 2)
 
         if verbose:
-            print("  Initializing per-galaxy params via MAP...")
+            print("  Initializing per-galaxy params via vectorized MAP...")
 
-        import gc
+        # Template fitter: any galaxy's flux/noise will do — its model,
+        # observation, and _data_args layout are reused inside map_solve_one.
+        _template_gal = self.galaxies[0]
+        _template_fitter = Fitter(
+            model,
+            _template_gal["flux_obs"],
+            _template_gal["noise"],
+            data_type=self.data_type,
+        )
+        map_solve_one = build_vectorized_map_solver(
+            _template_fitter,
+            n_steps=200,
+            learning_rate=0.03,
+        )
 
-        gal_param_lists = {name: [] for name in free_names}
-        gal_xi_list = []
-        for i in range(n_gal):
-            gal = self.galaxies[i]
-            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"], data_type=self.data_type)
-            map_i = fitter_i.run(
-                "map",
-                n_steps=500,
-                learning_rate=0.03,
-                verbose=False,
-                key=init_keys[i],
-            )
-            init_u = fitter_i._unbounded_from_posterior(map_i)
-            for name in free_names:
-                gal_param_lists[name].append(init_u.get(name, jnp.array(0.0)))
-            if stochastic:
-                gal_xi_list.append(init_u.get("psd_xi", jnp.zeros(n_grid)))
-            # Free per-galaxy MAP buffers before the next iteration.
-            del fitter_i, map_i, init_u
-        gc.collect()
+        # Stack per-galaxy data; lax.map streams them through map_solve_one.
+        all_flux_init = jnp.stack([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
+        all_noise_init = jnp.stack([jnp.asarray(g["noise"]) for g in self.galaxies])
+        gal_keys = init_keys[:n_gal]
 
-        _gal_stacked = {name: jnp.stack(vals) for name, vals in gal_param_lists.items()}
-        if n_pad > 0:
-            _gal_stacked = {
-                name: jnp.concatenate([arr, jnp.zeros(n_pad)])
-                for name, arr in _gal_stacked.items()
-            }
+        all_init_unbounded = jax.lax.map(
+            lambda args: map_solve_one(args[0], args[1], args[2]),
+            (all_flux_init, all_noise_init, gal_keys),
+            batch_size=K,
+        )
+        jax.block_until_ready(
+            all_init_unbounded["psd_xi"] if stochastic else next(iter(all_init_unbounded.values()))
+        )
+
+        _gal_stacked = {
+            name: all_init_unbounded.get(name, jnp.zeros(n_gal)) for name in free_names
+        }
         map_init = {
             "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
             "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
             "gal": _gal_stacked,
         }
         if stochastic:
-            _xi_stacked = jnp.stack(gal_xi_list)
-            if n_pad > 0:
-                _xi_stacked = jnp.concatenate([_xi_stacked, jnp.zeros((n_pad, n_grid))], axis=0)
-            map_init["gal_xi"] = _xi_stacked
+            map_init["gal_xi"] = all_init_unbounded.get(
+                "psd_xi",
+                jnp.zeros((n_gal, n_grid)),
+            )
 
         if verbose:
             print("  MAP init done. Running multi-seed optimization...")
@@ -1294,38 +1282,50 @@ class PopulationFitter:
             if k != "psd_xi":
                 init[k] = jnp.zeros_like(v)  # start at prior mean
 
-        # Per-galaxy: MAP initialization (sequential; compiled grad_fn is
-        # cached per-model so only one XLA compile happens). Stack into
-        # batched arrays to match the batched-leaf domain layout.
-        import gc
-
+        # Per-galaxy: vectorized MAP initialization via lax.map(batch_size=1).
+        # One JIT compile, then stream through all N galaxies — replaces the
+        # prior O(N) Python dispatch loop. Stack into batched arrays to match
+        # the batched-leaf domain layout.
         from tengri import Fitter
+        from tengri.inference.backends.map_dispatch import build_vectorized_map_solver
 
         keys = jax.random.split(key, n_gal + 1)
 
         if verbose:
-            print("  Initializing per-galaxy params via MAP...")
+            print("  Initializing per-galaxy params via vectorized MAP...")
 
-        gal_param_lists = {name: [] for name in free_names}
-        gal_xi_list = []
-        for i in range(n_gal):
-            gal = self.galaxies[i]
-            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"], data_type=self.data_type)
-            map_i = fitter_i.run(
-                "map", n_steps=500, learning_rate=0.03, verbose=False, key=keys[i]
-            )
-            init_u = fitter_i._unbounded_from_posterior(map_i)
-            for name in free_names:
-                gal_param_lists[name].append(init_u.get(name, jnp.array(0.0)))
-            gal_xi_list.append(init_u.get("psd_xi", jnp.zeros(n_grid)))
-            # Drop references to the per-galaxy MAP result so its buffers are
-            # reclaimable — prevents N live Posterior/loss_history arrays.
-            del fitter_i, map_i, init_u
-        gc.collect()
+        _template_gal = self.galaxies[0]
+        _template_fitter = Fitter(
+            model,
+            _template_gal["flux_obs"],
+            _template_gal["noise"],
+            data_type=self.data_type,
+        )
+        map_solve_one = build_vectorized_map_solver(
+            _template_fitter,
+            n_steps=200,
+            learning_rate=0.03,
+        )
+
+        all_flux_init = jnp.stack([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
+        all_noise_init = jnp.stack([jnp.asarray(g["noise"]) for g in self.galaxies])
+        gal_keys = keys[:n_gal]
+
+        all_init_unbounded = jax.lax.map(
+            lambda args: map_solve_one(args[0], args[1], args[2]),
+            (all_flux_init, all_noise_init, gal_keys),
+            batch_size=1,
+        )
+        jax.block_until_ready(
+            all_init_unbounded.get("psd_xi", next(iter(all_init_unbounded.values())))
+        )
 
         for name in free_names:
-            init[f"gal_{name}"] = jnp.stack(gal_param_lists[name])
-        init["gal_xi"] = jnp.stack(gal_xi_list)
+            init[f"gal_{name}"] = all_init_unbounded.get(name, jnp.zeros(n_gal))
+        init["gal_xi"] = all_init_unbounded.get(
+            "psd_xi",
+            jnp.zeros((n_gal, n_grid)),
+        )
 
         init_pos = jft.Vector(init)
 
@@ -1761,44 +1761,55 @@ class PopulationFitter:
         # Pre-build model with midpoint PSD for MAP initialization
         model = self.model_factory(psd_sigma=sigma_mid, psd_tau_myr=tau_mid)
 
-        # Initialize per-galaxy params via individual MAP fits
+        # Initialize per-galaxy params via vectorized MAP (lax.map(batch_size=1)).
         from tengri import Fitter
+        from tengri.inference.backends.map_dispatch import build_vectorized_map_solver
 
         keys = jax.random.split(key, n_gal + 2)
 
         if verbose:
-            print("  Initializing per-galaxy params via MAP...")
+            print("  Initializing per-galaxy params via vectorized MAP...")
 
-        import gc
+        _template_gal = self.galaxies[0]
+        _template_fitter = Fitter(
+            model,
+            _template_gal["flux_obs"],
+            _template_gal["noise"],
+            data_type=self.data_type,
+        )
+        map_solve_one = build_vectorized_map_solver(
+            _template_fitter,
+            n_steps=200,
+            learning_rate=0.03,
+        )
 
-        gal_param_lists = {name: [] for name in free_names}
-        gal_xi_list = []
+        all_flux_init = jnp.stack([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
+        all_noise_init = jnp.stack([jnp.asarray(g["noise"]) for g in self.galaxies])
+        gal_keys = keys[:n_gal]
 
-        for i in range(n_gal):
-            gal = self.galaxies[i]
-            fitter_i = Fitter(model, gal["flux_obs"], gal["noise"], data_type=self.data_type)
-            map_i = fitter_i.run(
-                "map", n_steps=500, learning_rate=0.03, verbose=False, key=keys[i]
-            )
-            init_u = fitter_i._unbounded_from_posterior(map_i)
-            for name in free_names:
-                gal_param_lists[name].append(init_u.get(name, jnp.array(0.0)))
-            if stochastic:
-                gal_xi_list.append(init_u.get("psd_xi", jnp.zeros(n_grid)))
-            del fitter_i, map_i, init_u
-        gc.collect()
+        all_init_unbounded = jax.lax.map(
+            lambda args: map_solve_one(args[0], args[1], args[2]),
+            (all_flux_init, all_noise_init, gal_keys),
+            batch_size=1,
+        )
 
         if verbose:
             print("  MAP initialization complete")
 
+        _gal_stacked = {
+            name: all_init_unbounded.get(name, jnp.zeros(n_gal)) for name in free_names
+        }
         # Structured init: shared scalars + stacked per-galaxy arrays
         init = {
             "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
             "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
-            "gal": {name: jnp.stack(vals) for name, vals in gal_param_lists.items()},
+            "gal": _gal_stacked,
         }
         if stochastic:
-            init["gal_xi"] = jnp.stack(gal_xi_list)
+            init["gal_xi"] = all_init_unbounded.get(
+                "psd_xi",
+                jnp.zeros((n_gal, n_grid)),
+            )
 
         init_flat, unravel_fn = ravel_pytree(init)
         D = len(init_flat)

@@ -365,7 +365,6 @@ class CatalogFitter:
         K = max(1, int(forward_chunk_size))
         n_gal = self.n_galaxies
         n_padded = _resolve_n_padded(n_gal, K, n_pad)
-        n_chunks = n_padded // K
         n_pad_extra = n_padded - n_gal
 
         n_data = self._validate_uniform_data()
@@ -414,22 +413,21 @@ class CatalogFitter:
         if verbose:
             print("  Compiling JIT engine (first call only)...")
 
-        # --- Chunked vmap: lax.map over n_chunks, vmap over K per chunk ---
-        def run_chunk(args):
-            init_c, key_c, data_c, noise_c = args
-            return jax.vmap(
-                lambda ini, k, d, n: run_fn(ini, k, d, n, n_iterations, n_samples, kl_rtol)
-            )(init_c, key_c, data_c, noise_c)
+        # --- lax.map(batch_size=K): scan over n_padded/K vmaps of size K. ---
+        # batch_size=K handles non-divisible n_padded internally, but n_pad is
+        # still useful for amortizing XLA compile cost across catalog sizes
+        # (e.g., always pad to power-of-2 to reuse the persistent cache).
+        def run_one(args):
+            ini, k, d, n = args
+            return run_fn(ini, k, d, n, n_iterations, n_samples, kl_rtol)
 
-        chunked = (
-            all_init.reshape(n_chunks, K, d_params),
-            run_keys.reshape(n_chunks, K, *run_keys.shape[1:]),
-            all_data.reshape(n_chunks, K, n_data),
-            all_noise.reshape(n_chunks, K, n_data),
+        all_best_flat, all_n_iters = jax.lax.map(
+            run_one,
+            (all_init, run_keys, all_data, all_noise),
+            batch_size=K,
         )
-        all_best_flat, all_n_iters = jax.lax.map(run_chunk, chunked)
-        all_best_flat = all_best_flat.reshape(n_padded, d_params)[:n_gal]
-        all_n_iters = jnp.asarray(all_n_iters).reshape(n_padded)[:n_gal]
+        all_best_flat = all_best_flat[:n_gal]
+        all_n_iters = jnp.asarray(all_n_iters)[:n_gal]
         jax.block_until_ready(all_best_flat)
 
         if verbose:
