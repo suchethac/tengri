@@ -209,7 +209,7 @@ def make_galaxies(n_gal: int, ssp_data, obs: Observation, key, sigma_true=2.0,
             noise[n_phot + n_lines + 0] = 0.02   # D4000
             noise[n_phot + n_lines + 1] = 0.3    # Hδ_A
             noise[n_phot + n_lines + 2] = 0.3    # Hβ_abs
-        noise[n_phot + n_lines + 3] = 0.3    # Mg b
+            noise[n_phot + n_lines + 3] = 0.3    # Mg b
 
         flux_obs = flux_arr + noise * np.asarray(jax.random.normal(k, shape=flux_arr.shape))
         galaxies.append({"flux_obs": jnp.asarray(flux_obs),
