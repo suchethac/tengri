@@ -122,6 +122,39 @@ in the table.
   (`spec_obs=True`) for the τ_PSD validation experiments, not the joint
   shortcut.
 
+## End-to-end validation: status
+
+`scripts/benchmark_joint_indices_e2e.py` was written to validate the
+prior-predictive projection (N≈154 for 3σ σ_PSD discrimination with
+joint+indices) against an actual `PopulationFitter` posterior at
+N=256, 512, 1024.
+
+**Two performance pathologies surfaced and remain open**:
+
+1. **HLO compile blowup**: at the joint+indices wave grid (≥99 wave
+   points spread across 7 disjoint sub-bands), `predict_spectrum` paired
+   with the vectorized MAP-init `lax.scan` produces an XLA artifact
+   exceeding the 2 GB protobuf limit (warnings: `xla.cpu.CompilationResultProto exceeded
+   maximum protobuf size of 2GB: 4711326381`). The compile succeeds but
+   cannot be cached. `wave_chunk_size` doesn't compose with
+   `lax.scan` (`ConcretizationTypeError` from
+   `priors.py:Uniform.unstandardize`).
+
+2. **Wall-time / memory inflation**: at N=32 K=4 with the joint observable
+   (44 wave points), the script spent 18+ minutes in compile/execution
+   with 2–17 GB peak RSS, vs `benchmark_population_native.py` which
+   completes the same N at K=4 in 22 s with 5 GB RSS at the
+   164-wave-point joint config. The plumbing inflation appears to come
+   from concurrent SSP/wave-graph signatures interacting with the
+   persistent JAX cache; root cause not yet isolated.
+
+**Decision**: the prior-predictive analysis above is the primary
+evidence. The E2E validation is deferred until the HLO blowup is
+addressed (likely requires a `lax.scan`-compatible `wave_chunk_size`
+implementation, separate from this work). The Burnham et al. 2026
+N=500 with full spectra remains the best-available external
+calibration point.
+
 ## Files
 
 - `scripts/joint_prior_predictive.py`
