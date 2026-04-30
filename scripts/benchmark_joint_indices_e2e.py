@@ -237,12 +237,17 @@ def run_one(n_gal: int, K: int, n_iter: int = 15, n_samp: int = 3) -> dict:
     )
     wall_s = time.time() - t0
 
-    sigma_samp = np.array(result.shared_samples.get("sfh_field_psd_sigma", []))
-    tau_samp = np.array(result.shared_samples.get("sfh_field_psd_tau_myr", []))
+    shared = getattr(result, "shared_samples", {}) or {}
+    # Existing benches use "psd_sigma" / "psd_tau_myr" keys (not the full
+    # "sfh_field_*" names). Probe both for forward-compat.
+    sigma_samp = np.asarray(shared.get("psd_sigma",
+                                       shared.get("sfh_field_psd_sigma", [])))
+    tau_samp = np.asarray(shared.get("psd_tau_myr",
+                                     shared.get("sfh_field_psd_tau_myr", [])))
 
     def _sum(arr):
         if arr.size == 0:
-            return None
+            return {"keys_available": list(shared.keys())}
         return {
             "median": float(np.median(arr)),
             "mean": float(np.mean(arr)),
@@ -260,10 +265,14 @@ def run_one(n_gal: int, K: int, n_iter: int = 15, n_samp: int = 3) -> dict:
         "psd_sigma_summary": _sum(sigma_samp),
         "psd_tau_summary": _sum(tau_samp),
     }
-    print(f"  wall={wall_s:.1f}s  σ posterior: median={out['psd_sigma_summary']['median']:.2f} "
-          f"± {out['psd_sigma_summary']['std']:.2f}  iters={out['n_iters_used']}")
-    print(f"  τ posterior: median={out['psd_tau_summary']['median']:.0f} "
-          f"± {out['psd_tau_summary']['std']:.0f} Myr")
+    print(f"  wall={wall_s:.1f}s  iters={out['n_iters_used']}")
+    ss, ts = out["psd_sigma_summary"], out["psd_tau_summary"]
+    if "median" in ss:
+        print(f"  σ posterior: median={ss['median']:.2f} ± {ss['std']:.2f}")
+    else:
+        print(f"  σ posterior: keys available = {ss.get('keys_available')}")
+    if "median" in ts:
+        print(f"  τ posterior: median={ts['median']:.0f} ± {ts['std']:.0f} Myr")
     return out
 
 
@@ -276,12 +285,15 @@ def main() -> None:
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     rows = []
+    import traceback
     for n in args.Ns:
         try:
             row = run_one(n, args.K)
         except Exception as exc:
-            row = {"n_gal": n, "K": args.K, "error": repr(exc)}
+            row = {"n_gal": n, "K": args.K, "error": repr(exc),
+                   "traceback": traceback.format_exc()}
             print(f"ERROR at N={n}: {exc}")
+            traceback.print_exc()
         rows.append(row)
         Path(args.out).write_text(json.dumps(rows, indent=2))
 
