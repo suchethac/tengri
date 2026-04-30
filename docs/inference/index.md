@@ -16,6 +16,7 @@ tengri exposes one standardized objective to **MAP**, **variational**, and **MCM
 - [Population VI scaling](scaling.md)
 - [Persistent compilation cache](compilation_cache.md)
 - [JIT compile cost in population inference](jit_compile.md)
+- [Information content of the joint observable](joint_information_content.md)
 - [API: inference](../api/inference.rst)
 
 ```{toctree}
@@ -27,5 +28,6 @@ tengri exposes one standardized objective to **MAP**, **variational**, and **MCM
 scaling
 compilation_cache
 jit_compile
+joint_information_content
 ../api/inference
 ```
