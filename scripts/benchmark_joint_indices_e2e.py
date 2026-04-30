@@ -110,9 +110,9 @@ def _compute_indices(spec_idx, layout, wave_idx):
         blue_F = spec_idx[blue_lo:blue_hi]
         blue_w = wave_idx[blue_lo:blue_hi]
         if name == "D4000":
-            d4 = jnp.mean(feat_F * feat_w**2) / jnp.maximum(
-                jnp.mean(blue_F * blue_w**2), 1e-40,
-            )
+            # Bruzual D4000: ratio of mean F_ν in red band over blue band.
+            # tengri returns L_ν (erg/s/Hz), so this is the right ratio.
+            d4 = jnp.mean(feat_F) / jnp.maximum(jnp.mean(blue_F), 1e-40)
             out.append(d4)
         else:
             red_lo, red_hi = layout[name]["red"]
@@ -129,58 +129,63 @@ def _compute_indices(spec_idx, layout, wave_idx):
     return jnp.array(out)
 
 
-def patch_predict_joint_indices(model: SEDModel) -> SEDModel:
-    """Wrap predict_photometry to return concatenated (10 phot + 4 lines + 4 indices)."""
+def patch_predict_joint_indices(model: SEDModel, include_indices: bool = True) -> SEDModel:
+    """Wrap predict_photometry to return concatenated (10 phot + 4 lines [+ 4 indices])."""
     line_centers_obs = LINE_WAVES_REST_AA * (1.0 + Z_FIX)
     waves_per_line = jnp.stack([
         jnp.linspace(c - LINE_WINDOW_AA, c + LINE_WINDOW_AA, LINE_NPIX)
         for c in line_centers_obs
     ])
     waves_lines = waves_per_line.reshape(-1)
-    waves_index, layout = _build_index_grid()
     n_lines = waves_lines.shape[0]
-    waves_all = jnp.concatenate([waves_lines, waves_index])
+    if include_indices:
+        waves_index, layout = _build_index_grid()
+        waves_all = jnp.concatenate([waves_lines, waves_index])
+    else:
+        waves_all = waves_lines
+        layout = None
+        waves_index = None
 
     orig_predict = model.predict_photometry
 
-    def predict_joint_indices(params, mode="auto"):
+    def predict_joint(params, mode="auto"):
         phot = orig_predict(params, mode=mode)
         spec_all = model.predict_spectrum(params, waves_all, mode=mode)
         spec_lines = spec_all[:n_lines]
-        spec_idx = spec_all[n_lines:]
-
         spec_per_line = spec_lines.reshape(LINE_WAVES_REST_AA.shape[0], LINE_NPIX)
         cont = 0.5 * (spec_per_line[:, 0] + spec_per_line[:, -1])
         line_flux = jax.vmap(
             lambda f, w, c: jnp.trapezoid(f - c, w)
         )(spec_per_line, waves_per_line, cont)
 
-        indices = _compute_indices(spec_idx, layout, waves_index)
+        if include_indices:
+            spec_idx = spec_all[n_lines:]
+            indices = _compute_indices(spec_idx, layout, waves_index)
+            return jnp.concatenate([phot, line_flux, indices])
+        return jnp.concatenate([phot, line_flux])
 
-        return jnp.concatenate([phot, line_flux, indices])
-
-    model.predict_photometry = predict_joint_indices  # type: ignore
+    model.predict_photometry = predict_joint  # type: ignore
     return model
 
 
-def model_factory(psd_sigma=1.0, psd_tau_myr=50.0, *, ssp_data, obs):
+def model_factory(psd_sigma=1.0, psd_tau_myr=50.0, *, ssp_data, obs,
+                  include_indices: bool = True):
     spec = make_spec()
-    # wave_chunk_size keeps the predict_spectrum HLO bounded — required at
-    # the ~240-point joint+indices wave grid (without chunking, the protobuf
-    # overflows XLA's 2 GB limit during compile).
     return patch_predict_joint_indices(
-        SEDModel(spec, ssp_data, observation=obs)
+        SEDModel(spec, ssp_data, observation=obs),
+        include_indices=include_indices,
     )
 
 
 def make_galaxies(n_gal: int, ssp_data, obs: Observation, key, sigma_true=2.0,
-                  tau_true=20.0):
+                  tau_true=20.0, include_indices: bool = True):
     template = patch_predict_joint_indices(
-        SEDModel(make_spec(), ssp_data, observation=obs)
+        SEDModel(make_spec(), ssp_data, observation=obs),
+        include_indices=include_indices,
     )
     n_phot = len(FILTERS)
     n_lines = len(LINE_NAMES)
-    n_idx = len(INDEX_DEFS)
+    n_idx = len(INDEX_DEFS) if include_indices else 0
 
     galaxies = []
     for i in range(n_gal):
@@ -200,9 +205,10 @@ def make_galaxies(n_gal: int, ssp_data, obs: Observation, key, sigma_true=2.0,
             + 1e-3 * np.median(np.abs(flux_pl))
         )
         # D4000: σ=0.02; EW indices: σ=0.3 Å
-        noise[n_phot + n_lines + 0] = 0.02   # D4000
-        noise[n_phot + n_lines + 1] = 0.3    # Hδ_A
-        noise[n_phot + n_lines + 2] = 0.3    # Hβ_abs
+        if include_indices:
+            noise[n_phot + n_lines + 0] = 0.02   # D4000
+            noise[n_phot + n_lines + 1] = 0.3    # Hδ_A
+            noise[n_phot + n_lines + 2] = 0.3    # Hβ_abs
         noise[n_phot + n_lines + 3] = 0.3    # Mg b
 
         flux_obs = flux_arr + noise * np.asarray(jax.random.normal(k, shape=flux_arr.shape))
@@ -211,17 +217,21 @@ def make_galaxies(n_gal: int, ssp_data, obs: Observation, key, sigma_true=2.0,
     return galaxies
 
 
-def run_one(n_gal: int, K: int, n_iter: int = 15, n_samp: int = 3) -> dict:
-    print(f"\n=== N={n_gal}  K={K}  joint+indices ===", flush=True)
+def run_one(n_gal: int, K: int, n_iter: int = 15, n_samp: int = 3,
+            include_indices: bool = True) -> dict:
+    label = "joint+indices" if include_indices else "joint-only"
+    print(f"\n=== N={n_gal}  K={K}  {label} ===", flush=True)
     ssp_data = load_ssp_data(SSP_FILE)
     obs = Observation(photometry=Photometry.from_names(FILTERS))
 
     key = jax.random.PRNGKey(42)
     t_setup = time.time()
-    galaxies = make_galaxies(n_gal, ssp_data, obs, key)
+    galaxies = make_galaxies(n_gal, ssp_data, obs, key,
+                             include_indices=include_indices)
     pop = PopulationFitter(
         lambda psd_sigma=1.0, psd_tau_myr=50.0:
-            model_factory(psd_sigma, psd_tau_myr, ssp_data=ssp_data, obs=obs),
+            model_factory(psd_sigma, psd_tau_myr, ssp_data=ssp_data, obs=obs,
+                          include_indices=include_indices),
         galaxies, data_type="photometry",
     )
     setup_s = time.time() - t_setup
@@ -281,14 +291,18 @@ def main() -> None:
     p.add_argument("--Ns", type=int, nargs="+", default=[256, 512, 1024])
     p.add_argument("--K", type=int, default=64)
     p.add_argument("--out", default="analysis/joint_indices_e2e.json")
+    p.add_argument("--no-indices", action="store_true",
+                   help="Disable Lick indices; runs as plain joint-mode for "
+                        "control comparison with vi_scaling_benchmark_joint.json.")
     args = p.parse_args()
+    include_indices = not args.no_indices
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     rows = []
     import traceback
     for n in args.Ns:
         try:
-            row = run_one(n, args.K)
+            row = run_one(n, args.K, include_indices=include_indices)
         except Exception as exc:
             row = {"n_gal": n, "K": args.K, "error": repr(exc),
                    "traceback": traceback.format_exc()}
