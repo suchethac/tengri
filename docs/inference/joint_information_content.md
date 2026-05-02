@@ -255,6 +255,40 @@ biased = forward model can't represent truth. Wide + centered on
 prior = data is uninformative. Both are valid outcomes, but the
 former demands you check the forward model, not the data.
 
+### Indices add τ-info but compute scaling is poor (2026-05-02 v6)
+
+After resolving the n_grid=64 / LINE_NPIX bias, two further forward-
+model issues surfaced when including Lick indices:
+
+1. `INDEX_NPIX=5` was too few wave points per Lick band (Hδ_A 38 Å /
+   Mg b 33 Å feat). Bumped to 21.
+2. `Hbeta_abs` Lick feat band (4848-4877 Å) overlapped the Hβ
+   emission-line window (4862±30 Å), so the same SED pixels entered
+   the likelihood twice with independent noise — a double-count that
+   reproduced the narrow+biased σ posterior signature. Dropped
+   Hβ_abs; remaining indices D4000, Hδ_A, Mg b are all clear of the
+   four emission lines.
+
+After both fixes, N=4 K=1 joint+indices recovers:
+
+```
+σ posterior: 2.27 ± 0.72   (truth=2.0; vs joint-only 1.99 ± 0.77)
+τ posterior: 70 ± 46 Myr   (truth=20; vs joint-only 149 ± 58 Myr)
+```
+
+τ tightens 2× toward truth — confirms indices probe SFH on
+complementary timescales (D4000 ~Gyr, Hδ_A ~few hundred Myr, Mg b
+~old) to emission lines (Hα/Hβ ~10 Myr).
+
+**N=20 K=4 +indices runtime blowup**: the VI took >200 min at N=20
+with the 332-pt joint+indices wave grid — vs 271 s for joint-only. Per
+iteration scales roughly with N × n_pix, so we expected ~2600 s, not
+12000+. Suggests the joint+indices landscape has multiple convergence
+basins or numerical instability that VI wanders. Not pursued further;
+the N=4 result establishes that indices add real τ-info, and full
+scaling validation can wait until the kernel-level fix for the joint
+forward (see HLO discussion above) reduces per-call cost.
+
 **Decision**: the prior-predictive analysis above is the primary
 evidence. E2E validation deferred. The Burnham et al. 2026 N=500
 NIRSpec result remains the best-available external calibration point.
