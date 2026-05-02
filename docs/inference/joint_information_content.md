@@ -185,11 +185,39 @@ the joint forward is ~2× the HLO of photometry-only — pushing past the
 2 GB protobuf serialization ceiling once gradients and population
 fitter inner loops are layered on.
 
-**Real fix path** (not attempted): add a fused `build_fused_tier2_joint`
-kernel in `forward/_kernels/compositional.py` that traces the
-`rest_sed_kernel` once and projects to **both** photometry filters and
-spectrum pixels in one JIT scope, exposed as `SEDModel.predict_joint`.
-This requires architectural work and was deferred.
+**Resolution (2026-05-01 v4)**: a fused joint kernel turned out to be
+unnecessary. XLA's CSE was already sharing the SED-build subgraph
+across the separate `_compositional.photometry` /
+`_compositional.spectrum` JITs (evidence: HLO sizes were within 0.3%
+across v1/v2/v3 attempts that varied the spectrum projection
+mechanism). The 2.3 GB / 3.7 GB HLO is the *irreducible* cost of the
+joint forward + gradient + Newton-CG + N=20 population fitter graph.
+
+The 2 GB warnings are **cache serialization failures**, not compile
+failures — XLA happily compiles the >2 GB graph but cannot persist it
+to the disk cache (protobuf limit). With memory headroom (22 GB
+watchdog vs ~17 GB compile peak), the run completes successfully:
+
+```
+=== N=20  K=4  joint-only ===
+wall=3126.2s  iters=15
+σ posterior: median=0.76 ± 0.06   (truth=2.0)
+τ posterior: median=296 ± 6 Myr   (truth=20 Myr; prior upper=300)
+```
+
+Plumbing now works end-to-end, but **the posterior is wrong**: both σ
+and τ are sharply biased, with τ pinned at the prior upper bound. At
+N=20 the prior-predictive analysis projected very weak constraint
+(N≈204 for 3σ σ-discrimination), so a *wide* posterior near the prior
+mean is expected — not a sharp bias. Likely causes (in order of
+suspicion): too few iterations for the shallow likelihood
+(n_iter=15), excessive wave-grid coarseness (LINE_NPIX=11 hampers line
+shape recovery), or noise-model misspecification.
+
+Per-run wall is ~52 min at N=20 K=4 — about 215× slower than
+photometry-only. This is the irreducible cost of the doubled HLO; not
+a target for further optimization. Future scaling tests should bump
+N=200+ and accept the ~hours-per-cell wall time.
 
 **Decision**: the prior-predictive analysis above is the primary
 evidence. E2E validation deferred. The Burnham et al. 2026 N=500
