@@ -130,7 +130,17 @@ def _compute_indices(spec_idx, layout, wave_idx):
 
 
 def patch_predict_joint_indices(model: SEDModel, include_indices: bool = True) -> SEDModel:
-    """Wrap predict_photometry to return concatenated (10 phot + 4 lines [+ 4 indices])."""
+    """Wrap predict_photometry to return concatenated (10 phot + 4 lines [+ 4 indices]).
+
+    Calls both ``predict_photometry`` (compositional fast path with precomputed
+    SSP×filter tables) and ``predict_spectrum`` (compositional path; arbitrary
+    wave grid → exact-mode spectrum interp through the 11149-point SSP grid).
+    The HLO compile blows past the 2 GB protobuf serialization limit (geoVI
+    ~2.3 GB, vi_linear ~3.7 GB) — see ``docs/inference/joint_information_content.md``.
+    The real fix requires registering ``waves_all`` as a ``Spectroscopy`` config
+    on the ``Observation`` so the precomputed-template spectrum fast path
+    (``_predict_spectrum_compositional`` line 2746) becomes available.
+    """
     line_centers_obs = LINE_WAVES_REST_AA * (1.0 + Z_FIX)
     waves_per_line = jnp.stack([
         jnp.linspace(c - LINE_WINDOW_AA, c + LINE_WINDOW_AA, LINE_NPIX)

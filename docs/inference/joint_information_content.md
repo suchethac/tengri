@@ -129,7 +129,7 @@ prior-predictive projection (N≈154 for 3σ σ_PSD discrimination with
 joint+indices) against an actual `PopulationFitter` posterior at
 N=256, 512, 1024.
 
-**Root cause isolated (2026-05-01 bisection)**:
+**Root cause isolated (2026-05-01 bisection — 2 attempts)**:
 
 A control run with `--no-indices` (joint-only, LINE_NPIX=11 → 451-pt
 wave grid) at N=20, K=4 still triggers HLO blowup:
@@ -141,29 +141,39 @@ xla.cpu.CompilationResultProto exceeded maximum protobuf size of 2GB:
   4,686,252,794  (subsequent compile)
 ```
 
-Memory peaked at 17.6 GB (watchdog kill at 15 GB). Reference
-`benchmark_population_native.py` joint mode at the same N=20 K=4
-finishes in 14.5 s warm with 5.5 GB RSS.
+Memory peaked at 17.6 GB. Reference `benchmark_population_native.py`
+photometry-only at N=20 K=4 finishes in 13.3 s warm with 5.8 GB RSS.
 
-**The blowup is structural, not wave-grid-driven**: it survives the
-reduction from 252 → 99 → 44 wave points and persists with indices
-disabled. Cause is `patch_predict_joint_indices` in
-`scripts/benchmark_joint_indices_e2e.py:133`, which monkey-patches
-`model.predict_photometry` to call BOTH `orig_predict(params)` AND
-`model.predict_spectrum(params, waves_all)` inside the same forward.
-Both calls take the compositional `predict_obs_sed` path, so the SSP +
-SFH + dust + nebular pipeline gets traced **twice** through every
-`lax.map(batch_size=K)` body and through the geoVI Newton-CG /
-vi_linear `lax.scan`. With K galaxies unrolled and gradient tape
-retained, the HLO graph doubles in size beyond the protobuf serializer
-limit even at K=4.
+**Falsified hypothesis** (attempt 1): "duplicate forward — both
+`predict_photometry` and `predict_spectrum` retrace the SED pipeline."
+Rewrote `patch_predict_joint_indices` to share one `predict_obs_sed`
+call and route both projections off the same observed-frame SED. HLO
+sizes were essentially unchanged (2.34 GB / 3.72 GB), and the run again
+hit 18.1 GB RSS. The SED-build subgraph was already shared via XLA CSE,
+or the duplicate was a small fraction of total HLO.
+
+**Actual cause**: spectrum projection at an arbitrary 451-pt wave grid
+forces the **exact / non-precomputed** spectrum path inside the
+population fitter forward. The reference's photometry-only forward uses
+precomputed SSP×filter integrals (12 met × 107 age × 10 filters ≈ 13K
+floats baked in). Our joint forward must evaluate the rest-frame SED on
+the full 11149-point SSP wavelength grid, then `jnp.interp` to the 451
+output points. Through the population fitter's per-galaxy vmap, the
+geoVI Newton-CG body, and gradient tape, this 11149-point pipeline
+inflates the HLO graph past the 2 GB protobuf serialization ceiling.
+
+**Real fix path**: register `waves_all` as a `Spectroscopy` config on
+the `Observation` at construction time. This activates
+`_predict_spectrum_compositional`'s precomputed-template fast path
+(``sed_model.py:2746``) — small constants (12 met × 107 age × 451 wave
+≈ 580K floats) baked into the kernel, eliminating the 11149-point
+in-graph interpolation. Deferred for now because it requires plumbing
+through `Spectroscopy` semantics that don't yet support multiple
+disjoint sub-bands as a single observable.
 
 **Decision**: the prior-predictive analysis above is the primary
-evidence. E2E validation is deferred until the script is rewritten to
-share a single `predict_obs_sed` call between photometry and spectrum
-extraction (or until tengri exposes a native joint photometry+spectrum
-forward). The Burnham et al. 2026 N=500 with full spectra remains the
-best-available external calibration point.
+evidence. E2E validation deferred. The Burnham et al. 2026 N=500
+NIRSpec result remains the best-available external calibration point.
 
 ## Files
 
