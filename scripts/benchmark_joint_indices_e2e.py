@@ -68,10 +68,16 @@ LINE_NPIX = 41  # match reference benchmark_population_native (was 11; HLO no lo
 INDEX_DEFS = {
     "D4000":      {"feat": (4050, 4250), "blue": (3750, 3950), "red": None},
     "Hdelta_A":   {"feat": (4083, 4122), "blue": (4041, 4079), "red": (4128, 4161)},
-    "Hbeta_abs":  {"feat": (4848, 4877), "blue": (4827, 4847), "red": (4877, 4892)},
+    # Hbeta_abs (feat 4848-4877) was dropped: overlaps with the Hβ emission-line
+    # window (4862±30 Å), causing double-counted likelihood at the same spectrum
+    # pixels and a "narrow + biased" σ_PSD posterior. To keep Hβ_abs we'd need
+    # explicit covariance between the line flux and the index — not worth the
+    # complexity for a single index.
     "Mgb":        {"feat": (5160, 5193), "blue": (5142, 5161), "red": (5191, 5206)},
 }
-INDEX_NPIX = 5  # was 21 — minimal sampling; trapezoid still fine for index integration
+INDEX_NPIX = 21  # was 5 — undersampling Lick bands biased σ_PSD posterior in the
+# same "narrow + biased" failure mode as n_grid=64 did for SFH; the underresolved
+# trapezoid integration introduces systematic likelihood gradient signal
 
 
 def make_spec() -> Parameters:
@@ -259,12 +265,11 @@ def make_galaxies(n_gal: int, ssp_data, obs: Observation, key, sigma_true=2.0,
         # 10% relative noise + absolute floor; match reference benchmark_population_native
         flux_pl = flux_arr[:n_phot + n_lines]
         noise[:n_phot + n_lines] = np.abs(flux_pl) * 0.10 + 1e-3
-        # D4000: σ=0.02; EW indices: σ=0.3 Å
+        # D4000: σ=0.02; EW indices: σ=0.3 Å (Hβ_abs dropped — overlaps Hβ line)
         if include_indices:
             noise[n_phot + n_lines + 0] = 0.02   # D4000
             noise[n_phot + n_lines + 1] = 0.3    # Hδ_A
-            noise[n_phot + n_lines + 2] = 0.3    # Hβ_abs
-            noise[n_phot + n_lines + 3] = 0.3    # Mg b
+            noise[n_phot + n_lines + 2] = 0.3    # Mg b
 
         flux_obs = flux_arr + noise * np.asarray(jax.random.normal(k, shape=flux_arr.shape))
         galaxies.append({"flux_obs": jnp.asarray(flux_obs),
