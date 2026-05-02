@@ -219,6 +219,42 @@ photometry-only. This is the irreducible cost of the doubled HLO; not
 a target for further optimization. Future scaling tests should bump
 N=200+ and accept the ~hours-per-cell wall time.
 
+### Posterior recovery (2026-05-01 v5)
+
+The earlier biased σ=0.76 posterior was a **forward-model misspecification**,
+not a structural problem with the joint observable. Three settings had
+diverged from `benchmark_population_native` and were corrected:
+
+- `n_grid: 64 → 128` — SFH log-age grid resolution. `n_grid=64`
+  cannot represent τ=20 Myr fluctuations (~218 Myr/bin near present),
+  so the optimizer drove σ→0 and τ→prior_upper to absorb the
+  unrepresentable signal. **Dominant cause of the bias.**
+- `LINE_NPIX: 11 → 41` — line-shape sampling. 11 was a misguided HLO
+  workaround; no longer needed after the Spectroscopy precompute.
+- `noise: 5% rel + 1e-3·median → 10% rel + 1e-3` (matches reference).
+
+After these fixes, end-to-end recovery at the same setup:
+
+| N (joint-only) | σ_post (truth=2.0) | τ_post (truth=20 Myr) | wall |
+| --- | --- | --- | --- |
+| 4 | 1.99 ± 0.77 | 149 ± 58 Myr | 164 s |
+| 20 | 2.14 ± 0.80 | 157 ± 66 Myr | 271 s |
+| Reference N=16 (saved) | 2.00 ± 0.71 | 129 ± 62 Myr | — |
+
+σ recovers truth unbiased with appropriate spread. τ remains broad near
+the prior mean — joint observable cannot tightly constrain τ at N≤20,
+matching the prior-predictive projection that the joint mode plateaus
+on τ at high N rather than crossing 3σ.
+
+Wall dropped 12× (3126 → 271 s) once the optimizer wasn't fighting
+the misspecified forward.
+
+**Diagnostic lesson**: a *narrow* posterior at the *wrong value* is
+qualitatively different from a *wide* uninformed posterior. Narrow +
+biased = forward model can't represent truth. Wide + centered on
+prior = data is uninformative. Both are valid outcomes, but the
+former demands you check the forward model, not the data.
+
 **Decision**: the prior-predictive analysis above is the primary
 evidence. E2E validation deferred. The Burnham et al. 2026 N=500
 NIRSpec result remains the best-available external calibration point.
