@@ -61,7 +61,9 @@ LINE_WAVES_REST_AA = jnp.array([6564.61, 4862.68, 5008.24, 3727.09])
 
 Z_FIX = 0.1
 LINE_WINDOW_AA = 30.0
-LINE_NPIX = 11  # was 41 — reduce wave grid to keep HLO bounded without wave_chunk_size
+LINE_NPIX = 41  # match reference benchmark_population_native (was 11; HLO no longer
+# the dominant constraint after Spectroscopy precompute hookup — see
+# joint_information_content.md for the cache-write tradeoff)
 
 INDEX_DEFS = {
     "D4000":      {"feat": (4050, 4250), "blue": (3750, 3950), "red": None},
@@ -87,7 +89,7 @@ def make_spec() -> Parameters:
         dust_slope=Fixed(-0.7),
         redshift=Fixed(Z_FIX),
         mean_sfh_type=["tsnorm", "field"],
-        n_grid=64,
+        n_grid=128,  # match reference; 64 cannot resolve τ=20 Myr fluctuations
     )
 
 
@@ -254,12 +256,9 @@ def make_galaxies(n_gal: int, ssp_data, obs: Observation, key, sigma_true=2.0,
 
         # Per-component noise levels
         noise = np.zeros(flux_arr.shape[0])
-        # 5% relative noise on phot + lines, with absolute floor
+        # 10% relative noise + absolute floor; match reference benchmark_population_native
         flux_pl = flux_arr[:n_phot + n_lines]
-        noise[:n_phot + n_lines] = (
-            np.abs(flux_pl) * 0.05
-            + 1e-3 * np.median(np.abs(flux_pl))
-        )
+        noise[:n_phot + n_lines] = np.abs(flux_pl) * 0.10 + 1e-3
         # D4000: σ=0.02; EW indices: σ=0.3 Å
         if include_indices:
             noise[n_phot + n_lines + 0] = 0.02   # D4000
