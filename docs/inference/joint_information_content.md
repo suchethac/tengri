@@ -162,14 +162,34 @@ output points. Through the population fitter's per-galaxy vmap, the
 geoVI Newton-CG body, and gradient tape, this 11149-point pipeline
 inflates the HLO graph past the 2 GB protobuf serialization ceiling.
 
-**Real fix path**: register `waves_all` as a `Spectroscopy` config on
-the `Observation` at construction time. This activates
-`_predict_spectrum_compositional`'s precomputed-template fast path
-(``sed_model.py:2746``) — small constants (12 met × 107 age × 451 wave
-≈ 580K floats) baked into the kernel, eliminating the 11149-point
-in-graph interpolation. Deferred for now because it requires plumbing
-through `Spectroscopy` semantics that don't yet support multiple
-disjoint sub-bands as a single observable.
+**Attempted fix (also falsified)**: register `waves_all` as a
+`Spectroscopy` config on the `Observation` at construction time
+(commit `<this commit>`, helper `build_joint_observation`). This
+activates `_predict_spectrum_compositional`'s precomputed-template
+fast path (`sed_model.py:2746`) — `ssp_on_pixels` is rebinned from
+`(12, 107, 11149)` to `(12, 107, 44)` at startup, a **253×** reduction
+in the spectrum kernel's wavelength dimension.
+
+Despite this, HLO at N=20, K=4 was unchanged: 2.33 GB (geoVI) /
+3.72 GB (vi_linear), within 0.3% of the previous attempts. The 253×
+spectrum-kernel reduction is dwarfed by something else.
+
+**Confirmed root cause**: `inference/jit_engine.py:62-65`'s
+`data_type="joint"` path (and equivalently the script's monkey-patched
+`predict_joint`) calls `model.predict_photometry(params)` and
+`model.predict_spectrum(params, wave_obs)` as **two separate fused
+kernels**, each carrying the full SFH+dust+nebular+IGM+AGN pipeline
+through its own `_compositional.photometry` / `_compositional.spectrum`
+JIT. XLA's CSE doesn't merge them across separate jit'd functions, so
+the joint forward is ~2× the HLO of photometry-only — pushing past the
+2 GB protobuf serialization ceiling once gradients and population
+fitter inner loops are layered on.
+
+**Real fix path** (not attempted): add a fused `build_fused_tier2_joint`
+kernel in `forward/_kernels/compositional.py` that traces the
+`rest_sed_kernel` once and projects to **both** photometry filters and
+spectrum pixels in one JIT scope, exposed as `SEDModel.predict_joint`.
+This requires architectural work and was deferred.
 
 **Decision**: the prior-predictive analysis above is the primary
 evidence. E2E validation deferred. The Burnham et al. 2026 N=500

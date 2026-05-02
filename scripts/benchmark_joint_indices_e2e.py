@@ -36,7 +36,15 @@ import jax.numpy as jnp
 import numpy as np
 
 import tengri  # noqa: F401
-from tengri import Fixed, Observation, Parameters, Photometry, SEDModel, Uniform
+from tengri import (
+    Fixed,
+    Observation,
+    Parameters,
+    Photometry,
+    SEDModel,
+    Spectroscopy,
+    Uniform,
+)
 from tengri.inference.hierarchical import PopulationFitter
 from tengri.sps.dsps_wrapper import load_ssp_data
 
@@ -129,17 +137,12 @@ def _compute_indices(spec_idx, layout, wave_idx):
     return jnp.array(out)
 
 
-def patch_predict_joint_indices(model: SEDModel, include_indices: bool = True) -> SEDModel:
-    """Wrap predict_photometry to return concatenated (10 phot + 4 lines [+ 4 indices]).
+def build_joint_grid(include_indices: bool = True):
+    """Build the concatenated wave grid for the joint observable (multi-band sub-grid).
 
-    Calls both ``predict_photometry`` (compositional fast path with precomputed
-    SSP×filter tables) and ``predict_spectrum`` (compositional path; arbitrary
-    wave grid → exact-mode spectrum interp through the 11149-point SSP grid).
-    The HLO compile blows past the 2 GB protobuf serialization limit (geoVI
-    ~2.3 GB, vi_linear ~3.7 GB) — see ``docs/inference/joint_information_content.md``.
-    The real fix requires registering ``waves_all`` as a ``Spectroscopy`` config
-    on the ``Observation`` so the precomputed-template spectrum fast path
-    (``_predict_spectrum_compositional`` line 2746) becomes available.
+    Returns the line+index wavelength grid plus per-line and per-index layout
+    metadata needed to slice and integrate the predicted spectrum back into
+    line fluxes and Lick-style indices.
     """
     line_centers_obs = LINE_WAVES_REST_AA * (1.0 + Z_FIX)
     waves_per_line = jnp.stack([
@@ -147,7 +150,6 @@ def patch_predict_joint_indices(model: SEDModel, include_indices: bool = True) -
         for c in line_centers_obs
     ])
     waves_lines = waves_per_line.reshape(-1)
-    n_lines = waves_lines.shape[0]
     if include_indices:
         waves_index, layout = _build_index_grid()
         waves_all = jnp.concatenate([waves_lines, waves_index])
@@ -155,11 +157,55 @@ def patch_predict_joint_indices(model: SEDModel, include_indices: bool = True) -
         waves_all = waves_lines
         layout = None
         waves_index = None
+    return waves_all, waves_per_line, waves_index, layout
+
+
+def build_joint_observation(include_indices: bool = True) -> tuple[Observation, jnp.ndarray]:
+    """Build an Observation with photometry + spectroscopy registered on the joint grid.
+
+    Registering the joint wave grid as a ``Spectroscopy`` activates the
+    precomputed-template spectrum fast path (``_predict_spectrum_compositional``,
+    sed_model.py:2746): the SSP is rebinned from 11149 to ``len(waves_all)``
+    pixels at construction, eliminating the in-graph 11149-pt interpolation
+    that previously inflated HLO past the 2 GB protobuf limit.
+
+    The returned ``waves_all`` is the SAME identity array stored on the
+    spectroscopy — pass it (or ``None``) to ``predict_spectrum`` to trigger
+    the fast path via the ``wave_obs is precomputed.wave_obs_pixels`` check.
+    """
+    waves_all, _, _, _ = build_joint_grid(include_indices=include_indices)
+    obs = Observation(
+        photometry=Photometry.from_names(FILTERS),
+        spectroscopy=Spectroscopy(wave_obs=waves_all),
+    )
+    return obs, waves_all
+
+
+def patch_predict_joint_indices(model: SEDModel, include_indices: bool = True) -> SEDModel:
+    """Wrap predict_photometry to return concatenated (10 phot + 4 lines [+ 4 indices]).
+
+    Reads the wave grid from ``model.observation.spectroscopy.wave_obs`` so the
+    precomputed-template fast path is hit (object identity comparison in
+    ``_predict_spectrum_compositional`` requires passing the same array
+    reference).
+    """
+    _, waves_per_line, waves_index, layout = build_joint_grid(
+        include_indices=include_indices
+    )
+    n_lines = waves_per_line.size
+
+    if model.observation is None or model.observation.spectroscopy is None:
+        raise ValueError(
+            "model.observation must have a Spectroscopy registered with the "
+            "joint wave grid; use build_joint_observation()."
+        )
+    waves_all = model.observation.spectroscopy.wave_obs  # identity-preserving
 
     orig_predict = model.predict_photometry
 
     def predict_joint(params, mode="auto"):
         phot = orig_predict(params, mode=mode)
+        # Pass the identity-preserving array to hit the precomputed fast path.
         spec_all = model.predict_spectrum(params, waves_all, mode=mode)
         spec_lines = spec_all[:n_lines]
         spec_per_line = spec_lines.reshape(LINE_WAVES_REST_AA.shape[0], LINE_NPIX)
@@ -232,7 +278,7 @@ def run_one(n_gal: int, K: int, n_iter: int = 15, n_samp: int = 3,
     label = "joint+indices" if include_indices else "joint-only"
     print(f"\n=== N={n_gal}  K={K}  {label} ===", flush=True)
     ssp_data = load_ssp_data(SSP_FILE)
-    obs = Observation(photometry=Photometry.from_names(FILTERS))
+    obs, _waves_all = build_joint_observation(include_indices=include_indices)
 
     key = jax.random.PRNGKey(42)
     t_setup = time.time()
