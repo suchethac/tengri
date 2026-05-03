@@ -40,7 +40,7 @@ DEFAULT_N_BINS = 7
 # ── Continuity SFH (Leja+2019) ────────────────────────────────────
 
 
-def continuity_sfh(
+def continuity(
     age_yr: jnp.ndarray,
     log_total_mass: float = 10.0,
     bin_edges_gyr: jnp.ndarray | None = None,
@@ -270,7 +270,7 @@ def _stick_breaking(z_fractions: jnp.ndarray) -> jnp.ndarray:
     return fractions
 
 
-def dirichlet_sfh(
+def dirichlet(
     age_yr: jnp.ndarray,
     log_total_mass: float = 10.0,
     bin_edges_gyr: jnp.ndarray | None = None,
@@ -452,7 +452,7 @@ def make_agebins_from_zred(
 # ── PSB continuity SFH (Suess+2021) ───────────────────────────────
 
 
-def psb_continuity_sfh(
+def psb_continuity(
     age_yr: jnp.ndarray,
     log_total_mass: float = 10.0,
     tlast_gyr: float = 0.5,
@@ -569,7 +569,7 @@ def psb_continuity_sfh(
 CFLEX_DEFAULT_ANCHOR_GYR = np.array([0.0316, 5.012, 13.7])
 
 
-def continuity_flex_sfh(
+def continuity_flex(
     age_yr: jnp.ndarray,
     log_total_mass: float = 10.0,
     bin_edges_gyr: jnp.ndarray | None = None,
@@ -794,3 +794,12 @@ def continuity_flex_prior_logp(
         ]
     )
     return jnp.sum(student_t.logpdf(all_ratios, df, loc=0.0, scale=scale))
+
+
+# ── Deprecated aliases (Phase 3) ──────────────────────────────────
+# The `_sfh` suffix was redundant inside the `tengri.components.sfh` namespace.
+# These aliases are provided for backward compatibility and will be removed in v1.0.
+continuity_sfh = continuity
+dirichlet_sfh = dirichlet
+psb_continuity_sfh = psb_continuity
+continuity_flex_sfh = continuity_flex

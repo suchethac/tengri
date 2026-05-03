@@ -170,7 +170,9 @@ def resolve_emission_model(name: str) -> Callable:
     return DUST_EMISSION_MODELS[name]
 
 
-get_emission_model = resolve_emission_model
+from tengri._deprecated import deprecated_alias
+
+get_emission_model = deprecated_alias(resolve_emission_model, old_name="get_emission_model")
 
 
 def preload_emission_model(name: str) -> Callable:

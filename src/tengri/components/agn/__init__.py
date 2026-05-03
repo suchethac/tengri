@@ -46,6 +46,7 @@ from tengri.components.agn.disc import (
 )
 from tengri.components.agn.nlr import (
     compute_nlr_sed,
+    compute_nlr_sed_richardson2014,
     nlr_emission,
     nlr_emission_richardson2014,
 )
@@ -66,6 +67,8 @@ from tengri.components.agn.unified import (
     unified_nlr_blr,
 )
 
+# New names
+
 __all__ = [
     "AGN_MODELS",
     "AGNConfig",
@@ -77,6 +80,7 @@ __all__ = [
     "compute_blr_sed",
     "compute_l2500",
     "compute_nlr_sed",
+    "compute_nlr_sed_richardson2014",
     "compute_qsogen_sed",
     "create_cat3d_wind_from_grid",
     "create_relagn_disc_from_grid",

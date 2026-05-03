@@ -100,7 +100,7 @@ def _skewed_gaussian_kernel(
 # ── Smooth SFH models — all take t_lookback (yr), return SFR (Msun/yr)
 
 
-def truncated_skewnormal_sfh(
+def truncated_skewnormal(
     t_lookback: jnp.ndarray,
     log_peak_sfr: float,
     peak_lbt: float,
@@ -181,9 +181,9 @@ def truncated_skewnormal_sfh(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri import truncated_skewnormal_sfh
+    >>> from tengri.components.sfh import truncated_skewnormal
     >>> t = jnp.linspace(0.0, 13.7e9, 100)
-    >>> sfr = truncated_skewnormal_sfh(
+    >>> sfr = truncated_skewnormal(
     ...     t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=5.0
     ... )
     >>> sfr.shape
@@ -202,10 +202,10 @@ def truncated_skewnormal_sfh(
 
 
 # Short alias registered in SFH_REGISTRY
-tsnorm = truncated_skewnormal_sfh
+tsnorm = truncated_skewnormal
 
 
-def skewnormal_sfh(
+def skewnormal(
     t_lookback: jnp.ndarray,
     log_peak_sfr: float,
     peak_lbt: float,
@@ -214,7 +214,7 @@ def skewnormal_sfh(
 ) -> jnp.ndarray:
     """Skew-normal SFH (Robotham+2020).
 
-    Like truncated_skewnormal_sfh but without truncation.
+    Like truncated_skewnormal but without truncation.
 
     Parameters
     ----------
@@ -241,9 +241,9 @@ def skewnormal_sfh(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri import skewnormal_sfh
+    >>> from tengri.components.sfh import skewnormal
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = skewnormal_sfh(t, log_peak_sfr=1.5, peak_lbt=3e9, width=1e9, skew=1.0)
+    >>> sfr = skewnormal(t, log_peak_sfr=1.5, peak_lbt=3e9, width=1e9, skew=1.0)
     >>> sfr.shape
     (64,)
     """
@@ -254,16 +254,16 @@ def skewnormal_sfh(
 
 
 # Short alias registered in SFH_REGISTRY
-snorm = skewnormal_sfh
+snorm = skewnormal
 
 
-def gaussian_sfh(
+def gaussian(
     t_lookback: jnp.ndarray,
     log_peak_sfr: float,
     peak_lbt: float,
     width: float,
 ) -> jnp.ndarray:
-    """Gaussian (normal) SFH — skewnormal_sfh with skew=0.
+    """Gaussian (normal) SFH — skewnormal with skew=0.
 
     Parameters
     ----------
@@ -288,20 +288,20 @@ def gaussian_sfh(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri import gaussian_sfh
+    >>> from tengri.components.sfh import gaussian
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = gaussian_sfh(t, log_peak_sfr=1.5, peak_lbt=3e9, width=1e9)
+    >>> sfr = gaussian(t, log_peak_sfr=1.5, peak_lbt=3e9, width=1e9)
     >>> sfr.shape
     (64,)
     """
-    return skewnormal_sfh(t_lookback, log_peak_sfr, peak_lbt, width, skew=0.0)
+    return skewnormal(t_lookback, log_peak_sfr, peak_lbt, width, skew=0.0)
 
 
 # Short alias registered in SFH_REGISTRY
-norm = gaussian_sfh
+norm = gaussian
 
 
-def lognormal_sfh(
+def lognormal(
     t_lookback: jnp.ndarray,
     log_peak_sfr: float,
     peak_lbt: float,
@@ -337,9 +337,9 @@ def lognormal_sfh(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri import lognormal_sfh
+    >>> from tengri.components.sfh import lognormal
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = lognormal_sfh(t, log_peak_sfr=1.5, peak_lbt=3e9, width=0.3)
+    >>> sfr = lognormal(t, log_peak_sfr=1.5, peak_lbt=3e9, width=0.3)
     >>> sfr.shape
     (64,)
     """
@@ -352,7 +352,7 @@ def lognormal_sfh(
 
 
 # Short alias registered in SFH_REGISTRY
-lnorm = lognormal_sfh
+lnorm = lognormal
 
 
 def double_powerlaw(
@@ -483,7 +483,7 @@ def dpl(
     return peak_sfr / (x**alpha + x ** (-beta))
 
 
-def constant_sfh(
+def constant(
     t_lookback: jnp.ndarray,
     log_sfr: float,
     start: float = 0.0,
@@ -519,9 +519,9 @@ def constant_sfh(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri import constant_sfh
+    >>> from tengri.components.sfh import constant
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = constant_sfh(t, log_sfr=1.0, start=5e8, end=5e9)
+    >>> sfr = constant(t, log_sfr=1.0, start=5e8, end=5e9)
     >>> sfr.shape
     (64,)
     """
@@ -530,7 +530,7 @@ def constant_sfh(
     return jnp.where(mask, sfr, 0.0)
 
 
-def exponential_sfh(
+def exponential(
     t_lookback: jnp.ndarray,
     log_peak_sfr: float,
     tau: float,
@@ -563,9 +563,9 @@ def exponential_sfh(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri import exponential_sfh
+    >>> from tengri.components.sfh import exponential
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = exponential_sfh(t, log_peak_sfr=2.0, tau=2e9, start=1e8)
+    >>> sfr = exponential(t, log_peak_sfr=2.0, tau=2e9, start=1e8)
     >>> sfr.shape
     (64,)
     """
@@ -575,7 +575,7 @@ def exponential_sfh(
     return jnp.where(dt >= 0, sfr, 0.0)
 
 
-def delayed_exponential_sfh(
+def delayed_exponential(
     t_lookback: jnp.ndarray,
     log_peak_sfr: float,
     tau: float,
@@ -609,9 +609,9 @@ def delayed_exponential_sfh(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri import delayed_exponential_sfh
+    >>> from tengri.components.sfh import delayed_exponential
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = delayed_exponential_sfh(t, log_peak_sfr=2.0, tau=2e9, start=1e8)
+    >>> sfr = delayed_exponential(t, log_peak_sfr=2.0, tau=2e9, start=1e8)
     >>> sfr.shape
     (64,)
     """
@@ -886,7 +886,7 @@ def psb_wild2020(
     return jnp.maximum(sfr, 0.0)
 
 
-def powerlaw_sfh(
+def powerlaw(
     t_lookback: jnp.ndarray, alpha: float, norm: float, t_ref: float = 1e8
 ) -> jnp.ndarray:
     """Power-law SFH: SFR(t) = norm * (t/t_ref)^alpha.
@@ -1261,7 +1261,7 @@ def _pchip_eval(
     return h00 * y0 + h10 * hi * d0 + h01 * y1 + h11 * hi * d1
 
 
-def spline_sfh(
+def spline(
     t_lookback: jnp.ndarray,
     sfr_nodes: jnp.ndarray,
     node_ages_yr: jnp.ndarray,
@@ -1357,7 +1357,7 @@ def spline_sfh(
     return jnp.maximum(sfr, 0.0)
 
 
-def snorm_burst_sfh(
+def snorm_burst(
     t_lookback: jnp.ndarray,
     log_peak_sfr: float,
     peak_lbt: float,
@@ -1421,20 +1421,20 @@ def snorm_burst_sfh(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri.components.sfh.mean_sfh import snorm_burst_sfh
+    >>> from tengri.components.sfh import snorm_burst
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = snorm_burst_sfh(
+    >>> sfr = snorm_burst(
     ...     t, log_peak_sfr=1.5, peak_lbt=5e9, width=2e9, skew=0.5, burst_sfr=2.0, burst_age=1e8
     ... )
     >>> sfr.shape
     (64,)
     """
-    sfr_snorm = skewnormal_sfh(t_lookback, log_peak_sfr, peak_lbt, width, skew)
+    sfr_snorm = skewnormal(t_lookback, log_peak_sfr, peak_lbt, width, skew)
     burst = jnp.where(t_lookback < burst_age, burst_sfr, 0.0)
     return jnp.maximum(sfr_snorm + burst, 0.0)
 
 
-def snorm_trunc_burst_sfh(
+def snorm_trunc_burst(
     t_lookback: jnp.ndarray,
     log_peak_sfr: float,
     peak_lbt: float,
@@ -1504,9 +1504,9 @@ def snorm_trunc_burst_sfh(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri.components.sfh.mean_sfh import snorm_trunc_burst_sfh
+    >>> from tengri.components.sfh import snorm_trunc_burst
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = snorm_trunc_burst_sfh(
+    >>> sfr = snorm_trunc_burst(
     ...     t,
     ...     log_peak_sfr=1.5,
     ...     peak_lbt=5e9,
@@ -1519,11 +1519,26 @@ def snorm_trunc_burst_sfh(
     >>> sfr.shape
     (64,)
     """
-    sfr_tsnorm = truncated_skewnormal_sfh(t_lookback, log_peak_sfr, peak_lbt, width, skew, trunc)
+    sfr_tsnorm = truncated_skewnormal(t_lookback, log_peak_sfr, peak_lbt, width, skew, trunc)
     burst = jnp.where(t_lookback < burst_age, burst_sfr, 0.0)
     return jnp.maximum(sfr_tsnorm + burst, 0.0)
 
 
-# Short aliases registered in SFH_REGISTRY
-snorm_burst = snorm_burst_sfh
-tsnorm_burst = snorm_trunc_burst_sfh
+# Short alias registered in SFH_REGISTRY
+tsnorm_burst = snorm_trunc_burst
+
+
+# ── Deprecated aliases (Phase 3) ──────────────────────────────────
+# The `_sfh` suffix was redundant inside the `tengri.components.sfh` namespace.
+# These aliases are provided for backward compatibility and will be removed in v1.0.
+constant_sfh = constant
+exponential_sfh = exponential
+delayed_exponential_sfh = delayed_exponential
+gaussian_sfh = gaussian
+lognormal_sfh = lognormal
+powerlaw_sfh = powerlaw
+skewnormal_sfh = skewnormal
+snorm_burst_sfh = snorm_burst
+snorm_trunc_burst_sfh = snorm_trunc_burst
+spline_sfh = spline
+truncated_skewnormal_sfh = truncated_skewnormal

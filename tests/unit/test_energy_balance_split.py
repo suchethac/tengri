@@ -848,11 +848,25 @@ class TestComputeAbsorbedLuminosity:
 class TestRegistryUtilities:
     """Tests for resolve_emission_model, get_emission_model, preload_emission_model."""
 
-    def test_get_emission_model_alias(self):
-        """get_emission_model is an alias for resolve_emission_model."""
+    def test_get_emission_model_is_deprecated_alias(self):
+        """get_emission_model is a DeprecationWarning shim for resolve_emission_model.
+
+        Post-Phase 2 (NAMING_CONTRACT §4): canonical name is
+        ``resolve_emission_model``; ``get_emission_model`` is kept as a
+        deprecated alias until v1.0.
+        """
+        import warnings
+
         from tengri.components.dust.emission import get_emission_model, resolve_emission_model
 
-        assert get_emission_model is resolve_emission_model
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            old_result = get_emission_model("modified_blackbody")
+            assert any(issubclass(rec.category, DeprecationWarning) for rec in w), (
+                "get_emission_model must emit DeprecationWarning"
+            )
+        new_result = resolve_emission_model("modified_blackbody")
+        assert old_result is new_result
 
     def test_resolve_returns_callable(self):
         """resolve_emission_model returns a callable for known models."""

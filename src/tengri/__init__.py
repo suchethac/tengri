@@ -51,14 +51,7 @@ from tengri.citations import (
 )
 from tengri.components.dust.attenuation import two_component_dust
 from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
-from tengri.components.sfh.gp_sfh import (
-    compute_sqrt_power_drw,
-    generate_gp_batch,
-    generate_gp_fourier,
-    gp_from_xi,
-    make_log_age_grid,
-)
-from tengri.components.sfh.mean_sfh import (
+from tengri.components.sfh import (
     AGEMAX_YR,
     constant_sfh,
     delayed_exponential_sfh,
@@ -80,6 +73,13 @@ from tengri.components.sfh.mean_sfh import (
     truncated_skewnormal_sfh,
     tsnorm,
     tsnorm_burst,
+)
+from tengri.components.sfh.gp_sfh import (
+    compute_sqrt_power_drw,
+    generate_gp_batch,
+    generate_gp_fourier,
+    gp_from_xi,
+    make_log_age_grid,
 )
 from tengri.components.sfh.psd_models import drw_acf, drw_variance, psd_drw
 from tengri.components.sfh.registry import (
@@ -264,16 +264,27 @@ from tengri import io
 
 sys.modules["tengri.io"] = io
 
+# New namespace hierarchy (Phase 1, see docs/dev/api_migration_v0.x.md)
+# These are pure re-exports: no behavioural change, just clearer locations.
+#   tengri.cosmology — Planck18 + distance/age helpers (was tengri.utils.cosmology)
+#   tengri.units     — F_nu/L_nu/AB-mag conversions (was utils.{conversions,magnitudes})
+#   tengri.plot      — plotting helpers (was tengri.analysis.plotting)
+from tengri import citations, cosmology, plot, units
 
+# Phase 6 (2026-05): the advertised top-level surface.
+#
+# This list is the *recommended* import paths. Everything in it is
+# either a user-facing class/facade (Galaxy, SEDModel, Fitter, ...) or
+# a subpackage namespace (tengri.sfh, tengri.dust, tengri.cosmology, ...).
+# Implementation details (noise kernels, branding strings, individual
+# citation helpers, single-purpose loaders) are no longer advertised
+# but remain importable for backward compatibility — see
+# docs/dev/api_migration_v0.x.md for the full story.
 __all__ = [
-    "LOGO",
-    "LOGO_BANNER",
     "AGNConfig",
     "BackendError",
-    "Bibliography",
     "CatalogFitter",
     "CatalogPosterior",
-    "Citation",
     "ConfigError",
     "DustConfig",
     "FitResult",
@@ -310,39 +321,27 @@ __all__ = [
     "VIConfig",
     "agn",
     "cache_size_bytes",
-    "citations_bibtex",
-    "citations_report",
-    "cite",
-    "cite_all",
-    "cites",
+    "citations",
     "clear_cache",
-    "collect_citations",
+    "cosmology",
     "doctor",
     "dust",
     "enable_persistent_cache",
-    "exp_squared_kernel",
     "filters",
     "generate_mock",
-    "gp_noise_covariance",
     "igm",
     "io",
     "is_cache_enabled",
-    "load_filter_set",
-    "load_ssp_data",
-    "matern32_kernel",
     "nebular",
     "observation",
-    "paper_citation",
+    "plot",
     "posteriors_to_dataframe",
     "preprocessing",
     "presets",
-    "print_bibtex",
-    "print_citations",
-    "print_logo",
-    "print_paper_citation",
     "radio",
     "sfh",
     "sps",
+    "units",
     "xray",
 ]
 

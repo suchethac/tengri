@@ -411,7 +411,7 @@ def _build_quantile_points(
 # ── Main SFH function ─────────────────────────────────────────────
 
 
-def dense_basis_sfh(
+def dense_basis(
     age_yr: jnp.ndarray,
     log_total_mass: float = 10.0,
     log_sfr_inst: float = 0.0,
@@ -594,7 +594,7 @@ def _build_quantile_points_pure(
     return time_q, mass_q
 
 
-def dense_basis_pure_sfh(
+def dense_basis_pure(
     age_yr: jnp.ndarray,
     log_total_mass: float = 10.0,
     age_universe_yr: float = 13.47e9,
@@ -694,3 +694,10 @@ def dense_basis_pure_sfh(
 
     result = jnp.interp(age_yr, t_lookback_yr, sfr)
     return jnp.maximum(result, 0.0)
+
+
+# ── Deprecated aliases (Phase 3) ──────────────────────────────────
+# The `_sfh` suffix was redundant inside the `tengri.components.sfh` namespace.
+# These aliases are provided for backward compatibility and will be removed in v1.0.
+dense_basis_sfh = dense_basis
+dense_basis_pure_sfh = dense_basis_pure

@@ -793,7 +793,7 @@ def radio_total_dpl(
     return sf + ff + agn
 
 
-def radio_components(
+def compute_radio_components(
     wavelength: jnp.ndarray,
     L_ir: float = 0.0,
     L_agn_bol: float = 0.0,
@@ -885,3 +885,8 @@ def radio_components(
     )
     total = synchrotron + ff + agn
     return {"synchrotron": synchrotron, "freefree": ff, "agn": agn, "total": total}
+
+
+from tengri._deprecated import deprecated_alias
+
+radio_components = deprecated_alias(compute_radio_components, old_name="radio_components")

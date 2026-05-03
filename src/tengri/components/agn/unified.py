@@ -260,7 +260,9 @@ def resolve_agn_model(name: str) -> Callable:
     return AGN_MODELS[name]
 
 
-get_agn_model = resolve_agn_model
+from tengri._deprecated import deprecated_alias
+
+get_agn_model = deprecated_alias(resolve_agn_model, old_name="get_agn_model")
 
 
 # ── Generic unified AGN combiner ──────────────────────────────────

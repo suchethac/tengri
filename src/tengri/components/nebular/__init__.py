@@ -89,7 +89,12 @@ from tengri.components.nebular.mappings_photo import (
     MappingsPhotoAGNBackend,
     MappingsPhotoStellarBackend,
 )
-from tengri.components.nebular.shock import ShockBackend, shock_emission_sed, shock_line_ratios
+from tengri.components.nebular.shock import (
+    ShockBackend,
+    compute_shock_sed,
+    shock_emission_sed,
+    shock_line_ratios,
+)
 
 _DEFAULT_CUE_WEIGHTS_PATH = Path(__file__).resolve().parents[4] / "data" / "cue_weights.npz"
 
@@ -116,6 +121,7 @@ __all__ = [
     "ShockBackend",
     "SynthesizerGridData",
     "SynthesizerNLRBackend",
+    "compute_shock_sed",
     "mix_dig_emission",
     "shock_emission_sed",
     "shock_line_ratios",

@@ -126,7 +126,7 @@ def drude_profile(
     return gamma**2 / (x**2 + gamma**2)
 
 
-def pah_template(
+def compute_pah_template(
     wave_um: ArrayLike,
     strengths: ArrayLike | None = None,
 ) -> jnp.ndarray:
@@ -246,3 +246,8 @@ def decompose_pah(
         "fitted_pah": fitted_pah,
         "residual": residual,
     }
+
+
+from tengri._deprecated import deprecated_alias
+
+pah_template = deprecated_alias(compute_pah_template, old_name="pah_template")

@@ -35,33 +35,33 @@ from typing import Any, NamedTuple
 
 import jax.numpy as jnp
 
-from tengri.components.sfh.dense_basis import dense_basis_pure_sfh, dense_basis_sfh
+from tengri.components.sfh.dense_basis import dense_basis, dense_basis_pure
 from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
 from tengri.components.sfh.mean_sfh import (
     AGEMAX_YR,
     buat08,
-    constant_sfh,
+    constant,
     constant_then_exponential_sfh,
     declining_exponential_sfh,
     delayed_bq,
-    delayed_exponential_sfh,
+    delayed_exponential,
     dpl,
-    exponential_sfh,
+    exponential,
     lnorm,
     norm,
     periodic,
     psb_wild2020,
     snorm,
-    snorm_burst_sfh,
-    snorm_trunc_burst_sfh,
+    snorm_burst,
+    snorm_trunc_burst,
     triweight_burst,
     tsnorm,
 )
 from tengri.components.sfh.nonparametric import (
     CFLEX_DEFAULT_ANCHOR_GYR,
-    continuity_flex_sfh,
-    continuity_sfh,
-    dirichlet_sfh,
+    continuity,
+    continuity_flex,
+    dirichlet,
 )
 from tengri.components.sfh.psd_models import drw_variance
 from tengri.parameters.priors import Distribution, Fixed, Uniform
@@ -227,7 +227,7 @@ SFH_REGISTRY["skewnormal_sfh"] = _snorm_spec
 # --- snorm_burst (skew-normal + flat burst) — canonical: snorm_burst_sfh ---
 _snorm_burst_spec = SFHModelSpec(
     name="snorm_burst",
-    fn=snorm_burst_sfh,
+    fn=snorm_burst,
     params={
         "sfh_snorm_burst_log_peak_sfr": ParamDef(
             "log10 peak SFR of skew-normal component", _always_true, "", Uniform(-1.0, 3.0)
@@ -263,7 +263,7 @@ SFH_REGISTRY["snorm_burst_sfh"] = _snorm_burst_spec
 # --- tsnorm_burst (truncated skew-normal + flat burst) — canonical: snorm_trunc_burst_sfh ---
 _tsnorm_burst_spec = SFHModelSpec(
     name="tsnorm_burst",
-    fn=snorm_trunc_burst_sfh,
+    fn=snorm_trunc_burst,
     params={
         "sfh_tsnorm_burst_log_peak_sfr": ParamDef(
             "log10 peak SFR of tsnorm component", _always_true, "", Uniform(-1.0, 3.0)
@@ -384,7 +384,7 @@ _register(
 _register(
     SFHModelSpec(
         name="const",
-        fn=constant_sfh,
+        fn=constant,
         params={
             "sfh_const_log_sfr": ParamDef("log10 SFR", _always_true, "", Uniform(-1.0, 3.0)),
             "sfh_const_start_gyr": ParamDef(
@@ -416,7 +416,7 @@ _register(
 _register(
     SFHModelSpec(
         name="exp",
-        fn=exponential_sfh,
+        fn=exponential,
         params={
             "sfh_exp_log_peak_sfr": ParamDef(
                 "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
@@ -442,7 +442,7 @@ _register(
 _register(
     SFHModelSpec(
         name="dexp",
-        fn=delayed_exponential_sfh,
+        fn=delayed_exponential,
         params={
             "sfh_dexp_log_peak_sfr": ParamDef(
                 "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
@@ -750,7 +750,7 @@ _register(
 _register(
     SFHModelSpec(
         name="continuity",
-        fn=continuity_sfh,
+        fn=continuity,
         params={
             "sfh_cont_log_total_mass": ParamDef(
                 "log10 total stellar mass formed (Msun)",
@@ -784,7 +784,7 @@ _N_CFLEX = 3
 _register(
     SFHModelSpec(
         name="continuity_flex",
-        fn=continuity_flex_sfh,
+        fn=continuity_flex,
         params={
             "sfh_cflex_log_total_mass": ParamDef(
                 "log10 total stellar mass formed (Msun)",
@@ -832,7 +832,7 @@ _register(
 _register(
     SFHModelSpec(
         name="dirichlet",
-        fn=dirichlet_sfh,
+        fn=dirichlet,
         params={
             "sfh_dir_log_total_mass": ParamDef(
                 "log10 total stellar mass formed (Msun)",
@@ -864,7 +864,7 @@ _register(
 _register(
     SFHModelSpec(
         name="dense_basis",
-        fn=dense_basis_sfh,
+        fn=dense_basis,
         params={
             "sfh_db_log_total_mass": ParamDef(
                 "log10 total stellar mass formed (Msun)",
@@ -907,7 +907,7 @@ SFH_REGISTRY["db"] = SFH_REGISTRY["dense_basis"]
 _register(
     SFHModelSpec(
         name="dense_basis_pure",
-        fn=dense_basis_pure_sfh,
+        fn=dense_basis_pure,
         params={
             "sfh_dbp_log_total_mass": ParamDef(
                 "log10 total stellar mass formed (Msun)",

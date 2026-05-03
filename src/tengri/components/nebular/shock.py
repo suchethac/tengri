@@ -520,7 +520,9 @@ def compute_shock_sed(
     return _place_line_profiles(line_waves, line_lums, wavelength, line_sigma_aa)
 
 
-shock_emission_sed = compute_shock_sed
+from tengri._deprecated import deprecated_alias
+
+shock_emission_sed = deprecated_alias(compute_shock_sed, old_name="shock_emission_sed")
 
 
 # ── Protocol-conformant backend class ─────────────────────────────

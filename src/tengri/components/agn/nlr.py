@@ -214,7 +214,7 @@ _RICHARDSON_FLUXES = jnp.array(
 )
 
 
-def nlr_emission_richardson2014(
+def compute_nlr_sed_richardson2014(
     wavelength: jnp.ndarray,
     l_disc_bol_erg: float,
     covering_fraction: float = 0.1,
@@ -302,4 +302,9 @@ def nlr_emission_richardson2014(
     return l_nu_lines
 
 
-nlr_emission = compute_nlr_sed
+from tengri._deprecated import deprecated_alias
+
+nlr_emission = deprecated_alias(compute_nlr_sed, old_name="nlr_emission")
+nlr_emission_richardson2014 = deprecated_alias(
+    compute_nlr_sed_richardson2014, old_name="nlr_emission_richardson2014"
+)

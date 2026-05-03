@@ -45,9 +45,12 @@ from tengri.components.dust.attenuation import (
     wg00_dusty,
     wg00_shell,
 )
+
+# New names
 from tengri.components.dust.drude_profiles import (
     N_PAH_FEATURES,
     SMITH2007_PAH_FEATURES,
+    compute_pah_template,
     decompose_pah,
     drude_profile,
     pah_template,
@@ -90,6 +93,8 @@ from tengri.components.dust.emission import (
     resolve_emission_model,
     themis,
 )
+
+# New names
 from tengri.components.dust.priors import (
     narayanan_prior,
     narayanan_tau_prior,

@@ -1,6 +1,7 @@
 """Radio emission: star-formation synchrotron + AGN jets + free-free."""
 
 from tengri.components.radio.radio import (
+    compute_radio_components,
     radio_agn,
     radio_agn_dpl,
     radio_components,
@@ -14,6 +15,7 @@ from tengri.components.radio.radio import (
 )
 
 __all__ = [
+    "compute_radio_components",
     "radio_agn",
     "radio_agn_dpl",
     "radio_components",

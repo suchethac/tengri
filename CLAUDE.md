@@ -94,6 +94,7 @@ Deprecated aliases (never use in new code): `Model`, `ParamSpec`, `SpectroscopyC
 Layout: `parameters/ -> components/ -> forward/ -> observation/ -> inference/ -> analysis/ -> config/ + utils/`. Public API re-exported at `src/tengri/__init__.py`.
 
 Key directories:
+- `core/` — Protocols (SEDComponent, ObservationModel, Likelihood) — Part II scaffold; nothing consumes yet
 - `parameters/` — Parameters class, priors, param translation
 - `components/` — SED physics: sfh/, sps/, dust/, nebular/, agn/, igm/, radio/, xray/
 - `forward/` — SEDModel, pipeline, _kernels/ (JIT strategies, private), precompute/ (protocol+registry)
@@ -102,6 +103,14 @@ Key directories:
 - `analysis/` — diagnostics, plotting, simulate, mock
 - `config/` — DustConfig/NebularConfig/SFHConfig/ModelConfig, exceptions, display, deprecation
 - `utils/` — cosmology, conversions, interpolation, physics_constants
+- `cosmology/` — re-exports from `utils/cosmology` (canonical user-facing path; added 2026-05)
+- `units/` — re-exports F_nu/L_nu/AB-magnitude conversions (canonical user-facing path; added 2026-05)
+- `plot/` — re-exports plotting helpers from `analysis/plotting` (canonical user-facing path; added 2026-05)
+- `_deprecated.py` — `deprecated_alias()` / `deprecated_attribute()` shims (added 2026-05)
+
+Phase 4 sub-namespaces (additive re-export modules; added 2026-05):
+- `components/agn/{disc_api,torus_api,lines,compose}.py`
+- `components/dust/{attenuation_models,emission_models,pah}.py`
 
 ## Key conventions
 
@@ -153,4 +162,6 @@ Search qmd first using `collections: ["tengri"]` before reading any file. Fall b
 - `docs/dev/design_philosophy.md` — architecture decisions
 - `docs/dev/NAMING_CONTRACT.md` — naming conventions (read before any rename/refactor)
 - `docs/dev/REFACTOR.md` — refactor plan
+- `docs/dev/api_migration_v0.x.md` — public-API migration table (Phase 1→6 + Part II scaffold)
 - `docs/known_bugs.md` — bug tracking (all currently fixed)
+- `tools/check_param_prefixes.py` — CI guard for free-parameter prefix rule (NAMING_CONTRACT §3.2)
