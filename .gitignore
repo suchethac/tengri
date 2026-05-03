@@ -72,3 +72,4 @@ docs/_notebooks/
 docs/auto_examples/
 .worktrees/
 .claude/
+.nb_home/
