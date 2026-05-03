@@ -26,7 +26,7 @@ from tengri.observation.eline_priors import (
 )
 from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.line_mask import build_line_mask
-from tengri.observation.noise import DETECTED, LOWER_LIMIT, UPPER_LIMIT
+from tengri.observation.noise import DETECTED, LOWER_LIMIT, UPPER_LIMIT, apply_zp_floor
 from tengri.observation.noise_model import NoiseModel
 from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
@@ -67,6 +67,7 @@ __all__ = [
     "Spectroscopy",
     "apply_aperture_correction",
     "apply_calibration",
+    "apply_zp_floor",
     "apply_double_calibration",
     "apply_lsf",
     "apply_wavelength_mask",

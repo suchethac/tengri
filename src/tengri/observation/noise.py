@@ -702,3 +702,89 @@ def gp_noise_covariance(
         raise ValueError(f"Unknown kernel '{kernel}'. Must be 'exp_squared' or 'matern32'.")
 
     return diag_noise + K_gp
+
+
+def apply_zp_floor(
+    flux: jnp.ndarray,
+    noise: jnp.ndarray,
+    floor: float | jnp.ndarray,
+) -> jnp.ndarray:
+    r"""Inflate per-band noise with a fractional zero-point systematic floor.
+
+    Combines the existing per-band statistical uncertainty with a
+    multiplicative ZP-calibration term in quadrature:
+
+    .. math::
+
+        \sigma_{\rm eff}^2 = \sigma_{\rm data}^2 +
+        \bigl(f_{\rm floor} \cdot |F|\bigr)^2
+
+    Different surveys / passbands have different ZP calibration
+    floors (e.g. SDSS ~2%, JWST NIRCam ~5%, Pan-STARRS ~1%). When the
+    photometric pipeline doesn't already fold these into the reported
+    noise, apply this preprocessing step before constructing the
+    Fitter so the fit can't be falsely confident below the
+    calibration limit.
+
+    Parameters
+    ----------
+    flux : array_like, shape (n_bands,)
+        Observed flux density per band. [erg/s/cm^2/Hz]
+    noise : array_like, shape (n_bands,)
+        Statistical 1-sigma noise per band. Same units as ``flux``.
+    floor : float or array_like, shape (n_bands,)
+        Fractional ZP floor (e.g. ``0.02`` for 2%). Scalar applies
+        the same floor to all bands; array gives per-band values.
+        Must be non-negative.
+
+    Returns
+    -------
+    ndarray, shape (n_bands,)
+        Effective per-band 1-sigma noise. Same units as ``noise``.
+
+    Raises
+    ------
+    ValueError
+        If ``floor`` has shape incompatible with ``flux``, or any
+        ``floor`` value is negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure ``jnp`` arithmetic.
+
+    Caps the achievable per-band SNR at :math:`1/f_{\rm floor}` (e.g.
+    a 2% floor caps SNR at 50). Uses ``|F|`` so non-detections with
+    negative flux still yield a finite, positive noise term.
+
+    The fractional floor is *not* the same as the existing
+    ``noise_frac_cal`` parameter, which applies a global Student-t-style
+    calibration term inside the likelihood. Use this utility upstream
+    for known per-band ZP uncertainties; reserve ``noise_frac_cal``
+    for free-parameter calibration nuisances.
+
+    Examples
+    --------
+    >>> flux = jnp.array([1.0, 2.0, 3.0])
+    >>> noise = jnp.array([0.05, 0.10, 0.15])
+    >>> # SDSS optical: 2% per band
+    >>> sigma_eff = apply_zp_floor(flux, noise, 0.02)
+    """
+    flux_arr = jnp.asarray(flux)
+    noise_arr = jnp.asarray(noise)
+    floor_arr = jnp.asarray(floor)
+
+    if floor_arr.ndim == 0:
+        if float(floor_arr) < 0.0:
+            raise ValueError("zp floor must be non-negative (got < 0)")
+    else:
+        if floor_arr.shape != flux_arr.shape:
+            raise ValueError(
+                f"floor shape {floor_arr.shape} != flux shape {flux_arr.shape}"
+            )
+        if not bool(jnp.all(floor_arr >= 0.0)):
+            raise ValueError(
+                "zp floor must be non-negative (got < 0 in some band)"
+            )
+
+    sys_term = floor_arr * jnp.abs(flux_arr)
+    return jnp.sqrt(noise_arr**2 + sys_term**2)
