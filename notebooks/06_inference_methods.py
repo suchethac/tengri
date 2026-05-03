@@ -354,6 +354,54 @@ except Exception as e:
     print(f"NSS:  Failed ({type(e).__name__})")
 
 # %% [markdown]
+# ## Method 7: Other BlackJAX MCMC variants
+#
+# In addition to NUTS, the fitter exposes a family of related MCMC samplers.
+# These all target the same posterior; differences are in proposal mechanics,
+# step-size adaptation, and high-D scaling. Useful when NUTS is the wrong
+# trade-off for a given problem (e.g. very high D, expensive likelihoods).
+#
+# - **HMC**: vanilla Hamiltonian Monte Carlo (fixed integration length).
+# - **Dynamic HMC**: adaptive trajectory length without NUTS' tree doubling.
+# - **GHMC**: generalised HMC; partial momentum refreshment for better
+#   exploration under correlated targets.
+# - **MCLMC**: Microcanonical Langevin Monte Carlo; recent unadjusted
+#   sampler that scales well to large D.
+# - **Elliptical Slice**: exact slice sampler under a Gaussian prior — the
+#   classic ESS, distinct from this code's ``mcmc_raytrace`` variant.
+
+# %%
+mcmc_variants = (
+    ("HMC", "mcmc_hmc"),
+    ("Dynamic HMC", "mcmc_dynamic_hmc"),
+    ("GHMC", "mcmc_ghmc"),
+    ("MCLMC", "mcmc_mclmc"),
+    ("Elliptical Slice", "mcmc_ess"),
+)
+
+variant_results: dict[str, object] = {}
+variant_times: dict[str, float] = {}
+
+for label, method_name in mcmc_variants:
+    t0 = time.perf_counter()
+    try:
+        res = fitter_param.run(
+            method_name,
+            init_from=result_map,
+            n_warmup=200,
+            n_samples=500,
+            verbose=False,
+        )
+        dt = time.perf_counter() - t0
+        variant_results[label] = res
+        variant_times[label] = dt
+        print(f"{label:<18} {dt:>8.2f}s")
+    except Exception as e:
+        variant_results[label] = None
+        variant_times[label] = None
+        print(f"{label:<18} Failed ({type(e).__name__}: {e})")
+
+# %% [markdown]
 # ## Comparison: Posterior Agreement
 
 # %%
@@ -372,6 +420,11 @@ if result_raytrace is not None:
 if result_nss is not None:
     sampling_results["NSS"] = result_nss
     sampling_methods["NSS"] = t_nss
+
+for label, res in variant_results.items():
+    if res is not None:
+        sampling_results[label] = res
+        sampling_methods[label] = variant_times[label]
 
 if sampling_results:
     # Corner plot overlay
@@ -460,6 +513,12 @@ if t_nss is not None:
     print(f"{'NSS (Evidence)':<20} {t_nss:>12.2f} {'Exact nested':>20}")
 else:
     print(f"{'NSS':<20} {'failed':>12} {'(N/A)':>20}")
+
+for label, dt in variant_times.items():
+    if dt is not None:
+        print(f"{label:<20} {dt:>12.2f} {'BlackJAX variant':>20}")
+    else:
+        print(f"{label:<20} {'failed':>12} {'(N/A)':>20}")
 
 print("=" * 70)
 
