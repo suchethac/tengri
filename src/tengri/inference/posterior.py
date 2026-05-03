@@ -535,6 +535,61 @@ class Posterior:
         lo, med, hi = jnp.percentile(ratio, jnp.array([16.0, 50.0, 84.0]))
         return (float(med), float(lo), float(hi))
 
+    def balmer_av(self) -> tuple[float, float, float]:
+        r"""Visual extinction A(V) from the Balmer decrement (Calzetti+2000).
+
+        Converts the observed Hα/Hβ ratio to a V-band attenuation
+        assuming Case B recombination (intrinsic ratio 2.86) and the
+        Calzetti et al. 2000 [1]_ starburst attenuation law
+        (:math:`R_V = 4.05`, :math:`k(H\alpha) = 2.53`, :math:`k(H\beta) = 3.61`).
+
+        Returns
+        -------
+        tuple
+            ``(median, lo_68, hi_68)`` of A(V) in [mag]. For MAP results
+            all three values are equal. Negative values are returned
+            as-is (unphysical, but informative for noisy data — clip
+            externally if desired).
+
+        Raises
+        ------
+        ValueError
+            If Hα or Hβ fluxes are not available.
+
+        Notes
+        -----
+        .. math::
+
+            E(B-V) &= \frac{\log_{10}\!\left(R_{\rm obs}/2.86\right)}
+            {0.4\,\left(k(H\beta) - k(H\alpha)\right)} \\
+            A(V) &= R_V \cdot E(B-V)
+
+        For Calzetti+2000:
+        :math:`0.4 \cdot (k(H\beta) - k(H\alpha)) = 0.432`,
+        :math:`R_V = 4.05`, so
+        :math:`A(V) \approx 9.375 \, \log_{10}(R_{\rm obs}/2.86)`.
+
+        References
+        ----------
+        .. [1] Calzetti, D. et al., 2000, ApJ, 533, 682.
+
+        Examples
+        --------
+        >>> av_med, av_lo, av_hi = result.balmer_av()
+        """
+        med, lo, hi = self.balmer_decrement()
+        # Calzetti+2000 conversion constants
+        _K_HALPHA = 2.53
+        _K_HBETA = 3.61
+        _R_V = 4.05
+        _DENOM = 0.4 * (_K_HBETA - _K_HALPHA)  # 0.432
+        _CASE_B = 2.86
+
+        def _to_av(r: float) -> float:
+            return _R_V * float(np.log10(r / _CASE_B)) / _DENOM
+
+        return _to_av(med), _to_av(lo), _to_av(hi)
+
     def equivalent_widths(
         self,
         window_aa: float = 20.0,

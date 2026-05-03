@@ -778,3 +778,71 @@ class TestBPTClassification:
         p = _make_bpt_posterior(fluxes)
         cls = p.bpt_class()
         assert cls == "unknown"
+
+
+# ── TestBalmerAv ──────────────────────────────────────────────────────────────
+
+
+class TestBalmerAv:
+    """Tests for the Calzetti+2000 Balmer decrement → A(V) utility."""
+
+    def test_no_dust_returns_zero(self):
+        # Hα/Hβ = 2.86 (Case B) → A(V) = 0
+        fluxes = jnp.array([2.86, 1.0])
+        p = Posterior(
+            samples=None,
+            params={},
+            method="MAP",
+            wall_time_s=0.0,
+            diagnostics={},
+            eline_fluxes=fluxes,
+            eline_names=("Halpha", "Hbeta"),
+            eline_wavelengths=jnp.array([6564.61, 4862.68]),
+        )
+        med, lo, hi = p.balmer_av()
+        assert med == pytest.approx(0.0, abs=1e-6)
+        assert med == lo == hi
+
+    def test_dusty_galaxy_amplitude(self):
+        # R_obs = 5.0; Calzetti+2000 R_V=4.05, k_Hα=2.53, k_Hβ=3.61.
+        # E(B-V) = log10(5/2.86) / (0.4 * (3.61 - 2.53)) = 0.2425 / 0.432 = 0.5614
+        # A(V) = 4.05 * 0.5614 = 2.274
+        fluxes = jnp.array([5.0, 1.0])
+        p = Posterior(
+            samples=None,
+            params={},
+            method="MAP",
+            wall_time_s=0.0,
+            diagnostics={},
+            eline_fluxes=fluxes,
+            eline_names=("Halpha", "Hbeta"),
+            eline_wavelengths=jnp.array([6564.61, 4862.68]),
+        )
+        med, _lo, _hi = p.balmer_av()
+        assert med == pytest.approx(2.274, rel=1e-3)
+
+    def test_sampling_returns_percentiles(self):
+        rng = np.random.default_rng(30)
+        n = 200
+        # Inject ratio ~ 4.0 with small spread → modest A(V)
+        ha = 4.0 + 0.1 * rng.normal(size=n)
+        hb = jnp.ones(n)
+        fluxes = jnp.stack([jnp.asarray(ha), hb], axis=1)
+        p = Posterior(
+            samples={"x": jnp.zeros(n)},
+            params={},
+            method="mcmc_nuts",
+            wall_time_s=1.0,
+            diagnostics={},
+            eline_fluxes=fluxes,
+            eline_names=("Halpha", "Hbeta"),
+            eline_wavelengths=jnp.array([6564.61, 4862.68]),
+        )
+        med, lo, hi = p.balmer_av()
+        assert lo < med < hi
+        # log10(4/2.86)/0.432*4.05 = 0.5905
+        assert med == pytest.approx(1.36, rel=0.05)
+
+    def test_raises_when_lines_missing(self, map_posterior):
+        with pytest.raises(ValueError, match="No emission line fluxes"):
+            map_posterior.balmer_av()

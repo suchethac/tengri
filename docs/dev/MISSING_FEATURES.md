@@ -83,14 +83,6 @@ If you find evidence the feature shipped, **update this file** (move the item to
 
 ## Tier 3 — Diagnostic / science-product gaps
 
-### 13. BPT-style classification utilities
-- **Status:** `Posterior.bpt_nii()` exists for coordinates; no Kewley+2001 / Kauffmann+2003 demarcation classification utility.
-- **Where:** `src/tengri/analysis/diagnostics/lines.py` or `inference/posterior.py`.
-
-### 14. Balmer decrement dust correction
-- **Status:** `Posterior.balmer_decrement()` exposes the ratio; no standard "decrement-derived A_V → de-redden Hα" utility.
-- **Where:** `src/tengri/analysis/diagnostics/`.
-
 ### 15. Doublet-ratio constraints in likelihood
 - **Status:** `[OIII] 4959/5007`, `[NII] 6548/6584`, `[SII] 6717/6731` ratios not enforced in the marginalized-line likelihood.
 - **Where:** `src/tengri/observation/emission_lines.py`, `src/tengri/inference/`.
@@ -98,6 +90,14 @@ If you find evidence the feature shipped, **update this file** (move the item to
 ---
 
 ## Resolved (move items here, do not delete)
+
+### 13. BPT-style classification utility (resolved 2026-05-03)
+- **Original problem:** `Posterior.bpt_nii()` exposed BPT-NII coordinates but no demarcation classifier.
+- **Fix:** added `Posterior.bpt_class()` returning per-draw `"SF" / "composite" / "AGN" / "unknown"` labels using the Kauffmann+2003 and Kewley+2001 demarcation lines. Tests in `tests/unit/test_posterior.py::TestBPTClassification`.
+
+### 14. Balmer decrement → A(V) (resolved 2026-05-03)
+- **Original problem:** `Posterior.balmer_decrement()` exposed the ratio but no standard "decrement → A(V)" utility.
+- **Fix:** added `Posterior.balmer_av()` using Calzetti+2000 (R_V=4.05, k(Hα)=2.53, k(Hβ)=3.61). Returns `(median, lo_68, hi_68)` of A(V) in mag. Tests in `tests/unit/test_posterior.py::TestBalmerAv`.
 
 ### 16. Cue abundance offsets unwired in user-facing pipeline (resolved 2026-05-03)
 - **Original problem:** `gas_logno`, `gas_logco`, `gas_logn`, and the seven `ionspec_*` Cue parameters were registered in `src/tengri/parameters/_param_defs.py` but stripped by `translate.get_internal_params` because they had no entries in any param_map. Cue's continuous-abundance feature was silently inaccessible from the high-level Parameters API.
