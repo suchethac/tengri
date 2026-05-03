@@ -354,21 +354,21 @@ These are not fatal (users adapt quickly), but **a single "Load SDSS FITS" tutor
 
 ## Files Audit Completed
 
-- `/Users/suchethacooray/Projects/tengri/notebooks/00_quickstart.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/01_why_jax.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/02_sed_anatomy.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/03_fitting_photometry.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/04_fitting_spectra.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/05_joint_photometry_spectroscopy.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/06_inference_methods.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/07_degeneracies.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/08_sfh_advanced.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/09_dust_emission.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/10_agn_advanced.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/11_population.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/12_diagnostics.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/13_extending_tengri.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/14_stochastic_sfh.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/15_vi_inference.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/16_simulation_interface.py` ✓
-- `/Users/suchethacooray/Projects/tengri/notebooks/17_emission_line_measurements.py` ✓
+- `notebooks/00_quickstart.py` ✓
+- `notebooks/01_why_jax.py` ✓
+- `notebooks/02_sed_anatomy.py` ✓
+- `notebooks/03_fitting_photometry.py` ✓
+- `notebooks/04_fitting_spectra.py` ✓
+- `notebooks/05_joint_photometry_spectroscopy.py` ✓
+- `notebooks/06_inference_methods.py` ✓
+- `notebooks/07_degeneracies.py` ✓
+- `notebooks/08_sfh_advanced.py` ✓
+- `notebooks/09_dust_emission.py` ✓
+- `notebooks/10_agn_advanced.py` ✓
+- `notebooks/11_population.py` ✓
+- `notebooks/12_diagnostics.py` ✓
+- `notebooks/13_extending_tengri.py` ✓
+- `notebooks/14_stochastic_sfh.py` ✓
+- `notebooks/15_vi_inference.py` ✓
+- `notebooks/16_simulation_interface.py` ✓
+- `notebooks/17_emission_line_measurements.py` ✓

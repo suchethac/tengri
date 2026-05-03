@@ -444,7 +444,7 @@ The "High-level API (preferred)" section in `CLAUDE.md` currently shows `Model`,
 
 **IMPORTANT FOR PAPER-WRITING AGENT:** The following sections in both papers need revision after the API is implemented. The paper agent should read the final implemented API (check `src/tengri/core/model.py` and `src/tengri/inference/fitter.py`) before revising — do not revise based on this plan alone, since implementation details may change.
 
-### Paper I: Code introduction (`~/writing-workspace/projects/tengri/`)
+### Paper I: Code introduction (*(private paper draft)*)
 
 This paper IS about the API. Every section may be affected. Priority sections:
 
@@ -456,7 +456,7 @@ This paper IS about the API. Every section may be affected. Priority sections:
 | `8-conclusion.tex` | If the conclusion contains any code snippets or method name lists, update them. Specifically check for mentions of "ten inference backends" — after unification, this should say "multiple inference methods accessible through a unified API" or give the new canonical count. |
 | `999-appendix.tex` | Likely no changes needed — the appendix covers mathematical details of Ray Tracing and geoVI, which are unchanged. However, if the appendix refers to `fitter.run("raytrace")` or other old method strings, update them. |
 
-### Paper II: Stochastic SFH (`~/writing-workspace/projects/differentiable_psd_sed_fitting/`)
+### Paper II: Stochastic SFH (*(private paper draft)*)
 
 This paper focuses on the science (IFT SFH, PSD recovery, hierarchical inference), not the API. However, two places reference the API:
 

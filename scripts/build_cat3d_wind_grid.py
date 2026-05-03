@@ -58,7 +58,7 @@ References
 - Hönig, S. F. & Kishimoto, M., "The dusty heart of nearby active
   galaxies. II. From clumpy torus models to a unified model," ApJL 838,
   L20 (2017). arXiv:1702.08691. Citation details must be verified against
-  ``~/writing-workspace`` before publication-time references.
+  the original paper before publication-time references.
 - Martínez-Ramírez et al. 2024 / Zhuang et al. 2024, arXiv:2405.12111
   (AGNfitter-rX).
 

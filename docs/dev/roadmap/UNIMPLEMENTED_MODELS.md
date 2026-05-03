@@ -6,7 +6,7 @@ Each section contains everything a future agent needs: paper references,
 equations, parameters, input/output contract, and integration points.
 
 Papers referenced here are available at:
-`~/writing-workspace/_global_context/arxiv_library/latex_sources/`
+*(private arxiv source library)*
 
 ---
 

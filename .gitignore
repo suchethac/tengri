@@ -55,6 +55,17 @@ notebooks/*/figures/
 models/figures/
 specialist/figures/
 
+# Stray root-level images (paper figures live in docs/_static/figures/)
+/*.png
+/*.pdf
+
+# Internal research outputs (not for distribution)
+analysis/figures/
+explore/
+profiling/
+notebook_execution.log
+notebook_metrics.json
+
 # Sphinx docs build artifacts
 docs/_build/
 docs/_notebooks/

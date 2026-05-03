@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-04-08 (session 5)
 **Repo:** `~/Projects/tengri/`
-**Paper draft:** `~/writing-workspace/projects/differentiable_psd_sed_fitting/`
+**Paper draft:** *(private paper draft)*
 
 ---
 
@@ -14,7 +14,7 @@
 
 **Locations:**
 - Code: `~/Projects/tengri/` (this repo)
-- Paper draft: `~/writing-workspace/projects/differentiable_psd_sed_fitting/`
+- Paper draft: *(private paper draft)*
 - SSP data: `~/Projects/tengri/data/` (not in git, 64 MB HDF5 files)
 
 **Environment:**
@@ -286,6 +286,6 @@ python analysis/fig07_speed_benchmarks.py --n-repeats 2
 python analysis/fig08_gradient_sensitivity.py
 
 # Compile paper
-cd ~/writing-workspace/projects/differentiable_psd_sed_fitting
+cd <private-paper-draft>
 latexmk -pdf 0-ms.tex
 ```

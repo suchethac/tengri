@@ -5,7 +5,7 @@
 Differentiable SED fitting code in JAX. Models galaxy star formation histories as IFT correlated fields with PSD-governed burstiness priors. Uses DSPS for differentiable stellar population synthesis.
 
 **Code name:** `tengri` (working name, final TBD).
-**Paper draft:** `~/writing-workspace/projects/tengri/`
+**Paper draft:** *(private paper draft)*
 **Paper I:** Methods + mock recovery. **Paper II:** Real data.
 
 ## Build/test commands

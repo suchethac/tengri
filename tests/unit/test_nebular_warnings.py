@@ -9,8 +9,11 @@ These tests verify that:
 
 import contextlib
 import warnings
+from pathlib import Path
 
 import pytest
+
+_CB19_GRID_PATH = Path(__file__).resolve().parents[2] / "data" / "cb19_templates.h5"
 
 from tengri.components.nebular import (
     BakedInBackend,
@@ -56,12 +59,7 @@ def test_baked_in_has_continuum_true():
 # ── CB19Backend ───────────────────────────────────────────────────
 
 
-@pytest.mark.skipif(
-    not __import__("pathlib")
-    .Path("/Users/suchethacooray/Projects/tengri/data/cb19_templates.h5")
-    .exists(),
-    reason="CB19 grid file not present",
-)
+@pytest.mark.skipif(not _CB19_GRID_PATH.exists(), reason="CB19 grid file not present")
 def test_cb19_warns_by_default():
     """CB19Backend warns with CB19IonizingSpectrumWarning by default."""
     with pytest.warns(CB19IonizingSpectrumWarning):

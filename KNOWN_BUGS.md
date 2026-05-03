@@ -8,7 +8,7 @@ the full audit history.
 ## Open implementation gaps surfaced by paper validation (2026-04-29)
 
 These are features described or planned in the methods paper
-(`writing-workspace/projects/tengri/`) that are not yet implemented in
+(*(private paper draft)*) that are not yet implemented in
 the code. The paper currently flags each of them explicitly as
 "planned" so the manuscript and the code stay consistent. When you
 implement one, drop the corresponding `--- planned` qualifier in the

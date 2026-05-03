@@ -831,7 +831,7 @@ def cat3d_wind_agn(
     -----
     **JIT-compatible**: yes.
 
-    Grid templates ported from AGNfitter-rX (Mart{\'\i}nez-Ram{\'\i}rez
+    Grid templates ported from AGNfitter-rX (Martínez-Ramírez
     et al. 2024, A&A 688, A46, arXiv:2405.12111) — Hönig & Kishimoto 2017
     CAT3D-Wind three-parameter projection. See
     :mod:`tengri.components.agn.cat3d_wind` and

@@ -24,7 +24,7 @@ References
 .. [1] L. Silva, R. Maiolino & G. L. Granato, "The nature of the Compton-thick
    AGN in NGC 1068 and implications for the cosmic X-ray background," MNRAS
    355, 973 (2004).  arXiv:astro-ph/0403425.  Citation details (volume, DOI)
-   must be verified against ``~/writing-workspace`` before publication.
+   must be verified against the original paper before publication.
 .. [2] G. Calistro Rivera et al., "AGNfitter: a Bayesian MCMC approach to
    fitting spectral energy distributions of AGNs," ApJ 833, 98 (2016).
    arXiv:1606.05648.

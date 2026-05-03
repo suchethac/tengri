@@ -20,67 +20,67 @@ You are refactoring the tengri project's Jupyter notebooks, Sphinx documentation
 
 ### The main implementation plan (READ THIS FULLY FIRST)
 ```
-/Users/suchethacooray/Projects/tengri/implementation_plans/notebooks_docs_refactor.md
+implementation_plans/notebooks_docs_refactor.md
 ```
 This is the comprehensive plan. It contains every notebook specification, section by section, with source files listed. Read it entirely before starting any work.
 
 ### Project rules and conventions (READ BEFORE WRITING ANY CODE)
 ```
-/Users/suchethacooray/Projects/tengri/CLAUDE.md
+CLAUDE.md
 ```
 Contains: build commands, code style, naming conventions, critical gotchas (deprecated API names, JAX rules, parameter naming). **You must follow the gotchas section exactly or your notebooks will produce silent bugs.**
 
 ### Context documents you may need to reference
 ```
-/Users/suchethacooray/Projects/tengri/docs/internal/AGN_MODEL_COMPARISON.md
+docs/internal/AGN_MODEL_COMPARISON.md
   → Comparison of tengri AGN vs CIGALE, Prospector, Bagpipes. Use for models/04_agn.py.
 
-/Users/suchethacooray/Projects/tengri/docs/internal/MODEL_DESCRIPTIONS.md
+docs/internal/MODEL_DESCRIPTIONS.md
   → Complete physics formulas for all models. Use when you need parameter names or equations.
 
-/Users/suchethacooray/Projects/tengri/docs/internal/design_philosophy.md
+docs/internal/design_philosophy.md
   → Design decisions. Context only.
 ```
 
 ### Source notebooks to copy from (the old ones)
 ```
-/Users/suchethacooray/Projects/tengri/notebooks/tutorials/notebook_code/
+notebooks/tutorials/notebook_code/
   → 01_quickstart.py, 02_the_api.py, 03_the_model.py, 04_the_forward_model.py, 05_prior_predictive.py
 
-/Users/suchethacooray/Projects/tengri/notebooks/demonstrations/notebook_code/
+notebooks/demonstrations/notebook_code/
   → 01_spectroscopic_fitting.py through 15_hierarchical_spectroscopy.py
 
-/Users/suchethacooray/Projects/tengri/notebooks/reference/notebook_code/
+notebooks/reference/notebook_code/
   → 01_psd_physics.py through 19_model_gallery_nebular.py
 ```
 
 ### Shared plot style utilities (import in every notebook)
 ```
-/Users/suchethacooray/Projects/tengri/notebooks/_plot_style.py
+notebooks/_plot_style.py
   → Provides: setup_style(), COLORS, convergence_table(), plot_sfh()
   → Every notebook uses this. See any existing notebook for the import pattern.
 ```
 
 ### SSP data file (used in all notebooks)
 ```
-/Users/suchethacooray/Projects/tengri/data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
 ```
 
 ### Current Sphinx gallery scripts (to fix)
 ```
-/Users/suchethacooray/Projects/tengri/examples/
+examples/
   → 21 existing plot_*.py scripts, organized in subdirectories
 ```
 
 ### Current docs site
 ```
-/Users/suchethacooray/Projects/tengri/docs/
+docs/
   → index.md, getting_started/, the_model/, inference/, worked_examples/, etc.
 ```
 
 ### Archive destination
 ```
-/Users/suchethacooray/Projects/tengri/notebooks/archive/
+notebooks/archive/
   → Move deprecated notebooks here. Do not delete them.
 ```
 
@@ -228,7 +228,7 @@ Read all `.py` files in `examples/`. Find and replace these deprecated names:
 | `charlot_fall` import | `two_component_dust(law_bc="power_law")` |
 | `sfh_alpha` | `sfh_dpl_alpha` (check full prefix with spec.free_params) |
 
-After fixing, run `cd /Users/suchethacooray/Projects/tengri && source .venv/bin/activate && python examples/quickstart/plot_first_fit.py` to verify one script runs cleanly before fixing all.
+After fixing, run `cd . && source .venv/bin/activate && python examples/quickstart/plot_first_fit.py` to verify one script runs cleanly before fixing all.
 
 ### Phase 6 — Write 8 new gallery scripts
 Create these new files. Each is 60–80 lines, produces one figure, starts with a module docstring. See main plan Section 6.4 for each script's purpose and source.
@@ -345,7 +345,7 @@ setup_style()
 
 ### Linting (run before finishing)
 ```bash
-cd /Users/suchethacooray/Projects/tengri
+cd .
 source .venv/bin/activate
 ruff check notebooks/ examples/ --fix
 ruff format notebooks/ examples/
@@ -355,7 +355,7 @@ Zero violations required before any commit.
 ### Syncing notebooks to .ipynb
 After writing or editing any `.py` notebook:
 ```bash
-cd /Users/suchethacooray/Projects/tengri/notebooks
+cd notebooks
 jupytext --sync quickstart/notebook_code/*.py
 jupytext --sync fitting/notebook_code/*.py
 # etc. for each track
@@ -408,7 +408,7 @@ After completing all phases:
 
 ```bash
 # 1. Full test suite must still pass (notebooks should not break tests)
-cd /Users/suchethacooray/Projects/tengri
+cd .
 source .venv/bin/activate
 pytest tests/ -q
 
@@ -419,7 +419,7 @@ ruff check notebooks/ examples/ && ruff format --check notebooks/ examples/
 cd notebooks && python quickstart/notebook_code/01_quickstart.py
 
 # 4. Verify one gallery script executes
-cd /Users/suchethacooray/Projects/tengri
+cd .
 python examples/quickstart/plot_first_fit.py
 
 # 5. Build docs (check for errors)
@@ -433,22 +433,22 @@ cd docs && make html 2>&1 | grep -i error | head -20
 The planning agent stored context here. You can read these for background but they are not required for implementation:
 
 ```
-/Users/suchethacooray/.claude/projects/-Users-suchethacooray-Projects-tengri/memory/MEMORY.md
+<local-claude-state>
   → Index of all memory files
 
-/Users/suchethacooray/.claude/projects/-Users-suchethacooray-Projects-tengri/memory/project_paper_series_vision.md
+<local-claude-state>
   → Paper series vision (3-paper arc, community tone)
 
-/Users/suchethacooray/.claude/projects/-Users-suchethacooray-Projects-tengri/memory/project_perf_optimization.md
+<local-claude-state>
   → Performance optimization context
 
-/Users/suchethacooray/.claude/plans/squishy-snacking-galaxy.md
+<local-claude-state>
   → Earlier draft of the plan (superseded by notebooks_docs_refactor.md)
 ```
 
 **The single most important file for implementation is:**
 ```
-/Users/suchethacooray/Projects/tengri/implementation_plans/notebooks_docs_refactor.md
+implementation_plans/notebooks_docs_refactor.md
 ```
 Read it in full. It contains every notebook specification with section-by-section descriptions.
 

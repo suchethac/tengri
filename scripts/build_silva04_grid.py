@@ -51,7 +51,7 @@ integral over frequency and multiplies by ``L_bol * agn_torus_frac``.
 Reference
 ---------
 Silva, Maiolino & Granato 2004, MNRAS 355, 973. Original paper ID and bib
-entry should be cross-checked against ``~/writing-workspace/projects/tengri/``
+entry should be cross-checked against `*(private paper draft)*`
 before publication-time docstring references are written.
 
 Port credit

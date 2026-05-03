@@ -538,7 +538,7 @@ Model = deprecated_class_alias("Model", SEDModel)
 
 ## 15. Cross-Reference: What CLAUDE.md Says
 
-From `/Users/suchethacooray/Projects/tengri/CLAUDE.md`:
+From `CLAUDE.md`:
 
 > **Canonical class names** (`SEDModel`, `Parameters`, `Spectroscopy`, `NoiseModel`, `LineList`, `PopulationFitter`)
 > **Deprecated aliases** (`Model`, `ParamSpec`, `SpectroscopyConfig`, `NoiseConfig`, `LineCatalog`, `HierarchicalFitter`) must never appear in new code.

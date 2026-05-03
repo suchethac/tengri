@@ -7,7 +7,7 @@ paper references, key equations, parameters, implementation plan,
 reference code, and parity tests.
 
 Papers referenced here are available at:
-`~/writing-workspace/_global_context/arxiv_library/latex_sources/`
+*(private arxiv source library)*
 
 ---
 

@@ -137,11 +137,11 @@ All 5 notebooks synced successfully:
 
 ## Files Modified
 
-- `/Users/suchethacooray/Projects/tengri/notebooks/03_fitting_photometry.py`
-- `/Users/suchethacooray/Projects/tengri/notebooks/04_fitting_spectra.py`
-- `/Users/suchethacooray/Projects/tengri/notebooks/05_joint_photometry_spectroscopy.py`
-- `/Users/suchethacooray/Projects/tengri/notebooks/09_dust_emission.py`
-- `/Users/suchethacooray/Projects/tengri/notebooks/10_agn_advanced.py`
+- `notebooks/03_fitting_photometry.py`
+- `notebooks/04_fitting_spectra.py`
+- `notebooks/05_joint_photometry_spectroscopy.py`
+- `notebooks/09_dust_emission.py`
+- `notebooks/10_agn_advanced.py`
 
 ---
 

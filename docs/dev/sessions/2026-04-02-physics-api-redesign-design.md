@@ -680,13 +680,13 @@ NEB_PARAM_MAP = {
 
 **IMPORTANT:** Read the final implemented API changes in the source before revising the paper. Do not revise based on this plan alone.
 
-**Paper I** (`~/writing-workspace/projects/tengri/`):
+**Paper I** (*(private paper draft)*):
 - `3-forward-model.tex` — the forward model section. After the registry unification, update any mentions of how models are selected (e.g., "the user specifies a dust law by name" → show `tengri.dust_registry.list()` or `Model.from_config(dust="calzetti")`).
 - `3-forward-model.tex` — the emission line marginalization subsection (if present): update to show the `EMISSION_LINE_CATALOG` and the unified `build_line_design_matrix()`. Add a note on `l_hbeta` and how it connects the continuum model to the line prior.
 - `4-inference.tex` — if there is any mention of emission line parameters as free parameters, clarify that they are analytically marginalized (zero inference cost) rather than sampled.
 - `6-usage.tex` — the code examples for AGN fitting should show the `AGNConfig` object rather than scattered `agn_*` kwargs.
 
-**Paper II** (`~/writing-workspace/projects/differentiable_psd_sed_fitting/`):
+**Paper II** (*(private paper draft)*):
 - No physics API changes affect Paper II directly. However, if Paper II contains any spectral fitting examples that use `fitter.run("native_geovi")` or explicit emission line handling, update those for the new API.
 
 ---

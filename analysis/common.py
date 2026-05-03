@@ -6,6 +6,7 @@ defaults used across all figure-generation scripts.
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,9 +35,8 @@ FIG_DIR = PROJECT_ROOT / "analysis" / "figures"
 FIG_DIR.mkdir(exist_ok=True)
 
 SSP_FILE = DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-PAPER_FIG_DIR = (
-    Path.home() / "writing-workspace" / "projects" / "differentiable_psd_sed_fitting" / "figures"
-)
+# Override via env var (e.g. for paper-figure output destination); defaults to local figures dir.
+PAPER_FIG_DIR = Path(os.environ.get("TENGRI_PAPER_FIG_DIR", str(FIG_DIR)))
 
 # ── PSD regimes ────────────────────────────────────────────────────
 PSD_REGIMES = {

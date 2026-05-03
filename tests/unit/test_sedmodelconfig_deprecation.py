@@ -33,7 +33,7 @@ def test_modelconfig_works_transparently():
         cfg2 = settings.SEDModelConfig()
 
         # Both should be the same type and have identical defaults
-        assert type(cfg1) == type(cfg2)
+        assert type(cfg1) is type(cfg2)
         assert cfg1.sfh.mean_type == cfg2.sfh.mean_type
         assert cfg1.dust.model == cfg2.dust.model
         assert cfg1.nebular.backend == cfg2.nebular.backend

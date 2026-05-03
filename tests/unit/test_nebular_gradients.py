@@ -55,9 +55,10 @@ def _make_mock_ssp(n_met=3, n_age=10, n_wave=50):
 
 # ── Module-scoped fixtures for shared backends ────────────────────
 
-_CLOUDY_GRID_PATH = Path("/Users/suchethacooray/Projects/tengri/data/cloudy_grid_mist.h5")
-_CUE_WEIGHTS_PATH = Path("/Users/suchethacooray/Projects/tengri/data/cue_weights.npz")
-_CB19_GRID_PATH = Path("/Users/suchethacooray/Projects/tengri/data/cb19_templates.h5")
+_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+_CLOUDY_GRID_PATH = _DATA_DIR / "cloudy_grid_mist.h5"
+_CUE_WEIGHTS_PATH = _DATA_DIR / "cue_weights.npz"
+_CB19_GRID_PATH = _DATA_DIR / "cb19_templates.h5"
 
 
 @pytest.fixture(scope="module")
@@ -370,7 +371,7 @@ def test_cb19_grad_logu(cb19_backend, mock_ssp):
 
 # ── ShockBackend — MAPPINGS V velocity gradient ───────────────────
 
-_MAPPINGS_GRID_PATH = Path("/Users/suchethacooray/Projects/tengri/data/mappings_templates.h5")
+_MAPPINGS_GRID_PATH = _DATA_DIR / "mappings_templates.h5"
 
 
 @pytest.mark.skipif(not _MAPPINGS_GRID_PATH.exists(), reason="MAPPINGS templates not present")

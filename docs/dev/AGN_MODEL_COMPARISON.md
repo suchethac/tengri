@@ -547,7 +547,7 @@ averaged over the same axes AGNfitter averaged out, recover the
 
 Before any of Silva+04, CAT3D-Wind or Temple+21 text is written into
 tengri source docstrings, the corresponding `.tex` / `.bib` entries in
-`~/writing-workspace/projects/tengri/` must be cross-checked. Specifically:
+*(private paper draft)* must be cross-checked. Specifically:
 
 - Silva, Maiolino & Granato 2004 — verify journal, volume, DOI, arXiv ID.
 - Hönig & Kishimoto 2017 — verify CAT3D-Wind paper reference (ApJL 838,
