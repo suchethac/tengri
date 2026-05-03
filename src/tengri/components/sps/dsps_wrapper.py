@@ -737,40 +737,51 @@ def salaris_feh_from_mh(mh: float, alpha_fe: float) -> float:
 
 @jax.jit
 def effective_metallicity(log_z_fe: float, alpha_fe: float = 0.0) -> float:
-    """Convert [Fe/H] + [alpha/Fe] to effective total metallicity.
+    r"""Convert [Fe/H] + [alpha/Fe] to effective total metallicity.
 
-    Approximates the effect of alpha-element enhancement on the SED
-    as a shift in the total metallicity used for SSP interpolation:
-
-        [Z/H]_eff = [Fe/H] + 0.75 * [alpha/Fe]
-
-    This is the standard approach when SSP templates are computed at
-    fixed abundance ratios and cannot be changed at runtime.
+    Approximates the effect of alpha-element enhancement on the SED as
+    a shift in the total metallicity used for SSP interpolation. Used
+    when SSP templates are computed at fixed solar abundance ratios and
+    cannot vary [alpha/Fe] at runtime.
 
     Parameters
     ----------
     log_z_fe : float
-        Iron abundance [Fe/H] (or equivalently, log10(Z) when
-        [alpha/Fe] = 0, i.e. the existing ``log_z`` parameter).
+        Iron abundance [Fe/H] (equivalently, log10(Z/Zsun) when
+        ``alpha_fe = 0``). [dex]
     alpha_fe : float, optional
-        Alpha-element enhancement [alpha/Fe] (relative to solar,
-        dimensionless). Default is 0.0 (solar abundance ratios).
+        Alpha-element enhancement [alpha/Fe] relative to solar.
+        Default 0.0 (solar abundance ratios). [dex]
 
     Returns
     -------
     float
-        Effective total metallicity log10(Z_eff) in the same
-        units as ``log_z_fe``.
+        Effective total metallicity log10(Z_eff/Zsun). Same units as
+        ``log_z_fe``. [dex]
 
     Notes
     -----
     **JIT-compatible**: yes — pure arithmetic; decorated with ``@jax.jit``.
     **Gradient-safe**: yes.
 
+    **Approximation** (Thomas, Maraston & Bender 2003 [1]_):
+    only valid for SSP grids that lack an explicit [alpha/Fe] axis. When
+    the grid does include one, prefer bilinear (Z, [alpha/Fe]) interpolation;
+    use :func:`has_alpha_grid` to test the SSP container at construction.
+
+    .. math::
+
+        [Z/H]_{\mathrm{eff}} = [\mathrm{Fe}/\mathrm{H}]
+        + 0.75 \, [\alpha/\mathrm{Fe}]
+
+    The coefficient 0.75 (``_ALPHA_TO_Z_COEFF``) is the empirical
+    enhancement-to-metallicity scaling adopted by the Vazdekis et al.
+    2015 [2]_ MILES library for E-MILES alpha-enhanced SSPs.
+
     References
     ----------
-    Thomas, Maraston & Bender 2003, MNRAS 339, 897.
-    Vazdekis et al. 2015, MNRAS 449, 1177.
+    .. [1] Thomas, D., Maraston, C., Bender, R., 2003, MNRAS, 339, 897.
+    .. [2] Vazdekis, A. et al., 2015, MNRAS, 449, 1177.
 
     Examples
     --------
@@ -1027,29 +1038,47 @@ def compute_csp_sed(
 def interpolate_metallicity(
     ssp_flux: jnp.ndarray, ssp_lgmet: jnp.ndarray, log_z: float
 ) -> jnp.ndarray:
-    """Interpolate SSP flux to a target metallicity.
+    r"""Interpolate SSP flux to a target metallicity.
 
     Linear interpolation in log(Z/Zsun) space between the two
     nearest metallicity grid points.
 
     Parameters
     ----------
-    ssp_flux : array, shape (n_met, n_age, n_wave)
-        Full SSP flux grid [Lsun/Hz/Msun].
-    ssp_lgmet : array, shape (n_met,)
-        Log10(Z/Zsun) grid (dimensionless).
+    ssp_flux : array_like, shape (n_met, n_age, n_wave)
+        Full SSP flux grid. [Lsun/Hz/Msun]
+    ssp_lgmet : array_like, shape (n_met,)
+        log10(Z/Zsun) grid points. [dimensionless]
     log_z : float
-        Target log10(Z/Zsun).
+        Target metallicity log10(Z/Zsun). Values outside the grid
+        bounds are clamped to ``[ssp_lgmet[0], ssp_lgmet[-1]]``. [dimensionless]
 
     Returns
     -------
-    array, shape (n_age, n_wave)
-        Interpolated SSP flux [Lsun/Hz/Msun].
+    ndarray, shape (n_age, n_wave)
+        SSP flux interpolated to the target metallicity. [Lsun/Hz/Msun]
 
     Notes
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     **Gradient-safe**: yes — linear interpolation is differentiable.
+
+    **Approximation**: piecewise-linear interpolation in
+    :math:`\log_{10}(Z/Z_\odot)`. Strictly valid only for grids whose
+    flux varies smoothly with metallicity; for sharply varying lines or
+    edges, prefer the smooth triweight kernel in
+    :func:`compute_lgmet_weights`.
+
+    Given bracketing grid indices :math:`i, i+1` with
+    :math:`\log Z_i \le \log Z \le \log Z_{i+1}`,
+
+    .. math::
+
+        f = \frac{\log Z - \log Z_i}{\log Z_{i+1} - \log Z_i},
+        \qquad
+        F(\log Z) = (1 - f)\, F_i + f\, F_{i+1}
+
+    where :math:`F_i \equiv` ``ssp_flux[i]`` [Lsun/Hz/Msun].
 
     """
     # Clamp to grid bounds
