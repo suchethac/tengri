@@ -116,7 +116,7 @@ def _redden_disc(
     l_disc: jnp.ndarray,
     agn_ebv_disc: float,
 ) -> jnp.ndarray:
-    """Apply Prévot SMC extinction to the disc SED.
+    r"""Apply Prévot SMC extinction to the disc SED.
 
     The Prévot et al. 1984 SMC law with ``R_V = 2.72`` is the standard
     AGN-disc obscuration prescription used by AGNfitter
@@ -130,7 +130,7 @@ def _redden_disc(
     l_disc : ndarray, shape (n_wave,)
         Unreddened disc SED. [erg/s/Hz]
     agn_ebv_disc : float
-        Colour excess E(B−V) applied to the disc. [mag]
+        Colour excess :math:`E(B-V)` applied to the disc. [mag]
 
     Returns
     -------
@@ -143,9 +143,23 @@ def _redden_disc(
 
     **Gradient-safe**: yes — ``prevot_smc`` uses a smooth sigmoid ramp
     through the X-ray region.
+
+    Attenuation at V band:
+
+    .. math::
+
+        A(V) = R_V \cdot E(B-V), \qquad
+        L_{\rm red}(\lambda) = L(\lambda)\, 10^{-0.4\, k(\lambda)\, R_V\, E(B-V)}
+
+    where :math:`k(\lambda) = A(\lambda)/A(V)` follows tengri's
+    ``k(V) = 1`` dust-law convention. The :math:`R_V = 2.72` factor
+    converts ``agn_ebv_disc`` (the user-facing :math:`E(B-V)`) to
+    :math:`A(V)` before applying the wavelength-dependent
+    :math:`k(\lambda)` curve.
     """
+    _R_V_PREVOT_SMC = 2.72  # Prevot+1984
     k = prevot_smc(wavelength)
-    return l_disc * jnp.power(10.0, -0.4 * k * agn_ebv_disc)
+    return l_disc * jnp.power(10.0, -0.4 * k * _R_V_PREVOT_SMC * agn_ebv_disc)
 
 
 @functools.cache
