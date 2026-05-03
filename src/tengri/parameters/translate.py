@@ -182,6 +182,9 @@ _NON_SFH_PARAM_MAP = {
     "dust_Rv": ("dust_Rv", 1.0, 0.0),
     # Noise model
     "noise_dof": ("noise_dof", 1.0, 0.0),
+    # Spectroscopy: stellar velocity dispersion (added in quadrature
+    # to the instrumental LSF in apply_lsf). See MISSING_FEATURES.md #8.
+    "sigma_v_kms": ("sigma_v_kms", 1.0, 0.0),
 }
 
 # (Reverse alias map now managed in _aliases.py — imported at top)

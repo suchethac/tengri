@@ -58,6 +58,13 @@ _NON_SFH_PARAMS = {
         "noise_dof bounds must have lo >= 0",
         Fixed(0.0),
     ),
+    "sigma_v_kms": (
+        "Stellar velocity dispersion sigma_v [km/s] — added in quadrature "
+        "to the instrumental LSF when computing spectra",
+        lambda lo, hi: lo >= 0 and hi <= 2000,
+        "sigma_v_kms must be in [0, 2000]",
+        Fixed(0.0),
+    ),
 }
 
 # Parameters that are only added when specific modules are enabled

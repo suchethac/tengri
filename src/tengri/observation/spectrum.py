@@ -250,6 +250,7 @@ def apply_lsf(
     resolution: jnp.ndarray | float,
     sigma_lib_kms: float = 0.0,
     n_bins: int = 16,
+    sigma_v_kms: float = 0.0,
 ) -> jnp.ndarray:
     r"""Apply wavelength-dependent Line Spread Function with library resolution subtraction.
 
@@ -306,6 +307,12 @@ def apply_lsf(
         Number of piecewise-constant segments for variable-R approximation.
         Ignored for scalar R. Higher values are more accurate but slower.
         Typical: 10–20. Default 16.
+    sigma_v_kms : float, optional
+        Intrinsic galaxy velocity dispersion :math:`\\sigma_v` [km/s] added
+        in quadrature to :math:`\\sigma_{\\rm eff}`. This is the broadening
+        from stellar dynamics — distinct from instrument LSF
+        (``resolution``) and from the SSP-library template resolution
+        (``sigma_lib_kms``). Default 0.0 (no extra broadening).
 
     Returns
     -------
@@ -358,14 +365,26 @@ def apply_lsf(
     >>> spectrum_smoothed = apply_lsf(spectrum, wave_obs, resolution=R_custom)
 
     """
+    if float(sigma_v_kms) < 0.0:
+        raise ValueError(
+            f"sigma_v_kms must be non-negative, got {sigma_v_kms}"
+        )
+
     resolution = jnp.asarray(resolution)
 
     # Compute instrument sigma at each pixel
     sigma_inst_kms = _C_KM_S / (_FWHM_TO_SIGMA * resolution)
 
-    # Subtract library resolution in quadrature; clamp to zero
+    # Subtract library resolution and add intrinsic stellar velocity
+    # dispersion in quadrature:
+    #   σ_total² = σ_inst² − σ_lib² + σ_v²
+    # σ_lib accounts for the broadening already baked into the SSP
+    # templates; σ_v is the intrinsic galaxy velocity dispersion.
     sigma_lib2 = sigma_lib_kms**2
-    sigma_eff_kms = jnp.sqrt(jnp.maximum(sigma_inst_kms**2 - sigma_lib2, 0.0))
+    sigma_v2 = sigma_v_kms**2
+    sigma_eff_kms = jnp.sqrt(
+        jnp.maximum(sigma_inst_kms**2 - sigma_lib2, 0.0) + sigma_v2
+    )
 
     # Dispatch based on whether R is constant or variable
     if resolution.ndim == 0:

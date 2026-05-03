@@ -44,9 +44,6 @@ If you find evidence the feature shipped, **update this file** (move the item to
 - **Status:** spectroscopy supports Chebyshev calibration polynomial; no explicit telluric absorption template or sky-residual nuisance.
 - **Where:** `src/tengri/observation/spectroscopy.py`.
 
-### 8. Velocity-dispersion fitting
-- **Status:** has variable-R LSF; no explicit σ_v free parameter or kinematic broadening kernel.
-- **Where:** `src/tengri/observation/spectroscopy.py`, `src/tengri/forward/_kernels/`.
 
 
 
@@ -77,6 +74,10 @@ If you find evidence the feature shipped, **update this file** (move the item to
 ### 5. Additional SFH parameterisations (audit was stale)
 - **Original claim:** missing constant, rising, piecewise (continuity), composite (quiescent + post-quench).
 - **Verified state (2026-05-03):** all four are present in `src/tengri/components/sfh/mean_sfh.py` and `nonparametric.py`: `constant` (line 486), `delayed_exponential` / `constant_then_exponential_sfh` (line 667), `continuity` (in `nonparametric.py:43`), `psb_wild2020` (post-starburst composite at line 816). Audit closed without code changes.
+
+### 8. Velocity-dispersion fitting (resolved 2026-05-03)
+- **Original problem:** spectroscopy supported variable-R LSF and SSP-library template resolution but no explicit stellar velocity-dispersion free parameter — fits couldn't recover σ_v from observed spectra.
+- **Fix:** `apply_lsf` now accepts `sigma_v_kms` (added in quadrature on top of σ_eff). New free parameter `sigma_v_kms` registered in `_param_defs.py` and `translate.py`; `SEDModel._get_sigma_v_kms(params)` helper threads the value through all three predict_spectrum paths (exact / hybrid / compositional). Tests in `tests/unit/test_apply_lsf_sigma_v.py`.
 
 ### 3. AGN+host decomposition products (resolved 2026-05-03)
 - **Original problem:** the pipeline produced per-component SEDs internally (`sed_agn`, `sed_attenuated`, `sed_dust_ir`, etc. in the `compute_sed_components` return dict) but no user-facing wrapper exposed them via `Posterior`.

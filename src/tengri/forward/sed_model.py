@@ -690,26 +690,31 @@ class SEDModel:
         """Precompute dust IR template photometry for fast hybrid kernel lookup.
 
         Delegates to the Precompute Protocol adapter at
-        :mod:`tengri.components.dust.dust_emission_precompute`, which handles
-        template loading, filter preintegration, and (per the Protocol) auto-
-        collapse-on-Fixed for any ``AXIS_PARAMS`` marked :class:`Fixed` in
-        ``self.spec``.  Returns ``None`` when the dust model is analytic
-        (MBB / Casey) or template data is not available on disk — callers
-        fall back to full-wavelength evaluation.
+        :mod:`tengri.components.dust.dust_emission_precompute` (for template-based
+        models) or :mod:`tengri.components.dust.dust_analytic_precompute` (for
+        analytic models), which handle template loading / model evaluation, filter
+        preintegration, and (per the Protocol) auto-collapse-on-Fixed for any
+        ``AXIS_PARAMS`` marked :class:`Fixed` in ``self.spec``.  Returns ``None``
+        when template data is not available on disk — callers fall back to
+        full-wavelength evaluation.
 
         Returns
         -------
         object or None
             JIT-compiled ``(L_absorbed, *grid_params) -> phot[n_filters]``
-            lookup, or ``None`` for analytic / data-missing cases.
+            lookup, or ``None`` for data-missing cases.
         """
-        from tengri.components.dust.dust_emission_precompute import (
-            build_lookup,
-            precompute_for_model,
-        )
+        import warnings
 
         model_name = self._dust_emission_model
+
+        # Try template-based models first (DL07, Dale2014, etc.)
         try:
+            from tengri.components.dust.dust_emission_precompute import (
+                build_lookup as build_lookup_template,
+                precompute_for_model,
+            )
+
             precomp = precompute_for_model(
                 model_name,
                 filter_waves=self.filter_waves,
@@ -717,19 +722,43 @@ class SEDModel:
                 redshift=float(self._z_fixed) if self._z_fixed is not None else 0.0,
                 parameters=self.spec,
             )
-            if precomp is None:
-                return None
-            return build_lookup(precomp, model_name=model_name)
+            if precomp is not None:
+                return build_lookup_template(precomp, model_name=model_name)
         except Exception as e:
-            import warnings
-
             warnings.warn(
-                f"Failed to precompute dust IR photometry for {model_name}: {e}. "
-                "Falling back to full-wavelength evaluation.",
+                f"Failed to precompute dust IR photometry (template path) for "
+                f"{model_name}: {e}. Trying analytic path.",
                 RuntimeWarning,
                 stacklevel=2,
             )
-            return None
+
+        # Try analytic models (modified_blackbody, casey2012, pah_drude)
+        if model_name in ("modified_blackbody", "casey2012", "pah_drude"):
+            try:
+                from tengri.components.dust.dust_analytic_precompute import (
+                    build_lookup as build_lookup_analytic,
+                    precompute,
+                )
+
+                precomp = precompute(
+                    self.filter_waves,
+                    self.filter_trans,
+                    redshift=float(self._z_fixed) if self._z_fixed is not None else 0.0,
+                    parameters=self.spec,
+                    model=model_name,
+                )
+                if precomp is not None:
+                    return build_lookup_analytic(precomp, model=model_name)
+            except Exception as e:
+                warnings.warn(
+                    f"Failed to precompute dust IR photometry (analytic path) for "
+                    f"{model_name}: {e}. Falling back to full-wavelength evaluation.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                return None
+
+        return None
 
     def _build_precomputed_data(self, ssp_data, precompute):
         """Build Level 1: precomputed SSP tensors."""
@@ -755,9 +784,21 @@ class SEDModel:
                 fixed=fixed_ssp if fixed_ssp else None,
             )
 
-        # Dust age weights (sigmoid, for exact two-component dust)
+        # Dust age weights (sigmoid, for exact two-component dust).
+        # Also force-precompute when dust_emission is enabled: the hybrid
+        # photometry kernel's energy-balance branch needs the continuous
+        # sigmoid age weights (binary young/old split underestimates UV
+        # absorption by ~22%). Without this, build_hybrid_photometry hit
+        # an UnboundLocalError that was silently swallowed by the
+        # contextlib.suppress(...) wrapper a few hundred lines below,
+        # forcing every IR-enabled fit through the compositional kernel
+        # — which captures the full 114 MB SSP flux grid as a JIT
+        # constant and explodes compile time (12+ minutes vs <1 minute).
+        # See `docs/dev/quickstart_oom_diagnosis.md`.
         dust_age_w = None
-        if self._dust_model != "single_component" and self._dust_scheme == "exact":
+        if self._dust_model != "single_component" and (
+            self._dust_scheme == "exact" or self._dust_emission_model is not None
+        ):
             dust_age_w = precompute_dust_age_weights(self.ssp_ages_yr)
 
         # IGM at filter effective wavelengths (for hybrid kernel, fixed z)
@@ -882,6 +923,72 @@ class SEDModel:
 
                 warnings.warn(
                     f"SKIRTOR torus preintegration failed: {e}. "
+                    "Falling back to full-wavelength evaluation.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+
+        # Silva+04 AGN torus preintegration
+        # Pre-integrate through filters at init time for fast triweight lookup.
+        silva04_preint = None
+        if (
+            precompute
+            and self._z_fixed is not None
+            and self.filter_waves is not None
+            and self._agn_model == "silva04"
+        ):
+            try:
+                from tengri.components.agn.silva04 import _find_silva04_grid
+                from tengri.components.agn.silva04_precompute import (
+                    build_lookup,
+                    precompute,
+                )
+
+                _grid_path = _find_silva04_grid()
+                _precomp = precompute(
+                    self.filter_waves,
+                    self.filter_trans,
+                    redshift=float(self._z_fixed),
+                    parameters=self.spec,
+                    grid_path=_grid_path,
+                )
+                silva04_preint = build_lookup(_precomp)
+            except Exception as e:
+                warnings.warn(
+                    f"Silva+04 torus preintegration failed: {e}. "
+                    "Falling back to full-wavelength evaluation.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+
+        # CAT3D-Wind AGN torus preintegration
+        # Pre-integrate through filters at init time for fast triweight lookup.
+        cat3d_preint = None
+        if (
+            precompute
+            and self._z_fixed is not None
+            and self.filter_waves is not None
+            and self._agn_model == "cat3d_wind"
+        ):
+            try:
+                from tengri.components.agn.cat3d_precompute import (
+                    build_lookup,
+                    precompute,
+                )
+                from tengri.components.agn.cat3d_wind import _find_cat3d_grid
+
+                _grid_path = _find_cat3d_grid()
+                _precomp = precompute(
+                    self.filter_waves,
+                    self.filter_trans,
+                    redshift=float(self._z_fixed),
+                    parameters=self.spec,
+                    grid_path=_grid_path,
+                )
+                cat3d_preint = build_lookup(_precomp)
+            except Exception as e:
+                warnings.warn(
+                    f"CAT3D-Wind torus preintegration failed: {e}. "
                     "Falling back to full-wavelength evaluation.",
                     RuntimeWarning,
                     stacklevel=2,
@@ -1014,6 +1121,8 @@ class SEDModel:
             dust_ir_lookup=dust_ir_lookup,
             kd_preintegrated=kd_preint,
             skirtor_preintegrated=skirtor_preint,
+            silva04_preintegrated=silva04_preint,
+            cat3d_preintegrated=cat3d_preint,
             powerlaw_disc_preintegrated=powerlaw_disc_preint,
             ss_disc_preintegrated=ss_disc_preint,
             cigale_disc_preintegrated=cigale_disc_preint,
@@ -1132,6 +1241,24 @@ class SEDModel:
             return self._dl_cm_fixed
         z = self._get_redshift(params)
         return luminosity_distance(z)
+
+    def _get_sigma_v_kms(self, params) -> float:
+        """Get stellar velocity dispersion sigma_v_kms from params.
+
+        Falls back to the fixed value declared in the spec, then to 0.0
+        when the parameter is absent (i.e., spectroscopic broadening
+        skipped). Always returned as a Python float so the value can
+        flow through ``apply_lsf``'s sign check.
+        """
+        if "sigma_v_kms" in params:
+            return float(params["sigma_v_kms"])
+        try:
+            dist = self.spec.get_distribution("sigma_v_kms")
+        except KeyError:
+            return 0.0
+        if dist.is_fixed:
+            return float(dist.bounds[0])
+        return 0.0
 
     # ── Core physics (SFH → SED pipeline) ─────────────────────────────
 
@@ -2711,14 +2838,25 @@ class SEDModel:
             raw = getattr(self._hybrid_kernels, "_photometry_raw", None)
             if raw is not None:
                 return raw(params)
-        # Fall back to compositional raw
+        # Fall back to compositional raw.
+        # Phase II-2 (focused): thread the SSP arrays as JIT-traced kwargs so
+        # XLA treats them as runtime inputs rather than baking them into the
+        # compiled HLO as constants (a 114 MB constant on the MIST grid).
+        # The compositional kernel falls back to closure-captured copies if
+        # these kwargs are absent — keeps the logged-jit wrapper and
+        # external callers working unchanged.
         if self._compositional_kernels is not None:
             raw = getattr(self._compositional_kernels, "_photometry_raw", None)
             if raw is not None:
                 p = self._get_internal_params(params)
                 sfr = self._compute_sfr(p)
                 sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-                return raw(sfr_on_ssp, params)
+                return raw(
+                    sfr_on_ssp,
+                    params,
+                    ssp_flux_traced=self.ssp_data.ssp_flux,
+                    ssp_lgmet_traced=self.ssp_data.ssp_lgmet,
+                )
         # Last resort: exact (slow but always works)
         return self._predict_photometry_exact(params)
 
@@ -2794,9 +2932,12 @@ class SEDModel:
         obs_sed = self.predict_obs_sed(params)
         z = self._get_redshift(params)
         dl_cm = self._get_dl_cm(params)
+        sigma_v_kms = self._get_sigma_v_kms(params)
 
         if self.observation is not None and self.observation.spectroscopy is not None:
-            return self.observation.observe_spectrum(obs_sed, z, dl_cm)
+            return self.observation.observe_spectrum(
+                obs_sed, z, dl_cm, sigma_v_kms=sigma_v_kms
+            )
 
         wave_rest = obs_sed.wavelength / (1.0 + z)
 
@@ -2816,6 +2957,7 @@ class SEDModel:
                 resolution,
                 sigma_lib_kms=self._sigma_lib_kms,
                 n_bins=self._lsf_n_bins,
+                sigma_v_kms=sigma_v_kms,
             )
         return flux
 
@@ -2847,6 +2989,7 @@ class SEDModel:
                 resolution,
                 sigma_lib_kms=self._sigma_lib_kms,
                 n_bins=self._lsf_n_bins,
+                sigma_v_kms=self._get_sigma_v_kms(params),
             )
 
         return flux
@@ -2917,6 +3060,7 @@ class SEDModel:
                 resolution,
                 sigma_lib_kms=self._sigma_lib_kms,
                 n_bins=self._lsf_n_bins,
+                sigma_v_kms=self._get_sigma_v_kms(params),
             )
 
         return flux

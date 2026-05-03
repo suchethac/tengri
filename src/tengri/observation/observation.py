@@ -472,7 +472,13 @@ class Observation:
             fluxes.append(f)
         return jnp.array(fluxes)
 
-    def observe_spectrum(self, sed_result, z: float, dl_cm: float) -> jnp.ndarray:
+    def observe_spectrum(
+        self,
+        sed_result,
+        z: float,
+        dl_cm: float,
+        sigma_v_kms: float = 0.0,
+    ) -> jnp.ndarray:
         """Project an observed-frame SED onto spectroscopic pixel grid.
 
         Parameters
@@ -511,6 +517,7 @@ class Observation:
                 wave_obs,
                 self.spectroscopy.resolution,
                 sigma_lib_kms=self.spectroscopy.sigma_lib_kms,
+                sigma_v_kms=sigma_v_kms,
             )
         return flux
 
