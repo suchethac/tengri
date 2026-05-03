@@ -95,13 +95,11 @@ If you find evidence the feature shipped, **update this file** (move the item to
 - **Status:** `[OIII] 4959/5007`, `[NII] 6548/6584`, `[SII] 6717/6731` ratios not enforced in the marginalized-line likelihood.
 - **Where:** `src/tengri/observation/emission_lines.py`, `src/tengri/inference/`.
 
-### 16. Cue abundance offsets unwired in user-facing pipeline
-- **Status:** `gas_logno` and `gas_logco` (Cue's [N/O] and [C/O] free parameters) are registered in `src/tengri/parameters/_param_defs.py:217-228` and consumed inside `src/tengri/components/nebular/cue.py:673` (`params["gas_logno"]`). However, `src/tengri/parameters/translate.py:398-411` strips them out of the params dict before they reach the model — they appear in the warning list `Unrecognized parameter names passed to Model`. This makes Cue's most distinctive feature (continuous abundance ratios) inaccessible from the high-level Parameters API.
-- **Where:** add the entries to `param_map` in `src/tengri/parameters/translate.py`, with internal-name mapping to whatever Cue's pipeline expects.
-- **Notes:** also requires a non-wNE SSP for Cue's ionising-spectrum fit to be physically meaningful (current default `ssp_prsc_miles_chabrier_wNE_*.h5` triggers `CueWNESSPWarning`). A canonical Cue example needs both fixes plus a non-wNE SSP available in `data/`.
-
 ---
 
 ## Resolved (move items here, do not delete)
 
-- *(none yet)*
+### 16. Cue abundance offsets unwired in user-facing pipeline (resolved 2026-05-03)
+- **Original problem:** `gas_logno`, `gas_logco`, `gas_logn`, and the seven `ionspec_*` Cue parameters were registered in `src/tengri/parameters/_param_defs.py` but stripped by `translate.get_internal_params` because they had no entries in any param_map. Cue's continuous-abundance feature was silently inaccessible from the high-level Parameters API.
+- **Fix:** added `_CUE_GAS_IDENTITY_PARAMS` and `_CUE_IONSPEC_IDENTITY_PARAMS` lists in `src/tengri/parameters/translate.py`, registered them in `SEDModel._init_nebular` conditional on `spec._valid_param_names` (mirrors Parameters' own conditional registration). Regression tests in `tests/unit/test_cue_param_translation.py`.
+- **Caveat still open:** a meaningful Cue abundance *example* still requires a non-wNE SSP in `data/` to avoid `CueWNESSPWarning`; the current canonical SSP file `ssp_prsc_miles_chabrier_wNE_*.h5` triggers it.
