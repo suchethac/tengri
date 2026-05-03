@@ -163,25 +163,40 @@ def xray_xrb(
 
 
 def alpha_ox_from_l2500(l_2500_erg_hz: float) -> float:
-    """Compute alpha_ox from monochromatic 2500 A luminosity (Just+2007).
+    r"""Compute alpha_ox from monochromatic 2500 A luminosity (Just+2007).
 
     Parameters
     ----------
     l_2500_erg_hz : float
-        Monochromatic luminosity density at 2500 A [erg/s/Hz].
+        Monochromatic luminosity density at rest-frame 2500 A. [erg/s/Hz]
 
     Returns
     -------
     float
-        alpha_ox (typically between -2.0 and -1.0) [dimensionless].
+        Optical-to-X-ray spectral index alpha_ox, the slope between 2500 A
+        and 2 keV monochromatic fluxes. Typical AGN range: -2.0 to -1.0.
+        [dimensionless]
 
     Notes
     -----
     **JIT-compatible**: yes — pure JAX function.
 
+    **Empirical correlation** (Just et al. 2007 [1]_, Eq. 3):
+    derived from optically-bright AGN; valid for
+    :math:`28 \lesssim \log_{10}(L_{2500}/[\mathrm{erg\,s^{-1}\,Hz^{-1}}]) \lesssim 33`.
+
+    .. math::
+
+        \alpha_{\mathrm{ox}} = -0.137 \, \log_{10}\!\left(
+            L_{2500}\,[\mathrm{erg\,s^{-1}\,Hz^{-1}}]
+        \right) + 2.638
+
+    More luminous AGN are X-ray weaker (steeper, more negative
+    :math:`\alpha_{\mathrm{ox}}`).
+
     References
     ----------
-    Just et al. 2007, ApJ, 665, 1004, Eq. 3.
+    .. [1] Just, D. W. et al., 2007, ApJ, 665, 1004, Eq. 3.
     """
     return -0.137 * jnp.log10(l_2500_erg_hz) + 2.638
 
@@ -192,36 +207,45 @@ def xray_anisotropy(
     a1: float = 0.5,
     a2: float = 0.0,
 ) -> jnp.ndarray:
-    """Apply viewing-angle anisotropy to X-ray luminosity (Yang+2022).
-
-    The correction factor is normalised so that face-on (cos_inc=1)
-    gives maximum luminosity:
-
-      f(theta) = a1 * cos(theta) + a2 * cos^2(theta) + (1 - a1 - a2)
+    r"""Apply viewing-angle anisotropy to X-ray luminosity (Yang+2022).
 
     Parameters
     ----------
-    l_x : array
-        Isotropic (face-on) X-ray luminosity spectrum.
+    l_x : array_like, shape (n_wave,)
+        Isotropic (face-on) X-ray luminosity spectrum. [erg/s/Hz]
     cos_inc : float
         Cosine of inclination angle (1 = face-on, 0 = edge-on).
-    a1 : float
-        Linear anisotropy coefficient. Default 0.5.
-    a2 : float
-        Quadratic anisotropy coefficient. Default 0.0.
+        [dimensionless]
+    a1 : float, optional
+        Linear anisotropy coefficient. Default 0.5. [dimensionless]
+    a2 : float, optional
+        Quadratic anisotropy coefficient. Default 0.0. [dimensionless]
 
     Returns
     -------
-    array
-        Anisotropy-corrected L_X, same shape as ``l_x``.
+    ndarray, shape (n_wave,)
+        Anisotropy-corrected L_X. [erg/s/Hz]
 
     Notes
     -----
     **JIT-compatible**: yes — pure JAX function.
 
+    **Empirical correction** (Yang et al. 2022 [1]_): polynomial in
+    :math:`\mu \equiv \cos\theta`, normalised so face-on
+    (:math:`\mu = 1`) returns the input ``l_x`` unchanged.
+
+    .. math::
+
+        f(\mu) = a_1\,\mu + a_2\,\mu^2 + (1 - a_1 - a_2),
+        \qquad
+        L_X^{\rm obs} = f(\mu)\, L_X^{\rm iso}
+
+    The default :math:`a_1 = 0.5,\, a_2 = 0` corresponds to the
+    "intermediate" obscuration solution adopted in CIGALE's X-CIGALE.
+
     References
     ----------
-    Yang et al. 2022, ApJ, 927, 42.
+    .. [1] Yang, G. et al., 2022, ApJ, 927, 42.
     """
     factor = a1 * cos_inc + a2 * cos_inc**2 + (1.0 - a1 - a2)
     return l_x * factor
@@ -288,8 +312,10 @@ def xray_agn_corona_from_disc(
     E_ref = 2.0  # keV
     spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-E_keV / E_cut)
 
-    # Normalise at 2 keV
-    l_nu = l_2kev_erg_hz / (_KEV_TO_HZ * E_ref) * spec
+    # Normalise at 2 keV. ``l_2kev_erg_hz`` is already L_nu(2 keV) in erg/s/Hz
+    # (alpha_ox is defined on monochromatic L_nu values, Tananbaum+1979), so
+    # multiplying by the dimensionless ``spec`` (=1 at E=E_ref) gives L_nu(E).
+    l_nu = l_2kev_erg_hz * spec
 
     # X-ray mask (E > 0.1 keV => lambda < 124 A)
     l_nu = jnp.where(wavelength < 124.0, l_nu, 0.0)
@@ -354,8 +380,10 @@ def xray_agn_corona(
     E_ref = 2.0  # keV
     spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-E_keV / E_cut)
 
-    # Normalize at 2 keV
-    L_nu = L_2keV / (_KEV_TO_HZ * E_ref) * spec
+    # Normalise at 2 keV. ``L_2keV`` is already L_nu(2 keV) in erg/s/Hz
+    # (alpha_ox is defined on monochromatic L_nu values, Tananbaum+1979), so
+    # multiplying by the dimensionless ``spec`` (=1 at E=E_ref) gives L_nu(E).
+    L_nu = L_2keV * spec
 
     xray_mask = wavelength < 124.0
     return jnp.where(xray_mask, L_nu, 0.0)
