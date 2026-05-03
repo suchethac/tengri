@@ -16,6 +16,10 @@ from tengri.analysis.diagnostics.autocorrelation import (
     check_chain_length,
     effective_sample_size,
 )
+from tengri.analysis.diagnostics.energy_balance import (
+    dust_energy_balance,
+    integrate_lnu_over_band,
+)
 from tengri.analysis.diagnostics.fisher import (
     compute_fisher_matrix,
     compute_jacobian,
@@ -61,9 +65,11 @@ __all__ = [
     "compute_time_sensitivity_matrix",
     "compute_window_function",
     "dn4000",
+    "dust_energy_balance",
     "effective_sample_size",
     "fisher_correlation_matrix",
     "fisher_parameter_errors",
+    "integrate_lnu_over_band",
     "irx",
     "rest_frame_colour",
     "rest_frame_luminosity",

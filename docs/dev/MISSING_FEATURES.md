@@ -38,10 +38,6 @@ If you find evidence the feature shipped, **update this file** (move the item to
 - **Where:** `src/tengri/inference/posterior.py` (new derived methods), `src/tengri/forward/sed_model.py` (split prediction path).
 - **Pairs with:** the BPT diagnostics in §6 below.
 
-### 4. Energy-balance diagnostic
-- **Status:** module exists in `dust/` but no user-facing "absorbed ≈ emitted" check / diagnostic output.
-- **Where:** `src/tengri/analysis/diagnostics/` (new utility), surfaced via `Posterior`.
-
 ### 5. Additional SFH parameterizations
 - **Status:** has delayed-exp, double-power-law, truncated skew-normal, GP/IFT nonparametric.
 - **Missing:** constant SFR, rising-only, piecewise/linear (Prospector-`continuity`), composite (quiescent + post-quench).
@@ -90,6 +86,10 @@ If you find evidence the feature shipped, **update this file** (move the item to
 ---
 
 ## Resolved (move items here, do not delete)
+
+### 4. Energy-balance diagnostic (resolved 2026-05-03)
+- **Original problem:** `dust_eta_balance` parameter exists in the forward model but no user-facing utility to check whether absorbed-stellar energy ≈ re-emitted dust energy on a model prediction.
+- **Fix:** added `tengri.analysis.diagnostics.dust_energy_balance(wave, l_unatten, l_atten, l_dust, tol)` and helper `integrate_lnu_over_band(wave, l_nu, lo, hi)`. Default UV-NIR/IR split at 3 μm (MAGPHYS/CIGALE convention). Returns `{absorbed, emitted, ratio, balanced}`. Tests in `tests/unit/test_energy_balance_diagnostic.py`.
 
 ### 13. BPT-style classification utility (resolved 2026-05-03)
 - **Original problem:** `Posterior.bpt_nii()` exposed BPT-NII coordinates but no demarcation classifier.
