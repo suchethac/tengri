@@ -1,5 +1,6 @@
 """Observation models: photometry, spectroscopy, calibration, and configuration."""
 
+from tengri.observation.aperture import apply_aperture_correction
 from tengri.observation.calibration import (
     apply_calibration,
     apply_double_calibration,
@@ -64,6 +65,7 @@ __all__ = [
     "SpectralIndexData",
     "SpectralIndexDef",
     "Spectroscopy",
+    "apply_aperture_correction",
     "apply_calibration",
     "apply_double_calibration",
     "apply_lsf",

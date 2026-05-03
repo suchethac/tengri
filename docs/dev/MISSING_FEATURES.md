@@ -59,9 +59,6 @@ If you find evidence the feature shipped, **update this file** (move the item to
 - **Status:** Gaussian / Student-t i.i.d. only. No GP-correlated noise in time/wavelength, no per-pixel jitter.
 - **Where:** `src/tengri/observation/noise.py`.
 
-### 10. Aperture corrections
-- **Status:** entirely absent — pipeline assumes pre-corrected photometry.
-- **Where:** `src/tengri/observation/photometry.py` (preprocessing hook), or upstream catalog tooling.
 
 ### 11. Surface-brightness dimming / extended-source corrections
 - **Status:** utilities exist for SB conversions; no extended-source dimming model in the forward path.
@@ -86,6 +83,10 @@ If you find evidence the feature shipped, **update this file** (move the item to
 ### 5. Additional SFH parameterisations (audit was stale)
 - **Original claim:** missing constant, rising, piecewise (continuity), composite (quiescent + post-quench).
 - **Verified state (2026-05-03):** all four are present in `src/tengri/components/sfh/mean_sfh.py` and `nonparametric.py`: `constant` (line 486), `delayed_exponential` / `constant_then_exponential_sfh` (line 667), `continuity` (in `nonparametric.py:43`), `psb_wild2020` (post-starburst composite at line 816). Audit closed without code changes.
+
+### 10. Aperture-correction preprocessing (resolved 2026-05-03)
+- **Original problem:** pipeline assumed pre-corrected photometry; no in-tree utility for users to apply per-band aperture corrections.
+- **Fix:** added `tengri.observation.apply_aperture_correction(flux, noise, corrections)` in `src/tengri/observation/aperture.py`. Per-band multiplication preserves SNR. Tests in `tests/unit/test_aperture_correction.py`.
 
 ### 4. Energy-balance diagnostic (resolved 2026-05-03)
 - **Original problem:** `dust_eta_balance` parameter exists in the forward model but no user-facing utility to check whether absorbed-stellar energy ≈ re-emitted dust energy on a model prediction.
