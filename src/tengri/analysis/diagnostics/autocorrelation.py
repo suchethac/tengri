@@ -32,6 +32,8 @@ __all__ = [
     "autocorrelation_time",
     "check_chain_length",
     "effective_sample_size",
+    "rhat",
+    "split_rhat",
 ]
 
 
@@ -282,3 +284,124 @@ def check_chain_length(
         "params": ess_info,
         "warnings": warnings,
     }
+
+
+# ── Split-Rhat (Gelman-Rubin) ─────────────────────────────────────────
+
+
+def split_rhat(chain: np.ndarray) -> float:
+    r"""Split-:math:`\hat R` (Gelman-Rubin) convergence diagnostic.
+
+    Parameters
+    ----------
+    chain : array_like
+        Either a 1-D array of length ``N`` (single chain split into two
+        halves), or a 2-D array of shape ``(m, n)`` with ``m`` chains of
+        length ``n`` (used as-is, no further splitting). [any units]
+
+    Returns
+    -------
+    float
+        :math:`\hat R`. Values close to 1.0 indicate convergence; values
+        :math:`> 1.01` (Vehtari+2021 [2]_) or :math:`> 1.05` (looser,
+        Gelman-Rubin 1992 [1]_) indicate failure to mix. Returns
+        ``np.nan`` for chains too short to split or with zero variance.
+        [dimensionless]
+
+    Notes
+    -----
+    For a 1-D input of length :math:`N`, the chain is split into two
+    halves of length :math:`n = \lfloor N/2 \rfloor` to detect
+    within-chain non-stationarity. With :math:`m` chains of length
+    :math:`n` and chain means :math:`\bar x_j`, overall mean
+    :math:`\bar x_{\cdot\cdot}`, and chain sample variances
+    :math:`s_j^2`,
+
+    .. math::
+
+        B &= \frac{n}{m - 1} \sum_{j=1}^{m} (\bar x_j - \bar x_{\cdot\cdot})^2 \\
+        W &= \frac{1}{m} \sum_{j=1}^{m} s_j^2 \\
+        \hat V &= \frac{n - 1}{n}\, W + \frac{1}{n}\, B \\
+        \hat R &= \sqrt{\hat V / W}
+
+    The numerator :math:`\hat V` over-estimates the marginal posterior
+    variance until the chains have mixed; :math:`W` under-estimates it.
+    Their ratio approaches 1 from above as mixing improves.
+
+    This is the **classical** split-:math:`\hat R`. The rank-normalised
+    folded variant of Vehtari et al. 2021 is more robust to heavy tails
+    but adds rank/folding pre-processing steps; consider that variant
+    for production diagnostics on heavy-tailed posteriors.
+
+    References
+    ----------
+    .. [1] Gelman, A., Rubin, D. B., 1992, Statistical Science, 7, 457.
+    .. [2] Vehtari, A. et al., 2021, Bayesian Analysis, 16, 667.
+    """
+    arr = np.asarray(chain)
+    if arr.ndim == 1:
+        n_total = arr.shape[0]
+        n = n_total // 2
+        if n < 2:
+            return float("nan")
+        chains = np.stack([arr[:n], arr[n : 2 * n]], axis=0)
+    elif arr.ndim == 2:
+        chains = arr
+        n = chains.shape[1]
+        if n < 2 or chains.shape[0] < 2:
+            return float("nan")
+    else:
+        raise ValueError(
+            f"split_rhat expects 1-D or 2-D array, got ndim={arr.ndim}"
+        )
+
+    m = chains.shape[0]
+    chain_means = chains.mean(axis=1)
+    chain_vars = chains.var(axis=1, ddof=1)
+    overall_mean = chain_means.mean()
+
+    W = chain_vars.mean()
+    if W <= 0.0 or not np.isfinite(W):
+        return float("nan")
+
+    B = (n / (m - 1)) * float(np.sum((chain_means - overall_mean) ** 2))
+    var_hat = (n - 1) / n * W + B / n
+    return float(np.sqrt(var_hat / W))
+
+
+def rhat(
+    chains: dict[str, np.ndarray],
+    exclude_prefixes: tuple[str, ...] = ("psd_xi",),
+) -> dict[str, float]:
+    r"""Per-parameter split-:math:`\hat R`.
+
+    Parameters
+    ----------
+    chains : dict
+        Parameter name → 1-D chain array (or 2-D array of multiple
+        chains).
+    exclude_prefixes : tuple of str, optional
+        Parameter name prefixes to skip (default skips ``psd_xi`` GP
+        latent fields).
+
+    Returns
+    -------
+    dict
+        Parameter name → :math:`\hat R`. Static (zero-variance) and
+        excluded parameters are dropped from the output.
+
+    See Also
+    --------
+    split_rhat : underlying scalar/vector implementation.
+    """
+    result: dict[str, float] = {}
+    for name, arr in chains.items():
+        if any(name.startswith(p) for p in exclude_prefixes):
+            continue
+        a = np.asarray(arr)
+        if a.ndim not in (1, 2):
+            continue
+        if np.var(a) < 1e-30:
+            continue
+        result[name] = split_rhat(a)
+    return result

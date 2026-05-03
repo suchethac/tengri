@@ -867,19 +867,66 @@ class Posterior:
             verbose=verbose,
         )
 
+    def rhat(self, exclude_prefixes: tuple[str, ...] = ("psd_xi",)) -> dict[str, float]:
+        r"""Per-parameter split-:math:`\hat R` (Gelman-Rubin).
+
+        Splits each parameter chain in half and computes the classical
+        :math:`\hat R = \sqrt{\hat V / W}` against the two halves.
+        :math:`\hat R \approx 1.0` indicates convergence;
+        :math:`\hat R > 1.01` (Vehtari+2021) suggests failure to mix.
+
+        Parameters
+        ----------
+        exclude_prefixes : tuple of str, optional
+            Parameter name prefixes to skip. Default skips ``psd_xi``
+            (GP latent vector — high-D, not informative per-component).
+
+        Returns
+        -------
+        dict
+            Parameter name → :math:`\hat R`. Static (zero-variance) and
+            excluded parameters are dropped.
+
+        Raises
+        ------
+        ValueError
+            If this is a MAP result (no samples to split).
+
+        See Also
+        --------
+        tengri.analysis.diagnostics.autocorrelation.split_rhat
+            Underlying implementation.
+
+        Examples
+        --------
+        >>> rh = result.rhat()
+        >>> bad = {k: v for k, v in rh.items() if v > 1.05}
+        >>> if bad:
+        ...     print(f"Unconverged: {bad}")
+        """
+        if self.samples is None:
+            raise ValueError("R-hat requires samples (not a MAP result).")
+        from tengri.analysis.diagnostics.autocorrelation import rhat as _rhat
+
+        return _rhat(
+            {k: np.asarray(v) for k, v in self.samples.items()},
+            exclude_prefixes=exclude_prefixes,
+        )
+
     def diagnostics_summary(self) -> str:
-        """Print a diagnostics summary including ESS and R-hat proxy.
+        """Print a diagnostics summary with ESS and credible intervals.
 
         Returns
         -------
         str
-            Formatted table of per-parameter ESS and credible intervals.
+            Formatted table of per-parameter ESS and 68% credible intervals.
 
         Notes
         -----
         For MAP results, returns a simple string indicating no samples are available.
         For sampling methods, tabulates ESS for each parameter alongside median
-        and 68% credible intervals.
+        and 68% credible intervals. Use :meth:`rhat` for the split-chain
+        Gelman-Rubin diagnostic.
 
         Examples
         --------
