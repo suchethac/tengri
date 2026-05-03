@@ -75,13 +75,13 @@ If you find evidence the feature shipped, **update this file** (move the item to
 
 ## Tier 3 — Diagnostic / science-product gaps
 
-### 15. Doublet-ratio constraints in likelihood
-- **Status:** `[OIII] 4959/5007`, `[NII] 6548/6584`, `[SII] 6717/6731` ratios not enforced in the marginalized-line likelihood.
-- **Where:** `src/tengri/observation/emission_lines.py`, `src/tengri/inference/`.
-
 ---
 
 ## Resolved (move items here, do not delete)
+
+### 15. Doublet-ratio likelihood constraints (audit was stale)
+- **Original claim:** `[OIII] 4959/5007`, `[NII] 6548/6584`, `[SII] 6717/6731` ratios not enforced.
+- **Verified state (2026-05-03):** `src/tengri/observation/eline_marginalization.py:190` exposes `apply_doublet_constraints(G, C)` which encodes the [OIII] and [NII] doublet ratios as a linear transformation on the design matrix (handled by `_DOUBLET_RATIOS` in `line_list.py:30`). `[SII] 6717/6731` is **intentionally unconstrained** because the ratio is density-sensitive and serves as a diagnostic (see comment at `line_list.py:84`). Audit closed without code changes.
 
 ### 5. Additional SFH parameterisations (audit was stale)
 - **Original claim:** missing constant, rising, piecewise (continuity), composite (quiescent + post-quench).
