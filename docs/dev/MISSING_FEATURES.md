@@ -33,10 +33,6 @@ If you find evidence the feature shipped, **update this file** (move the item to
 - **Where:** `src/tengri/components/sps/`, `src/tengri/components/nebular/`, parameter spec.
 - **Note:** check `chem_evol.py` first — the audit assumed full decoupling is missing; verify before scoping.
 
-### 3. AGN+host decomposition products
-- **Status:** AGN physics complete, but no extracted "AGN fraction at λ", host-only SED, or bolometric-decomposition outputs in `Posterior` results.
-- **Where:** `src/tengri/inference/posterior.py` (new derived methods), `src/tengri/forward/sed_model.py` (split prediction path).
-- **Pairs with:** the BPT diagnostics in §6 below.
 
 
 ---
@@ -80,6 +76,10 @@ If you find evidence the feature shipped, **update this file** (move the item to
 ### 5. Additional SFH parameterisations (audit was stale)
 - **Original claim:** missing constant, rising, piecewise (continuity), composite (quiescent + post-quench).
 - **Verified state (2026-05-03):** all four are present in `src/tengri/components/sfh/mean_sfh.py` and `nonparametric.py`: `constant` (line 486), `delayed_exponential` / `constant_then_exponential_sfh` (line 667), `continuity` (in `nonparametric.py:43`), `psb_wild2020` (post-starburst composite at line 816). Audit closed without code changes.
+
+### 3. AGN+host decomposition products (resolved 2026-05-03)
+- **Original problem:** the pipeline produced per-component SEDs internally (`sed_agn`, `sed_attenuated`, `sed_dust_ir`, etc. in the `compute_sed_components` return dict) but no user-facing wrapper exposed them via `Posterior`.
+- **Fix:** added `Posterior.sed_components(wavelength=None)` returning a dict of per-component arrays (shape ``(n_samples, n_wave)`` or ``(n_wave,)`` for MAP), plus `Posterior.agn_fraction(wavelength)` returning the median wavelength-resolved L_agn/L_total. Tests in `tests/unit/test_posterior.py::TestSEDComponents`.
 
 ### 6. Per-band ZP systematic floor (resolved 2026-05-03)
 - **Original problem:** noise model supported a global Student-t-style calibration term (`noise_frac_cal`) but no first-class per-band / per-survey ZP systematic floor.

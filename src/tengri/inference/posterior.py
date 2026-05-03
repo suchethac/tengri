@@ -535,6 +535,129 @@ class Posterior:
         lo, med, hi = jnp.percentile(ratio, jnp.array([16.0, 50.0, 84.0]))
         return (float(med), float(lo), float(hi))
 
+    # ── Component decomposition (AGN + host) ─────────────────────
+
+    _COMPONENT_KEYS = (
+        "sed_total",
+        "sed_attenuated",
+        "sed_intrinsic",
+        "sed_nebular",
+        "sed_shock",
+        "sed_dust_ir",
+        "sed_agn",
+        "sed_radio",
+        "sed_xray",
+    )
+
+    def sed_components(self, wavelength=None) -> dict:
+        r"""Per-component SEDs across posterior draws.
+
+        Decomposes the model prediction into stellar (attenuated /
+        intrinsic) + nebular + shock + dust IR + AGN + radio + X-ray
+        for every posterior sample (or the MAP point estimate) by
+        calling the underlying ``model._compute_sed_components`` per
+        draw and stacking the results.
+
+        Parameters
+        ----------
+        wavelength : array_like, optional
+            Rest-frame wavelength grid for the decomposition. If
+            ``None`` (default), uses the model's internal grid.
+
+        Returns
+        -------
+        dict
+            Keys: ``wavelength`` plus the entries of
+            :attr:`Posterior._COMPONENT_KEYS` (``sed_total``,
+            ``sed_attenuated``, ``sed_intrinsic``, ``sed_nebular``,
+            ``sed_shock``, ``sed_dust_ir``, ``sed_agn``, ``sed_radio``,
+            ``sed_xray``). Each component array has shape
+            ``(n_wave,)`` for MAP and ``(n_samples, n_wave)`` for
+            sampling.
+
+        Raises
+        ------
+        ValueError
+            If no ``_model`` is attached.
+
+        Notes
+        -----
+        ``model._compute_sed_components`` is **not** JIT-compiled, so
+        for large posteriors this is a slow Python loop. Use
+        :meth:`agn_fraction` directly if you only need the AGN
+        contribution at λ.
+
+        Examples
+        --------
+        >>> comp = result.sed_components()
+        >>> agn_to_total = comp["sed_agn"] / comp["sed_total"]
+        """
+        if self._model is None:
+            raise ValueError(
+                "No forward model attached; cannot compute sed_components(). "
+                "Refit with the model accessible."
+            )
+
+        def _one(p: dict) -> dict:
+            return self._model._compute_sed_components(p, rest_wavelength=wavelength)
+
+        if self.samples is None:
+            comp = _one(self.params)
+            out: dict = {"wavelength": jnp.asarray(comp["rest_wavelength"])}
+            for key in self._COMPONENT_KEYS:
+                out[key] = jnp.asarray(comp[key])
+            return out
+
+        # Sampling path
+        sample_keys = [k for k, v in self.samples.items() if v.ndim >= 1]
+        n = int(self.samples[sample_keys[0]].shape[0]) if sample_keys else 1
+
+        first = _one({k: (v[0] if v.ndim >= 1 else v) for k, v in self.samples.items()})
+        wave_out = jnp.asarray(first["rest_wavelength"])
+        stacked = {key: [jnp.asarray(first[key])] for key in self._COMPONENT_KEYS}
+        for i in range(1, n):
+            params_i = {
+                k: (v[i] if v.ndim >= 1 else v) for k, v in self.samples.items()
+            }
+            comp = _one(params_i)
+            for key in self._COMPONENT_KEYS:
+                stacked[key].append(jnp.asarray(comp[key]))
+        out = {"wavelength": wave_out}
+        for key in self._COMPONENT_KEYS:
+            out[key] = jnp.stack(stacked[key], axis=0)
+        return out
+
+    def agn_fraction(self, wavelength=None) -> jnp.ndarray:
+        r"""Wavelength-resolved AGN luminosity fraction.
+
+        Returns the median over posterior draws of ``L_agn(λ) /
+        L_total(λ)`` (or the MAP point estimate as a single curve).
+
+        Parameters
+        ----------
+        wavelength : array_like, optional
+            Rest-frame wavelength grid. Defaults to the model's grid.
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Median AGN fraction at each wavelength.
+
+        Notes
+        -----
+        Wraps :meth:`sed_components`. To get full credible intervals
+        on the fraction, call ``sed_components`` directly and compute
+        percentiles on ``sed_agn / sed_total``.
+        """
+        comp = self.sed_components(wavelength=wavelength)
+        agn = jnp.asarray(comp["sed_agn"])
+        total = jnp.asarray(comp["sed_total"])
+        # Avoid divide-by-zero at wavelengths where total is exactly zero.
+        ratio = jnp.where(total > 0.0, agn / jnp.maximum(total, 1e-300), 0.0)
+        if self.samples is None:
+            return ratio
+        return jnp.asarray(np.median(np.asarray(ratio), axis=0))
+
     def balmer_av(self) -> tuple[float, float, float]:
         r"""Visual extinction A(V) from the Balmer decrement (Calzetti+2000).
 

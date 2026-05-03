@@ -846,3 +846,145 @@ class TestBalmerAv:
     def test_raises_when_lines_missing(self, map_posterior):
         with pytest.raises(ValueError, match="No emission line fluxes"):
             map_posterior.balmer_av()
+
+
+# ── TestSEDComponents (#3 AGN+host decomposition) ────────────────────
+
+
+class _FakeComponentModel:
+    """Stand-in for SEDModel with a _compute_sed_components method.
+
+    Returns a dict matching the pipeline's component-SED keys. Component
+    amplitudes are driven by a single param ``frac`` so tests can verify
+    that sample-to-sample variation propagates correctly.
+    """
+
+    def __init__(self, wave):
+        self._wave = wave
+
+    def _compute_sed_components(
+        self, params, _sfr=None, _weights=None, need_intrinsic=False, rest_wavelength=None
+    ):
+        wave = jnp.asarray(rest_wavelength) if rest_wavelength is not None else self._wave
+        f = float(params.get("frac", 0.0))
+        # Per-component SEDs: amplitudes split by frac
+        host = (1.0 - f) * jnp.ones_like(wave)
+        agn = f * jnp.ones_like(wave)
+        return {
+            "rest_wavelength": wave,
+            "sed_total": host + agn,
+            "sed_attenuated": host,
+            "sed_intrinsic": host * 1.5,
+            "sed_nebular": jnp.zeros_like(wave),
+            "sed_shock": jnp.zeros_like(wave),
+            "sed_dust_ir": jnp.zeros_like(wave),
+            "sed_agn": agn,
+            "sed_radio": jnp.zeros_like(wave),
+            "sed_xray": jnp.zeros_like(wave),
+        }
+
+
+class TestSEDComponents:
+    def test_raises_no_model(self):
+        p = Posterior(
+            samples=None,
+            params={"frac": jnp.array(0.0)},
+            method="MAP",
+            wall_time_s=0.0,
+            diagnostics={},
+        )
+        with pytest.raises(ValueError, match="model"):
+            p.sed_components()
+
+    def test_map_returns_per_component_arrays(self):
+        wave = jnp.linspace(1000.0, 1e6, 100)
+        model = _FakeComponentModel(wave)
+        p = Posterior(
+            samples=None,
+            params={"frac": jnp.array(0.3)},
+            method="MAP",
+            wall_time_s=0.1,
+            diagnostics={},
+        )
+        p._model = model
+        out = p.sed_components()
+        # MAP path: each component should have shape (n_wave,)
+        assert out["sed_total"].shape == (100,)
+        assert out["sed_agn"].shape == (100,)
+        assert out["wavelength"].shape == (100,)
+        # frac=0.3 → host=0.7, agn=0.3, total=1.0
+        np.testing.assert_allclose(np.asarray(out["sed_agn"]), 0.3, rtol=1e-6)
+        np.testing.assert_allclose(np.asarray(out["sed_total"]), 1.0, rtol=1e-6)
+
+    def test_sampling_returns_stacked_arrays(self):
+        wave = jnp.linspace(1000.0, 1e6, 50)
+        model = _FakeComponentModel(wave)
+        rng = np.random.default_rng(50)
+        n = 25
+        p = Posterior(
+            samples={"frac": jnp.asarray(rng.uniform(0.1, 0.9, size=n))},
+            params={"frac": jnp.array(0.5)},
+            method="mcmc_nuts",
+            wall_time_s=1.0,
+            diagnostics={},
+        )
+        p._model = model
+        out = p.sed_components()
+        assert out["sed_total"].shape == (n, 50)
+        assert out["sed_agn"].shape == (n, 50)
+        # AGN amplitude should equal frac sample-by-sample (at any wavelength)
+        np.testing.assert_allclose(
+            np.asarray(out["sed_agn"][:, 0]),
+            np.asarray(p.samples["frac"]),
+            rtol=1e-6,
+        )
+
+    def test_agn_fraction_map(self):
+        wave = jnp.linspace(1000.0, 1e6, 100)
+        model = _FakeComponentModel(wave)
+        p = Posterior(
+            samples=None,
+            params={"frac": jnp.array(0.4)},
+            method="MAP",
+            wall_time_s=0.1,
+            diagnostics={},
+        )
+        p._model = model
+        agn_frac = p.agn_fraction()
+        np.testing.assert_allclose(np.asarray(agn_frac), 0.4, rtol=1e-6)
+
+    def test_agn_fraction_sampling(self):
+        wave = jnp.linspace(1000.0, 1e6, 30)
+        model = _FakeComponentModel(wave)
+        rng = np.random.default_rng(51)
+        n = 20
+        fracs = rng.uniform(0.1, 0.7, size=n)
+        p = Posterior(
+            samples={"frac": jnp.asarray(fracs)},
+            params={"frac": jnp.array(0.4)},
+            method="mcmc_nuts",
+            wall_time_s=1.0,
+            diagnostics={},
+        )
+        p._model = model
+        agn_frac = p.agn_fraction()
+        # Median across samples should track the input median frac
+        assert agn_frac.shape == (30,)  # one per wavelength
+        # Wavelength-flat AGN fraction → at any wavelength, median of frac samples
+        assert agn_frac[0] == pytest.approx(np.median(fracs), rel=1e-6)
+
+    def test_custom_wavelength_grid(self):
+        wave_default = jnp.linspace(1000.0, 1e6, 100)
+        wave_custom = jnp.linspace(2000.0, 8000.0, 50)
+        model = _FakeComponentModel(wave_default)
+        p = Posterior(
+            samples=None,
+            params={"frac": jnp.array(0.2)},
+            method="MAP",
+            wall_time_s=0.1,
+            diagnostics={},
+        )
+        p._model = model
+        out = p.sed_components(wavelength=wave_custom)
+        assert out["sed_total"].shape == (50,)
+        assert out["wavelength"].shape == (50,)
