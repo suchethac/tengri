@@ -579,3 +579,112 @@ class TestDiagnosticsSummary:
         assert "Method" in s
         assert "Samples" in s
         assert "sfh_dpl_alpha" in s
+
+
+# ── TestPosteriorPredictive ───────────────────────────────────────────────────
+
+
+class _FakePhotModel:
+    """Stand-in for SEDModel exposing only predict_photometry()."""
+
+    def __init__(self, fluxes_for_params):
+        # fluxes_for_params(params) -> array of band fluxes
+        self._fn = fluxes_for_params
+
+    def predict_photometry(self, params):
+        return self._fn(params)
+
+
+class TestPosteriorPredictive:
+    def test_raises_no_model(self, sampling_posterior):
+        # sampling_posterior has no _model attached
+        with pytest.raises(ValueError, match="model"):
+            sampling_posterior.posterior_predictive(
+                data=jnp.array([1.0, 2.0]), noise=jnp.array([0.1, 0.1])
+            )
+
+    def test_map_returns_zero_residuals_when_prediction_matches_data(self):
+        bands = 5
+        truth = jnp.linspace(1.0, 5.0, bands)
+        model = _FakePhotModel(lambda p: truth)
+        p = Posterior(
+            samples=None,
+            params={"x": jnp.array(1.0)},
+            method="MAP",
+            wall_time_s=0.1,
+            diagnostics={},
+        )
+        p._model = model
+        out = p.posterior_predictive(
+            data=truth, noise=jnp.full(bands, 0.1), n_samples=10
+        )
+        assert out["predictions"].shape == (1, bands)
+        assert out["residuals"].shape == (1, bands)
+        assert out["chi2"].shape == (1,)
+        assert float(out["chi2"][0]) == pytest.approx(0.0, abs=1e-12)
+        assert float(np.max(np.abs(out["residuals"]))) < 1e-12
+
+    def test_sampling_returns_n_samples_predictions(self):
+        bands = 4
+        n = 30
+        truth = jnp.linspace(1.0, 4.0, bands)
+        # fake model: predict_photometry returns truth + a small bias driven by params
+        model = _FakePhotModel(lambda p: truth + 0.01 * jnp.sum(jnp.asarray(list(p.values()))))
+        rng = np.random.default_rng(8)
+        p = Posterior(
+            samples={"x": jnp.asarray(rng.normal(size=n))},
+            params={"x": jnp.array(0.0)},
+            method="mcmc_nuts",
+            wall_time_s=1.0,
+            diagnostics={},
+        )
+        p._model = model
+        out = p.posterior_predictive(
+            data=truth, noise=jnp.full(bands, 0.05), n_samples=n
+        )
+        assert out["predictions"].shape == (n, bands)
+        assert out["residuals"].shape == (n, bands)
+        assert out["chi2"].shape == (n,)
+        # chi^2 must all be finite
+        assert np.all(np.isfinite(np.asarray(out["chi2"])))
+
+    def test_chi2_increases_with_misfit(self):
+        bands = 3
+        data = jnp.array([1.0, 2.0, 3.0])
+        # Model returns data + 1.0 across the board → uniform misfit
+        model = _FakePhotModel(lambda p: data + 1.0)
+        p = Posterior(
+            samples=None,
+            params={"x": jnp.array(0.0)},
+            method="MAP",
+            wall_time_s=0.1,
+            diagnostics={},
+        )
+        p._model = model
+        out_low = p.posterior_predictive(data=data, noise=jnp.full(bands, 1.0))
+        out_high = p.posterior_predictive(data=data, noise=jnp.full(bands, 0.1))
+        # chi^2 = sum((data - pred)^2 / noise^2); halving noise → 100× chi^2
+        assert float(out_high["chi2"][0]) > float(out_low["chi2"][0])
+        # exact: 3 / 1 vs 3 / 0.01 = 3 vs 300
+        assert float(out_low["chi2"][0]) == pytest.approx(3.0, rel=1e-9)
+        assert float(out_high["chi2"][0]) == pytest.approx(300.0, rel=1e-9)
+
+    def test_n_samples_subselects(self):
+        bands = 2
+        truth = jnp.array([1.0, 2.0])
+        model = _FakePhotModel(lambda p: truth)
+        rng = np.random.default_rng(9)
+        n_total = 100
+        p = Posterior(
+            samples={"x": jnp.asarray(rng.normal(size=n_total))},
+            params={"x": jnp.array(0.0)},
+            method="mcmc_nuts",
+            wall_time_s=1.0,
+            diagnostics={},
+        )
+        p._model = model
+        out = p.posterior_predictive(
+            data=truth, noise=jnp.full(bands, 0.1), n_samples=20
+        )
+        assert out["predictions"].shape == (20, bands)
+        assert out["chi2"].shape == (20,)

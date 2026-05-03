@@ -867,6 +867,117 @@ class Posterior:
             verbose=verbose,
         )
 
+    def posterior_predictive(
+        self,
+        data: jnp.ndarray,
+        noise: jnp.ndarray,
+        n_samples: int | None = None,
+        key=None,
+    ) -> dict[str, jnp.ndarray]:
+        r"""Posterior predictive predictions, residuals, and chi^2 distribution.
+
+        Pushes posterior draws (or the MAP point estimate) through the
+        attached forward model's ``predict_photometry`` and reports
+        per-draw predictions, standardised residuals, and a chi^2
+        distribution against the supplied data + noise.
+
+        Parameters
+        ----------
+        data : array_like, shape (n_obs,)
+            Observed data the posterior was conditioned on. Same units
+            as ``predict_photometry``'s output.
+        noise : array_like, shape (n_obs,)
+            Per-observation 1-sigma uncertainty (Gaussian).
+        n_samples : int, optional
+            How many posterior draws to evaluate. ``None`` (default)
+            uses every available draw; for MAP results this is
+            implicitly 1. For sampling results, draws are selected
+            via :meth:`resample` (with replacement) using ``key``.
+        key : PRNGKey, optional
+            JAX PRNG key for resampling. If ``None``, defaults to
+            ``jax.random.PRNGKey(0)``.
+
+        Returns
+        -------
+        dict
+            ``predictions``: shape ``(N, n_obs)``,
+            ``residuals``: ``(data - prediction) / noise`` of shape
+            ``(N, n_obs)``,
+            ``chi2``: per-draw :math:`\chi^2 = \sum_i r_i^2`, shape
+            ``(N,)``,
+            ``chi2_median``, ``chi2_lo``, ``chi2_hi``: 16/50/84
+            percentiles of the chi^2 distribution (scalars).
+            ``N`` is 1 for MAP, otherwise ``n_samples`` (or the full
+            chain length if ``n_samples is None``).
+
+        Raises
+        ------
+        ValueError
+            If no ``_model`` is attached.
+
+        Notes
+        -----
+        This is a deterministic posterior predictive (no extra noise
+        realisation per draw). For replicated PPCs that draw observation
+        noise per sample, layer ``noise * jax.random.normal`` on top of
+        ``predictions``.
+        """
+        if self._model is None:
+            raise ValueError(
+                "No forward model attached; cannot compute "
+                "posterior_predictive(). Refit with the model accessible."
+            )
+        data_arr = jnp.asarray(data)
+        noise_arr = jnp.asarray(noise)
+
+        def _predict_one(p: dict) -> jnp.ndarray:
+            return jnp.asarray(self._model.predict_photometry(p))
+
+        if self.samples is None:
+            preds = _predict_one(self.params)[None, :]
+        else:
+            sample_keys = [k for k, v in self.samples.items() if v.ndim >= 1]
+            n_total = (
+                int(self.samples[sample_keys[0]].shape[0]) if sample_keys else 0
+            )
+            if not sample_keys or n_total == 0:
+                preds = _predict_one(self.params)[None, :]
+            else:
+                if n_samples is None or n_samples >= n_total:
+                    indices = np.arange(n_total)
+                else:
+                    if key is None:
+                        key = jax.random.PRNGKey(0)
+                    indices = np.asarray(
+                        jax.random.choice(
+                            key, n_total, shape=(int(n_samples),), replace=True
+                        )
+                    )
+                preds_list = []
+                for idx in indices:
+                    params_i = {
+                        k: (v[idx] if v.ndim >= 1 else v)
+                        for k, v in self.samples.items()
+                    }
+                    preds_list.append(_predict_one(params_i))
+                preds = jnp.stack(preds_list, axis=0)
+
+        residuals = (data_arr[None, :] - preds) / noise_arr[None, :]
+        chi2 = jnp.sum(residuals**2, axis=1)
+        chi2_np = np.asarray(chi2)
+        if chi2_np.shape[0] >= 1:
+            lo, med, hi = np.percentile(chi2_np, [16.0, 50.0, 84.0])
+        else:
+            lo = med = hi = float("nan")
+        return {
+            "predictions": preds,
+            "residuals": residuals,
+            "chi2": chi2,
+            "chi2_median": float(med),
+            "chi2_lo": float(lo),
+            "chi2_hi": float(hi),
+        }
+
     def rhat(self, exclude_prefixes: tuple[str, ...] = ("psd_xi",)) -> dict[str, float]:
         r"""Per-parameter split-:math:`\hat R` (Gelman-Rubin).
 
