@@ -26,6 +26,31 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+def _stack_or_nan(values: list, n: int) -> jnp.ndarray:
+    """Stack array values or return NaN-filled array if any value is None.
+
+    Handles the case where a derived quantity is unavailable (None) for all
+    samples, as occurs when predict_derived() returns None for a field
+    (e.g., stellar_mass_surviving when SSP mass-remaining table is absent).
+
+    Parameters
+    ----------
+    values : list
+        List of values (jnp.ndarray, scalar, or None).
+    n : int
+        Expected number of samples. Used to shape the NaN array if needed.
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        If all values are not-None: stacked array with jnp.asarray defensiveness.
+        If any value is None: NaN-filled array of shape (n,).
+    """
+    if any(x is None for x in values):
+        return jnp.full(n, jnp.nan)
+    return jnp.stack([jnp.asarray(x) for x in values])
+
+
 @dataclass
 class Posterior:
     """Inference results with samples, diagnostics, and derived quantities.
@@ -249,10 +274,7 @@ class Posterior:
                     derived_lists[k] = []
                 derived_lists[k].append(v)
 
-        return {
-            k: jnp.full(n_samples, jnp.nan) if any(x is None for x in v) else jnp.stack(v)
-            for k, v in derived_lists.items()
-        }
+        return {k: _stack_or_nan(v, n_samples) for k, v in derived_lists.items()}
 
     def line_fluxes(self) -> dict[str, tuple[float, float, float]]:
         """Emission line flux posterior summaries.
@@ -422,36 +444,104 @@ class Posterior:
         lo, med, hi = jnp.percentile(ratio, jnp.array([16.0, 50.0, 84.0]))
         return (float(med), float(lo), float(hi))
 
-    def equivalent_widths(self) -> dict[str, tuple[float, float, float]]:
-        """Rest-frame emission line equivalent widths.
+    def equivalent_widths(
+        self,
+        window_aa: float = 20.0,
+        continuum_width_aa: float = 50.0,
+    ) -> dict[str, tuple[float, float, float]]:
+        """Rest-frame emission line equivalent widths from posterior samples.
 
-        EW(λ) = F_line / f_cont(λ_line), where f_cont is the continuum
-        flux density at the line center [erg/s/Hz].
+        For each emission line, predicts the rest-frame SED for each posterior
+        sample (or the MAP point estimate) using the attached forward model
+        and integrates the line flux relative to the local continuum estimated
+        from sidebands flanking the line. Sign convention follows
+        :func:`tengri.analysis.diagnostics.spectral.equivalent_width`:
+        positive EW for emission, negative for absorption.
+
+        Parameters
+        ----------
+        window_aa : float, optional
+            Half-width of the line integration window [Angstrom]. Default 20.
+        continuum_width_aa : float, optional
+            Width of each sideband used to estimate the continuum [Angstrom].
+            Sidebands sit at ``[lambda_0 +/- window +/- continuum_width]``.
+            Default 50.
 
         Returns
         -------
         dict
-            ``{line_name: (median_EW, lo_68, hi_68)}`` in [Angstrom].
+            ``{line_name: (median_EW, lo_68, hi_68)}`` in [Angstrom]. For MAP
+            results, all three values coincide.
+
+        Raises
+        ------
+        ValueError
+            If ``eline_fluxes`` / ``eline_wavelengths`` are unavailable, or if
+            no ``_model`` is attached to compute the continuum.
 
         Notes
         -----
-        Requires ``_model`` to compute the continuum prediction at each
-        emission line's rest-frame wavelength for each posterior sample.
-        Not yet implemented — raises ``NotImplementedError``.
-        When implemented, will return 68% credible intervals via percentile
-        computation over posterior samples.
+        The continuum is estimated locally per line from the model-predicted
+        rest-frame SED, *not* from a precomputed continuum-only grid. The
+        sideband choice therefore must avoid contamination from neighbouring
+        emission lines; defaults are tuned for optical BPT lines.
 
         Examples
         --------
         ::
 
-            ew = result.equivalent_widths()  # Not yet available
-            # Expected: ew["Halpha"] = (median_ew, lo, hi) in Angstrom
+            ew = result.equivalent_widths()
+            ha_med, ha_lo, ha_hi = ew["Halpha"]
         """
-        raise NotImplementedError(
-            "equivalent_widths() not yet implemented. "
-            "Use line_fluxes() and divide by the continuum model manually."
-        )
+        if self.eline_fluxes is None or self.eline_wavelengths is None:
+            raise ValueError(
+                "No emission line fluxes available. "
+                "Set eline_mode='marginalized' or 'fitted' in Spectroscopy."
+            )
+        if self._model is None:
+            raise ValueError(
+                "No forward model attached; cannot compute continuum for "
+                "equivalent_widths(). Refit with the model accessible."
+            )
+
+        from tengri.analysis.diagnostics.spectral import equivalent_width
+
+        names = list(self.eline_names)
+        wavelengths = [float(w) for w in np.asarray(self.eline_wavelengths)]
+
+        def _ew_for_params(p: dict) -> jnp.ndarray:
+            sed = self._model.predict_rest_sed(p)
+            return jnp.stack(
+                [
+                    equivalent_width(
+                        sed.wavelength, sed.sed, lc, window_aa, continuum_width_aa
+                    )
+                    for lc in wavelengths
+                ]
+            )
+
+        if self.samples is None:
+            # MAP: one prediction.
+            ew_arr = np.asarray(_ew_for_params(self.params))
+            return {name: (float(ew_arr[i]),) * 3 for i, name in enumerate(names)}
+
+        # Sampling: predict per draw, then take percentiles over draws.
+        keys = [k for k, v in self.samples.items() if v.ndim >= 1]
+        if not keys:
+            ew_arr = np.asarray(_ew_for_params(self.params))
+            return {name: (float(ew_arr[i]),) * 3 for i, name in enumerate(names)}
+
+        n = int(self.samples[keys[0]].shape[0])
+        ew_samples = np.empty((n, len(names)))
+        for i in range(n):
+            params_i = {k: (v[i] if v.ndim >= 1 else v) for k, v in self.samples.items()}
+            ew_samples[i] = np.asarray(_ew_for_params(params_i))
+
+        result: dict[str, tuple[float, float, float]] = {}
+        for j, name in enumerate(names):
+            lo, med, hi = np.percentile(ew_samples[:, j], [16.0, 50.0, 84.0])
+            result[name] = (float(med), float(lo), float(hi))
+        return result
 
     # ── Summary statistics ────────────────────────────────────────
 

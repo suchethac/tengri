@@ -285,10 +285,141 @@ class TestBalmerDecrement:
 # ── TestEquivalentWidths ──────────────────────────────────────────────────────
 
 
+_C_AA_S = 2.99792458e18
+
+
+class _FakeSED:
+    """Minimal stand-in for SEDModel exposing predict_rest_sed only."""
+
+    def __init__(self, wave, line_centers, line_amplitudes, sigma_aa=5.0, cont_f_lambda=1.0):
+        self._wave = wave
+        self._centers = line_centers
+        self._amps = line_amplitudes
+        self._sigma = sigma_aa
+        self._cont = cont_f_lambda
+
+    def predict_rest_sed(self, params, wave=None):
+        from tengri.forward.result import SEDResult
+
+        f_lambda = jnp.full_like(self._wave, self._cont)
+        for c, a in zip(self._centers, self._amps):
+            f_lambda = f_lambda + a * jnp.exp(
+                -0.5 * ((self._wave - c) / self._sigma) ** 2
+            ) / (self._sigma * jnp.sqrt(2.0 * jnp.pi))
+        l_nu = f_lambda * (self._wave**2 / _C_AA_S)
+        return SEDResult(wavelength=self._wave, sed=l_nu)
+
+
+@pytest.fixture
+def ew_wave():
+    """Fine wavelength grid covering all BPT lines."""
+    return jnp.linspace(4500.0, 7000.0, 8000)
+
+
+@pytest.fixture
+def map_ew_posterior(ew_wave):
+    """MAP posterior with attached fake model that has H-alpha and H-beta emission."""
+    fake = _FakeSED(
+        ew_wave,
+        line_centers=[4862.68, 5008.24, 6564.61, 6583.45],  # Hb, OIII, Ha, NII
+        line_amplitudes=[20.0, 10.0, 50.0, 25.0],
+    )
+    p = Posterior(
+        samples=None,
+        params={"sfh_dpl_alpha": jnp.array(1.2)},
+        method="MAP",
+        wall_time_s=1.0,
+        diagnostics={},
+        eline_fluxes=_BPT_FLUX_1D,
+        eline_names=_BPT_NAMES,
+        eline_wavelengths=_BPT_WAVES,
+    )
+    p._model = fake
+    return p
+
+
+@pytest.fixture
+def sampling_ew_posterior(ew_wave):
+    """Sampling posterior with attached fake model and 30 draws."""
+    fake = _FakeSED(
+        ew_wave,
+        line_centers=[4862.68, 5008.24, 6564.61, 6583.45],
+        line_amplitudes=[20.0, 10.0, 50.0, 25.0],
+    )
+    n = 30
+    key = jax.random.PRNGKey(11)
+    fluxes = jnp.stack(
+        [
+            10.0 + 0.5 * jax.random.normal(key, (n,)),
+            4.0 + 0.2 * jax.random.normal(jax.random.PRNGKey(12), (n,)),
+            5.0 + 0.2 * jax.random.normal(jax.random.PRNGKey(13), (n,)),
+            2.0 + 0.1 * jax.random.normal(jax.random.PRNGKey(14), (n,)),
+        ],
+        axis=1,
+    )
+    p = Posterior(
+        samples={"sfh_dpl_alpha": 1.2 + 0.05 * jax.random.normal(key, (n,))},
+        params={"sfh_dpl_alpha": jnp.array(1.2)},
+        method="mcmc_nuts",
+        wall_time_s=5.0,
+        diagnostics={},
+        eline_fluxes=fluxes,
+        eline_names=_BPT_NAMES,
+        eline_wavelengths=_BPT_WAVES,
+    )
+    p._model = fake
+    return p
+
+
 class TestEquivalentWidths:
-    def test_raises_not_implemented(self, map_eline_posterior):
-        with pytest.raises(NotImplementedError):
+    def test_raises_no_eline_fluxes(self, map_posterior):
+        with pytest.raises(ValueError, match="No emission line fluxes"):
+            map_posterior.equivalent_widths()
+
+    def test_raises_no_model(self, map_eline_posterior):
+        # Fixture map_eline_posterior has eline_fluxes but no _model attached.
+        with pytest.raises(ValueError, match="model"):
             map_eline_posterior.equivalent_widths()
+
+    def test_map_returns_triple_same(self, map_ew_posterior):
+        ew = map_ew_posterior.equivalent_widths()
+        assert set(ew.keys()) == set(_BPT_NAMES)
+        for name in _BPT_NAMES:
+            med, lo, hi = ew[name]
+            assert med == lo == hi
+
+    def test_map_emission_lines_positive(self, map_ew_posterior):
+        ew = map_ew_posterior.equivalent_widths()
+        for name in _BPT_NAMES:
+            med, _lo, _hi = ew[name]
+            assert med > 0.0, f"{name} EW should be positive for emission"
+
+    def test_map_halpha_recovers_amplitude_isolated(self, ew_wave):
+        """With a single isolated line, EW recovers the injected line flux."""
+        fake = _FakeSED(ew_wave, line_centers=[6564.61], line_amplitudes=[50.0])
+        p = Posterior(
+            samples=None,
+            params={"sfh_dpl_alpha": jnp.array(1.2)},
+            method="MAP",
+            wall_time_s=1.0,
+            diagnostics={},
+            eline_fluxes=jnp.array([10.0]),
+            eline_names=("Halpha",),
+            eline_wavelengths=jnp.array([6564.61]),
+        )
+        p._model = fake
+        ew = p.equivalent_widths()
+        med, _lo, _hi = ew["Halpha"]
+        assert med == pytest.approx(50.0, rel=0.05)
+
+    def test_sampling_returns_percentiles(self, sampling_ew_posterior):
+        ew = sampling_ew_posterior.equivalent_widths()
+        for name in _BPT_NAMES:
+            med, lo, hi = ew[name]
+            # Continuum is identical across samples → distribution is degenerate
+            # but lo ≤ med ≤ hi must still hold.
+            assert lo <= med <= hi
+            assert med > 0.0
 
 
 # ── TestSummaryTable ──────────────────────────────────────────────────────────
