@@ -48,9 +48,6 @@ If you find evidence the feature shipped, **update this file** (move the item to
 - **Status:** has variable-R LSF; no explicit σ_v free parameter or kinematic broadening kernel.
 - **Where:** `src/tengri/observation/spectroscopy.py`, `src/tengri/forward/_kernels/`.
 
-### 9. Correlated noise / jitter terms
-- **Status:** Gaussian / Student-t i.i.d. only. No GP-correlated noise in time/wavelength, no per-pixel jitter.
-- **Where:** `src/tengri/observation/noise.py`.
 
 
 ### 11. Surface-brightness dimming / extended-source corrections
@@ -72,6 +69,10 @@ If you find evidence the feature shipped, **update this file** (move the item to
 ### 15. Doublet-ratio likelihood constraints (audit was stale)
 - **Original claim:** `[OIII] 4959/5007`, `[NII] 6548/6584`, `[SII] 6717/6731` ratios not enforced.
 - **Verified state (2026-05-03):** `src/tengri/observation/eline_marginalization.py:190` exposes `apply_doublet_constraints(G, C)` which encodes the [OIII] and [NII] doublet ratios as a linear transformation on the design matrix (handled by `_DOUBLET_RATIOS` in `line_list.py:30`). `[SII] 6717/6731` is **intentionally unconstrained** because the ratio is density-sensitive and serves as a diagnostic (see comment at `line_list.py:84`). Audit closed without code changes.
+
+### 9. Correlated noise / jitter (audit was partly stale)
+- **Original claim:** no GP-correlated noise / per-pixel jitter.
+- **Verified state (2026-05-03):** `src/tengri/observation/noise.py` already provides `gp_noise_covariance`, `exp_squared_kernel`, and `matern32_kernel` for wavelength-correlated GP noise on spectroscopy. Per-pixel jitter is structurally the same as the new `apply_zp_floor` utility (added 2026-05-03 commit 16c8131) — apply it to a spectrum's per-pixel noise. Audit closed without further code changes.
 
 ### 5. Additional SFH parameterisations (audit was stale)
 - **Original claim:** missing constant, rising, piecewise (continuity), composite (quiescent + post-quench).
