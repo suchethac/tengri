@@ -688,3 +688,93 @@ class TestPosteriorPredictive:
         )
         assert out["predictions"].shape == (20, bands)
         assert out["chi2"].shape == (20,)
+
+
+# ── TestBPTClassification ────────────────────────────────────────────────────
+
+
+def _make_bpt_posterior(fluxes_1d_or_2d):
+    """Build a Posterior with BPT lines pinned to the supplied fluxes."""
+    return Posterior(
+        samples=None if fluxes_1d_or_2d.ndim == 1 else {"x": jnp.zeros(fluxes_1d_or_2d.shape[0])},
+        params={"x": jnp.array(0.0)},
+        method="MAP" if fluxes_1d_or_2d.ndim == 1 else "mcmc_nuts",
+        wall_time_s=0.1,
+        diagnostics={},
+        eline_fluxes=fluxes_1d_or_2d,
+        eline_names=_BPT_NAMES,
+        eline_wavelengths=_BPT_WAVES,
+    )
+
+
+class TestBPTClassification:
+    def test_pure_sf_galaxy(self):
+        """log([NII]/Hα)≈-0.7, log([OIII]/Hβ)≈-0.5 sits well below Kauffmann."""
+        fluxes = jnp.array([10.0, 4.0, 2.0, 1.3])  # Hα, Hβ, NII, OIII
+        p = _make_bpt_posterior(fluxes)
+        cls = p.bpt_class()
+        assert cls == "SF"
+
+    def test_seyfert_agn_galaxy(self):
+        """High [OIII]/Hβ and high [NII]/Hα → AGN."""
+        # log NII/Hα = log(8/10) = -0.097, log OIII/Hβ = log(20/4) = 0.7
+        # Kewley@(-0.097): 0.61/(-0.567)+1.19 = -1.076+1.19 = 0.114; 0.7 > 0.114 → AGN
+        fluxes = jnp.array([10.0, 4.0, 8.0, 20.0])
+        p = _make_bpt_posterior(fluxes)
+        cls = p.bpt_class()
+        assert cls == "AGN"
+
+    def test_composite_galaxy(self):
+        """Between Kauffmann and Kewley demarcation lines."""
+        # log NII/Hα = log(5/10) = -0.301, log OIII/Hβ = log(2/4) = -0.301
+        # Kauffmann@(-0.301): 0.61/(-0.351)+1.3 = -1.738+1.3 = -0.438; -0.301 > -0.438 → above
+        # Kewley@(-0.301):    0.61/(-0.771)+1.19 = -0.791+1.19 = 0.399; -0.301 < 0.399 → below
+        # → composite
+        fluxes = jnp.array([10.0, 4.0, 5.0, 2.0])
+        p = _make_bpt_posterior(fluxes)
+        cls = p.bpt_class()
+        assert cls == "composite"
+
+    def test_sampling_returns_array_of_labels(self):
+        rng = np.random.default_rng(20)
+        n = 50
+        fluxes = jnp.stack(
+            [
+                10.0 + rng.normal(size=n) * 0.1,  # Halpha
+                4.0 + rng.normal(size=n) * 0.05,  # Hbeta
+                2.0 + rng.normal(size=n) * 0.05,  # NII (low → SF)
+                1.3 + rng.normal(size=n) * 0.05,  # OIII (low → SF)
+            ],
+            axis=1,
+        )
+        p = _make_bpt_posterior(fluxes)
+        labels = p.bpt_class()
+        assert isinstance(labels, np.ndarray)
+        assert labels.shape == (n,)
+        # All draws should classify as SF given small spread
+        assert np.all(labels == "SF")
+
+    def test_raises_when_lines_missing(self, map_posterior):
+        with pytest.raises(ValueError, match="No emission line fluxes"):
+            map_posterior.bpt_class()
+
+    def test_raises_when_bpt_lines_absent(self):
+        p = Posterior(
+            samples=None,
+            params={},
+            method="MAP",
+            wall_time_s=0.0,
+            diagnostics={},
+            eline_fluxes=jnp.array([5.0, 3.0]),
+            eline_names=("Halpha", "Hbeta"),
+            eline_wavelengths=jnp.array([6564.61, 4862.68]),
+        )
+        with pytest.raises(ValueError, match="BPT lines"):
+            p.bpt_class()
+
+    def test_nondetection_returns_unknown(self):
+        # Negative NII flux → log ratio is NaN → 'unknown' label
+        fluxes = jnp.array([10.0, 4.0, -1.0, 2.0])
+        p = _make_bpt_posterior(fluxes)
+        cls = p.bpt_class()
+        assert cls == "unknown"

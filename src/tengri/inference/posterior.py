@@ -389,6 +389,97 @@ class Posterior:
         )
         return log_nii_ha, log_oiii_hb
 
+    def bpt_class(self):
+        r"""Classify each posterior draw as SF / composite / AGN on the BPT-NII diagram.
+
+        Uses the standard demarcation lines:
+
+        - **Kauffmann et al. 2003** [1]_ — separates pure SF from
+          composite (SF + AGN admixture).
+        - **Kewley et al. 2001** [2]_ — separates composite from
+          pure AGN/Seyfert.
+
+        Below Kauffmann ⇒ ``"SF"``; between Kauffmann and Kewley ⇒
+        ``"composite"``; above Kewley ⇒ ``"AGN"``. Non-detections
+        (NaN ratios) return ``"unknown"``.
+
+        Returns
+        -------
+        str or ndarray of dtype <U9
+            For MAP results: a single label string.
+            For sampling results: a length-``n_samples`` array of labels.
+
+        Raises
+        ------
+        ValueError
+            If emission line fluxes are unavailable or BPT lines absent.
+
+        Notes
+        -----
+        Kauffmann+2003 demarcation:
+
+        .. math::
+
+            \log_{10}\!\frac{[\mathrm{O\,III}]}{H\beta} =
+            \frac{0.61}{\log_{10}([\mathrm{N\,II}]/H\alpha) - 0.05} + 1.30
+            \quad (\text{for }\log [\mathrm{N\,II}]/H\alpha < 0.05)
+
+        Kewley+2001 demarcation:
+
+        .. math::
+
+            \log_{10}\!\frac{[\mathrm{O\,III}]}{H\beta} =
+            \frac{0.61}{\log_{10}([\mathrm{N\,II}]/H\alpha) - 0.47} + 1.19
+            \quad (\text{for }\log [\mathrm{N\,II}]/H\alpha < 0.47)
+
+        Points right of the asymptote (:math:`\log [\mathrm{N\,II}]/H\alpha
+        \ge 0.47`) are classified as AGN regardless of [O III]/Hβ.
+
+        References
+        ----------
+        .. [1] Kauffmann, G. et al., 2003, MNRAS, 346, 1055.
+        .. [2] Kewley, L. J. et al., 2001, ApJ, 556, 121.
+
+        Examples
+        --------
+        >>> labels = result.bpt_class()
+        >>> import numpy as np
+        >>> agn_frac = float(np.mean(np.asarray(labels) == "AGN"))
+        """
+        x, y = self.bpt_nii()  # log_nii_ha, log_oiii_hb
+        x_arr = np.asarray(x)
+        y_arr = np.asarray(y)
+        scalar_input = x_arr.ndim == 0
+        x_arr = np.atleast_1d(x_arr)
+        y_arr = np.atleast_1d(y_arr)
+
+        # Demarcation curves; defined only for x < asymptote.
+        with np.errstate(divide="ignore", invalid="ignore"):
+            kauffmann = 0.61 / (x_arr - 0.05) + 1.30
+            kewley = 0.61 / (x_arr - 0.47) + 1.19
+
+        labels = np.full(x_arr.shape, "unknown", dtype="<U9")
+        finite = np.isfinite(x_arr) & np.isfinite(y_arr)
+
+        # AGN region: right of Kewley asymptote (x >= 0.47) OR above Kewley curve.
+        agn = finite & ((x_arr >= 0.47) | (y_arr > kewley))
+        # Composite: above Kauffmann but below Kewley (and left of Kewley asymptote).
+        composite = (
+            finite
+            & ~agn
+            & ((x_arr >= 0.05) | (y_arr > kauffmann))
+        )
+        # SF: everything finite that's not AGN or composite.
+        sf = finite & ~agn & ~composite
+
+        labels[sf] = "SF"
+        labels[composite] = "composite"
+        labels[agn] = "AGN"
+
+        if scalar_input:
+            return str(labels[0])
+        return labels
+
     def balmer_decrement(self) -> tuple[float, float, float]:
         """Observed Hα/Hβ ratio from posterior line fluxes.
 
