@@ -38,10 +38,6 @@ If you find evidence the feature shipped, **update this file** (move the item to
 - **Where:** `src/tengri/inference/posterior.py` (new derived methods), `src/tengri/forward/sed_model.py` (split prediction path).
 - **Pairs with:** the BPT diagnostics in §6 below.
 
-### 5. Additional SFH parameterizations
-- **Status:** has delayed-exp, double-power-law, truncated skew-normal, GP/IFT nonparametric.
-- **Missing:** constant SFR, rising-only, piecewise/linear (Prospector-`continuity`), composite (quiescent + post-quench).
-- **Where:** `src/tengri/components/sfh/`.
 
 ---
 
@@ -86,6 +82,10 @@ If you find evidence the feature shipped, **update this file** (move the item to
 ---
 
 ## Resolved (move items here, do not delete)
+
+### 5. Additional SFH parameterisations (audit was stale)
+- **Original claim:** missing constant, rising, piecewise (continuity), composite (quiescent + post-quench).
+- **Verified state (2026-05-03):** all four are present in `src/tengri/components/sfh/mean_sfh.py` and `nonparametric.py`: `constant` (line 486), `delayed_exponential` / `constant_then_exponential_sfh` (line 667), `continuity` (in `nonparametric.py:43`), `psb_wild2020` (post-starburst composite at line 816). Audit closed without code changes.
 
 ### 4. Energy-balance diagnostic (resolved 2026-05-03)
 - **Original problem:** `dust_eta_balance` parameter exists in the forward model but no user-facing utility to check whether absorbed-stellar energy ≈ re-emitted dust energy on a model prediction.

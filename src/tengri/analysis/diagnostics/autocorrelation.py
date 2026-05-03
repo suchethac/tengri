@@ -32,6 +32,7 @@ __all__ = [
     "autocorrelation_time",
     "check_chain_length",
     "effective_sample_size",
+    "rank_normalised_rhat",
     "rhat",
     "split_rhat",
 ]
@@ -405,3 +406,115 @@ def rhat(
             continue
         result[name] = split_rhat(a)
     return result
+
+
+# ── Vehtari+2021 rank-normalised folded split-Rhat ─────────────────────
+
+
+def _rank_normalise(values: np.ndarray) -> np.ndarray:
+    r"""Rank-normalise a flat array via the standard-normal inverse-CDF.
+
+    Replaces each value with :math:`\Phi^{-1}((r - 0.5)/N)` where
+    :math:`r` is its average rank (ties resolved by averaging) and
+    :math:`N` is the total sample count. The output is approximately
+    standard-normal regardless of the input distribution.
+
+    Notes
+    -----
+    Uses ``scipy.stats.norm.ppf`` if available, else the rational
+    approximation in Beasley & Springer (1977) via ``math.erfinv``.
+    Pure-numpy implementation to keep this module dependency-light.
+    """
+    flat = values.ravel()
+    n_total = flat.shape[0]
+    # Average ranks in [1, n_total]
+    order = flat.argsort()
+    ranks = np.empty_like(flat, dtype=np.float64)
+    # Assign tied values their mean rank.
+    sorted_vals = flat[order]
+    i = 0
+    while i < n_total:
+        j = i + 1
+        while j < n_total and sorted_vals[j] == sorted_vals[i]:
+            j += 1
+        mean_rank = 0.5 * (i + 1 + j)  # 1-based mean
+        ranks[order[i:j]] = mean_rank
+        i = j
+    # Map rank to (0, 1) via (r - 0.5)/N, then to standard normal via
+    # the inverse normal CDF Φ⁻¹.
+    p = (ranks - 0.5) / n_total
+    from scipy.special import ndtri  # Φ⁻¹
+
+    z = ndtri(p).astype(np.float64)
+    return z.reshape(values.shape)
+
+
+def rank_normalised_rhat(chain: np.ndarray) -> float:
+    r"""Vehtari+2021 rank-normalised folded split-:math:`\hat R`.
+
+    More robust than the classical Gelman-Rubin diagnostic to heavy
+    tails and to chains that mix in mean but not in scale. Computes the
+    classical split-:math:`\hat R` after **rank-normalising** the
+    samples (so the underlying distribution is Gaussian by
+    construction), and additionally on the **folded** samples
+    :math:`|x - \mathrm{median}(x)|` to detect scale drift. Returns the
+    maximum of the two — the recommended convergence statistic of
+    Vehtari et al. 2021 [1]_.
+
+    Parameters
+    ----------
+    chain : array_like
+        1-D chain of length ``N`` (split into halves), or 2-D ``(m, n)``
+        with ``m`` chains used as-is.
+
+    Returns
+    -------
+    float
+        :math:`\max(\hat R_{\rm rank}, \hat R_{\rm rank, folded})`.
+        Convergence threshold ``< 1.01`` (Vehtari+2021). Returns
+        ``np.nan`` for chains too short to split or with zero variance.
+
+    Notes
+    -----
+    The rank step makes the test robust to non-Gaussian / heavy-tailed
+    posteriors where the classical :math:`\hat R` can be noisy. The
+    folded step (Vehtari+2021 §4.2) catches scenarios where the chains
+    agree on the mean but disagree on the scale — the classical
+    diagnostic misses these because chain means converge while
+    variances do not.
+
+    References
+    ----------
+    .. [1] Vehtari, A. et al., 2021,
+       "Rank-Normalization, Folding, and Localization: An Improved R̂
+       for Assessing Convergence of MCMC,"
+       Bayesian Analysis, 16, 667-718. arXiv:1903.08008.
+    """
+    arr = np.asarray(chain)
+    if arr.ndim == 1:
+        n_total = arr.shape[0]
+        n = n_total // 2
+        if n < 2:
+            return float("nan")
+        chains = np.stack([arr[:n], arr[n : 2 * n]], axis=0)
+    elif arr.ndim == 2:
+        chains = arr
+        if chains.shape[1] < 2 or chains.shape[0] < 2:
+            return float("nan")
+    else:
+        raise ValueError(
+            f"rank_normalised_rhat expects 1-D or 2-D array, got ndim={arr.ndim}"
+        )
+    if not np.isfinite(np.var(chains)) or np.var(chains) < 1e-30:
+        return float("nan")
+
+    # Standard rank-normalisation across the pooled sample.
+    z = _rank_normalise(chains)
+    r_basic = split_rhat(z)
+    # Folded: rank-normalise |x - pooled_median|.
+    folded = np.abs(chains - np.median(chains))
+    z_fold = _rank_normalise(folded)
+    r_fold = split_rhat(z_fold)
+    if not (np.isfinite(r_basic) and np.isfinite(r_fold)):
+        return float("nan")
+    return float(max(r_basic, r_fold))

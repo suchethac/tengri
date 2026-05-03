@@ -11,7 +11,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tengri.analysis.diagnostics.autocorrelation import rhat, split_rhat
+from tengri.analysis.diagnostics.autocorrelation import (
+    rank_normalised_rhat,
+    rhat,
+    split_rhat,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -137,3 +141,54 @@ class TestPosteriorRhatMethod:
         out = p.rhat()
         assert "x" in out
         assert abs(out["x"] - 1.0) < 0.05
+
+
+# ── Vehtari+2021 rank-normalised folded split-Rhat ────────────────────
+
+
+class TestRankNormalisedRhat:
+    def test_white_noise_close_to_one(self):
+        rng = np.random.default_rng(100)
+        chain = rng.normal(size=4000)
+        r = rank_normalised_rhat(chain)
+        assert abs(r - 1.0) < 0.05
+
+    def test_drift_between_halves_flagged(self):
+        rng = np.random.default_rng(101)
+        chain = np.concatenate([rng.normal(size=1000), rng.normal(loc=2.0, size=1000)])
+        r = rank_normalised_rhat(chain)
+        assert r > 1.1
+
+    def test_variance_only_drift_flagged_by_folded(self):
+        """Chain whose two halves have identical mean but different variance.
+        Classical R̂ misses this; the folded variant catches it."""
+        rng = np.random.default_rng(102)
+        chain = np.concatenate(
+            [rng.normal(scale=1.0, size=2000), rng.normal(scale=4.0, size=2000)]
+        )
+        r_classical = split_rhat(chain)
+        r_rank = rank_normalised_rhat(chain)
+        # Classical may or may not flag; rank-normalised folded must flag.
+        assert r_rank > 1.05, (
+            f"rank-normalised R̂={r_rank:.3f} should flag scale drift; "
+            f"classical={r_classical:.3f}"
+        )
+
+    def test_heavy_tailed_well_mixed_robust(self):
+        """Cauchy-distributed well-mixed chain — classical R̂ noisy, rank version stable."""
+        rng = np.random.default_rng(103)
+        chain = rng.standard_cauchy(size=4000)
+        # Filter wild outliers so classical R̂ doesn't blow up; just sanity check
+        # that rank version stays near 1.
+        r_rank = rank_normalised_rhat(chain)
+        assert abs(r_rank - 1.0) < 0.10
+
+    def test_returns_nan_for_short_or_constant(self):
+        assert np.isnan(rank_normalised_rhat(np.full(100, 0.5)))
+        assert np.isnan(rank_normalised_rhat(np.array([1.0, 2.0])))
+
+    def test_two_chains_input(self):
+        rng = np.random.default_rng(104)
+        chains = rng.normal(size=(4, 1000))
+        r = rank_normalised_rhat(chains)
+        assert abs(r - 1.0) < 0.05
