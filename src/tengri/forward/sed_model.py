@@ -79,6 +79,8 @@ from tengri.observation.photometry import ab_mag_from_flux
 from tengri.observation.spectrum import apply_lsf, compute_spectrum
 from tengri.parameters.translate import (
     _AGN_IDENTITY_PARAMS,
+    _CUE_GAS_IDENTITY_PARAMS,
+    _CUE_IONSPEC_IDENTITY_PARAMS,
     _DUST_EMISSION_IDENTITY_PARAMS,
     _EVOLVING_ALPHA_PARAM_MAP,
     _NEBULAR_IDENTITY_PARAMS,
@@ -356,6 +358,7 @@ class SEDModel:
             csp_integration=self._csp_integration,
             forward_dtype=self._forward_dtype,
             met_interp=self._met_interp,
+            met_mode=self._met_mode,
             z_interp=self._z_interp,
             lgmet_scatter=self._lgmet_scatter,
             sfh_fn=self._sfh_fn,
@@ -558,6 +561,19 @@ class SEDModel:
         if spec.nebular_mode == "cue":
             from tengri.components.nebular import CueBackend
 
+            # Cue-specific abundance + ionising-spectrum free params. These
+            # are validated by Parameters but were silently stripped by
+            # translate.get_internal_params before being registered here.
+            # See MISSING_FEATURES.md #16. Register only the ones the user
+            # explicitly added to the spec — Parameters mirrors the same
+            # conditional registration in _CUE_GAS_EXTRA_PARAMS / _CUE_IONSPEC_PARAMS.
+            _user_params = getattr(spec, "_valid_param_names", frozenset())
+            for name in _CUE_GAS_IDENTITY_PARAMS:
+                if name in _user_params:
+                    self._param_map[name] = (name, 1.0, 0.0)
+            for name in _CUE_IONSPEC_IDENTITY_PARAMS:
+                if name in _user_params:
+                    self._param_map[name] = (name, 1.0, 0.0)
             self._nebular_backend = CueBackend(spec.cue_weights_path, ssp_data=ssp_data)
         elif spec.nebular_mode == "cloudy":
             from tengri.components.nebular import CloudyGridBackend
@@ -871,6 +887,125 @@ class SEDModel:
                     stacklevel=2,
                 )
 
+        # Analytic disc model preintegration (powerlaw_disc, ss_disc, cigale_disc)
+        # Pre-integrate through filters at init time for fast triweight lookup.
+        powerlaw_disc_preint = None
+        if (
+            precompute
+            and self._z_fixed is not None
+            and self.filter_waves is not None
+            and self._agn_model == "powerlaw_disc"
+        ):
+            try:
+                from tengri.components.agn.disc_precompute import (
+                    build_lookup,
+                    precompute,
+                )
+
+                _precomp = precompute(
+                    self.filter_waves,
+                    self.filter_trans,
+                    redshift=float(self._z_fixed),
+                    parameters=self.spec,
+                    model="powerlaw_disc",
+                )
+                powerlaw_disc_preint = build_lookup(_precomp, model="powerlaw_disc")
+            except Exception as e:
+                warnings.warn(
+                    f"powerlaw_disc preintegration failed: {e}. "
+                    "Falling back to full-wavelength evaluation.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+
+        ss_disc_preint = None
+        if (
+            precompute
+            and self._z_fixed is not None
+            and self.filter_waves is not None
+            and self._agn_model == "ss_disc"
+        ):
+            try:
+                from tengri.components.agn.disc_precompute import (
+                    build_lookup,
+                    precompute,
+                )
+
+                _precomp = precompute(
+                    self.filter_waves,
+                    self.filter_trans,
+                    redshift=float(self._z_fixed),
+                    parameters=self.spec,
+                    model="ss_disc",
+                )
+                ss_disc_preint = build_lookup(_precomp, model="ss_disc")
+            except Exception as e:
+                warnings.warn(
+                    f"ss_disc preintegration failed: {e}. "
+                    "Falling back to full-wavelength evaluation.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+
+        cigale_disc_preint = None
+        if (
+            precompute
+            and self._z_fixed is not None
+            and self.filter_waves is not None
+            and self._agn_model == "cigale_disc"
+        ):
+            try:
+                from tengri.components.agn.disc_precompute import (
+                    build_lookup,
+                    precompute,
+                )
+
+                _precomp = precompute(
+                    self.filter_waves,
+                    self.filter_trans,
+                    redshift=float(self._z_fixed),
+                    parameters=self.spec,
+                    model="cigale_disc",
+                )
+                cigale_disc_preint = build_lookup(_precomp, model="cigale_disc")
+            except Exception as e:
+                warnings.warn(
+                    f"cigale_disc preintegration failed: {e}. "
+                    "Falling back to full-wavelength evaluation.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+
+        # QSOgen quasar SED preintegration
+        # Pre-integrate through filters at init time for fast triweight lookup.
+        qsogen_preint = None
+        if (
+            precompute
+            and self._z_fixed is not None
+            and self.filter_waves is not None
+            and self._agn_model == "qsogen"
+        ):
+            try:
+                from tengri.components.agn.qsogen_precompute import (
+                    build_lookup,
+                    precompute,
+                )
+
+                _precomp = precompute(
+                    self.filter_waves,
+                    self.filter_trans,
+                    redshift=float(self._z_fixed),
+                    parameters=self.spec,
+                )
+                qsogen_preint = build_lookup(_precomp)
+            except Exception as e:
+                warnings.warn(
+                    f"qsogen preintegration failed: {e}. "
+                    "Falling back to full-wavelength evaluation.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+
         return PrecomputedData(
             photometry=phot,
             dust_age_weights=dust_age_w,
@@ -879,6 +1014,10 @@ class SEDModel:
             dust_ir_lookup=dust_ir_lookup,
             kd_preintegrated=kd_preint,
             skirtor_preintegrated=skirtor_preint,
+            powerlaw_disc_preintegrated=powerlaw_disc_preint,
+            ss_disc_preintegrated=ss_disc_preint,
+            cigale_disc_preintegrated=cigale_disc_preint,
+            qsogen_preintegrated=qsogen_preint,
         )
 
     def _build_compositional_kernels(self):

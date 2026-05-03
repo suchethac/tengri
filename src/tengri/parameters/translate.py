@@ -127,6 +127,27 @@ _NEBULAR_IDENTITY_PARAMS = [
     "neb_fesc_lya",
 ]
 
+# Cue-only continuous abundance + density offsets (Li et al. 2025). Validated
+# in _param_defs._CUE_GAS_EXTRA_PARAMS but were silently stripped by
+# get_internal_params before this entry existed. See MISSING_FEATURES.md #16.
+_CUE_GAS_IDENTITY_PARAMS = [
+    "gas_logn",
+    "gas_logno",
+    "gas_logco",
+]
+
+# Cue ionising-spectrum coefficients (4 segment slopes + 3 segment ratios).
+# Same pre-existing plumbing gap. Registered only when nebular_mode == "cue".
+_CUE_IONSPEC_IDENTITY_PARAMS = [
+    "ionspec_index1",
+    "ionspec_index2",
+    "ionspec_index3",
+    "ionspec_index4",
+    "ionspec_logLratio1",
+    "ionspec_logLratio2",
+    "ionspec_logLratio3",
+]
+
 
 def identity_param_map(names: list[str]) -> dict[str, tuple[str, float, float]]:
     """Build param_map entries for parameters that pass through without unit conversion.
