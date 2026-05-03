@@ -48,11 +48,9 @@ def compute_gradient_sed(forward_model, params, param_name):
         """
         p = dict(params)
         p[param_name] = val
-        return forward_model(p)
+        return forward_model.predict_rest_sed(p).sed
 
-    gradient_sed = jax.grad(lambda v: jnp.sum(sed_as_fn_of_param(v)))(params[param_name])
-    # For a scalar param, grad gives us a scalar — we need the per-wavelength gradient
-    # Use jacobian instead
+    # Per-wavelength gradient: jacobian of SED w.r.t. the scalar parameter.
     gradient_sed = jax.jacobian(sed_as_fn_of_param)(params[param_name])
 
     return gradient_sed, forward_model.ssp_data.ssp_wave

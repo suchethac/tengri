@@ -65,8 +65,6 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 from tengri import (
     Fitter,
     Fixed,
-    LogUniform,
-    ModelConfig,
     Observation,
     Parameters,
     Photometry,
@@ -129,8 +127,10 @@ spec = Parameters(
 model = SEDModel(spec, ssp_data, observation=obs)
 
 # Ground-truth parameters and a mock observation at SNR = 20.
+# Use the model's MockData-returning helper so the rest of the
+# notebook can use attribute access (mock.flux_obs / mock.noise).
 truth = spec.sample(jax.random.PRNGKey(42))
-mock = generate_mock(model, truth, snr=20.0, key=jax.random.PRNGKey(43))
+mock = model.mock(truth, snr=20.0, key=jax.random.PRNGKey(43))
 
 print(f"Mock photometry (SNR=20): {BANDS}")
 print(f"Fluxes [erg/s/cm²/Hz]: {np.asarray(mock.flux_obs)}")
@@ -161,31 +161,29 @@ print(f"\nFit completed. Free parameters: {PARAM_NAMES}")
 # parameter forecasting.
 
 # %%
-# Use MAP estimate as evaluation point
-map_params = result.map_estimate
+# Evaluation point: the MAP estimate. Run a cheap MAP fit so Fisher and
+# saliency are anchored at the mode of the posterior.
+fitter_map = Fitter(model, mock.flux_obs, mock.noise)
+result_map = fitter_map.run("map", verbose=False)
+# MAP results expose point estimates via .params (not .samples).
+map_params = {name: result_map.params[name] for name in PARAM_NAMES}
 
-# Compute FIM
+# Compute the Fisher Information Matrix at MAP.
 fim, param_names = compute_fisher_matrix(
     model,
     map_params,
-    noise=mock_data.error,
+    noise=mock.noise,
     data_type="photometry",
-    param_names=[
-        "psd_sigma",
-        "psd_tau_yr",
-        "alpha",
-        "beta",
-        "tau_sfh",
-        "sfr_norm",
-        "log_z_abs",
-    ],
+    param_names=PARAM_NAMES,
 )
 
-# Diagonal parameter errors
+# Diagonal parameter errors (Laplace approximation)
 fisher_errors = fisher_parameter_errors(fim)
 
-# Compare to posterior widths
-posterior_errors = np.nanstd(result.chain, axis=0)[:7]  # First 7 free params
+# Compare to posterior widths from the NUTS run above.
+posterior_errors = np.array(
+    [np.nanstd(np.asarray(result.samples[name])) for name in PARAM_NAMES]
+)
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 4))
 
@@ -232,19 +230,11 @@ print(f"Fisher parameter errors:\n{dict(zip(param_names, fisher_errors))}")
 # "Which filters should I use to constrain age vs. dust vs. metallicity?"
 
 # %%
-# Compute gradient SED for all parameters (rest-frame)
+# Compute gradient SED for all free parameters (rest-frame wavelengths)
 gradients, wave_rest = compute_all_gradient_seds(
     model,
     map_params,
-    param_names=[
-        "psd_sigma",
-        "psd_tau_yr",
-        "alpha",
-        "beta",
-        "tau_sfh",
-        "sfr_norm",
-        "log_z_abs",
-    ],
+    param_names=PARAM_NAMES,
 )
 
 # Plot gradient SEDs: which parameter drives which wavelength?
@@ -283,15 +273,7 @@ plt.show()
 jac_phot, param_names_phot = compute_photometry_sensitivity(
     model,
     map_params,
-    param_names=[
-        "psd_sigma",
-        "psd_tau_yr",
-        "alpha",
-        "beta",
-        "tau_sfh",
-        "sfr_norm",
-        "log_z_abs",
-    ],
+    param_names=PARAM_NAMES,
 )
 
 # Normalize by parameter and flux magnitude for visibility
@@ -304,8 +286,8 @@ fig, ax = plt.subplots(figsize=(10, 3.5))
 im = ax.imshow(jac_norm.T, cmap="RdBu_r", aspect="auto")
 ax.set_xlabel("Filter")
 ax.set_ylabel("Parameter")
-ax.set_xticks(np.arange(len(bands)))
-ax.set_xticklabels(bands, rotation=45, ha="right")
+ax.set_xticks(np.arange(len(BANDS)))
+ax.set_xticklabels(BANDS, rotation=45, ha="right")
 ax.set_yticks(np.arange(len(param_names_phot)))
 ax.set_yticklabels(param_names_phot)
 ax.set_title("Photometric Sensitivity: which filter constrains which parameter?")
@@ -314,7 +296,7 @@ plt.tight_layout()
 plt.show()
 
 print("Photometry Sensitivity (normalized):")
-print(f"Filters: {bands}")
+print(f"Filters: {BANDS}")
 print(f"Parameters: {param_names_phot}")
 
 # %% [markdown]
@@ -332,8 +314,12 @@ print(f"Parameters: {param_names_phot}")
 # $\tau=10$ means 10 samples per independent draw.
 
 # %%
-# Check convergence of the NUTS chain
-chain_dict = {name: result.chain[:, i] for i, name in enumerate(param_names_phot)}
+# Check convergence of the NUTS chain. Posterior.samples is a dict
+# {param_name: ndarray of shape (n_samples,)} — pass it straight through.
+chain_dict = {
+    name: np.asarray(result.samples[name])
+    for name in PARAM_NAMES
+}
 
 convergence_info = check_chain_length(
     chain_dict,

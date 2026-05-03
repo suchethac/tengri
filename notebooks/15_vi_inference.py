@@ -78,6 +78,10 @@ sys.path.insert(0, _nb_dir)
 
 import jax
 import jax.numpy as jnp
+import matplotlib
+
+if "ipykernel" not in sys.modules:
+    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -120,8 +124,11 @@ if _repo_data_root is None:
     _np_here = os.path.abspath(os.getcwd())
 
 try:
-    from _plot_style import setup_style, COLORS
+    from _plot_style import setup_style, COLORS as _COLORS_DICT
     setup_style()
+    # The shared COLORS palette is a band-keyed dict; this notebook indexes
+    # by integer for arbitrary curves, so flatten to a list of hex values.
+    COLORS = list(_COLORS_DICT.values()) if isinstance(_COLORS_DICT, dict) else list(_COLORS_DICT)
 except ImportError:
     COLORS = [
         "#2b6ca3",

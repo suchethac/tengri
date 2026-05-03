@@ -50,6 +50,10 @@ sys.path.insert(0, _nb_dir)
 
 import jax
 import jax.numpy as jnp
+import matplotlib
+
+if "ipykernel" not in sys.modules:
+    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
