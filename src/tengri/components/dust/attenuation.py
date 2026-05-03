@@ -149,7 +149,9 @@ def resolve_dust_law(name: str) -> Callable:
     return DUST_LAWS[name]
 
 
-get_dust_law = resolve_dust_law
+from tengri._deprecated import deprecated_alias
+
+get_dust_law = deprecated_alias(resolve_dust_law, old_name="get_dust_law")
 
 
 # ── Utility: Drude profile for the 2175 Angstrom UV bump ──────────
@@ -647,9 +649,13 @@ def prevot_smc(
 ) -> jnp.ndarray:
     r"""Prevot et al. (1984) SMC extinction law for AGN obscuration.
 
-    Analytic SMC extinction curve from the UV to near-infrared. Used in
-    AGNfitter for AGN disc reddening. R_V = 2.72. Ramps to zero below
-    62 Å to suppress reddening in the X-ray regime (E > 200 eV).
+    Analytic SMC extinction curve from the UV to near-infrared, used in
+    AGNfitter for AGN disc reddening. The published Prevot+1984 form
+    gives :math:`k_{\rm raw}(\lambda) = A(\lambda)/E(B-V)` with
+    :math:`R_V = 2.72`; this function returns the V-band-normalised
+    curve :math:`k(\lambda) = A(\lambda)/A(V) = k_{\rm raw}(\lambda)/k_{\rm raw}(V)`,
+    matching the convention used by ``cardelli`` and the rest of the
+    ``components.dust.attenuation`` registry (k(V)=1).
 
     Parameters
     ----------
@@ -659,20 +665,21 @@ def prevot_smc(
     Returns
     -------
     ndarray, shape (n_wave,)
-        Extinction curve k(λ). [dimensionless]
+        Extinction curve :math:`k(\lambda) = A(\lambda)/A(V)` normalised
+        to ``k(5500 A) = 1``. [dimensionless]
 
     Notes
     -----
     **JIT-compatible**: yes — all operations are ``jnp`` primitives.
 
-    Implements the functional form from Prevot et al. (1984):
-
     .. math::
 
-        k(\lambda) = 1.39 \cdot \lambda^{-1.2} - 0.38
+        k_{\rm raw}(\lambda) = 1.39 \, \lambda_{\mu m}^{-1.2} - 0.38,
+        \qquad
+        k(\lambda) = k_{\rm raw}(\lambda) / k_{\rm raw}(0.55\,\mu m)
 
-    where :math:`\lambda` is in micrometers [μm], with :math:`R_V = 2.72`
-    (total-to-selective extinction ratio).
+    where :math:`\lambda_{\mu m}` is wavelength in micrometres and
+    :math:`k_{\rm raw}(0.55) \approx 2.468`.
 
     For wavelengths below 62 Å, reddening is ramped to zero using a smooth
     sigmoid (no hard discontinuity) to suppress extinction in the X-ray regime
@@ -691,8 +698,12 @@ def prevot_smc(
     """
     # Convert wavelength from Å to μm
     wavelength_um = wavelength / 1e4
-    # k(lambda) = 1.39 * lambda^-1.2 - 0.38  (lambda in μm)
-    k_prevot = 1.39 * jnp.power(wavelength_um, -1.2) - 0.38
+    # Raw Prevot+1984 form: A(lambda)/E(B-V) with lambda in μm
+    k_raw = 1.39 * jnp.power(wavelength_um, -1.2) - 0.38
+    # Normalise to k(V) = 1 (V band = 5500 Å = 0.55 μm) so that
+    # the result is A(lambda)/A(V), matching tengri's dust-law convention.
+    k_v_raw = 1.39 * (0.55) ** (-1.2) - 0.38  # ≈ 2.4683
+    k_norm = k_raw / k_v_raw
 
     # Suppress extinction for lambda < 62 A (X-ray regime, E > 200 eV)
     # where dust is ineffective. Use a smooth sigmoid ramp to avoid discontinuities.
@@ -704,7 +715,7 @@ def prevot_smc(
     sigmoid_slope = 0.5  # steeper transition for more aggressive ramp-down
     ramp_factor = 1.0 / (1.0 + jnp.exp(-sigmoid_slope * (wavelength - lambda_xray_edge)))
 
-    return k_prevot * ramp_factor
+    return k_norm * ramp_factor
 
 
 @register_dust_law("cardelli")
