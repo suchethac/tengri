@@ -26,6 +26,13 @@ monolith deletion). Existing code reading
 ``predict_sfh_quantities(...).stellar_mass`` keeps working when the
 prediction is sourced from ``run_components``.
 
+### Tests (Phase II-2.6 — bridge regression suite)
+
+- ``tests/integration/test_state_quantities_bridges.py`` — 9 tests
+  pinning the orchestrator → legacy Quantities mapping. Covers all
+  five bridge types (SFH, SED, Radio, XRay, Ionizing): all-fields-
+  finite + physical-range assertions + JIT compatibility (rtol=1e-12).
+
 ### Added (Phase II-2.6 — Radio/XRay/Ionizing Quantities bridges)
 
 - ``RadioQuantities``, ``XRayQuantities``, ``IonizingQuantities``
