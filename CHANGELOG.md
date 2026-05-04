@@ -26,6 +26,23 @@ monolith deletion). Existing code reading
 ``predict_sfh_quantities(...).stellar_mass`` keeps working when the
 prediction is sourced from ``run_components``.
 
+### Added (Phase II-2.6 — emission-lines bridge: full Prediction parity)
+
+- ``NebularSEDComponent.apply`` now also calls
+  ``backend.predict_nebular_line_luminosities`` (when supported —
+  Cue, CloudyGrid) and publishes the discrete line catalogue as
+  ``state.derived["line_waves"]`` / ``state.derived["line_lums"]``.
+- ``tengri.forward.state_to_emission_lines(state)`` extracts the 11
+  standard survey-diagnostic lines via the legacy nearest-wavelength
+  matcher. Returns all-NaN when the active backend didn't publish a
+  catalogue (BakedIn, shock).
+- ``SEDModel.predict_emission_lines_via_orchestrator(params)``
+  exposes the bridge as a method.
+- Together with SFH / SED / Radio / XRay / Ionizing bridges, this
+  completes the **JAX-pytree mirror of the legacy Prediction object**.
+  Smoke fixture (Cue + PRSC-MILES) returns Balmer decrement
+  Hα/Hβ ≈ 2.8 (near case-B), [OIII]5007/Hβ ≈ 2.9, [NII]6584/Hα ≈ 0.23.
+
 ### Tests (Phase II-2.6 — bridge regression suite)
 
 - ``tests/integration/test_state_quantities_bridges.py`` — 9 tests
