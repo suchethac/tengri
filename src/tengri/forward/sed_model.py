@@ -2844,6 +2844,44 @@ class SEDModel:
 
         return state_to_sed_quantities(self.predict_via_orchestrator(params))
 
+    def predict_radio_quantities_via_orchestrator(self, params):
+        """Phase II-2.6 orchestrator-path radio quantities.
+
+        Returns
+        -------
+        RadioQuantities
+            ``l_1p4ghz``, ``l_thermal``, ``l_nonthermal``, ``q_ir``.
+            Fields are NaN if the configured chain has no
+            :class:`RadioSEDComponent`.
+        """
+        from tengri.forward import state_to_radio_quantities
+
+        return state_to_radio_quantities(self.predict_via_orchestrator(params))
+
+    def predict_xray_quantities_via_orchestrator(self, params):
+        """Phase II-2.6 orchestrator-path X-ray quantities.
+
+        Returns
+        -------
+        XRayQuantities
+            ``l_x_xrb``, ``l_x_agn``, ``l_x_total``.
+        """
+        from tengri.forward import state_to_xray_quantities
+
+        return state_to_xray_quantities(self.predict_via_orchestrator(params))
+
+    def predict_ionizing_quantities_via_orchestrator(self, params):
+        """Phase II-2.6 orchestrator-path ionizing-photon quantities.
+
+        Returns
+        -------
+        IonizingQuantities
+            ``q_h``, ``xi_ion``.
+        """
+        from tengri.forward import state_to_ionizing_quantities
+
+        return state_to_ionizing_quantities(self.predict_via_orchestrator(params))
+
     def predict_via_orchestrator(self, params):
         """Forward pass via the Phase II SEDComponent orchestrator.
 
