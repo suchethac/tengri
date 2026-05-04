@@ -13,10 +13,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   NamedTuple (all 7 fields populated; mass-weighted age and metallicity
   computed from the published SFH grid).
 - ``tengri.forward.state_to_sed_quantities(state)`` — converts to
-  ``SEDQuantities``; populates ``l_bol``, ``l_tir``,
-  ``l_dust_absorbed`` directly from the state. UV-slope, Dn4000,
-  Balmer-break, M_UV, and luminosity-weighted quantities return ``NaN``
-  pending the next bridge step.
+  ``SEDQuantities``; **13/15 fields populated**: ``l_bol``, ``l_tir``,
+  ``l_dust_absorbed``, ``irx``, ``uv_slope_beta``, ``dn4000``,
+  ``balmer_break``, ``m_uv``, ``fuv_flux``, ``nuv_flux``,
+  ``fuv_flux_intrinsic``, ``nuv_flux_intrinsic``, ``rest_uv_color``.
+  Pre-dust UV uses the per-age cube (``state.derived["lnu_age"]``)
+  reconstructed before dust overwrites ``sed_intrinsic`` — gives
+  physical fuv_intrinsic / fuv ratio (~3 with tau_bc=0.5).
+  Luminosity-weighted age and metallicity remain ``NaN`` pending
+  additional intermediate state.
 
 These are the first half of full ``Prediction`` parity (which gates
 monolith deletion). Existing code reading
