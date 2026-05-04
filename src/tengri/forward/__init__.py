@@ -16,7 +16,12 @@ Usage::
     from tengri.forward import build_components, run_components
 """
 
-from tengri.forward.component_factory import build_components, chain_summary
+from tengri.forward.component_factory import (
+    build_components,
+    chain_summary,
+    state_to_sed_quantities,
+    state_to_sfh_quantities,
+)
 from tengri.forward.orchestrator import run_components
 from tengri.forward.result import SEDResult
 
@@ -25,4 +30,6 @@ __all__ = [
     "build_components",
     "chain_summary",
     "run_components",
+    "state_to_sed_quantities",
+    "state_to_sfh_quantities",
 ]

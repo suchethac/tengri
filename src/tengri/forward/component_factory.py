@@ -31,6 +31,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+import jax.numpy as jnp
+
 from tengri.components.agn.component import AGNSEDComponent, AGNSEDComponentConfig
 from tengri.components.dust.two_component import (
     DustSEDComponent,
@@ -47,7 +49,12 @@ from tengri.components.stellar.component import StellarSEDComponentConfig
 from tengri.components.xray.component import XRaySEDComponent
 from tengri.core.component import SEDComponent
 
-__all__ = ["build_components"]
+__all__ = [
+    "build_components",
+    "chain_summary",
+    "state_to_sed_quantities",
+    "state_to_sfh_quantities",
+]
 
 
 def build_components(
@@ -207,3 +214,156 @@ def chain_summary(components: Sequence[SEDComponent]) -> str:
     matters more than the parameter values.
     """
     return " → ".join(c.name for c in components)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# PipelineState → legacy Quantities bridges
+# ─────────────────────────────────────────────────────────────────────
+#
+# Build out the legacy ``SFHQuantities`` / ``SEDQuantities`` NamedTuples
+# from a fresh :class:`PipelineState`. Lets users with code that
+# expects the legacy types swap in the orchestrator path without
+# rewriting downstream call sites. Full :class:`Prediction` parity
+# (lines, radio, X-ray, ionising-photon properties) is follow-up.
+
+
+def state_to_sfh_quantities(state: Any):
+    """Convert orchestrator :class:`PipelineState` → :class:`SFHQuantities`.
+
+    Pulls the per-galaxy SFH derived quantities published by
+    :class:`StellarSEDComponent` (``log_mstar``, ``log_mstar_formed``,
+    ``sfr_10myr``, ``sfr_100myr``, ``sfh_grid_lbt_yr``, ``sfr_history``,
+    ``log_metallicity_history``) and packages them in the legacy
+    NamedTuple shape so existing code reading
+    ``predict_sfh_quantities(...).stellar_mass`` keeps working when
+    sourced from the orchestrator path.
+
+    Parameters
+    ----------
+    state : PipelineState
+        Output of :func:`run_components` on a chain that includes
+        :class:`StellarSEDComponent`.
+
+    Returns
+    -------
+    SFHQuantities
+        ``stellar_mass``, ``stellar_mass_surviving``, ``sfr_100myr``,
+        ``sfr_10myr``, ``ssfr``, ``mass_weighted_age_gyr``,
+        ``mass_weighted_metallicity``.
+
+    Notes
+    -----
+    Mass-weighted age and metallicity are computed from
+    ``sfh_grid_lbt_yr`` × ``sfr_history`` (mass per bin) and
+    ``log_metallicity_history``. ``ssfr`` uses the **surviving** mass
+    in the denominator to match the legacy convention.
+
+    **JIT-compatible**: yes — pure JAX.
+    """
+    from tengri.forward.prediction import SFHQuantities
+
+    derived = state.derived
+    log_mstar = jnp.asarray(derived["log_mstar"])
+    log_mstar_formed = jnp.asarray(derived["log_mstar_formed"])
+    stellar_mass_surviving = jnp.power(10.0, log_mstar)
+    stellar_mass = jnp.power(10.0, log_mstar_formed)
+
+    sfh_lbt = jnp.asarray(derived["sfh_grid_lbt_yr"])
+    sfr_history = jnp.asarray(derived["sfr_history"])
+    log_z_history = jnp.asarray(derived["log_metallicity_history"])
+
+    # Mass per SFH bin (∫ SFR dt locally) — used as weight for the
+    # mass-weighted age and metallicity.
+    bin_widths = jnp.gradient(sfh_lbt)
+    bin_mass = jnp.maximum(sfr_history * bin_widths, 0.0)
+    bin_mass_total = jnp.maximum(jnp.sum(bin_mass), 1e-30)
+    mw_age_yr = jnp.sum(sfh_lbt * bin_mass) / bin_mass_total
+    mw_age_gyr = mw_age_yr / 1e9
+    mw_z = jnp.sum(log_z_history * bin_mass) / bin_mass_total
+
+    sfr_100myr = jnp.asarray(derived["sfr_100myr"])
+    sfr_10myr = jnp.asarray(derived["sfr_10myr"])
+    ssfr = sfr_100myr / jnp.maximum(stellar_mass_surviving, 1e-30)
+
+    return SFHQuantities(
+        stellar_mass=stellar_mass,
+        stellar_mass_surviving=stellar_mass_surviving,
+        sfr_100myr=sfr_100myr,
+        sfr_10myr=sfr_10myr,
+        ssfr=ssfr,
+        mass_weighted_age_gyr=mw_age_gyr,
+        mass_weighted_metallicity=mw_z,
+    )
+
+
+def state_to_sed_quantities(state: Any):
+    """Convert orchestrator :class:`PipelineState` → :class:`SEDQuantities`.
+
+    Maps the directly-available SED quantities and computes the
+    UV/break diagnostics from ``state.sed_intrinsic`` and
+    ``state.wave``. Fields that the orchestrator does not yet publish
+    or that require luminosity-weighting infrastructure are returned
+    as ``NaN`` — callers that need them should keep using
+    :meth:`SEDModel.predict_sed_quantities` until the orchestrator
+    bridge is extended.
+
+    Parameters
+    ----------
+    state : PipelineState
+        Output of :func:`run_components` on a chain that includes
+        :class:`StellarSEDComponent` (and ideally
+        :class:`DustSEDComponent` for ``l_tir`` / ``l_dust_absorbed``).
+
+    Returns
+    -------
+    SEDQuantities
+        ``l_bol``, ``l_tir``, ``l_dust_absorbed`` populated;
+        UV-slope / Dn4000 / Balmer-break / M_UV / luminosity-weighted
+        quantities returned as ``NaN`` (TODO: port the legacy
+        :func:`compute_uv_slope_beta` etc. machinery).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX.
+    **Units**: bolometric luminosities returned in Lsun (matches the
+    legacy NamedTuple convention).
+    """
+    from tengri.forward.prediction import SEDQuantities
+    from tengri.utils.physics_constants import C_AA, L_SUN
+
+    sed = state.sed_intrinsic
+    wave = state.wave
+    nu = C_AA / wave
+
+    # Bolometric luminosity in Lsun. Wave is ascending, so nu is
+    # descending; ``trapezoid(L_nu, nu)`` returns a negative signed
+    # area. ``abs(...)`` recovers the positive luminosity.
+    l_bol_erg = jnp.abs(jnp.trapezoid(sed, nu))
+    l_bol = l_bol_erg / L_SUN
+
+    # Dust-absorbed and IR re-emission luminosities, available when
+    # DustSEDComponent ran in the chain.
+    derived = state.derived
+    l_ir = jnp.asarray(derived.get("L_ir", 0.0))
+    l_absorbed = jnp.asarray(derived.get("L_absorbed", 0.0))
+    l_tir = l_ir / L_SUN
+    l_dust_absorbed = l_absorbed / L_SUN
+
+    nan_scalar = jnp.asarray(jnp.nan)
+    return SEDQuantities(
+        l_bol=l_bol,
+        l_tir=l_tir,
+        l_dust_absorbed=l_dust_absorbed,
+        irx=nan_scalar,
+        uv_slope_beta=nan_scalar,
+        dn4000=nan_scalar,
+        balmer_break=nan_scalar,
+        m_uv=nan_scalar,
+        fuv_flux=nan_scalar,
+        nuv_flux=nan_scalar,
+        fuv_flux_intrinsic=nan_scalar,
+        nuv_flux_intrinsic=nan_scalar,
+        rest_uv_color=nan_scalar,
+        luminosity_weighted_age_gyr=nan_scalar,
+        luminosity_weighted_metallicity=nan_scalar,
+    )
