@@ -45,10 +45,12 @@ prediction is sourced from ``run_components``.
 
 ### Tests (Phase II-2.6 — bridge regression suite)
 
-- ``tests/integration/test_state_quantities_bridges.py`` — 9 tests
-  pinning the orchestrator → legacy Quantities mapping. Covers all
-  five bridge types (SFH, SED, Radio, XRay, Ionizing): all-fields-
-  finite + physical-range assertions + JIT compatibility (rtol=1e-12).
+- ``tests/integration/test_state_quantities_bridges.py`` — **13 tests
+  pinning all six bridge types** (SFH, SED, Radio, XRay, Ionizing,
+  Lines). Includes physical-range assertions (Balmer decrement
+  Hα/Hβ ≈ 2.85 for the Cue chain), JIT-compatibility (rtol=1e-12),
+  and the explicit "no-AGN → l_x_agn=0" / "no-Cue/Cloudy → all-NaN
+  Lines" boundary cases.
 
 ### Added (Phase II-2.6 — Radio/XRay/Ionizing Quantities bridges)
 
