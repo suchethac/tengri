@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel older runs of this workflow on the same ref when a new push lands.
+# Saves compute when commits land back-to-back.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
