@@ -366,9 +366,7 @@ def apply_lsf(
 
     """
     if float(sigma_v_kms) < 0.0:
-        raise ValueError(
-            f"sigma_v_kms must be non-negative, got {sigma_v_kms}"
-        )
+        raise ValueError(f"sigma_v_kms must be non-negative, got {sigma_v_kms}")
 
     resolution = jnp.asarray(resolution)
 
@@ -382,9 +380,7 @@ def apply_lsf(
     # templates; σ_v is the intrinsic galaxy velocity dispersion.
     sigma_lib2 = sigma_lib_kms**2
     sigma_v2 = sigma_v_kms**2
-    sigma_eff_kms = jnp.sqrt(
-        jnp.maximum(sigma_inst_kms**2 - sigma_lib2, 0.0) + sigma_v2
-    )
+    sigma_eff_kms = jnp.sqrt(jnp.maximum(sigma_inst_kms**2 - sigma_lib2, 0.0) + sigma_v2)
 
     # Dispatch based on whether R is constant or variable
     if resolution.ndim == 0:

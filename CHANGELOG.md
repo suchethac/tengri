@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed (Phase II-2 — unified loss-function core)
+
+- `tengri.inference.loss_functions` now has a single
+  `_build_data_neg_log_likelihood_fn` core. `build_loss_fn`,
+  `build_loglikelihood_fn` and `build_loglikelihood_unbounded_fn`
+  are thin wrappers over it, so the data term cannot drift in sign
+  or branch coverage between the three builders. File shrank
+  ~960 → ~700 lines. Two shared helpers,
+  `_unstandardize_parameters` and `_build_prediction`, replace the
+  inline copies of the unstandardize-and-resolve-mirrors block and
+  the `predict_photometry` / `predict_spectrum` dispatch. Public
+  API and behaviour unchanged.
+- **Bug fix (drift)**: `build_loglikelihood_fn` previously had no
+  censored-data branch — NSS evidence and Elliptical Slice Sampling
+  on photometry with non-detections silently treated masked bands
+  as zero-flux detections. Now eliminated by construction since the
+  censored case lives once in the auto-built `CensoredLikelihood`
+  shared by all three builders.
+
 ### Added (Phase II-1 scaffold — `tengri.core` protocols)
 
 - **`tengri.core.SEDComponent`** — Protocol every physics block (stellar,

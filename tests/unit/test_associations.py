@@ -89,9 +89,7 @@ def test_all_association_keys_registered(name: str, table: dict | list):
     ],
 )
 def test_dust_law_mapping(law: str, expected: str):
-    assert expected in DUST_LAW_CITATIONS[law], (
-        f"law_bc={law!r} should trigger {expected}"
-    )
+    assert expected in DUST_LAW_CITATIONS[law], f"law_bc={law!r} should trigger {expected}"
 
 
 @pytest.mark.parametrize(

@@ -49,6 +49,4 @@ class TestReddenDiscAmplitude:
         wave = jnp.array([1500.0, 5500.0, 8000.0])
         l_disc = jnp.ones_like(wave)
         out = np.asarray(_redden_disc(wave, l_disc, agn_ebv_disc=0.2))
-        assert out[0] < out[1] < out[2], (
-            f"expected UV < V < NIR transmission; got {out}"
-        )
+        assert out[0] < out[1] < out[2], f"expected UV < V < NIR transmission; got {out}"

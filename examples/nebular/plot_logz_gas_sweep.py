@@ -72,6 +72,7 @@ fig, ax = sweep_parameter(
 )
 ax.set_title("Gas Metallicity: Impact on Optical Forbidden Lines", fontsize=12)
 ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)")
+ax.set_ylim(0, 30_000)
 plt.tight_layout()
 plt.savefig("plot_logz_gas_sweep.png", dpi=150, bbox_inches="tight")
 plt.show()

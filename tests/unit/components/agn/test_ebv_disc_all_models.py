@@ -22,8 +22,7 @@ _DATA_DIR = Path(__file__).resolve().parents[4] / "data"
 _SILVA04 = _DATA_DIR / "silva04_torus_grid.h5"
 _CAT3D = _DATA_DIR / "cat3d_wind_torus_grid.h5"
 _SKIRTOR = any(
-    (_DATA_DIR / p).is_file()
-    for p in ("skirtor_templates_v2.h5", "skirtor_templates_v3.h5", "skirtor_templates.npz")
+    (_DATA_DIR / p).is_file() for p in ("skirtor_templates_v2.h5", "skirtor_templates_v3.h5")
 )
 
 

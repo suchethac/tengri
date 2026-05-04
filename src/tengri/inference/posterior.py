@@ -464,11 +464,7 @@ class Posterior:
         # AGN region: right of Kewley asymptote (x >= 0.47) OR above Kewley curve.
         agn = finite & ((x_arr >= 0.47) | (y_arr > kewley))
         # Composite: above Kauffmann but below Kewley (and left of Kewley asymptote).
-        composite = (
-            finite
-            & ~agn
-            & ((x_arr >= 0.05) | (y_arr > kauffmann))
-        )
+        composite = finite & ~agn & ((x_arr >= 0.05) | (y_arr > kauffmann))
         # SF: everything finite that's not AGN or composite.
         sf = finite & ~agn & ~composite
 
@@ -616,9 +612,7 @@ class Posterior:
         wave_out = jnp.asarray(first["rest_wavelength"])
         stacked = {key: [jnp.asarray(first[key])] for key in self._COMPONENT_KEYS}
         for i in range(1, n):
-            params_i = {
-                k: (v[i] if v.ndim >= 1 else v) for k, v in self.samples.items()
-            }
+            params_i = {k: (v[i] if v.ndim >= 1 else v) for k, v in self.samples.items()}
             comp = _one(params_i)
             for key in self._COMPONENT_KEYS:
                 stacked[key].append(jnp.asarray(comp[key]))
@@ -782,9 +776,7 @@ class Posterior:
             sed = self._model.predict_rest_sed(p)
             return jnp.stack(
                 [
-                    equivalent_width(
-                        sed.wavelength, sed.sed, lc, window_aa, continuum_width_aa
-                    )
+                    equivalent_width(sed.wavelength, sed.sed, lc, window_aa, continuum_width_aa)
                     for lc in wavelengths
                 ]
             )
@@ -1206,9 +1198,7 @@ class Posterior:
             preds = _predict_one(self.params)[None, :]
         else:
             sample_keys = [k for k, v in self.samples.items() if v.ndim >= 1]
-            n_total = (
-                int(self.samples[sample_keys[0]].shape[0]) if sample_keys else 0
-            )
+            n_total = int(self.samples[sample_keys[0]].shape[0]) if sample_keys else 0
             if not sample_keys or n_total == 0:
                 preds = _predict_one(self.params)[None, :]
             else:
@@ -1218,16 +1208,11 @@ class Posterior:
                     if key is None:
                         key = jax.random.PRNGKey(0)
                     indices = np.asarray(
-                        jax.random.choice(
-                            key, n_total, shape=(int(n_samples),), replace=True
-                        )
+                        jax.random.choice(key, n_total, shape=(int(n_samples),), replace=True)
                     )
                 preds_list = []
                 for idx in indices:
-                    params_i = {
-                        k: (v[idx] if v.ndim >= 1 else v)
-                        for k, v in self.samples.items()
-                    }
+                    params_i = {k: (v[idx] if v.ndim >= 1 else v) for k, v in self.samples.items()}
                     preds_list.append(_predict_one(params_i))
                 preds = jnp.stack(preds_list, axis=0)
 

@@ -78,11 +78,7 @@ def tree(model: SEDModel) -> str:
     sfh_type = getattr(model.spec, "mean_sfh_type", ["unknown"])
     sfh_name = "+".join(sfh_type) if isinstance(sfh_type, (list, tuple)) else str(sfh_type)
     lines.append(f"{branch} SFH: {sfh_name}")
-    sfh_params = [
-        p
-        for p in model.spec.free_params
-        if p.startswith("sfh_")
-    ]
+    sfh_params = [p for p in model.spec.free_params if p.startswith("sfh_")]
     for i, name in enumerate(sfh_params):
         prefix = last if i == len(sfh_params) - 1 else branch
         try:

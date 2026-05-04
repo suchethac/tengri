@@ -294,9 +294,8 @@ def equivalent_width(
 
     f_lambda = l_nu * (c_aa_s / (wavelength_aa**2))
 
-    line_mask = (
-        (wavelength_aa >= line_center_aa - window_aa)
-        & (wavelength_aa <= line_center_aa + window_aa)
+    line_mask = (wavelength_aa >= line_center_aa - window_aa) & (
+        wavelength_aa <= line_center_aa + window_aa
     )
 
     blue_lo = line_center_aa - window_aa - continuum_width_aa
@@ -310,8 +309,7 @@ def equivalent_width(
     n_blue = jnp.sum(blue_mask)
     n_red = jnp.sum(red_mask)
     f_cont = (
-        jnp.sum(jnp.where(blue_mask, f_lambda, 0.0))
-        + jnp.sum(jnp.where(red_mask, f_lambda, 0.0))
+        jnp.sum(jnp.where(blue_mask, f_lambda, 0.0)) + jnp.sum(jnp.where(red_mask, f_lambda, 0.0))
     ) / jnp.maximum(n_blue + n_red, 1.0)
 
     integrand = jnp.where(

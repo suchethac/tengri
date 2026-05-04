@@ -144,11 +144,7 @@ class TestFitResult:
                 input_data_hash="abc123",
             )
             # Use a Posterior-like dict structure with samples
-            inner = {
-                "samples": {
-                    "param": np.array([1.0, 2.0, 3.0])
-                }
-            }
+            inner = {"samples": {"param": np.array([1.0, 2.0, 3.0])}}
             result = FitResult(
                 inner=inner,
                 provenance=prov,

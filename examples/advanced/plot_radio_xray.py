@@ -61,6 +61,9 @@ components = [
 
 for l_nu, label, color, ls in components:
     l_np = np.array(l_nu)
+    pos = l_np[l_np > 0]
+    print(f"DIAG {label}: n_positive={len(pos)}, min={pos.min() if len(pos) else 0:.2e}, "
+          f"max={l_np.max():.2e}")
     # Mask zero-emission regions for clean plotting
     mask = l_np > 0
     if not np.any(mask):
@@ -76,12 +79,12 @@ ax.loglog(
 )
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("Panchromatic Galaxy SED: X-ray to Radio Components")
 ax.set_xlim(1e-4, 1e6)
+ax.set_ylim(1e20, 1e32)
 ax.legend(frameon=False, fontsize=10, ncol=2)
 
-# %%
 # Annotate wavelength regime boundaries
 for x, label in [(1.24e-4, "X-ray"), (3e4, "Radio")]:
     ax.axvline(x, color="grey", ls=":", lw=0.7, alpha=0.5)

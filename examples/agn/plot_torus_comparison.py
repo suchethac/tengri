@@ -27,7 +27,7 @@ fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 # --- Panel 1: Simple vs Two-Temperature Torus (Nenkova) ---
 ax = axes[0, 0]
 
-lbol = 44.0
+lbol = 11.0  # log10(L_bol / L_sun); ~10^44.5 erg/s (Seyfert/QSO)
 for torus_model, label, color in [
     ("simple", "Simple MBB Torus", "C0"),
     ("two_temp", "Two-Temperature Torus", "C1"),
@@ -40,10 +40,11 @@ for torus_model, label, color in [
     ax.loglog(wave_um, np.array(sed), lw=2.0, label=label, color=color)
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("Nenkova Simple vs Two-Temperature")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(1, 500)
+ax.set_ylim(1e24, 1e32)
 
 # --- Panel 2: Temperature sweep (Simple MBB) ---
 ax = axes[0, 1]
@@ -53,10 +54,11 @@ for temp in [800.0, 1200.0, 1500.0, 2000.0]:
     ax.loglog(wave_um, np.array(sed), lw=1.5, label=f"T={temp:.0f} K")
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("Simple Torus: Temperature Sensitivity")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(1, 500)
+ax.set_ylim(1e24, 1e32)
 
 # --- Panel 3: Covering fraction sweep ---
 ax = axes[1, 0]
@@ -66,10 +68,11 @@ for frac in [0.2, 0.5, 0.8]:
     ax.loglog(wave_um, np.array(sed), lw=1.5, label=f"Covering Frac={frac:.1f}")
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("Two-Temperature Torus: Covering Fraction")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(1, 500)
+ax.set_ylim(1e24, 1e32)
 
 # --- Panel 4: Silva04 (if available) ---
 ax = axes[1, 1]
@@ -95,10 +98,11 @@ if _silva04_path is not None:
         ax.loglog(wave_um, np.array(sed), lw=1.5, label=f"log(NH)={log_nh:.1f}")
 
     ax.set_xlabel(r"Wavelength [$\mu$m]")
-    ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+    ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
     ax.set_title("Silva+04 Smooth Torus: Column Density")
     ax.legend(fontsize=10, frameon=False)
     ax.set_xlim(1, 500)
+    ax.set_ylim(1e24, 1e32)
 else:
     # If Silva04 not available, show nenkova comparison
     sed1 = simple_torus(wavelength, agn_log_lbol=10.0, agn_torus_temp=1500.0)
@@ -110,10 +114,11 @@ else:
     ax.loglog(wave_um, np.array(sed3), lw=1.5, label="log(L_bol)=45")
 
     ax.set_xlabel(r"Wavelength [$\mu$m]")
-    ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+    ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
     ax.set_title("Torus Luminosity Dependence")
     ax.legend(fontsize=10, frameon=False)
     ax.set_xlim(1, 500)
+    ax.set_ylim(1e24, 1e32)
 
 fig.suptitle("AGN Torus Models: Parametric vs Template-Based", fontsize=12)
 fig.tight_layout(rect=[0, 0, 1, 0.97])

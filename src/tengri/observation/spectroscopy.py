@@ -563,9 +563,7 @@ class Spectroscopy:
         flux_cgs = jnp.where(nan_mask, 0.0, flux_cgs)
 
         if resolution is None:
-            grating = str(
-                header.get("GRATING", primary_header.get("GRATING", ""))
-            ).upper()
+            grating = str(header.get("GRATING", primary_header.get("GRATING", ""))).upper()
             if "PRISM" in grating:
                 from tengri.observation.spectrum import nirspec_prism_resolution
 
@@ -732,7 +730,6 @@ def build_wavelength_grid(
     >>> from tengri.observation.spectrum import nirspec_prism_resolution
     >>> grid = build_wavelength_grid(nirspec_prism_resolution, 6000.0, 53000.0)
     >>> grid.shape[0]  # ~400-600 pixels depending on sampling
-    ...
 
     """
     import numpy as np

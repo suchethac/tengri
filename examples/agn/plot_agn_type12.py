@@ -54,8 +54,9 @@ for wl, lbl in [(0.1216, r"Ly$\alpha$"), (0.6563, r"H$\alpha$"), (9.7, "Silicate
             lbl, fontsize=10, color="grey", va="bottom", rotation=90)
 
 ax.set_xlim(1e-3, 100)
+ax.set_ylim(1e41, 1e46)
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$\nu L_\nu$ [arb.]")
+ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
 ax.set_title("Type 1 vs Type 2 AGN: Same Physics, Different Viewing Angle")
 ax.legend(fontsize=10, frameon=False)
 fig.tight_layout()

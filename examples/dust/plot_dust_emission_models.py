@@ -26,7 +26,9 @@ setup_style()
 # --- Wavelength grid: 1–1000 μm ---
 wave_aa = jnp.logspace(np.log10(1e4), np.log10(1e7), 2000)
 wave_um = np.array(wave_aa) * 1e-4
-L_ABS = 1e10  # Lsun
+# modified_blackbody is unit-agnostic — output L_nu is in (input)/Hz.
+# Pass erg/s so output is in erg/s/Hz (tengri's canonical SED unit).
+L_ABS = 1e10 * 3.828e33  # 10^10 L_sun expressed in erg/s
 
 
 def _mbb():
@@ -85,8 +87,9 @@ for label, color, lnu in MODELS:
     ax.loglog(wave_um[mask], y[mask], color=color, lw=1.8, label=label)
 
 ax.set_xlim(1, 1000)
+ax.set_ylim(1e29, 1e32)
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title(r"Dust Emission Models ($L_{\rm abs} = 10^{10}\,L_\odot$, $T = 35$ K)")
 ax.legend(fontsize=10, frameon=False, ncol=2)
 

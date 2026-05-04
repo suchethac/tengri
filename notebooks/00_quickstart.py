@@ -439,42 +439,6 @@ plot_sfh(
     method="NUTS",
 )
 ax.set_title("SFH Recovery: Monotonically Rising Profile (D = 7, NUTS)")
-sfh_true_param = model_param.predict_sfh(true_params_param)
-t_gyr_p = np.array(sfh_true_param["t_gyr"])
-sfr_key_p = "sfr_full" if model_param.spec.stochastic else "sfr_mean"
-sfr_true_p = np.array(sfh_true_param[sfr_key_p])
-inset = ax.inset_axes([0.58, 0.58, 0.38, 0.38])
-mask_200 = t_gyr_p < 0.2
-if hasattr(t_gyr_p, "__len__") and np.any(mask_200):
-    t_inset = t_gyr_p[mask_200] * 1e3  # Gyr → Myr
-    # Posterior SFH draws
-    if result_mcmc.samples is not None:
-        n_samp = len(next(iter(result_mcmc.samples.values())))
-        sfh_draws = []
-        for i in range(n_samp):
-            s_i = {k: result_mcmc.samples[k][i] for k in result_mcmc.samples}
-            sfh_draws.append(np.array(model_param.predict_sfh(s_i)[sfr_key_p])[mask_200])
-        sfh_arr = np.array(sfh_draws)
-        lo, hi = np.percentile(sfh_arr, [16, 84], axis=0)
-        median = np.median(sfh_arr, axis=0)
-        inset.fill_between(t_inset, lo, hi, color=COLORS["mcmc_nuts"], alpha=0.3, lw=0)
-        inset.plot(t_inset, median, color=COLORS["mcmc_nuts"], lw=1.2, label="Posterior")
-    else:
-        sfh_fit = model_param.predict_sfh(result_mcmc.params)
-        inset.plot(
-            t_inset,
-            np.array(sfh_fit[sfr_key_p])[mask_200],
-            color=COLORS["mcmc_nuts"],
-            lw=1.2,
-            ls="--",
-            label="MAP",
-        )
-    inset.plot(t_inset, sfr_true_p[mask_200], color=COLORS["truth"], lw=1.5, label="Truth")
-    inset.set_xlabel("Lookback [Myr]", fontsize=10)
-    inset.set_ylabel("SFR", fontsize=10)
-    inset.tick_params(labelsize=5)
-    inset.set_xlim(0, 200)
-    inset.legend(fontsize=10, loc="upper right")
 fig.tight_layout()
 # plt.savefig(os.path.join(FIGDIR, "fig03_sfh_param.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()

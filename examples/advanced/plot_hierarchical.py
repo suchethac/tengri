@@ -115,8 +115,8 @@ elapsed = time.perf_counter() - t0
 print(f"Hierarchical fit: {elapsed:.1f}s")
 
 # --- Figure: shared PSD posterior ---
-sig_samples = np.array(result.shared_samples["psd_sigma"])
-tau_samples = np.array(result.shared_samples["psd_tau_myr"])
+sig_samples = np.array(result.shared_samples["sfh_field_psd_sigma"])
+tau_samples = np.array(result.shared_samples["sfh_field_psd_tau_myr"])
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
 

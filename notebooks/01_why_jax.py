@@ -91,7 +91,10 @@ if not os.path.exists(_SSP_PATH):
     _SSP_PATH = "data/ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 
 ssp_data = load_ssp_data(_SSP_PATH)
-print(f"✓ Loaded SSP grid: {ssp_data.ssps.shape}, z ∈ [0, {ssp_data.zred.max():.2f}]")
+print(
+    f"✓ Loaded SSP grid: flux{tuple(ssp_data.ssp_flux.shape)}, "
+    f"n_age={ssp_data.ssp_lg_age_gyr.size}, n_met={ssp_data.ssp_lgmet.size}"
+)
 
 # %% [markdown]
 # Set up a minimal 7-D model (smooth star formation history + dust).
@@ -214,17 +217,22 @@ print("\nCompiling forward model for gradient computation...")
 sed = model.predict_photometry(params, mode="exact")
 print(f"  Model output: shape {sed.shape}, range [{sed.min():.2e}, {sed.max():.2e}] erg/s/Hz")
 
-# Define and JIT the gradient function
-grad_fn = jax.jit(jax.grad(log_likelihood_chi2, argnums=0))
+# Define and JIT the gradient function. We close over `model` so JAX doesn't
+# need to trace the SEDModel object — only the numeric `params` dict.
+def _grad_loss(params_dict):
+    return log_likelihood_chi2(params_dict, model)
+
+
+grad_fn = jax.jit(jax.grad(_grad_loss))
 
 print("\nCompiling gradient function...")
-_ = grad_fn(params, model)
+_ = grad_fn(params)
 
 # Time gradient vs forward pass
 n_evals = 20
 t0 = time.perf_counter()
 for _ in range(n_evals):
-    grads = grad_fn(params, model)
+    grads = grad_fn(params)
     _ = grads[next(iter(grads.keys()))].block_until_ready()
 grad_time = (time.perf_counter() - t0) / n_evals * 1e3
 
@@ -263,13 +271,7 @@ print("\nBuilding a batch of 100 galaxies...\n")
 
 # Generate 100 random parameter vectors (same 7-D model)
 n_galaxies = 100
-params_batch = {}
-for key in spec.free_params:
-    # Each galaxy gets a random sample
-    key_array = jax.random.split(jax.random.PRNGKey(123), n_galaxies)
-    params_batch[key] = jnp.array([
-        spec.prior[key].sample(k) for k in key_array
-    ])
+params_batch = spec.sample_batch(jax.random.PRNGKey(123), n_galaxies)
 
 print(f"Batch params shape: {next(iter(params_batch.values())).shape}")
 print(f"  (n_galaxies={n_galaxies},)")
@@ -277,30 +279,15 @@ print(f"  (n_galaxies={n_galaxies},)")
 # Define a vectorized forward model
 @jax.jit
 def batch_forward(params_batch):
-    """Apply model to a batch of parameter vectors via vmap."""
-    # vmap over the first (batch) dimension of each parameter
+    """Apply model to a batch of parameter vectors via vmap.
+
+    ``params_batch`` is a dict of arrays with shape (n_galaxies,). vmap over
+    axis 0 of each entry produces a stacked photometry array (n_galaxies, n_bands).
+    """
     def single_galaxy(param_dict):
         return model.predict_photometry(param_dict, mode="exact")
 
-    # Stack parameters into a batch: vmap maps over first axis
-    # We need to reshape: {key: (n,)} → vmap-friendly structure
-    def apply_vmap(pb):
-        # Reconstruct dict for each galaxy
-        def for_galaxy(i):
-            return {k: pb[k][i] for k in pb}
-        return jax.vmap(single_galaxy)(
-            jax.tree_map(lambda x: x, params_batch)
-        )
-
-    # Simpler approach: use tree_map aware vmap
-    def single_eval(**kwargs):
-        return single_galaxy(kwargs)
-
-    # Even simpler: tree-based vmap
-    return jax.vmap(single_galaxy, in_axes=jax.tree_map(
-        lambda x: 0,  # vmap over axis 0 of all parameters
-        params_batch
-    ))(params_batch)
+    return jax.vmap(single_galaxy)(params_batch)
 
 print("\nTiming batched forward model (100 galaxies)...")
 t0 = time.perf_counter()
@@ -329,14 +316,16 @@ print("  Scales to GPU/TPU naturally: ✓")
 # %%
 print("\nBuilding a combined inference function...\n")
 
-@jax.jit
-def batch_log_likelihood(params_batch, model):
-    """Likelihood for a batch of galaxies."""
-    def single_galaxy_loss(p):
-        return log_likelihood_chi2(p, model)
+def _make_batch_ll(model):
+    @jax.jit
+    def batch_log_likelihood(params_batch):
+        """Likelihood for a batch of galaxies."""
+        return jax.vmap(lambda p: log_likelihood_chi2(p, model))(params_batch)
 
-    # vmap the loss over all galaxies
-    return jax.vmap(single_galaxy_loss)(params_batch)
+    return batch_log_likelihood
+
+
+batch_log_likelihood = _make_batch_ll(model)
 
 # This compiles once and then:
 # - evaluates 100 likelihoods in ~10× the time of 1 galaxy (GPU scaling)
@@ -344,7 +333,7 @@ def batch_log_likelihood(params_batch, model):
 
 print("Evaluating batch likelihoods...")
 t0 = time.perf_counter()
-loglikes = batch_log_likelihood(params_batch, model)
+loglikes = batch_log_likelihood(params_batch)
 batch_like_time = (time.perf_counter() - t0) * 1e3
 
 print(f"  Batch time (100 galaxies):  {batch_like_time:>7.1f} ms")

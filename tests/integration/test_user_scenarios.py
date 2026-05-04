@@ -857,12 +857,12 @@ class TestAGNScience:
             )
 
     def test_b2_qsogen_tracer_leak(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
-        """B2. qsogen forbidden (D=10, BUG-NSS-03 tracer leak test).
+        """B2. qsogen with JIT-compiled inference (D=10, BUG-NSS-03 regression test).
 
         SEDModel: tsnorm + agn_model="qsogen" (template-based AGN)
-        Inference: map
-        Expected: ⚠️ BUG-NSS-03 — UnexpectedTracerError during JIT
-        Purpose: Confirm documented bug, check error message clarity
+        Inference: map (which uses JIT internally)
+        Expected: ✓ SUCCESS — BUG-NSS-03 fixed (no UnexpectedTracerError)
+        Purpose: Regression test for BUG-NSS-03 fix (lazy file I/O moved to import time)
         """
         params = Parameters(
             mean_sfh_type="tsnorm",
@@ -874,13 +874,13 @@ class TestAGNScience:
             met_logzsol=Uniform(-2.0, 0.2),
             dust_tau_bc=Uniform(0.0, 3.0),
             dust_tau_diff=Uniform(0.0, 2.0),
-            agn_model="qsogen",  # Known to cause UnexpectedTracerError
+            agn_model="qsogen",  # Fixed: no longer causes UnexpectedTracerError
             agn_log_lbol=Uniform(43.0, 46.0),
             redshift=Fixed(mock_data_z1["redshift"]),
         )
 
         result = run_scenario(
-            name="B2_qsogen_BUG_NSS_03",
+            name="B2_qsogen_FIXED",
             params=params,
             ssp_data=mist_ssp,
             observation=mock_obs_z1,
@@ -890,15 +890,11 @@ class TestAGNScience:
             rng_key=rng_key,
         )
 
-        if not result["success"]:
-            if "UnexpectedTracerError" in result["error_type"]:
-                print("\n✓ BUG-NSS-03 reproduced: qsogen raises UnexpectedTracerError")
-                print(f"   Error: {result['error_msg'][:100]}")
-            else:
-                print(f"\n⚠️ Different error: {result['error_type']}: {result['error_msg'][:100]}")
-        else:
-            print("\n⚠️ BUG-NSS-03 NOT reproduced: qsogen succeeded")
-            print("   This could mean BUG-NSS-03 was fixed!")
+        assert result["success"], (
+            f"BUG-NSS-03 regression: qsogen MAP failed with {result['error_type']}: "
+            f"{result['error_msg'][:200]}"
+        )
+        print("\n✓ BUG-NSS-03 fixed: qsogen JIT compilation succeeded")
 
 
 class TestInferenceStressTests:

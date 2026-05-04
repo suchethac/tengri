@@ -28,7 +28,13 @@ _REGISTRY: dict[str, str] = {
     "ssp": "tengri.components.sps.precompute",
     # Nebular (CLOUDY emulator / tabulated grid)
     "cloudy": "tengri.components.nebular.cloudy_precompute",
-    # Dust IR emission — unified adapter for every template-based model
+    # Feltre+2016 AGN NLR (CLOUDY c13.03)
+    "feltre_nlr": "tengri.components.nebular.feltre_precompute",
+    # MAPPINGS V photoionization (stellar)
+    "mappings_v": "tengri.components.nebular.mappings_photo_precompute",
+    # MAPPINGS shock
+    "mappings_shock": "tengri.components.nebular.mappings_shock_precompute",
+    # Dust IR emission — template-based models
     "dl07": "tengri.components.dust.dust_emission_precompute",
     "draine_li2007": "tengri.components.dust.dust_emission_precompute",
     "dale2014": "tengri.components.dust.dust_emission_precompute",
@@ -36,11 +42,36 @@ _REGISTRY: dict[str, str] = {
     "astrodust": "tengri.components.dust.dust_emission_precompute",
     "bosa": "tengri.components.dust.dust_emission_precompute",
     "themis": "tengri.components.dust.dust_emission_precompute",
+    # Dust IR emission — analytic models
+    "modified_blackbody": "tengri.components.dust.dust_analytic_precompute",
+    "casey2012": "tengri.components.dust.dust_analytic_precompute",
+    "pah_drude": "tengri.components.dust.dust_analytic_precompute",
     # AGN torus templates
     "skirtor": "tengri.components.agn.skirtor_precompute",
+    "silva04": "tengri.components.agn.silva04_precompute",
+    "cat3d_wind": "tengri.components.agn.cat3d_precompute",
     # AGN K&D 3-zone disc (custom dataclass, but still Protocol-shaped)
     "kd_disc": "tengri.components.agn.kd_precompute",
     "kubota_done": "tengri.components.agn.kd_precompute",
+    # AGN analytic disc models
+    "powerlaw_disc": "tengri.components.agn.disc_precompute",
+    "ss_disc": "tengri.components.agn.disc_precompute",
+    "cigale_disc": "tengri.components.agn.disc_precompute",
+    # AGN empirical quasar model
+    "qsogen": "tengri.components.agn.qsogen_precompute",
+    # Radio analytic components
+    "radio_synchrotron": "tengri.components.radio.radio_precompute",
+    "radio_freefree": "tengri.components.radio.radio_precompute",
+    "radio_agn_jet": "tengri.components.radio.radio_precompute",
+    # X-ray analytic components
+    "xray_xrb": "tengri.components.xray.xray_precompute",
+    "xray_corona": "tengri.components.xray.xray_precompute",
+    "xray_corona_lopez24": "tengri.components.xray.xray_precompute",
+    # CB19 (3MdB_17) photoionization grid
+    "cb19": "tengri.components.nebular.cb19_precompute",
+    # AGN BLR / NLR Gaussian-line composers (filter-projection precompute only)
+    "blr": "tengri.components.agn.blr_precompute",
+    "nlr_gaussian": "tengri.components.agn.nlr_gaussian_precompute",
 }
 
 

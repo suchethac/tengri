@@ -1442,6 +1442,65 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
         if _has_preint_skirtor:
             non_stellar_phot = non_stellar_phot + skirtor_torus_preint
 
+        # TODO(precompute-consumer): The following PrecomputedData fields are
+        # built and stored by SEDModel but not yet consumed here. Wiring each
+        # one requires the paired (gate-runtime, add-precompute) pattern used
+        # for dust IR / KD / SKIRTOR above. Family-by-family follow-up:
+        #
+        #   AGN disc/empirical (PR 1):
+        #     - state.precomputed.powerlaw_disc_preintegrated
+        #     - state.precomputed.ss_disc_preintegrated
+        #     - state.precomputed.cigale_disc_preintegrated
+        #     - state.precomputed.qsogen_preintegrated
+        #     Gate site: agn_model_fn_full call near line 1324.
+        #
+        #   AGN torus alternatives (PR 2):
+        #     - state.precomputed.silva04_preintegrated
+        #     - state.precomputed.cat3d_preintegrated
+        #     Gate site: same agn_model_fn_full call, branch on state.agn_model.
+        #
+        #   Radio (PR 5):
+        #     - state.precomputed.radio_synchrotron_preintegrated
+        #     - state.precomputed.radio_freefree_preintegrated
+        #     - state.precomputed.radio_agn_jet_preintegrated
+        #     Gate site: radio_emission call near line 1361. Requires either
+        #     refactoring radio_emission to expose per-component subfunctions
+        #     OR computing the three subcomponents inline in the kernel so
+        #     the precomputes can be substituted independently.
+        #
+        #   X-ray (PR 6):
+        #     - state.precomputed.xray_xrb_preintegrated
+        #     - state.precomputed.xray_corona_preintegrated
+        #     - state.precomputed.xray_corona_lopez24_preintegrated
+        #     Gate site: xray_emission call near line 1385. Same refactor
+        #     pattern as radio.
+        #
+        #   Line emitters (PR 4) — DIFFERENT ARCHITECTURE; do NOT route through
+        #   PrecomputedData. The kernel consumes line emission via duck-typed
+        #   methods on ``state.nebular_backend`` (``_has_preint_photometry``,
+        #   ``_preint_continuum``, ``_preint_lines``, ``_line_lum_collapsed``,
+        #   ``_young_idx``, ``_qh_table``); see lines 169-199 above and the
+        #   reference implementation in
+        #   ``CloudyGridBackend.preintegrate_for_photometry``.
+        #
+        #     - CB19, MAPPINGS V (stellar photoionization alternatives):
+        #       implement the duck-typed surface on the backend class so the
+        #       existing nebular branch picks them up; precompute adapter
+        #       supplies the data.
+        #     - Feltre NLR, BLR, NLR-Gaussian (AGN nebular): no fit to the
+        #       stellar duck-type — needs a NEW AGN-nebular branch in the AGN
+        #       photometry path, scaling on ``L_disc × covering_fraction``
+        #       not Q_H.
+        #     - MAPPINGS shock: independent again; needs a shock kernel branch.
+        #
+        #   Each is a separate PR with its own equivalence harness against the
+        #   runtime path.
+        #
+        # See `tests/unit/test_precompute_protocol.py` for the conformance
+        # surface and `scripts/benchmark_precompute_analytic.py` for the
+        # speed-up motivation. Each family wiring needs a numerical-equivalence
+        # test against the runtime path (1e-4 rel tol) per the original plan.
+
         return stellar_phot + non_stellar_phot
 
     # --- Fused end-to-end wrapper: params dict → photometry ---

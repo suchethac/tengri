@@ -48,7 +48,7 @@ ax.set_xlabel(r"Observed wavelength [$\AA$]", fontsize=12)
 ax.set_ylabel("IGM transmission", fontsize=12)
 ax.set_xlim(500, 50000)
 ax.set_xscale("log")
-ax.set_ylim(-0.05, 1.1)
+ax.set_ylim(-0.02, 1.05)
 ax.legend(fontsize=10, frameon=False, ncol=2, loc="upper right")
 ax.set_title("IGM Transmission Curves (Inoue+2014)", fontsize=12)
 

@@ -26,22 +26,22 @@ fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 ax = axes[0, 0]
 
 for log_lbol in [43.0, 44.0, 45.0, 46.0]:
-    L_bol = 10.0**log_lbol * 3.828e33  # erg/s
+    L_bol = 10.0**log_lbol  # erg/s
     l_xray = xray_agn_corona(wavelength, L_agn_bol=L_bol)
     ax.loglog(wave_keV, np.array(l_xray), lw=1.5, label=f"log(L_bol)={log_lbol:.0f}")
 
 ax.set_xlabel("Energy [keV]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("AGN X-ray Corona: Luminosity Sequence")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.1, 1000)
-ax.set_ylim(1e28, 1e35)
+ax.set_ylim(1e20, 1e27)
 
 # --- Panel 2: Show X-ray continuum shape (Compton reflection) ---
 ax = axes[0, 1]
 
 log_lbol = 44.0
-L_bol = 10.0**log_lbol * 3.828e33
+L_bol = 10.0**log_lbol
 
 l_xray = xray_agn_corona(wavelength, L_agn_bol=L_bol)
 
@@ -59,25 +59,26 @@ ax.axvspan(10.0, 100.0, alpha=0.2, color="C3", label="Reflection (>10 keV)")
 ax.axvline(6.4, color="red", ls="--", lw=1.0, alpha=0.7, label="Fe K-α (6.4 keV)")
 
 ax.set_xlabel("Energy [keV]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("AGN X-ray Spectral Features")
 ax.legend(fontsize=10, frameon=False, ncol=2)
 ax.set_xlim(0.1, 1000)
-ax.set_ylim(1e28, 1e35)
+ax.set_ylim(1e20, 1e27)
 
 # --- Panel 3: High-luminosity AGN ---
 ax = axes[1, 0]
 
 for log_lbol in [45.0, 45.5, 46.0, 46.5]:
-    L_bol = 10.0**log_lbol * 3.828e33
+    L_bol = 10.0**log_lbol
     l_xray = xray_agn_corona(wavelength, L_agn_bol=L_bol)
     ax.loglog(wave_keV, np.array(l_xray), lw=1.5, label=f"log(L_bol)={log_lbol:.1f}")
 
 ax.set_xlabel("Energy [keV]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("AGN X-ray: Ultra-Luminous Range")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.1, 1000)
+ax.set_ylim(1e22, 1e27)
 
 # --- Panel 4: Spectral index vs luminosity (implicit) ---
 ax = axes[1, 1]
@@ -86,15 +87,16 @@ log_lbol_range = np.linspace(42.0, 46.5, 12)
 colors = plt.cm.plasma(np.linspace(0, 1, len(log_lbol_range)))
 
 for log_lbol, color in zip(log_lbol_range, colors):
-    L_bol = 10.0**log_lbol * 3.828e33
+    L_bol = 10.0**log_lbol
     l_xray = xray_agn_corona(wavelength, L_agn_bol=L_bol)
     mask = np.array(l_xray) > 0
     ax.loglog(wave_keV[mask], np.array(l_xray)[mask], lw=1.0, color=color, alpha=0.7)
 
 ax.set_xlabel("Energy [keV]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("AGN X-ray SED Family")
 ax.set_xlim(0.1, 1000)
+ax.set_ylim(1e20, 1e27)
 
 # Colorbar-like legend
 sm = plt.cm.ScalarMappable(

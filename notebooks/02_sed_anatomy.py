@@ -390,7 +390,7 @@ for _wbreak, _wlabel, _xside in [
     )
 
 fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "01_sed_decomposition.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(FIGDIR, "01_sed_decomposition.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 print("→ Next: build the SED in steps using separate forward models (same SSP, toggled modules).")

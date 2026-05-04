@@ -1113,6 +1113,120 @@ class SEDModel:
                     stacklevel=2,
                 )
 
+        # Radio analytic precomputes (PR 5).  These build cleanly per the
+        # protocol but the kernel does not yet consume them; they are stored
+        # on PrecomputedData so a future kernel branch can swap in the lookup
+        # without re-touching SEDModel.  See benchmarks: ~5x faster than
+        # runtime evaluation in isolation; see TODOs in
+        # ``components/radio/radio_precompute.py``.
+        radio_synchrotron_preint = None
+        radio_freefree_preint = None
+        radio_agn_jet_preint = None
+        if (
+            precompute
+            and self._z_fixed is not None
+            and self.filter_waves is not None
+            and getattr(self, "_uses_radio", False)
+        ):
+            try:
+                from tengri.components.radio.radio_precompute import (
+                    build_lookup as _radio_build,
+                    precompute as _radio_precompute,
+                )
+
+                if getattr(self, "_radio_sfr_mode", "bell2003") == "bell2003":
+                    _p = _radio_precompute(
+                        self.filter_waves,
+                        self.filter_trans,
+                        redshift=float(self._z_fixed),
+                        parameters=self.spec,
+                        model="radio_synchrotron",
+                    )
+                    radio_synchrotron_preint = _radio_build(_p, model="radio_synchrotron")
+                if getattr(self, "_radio_include_freefree", True):
+                    _p = _radio_precompute(
+                        self.filter_waves,
+                        self.filter_trans,
+                        redshift=float(self._z_fixed),
+                        parameters=self.spec,
+                        model="radio_freefree",
+                    )
+                    radio_freefree_preint = _radio_build(_p, model="radio_freefree")
+                _p = _radio_precompute(
+                    self.filter_waves,
+                    self.filter_trans,
+                    redshift=float(self._z_fixed),
+                    parameters=self.spec,
+                    model="radio_agn_jet",
+                )
+                radio_agn_jet_preint = _radio_build(_p, model="radio_agn_jet")
+            except Exception as e:
+                warnings.warn(
+                    f"Radio preintegration failed: {e}. "
+                    "Falling back to full-wavelength evaluation.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+
+        # X-ray analytic precomputes (PR 6).  Same caveat as radio: built and
+        # stored; kernel consumption pending.
+        xray_xrb_preint = None
+        xray_corona_preint = None
+        xray_corona_lopez24_preint = None
+        if (
+            precompute
+            and self._z_fixed is not None
+            and self.filter_waves is not None
+            and getattr(self, "_uses_xray", False)
+        ):
+            try:
+                from tengri.components.xray.xray_precompute import (
+                    build_lookup as _xray_build,
+                    precompute as _xray_precompute,
+                )
+
+                _p = _xray_precompute(
+                    self.filter_waves,
+                    self.filter_trans,
+                    redshift=float(self._z_fixed),
+                    parameters=self.spec,
+                    model="xray_xrb",
+                )
+                xray_xrb_preint = _xray_build(_p, model="xray_xrb")
+                _p = _xray_precompute(
+                    self.filter_waves,
+                    self.filter_trans,
+                    redshift=float(self._z_fixed),
+                    parameters=self.spec,
+                    model="xray_corona",
+                )
+                xray_corona_preint = _xray_build(_p, model="xray_corona")
+                _p = _xray_precompute(
+                    self.filter_waves,
+                    self.filter_trans,
+                    redshift=float(self._z_fixed),
+                    parameters=self.spec,
+                    model="xray_corona_lopez24",
+                )
+                xray_corona_lopez24_preint = _xray_build(_p, model="xray_corona_lopez24")
+            except Exception as e:
+                warnings.warn(
+                    f"X-ray preintegration failed: {e}. "
+                    "Falling back to full-wavelength evaluation.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+
+        # Line-emitter precomputes (PR 4) intentionally NOT built here.
+        # The photometry kernel consumes line emission via duck-typed methods
+        # on ``state.nebular_backend`` (see ``CloudyGridBackend.preintegrate_for_photometry``
+        # and ``_kernels/hybrid.py`` lines 169-199), not via PrecomputedData.
+        # Wiring CB19 / MAPPINGS V to the kernel means making each backend
+        # class implement that duck-typed surface (with the precompute adapter
+        # providing the data); AGN-nebular emitters (Feltre, BLR, NLR-Gaussian)
+        # need a new AGN-nebular kernel branch entirely. Each is a separate
+        # follow-up PR with its own equivalence harness.
+
         return PrecomputedData(
             photometry=phot,
             dust_age_weights=dust_age_w,
@@ -1127,6 +1241,12 @@ class SEDModel:
             ss_disc_preintegrated=ss_disc_preint,
             cigale_disc_preintegrated=cigale_disc_preint,
             qsogen_preintegrated=qsogen_preint,
+            radio_synchrotron_preintegrated=radio_synchrotron_preint,
+            radio_freefree_preintegrated=radio_freefree_preint,
+            radio_agn_jet_preintegrated=radio_agn_jet_preint,
+            xray_xrb_preintegrated=xray_xrb_preint,
+            xray_corona_preintegrated=xray_corona_preint,
+            xray_corona_lopez24_preintegrated=xray_corona_lopez24_preint,
         )
 
     def _build_compositional_kernels(self):
@@ -2935,9 +3055,7 @@ class SEDModel:
         sigma_v_kms = self._get_sigma_v_kms(params)
 
         if self.observation is not None and self.observation.spectroscopy is not None:
-            return self.observation.observe_spectrum(
-                obs_sed, z, dl_cm, sigma_v_kms=sigma_v_kms
-            )
+            return self.observation.observe_spectrum(obs_sed, z, dl_cm, sigma_v_kms=sigma_v_kms)
 
         wave_rest = obs_sed.wavelength / (1.0 + z)
 

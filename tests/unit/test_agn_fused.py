@@ -18,7 +18,10 @@ import pytest
 from tengri import Fixed, Parameters, SEDModel, Uniform
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
-_SKIRTOR_CANDIDATES = [_DATA_DIR / "skirtor_templates_v2.h5", _DATA_DIR / "skirtor_templates.npz"]
+_SKIRTOR_CANDIDATES = [
+    _DATA_DIR / "skirtor_templates_v3.h5",
+    _DATA_DIR / "skirtor_templates_v2.h5",
+]
 _SKIRTOR_PATH = next((p for p in _SKIRTOR_CANDIDATES if p.is_file()), None)
 _has_skirtor_data = _SKIRTOR_PATH is not None
 

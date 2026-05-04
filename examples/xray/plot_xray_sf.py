@@ -31,10 +31,11 @@ for sfr in [0.1, 1.0, 10.0, 100.0]:
     ax.loglog(wave_keV, np.array(l_xrb), lw=1.5, label=f"SFR={sfr:.1f} M_sun/yr")
 
 ax.set_xlabel("Energy [keV]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title(f"X-ray Binary SFR Dependence (M_*={stellar_mass:.0e} M_sun)")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.1, 100)
+ax.set_ylim(1e20, 1e32)
 
 # --- Panel 2: Stellar mass dependence (fixed SFR) ---
 ax = axes[0, 1]
@@ -45,10 +46,11 @@ for m_star in [1e9, 1e10, 1e11, 1e12]:
     ax.loglog(wave_keV, np.array(l_xrb), lw=1.5, label=f"M_*={m_star:.0e} M_sun")
 
 ax.set_xlabel("Energy [keV]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title(f"X-ray Binary Mass Dependence (SFR={sfr:.1f} M_sun/yr)")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.1, 100)
+ax.set_ylim(1e20, 1e32)
 
 # --- Panel 3: HMXB vs LMXB ratio ---
 ax = axes[1, 0]
@@ -63,10 +65,11 @@ for sfr in sfr_vals:
     ax.loglog(wave_keV, np.array(l_xrb), lw=1.5, label=f"SFR={sfr:.1f}")
 
 ax.set_xlabel("Energy [keV]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("X-ray Binary Spectral Shape")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.1, 100)
+ax.set_ylim(1e20, 1e32)
 
 # --- Panel 4: L_X vs SFR and M_* (heatmap via lines) ---
 ax = axes[1, 1]
@@ -82,9 +85,10 @@ for sfr, color in zip(sfr_range, colors):
     ax.loglog(wave_keV, np.array(l_xrb), lw=1.0, color=color, alpha=0.6)
 
 ax.set_xlabel("Energy [keV]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title(f"X-ray Binary SFR Range (M_*={m_star_ref:.0e})")
 ax.set_xlim(0.1, 100)
+ax.set_ylim(1e20, 1e32)
 
 # Add colorbar-like legend
 sm = plt.cm.ScalarMappable(

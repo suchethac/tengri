@@ -638,42 +638,48 @@ class TestBrokenPowerlawEuvBranch:
 
 
 class TestLoadEmlineTemplateError:
-    """Test the FileNotFoundError path in _load_emline_template.
+    """Test the FileNotFoundError path in _load_emline_template_arrays.
 
-    The template file is typically found at data/qsogen_emline_template.dat,
-    so we must monkeypatch both the global cache and Path.is_file() to force
-    the error path to execute.
+    The template file is typically found at data/qsogen_emline_template.dat.
+    The module-level load happens at import time, so this test verifies the
+    loader function directly.
     """
 
     def test_raises_file_not_found_when_template_missing(self, monkeypatch):
         """FileNotFoundError raised when no candidate path is found.
 
-        ``import tengri.components.agn.qsogen as x`` binds to the *function*
-        ``qsogen`` re-exported by the package ``__init__``, not the module.
-        We use ``sys.modules`` to reliably access the module object.
+        Test the _load_emline_template_arrays function directly by patching
+        Path.is_file to force the error path.
         """
-        import sys
         from pathlib import Path
 
-        _mod = sys.modules["tengri.components.agn.qsogen"]
-
-        # Clear functools.cache so the loader re-runs on next call
-        _mod._load_emline_template.cache_clear()
+        from tengri.components.agn.qsogen import _load_emline_template_arrays
 
         # Patch Path.is_file to always return False, forcing the FileNotFoundError path
         monkeypatch.setattr(Path, "is_file", lambda self: False)
 
-        try:
-            with pytest.raises(FileNotFoundError, match="QSOGen emission line template"):
-                _mod._load_emline_template()
-        finally:
-            # Clear again so the error result is not cached for subsequent tests
-            _mod._load_emline_template.cache_clear()
+        with pytest.raises(FileNotFoundError, match="QSOGen emission line template"):
+            _load_emline_template_arrays()
 
-    def test_caches_result_on_second_call(self):
-        """Calling _load_emline_template twice returns the same cached object."""
-        from tengri.components.agn.qsogen import _load_emline_template
+    def test_loads_numpy_arrays_not_generators(self, monkeypatch):
+        """_load_emline_template_arrays returns fully-realized NumPy arrays.
 
-        result1 = _load_emline_template()
-        result2 = _load_emline_template()
-        assert result1 is result2, "_load_emline_template should cache result"
+        This is the regression test for BUG-NSS-03: the loader must return
+        NumPy arrays, not generators or JAX arrays, to avoid tracer leaks
+        inside JIT-compiled functions.
+        """
+        from tengri.components.agn.qsogen import _load_emline_template_arrays
+
+        # Load the template (works because the file exists in the test environment)
+        arrays = _load_emline_template_arrays()
+
+        # Should return a 6-tuple of NumPy arrays
+        assert len(arrays) == 6, f"Expected 6 arrays, got {len(arrays)}"
+
+        for i, arr in enumerate(arrays):
+            assert isinstance(arr, np.ndarray), f"Array {i} is {type(arr)}, expected np.ndarray"
+            assert arr.dtype in (
+                np.float64,
+                np.float32,
+            ), f"Array {i} has dtype {arr.dtype}, expected float"
+            assert arr.ndim == 1, f"Array {i} should be 1D, got {arr.ndim}D"

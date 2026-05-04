@@ -65,10 +65,11 @@ for lbl, wl in lines.items():
     ax.text(wl, ax.get_ylim()[0] * 1.5, lbl, fontsize=10, rotation=90, color="gray", va="bottom")
 
 ax.set_xlabel(r"Wavelength [$\AA$]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("NLR vs BLR Spectral Comparison")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(1000, 7000)
+ax.set_ylim(1e-2, 1e30)
 
 # --- Panel 2: BLR strength sweep ---
 ax = axes[0, 1]
@@ -85,10 +86,11 @@ for covering_frac in [0.05, 0.10, 0.20]:
     ax.semilogy(wave_angstrom, np.array(l_blr) / LSUN_ERG, lw=1.5, label=label_txt)
 
 ax.set_xlabel(r"Wavelength [$\AA$]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("BLR: Covering Fraction Sensitivity")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(1000, 7000)
+ax.set_ylim(1e-2, 1e30)
 
 # --- Panel 3: Fe II strength in BLR ---
 ax = axes[1, 0]
@@ -106,10 +108,11 @@ for fe2_strength in [0.0, 0.5, 1.0, 2.0]:
     ax.semilogy(wave_angstrom, np.array(l_blr) / LSUN_ERG, lw=1.5, label=label_fe2)
 
 ax.set_xlabel(r"Wavelength [$\AA$]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("BLR: Iron Multiplet Strength")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(1000, 7000)
+ax.set_ylim(1e-2, 1e30)
 
 # --- Panel 4: NLR FWHM variations ---
 ax = axes[1, 1]
@@ -123,10 +126,11 @@ for fwhm in [300.0, 500.0, 800.0, 1200.0]:
     )
 
 ax.set_xlabel(r"Wavelength [$\AA$]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("NLR: Line Width Sensitivity")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(1000, 7000)
+ax.set_ylim(1e-2, 1e30)
 
 fig.suptitle("AGN Emission Lines: NLR vs BLR Behavior", fontsize=12)
 fig.tight_layout(rect=[0, 0, 1, 0.97])

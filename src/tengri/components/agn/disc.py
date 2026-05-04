@@ -1589,6 +1589,7 @@ def _adaf_truncated_disc_spectrum(
     return jnp.sum(ring_contributions, axis=0)
 
 
+# TODO: Precompute adapter deferred until project_adaf_rewrite.md lands (see disc_precompute.py)
 def adaf_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
@@ -1974,9 +1975,7 @@ def create_relagn_disc_from_grid(grid_path: str) -> Callable:
         **Gradient-safe**: yes — triweight kernel, C²-continuous.
         """
         point = (agn_log_mbh, agn_log_mdot, agn_astar)
-        lnu_template = _interp_nd_triweight(
-            grid_jax, axes, edges, point, scatters=scatters
-        )
+        lnu_template = _interp_nd_triweight(grid_jax, axes, edges, point, scatters=scatters)
         # Interpolate grid wavelength → observation wavelength
         lnu_interp = jnp.interp(wavelength, wave_grid, lnu_template, left=0.0, right=0.0)
         # Inclination scaling from reference cos_inc = 0.5

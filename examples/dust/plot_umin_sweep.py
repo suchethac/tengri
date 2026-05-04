@@ -75,6 +75,7 @@ fig, ax = sweep_parameter(
 )
 ax.set_yscale("log")
 ax.set_xscale("log")
+ax.set_ylim(1e32, 1e40)
 ax.set_title("Draine & Li: Radiation Field Intensity Impact", fontsize=12)
 ax.set_ylabel(r"$\lambda F_\lambda$ (not normalized)")
 plt.tight_layout()

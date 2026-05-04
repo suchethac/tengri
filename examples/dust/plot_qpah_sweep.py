@@ -76,6 +76,7 @@ fig, ax = sweep_parameter(
 )
 ax.set_yscale("log")
 ax.set_xscale("log")
+ax.set_ylim(1e31, 1e37)
 ax.set_title("PAH Mass Fraction: Mid-Infrared Feature Strength", fontsize=12)
 ax.set_ylabel(r"$\lambda F_\lambda$ (not normalized)")
 plt.tight_layout()

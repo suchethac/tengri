@@ -170,8 +170,7 @@ class TestRankNormalisedRhat:
         r_rank = rank_normalised_rhat(chain)
         # Classical may or may not flag; rank-normalised folded must flag.
         assert r_rank > 1.05, (
-            f"rank-normalised R̂={r_rank:.3f} should flag scale drift; "
-            f"classical={r_classical:.3f}"
+            f"rank-normalised R̂={r_rank:.3f} should flag scale drift; classical={r_classical:.3f}"
         )
 
     def test_heavy_tailed_well_mixed_robust(self):

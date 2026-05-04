@@ -32,14 +32,16 @@ ax.loglog(wave_um, np.array(disc), "--", color="C0", lw=1.5, label="Accretion di
 ax.loglog(wave_um, np.array(torus), "--", color="C1", lw=1.5, label="Dust torus")
 ax.loglog(wave_um, np.array(combined), "k-", lw=2.0, label="Combined AGN")
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("AGN SED Components")
 ax.set_xlim(0.01, 100)
+ax.set_ylim(1e20, 1e33)
 ax.legend(frameon=False)
 
 # Right: luminosity sequence
 ax = axes[1]
-log_lbols = [42.0, 43.0, 44.0, 45.0, 46.0]
+# agn_log_lbol is log10(L_bol / L_sun); Seyfert→quasar range 10^9–10^13 Lsun
+log_lbols = [9.0, 10.0, 11.0, 12.0, 13.0]
 colors = plt.cm.viridis(np.linspace(0.15, 0.9, len(log_lbols)))
 
 for log_lbol, color in zip(log_lbols, colors):
@@ -47,12 +49,13 @@ for log_lbol, color in zip(log_lbols, colors):
     torus_l = simple_torus(wavelength, agn_log_lbol=log_lbol, agn_torus_temp=1500.0)
     total = disc_l + 0.5 * torus_l
     ax.loglog(wave_um, np.array(total), color=color, lw=1.5,
-              label=rf"$\log L_{{\mathrm{{bol}}}} = {log_lbol:.0f}$")
+              label=rf"$\log L_{{\mathrm{{bol}}}}/L_\odot = {log_lbol:.0f}$")
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("AGN Luminosity Sequence")
 ax.set_xlim(0.01, 100)
+ax.set_ylim(1e19, 1e34)
 ax.legend(frameon=False, fontsize=10)
 
 fig.tight_layout()

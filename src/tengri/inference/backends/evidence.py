@@ -52,6 +52,7 @@ def _get_nss_fns(
         # same abstract shapes hit the Python-level JIT cache without retrace.
         def _step_with_data(key, state, data_args):
             """Advance nested sampling state by one iteration with the given data."""
+
             def _loglik(params):
                 """Evaluate likelihood for given parameters."""
                 return loglikelihood_fn(params, data_args)
@@ -68,6 +69,7 @@ def _get_nss_fns(
 
         def _init_with_data(particles, data_args):
             """Initialize nested sampling state with particles and data."""
+
             def _loglik(params):
                 """Evaluate likelihood for given parameters."""
                 return loglikelihood_fn(params, data_args)

@@ -25,7 +25,6 @@ from tengri import (
     SEDModel,
     Spectroscopy,
     Uniform,
-    generate_mock,
     load_ssp_data,
     setup_style,
 )
@@ -172,19 +171,6 @@ ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"Flux density [$\mu$Jy]")
 ax.set_title("Low-resolution Spectrum (R=100)")
 ax.legend(frameon=False)
-
-# --- SFH inset on photometry panel ---
-sfh_true = model.predict_sfh(true_params)
-sfh_fit = model.predict_sfh(posterior.params)
-t_gyr = np.array(sfh_true["t_gyr"])
-inset = axes[0].inset_axes([0.55, 0.55, 0.40, 0.40])
-mask = t_gyr < 5.0
-inset.plot(t_gyr[mask], np.array(sfh_true["sfr_mean"])[mask], "k-", lw=1.5, label="Truth")
-inset.plot(t_gyr[mask], np.array(sfh_fit["sfr_mean"])[mask], "r--", lw=1.2, label="MAP")
-inset.set_xlabel("Lookback [Gyr]", fontsize=10)
-inset.set_ylabel("SFR", fontsize=10)
-inset.tick_params(labelsize=5)
-inset.legend(fontsize=10)
 
 fig.suptitle("Joint Photometry + Spectroscopy Mock", fontsize=13, y=1.02)
 fig.tight_layout()

@@ -61,9 +61,7 @@ class TestDustEnergyBalance:
         atten_f_lambda = atten_uv_factor * unatten_f_lambda
         peak = 1.0e6  # 100 μm
         sigma = 3.0e5
-        ir_shape = jnp.exp(-0.5 * ((wave - peak) / sigma) ** 2) / (
-            sigma * jnp.sqrt(2.0 * jnp.pi)
-        )
+        ir_shape = jnp.exp(-0.5 * ((wave - peak) / sigma) ** 2) / (sigma * jnp.sqrt(2.0 * jnp.pi))
         absorbed_l_lambda = (1.0 - atten_uv_factor) * (30000.0 - 912.0)
         ir_f_lambda = l_dust_factor * absorbed_l_lambda * ir_shape
         return (
@@ -74,9 +72,7 @@ class TestDustEnergyBalance:
 
     def test_perfect_balance(self):
         wave = jnp.logspace(np.log10(800), np.log10(3.0e6), 30000)
-        l_unatten, l_atten, l_dust = self._make_seds(
-            wave, atten_uv_factor=0.5, l_dust_factor=1.0
-        )
+        l_unatten, l_atten, l_dust = self._make_seds(wave, atten_uv_factor=0.5, l_dust_factor=1.0)
         result = dust_energy_balance(wave, l_unatten, l_atten, l_dust)
         assert result["ratio"] == pytest.approx(1.0, rel=0.05)
         assert result["balanced"]
@@ -85,18 +81,14 @@ class TestDustEnergyBalance:
 
     def test_under_emission(self):
         wave = jnp.logspace(np.log10(800), np.log10(3.0e6), 30000)
-        l_unatten, l_atten, l_dust = self._make_seds(
-            wave, atten_uv_factor=0.5, l_dust_factor=0.5
-        )
+        l_unatten, l_atten, l_dust = self._make_seds(wave, atten_uv_factor=0.5, l_dust_factor=0.5)
         result = dust_energy_balance(wave, l_unatten, l_atten, l_dust)
         assert result["ratio"] == pytest.approx(0.5, rel=0.05)
         assert not result["balanced"]
 
     def test_over_emission(self):
         wave = jnp.logspace(np.log10(800), np.log10(3.0e6), 30000)
-        l_unatten, l_atten, l_dust = self._make_seds(
-            wave, atten_uv_factor=0.5, l_dust_factor=2.0
-        )
+        l_unatten, l_atten, l_dust = self._make_seds(wave, atten_uv_factor=0.5, l_dust_factor=2.0)
         result = dust_energy_balance(wave, l_unatten, l_atten, l_dust)
         assert result["ratio"] == pytest.approx(2.0, rel=0.05)
         assert not result["balanced"]
@@ -111,9 +103,7 @@ class TestDustEnergyBalance:
 
     def test_tolerance_kwarg(self):
         wave = jnp.logspace(np.log10(800), np.log10(3.0e6), 30000)
-        l_unatten, l_atten, l_dust = self._make_seds(
-            wave, atten_uv_factor=0.5, l_dust_factor=1.05
-        )
+        l_unatten, l_atten, l_dust = self._make_seds(wave, atten_uv_factor=0.5, l_dust_factor=1.05)
         result_loose = dust_energy_balance(wave, l_unatten, l_atten, l_dust, tol=0.10)
         result_strict = dust_energy_balance(wave, l_unatten, l_atten, l_dust, tol=0.01)
         assert result_loose["balanced"]

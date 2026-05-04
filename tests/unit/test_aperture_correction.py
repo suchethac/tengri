@@ -45,9 +45,7 @@ class TestApplyApertureCorrection:
         noise = jnp.array([0.1, 0.2, 0.3])
         corr = jnp.array([0.5, 1.5, 2.0])
         f2, n2 = apply_aperture_correction(flux, noise, corr)
-        np.testing.assert_allclose(
-            np.asarray(f2 / n2), np.asarray(flux / noise), rtol=1e-12
-        )
+        np.testing.assert_allclose(np.asarray(f2 / n2), np.asarray(flux / noise), rtol=1e-12)
 
     def test_shape_mismatch_raises(self):
         flux = jnp.array([1.0, 2.0, 3.0])

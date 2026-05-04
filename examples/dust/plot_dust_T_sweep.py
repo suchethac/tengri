@@ -75,7 +75,7 @@ fig, ax = sweep_parameter(
 )
 ax.set_yscale("log")
 ax.set_xscale("log")
-ax.set_ylim(1e-2, 1e3)
+ax.set_ylim(1e31, 1e40)
 ax.set_title("Dust Temperature: Far-IR Peak Position and Shape", fontsize=12)
 ax.set_ylabel(r"$\lambda F_\lambda$ (not normalized)")
 plt.tight_layout()

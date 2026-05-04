@@ -67,7 +67,7 @@ fig, ax = sweep_parameter(
     label_fmt=r"$\tau_{{BC}}$ = {:.1f}",
     wave_range=(1000, 10000),
 )
-ax.set_ylim(0, 3)
+ax.set_ylim(0, 2.5e5)
 ax.set_title("Birth Cloud Dust: Impact on Young Star-Forming Galaxy SED", fontsize=12)
 ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)")
 plt.tight_layout()

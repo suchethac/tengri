@@ -38,15 +38,18 @@ class TestPrevotSMCFunction:
     def test_reference_values(self):
         """Test prevot_smc at key optical/NIR wavelengths.
 
-        Expected values computed from k(λ) = 1.39 * λ^(-1.2) - 0.38
-        where λ is in micrometers.
+        Expected values computed from normalized k(λ) = [1.39 * λ^(-1.2) - 0.38] / k(V)
+        where λ is in micrometers and k(V) ≈ 2.468.
         """
-        # λ (Å) -> λ (μm), k(λ) expected
+        # Normalization constant (k(V) at 5500 Å = 0.55 μm)
+        k_v = 1.39 * (0.55) ** (-1.2) - 0.38
+
+        # λ (Å) -> λ (μm), k(λ) expected (normalized)
         test_cases = [
-            (2000.0, 1.39 * (0.2) ** (-1.2) - 0.38),  # 0.2 μm
-            (4500.0, 1.39 * (0.45) ** (-1.2) - 0.38),  # 0.45 μm
-            (5500.0, 1.39 * (0.55) ** (-1.2) - 0.38),  # 0.55 μm (V-band)
-            (10000.0, 1.39 * (1.0) ** (-1.2) - 0.38),  # 1.0 μm
+            (2000.0, (1.39 * (0.2) ** (-1.2) - 0.38) / k_v),  # 0.2 μm
+            (4500.0, (1.39 * (0.45) ** (-1.2) - 0.38) / k_v),  # 0.45 μm
+            (5500.0, (1.39 * (0.55) ** (-1.2) - 0.38) / k_v),  # 0.55 μm (V-band)
+            (10000.0, (1.39 * (1.0) ** (-1.2) - 0.38) / k_v),  # 1.0 μm
         ]
 
         for wav_aa, expected_k in test_cases:
@@ -84,9 +87,10 @@ class TestPrevotSMCFunction:
         assert k_10 < k_62, "X-ray suppression should increase at shorter wavelengths"
 
         # Both should be suppressed compared to no ramp (i.e., smaller than
-        # the raw functional form without ramp)
-        k_raw_10 = 1.39 * (0.001) ** (-1.2) - 0.38
-        k_raw_62 = 1.39 * (0.0062) ** (-1.2) - 0.38
+        # the raw normalized functional form without ramp)
+        k_v = 1.39 * (0.55) ** (-1.2) - 0.38
+        k_raw_10 = (1.39 * (0.001) ** (-1.2) - 0.38) / k_v
+        k_raw_62 = (1.39 * (0.0062) ** (-1.2) - 0.38) / k_v
         assert k_10 < k_raw_10, "Ramp should suppress 10 Å value"
         assert k_62 < k_raw_62, "Ramp should suppress 62 Å value"
 

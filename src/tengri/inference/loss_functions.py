@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.inference.likelihoods.gaussian import diag_gaussian_chi2
+
 __all__ = [
     "build_loglikelihood_fn",
     "build_loglikelihood_unbounded_fn",
@@ -100,7 +102,319 @@ def _calibration_log_likelihood(predicted, data, noise, wave_obs, n_poly, prior_
     return log_like
 
 
+def _unstandardize_parameters(params_unbounded, spec, free_names, fixed_values, stochastic):
+    """Convert unbounded ξ → physical params, merge fixed values, attach psd_xi, resolve mirrors.
+
+    The single source of truth for the standardized → physical transform.
+    Each distribution's unstandardize() method implements h(ξ) such that
+    P(h(ξ)) |dh/dξ| = φ(ξ), giving Jacobian cancellation in the Hamiltonian.
+    """
+    params = {}
+    for name in free_names:
+        dist = spec.get_distribution(name)
+        params[name] = dist.unstandardize(params_unbounded[name])
+    for name, val in fixed_values.items():
+        params[name] = val
+    if stochastic and "psd_xi" in params_unbounded:
+        params["psd_xi"] = params_unbounded["psd_xi"]
+    return spec.resolve_mirrors(params)
+
+
+def _build_prediction(
+    model, params, data_type, mode, *, has_line_fluxes, has_indices, index_defs, data_args
+):
+    """Forward-model prediction in one place.
+
+    Returns ``(prediction_dict, predicted, pred_phot, pred_spec)``:
+
+    - ``prediction_dict``: keys ``phot_fnu`` / ``spec_fnu`` / optional
+      ``line_fluxes`` / ``indices`` — fed to user / auto-built Likelihood adapters.
+    - ``predicted``: concatenated array (legacy χ² fall-through still uses this).
+    - ``pred_phot`` / ``pred_spec``: split components or ``None``.
+    """
+    if data_type == "photometry":
+        predicted = model.predict_photometry(params, mode=mode)
+        pred_phot, pred_spec = predicted, None
+    elif data_type == "spectroscopy":
+        predicted = model.predict_spectrum(params, model._wave_obs, mode=mode)
+        pred_phot, pred_spec = None, predicted
+    elif data_type == "joint":
+        pred_phot = model.predict_photometry(params, mode=mode)
+        pred_spec = model.predict_spectrum(params, model._wave_obs, mode=mode)
+        predicted = jnp.concatenate([pred_phot, pred_spec])
+    else:
+        raise ValueError(f"Unknown data_type: {data_type}")
+
+    prediction = {}
+    if pred_phot is not None:
+        prediction["phot_fnu"] = pred_phot
+    if pred_spec is not None:
+        prediction["spec_fnu"] = pred_spec
+    if has_line_fluxes:
+        prediction["line_fluxes"] = model.predict_line_fluxes(
+            params, target_wavelengths=data_args["line_flux_waves"]
+        )
+    if has_indices:
+        prediction["indices"] = model.predict_spectral_indices(params, index_defs, mode=mode)
+
+    return prediction, predicted, pred_phot, pred_spec
+
+
 # ── Builders ─────────────────────────────────────────────────────────────
+
+
+def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
+    """Build the data-term function ``neg_log_lik(params, data_args) -> -log p(d|params)``.
+
+    Single source of truth for the data term. Both :func:`build_loss_fn`
+    and :func:`build_loglikelihood_fn` compose around this so the two
+    cannot drift in sign / formula / branch coverage.
+
+    Routes through ``fitter._user_likelihood`` when set (the Phase II-1
+    Likelihood-adapter cohort built by
+    :meth:`Fitter._maybe_build_default_likelihood`). Otherwise falls
+    through to the legacy χ² switch — which still covers the cases the
+    auto-build does not yet handle (cloudy-prior e-line marginalisation,
+    explicitly-fitted line amplitudes, joint/spec + variable_noise, and a
+    handful of edge bail-outs).
+
+    Takes **physical** parameters; the unstandardize transform belongs
+    in the wrappers.
+    """
+    from tengri.observation.noise import (
+        censored_log_likelihood,
+        get_noise_dof,
+        has_noise_model,
+        uses_student_t,
+        variable_noise_hamiltonian,
+    )
+
+    model = fitter.model
+    data_type = fitter.data_type
+    fixed_values = fitter._fixed_values
+    spec = fitter.spec
+    use_variable_noise = has_noise_model(spec)
+    noise_dof = get_noise_dof(spec) if uses_student_t(spec) else None
+    use_censored = fitter.data_mask is not None
+    use_cal_marg = fitter._calibration_marginalize and fitter._has_spectroscopy
+    cal_n_poly = fitter._cal_n_poly
+    cal_prior_sigma = fitter._cal_prior_sigma
+    use_eline_marg = fitter._eline_marginalize
+    use_eline_fitted = fitter._eline_fitted
+    eline_wavelengths = fitter._eline_wavelengths
+    eline_independent_wavelengths = fitter._eline_independent_wavelengths
+    eline_constraint_matrix = fitter._eline_constraint_matrix
+    eline_prior_type = fitter._eline_prior_type
+    eline_prior_sigma = fitter._eline_prior_sigma
+    eline_prior_width_dex = fitter._eline_prior_width_dex
+    eline_amplitude_names = fitter._eline_amplitude_names
+    has_spec_cov = "spec_cov_inv" in fitter._data_args
+    has_line_fluxes = "line_flux_waves" in fitter._data_args
+    has_indices = "index_obs" in fitter._data_args
+    index_defs = None
+    if has_indices:
+        obs_for_idx = getattr(model, "observation", None)
+        if obs_for_idx is not None and obs_for_idx.spectral_indices is not None:
+            index_defs = obs_for_idx.spectral_indices.index_defs
+    n_phot = 0
+    if has_spec_cov and data_type == "joint":
+        obs = getattr(model, "observation", None)
+        if obs is not None:
+            n_phot = obs.n_data_phot
+    user_likelihood = getattr(fitter, "_user_likelihood", None)
+
+    def neg_log_lik(params, data_args):
+        """-log p(d | params). Caller supplies physical params + data_args."""
+        data = data_args["data"]
+        noise = data_args["noise"]
+
+        prediction, predicted, pred_phot, _ = _build_prediction(
+            model,
+            params,
+            data_type,
+            mode,
+            has_line_fluxes=has_line_fluxes,
+            has_indices=has_indices,
+            index_defs=index_defs,
+            data_args=data_args,
+        )
+
+        # Auto-built / user-supplied Likelihood adapter handles the data
+        # term (and any extras composed via CompositeLikelihood).
+        if user_likelihood is not None:
+            return -user_likelihood.log_prob(prediction, params)
+
+        # Legacy χ² fall-through — only fires when auto-build returned
+        # None (cloudy/fitted e-lines, joint+variable_noise, edge bail-outs).
+        # Most-specific branches first.
+        if use_eline_marg and use_cal_marg and data_type == "spectroscopy":
+            G_eff = _build_eline_G_eff(
+                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
+            )
+            _, a_hat, _ = _marginalize_elines(
+                data - predicted,
+                noise,
+                G_eff,
+                params,
+                fixed_values,
+                eline_prior_type,
+                eline_prior_sigma,
+                eline_prior_width_dex,
+                eline_independent_wavelengths,
+            )
+            pred_with_lines = predicted + G_eff @ a_hat
+            ll_spec = _calibration_log_likelihood(
+                pred_with_lines, data, noise, model._wave_obs, cal_n_poly, cal_prior_sigma
+            )
+            e_lh = -ll_spec
+        elif use_eline_marg and use_cal_marg and data_type == "joint":
+            G_eff = _build_eline_G_eff(
+                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
+            )
+            n_p = pred_phot.shape[0]
+            data_phot, data_spec, noise_phot, noise_spec, p_phot, p_spec = _split_joint_data(
+                data, noise, predicted, n_p
+            )
+            _, a_hat, _ = _marginalize_elines(
+                data_spec - p_spec,
+                noise_spec,
+                G_eff,
+                params,
+                fixed_values,
+                eline_prior_type,
+                eline_prior_sigma,
+                eline_prior_width_dex,
+                eline_independent_wavelengths,
+            )
+            p_spec_with_lines = p_spec + G_eff @ a_hat
+            chi2_phot = diag_gaussian_chi2(p_phot, data_phot, noise_phot)
+            ll_spec = _calibration_log_likelihood(
+                p_spec_with_lines,
+                data_spec,
+                noise_spec,
+                model._wave_obs,
+                cal_n_poly,
+                cal_prior_sigma,
+            )
+            e_lh = 0.5 * chi2_phot - ll_spec
+        elif use_cal_marg and data_type == "spectroscopy":
+            ll_spec = _calibration_log_likelihood(
+                predicted, data, noise, model._wave_obs, cal_n_poly, cal_prior_sigma
+            )
+            e_lh = -ll_spec
+        elif use_cal_marg and data_type == "joint":
+            n_p = pred_phot.shape[0]
+            data_phot, data_spec, noise_phot, noise_spec, p_phot, p_spec = _split_joint_data(
+                data, noise, predicted, n_p
+            )
+            chi2_phot = diag_gaussian_chi2(p_phot, data_phot, noise_phot)
+            ll_spec = _calibration_log_likelihood(
+                p_spec, data_spec, noise_spec, model._wave_obs, cal_n_poly, cal_prior_sigma
+            )
+            e_lh = 0.5 * chi2_phot - ll_spec
+        elif use_eline_marg and data_type == "spectroscopy":
+            G_eff = _build_eline_G_eff(
+                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
+            )
+            ln_l_eline, _, _ = _marginalize_elines(
+                data - predicted,
+                noise,
+                G_eff,
+                params,
+                fixed_values,
+                eline_prior_type,
+                eline_prior_sigma,
+                eline_prior_width_dex,
+                eline_independent_wavelengths,
+            )
+            e_lh = -ln_l_eline
+        elif use_eline_marg and data_type == "joint":
+            G_eff = _build_eline_G_eff(
+                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
+            )
+            n_p = pred_phot.shape[0]
+            data_phot, data_spec, noise_phot, noise_spec, p_phot, p_spec = _split_joint_data(
+                data, noise, predicted, n_p
+            )
+            ln_l_eline, _, _ = _marginalize_elines(
+                data_spec - p_spec,
+                noise_spec,
+                G_eff,
+                params,
+                fixed_values,
+                eline_prior_type,
+                eline_prior_sigma,
+                eline_prior_width_dex,
+                eline_independent_wavelengths,
+            )
+            chi2_phot = diag_gaussian_chi2(p_phot, data_phot, noise_phot)
+            e_lh = 0.5 * chi2_phot - ln_l_eline
+        elif use_eline_fitted and data_type == "spectroscopy":
+            G_eff = _build_eline_G_eff(
+                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
+            )
+            a = jnp.array([params[nm] for nm in eline_amplitude_names])
+            predicted_with_lines = predicted + G_eff @ a
+            chi2 = diag_gaussian_chi2(predicted_with_lines, data, noise)
+            e_lh = 0.5 * chi2
+        elif use_eline_fitted and data_type == "joint":
+            G_eff = _build_eline_G_eff(
+                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
+            )
+            n_p = pred_phot.shape[0]
+            data_phot, data_spec, noise_phot, noise_spec, p_phot, p_spec = _split_joint_data(
+                data, noise, predicted, n_p
+            )
+            a = jnp.array([params[nm] for nm in eline_amplitude_names])
+            p_spec_with_lines = p_spec + G_eff @ a
+            chi2_phot = diag_gaussian_chi2(p_phot, data_phot, noise_phot)
+            chi2_spec = diag_gaussian_chi2(p_spec_with_lines, data_spec, noise_spec)
+            e_lh = 0.5 * (chi2_phot + chi2_spec)
+        elif use_censored:
+            mask = data_args["data_mask"]
+            f_cal = params.get("noise_frac_cal", 0.0)
+            e_lh = censored_log_likelihood(
+                data, noise, predicted, mask, f_cal=f_cal, dof=noise_dof
+            )
+        elif use_variable_noise:
+            f_cal = params.get("noise_frac_cal", 0.0)
+            e_lh = variable_noise_hamiltonian(data, noise, predicted, f_cal, dof=noise_dof)
+        elif has_spec_cov and data_type == "spectroscopy":
+            diff = data - predicted
+            chi2 = diff @ data_args["spec_cov_inv"] @ diff
+            e_lh = 0.5 * chi2
+        elif has_spec_cov and data_type == "joint":
+            data_phot = data[:n_phot]
+            p_phot = predicted[:n_phot]
+            noise_phot = noise[:n_phot]
+            diff_spec = data[n_phot:] - predicted[n_phot:]
+            chi2_phot = diag_gaussian_chi2(p_phot, data_phot, noise_phot)
+            chi2_spec = diff_spec @ data_args["spec_cov_inv"] @ diff_spec
+            e_lh = 0.5 * (chi2_phot + chi2_spec)
+        else:
+            chi2 = diag_gaussian_chi2(predicted, data, noise)
+            e_lh = 0.5 * chi2
+
+        # Line-flux / spectral-index constraints (legacy fall-through only;
+        # the user-likelihood path composes these via CompositeLikelihood).
+        if has_line_fluxes:
+            model_lf = model.predict_line_fluxes(
+                params, target_wavelengths=data_args["line_flux_waves"]
+            )
+            chi2_lines = jnp.sum(
+                ((data_args["line_flux_obs"] - model_lf) / data_args["line_flux_err"]) ** 2
+            )
+            e_lh = e_lh + 0.5 * chi2_lines
+        if has_indices:
+            model_idx = model.predict_spectral_indices(params, index_defs, mode=mode)
+            chi2_idx = jnp.sum(
+                ((data_args["index_obs"] - model_idx) / data_args["index_err"]) ** 2
+            )
+            e_lh = e_lh + 0.5 * chi2_idx
+
+        return e_lh
+
+    return neg_log_lik
 
 
 def build_loss_fn(fitter, mode="_traceable"):
@@ -180,281 +494,36 @@ def build_loss_fn(fitter, mode="_traceable"):
     .. [1] Standardized parameterization derivation and Jacobian cancellation:
        Section 2.2 and Appendix A of the tengri methods paper.
     """
-    from tengri.observation.noise import (
-        censored_log_likelihood,
-        get_noise_dof,
-        has_noise_model,
-        uses_student_t,
-        variable_noise_hamiltonian,
-    )
+    from tengri.inference.loss_functions import _build_data_neg_log_likelihood_fn
 
-    model = fitter.model
-    data_type = fitter.data_type
     free_names = fitter._free_names
     fixed_values = fitter._fixed_values
     spec = fitter.spec
     stochastic = spec.stochastic
-    use_variable_noise = has_noise_model(spec)
-    noise_dof = get_noise_dof(spec) if uses_student_t(spec) else None
-    use_censored = fitter.data_mask is not None
-    use_cal_marg = fitter._calibration_marginalize and fitter._has_spectroscopy
-    cal_n_poly = fitter._cal_n_poly
-    cal_prior_sigma = fitter._cal_prior_sigma
-    use_eline_marg = fitter._eline_marginalize
-    use_eline_fitted = fitter._eline_fitted
-    eline_wavelengths = fitter._eline_wavelengths
-    eline_independent_wavelengths = fitter._eline_independent_wavelengths
-    eline_constraint_matrix = fitter._eline_constraint_matrix
-    eline_prior_type = fitter._eline_prior_type
-    eline_prior_sigma = fitter._eline_prior_sigma
-    eline_prior_width_dex = fitter._eline_prior_width_dex
-    eline_amplitude_names = fitter._eline_amplitude_names
-    has_spec_cov = "spec_cov_inv" in fitter._data_args
-    has_line_fluxes = "line_flux_waves" in fitter._data_args
-    has_indices = "index_obs" in fitter._data_args
-    index_defs = None
-    if has_indices:
-        obs_for_idx = getattr(model, "observation", None)
-        if obs_for_idx is not None and obs_for_idx.spectral_indices is not None:
-            index_defs = obs_for_idx.spectral_indices.index_defs
-    n_phot = 0
-    if has_spec_cov and data_type == "joint":
-        obs = getattr(model, "observation", None)
-        if obs is not None:
-            n_phot = obs.n_data_phot
+    neg_log_lik = _build_data_neg_log_likelihood_fn(fitter, mode=mode)
 
     def loss_fn(params_unbounded, data_args):
-        """Compute loss: likelihood + prior penalty on standardized params."""
-        data = data_args["data"]
-        noise = data_args["noise"]
+        """Compute loss: -log_lik + ½ξᵀξ prior on standardized params."""
+        params = _unstandardize_parameters(
+            params_unbounded, spec, free_names, fixed_values, stochastic
+        )
+        e_lh = neg_log_lik(params, data_args)
 
-        # Convert unbounded → physical for free params
-        # Each distribution's unstandardize() method implements the transform h(ξ)
-        # that satisfies P(h(ξ)) |dh/dξ| = φ(ξ), ensuring Jacobian cancellation
-        params = {}
-        for name in free_names:
-            dist = spec.get_distribution(name)
-            params[name] = dist.unstandardize(params_unbounded[name])
-
-        # Merge fixed values
-        for name, val in fixed_values.items():
-            params[name] = val
-
-        # Add psd_xi if stochastic
-        if stochastic and "psd_xi" in params_unbounded:
-            params["psd_xi"] = params_unbounded["psd_xi"]
-
-        # Resolve mirrored parameters (e.g., neb_logZ_gas = met_logzsol)
-        params = spec.resolve_mirrors(params)
-
-        # Forward model prediction
-        if data_type == "photometry":
-            predicted = model.predict_photometry(params, mode=mode)
-        elif data_type == "spectroscopy":
-            predicted = model.predict_spectrum(params, model._wave_obs, mode=mode)
-        elif data_type == "joint":
-            pred_phot = model.predict_photometry(params, mode=mode)
-            pred_spec = model.predict_spectrum(params, model._wave_obs, mode=mode)
-            predicted = jnp.concatenate([pred_phot, pred_spec])
-        else:
-            raise ValueError(f"Unknown data_type: {data_type}")
-
-        # Likelihood energy — ordered most-specific first so combined branches
-        # (eline+cal) are not shadowed by the less-specific cal-only branches.
-        if use_eline_marg and use_cal_marg and data_type == "spectroscopy":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            _, a_hat, _ = _marginalize_elines(
-                data - predicted,
-                noise,
-                G_eff,
-                params,
-                fixed_values,
-                eline_prior_type,
-                eline_prior_sigma,
-                eline_prior_width_dex,
-                eline_independent_wavelengths,
-            )
-            pred_with_lines = predicted + G_eff @ a_hat
-            ll_spec = _calibration_log_likelihood(
-                pred_with_lines, data, noise, model._wave_obs, cal_n_poly, cal_prior_sigma
-            )
-            e_lh = -ll_spec
-        elif use_eline_marg and use_cal_marg and data_type == "joint":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            n_p = model.predict_photometry(params, mode=mode).shape[0]
-            data_phot, data_spec, noise_phot, noise_spec, pred_phot, pred_spec = _split_joint_data(
-                data, noise, predicted, n_p
-            )
-            _, a_hat, _ = _marginalize_elines(
-                data_spec - pred_spec,
-                noise_spec,
-                G_eff,
-                params,
-                fixed_values,
-                eline_prior_type,
-                eline_prior_sigma,
-                eline_prior_width_dex,
-                eline_independent_wavelengths,
-            )
-            pred_spec_with_lines = pred_spec + G_eff @ a_hat
-            chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
-            ll_spec = _calibration_log_likelihood(
-                pred_spec_with_lines,
-                data_spec,
-                noise_spec,
-                model._wave_obs,
-                cal_n_poly,
-                cal_prior_sigma,
-            )
-            e_lh = 0.5 * chi2_phot - ll_spec
-        elif use_cal_marg and data_type == "spectroscopy":
-            ll_spec = _calibration_log_likelihood(
-                predicted, data, noise, model._wave_obs, cal_n_poly, cal_prior_sigma
-            )
-            e_lh = -ll_spec
-        elif use_cal_marg and data_type == "joint":
-            n_p = model.predict_photometry(params, mode=mode).shape[0]
-            data_phot, data_spec, noise_phot, noise_spec, pred_phot, pred_spec = _split_joint_data(
-                data, noise, predicted, n_p
-            )
-            chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
-            ll_spec = _calibration_log_likelihood(
-                pred_spec, data_spec, noise_spec, model._wave_obs, cal_n_poly, cal_prior_sigma
-            )
-            e_lh = 0.5 * chi2_phot - ll_spec
-        elif use_eline_marg and data_type == "spectroscopy":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            ln_l_eline, _, _ = _marginalize_elines(
-                data - predicted,
-                noise,
-                G_eff,
-                params,
-                fixed_values,
-                eline_prior_type,
-                eline_prior_sigma,
-                eline_prior_width_dex,
-                eline_independent_wavelengths,
-            )
-            e_lh = -ln_l_eline
-        elif use_eline_marg and data_type == "joint":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            n_p = model.predict_photometry(params, mode=mode).shape[0]
-            data_phot, data_spec, noise_phot, noise_spec, pred_phot, pred_spec = _split_joint_data(
-                data, noise, predicted, n_p
-            )
-            ln_l_eline, _, _ = _marginalize_elines(
-                data_spec - pred_spec,
-                noise_spec,
-                G_eff,
-                params,
-                fixed_values,
-                eline_prior_type,
-                eline_prior_sigma,
-                eline_prior_width_dex,
-                eline_independent_wavelengths,
-            )
-            chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
-            e_lh = 0.5 * chi2_phot - ln_l_eline
-        elif use_eline_fitted and data_type == "spectroscopy":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            a = jnp.array([params[nm] for nm in eline_amplitude_names])
-            predicted_with_lines = predicted + G_eff @ a
-            chi2 = jnp.sum(((data - predicted_with_lines) / noise) ** 2)
-            e_lh = 0.5 * chi2
-        elif use_eline_fitted and data_type == "joint":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            n_p = model.predict_photometry(params, mode=mode).shape[0]
-            data_phot, data_spec, noise_phot, noise_spec, pred_phot, pred_spec = _split_joint_data(
-                data, noise, predicted, n_p
-            )
-            a = jnp.array([params[nm] for nm in eline_amplitude_names])
-            pred_spec_with_lines = pred_spec + G_eff @ a
-            chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
-            chi2_spec = jnp.sum(((data_spec - pred_spec_with_lines) / noise_spec) ** 2)
-            e_lh = 0.5 * (chi2_phot + chi2_spec)
-        elif use_censored:
-            mask = data_args["data_mask"]
-            f_cal = params.get("noise_frac_cal", 0.0)
-            e_lh = censored_log_likelihood(
-                data, noise, predicted, mask, f_cal=f_cal, dof=noise_dof
-            )
-        elif use_variable_noise:
-            f_cal = params.get("noise_frac_cal", 0.0)
-            e_lh = variable_noise_hamiltonian(data, noise, predicted, f_cal, dof=noise_dof)
-        elif has_spec_cov and data_type == "spectroscopy":
-            diff = data - predicted
-            chi2 = diff @ data_args["spec_cov_inv"] @ diff
-            e_lh = 0.5 * chi2
-        elif has_spec_cov and data_type == "joint":
-            data_phot = data[:n_phot]
-            pred_phot = predicted[:n_phot]
-            noise_phot = noise[:n_phot]
-            diff_spec = data[n_phot:] - predicted[n_phot:]
-            chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
-            chi2_spec = diff_spec @ data_args["spec_cov_inv"] @ diff_spec
-            e_lh = 0.5 * (chi2_phot + chi2_spec)
-        else:
-            chi2 = jnp.sum(((data - predicted) / noise) ** 2)
-            e_lh = 0.5 * chi2
-
-        if has_line_fluxes:
-            model_lf = model.predict_line_fluxes(
-                params, target_wavelengths=data_args["line_flux_waves"]
-            )
-            chi2_lines = jnp.sum(
-                ((data_args["line_flux_obs"] - model_lf) / data_args["line_flux_err"]) ** 2
-            )
-            e_lh = e_lh + 0.5 * chi2_lines
-
-        if has_indices:
-            model_idx = model.predict_spectral_indices(params, index_defs, mode=mode)
-            chi2_idx = jnp.sum(
-                ((data_args["index_obs"] - model_idx) / data_args["index_err"]) ** 2
-            )
-            e_lh = e_lh + 0.5 * chi2_idx
-
-        # Prior contributions (IFT Hamiltonian)
+        # Prior contributions (IFT Hamiltonian).
         #
         # The information Hamiltonian in standardized space is:
         #   H(ξ|d) = ½χ²(d, h(ξ)) + ½ξᵀξ
         #
-        # where h(ξ) is the per-parameter transform that maps ξ ~ N(0,1) to the
-        # physical parameter θ with the desired prior distribution.
-        #
-        # Each distribution class implements unstandardize(ξ) = h(ξ) such that
-        # the Jacobian condition holds: P(h(ξ)) |dh/dξ| = φ(ξ), where φ is
-        # the standard normal density. This guarantees that the Jacobian factors
-        # from the change of variables cancel exactly with the prior density,
-        # leaving only the isotropic quadratic term ½ξᵀξ in the Hamiltonian.
-        #
-        # This cancellation is NOT an approximation—it is exact for all prior
-        # types (Uniform, Gaussian, LogUniform, LogNormal, StudentT) via their
-        # respective transforms (sigmoid, linear, exp-sigmoid, exp, quantile).
-        #
-        # Reference: Section 2.2 and Appendix A of the tengri paper.
-        #
+        # Each distribution implements unstandardize(ξ) = h(ξ) such that
+        # P(h(ξ)) |dh/dξ| = φ(ξ), so the change-of-variables Jacobian
+        # cancels the prior density and leaves the isotropic quadratic
+        # term. Exact for Uniform, Gaussian, LogUniform, LogNormal,
+        # StudentT priors.  Reference: tengri paper §2.2 + Appendix A.
         prior_penalty = 0.0
-
-        # Standard normal prior: ξᵀξ (doubled here because we return 0.5 * prior_penalty)
         for name in free_names:
-            prior_penalty += params_unbounded[name] ** 2
-
-        # Standard normal prior on psd_xi (IFT correlated field)
+            prior_penalty = prior_penalty + params_unbounded[name] ** 2
         if stochastic and "psd_xi" in params_unbounded:
-            prior_penalty += jnp.sum(params_unbounded["psd_xi"] ** 2)
-
+            prior_penalty = prior_penalty + jnp.sum(params_unbounded["psd_xi"] ** 2)
         return e_lh + 0.5 * prior_penalty
 
     return loss_fn
@@ -586,227 +655,17 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
     build_loss_fn : Returns likelihood + isotropic prior (Hamiltonian).
     build_logprior_fn : Returns only prior log-density.
     """
-    from tengri.observation.noise import (
-        get_noise_dof,
-        has_noise_model,
-        uses_student_t,
-        variable_noise_hamiltonian,
-    )
-
-    model = fitter.model
-    data_type = fitter.data_type
     fixed_values = fitter._fixed_values
     spec = fitter.spec
-    use_variable_noise = has_noise_model(spec)
-    noise_dof = get_noise_dof(spec) if uses_student_t(spec) else None
-    use_cal_marg = fitter._calibration_marginalize and fitter._has_spectroscopy
-    cal_n_poly = fitter._cal_n_poly
-    cal_prior_sigma = fitter._cal_prior_sigma
-    use_eline_marg = fitter._eline_marginalize
-    use_eline_fitted = fitter._eline_fitted
-    eline_wavelengths = fitter._eline_wavelengths
-    eline_independent_wavelengths = fitter._eline_independent_wavelengths
-    eline_constraint_matrix = fitter._eline_constraint_matrix
-    eline_prior_type = fitter._eline_prior_type
-    eline_prior_sigma = fitter._eline_prior_sigma
-    eline_prior_width_dex = fitter._eline_prior_width_dex
-    eline_amplitude_names = fitter._eline_amplitude_names
-    has_spec_cov_ll = "spec_cov_inv" in fitter._data_args
-    has_line_fluxes_ll = "line_flux_waves" in fitter._data_args
-    has_indices_ll = "index_obs" in fitter._data_args
-    index_defs_ll = None
-    if has_indices_ll:
-        obs_for_idx_ll = getattr(model, "observation", None)
-        if obs_for_idx_ll is not None and obs_for_idx_ll.spectral_indices is not None:
-            index_defs_ll = obs_for_idx_ll.spectral_indices.index_defs
-    n_phot_ll = 0
-    if has_spec_cov_ll and data_type == "joint":
-        obs_ll = getattr(model, "observation", None)
-        if obs_ll is not None:
-            n_phot_ll = obs_ll.n_data_phot
+    neg_log_lik = _build_data_neg_log_likelihood_fn(fitter, mode=mode)
 
     def loglikelihood_fn(free_params, data_args):
-        """Compute log likelihood: data probability given current parameter values (no prior)."""
-        data = data_args["data"]
-        noise = data_args["noise"]
-
-        # Merge free + fixed
+        """Compute log p(d | params) — physical params, no prior."""
         params = dict(free_params)
         for name, val in fixed_values.items():
             params[name] = val
-
         params = spec.resolve_mirrors(params)
-
-        # Forward model prediction
-        if data_type == "photometry":
-            predicted = model.predict_photometry(params, mode=mode)
-        elif data_type == "spectroscopy":
-            predicted = model.predict_spectrum(params, model._wave_obs, mode=mode)
-        elif data_type == "joint":
-            pred_phot = model.predict_photometry(params, mode=mode)
-            pred_spec = model.predict_spectrum(params, model._wave_obs, mode=mode)
-            predicted = jnp.concatenate([pred_phot, pred_spec])
-        else:
-            raise ValueError(f"Unknown data_type: {data_type}")
-
-        # Log-likelihood — ordered most-specific first so combined branches
-        # (eline+cal) are not shadowed by the less-specific cal-only branches.
-        if use_eline_marg and use_cal_marg and data_type == "spectroscopy":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            _, a_hat, _ = _marginalize_elines(
-                data - predicted,
-                noise,
-                G_eff,
-                params,
-                fixed_values,
-                eline_prior_type,
-                eline_prior_sigma,
-                eline_prior_width_dex,
-                eline_independent_wavelengths,
-            )
-            pred_with_lines = predicted + G_eff @ a_hat
-            ll = _calibration_log_likelihood(
-                pred_with_lines, data, noise, model._wave_obs, cal_n_poly, cal_prior_sigma
-            )
-        elif use_eline_marg and use_cal_marg and data_type == "joint":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            n_p = model.predict_photometry(params, mode=mode).shape[0]
-            data_phot, data_spec, noise_phot, noise_spec, pred_phot, pred_spec = _split_joint_data(
-                data, noise, predicted, n_p
-            )
-            _, a_hat, _ = _marginalize_elines(
-                data_spec - pred_spec,
-                noise_spec,
-                G_eff,
-                params,
-                fixed_values,
-                eline_prior_type,
-                eline_prior_sigma,
-                eline_prior_width_dex,
-                eline_independent_wavelengths,
-            )
-            pred_spec_with_lines = pred_spec + G_eff @ a_hat
-            chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
-            ll_spec = _calibration_log_likelihood(
-                pred_spec_with_lines,
-                data_spec,
-                noise_spec,
-                model._wave_obs,
-                cal_n_poly,
-                cal_prior_sigma,
-            )
-            ll = -0.5 * chi2_phot + ll_spec
-        elif use_cal_marg and data_type == "spectroscopy":
-            ll = _calibration_log_likelihood(
-                predicted, data, noise, model._wave_obs, cal_n_poly, cal_prior_sigma
-            )
-        elif use_cal_marg and data_type == "joint":
-            n_p = model.predict_photometry(params, mode=mode).shape[0]
-            data_phot, data_spec, noise_phot, noise_spec, pred_phot, pred_spec = _split_joint_data(
-                data, noise, predicted, n_p
-            )
-            chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
-            ll_spec = _calibration_log_likelihood(
-                pred_spec, data_spec, noise_spec, model._wave_obs, cal_n_poly, cal_prior_sigma
-            )
-            ll = -0.5 * chi2_phot + ll_spec
-        elif use_eline_marg and data_type == "spectroscopy":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            ln_l_eline, _, _ = _marginalize_elines(
-                data - predicted,
-                noise,
-                G_eff,
-                params,
-                fixed_values,
-                eline_prior_type,
-                eline_prior_sigma,
-                eline_prior_width_dex,
-                eline_independent_wavelengths,
-            )
-            ll = ln_l_eline
-        elif use_eline_marg and data_type == "joint":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            n_p = model.predict_photometry(params, mode=mode).shape[0]
-            data_phot, data_spec, noise_phot, noise_spec, pred_phot, pred_spec = _split_joint_data(
-                data, noise, predicted, n_p
-            )
-            ln_l_eline, _, _ = _marginalize_elines(
-                data_spec - pred_spec,
-                noise_spec,
-                G_eff,
-                params,
-                fixed_values,
-                eline_prior_type,
-                eline_prior_sigma,
-                eline_prior_width_dex,
-                eline_independent_wavelengths,
-            )
-            chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
-            ll = -0.5 * chi2_phot + ln_l_eline
-        elif use_eline_fitted and data_type == "spectroscopy":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            a = jnp.array([params[nm] for nm in eline_amplitude_names])
-            predicted_with_lines = predicted + G_eff @ a
-            chi2 = jnp.sum(((data - predicted_with_lines) / noise) ** 2)
-            ll = -0.5 * chi2
-        elif use_eline_fitted and data_type == "joint":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            n_p = model.predict_photometry(params, mode=mode).shape[0]
-            data_phot, data_spec, noise_phot, noise_spec, pred_phot, pred_spec = _split_joint_data(
-                data, noise, predicted, n_p
-            )
-            a = jnp.array([params[nm] for nm in eline_amplitude_names])
-            pred_spec_with_lines = pred_spec + G_eff @ a
-            chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
-            chi2_spec = jnp.sum(((data_spec - pred_spec_with_lines) / noise_spec) ** 2)
-            ll = -0.5 * (chi2_phot + chi2_spec)
-        elif use_variable_noise:
-            f_cal = params.get("noise_frac_cal", 0.0)
-            ll = -variable_noise_hamiltonian(data, noise, predicted, f_cal, dof=noise_dof)
-        elif has_spec_cov_ll and data_type == "spectroscopy":
-            diff = data - predicted
-            ll = -0.5 * (diff @ data_args["spec_cov_inv"] @ diff)
-        elif has_spec_cov_ll and data_type == "joint":
-            data_phot = data[:n_phot_ll]
-            pred_phot = predicted[:n_phot_ll]
-            noise_phot = noise[:n_phot_ll]
-            diff_spec = data[n_phot_ll:] - predicted[n_phot_ll:]
-            chi2_phot = jnp.sum(((data_phot - pred_phot) / noise_phot) ** 2)
-            chi2_spec = diff_spec @ data_args["spec_cov_inv"] @ diff_spec
-            ll = -0.5 * (chi2_phot + chi2_spec)
-        else:
-            chi2 = jnp.sum(((data - predicted) / noise) ** 2)
-            ll = -0.5 * chi2
-
-        if has_line_fluxes_ll:
-            model_lf = model.predict_line_fluxes(
-                params, target_wavelengths=data_args["line_flux_waves"]
-            )
-            chi2_lines = jnp.sum(
-                ((data_args["line_flux_obs"] - model_lf) / data_args["line_flux_err"]) ** 2
-            )
-            ll = ll - 0.5 * chi2_lines
-
-        if has_indices_ll:
-            model_idx = model.predict_spectral_indices(params, index_defs_ll, mode=mode)
-            chi2_idx = jnp.sum(
-                ((data_args["index_obs"] - model_idx) / data_args["index_err"]) ** 2
-            )
-            ll = ll - 0.5 * chi2_idx
-
-        return ll
+        return -neg_log_lik(params, data_args)
 
     return loglikelihood_fn
 
@@ -837,15 +696,9 @@ def build_loglikelihood_unbounded_fn(fitter, mode="_traceable"):
 
     def loglik_unbounded(params_unbounded, data_args):
         """Compute log-likelihood after unstandardizing unbounded parameters to physical space."""
-        params = {}
-        for name in free_names:
-            dist = spec.get_distribution(name)
-            params[name] = dist.unstandardize(params_unbounded[name])
-        for name, val in fixed_values.items():
-            params[name] = val
-        if spec.stochastic and "psd_xi" in params_unbounded:
-            params["psd_xi"] = params_unbounded["psd_xi"]
-        params = spec.resolve_mirrors(params)
+        params = _unstandardize_parameters(
+            params_unbounded, spec, free_names, fixed_values, spec.stochastic
+        )
         return loglik_fn(params, data_args)
 
     return loglik_unbounded

@@ -20,9 +20,9 @@ jax.config.update("jax_enable_x64", True)
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
-ASTRODUST_PATH = DATA_DIR / "astrodust_templates.npz"
-BOSA_PATH = DATA_DIR / "bosa_templates.npz"
-THEMIS_PATH = DATA_DIR / "themis_templates.npz"
+ASTRODUST_PATH = DATA_DIR / "astrodust_templates.h5"
+BOSA_PATH = DATA_DIR / "bosa_templates.h5"
+THEMIS_PATH = DATA_DIR / "themis_templates.h5"
 
 # Wavelength grid for SED evaluation: 1 to 1000 microns in Angstrom
 WAVE_AA = jnp.linspace(1.0e4, 1.0e7, 1000)
@@ -357,8 +357,15 @@ class TestCrossModelComparison:
 
     @pytest.fixture(scope="class")
     def dl07_available(self):
-        dl07_path = DATA_DIR / "dl07_templates.npz"
-        if not dl07_path.exists():
+        dl07_path = next(
+            (
+                DATA_DIR / f
+                for f in ("dl07_templates_v2.h5", "dl07_templates.h5")
+                if (DATA_DIR / f).exists()
+            ),
+            None,
+        )
+        if dl07_path is None:
             pytest.skip("DL07 templates not found")
         return True
 

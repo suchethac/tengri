@@ -95,8 +95,8 @@ def setup_style(style="tengri"):
     Examples
     --------
     >>> from tengri.analysis.plotting import setup_style
-    >>> setup_style()                 # default: science + tengri overrides
-    >>> setup_style("tengri-minimal") # fallback if scienceplots absent
+    >>> setup_style()  # default: science + tengri overrides
+    >>> setup_style("tengri-minimal")  # fallback if scienceplots absent
     """
     # Composite-style block: layer scienceplots presets first, then tengri
     # overrides. Falls back gracefully if scienceplots is not installed.

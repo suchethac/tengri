@@ -90,6 +90,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "io",
         "nebular",
         "observation",
+        "pipeline",
         "plot",
         "preprocessing",
         "presets",

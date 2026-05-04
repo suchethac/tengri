@@ -96,12 +96,8 @@ def apply_aperture_correction(
             raise ValueError("aperture correction must be positive (got <= 0)")
     else:
         if corr_arr.shape != flux_arr.shape:
-            raise ValueError(
-                f"corrections shape {corr_arr.shape} != flux shape {flux_arr.shape}"
-            )
+            raise ValueError(f"corrections shape {corr_arr.shape} != flux shape {flux_arr.shape}")
         if not bool(np.all(np.asarray(corr_arr) > 0.0)):
-            raise ValueError(
-                "aperture corrections must be positive (got <= 0 in some band)"
-            )
+            raise ValueError("aperture corrections must be positive (got <= 0 in some band)")
 
     return flux_arr * corr_arr, noise_arr * corr_arr

@@ -36,10 +36,11 @@ ax.loglog(wave_um, np.array(l_equat_torus), "C1--", lw=1.5, label="Equatorial To
 ax.loglog(wave_um, np.array(l_disc + l_equat_torus), "k-", lw=1.8, label="Total (without polar)")
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("Baseline: Disc + Equatorial Torus")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.01, 100)
+ax.set_ylim(1e21, 1e32)
 
 # --- Panel 2: Add polar dust (parametrically) ---
 ax = axes[1]
@@ -76,10 +77,11 @@ no_polar = "No polar"
 ax.loglog(wave_um, np.array(l_disc + l_equat_torus), "k--", lw=1.5, alpha=0.5, label=no_polar)
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("Effect of Polar Dust on IR SED")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.01, 100)
+ax.set_ylim(1e21, 1e32)
 
 # --- Panel 3: Polar dust covering fraction vs inclination ---
 ax = axes[2]
@@ -104,10 +106,11 @@ for cos_inc in [0.9, 0.5, 0.1]:
     ax.loglog(wave_um, l_total_i, lw=1.8, label=f"Inclination θ={inc_deg:.0f}°")
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [$L_\odot$ Hz$^{-1}$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title("Polar Dust: Inclination Dependence")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0.01, 100)
+ax.set_ylim(1e21, 1e32)
 
 title_str = "Polar Dust Torus: Geometry Decoupled from Equatorial Dust (Stalevski+2016)"
 fig.suptitle(title_str, fontsize=12)

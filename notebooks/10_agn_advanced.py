@@ -352,7 +352,7 @@ try:
     axes[0].grid(alpha=0.3)
 
     # (b) Zoom on silicate feature
-    wave_sil = jnp.logspace(np.log10(5), np.log10(20), 300)
+    wave_sil = jnp.logspace(np.log10(5e4), np.log10(20e4), 300)  # 5-20 µm in Angstroms
     wave_sil_um = np.asarray(wave_sil) / 1e4
 
     for frac, c in zip([0.5, 0.8], [COLORS["rt"], COLORS["model"]]):

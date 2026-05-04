@@ -17,23 +17,45 @@ def _reset_emission_caches():
     """Clear the lazy-loader resolution caches in emission.py."""
     _emission_mod._resolved.clear()
     _emission_mod._dl14_fn = None
+    # Clear functools.cache on the on-demand loader so a subsequent monkeypatch
+    # of _find_data_file actually takes effect.
+    if hasattr(_emission_mod._load_dl14_fn, "cache_clear"):
+        _emission_mod._load_dl14_fn.cache_clear()
     # Clear registry entries back to lazy wrappers
     _emission_mod.DUST_EMISSION_MODELS["draine_li2007"] = _emission_mod._dl07_lazy_wrapper
     _emission_mod.DUST_EMISSION_MODELS["dale2014"] = _emission_mod._make_lazy_loader(
         "dale2014",
-        "dale2014_templates.npz",
+        "dale2014_templates.h5",
         "create_dale2014_from_grid",
     )
     _emission_mod.DUST_EMISSION_MODELS["draine_li2014"] = _emission_mod._dl14_lazy_wrapper
     _emission_mod.DUST_EMISSION_MODELS["astrodust"] = _emission_mod._make_lazy_loader(
         "astrodust",
-        "astrodust_templates.npz",
+        "astrodust_templates.h5",
         "create_astrodust_from_grid",
     )
 
 
 def _reset_skirtor_cache():
     _skirtor_mod._skirtor_default = None
+    # Clear functools.cache on default loaders so monkeypatched paths take effect.
+    for attr in ("_load_skirtor_default",):
+        fn = getattr(_skirtor_mod, attr, None)
+        if fn is not None and hasattr(fn, "cache_clear"):
+            fn.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_caches_between_tests():
+    """Restore the emission-model registry and lazy-resolution caches before
+    AND after each test so that monkeypatch-driven ``_find_*_templates = None``
+    edits (either from this file or from upstream test modules that cached a
+    FileNotFoundError wrapper) don't leak into the current test."""
+    _reset_emission_caches()
+    _reset_skirtor_cache()
+    yield
+    _reset_emission_caches()
+    _reset_skirtor_cache()
 
 
 # ── DL07 (Draine & Li 2007) ───────────────────────────────────────
@@ -76,7 +98,7 @@ class TestDale2014NoFallback:
         _emission_mod._resolved.discard("dale2014")
         _emission_mod.DUST_EMISSION_MODELS["dale2014"] = _emission_mod._make_lazy_loader(
             "dale2014",
-            "dale2014_templates.npz",
+            "dale2014_templates.h5",
             "create_dale2014_from_grid",
         )
 
@@ -128,7 +150,7 @@ class TestAstrodustNoFallback:
         _emission_mod._resolved.discard("astrodust")
         _emission_mod.DUST_EMISSION_MODELS["astrodust"] = _emission_mod._make_lazy_loader(
             "astrodust",
-            "astrodust_templates.npz",
+            "astrodust_templates.h5",
             "create_astrodust_from_grid",
         )
 

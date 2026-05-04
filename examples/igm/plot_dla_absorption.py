@@ -27,7 +27,7 @@ ax = axes[0, 0]
 log_nh_col = 20.3  # DLA column density
 for z in [2.0, 2.5, 3.0, 4.0]:
     # Transmission in observed frame
-    tau_dla = dla_transmission_obs(wavelength_rest, z=z, log_nh_col=log_nh_col)
+    tau_dla = dla_transmission_obs(wavelength_rest, z_dla=z, log_n_hi=log_nh_col)
     transmission = jnp.exp(-tau_dla)
 
     ax.plot(
@@ -42,7 +42,7 @@ ax.set_ylabel(r"Transmission (1 - $\tau_{DLA}$)")
 ax.set_title("DLA Transmission: Redshift Evolution")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(500, 5000)
-ax.set_ylim(0, 1.1)
+ax.set_ylim(-0.02, 1.05)
 ax.grid(True, alpha=0.3)
 
 # --- Panel 2: Column density dependence (Lyman-alpha forest) ---
@@ -50,7 +50,7 @@ ax = axes[0, 1]
 
 z = 3.0
 for log_nh in [19.0, 19.5, 20.0, 20.3, 20.8]:
-    tau_dla = dla_transmission_obs(wavelength_rest, z=z, log_nh_col=log_nh)
+    tau_dla = dla_transmission_obs(wavelength_rest, z_dla=z, log_n_hi=log_nh)
     transmission = jnp.exp(-tau_dla)
 
     ax.plot(
@@ -65,7 +65,7 @@ ax.set_ylabel(r"Transmission")
 ax.set_title(f"DLA Transmission: Column Density (z={z})")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(500, 5000)
-ax.set_ylim(0, 1.1)
+ax.set_ylim(-0.02, 1.05)
 ax.grid(True, alpha=0.3)
 
 # Mark Lyman-alpha
@@ -76,7 +76,7 @@ ax = axes[1, 0]
 
 z = 2.5
 # Single DLA
-tau_single = dla_transmission_obs(wavelength_rest, z=z, log_nh_col=20.3)
+tau_single = dla_transmission_obs(wavelength_rest, z_dla=z, log_n_hi=20.3)
 transmission_single = jnp.exp(-tau_single)
 
 # Approximate double DLA (stack two with slightly different optical depths)
@@ -93,7 +93,7 @@ ax.set_ylabel(r"Transmission")
 ax.set_title(f"DLA: Single vs Stacked Systems (z={z})")
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(500, 5000)
-ax.set_ylim(0, 1.1)
+ax.set_ylim(-0.02, 1.05)
 ax.grid(True, alpha=0.3)
 
 # --- Panel 4: Attenuation impact on galaxy SED ---
@@ -107,7 +107,7 @@ colors = plt.cm.Oranges(np.linspace(0.3, 0.9, len(log_nh_values)))
 galaxy_sed = np.ones_like(wavelength_rest)  # Flat SED in L_nu
 
 for log_nh, color in zip(log_nh_values, colors):
-    tau_dla = dla_transmission_obs(wavelength_rest, z=z, log_nh_col=log_nh)
+    tau_dla = dla_transmission_obs(wavelength_rest, z_dla=z, log_n_hi=log_nh)
     transmission = jnp.exp(-tau_dla)
     attenuated_sed = galaxy_sed * np.array(transmission)
 

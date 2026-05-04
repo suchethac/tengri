@@ -47,6 +47,12 @@ if SSP_PATH is None:
 
 ssp = load_ssp_data(SSP_PATH)
 
+_FILTER_DIR = next(
+    (str(d) for d in [Path("data/filters"), Path("../data/filters"),
+                      Path("../../data/filters"), Path("../../../data/filters")] if d.exists()),
+    "data/filters",
+)
+
 spec = Parameters(
     sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
@@ -70,9 +76,9 @@ true_params = {**spec.sample(key),
 FILTER_SETS = {
     "SDSS (5)":   ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
     "+ NIR (8)":  ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-                   "twomass_J", "twomass_H", "twomass_Ks"],
+                   "2mass_j", "2mass_h", "2mass_ks"],
     "+ MIR (10)": ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-                   "twomass_J", "twomass_H", "twomass_Ks",
+                   "2mass_j", "2mass_h", "2mass_ks",
                    "wise_w1", "wise_w2"],
 }
 
@@ -82,15 +88,18 @@ COLORS_BAR = ["#4477AA", "#EE6677", "#228833"]
 sigmas = {}
 for fname, filters in FILTER_SETS.items():
     try:
-        obs  = Observation(photometry=Photometry.from_names(filters))
+        obs  = Observation(photometry=Photometry.from_names(filters, cache_dir=_FILTER_DIR))
         mdl  = SEDModel(spec, ssp, observation=obs)
         phot = jnp.abs(mdl.predict_photometry(true_params))
         noise = phot / 20.0
         fim, _ = compute_fisher_matrix(mdl, true_params, noise,
                                        data_type="photometry", param_names=fisher_params)
-        sigmas[fname] = fisher_parameter_errors(fim)
-    except Exception:
-        pass
+        errs = np.array(fisher_parameter_errors(fim))
+        # Unconstrained directions → clip to prior scale for visibility.
+        errs = np.where(np.isfinite(errs) & (errs > 0), errs, 5.0)
+        sigmas[fname] = np.minimum(errs, 5.0)
+    except Exception as e:
+        print(f"[{fname}] skipped: {e}")
 
 if not sigmas:
     raise RuntimeError("Fisher computation failed — check filter availability")
@@ -102,9 +111,11 @@ for i, (fname, sigma_arr) in enumerate(sigmas.items()):
     ax.bar(x + (i - 1) * width, sigma_arr, width,
            label=fname, color=COLORS_BAR[i], alpha=0.85)
 
+ax.set_yscale("log")
+ax.set_ylim(1e-3, 1e1)
 ax.set_xticks(x)
 ax.set_xticklabels(PARAM_LABELS, fontsize=10)
-ax.set_ylabel(r"Cramér-Rao $1\sigma$ bound")
+ax.set_ylabel(r"Cramér-Rao $1\sigma$ bound (log scale)")
 ax.set_title("Age-Dust-Metallicity Degeneracy: Filter Coverage Matters")
 ax.legend(fontsize=10, frameon=False)
 fig.tight_layout()

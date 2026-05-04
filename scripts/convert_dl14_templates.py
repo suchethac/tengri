@@ -161,9 +161,13 @@ def convert(input_dir: str, output_path: str) -> None:
             single_path = os.path.join(input_dir, single_dir, "spec_1.0.dat")
 
             if os.path.exists(single_path):
-                _, j_nu = read_dl14_spectrum(single_path)
-                single_u[iq, iu, :] = j_nu
-                found += 1
+                try:
+                    _, j_nu = read_dl14_spectrum(single_path)
+                    single_u[iq, iu, :] = j_nu
+                    found += 1
+                except (ValueError, OSError) as e:
+                    missing += 1
+                    print(f"\n  Corrupt: {single_path} ({e})")
             else:
                 missing += 1
                 if iu == 0 and iq == 0:
@@ -175,9 +179,13 @@ def convert(input_dir: str, output_path: str) -> None:
                 pl_path = os.path.join(input_dir, pl_dir, f"spec_{alpha_str}.dat")
 
                 if os.path.exists(pl_path):
-                    _, j_nu = read_dl14_spectrum(pl_path)
-                    powerlaw[iq, iu, ia, :] = j_nu
-                    found += 1
+                    try:
+                        _, j_nu = read_dl14_spectrum(pl_path)
+                        powerlaw[iq, iu, ia, :] = j_nu
+                        found += 1
+                    except (ValueError, OSError) as e:
+                        missing += 1
+                        print(f"\n  Corrupt: {pl_path} ({e})")
                 else:
                     missing += 1
                     if iu == 0 and iq == 0 and ia == 0:
@@ -210,6 +218,21 @@ def convert(input_dir: str, output_path: str) -> None:
                 total = -np.trapz(powerlaw[iq, iu, ia, :], nu_from_um)
                 if total > 0:
                     powerlaw[iq, iu, ia, :] /= total
+
+    # Drop qpah slots that are all-zero (missing raw data) so we don't
+    # silently extrapolate to fake templates. Downstream interpolation over
+    # the truncated qpah axis gives a correct (if narrower) grid.
+    keep_qpah = np.array([single_u[iq].any() for iq in range(n_qpah)])
+    n_dropped = int((~keep_qpah).sum())
+    if n_dropped:
+        print(
+            f"Dropping {n_dropped} qpah slots with no raw data: "
+            f"{[qpah_values[i] for i in np.where(~keep_qpah)[0]]}"
+        )
+        single_u = single_u[keep_qpah]
+        powerlaw = powerlaw[keep_qpah]
+        qpah_values = [qpah_values[i] for i in np.where(keep_qpah)[0]]
+        n_qpah = len(qpah_values)
 
     # Write HDF5
     wave_aa = wave_um * 1e4  # convert to Angstrom for tengri convention

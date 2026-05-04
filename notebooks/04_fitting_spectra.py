@@ -379,14 +379,6 @@ ax.set_title("SFH Recovery from Spectroscopy")
 sfh_true_p = model_param.predict_sfh(true_param)
 t_gyr_p = np.array(sfh_true_p["t_gyr"])
 sfr_p = np.array(sfh_true_p["sfr_mean"])
-inset = ax.inset_axes([0.6, 0.6, 0.35, 0.35])
-mask_200 = t_gyr_p < 0.2
-if hasattr(t_gyr_p, "__len__") and np.any(mask_200):
-    inset.plot(t_gyr_p[mask_200] * 1e3, sfr_p[mask_200], color=COLORS["truth"], lw=1)
-    inset.set_xlabel("Lookback [Myr]", fontsize=10)
-    inset.set_ylabel("SFR", fontsize=10)
-    inset.tick_params(labelsize=5)
-    inset.set_xlim(0, 200)
 fig.tight_layout()
 # plt.savefig(os.path.join(FIGDIR, "fig03_sfh_spec.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -576,69 +568,6 @@ if RUN_EXPENSIVE:
     sfh_true_s = model_stoch.predict_sfh(true_stoch)
     t_gyr_s = np.array(sfh_true_s["t_gyr"])
     sfr_full_s = np.array(sfh_true_s["sfr_full"])
-    inset = ax.inset_axes([0.6, 0.6, 0.35, 0.35])
-    mask_200 = t_gyr_s < 0.2
-    if hasattr(t_gyr_s, "__len__") and np.any(mask_200):
-        inset.plot(t_gyr_s[mask_200] * 1e3, sfr_full_s[mask_200], color=COLORS["truth"], lw=1)
-        inset.set_xlabel("Lookback [Myr]", fontsize=10)
-        inset.set_ylabel("SFR", fontsize=10)
-        inset.tick_params(labelsize=5)
-        inset.set_xlim(0, 200)
-    fig.tight_layout()
-    plt.show()
-
-    # --- FIGURE 6: PSD parameter corner ---
-    psd_params = ["sfh_field_psd_sigma", "sfh_field_psd_tau_myr"]
-    fig = safe_corner(result_stoch_spec, truths=true_stoch, params=psd_params)
-    if fig is not None:
-        fig.suptitle("PSD Parameters — Spectroscopy Constrains Both σ and τ", y=1.02)
-    plt.show()
-
-    # --- FIGURE 7: Photometry vs Spectroscopy (stochastic) ---
-    model_stoch_phot = SEDModel(spec_stoch, ssp_data, observation=obs_phot)
-    fitter_stoch_phot = Fitter(model_stoch_phot, mock_phot_s.flux_obs, mock_phot_s.noise)
-    _ = fitter_stoch_phot.run("map", n_steps=500, verbose=False)
-    result_stoch_phot = fitter_stoch_phot.run(
-        "mcmc_nuts",
-        n_warmup=400,
-        n_samples=800,
-        verbose=False,
-    )
-
-    phys_params = [p for p in spec_stoch.free_params if "xi" not in p]
-    fig = plot_corner_comparison(
-        [result_stoch_phot, result_stoch_spec],
-        labels=["Photometry (5 bands)", "Spectroscopy (200 px)"],
-        colors=[COLORS["mcmc_nuts"], COLORS["mcmc_nuts"]],
-        truths=true_stoch,
-        params=phys_params,
-    )
-    if fig is not None:
-        fig.suptitle("Photometry vs Spectroscopy — Physical Parameters (NUTS)", y=1.02)
-    plt.show()
-
-    fig = plot_corner_comparison(
-        [result_stoch_phot, result_stoch_spec],
-        labels=["Photometry", "Spectroscopy"],
-        colors=[COLORS["mcmc_nuts"], COLORS["mcmc_nuts"]],
-        truths=true_stoch,
-        params=psd_params,
-    )
-    if fig is not None:
-        fig.suptitle("PSD Recovery: Spectroscopy Breaks the σ–τ Degeneracy (NUTS)", y=1.02)
-    plt.show()
-
-    # CI width comparison table
-    print("\n  Parameter                  | Phot CI   | Spec CI   | Improvement")
-    print("  " + "-" * 65)
-    for p in phys_params:
-        s_phot = np.array(result_stoch_phot.samples[p])
-        s_spec = np.array(result_stoch_spec.samples[p])
-        w_phot = np.percentile(s_phot, 84) - np.percentile(s_phot, 16)
-        w_spec = np.percentile(s_spec, 84) - np.percentile(s_spec, 16)
-        ratio = w_phot / max(w_spec, 1e-10)
-        print(f"  {p:<28s} | {w_phot:>7.3f}  | {w_spec:>7.3f}  | {ratio:>5.1f}×")
-
 # %% [markdown]
 # ## SNR Dependence (Optional)
 

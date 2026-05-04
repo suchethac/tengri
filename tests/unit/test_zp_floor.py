@@ -40,9 +40,7 @@ class TestApplyZpFloor:
         noise = jnp.array([0.1, 0.2, 0.3])
         floor = jnp.array([0.01, 0.05, 0.10])
         out = apply_zp_floor(flux, noise, floor)
-        expected = np.sqrt(
-            np.asarray(noise) ** 2 + (np.asarray(floor) * np.asarray(flux)) ** 2
-        )
+        expected = np.sqrt(np.asarray(noise) ** 2 + (np.asarray(floor) * np.asarray(flux)) ** 2)
         np.testing.assert_allclose(np.asarray(out), expected, rtol=1e-12)
 
     def test_caps_snr_at_inverse_floor(self):

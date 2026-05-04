@@ -352,9 +352,7 @@ def split_rhat(chain: np.ndarray) -> float:
         if n < 2 or chains.shape[0] < 2:
             return float("nan")
     else:
-        raise ValueError(
-            f"split_rhat expects 1-D or 2-D array, got ndim={arr.ndim}"
-        )
+        raise ValueError(f"split_rhat expects 1-D or 2-D array, got ndim={arr.ndim}")
 
     m = chains.shape[0]
     chain_means = chains.mean(axis=1)
@@ -502,9 +500,7 @@ def rank_normalised_rhat(chain: np.ndarray) -> float:
         if chains.shape[1] < 2 or chains.shape[0] < 2:
             return float("nan")
     else:
-        raise ValueError(
-            f"rank_normalised_rhat expects 1-D or 2-D array, got ndim={arr.ndim}"
-        )
+        raise ValueError(f"rank_normalised_rhat expects 1-D or 2-D array, got ndim={arr.ndim}")
     if not np.isfinite(np.var(chains)) or np.var(chains) < 1e-30:
         return float("nan")
 

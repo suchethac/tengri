@@ -149,8 +149,7 @@ def _resolve(size: str) -> str:
     if size in ("compact", "banner"):
         return LOGO_BANNER
     raise ValueError(
-        f"Unknown logo size '{size}'. "
-        "Use 'default', 'small', 'stipple', or 'compact'."
+        f"Unknown logo size '{size}'. Use 'default', 'small', 'stipple', or 'compact'."
     )
 
 

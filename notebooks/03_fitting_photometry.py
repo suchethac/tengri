@@ -312,7 +312,7 @@ spec_with_photoz = Parameters(
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 1.5),
     dust_slope=Fixed(-0.7),
-    redshift=Gaussian(REDSHIFT, 0.02),  # Photo-z prior: μ=0.1, σ=0.02
+    redshift=Gaussian(REDSHIFT, 0.02, lo=0.001, hi=6.0),  # Photo-z prior: μ=0.1, σ=0.02
     mean_sfh_type="dense_basis",
 )
 

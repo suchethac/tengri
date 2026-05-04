@@ -37,7 +37,8 @@ if not _GRID_PATH.is_file():
 
 if not _AGNFITTER_PICKLE.is_file():
     pytest.skip(
-        "AGNfitter S04.pickle not found at " + str(_AGNFITTER_PICKLE)
+        "AGNfitter S04.pickle not found at "
+        + str(_AGNFITTER_PICKLE)
         + " (clone with: git clone https://github.com/GabrielaCR/AGNfitter /tmp/AGNfitter-rX)",
         allow_module_level=True,
     )
@@ -121,9 +122,7 @@ class TestSilva04Shapes:
     """Verify SED shapes match between AGNfitter and tengri templates."""
 
     @pytest.mark.parametrize("nh_idx", [0, 2, 4])
-    def test_sed_shapes_match_after_normalisation(
-        self, silva04_grid, agnfitter_silva04, nh_idx
-    ):
+    def test_sed_shapes_match_after_normalisation(self, silva04_grid, agnfitter_silva04, nh_idx):
         """Pick specific log_N_H bins and verify tengri's template matches AGNfitter's shape.
 
         The comparison:

@@ -74,7 +74,7 @@ mock = model.mock_spectrum(true_params, WAVE_OBS, snr=30.0, key=jax.random.PRNGK
 # --- Fit with MAP ---
 fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="spectroscopy")
 posterior = fitter.run("map", optimizer="adam", n_steps=500, verbose=False)
-best_spec = model.predict_spectrum(posterior.map_params, WAVE_OBS)
+best_spec = model.predict_spectrum(posterior.params, WAVE_OBS)
 
 # --- Plot ---
 wave = np.array(WAVE_OBS)

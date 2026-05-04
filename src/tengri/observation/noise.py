@@ -778,13 +778,9 @@ def apply_zp_floor(
             raise ValueError("zp floor must be non-negative (got < 0)")
     else:
         if floor_arr.shape != flux_arr.shape:
-            raise ValueError(
-                f"floor shape {floor_arr.shape} != flux shape {flux_arr.shape}"
-            )
+            raise ValueError(f"floor shape {floor_arr.shape} != flux shape {flux_arr.shape}")
         if not bool(jnp.all(floor_arr >= 0.0)):
-            raise ValueError(
-                "zp floor must be non-negative (got < 0 in some band)"
-            )
+            raise ValueError("zp floor must be non-negative (got < 0 in some band)")
 
     sys_term = floor_arr * jnp.abs(flux_arr)
     return jnp.sqrt(noise_arr**2 + sys_term**2)

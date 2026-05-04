@@ -262,11 +262,11 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
     from tengri.components.sps.dsps_wrapper import (
         interpolate_metallicity_smooth as _interp_metallicity_smooth,
     )
+
     _met_use_smooth = state.met_interp == "smooth"
 
     # --- Shared SED computation (sfr_on_ssp pre-computed by caller) ---
-    def _compute_rest_sed(sfr_on_ssp, params,
-                          ssp_flux_traced=None, ssp_lgmet_traced=None):
+    def _compute_rest_sed(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
         """sfr_on_ssp, params → (rest_sed, redshift_value).
 
         ``sfr_on_ssp`` is the SFH already evaluated on the SSP age grid.
@@ -327,21 +327,29 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
                 if _use_alpha_fe_t2:
                     alpha_fe = p.get("alpha_fe", 0.0)
                     ssp_flux_at_z = interp_met_alpha_evolving_dispatch(
-                        model, lgmet_per_age, alpha_fe,
-                        ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced,
+                        model,
+                        lgmet_per_age,
+                        alpha_fe,
+                        ssp_flux=ssp_flux_traced,
+                        ssp_lgmet=ssp_lgmet_traced,
                     )
                 else:
                     ssp_flux_at_z = interp_metallicity_evolving(
-                        model, lgmet_per_age,
-                        ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced,
+                        model,
+                        lgmet_per_age,
+                        ssp_flux=ssp_flux_traced,
+                        ssp_lgmet=ssp_lgmet_traced,
                     )
             else:
                 _lgmet = p.get("log_z_abs", -1.8477)
                 if _use_alpha_fe_t2:
                     alpha_fe = p.get("alpha_fe", 0.0)
                     ssp_flux_at_z = interp_met_alpha_dispatch(
-                        model, _lgmet, alpha_fe,
-                        ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced,
+                        model,
+                        _lgmet,
+                        alpha_fe,
+                        ssp_flux=ssp_flux_traced,
+                        ssp_lgmet=ssp_lgmet_traced,
                     )
                 else:
                     # Phase II-2 trace path: prefer traced SSP arrays when
@@ -369,12 +377,9 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
 
     if is_free_z:
 
-        def fused_tier2_phot(sfr_on_ssp, params,
-                             ssp_flux_traced=None, ssp_lgmet_traced=None):
+        def fused_tier2_phot(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
             """sfr_on_ssp, params dict → observed photometry (free z)."""
-            rest_sed, z = _compute_rest_sed(
-                sfr_on_ssp, params, ssp_flux_traced, ssp_lgmet_traced
-            )
+            rest_sed, z = _compute_rest_sed(sfr_on_ssp, params, ssp_flux_traced, ssp_lgmet_traced)
             dl_cm = _lum_dist(z)
 
             if apply_igm:
@@ -392,12 +397,9 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
 
     else:
 
-        def fused_tier2_phot(sfr_on_ssp, params,
-                             ssp_flux_traced=None, ssp_lgmet_traced=None):
+        def fused_tier2_phot(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
             """sfr_on_ssp, params dict → observed photometry (fixed z)."""
-            rest_sed, _z = _compute_rest_sed(
-                sfr_on_ssp, params, ssp_flux_traced, ssp_lgmet_traced
-            )
+            rest_sed, _z = _compute_rest_sed(sfr_on_ssp, params, ssp_flux_traced, ssp_lgmet_traced)
 
             if igm_trans_full is not None:
                 rest_sed = rest_sed * igm_trans_full
@@ -526,8 +528,7 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
     )
 
     # Shared SED computation (sfr_on_ssp pre-computed by caller)
-    def _compute_rest_sed_spec(sfr_on_ssp, params,
-                               ssp_flux_traced=None, ssp_lgmet_traced=None):
+    def _compute_rest_sed_spec(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
         """Compute rest-frame SED for the spectroscopy kernel given pre-computed SFR weights.
 
         ``ssp_flux_traced`` / ``ssp_lgmet_traced`` (Phase II-2 trace path):
@@ -592,21 +593,29 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
                 if _use_alpha_fe_spec2:
                     alpha_fe = p.get("alpha_fe", 0.0)
                     ssp_flux_at_z = interp_met_alpha_evolving_dispatch(
-                        model, lgmet_per_age, alpha_fe,
-                        ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced,
+                        model,
+                        lgmet_per_age,
+                        alpha_fe,
+                        ssp_flux=ssp_flux_traced,
+                        ssp_lgmet=ssp_lgmet_traced,
                     )
                 else:
                     ssp_flux_at_z = interp_metallicity_evolving(
-                        model, lgmet_per_age,
-                        ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced,
+                        model,
+                        lgmet_per_age,
+                        ssp_flux=ssp_flux_traced,
+                        ssp_lgmet=ssp_lgmet_traced,
                     )
             else:
                 if _use_alpha_fe_spec2:
                     alpha_fe = p.get("alpha_fe", 0.0)
                     _lgmet_s = p.get("log_z_abs", -1.8477)
                     ssp_flux_at_z = interp_met_alpha_dispatch(
-                        model, _lgmet_s, alpha_fe,
-                        ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced,
+                        model,
+                        _lgmet_s,
+                        alpha_fe,
+                        ssp_flux=ssp_flux_traced,
+                        ssp_lgmet=ssp_lgmet_traced,
                     )
                 else:
                     _lgmet_s = p.get("log_z_abs", -1.8477)
@@ -631,8 +640,7 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
 
     if is_free_z:
 
-        def fused_tier2_spec(sfr_on_ssp, params,
-                             ssp_flux_traced=None, ssp_lgmet_traced=None):
+        def fused_tier2_spec(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
             """sfr_on_ssp, params dict → observed spectrum (free z)."""
             rest_sed, z = _compute_rest_sed_spec(
                 sfr_on_ssp, params, ssp_flux_traced, ssp_lgmet_traced
@@ -642,8 +650,7 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
 
     else:
 
-        def fused_tier2_spec(sfr_on_ssp, params,
-                             ssp_flux_traced=None, ssp_lgmet_traced=None):
+        def fused_tier2_spec(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
             """sfr_on_ssp, params dict → observed spectrum (fixed z)."""
             rest_sed, _z = _compute_rest_sed_spec(
                 sfr_on_ssp, params, ssp_flux_traced, ssp_lgmet_traced
@@ -773,13 +780,18 @@ def build_hybrid_spectrum(state: SEDModelState, model=None):
         if _use_alpha_fe and _has_alpha:
             alpha_fe_val = p.get("alpha_fe", 0.0)
             ssp_flux_at_z = interp_met_alpha_dispatch(
-                model, _lgmet_hs, alpha_fe_val,
-                ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced,
+                model,
+                _lgmet_hs,
+                alpha_fe_val,
+                ssp_flux=ssp_flux_traced,
+                ssp_lgmet=ssp_lgmet_traced,
             )
         else:
             ssp_flux_at_z = interp_metallicity(
-                model, _lgmet_hs,
-                ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced,
+                model,
+                _lgmet_hs,
+                ssp_flux=ssp_flux_traced,
+                ssp_lgmet=ssp_lgmet_traced,
             )
 
         # Stellar spectrum on pixels
@@ -828,8 +840,7 @@ def build_hybrid_spectrum(state: SEDModelState, model=None):
     # Ideally, hybrid kernel would not be used for evolving metallicity.
     if _is_single_dust:
 
-        def hybrid_spec(sfr_on_ssp, params,
-                        ssp_flux_traced=None, ssp_lgmet_traced=None):
+        def hybrid_spec(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
             """Single-dust hybrid spectrum."""
             p = get_internal_params(params, param_map, spec, has_field)
             if state.met_mode == "ramp":
@@ -849,15 +860,17 @@ def build_hybrid_spectrum(state: SEDModelState, model=None):
             else:
                 _lgmet = p.get("log_z_abs", -1.8477)
             return _hybrid_spec_body(
-                sfr_on_ssp, params, _lgmet, (p.get("tau_v", 0.0),),
+                sfr_on_ssp,
+                params,
+                _lgmet,
+                (p.get("tau_v", 0.0),),
                 ssp_flux_traced=ssp_flux_traced,
                 ssp_lgmet_traced=ssp_lgmet_traced,
             )
 
     else:
 
-        def hybrid_spec(sfr_on_ssp, params,
-                        ssp_flux_traced=None, ssp_lgmet_traced=None):
+        def hybrid_spec(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
             """Two-dust hybrid spectrum."""
             p = get_internal_params(params, param_map, spec, has_field)
             if state.met_mode == "ramp":

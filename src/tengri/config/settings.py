@@ -434,6 +434,7 @@ class SEDModelConfig:
 def __getattr__(name: str):
     if name == "ModelConfig":
         import warnings
+
         warnings.warn(
             "ModelConfig is deprecated; use SEDModelConfig instead. "
             "ModelConfig will be removed in v1.0.",

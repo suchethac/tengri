@@ -143,8 +143,12 @@ def interp_met_alpha_dispatch(
 
 
 def interp_met_alpha_evolving_dispatch(
-    model, log_z_per_age, alpha_fe_per_age,
-    ssp_flux=None, ssp_lgmet=None, ssp_alpha_fe=None,
+    model,
+    log_z_per_age,
+    alpha_fe_per_age,
+    ssp_flux=None,
+    ssp_lgmet=None,
+    ssp_alpha_fe=None,
 ):
     """Dispatch per-age metallicity+alpha interpolation on SSP grid.
 
@@ -182,9 +186,7 @@ def interp_met_alpha_evolving_dispatch(
         )
     # Fallback: effective_metallicity on 3D grid
     log_z_eff = effective_metallicity(log_z_per_age, alpha_fe_per_age)
-    return interp_metallicity_evolving(
-        model, log_z_eff, ssp_flux=ssp_flux, ssp_lgmet=ssp_lgmet
-    )
+    return interp_metallicity_evolving(model, log_z_eff, ssp_flux=ssp_flux, ssp_lgmet=ssp_lgmet)
 
 
 def get_dust_kwargs(model, p):

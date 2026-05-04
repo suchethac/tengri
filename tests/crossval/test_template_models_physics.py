@@ -41,7 +41,7 @@ def _no_fallback_warning(recwarn) -> bool:
 
 # ── DL07 — Draine & Li 2007 ───────────────────────────────────────
 
-_DL07_EXISTS = _template_exists("dl07_templates.npz") or _template_exists("dl07_templates.h5")
+_DL07_EXISTS = _template_exists("dl07_templates_v2.h5") or _template_exists("dl07_templates.h5")
 
 
 @pytest.mark.skipif(not _DL07_EXISTS, reason="DL07 templates not found")
@@ -153,7 +153,7 @@ class TestDL07TemplatePhysics:
 
 # ── ASTRODUST — Hensley & Draine 2023 ─────────────────────────────
 
-_AD_EXISTS = _template_exists("astrodust_templates.npz")
+_AD_EXISTS = _template_exists("astrodust_templates.h5")
 
 
 @pytest.mark.skipif(not _AD_EXISTS, reason="Astrodust templates not found")
@@ -218,7 +218,7 @@ class TestAstrodustTemplatePhysics:
 
 # ── THEMIS — Jones et al. 2017 ────────────────────────────────────
 
-_TH_EXISTS = _template_exists("themis_templates.npz")
+_TH_EXISTS = _template_exists("themis_templates.h5")
 
 
 @pytest.mark.skipif(not _TH_EXISTS, reason="THEMIS templates not found")
@@ -268,7 +268,7 @@ class TestTHEMISTemplatePhysics:
 
 # ── BOSA — Boquien & Salim 2021 ───────────────────────────────────
 
-_BO_EXISTS = _template_exists("bosa_templates.npz")
+_BO_EXISTS = _template_exists("bosa_templates.h5")
 
 
 @pytest.mark.skipif(not _BO_EXISTS, reason="BOSA templates not found")
@@ -335,7 +335,7 @@ class TestBOSATemplatePhysics:
 
 # ── Dale 2014 templates ───────────────────────────────────────────
 
-_DA_EXISTS = _template_exists("dale2014_templates.npz")
+_DA_EXISTS = _template_exists("dale2014_templates.h5")
 
 
 @pytest.mark.skipif(not _DA_EXISTS, reason="Dale2014 templates not found")

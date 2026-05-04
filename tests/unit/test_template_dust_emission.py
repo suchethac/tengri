@@ -510,6 +510,13 @@ class TestDL14ExtendedRange:
         grads_jax = jax.grad(loss, argnums=(0, 1, 2, 3))(1.0, 0.05, 2.5, 2.0)
         param_vals = [1.0, 0.05, 2.5, 2.0]
         param_names = ["umin", "gamma", "qpah", "alpha"]
+        # Map short name → actual kwarg name expected by the loader
+        kw_for = {
+            "umin": "dust_umin",
+            "gamma": "dust_gamma_dl",
+            "qpah": "dust_qpah",
+            "alpha": "dust_alpha_dl14",
+        }
 
         def make_loss_single(idx):
             def loss_single(x):
@@ -519,7 +526,7 @@ class TestDL14ExtendedRange:
                     "dust_qpah": param_vals[2],
                     "dust_alpha_dl14": param_vals[3],
                 }
-                kwargs[f"dust_{param_names[idx]}"] = x
+                kwargs[kw_for[param_names[idx]]] = x
                 return float(jnp.sum(draine_li2014(ir_wave, 1e10, **kwargs)))
 
             return loss_single

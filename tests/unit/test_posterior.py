@@ -303,9 +303,9 @@ class _FakeSED:
 
         f_lambda = jnp.full_like(self._wave, self._cont)
         for c, a in zip(self._centers, self._amps):
-            f_lambda = f_lambda + a * jnp.exp(
-                -0.5 * ((self._wave - c) / self._sigma) ** 2
-            ) / (self._sigma * jnp.sqrt(2.0 * jnp.pi))
+            f_lambda = f_lambda + a * jnp.exp(-0.5 * ((self._wave - c) / self._sigma) ** 2) / (
+                self._sigma * jnp.sqrt(2.0 * jnp.pi)
+            )
         l_nu = f_lambda * (self._wave**2 / _C_AA_S)
         return SEDResult(wavelength=self._wave, sed=l_nu)
 
@@ -615,9 +615,7 @@ class TestPosteriorPredictive:
             diagnostics={},
         )
         p._model = model
-        out = p.posterior_predictive(
-            data=truth, noise=jnp.full(bands, 0.1), n_samples=10
-        )
+        out = p.posterior_predictive(data=truth, noise=jnp.full(bands, 0.1), n_samples=10)
         assert out["predictions"].shape == (1, bands)
         assert out["residuals"].shape == (1, bands)
         assert out["chi2"].shape == (1,)
@@ -639,9 +637,7 @@ class TestPosteriorPredictive:
             diagnostics={},
         )
         p._model = model
-        out = p.posterior_predictive(
-            data=truth, noise=jnp.full(bands, 0.05), n_samples=n
-        )
+        out = p.posterior_predictive(data=truth, noise=jnp.full(bands, 0.05), n_samples=n)
         assert out["predictions"].shape == (n, bands)
         assert out["residuals"].shape == (n, bands)
         assert out["chi2"].shape == (n,)
@@ -683,9 +679,7 @@ class TestPosteriorPredictive:
             diagnostics={},
         )
         p._model = model
-        out = p.posterior_predictive(
-            data=truth, noise=jnp.full(bands, 0.1), n_samples=20
-        )
+        out = p.posterior_predictive(data=truth, noise=jnp.full(bands, 0.1), n_samples=20)
         assert out["predictions"].shape == (20, bands)
         assert out["chi2"].shape == (20,)
 

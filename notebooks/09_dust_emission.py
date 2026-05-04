@@ -798,7 +798,7 @@ plt.show()
 
 # %%
 # Example: Verify energy balance in a fit prediction
-from tengri import SEDModel, Parameters, Uniform, Fixed, Photometry, load_ssp_data
+from tengri import SEDModel, Parameters, Uniform, Fixed, Photometry, Observation, load_ssp_data
 
 ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 
@@ -820,7 +820,7 @@ spec_eb = Parameters(
 model_eb = SEDModel(
     spec_eb,
     ssp,
-    observation=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
+    observation=Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])),
 )
 
 # Generate prediction

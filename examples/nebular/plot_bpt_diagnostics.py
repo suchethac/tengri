@@ -28,10 +28,10 @@ shock_nii_ha = []
 shock_oiii_hb = []
 for v in velocities:
     r = shock_line_ratios(float(v))
-    ha  = float(r["Halpha"])
-    hb  = float(r.get("Hbeta", ha / 2.86))
-    nii = float(r["NII_6583"])
-    oiii = float(r["OIII_5007"])
+    ha  = float(r["HA_6563A"])
+    hb  = float(r.get("Hb_4861A", ha / 2.86))
+    nii = float(r["NII_6583A"])
+    oiii = float(r["O3_5007A"])
     if ha > 0 and hb > 0:
         shock_nii_ha.append(np.log10(nii / ha))
         shock_oiii_hb.append(np.log10(max(oiii / hb, 1e-10)))
@@ -70,7 +70,7 @@ ax.set_xlabel(r"log [NII]6583 / H$\alpha$")
 ax.set_ylabel(r"log [OIII]5007 / H$\beta$")
 ax.set_title("BPT Diagram: Shocks Move Galaxies into AGN Region")
 ax.set_xlim(-1.6, 0.7)
-ax.set_ylim(-1.2, 1.6)
+ax.set_ylim(-1.2, 1.5)
 ax.legend(fontsize=10, frameon=False, loc="lower left")
 fig.tight_layout()
 plt.savefig("plot_bpt_diagnostics.png", dpi=150, bbox_inches="tight")

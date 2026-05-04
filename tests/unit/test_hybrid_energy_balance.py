@@ -34,9 +34,9 @@ from tengri.parameters.priors import Fixed, Uniform
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-_DL07_FILE = _DATA_DIR / "dl07_templates.npz"
-_DALE_FILE = _DATA_DIR / "dale2014_templates.npz"
-_THEMIS_FILE = _DATA_DIR / "themis_templates.npz"
+_DL07_FILE = _DATA_DIR / "dl07_templates_v2.h5"
+_DALE_FILE = _DATA_DIR / "dale2014_templates.h5"
+_THEMIS_FILE = _DATA_DIR / "themis_templates.h5"
 
 _SSP_EXISTS = _SSP_FILE.is_file()
 

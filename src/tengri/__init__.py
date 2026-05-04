@@ -269,7 +269,7 @@ sys.modules["tengri.io"] = io
 #   tengri.cosmology — Planck18 + distance/age helpers (was tengri.utils.cosmology)
 #   tengri.units     — F_nu/L_nu/AB-mag conversions (was utils.{conversions,magnitudes})
 #   tengri.plot      — plotting helpers (was tengri.analysis.plotting)
-from tengri import citations, cosmology, plot, units
+from tengri import citations, cosmology, pipeline, plot, units
 
 # Phase 6 (2026-05): the advertised top-level surface.
 #
@@ -334,6 +334,7 @@ __all__ = [
     "is_cache_enabled",
     "nebular",
     "observation",
+    "pipeline",
     "plot",
     "posteriors_to_dataframe",
     "preprocessing",

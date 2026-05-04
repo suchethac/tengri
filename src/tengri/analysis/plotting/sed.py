@@ -334,13 +334,9 @@ def sweep_parameter(
     for i, val in enumerate(values):
         # Override single parameter; use model defaults for rest
         override = {param_name: float(val)}
-        try:
-            wave, lnu = model.sed(override)
-        except (AttributeError, TypeError, ValueError):
-            # Fallback: use the public predict() accessor.
-            pred = model.predict(override)
-            wave = np.asarray(model.ssp_data.ssp_wave)
-            lnu = np.asarray(pred.sed_array)
+        pred = model.predict_rest_sed(override)
+        wave = np.asarray(pred.wavelength)
+        lnu = np.asarray(pred.sed)
 
         wave = np.asarray(wave)
         lnu = np.asarray(lnu)
@@ -477,19 +473,18 @@ def sfh_sed_comparison(
 
         # SFH panel
         try:
-            t_lookback, sfr = model.sfh(override)
-            ax_sfh.plot(np.asarray(t_lookback), np.asarray(sfr), color=color, lw=1.8, label=label)
-        except (AttributeError, TypeError, ValueError):
-            # AttributeError: sfh() method doesn't exist
-            # TypeError: sfh() signature mismatch
-            # ValueError: sfh() failed with invalid parameters
-            pass  # model may not support sfh() — skip
+            sfh = model.predict_sfh(override)
+            t_lookback = np.asarray(sfh["t_gyr"])
+            sfr = np.asarray(sfh.get("sfr_full", sfh.get("sfr_mean")))
+            ax_sfh.plot(t_lookback, sfr, color=color, lw=1.8, label=label)
+        except (AttributeError, TypeError, ValueError, KeyError):
+            pass
 
         # SED panel
         try:
-            wave, lnu = model.sed(override)
-            wave = np.asarray(wave)
-            lnu = np.asarray(lnu)
+            pred = model.predict_rest_sed(override)
+            wave = np.asarray(pred.wavelength)
+            lnu = np.asarray(pred.sed)
             idx_norm = int(np.argmin(np.abs(wave - 5500.0)))
             norm = lnu[idx_norm]
             if norm > 0:
@@ -497,10 +492,7 @@ def sfh_sed_comparison(
             y = lnu * wave
             mask = (wave >= SED_XLIM[0]) & (wave <= SED_XLIM[1])
             ax_sed.plot(wave[mask], y[mask], color=color, lw=1.8, label=label)
-        except (IndexError, ValueError, TypeError):
-            # IndexError: idx_norm out of bounds
-            # ValueError: boolean indexing failed
-            # TypeError: arithmetic operation failed
+        except (IndexError, ValueError, TypeError, AttributeError):
             pass
 
     ax_sfh.set_xlabel(SFH_XLABEL)

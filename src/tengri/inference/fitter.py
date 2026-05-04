@@ -338,7 +338,18 @@ class Fitter:
         cal_prior_sigma=1.0,
         eline_marginalize=None,
         eline_prior_type=None,
+        likelihood=None,
+        auto_protocol_likelihood=True,
     ):
+        # ── User-supplied Likelihood (Phase II-1 Protocol path) ─────
+        # When non-None, replaces the built-in χ² dispatch. The user
+        # owns the entire data-term math and is responsible for
+        # tracking their own observed arrays. Calibration / e-line
+        # marginalisation are NOT applied automatically — wrap them
+        # into the user likelihood if needed.
+        self._user_likelihood = likelihood
+        self._auto_protocol_likelihood = auto_protocol_likelihood
+
         # ── Data validation ─────────────────────────────────────────
         self.model = model
         self.data = jnp.asarray(data)
@@ -367,6 +378,18 @@ class Fitter:
         # ── Data arguments ─────────────────────────────────────────
         self._data_args = self._build_data_args(model)
 
+        # ── Auto-build Protocol likelihood (option β default) ──────
+        # When the user didn't pass a custom likelihood AND none of the
+        # legacy-only features (cal-marg, e-line marg, Student-t,
+        # spec-cov, censored, line fluxes, indices) are configured,
+        # build the matching :class:`Likelihood` Protocol object
+        # (Photometry / Spectroscopy / Composite) from data + noise.
+        # This routes simple cases through the new path so the
+        # diagonal-Gaussian χ² lives in exactly one place. Legacy
+        # dispatch still handles any case that asks for an extra.
+        if self._user_likelihood is None and self._auto_protocol_likelihood:
+            self._user_likelihood = self._maybe_build_default_likelihood()
+
         # ── Memory-mode auto-detect ─────────────────────────────────
         # Pre-set _memory_mode before spawning the background compile
         # thread so that thread builds the correct engine variant the
@@ -386,6 +409,256 @@ class Fitter:
         self._compilation_lock = threading.Lock()
         self._compilation_thread: threading.Thread | None = None
         self._start_background_compilation()
+
+    def _maybe_build_default_likelihood(self):
+        """Build the default Protocol likelihood for this Fitter's data.
+
+        Now handles every case in the Phase II-1 cohort:
+
+        - simple diagonal Gaussian → ``PhotometryLikelihood`` /
+          ``SpectroscopyLikelihood``
+        - joint phot+spec → ``CompositeLikelihood``
+        - Student-t (variable noise) → ``StudentTLikelihood``
+        - censored data → ``CensoredLikelihood``
+        - spec covariance → ``MultivariateGaussianLikelihood``
+        - calibration marginalisation → ``CalibrationMarginalisedLikelihood``
+        - flat-prior e-line marginalisation → ``ELineMarginalisedLikelihood``
+          (with a per-call design-matrix builder closure)
+        - line fluxes / spectral indices → composed onto the base
+          via ``CompositeLikelihood``
+
+        Returns ``None`` only for cases the Protocol path does not yet
+        cover — currently the Cloudy-prior e-line marginalisation
+        (uses a different math primitive) and the e-line *fitted*
+        amplitudes (line amplitudes are fit, not marginalised).
+        """
+        # ── Bail-outs: cases the Protocol path doesn't yet cover ────
+        if self._eline_fitted:
+            # Line amplitudes are explicit free params; legacy path
+            # handles the design matrix arithmetic differently.
+            return None
+        if self._eline_marginalize and self._eline_prior_type == "cloudy":
+            # Wraps a different primitive (marginalize_emission_lines_cloudy)
+            # that needs log_z + neb_logU from params. Defer.
+            return None
+
+        base = self._build_base_likelihood()
+        if base is None:
+            return None
+        extras = self._build_likelihood_extras()
+        if not extras:
+            return base
+        from tengri.inference.composite_likelihood import CompositeLikelihood
+
+        return CompositeLikelihood(base, *extras)
+
+    def _build_base_likelihood(self):
+        """Choose the BASE adapter for the main data channel(s)."""
+        from tengri.inference.composite_likelihood import CompositeLikelihood
+        from tengri.inference.likelihoods import (
+            CalibrationMarginalisedLikelihood,
+            CensoredLikelihood,
+            ELineMarginalisedLikelihood,
+            MultivariateGaussianLikelihood,
+            StudentTLikelihood,
+        )
+        from tengri.inference.photometry_likelihood import PhotometryLikelihood
+        from tengri.inference.spectroscopy_likelihood import SpectroscopyLikelihood
+        from tengri.observation.noise import (
+            get_noise_dof,
+            has_noise_model,
+            uses_student_t,
+        )
+
+        # ── Censored mask (photometry): wraps full data with CensoredLikelihood
+        if self.data_mask is not None and self.data_type == "photometry":
+            dof = get_noise_dof(self.spec) if uses_student_t(self.spec) else None
+            return CensoredLikelihood(
+                obs=self.data,
+                err=self.noise,
+                mask=self.data_mask,
+                dof=dof,
+                f_cal_param="noise_frac_cal" if has_noise_model(self.spec) else None,
+                channel="phot_fnu",
+            )
+
+        # ── Variable-noise / Student-t (no censoring) ──────────────
+        # When the parameter spec declares noise_frac_cal / noise_dof,
+        # the legacy path uses variable_noise_hamiltonian — wrap with
+        # StudentTLikelihood (which handles the Gaussian dof=None case
+        # too via the same primitive).
+        if has_noise_model(self.spec) or uses_student_t(self.spec):
+            if self.data_type != "photometry":
+                # Joint / spectroscopy path with variable noise needs more
+                # care (separate per-channel f_cal). Defer to legacy.
+                return None
+            dof = get_noise_dof(self.spec) if uses_student_t(self.spec) else None
+            return StudentTLikelihood(
+                obs=self.data,
+                err=self.noise,
+                dof=dof,
+                f_cal_param="noise_frac_cal",
+                channel="phot_fnu",
+            )
+
+        # ── Spec covariance (correlated noise on spectroscopy) ──────
+        if "spec_cov_inv" in self._data_args:
+            cov_inv = self._data_args["spec_cov_inv"]
+            if self.data_type == "spectroscopy":
+                return MultivariateGaussianLikelihood(
+                    obs=self.data, cov_inv=cov_inv, channel="spec_fnu"
+                )
+            if self.data_type == "joint":
+                obs = getattr(self.model, "observation", None)
+                n_phot = getattr(obs, "n_data_phot", None)
+                if n_phot is None:
+                    return None
+                return CompositeLikelihood(
+                    PhotometryLikelihood(fnu_obs=self.data[:n_phot], fnu_err=self.noise[:n_phot]),
+                    MultivariateGaussianLikelihood(
+                        obs=self.data[n_phot:], cov_inv=cov_inv, channel="spec_fnu"
+                    ),
+                )
+
+        # ── Calibration polynomial marginalisation (spectroscopy) ───
+        if self._calibration_marginalize and self._has_spectroscopy:
+            wavelength = getattr(self.model, "_wave_obs", None)
+            if wavelength is None:
+                return None  # legacy path needs model._wave_obs
+            cal_lk = CalibrationMarginalisedLikelihood(
+                fnu_obs=self.data
+                if self.data_type == "spectroscopy"
+                else self.data[self._n_phot_split() :],
+                fnu_err=self.noise
+                if self.data_type == "spectroscopy"
+                else self.noise[self._n_phot_split() :],
+                wavelength=wavelength,
+                n_poly=self._cal_n_poly,
+                prior_sigma=self._cal_prior_sigma,
+                channel="spec_fnu",
+            )
+            if self.data_type == "spectroscopy":
+                return cal_lk
+            # Joint: photometry + cal-marg spectroscopy
+            n_phot = self._n_phot_split()
+            if n_phot is None:
+                return None
+            return CompositeLikelihood(
+                PhotometryLikelihood(fnu_obs=self.data[:n_phot], fnu_err=self.noise[:n_phot]),
+                cal_lk,
+            )
+
+        # ── E-line marginalisation (flat prior) on spectroscopy ─────
+        if self._eline_marginalize:
+            if self.data_type == "spectroscopy":
+                spec_obs = self.data
+                spec_err = self.noise
+            elif self.data_type == "joint":
+                n_phot = self._n_phot_split()
+                if n_phot is None:
+                    return None
+                spec_obs = self.data[n_phot:]
+                spec_err = self.noise[n_phot:]
+            else:
+                return None
+            builder = self._make_eline_design_builder()
+            if builder is None:
+                return None
+            eline_lk = ELineMarginalisedLikelihood(
+                fnu_obs=spec_obs,
+                fnu_err=spec_err,
+                design_matrix_builder=builder,
+                channel="spec_fnu",
+            )
+            if self.data_type == "spectroscopy":
+                return eline_lk
+            return CompositeLikelihood(
+                PhotometryLikelihood(
+                    fnu_obs=self.data[: self._n_phot_split()],
+                    fnu_err=self.noise[: self._n_phot_split()],
+                ),
+                eline_lk,
+            )
+
+        # ── Plain diagonal Gaussian cases ───────────────────────────
+        if self.data_type == "photometry":
+            return PhotometryLikelihood(fnu_obs=self.data, fnu_err=self.noise)
+        if self.data_type == "spectroscopy":
+            return SpectroscopyLikelihood(fnu_obs=self.data, fnu_err=self.noise)
+        if self.data_type == "joint":
+            n_phot = self._n_phot_split()
+            if n_phot is None:
+                return None
+            return CompositeLikelihood(
+                PhotometryLikelihood(fnu_obs=self.data[:n_phot], fnu_err=self.noise[:n_phot]),
+                SpectroscopyLikelihood(fnu_obs=self.data[n_phot:], fnu_err=self.noise[n_phot:]),
+            )
+        return None
+
+    def _build_likelihood_extras(self):
+        """Constraint-style likelihoods composed on top of the base.
+
+        Reads the optional ``line_flux_*`` and ``index_*`` data_args
+        and emits :class:`GaussianLikelihood` instances pinned to the
+        ``"line_fluxes"`` / ``"indices"`` prediction-dict keys (which
+        the user-likelihood short-circuit in
+        :func:`tengri.inference.loss_functions.build_loss_fn`
+        populates by calling ``model.predict_line_fluxes`` /
+        ``model.predict_spectral_indices``).
+        """
+        from tengri.inference.likelihoods import GaussianLikelihood
+
+        extras = []
+        if "line_flux_waves" in self._data_args:
+            extras.append(
+                GaussianLikelihood(
+                    obs=self._data_args["line_flux_obs"],
+                    err=self._data_args["line_flux_err"],
+                    channel="line_fluxes",
+                    name="line_flux_constraint",
+                )
+            )
+        if "index_obs" in self._data_args:
+            extras.append(
+                GaussianLikelihood(
+                    obs=self._data_args["index_obs"],
+                    err=self._data_args["index_err"],
+                    channel="indices",
+                    name="spectral_index_constraint",
+                )
+            )
+        return extras
+
+    def _n_phot_split(self):
+        """Return n_data_phot for joint data, or None if unavailable."""
+        obs = getattr(self.model, "observation", None)
+        return getattr(obs, "n_data_phot", None)
+
+    def _make_eline_design_builder(self):
+        """Build a closure that rebuilds the e-line design matrix per call.
+
+        The returned callable takes the params dict and returns a
+        ``(n_pixels, n_lines)`` design matrix with current redshift +
+        line-shape parameters baked in. Required because line
+        wavelengths shift with z and line widths can be free
+        parameters too.
+
+        Returns ``None`` when the underlying e-line state is absent.
+        """
+        from tengri.inference.loss_functions import _build_eline_G_eff
+
+        if self._eline_wavelengths is None or self._eline_constraint_matrix is None:
+            return None
+
+        fixed_values = self._fixed_values
+        model = self.model
+        wavelengths = self._eline_wavelengths
+        constraint_matrix = self._eline_constraint_matrix
+
+        def builder(params):
+            return _build_eline_G_eff(params, fixed_values, model, wavelengths, constraint_matrix)
+
+        return builder
 
     @staticmethod
     def _resolve_data_type(data_type: str | None, model: Any) -> str:

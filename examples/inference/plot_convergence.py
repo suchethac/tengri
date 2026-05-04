@@ -86,7 +86,6 @@ posterior = fitter.run(
     "vi",
     n_iterations=10,
     n_samples=4,
-    n_seeds=3,
     n_posterior_samples=3000,
     verbose=False,
 )
@@ -134,6 +133,6 @@ fig.tight_layout()
 outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
 outdir.mkdir(parents=True, exist_ok=True)
 plt.savefig(
-    str(outdir / "convergence.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight"
+    str(outdir / "convergence.png"), dpi=150, bbox_inches="tight"
 )
 plt.show()

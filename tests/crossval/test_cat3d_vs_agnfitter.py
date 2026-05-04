@@ -40,7 +40,8 @@ if not _GRID_PATH.is_file():
 
 if not _AGNFITTER_PICKLE.is_file():
     pytest.skip(
-        "AGNfitter CAT3D_mean_3p.pickle not found at " + str(_AGNFITTER_PICKLE)
+        "AGNfitter CAT3D_mean_3p.pickle not found at "
+        + str(_AGNFITTER_PICKLE)
         + " (clone with: git clone --branch AGNfitter-rX_v0.1 "
         + "https://github.com/GabrielaCR/AGNfitter /tmp/AGNfitter-rX)",
         allow_module_level=True,

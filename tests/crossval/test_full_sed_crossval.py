@@ -1746,7 +1746,7 @@ class TestDustEmission:
     """Cross-validate DL07 dust emission SEDs from FSPS.
 
     FSPS generates Draine & Li (2007) IR emission when add_dust_emission=True.
-    tengri's draine_li2007 uses tabulated templates from data/dl07_templates.npz.
+    tengri's draine_li2007 uses tabulated templates from data/dl07_templates_v2.h5.
     These tests verify the reference SEDs are physically sensible and that
     tengri reproduces FSPS within a factor of 3 in the far-IR.
     """

@@ -34,6 +34,15 @@ sphinx_gallery_conf = {
     "examples_dirs": ["../examples"],
     "gallery_dirs": ["auto_examples"],
     "filename_pattern": r"plot_.+\.py$",
+    # Skip scripts that run heavy inference (hierarchical VI fits, long MCMC) —
+    # they would block the gallery build for tens of minutes. Users can still
+    # execute these directly from the source file.
+    "ignore_pattern": (
+        r".*(plot_hierarchical|plot_hierarchical_convergence|"
+        r"plot_convergence|plot_corner|plot_method_comparison|"
+        r"plot_photometric_fit|plot_spectrum_fit|plot_joint_fit|"
+        r"plot_bursty_recovery|plot_first_fit|plot_stochastic_sfh)\.py"
+    ),
     "download_all_examples": False,
     "plot_gallery": "True",
     "remove_config_comments": True,
@@ -44,6 +53,52 @@ sphinx_gallery_conf = {
     "abort_on_example_error": False,
     "min_reported_time": 2,
 }
+
+
+# ── Gallery-index post-processor ────────────────────────────────────────────
+# sphinx-gallery writes `auto_examples/index.rst` with one ``.. toctree::`` at
+# the very bottom, *after* the last category heading ("X-ray Emission").  In
+# RST, content following a heading belongs to that heading, so every other
+# gallery subsection ends up nested under X-ray in the sidebar.
+#
+# Fix: move the toctree to the *top* of the file (right after the ":orphan:"
+# directive) so it is not a child of any section.  We run this after
+# sphinx-gallery has generated its index.
+def _fix_gallery_index_toctree(app, *_args, **_kwargs):
+    from pathlib import Path
+
+    path = Path(app.srcdir) / "auto_examples" / "index.rst"
+    if not path.exists():
+        return
+    src = path.read_text()
+    # Capture the toctree block appended at the bottom.
+    import re
+
+    tc_re = re.compile(
+        r"\n\.\. toctree::\s*\n(?:\s+:\w+:.*\n)*(?:\s+.*\n)*",
+        re.MULTILINE,
+    )
+    matches = list(tc_re.finditer(src))
+    if not matches:
+        return
+    tc_block = matches[-1].group(0).strip("\n")
+    # Strip the original position.
+    src_no_tc = src[: matches[-1].start()] + src[matches[-1].end() :]
+    # Insert after ``:orphan:`` or at the very top.
+    if ":orphan:" in src_no_tc:
+        new = src_no_tc.replace(
+            ":orphan:",
+            ":orphan:\n\n" + tc_block,
+            1,
+        )
+    else:
+        new = tc_block + "\n\n" + src_no_tc
+    path.write_text(new)
+
+
+def setup(app):
+    # Priority 1000 runs *after* sphinx-gallery's own builder-inited handler.
+    app.connect("builder-inited", _fix_gallery_index_toctree, priority=1000)
 
 # -- MyST configuration ------------------------------------------------------
 
@@ -71,10 +126,15 @@ html_title = "tengri"
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 
+html_logo = "_static/tengri-logo.png"
+html_favicon = "_static/tengri-logo.png"
+
 html_theme_options = {
     "source_repository": "https://github.com/suchethac/tengri",
     "source_branch": "main",
     "source_directory": "docs/",
+    # Use a single logo (transparent PNG) for both light and dark modes —
+    # Furo otherwise renders two images side-by-side.
 }
 
 # -- autodoc configuration ---------------------------------------------------

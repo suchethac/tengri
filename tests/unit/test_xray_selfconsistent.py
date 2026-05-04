@@ -238,20 +238,19 @@ class TestXrayAgnCoronaFromDisc:
 
         For L_2500 = 1e30 erg/s/Hz, alpha_ox ~ -1.47, so
         L_2keV / L_2500 = 10^(alpha_ox/0.384) ~ 1.5e-4.
-        L_nu(2keV) should be order ~1e26 erg/s/Hz ~ 1e-8 Lsun/Hz.
+        L_nu(2keV) should be order ~1.5e26 erg/s/Hz.
         """
         l_nu = xray_agn_corona_from_disc(WAVE_XRAY, l_2500_erg_hz=1e30)
-        # Find L_nu near 2 keV (lambda ~ 6.2 A)
         wave_2kev = 6.2  # Angstrom
         idx = jnp.argmin(jnp.abs(WAVE_XRAY - wave_2kev))
-        l_nu_2kev = l_nu[idx]
-        # Should be positive and in a reasonable range (Lsun/Hz)
-        assert l_nu_2kev > 0
-        # L_nu at peak should be finite and not huge
-        assert jnp.max(l_nu) < 1e10  # Lsun/Hz upper bound
-        # Values are small but nonzero (uses same normalization
-        # convention as existing xray_agn_corona)
-        assert jnp.max(l_nu) > 1e-30
+        l_nu_2kev = float(l_nu[idx])
+        assert 1e25 < l_nu_2kev < 1e27, (
+            f"L_nu(2 keV) = {l_nu_2kev:.2e} erg/s/Hz, "
+            "expected ~1.5e26 from alpha_ox = 0.384 log10(L_2keV/L_2500)"
+        )
+        # Peak of X-ray band must remain in a physical erg/s/Hz range.
+        lmax = float(jnp.max(l_nu))
+        assert 1e25 < lmax < 1e30, f"max L_nu = {lmax:.2e} erg/s/Hz"
 
 
 # ---- xray_xrb offset tests ----

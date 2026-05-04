@@ -31,7 +31,6 @@ drw = psd_drw(omega, psd_sigma=sigma, psd_tau_yr=tau_yr)
 fig, ax = plt.subplots(figsize=(9, 6))
 ax.loglog(np.array(omega), np.array(drw), "k-", lw=2.5, label="DRW (default)")
 
-# %%
 # Matern family: nu=0.5 recovers DRW, higher nu gives smoother fields
 try:
     from tengri.sfh import psd_matern
@@ -51,7 +50,6 @@ try:
 except ImportError:
     pass  # psd_matern not available
 
-# %%
 # Extended regulator model (Tacchella+2020)
 try:
     from tengri.sfh import psd_extended_regulator
@@ -68,11 +66,11 @@ try:
 except ImportError:
     pass  # psd_extended_regulator not available
 
-# %%
 # Annotate and finalize
 ax.set_xlabel(r"Angular frequency $\omega$ [rad yr$^{-1}$]")
 ax.set_ylabel(r"PSD $P(\omega)$")
 ax.set_title(r"PSD Models ($\sigma=0.3$, $\tau=200$ Myr)")
+ax.set_ylim(1e-10, 1e0)
 ax.legend(frameon=False, fontsize=10)
 fig.tight_layout()
 

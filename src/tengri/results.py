@@ -155,9 +155,7 @@ class Provenance:
             platform=f"{_platform.system()} {_platform.machine()}",
             jax_version=jax_v,
             jax_backend=jax_b,
-            timestamp_utc=_dt.datetime.now(_dt.timezone.utc).strftime(
-                "%Y-%m-%dT%H:%M:%SZ"
-            ),
+            timestamp_utc=_dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             wall_time_seconds=wall_time_seconds,
             random_seed=random_seed,
             input_data_hash=input_data_hash,
@@ -393,9 +391,7 @@ class FitResult:
         try:
             import h5py
         except ImportError:
-            raise ImportError(
-                "save() requires h5py: pip install h5py"
-            ) from None
+            raise ImportError("save() requires h5py: pip install h5py") from None
 
         with h5py.File(path, "w") as f:
             # Root group for versioning
@@ -492,9 +488,7 @@ class FitResult:
         try:
             import h5py
         except ImportError:
-            raise ImportError(
-                "load() requires h5py: pip install h5py"
-            ) from None
+            raise ImportError("load() requires h5py: pip install h5py") from None
 
         import json
 

@@ -90,8 +90,6 @@ References
 - Stern et al. 2012, ApJ, 753, 30 (W1-W2 AGN selection)
 """
 
-import contextlib
-import functools
 from pathlib import Path
 
 import jax
@@ -150,14 +148,22 @@ _SIGMOID_WIDTH = 0.02  # dex (~5% in wavelength)
 # This preserves EW ratios relative to the actual continuum.
 
 
-@functools.cache
-def _load_emline_template():
-    """Load the empirical emission line template (Temple+2021).
+def _load_emline_template_arrays():
+    """Load the empirical emission line template arrays eagerly (NumPy, not JAX).
+
+    This function loads the emission-line template data at import time to avoid
+    file I/O and generator evaluation inside JIT-traced functions, which would
+    cause UnexpectedTracerError (BUG-NSS-03).
 
     Returns
     -------
-    tuple of jnp.ndarray
+    tuple of np.ndarray
         (wavelength, median_lines, reference_continuum, peaky, windy, narrow)
+
+    Raises
+    ------
+    FileNotFoundError
+        If the template file is not found in any of the searched locations.
     """
     candidates = [
         Path(__file__).resolve().parents[4] / "data" / "qsogen_emline_template.dat",
@@ -167,12 +173,32 @@ def _load_emline_template():
     for path in candidates:
         if path.is_file():
             data = np.genfromtxt(str(path), unpack=True)
-            return tuple(jnp.array(row) for row in data)
+            # Materialize each row as a fully-realized np.ndarray (not generator)
+            # to avoid tracer leaks when accessed inside JIT-compiled functions.
+            wavelength = np.asarray(data[0], dtype=np.float64)
+            median_lines = np.asarray(data[1], dtype=np.float64)
+            reference_continuum = np.asarray(data[2], dtype=np.float64)
+            peaky = np.asarray(data[3], dtype=np.float64)
+            windy = np.asarray(data[4], dtype=np.float64)
+            narrow = np.asarray(data[5], dtype=np.float64)
+            return wavelength, median_lines, reference_continuum, peaky, windy, narrow
 
     raise FileNotFoundError(
         "QSOGen emission line template not found. Expected at data/qsogen_emline_template.dat"
     )
 
+
+# Load emission-line template arrays at module import time to avoid tracer leaks
+# in JIT-compiled functions (BUG-NSS-03 fix). Arrays are materialized as NumPy
+# and stored as module-level closures referenced by _empirical_emission_lines.
+try:
+    _EMLINE_WAV, _EMLINE_MED, _EMLINE_REF, _EMLINE_PEAKY, _EMLINE_WINDY, _EMLINE_NARROW = (
+        _load_emline_template_arrays()
+    )
+except FileNotFoundError:
+    # If template file is missing, set to None. _empirical_emission_lines will
+    # raise a clear error at runtime when called.
+    _EMLINE_WAV = None
 
 # Redshift-luminosity relation from SDSS DR16Q (Temple+2021 config.py)
 _ZLUM = np.array([0.23, 0.34, 0.6, 1.0, 1.4, 1.8, 2.2, 2.6, 3.0, 3.3, 3.7, 4.13, 4.5])
@@ -457,7 +483,19 @@ def _empirical_emission_lines(
     array, shape (n_wave,)
         Emission line f_nu contribution (same units as continuum_fnu).
     """
-    linwav, medval, conval_raw, pkyval, wdyval, _nlr = _load_emline_template()
+    # Use module-level emission-line template arrays (loaded at import time
+    # to avoid file I/O and tracer leaks inside JIT scope). BUG-NSS-03 fix.
+    if _EMLINE_WAV is None:
+        raise FileNotFoundError(
+            "QSOGen emission line template not found. Expected at data/qsogen_emline_template.dat"
+        )
+
+    linwav = _EMLINE_WAV
+    medval = _EMLINE_MED
+    conval_raw = _EMLINE_REF
+    pkyval = _EMLINE_PEAKY
+    wdyval = _EMLINE_WINDY
+    _nlr = _EMLINE_NARROW
 
     # Baldwin effect: emline_type = (M_i - benorm) * beslope
     # beslope > 0, benorm = -27 -> brighter quasars (more negative M_i)
@@ -762,9 +800,6 @@ def qsogen(
     )
 
 
-qsogen_sed = compute_qsogen_sed
+from tengri._deprecated import deprecated_alias
 
-# Pre-load emission line template at import time so that file I/O does not
-# occur inside JIT-traced functions (which causes UnexpectedTracerError).
-with contextlib.suppress(FileNotFoundError):
-    _load_emline_template()
+qsogen_sed = deprecated_alias(compute_qsogen_sed, old_name="qsogen_sed")

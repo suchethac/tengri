@@ -90,7 +90,6 @@ result_geovi = fitter.run(
     "vi",
     n_iterations=10,
     n_samples=4,
-    n_seeds=3,
     n_posterior_samples=2000,
     verbose=False,
 )
@@ -101,19 +100,24 @@ if fig is not None:
     # Mark MAP point
     map_vals = [float(result_map.params[p]) for p in spec.free_params]
     n = len(spec.free_params)
-    axes = np.array(fig.axes).reshape(n, n)
+    # Reshape axes to a square grid; safe_corner creates n_params x n_params axes
+    n_axes = int(np.sqrt(len(fig.axes)))
+    axes = np.array(fig.axes).reshape(n_axes, n_axes) if n_axes > 0 else np.array(fig.axes)
     for i in range(n):
-        axes[i, i].axvline(map_vals[i], color="C3", ls="--", lw=1.2, label="MAP")
-        for j in range(i):
-            axes[i, j].axhline(map_vals[i], color="C3", ls="--", lw=0.8)
-            axes[i, j].axvline(map_vals[j], color="C3", ls="--", lw=0.8)
-    axes[0, 0].legend(fontsize=10)
+        if i < n_axes:
+            axes[i, i].axvline(map_vals[i], color="C3", ls="--", lw=1.2, label="MAP")
+            for j in range(i):
+                if j < n_axes:
+                    axes[i, j].axhline(map_vals[i], color="C3", ls="--", lw=0.8)
+                    axes[i, j].axvline(map_vals[j], color="C3", ls="--", lw=0.8)
+    if n_axes > 0:
+        axes[0, 0].legend(fontsize=10)
     fig.suptitle("MAP (dashed red) vs geoVI posteriors", y=1.02)
 
 outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
 outdir.mkdir(parents=True, exist_ok=True)
 plt.savefig(
-    str(outdir / "method_comparison_corner.png", dpi=300, bbox_inches="tight"),
+    str(outdir / "method_comparison_corner.png"),
     dpi=150,
     bbox_inches="tight",
 )
@@ -139,7 +143,7 @@ ax_sfh.set_title("SFH recovery: MAP vs geoVI")
 ax_sfh.legend(fontsize=10, frameon=False)
 fig_sfh.tight_layout()
 plt.savefig(
-    str(outdir / "method_comparison_sfh.png", dpi=300, bbox_inches="tight"),
+    str(outdir / "method_comparison_sfh.png"),
     dpi=150,
     bbox_inches="tight",
 )

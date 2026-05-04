@@ -251,6 +251,18 @@ class PrecomputedData:
         KDPreintegratedData for K&D AGN disc model.
     skirtor_preintegrated : object or None
         Preintegrated SKIRTOR torus photometry lookup.
+    silva04_preintegrated : object or None
+        Preintegrated Silva+04 torus photometry lookup.
+    cat3d_preintegrated : object or None
+        Preintegrated CAT3D-Wind torus photometry lookup.
+    powerlaw_disc_preintegrated : object or None
+        Preintegrated powerlaw_disc photometry lookup.
+    ss_disc_preintegrated : object or None
+        Preintegrated Shakura-Sunyaev disc photometry lookup.
+    cigale_disc_preintegrated : object or None
+        Preintegrated CIGALE piecewise-powerlaw disc photometry lookup.
+    qsogen_preintegrated : object or None
+        Preintegrated QSOgen quasar SED photometry lookup.
 
     Notes
     -----
@@ -267,6 +279,48 @@ class PrecomputedData:
     dust_ir_lookup: object | None = None  # Preintegrated template-based dust IR photometry
     kd_preintegrated: object | None = None  # KDPreintegratedData for K&D AGN disc
     skirtor_preintegrated: object | None = None  # Preintegrated SKIRTOR torus photometry lookup
+    silva04_preintegrated: object | None = None  # Preintegrated Silva+04 torus photometry lookup
+    cat3d_preintegrated: object | None = None  # Preintegrated CAT3D-Wind torus photometry lookup
+    # ── Shelved precomputes ───────────────────────────────────────────
+    # The fields below are *built and stored* by SEDModel but are NOT yet
+    # read by the photometry kernel (``_kernels/hybrid.py``).  Kernel
+    # consumption requires a paired change per family: (a) gate off the
+    # runtime contribution to ``non_stellar_sed`` when the precompute is
+    # active (otherwise band fluxes double-count), and (b) add the lookup
+    # output to ``non_stellar_phot`` after band integration (mirror the
+    # ``_has_preint_dust_ir`` pattern in hybrid.py around line 1200/1434).
+    # Search for ``# TODO(precompute-consumer)`` in hybrid.py for insertion
+    # sites.  The bundled ``radio_emission`` and ``xray_emission`` functions
+    # need to be refactored to expose per-component subcalls so individual
+    # subcomponents can be gated; line emitters additionally need a line
+    # projection einsum next to the existing CLOUDY block (~line 982-994).
+    silva04_preintegrated: object | None = None  # Preintegrated Silva+04 torus photometry lookup
+    cat3d_preintegrated: object | None = None  # Preintegrated CAT3D-Wind torus photometry lookup
+    powerlaw_disc_preintegrated: object | None = None  # Preintegrated powerlaw_disc photometry
+    ss_disc_preintegrated: object | None = None  # Preintegrated Shakura-Sunyaev disc photometry
+    cigale_disc_preintegrated: object | None = None  # Preintegrated CIGALE disc photometry
+    qsogen_preintegrated: object | None = None  # Preintegrated QSOgen photometry lookup
+    # Radio analytic adapters (PR 5).
+    radio_synchrotron_preintegrated: object | None = None
+    radio_freefree_preintegrated: object | None = None
+    radio_agn_jet_preintegrated: object | None = None
+    # X-ray analytic adapters (PR 6).
+    xray_xrb_preintegrated: object | None = None
+    xray_corona_preintegrated: object | None = None
+    xray_corona_lopez24_preintegrated: object | None = None
+    # Line-emitter adapters (PR 4) intentionally NOT stored on PrecomputedData.
+    # Architectural note: the photometry kernel consumes line emission through
+    # duck-typed methods on ``state.nebular_backend`` (``_has_preint_photometry``,
+    # ``_preint_continuum``, ``_preint_lines``, ``_line_lum_collapsed``,
+    # ``_young_idx``, ``_qh_table``) — see ``CloudyGridBackend.preintegrate_for_photometry``
+    # for the interface, and ``_kernels/hybrid.py`` lines 169-199 for the
+    # consumer. Wiring CB19 / MAPPINGS V to the kernel means each backend
+    # class must implement that duck-typed interface (with its precompute
+    # adapter doing the heavy lifting inside). AGN-nebular emitters (Feltre,
+    # BLR, NLR-Gaussian) do not fit the stellar duck-type at all — they need
+    # a new AGN-nebular kernel branch. The MAPPINGS shock backend is
+    # independent again. Treat each as its own PR with its own equivalence
+    # harness; do NOT route them through PrecomputedData fields.
 
 
 @dataclasses.dataclass
@@ -369,6 +423,7 @@ class SEDModelState:
     csp_integration: str
     forward_dtype: object  # jnp.dtype
     met_interp: str
+    met_mode: str
     z_interp: str
     lgmet_scatter: float
     sfh_fn: object

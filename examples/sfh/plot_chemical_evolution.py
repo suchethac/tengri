@@ -11,14 +11,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri.analysis.plotting import setup_style
-from tengri.components.sfh import closed_box_metallicity, closed_box_metallicity_anchored
+from tengri.components.sfh import closed_box_metallicity
+from tengri.utils.cosmology import age_at_z0
 
 setup_style()
 
 fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
-# Time axis: look-back time in Gyr
-t_gyr = np.linspace(0, 13.8, 200)
+# Time axis: look-back time in Gyr (cosmology-dependent age)
+age_uni_gyr = float(age_at_z0())
+t_gyr = np.linspace(0, age_uni_gyr, 200)
 # Convert to years for the function (if needed)
 t_yr = t_gyr * 1e9
 
@@ -32,18 +34,13 @@ ax = axes[0, 0]
 # where x = (M_recycled + M_ejected) / M_initial is cumulative mass fraction
 # For a simple closed box, x scales with (time / age_max)^alpha
 
-z_vals = []
-labels = []
-
-# Simple closed-box: constant Z increase
-z_simple = closed_box_metallicity(t_yr, z_solar=1.0, m_recycled_msun=1e10)
-ax.plot(t_gyr, np.array(z_simple) / Z_sun, lw=2.0, label="Closed-box (Z_sun=1)")
-
-# Try anchored version
-z_anchored = closed_box_metallicity_anchored(
-    t_yr, z_solar=1.0, z_anchor=0.5, t_anchor_gyr=2.0, m_recycled_msun=1e10
-)
-ax.plot(t_gyr, np.array(z_anchored) / Z_sun, lw=2.0, label="Closed-box anchored")
+# closed_box_metallicity takes (age_yr, sfr, ...) and returns log10(Z/Z_sun).
+# Convention: age_yr is LOOKBACK time (youngest first); sfr is the SFH on that grid.
+age_from_start = age_uni_gyr - t_gyr  # time since formation
+for tau_gyr, y_label in [(2.0, "τ=2 Gyr"), (5.0, "τ=5 Gyr"), (10.0, "τ=10 Gyr")]:
+    sfr = np.exp(-age_from_start / tau_gyr)
+    log_z = closed_box_metallicity(t_yr, sfr, yield_y=0.03, eta_outflow=0.0, f_gas_init=0.9)
+    ax.plot(t_gyr, 10.0 ** np.array(log_z), lw=2.0, label=y_label)
 
 ax.set_xlabel("Look-back Time [Gyr]")
 ax.set_ylabel(r"Metallicity (Z / Z$_\odot$)")
@@ -56,7 +53,7 @@ ax.set_xlim(0, 14)
 ax = axes[0, 1]
 
 # Age grid
-age_gyr = 13.8  # Galaxy age
+age_gyr = age_uni_gyr  # Galaxy age
 tau_values = [1.0, 2.0, 5.0, 10.0]  # Exponential timescales in Gyr
 
 for tau_gyr in tau_values:
@@ -82,10 +79,12 @@ ax = axes[1, 0]
 outflow_rates = [0.0, 0.2, 0.5, 0.8]  # eta: 0 = closed, 1 = maximal outflow
 colors = plt.cm.Reds(np.linspace(0.3, 0.9, len(outflow_rates)))
 
+sfr_const = np.ones_like(t_yr)  # constant SFR
 for eta, color in zip(outflow_rates, colors):
-    # Simplified leaky-box: Z scales with (1 - eta)
-    z_leaky = Z_sun * (1.0 - eta) * closed_box_metallicity(t_yr, z_solar=1.0, m_recycled_msun=1e10)
-    ax.plot(t_gyr, np.array(z_leaky) / Z_sun, lw=1.5, color=color, label=f"η={eta:.1f}")
+    log_z = closed_box_metallicity(
+        t_yr, sfr_const, yield_y=0.03, eta_outflow=eta, f_gas_init=0.9
+    )
+    ax.plot(t_gyr, 10.0 ** np.array(log_z), lw=1.5, color=color, label=f"η={eta:.1f}")
 
 ax.set_xlabel("Look-back Time [Gyr]")
 ax.set_ylabel(r"Metallicity (Z / Z$_\odot$)")
@@ -106,12 +105,12 @@ colors_amr = plt.cm.viridis(np.linspace(0, 1, len(ages_gyr)))
 
 for age_gyr, color in zip(ages_gyr, colors_amr):
     # Mock Z(age) curve: Z increases with formation time
-    z_amr = Z_sun * (age_gyr / 13.8) * 0.3  # Normalized to ~0.3 Z_sun at age 13.8 Gyr
+    z_amr = Z_sun * (age_gyr / age_uni_gyr) * 0.3  # Normalized to ~0.3 Z_sun at age age_uni_gyr Gyr
     ax.scatter(age_gyr, z_amr / Z_sun, s=200, color=color, edgecolors="k", linewidth=1.0)
 
 # Interpolate
-ages_interp = np.linspace(0, 13.8, 100)
-z_interp = Z_sun * (ages_interp / 13.8) * 0.3
+ages_interp = np.linspace(0, age_uni_gyr, 100)
+z_interp = Z_sun * (ages_interp / age_uni_gyr) * 0.3
 ax.plot(ages_interp, z_interp / Z_sun, "k--", lw=1.5, alpha=0.4, label="Age-Metallicity Relation")
 
 ax.set_xlabel("Galaxy Age [Gyr]")
@@ -120,7 +119,7 @@ ax.set_title("Age-Metallicity Relation")
 ax.legend(fontsize=10, frameon=False)
 ax.grid(True, alpha=0.3)
 ax.set_xlim(-0.5, 14)
-ax.set_ylim(0, 0.4)
+ax.set_ylim(-2.5, 0.5)
 
 fig.suptitle("Chemical Evolution: Metallicity History Models", fontsize=12)
 fig.tight_layout(rect=[0, 0, 1, 0.97])
