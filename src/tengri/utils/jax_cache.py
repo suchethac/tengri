@@ -99,7 +99,7 @@ def _default_cache_dir() -> Path:
 def enable_persistent_cache(
     cache_dir: str | os.PathLike[str] | None = None,
     *,
-    min_compile_time_secs: float = 5.0,
+    min_compile_time_secs: float = 0.5,
     max_size_bytes: int | None = None,
 ) -> Path:
     """Enable JAX's persistent on-disk compilation cache.
@@ -115,9 +115,11 @@ def enable_persistent_cache(
         :func:`_default_cache_dir` (env var → XDG → ``~/.cache``).
     min_compile_time_secs : float
         Minimum compile time before a cached entry is persisted to disk.
-        Default 5.0 captures expensive compiles (geoVI, MGVI while_loop,
-        MCMC warmups) while skipping the long tail of small SSP/dust
-        kernel compiles that only take 1–2 s and would bloat disk usage.
+        Default 0.5 captures the orchestrator-component pipelines
+        (~500–800 ms cold) and the slower expensive compiles
+        (geoVI, MGVI while_loop, MCMC warmups). Was 5.0 before
+        2026-05-04, which skipped the orchestrator chain entirely
+        and forced a full recompile per process restart.
     max_size_bytes : int or None
         If provided and supported by the installed JAX, sets
         ``jax_compilation_cache_max_size`` so JAX evicts old entries

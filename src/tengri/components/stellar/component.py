@@ -419,10 +419,9 @@ class StellarSEDComponent:
         age_weights = joint_weights.sum(axis=0) * total_mass  # (n_age,) Msun
 
         # ── 7. Stellar SED in erg/s/Hz ──────────────────────────────────
-        # rest_sed from DSPS is in Lsun/Hz (mass scaling included). The
-        # per-age cube reconstructs the same total when summed:
-        # ``sum_a(lnu_age) == total_mass × sum_a(ssp_flux_at_age) × LSUN``
-        # ``                  == rest_sed × LSUN``.
+        # ``rest_sed`` from DSPS is in Lsun/Hz (mass scaling included).
+        # Sum the per-age cube — XLA folds the sum into the same kernel
+        # as the einsum and avoids materialising ``rest_sed`` separately.
         lnu_age = total_mass * ssp_flux_at_age * LSUN_ERG_PER_S
         sed_intrinsic = jnp.sum(lnu_age, axis=0)
 
@@ -517,3 +516,32 @@ def _time_weighted_sfr(
     weighted_sum = jnp.sum(sfr_history * weights)
     weight_total = jnp.sum(weights)
     return jnp.where(weight_total > 0.0, weighted_sum / weight_total, sfr_history[0])
+
+
+# ─────────────────────────────────────────────────────────────────────
+# JAX pytree registration
+# ─────────────────────────────────────────────────────────────────────
+#
+# Register StellarSEDComponent as a JAX pytree so ``self.ssp_data``
+# flows through ``jax.jit`` as a TRACED input rather than being baked
+# into the XLA graph as a literal constant. The SSP grid is ~8 MB
+# (15 × 93 × 5994 doubles); without this registration the cold-compile
+# time of any orchestrator chain that contains StellarSEDComponent
+# explodes to ~900 ms because XLA inlines the entire grid as constants
+# at every call site. With registration cold-compile drops by an
+# order of magnitude. (Mirrors the Phase II-2 commit e52bd75 fix to
+# the legacy hybrid kernel path.)
+#
+# ``ssp_data`` is the only data field (it's a JAX-pytree-compatible
+# NamedTuple with ndarray leaves). Everything else is structural
+# (config, name, parameter_prefix) → meta.
+
+from jax import tree_util as _tree_util
+
+_tree_util.register_dataclass(
+    StellarSEDComponent,
+    data_fields=("ssp_data",),
+    meta_fields=("config", "name", "parameter_prefix"),
+)
+
+del _tree_util
