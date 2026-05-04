@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/suchethac/tengri/actions/workflows/tests.yml/badge.svg)](https://github.com/suchethac/tengri/actions/workflows/tests.yml)
 [![Docs](https://github.com/suchethac/tengri/actions/workflows/docs.yml/badge.svg)](https://suchethac.github.io/tengri/)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: BSD-3](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)](LICENSE)
 
 Tengri is a JAX framework for differentiable galaxy SED fitting. One modular forward model spans stars, dust, nebular emission, AGN, and IGM — X-ray to radio. Every inference method (MAP, Laplace, Pathfinder, NUTS, Ray Tracing, Bayesian evidence, hierarchical population) runs on the same model, with gradients available everywhere. Pre-1.0 research code; JIT-compiled and GPU/TPU-native. Information-Field-Theory stochastic SFH priors and geoVI are Paper II preview material.
@@ -25,7 +25,7 @@ This codebase was initially drafted with AI assistance (Claude Code) and is prog
 pip install -e ".[dev]"
 ```
 
-**Requirements:** Python >= 3.10, JAX >= 0.4.20, DSPS >= 0.3, NIFTy.re >= 8.5
+**Requirements:** Python >= 3.11, JAX >= 0.4.20, DSPS >= 0.4.6, NIFTy.re >= 8.5
 
 JAX backend setup:
 - **CPU (default):** Works out-of-the-box.
