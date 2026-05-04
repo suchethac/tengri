@@ -39,8 +39,6 @@ from tengri.components.stellar.sfh.mean_sfh import AGEMAX_YR, dpl, truncated_ske
 from tengri.components.stellar.sps.dsps_wrapper import (
     LSUN_ERG_PER_S,
     SSPData,
-    compute_dsps_met_table_weights,
-    compute_dsps_native_weights,
     compute_log_z_evolving,
     compute_surviving_mass,
     interpolate_mass_remaining,
@@ -368,36 +366,64 @@ class StellarSEDComponent:
             log_z_for_mr = log_z_final_abs
 
         # ── 6. CSP integral via DSPS ────────────────────────────────────
-        # delta path uses the lognormal-MDF kernel (single scalar lgmet);
-        # ramp path uses the per-age metallicity table kernel. Both come
-        # from :mod:`tengri.components.stellar.sps.dsps_wrapper`.
+        # We call DSPS directly and use ``result.weights`` — the JOINT
+        # (n_met, n_age) probability distribution — instead of the
+        # separable approximation in compute_dsps_native_weights. The
+        # separable form (lgmet_w × age_w) gave the right marginals but
+        # the wrong product for non-trivial age-metallicity correlations,
+        # over-scaling the CSP SED by orders of magnitude.
+        from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_lognormal_mdf
+
+        ssp_age_gyr = ssp_ages_yr / 1e9
+        t_cosmic_gyr = jnp.clip(t_obs_gyr - ssp_age_gyr, min=1e-3)
+        t_cosmic_asc = t_cosmic_gyr[::-1]
+        sfr_asc = sfr_on_ssp[::-1]
+        total_mass = jnp.maximum(jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9), 0.0)
+
         if self.config.metallicity_model == "delta":
-            age_weights, ssp_flux_at_z = compute_dsps_native_weights(
-                sfr_on_ssp_ages=sfr_on_ssp,
-                ssp_ages_yr=ssp_ages_yr,
+            dsps_result = calc_rest_sed_sfh_table_lognormal_mdf(
+                gal_t_table=t_cosmic_asc,
+                gal_sfr_table=sfr_asc,
+                gal_lgmet=log_z_abs_scalar,
+                gal_lgmet_scatter=self.config.lgmet_scatter,
                 ssp_lgmet=ssp.ssp_lgmet,
                 ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
                 ssp_flux=ssp.ssp_flux,
-                t_obs_gyr=t_obs_gyr,
-                lgmet=log_z_abs_scalar,
-                lgmet_scatter=self.config.lgmet_scatter,
+                t_obs=t_obs_gyr,
             )
-        else:  # ramp
-            age_weights, ssp_flux_at_z = compute_dsps_met_table_weights(
-                sfr_on_ssp_ages=sfr_on_ssp,
-                lgmet_on_ssp_ages=lgmet_on_ssp_ages,
-                ssp_ages_yr=ssp_ages_yr,
+        else:  # ramp — per-age metallicity table
+            from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
+
+            dsps_result = calc_rest_sed_sfh_table_met_table(
+                gal_t_table=t_cosmic_asc,
+                gal_sfr_table=sfr_asc,
+                gal_lgmet_table=lgmet_on_ssp_ages[::-1],
+                gal_lgmet_scatter=self.config.lgmet_scatter,
                 ssp_lgmet=ssp.ssp_lgmet,
                 ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
                 ssp_flux=ssp.ssp_flux,
-                t_obs_gyr=t_obs_gyr,
-                lgmet_scatter=self.config.lgmet_scatter,
+                t_obs=t_obs_gyr,
             )
-        # age_weights : (n_age,) Msun
-        # ssp_flux_at_z : (n_age, n_wave) Lsun/Hz/Msun
+
+        # ``dsps_result.weights`` is the joint (n_met, n_age) probability
+        # distribution (sums to 1) over SSP grid points. The age axis is
+        # already aligned with tengri's ssp_flux ordering (ascending
+        # lookback age) — no flip needed; DSPS handles the cosmic-time
+        # bookkeeping internally before storing weights against the
+        # SSP grid.
+        joint_weights = dsps_result.weights  # (n_met, n_age)
+        # Per-age × per-Msun-formed weighted SSP flux (Lsun/Hz/Msun):
+        ssp_flux_at_age = jnp.einsum("ma,maw->aw", joint_weights, ssp.ssp_flux)
+        # Per-age "mass" for downstream per-age operations (dust BC mask).
+        # This is the marginalised age distribution × total_mass.
+        age_weights = joint_weights.sum(axis=0) * total_mass  # (n_age,) Msun
 
         # ── 7. Stellar SED in erg/s/Hz ──────────────────────────────────
-        lnu_age = age_weights[:, None] * ssp_flux_at_z * LSUN_ERG_PER_S
+        # rest_sed from DSPS is in Lsun/Hz (mass scaling included). The
+        # per-age cube reconstructs the same total when summed:
+        # ``sum_a(lnu_age) == total_mass × sum_a(ssp_flux_at_age) × LSUN``
+        # ``                  == rest_sed × LSUN``.
+        lnu_age = total_mass * ssp_flux_at_age * LSUN_ERG_PER_S
         sed_intrinsic = jnp.sum(lnu_age, axis=0)
 
         # ── 8. Mass quantities ──────────────────────────────────────────
