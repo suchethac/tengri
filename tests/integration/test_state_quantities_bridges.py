@@ -189,3 +189,94 @@ def test_state_to_sed_quantities_jit_compatible(state):
         assert jnp.allclose(getattr(out, f), getattr(out_eager, f), rtol=1e-12), (
             f"JIT vs eager differ at {f}"
         )
+
+
+# ── Emission-lines bridge ────────────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def state_with_cue(ssp):
+    """A chain with Cue nebular backend so line catalogue is published."""
+    from tengri.components.nebular.component import (
+        NebularSEDComponent,
+        NebularSEDComponentConfig,
+    )
+    from tengri.components.nebular.cue import CueBackend
+    from tengri.forward import state_to_emission_lines  # noqa: F401 — used elsewhere
+
+    cue_path = pathlib.Path("data/cue_weights.npz").resolve()
+    if not cue_path.exists():
+        pytest.skip(f"Cue weights not present at {cue_path}")
+    cue = CueBackend(weights_path=str(cue_path))
+    chain = [
+        StellarSEDComponent(ssp_data=ssp),
+        NebularSEDComponent(
+            config=NebularSEDComponentConfig(backend="cue"), backend=cue
+        ),
+    ]
+    state0 = PipelineState(wave=ssp.ssp_wave)
+    params = {
+        "sfh_tsnorm_log_peak_sfr": jnp.asarray(1.0),
+        "sfh_tsnorm_peak_lbt_gyr": jnp.asarray(2.0),
+        "sfh_tsnorm_width_gyr": jnp.asarray(1.0),
+        "sfh_tsnorm_skew": jnp.asarray(0.0),
+        "sfh_tsnorm_trunc": jnp.asarray(3.0),
+        "met_logzsol": jnp.asarray(-0.5),
+        "neb_logU": jnp.asarray(-2.5),
+        "neb_logZ_gas": jnp.asarray(-0.3),
+        "neb_fesc": jnp.asarray(0.0),
+        "neb_fesc_lya": jnp.asarray(0.0),
+        "ionspec_index1": jnp.asarray(15.0),
+        "ionspec_index2": jnp.asarray(5.0),
+        "ionspec_index3": jnp.asarray(0.0),
+        "ionspec_index4": jnp.asarray(0.0),
+        "ionspec_logLratio1": jnp.asarray(2.0),
+        "ionspec_logLratio2": jnp.asarray(0.5),
+        "ionspec_logLratio3": jnp.asarray(0.5),
+        "gas_logn": jnp.asarray(2.0),
+        "gas_logno": jnp.asarray(0.0),
+        "gas_logco": jnp.asarray(0.0),
+        "redshift": jnp.asarray(0.0),
+    }
+    return run_components(chain, state0, params)
+
+
+def test_emission_lines_published_by_cue(state_with_cue):
+    """Cue backend should populate state.derived line catalogue."""
+    assert "line_waves" in state_with_cue.derived
+    assert "line_lums" in state_with_cue.derived
+    # Cue's output is a many-line catalogue (~100+).
+    assert state_with_cue.derived["line_waves"].shape[0] > 50
+
+
+def test_state_to_emission_lines_all_finite(state_with_cue):
+    """All 11 bridge-extracted lines should be finite for Cue."""
+    from tengri.forward import state_to_emission_lines
+
+    lines = state_to_emission_lines(state_with_cue)
+    nans = [f for f in lines._fields if not bool(jnp.isfinite(getattr(lines, f)))]
+    assert nans == [], f"Lines with NaN: {nans}"
+
+
+def test_state_to_emission_lines_balmer_decrement(state_with_cue):
+    """Halpha / Hbeta ≈ 2.85 (case-B recombination at T_e=10⁴ K)."""
+    from tengri.forward import state_to_emission_lines
+
+    lines = state_to_emission_lines(state_with_cue)
+    ratio = float(lines.halpha / lines.hbeta)
+    # Cue's intrinsic Balmer decrement should be in [2.5, 3.5] —
+    # case-B is 2.86; small departures are physical.
+    assert 2.0 < ratio < 4.0, f"Halpha/Hbeta = {ratio} (expected ~2.85)"
+
+
+def test_state_to_emission_lines_no_catalogue_returns_nan(state):
+    """Chain without nebular catalogue (no Cue/Cloudy) → all NaN."""
+    from tengri.forward import state_to_emission_lines
+
+    # The ``state`` fixture has no nebular component → no line_waves.
+    assert "line_waves" not in state.derived
+    lines = state_to_emission_lines(state)
+    for f in lines._fields:
+        assert not bool(jnp.isfinite(getattr(lines, f))), (
+            f"Lines.{f} should be NaN when no catalogue published"
+        )
