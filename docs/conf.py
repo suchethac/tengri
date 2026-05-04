@@ -44,7 +44,12 @@ sphinx_gallery_conf = {
         r"plot_bursty_recovery|plot_first_fit|plot_stochastic_sfh)\.py"
     ),
     "download_all_examples": False,
-    "plot_gallery": "True",
+    # Locally we execute (default). On CI (e.g. GitHub Actions sets CI=true) we
+    # use the pre-rendered docs/auto_examples/ that the developer committed so
+    # the cloud build doesn't need SSP grids, RELAGN, or ~20 GB of optional
+    # data. Run `make html` locally and commit the regenerated auto_examples/
+    # before pushing if you want fresh galleries.
+    "plot_gallery": "False" if os.environ.get("CI", "").lower() == "true" else "True",
     "remove_config_comments": True,
     "within_subsection_order": "FileNameSortKey",
     "thumbnail_size": (320, 224),

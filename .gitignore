@@ -71,7 +71,10 @@ notebook_metrics.json
 # Sphinx docs build artifacts
 docs/_build/
 docs/_notebooks/
-docs/auto_examples/
+# docs/auto_examples/ is committed (pre-rendered locally) so the docs build
+# in CI doesn't need SSP grids or RELAGN — see docs/conf.py plot_gallery.
+# Re-run `make html` locally and commit changes when galleries need refresh.
+# docs/auto_examples/
 .worktrees/
 .claude/
 .nb_home/
