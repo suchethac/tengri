@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added (Phase II-2.6 — Quantities bridges from PipelineState)
+
+- ``tengri.forward.state_to_sfh_quantities(state)`` — converts an
+  orchestrator ``PipelineState`` into the legacy ``SFHQuantities``
+  NamedTuple (all 7 fields populated; mass-weighted age and metallicity
+  computed from the published SFH grid).
+- ``tengri.forward.state_to_sed_quantities(state)`` — converts to
+  ``SEDQuantities``; populates ``l_bol``, ``l_tir``,
+  ``l_dust_absorbed`` directly from the state. UV-slope, Dn4000,
+  Balmer-break, M_UV, and luminosity-weighted quantities return ``NaN``
+  pending the next bridge step.
+
+These are the first half of full ``Prediction`` parity (which gates
+monolith deletion). Existing code reading
+``predict_sfh_quantities(...).stellar_mass`` keeps working when the
+prediction is sourced from ``run_components``.
+
 ### Added (Phase II-2.6 — SEDModel + Galaxy bridges to orchestrator)
 
 - ``SEDModel.predict_via_orchestrator(params)`` — public bridge from
