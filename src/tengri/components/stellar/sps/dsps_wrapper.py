@@ -460,19 +460,28 @@ def compute_dsps_native_weights(
         t_obs=t_obs_gyr,
     )
 
-    # result.age_weights is normalized (sum=1, DSPS convention).
-    # Scale to absolute mass (Msun) using trapezoidal integral of SFR dt.
+    # ``result.weights`` is the joint (n_met, n_age) probability
+    # distribution (sums to 1) used by DSPS internally to build
+    # ``rest_sed``. The joint is **non-separable**: the outer product
+    # of the marginals (lgmet_weights ⊗ age_weights) gives the right
+    # marginals but the wrong per-bin product when convolved with
+    # ``ssp_flux``, over-scaling the CSP SED by orders of magnitude.
+    # Use the joint directly. (Discovered in 2026-05-04 stellar
+    # component debugging; see commit 221e4e8.)
     total_mass = jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9)
-    # age_weights from DSPS are in reversed (ascending cosmic time) order.
-    # Flip back to tengri's ascending-age convention.
-    age_weights_msun = result.age_weights[::-1] * jnp.maximum(total_mass, 0.0)
 
-    # Metallicity-marginalized SSP flux per age bin.
-    # result.lgmet_weights shape: (n_met,) — fractional weights summing to 1.
-    lgmet_w = result.lgmet_weights  # (n_met,)
-    lgmet_w_safe = lgmet_w / jnp.maximum(lgmet_w.sum(), 1e-30)
-    # Broadcast over age axis: ssp_flux shape is (n_met, n_age, n_wave).
-    ssp_flux_at_z = jnp.einsum("m,maw->aw", lgmet_w_safe, ssp_flux)  # (n_age, n_wave)
+    joint = result.weights  # (n_met, n_age) sum=1
+    age_weights_norm = joint.sum(axis=0)  # (n_age,) sum=1
+    age_weights_msun = age_weights_norm * jnp.maximum(total_mass, 0.0)
+
+    # Per-age conditional metallicity-weighted SSP flux (Lsun/Hz/Msun).
+    # weighted_ssp[a] = sum_m(joint[m, a] × ssp_flux[m, a, :])
+    # ssp_flux_at_z[a] = weighted_ssp[a] / age_weights_norm[a]
+    # so that ``age_weights_msun[a] × ssp_flux_at_z[a, :]`` reproduces
+    # ``total_mass × weighted_ssp[a]``. Sum over a → rest_sed.
+    weighted_ssp = jnp.einsum("ma,maw->aw", joint, ssp_flux)  # (n_age, n_wave)
+    age_weights_safe = jnp.maximum(age_weights_norm, 1e-30)
+    ssp_flux_at_z = weighted_ssp / age_weights_safe[:, None]
 
     return age_weights_msun, ssp_flux_at_z
 
@@ -572,17 +581,19 @@ def compute_dsps_met_table_weights(
         t_obs=t_obs_gyr,
     )
 
-    # Scale normalized age weights to absolute mass (Msun).
+    # See ``compute_dsps_native_weights`` for the rationale: use the
+    # joint (n_met, n_age) ``result.weights`` directly. DSPS aligns its
+    # weights' age axis with the SSP grid (lookback-time ascending) —
+    # no axis flips required to dot with ``ssp_flux``.
     total_mass = jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9)
-    # result.age_weights is in ascending cosmic time (oldest first) → flip back.
-    age_weights_msun = result.age_weights[::-1] * jnp.maximum(total_mass, 0.0)
 
-    # lgmet_weights: (n_met, n_age) in ascending cosmic time (oldest first).
-    # Flip age axis → youngest first, matching tengri's ssp_flux axis order.
-    lgmet_w = result.lgmet_weights[:, ::-1]  # (n_met, n_age)
-    lgmet_w_safe = lgmet_w / jnp.maximum(jnp.sum(lgmet_w, axis=0, keepdims=True), 1e-30)
-    # Per-age metallicity-marginalized SSP flux.
-    ssp_flux_at_z = jnp.einsum("ma,maw->aw", lgmet_w_safe, ssp_flux)  # (n_age, n_wave)
+    joint = result.weights  # (n_met, n_age) sum=1
+    age_weights_norm = joint.sum(axis=0)  # (n_age,) sum=1
+    age_weights_msun = age_weights_norm * jnp.maximum(total_mass, 0.0)
+
+    weighted_ssp = jnp.einsum("ma,maw->aw", joint, ssp_flux)  # (n_age, n_wave) per Msun_formed
+    age_weights_safe = jnp.maximum(age_weights_norm, 1e-30)
+    ssp_flux_at_z = weighted_ssp / age_weights_safe[:, None]
 
     return age_weights_msun, ssp_flux_at_z
 
