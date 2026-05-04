@@ -246,32 +246,32 @@ def _tau_lc_laf(
     # Three source-redshift regimes
     # Regime z_S < 1.2
     t_low = (
-        0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, a_max=2.2) ** 1.2)
-        - 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, a_max=2.2) ** 3.7)
-        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, a_max=2.2) ** 5.5)
+        0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, max=2.2) ** 1.2)
+        - 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=2.2) ** 3.7)
+        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=2.2) ** 5.5)
     )
 
     # Regime 1.2 <= z_S < 4.7
     t_mid = (
         2.55e-2 * ((1.0 + z_obs_safe) ** 1.2 - (1.0 + z_source) ** 1.2)
-        - 0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, a_max=2.2) ** 1.2)
-        - 1.15e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, a_max=5.7) ** 3.7)
-        + 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, a_max=2.2) ** 3.7)
-        - 7.83e-4 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, a_max=5.7) ** 5.5)
-        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, a_max=2.2) ** 5.5)
+        - 0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, max=2.2) ** 1.2)
+        - 1.15e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=5.7) ** 3.7)
+        + 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=2.2) ** 3.7)
+        - 7.83e-4 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=5.7) ** 5.5)
+        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=2.2) ** 5.5)
     )
 
     # Regime z_S >= 4.7
     t_high = (
         5.22e-4 * ((1.0 + z_obs_safe) ** 1.2 - (1.0 + z_source) ** 1.2)
         + 2.55e-2 * ((1.0 + z_obs_safe) ** 1.2 - (1.0 + z_source) ** 1.2)
-        - 0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, a_max=2.2) ** 1.2)
+        - 0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, max=2.2) ** 1.2)
         - 1.328e-3 * ((1.0 + z_obs_safe) ** 3.7 - (1.0 + z_source) ** 3.7)
-        - 1.15e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, a_max=5.7) ** 3.7)
-        + 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, a_max=2.2) ** 3.7)
+        - 1.15e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=5.7) ** 3.7)
+        + 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=2.2) ** 3.7)
         - 5.15e-5 * ((1.0 + z_obs_safe) ** 5.5 - (1.0 + z_source) ** 5.5)
-        - 7.83e-4 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, a_max=5.7) ** 5.5)
-        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, a_max=2.2) ** 5.5)
+        - 7.83e-4 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=5.7) ** 5.5)
+        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=2.2) ** 5.5)
     )
 
     tau = jnp.where(
@@ -280,7 +280,7 @@ def _tau_lc_laf(
         jnp.where(z_source < 4.7, t_mid, t_high),
     )
 
-    return jnp.where(active, jnp.clip(tau, a_min=0.0), 0.0)
+    return jnp.where(active, jnp.clip(tau, min=0.0), 0.0)
 
 
 # ── Lyman continuum optical depth (DLA) ───────────────────────────
@@ -308,7 +308,7 @@ def _tau_lc_dla(
     )
 
     tau = jnp.where(z_source < 2.0, t_low, t_high)
-    return jnp.where(active, jnp.clip(tau, a_min=0.0), 0.0)
+    return jnp.where(active, jnp.clip(tau, min=0.0), 0.0)
 
 
 # ── CGM damping wing absorption (Asada et al. 2025) ───────────────
@@ -402,7 +402,7 @@ def _cgm_damping_wing_tau(
     # Only apply at z > 5 (below this, CGM is ionized and negligible)
     tau = jnp.where(z_source > 5.0, tau, 0.0)
 
-    return jnp.clip(tau, a_min=0.0)
+    return jnp.clip(tau, min=0.0)
 
 
 # ── Public API ────────────────────────────────────────────────────
@@ -527,7 +527,7 @@ def igm_transmission(
     )
     tau_total = tau_total + tau_cgm
 
-    return jnp.exp(-jnp.clip(tau_total, a_min=0.0))
+    return jnp.exp(-jnp.clip(tau_total, min=0.0))
 
 
 # ── Patchy reionization damping wing (Mason+2018, Keating+2025) ───
@@ -623,7 +623,7 @@ def _damping_wing_tau(
     # Only apply redward of Ly-alpha at source (damping wing side)
     tau_wing = jnp.where(wave_obs > lya_obs, tau_wing, 0.0)
 
-    return jnp.clip(tau_wing, a_min=0.0)
+    return jnp.clip(tau_wing, min=0.0)
 
 
 def igm_transmission_patchy(
