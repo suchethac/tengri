@@ -2976,7 +2976,13 @@ class SEDModel:
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
         sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-        flux = self._hybrid.spectrum(sfr_on_ssp, params, **self._get_non_stellar_kwargs(p))
+        flux = self._hybrid.spectrum(
+            sfr_on_ssp,
+            params,
+            ssp_flux_traced=self.ssp_data.ssp_flux,
+            ssp_lgmet_traced=self.ssp_data.ssp_lgmet,
+            **self._get_non_stellar_kwargs(p),
+        )
 
         # Apply LSF if needed
         resolution = self._lsf_resolution
@@ -3006,13 +3012,33 @@ class SEDModel:
         auto path if no precomputed spectrum kernel is available.
         """
         # Prefer hybrid spectrum raw (precomputed SSP on pixel grid)
+        # Phase II-2: thread SSP arrays as JIT-traced kwargs so XLA does not
+        # bake the full SSP grid into the compiled HLO as constants.
         if self._hybrid_kernels is not None:
             raw = getattr(self._hybrid_kernels, "_spectrum_raw", None)
             if raw is not None:
                 p = self._get_internal_params(params)
                 sfr = self._compute_sfr(p)
                 sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-                return raw(sfr_on_ssp, params)
+                return raw(
+                    sfr_on_ssp,
+                    params,
+                    ssp_flux_traced=self.ssp_data.ssp_flux,
+                    ssp_lgmet_traced=self.ssp_data.ssp_lgmet,
+                )
+        # Fall back to compositional spectrum raw if available
+        if self._compositional_kernels is not None:
+            raw = getattr(self._compositional_kernels, "_spectrum_raw", None)
+            if raw is not None and self._met_mode != "chem_evol":
+                p = self._get_internal_params(params)
+                sfr = self._compute_sfr(p)
+                sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
+                return raw(
+                    sfr_on_ssp,
+                    params,
+                    ssp_flux_traced=self.ssp_data.ssp_flux,
+                    ssp_lgmet_traced=self.ssp_data.ssp_lgmet,
+                )
         # Fall back to auto path (compositional rest-SED)
         return self._predict_spectrum_auto(params, wave_obs, wave_chunk_size)
 
@@ -3034,7 +3060,14 @@ class SEDModel:
             p = self._get_internal_params(params)
             sfr = self._compute_sfr(p)
             sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-            flux = self._compositional.spectrum(sfr_on_ssp, params)
+            # Phase II-2: pass SSP arrays as JIT-traced kwargs to keep the
+            # 100+ MB SSP flux grid out of the compiled HLO as constants.
+            flux = self._compositional.spectrum(
+                sfr_on_ssp,
+                params,
+                ssp_flux_traced=self.ssp_data.ssp_flux,
+                ssp_lgmet_traced=self.ssp_data.ssp_lgmet,
+            )
             # Apply LSF if needed (below)
         else:
             rest_sed = self._compute_rest_sed_compositional(params)

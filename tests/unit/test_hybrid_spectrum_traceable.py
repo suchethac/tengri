@@ -85,9 +85,9 @@ def test_traceable_spectrum_uses_hybrid(model_with_spec):
     call_log = []
     original_raw = hk._spectrum_raw
 
-    def patched_raw(sfr_on_ssp, params):
+    def patched_raw(sfr_on_ssp, params, **kwargs):
         call_log.append("hybrid")
-        return original_raw(sfr_on_ssp, params)
+        return original_raw(sfr_on_ssp, params, **kwargs)
 
     hk._spectrum_raw = patched_raw
     try:

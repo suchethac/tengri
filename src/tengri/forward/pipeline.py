@@ -34,7 +34,7 @@ from tengri.components.sps.dsps_wrapper import (
 )
 
 
-def interp_metallicity(model, log_z):
+def interp_metallicity(model, log_z, ssp_flux=None, ssp_lgmet=None):
     """Dispatch metallicity interpolation on SSP grid (single Z value).
 
     Parameters
@@ -43,6 +43,13 @@ def interp_metallicity(model, log_z):
         The model instance.
     log_z : float
         log10(Z) absolute metallicity [dimensionless].
+    ssp_flux : ndarray, optional
+        Traced override for ``model.ssp_data.ssp_flux``. When provided
+        with ``ssp_lgmet``, the SSP arrays enter the JIT graph as
+        runtime tensors instead of closure-captured constants
+        (Phase II-2 trace path; see ``docs/dev/quickstart_oom_diagnosis.md``).
+    ssp_lgmet : ndarray, optional
+        Traced override for ``model.ssp_data.ssp_lgmet``.
 
     Returns
     -------
@@ -53,17 +60,19 @@ def interp_metallicity(model, log_z):
     -----
     **JIT-compatible**: yes — uses smooth or nearest-neighbor interpolation.
     """
+    flux = ssp_flux if ssp_flux is not None else model.ssp_data.ssp_flux
+    lgmet = ssp_lgmet if ssp_lgmet is not None else model.ssp_data.ssp_lgmet
     if model._met_interp == "smooth":
         return interpolate_metallicity_smooth(
-            model.ssp_data.ssp_flux,
-            model.ssp_data.ssp_lgmet,
+            flux,
+            lgmet,
             log_z,
             model._lgmet_scatter,
         )
-    return interpolate_metallicity(model.ssp_data.ssp_flux, model.ssp_data.ssp_lgmet, log_z)
+    return interpolate_metallicity(flux, lgmet, log_z)
 
 
-def interp_metallicity_evolving(model, log_z_per_age):
+def interp_metallicity_evolving(model, log_z_per_age, ssp_flux=None, ssp_lgmet=None):
     """Dispatch per-age metallicity interpolation on SSP grid.
 
     Parameters
@@ -82,19 +91,21 @@ def interp_metallicity_evolving(model, log_z_per_age):
     -----
     **JIT-compatible**: yes — uses smooth or nearest-neighbor interpolation.
     """
+    flux = ssp_flux if ssp_flux is not None else model.ssp_data.ssp_flux
+    lgmet = ssp_lgmet if ssp_lgmet is not None else model.ssp_data.ssp_lgmet
     if model._met_interp == "smooth":
         return interpolate_metallicity_smooth_evolving(
-            model.ssp_data.ssp_flux,
-            model.ssp_data.ssp_lgmet,
+            flux,
+            lgmet,
             log_z_per_age,
             model._lgmet_scatter,
         )
-    return interpolate_metallicity_evolving(
-        model.ssp_data.ssp_flux, model.ssp_data.ssp_lgmet, log_z_per_age
-    )
+    return interpolate_metallicity_evolving(flux, lgmet, log_z_per_age)
 
 
-def interp_met_alpha_dispatch(model, log_z, alpha_fe):
+def interp_met_alpha_dispatch(
+    model, log_z, alpha_fe, ssp_flux=None, ssp_lgmet=None, ssp_alpha_fe=None
+):
     """Dispatch metallicity+alpha interpolation based on SSP grid dimensionality.
 
     Uses 4D bilinear interpolation if alpha-enhanced SSPs are available,
@@ -120,18 +131,21 @@ def interp_met_alpha_dispatch(model, log_z, alpha_fe):
     """
     if has_alpha_grid(model.ssp_data):
         return interpolate_met_alpha(
-            model.ssp_data.ssp_flux,
-            model.ssp_data.ssp_lgmet,
-            model.ssp_data.ssp_alpha_fe,
+            ssp_flux if ssp_flux is not None else model.ssp_data.ssp_flux,
+            ssp_lgmet if ssp_lgmet is not None else model.ssp_data.ssp_lgmet,
+            ssp_alpha_fe if ssp_alpha_fe is not None else model.ssp_data.ssp_alpha_fe,
             log_z,
             alpha_fe,
         )
     # Fallback: effective_metallicity on 3D grid
     log_z_eff = effective_metallicity(log_z, alpha_fe)
-    return interp_metallicity(model, log_z_eff)
+    return interp_metallicity(model, log_z_eff, ssp_flux=ssp_flux, ssp_lgmet=ssp_lgmet)
 
 
-def interp_met_alpha_evolving_dispatch(model, log_z_per_age, alpha_fe_per_age):
+def interp_met_alpha_evolving_dispatch(
+    model, log_z_per_age, alpha_fe_per_age,
+    ssp_flux=None, ssp_lgmet=None, ssp_alpha_fe=None,
+):
     """Dispatch per-age metallicity+alpha interpolation on SSP grid.
 
     Uses per-age 4D bilinear if alpha-enhanced SSPs available,
@@ -160,15 +174,17 @@ def interp_met_alpha_evolving_dispatch(model, log_z_per_age, alpha_fe_per_age):
         if not hasattr(alpha_fe_per_age, "shape") or alpha_fe_per_age.ndim == 0:
             alpha_fe_per_age = jnp.full_like(log_z_per_age, alpha_fe_per_age)
         return interpolate_met_alpha_evolving(
-            model.ssp_data.ssp_flux,
-            model.ssp_data.ssp_lgmet,
-            model.ssp_data.ssp_alpha_fe,
+            ssp_flux if ssp_flux is not None else model.ssp_data.ssp_flux,
+            ssp_lgmet if ssp_lgmet is not None else model.ssp_data.ssp_lgmet,
+            ssp_alpha_fe if ssp_alpha_fe is not None else model.ssp_data.ssp_alpha_fe,
             log_z_per_age,
             alpha_fe_per_age,
         )
     # Fallback: effective_metallicity on 3D grid
     log_z_eff = effective_metallicity(log_z_per_age, alpha_fe_per_age)
-    return interp_metallicity_evolving(model, log_z_eff)
+    return interp_metallicity_evolving(
+        model, log_z_eff, ssp_flux=ssp_flux, ssp_lgmet=ssp_lgmet
+    )
 
 
 def get_dust_kwargs(model, p):

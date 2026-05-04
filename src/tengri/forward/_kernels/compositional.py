@@ -190,6 +190,8 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
     spec = state.spec
     has_field = state.uses_stochastic_sfh
     ssp_ages_yr = state.ssp_ages_yr
+    # Metallicity mode: "delta" (scalar), "ramp" (evolving), or "chem_evol"
+    _met_mode = state.met_mode
     # Panchromatic wavelength grid (extended if radio/xray enabled)
     rest_wave = state.rest_wavelength
 
@@ -205,6 +207,13 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
         _ssp_lg_age_gyr = state.ssp_data.ssp_lg_age_gyr
         _ssp_flux = state.ssp_data.ssp_flux
         _lgmet_scatter_native = float(state.lgmet_scatter)
+        from tengri.utils.cosmology import age_at_z as _age_at_z_fn
+
+    # BUG-NSS-02: For ramp mode (evolving metallicity), capture SSP age grid
+    # to compute per-age metallicity evolution
+    if _met_mode == "ramp":
+        if not _use_dsps_native:
+            _ssp_lg_age_gyr = state.ssp_data.ssp_lg_age_gyr
         from tengri.utils.cosmology import age_at_z as _age_at_z_fn
 
     # Redshift: fixed (precompute IGM once) or free (traced through)
@@ -233,20 +242,62 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
     if is_free_z:
         from tengri.utils.cosmology import luminosity_distance as _lum_dist
 
+    # Phase II-2 (focused): SSP arrays passed as JIT-traced inputs rather than
+    # captured by closure. Without this, the simple non-evolving-Z trapz path
+    # below would close over `model.ssp_data.ssp_flux` (~114 MB at MIST grid
+    # size) and XLA's constant-folder would bake transposes of it into the
+    # compiled HLO, blowing past the 2 GB protobuf serialization limit. With
+    # `ssp_flux_traced` and `ssp_lgmet_traced` as JIT inputs, the array stays a
+    # runtime tensor — closed paths below that still take `model` (alpha_fe,
+    # ramp metallicity) are unchanged for now and remain on the closure-capture
+    # path; those branches are not on the quickstart's photometry path. See
+    # `docs/dev/quickstart_oom_diagnosis.md`.
+
+    # Closure-captured fallbacks for SSP arrays (used when callers don't pass
+    # traced inputs — e.g. legacy callsites and the non-_traceable predict_*
+    # methods that go through the lazily-built logged_jit wrapper).
+    _ssp_flux_closure = state.ssp_data.ssp_flux
+    _ssp_lgmet_closure = state.ssp_data.ssp_lgmet
+    _lgmet_scatter_closure = float(state.lgmet_scatter)
+    from tengri.components.sps.dsps_wrapper import (
+        interpolate_metallicity_smooth as _interp_metallicity_smooth,
+    )
+    _met_use_smooth = state.met_interp == "smooth"
+
     # --- Shared SED computation (sfr_on_ssp pre-computed by caller) ---
-    def _compute_rest_sed(sfr_on_ssp, params):
+    def _compute_rest_sed(sfr_on_ssp, params,
+                          ssp_flux_traced=None, ssp_lgmet_traced=None):
         """sfr_on_ssp, params → (rest_sed, redshift_value).
 
         ``sfr_on_ssp`` is the SFH already evaluated on the SSP age grid.
         Keeping SFH outside this function prevents the SFH type from entering
         the JIT closure, so switching SFH models does not cause recompilation.
+
+        When ``ssp_flux_traced`` and ``ssp_lgmet_traced`` are provided
+        (Phase II-2 trace path), the metallicity-interpolation step uses
+        these as JIT-traced inputs rather than the closure-captured SSP
+        arrays — which keeps XLA from baking the 114 MB SSP flux grid
+        into the compiled HLO.
         """
         p = get_internal_params(params, param_map, spec, has_field)
 
         if _use_dsps_native:
             z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
             t_obs_gyr = _t_obs_gyr_fixed if _t_obs_gyr_fixed is not None else _age_at_z_fn(z)
-            lgmet = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
+            # BUG-NSS-02 fix: For ramp mode, compute per-age metallicity from initial/final
+            if _met_mode == "ramp":
+                from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
+
+                lgmet_per_age = compute_log_z_evolving(
+                    _ssp_lg_age_gyr, p["log_z_abs_initial"], p["log_z_abs_final"], t_obs_gyr
+                )
+                # For dsps_native with ramp, pass the per-age array
+                # Note: compute_dsps_native_weights expects scalar lgmet, so this path
+                # is not fully supported yet. Fall back to scalar (use final value).
+                # TODO: extend compute_dsps_native_weights to handle per-age metallicity
+                lgmet = jnp.mean(lgmet_per_age)  # Approximate with mean
+            else:
+                lgmet = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
             lgmet_scatter = float(p.get("lgmet_scatter", _lgmet_scatter_native))
             weights, ssp_flux_at_z = compute_dsps_native_weights(
                 sfr_on_ssp,
@@ -260,12 +311,54 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
             )
         else:
             weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
-            _lgmet = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
-            if _use_alpha_fe_t2:
-                alpha_fe = p.get("alpha_fe", 0.0)
-                ssp_flux_at_z = interp_met_alpha_dispatch(model, _lgmet, alpha_fe)
+            # BUG-NSS-02 fix: For ramp mode, compute per-age metallicity and vmap interpolation
+            if _met_mode == "ramp":
+                from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
+                from tengri.forward.pipeline import (
+                    interp_met_alpha_evolving_dispatch,
+                    interp_metallicity_evolving,
+                )
+
+                z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
+                t_obs_gyr = _t_obs_gyr_fixed if _t_obs_gyr_fixed is not None else _age_at_z_fn(z)
+                lgmet_per_age = compute_log_z_evolving(
+                    _ssp_lg_age_gyr, p["log_z_abs_initial"], p["log_z_abs_final"], t_obs_gyr
+                )
+                if _use_alpha_fe_t2:
+                    alpha_fe = p.get("alpha_fe", 0.0)
+                    ssp_flux_at_z = interp_met_alpha_evolving_dispatch(
+                        model, lgmet_per_age, alpha_fe,
+                        ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced,
+                    )
+                else:
+                    ssp_flux_at_z = interp_metallicity_evolving(
+                        model, lgmet_per_age,
+                        ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced,
+                    )
             else:
-                ssp_flux_at_z = interp_metallicity(model, _lgmet)
+                _lgmet = p.get("log_z_abs", -1.8477)
+                if _use_alpha_fe_t2:
+                    alpha_fe = p.get("alpha_fe", 0.0)
+                    ssp_flux_at_z = interp_met_alpha_dispatch(
+                        model, _lgmet, alpha_fe,
+                        ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced,
+                    )
+                else:
+                    # Phase II-2 trace path: prefer traced SSP arrays when
+                    # provided, fall back to closure-captured otherwise.
+                    if (
+                        _met_use_smooth
+                        and ssp_flux_traced is not None
+                        and ssp_lgmet_traced is not None
+                    ):
+                        ssp_flux_at_z = _interp_metallicity_smooth(
+                            ssp_flux_traced,
+                            ssp_lgmet_traced,
+                            _lgmet,
+                            _lgmet_scatter_closure,
+                        )
+                    else:
+                        ssp_flux_at_z = interp_metallicity(model, _lgmet)
 
         # Always pass current SFR — needed by nebular (Q_H scaling) and X-ray.
         p = {**p, "_sfr_current": sfr_on_ssp[-1]}
@@ -276,9 +369,12 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
 
     if is_free_z:
 
-        def fused_tier2_phot(sfr_on_ssp, params):
+        def fused_tier2_phot(sfr_on_ssp, params,
+                             ssp_flux_traced=None, ssp_lgmet_traced=None):
             """sfr_on_ssp, params dict → observed photometry (free z)."""
-            rest_sed, z = _compute_rest_sed(sfr_on_ssp, params)
+            rest_sed, z = _compute_rest_sed(
+                sfr_on_ssp, params, ssp_flux_traced, ssp_lgmet_traced
+            )
             dl_cm = _lum_dist(z)
 
             if apply_igm:
@@ -296,9 +392,12 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
 
     else:
 
-        def fused_tier2_phot(sfr_on_ssp, params):
+        def fused_tier2_phot(sfr_on_ssp, params,
+                             ssp_flux_traced=None, ssp_lgmet_traced=None):
             """sfr_on_ssp, params dict → observed photometry (fixed z)."""
-            rest_sed, _z = _compute_rest_sed(sfr_on_ssp, params)
+            rest_sed, _z = _compute_rest_sed(
+                sfr_on_ssp, params, ssp_flux_traced, ssp_lgmet_traced
+            )
 
             if igm_trans_full is not None:
                 rest_sed = rest_sed * igm_trans_full
@@ -387,12 +486,21 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
     ssp_ages_yr = state.ssp_ages_yr
     # Panchromatic wavelength grid (extended if radio/xray enabled)
     rest_wave = state.rest_wavelength
+    # Metallicity mode: "delta" (scalar), "ramp" (evolving), or "chem_evol"
+    _met_mode_spec = state.met_mode
 
     if _use_dsps_native_spec:
         _ssp_lgmet_spec = state.ssp_data.ssp_lgmet
         _ssp_lg_age_gyr_spec = state.ssp_data.ssp_lg_age_gyr
         _ssp_flux_spec = state.ssp_data.ssp_flux
         _lgmet_scatter_spec = float(state.lgmet_scatter)
+        from tengri.utils.cosmology import age_at_z as _age_at_z_spec
+
+    # BUG-NSS-02: For ramp mode (evolving metallicity), capture SSP age grid
+    # to compute per-age metallicity evolution
+    if _met_mode_spec == "ramp":
+        if not _use_dsps_native_spec:
+            _ssp_lg_age_gyr_spec = state.ssp_data.ssp_lg_age_gyr
         from tengri.utils.cosmology import age_at_z as _age_at_z_spec
 
     z_fixed = state.z_fixed
@@ -406,16 +514,48 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
     if is_free_z:
         from tengri.utils.cosmology import luminosity_distance as _lum_dist_spec
 
+    # Phase II-2: closure fallbacks for SSP arrays so legacy callers
+    # (logged_jit wrapper, batch fitter) still work when traced kwargs
+    # are absent.
+    _ssp_flux_closure_spec = state.ssp_data.ssp_flux
+    _ssp_lgmet_closure_spec = state.ssp_data.ssp_lgmet
+    _lgmet_scatter_closure_spec = float(state.lgmet_scatter)
+    _met_use_smooth_spec = state.met_interp == "smooth"
+    from tengri.components.sps.dsps_wrapper import (
+        interpolate_metallicity_smooth as _interp_metallicity_smooth_spec,
+    )
+
     # Shared SED computation (sfr_on_ssp pre-computed by caller)
-    def _compute_rest_sed_spec(sfr_on_ssp, params):
-        """Compute rest-frame SED for the spectroscopy kernel given pre-computed SFR weights."""
+    def _compute_rest_sed_spec(sfr_on_ssp, params,
+                               ssp_flux_traced=None, ssp_lgmet_traced=None):
+        """Compute rest-frame SED for the spectroscopy kernel given pre-computed SFR weights.
+
+        ``ssp_flux_traced`` / ``ssp_lgmet_traced`` (Phase II-2 trace path):
+        when provided, the smooth-Z metallicity-interpolation step uses
+        them as JIT-traced inputs instead of closure-captured SSP arrays.
+        Keeps XLA from baking the 114 MB SSP grid into the compiled HLO.
+        """
         p = get_internal_params(params, param_map, spec, has_field)
         if _use_dsps_native_spec:
             z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
             t_obs_gyr = (
                 _t_obs_gyr_fixed_spec if _t_obs_gyr_fixed_spec is not None else _age_at_z_spec(z)
             )
-            lgmet = p.get("log_z_abs", -1.8477)
+            # BUG-NSS-02 fix: For ramp mode, compute per-age metallicity from initial/final
+            if _met_mode_spec == "ramp":
+                from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
+
+                lgmet_per_age = compute_log_z_evolving(
+                    _ssp_lg_age_gyr_spec,
+                    p["log_z_abs_initial"],
+                    p["log_z_abs_final"],
+                    t_obs_gyr,
+                )
+                # For dsps_native with ramp, approximate with mean
+                # TODO: extend compute_dsps_native_weights to handle per-age metallicity
+                lgmet = jnp.mean(lgmet_per_age)
+            else:
+                lgmet = p.get("log_z_abs", -1.8477)
             lgmet_scatter = float(p.get("lgmet_scatter", _lgmet_scatter_spec))
             weights, ssp_flux_at_z = compute_dsps_native_weights(
                 sfr_on_ssp,
@@ -429,14 +569,61 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
             )
         else:
             weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
-            if _use_alpha_fe_spec2:
-                alpha_fe = p.get("alpha_fe", 0.0)
-                _lgmet_s = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
-                ssp_flux_at_z = interp_met_alpha_dispatch(model, _lgmet_s, alpha_fe)
-            else:
-                ssp_flux_at_z = interp_metallicity(
-                    model, p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
+            # BUG-NSS-02 fix: For ramp mode, compute per-age metallicity and vmap interpolation
+            if _met_mode_spec == "ramp":
+                from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
+                from tengri.forward.pipeline import (
+                    interp_met_alpha_evolving_dispatch,
+                    interp_metallicity_evolving,
                 )
+
+                z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
+                t_obs_gyr = (
+                    _t_obs_gyr_fixed_spec
+                    if _t_obs_gyr_fixed_spec is not None
+                    else _age_at_z_spec(z)
+                )
+                lgmet_per_age = compute_log_z_evolving(
+                    _ssp_lg_age_gyr_spec,
+                    p["log_z_abs_initial"],
+                    p["log_z_abs_final"],
+                    t_obs_gyr,
+                )
+                if _use_alpha_fe_spec2:
+                    alpha_fe = p.get("alpha_fe", 0.0)
+                    ssp_flux_at_z = interp_met_alpha_evolving_dispatch(
+                        model, lgmet_per_age, alpha_fe,
+                        ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced,
+                    )
+                else:
+                    ssp_flux_at_z = interp_metallicity_evolving(
+                        model, lgmet_per_age,
+                        ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced,
+                    )
+            else:
+                if _use_alpha_fe_spec2:
+                    alpha_fe = p.get("alpha_fe", 0.0)
+                    _lgmet_s = p.get("log_z_abs", -1.8477)
+                    ssp_flux_at_z = interp_met_alpha_dispatch(
+                        model, _lgmet_s, alpha_fe,
+                        ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced,
+                    )
+                else:
+                    _lgmet_s = p.get("log_z_abs", -1.8477)
+                    if (
+                        _met_use_smooth_spec
+                        and ssp_flux_traced is not None
+                        and ssp_lgmet_traced is not None
+                    ):
+                        # Phase II-2 trace path: SSP arrays as JIT inputs
+                        ssp_flux_at_z = _interp_metallicity_smooth_spec(
+                            ssp_flux_traced,
+                            ssp_lgmet_traced,
+                            _lgmet_s,
+                            _lgmet_scatter_closure_spec,
+                        )
+                    else:
+                        ssp_flux_at_z = interp_metallicity(model, _lgmet_s)
         p = {**p, "_sfr_current": sfr_on_ssp[-1]}
         rest_sed = rest_sed_kernel(weights, ssp_flux_at_z, p)
         z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
@@ -444,17 +631,23 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
 
     if is_free_z:
 
-        def fused_tier2_spec(sfr_on_ssp, params):
+        def fused_tier2_spec(sfr_on_ssp, params,
+                             ssp_flux_traced=None, ssp_lgmet_traced=None):
             """sfr_on_ssp, params dict → observed spectrum (free z)."""
-            rest_sed, z = _compute_rest_sed_spec(sfr_on_ssp, params)
+            rest_sed, z = _compute_rest_sed_spec(
+                sfr_on_ssp, params, ssp_flux_traced, ssp_lgmet_traced
+            )
             dl_cm = _lum_dist_spec(z)
             return compute_spectrum(rest_sed, rest_wave, wave_obs, z, dl_cm)
 
     else:
 
-        def fused_tier2_spec(sfr_on_ssp, params):
+        def fused_tier2_spec(sfr_on_ssp, params,
+                             ssp_flux_traced=None, ssp_lgmet_traced=None):
             """sfr_on_ssp, params dict → observed spectrum (fixed z)."""
-            rest_sed, _z = _compute_rest_sed_spec(sfr_on_ssp, params)
+            rest_sed, _z = _compute_rest_sed_spec(
+                sfr_on_ssp, params, ssp_flux_traced, ssp_lgmet_traced
+            )
             return compute_spectrum(rest_sed, rest_wave, wave_obs, z_fixed, dl_cm_fixed)
 
     return fused_tier2_spec
@@ -561,18 +754,33 @@ def build_hybrid_spectrum(state: SEDModelState, model=None):
         log_z_abs,
         dust_params,  # tuple: (tau_bc,) or (tau_bc, tau_diff)
         alpha_fe=0.0,
+        ssp_flux_traced=None,
+        ssp_lgmet_traced=None,
     ):
-        """Compute hybrid spectrum: precomputed stellar + non-stellar."""
+        """Compute hybrid spectrum: precomputed stellar + non-stellar.
+
+        Phase II-2: when ``ssp_flux_traced`` and ``ssp_lgmet_traced`` are
+        supplied, the metallicity interpolation step uses them as
+        JIT-traced inputs rather than closure-captured constants — keeps
+        XLA from baking the full SSP grid into the compiled HLO.
+        """
         p = get_internal_params(params, param_map, spec, has_field)
         weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
 
         # Metallicity interpolation
-        _lgmet_hs = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
+        # BUG-NSS-02: Use the provided log_z_abs, don't silently fall back
+        _lgmet_hs = log_z_abs
         if _use_alpha_fe and _has_alpha:
             alpha_fe_val = p.get("alpha_fe", 0.0)
-            ssp_flux_at_z = interp_met_alpha_dispatch(model, _lgmet_hs, alpha_fe_val)
+            ssp_flux_at_z = interp_met_alpha_dispatch(
+                model, _lgmet_hs, alpha_fe_val,
+                ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced,
+            )
         else:
-            ssp_flux_at_z = interp_metallicity(model, _lgmet_hs)
+            ssp_flux_at_z = interp_metallicity(
+                model, _lgmet_hs,
+                ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced,
+            )
 
         # Stellar spectrum on pixels
         stellar_spec = jnp.dot(weights, ssp_on_pixels[0])  # (n_pix,)
@@ -615,25 +823,66 @@ def build_hybrid_spectrum(state: SEDModelState, model=None):
 
     # === Define kernel with correct dust signature ===
 
+    # BUG-NSS-02: For ramp mode, use mean metallicity (approximate) since
+    # the hybrid kernel's precomputed stellar pixels are not per-age.
+    # Ideally, hybrid kernel would not be used for evolving metallicity.
     if _is_single_dust:
 
-        def hybrid_spec(sfr_on_ssp, params):
+        def hybrid_spec(sfr_on_ssp, params,
+                        ssp_flux_traced=None, ssp_lgmet_traced=None):
             """Single-dust hybrid spectrum."""
             p = get_internal_params(params, param_map, spec, has_field)
-            _lgmet = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
-            return _hybrid_spec_body(sfr_on_ssp, params, _lgmet, (p.get("tau_v", 0.0),))
+            if state.met_mode == "ramp":
+                from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
+                from tengri.utils.cosmology import age_at_z
+
+                z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
+                t_obs_gyr = age_at_z(z)
+                lgmet_per_age = compute_log_z_evolving(
+                    state.ssp_data.ssp_lg_age_gyr,
+                    p["log_z_abs_initial"],
+                    p["log_z_abs_final"],
+                    t_obs_gyr,
+                )
+                # Use mean metallicity as approximation for precomputed stellar grid
+                _lgmet = jnp.mean(lgmet_per_age)
+            else:
+                _lgmet = p.get("log_z_abs", -1.8477)
+            return _hybrid_spec_body(
+                sfr_on_ssp, params, _lgmet, (p.get("tau_v", 0.0),),
+                ssp_flux_traced=ssp_flux_traced,
+                ssp_lgmet_traced=ssp_lgmet_traced,
+            )
 
     else:
 
-        def hybrid_spec(sfr_on_ssp, params):
+        def hybrid_spec(sfr_on_ssp, params,
+                        ssp_flux_traced=None, ssp_lgmet_traced=None):
             """Two-dust hybrid spectrum."""
             p = get_internal_params(params, param_map, spec, has_field)
-            _lgmet = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
+            if state.met_mode == "ramp":
+                from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
+                from tengri.utils.cosmology import age_at_z
+
+                z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
+                t_obs_gyr = age_at_z(z)
+                lgmet_per_age = compute_log_z_evolving(
+                    state.ssp_data.ssp_lg_age_gyr,
+                    p["log_z_abs_initial"],
+                    p["log_z_abs_final"],
+                    t_obs_gyr,
+                )
+                # Use mean metallicity as approximation for precomputed stellar grid
+                _lgmet = jnp.mean(lgmet_per_age)
+            else:
+                _lgmet = p.get("log_z_abs", -1.8477)
             return _hybrid_spec_body(
                 sfr_on_ssp,
                 params,
                 _lgmet,
                 (p.get("tau_bc", 0.0), p.get("tau_diff", 0.0)),
+                ssp_flux_traced=ssp_flux_traced,
+                ssp_lgmet_traced=ssp_lgmet_traced,
             )
 
     return hybrid_spec
