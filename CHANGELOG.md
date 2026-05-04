@@ -26,6 +26,15 @@ monolith deletion). Existing code reading
 ``predict_sfh_quantities(...).stellar_mass`` keeps working when the
 prediction is sourced from ``run_components``.
 
+### Added (Phase II-2.6 — predict_*_quantities_via_orchestrator)
+
+- ``SEDModel.predict_sfh_quantities_via_orchestrator(params)`` and
+  ``SEDModel.predict_sed_quantities_via_orchestrator(params)``: drop-in
+  replacements for the legacy ``predict_sfh_quantities`` /
+  ``predict_sed_quantities`` that route through the orchestrator and
+  return the same legacy ``SFHQuantities`` / ``SEDQuantities``
+  NamedTuple shapes via the state-to-quantities bridge. JIT-compatible.
+
 ### Added (Phase II-2.6 — SEDModel + Galaxy bridges to orchestrator)
 
 - ``SEDModel.predict_via_orchestrator(params)`` — public bridge from
