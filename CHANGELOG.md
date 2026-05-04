@@ -27,6 +27,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   bagpipes/FSPS may need re-recording because the absolute
   bolometric was previously wrong.
 
+### Performance (Phase II — orchestrator JIT compile-time benchmark, refreshed 2026-05-04)
+
+- New benchmark file ``analysis/orchestrator_jit_benchmark.json``
+  records cold (cache-hit) and warm (in-process) JIT-compile times
+  for the orchestrator path on PRSC-MILES SSP, CPU. Sample numbers:
+
+  ===================  ============  ============
+  chain                cold (ms)     warm-min (ms)
+  ===================  ============  ============
+  stellar_only         ~520          ~0.8
+  stellar_dust         ~460          ~1.3
+  stellar_dust_igm     ~520          ~1.8
+  full_chain (7 comp)  ~465          ~1.9
+  ===================  ============  ============
+
+  The ~500 ms cache-hit cold floor is intrinsic to XLA compiling the
+  8 MB SSP-grid einsum + DSPS internals. Warm runs are < 2 ms — fast
+  enough that compilation is < 25% of a typical 1000-step inference.
+
 ### Performance (Phase II — orchestrator JIT compile-time benchmark)
 
 - Cold compile of the full 7-component chain

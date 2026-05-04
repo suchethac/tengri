@@ -1,0 +1,54 @@
+[
+  {
+    "variant": "orchestrator",
+    "chain": "stellar_only",
+    "n_components": 1,
+    "n_wave": 5994,
+    "n_age": 93,
+    "n_met": 15,
+    "compile_s": 0.516620457987301,
+    "warm_min_s": 0.000826291972771287,
+    "warm_avg_s": 0.0009810834075324238,
+    "platform": "cpu",
+    "ssp_file": "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+  },
+  {
+    "variant": "orchestrator",
+    "chain": "stellar_dust",
+    "n_components": 2,
+    "n_wave": 5994,
+    "n_age": 93,
+    "n_met": 15,
+    "compile_s": 0.45824533299310133,
+    "warm_min_s": 0.001305959012825042,
+    "warm_avg_s": 0.0013635833980515598,
+    "platform": "cpu",
+    "ssp_file": "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+  },
+  {
+    "variant": "orchestrator",
+    "chain": "stellar_dust_igm",
+    "n_components": 3,
+    "n_wave": 5994,
+    "n_age": 93,
+    "n_met": 15,
+    "compile_s": 0.5154973340104334,
+    "warm_min_s": 0.0017672079848125577,
+    "warm_avg_s": 0.0018270332016982137,
+    "platform": "cpu",
+    "ssp_file": "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+  },
+  {
+    "variant": "orchestrator",
+    "chain": "full_chain",
+    "n_components": 7,
+    "n_wave": 5994,
+    "n_age": 93,
+    "n_met": 15,
+    "compile_s": 0.46529262501280755,
+    "warm_min_s": 0.0018939169822260737,
+    "warm_avg_s": 0.0019931084010750056,
+    "platform": "cpu",
+    "ssp_file": "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+  }
+]
