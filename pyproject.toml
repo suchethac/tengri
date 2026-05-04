@@ -140,6 +140,8 @@ ignore = [
 "src/tengri/components/nebular/_shared.py" = ["E501"]
 "src/tengri/components/sfh/mean_sfh.py" = ["E501"]
 "src/tengri/components/sfh/psd_models.py" = ["E501"]
+"src/tengri/components/stellar/sfh/mean_sfh.py" = ["E501"]
+"src/tengri/components/stellar/sfh/psd_models.py" = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["tengri"]
