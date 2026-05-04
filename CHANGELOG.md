@@ -49,6 +49,13 @@ prediction is sourced from ``run_components``.
   ``predict_sed_quantities`` that route through the orchestrator and
   return the same legacy ``SFHQuantities`` / ``SEDQuantities``
   NamedTuple shapes via the state-to-quantities bridge. JIT-compatible.
+- ``SEDModel.predict_radio_quantities_via_orchestrator(params)``,
+  ``predict_xray_quantities_via_orchestrator(params)``,
+  ``predict_ionizing_quantities_via_orchestrator(params)``: same
+  pattern for the new ``RadioQuantities``/``XRayQuantities``/
+  ``IonizingQuantities`` types. SEDModel now exposes 5
+  ``predict_*_via_orchestrator`` entry points (Lines is the remaining
+  hold-out, gated on backend-specific extraction).
 
 ### Added (Phase II-2.6 — SEDModel + Galaxy bridges to orchestrator)
 
