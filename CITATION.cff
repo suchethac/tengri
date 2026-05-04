@@ -5,6 +5,8 @@ type: software
 authors:
   - family-names: Cooray
     given-names: Suchetha
+    email: astro.tengri@gmail.com
+    # orcid: "https://orcid.org/0000-0000-0000-0000"   # paste ORCID here
 license: BSD-3-Clause
 repository-code: "https://github.com/suchethac/tengri"
 url: "https://github.com/suchethac/tengri"
@@ -15,6 +17,7 @@ preferred-citation:
   authors:
     - family-names: Cooray
       given-names: Suchetha
+      email: astro.tengri@gmail.com
   title: "tengri: Differentiable SED Fitting with IFT Star Formation History Priors (Paper I)"
   journal: "in preparation"
   year: 2026

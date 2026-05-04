@@ -3,14 +3,36 @@ requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tengri"
+name = "astro-tengri"
 version = "0.1.0"
 description = "Differentiable SED fitting with IFT star formation history priors"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "BSD-3-Clause"}
 authors = [
-    {name = "Suchetha Cooray"},
+    {name = "Suchetha Cooray", email = "astro.tengri@gmail.com"},
+]
+keywords = [
+    "sed-fitting",
+    "galaxies",
+    "jax",
+    "astronomy",
+    "stellar-populations",
+    "differentiable",
+    "bayesian-inference",
+    "information-field-theory",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
     "jax>=0.4.20",
