@@ -2812,6 +2812,120 @@ class SEDModel:
             luminosity_weighted_metallicity=lw_z,
         )
 
+    # ── Component orchestrator path (Phase II-2.6 opt-in) ─────────────
+
+    def predict_via_orchestrator(self, params):
+        """Forward pass via the Phase II SEDComponent orchestrator.
+
+        Builds a component chain from this model's structural settings
+        (``self.spec`` + ``self.ssp_data`` + dust / nebular / AGN / radio
+        / X-ray / IGM flags) and threads ``params`` through
+        :func:`tengri.forward.run_components`. Returns the final
+        :class:`tengri.core.PipelineState`, **not** a legacy
+        :class:`Prediction` — callers wanting the legacy shape should
+        keep using :meth:`predict_photometry`/:meth:`predict_spectrum`
+        until the full integration adapter ships.
+
+        This is the public bridge between :class:`SEDModel`'s
+        configuration surface and the orchestrator: it lets users with
+        an existing ``SEDModel`` go through ``run_components`` without
+        re-typing the chain at every call site.
+
+        Parameters
+        ----------
+        params : Mapping
+            Free parameters keyed by canonical name (``sfh_*``,
+            ``met_*``, ``dust_*``, ``agn_*``, ``radio_*``, ``xray_*``,
+            ``igm_*``, ``redshift``).
+
+        Returns
+        -------
+        PipelineState
+            Threaded state after the chain runs. ``sed_intrinsic`` is
+            the rest-frame total SED in erg/s/Hz; ``sed_observed`` is
+            populated when an IGM component is present; ``derived``
+            carries every cross-component publication (``L_ir``,
+            ``L_agn_bol``, ``log_mstar``, ``lnu_age``, etc.).
+
+        Notes
+        -----
+        **JIT-compatible**: yes — :func:`run_components` and every
+        adapter's ``apply`` are pure JAX.
+
+        ``self.spec.mean_sfh_type`` is a list (e.g. ``["tsnorm"]``,
+        ``["dpl", "field"]``); the first entry is the mean SFH model,
+        and ``"field"`` anywhere in the list enables the GP-field
+        branch. Anything else (``burst``, etc.) is currently unmapped
+        and will raise downstream.
+        """
+        from tengri.core.component import PipelineState
+        from tengri.forward import build_components, run_components
+
+        chain = self._build_component_chain()
+        wave = self.ssp_data.ssp_wave
+        state0 = PipelineState(wave=wave, sed_observed=jnp.ones_like(wave))
+        del build_components  # silence unused-import warning; used in helper
+        return run_components(chain, state0, params)
+
+    def _build_component_chain(self):
+        """Construct the orchestrator chain from ``self``'s settings.
+
+        Reads ``self.spec`` and the ``_dust_*``/``_nebular_backend``/
+        ``_agn_model``/``_uses_*`` attributes set in :meth:`__init__`
+        and produces a list of :class:`SEDComponent` adapters in the
+        canonical pipeline order.
+        """
+        from tengri.forward.component_factory import build_components
+
+        # Mean SFH: first entry of mean_sfh_type, with "field" flag if
+        # the GP modulator is composed in.
+        mean_types = list(getattr(self.spec, "mean_sfh_type", ["tsnorm"]))
+        mean_model = next((m for m in mean_types if m != "field"), "tsnorm")
+        field_on = "field" in mean_types
+
+        # Nebular backend mapping. SEDModel's ``_nebular_backend`` is
+        # either ``None`` (off) or a backend instance (BakedIn, Cue,
+        # CloudyGrid, …); the factory takes a string + optional
+        # instance.
+        neb_inst = getattr(self, "_nebular_backend", None)
+        if neb_inst is None:
+            neb_backend_name = None
+            neb_backend_instance = None
+        else:
+            cls_name = type(neb_inst).__name__.lower()
+            if "bakedin" in cls_name:
+                neb_backend_name = "baked_in"
+            elif "cloudygrid" in cls_name:
+                neb_backend_name = "cloudy_grid"
+            elif "cue" in cls_name:
+                neb_backend_name = "cue"
+            elif "shock" in cls_name:
+                neb_backend_name = "shock"
+            else:
+                neb_backend_name = "baked_in"  # fallback
+            neb_backend_instance = neb_inst
+
+        return build_components(
+            ssp_data=self.ssp_data,
+            sfh_model=mean_model,
+            field=field_on,
+            metallicity_model=getattr(self, "_met_mode", "delta"),
+            n_grid=int(getattr(self.spec, "n_grid", 64)),
+            lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.2)),
+            nebular_backend=neb_backend_name,
+            nebular_backend_instance=neb_backend_instance,
+            agn_model=getattr(self, "_agn_model", None),
+            dust_law_bc=getattr(self, "_dust_law_bc", "power_law"),
+            dust_law_diff=getattr(self, "_dust_law_diff", "power_law"),
+            dust_emission_model=(
+                getattr(self, "_dust_emission_model", None) or "modified_blackbody"
+            ),
+            use_dust=(getattr(self, "_dust_model", "two_component") != "off"),
+            use_radio=bool(getattr(self, "_uses_radio", False)),
+            use_xray=bool(getattr(self, "_uses_xray", False)),
+            use_igm=bool(getattr(self, "_uses_igm", False)),
+        )
+
     # ── Batch operations ──────────────────────────────────────────────
 
     def predict_photometry_batch(self, params_batch):
