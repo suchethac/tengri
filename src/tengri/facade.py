@@ -275,6 +275,37 @@ class Galaxy:
             self.model = SEDModel(self.parameters, self.ssp, observation=self.observation)
         return self.model
 
+    def predict_via_components(self, params):
+        """Forward pass via the Phase II SEDComponent orchestrator.
+
+        Convenience wrapper around
+        :meth:`tengri.SEDModel.predict_via_orchestrator` that lazy-builds
+        the underlying ``SEDModel`` and threads the params dict through
+        the component chain. Returns a :class:`tengri.core.PipelineState`.
+
+        Use this when you want the orchestrator's published cross-component
+        derived quantities (``L_ir``, ``L_agn_bol``, ``log_mstar``,
+        ``lnu_age``, …) directly without going through
+        :meth:`fit`. For inference, keep using :meth:`fit`.
+
+        Parameters
+        ----------
+        params : Mapping
+            Free parameter values keyed by canonical name.
+
+        Returns
+        -------
+        PipelineState
+            See :meth:`SEDModel.predict_via_orchestrator`.
+
+        Examples
+        --------
+        >>> g = Galaxy.from_arrays(filters=..., flux=..., flux_err=...)  # doctest: +SKIP
+        >>> state = g.predict_via_components(params)  # doctest: +SKIP
+        >>> state.derived["log_mstar"]  # doctest: +SKIP
+        """
+        return self.build_model().predict_via_orchestrator(params)
+
     def fit(
         self,
         backend: str = "map",
