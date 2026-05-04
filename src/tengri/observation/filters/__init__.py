@@ -28,6 +28,12 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
+# numpy 2.0 removed np.trapz; numpy >= 1.26 provides np.trapezoid.
+try:
+    from numpy import trapezoid as _np_trapezoid
+except ImportError:  # numpy < 1.26
+    from numpy import trapz as _np_trapezoid  # type: ignore[no-redef]
+
 from tengri.observation.photometry import FilterCurve
 
 # ── Registry: short name -> SVO Filter Profile Service ID ─────────
@@ -137,8 +143,8 @@ def compute_effective_wavelength(wave: np.ndarray, trans: np.ndarray) -> float:
     computation, not forward model evaluation.
 
     """
-    num = np.trapz(trans * wave, wave)
-    den = np.trapz(trans, wave)
+    num = _np_trapezoid(trans * wave, wave)
+    den = _np_trapezoid(trans, wave)
     if den == 0:
         return 0.0
     return float(num / den)

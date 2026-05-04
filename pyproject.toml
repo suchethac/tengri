@@ -66,6 +66,11 @@ dev = [
     "pytest-cov>=4.0",
     "ruff>=0.9",
     "jupytext>=1.16",
+    # Tests cover optional inference paths (MAP via optax, NUTS via blackjax) —
+    # the imports themselves are guarded inside functions, but pytest collection
+    # walks the modules and ImportError bubbles up. Bundle into dev so CI green.
+    "optax>=0.2",
+    "blackjax>=1.0",
 ]
 crossval = [
     "bagpipes>=1.0",
