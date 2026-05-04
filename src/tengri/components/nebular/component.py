@@ -414,6 +414,29 @@ class NebularSEDComponent:
                 **common_kwargs,
             )
 
+        # Publish the discrete line catalogue (``line_waves`` /
+        # ``line_lums``) when the backend supports it. This is what the
+        # legacy ``state_to_emission_lines`` bridge consumes.
+        if hasattr(self.backend, "predict_nebular_line_luminosities"):
+            try:
+                if self.config.backend == "cue":
+                    line_waves, line_lums = self.backend.predict_nebular_line_luminosities(
+                        **common_kwargs, **cue_extras
+                    )
+                else:  # cloudy_grid
+                    line_waves, line_lums = self.backend.predict_nebular_line_luminosities(
+                        ssp_weights=ssp_weights,
+                        ssp_log_ages_yr=ssp_log_ages_yr,
+                        **common_kwargs,
+                    )
+                new_derived["line_waves"] = line_waves
+                new_derived["line_lums"] = line_lums
+            except Exception:
+                # Backend's line-luminosity path may fail (e.g. when
+                # ``cloudyfsps_only=True`` filters everything out).
+                # Don't let it block the SED forward pass.
+                pass
+
         # Add nebular contribution to sed_intrinsic (BC dust attenuation
         # of the nebular emission is the dust component's responsibility
         # — its ``two_component_dust`` transmission applies to the full

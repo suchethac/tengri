@@ -55,6 +55,7 @@ __all__ = [
     "XRayQuantities",
     "build_components",
     "chain_summary",
+    "state_to_emission_lines",
     "state_to_ionizing_quantities",
     "state_to_radio_quantities",
     "state_to_sed_quantities",
@@ -600,3 +601,55 @@ def state_to_ionizing_quantities(state: Any) -> IonizingQuantities:
         xi_ion = q_h / jnp.maximum(nu_l_uv, 1e-30)
 
     return IonizingQuantities(q_h=q_h, xi_ion=xi_ion)
+
+
+def state_to_emission_lines(state: Any):
+    """Convert :class:`PipelineState` → :class:`EmissionLines`.
+
+    Reads the discrete line catalogue
+    ``state.derived["line_waves"]`` / ``state.derived["line_lums"]``
+    published by :class:`NebularSEDComponent` (when the active backend
+    is Cue or CloudyGrid) and extracts the 11 standard
+    survey-diagnostic lines via the legacy nearest-wavelength
+    matcher :func:`tengri.utils.sed_quantities.extract_line_luminosity`.
+
+    Returns
+    -------
+    EmissionLines
+        ``lya``, ``civ_1549``, ``oii``, ``hbeta``, ``oiii_4959``,
+        ``oiii_5007``, ``nii_6548``, ``halpha``, ``nii_6584``,
+        ``sii_6717``, ``sii_6731`` — all in Lsun.
+
+    Notes
+    -----
+    Returns all-NaN when the chain's nebular backend did not publish
+    a line catalogue (BakedIn — emission baked into SSP grid; shock —
+    publishes a continuous line SED, not a discrete list). For those
+    cases callers should query ``state.derived["sed_nebular"]`` and
+    perform their own narrow-band integration.
+    """
+    from tengri.forward.prediction import EmissionLines
+    from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
+
+    derived = state.derived
+    nan_scalar = jnp.asarray(jnp.nan)
+    if "line_waves" not in derived or "line_lums" not in derived:
+        # No discrete catalogue published. Return all-NaN.
+        return EmissionLines(**{k: nan_scalar for k in EmissionLines._fields})
+
+    line_waves = jnp.asarray(derived["line_waves"])
+    line_lums = jnp.asarray(derived["line_lums"])
+
+    return EmissionLines(
+        lya=extract_line_luminosity(line_waves, line_lums, KEY_LINES["lya"]),
+        civ_1549=extract_line_luminosity(line_waves, line_lums, KEY_LINES["civ_1549"]),
+        oii=extract_line_luminosity(line_waves, line_lums, KEY_LINES["oii"]),
+        hbeta=extract_line_luminosity(line_waves, line_lums, KEY_LINES["hbeta"]),
+        oiii_4959=extract_line_luminosity(line_waves, line_lums, KEY_LINES["oiii_4959"]),
+        oiii_5007=extract_line_luminosity(line_waves, line_lums, KEY_LINES["oiii_5007"]),
+        nii_6548=extract_line_luminosity(line_waves, line_lums, KEY_LINES["nii_6548"]),
+        halpha=extract_line_luminosity(line_waves, line_lums, KEY_LINES["halpha"]),
+        nii_6584=extract_line_luminosity(line_waves, line_lums, KEY_LINES["nii_6584"]),
+        sii_6717=extract_line_luminosity(line_waves, line_lums, KEY_LINES["sii_6717"]),
+        sii_6731=extract_line_luminosity(line_waves, line_lums, KEY_LINES["sii_6731"]),
+    )

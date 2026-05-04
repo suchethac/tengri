@@ -2882,6 +2882,21 @@ class SEDModel:
 
         return state_to_ionizing_quantities(self.predict_via_orchestrator(params))
 
+    def predict_emission_lines_via_orchestrator(self, params):
+        """Phase II-2.6 orchestrator-path emission-line luminosities.
+
+        Returns
+        -------
+        EmissionLines
+            11 standard survey-diagnostic lines (lya, civ_1549, oii,
+            hbeta, oiii_4959/5007, nii_6548/6584, halpha, sii_6717/6731).
+            Returns all-NaN when the active nebular backend does not
+            publish a discrete line catalogue (BakedIn, shock).
+        """
+        from tengri.forward import state_to_emission_lines
+
+        return state_to_emission_lines(self.predict_via_orchestrator(params))
+
     def predict_via_orchestrator(self, params):
         """Forward pass via the Phase II SEDComponent orchestrator.
 
