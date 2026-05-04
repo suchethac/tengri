@@ -18,7 +18,7 @@ from tengri.components.dust.attenuation import (
     single_component_dust_fast,
     two_component_dust_fast,
 )
-from tengri.components.sps.dsps_wrapper import (
+from tengri.components.stellar.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_log_z_evolving,
     compute_surviving_mass,
@@ -434,7 +434,7 @@ def compute_sed_components(
     # Resolve [α/Fe]: either global scalar or per-age evolving ramp
     _alpha_evolving = getattr(model, "_alpha_fe_evolving", False)
     if _alpha_evolving:
-        from tengri.components.sps.dsps_wrapper import compute_alpha_fe_evolving
+        from tengri.components.stellar.sps.dsps_wrapper import compute_alpha_fe_evolving
 
         alpha_fe_old = p.get("alpha_fe_old", 0.3)
         alpha_fe_young = p.get("alpha_fe_young", 0.0)
@@ -549,7 +549,7 @@ def compute_sed_components(
             t_universe_gyr,
         )
         if model._csp_integration == "dsps_met_table":
-            from tengri.components.sps.dsps_wrapper import compute_dsps_met_table_weights
+            from tengri.components.stellar.sps.dsps_wrapper import compute_dsps_met_table_weights
 
             lgmet_scatter = float(p.get("lgmet_scatter", getattr(model, "_lgmet_scatter", 0.2)))
             weights, ssp_flux_at_z = compute_dsps_met_table_weights(
@@ -568,7 +568,9 @@ def compute_sed_components(
             ssp_flux_at_z = interp_metallicity_evolving(model, log_z_per_age)
     elif model._met_mode == "chem_evol":
         # Chemical evolution: derive Z(t) from SFH via gas-regulator model
-        from tengri.components.sfh.chemical_evolution import chem_evol_metallicity_on_ssp_grid
+        from tengri.components.stellar.sfh.chemical_evolution import (
+            chem_evol_metallicity_on_ssp_grid,
+        )
 
         log_z_per_age = chem_evol_metallicity_on_ssp_grid(
             model.ssp_log_ages_yr,
@@ -580,7 +582,7 @@ def compute_sed_components(
             return_frac=p.get("chem_return_frac", 0.4),
         )
         if model._csp_integration == "dsps_met_table":
-            from tengri.components.sps.dsps_wrapper import compute_dsps_met_table_weights
+            from tengri.components.stellar.sps.dsps_wrapper import compute_dsps_met_table_weights
 
             z = p.get("redshift", 0.0)
             _has_t_uni = hasattr(model, "_t_universe_gyr")
@@ -602,7 +604,7 @@ def compute_sed_components(
             ssp_flux_at_z = interp_metallicity_evolving(model, log_z_per_age)
     else:
         if model._csp_integration == "dsps_native":
-            from tengri.components.sps.dsps_wrapper import compute_dsps_native_weights
+            from tengri.components.stellar.sps.dsps_wrapper import compute_dsps_native_weights
 
             z = p.get("redshift", 0.0)
             _has_t_uni = hasattr(model, "_t_universe_gyr")
@@ -620,7 +622,7 @@ def compute_sed_components(
                 lgmet_scatter,
             )
         elif model._csp_integration == "dsps_met_table":
-            from tengri.components.sps.dsps_wrapper import compute_dsps_met_table_weights
+            from tengri.components.stellar.sps.dsps_wrapper import compute_dsps_met_table_weights
 
             z = p.get("redshift", 0.0)
             _has_t_uni = hasattr(model, "_t_universe_gyr")

@@ -25,7 +25,7 @@ from types import ModuleType
 # to the dotted module path of its precompute adapter.
 _REGISTRY: dict[str, str] = {
     # Stellar population photometry (redshift + filters fixed → preintegrate SSP×filter tensor)
-    "ssp": "tengri.components.sps.precompute",
+    "ssp": "tengri.components.stellar.sps.precompute",
     # Nebular (CLOUDY emulator / tabulated grid)
     "cloudy": "tengri.components.nebular.cloudy_precompute",
     # Feltre+2016 AGN NLR (CLOUDY c13.03)

@@ -170,7 +170,7 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
     if state.filter_waves is None:
         return None
 
-    from tengri.components.sps.dsps_wrapper import compute_csp_weights
+    from tengri.components.stellar.sps.dsps_wrapper import compute_csp_weights
     from tengri.forward.pipeline import interp_met_alpha_dispatch, interp_metallicity
     from tengri.observation.photometry import (
         compute_flux_density_batch,
@@ -180,7 +180,7 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
 
     _use_dsps_native = state.csp_integration == "dsps_native"
     if _use_dsps_native:
-        from tengri.components.sps.dsps_wrapper import compute_dsps_native_weights
+        from tengri.components.stellar.sps.dsps_wrapper import compute_dsps_native_weights
 
     # effective_metallicity correction is opt-in (see fused_kernels tier1 note).
     _use_alpha_fe_t2 = state.spec.alpha_fe_evolving or "met_alpha_fe" in state.spec.free_params
@@ -259,7 +259,7 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
     _ssp_flux_closure = state.ssp_data.ssp_flux
     _ssp_lgmet_closure = state.ssp_data.ssp_lgmet
     _lgmet_scatter_closure = float(state.lgmet_scatter)
-    from tengri.components.sps.dsps_wrapper import (
+    from tengri.components.stellar.sps.dsps_wrapper import (
         interpolate_metallicity_smooth as _interp_metallicity_smooth,
     )
 
@@ -286,7 +286,7 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
             t_obs_gyr = _t_obs_gyr_fixed if _t_obs_gyr_fixed is not None else _age_at_z_fn(z)
             # BUG-NSS-02 fix: For ramp mode, compute per-age metallicity from initial/final
             if _met_mode == "ramp":
-                from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
+                from tengri.components.stellar.sps.dsps_wrapper import compute_log_z_evolving
 
                 lgmet_per_age = compute_log_z_evolving(
                     _ssp_lg_age_gyr, p["log_z_abs_initial"], p["log_z_abs_final"], t_obs_gyr
@@ -313,7 +313,7 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
             weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
             # BUG-NSS-02 fix: For ramp mode, compute per-age metallicity and vmap interpolation
             if _met_mode == "ramp":
-                from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
+                from tengri.components.stellar.sps.dsps_wrapper import compute_log_z_evolving
                 from tengri.forward.pipeline import (
                     interp_met_alpha_evolving_dispatch,
                     interp_metallicity_evolving,
@@ -459,14 +459,14 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
     if rest_sed_kernel is None:
         return None
 
-    from tengri.components.sps.dsps_wrapper import compute_csp_weights
+    from tengri.components.stellar.sps.dsps_wrapper import compute_csp_weights
     from tengri.forward.pipeline import interp_met_alpha_dispatch, interp_metallicity
     from tengri.observation.spectrum import compute_spectrum
     from tengri.parameters.translate import get_internal_params
 
     _use_dsps_native_spec = state.csp_integration == "dsps_native"
     if _use_dsps_native_spec:
-        from tengri.components.sps.dsps_wrapper import compute_dsps_native_weights
+        from tengri.components.stellar.sps.dsps_wrapper import compute_dsps_native_weights
 
     # effective_metallicity correction is opt-in: only applied when the user
     # explicitly makes met_alpha_fe (or evolving variant) a free parameter.
@@ -523,7 +523,7 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
     _ssp_lgmet_closure_spec = state.ssp_data.ssp_lgmet
     _lgmet_scatter_closure_spec = float(state.lgmet_scatter)
     _met_use_smooth_spec = state.met_interp == "smooth"
-    from tengri.components.sps.dsps_wrapper import (
+    from tengri.components.stellar.sps.dsps_wrapper import (
         interpolate_metallicity_smooth as _interp_metallicity_smooth_spec,
     )
 
@@ -544,7 +544,7 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
             )
             # BUG-NSS-02 fix: For ramp mode, compute per-age metallicity from initial/final
             if _met_mode_spec == "ramp":
-                from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
+                from tengri.components.stellar.sps.dsps_wrapper import compute_log_z_evolving
 
                 lgmet_per_age = compute_log_z_evolving(
                     _ssp_lg_age_gyr_spec,
@@ -572,7 +572,7 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
             weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
             # BUG-NSS-02 fix: For ramp mode, compute per-age metallicity and vmap interpolation
             if _met_mode_spec == "ramp":
-                from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
+                from tengri.components.stellar.sps.dsps_wrapper import compute_log_z_evolving
                 from tengri.forward.pipeline import (
                     interp_met_alpha_evolving_dispatch,
                     interp_metallicity_evolving,
@@ -703,7 +703,7 @@ def build_hybrid_spectrum(state: SEDModelState, model=None):
         return None
 
     from tengri.components.dust.attenuation import resolve_dust_law
-    from tengri.components.sps.dsps_wrapper import compute_csp_weights
+    from tengri.components.stellar.sps.dsps_wrapper import compute_csp_weights
     from tengri.forward.pipeline import (
         interp_met_alpha_dispatch,
         interp_metallicity,
@@ -728,7 +728,7 @@ def build_hybrid_spectrum(state: SEDModelState, model=None):
     # Alpha enhancement
     _use_alpha_fe = state.spec.alpha_fe_evolving or "met_alpha_fe" in state.spec.free_params
     if _use_alpha_fe:
-        from tengri.components.sps.dsps_wrapper import has_alpha_grid
+        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
 
         _has_alpha = has_alpha_grid(state.ssp_data)
     else:
@@ -844,7 +844,7 @@ def build_hybrid_spectrum(state: SEDModelState, model=None):
             """Single-dust hybrid spectrum."""
             p = get_internal_params(params, param_map, spec, has_field)
             if state.met_mode == "ramp":
-                from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
+                from tengri.components.stellar.sps.dsps_wrapper import compute_log_z_evolving
                 from tengri.utils.cosmology import age_at_z
 
                 z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
@@ -874,7 +874,7 @@ def build_hybrid_spectrum(state: SEDModelState, model=None):
             """Two-dust hybrid spectrum."""
             p = get_internal_params(params, param_map, spec, has_field)
             if state.met_mode == "ramp":
-                from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
+                from tengri.components.stellar.sps.dsps_wrapper import compute_log_z_evolving
                 from tengri.utils.cosmology import age_at_z
 
                 z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)

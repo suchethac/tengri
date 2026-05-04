@@ -35,9 +35,9 @@ from typing import Any, NamedTuple
 
 import jax.numpy as jnp
 
-from tengri.components.sfh.dense_basis import dense_basis, dense_basis_pure
-from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
-from tengri.components.sfh.mean_sfh import (
+from tengri.components.stellar.sfh.dense_basis import dense_basis, dense_basis_pure
+from tengri.components.stellar.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
+from tengri.components.stellar.sfh.mean_sfh import (
     AGEMAX_YR,
     buat08,
     constant,
@@ -57,13 +57,13 @@ from tengri.components.sfh.mean_sfh import (
     triweight_burst,
     tsnorm,
 )
-from tengri.components.sfh.nonparametric import (
+from tengri.components.stellar.sfh.nonparametric import (
     CFLEX_DEFAULT_ANCHOR_GYR,
     continuity,
     continuity_flex,
     dirichlet,
 )
-from tengri.components.sfh.psd_models import drw_variance
+from tengri.components.stellar.sfh.psd_models import drw_variance
 from tengri.parameters.priors import Distribution, Fixed, Uniform
 
 # ── Data structures ───────────────────────────────────────────────

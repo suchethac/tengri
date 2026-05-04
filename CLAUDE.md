@@ -125,6 +125,39 @@ Phase 4 sub-namespaces (additive re-export modules; added 2026-05):
 - **AGN shared physics**: `_planck_lnu` in `components/agn/_phys.py` — do NOT duplicate the Planck function.
 - **Notebooks**: edit `.py` files (jupytext percent format), never `.ipynb`.
 
+## Adding a new physics block (Phase II-2 component shape)
+
+The forward model is mid-migration to a `SEDComponent`-based pipeline (`src/tengri/core/component.py`). New physics blocks **must** follow the Protocol shape rather than adding branches to `forward/sed_model.py` or `forward/pipeline.py`.
+
+**Canonical adapter to copy:** `src/tengri/components/radio/component.py`. Mirror its layout exactly.
+
+**Required structure** (see `core/component.py` for the Protocol):
+
+```python
+@dataclass(frozen=True)
+class MySEDComponentConfig(SEDComponentConfig):
+    name: str = "my"
+    # static knobs only — no parameters that the user fits
+
+@dataclass(frozen=True)
+class MySEDComponent:
+    config: MySEDComponentConfig = field(default_factory=MySEDComponentConfig)
+    name: str = "my"
+    parameter_prefix: str = "my_"     # CI-enforced via tools/check_param_prefixes.py
+
+    def declared_parameters(self) -> list[ParamDeclaration]: ...
+    def precompute(self, ssp_data=None, wave_grid=None) -> SEDComponentState: ...
+    def apply(self, state: PipelineState, params) -> PipelineState: ...
+```
+
+**Parameters.** `declared_parameters()` mirrors the entries already in `parameters/_param_defs.py` — do **not** duplicate priors. The `_param_defs.py` registry stays the single source of truth until the migration completes.
+
+**Cross-component coupling.** Read upstream quantities from `state.derived` with a documented fallback (e.g. `state.derived.get("L_ir", 0.0)`); publish your own as `state.derived["L_<name>"]`. Never reach into another component's state directly.
+
+**Source of truth:** `docs/dev/20260404-refactor.md`. The active plan, entropy budget, and PR order live there.
+
+**Do not pre-build** `Parameters.from_components(...)` — it is deferred until ≥5 components have landed.
+
 ## Critical gotchas
 
 - `jax.random.fold_in(key, hash(string))` overflows uint32. Use `abs(hash(x)) % (2**31)`

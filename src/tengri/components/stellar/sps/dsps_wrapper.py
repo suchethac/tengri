@@ -124,7 +124,7 @@ def load_ssp_data(filepath: str) -> SSPData:
 
     Examples
     --------
-    >>> from tengri.components.sps import load_ssp_data
+    >>> from tengri.components.stellar.sps import load_ssp_data
     >>> ssp = load_ssp_data("data/ssp_bc03.h5")
     >>> print(ssp.ssp_wave.shape, ssp.ssp_flux.shape)
     (6000,) (50, 300, 6000)

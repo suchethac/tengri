@@ -147,7 +147,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
     """
     import jax.numpy as jnp
 
-    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     _is_single_dust = model._dust_model == "single_component"
     _c_aa = 2.99792458e18  # c in Angstrom/s

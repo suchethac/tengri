@@ -511,7 +511,7 @@ def fast_photometry(
 
     """
     # Weighted sum: weights [Msun] * ssp [Lsun/Hz/Msun] * dust -> Lsun/Hz
-    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     flux_lsun = jnp.einsum("i,if,if->f", weights, dust_at_eff, ssp_phot_at_z)
     return flux_scale * flux_lsun * LSUN_ERG_PER_S

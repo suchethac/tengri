@@ -59,7 +59,7 @@ def build_exact_sed(state: SEDModelState):
 
     Typical speedup: 4–14× vs un-JIT'd exact path (measured on CPU).
     """
-    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     dt = state.forward_dtype
     ssp_wave = state.ssp_data.ssp_wave.astype(dt)
@@ -173,7 +173,7 @@ def build_fused_rest_sed(state: SEDModelState, model):
     **Gradient-safe**: yes — differentiable w.r.t. all parameters in p_dict.
     """
     from tengri.components.dust.attenuation import resolve_dust_law
-    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     dt = state.forward_dtype
     ssp_wave = state.ssp_data.ssp_wave.astype(dt)

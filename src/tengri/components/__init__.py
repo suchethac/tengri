@@ -1,7 +1,14 @@
-"""Forward model components: SFH, dust, SPS, observation."""
+"""Forward model components: stellar, dust, nebular, AGN, IGM, radio, X-ray.
 
-# Import submodules to make them available as components.agn, components.dust, etc.
-from tengri.components import agn, dust, igm, nebular, radio, sfh, sps, xray
+The ``sfh`` and ``sps`` subpackages were folded into ``stellar`` in
+Phase II-2.1. The old dotted names remain importable as deprecation
+shims (firing :class:`DeprecationWarning` on first use); they are not
+preloaded here so that ``import tengri.components`` is warning-clean.
+"""
+
+# Import canonical submodules eagerly so users can write
+# ``tengri.components.dust`` etc. without an explicit submodule import.
+from tengri.components import agn, dust, igm, nebular, radio, stellar, xray
 
 __all__ = [
     "agn",
@@ -9,7 +16,6 @@ __all__ = [
     "igm",
     "nebular",
     "radio",
-    "sfh",
-    "sps",
+    "stellar",
     "xray",
 ]

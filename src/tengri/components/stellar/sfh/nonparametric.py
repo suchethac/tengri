@@ -797,7 +797,7 @@ def continuity_flex_prior_logp(
 
 
 # ── Deprecated aliases (Phase 3) ──────────────────────────────────
-# The `_sfh` suffix was redundant inside the `tengri.components.sfh` namespace.
+# The `_sfh` suffix was redundant inside the `tengri.components.stellar.sfh` namespace.
 # These aliases are provided for backward compatibility and will be removed in v1.0.
 continuity_sfh = continuity
 dirichlet_sfh = dirichlet

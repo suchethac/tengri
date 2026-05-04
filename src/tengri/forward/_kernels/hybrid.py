@@ -54,7 +54,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
     **Gradient-safe**: yes — differentiable w.r.t. all dust, AGN, nebular,
     and shock parameters.
     """
-    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
     from tengri.forward.emission_helpers import (
         agn_emission,
         attenuate_emission,
@@ -109,7 +109,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
     if not _is_single_dust:
         law_diff_fn = state.dust_law_diff_fn
 
-    from tengri.components.sps.dsps_wrapper import (
+    from tengri.components.stellar.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
         has_alpha_grid,
     )
@@ -123,7 +123,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
     _use_smooth_z = state.met_interp == "smooth"
     _lgmet_scat = dt.type(state.lgmet_scatter)
     if _use_smooth_z:
-        from tengri.components.sps.dsps_wrapper import compute_lgmet_weights as _clw
+        from tengri.components.stellar.sps.dsps_wrapper import compute_lgmet_weights as _clw
 
     # IGM: full-wavelength transmission (compositional-quality, not approximate).
     # Precompute once at init on the rest-frame wavelength grid.
@@ -1506,7 +1506,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
     # --- Fused end-to-end wrapper: params dict → photometry ---
     # Fuse param translation + SFH computation into the JIT scope,
     # eliminating ~240 μs of Python dispatch overhead per call.
-    from tengri.components.sfh.registry import compute_field_gp
+    from tengri.components.stellar.sfh.registry import compute_field_gp
     from tengri.parameters.translate import get_internal_params
 
     param_map = state.param_map
@@ -1646,8 +1646,8 @@ def build_hybrid_photometry_ztable(state: SEDModelState, model=None):
     redshift, dust, AGN, nebular, and shock parameters.
     """
     from tengri.components.dust.attenuation import resolve_dust_law
-    from tengri.components.sfh.registry import compute_field_gp
-    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.components.stellar.sfh.registry import compute_field_gp
+    from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
     from tengri.forward.emission_helpers import (
         agn_emission,
         attenuate_emission,
@@ -1692,7 +1692,7 @@ def build_hybrid_photometry_ztable(state: SEDModelState, model=None):
     if not _is_single_dust:
         law_diff_fn = resolve_dust_law(state.dust_law_diff)
 
-    from tengri.components.sps.dsps_wrapper import (
+    from tengri.components.stellar.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
         has_alpha_grid,
     )
@@ -1706,7 +1706,7 @@ def build_hybrid_photometry_ztable(state: SEDModelState, model=None):
     _use_smooth_z = state.met_interp == "smooth"
     _lgmet_scat = dt.type(state.lgmet_scatter)
     if _use_smooth_z:
-        from tengri.components.sps.dsps_wrapper import compute_lgmet_weights as _clw
+        from tengri.components.stellar.sps.dsps_wrapper import compute_lgmet_weights as _clw
 
     # Smooth redshift-table interpolation (C^2 gradient) — recommended when
     # redshift is a free parameter and the sampler is gradient-based (NUTS/HMC).
@@ -1716,13 +1716,13 @@ def build_hybrid_photometry_ztable(state: SEDModelState, model=None):
     if _use_smooth_ztable:
         import numpy as _np
 
-        from tengri.components.sps.precompute import (
+        from tengri.components.stellar.sps.precompute import (
             interpolate_ztable_smooth as _interpolate_ztable,
         )
 
         _z_scatter = dt.type(0.5 * float(_np.mean(_np.diff(_np.asarray(ztable.z_grid)))))
     else:
-        from tengri.components.sps.precompute import (
+        from tengri.components.stellar.sps.precompute import (
             interpolate_ztable as _interpolate_ztable,
         )
 

@@ -42,9 +42,9 @@ import jax
 import jax.numpy as jnp
 
 from tengri.components.dust.attenuation import precompute_dust_age_weights
-from tengri.components.sfh.registry import compute_field_gp, resolve_sfh
-from tengri.components.sps.dsps_wrapper import csp_age_dt
-from tengri.components.sps.precompute import (
+from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
+from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
+from tengri.components.stellar.sps.precompute import (
     precompute_photometry,
     precompute_photometry_ztable,
     precompute_spectroscopy,
@@ -452,7 +452,7 @@ class SEDModel:
             )
         self._csp_integration = csp_integration
         if csp_integration == "log_interp":
-            from tengri.components.sps.dsps_wrapper import csp_log_interp_matrix
+            from tengri.components.stellar.sps.dsps_wrapper import csp_log_interp_matrix
 
             self._csp_matrix = jnp.array(csp_log_interp_matrix(self.ssp_ages_yr))
             self._csp_age_dt = None
@@ -489,7 +489,7 @@ class SEDModel:
 
         if self._met_mode != "delta":
             self._param_map.pop("met_logzsol", None)
-        from tengri.components.sfh.met_registry import resolve_met
+        from tengri.components.stellar.sfh.met_registry import resolve_met
 
         _, _, met_param_map, _ = resolve_met(self._met_mode)
         self._param_map.update(met_param_map)
@@ -2532,7 +2532,7 @@ class SEDModel:
             weights = self._csp_matrix @ sfr_on_ssp
         elif self._csp_integration == "dsps_native":
             # For stellar_mass(), only age_weights matter (not ssp_flux_at_z).
-            from tengri.components.sps.dsps_wrapper import compute_dsps_native_weights
+            from tengri.components.stellar.sps.dsps_wrapper import compute_dsps_native_weights
 
             z_val = p.get("redshift", 0.1)
             t_obs_gyr = self._t_universe_gyr(z_val)
@@ -2549,13 +2549,13 @@ class SEDModel:
                 lgmet_scatter,
             )
         elif self._csp_integration == "dsps_met_table":
-            from tengri.components.sps.dsps_wrapper import compute_dsps_met_table_weights
+            from tengri.components.stellar.sps.dsps_wrapper import compute_dsps_met_table_weights
 
             z_val = p.get("redshift", 0.1)
             t_obs_gyr = self._t_universe_gyr(z_val)
             lgmet_scatter = float(p.get("lgmet_scatter", self._lgmet_scatter))
             if self._met_mode == "ramp":
-                from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
+                from tengri.components.stellar.sps.dsps_wrapper import compute_log_z_evolving
 
                 lgmet_per_age = compute_log_z_evolving(
                     self.ssp_data.ssp_lg_age_gyr,
@@ -2581,7 +2581,7 @@ class SEDModel:
 
         # Surviving mass
         if self.ssp_data.ssp_mass_remaining is not None:
-            from tengri.components.sps.dsps_wrapper import (
+            from tengri.components.stellar.sps.dsps_wrapper import (
                 compute_surviving_mass,
                 interpolate_mass_remaining,
             )
@@ -3240,7 +3240,7 @@ class SEDModel:
         if self._csp_integration == "log_interp":
             weights = self._csp_matrix @ sfr_on_ssp
         elif self._csp_integration == "dsps_native":
-            from tengri.components.sps.dsps_wrapper import compute_dsps_native_weights
+            from tengri.components.stellar.sps.dsps_wrapper import compute_dsps_native_weights
 
             z_val = p.get("redshift", 0.0)
             t_obs_gyr = self._t_universe_gyr(z_val) if hasattr(self, "_t_universe_gyr") else 13.7
@@ -3260,13 +3260,13 @@ class SEDModel:
                 p = {**p, "_sfr_current": sfr[-1]}
             return self._compositional.rest_sed(weights, ssp_flux_at_z, p)
         elif self._csp_integration == "dsps_met_table":
-            from tengri.components.sps.dsps_wrapper import compute_dsps_met_table_weights
+            from tengri.components.stellar.sps.dsps_wrapper import compute_dsps_met_table_weights
 
             z_val = p.get("redshift", 0.0)
             t_obs_gyr = self._t_universe_gyr(z_val) if hasattr(self, "_t_universe_gyr") else 13.7
             lgmet_scatter = float(p.get("lgmet_scatter", self._lgmet_scatter))
             if self._met_mode == "ramp":
-                from tengri.components.sps.dsps_wrapper import compute_log_z_evolving
+                from tengri.components.stellar.sps.dsps_wrapper import compute_log_z_evolving
 
                 lgmet_per_age = compute_log_z_evolving(
                     self.ssp_data.ssp_lg_age_gyr,
@@ -3306,7 +3306,9 @@ class SEDModel:
             # Use the final (present-day) metallicity as the representative value.
             _log_z = p.get("log_z_abs_final", p.get("log_z_abs", -1.8477))
         elif self._met_mode == "chem_evol":
-            from tengri.components.sfh.chemical_evolution import chem_evol_metallicity_on_ssp_grid
+            from tengri.components.stellar.sfh.chemical_evolution import (
+                chem_evol_metallicity_on_ssp_grid,
+            )
 
             _log_z_per_age = chem_evol_metallicity_on_ssp_grid(
                 self.ssp_log_ages_yr,

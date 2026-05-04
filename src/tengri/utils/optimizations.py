@@ -107,7 +107,7 @@ def compute_full_amplitude_drw(
     array, shape (n_points,)
         Full-space amplitude operator.
     """
-    from tengri.components.sfh.psd_models import psd_drw
+    from tengri.components.stellar.sfh.psd_models import psd_drw
 
     t_ref = 10.0**log_age_ref
     ln10 = jnp.log(10.0)

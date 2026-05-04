@@ -51,7 +51,7 @@ from tengri.citations import (
 )
 from tengri.components.dust.attenuation import two_component_dust
 from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
-from tengri.components.sfh import (
+from tengri.components.stellar.sfh import (
     AGEMAX_YR,
     constant_sfh,
     delayed_exponential_sfh,
@@ -74,21 +74,21 @@ from tengri.components.sfh import (
     tsnorm,
     tsnorm_burst,
 )
-from tengri.components.sfh.gp_sfh import (
+from tengri.components.stellar.sfh.gp_sfh import (
     compute_sqrt_power_drw,
     generate_gp_batch,
     generate_gp_fourier,
     gp_from_xi,
     make_log_age_grid,
 )
-from tengri.components.sfh.psd_models import drw_acf, drw_variance, psd_drw
-from tengri.components.sfh.registry import (
+from tengri.components.stellar.sfh.psd_models import drw_acf, drw_variance, psd_drw
+from tengri.components.stellar.sfh.registry import (
     FIELD_MODEL_REGISTRY,
     SFH_REGISTRY,
     compute_field_gp,
     resolve_sfh,
 )
-from tengri.components.sps.dsps_wrapper import (
+from tengri.components.stellar.sps.dsps_wrapper import (
     SSPData,
     effective_metallicity,
     has_alpha_grid,
@@ -234,8 +234,11 @@ from tengri import components as _components, preprocessing, presets
 agn = _components.agn
 dust = _components.dust
 nebular = _components.nebular
-sfh = _components.sfh
-sps = _components.sps
+# sfh/sps were folded into stellar in Phase II-2.1; the top-level
+# convenience aliases continue to resolve to the canonical location.
+sfh = _components.stellar.sfh
+sps = _components.stellar.sps
+stellar = _components.stellar
 igm = _components.igm
 radio = _components.radio
 xray = _components.xray
@@ -246,6 +249,7 @@ sys.modules["tengri.dust"] = dust
 sys.modules["tengri.nebular"] = nebular
 sys.modules["tengri.sfh"] = sfh
 sys.modules["tengri.sps"] = sps
+sys.modules["tengri.stellar"] = stellar
 sys.modules["tengri.igm"] = igm
 sys.modules["tengri.radio"] = radio
 sys.modules["tengri.xray"] = xray

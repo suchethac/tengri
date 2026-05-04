@@ -181,7 +181,7 @@ def truncated_skewnormal(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri.components.sfh import truncated_skewnormal
+    >>> from tengri.components.stellar.sfh import truncated_skewnormal
     >>> t = jnp.linspace(0.0, 13.7e9, 100)
     >>> sfr = truncated_skewnormal(
     ...     t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=5.0
@@ -241,7 +241,7 @@ def skewnormal(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri.components.sfh import skewnormal
+    >>> from tengri.components.stellar.sfh import skewnormal
     >>> t = jnp.logspace(7, 10.14, 64)
     >>> sfr = skewnormal(t, log_peak_sfr=1.5, peak_lbt=3e9, width=1e9, skew=1.0)
     >>> sfr.shape
@@ -288,7 +288,7 @@ def gaussian(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri.components.sfh import gaussian
+    >>> from tengri.components.stellar.sfh import gaussian
     >>> t = jnp.logspace(7, 10.14, 64)
     >>> sfr = gaussian(t, log_peak_sfr=1.5, peak_lbt=3e9, width=1e9)
     >>> sfr.shape
@@ -337,7 +337,7 @@ def lognormal(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri.components.sfh import lognormal
+    >>> from tengri.components.stellar.sfh import lognormal
     >>> t = jnp.logspace(7, 10.14, 64)
     >>> sfr = lognormal(t, log_peak_sfr=1.5, peak_lbt=3e9, width=0.3)
     >>> sfr.shape
@@ -519,7 +519,7 @@ def constant(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri.components.sfh import constant
+    >>> from tengri.components.stellar.sfh import constant
     >>> t = jnp.logspace(7, 10.14, 64)
     >>> sfr = constant(t, log_sfr=1.0, start=5e8, end=5e9)
     >>> sfr.shape
@@ -563,7 +563,7 @@ def exponential(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri.components.sfh import exponential
+    >>> from tengri.components.stellar.sfh import exponential
     >>> t = jnp.logspace(7, 10.14, 64)
     >>> sfr = exponential(t, log_peak_sfr=2.0, tau=2e9, start=1e8)
     >>> sfr.shape
@@ -609,7 +609,7 @@ def delayed_exponential(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri.components.sfh import delayed_exponential
+    >>> from tengri.components.stellar.sfh import delayed_exponential
     >>> t = jnp.logspace(7, 10.14, 64)
     >>> sfr = delayed_exponential(t, log_peak_sfr=2.0, tau=2e9, start=1e8)
     >>> sfr.shape
@@ -981,7 +981,7 @@ def delayed_bq(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri.components.sfh.mean_sfh import delayed_bq
+    >>> from tengri.components.stellar.sfh.mean_sfh import delayed_bq
     >>> t = jnp.logspace(7, 10.14, 100)
     >>> sfr = delayed_bq(t, tau_main_yr=2e9, age_main_yr=5e9,
     ...     age_bq_yr=500e6, r_sfr=0.1)
@@ -1053,7 +1053,7 @@ def periodic(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri.components.sfh.mean_sfh import periodic
+    >>> from tengri.components.stellar.sfh.mean_sfh import periodic
     >>> t = jnp.logspace(6, 10, 100)
     >>> sfr = periodic(t, delta_bursts_yr=50e6, tau_bursts_yr=20e6, burst_type=0, age_yr=1000e6)
     >>> sfr.shape
@@ -1153,7 +1153,7 @@ def buat08(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri.components.sfh.mean_sfh import buat08
+    >>> from tengri.components.stellar.sfh.mean_sfh import buat08
     >>> t = jnp.logspace(6, 10.14, 100)
     >>> sfr = buat08(t, velocity_km_s=220.0)
     >>> sfr.shape
@@ -1340,7 +1340,7 @@ def spline(
     --------
     >>> import jax.numpy as jnp
     >>> import numpy as np
-    >>> from tengri.components.sfh.mean_sfh import spline_sfh
+    >>> from tengri.components.stellar.sfh.mean_sfh import spline_sfh
     >>> node_ages = np.array([1e5, 2e9, 9e9, 13e9])
     >>> sfr_nodes = jnp.array([5.0, 10.0, 3.0, 0.5])
     >>> t = jnp.logspace(5.0, 10.14, 100)
@@ -1421,7 +1421,7 @@ def snorm_burst(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri.components.sfh import snorm_burst
+    >>> from tengri.components.stellar.sfh import snorm_burst
     >>> t = jnp.logspace(7, 10.14, 64)
     >>> sfr = snorm_burst(
     ...     t, log_peak_sfr=1.5, peak_lbt=5e9, width=2e9, skew=0.5, burst_sfr=2.0, burst_age=1e8
@@ -1504,7 +1504,7 @@ def snorm_trunc_burst(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri.components.sfh import snorm_trunc_burst
+    >>> from tengri.components.stellar.sfh import snorm_trunc_burst
     >>> t = jnp.logspace(7, 10.14, 64)
     >>> sfr = snorm_trunc_burst(
     ...     t,
@@ -1529,7 +1529,7 @@ tsnorm_burst = snorm_trunc_burst
 
 
 # ── Deprecated aliases (Phase 3) ──────────────────────────────────
-# The `_sfh` suffix was redundant inside the `tengri.components.sfh` namespace.
+# The `_sfh` suffix was redundant inside the `tengri.components.stellar.sfh` namespace.
 # These aliases are provided for backward compatibility and will be removed in v1.0.
 constant_sfh = constant
 exponential_sfh = exponential

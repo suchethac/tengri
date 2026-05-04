@@ -863,8 +863,8 @@ def _build_param_registry(
     defaults : dict
         param_name -> default Distribution
     """
-    from tengri.components.sfh.met_registry import resolve_met
-    from tengri.components.sfh.registry import resolve_sfh
+    from tengri.components.stellar.sfh.met_registry import resolve_met
+    from tengri.components.stellar.sfh.registry import resolve_sfh
 
     _, sfh_params, _, _ = resolve_sfh(mean_sfh_type)
 

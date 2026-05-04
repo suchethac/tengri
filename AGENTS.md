@@ -38,6 +38,31 @@ Parameters (latent xi + physical params)
 
 **All operations are pure JAX functions.** The entire pipeline is JIT-compilable, differentiable, and vmap-able.
 
+## Component migration (Phase II-2) — active refactor
+
+> **Read this before touching `forward/` or adding any physics block.**
+
+The forward model is mid-migration from the monolithic `SEDModel` class onto the `SEDComponent` Protocol scaffold in `src/tengri/core/component.py`. Phase II-1 has shipped: the Protocol, `PipelineState`, and two reference adapters (`components/radio/component.py`, `components/igm/component.py`). The current effort (Phase II-2) ports the remaining 6 physics blocks one PR at a time.
+
+**Source of truth:** `docs/dev/20260404-refactor.md`. Read this before producing any plan that touches the forward path.
+
+**Canonical adapter to copy:** `src/tengri/components/radio/component.py`. Mirror its method order, docstring sections, and `state.derived` publish/read idiom. Do not deviate without a one-line `Notes` justification.
+
+**Things you must not reinvent:**
+- The parameter registry. Parameters are already domain-organized in `src/tengri/parameters/_param_defs.py` (`_DUST_EMISSION_PARAMS`, `_AGN_PARAMS`, `_RADIO_PARAMS`, …). A component's `declared_parameters()` references these; it does not duplicate them.
+- The precompute system. `src/tengri/forward/precompute/registry.py` is the existing registry (~30 entries). New components consume it, they do not replace it.
+- Protocols. The only types added in this migration are concrete `SEDComponent` subclasses. No new Protocols, no new abstractions.
+
+**Entropy budget enforced per PR:**
+1. Net-negative LOC: each PR deletes ≥ as many lines from `sed_model.py` + `pipeline.py` as it adds elsewhere.
+2. Component file ≤ 400 LOC (docstrings included). Split the *physics*, not the *file*.
+3. No feature flag. The monolith branch for the migrated block is deleted in the same PR that introduces the component.
+4. No placeholders, no `TODO`, no commented-out code, no stub methods.
+5. Structural conformance to the previous merged component.
+6. CHANGELOG entry must list the monolith lines deleted; an empty deletion list means the PR is not entropy-reducing.
+
+**The `Parameters.from_components(...)` builder is deferred** until ≥5 components have landed. Until then, `_param_defs.py` continues feeding `Parameters` unchanged. Do not pre-build the component-driven parameter constructor.
+
 ## Key files to read
 
 **Package layout rewritten 2026-04-15, further refined 2026-04-21** (`core/` dissolved; `models/` → `components/`;

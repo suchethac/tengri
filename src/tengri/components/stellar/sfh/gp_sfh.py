@@ -282,7 +282,7 @@ def compute_sqrt_power_drw(
     >>> sp.shape
     (33,)
     """
-    from tengri.components.sfh.psd_models import psd_drw, psd_to_sqrt_power
+    from tengri.components.stellar.sfh.psd_models import psd_drw, psd_to_sqrt_power
 
     t_ref = 10.0**log_age_ref
     ln10 = jnp.log(10.0)

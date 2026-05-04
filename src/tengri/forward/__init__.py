@@ -2,12 +2,27 @@
 
 Key class: ``SEDModel`` — the main forward model class.
 
+Phase II-2.6 also exposes the **component-orchestrator** path:
+
+- :func:`build_components` — assemble an ordered list of
+  :class:`SEDComponent` adapters from a flat keyword-argument call.
+- :func:`run_components` — thread a
+  :class:`tengri.core.PipelineState` through the chain.
+
 Usage::
 
-    from tengri import SEDModel  # canonical import path
-    from tengri.forward.result import SEDResult  # lightweight type
+    from tengri import SEDModel
+    from tengri.forward.result import SEDResult
+    from tengri.forward import build_components, run_components
 """
 
+from tengri.forward.component_factory import build_components, chain_summary
+from tengri.forward.orchestrator import run_components
 from tengri.forward.result import SEDResult
 
-__all__ = ["SEDResult"]
+__all__ = [
+    "SEDResult",
+    "build_components",
+    "chain_summary",
+    "run_components",
+]

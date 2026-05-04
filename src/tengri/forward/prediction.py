@@ -79,7 +79,7 @@ from typing import NamedTuple
 
 import jax.numpy as jnp
 
-from tengri.components.sps.dsps_wrapper import (
+from tengri.components.stellar.sps.dsps_wrapper import (
     compute_csp_weights,
     compute_surviving_mass,
     interpolate_mass_remaining,

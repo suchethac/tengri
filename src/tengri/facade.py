@@ -16,7 +16,7 @@ import jax
 import numpy as np
 
 from tengri._logo import logo_str
-from tengri.components.sps.dsps_wrapper import load_ssp_data
+from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.config.settings import SEDModelConfig
 from tengri.forward.sed_model import SEDModel
 from tengri.inference.fitter import Fitter

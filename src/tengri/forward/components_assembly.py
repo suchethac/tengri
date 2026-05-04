@@ -43,7 +43,7 @@ def build_ssp_component(model):
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
-    from tengri.components.sps.dsps_wrapper import (
+    from tengri.components.stellar.sps.dsps_wrapper import (
         _ALPHA_TO_Z_COEFF as _A2Z,
         compute_lgmet_weights,
     )
@@ -141,7 +141,7 @@ def build_dust_atten_component(model):
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
-    from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
+    from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     dt = model._forward_dtype
     ssp_wave = model.ssp_data.ssp_wave.astype(dt)

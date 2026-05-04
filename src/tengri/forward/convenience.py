@@ -847,7 +847,7 @@ def build_model_from_config(
     nebular = _defs["nebular"] if nebular is _UNSET else nebular
     agn = _defs["agn"] if agn is _UNSET else agn
     redshift = _defs["redshift"] if redshift is _UNSET else redshift
-    from tengri.components.sps.dsps_wrapper import SSPData, load_ssp_data
+    from tengri.components.stellar.sps.dsps_wrapper import SSPData, load_ssp_data
     from tengri.observation.observation import Observation
     from tengri.parameters.parameters import Parameters
     from tengri.parameters.priors import Uniform

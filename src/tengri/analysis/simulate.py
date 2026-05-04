@@ -42,7 +42,7 @@ References
 import jax.numpy as jnp
 
 from tengri.components.dust.attenuation import two_component_dust
-from tengri.components.sps.dsps_wrapper import (
+from tengri.components.stellar.sps.dsps_wrapper import (
     compute_csp_sed,
     compute_csp_weights,
     interpolate_metallicity,

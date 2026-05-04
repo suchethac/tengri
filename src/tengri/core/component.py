@@ -177,6 +177,41 @@ class PipelineState:
 
 
 # ─────────────────────────────────────────────────────────────────────
+# JAX pytree registration
+# ─────────────────────────────────────────────────────────────────────
+#
+# ``PipelineState`` and ``SEDComponentState`` are threaded through
+# JIT-compiled component pipelines, so they must be JAX pytrees. All
+# fields are dynamic (data, not static metadata) — even the ``Mapping``
+# fields ``lines`` and ``derived`` are dicts of arrays that JAX's
+# default dict-pytree handler unpacks recursively.
+#
+# Registration uses :func:`jax.tree_util.register_dataclass` (JAX ≥ 0.4),
+# which preserves the frozen-dataclass nature and integrates with
+# :func:`dataclasses.replace`-based mutation in :meth:`PipelineState.with_`.
+
+from jax import tree_util as _tree_util
+
+_tree_util.register_dataclass(
+    PipelineState,
+    data_fields=("wave", "sed_intrinsic", "sed_attenuated", "sed_observed", "lines", "derived"),
+    meta_fields=(),
+)
+_tree_util.register_dataclass(
+    SEDComponentState,
+    data_fields=(),
+    meta_fields=("name",),
+)
+_tree_util.register_dataclass(
+    SEDComponentConfig,
+    data_fields=(),
+    meta_fields=("name",),
+)
+
+del _tree_util
+
+
+# ─────────────────────────────────────────────────────────────────────
 # The Protocol
 # ─────────────────────────────────────────────────────────────────────
 
