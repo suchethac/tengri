@@ -114,16 +114,16 @@ def _make_fitter(user_likelihood=None):
     return fitter, fnu_obs, fnu_err, fnu_pred
 
 
-def test_legacy_path_unchanged():
-    """Without likelihood=, build_loss_fn returns the standard Hamiltonian."""
-    fitter, fnu_obs, fnu_err, fnu_pred = _make_fitter(user_likelihood=None)
+def test_legacy_default_path_now_raises():
+    """Phase II-2.3 hardening: the unreachable defensive default-Gaussian
+    fall-through now raises AssertionError. Production never hits it
+    because Fitter._maybe_build_default_likelihood always builds an
+    adapter for the configurations it supports. The raise surfaces
+    missing auto-build coverage loudly rather than silently degrading."""
+    fitter, *_ = _make_fitter(user_likelihood=None)
     loss_fn = build_loss_fn(fitter, mode="auto")
-    result = loss_fn({"flux_scale": 1.0}, fitter._data_args)
-
-    # Compute expected: 0.5 * χ² + 0.5 * ξᵀξ (with ξ=1.0)
-    chi2 = jnp.sum(((fnu_obs - fnu_pred) / fnu_err) ** 2)
-    expected = 0.5 * chi2 + 0.5 * 1.0
-    assert float(result) == pytest.approx(float(expected), rel=1e-6)
+    with pytest.raises(AssertionError, match="auto-build"):
+        loss_fn({"flux_scale": 1.0}, fitter._data_args)
 
 
 def test_user_likelihood_replaces_chi2():

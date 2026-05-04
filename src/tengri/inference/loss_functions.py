@@ -14,8 +14,6 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from tengri.inference.likelihoods.gaussian import diag_gaussian_chi2
-
 __all__ = [
     "build_loglikelihood_fn",
     "build_loglikelihood_unbounded_fn",
@@ -46,60 +44,6 @@ def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constrain
         eline_delta_v_kms=delta_v,
     )
     return apply_doublet_constraints(G, constraint_matrix)
-
-
-def _marginalize_elines(
-    residual,
-    noise,
-    G_eff,
-    params,
-    fixed_values,
-    prior_type,
-    prior_sigma,
-    prior_width_dex,
-    independent_wavelengths,
-):
-    """Analytically marginalize emission line amplitudes (cloudy or flat prior)."""
-    from tengri.observation.eline_marginalization import marginalize_emission_lines
-
-    if prior_type == "cloudy":
-        from tengri.observation.eline_priors import marginalize_emission_lines_cloudy
-
-        log_z = params.get("met_logzsol", fixed_values.get("met_logzsol", 0.0))
-        neb_logU = params.get("neb_logU", fixed_values.get("neb_logU", -3.0))
-        return marginalize_emission_lines_cloudy(
-            residual,
-            noise,
-            G_eff,
-            log_z=log_z,
-            neb_logU=neb_logU,
-            line_wavelengths=independent_wavelengths,
-            prior_width_dex=prior_width_dex,
-        )
-    prior_var = jnp.full(G_eff.shape[1], prior_sigma**2)
-    return marginalize_emission_lines(residual, noise, G_eff, prior_variance=prior_var)
-
-
-def _split_joint_data(data, noise, predicted, n_phot):
-    """Split concatenated [photometry, spectroscopy] arrays at n_phot."""
-    return (
-        data[:n_phot],
-        data[n_phot:],
-        noise[:n_phot],
-        noise[n_phot:],
-        predicted[:n_phot],
-        predicted[n_phot:],
-    )
-
-
-def _calibration_log_likelihood(predicted, data, noise, wave_obs, n_poly, prior_sigma):
-    """Log-likelihood with calibration polynomial marginalized out."""
-    from tengri.observation.calibration import marginalize_calibration
-
-    log_like, _c_hat, _c_err = marginalize_calibration(
-        predicted, data, noise, wave_obs, n_poly=n_poly, prior_sigma=prior_sigma
-    )
-    return log_like
 
 
 def _unstandardize_parameters(params_unbounded, spec, free_names, fixed_values, stochastic):
@@ -222,13 +166,14 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
         if user_likelihood is not None:
             return -user_likelihood.log_prob(prediction, params)
 
-        # Legacy χ² fall-through. Only two cases reach this code path
-        # (auto-build covers everything else):
-        #
-        #   1. data_mask + spec/joint — censoring across the concatenated
-        #      data array, not addressable via single-channel adapters.
-        #   2. Defensive default — diagonal Gaussian. Should be unreachable
-        #      for any properly-configured Fitter.
+        # Legacy χ² fall-through. Exactly one case reaches this code path
+        # post Phase II-2.3: data_mask + spec/joint (censoring across the
+        # concatenated data array, not addressable via a single-channel
+        # adapter). All other configurations are covered by auto-build
+        # in Fitter._maybe_build_default_likelihood. If you find yourself
+        # hitting the AssertionError below, the auto-build cohort is
+        # missing coverage for your case — extend it there, don't add a
+        # branch here.
         if use_censored:
             mask = data_args["data_mask"]
             f_cal = params.get("noise_frac_cal", 0.0)
@@ -236,11 +181,17 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
                 data, noise, predicted, mask, f_cal=f_cal, dof=noise_dof
             )
         else:
-            chi2 = diag_gaussian_chi2(predicted, data, noise)
-            e_lh = 0.5 * chi2
+            raise AssertionError(
+                "Legacy χ² fall-through reached for an unexpected configuration. "
+                "Auto-build (Fitter._maybe_build_default_likelihood) returned None "
+                "but use_censored is False. Either extend the auto-build cohort to "
+                "cover this configuration, or raise NotImplementedError at the "
+                "auto-build bail-out site rather than falling through here."
+            )
 
-        # Line-flux / spectral-index constraints (legacy fall-through only;
-        # the user-likelihood path composes these via CompositeLikelihood).
+        # Line-flux / spectral-index extras for the censored fall-through.
+        # The user-likelihood path composes these via CompositeLikelihood;
+        # the censored path needs them inlined since it bypasses the cohort.
         if has_line_fluxes:
             model_lf = model.predict_line_fluxes(
                 params, target_wavelengths=data_args["line_flux_waves"]

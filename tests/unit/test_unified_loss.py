@@ -120,7 +120,15 @@ def test_three_builders_share_one_data_term():
     Any future drift between the three (different sign, missed
     branch, divergent prediction dict) trips this test.
     """
-    fitter, fnu_obs, fnu_err, fnu_pred = _make_fitter()
+    # Post Phase II-2.3 the legacy default-Gaussian path raises; pass
+    # an auto-built-style PhotometryLikelihood as user_likelihood so the
+    # data term goes through the standard adapter path (matches what
+    # production Fitter does via _maybe_build_default_likelihood).
+    from tengri.inference.photometry_likelihood import PhotometryLikelihood
+
+    _, fnu_obs, fnu_err, fnu_pred = _make_fitter()
+    user_lik = PhotometryLikelihood(fnu_obs=fnu_obs, fnu_err=fnu_err)
+    fitter, *_ = _make_fitter(user_likelihood=user_lik)
 
     loss_fn = build_loss_fn(fitter, mode="auto")
     loglik_fn = build_loglikelihood_fn(fitter, mode="auto")
@@ -141,30 +149,18 @@ def test_three_builders_share_one_data_term():
     assert loss == pytest.approx(-expected_ll + prior, rel=1e-6)
 
 
-def test_legacy_fall_through_returns_finite_scalar():
-    """When no user_likelihood is set, the legacy fall-through fires.
-
-    Confirms the unified core's legacy switch — exercised by
-    eline_fitted / cloudy-eline / variable_noise paths in production
-    — produces a finite scalar through all three wrappers. Here we
-    use the default-Gaussian branch (the simplest legacy path) so
-    the test doesn't need elaborate eline mock state.
+def test_legacy_default_path_now_raises():
+    """Phase II-2.3 hardening: the unreachable defensive default-Gaussian
+    fall-through now raises AssertionError. Production never reaches it
+    because Fitter._maybe_build_default_likelihood always builds an
+    adapter for the configurations it covers (everything except
+    data_mask + non-photometry, which goes through the censored
+    branch). The raise surfaces missing auto-build coverage loudly.
     """
     fitter, *_ = _make_fitter(user_likelihood=None)
-
-    loss = float(build_loss_fn(fitter, mode="auto")({"flux_scale": 1.0}, fitter._data_args))
-    ll = float(build_loglikelihood_fn(fitter, mode="auto")({"flux_scale": 1.0}, fitter._data_args))
-    ll_u = float(
-        build_loglikelihood_unbounded_fn(fitter, mode="auto")(
-            {"flux_scale": 1.0}, fitter._data_args
-        )
-    )
-
-    assert jnp.isfinite(loss)
-    assert jnp.isfinite(ll)
-    assert jnp.isfinite(ll_u)
-    # Also: the relationship still holds in the legacy path.
-    assert loss == pytest.approx(-ll + 0.5, rel=1e-6)
+    loss_fn = build_loss_fn(fitter, mode="auto")
+    with pytest.raises(AssertionError, match="auto-build"):
+        loss_fn({"flux_scale": 1.0}, fitter._data_args)
 
 
 def test_loglik_handles_censored_likelihood_via_user_path():
@@ -193,8 +189,13 @@ def test_loglik_handles_censored_likelihood_via_user_path():
     assert jnp.isfinite(loss)
     # If the masked band were silently treated as detected, the
     # likelihood would differ — confirm the censored adapter actually
-    # ran by comparing against the same Fitter without the mask.
-    fitter_no_mask, *_ = _make_fitter(user_likelihood=None, data_mask=None)
+    # ran by comparing against the same Fitter without the mask
+    # (using a plain PhotometryLikelihood as user_likelihood since
+    # the legacy default Gaussian now raises post-II-2.3).
+    from tengri.inference.photometry_likelihood import PhotometryLikelihood
+
+    plain_lik = PhotometryLikelihood(fnu_obs=fnu_obs, fnu_err=fnu_err)
+    fitter_no_mask, *_ = _make_fitter(user_likelihood=plain_lik, data_mask=None)
     ll_no_mask = float(
         build_loglikelihood_fn(fitter_no_mask, mode="auto")(
             {"flux_scale": 1.0}, fitter_no_mask._data_args

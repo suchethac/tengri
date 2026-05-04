@@ -639,7 +639,11 @@ class Fitter:
                 spec_obs = self.data[n_phot:]
                 spec_err = self.noise[n_phot:]
             else:
-                return None  # photometry-only with eline flag — not meaningful
+                raise NotImplementedError(
+                    "Emission-line marginalisation / fitting requires spectroscopy "
+                    "or joint data; got data_type='photometry'. Either disable "
+                    "the eline flag or use spectroscopy."
+                )
             builder = self._make_eline_design_builder()
             assert builder is not None, (
                 "eline path requires _eline_wavelengths and _eline_constraint_matrix to be set"

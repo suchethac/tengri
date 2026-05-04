@@ -297,3 +297,76 @@ def test_full_cohort_composes_in_one_composite():
     expected = sum(float(c.log_prob(prediction)) for c in components)
     actual = float(composite.log_prob(prediction))
     assert actual == pytest.approx(expected, rel=1e-10)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Phase II-2.3 — equivalence test for combined cal+eline adapter
+# ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+def test_calibration_eline_marginalised_matches_deleted_legacy_sequential():
+    """``CalibrationELineMarginalisedLikelihood.log_prob(...)`` must match
+    the deleted legacy sequential composition bit-for-bit:
+
+        marginalize_emission_lines → augment prediction → marginalize_calibration
+
+    This pins the new adapter to the math the legacy χ² switch
+    encoded in lines 248-297 of pre-II-2.3 ``loss_functions.py``.
+    """
+    import jax.numpy as jnp
+
+    from tengri.inference.likelihoods.marginalised import (
+        CalibrationELineMarginalisedLikelihood,
+    )
+    from tengri.observation.calibration import marginalize_calibration
+    from tengri.observation.eline_marginalization import marginalize_emission_lines
+
+    # Tiny synthetic spec: 8 wavelength pixels, 2 emission lines.
+    rng = jnp.linspace(0.0, 1.0, 8)
+    fnu_obs = 1.0 + 0.1 * jnp.cos(2 * jnp.pi * rng)
+    fnu_err = jnp.full(8, 0.05)
+    wavelength = jnp.linspace(4500.0, 6700.0, 8)
+    model_spec = 1.0 + 0.05 * rng  # smooth model continuum (no lines)
+    # Two narrow lines: design matrix columns are Gaussian profiles.
+    line_centres = jnp.array([5000.0, 6500.0])
+    sigma = 30.0
+    design_matrix = jnp.stack(
+        [jnp.exp(-0.5 * ((wavelength - lc) / sigma) ** 2) for lc in line_centres],
+        axis=1,
+    )
+    prior_sigma_eline = 0.5  # per-line amplitude prior σ
+    prior_var_eline = jnp.full(2, prior_sigma_eline**2)
+
+    # ── Path A: deleted legacy sequential composition ──
+    residual = fnu_obs - model_spec
+    _, a_hat, _ = marginalize_emission_lines(
+        residual, fnu_err, design_matrix, prior_variance=prior_var_eline
+    )
+    pred_with_lines = model_spec + design_matrix @ a_hat
+    expected_log_lik, _, _ = marginalize_calibration(
+        model_flux=pred_with_lines,
+        obs_flux=fnu_obs,
+        obs_err=fnu_err,
+        wavelength=wavelength,
+        n_poly=3,
+        prior_sigma=1.0,
+    )
+
+    # ── Path B: new adapter ──
+    adapter = CalibrationELineMarginalisedLikelihood(
+        fnu_obs=fnu_obs,
+        fnu_err=fnu_err,
+        wavelength=wavelength,
+        design_matrix_builder=lambda _params: design_matrix,
+        n_poly=3,
+        prior_sigma=1.0,
+        eline_prior_type="flat",
+        eline_prior_sigma=prior_sigma_eline,
+        channel="spec_fnu",
+    )
+    actual = adapter.log_prob({"spec_fnu": model_spec}, params={})
+
+    # Bit-for-bit (within FP rounding) — both paths share the underlying
+    # primitives, so the difference should be machine ε.
+    assert float(actual) == pytest.approx(float(expected_log_lik), rel=1e-12, abs=1e-12)

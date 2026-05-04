@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed (Phase II-2.4 — dead-helper removal + legacy default raises)
+
+- Deleted three private helpers in `loss_functions.py` that were no
+  longer called after Phase II-2.3 collapsed the legacy switch:
+  `_marginalize_elines`, `_split_joint_data`, and
+  `_calibration_log_likelihood`. `_build_eline_G_eff` is kept (still
+  used by `Fitter._make_eline_design_builder`).
+- The defensive default-Gaussian fall-through in the legacy χ²
+  switch now raises `AssertionError` rather than silently producing
+  a chi² that ignores any feature flags. Production code never
+  reaches it (auto-build covers everything except `data_mask +
+  non-photometry`, which goes through the `use_censored` branch);
+  the explicit raise surfaces missing auto-build coverage instead
+  of degrading silently.
+- Photometry + emission-line marginalisation/fitting (a meaningless
+  configuration) now raises `NotImplementedError` in
+  `_build_base_likelihood` instead of returning `None` and falling
+  through to the legacy default.
+- Added `test_calibration_eline_marginalised_matches_deleted_legacy_sequential`:
+  bit-for-bit equivalence between
+  `CalibrationELineMarginalisedLikelihood.log_prob` and the deleted
+  legacy sequential composition (marginalise lines → augment
+  prediction → marginalise calibration). Pins the new adapter to
+  the exact math the old switch encoded.
+- File `loss_functions.py`: 548 → 499 lines.
+
 ### Changed (Phase II-2.3 — full legacy χ² migration + edge-case assertions)
 
 Three further follow-ups, picked for typical astronomy use cases:
