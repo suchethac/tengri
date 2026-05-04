@@ -1,0 +1,62 @@
+# MANIFEST.in — controls what setuptools includes in the source distribution.
+#
+# The sdist (tar.gz) on PyPI must stay under ~60 MB. By default setuptools-scm
+# bundles every git-tracked file, which would balloon to ~400 MB because the
+# repo carries ~100 MB of HDF5 templates, archived notebooks, gallery output,
+# and analysis figures. None of that is needed by `pip install astro-tengri`.
+#
+# Wheel package data (defaults.toml, filters_registry.json, references.bib)
+# is declared separately under [tool.setuptools.package-data] in pyproject.toml
+# and is unaffected by this file.
+
+# What ships in sdist (pull in the stuff PyPI does need):
+include README.md
+include LICENSE
+include NOTICE
+include CITATION.cff
+include CITATION.bib
+include CHANGELOG.md
+include pyproject.toml
+include MANIFEST.in
+recursive-include src/tengri *.py *.toml *.json *.bib
+
+# What gets pruned (everything below):
+prune data
+prune analysis
+prune docs
+prune examples
+prune explore
+prune figures
+prune models
+prune notebooks
+prune profiling
+prune scripts
+prune tools
+prune vendor
+prune tests
+prune .github
+
+# Stray top-level docs that aren't needed for source-build
+exclude AGENTS.md
+exclude CLAUDE.md
+exclude CODE_OF_CONDUCT.md
+exclude CONTRIBUTING.md
+exclude CONTRIBUTORS.md
+exclude GOVERNANCE.md
+exclude HANDOFF.md
+exclude KNOWN_BUGS.md
+exclude ROADMAP.md
+exclude SECURITY.md
+exclude SUPPORT.md
+exclude VERIFICATION.md
+exclude run_notebooks_*.py
+exclude notebook_metrics.json
+exclude notebook_execution.log
+exclude plot_cue_no_abundance_sweep.png
+
+# Editor / cache crud
+global-exclude __pycache__
+global-exclude *.pyc
+global-exclude .DS_Store
+global-exclude *.h5
+global-exclude *.npz
