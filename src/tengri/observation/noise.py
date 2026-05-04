@@ -281,7 +281,7 @@ LOWER_LIMIT = -1
 # ── Censored likelihood for upper/lower limits ────────────────────
 
 
-def censored_log_likelihood(
+def censored_neg_log_likelihood(
     data: jnp.ndarray,
     noise_obs: jnp.ndarray,
     predicted: jnp.ndarray,

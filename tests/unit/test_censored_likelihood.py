@@ -1,6 +1,6 @@
 """Tests for censored (upper/lower limit) likelihood.
 
-Tests Feature 3 — the ``censored_log_likelihood`` function in
+Tests Feature 3 — the ``censored_neg_log_likelihood`` function in
 ``tengri.observation.noise`` and its integration into the standardized
 loss framework.
 """
@@ -15,7 +15,7 @@ from tengri.observation.noise import (
     DETECTED,
     LOWER_LIMIT,
     UPPER_LIMIT,
-    censored_log_likelihood,
+    censored_neg_log_likelihood,
     variable_noise_hamiltonian,
 )
 
@@ -54,7 +54,7 @@ class TestCensoredAllDetected:
         predicted = jnp.array([1.05, 2.1, 2.9])
         mask = jnp.array([DETECTED, DETECTED, DETECTED])
 
-        censored = censored_log_likelihood(data, noise, predicted, mask)
+        censored = censored_neg_log_likelihood(data, noise, predicted, mask)
         standard = variable_noise_hamiltonian(data, noise, predicted, 0.0)
         npt.assert_allclose(float(censored), float(standard), rtol=1e-10)
 
@@ -66,7 +66,7 @@ class TestCensoredAllDetected:
         mask = jnp.array([DETECTED, DETECTED])
         f_cal = 0.05
 
-        censored = censored_log_likelihood(data, noise, predicted, mask, f_cal=f_cal)
+        censored = censored_neg_log_likelihood(data, noise, predicted, mask, f_cal=f_cal)
         standard = variable_noise_hamiltonian(data, noise, predicted, f_cal)
         npt.assert_allclose(float(censored), float(standard), rtol=1e-10)
 
@@ -84,7 +84,7 @@ class TestUpperLimit:
         predicted = jnp.array([1.0])  # well below limit
         mask = jnp.array([UPPER_LIMIT])
 
-        energy = censored_log_likelihood(data, noise, predicted, mask)
+        energy = censored_neg_log_likelihood(data, noise, predicted, mask)
         assert float(energy) < 0.5
 
     def test_model_above_limit_high_energy(self):
@@ -94,7 +94,7 @@ class TestUpperLimit:
         predicted = jnp.array([10.0])  # well above limit
         mask = jnp.array([UPPER_LIMIT])
 
-        energy = censored_log_likelihood(data, noise, predicted, mask)
+        energy = censored_neg_log_likelihood(data, noise, predicted, mask)
         assert float(energy) > 10.0
 
     def test_model_at_limit_moderate_energy(self):
@@ -104,7 +104,7 @@ class TestUpperLimit:
         predicted = jnp.array([5.0])
         mask = jnp.array([UPPER_LIMIT])
 
-        energy = censored_log_likelihood(data, noise, predicted, mask)
+        energy = censored_neg_log_likelihood(data, noise, predicted, mask)
         expected = -jnp.log(0.5)
         npt.assert_allclose(float(energy), float(expected), rtol=1e-6)
 
@@ -116,7 +116,7 @@ class TestUpperLimit:
 
         energies = []
         for m in [0.0, 2.0, 5.0, 8.0, 12.0]:
-            e = censored_log_likelihood(data, noise, jnp.array([m]), mask)
+            e = censored_neg_log_likelihood(data, noise, jnp.array([m]), mask)
             energies.append(float(e))
 
         for i in range(len(energies) - 1):
@@ -139,7 +139,7 @@ class TestLowerLimit:
         predicted = jnp.array([10.0])  # well above limit
         mask = jnp.array([LOWER_LIMIT])
 
-        energy = censored_log_likelihood(data, noise, predicted, mask)
+        energy = censored_neg_log_likelihood(data, noise, predicted, mask)
         assert float(energy) < 0.5
 
     def test_model_below_limit_high_energy(self):
@@ -149,7 +149,7 @@ class TestLowerLimit:
         predicted = jnp.array([1.0])  # well below limit
         mask = jnp.array([LOWER_LIMIT])
 
-        energy = censored_log_likelihood(data, noise, predicted, mask)
+        energy = censored_neg_log_likelihood(data, noise, predicted, mask)
         assert float(energy) > 10.0
 
     def test_model_at_limit_moderate_energy(self):
@@ -159,7 +159,7 @@ class TestLowerLimit:
         predicted = jnp.array([5.0])
         mask = jnp.array([LOWER_LIMIT])
 
-        energy = censored_log_likelihood(data, noise, predicted, mask)
+        energy = censored_neg_log_likelihood(data, noise, predicted, mask)
         expected = -jnp.log(0.5)
         npt.assert_allclose(float(energy), float(expected), rtol=1e-6)
 
@@ -171,7 +171,7 @@ class TestLowerLimit:
 
         energies = []
         for m in [0.0, 2.0, 5.0, 8.0, 12.0]:
-            e = censored_log_likelihood(data, noise, jnp.array([m]), mask)
+            e = censored_neg_log_likelihood(data, noise, jnp.array([m]), mask)
             energies.append(float(e))
 
         for i in range(len(energies) - 1):
@@ -185,8 +185,12 @@ class TestLowerLimit:
         data = jnp.array([5.0])
         noise = jnp.array([1.0])
 
-        e_upper = censored_log_likelihood(data, noise, jnp.array([3.0]), jnp.array([UPPER_LIMIT]))
-        e_lower = censored_log_likelihood(data, noise, jnp.array([7.0]), jnp.array([LOWER_LIMIT]))
+        e_upper = censored_neg_log_likelihood(
+            data, noise, jnp.array([3.0]), jnp.array([UPPER_LIMIT])
+        )
+        e_lower = censored_neg_log_likelihood(
+            data, noise, jnp.array([7.0]), jnp.array([LOWER_LIMIT])
+        )
         npt.assert_allclose(float(e_upper), float(e_lower), rtol=1e-10)
 
 
@@ -203,7 +207,7 @@ class TestMixedMask:
         predicted = jnp.array([1.05, 3.0, 5.0])
         mask = jnp.array([DETECTED, UPPER_LIMIT, LOWER_LIMIT])
 
-        energy = censored_log_likelihood(data, noise, predicted, mask)
+        energy = censored_neg_log_likelihood(data, noise, predicted, mask)
         assert jnp.isfinite(energy)
 
     def test_sum_of_individual_bands(self):
@@ -213,13 +217,15 @@ class TestMixedMask:
         predicted = jnp.array([1.05, 3.0, 5.0])
         mask = jnp.array([DETECTED, UPPER_LIMIT, LOWER_LIMIT])
 
-        total = censored_log_likelihood(data, noise, predicted, mask)
+        total = censored_neg_log_likelihood(data, noise, predicted, mask)
 
-        e0 = censored_log_likelihood(data[0:1], noise[0:1], predicted[0:1], jnp.array([DETECTED]))
-        e1 = censored_log_likelihood(
+        e0 = censored_neg_log_likelihood(
+            data[0:1], noise[0:1], predicted[0:1], jnp.array([DETECTED])
+        )
+        e1 = censored_neg_log_likelihood(
             data[1:2], noise[1:2], predicted[1:2], jnp.array([UPPER_LIMIT])
         )
-        e2 = censored_log_likelihood(
+        e2 = censored_neg_log_likelihood(
             data[2:3], noise[2:3], predicted[2:3], jnp.array([LOWER_LIMIT])
         )
         npt.assert_allclose(float(total), float(e0 + e1 + e2), rtol=1e-10)
@@ -231,7 +237,7 @@ class TestMixedMask:
         predicted = jnp.array([2.0, 1.0])
         mask = jnp.array([UPPER_LIMIT, UPPER_LIMIT])
 
-        energy = censored_log_likelihood(data, noise, predicted, mask)
+        energy = censored_neg_log_likelihood(data, noise, predicted, mask)
         assert jnp.isfinite(energy)
         assert float(energy) > 0
 
@@ -242,7 +248,7 @@ class TestMixedMask:
         predicted = jnp.array([5.0, 10.0])
         mask = jnp.array([LOWER_LIMIT, LOWER_LIMIT])
 
-        energy = censored_log_likelihood(data, noise, predicted, mask)
+        energy = censored_neg_log_likelihood(data, noise, predicted, mask)
         assert jnp.isfinite(energy)
         assert float(energy) >= 0
 
@@ -260,8 +266,8 @@ class TestCensoredWithFcal:
         predicted = jnp.array([8.0])  # above limit
         mask = jnp.array([UPPER_LIMIT])
 
-        e_no_cal = censored_log_likelihood(data, noise, predicted, mask, f_cal=0.0)
-        e_with_cal = censored_log_likelihood(data, noise, predicted, mask, f_cal=0.5)
+        e_no_cal = censored_neg_log_likelihood(data, noise, predicted, mask, f_cal=0.0)
+        e_with_cal = censored_neg_log_likelihood(data, noise, predicted, mask, f_cal=0.5)
         assert float(e_with_cal) < float(e_no_cal)
 
     def test_fcal_zero_matches_no_fcal(self):
@@ -270,8 +276,8 @@ class TestCensoredWithFcal:
         predicted = jnp.array([4.0, 2.0])
         mask = jnp.array([UPPER_LIMIT, LOWER_LIMIT])
 
-        e0 = censored_log_likelihood(data, noise, predicted, mask, f_cal=0.0)
-        e_default = censored_log_likelihood(data, noise, predicted, mask)
+        e0 = censored_neg_log_likelihood(data, noise, predicted, mask, f_cal=0.0)
+        e_default = censored_neg_log_likelihood(data, noise, predicted, mask)
         npt.assert_allclose(float(e0), float(e_default), rtol=1e-12)
 
 
@@ -288,8 +294,8 @@ class TestCensoredWithStudentT:
         predicted = jnp.array([1.5])  # 5σ residual
         mask = jnp.array([DETECTED])
 
-        e_gauss = censored_log_likelihood(data, noise, predicted, mask, dof=None)
-        e_t2 = censored_log_likelihood(data, noise, predicted, mask, dof=2.0)
+        e_gauss = censored_neg_log_likelihood(data, noise, predicted, mask, dof=None)
+        e_t2 = censored_neg_log_likelihood(data, noise, predicted, mask, dof=2.0)
         assert float(e_t2) < float(e_gauss)
 
     def test_censored_bands_unaffected_by_dof(self):
@@ -300,8 +306,8 @@ class TestCensoredWithStudentT:
 
         for mask_val in [UPPER_LIMIT, LOWER_LIMIT]:
             mask = jnp.array([mask_val])
-            e_none = censored_log_likelihood(data, noise, predicted, mask, dof=None)
-            e_dof2 = censored_log_likelihood(data, noise, predicted, mask, dof=2.0)
+            e_none = censored_neg_log_likelihood(data, noise, predicted, mask, dof=None)
+            e_dof2 = censored_neg_log_likelihood(data, noise, predicted, mask, dof=2.0)
             npt.assert_allclose(float(e_none), float(e_dof2), rtol=1e-10)
 
     def test_student_t_large_dof_converges_to_gaussian(self):
@@ -311,8 +317,8 @@ class TestCensoredWithStudentT:
         predicted = jnp.array([1.05])
         mask = jnp.array([DETECTED])
 
-        e_gauss = censored_log_likelihood(data, noise, predicted, mask, dof=None)
-        e_large = censored_log_likelihood(data, noise, predicted, mask, dof=1e6)
+        e_gauss = censored_neg_log_likelihood(data, noise, predicted, mask, dof=None)
+        e_large = censored_neg_log_likelihood(data, noise, predicted, mask, dof=1e6)
         npt.assert_allclose(float(e_large), float(e_gauss), rtol=1e-4)
 
 
@@ -328,7 +334,7 @@ class TestCensoredJIT:
         predicted = jnp.array([0.95, 3.0])
         mask = jnp.array([DETECTED, UPPER_LIMIT])
 
-        fn = jax.jit(censored_log_likelihood)
+        fn = jax.jit(censored_neg_log_likelihood)
         result = fn(data, noise, predicted, mask)
         assert jnp.isfinite(result)
 
@@ -338,7 +344,7 @@ class TestCensoredJIT:
         predicted = jnp.array([0.95, 3.0, 5.0])
         mask = jnp.array([DETECTED, UPPER_LIMIT, LOWER_LIMIT])
 
-        fn = jax.jit(lambda d, n, p, m: censored_log_likelihood(d, n, p, m, f_cal=0.05))
+        fn = jax.jit(lambda d, n, p, m: censored_neg_log_likelihood(d, n, p, m, f_cal=0.05))
         result = fn(data, noise, predicted, mask)
         assert jnp.isfinite(result)
 
@@ -356,7 +362,7 @@ class TestCensoredGradients:
         mask = jnp.array([DETECTED])
 
         def loss(m):
-            return censored_log_likelihood(data, noise, jnp.array([m]), mask)
+            return censored_neg_log_likelihood(data, noise, jnp.array([m]), mask)
 
         grad_jax = float(jax.grad(loss)(1.05))
         grad_fd = fd_grad(loss, 1.05)
@@ -369,7 +375,7 @@ class TestCensoredGradients:
         mask = jnp.array([UPPER_LIMIT])
 
         def loss(m):
-            return censored_log_likelihood(data, noise, jnp.array([m]), mask)
+            return censored_neg_log_likelihood(data, noise, jnp.array([m]), mask)
 
         # SEDModel at 7.0 (above limit 5.0) → gradient should be positive
         # (increasing model further increases energy)
@@ -388,7 +394,7 @@ class TestCensoredGradients:
         mask = jnp.array([LOWER_LIMIT])
 
         def loss(m):
-            return censored_log_likelihood(data, noise, jnp.array([m]), mask)
+            return censored_neg_log_likelihood(data, noise, jnp.array([m]), mask)
 
         # SEDModel at 3.0 (below limit 5.0) → gradient should be negative
         # (increasing model reduces energy)
@@ -402,7 +408,7 @@ class TestCensoredGradients:
         mask = jnp.array([UPPER_LIMIT])
 
         def loss(m):
-            return censored_log_likelihood(data, noise, jnp.array([m]), mask)
+            return censored_neg_log_likelihood(data, noise, jnp.array([m]), mask)
 
         for m_val in [2.0, 5.0, 8.0]:
             grad_jax = float(jax.grad(loss)(m_val))
@@ -421,7 +427,7 @@ class TestCensoredGradients:
         mask = jnp.array([LOWER_LIMIT])
 
         def loss(m):
-            return censored_log_likelihood(data, noise, jnp.array([m]), mask)
+            return censored_neg_log_likelihood(data, noise, jnp.array([m]), mask)
 
         for m_val in [2.0, 5.0, 8.0]:
             grad_jax = float(jax.grad(loss)(m_val))
@@ -441,7 +447,7 @@ class TestCensoredGradients:
         mask = jnp.array([DETECTED, UPPER_LIMIT, LOWER_LIMIT])
 
         def loss(f_cal):
-            return censored_log_likelihood(data, noise, predicted, mask, f_cal=f_cal)
+            return censored_neg_log_likelihood(data, noise, predicted, mask, f_cal=f_cal)
 
         grad_jax = float(jax.grad(loss)(0.05))
         grad_fd = fd_grad(loss, 0.05)
@@ -464,7 +470,7 @@ class TestCensoredEdgeCases:
         noise = jnp.array([0.1])
         predicted = jnp.array([1.0])
         mask = jnp.array([DETECTED])
-        energy = censored_log_likelihood(data, noise, predicted, mask)
+        energy = censored_neg_log_likelihood(data, noise, predicted, mask)
         assert jnp.isfinite(energy)
 
     def test_large_residual_upper_limit(self):
@@ -474,7 +480,7 @@ class TestCensoredEdgeCases:
         predicted = jnp.array([2.0])  # 100σ above
         mask = jnp.array([UPPER_LIMIT])
 
-        energy = censored_log_likelihood(data, noise, predicted, mask)
+        energy = censored_neg_log_likelihood(data, noise, predicted, mask)
         assert jnp.isfinite(energy)
         assert float(energy) > 100.0
 
@@ -485,7 +491,7 @@ class TestCensoredEdgeCases:
         predicted = jnp.array([1.0])  # 100σ below
         mask = jnp.array([LOWER_LIMIT])
 
-        energy = censored_log_likelihood(data, noise, predicted, mask)
+        energy = censored_neg_log_likelihood(data, noise, predicted, mask)
         assert jnp.isfinite(energy)
         assert float(energy) > 100.0
 
@@ -499,5 +505,5 @@ class TestCensoredEdgeCases:
         mask = mask.at[5].set(UPPER_LIMIT)
         mask = mask.at[10].set(LOWER_LIMIT)
 
-        energy = censored_log_likelihood(data, noise, predicted, mask)
+        energy = censored_neg_log_likelihood(data, noise, predicted, mask)
         assert jnp.isfinite(energy)

@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed (Phase II-2.2 — eline cohort migrated to adapters + drift fixes)
+
+- **New adapters**: `CloudyELineMarginalisedLikelihood` and
+  `ELineFittedLikelihood` in
+  `tengri.inference.likelihoods.marginalised`. Both use the existing
+  `design_matrix_builder` closure pattern from
+  `ELineMarginalisedLikelihood`. `_maybe_build_default_likelihood`
+  now wires both, and the corresponding pure-eline branches in the
+  `loss_functions.py` legacy χ² switch are gone. The combined
+  `cal_marg + eline_{marg,fitted}` case still falls through to
+  legacy (sequential composition the auto-build cohort does not yet
+  express); auto-build bails to `None` in that case so the legacy
+  combined branch fires correctly.
+- **Bug fix**: `_maybe_build_default_likelihood` now bails to `None`
+  for `data_mask + non-photometry` data. Previously fell through
+  to subsequent checks and returned a plain
+  `SpectroscopyLikelihood` / `Composite` that silently ignored the
+  mask, treating upper-limit pixels as detected zero-flux. Legacy
+  fall-through correctly applies censoring across the concatenated
+  data, so the bail-out routes spec/joint+mask through it.
+- **Renamed**: `tengri.observation.noise.censored_log_likelihood`
+  → `censored_neg_log_likelihood`. The function name suggested a
+  log-likelihood (positive when fit good) but it returns energy
+  (= negative log-likelihood). Every caller already treated it as
+  energy; the rename brings the name in line with the convention.
+  All 50+ call sites updated.
+- File `loss_functions.py`: 704 → 644 lines (further dedup from
+  removing pure-eline legacy branches).
+
 ### Changed (Phase II-2 — unified loss-function core)
 
 - `tengri.inference.loss_functions` now has a single

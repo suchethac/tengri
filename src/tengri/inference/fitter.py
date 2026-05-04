@@ -432,16 +432,6 @@ class Fitter:
         (uses a different math primitive) and the e-line *fitted*
         amplitudes (line amplitudes are fit, not marginalised).
         """
-        # ── Bail-outs: cases the Protocol path doesn't yet cover ────
-        if self._eline_fitted:
-            # Line amplitudes are explicit free params; legacy path
-            # handles the design matrix arithmetic differently.
-            return None
-        if self._eline_marginalize and self._eline_prior_type == "cloudy":
-            # Wraps a different primitive (marginalize_emission_lines_cloudy)
-            # that needs log_z + neb_logU from params. Defer.
-            return None
-
         base = self._build_base_likelihood()
         if base is None:
             return None
@@ -458,6 +448,8 @@ class Fitter:
         from tengri.inference.likelihoods import (
             CalibrationMarginalisedLikelihood,
             CensoredLikelihood,
+            CloudyELineMarginalisedLikelihood,
+            ELineFittedLikelihood,
             ELineMarginalisedLikelihood,
             MultivariateGaussianLikelihood,
             StudentTLikelihood,
@@ -481,6 +473,15 @@ class Fitter:
                 f_cal_param="noise_frac_cal" if has_noise_model(self.spec) else None,
                 channel="phot_fnu",
             )
+        # Censored mask on spec / joint isn't covered by a single-channel
+        # adapter (the mask spans the concatenated data array). Defer to
+        # the legacy χ² fall-through, which applies `censored_neg_log_likelihood`
+        # uniformly across the concatenated prediction. Without this
+        # bail-out, downstream branches would build a plain
+        # SpectroscopyLikelihood / Composite that silently ignores the
+        # mask — a real bug, fix is the bail-out itself.
+        if self.data_mask is not None:
+            return None
 
         # ── Variable-noise / Student-t (no censoring) ──────────────
         # When the parameter spec declares noise_frac_cal / noise_dof,
@@ -521,6 +522,13 @@ class Fitter:
                 )
 
         # ── Calibration polynomial marginalisation (spectroscopy) ───
+        # Combined cal-marg + eline_{marg,fitted} requires the legacy
+        # path's sequential combination (marginalise lines → add to
+        # prediction → run cal-marg on the combined model). No
+        # single-channel adapter expresses this composition, so bail
+        # to None and let the legacy χ² switch handle the combined case.
+        if self._calibration_marginalize and (self._eline_marginalize or self._eline_fitted):
+            return None
         if self._calibration_marginalize and self._has_spectroscopy:
             wavelength = getattr(self.model, "_wave_obs", None)
             if wavelength is None:
@@ -548,8 +556,8 @@ class Fitter:
                 cal_lk,
             )
 
-        # ── E-line marginalisation (flat prior) on spectroscopy ─────
-        if self._eline_marginalize:
+        # ── E-line: marginalised (flat / cloudy prior) OR fitted ────
+        if self._eline_marginalize or self._eline_fitted:
             if self.data_type == "spectroscopy":
                 spec_obs = self.data
                 spec_err = self.noise
@@ -564,12 +572,31 @@ class Fitter:
             builder = self._make_eline_design_builder()
             if builder is None:
                 return None
-            eline_lk = ELineMarginalisedLikelihood(
-                fnu_obs=spec_obs,
-                fnu_err=spec_err,
-                design_matrix_builder=builder,
-                channel="spec_fnu",
-            )
+            # Pick the right adapter for the eline mode.
+            if self._eline_fitted:
+                eline_lk = ELineFittedLikelihood(
+                    fnu_obs=spec_obs,
+                    fnu_err=spec_err,
+                    design_matrix_builder=builder,
+                    amplitude_names=tuple(self._eline_amplitude_names),
+                    channel="spec_fnu",
+                )
+            elif self._eline_prior_type == "cloudy":
+                eline_lk = CloudyELineMarginalisedLikelihood(
+                    fnu_obs=spec_obs,
+                    fnu_err=spec_err,
+                    design_matrix_builder=builder,
+                    line_wavelengths=self._eline_independent_wavelengths,
+                    prior_width_dex=self._eline_prior_width_dex,
+                    channel="spec_fnu",
+                )
+            else:
+                eline_lk = ELineMarginalisedLikelihood(
+                    fnu_obs=spec_obs,
+                    fnu_err=spec_err,
+                    design_matrix_builder=builder,
+                    channel="spec_fnu",
+                )
             if self.data_type == "spectroscopy":
                 return eline_lk
             return CompositeLikelihood(
@@ -687,7 +714,7 @@ class Fitter:
 
         import contextlib
 
-        from tengri.components.sps.precompute import precompute_photometry
+        from tengri.components.stellar.sps.precompute import precompute_photometry
 
         model._precomputed.photometry = precompute_photometry(
             model.ssp_data,

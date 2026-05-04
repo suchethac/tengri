@@ -24,7 +24,7 @@ from collections.abc import Callable
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
-from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw
+from tengri.components.stellar.sfh.gp_sfh import compute_sqrt_power_drw
 from tengri.utils.grid import make_log_age_grid
 
 
@@ -316,7 +316,7 @@ def build_standardized_loss(
         Function that reconstructs the structured ``xi`` dict from ``xi_flat``.
     """
     from tengri.observation.noise import (
-        censored_log_likelihood,
+        censored_neg_log_likelihood,
         get_noise_dof,
         has_noise_model,
         uses_student_t,
@@ -346,7 +346,7 @@ def build_standardized_loss(
             params = smodel.xi_to_params(xi)
             f_cal = params.get("noise_frac_cal", 0.0)
 
-            e_lh = censored_log_likelihood(
+            e_lh = censored_neg_log_likelihood(
                 data, noise, predicted, mask_arr, f_cal=f_cal, dof=noise_dof
             )
             prior = jnp.sum(xi_flat**2)

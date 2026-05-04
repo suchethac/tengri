@@ -182,7 +182,7 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
     in the wrappers.
     """
     from tengri.observation.noise import (
-        censored_log_likelihood,
+        censored_neg_log_likelihood,
         get_noise_dof,
         has_noise_model,
         uses_student_t,
@@ -200,14 +200,12 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
     cal_n_poly = fitter._cal_n_poly
     cal_prior_sigma = fitter._cal_prior_sigma
     use_eline_marg = fitter._eline_marginalize
-    use_eline_fitted = fitter._eline_fitted
     eline_wavelengths = fitter._eline_wavelengths
     eline_independent_wavelengths = fitter._eline_independent_wavelengths
     eline_constraint_matrix = fitter._eline_constraint_matrix
     eline_prior_type = fitter._eline_prior_type
     eline_prior_sigma = fitter._eline_prior_sigma
     eline_prior_width_dex = fitter._eline_prior_width_dex
-    eline_amplitude_names = fitter._eline_amplitude_names
     has_spec_cov = "spec_cov_inv" in fitter._data_args
     has_line_fluxes = "line_flux_waves" in fitter._data_args
     has_indices = "index_obs" in fitter._data_args
@@ -312,68 +310,10 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
                 p_spec, data_spec, noise_spec, model._wave_obs, cal_n_poly, cal_prior_sigma
             )
             e_lh = 0.5 * chi2_phot - ll_spec
-        elif use_eline_marg and data_type == "spectroscopy":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            ln_l_eline, _, _ = _marginalize_elines(
-                data - predicted,
-                noise,
-                G_eff,
-                params,
-                fixed_values,
-                eline_prior_type,
-                eline_prior_sigma,
-                eline_prior_width_dex,
-                eline_independent_wavelengths,
-            )
-            e_lh = -ln_l_eline
-        elif use_eline_marg and data_type == "joint":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            n_p = pred_phot.shape[0]
-            data_phot, data_spec, noise_phot, noise_spec, p_phot, p_spec = _split_joint_data(
-                data, noise, predicted, n_p
-            )
-            ln_l_eline, _, _ = _marginalize_elines(
-                data_spec - p_spec,
-                noise_spec,
-                G_eff,
-                params,
-                fixed_values,
-                eline_prior_type,
-                eline_prior_sigma,
-                eline_prior_width_dex,
-                eline_independent_wavelengths,
-            )
-            chi2_phot = diag_gaussian_chi2(p_phot, data_phot, noise_phot)
-            e_lh = 0.5 * chi2_phot - ln_l_eline
-        elif use_eline_fitted and data_type == "spectroscopy":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            a = jnp.array([params[nm] for nm in eline_amplitude_names])
-            predicted_with_lines = predicted + G_eff @ a
-            chi2 = diag_gaussian_chi2(predicted_with_lines, data, noise)
-            e_lh = 0.5 * chi2
-        elif use_eline_fitted and data_type == "joint":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            n_p = pred_phot.shape[0]
-            data_phot, data_spec, noise_phot, noise_spec, p_phot, p_spec = _split_joint_data(
-                data, noise, predicted, n_p
-            )
-            a = jnp.array([params[nm] for nm in eline_amplitude_names])
-            p_spec_with_lines = p_spec + G_eff @ a
-            chi2_phot = diag_gaussian_chi2(p_phot, data_phot, noise_phot)
-            chi2_spec = diag_gaussian_chi2(p_spec_with_lines, data_spec, noise_spec)
-            e_lh = 0.5 * (chi2_phot + chi2_spec)
         elif use_censored:
             mask = data_args["data_mask"]
             f_cal = params.get("noise_frac_cal", 0.0)
-            e_lh = censored_log_likelihood(
+            e_lh = censored_neg_log_likelihood(
                 data, noise, predicted, mask, f_cal=f_cal, dof=noise_dof
             )
         elif use_variable_noise:
