@@ -330,6 +330,16 @@ def state_to_sed_quantities(state: Any):
     """
     from tengri.forward.prediction import SEDQuantities
     from tengri.utils.physics_constants import C_AA, L_SUN
+    from tengri.utils.sed_quantities import (
+        compute_balmer_break,
+        compute_dn4000,
+        compute_fuv_flux,
+        compute_irx,
+        compute_m_uv,
+        compute_nuv_flux,
+        compute_rest_uv_color,
+        compute_uv_slope_beta,
+    )
 
     sed = state.sed_intrinsic
     wave = state.wave
@@ -349,21 +359,42 @@ def state_to_sed_quantities(state: Any):
     l_tir = l_ir / L_SUN
     l_dust_absorbed = l_absorbed / L_SUN
 
+    # UV / break diagnostics — pull from the legacy helpers, which
+    # take ``(sed, wave)`` arrays directly.
+    fuv = compute_fuv_flux(sed, wave)
+    nuv = compute_nuv_flux(sed, wave)
+    irx = compute_irx(l_tir, fuv * 2.998e15 / 1500.0)  # νLν at 1500 Å in erg/s
+
+    # Pre-dust stellar SED reconstructed from the per-age cube
+    # ``lnu_age``, which StellarSEDComponent publishes before
+    # DustSEDComponent overwrites ``sed_intrinsic``. If no per-age
+    # cube is present (chain has no stellar component), fall back to
+    # NaN.
     nan_scalar = jnp.asarray(jnp.nan)
+    if "lnu_age" in derived:
+        sed_stellar_intrinsic = jnp.sum(jnp.asarray(derived["lnu_age"]), axis=0)
+        fuv_intrinsic = compute_fuv_flux(sed_stellar_intrinsic, wave)
+        nuv_intrinsic = compute_nuv_flux(sed_stellar_intrinsic, wave)
+    else:
+        fuv_intrinsic = nan_scalar
+        nuv_intrinsic = nan_scalar
+
     return SEDQuantities(
         l_bol=l_bol,
         l_tir=l_tir,
         l_dust_absorbed=l_dust_absorbed,
-        irx=nan_scalar,
-        uv_slope_beta=nan_scalar,
-        dn4000=nan_scalar,
-        balmer_break=nan_scalar,
-        m_uv=nan_scalar,
-        fuv_flux=nan_scalar,
-        nuv_flux=nan_scalar,
-        fuv_flux_intrinsic=nan_scalar,
-        nuv_flux_intrinsic=nan_scalar,
-        rest_uv_color=nan_scalar,
+        irx=irx,
+        uv_slope_beta=compute_uv_slope_beta(sed, wave),
+        dn4000=compute_dn4000(sed, wave),
+        balmer_break=compute_balmer_break(sed, wave),
+        m_uv=compute_m_uv(sed, wave),
+        fuv_flux=fuv,
+        nuv_flux=nuv,
+        fuv_flux_intrinsic=fuv_intrinsic,
+        nuv_flux_intrinsic=nuv_intrinsic,
+        rest_uv_color=compute_rest_uv_color(sed, wave),
+        # Luminosity-weighted age/metallicity require the per-age
+        # cube ``lnu_age`` AND the SSP age axis; future bridge step.
         luminosity_weighted_age_gyr=nan_scalar,
         luminosity_weighted_metallicity=nan_scalar,
     )
