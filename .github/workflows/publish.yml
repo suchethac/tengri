@@ -1,0 +1,66 @@
+name: Publish to PyPI
+
+# Triggers only when a GitHub Release is published. Build the sdist + wheel
+# and upload via PyPI Trusted Publishers (OIDC; no API token in repo secrets).
+#
+# Setup checklist (one-time, before the first real release):
+#   1. https://pypi.org/manage/account/publishing/ → "Add a new pending publisher"
+#      - PyPI Project Name: astro-tengri
+#      - Owner: tengri-project   (after the org transfer; until then: suchethac)
+#      - Repository name: tengri
+#      - Workflow name: publish.yml
+#      - Environment name: pypi
+#   2. In repo Settings → Environments → New: "pypi" (no required reviewers
+#      needed for first run; can add later)
+#   3. (Recommended) Do a dry run on TestPyPI first by creating a pre-release
+#      tag (e.g. v0.1.0a1) — TestPyPI uses a separate Trusted Publisher.
+#      Add a duplicate workflow `publish-testpypi.yml` if desired.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:  # allow manual trigger from Actions UI
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # setuptools-scm needs full history for version
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install build backend
+        run: python -m pip install --upgrade build twine
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - name: Validate distribution metadata
+        run: twine check --strict dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Upload to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/astro-tengri
+    permissions:
+      id-token: write  # required for trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
