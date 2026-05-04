@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added (Phase II-2.6 — SEDModel + Galaxy bridges to orchestrator)
+
+- ``SEDModel.predict_via_orchestrator(params)`` — public bridge from
+  the legacy ``SEDModel`` configuration surface to the Phase II
+  ``SEDComponent`` orchestrator. Builds the chain via
+  ``_build_component_chain()`` (maps ``spec.mean_sfh_type``,
+  ``self._met_mode``, the dust/AGN/nebular/radio/xray/IGM flags, and
+  the pre-constructed nebular backend instance to
+  ``tengri.forward.build_components`` kwargs) and threads ``params``
+  through ``run_components``. Returns a ``PipelineState`` directly;
+  the legacy ``predict_photometry`` / ``predict_spectrum`` paths are
+  unchanged. Wrapping the state in a legacy ``Prediction`` shape is
+  a follow-up.
+- ``Galaxy.predict_via_components(params)`` — convenience wrapper that
+  lazy-builds the underlying ``SEDModel`` and delegates. Lets users
+  with ``Galaxy.from_arrays(...)`` reach the orchestrator with one
+  call.
+
+### Fixed (Phase II-4.1 — NebularSEDComponent prefix covers all backends)
+
+- ``NebularSEDComponent.parameter_prefix`` is now a tuple
+  ``("neb_", "shock_", "ionspec_", "gas_")`` instead of a single
+  ``"neb_"``. Previously the orchestrator's prefix-slicer dropped
+  every ``shock_*`` key when MAPPINGS V was active, raising
+  ``KeyError`` inside ``apply``. Cue + CloudyGrid were also silently
+  missing their ``ionspec_*`` / ``gas_*`` extras unless those keys
+  were threaded via a different prefix. After the fix, Cue and
+  MAPPINGS both run end-to-end (Cue ~0.7% of stellar SED; MAPPINGS
+  ~16%).
+
 ### Fixed (Phase II-2 — CSP integration via DSPS joint weights)
 
 - `StellarSEDComponent.apply` now produces physically correct
