@@ -26,6 +26,21 @@ monolith deletion). Existing code reading
 ``predict_sfh_quantities(...).stellar_mass`` keeps working when the
 prediction is sourced from ``run_components``.
 
+### Added (Phase II-2.6 — Radio/XRay/Ionizing Quantities bridges)
+
+- ``RadioQuantities``, ``XRayQuantities``, ``IonizingQuantities``
+  NamedTuples + ``state_to_radio_quantities``,
+  ``state_to_xray_quantities``, ``state_to_ionizing_quantities``
+  bridges.
+- Radio: ``l_1p4ghz`` (interpolated from L_radio at 21 cm),
+  ``l_thermal`` (free-free), ``l_nonthermal``, ``q_ir``.
+- X-ray: ``l_x_xrb`` (Lehmer+10/16), ``l_x_agn`` (Duras+20; returns
+  0 when no AGN component is in the chain rather than NaN),
+  ``l_x_total``.
+- Ionizing: ``q_h`` = ``state.derived["nion"]``,
+  ``xi_ion`` = q_h / νLν(1500 Å).
+- Re-exported from ``tengri.forward``.
+
 ### Added (Phase II-2.6 — predict_*_quantities_via_orchestrator)
 
 - ``SEDModel.predict_sfh_quantities_via_orchestrator(params)`` and
