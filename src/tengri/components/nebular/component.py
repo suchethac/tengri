@@ -118,7 +118,12 @@ class NebularSEDComponent:
     config: NebularSEDComponentConfig = field(default_factory=NebularSEDComponentConfig)
     backend: Any | None = None
     name: str = "nebular"
-    parameter_prefix: str = "neb_"
+    # Tuple prefix so the MAPPINGS shock backend (``shock_*``) and the
+    # photoionisation backends (``neb_*``, ``ionspec_*``, ``gas_*``) all
+    # flow through the orchestrator's prefix-slicer. Backends silently
+    # ignore keys they don't consume — passing ``shock_*`` to Cue is
+    # harmless, and vice versa.
+    parameter_prefix: tuple[str, ...] = ("neb_", "shock_", "ionspec_", "gas_")
 
     def declared_parameters(self) -> list[ParamDeclaration]:
         r"""Free parameters this component owns.
