@@ -15,6 +15,7 @@ from tengri.inference.likelihoods.gaussian import (
     diag_gaussian_log_prob,
 )
 from tengri.inference.likelihoods.marginalised import (
+    CalibrationELineMarginalisedLikelihood,
     CalibrationMarginalisedLikelihood,
     CloudyELineMarginalisedLikelihood,
     ELineFittedLikelihood,
@@ -28,6 +29,7 @@ from tengri.inference.likelihoods.protocol import (
 )
 
 __all__ = [
+    "CalibrationELineMarginalisedLikelihood",
     "CalibrationMarginalisedLikelihood",
     "CensoredLikelihood",
     "CloudyELineMarginalisedLikelihood",

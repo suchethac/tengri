@@ -446,6 +446,7 @@ class Fitter:
         """Choose the BASE adapter for the main data channel(s)."""
         from tengri.inference.composite_likelihood import CompositeLikelihood
         from tengri.inference.likelihoods import (
+            CalibrationELineMarginalisedLikelihood,
             CalibrationMarginalisedLikelihood,
             CensoredLikelihood,
             CloudyELineMarginalisedLikelihood,
@@ -485,22 +486,50 @@ class Fitter:
 
         # ── Variable-noise / Student-t (no censoring) ──────────────
         # When the parameter spec declares noise_frac_cal / noise_dof,
-        # the legacy path uses variable_noise_hamiltonian — wrap with
-        # StudentTLikelihood (which handles the Gaussian dof=None case
-        # too via the same primitive).
+        # apply the variable-noise (Student-t) adapter per channel.
+        # `f_cal_param="noise_frac_cal"` reads the fractional calibration
+        # uncertainty from the params dict at log_prob time. The same
+        # f_cal applies to both phot and spec channels for joint data —
+        # matches the legacy `variable_noise_hamiltonian` semantics.
         if has_noise_model(self.spec) or uses_student_t(self.spec):
-            if self.data_type != "photometry":
-                # Joint / spectroscopy path with variable noise needs more
-                # care (separate per-channel f_cal). Defer to legacy.
-                return None
             dof = get_noise_dof(self.spec) if uses_student_t(self.spec) else None
-            return StudentTLikelihood(
-                obs=self.data,
-                err=self.noise,
-                dof=dof,
-                f_cal_param="noise_frac_cal",
-                channel="phot_fnu",
-            )
+            if self.data_type == "photometry":
+                return StudentTLikelihood(
+                    obs=self.data,
+                    err=self.noise,
+                    dof=dof,
+                    f_cal_param="noise_frac_cal",
+                    channel="phot_fnu",
+                )
+            if self.data_type == "spectroscopy":
+                return StudentTLikelihood(
+                    obs=self.data,
+                    err=self.noise,
+                    dof=dof,
+                    f_cal_param="noise_frac_cal",
+                    channel="spec_fnu",
+                )
+            if self.data_type == "joint":
+                n_phot = self._n_phot_split()
+                assert n_phot is not None, (
+                    "joint data requires model.observation.n_data_phot to be set"
+                )
+                return CompositeLikelihood(
+                    StudentTLikelihood(
+                        obs=self.data[:n_phot],
+                        err=self.noise[:n_phot],
+                        dof=dof,
+                        f_cal_param="noise_frac_cal",
+                        channel="phot_fnu",
+                    ),
+                    StudentTLikelihood(
+                        obs=self.data[n_phot:],
+                        err=self.noise[n_phot:],
+                        dof=dof,
+                        f_cal_param="noise_frac_cal",
+                        channel="spec_fnu",
+                    ),
+                )
 
         # ── Spec covariance (correlated noise on spectroscopy) ──────
         if "spec_cov_inv" in self._data_args:
@@ -510,10 +539,10 @@ class Fitter:
                     obs=self.data, cov_inv=cov_inv, channel="spec_fnu"
                 )
             if self.data_type == "joint":
-                obs = getattr(self.model, "observation", None)
-                n_phot = getattr(obs, "n_data_phot", None)
-                if n_phot is None:
-                    return None
+                n_phot = self._n_phot_split()
+                assert n_phot is not None, (
+                    "joint data with spec_cov requires model.observation.n_data_phot"
+                )
                 return CompositeLikelihood(
                     PhotometryLikelihood(fnu_obs=self.data[:n_phot], fnu_err=self.noise[:n_phot]),
                     MultivariateGaussianLikelihood(
@@ -521,18 +550,62 @@ class Fitter:
                     ),
                 )
 
-        # ── Calibration polynomial marginalisation (spectroscopy) ───
-        # Combined cal-marg + eline_{marg,fitted} requires the legacy
-        # path's sequential combination (marginalise lines → add to
-        # prediction → run cal-marg on the combined model). No
-        # single-channel adapter expresses this composition, so bail
-        # to None and let the legacy χ² switch handle the combined case.
-        if self._calibration_marginalize and (self._eline_marginalize or self._eline_fitted):
-            return None
+        # ── Combined calibration polynomial + eline marginalisation ──
+        # Most common galaxy spectroscopy configuration (Prospector-style).
+        # Sequential composition: marginalise lines → add MAP amplitudes
+        # to the prediction → run cal-marg on the line-augmented model.
+        # Supports both flat and Cloudy eline priors via the same adapter.
+        # eline_fitted + cal_marg is not yet expressible (would need a
+        # mixed marginalised/fitted variant); legacy switch covers it.
+        if self._calibration_marginalize and self._eline_fitted:
+            raise NotImplementedError(
+                "Combined calibration marginalisation + fitted (non-marginalised) "
+                "emission-line amplitudes is not currently supported. "
+                "Use eline_marginalize=True (with optional eline_prior_type) for "
+                "the standard Prospector-style configuration, or disable "
+                "calibration_marginalize."
+            )
+        if self._calibration_marginalize and self._eline_marginalize:
+            wavelength = getattr(self.model, "_wave_obs", None)
+            assert wavelength is not None, "calibration marginalisation requires model._wave_obs"
+            builder = self._make_eline_design_builder()
+            assert builder is not None, (
+                "eline marginalisation requires _eline_wavelengths and "
+                "_eline_constraint_matrix to be set"
+            )
+            if self.data_type == "spectroscopy":
+                spec_obs, spec_err = self.data, self.noise
+            else:  # joint
+                n_phot = self._n_phot_split()
+                assert n_phot is not None, (
+                    "joint cal+eline marg requires model.observation.n_data_phot"
+                )
+                spec_obs = self.data[n_phot:]
+                spec_err = self.noise[n_phot:]
+            cal_eline_lk = CalibrationELineMarginalisedLikelihood(
+                fnu_obs=spec_obs,
+                fnu_err=spec_err,
+                wavelength=wavelength,
+                design_matrix_builder=builder,
+                n_poly=self._cal_n_poly,
+                prior_sigma=self._cal_prior_sigma,
+                eline_prior_type=self._eline_prior_type or "flat",
+                eline_prior_sigma=self._eline_prior_sigma or 1e10,
+                eline_line_wavelengths=self._eline_independent_wavelengths,
+                eline_prior_width_dex=self._eline_prior_width_dex,
+                channel="spec_fnu",
+            )
+            if self.data_type == "spectroscopy":
+                return cal_eline_lk
+            return CompositeLikelihood(
+                PhotometryLikelihood(fnu_obs=self.data[:n_phot], fnu_err=self.noise[:n_phot]),
+                cal_eline_lk,
+            )
+
+        # ── Calibration polynomial only (no elines) ─────────────────
         if self._calibration_marginalize and self._has_spectroscopy:
             wavelength = getattr(self.model, "_wave_obs", None)
-            if wavelength is None:
-                return None  # legacy path needs model._wave_obs
+            assert wavelength is not None, "calibration marginalisation requires model._wave_obs"
             cal_lk = CalibrationMarginalisedLikelihood(
                 fnu_obs=self.data
                 if self.data_type == "spectroscopy"
@@ -549,8 +622,7 @@ class Fitter:
                 return cal_lk
             # Joint: photometry + cal-marg spectroscopy
             n_phot = self._n_phot_split()
-            if n_phot is None:
-                return None
+            assert n_phot is not None, "joint cal-marg requires model.observation.n_data_phot"
             return CompositeLikelihood(
                 PhotometryLikelihood(fnu_obs=self.data[:n_phot], fnu_err=self.noise[:n_phot]),
                 cal_lk,
@@ -563,15 +635,15 @@ class Fitter:
                 spec_err = self.noise
             elif self.data_type == "joint":
                 n_phot = self._n_phot_split()
-                if n_phot is None:
-                    return None
+                assert n_phot is not None, "joint eline requires model.observation.n_data_phot"
                 spec_obs = self.data[n_phot:]
                 spec_err = self.noise[n_phot:]
             else:
-                return None
+                return None  # photometry-only with eline flag — not meaningful
             builder = self._make_eline_design_builder()
-            if builder is None:
-                return None
+            assert builder is not None, (
+                "eline path requires _eline_wavelengths and _eline_constraint_matrix to be set"
+            )
             # Pick the right adapter for the eline mode.
             if self._eline_fitted:
                 eline_lk = ELineFittedLikelihood(
@@ -614,8 +686,9 @@ class Fitter:
             return SpectroscopyLikelihood(fnu_obs=self.data, fnu_err=self.noise)
         if self.data_type == "joint":
             n_phot = self._n_phot_split()
-            if n_phot is None:
-                return None
+            assert n_phot is not None, (
+                "joint data requires model.observation.n_data_phot to be set"
+            )
             return CompositeLikelihood(
                 PhotometryLikelihood(fnu_obs=self.data[:n_phot], fnu_err=self.noise[:n_phot]),
                 SpectroscopyLikelihood(fnu_obs=self.data[n_phot:], fnu_err=self.noise[n_phot:]),

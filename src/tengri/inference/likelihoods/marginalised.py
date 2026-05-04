@@ -344,3 +344,129 @@ class ELineFittedLikelihood:
 
     def declared_parameters(self):
         return list(self.amplitude_names)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Combined: calibration polynomial + emission-line amplitudes
+# ─────────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class CalibrationELineMarginalisedLikelihood:
+    r"""Spectroscopy likelihood with BOTH the calibration polynomial AND
+    emission-line amplitudes marginalised analytically.
+
+    Covers the most common galaxy spectroscopy configuration
+    (Prospector-style joint cal-poly + line marginalisation). Sequential
+    composition:
+
+    1. Build the line design matrix ``G`` via ``design_matrix_builder``.
+    2. Solve for the line amplitudes ``â`` under the chosen prior
+       (flat Gaussian or Cloudy). This is a profile-likelihood step:
+       we use the MAP amplitudes, not the marginal log-likelihood,
+       because the cal-marg step in (4) needs the line-augmented
+       prediction.
+    3. Augment the model: ``m'(λ) = m(λ) + G â``.
+    4. Run cal-poly marginalisation on ``m'`` against the observed
+       spectrum, returning the marginal log-likelihood.
+
+    Both flat and Cloudy line-amplitude priors are supported via
+    ``eline_prior_type``.
+
+    Parameters
+    ----------
+    fnu_obs, fnu_err : ndarray, shape (n_pixels,)
+        Observed spectrum and 1-σ uncertainties [erg/s/cm²/Hz].
+    wavelength : ndarray, shape (n_pixels,)
+        Wavelength grid for the Chebyshev calibration basis [Å].
+    design_matrix_builder : callable, keyword-only
+        Per-call closure rebuilding the line design matrix. Required —
+        line wavelengths shift with redshift. See
+        :class:`ELineMarginalisedLikelihood`.
+    n_poly, prior_sigma : keyword-only
+        Calibration polynomial: order and per-coefficient prior σ.
+    eline_prior_type : str, keyword-only
+        ``"flat"`` (default — Gaussian with per-line variance
+        ``eline_prior_sigma**2``) or ``"cloudy"`` (Cloudy-grid prior
+        evaluated at ``params["met_logzsol"]`` /
+        ``params["neb_logU"]``).
+    eline_prior_sigma : float, keyword-only
+        Per-line prior σ for the flat case [erg/s/cm²/Hz]. Default 1e10.
+    eline_line_wavelengths : ndarray | None, keyword-only
+        Rest-frame line wavelengths (Cloudy case only) [Å].
+    eline_prior_width_dex : float, keyword-only
+        Cloudy prior width [dex]. Default 0.5.
+    channel : str, keyword-only
+        Prediction-dict key. Default ``"spec_fnu"``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes; ``eline_prior_type`` is static at
+    construction time.
+
+    Discards the eline marginal log-likelihood (uses the plug-in
+    ``â``). This matches the legacy χ² composition in
+    :func:`tengri.inference.loss_functions.build_loss_fn` exactly.
+    """
+
+    fnu_obs: jnp.ndarray
+    fnu_err: jnp.ndarray
+    wavelength: jnp.ndarray
+    _: KW_ONLY
+    design_matrix_builder: Callable[[Mapping[str, jnp.ndarray]], jnp.ndarray]
+    n_poly: int = 3
+    prior_sigma: float = 1.0
+    eline_prior_type: str = "flat"
+    eline_prior_sigma: float = 1e10
+    eline_line_wavelengths: jnp.ndarray | None = None
+    eline_prior_width_dex: float = 0.5
+    channel: str = "spec_fnu"
+    name: str = "calibration_eline_marginalised"
+
+    def log_prob(
+        self,
+        prediction: Mapping[str, jnp.ndarray],
+        params: Mapping[str, jnp.ndarray] | None = None,
+    ) -> jnp.ndarray:
+        from tengri.observation.eline_marginalization import (
+            marginalize_emission_lines as _marginalize_flat,
+        )
+
+        params = params or {}
+        design_matrix = self.design_matrix_builder(params)
+        model_spec = prediction[self.channel]
+        residual = self.fnu_obs - model_spec
+
+        if self.eline_prior_type == "cloudy":
+            from tengri.observation.eline_priors import marginalize_emission_lines_cloudy
+
+            log_z = params.get("met_logzsol", 0.0)
+            neb_logU = params.get("neb_logU", -3.0)
+            _ln_l, a_hat, _a_err = marginalize_emission_lines_cloudy(
+                residual,
+                self.fnu_err,
+                design_matrix,
+                log_z=log_z,
+                neb_logU=neb_logU,
+                line_wavelengths=self.eline_line_wavelengths,
+                prior_width_dex=self.eline_prior_width_dex,
+            )
+        else:
+            prior_var = jnp.full(design_matrix.shape[1], self.eline_prior_sigma**2)
+            _ln_l, a_hat, _a_err = _marginalize_flat(
+                residual, self.fnu_err, design_matrix, prior_variance=prior_var
+            )
+
+        pred_with_lines = model_spec + design_matrix @ a_hat
+        log_lik, _c_hat, _c_err = _marginalize_calibration(
+            model_flux=pred_with_lines,
+            obs_flux=self.fnu_obs,
+            obs_err=self.fnu_err,
+            wavelength=self.wavelength,
+            n_poly=self.n_poly,
+            prior_sigma=self.prior_sigma,
+        )
+        return log_lik
+
+    def declared_parameters(self):
+        return []

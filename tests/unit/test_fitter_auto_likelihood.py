@@ -333,12 +333,133 @@ def test_eline_fitted_auto_builds_fitted_likelihood():
 
 
 @pytest.mark.unit
-def test_joint_without_n_data_phot_falls_back_to_legacy():
-    """Joint without an explicit phot/spec split → can't build composite."""
+def test_joint_without_n_data_phot_raises_assertion():
+    """Joint data requires model.observation.n_data_phot — used to be a
+    silent None bail-out (so legacy χ² fall-through fired with the
+    wrong likelihood); now an explicit assertion flags the
+    misconfiguration loudly. Phase II-2.3 cleanup."""
     fitter = _make_proxy(
         data=[1.0] * 6,
         noise=[0.1] * 6,
         data_type="joint",
         n_data_phot=None,
     )
-    assert Fitter._maybe_build_default_likelihood(fitter) is None
+    with pytest.raises(AssertionError, match="n_data_phot"):
+        Fitter._maybe_build_default_likelihood(fitter)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Phase II-2.3 — combined cal+eline + joint variable_noise
+# ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+def test_cal_marg_plus_eline_marg_auto_builds_combined_adapter():
+    """Combined calibration + eline marginalisation → single adapter
+    (Prospector-style galaxy spectroscopy fitting). Was a legacy
+    fall-through pre-II-2.3."""
+    from tengri.inference.likelihoods import CalibrationELineMarginalisedLikelihood
+
+    fitter = _make_proxy(
+        data=[1.0, 2.0, 3.0],
+        noise=[0.1, 0.1, 0.1],
+        data_type="spectroscopy",
+        has_cal=True,
+        has_eline=True,
+    )
+    fitter._eline_wavelengths = jnp.array([6564.6, 4861.3])
+    fitter._eline_independent_wavelengths = jnp.array([6564.6, 4861.3])
+    fitter._eline_constraint_matrix = jnp.eye(2)
+    fitter._eline_prior_sigma = 1e10
+    fitter._eline_prior_width_dex = 0.5
+    fitter.model._wave_obs = jnp.linspace(4000.0, 8000.0, 3)
+    fitter.model._spectral_resolution = 2000.0
+    lk = Fitter._maybe_build_default_likelihood(fitter)
+    assert isinstance(lk, CalibrationELineMarginalisedLikelihood)
+    assert lk.eline_prior_type == "flat"
+    assert lk.channel == "spec_fnu"
+
+
+@pytest.mark.unit
+def test_cal_marg_plus_eline_cloudy_auto_builds_combined_adapter_cloudy():
+    """Cloudy variant of the combined cal + eline adapter."""
+    from tengri.inference.likelihoods import CalibrationELineMarginalisedLikelihood
+
+    fitter = _make_proxy(
+        data=[1.0, 2.0, 3.0],
+        noise=[0.1, 0.1, 0.1],
+        data_type="spectroscopy",
+        has_cal=True,
+        has_eline=True,
+    )
+    fitter._eline_prior_type = "cloudy"
+    fitter._eline_prior_sigma = 1e10
+    fitter._eline_wavelengths = jnp.array([6564.6, 4861.3])
+    fitter._eline_independent_wavelengths = jnp.array([6564.6, 4861.3])
+    fitter._eline_constraint_matrix = jnp.eye(2)
+    fitter._eline_prior_width_dex = 0.5
+    fitter.model._wave_obs = jnp.linspace(4000.0, 8000.0, 3)
+    fitter.model._spectral_resolution = 2000.0
+    lk = Fitter._maybe_build_default_likelihood(fitter)
+    assert isinstance(lk, CalibrationELineMarginalisedLikelihood)
+    assert lk.eline_prior_type == "cloudy"
+
+
+@pytest.mark.unit
+def test_cal_marg_plus_eline_fitted_raises_not_implemented():
+    """cal_marg + eline_fitted is a legitimate-but-unsupported combo.
+    Raise loudly rather than silently producing wrong likelihoods."""
+    fitter = _make_proxy(
+        data=[1.0, 2.0],
+        noise=[0.1, 0.1],
+        data_type="spectroscopy",
+        has_cal=True,
+    )
+    fitter._eline_fitted = True
+    with pytest.raises(NotImplementedError, match="calibration"):
+        Fitter._maybe_build_default_likelihood(fitter)
+
+
+@pytest.mark.unit
+def test_spectroscopy_with_variable_noise_auto_builds_student_t():
+    """Spec + variable_noise → StudentTLikelihood pinned to spec_fnu."""
+    from tengri.inference.likelihoods import StudentTLikelihood
+
+    fitter = _make_proxy(
+        data=[1.0, 2.0, 3.0],
+        noise=[0.1, 0.1, 0.1],
+        data_type="spectroscopy",
+    )
+    # Mock has_noise_model returning True via spec.all_params having the right entry
+    from unittest.mock import patch
+
+    with patch("tengri.observation.noise.has_noise_model", return_value=True):
+        lk = Fitter._maybe_build_default_likelihood(fitter)
+    assert isinstance(lk, StudentTLikelihood)
+    assert lk.channel == "spec_fnu"
+
+
+@pytest.mark.unit
+def test_joint_with_variable_noise_auto_builds_composite_of_student_t():
+    """Joint + variable_noise → CompositeLikelihood of two Student-t
+    (one per channel, sharing f_cal_param='noise_frac_cal'). Was a
+    legacy fall-through pre-II-2.3."""
+    from unittest.mock import patch
+
+    from tengri.inference.likelihoods import StudentTLikelihood
+
+    fitter = _make_proxy(
+        data=[1.0, 2.0, 3.0, 4.0, 5.0],
+        noise=[0.1] * 5,
+        data_type="joint",
+        n_data_phot=2,
+    )
+    with patch("tengri.observation.noise.has_noise_model", return_value=True):
+        lk = Fitter._maybe_build_default_likelihood(fitter)
+    assert isinstance(lk, CompositeLikelihood)
+    assert len(lk.likelihoods) == 2
+    phot_lk, spec_lk = lk.likelihoods
+    assert isinstance(phot_lk, StudentTLikelihood)
+    assert isinstance(spec_lk, StudentTLikelihood)
+    assert phot_lk.channel == "phot_fnu"
+    assert spec_lk.channel == "spec_fnu"

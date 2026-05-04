@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed (Phase II-2.3 — full legacy χ² migration + edge-case assertions)
+
+Three further follow-ups, picked for typical astronomy use cases:
+
+- **New combined adapter** `CalibrationELineMarginalisedLikelihood`
+  (in `likelihoods.marginalised`). Covers the most common galaxy
+  spectroscopy configuration — Prospector-style joint Chebyshev
+  calibration + emission-line amplitude marginalisation. Sequential
+  composition: marginalise lines (returning MAP amplitudes) → augment
+  the prediction with `G @ a_hat` → run cal-marg on the line-augmented
+  model. Supports both flat and Cloudy line priors via the
+  `eline_prior_type` flag, both for spectroscopy and joint data.
+  `cal_marg + eline_fitted` (mixed marg/fit) raises
+  `NotImplementedError` rather than silently degrading.
+- **Joint + variable-noise** now auto-builds a `CompositeLikelihood`
+  of two `StudentTLikelihood` instances (one per channel sharing
+  `f_cal_param="noise_frac_cal"`). Spectroscopy-only + variable-noise
+  builds a single `StudentTLikelihood(channel="spec_fnu")`. Was a
+  legacy fall-through before.
+- **Edge-case bail-outs replaced with assertions**: `n_phot is None`
+  and `_wave_obs is None` no longer cause silent legacy fall-through.
+  These cases indicate misconfiguration (joint data without
+  `model.observation.n_data_phot`, or calibration marginalisation
+  without `_wave_obs`) and now raise loudly, rather than producing
+  the wrong likelihood with no warning.
+
+After this, `loss_functions.py` legacy switch reduces to two cases:
+non-photometry censored data (mask spans concatenated array, not
+addressable via single-channel adapters) and a defensive default
+diagonal Gaussian fallback that should be unreachable. File:
+644 → 548 lines.
+
 ### Changed (Phase II-2.2 — eline cohort migrated to adapters + drift fixes)
 
 - **New adapters**: `CloudyELineMarginalisedLikelihood` and

@@ -184,29 +184,14 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
     from tengri.observation.noise import (
         censored_neg_log_likelihood,
         get_noise_dof,
-        has_noise_model,
         uses_student_t,
-        variable_noise_hamiltonian,
     )
 
     model = fitter.model
     data_type = fitter.data_type
-    fixed_values = fitter._fixed_values
     spec = fitter.spec
-    use_variable_noise = has_noise_model(spec)
     noise_dof = get_noise_dof(spec) if uses_student_t(spec) else None
     use_censored = fitter.data_mask is not None
-    use_cal_marg = fitter._calibration_marginalize and fitter._has_spectroscopy
-    cal_n_poly = fitter._cal_n_poly
-    cal_prior_sigma = fitter._cal_prior_sigma
-    use_eline_marg = fitter._eline_marginalize
-    eline_wavelengths = fitter._eline_wavelengths
-    eline_independent_wavelengths = fitter._eline_independent_wavelengths
-    eline_constraint_matrix = fitter._eline_constraint_matrix
-    eline_prior_type = fitter._eline_prior_type
-    eline_prior_sigma = fitter._eline_prior_sigma
-    eline_prior_width_dex = fitter._eline_prior_width_dex
-    has_spec_cov = "spec_cov_inv" in fitter._data_args
     has_line_fluxes = "line_flux_waves" in fitter._data_args
     has_indices = "index_obs" in fitter._data_args
     index_defs = None
@@ -214,11 +199,6 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
         obs_for_idx = getattr(model, "observation", None)
         if obs_for_idx is not None and obs_for_idx.spectral_indices is not None:
             index_defs = obs_for_idx.spectral_indices.index_defs
-    n_phot = 0
-    if has_spec_cov and data_type == "joint":
-        obs = getattr(model, "observation", None)
-        if obs is not None:
-            n_phot = obs.n_data_phot
     user_likelihood = getattr(fitter, "_user_likelihood", None)
 
     def neg_log_lik(params, data_args):
@@ -226,7 +206,7 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
         data = data_args["data"]
         noise = data_args["noise"]
 
-        prediction, predicted, pred_phot, _ = _build_prediction(
+        prediction, predicted, _pred_phot, _pred_spec = _build_prediction(
             model,
             params,
             data_type,
@@ -242,95 +222,19 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
         if user_likelihood is not None:
             return -user_likelihood.log_prob(prediction, params)
 
-        # Legacy χ² fall-through — only fires when auto-build returned
-        # None (cloudy/fitted e-lines, joint+variable_noise, edge bail-outs).
-        # Most-specific branches first.
-        if use_eline_marg and use_cal_marg and data_type == "spectroscopy":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            _, a_hat, _ = _marginalize_elines(
-                data - predicted,
-                noise,
-                G_eff,
-                params,
-                fixed_values,
-                eline_prior_type,
-                eline_prior_sigma,
-                eline_prior_width_dex,
-                eline_independent_wavelengths,
-            )
-            pred_with_lines = predicted + G_eff @ a_hat
-            ll_spec = _calibration_log_likelihood(
-                pred_with_lines, data, noise, model._wave_obs, cal_n_poly, cal_prior_sigma
-            )
-            e_lh = -ll_spec
-        elif use_eline_marg and use_cal_marg and data_type == "joint":
-            G_eff = _build_eline_G_eff(
-                params, fixed_values, model, eline_wavelengths, eline_constraint_matrix
-            )
-            n_p = pred_phot.shape[0]
-            data_phot, data_spec, noise_phot, noise_spec, p_phot, p_spec = _split_joint_data(
-                data, noise, predicted, n_p
-            )
-            _, a_hat, _ = _marginalize_elines(
-                data_spec - p_spec,
-                noise_spec,
-                G_eff,
-                params,
-                fixed_values,
-                eline_prior_type,
-                eline_prior_sigma,
-                eline_prior_width_dex,
-                eline_independent_wavelengths,
-            )
-            p_spec_with_lines = p_spec + G_eff @ a_hat
-            chi2_phot = diag_gaussian_chi2(p_phot, data_phot, noise_phot)
-            ll_spec = _calibration_log_likelihood(
-                p_spec_with_lines,
-                data_spec,
-                noise_spec,
-                model._wave_obs,
-                cal_n_poly,
-                cal_prior_sigma,
-            )
-            e_lh = 0.5 * chi2_phot - ll_spec
-        elif use_cal_marg and data_type == "spectroscopy":
-            ll_spec = _calibration_log_likelihood(
-                predicted, data, noise, model._wave_obs, cal_n_poly, cal_prior_sigma
-            )
-            e_lh = -ll_spec
-        elif use_cal_marg and data_type == "joint":
-            n_p = pred_phot.shape[0]
-            data_phot, data_spec, noise_phot, noise_spec, p_phot, p_spec = _split_joint_data(
-                data, noise, predicted, n_p
-            )
-            chi2_phot = diag_gaussian_chi2(p_phot, data_phot, noise_phot)
-            ll_spec = _calibration_log_likelihood(
-                p_spec, data_spec, noise_spec, model._wave_obs, cal_n_poly, cal_prior_sigma
-            )
-            e_lh = 0.5 * chi2_phot - ll_spec
-        elif use_censored:
+        # Legacy χ² fall-through. Only two cases reach this code path
+        # (auto-build covers everything else):
+        #
+        #   1. data_mask + spec/joint — censoring across the concatenated
+        #      data array, not addressable via single-channel adapters.
+        #   2. Defensive default — diagonal Gaussian. Should be unreachable
+        #      for any properly-configured Fitter.
+        if use_censored:
             mask = data_args["data_mask"]
             f_cal = params.get("noise_frac_cal", 0.0)
             e_lh = censored_neg_log_likelihood(
                 data, noise, predicted, mask, f_cal=f_cal, dof=noise_dof
             )
-        elif use_variable_noise:
-            f_cal = params.get("noise_frac_cal", 0.0)
-            e_lh = variable_noise_hamiltonian(data, noise, predicted, f_cal, dof=noise_dof)
-        elif has_spec_cov and data_type == "spectroscopy":
-            diff = data - predicted
-            chi2 = diff @ data_args["spec_cov_inv"] @ diff
-            e_lh = 0.5 * chi2
-        elif has_spec_cov and data_type == "joint":
-            data_phot = data[:n_phot]
-            p_phot = predicted[:n_phot]
-            noise_phot = noise[:n_phot]
-            diff_spec = data[n_phot:] - predicted[n_phot:]
-            chi2_phot = diag_gaussian_chi2(p_phot, data_phot, noise_phot)
-            chi2_spec = diff_spec @ data_args["spec_cov_inv"] @ diff_spec
-            e_lh = 0.5 * (chi2_phot + chi2_spec)
         else:
             chi2 = diag_gaussian_chi2(predicted, data, noise)
             e_lh = 0.5 * chi2
