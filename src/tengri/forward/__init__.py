@@ -17,19 +17,31 @@ Usage::
 """
 
 from tengri.forward.component_factory import (
+    IonizingQuantities,
+    RadioQuantities,
+    XRayQuantities,
     build_components,
     chain_summary,
+    state_to_ionizing_quantities,
+    state_to_radio_quantities,
     state_to_sed_quantities,
     state_to_sfh_quantities,
+    state_to_xray_quantities,
 )
 from tengri.forward.orchestrator import run_components
 from tengri.forward.result import SEDResult
 
 __all__ = [
+    "IonizingQuantities",
+    "RadioQuantities",
     "SEDResult",
+    "XRayQuantities",
     "build_components",
     "chain_summary",
     "run_components",
+    "state_to_ionizing_quantities",
+    "state_to_radio_quantities",
     "state_to_sed_quantities",
     "state_to_sfh_quantities",
+    "state_to_xray_quantities",
 ]

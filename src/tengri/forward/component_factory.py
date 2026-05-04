@@ -29,7 +29,7 @@ calling this helper.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, NamedTuple
 
 import jax.numpy as jnp
 
@@ -50,11 +50,75 @@ from tengri.components.xray.component import XRaySEDComponent
 from tengri.core.component import SEDComponent
 
 __all__ = [
+    "IonizingQuantities",
+    "RadioQuantities",
+    "XRayQuantities",
     "build_components",
     "chain_summary",
+    "state_to_ionizing_quantities",
+    "state_to_radio_quantities",
     "state_to_sed_quantities",
     "state_to_sfh_quantities",
+    "state_to_xray_quantities",
 ]
+
+
+class RadioQuantities(NamedTuple):
+    """Orchestrator-path mirror of the legacy
+    :class:`tengri.forward.prediction.RadioProperties` accessor.
+
+    Fields:
+
+    - ``l_1p4ghz`` (erg/s/Hz) — radio luminosity at 1.4 GHz, integrated
+      from ``state.derived["L_radio"]`` at 21 cm rest-frame.
+    - ``l_thermal`` (erg/s/Hz) — free-free thermal contribution
+      computed from the published ``nion`` via
+      :func:`tengri.utils.sed_quantities.compute_l_radio_thermal`.
+    - ``l_nonthermal`` (erg/s/Hz) — synchrotron component
+      (l_1p4ghz − l_thermal).
+    - ``q_ir`` — FIR-radio correlation parameter from L_TIR and l_1p4ghz.
+
+    All fields are JAX scalars; the NamedTuple is a JAX pytree.
+    """
+
+    l_1p4ghz: jnp.ndarray
+    l_thermal: jnp.ndarray
+    l_nonthermal: jnp.ndarray
+    q_ir: jnp.ndarray
+
+
+class XRayQuantities(NamedTuple):
+    """Orchestrator-path mirror of the legacy
+    :class:`tengri.forward.prediction.XRayProperties` accessor.
+
+    Fields:
+
+    - ``l_x_xrb`` (erg/s) — X-ray-binary luminosity (Lehmer 2010, 2016)
+      computed from ``sfh_quantities.sfr_100myr`` and
+      ``sfh_quantities.stellar_mass``.
+    - ``l_x_agn`` (erg/s) — AGN X-ray luminosity from the published
+      ``L_agn_bol`` via :func:`compute_l_x_agn`.
+    - ``l_x_total`` (erg/s) — sum of the two.
+    """
+
+    l_x_xrb: jnp.ndarray
+    l_x_agn: jnp.ndarray
+    l_x_total: jnp.ndarray
+
+
+class IonizingQuantities(NamedTuple):
+    """Orchestrator-path mirror of the legacy
+    :class:`tengri.forward.prediction.IonizingProperties` accessor.
+
+    Fields:
+
+    - ``q_h`` (photons/s) — total ionising photon production rate;
+      sourced directly from ``state.derived["nion"]``.
+    - ``xi_ion`` (Hz/erg) — production efficiency q_h / νLν(1500 Å).
+    """
+
+    q_h: jnp.ndarray
+    xi_ion: jnp.ndarray
 
 
 def build_components(
@@ -421,3 +485,118 @@ def state_to_sed_quantities(state: Any):
         luminosity_weighted_age_gyr=lw_age_gyr,
         luminosity_weighted_metallicity=lw_z,
     )
+
+
+def state_to_radio_quantities(state: Any) -> RadioQuantities:
+    """Convert :class:`PipelineState` → :class:`RadioQuantities`.
+
+    Reads ``state.derived["L_radio"]`` (the radio-component-published
+    SED in erg/s/Hz on the rest-frame wave grid) and interpolates at
+    21 cm (= 1.4 GHz) to populate ``l_1p4ghz``. Thermal / non-thermal
+    split uses the published ``nion`` and the legacy
+    :func:`tengri.utils.sed_quantities.compute_l_radio_thermal`.
+
+    Returns
+    -------
+    RadioQuantities
+        ``l_1p4ghz``, ``l_thermal``, ``l_nonthermal``, ``q_ir``.
+
+    Notes
+    -----
+    Returns ``NaN`` fields when the chain did not include
+    :class:`RadioSEDComponent` (no ``L_radio`` published).
+    """
+    from tengri.utils.physics_constants import L_SUN
+    from tengri.utils.sed_quantities import compute_l_radio_thermal, compute_q_ir
+
+    derived = state.derived
+    nan_scalar = jnp.asarray(jnp.nan)
+    if "L_radio" not in derived:
+        return RadioQuantities(
+            l_1p4ghz=nan_scalar,
+            l_thermal=nan_scalar,
+            l_nonthermal=nan_scalar,
+            q_ir=nan_scalar,
+        )
+    L_radio = jnp.asarray(derived["L_radio"])  # erg/s/Hz on rest-frame wave grid
+    wave = state.wave
+    # 21 cm = 2.1e9 Å. The radio component computes at all wavelengths.
+    wave_21cm = 21.106e8  # Å — 1.4 GHz exactly
+    l_1p4ghz = jnp.interp(wave_21cm, wave, L_radio)
+
+    nion = jnp.asarray(derived.get("nion", 0.0))
+    l_thermal = compute_l_radio_thermal(nion)
+    l_nonthermal = l_1p4ghz - l_thermal
+
+    l_ir = jnp.asarray(derived.get("L_ir", 0.0))
+    l_tir_lsun = l_ir / L_SUN
+    q_ir = compute_q_ir(l_tir_lsun, l_1p4ghz)
+
+    return RadioQuantities(
+        l_1p4ghz=l_1p4ghz,
+        l_thermal=l_thermal,
+        l_nonthermal=l_nonthermal,
+        q_ir=q_ir,
+    )
+
+
+def state_to_xray_quantities(state: Any) -> XRayQuantities:
+    """Convert :class:`PipelineState` → :class:`XRayQuantities`.
+
+    Uses the SFH-derived SFR and stellar mass to compute the XRB
+    luminosity (Lehmer+10/16) and the published ``L_agn_bol`` to
+    compute the AGN corona luminosity (Duras+20).
+
+    Returns
+    -------
+    XRayQuantities
+        ``l_x_xrb``, ``l_x_agn``, ``l_x_total``.
+    """
+    from tengri.utils.sed_quantities import compute_l_x_agn, compute_l_x_xrb
+
+    derived = state.derived
+    sfr = jnp.asarray(derived.get("sfr_100myr", derived.get("sfr", 0.0)))
+    log_mstar = jnp.asarray(derived.get("log_mstar", 0.0))
+    mstar = jnp.power(10.0, log_mstar)
+    l_x_xrb = compute_l_x_xrb(sfr, mstar)
+
+    L_agn_bol = jnp.asarray(derived.get("L_agn_bol", 0.0))
+    # ``compute_l_x_agn`` uses log10 internally — protect against the
+    # zero-AGN case where the conversion would produce -inf/NaN.
+    l_x_agn = jnp.where(L_agn_bol > 0.0, compute_l_x_agn(jnp.maximum(L_agn_bol, 1e-30)), 0.0)
+
+    return XRayQuantities(
+        l_x_xrb=l_x_xrb,
+        l_x_agn=l_x_agn,
+        l_x_total=l_x_xrb + l_x_agn,
+    )
+
+
+def state_to_ionizing_quantities(state: Any) -> IonizingQuantities:
+    """Convert :class:`PipelineState` → :class:`IonizingQuantities`.
+
+    Reads ``state.derived["nion"]`` (ionising photon rate, photons/s)
+    and computes ``xi_ion`` = q_h / νLν(1500 Å).
+
+    Returns
+    -------
+    IonizingQuantities
+        ``q_h``, ``xi_ion``.
+    """
+    from tengri.utils.physics_constants import C_AA
+    from tengri.utils.sed_quantities import compute_fuv_flux
+
+    derived = state.derived
+    nan_scalar = jnp.asarray(jnp.nan)
+    q_h = jnp.asarray(derived.get("nion", nan_scalar))
+
+    sed = state.sed_intrinsic
+    if sed is None:
+        xi_ion = nan_scalar
+    else:
+        fuv = compute_fuv_flux(sed, state.wave)  # mean L_ν in 1000-1700 Å
+        nu_uv = C_AA / 1500.0  # Hz
+        nu_l_uv = fuv * nu_uv  # erg/s
+        xi_ion = q_h / jnp.maximum(nu_l_uv, 1e-30)
+
+    return IonizingQuantities(q_h=q_h, xi_ion=xi_ion)
