@@ -193,6 +193,30 @@ in the same commit.
 
 ---
 
+## Phase II-2.1 — Stellar package consolidation (2026-05-03)
+
+`tengri.components.sfh` and `tengri.components.sps` were folded into a
+unified `tengri.components.stellar` package as part of the SEDComponent
+migration. The old dotted paths remain importable as deprecation shims
+(via `sys.modules` aliasing in
+`src/tengri/components/{sfh,sps}/__init__.py`); they fire one
+`DeprecationWarning` on first import and forward all attribute and
+submodule access to the new locations. Top-level convenience aliases
+(`tengri.sfh`, `tengri.sps`, the new `tengri.stellar`) resolve to the
+canonical location without firing a deprecation warning.
+
+| Old path                                          | New path                                                | Status (v0.x)        |
+| ------------------------------------------------- | ------------------------------------------------------- | -------------------- |
+| `tengri.components.sfh`                           | `tengri.components.stellar.sfh`                          | Both work; old warns |
+| `tengri.components.sfh.<submodule>`               | `tengri.components.stellar.sfh.<submodule>`              | Both work; old warns |
+| `tengri.components.sps`                           | `tengri.components.stellar.sps`                          | Both work; old warns |
+| `tengri.components.sps.<submodule>`               | `tengri.components.stellar.sps.<submodule>`              | Both work; old warns |
+| `tengri.sfh`, `tengri.sps`                        | `tengri.stellar.sfh`, `tengri.stellar.sps`               | Both work, no warn   |
+
+The shims will be removed in v1.0.
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in
