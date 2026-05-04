@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed (Phase II-2 — CSP integration via DSPS joint weights)
+
+- `StellarSEDComponent.apply` now produces physically correct
+  bolometric luminosities. The previous implementation used the
+  separable factorisation (lgmet_w ⊗ age_w) of DSPS's joint weights,
+  which gave the right marginals but the wrong per-bin product when
+  convolved with ``ssp_flux``, over-scaling L_bol by ~10³×.
+  After the fix: ``L_bol/M* ≈ 2.7 Lsun/Msun`` for a 10¹⁰ Msun population
+  with a 2 Gyr-peaked tsnorm SFH; ``L_ir/L_bol ≈ 0.42`` for
+  ``tau_bc=1, tau_diff=0.3``; energy balance is exact.
+- `compute_dsps_native_weights` and `compute_dsps_met_table_weights`
+  in `components/stellar/sps/dsps_wrapper.py` apply the same fix —
+  use the joint ``result.weights`` (n_met, n_age) directly instead of
+  the separable approximation. Public API unchanged. Legacy callers
+  (`forward/pipeline.py`, `forward/sed_model.py`,
+  `forward/_kernels/compositional.py`) inherit the fix; their
+  bolometric output now matches DSPS's authoritative ``rest_sed``.
+  ⚠️ Crossval baselines that compared the legacy path against
+  bagpipes/FSPS may need re-recording because the absolute
+  bolometric was previously wrong.
+
+### Performance (Phase II — orchestrator JIT compile-time benchmark)
+
+- Cold compile of the full 7-component chain
+  (Stellar+Nebular+AGN+Dust+Radio+XRay+IGM) at z=0 on PRSC-MILES SSP:
+  **~885 ms**. Warm runs: **~2 ms**. The plan's 2× ceiling (vs
+  ~64 ms per-fusion baseline at `analysis/jit_compile_benchmark.json`)
+  is exceeded for cold compile; the baseline was a single tier-2
+  photometry fusion, not the full chain. Warm-run latency is in line
+  with legacy. Cold-compile optimisation is deferred follow-up.
+
 ### Added (Phase II-2.6 + II-4.1 — public-API orchestrator + full nebular params)
 
 - **`tengri.forward.build_components(...)`** — public-API factory for
