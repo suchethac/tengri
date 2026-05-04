@@ -22,6 +22,16 @@ This codebase was initially drafted with AI assistance (Claude Code) and is prog
 ## Installation
 
 ```bash
+pip install astro-tengri
+```
+
+The PyPI distribution name is `astro-tengri`; the import name is `tengri` (`pip install tengri` is a different, unrelated 2017 package).
+
+For development (run tests, build docs, edit code):
+
+```bash
+git clone https://github.com/suchethac/tengri.git
+cd tengri
 pip install -e ".[dev]"
 ```
 
