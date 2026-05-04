@@ -379,6 +379,31 @@ def state_to_sed_quantities(state: Any):
         fuv_intrinsic = nan_scalar
         nuv_intrinsic = nan_scalar
 
+    # Luminosity-weighted age and metallicity. Stellar publishes
+    # ``L_age`` (bolometric luminosity per SSP age bin, erg/s) and
+    # ``ssp_ages_yr`` (n_age,). For metallicity we use the SFH-grid
+    # log_metallicity_history evaluated at each SSP age via linear
+    # interpolation — the metallicity ramp is monotonic in lookback
+    # time so this is sound for the supported (delta, ramp) modes.
+    if "L_age" in derived and "ssp_ages_yr" in derived:
+        L_age = jnp.asarray(derived["L_age"])
+        ssp_ages_yr = jnp.asarray(derived["ssp_ages_yr"])
+        L_total = jnp.maximum(jnp.sum(L_age), 1e-30)
+        lw_age_yr = jnp.sum(ssp_ages_yr * L_age) / L_total
+        lw_age_gyr = lw_age_yr / 1e9
+        if "log_metallicity_history" in derived and "sfh_grid_lbt_yr" in derived:
+            lz_per_ssp = jnp.interp(
+                ssp_ages_yr,
+                jnp.asarray(derived["sfh_grid_lbt_yr"]),
+                jnp.asarray(derived["log_metallicity_history"]),
+            )
+            lw_z = jnp.sum(lz_per_ssp * L_age) / L_total
+        else:
+            lw_z = nan_scalar
+    else:
+        lw_age_gyr = nan_scalar
+        lw_z = nan_scalar
+
     return SEDQuantities(
         l_bol=l_bol,
         l_tir=l_tir,
@@ -393,8 +418,6 @@ def state_to_sed_quantities(state: Any):
         fuv_flux_intrinsic=fuv_intrinsic,
         nuv_flux_intrinsic=nuv_intrinsic,
         rest_uv_color=compute_rest_uv_color(sed, wave),
-        # Luminosity-weighted age/metallicity require the per-age
-        # cube ``lnu_age`` AND the SSP age axis; future bridge step.
-        luminosity_weighted_age_gyr=nan_scalar,
-        luminosity_weighted_metallicity=nan_scalar,
+        luminosity_weighted_age_gyr=lw_age_gyr,
+        luminosity_weighted_metallicity=lw_z,
     )
