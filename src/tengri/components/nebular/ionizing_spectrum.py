@@ -15,8 +15,12 @@ import numpy as np
 
 from tengri.components.nebular._constants import _C_AA, _H_PLANCK
 
-# numpy < 2.0 compat
-_np_trapz = getattr(np, "trapezoid", np.trapz)
+# numpy < 2.0 compat: numpy 2.0 removed `trapz`; numpy >= 1.26 provides `trapezoid`.
+# Guarded import avoids the eager `np.trapz` lookup that crashes on numpy >= 2.0.
+try:
+    from numpy import trapezoid as _np_trapz
+except ImportError:  # numpy < 1.26
+    from numpy import trapz as _np_trapz  # type: ignore[no-redef]
 
 # Physical constants
 from tengri.utils.physics_constants import L_SUN as _LSUN
@@ -153,6 +157,7 @@ def _compute_segment_luminosities(
                 log_A + np.log10(_C_AA * _LSUN) + np.log10(np.abs(np.log(lam_hi) - np.log(lam_lo)))
             )
     return log_L
+
 
 # Ionization edges (Angstrom) — from cue/constants.py
 HEII_EDGE = 1e8 / 438908.8789  # 227.84 A
