@@ -2814,6 +2814,36 @@ class SEDModel:
 
     # ── Component orchestrator path (Phase II-2.6 opt-in) ─────────────
 
+    def predict_sfh_quantities_via_orchestrator(self, params):
+        """Drop-in replacement for :meth:`predict_sfh_quantities`.
+
+        Routes through the orchestrator and converts the resulting
+        :class:`PipelineState` to a legacy :class:`SFHQuantities`
+        NamedTuple via :func:`tengri.forward.state_to_sfh_quantities`.
+        Same return shape as the legacy method, computed via the
+        Phase II SEDComponent path.
+
+        Returns
+        -------
+        SFHQuantities
+            7-field NamedTuple matching the legacy contract.
+        """
+        from tengri.forward import state_to_sfh_quantities
+
+        return state_to_sfh_quantities(self.predict_via_orchestrator(params))
+
+    def predict_sed_quantities_via_orchestrator(self, params):
+        """Drop-in replacement for :meth:`predict_sed_quantities`.
+
+        Returns
+        -------
+        SEDQuantities
+            15-field NamedTuple matching the legacy contract.
+        """
+        from tengri.forward import state_to_sed_quantities
+
+        return state_to_sed_quantities(self.predict_via_orchestrator(params))
+
     def predict_via_orchestrator(self, params):
         """Forward pass via the Phase II SEDComponent orchestrator.
 
