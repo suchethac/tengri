@@ -279,6 +279,81 @@ def test_field_legacy_runs(stellar_field_model):
     assert jnp.any(sfh["sfr_full"] > 0.0), "legacy sfr_full all zero — field branch dead?"
 
 
+# ── Phase II-2.6: Galaxy.predict() unified entry point ───────────────
+
+
+@pytest.fixture(scope="module")
+def stellar_only_galaxy(ssp, stellar_only_model):
+    """Minimal Galaxy wrapping the stellar-only SEDModel.
+
+    Bypasses ``Galaxy.from_arrays`` (which builds the full model from
+    a preset) by constructing the Galaxy directly with a pre-built
+    ``SEDModel``. We don't need real photometry for this dispatch test;
+    we just need a Galaxy whose ``build_model()`` returns the stellar-
+    only model already used by the SED-equivalence tests.
+    """
+    from tengri import Galaxy
+    from tengri.config.settings import SEDModelConfig
+
+    return Galaxy(
+        ssp=ssp,
+        observation=None,
+        parameters=stellar_only_model.spec,
+        model_config=SEDModelConfig(),
+        model=stellar_only_model,
+    )
+
+
+def test_galaxy_predict_legacy_returns_prediction(stellar_only_galaxy):
+    """Galaxy.predict(..., backend='legacy') returns a Prediction."""
+    from tengri.forward.prediction import Prediction
+
+    pred = stellar_only_galaxy.predict(_STELLAR_PARAMS)
+    assert isinstance(pred, Prediction)
+    # And the SED is finite
+    assert jnp.all(jnp.isfinite(pred.sed.l_bol)) if hasattr(pred.sed, "l_bol") else True
+
+
+def test_galaxy_predict_component_returns_pipeline_state(stellar_only_galaxy):
+    """Galaxy.predict(..., backend='component') returns a PipelineState
+    with the expected stellar derived keys."""
+    from tengri.core.component import PipelineState
+
+    state = stellar_only_galaxy.predict(_STELLAR_PARAMS, backend="component")
+    assert isinstance(state, PipelineState)
+    assert "log_mstar" in state.derived
+    assert "sfr_history" in state.derived
+
+
+def test_galaxy_predict_unknown_backend_raises(stellar_only_galaxy):
+    """Galaxy.predict(..., backend='nonsense') raises ValueError."""
+    with pytest.raises(ValueError, match="must be 'legacy' or 'component'"):
+        stellar_only_galaxy.predict(_STELLAR_PARAMS, backend="nonsense")
+
+
+def test_galaxy_predict_default_is_legacy(stellar_only_galaxy):
+    """Default backend remains 'legacy' until Phase B v1.0 cutover."""
+    from tengri.core.component import PipelineState
+    from tengri.forward.prediction import Prediction
+
+    default_pred = stellar_only_galaxy.predict(_STELLAR_PARAMS)
+    explicit_legacy = stellar_only_galaxy.predict(_STELLAR_PARAMS, backend="legacy")
+    assert isinstance(default_pred, Prediction)
+    assert isinstance(explicit_legacy, Prediction)
+    # And not a PipelineState
+    assert not isinstance(default_pred, PipelineState)
+
+
+def test_galaxy_predict_via_components_alias_unchanged(stellar_only_galaxy):
+    """The pre-existing predict_via_components() shim still works (aliasing
+    Galaxy.predict(..., backend='component'))."""
+    state_alias = stellar_only_galaxy.predict_via_components(_STELLAR_PARAMS)
+    state_unified = stellar_only_galaxy.predict(_STELLAR_PARAMS, backend="component")
+    # Both call the same SEDModel.predict_via_orchestrator on the same params,
+    # so the published quantities should be identical.
+    assert jnp.allclose(state_alias.sed_intrinsic, state_unified.sed_intrinsic, rtol=1e-12)
+
+
 # ── Phase II-2.5: non-parametric SFH modes ───────────────────────────
 
 

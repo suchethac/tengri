@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added (Phase II-2 stellar migration finishing — II-2.3 → II-2.6)
+
+- ``StellarSEDComponent`` (``tengri.components.stellar.component``) now
+  supports the full Phase II-2 scope through the orchestrator path:
+  - **SFH modes**: ``tsnorm``, ``dpl``, ``continuity``, ``dirichlet``,
+    ``dense_basis`` + ``field=True`` PSD-governed GP modulation. SFH
+    evaluation is registry-driven via ``SFH_REGISTRY[mode].internal_param_map``,
+    matching the legacy ``SEDModel._compute_sfr`` translation.
+  - **Metallicity modes**: ``delta``, ``ramp``, ``chem_evol``.
+- New ``Galaxy.predict(params, backend='legacy' | 'component')``
+  unified entry point. ``backend='legacy'`` returns the lazy
+  ``Prediction`` (default, unchanged behaviour). ``backend='component'``
+  returns the orchestrator's ``PipelineState`` with all cross-component
+  derived quantities published. Default remains ``'legacy'`` until
+  Phase B v1.0 cutover.
+- ``tests/integration/test_orchestrator_vs_legacy.py`` pins the new
+  configurations against legacy at:
+  - ``tsnorm``: rtol = 9.7e-4
+  - ``continuity``: rtol = 6.7e-3
+  - ``dense_basis``: rtol = 7.3e-3
+  - ``dirichlet``: rtol = 3.0e-2 (piecewise-constant SFH amplifies
+    the SFH-integration mismatch tracked in
+    ``docs/dev/20260504-csp-integral-canonicalization.md``)
+  - ``field=True``: rtol = 3.3e-3 (closed by aligning SFH log-age grid
+    with ``make_log_age_grid`` — fixes a 13% divergence flagged before
+    the alignment commit)
+  - ``chem_evol`` orchestrator-vs-legacy is xfail-strict — the legacy
+    ``trapz`` CSP path collapses chem_evol's per-age Z(t) to a scalar
+    via SED-luminosity-weighted average; the orchestrator threads
+    the full per-age table through ``calc_rest_sed_sfh_table_met_table``.
+    The two are different formulations.
+
 ### Fixed (compute_dsps_native_weights NaN robustness for too-old SSPs)
 
 - ``compute_dsps_native_weights`` now safely handles SSP grids

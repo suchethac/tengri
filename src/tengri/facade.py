@@ -298,6 +298,12 @@ class Galaxy:
         PipelineState
             See :meth:`SEDModel.predict_via_orchestrator`.
 
+        See Also
+        --------
+        :meth:`Galaxy.predict` : Unified entry point with a ``backend``
+            switch between the legacy ``Prediction`` lazy view and the
+            orchestrator's ``PipelineState`` (this method).
+
         Examples
         --------
         >>> g = Galaxy.from_arrays(filters=..., flux=..., flux_err=...)  # doctest: +SKIP
@@ -305,6 +311,66 @@ class Galaxy:
         >>> state.derived["log_mstar"]  # doctest: +SKIP
         """
         return self.build_model().predict_via_orchestrator(params)
+
+    def predict(self, params, backend: str = "legacy"):
+        """Compute a forward-model prediction for ``params``.
+
+        Phase II-2.6 unified entry point. The ``backend`` argument selects
+        between the legacy tier-dispatch path (returns a
+        :class:`Prediction` lazy view) and the orchestrator path (returns
+        a :class:`PipelineState`).
+
+        Parameters
+        ----------
+        params : Mapping
+            Free parameter values keyed by canonical name.
+        backend : {"legacy", "component"}, optional
+            ``"legacy"`` (default) returns the lazy :class:`Prediction`
+            wrapper from :meth:`SEDModel.predict`, exposing the
+            ``.sfh`` / ``.sed`` / ``.lines`` / ``.radio`` / ``.xray`` /
+            ``.ionizing`` property groups. ``"component"`` returns a
+            :class:`tengri.core.PipelineState` from the Phase II
+            SEDComponent orchestrator with all cross-component
+            quantities published in ``state.derived``.
+
+            The default remains ``"legacy"`` until the v1.0 cutover.
+            The two backends agree on the rest-frame SED at
+            ``rtol ≤ 5e-2`` for the configurations covered by the
+            Phase II-2 stellar migration (stellar + dust + IGM +
+            radio + X-ray); see ``docs/dev/phase_ii_2_stellar_migration.md``.
+
+        Returns
+        -------
+        Prediction or PipelineState
+            ``Prediction`` for ``backend="legacy"``,
+            :class:`tengri.core.PipelineState` for ``backend="component"``.
+
+        Raises
+        ------
+        ValueError
+            If ``backend`` is not ``"legacy"`` or ``"component"``.
+
+        Examples
+        --------
+        Legacy lazy view:
+
+        >>> g = Galaxy.from_arrays(filters=..., flux=..., flux_err=...)  # doctest: +SKIP
+        >>> pred = g.predict(params)  # backend="legacy" (default)
+        >>> pred.sfh.stellar_mass  # doctest: +SKIP
+
+        Orchestrator path:
+
+        >>> state = g.predict(params, backend="component")
+        >>> state.derived["log_mstar"]  # doctest: +SKIP
+        """
+        if backend == "legacy":
+            return self.build_model().predict(params)
+        if backend == "component":
+            return self.predict_via_components(params)
+        raise ValueError(
+            f"backend must be 'legacy' or 'component', got {backend!r}. "
+            f"Default is 'legacy' until the Phase II cutover."
+        )
 
     def fit(
         self,
