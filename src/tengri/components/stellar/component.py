@@ -270,7 +270,21 @@ class StellarSEDComponent:
         # continuity, dirichlet, dense_basis. Others (snorm, lnorm, …)
         # would also work via the same dispatch but are not part of the
         # Phase II-2 scope; their equivalence has not been pinned.
-        _SUPPORTED_SFH = ("tsnorm", "dpl", "continuity", "dirichlet", "dense_basis")
+        _SUPPORTED_SFH = (
+            "tsnorm",
+            "dpl",
+            "continuity",
+            "dirichlet",
+            "dense_basis",
+            # Phase II-2.5 expansion: parametric SFH variants pinned
+            # against legacy by tests in
+            # ``tests/integration/test_orchestrator_vs_legacy.py``.
+            "lnorm",
+            "snorm",
+            "snorm_burst",
+            "tsnorm_burst",
+            "norm",
+        )
         if self.config.sfh_model not in _SUPPORTED_SFH:
             raise NotImplementedError(
                 f"sfh_model={self.config.sfh_model!r} not yet pinned by an "

@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added (Phase II-2.5 — orchestrator now supports 5 more SFH variants)
+
+- ``StellarSEDComponent._SUPPORTED_SFH`` allowlist expanded with
+  ``lnorm``, ``snorm``, ``snorm_burst``, ``tsnorm_burst``, and
+  ``norm``. Each has a new equivalence test in
+  ``tests/integration/test_orchestrator_vs_legacy.py`` pinning
+  orchestrator output to legacy ``predict_rest_sed.sed`` at
+  ``rtol=5e-2`` (the same physical-range tolerance as the existing
+  ``tsnorm`` test).
+- Brings the total of orchestrator-supported parametric SFH
+  variants to 10: ``tsnorm``, ``dpl``, ``continuity``, ``dirichlet``,
+  ``dense_basis``, plus the 5 added here. The remaining registered
+  modes (e.g. ``const_exp``, ``psb``, ``dense_basis_pure``) still
+  raise ``NotImplementedError`` from the orchestrator until each is
+  similarly pinned.
+
 ### Added (Phase II-2 stellar migration finishing — II-2.3 → II-2.6)
 
 - ``StellarSEDComponent`` (``tengri.components.stellar.component``) now

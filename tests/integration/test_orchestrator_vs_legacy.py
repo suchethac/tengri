@@ -648,3 +648,137 @@ def test_field_orchestrator_rest_sed_close_to_legacy(stellar_field_model):
         )
     )
     assert rel_diff < 1e-2, f"max rel diff: {rel_diff:.3e}"
+
+
+# ── Phase II-2.5: equivalence pinning for additional SFH variants ────
+#
+# These tests broaden orchestrator-vs-legacy parity to the remaining
+# parametric SFH variants registered in
+# ``components/stellar/sfh/registry.py``: ``lnorm``, ``snorm``,
+# ``snorm_burst``, ``tsnorm_burst``, ``norm``. Each test pins the
+# orchestrator's ``state.sed_intrinsic`` to legacy
+# ``predict_rest_sed.sed`` at ``rtol=5e-2``, the same physical-range
+# tolerance as ``test_orchestrator_rest_sed_close_to_legacy``.
+#
+# When a test passes, the corresponding name should be added to
+# ``components/stellar/component.py::StellarSEDComponent._SUPPORTED_SFH``
+# so the orchestrator stops raising ``NotImplementedError`` on it.
+
+
+def _stellar_only_spec(sfh_name: str, sfh_params: dict):
+    """Build a stellar-only Parameters spec for the given SFH variant.
+
+    All free SFH params get ``Uniform`` priors centred on the test
+    values; metallicity and dust are fixed to their off-state.
+    """
+    free_priors = {}
+    for k, v in sfh_params.items():
+        # Some params have physical constraints (must be > 0): widths,
+        # truncs, burst_sfr, burst_age, peak_lbt. Use multiplicative
+        # bounds for those; additive ±1.5 for unconstrained params
+        # like log_peak_sfr and skew.
+        positive_only = (
+            "width" in k or "trunc" in k or "burst_sfr" in k or "burst_age" in k or "peak_lbt" in k
+        )
+        if positive_only:
+            free_priors[k] = Uniform(max(v * 0.1, 1e-3), max(v * 5.0, 0.5))
+        else:
+            free_priors[k] = Uniform(v - 1.5, v + 1.5)
+    return Parameters(
+        mean_sfh_type=[sfh_name],
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+        **free_priors,
+    )
+
+
+def _check_sfh_variant_equivalence(ssp, sfh_name: str, sfh_params: dict):
+    spec = _stellar_only_spec(sfh_name, sfh_params)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = SEDModel(spec, ssp)
+    legacy = model.predict_rest_sed(sfh_params)
+    state = model.predict_via_orchestrator(sfh_params)
+    assert legacy.sed.shape == state.sed_intrinsic.shape
+    rel_diff = float(
+        jnp.max(
+            jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
+        )
+    )
+    assert rel_diff < 5e-2, f"{sfh_name} max rel diff: {rel_diff:.3e}"
+
+
+def test_orchestrator_lnorm_close_to_legacy(ssp):
+    """``lnorm`` (lognormal SFH) — orchestrator vs legacy."""
+    _check_sfh_variant_equivalence(
+        ssp,
+        "lnorm",
+        {
+            "sfh_lnorm_log_peak_sfr": 1.0,
+            "sfh_lnorm_peak_lbt_gyr": 3.0,
+            "sfh_lnorm_width_gyr": 1.0,
+        },
+    )
+
+
+def test_orchestrator_snorm_close_to_legacy(ssp):
+    """``snorm`` (skew-normal SFH) — orchestrator vs legacy."""
+    _check_sfh_variant_equivalence(
+        ssp,
+        "snorm",
+        {
+            "sfh_snorm_log_peak_sfr": 1.0,
+            "sfh_snorm_peak_lbt_gyr": 3.0,
+            "sfh_snorm_width_gyr": 1.0,
+            "sfh_snorm_skew": 0.0,
+        },
+    )
+
+
+def test_orchestrator_snorm_burst_close_to_legacy(ssp):
+    """``snorm_burst`` (skew-normal + burst SFH) — orchestrator vs legacy."""
+    _check_sfh_variant_equivalence(
+        ssp,
+        "snorm_burst",
+        {
+            "sfh_snorm_burst_log_peak_sfr": 1.0,
+            "sfh_snorm_burst_peak_lbt_gyr": 3.0,
+            "sfh_snorm_burst_width_gyr": 1.0,
+            "sfh_snorm_burst_skew": 0.0,
+            "sfh_snorm_burst_burst_sfr": 5.0,
+            "sfh_snorm_burst_burst_age_gyr": 0.05,
+        },
+    )
+
+
+def test_orchestrator_tsnorm_burst_close_to_legacy(ssp):
+    """``tsnorm_burst`` (truncated-skew-normal + burst SFH) — orchestrator vs legacy."""
+    _check_sfh_variant_equivalence(
+        ssp,
+        "tsnorm_burst",
+        {
+            "sfh_tsnorm_burst_log_peak_sfr": 1.0,
+            "sfh_tsnorm_burst_peak_lbt_gyr": 3.0,
+            "sfh_tsnorm_burst_width_gyr": 1.0,
+            "sfh_tsnorm_burst_skew": 0.0,
+            "sfh_tsnorm_burst_trunc": 3.0,
+            "sfh_tsnorm_burst_burst_sfr": 5.0,
+            "sfh_tsnorm_burst_burst_age_gyr": 0.05,
+        },
+    )
+
+
+def test_orchestrator_norm_close_to_legacy(ssp):
+    """``norm`` (Gaussian SFH) — orchestrator vs legacy."""
+    _check_sfh_variant_equivalence(
+        ssp,
+        "norm",
+        {
+            "sfh_norm_log_peak_sfr": 1.0,
+            "sfh_norm_peak_lbt_gyr": 3.0,
+            "sfh_norm_width_gyr": 1.0,
+        },
+    )
