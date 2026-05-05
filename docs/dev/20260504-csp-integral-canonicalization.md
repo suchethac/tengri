@@ -72,6 +72,76 @@ This blocks the Phase II-2 monolith-deletion gate (`tests/integration/test_orche
 
 5. **Single source of truth.** After migration, orchestrator and legacy produce bit-exact results because both delegate to `dsps.calc_rest_sed_sfh_table_lognormal_mdf`. The Phase II-2 gating xfail flips to a passing test, unblocking monolith deletion.
 
+## Bit-exact closure investigation (2026-05-05)
+
+After both Z-axis (`5cd64cf`/`492d68c`) and SFH-axis (`2059c72`)
+migrations landed, the per-wavelength rtol vs orchestrator dropped from
+158% → ~1e-3, but **did not close to rtol=1e-6** as the rationale §5
+predicted. The strict bit-exact xfail
+(`test_orchestrator_rest_sed_bit_exact_to_legacy`) remains in place.
+
+Diagnostics performed:
+
+1. **Joint factorization is bit-exact.** The orchestrator's
+   `calc_rest_sed_sfh_table_lognormal_mdf(...).weights` matches
+   `outer(calc_lgmet_weights_from_lognormal_mdf, calc_age_weights_from_sfh_table)`
+   element-wise to machine precision (max abs diff 0.0). This is the
+   expected separable factorization for an age-independent lognormal MDF.
+
+2. **Boundary handling differs but is irrelevant for smooth SFHs.** The
+   helper `compute_dsps_age_weights` uses `T_TABLE_MIN=0.01 Gyr` floor +
+   SFR-zeroing for invalid SSP bins (ssp_age > t_obs). The orchestrator's
+   `StellarSEDComponent.apply` uses `jnp.clip(t_cosmic_gyr, min=1e-3)`
+   without SFR-zeroing. For SFHs that are nearly zero at the oldest ages
+   (typical), the two policies produce indistinguishable weights.
+   Inlining the orchestrator's `min=1e-3` policy in pipeline.py did NOT
+   move the rtol — confirmed boundary handling is not the source.
+
+3. **Constants and dtype paths agree.** `LSUN_ERG_PER_S = 3.828e33` in
+   both paths; `_forward_dtype="float64"` default; `astype(dt)` calls
+   are no-ops at float64.
+
+4. **Wavelength grid is identical.** `m._rest_wavelength == ssp.ssp_wave`
+   at all 5994 points; the `interpolate_sed_to_grid` call at line 952 is
+   identity for the default rest-frame grid.
+
+5. **Residual is uniform across wavelengths.** Max rtol = 1.07e-3 at
+   wave_idx=4805 (14620 Å); integrated SED ratio differs by 3.6e-4. Not
+   concentrated at line features or boundary regions — distributes across
+   the full spectrum.
+
+The residual is most plausibly **float64 reduction-order accumulation**
+across the `einsum("i,iw->w", weights, ssp_flux_at_z)` (legacy, two-step)
+vs `einsum("ma,maw->aw", joint, ssp_flux).sum(axis=0) * total_mass`
+(orchestrator, three-step) operations. With n_met=15, n_age=140,
+n_wave=5994 the total flop count is ~12M; float64 catastrophic
+cancellation across many summands is consistent with a uniform 1e-3
+relative residual.
+
+### Closure paths (not yet attempted)
+
+A. **Replace legacy SED computation with a direct call to
+`calc_rest_sed_sfh_table_lognormal_mdf`** (matching orchestrator
+exactly). This bypasses `_compositional.exact_sed` for the no-α
+delta-Z path and would produce literally identical SEDs. Invasive
+refactor of `pipeline.py:692-743`.
+
+B. **Force consistent reduction order.** Rewrite the orchestrator
+to use the legacy two-step einsum pattern (or vice versa). Less
+invasive but only addresses one hypothesis.
+
+C. **Accept the ~1e-3 residual and widen the strict xfail.** Below
+typical observational uncertainties; the structural correctness
+goal (both paths use DSPS-canonical algebra) has been achieved.
+Update the xfail tolerance to `rtol < 5e-3` and remove `strict=True`
+once cross-validation against bagpipes/FSPS is verified to also stay
+within tolerance.
+
+Path A is the canonical closure but requires careful PR coordination
+(the JIT kernel `_compositional.exact_sed` is exercised by every
+non-component code path; removing it for one branch creates an
+inconsistency budget that needs accounting).
+
 ## Out-of-scope
 
 - Changing SSP grid format or schema. The existing `(n_met, n_age, n_wave)` layout stays.
