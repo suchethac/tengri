@@ -6,6 +6,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added (Phase E — observation sub-namespaces)
+
+- New additive sub-namespaces under ``tengri.observation``:
+  - ``tengri.observation.containers`` (8 names) — user-facing data
+    classes: ``Photometry``, ``Spectroscopy``, ``LineFluxData``,
+    ``LineList``, ``NoiseModel``, ``Observation``,
+    ``SpectralIndexData``, ``SpectralIndexDef``.
+  - ``tengri.observation.physics`` (20 names) — transformation
+    primitives: ``apply_calibration``, ``apply_lsf``,
+    ``build_eline_design_matrix``, ``marginalize_calibration``,
+    ``marginalize_emission_lines``, etc.
+  - ``tengri.observation.constants`` (9 names) — catalogs and status
+    flags: ``DETECTED``, ``UPPER_LIMIT``, ``LOWER_LIMIT``,
+    ``DEFAULT_LINE_NAMES``, ``DEFAULT_LINE_WAVELENGTHS``,
+    ``CLOUDY_LINE_NAMES``, ``CLOUDY_LINE_WAVELENGTHS``,
+    ``STANDARD_INDICES``, ``SSP_LIBRARY_RESOLUTIONS``.
+- Sub-namespace bindings are ``is``-identical to the flat-surface
+  bindings (verified by ``test_observation_subnamespaces.py``).
+- ``LineList`` is now exported from ``tengri.observation`` directly
+  (was previously only reachable via top-level ``tengri.LineList``).
+- The flat ``tengri.observation.X`` surface is unchanged and emits
+  no DeprecationWarning. Phase B will collapse the flat re-exports
+  into deprecation shims pointing at the sub-namespaces after
+  Paper I submission.
+
+### Changed (Phase A — public-API housekeeping)
+
+- ``tengri.pipeline.__all__`` now re-exports
+  ``CloudyELineMarginalisedLikelihood``, ``ELineFittedLikelihood``,
+  and ``CalibrationELineMarginalisedLikelihood`` (28 → 31 names) —
+  the marginalised-likelihood cohort is fully discoverable from the
+  pipeline namespace.
+- ``build_loglikelihood_unbounded_fn`` (in
+  ``inference/loss_functions.py``) now composes directly around
+  ``_build_data_neg_log_likelihood_fn``, matching the shape of
+  ``build_loss_fn`` and ``build_loglikelihood_fn``. All three
+  wrappers share the same data-term core and cannot drift in sign,
+  formula, or branch coverage.
+
 ### Changed (CSP integral canonicalised on DSPS — Hearin+ 2021 Eq. 11)
 
 - Legacy ``compute_sed_components`` (in ``forward/pipeline.py``) no
