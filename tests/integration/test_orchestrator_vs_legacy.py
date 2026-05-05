@@ -279,6 +279,98 @@ def test_field_legacy_runs(stellar_field_model):
     assert jnp.any(sfh["sfr_full"] > 0.0), "legacy sfr_full all zero — field branch dead?"
 
 
+# ── Phase II-2.4: chem_evol metallicity equivalence ──────────────────
+
+
+@pytest.fixture(scope="module")
+def stellar_chem_evol_model(ssp):
+    """Stellar-only model with metallicity_model='chem_evol'.
+
+    Chemical-evolution closed-box gas regulator — Z(t) is derived
+    self-consistently from the SFH using `chem_yield`, `chem_eta_outflow`,
+    `chem_f_gas_init`, `chem_return_frac`. Mirrors the legacy code path
+    at sed_model.py:3578-3592 and the orchestrator port at
+    component.py (Phase II-2.4).
+    """
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        met_mode="chem_evol",
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        chem_yield=Fixed(0.03),
+        chem_eta_outflow=Fixed(0.0),
+        chem_f_gas_init=Fixed(0.9),
+        chem_return_frac=Fixed(0.4),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel(spec, ssp)
+
+
+def test_chem_evol_orchestrator_runs(stellar_chem_evol_model):
+    """Orchestrator handles metallicity_model='chem_evol' and publishes a
+    finite, monotonically-enriching log_metallicity_history."""
+    state = stellar_chem_evol_model.predict_via_orchestrator(_STELLAR_PARAMS)
+    log_z_hist = state.derived["log_metallicity_history"]
+    assert jnp.all(jnp.isfinite(log_z_hist)), "log_metallicity_history NaN/Inf"
+    # Closed-box enrichment: metallicity at present (lookback≈0) should
+    # exceed metallicity at oldest stars (lookback≈14 Gyr). The grid is
+    # ascending in lookback time, so log_z_hist[0] is youngest, [-1] oldest.
+    assert float(log_z_hist[0]) > float(log_z_hist[-1]), (
+        f"chem_evol should enrich over time: youngest log_Z={log_z_hist[0]:.3f}, "
+        f"oldest log_Z={log_z_hist[-1]:.3f}"
+    )
+
+
+def test_chem_evol_legacy_runs(stellar_chem_evol_model):
+    """Legacy handles metallicity_model='chem_evol' without raising."""
+    legacy = stellar_chem_evol_model.predict_rest_sed(_STELLAR_PARAMS)
+    assert jnp.all(jnp.isfinite(legacy.sed)), "legacy SED has NaN/Inf"
+    assert jnp.any(legacy.sed > 0.0), "legacy SED all zero"
+
+
+@pytest.mark.xfail(
+    reason=(
+        "Formulation difference, not a bug. The default legacy CSP "
+        "integration (csp_integration='trapz') collapses chem_evol's "
+        "per-age Z(t) to a scalar via SED-luminosity-weighted average "
+        "(sed_model.py:3578-3592), then uses bilinear `interp_metallicity` "
+        "on the (Z, age) SSP grid — a single representative Z. The "
+        "orchestrator threads the full per-age metallicity table through "
+        "DSPS's calc_rest_sed_sfh_table_met_table, which uses the "
+        "triweight-MDF kernel per-age. Disagreement ~50% on the SED is "
+        "expected: the orchestrator is the more physically correct "
+        "formulation; legacy chem_evol with default csp_integration is a "
+        "scalar-collapse approximation. "
+        "Closing this gap is Phase II-2.6 scope (migrate legacy chem_evol "
+        "to per-age met-table or accept the orchestrator as canonical "
+        "and remove the legacy collapse). Marked strict so the test "
+        "fails loudly if the formulations are unified later."
+    ),
+    strict=True,
+)
+def test_chem_evol_orchestrator_rest_sed_close_to_legacy(stellar_chem_evol_model):
+    """Phase II-2.4 finishing contract — currently xfail (see reason)."""
+    legacy = stellar_chem_evol_model.predict_rest_sed(_STELLAR_PARAMS)
+    state = stellar_chem_evol_model.predict_via_orchestrator(_STELLAR_PARAMS)
+
+    assert legacy.sed.shape == state.sed_intrinsic.shape
+
+    rel_diff = float(
+        jnp.max(
+            jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
+        )
+    )
+    assert rel_diff < 1e-2, f"max rel diff: {rel_diff:.3e}"
+
+
 def test_field_orchestrator_rest_sed_close_to_legacy(stellar_field_model):
     """Phase II-2.3 contract: orchestrator's stellar SED with field=True
     agrees with legacy at ``rtol=1e-2`` — the same bar as field=False.

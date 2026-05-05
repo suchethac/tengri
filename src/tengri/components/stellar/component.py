@@ -274,12 +274,14 @@ class StellarSEDComponent:
                 f"are deferred — they need vector-valued parameters with "
                 f"separate registry plumbing)."
             )
-        if self.config.metallicity_model not in ("delta", "ramp"):
+        if self.config.metallicity_model not in ("delta", "ramp", "chem_evol"):
             raise NotImplementedError(
                 f"metallicity_model={self.config.metallicity_model!r} not yet "
-                f"implemented (Phase II-2.2 supports 'delta'; II-2.4 adds "
-                f"'ramp'; 'chem_evol', 'two_step', 'bins', 'tabulated' "
-                f"are deferred to follow-up sub-PRs)."
+                f"implemented (Phase II-2.4 supports 'delta', 'ramp', 'chem_evol'; "
+                f"'two_step', 'psb_two_step', 'bins', 'bins_continuity', 'table' "
+                f"are deferred — they exist as math primitives in "
+                f"components/stellar/sfh/metallicity_history.py but are not "
+                f"wired into the legacy CSP forward pass either)."
             )
         # config.field is supported as of Phase II-2.3 (see step 2b below).
 
@@ -354,12 +356,14 @@ class StellarSEDComponent:
         # ── 4. Metallicity history Z(t) on SFH grid + per-SSP-age ───────
         # delta: scalar absolute log10(Z), constant in time.
         # ramp: linear interpolation between two endpoints.
+        # chem_evol: closed-box gas regulator — Z(t) derived from SFH self-
+        # consistently (Phase II-2.4). Mirrors legacy sed_model.py:3578-3592.
         if self.config.metallicity_model == "delta":
             log_z_abs_scalar = jnp.asarray(params["met_logzsol"]) + LOG10_ZSUN
             log_metallicity_history = jnp.full(n_grid, log_z_abs_scalar)
             lgmet_on_ssp_ages = jnp.full_like(ssp_ages_yr, log_z_abs_scalar)
             log_z_for_mr = log_z_abs_scalar
-        else:  # ramp
+        elif self.config.metallicity_model == "ramp":
             log_z_init_abs = jnp.asarray(params["met_logzsol_0"]) + LOG10_ZSUN
             log_z_final_abs = jnp.asarray(params["met_logzsol_final"]) + LOG10_ZSUN
             # Build the per-age metallicity ramp on both grids (SFH grid for
@@ -374,6 +378,45 @@ class StellarSEDComponent:
             # For mass-remaining interpolation use the present-day metallicity
             # (newest stars dominate the mass-loss correction).
             log_z_for_mr = log_z_final_abs
+        else:  # chem_evol
+            from tengri.components.stellar.sfh.chemical_evolution import (
+                chem_evol_metallicity_on_ssp_grid,
+                closed_box_metallicity,
+            )
+
+            yield_y = float(params.get("chem_yield", 0.03))
+            eta_outflow = float(params.get("chem_eta_outflow", 0.0))
+            f_gas_init = float(params.get("chem_f_gas_init", 0.9))
+            return_frac = float(params.get("chem_return_frac", 0.4))
+
+            # Per-age metallicity on the SSP grid — mirrors legacy
+            # sed_model.py:3583. Uses log10(age/yr) on both grids; the
+            # SSP grid is ssp.ssp_lg_age_gyr + 9.0.
+            ssp_log_ages_yr = ssp.ssp_lg_age_gyr + 9.0
+            lgmet_on_ssp_ages = chem_evol_metallicity_on_ssp_grid(
+                ssp_log_ages_yr,
+                log_age_grid,
+                sfr_history,
+                yield_y=yield_y,
+                eta_outflow=eta_outflow,
+                f_gas_init=f_gas_init,
+                return_frac=return_frac,
+            )
+            # Z(t) on the SFH grid for diagnostics — closed_box_metallicity
+            # returns log10(Z/Zsun); add LOG10_ZSUN for absolute log10(Z).
+            log_metallicity_history = (
+                closed_box_metallicity(
+                    sfh_lbt_grid,
+                    sfr_history,
+                    yield_y=yield_y,
+                    eta_outflow=eta_outflow,
+                    f_gas_init=f_gas_init,
+                    return_frac=return_frac,
+                )
+                + LOG10_ZSUN
+            )
+            # Mass-remaining interpolation: use present-day Z (youngest SSP age).
+            log_z_for_mr = lgmet_on_ssp_ages[0]
 
         # ── 6. CSP integral via DSPS ────────────────────────────────────
         # We call DSPS directly and use ``result.weights`` — the JOINT
@@ -401,7 +444,7 @@ class StellarSEDComponent:
                 ssp_flux=ssp.ssp_flux,
                 t_obs=t_obs_gyr,
             )
-        else:  # ramp — per-age metallicity table
+        else:  # ramp / chem_evol — per-age metallicity table
             from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
 
             dsps_result = calc_rest_sed_sfh_table_met_table(
