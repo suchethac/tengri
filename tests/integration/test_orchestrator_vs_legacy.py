@@ -279,6 +279,179 @@ def test_field_legacy_runs(stellar_field_model):
     assert jnp.any(sfh["sfr_full"] > 0.0), "legacy sfr_full all zero — field branch dead?"
 
 
+# ── Phase II-2.5: non-parametric SFH modes ───────────────────────────
+
+
+@pytest.fixture(scope="module")
+def stellar_dirichlet_model(ssp):
+    """Stellar-only model with non-parametric Dirichlet SFH (Leja+2017)."""
+    spec = Parameters(
+        mean_sfh_type=["dirichlet"],
+        sfh_dir_log_total_mass=Uniform(8.0, 12.0),
+        sfh_dir_z_0=Uniform(0.01, 0.99),
+        sfh_dir_z_1=Uniform(0.01, 0.99),
+        sfh_dir_z_2=Uniform(0.01, 0.99),
+        sfh_dir_z_3=Uniform(0.01, 0.99),
+        sfh_dir_z_4=Uniform(0.01, 0.99),
+        sfh_dir_z_5=Uniform(0.01, 0.99),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel(spec, ssp)
+
+
+_DIRICHLET_PARAMS = {
+    "sfh_dir_log_total_mass": 10.5,
+    "sfh_dir_z_0": 0.2,
+    "sfh_dir_z_1": 0.3,
+    "sfh_dir_z_2": 0.4,
+    "sfh_dir_z_3": 0.5,
+    "sfh_dir_z_4": 0.6,
+    "sfh_dir_z_5": 0.7,
+}
+
+
+def test_dirichlet_orchestrator_runs(stellar_dirichlet_model):
+    """Orchestrator handles dirichlet SFH: finite sfr_history with positive bins."""
+    state = stellar_dirichlet_model.predict_via_orchestrator(_DIRICHLET_PARAMS)
+    sfr = state.derived["sfr_history"]
+    assert jnp.all(jnp.isfinite(sfr)), "dirichlet sfr_history NaN/Inf"
+    assert jnp.any(sfr > 0.0), "dirichlet sfr_history all zero"
+
+
+def test_dirichlet_legacy_runs(stellar_dirichlet_model):
+    """Legacy handles dirichlet SFH without raising."""
+    legacy = stellar_dirichlet_model.predict_rest_sed(_DIRICHLET_PARAMS)
+    assert jnp.all(jnp.isfinite(legacy.sed)), "legacy dirichlet SED NaN/Inf"
+    assert jnp.any(legacy.sed > 0.0), "legacy dirichlet SED all zero"
+
+
+def test_dirichlet_orchestrator_rest_sed_close_to_legacy(stellar_dirichlet_model):
+    """Phase II-2.5 contract: orchestrator's stellar SED with dirichlet SFH
+    agrees with legacy at ``rtol=5e-2`` — slightly looser than the
+    ``rtol=1e-2`` tsnorm/dpl bar because piecewise-constant SFHs
+    amplify the SFH-integration mismatch from the unrelated CSP
+    canonicalisation work tracked in
+    ``docs/dev/20260504-csp-integral-canonicalization.md``.
+
+    Both paths dispatch through ``SFH_REGISTRY["dirichlet"].fn``
+    (the bare ``dirichlet`` function) with the same internal kwargs
+    derived from the registry's ``internal_param_map``. The orchestrator
+    drives the dispatch directly; legacy drives it through
+    ``resolve_sfh`` which composes a wrapper. Closing the gap to
+    ``rtol=1e-3`` is contingent on migrating the legacy SFH integration
+    onto DSPS canonical trapezoidal-in-cosmic-time.
+    """
+    legacy = stellar_dirichlet_model.predict_rest_sed(_DIRICHLET_PARAMS)
+    state = stellar_dirichlet_model.predict_via_orchestrator(_DIRICHLET_PARAMS)
+
+    assert legacy.sed.shape == state.sed_intrinsic.shape
+
+    rel_diff = float(
+        jnp.max(
+            jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
+        )
+    )
+    assert rel_diff < 5e-2, f"max rel diff: {rel_diff:.3e}"
+
+
+@pytest.fixture(scope="module")
+def stellar_continuity_model(ssp):
+    """Stellar-only model with non-parametric continuity SFH (Leja+2019)."""
+    spec = Parameters(
+        mean_sfh_type=["continuity"],
+        sfh_cont_log_total_mass=Uniform(8.0, 12.0),
+        sfh_cont_ratio_0=Uniform(-1.0, 1.0),
+        sfh_cont_ratio_1=Uniform(-1.0, 1.0),
+        sfh_cont_ratio_2=Uniform(-1.0, 1.0),
+        sfh_cont_ratio_3=Uniform(-1.0, 1.0),
+        sfh_cont_ratio_4=Uniform(-1.0, 1.0),
+        sfh_cont_ratio_5=Uniform(-1.0, 1.0),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel(spec, ssp)
+
+
+_CONTINUITY_PARAMS = {
+    "sfh_cont_log_total_mass": 10.5,
+    "sfh_cont_ratio_0": 0.1,
+    "sfh_cont_ratio_1": 0.0,
+    "sfh_cont_ratio_2": -0.2,
+    "sfh_cont_ratio_3": 0.3,
+    "sfh_cont_ratio_4": -0.1,
+    "sfh_cont_ratio_5": 0.0,
+}
+
+
+def test_continuity_orchestrator_rest_sed_close_to_legacy(stellar_continuity_model):
+    """Phase II-2.5 contract: continuity SFH parity at ``rtol=5e-2``."""
+    legacy = stellar_continuity_model.predict_rest_sed(_CONTINUITY_PARAMS)
+    state = stellar_continuity_model.predict_via_orchestrator(_CONTINUITY_PARAMS)
+
+    assert legacy.sed.shape == state.sed_intrinsic.shape
+    rel_diff = float(
+        jnp.max(
+            jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
+        )
+    )
+    assert rel_diff < 5e-2, f"max rel diff: {rel_diff:.3e}"
+
+
+@pytest.fixture(scope="module")
+def stellar_dense_basis_model(ssp):
+    """Stellar-only model with non-parametric dense_basis SFH (Iyer+2017)."""
+    spec = Parameters(
+        mean_sfh_type=["dense_basis"],
+        sfh_db_log_total_mass=Uniform(8.0, 12.0),
+        sfh_db_log_sfr_inst=Uniform(-2.0, 3.0),
+        sfh_db_tx_frac_0=Uniform(0.05, 0.95),
+        sfh_db_tx_frac_1=Uniform(0.05, 0.95),
+        sfh_db_tx_frac_2=Uniform(0.05, 0.95),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel(spec, ssp)
+
+
+_DENSE_BASIS_PARAMS = {
+    "sfh_db_log_total_mass": 10.5,
+    "sfh_db_log_sfr_inst": 0.5,
+    "sfh_db_tx_frac_0": 0.25,
+    "sfh_db_tx_frac_1": 0.50,
+    "sfh_db_tx_frac_2": 0.75,
+}
+
+
+def test_dense_basis_orchestrator_rest_sed_close_to_legacy(stellar_dense_basis_model):
+    """Phase II-2.5 contract: dense_basis SFH parity at ``rtol=5e-2``."""
+    legacy = stellar_dense_basis_model.predict_rest_sed(_DENSE_BASIS_PARAMS)
+    state = stellar_dense_basis_model.predict_via_orchestrator(_DENSE_BASIS_PARAMS)
+
+    assert legacy.sed.shape == state.sed_intrinsic.shape
+    rel_diff = float(
+        jnp.max(
+            jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
+        )
+    )
+    assert rel_diff < 5e-2, f"max rel diff: {rel_diff:.3e}"
+
+
 # ── Phase II-2.4: chem_evol metallicity equivalence ──────────────────
 
 

@@ -36,7 +36,6 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.stellar.sfh.gp_sfh import make_log_age_grid
-from tengri.components.stellar.sfh.mean_sfh import dpl, truncated_skewnormal
 from tengri.components.stellar.sps.dsps_wrapper import (
     LSUN_ERG_PER_S,
     SSPData,
@@ -266,13 +265,19 @@ class StellarSEDComponent:
                 "StellarSEDComponent.apply requires ssp_data set on the component. "
                 "Pass it at construction: StellarSEDComponent(ssp_data=ssp)."
             )
-        if self.config.sfh_model not in ("tsnorm", "dpl"):
+        # Phase II-2.5 ships the non-parametric forms via SFH_REGISTRY's
+        # internal_param_map. The supported set is: tsnorm, dpl,
+        # continuity, dirichlet, dense_basis. Others (snorm, lnorm, …)
+        # would also work via the same dispatch but are not part of the
+        # Phase II-2 scope; their equivalence has not been pinned.
+        _SUPPORTED_SFH = ("tsnorm", "dpl", "continuity", "dirichlet", "dense_basis")
+        if self.config.sfh_model not in _SUPPORTED_SFH:
             raise NotImplementedError(
-                f"sfh_model={self.config.sfh_model!r} not yet implemented "
-                f"(Phase II-2.2/II-2.5 supports 'tsnorm' and 'dpl'; "
-                f"non-parametric forms 'continuity'/'dirichlet'/'dense_basis' "
-                f"are deferred — they need vector-valued parameters with "
-                f"separate registry plumbing)."
+                f"sfh_model={self.config.sfh_model!r} not yet pinned by an "
+                f"orchestrator-vs-legacy equivalence test. Supported in "
+                f"Phase II-2.5: {_SUPPORTED_SFH}. Other registered modes "
+                f"may dispatch correctly via the registry path below but "
+                f"have not been verified against legacy."
             )
         if self.config.metallicity_model not in ("delta", "ramp", "chem_evol"):
             raise NotImplementedError(
@@ -302,26 +307,32 @@ class StellarSEDComponent:
         log_age_grid = make_log_age_grid(n_grid)
         sfh_lbt_grid = 10.0**log_age_grid
 
-        # ── 2. Evaluate mean SFH on grid (parametric models) ────────────
-        # Param names + Gyr→yr conversions match
-        # ``components/stellar/sfh/registry.py``'s internal_param_map.
-        if self.config.sfh_model == "tsnorm":
-            sfr_history = truncated_skewnormal(
-                sfh_lbt_grid,
-                jnp.asarray(params["sfh_tsnorm_log_peak_sfr"]),
-                jnp.asarray(params["sfh_tsnorm_peak_lbt_gyr"]) * 1e9,
-                jnp.asarray(params["sfh_tsnorm_width_gyr"]) * 1e9,
-                jnp.asarray(params["sfh_tsnorm_skew"]),
-                jnp.asarray(params["sfh_tsnorm_trunc"]),
-            )
-        else:  # dpl
-            sfr_history = dpl(
-                sfh_lbt_grid,
-                jnp.asarray(params["sfh_dpl_alpha"]),
-                jnp.asarray(params["sfh_dpl_beta"]),
-                jnp.asarray(params["sfh_dpl_tau_gyr"]) * 1e9,
-                jnp.asarray(params["sfh_dpl_log_peak_sfr"]),
-            )
+        # ── 2. Evaluate mean SFH on grid (registry-driven) ──────────────
+        # Translate user-facing public params → SFH-function kwargs via
+        # the registry's ``internal_param_map``: each entry is
+        # ``(internal_name, scale, offset)`` and the conversion is
+        # ``internal = public * scale + offset``. This is the same
+        # mechanism the legacy SEDModel uses (see
+        # ``forward/sed_model.py::_compute_sfr``), so the two paths see
+        # the same units and naming. Phase II-2.5 generalises Phase
+        # II-2.2's hardcoded tsnorm/dpl branches into one dispatch.
+        from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+        sfh_spec = SFH_REGISTRY[self.config.sfh_model]
+        sfh_kwargs = {}
+        for public_name, (internal_name, scale, offset) in sfh_spec.internal_param_map.items():
+            if public_name in params:
+                sfh_kwargs[internal_name] = jnp.asarray(params[public_name]) * scale + offset
+
+        # Mode-specific settings that are NOT free parameters.
+        # ``dense_basis`` needs an explicit ``age_universe_yr`` derived
+        # from the configured cosmology; default of 13.47 Gyr matches
+        # the registry setting (FlatLambdaCDM, H0=70, Omega_m=0.3, z=0).
+        if self.config.sfh_model == "dense_basis":
+            age_universe_gyr = sfh_spec.settings.get("sfh_db_age_universe_gyr", 13.47)
+            sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
+
+        sfr_history = sfh_spec.fn(sfh_lbt_grid, **sfh_kwargs)
 
         # ── 2b. GP-field modulation (Phase II-2.3) ──────────────────────
         # Multiplicative log-normal modulation: SFR_total = SFR_mean ×

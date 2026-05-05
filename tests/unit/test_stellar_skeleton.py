@@ -91,7 +91,9 @@ def test_apply_without_ssp_data_raises():
 
 @pytest.mark.unit
 def test_apply_unsupported_sfh_model_raises():
-    """II-2.2 supports tsnorm only; other modes raise NotImplementedError."""
+    """Phase II-2.5 supports tsnorm/dpl/continuity/dirichlet/dense_basis;
+    other registered modes (lnorm, snorm, ...) raise NotImplementedError
+    until their orchestrator-vs-legacy equivalence is pinned."""
     import jax.numpy as jnp
 
     from tengri.components.stellar.sps.dsps_wrapper import SSPData
@@ -102,13 +104,15 @@ def test_apply_unsupported_sfh_model_raises():
         ssp_lg_age_gyr=jnp.array([0.0]),
         ssp_lgmet=jnp.array([-2.0]),
     )
-    # 'continuity' is non-parametric — needs vector params, deferred past II-2.5.
+    # 'lnorm' (lognormal) is registered in SFH_REGISTRY but its parity
+    # against legacy has not been pinned by an equivalence test — the
+    # component refuses to dispatch.
     comp = StellarSEDComponent(
-        config=StellarSEDComponentConfig(sfh_model="continuity"),
+        config=StellarSEDComponentConfig(sfh_model="lnorm"),
         ssp_data=fake_ssp,
     )
     state = PipelineState(wave=fake_ssp.ssp_wave)
-    with pytest.raises(NotImplementedError, match="non-parametric forms"):
+    with pytest.raises(NotImplementedError, match="not yet pinned"):
         comp.apply(state, {})
 
 
