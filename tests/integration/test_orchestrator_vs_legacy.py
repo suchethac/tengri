@@ -707,7 +707,7 @@ def _stellar_only_spec(sfh_name: str, sfh_params: dict):
     )
 
 
-def _check_sfh_variant_equivalence(ssp, sfh_name: str, sfh_params: dict, rtol: float = 5e-2):
+def _check_sfh_variant_equivalence(ssp, sfh_name: str, sfh_params: dict, rtol: float = 2e-2):
     spec = _stellar_only_spec(sfh_name, sfh_params)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -858,7 +858,7 @@ def _stellar_only_spec_with_priors(sfh_name: str, priors: dict):
     )
 
 
-def _check_with_priors(ssp, sfh_name, priors, sfh_params, rtol=5e-2):
+def _check_with_priors(ssp, sfh_name, priors, sfh_params, rtol=2e-2):
     spec = _stellar_only_spec_with_priors(sfh_name, priors)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -969,6 +969,36 @@ def test_orchestrator_exp_close_to_legacy(ssp):
         "sfh_exp_tau_gyr": 2.0,
     }
     _check_with_priors(ssp, "exp", priors, sfh_params)
+
+
+def test_orchestrator_periodic_close_to_legacy(ssp):
+    """``periodic`` (Ciesla+ 2017 periodic burst SFH) — rtol=1e-1.
+
+    Multiple sharp burst rise/fall edges produce ~9% rtol residual,
+    similar to const_exp/psb. Closes to <1% with the SFH-side migration.
+    """
+    priors = {
+        "sfh_periodic_delta_bursts_gyr": Uniform(0.01, 1.0),
+        "sfh_periodic_tau_bursts_gyr": Uniform(0.001, 0.5),
+        "sfh_periodic_age_gyr": Uniform(0.5, 13.0),
+    }
+    sfh_params = {
+        "sfh_periodic_delta_bursts_gyr": 0.5,
+        "sfh_periodic_tau_bursts_gyr": 0.05,
+        "sfh_periodic_age_gyr": 5.0,
+    }
+    _check_with_priors(ssp, "periodic", priors, sfh_params, rtol=1e-1)
+
+
+def test_orchestrator_buat08_close_to_legacy(ssp):
+    """``buat08`` (Buat+ 2008 velocity-parameterised SFH) — rtol=5e-2."""
+    priors = {
+        "sfh_buat08_velocity_km_s": Uniform(80.0, 360.0),
+    }
+    sfh_params = {
+        "sfh_buat08_velocity_km_s": 200.0,
+    }
+    _check_with_priors(ssp, "buat08", priors, sfh_params)
 
 
 def test_orchestrator_dexp_close_to_legacy(ssp):

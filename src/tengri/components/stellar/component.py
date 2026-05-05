@@ -311,6 +311,9 @@ class StellarSEDComponent:
             "exp",
             "dexp",
             "tau",
+            # Phase II-2.5d: bursty / velocity-parameterised variants.
+            "periodic",
+            "buat08",
         )
         if self.config.sfh_model not in _SUPPORTED_SFH:
             raise NotImplementedError(
