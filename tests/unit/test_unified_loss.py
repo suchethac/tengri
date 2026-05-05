@@ -99,12 +99,6 @@ def _make_fitter(user_likelihood=None, data_mask=None):
         _user_likelihood=user_likelihood,
     )
 
-    # build_loglikelihood_unbounded_fn calls fitter._get_or_build_loglikelihood_fn
-    # to share the cached physical-space loglik. Wire that to build_loglikelihood_fn.
-    def _get_or_build_loglikelihood_fn(mode="_traceable"):
-        return build_loglikelihood_fn(fitter, mode=mode)
-
-    fitter._get_or_build_loglikelihood_fn = _get_or_build_loglikelihood_fn
     return fitter, fnu_obs, fnu_err, fnu_pred
 
 
