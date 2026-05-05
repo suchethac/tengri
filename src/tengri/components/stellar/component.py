@@ -299,6 +299,18 @@ class StellarSEDComponent:
             "psb",
             "delayed_bq",
             "dense_basis_pure",
+            # Phase II-2.5c: sharp-cutoff exponentials. These dispatch
+            # correctly via the registry path but diverge from legacy
+            # at rtol≥1e-1 because legacy interpolates SFR in log-space
+            # while orchestrator interpolates in linear-space — the
+            # ``sfh_*_start_gyr`` / ``sfh_tau_age_gyr`` cutoff is
+            # resolved differently. Closes when the legacy SFH
+            # integration migrates to DSPS canonical
+            # trapezoidal-in-cosmic-time. Pinned as xfail-strict in
+            # ``tests/integration/test_orchestrator_vs_legacy.py``.
+            "exp",
+            "dexp",
+            "tau",
         )
         if self.config.sfh_model not in _SUPPORTED_SFH:
             raise NotImplementedError(

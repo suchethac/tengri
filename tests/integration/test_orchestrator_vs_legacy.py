@@ -948,3 +948,69 @@ def test_orchestrator_continuity_flex_close_to_legacy(ssp):
             "sfh_cflex_ratio_old": 0.0,
         },
     )
+
+
+# ── Phase II-2.5c: sharp-cutoff exponential SFH variants ──────────────
+
+
+def test_orchestrator_exp_close_to_legacy(ssp):
+    """``exp`` (exponential) — agrees at rtol=5e-2 when ``start_gyr``
+    is at its default Fixed(0) (no sharp cutoff). Variants with
+    non-zero ``sfh_exp_start_gyr`` would expose the legacy log-space
+    vs orchestrator linear-space SFR interpolation residual at the
+    cutoff edge, which closes only with the SFH-side CSP migration.
+    """
+    priors = {
+        "sfh_exp_log_peak_sfr": Uniform(-1.0, 3.0),
+        "sfh_exp_tau_gyr": Uniform(0.1, 10.0),
+    }
+    sfh_params = {
+        "sfh_exp_log_peak_sfr": 1.0,
+        "sfh_exp_tau_gyr": 2.0,
+    }
+    _check_with_priors(ssp, "exp", priors, sfh_params)
+
+
+def test_orchestrator_dexp_close_to_legacy(ssp):
+    """``dexp`` (delayed exponential) — same caveat as ``exp``."""
+    priors = {
+        "sfh_dexp_log_peak_sfr": Uniform(-1.0, 3.0),
+        "sfh_dexp_tau_gyr": Uniform(0.1, 10.0),
+    }
+    sfh_params = {
+        "sfh_dexp_log_peak_sfr": 1.0,
+        "sfh_dexp_tau_gyr": 2.0,
+    }
+    _check_with_priors(ssp, "dexp", priors, sfh_params)
+
+
+@pytest.mark.xfail(
+    reason=(
+        "``tau`` (declining exponential, FSPS sfh=1 / bagpipes "
+        "'exponential') has a hard SFH cutoff at "
+        "``lookback_time = sfh_tau_age_gyr``. Legacy interpolates SFR "
+        "in log-space; orchestrator interpolates in linear-space. The "
+        "two resolve the cutoff edge differently, producing ~13% "
+        "per-wavelength SED divergence at typical parameter values "
+        "(rtol = 1.3e-1 for log_peak=1, tau=2 Gyr, age=5 Gyr). The "
+        "residual closes when the legacy SFH integration migrates to "
+        "DSPS canonical trapezoidal-in-cosmic-time — tracked in "
+        "``docs/dev/20260504-csp-integral-canonicalization.md``. "
+        "Marked strict so the test fails loudly when the migration "
+        "lands and parity holds."
+    ),
+    strict=True,
+)
+def test_orchestrator_tau_close_to_legacy(ssp):
+    """``tau`` SFH parity — currently xfail-strict (see reason)."""
+    priors = {
+        "sfh_tau_log_peak_sfr": Uniform(-1.0, 3.0),
+        "sfh_tau_tau_gyr": Uniform(0.1, 10.0),
+        "sfh_tau_age_gyr": Uniform(0.5, 13.0),
+    }
+    sfh_params = {
+        "sfh_tau_log_peak_sfr": 1.0,
+        "sfh_tau_tau_gyr": 2.0,
+        "sfh_tau_age_gyr": 5.0,
+    }
+    _check_with_priors(ssp, "tau", priors, sfh_params)
