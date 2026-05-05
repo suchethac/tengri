@@ -209,3 +209,106 @@ def test_orchestrator_rest_sed_bit_exact_to_legacy(stellar_only_model):
         )
     )
     assert rel_diff < 1e-6, f"max rel diff: {rel_diff:.3e}"
+
+
+# ── Phase II-2.3: stochastic GP field equivalence ────────────────────
+
+
+_FIELD_N_GRID = 64
+
+
+@pytest.fixture(scope="module")
+def stellar_field_model(ssp):
+    """Stellar-only model with field=True (PSD-governed GP modulation).
+
+    Adds ``"field"`` to ``mean_sfh_type`` to enable the stochastic
+    branch in both legacy and orchestrator paths. The GP-draw vector
+    ``sfh_field_xi`` is supplied at *call time* in ``_STELLAR_FIELD_PARAMS``
+    (it's a runtime input rather than a ``Fixed`` prior; see
+    :mod:`tengri.parameters.translate`).
+    """
+    spec = Parameters(
+        mean_sfh_type=["tsnorm", "field"],
+        n_grid=_FIELD_N_GRID,
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        sfh_field_psd_sigma=Uniform(0.05, 0.5),
+        sfh_field_psd_tau_myr=Uniform(50.0, 500.0),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel(spec, ssp)
+
+
+def _field_params():
+    """Build a deterministic GP-draw payload used by every field test."""
+    import numpy as np
+
+    rng = np.random.default_rng(seed=42)
+    return {
+        **_STELLAR_PARAMS,
+        "sfh_field_psd_sigma": 0.2,
+        "sfh_field_psd_tau_myr": 200.0,
+        "sfh_field_xi": jnp.asarray(rng.standard_normal(_FIELD_N_GRID)),
+    }
+
+
+_STELLAR_FIELD_PARAMS = _field_params()
+
+
+def test_field_orchestrator_runs(stellar_field_model):
+    """Orchestrator handles field=True without raising and produces finite SFH."""
+    state = stellar_field_model.predict_via_orchestrator(_STELLAR_FIELD_PARAMS)
+    sfr_history = state.derived["sfr_history"]
+    assert jnp.all(jnp.isfinite(sfr_history)), "sfr_history contains NaN/Inf"
+    assert jnp.any(sfr_history > 0.0), "sfr_history is all zero — field branch dead?"
+
+
+def test_field_legacy_runs(stellar_field_model):
+    """Legacy handles field=True without raising and produces finite SFH."""
+    sfh = stellar_field_model.predict_sfh(_STELLAR_FIELD_PARAMS)
+    assert jnp.all(jnp.isfinite(sfh["sfr_full"])), "legacy sfr_full contains NaN/Inf"
+    assert jnp.any(sfh["sfr_full"] > 0.0), "legacy sfr_full all zero — field branch dead?"
+
+
+@pytest.mark.xfail(
+    reason=(
+        "Phase II-2.3 finishing work: orchestrator's stellar SED with "
+        "field=True diverges from legacy's predict_rest_sed.sed by ~13% "
+        "(rtol=1.3e-1) — far worse than the ~0.2% field=False bar. "
+        "The component implementation supports field=True (component.py "
+        "lines 313–331) and the SFH-side `compute_field_gp` import is "
+        "shared verbatim with legacy, but the SED-side outputs differ "
+        "by orders of magnitude beyond the field=False inheritance from "
+        "the SFH-integration mismatch. Investigation needed: is the "
+        "lognormal-bias correction k0_half normalisation interpreted "
+        "consistently, or does the orchestrator's resampling of the GP "
+        "draw onto the SSP age grid in component.py:334 differ from "
+        "legacy's path? This xfail marks the finding rather than "
+        "claiming false success. Closing it is the gating criterion "
+        "for Phase II-2.6 stellar+dust+IGM cutover."
+    ),
+    strict=True,
+)
+def test_field_orchestrator_rest_sed_close_to_legacy(stellar_field_model):
+    """Phase II-2.3 contract: orchestrator's stellar SED with field=True
+    must agree with legacy at ``rtol=1e-2`` (the same bar as field=False)."""
+    legacy = stellar_field_model.predict_rest_sed(_STELLAR_FIELD_PARAMS)
+    state = stellar_field_model.predict_via_orchestrator(_STELLAR_FIELD_PARAMS)
+
+    assert legacy.sed.shape == state.sed_intrinsic.shape
+
+    rel_diff = float(
+        jnp.max(
+            jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
+        )
+    )
+    assert rel_diff < 1e-2, f"max rel diff: {rel_diff:.3e}"
