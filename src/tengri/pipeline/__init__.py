@@ -71,7 +71,10 @@ from tengri.forward.orchestrator import (
 )
 from tengri.inference.composite_likelihood import CompositeLikelihood
 from tengri.inference.likelihoods.marginalised import (
+    CalibrationELineMarginalisedLikelihood,
     CalibrationMarginalisedLikelihood,
+    CloudyELineMarginalisedLikelihood,
+    ELineFittedLikelihood,
     ELineMarginalisedLikelihood,
 )
 from tengri.inference.likelihoods.protocol import (
@@ -86,11 +89,14 @@ from tengri.observation.photometry_model import PhotometryObservationModel
 
 __all__ = [
     "BARE_NAME_ALLOWLIST",
+    "CalibrationELineMarginalisedLikelihood",
     "CalibrationMarginalisedLikelihood",
     "CensoredLikelihood",
+    "CloudyELineMarginalisedLikelihood",
     "CompositeLikelihood",
     "DustAttenuationSEDComponent",
     "DustEmissionSEDComponent",
+    "ELineFittedLikelihood",
     "ELineMarginalisedLikelihood",
     "GaussianLikelihood",
     "IGMSEDComponent",

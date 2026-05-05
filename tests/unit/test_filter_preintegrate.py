@@ -63,7 +63,9 @@ def test_preintegrate_redshift_shifts_filter_alignment(ssp):
     v0 = float(z0[-1, -1, 0])
     v1 = float(z1[-1, -1, 0])
     ratio = max(v0, v1) / max(min(v0, v1), 1e-40)
-    assert ratio > 1.5, f"z=0 and z=1 should differ by >1.5×; got {ratio:.2f}× ({v0:.3e} vs {v1:.3e})"
+    assert ratio > 1.5, (
+        f"z=0 and z=1 should differ by >1.5×; got {ratio:.2f}× ({v0:.3e} vs {v1:.3e})"
+    )
 
 
 def test_preintegrate_compression_factor(ssp):

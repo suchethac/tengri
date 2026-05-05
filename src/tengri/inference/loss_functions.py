@@ -483,17 +483,26 @@ def build_loglikelihood_unbounded_fn(fitter, mode="_traceable"):
     -------
     callable
         ``loglik_unbounded(params_unbounded, data_args) -> scalar``
+
+    Notes
+    -----
+    Composes directly around :func:`_build_data_neg_log_likelihood_fn`,
+    matching the shape of :func:`build_loss_fn` and
+    :func:`build_loglikelihood_fn`. All three wrappers share the same
+    data-term core so they cannot drift in sign / formula / branch
+    coverage.
     """
-    loglik_fn = fitter._get_or_build_loglikelihood_fn(mode=mode)
     free_names = fitter._free_names
     fixed_values = fitter._fixed_values
     spec = fitter.spec
+    stochastic = spec.stochastic
+    neg_log_lik = _build_data_neg_log_likelihood_fn(fitter, mode=mode)
 
     def loglik_unbounded(params_unbounded, data_args):
         """Compute log-likelihood after unstandardizing unbounded parameters to physical space."""
         params = _unstandardize_parameters(
-            params_unbounded, spec, free_names, fixed_values, spec.stochastic
+            params_unbounded, spec, free_names, fixed_values, stochastic
         )
-        return loglik_fn(params, data_args)
+        return -neg_log_lik(params, data_args)
 
     return loglik_unbounded
