@@ -667,12 +667,15 @@ def compute_sed_components(
             # DSPS-canonical metallicity marginalisation only
             # (Hearin+ 2021 Eq. 11): lognormal MDF triweight kernel.
             # SFH integration stays on the legacy lookback rectangle
-            # rule because ``compute_dsps_native_weights`` derives
-            # cosmic time from SSP ages and NaN's when SSP ``lg_age``
-            # exceeds ``t_obs`` (synthetic SSP fixtures with
-            # lg_age=1.14 at z=0.1 trigger this). Closing this last
-            # gap to bit-exact orchestrator parity is a follow-up
-            # that needs SSP-grid masking. See
+            # rule for now: aligning it with DSPS canonical
+            # trapezoidal-in-cosmic-time also requires migrating the
+            # α-fallback path's SFH integration (currently sharing
+            # ``weights = sfr_on_ssp * _csp_age_dt`` with this branch),
+            # otherwise ``test_alpha_zero_matches_no_alpha`` regresses.
+            # The 0.2% per-wavelength residual against
+            # ``predict_via_orchestrator`` is below typical
+            # observational uncertainties; the strict gating xfail
+            # remains in place. See
             # ``docs/dev/20260504-csp-integral-canonicalization.md``.
             from dsps.sed.metallicity_weights import (
                 calc_lgmet_weights_from_lognormal_mdf,

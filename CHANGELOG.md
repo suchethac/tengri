@@ -38,6 +38,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     the full per-age table through ``calc_rest_sed_sfh_table_met_table``.
     The two are different formulations.
 
+### Added (compute_dsps_age_weights helper for future SFH-side migration)
+
+- New ``tengri.components.stellar.sps.dsps_wrapper.compute_dsps_age_weights(
+  sfr_on_ssp_ages, ssp_ages_yr, ssp_lg_age_gyr, t_obs_gyr)``
+  helper computes the SFH→age weight tensor (Hearin+ 2021 Eq. 9)
+  in absolute mass units, without the metallicity dispatch. Mirrors
+  the negative-cosmic-time safety from ``compute_dsps_native_weights``
+  (T_TABLE_MIN ramp + zero SFR for invalid bins).
+- Building block for the next-step SFH-side canonicalisation.
+  **Not yet wired into the legacy CSP path** — doing that cleanly
+  requires also migrating the JIT-fused Tier 2 kernels
+  (``_compositional.rest_sed`` / ``_compositional.photometry`` /
+  hybrid-spec) and regenerating golden-value snapshots, which is a
+  multi-PR effort. Available now for any caller that wants
+  explicit DSPS-canonical age weighting.
+
 ### Fixed (compute_dsps_native_weights NaN robustness for too-old SSPs)
 
 - ``compute_dsps_native_weights`` now safely handles SSP grids

@@ -518,6 +518,89 @@ def compute_dsps_native_weights(
     return age_weights_msun, ssp_flux_at_z
 
 
+def compute_dsps_age_weights(
+    sfr_on_ssp_ages: jnp.ndarray,
+    ssp_ages_yr: jnp.ndarray,
+    ssp_lg_age_gyr: jnp.ndarray,
+    t_obs_gyr: float,
+) -> jnp.ndarray:
+    r"""DSPS-canonical age weights only (no metallicity dispatch).
+
+    Produces the SFH→age weight tensor (Hearin+ 2021 Eq. 9) on the
+    SSP age grid in absolute mass units (Msun per age bin), without
+    doing the metallicity marginalisation. Useful when the caller
+    runs an independent metallicity dispatch (bilinear on a 4D
+    α-grid, ramp, chem-evol, etc.) and only needs DSPS-canonical
+    SFH integration.
+
+    Implements the same negative-cosmic-time safety as
+    :func:`compute_dsps_native_weights` (invalid SSP bins masked
+    via ``T_TABLE_MIN`` ramp + zero SFR).
+
+    Parameters
+    ----------
+    sfr_on_ssp_ages : array, shape (n_age,)
+        Star formation rate (Msun/yr) at each SSP lookback age,
+        sorted **ascending by age** (youngest = index 0).
+    ssp_ages_yr : array, shape (n_age,)
+        SSP lookback ages in years (ascending).
+    ssp_lg_age_gyr : array, shape (n_age,)
+        log10(age/Gyr) of SSP templates (DSPS convention).
+    t_obs_gyr : float
+        Age of the universe in Gyr at the observation redshift.
+
+    Returns
+    -------
+    age_weights_msun : ndarray, shape (n_age,)
+        Mass formed per SSP age bin (Msun), sorted ascending by age.
+        Sum = total stellar mass formed.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Differentiable**: yes — pure JAX,
+    no shape changes from inputs.
+
+    References
+    ----------
+    .. [1] Hearin et al. 2021, "DSPS: Differentiable Stellar
+       Population Synthesis", arXiv:2112.06830, Eq. 9.
+    """
+    try:
+        from dsps.sed.ssp_weights import calc_age_weights_from_sfh_table
+    except ImportError:
+        raise ImportError(
+            "dsps is required for DSPS-canonical age weights. Install with: pip install dsps"
+        ) from None
+
+    ssp_age_gyr = ssp_ages_yr / 1e9
+    t_cosmic_raw = t_obs_gyr - ssp_age_gyr
+
+    # NaN-safety: floor + invalid-bin ramp (see compute_dsps_native_weights).
+    T_TABLE_MIN = 0.01  # Gyr; matches dsps.constants.T_TABLE_MIN
+    n_ssp = ssp_ages_yr.shape[0]
+    t_cosmic_floor = jnp.maximum(t_cosmic_raw, T_TABLE_MIN)
+    valid = t_cosmic_raw > 0.0
+    valid_asc = valid[::-1]
+    t_cosmic_asc_raw = t_cosmic_floor[::-1]
+    sfr_asc_raw = sfr_on_ssp_ages[::-1]
+    n_invalid = jnp.sum(~valid_asc)
+    idx = jnp.arange(n_ssp)
+    is_invalid_pos = idx < n_invalid
+    ramp = T_TABLE_MIN + (T_TABLE_MIN * 0.5) * (idx + 1) / jnp.maximum(n_invalid, 1)
+    t_cosmic_asc = jnp.where(is_invalid_pos, ramp, t_cosmic_asc_raw)
+    sfr_asc = jnp.where(is_invalid_pos, 0.0, sfr_asc_raw)
+
+    # DSPS canonical trapezoidal-in-cosmic-time SFH integration.
+    age_weights_norm = calc_age_weights_from_sfh_table(
+        gal_t_table=t_cosmic_asc,
+        gal_sfr_table=sfr_asc,
+        ssp_lg_age_gyr=ssp_lg_age_gyr,
+        t_obs=t_obs_gyr,
+    )
+    total_mass = jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9)
+    return age_weights_norm * jnp.maximum(total_mass, 0.0)
+
+
 def compute_dsps_met_table_weights(
     sfr_on_ssp_ages: jnp.ndarray,
     lgmet_on_ssp_ages: jnp.ndarray,
