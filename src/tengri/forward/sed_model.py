@@ -2882,6 +2882,75 @@ class SEDModel:
 
         return state_to_ionizing_quantities(self.predict_via_orchestrator(params))
 
+    def predict_photometry_via_orchestrator(self, params):
+        """Photometry through the orchestrator path.
+
+        Runs the SEDComponent chain on the model's configuration,
+        then projects the resulting rest-frame SED through every
+        filter in :attr:`self.observation.photometry`. Returns flux
+        densities in the AB system at the source.
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict (same shape as
+            :meth:`predict_via_orchestrator`).
+
+        Returns
+        -------
+        flux_density : ndarray, shape (n_filters,)
+            Observed flux densities [erg/s/cm²/Hz].
+
+        Raises
+        ------
+        ValueError
+            If no photometric filters are configured on the
+            observation.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — uses :func:`jax.jit`-friendly
+        :func:`tengri.observation.photometry.compute_flux_density`
+        per filter.
+
+        Differs from the legacy :meth:`predict_photometry`: this
+        path goes through the SEDComponent orchestrator (no fused
+        kernel dispatch); for inference workflows where you compile
+        once and run thousands of times, the warm latency is
+        equivalent (~2 ms). For one-shot photometry the legacy path
+        with its tier-1/tier-2 fast paths is still faster.
+        """
+        if not self.observation.can_do_photometry:
+            raise ValueError(
+                "predict_photometry_via_orchestrator requires photometric "
+                "filters configured on the observation. Construct the "
+                "model with ``filters=`` or pass an Observation that "
+                "carries a Photometry instance."
+            )
+        from tengri.observation.photometry import compute_flux_density
+        from tengri.utils.cosmology import luminosity_distance
+
+        state = self.predict_via_orchestrator(params)
+        z = jnp.asarray(params.get("redshift", 0.0))
+        # ``luminosity_distance`` returns cm directly (per its docstring).
+        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+
+        sed_rest = state.sed_intrinsic
+        wave_rest = state.wave
+        photometry = jnp.asarray(
+            [
+                compute_flux_density(
+                    sed_rest, wave_rest, fw, ft, redshift=z, dl_cm=dl_cm
+                )
+                for fw, ft in zip(
+                    self.observation.photometry.filter_waves,
+                    self.observation.photometry.filter_trans,
+                    strict=False,
+                )
+            ]
+        )
+        return photometry
+
     def predict_emission_lines_via_orchestrator(self, params):
         """Phase II-2.6 orchestrator-path emission-line luminosities.
 
