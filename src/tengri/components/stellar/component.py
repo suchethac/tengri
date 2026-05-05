@@ -296,6 +296,9 @@ class StellarSEDComponent:
             "const",
             "const_exp",
             "continuity_flex",
+            "psb",
+            "delayed_bq",
+            "dense_basis_pure",
         )
         if self.config.sfh_model not in _SUPPORTED_SFH:
             raise NotImplementedError(

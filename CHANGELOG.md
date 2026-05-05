@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added (Phase II-2.5c — three bounded-fraction SFH variants pinned)
+
+- ``StellarSEDComponent._SUPPORTED_SFH`` further extends to ``psb``
+  (post-starburst, Wild+ 2020), ``delayed_bq`` (delayed
+  burst-quench), and ``dense_basis_pure``. Each is pinned by an
+  explicit-priors equivalence test in
+  ``tests/integration/test_orchestrator_vs_legacy.py`` that supplies
+  the registry's default priors directly (the generic
+  ``±multiplicative-bound`` generator can't satisfy the ``[0,1]``
+  fraction constraints these variants impose).
+- ``psb`` matches at ``rtol=1e-1`` (the burst component's sharp DPL
+  rise/fall picks up the same log-vs-linear interpolation residual
+  as ``const_exp``); the other two match at ``rtol=5e-2``.
+- Total orchestrator-supported parametric SFH variants: 16
+  (tsnorm, dpl, continuity, dirichlet, dense_basis, lnorm, snorm,
+  snorm_burst, tsnorm_burst, norm, const, const_exp,
+  continuity_flex, psb, delayed_bq, dense_basis_pure).
+  Variants still blocked on the SFH-side CSP-canonicalisation:
+  ``exp``, ``dexp``, ``tau``.
+
 ### Added (Phase II-2.5b — three more smooth-SFH variants pinned)
 
 - ``StellarSEDComponent._SUPPORTED_SFH`` extends to ``const``,

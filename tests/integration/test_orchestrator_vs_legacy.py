@@ -841,6 +841,99 @@ def test_orchestrator_const_exp_close_to_legacy(ssp):
     )
 
 
+def _stellar_only_spec_with_priors(sfh_name: str, priors: dict):
+    """Build a stellar-only Parameters spec with explicit priors per param.
+
+    Used for variants whose default priors have non-trivial constraints
+    (``[0,1]`` fractions, etc.) that the generic generator can't infer.
+    """
+    return Parameters(
+        mean_sfh_type=[sfh_name],
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+        **priors,
+    )
+
+
+def _check_with_priors(ssp, sfh_name, priors, sfh_params, rtol=5e-2):
+    spec = _stellar_only_spec_with_priors(sfh_name, priors)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = SEDModel(spec, ssp)
+    legacy = model.predict_rest_sed(sfh_params)
+    state = model.predict_via_orchestrator(sfh_params)
+    assert legacy.sed.shape == state.sed_intrinsic.shape
+    rel_diff = float(
+        jnp.max(
+            jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
+        )
+    )
+    assert rel_diff < rtol, f"{sfh_name} max rel diff: {rel_diff:.3e}"
+
+
+def test_orchestrator_psb_close_to_legacy(ssp):
+    """``psb`` (post-starburst, Wild+ 2020) — orchestrator vs legacy."""
+    priors = {
+        "sfh_psb_log_peak_sfr": Uniform(-1.0, 3.0),
+        "sfh_psb_age_gyr": Uniform(0.5, 13.0),
+        "sfh_psb_tau_gyr": Uniform(0.1, 10.0),
+        "sfh_psb_burstage_gyr": Uniform(0.01, 5.0),
+        "sfh_psb_alpha": Uniform(0.5, 5.0),
+        "sfh_psb_beta": Uniform(0.5, 5.0),
+        "sfh_psb_fburst": Uniform(0.01, 0.99),
+    }
+    sfh_params = {
+        "sfh_psb_log_peak_sfr": 1.0,
+        "sfh_psb_age_gyr": 5.0,
+        "sfh_psb_tau_gyr": 2.0,
+        "sfh_psb_burstage_gyr": 0.5,
+        "sfh_psb_alpha": 2.0,
+        "sfh_psb_beta": 2.0,
+        "sfh_psb_fburst": 0.3,
+    }
+    # rtol=1e-1: the post-starburst burst component has a sharp DPL
+    # rise/fall whose log-vs-linear interpolation residual is ~6%,
+    # similar to const_exp. Closes to <1% with the SFH-side migration.
+    _check_with_priors(ssp, "psb", priors, sfh_params, rtol=1e-1)
+
+
+def test_orchestrator_delayed_bq_close_to_legacy(ssp):
+    """``delayed_bq`` (delayed burst-quench SFH) — orchestrator vs legacy."""
+    priors = {
+        "sfh_delayed_bq_tau_main_gyr": Uniform(0.1, 10.0),
+        "sfh_delayed_bq_age_main_gyr": Uniform(0.5, 13.0),
+        "sfh_delayed_bq_age_bq_gyr": Uniform(0.01, 5.0),
+        "sfh_delayed_bq_r_sfr": Uniform(0.01, 10.0),
+    }
+    sfh_params = {
+        "sfh_delayed_bq_tau_main_gyr": 2.0,
+        "sfh_delayed_bq_age_main_gyr": 5.0,
+        "sfh_delayed_bq_age_bq_gyr": 1.0,
+        "sfh_delayed_bq_r_sfr": 0.1,
+    }
+    _check_with_priors(ssp, "delayed_bq", priors, sfh_params)
+
+
+def test_orchestrator_dense_basis_pure_close_to_legacy(ssp):
+    """``dense_basis_pure`` — orchestrator vs legacy."""
+    priors = {
+        "sfh_dbp_log_total_mass": Uniform(8.0, 12.0),
+        "sfh_dbp_tx_frac_0": Uniform(0.05, 0.95),
+        "sfh_dbp_tx_frac_1": Uniform(0.05, 0.95),
+        "sfh_dbp_tx_frac_2": Uniform(0.05, 0.95),
+    }
+    sfh_params = {
+        "sfh_dbp_log_total_mass": 10.0,
+        "sfh_dbp_tx_frac_0": 0.25,
+        "sfh_dbp_tx_frac_1": 0.5,
+        "sfh_dbp_tx_frac_2": 0.75,
+    }
+    _check_with_priors(ssp, "dense_basis_pure", priors, sfh_params)
+
+
 def test_orchestrator_continuity_flex_close_to_legacy(ssp):
     """``continuity_flex`` — orchestrator vs legacy."""
     _check_sfh_variant_equivalence(
