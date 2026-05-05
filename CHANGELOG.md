@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed (compute_dsps_native_weights NaN robustness for too-old SSPs)
+
+- ``compute_dsps_native_weights`` now safely handles SSP grids
+  whose ages exceed ``t_obs`` (the universe age at the observation
+  redshift). Previously, the implied negative-cosmic-time bins
+  caused DSPS to NaN at ``cumulative_mstar_formed → log10(0)``
+  because ``t_table[0] < dsps.constants.T_TABLE_MIN = 0.01 Gyr``.
+- New behaviour: invalid SSP bins (``t_obs - ssp_age ≤ 0``) get a
+  strictly-monotonic linear ramp at ``T_TABLE_MIN`` with SFR set to
+  zero, contributing no mass to the CSP integral. Valid bins are
+  also floored at ``T_TABLE_MIN`` so very-high-z observations don't
+  underflow.
+- This was an architectural prerequisite for the SFH-side
+  canonicalisation (replacing the legacy lookback-rectangle SFH
+  integration with DSPS's trapezoidal-in-cosmic-time scheme), but
+  the SFH migration itself remains deferred: aligning it requires
+  also migrating the α-fallback's SFH integration (currently
+  shares ``weights = sfr_on_ssp * _csp_age_dt`` with the no-α
+  branch). The 0.2% strict-gating residual stays as
+  ``xfail(strict=True)`` for now.
+
 ### Fixed (α-aware fallback path canonicalised on DSPS lognormal MDF)
 
 - ``interp_met_alpha_dispatch`` (the α-aware fallback when no real

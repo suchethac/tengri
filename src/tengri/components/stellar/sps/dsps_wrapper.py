@@ -443,11 +443,43 @@ def compute_dsps_native_weights(
     # DSPS needs cosmic times (old→young = ascending cosmic time).
     # Reverse so that gal_t_table is sorted ascending for DSPS.
     ssp_age_gyr = ssp_ages_yr / 1e9
-    t_cosmic_gyr = jnp.clip(t_obs_gyr - ssp_age_gyr, min=1e-3)
+    t_cosmic_raw = t_obs_gyr - ssp_age_gyr  # may go ≤ 0 for SSP ages > t_obs
 
-    # Flip to ascending cosmic time (oldest universe-age first).
-    t_cosmic_asc = t_cosmic_gyr[::-1]
-    sfr_asc = sfr_on_ssp_ages[::-1]
+    # Mask out invalid bins (stars formed before the Big Bang). For
+    # those bins, set SFR to zero so they contribute no mass to the
+    # CSP integral. The cosmic-time array must be **strictly**
+    # monotonic (no duplicates) AND every entry must satisfy
+    # ``t >= T_TABLE_MIN = 0.01 Gyr`` for DSPS's internal
+    # ``cumulative_mstar_formed`` and ``log10(M*)`` calls to behave
+    # sanely. We give each bin a small linear ramp starting at
+    # T_TABLE_MIN; valid bins keep their actual cosmic time but
+    # also get a floor at T_TABLE_MIN so very-high-z observations
+    # don't underflow.
+    T_TABLE_MIN = 0.01  # Gyr; matches dsps.constants.T_TABLE_MIN
+    n_ssp = ssp_ages_yr.shape[0]
+    # Floor every cosmic time to T_TABLE_MIN.
+    t_cosmic_floor = jnp.maximum(t_cosmic_raw, T_TABLE_MIN)
+    # Identify invalid bins (originally ≤0).
+    valid = t_cosmic_raw > 0.0
+
+    # ``valid`` is in lookback (young→old) order; reverse to align
+    # with ascending cosmic time.
+    valid_asc = valid[::-1]
+    t_cosmic_asc_raw = t_cosmic_floor[::-1]
+    sfr_asc_raw = sfr_on_ssp_ages[::-1]
+
+    # In ascending-cosmic-time order, invalid bins occupy the first
+    # ``k = n_invalid`` indices. Give them a strict-monotonic ramp
+    # in ``[T_TABLE_MIN, T_TABLE_MIN + ε]`` so they stay below the
+    # youngest valid bin (which has t_cosmic > 0 by definition,
+    # though potentially small).
+    n_invalid = jnp.sum(~valid_asc)
+    idx = jnp.arange(n_ssp)
+    is_invalid_pos = idx < n_invalid
+    # Ramp from T_TABLE_MIN to T_TABLE_MIN * 1.5, strictly increasing.
+    ramp = T_TABLE_MIN + (T_TABLE_MIN * 0.5) * (idx + 1) / jnp.maximum(n_invalid, 1)
+    t_cosmic_asc = jnp.where(is_invalid_pos, ramp, t_cosmic_asc_raw)
+    sfr_asc = jnp.where(is_invalid_pos, 0.0, sfr_asc_raw)
 
     result = calc_rest_sed_sfh_table_lognormal_mdf(
         gal_t_table=t_cosmic_asc,
