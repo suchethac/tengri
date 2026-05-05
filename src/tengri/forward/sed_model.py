@@ -2939,9 +2939,7 @@ class SEDModel:
         wave_rest = state.wave
         photometry = jnp.asarray(
             [
-                compute_flux_density(
-                    sed_rest, wave_rest, fw, ft, redshift=z, dl_cm=dl_cm
-                )
+                compute_flux_density(sed_rest, wave_rest, fw, ft, redshift=z, dl_cm=dl_cm)
                 for fw, ft in zip(
                     self.observation.photometry.filter_waves,
                     self.observation.photometry.filter_trans,
@@ -3017,7 +3015,13 @@ class SEDModel:
         wave = self.ssp_data.ssp_wave
         state0 = PipelineState(wave=wave, sed_observed=jnp.ones_like(wave))
         del build_components  # silence unused-import warning; used in helper
-        return run_components(chain, state0, params)
+
+        # Inject Fixed values from spec for parameters absent from
+        # ``params``. Matches the legacy ``get_internal_params``
+        # convention so callers using ``predict_rest_sed`` and
+        # ``predict_via_orchestrator`` can pass the same params dict.
+        full_params = {**self.spec.get_fixed_values(), **params}
+        return run_components(chain, state0, full_params)
 
     def _build_component_chain(self):
         """Construct the orchestrator chain from ``self``'s settings.

@@ -63,21 +63,63 @@ def stellar_only_model(ssp):
 
 
 _STELLAR_PARAMS = {
+    # Only free params — fixed values (met_logzsol, redshift,
+    # dust_tau_*) are read from spec by both predict_rest_sed and
+    # predict_via_orchestrator (the latter injects via
+    # spec.get_fixed_values()). This is the realistic call site.
     "sfh_tsnorm_log_peak_sfr": 1.0,
     "sfh_tsnorm_peak_lbt_gyr": 2.0,
     "sfh_tsnorm_width_gyr": 1.0,
     "sfh_tsnorm_skew": 0.0,
     "sfh_tsnorm_trunc": 3.0,
-    # Orchestrator path expects ALL parameters (free + fixed) in
-    # the params dict. Legacy path reads fixed values from spec.
-    "met_logzsol": -0.5,
-    "redshift": 0.05,
-    "dust_tau_bc": 0.0,
-    "dust_tau_diff": 0.0,
-    "dust_slope": 0.0,
-    "dust_T": 35.0,
-    "dust_beta_ir": 1.6,
 }
+
+
+# ── Fixed-param injection: orchestrator now reads from spec ──────────
+
+
+def test_orchestrator_injects_fixed_values_from_spec(stellar_only_model):
+    """Calling predict_via_orchestrator with only the FREE params must
+    succeed — fixed values (met_logzsol, redshift, dust_tau_*) come
+    from spec.get_fixed_values()."""
+    free_only = {
+        "sfh_tsnorm_log_peak_sfr": 1.0,
+        "sfh_tsnorm_peak_lbt_gyr": 2.0,
+        "sfh_tsnorm_width_gyr": 1.0,
+        "sfh_tsnorm_skew": 0.0,
+        "sfh_tsnorm_trunc": 3.0,
+    }
+    state = stellar_only_model.predict_via_orchestrator(free_only)
+    # log_mstar published by stellar component → injection worked end-to-end.
+    assert "log_mstar" in state.derived
+    assert jnp.isfinite(state.derived["log_mstar"])
+
+
+def test_orchestrator_explicit_param_overrides_spec_fixed(stellar_only_model):
+    """A param passed explicitly must win over the spec's fixed value."""
+    free_only = {
+        "sfh_tsnorm_log_peak_sfr": 1.0,
+        "sfh_tsnorm_peak_lbt_gyr": 2.0,
+        "sfh_tsnorm_width_gyr": 1.0,
+        "sfh_tsnorm_skew": 0.0,
+        "sfh_tsnorm_trunc": 3.0,
+    }
+    state_default = stellar_only_model.predict_via_orchestrator(free_only)
+    # Override met_logzsol with a different value than the spec fixed.
+    state_overridden = stellar_only_model.predict_via_orchestrator(
+        {**free_only, "met_logzsol": 0.0}
+    )
+    # Stellar SED differs because metallicity strongly affects spectral shape.
+    rel_diff = float(
+        jnp.max(
+            jnp.abs(state_default.sed_intrinsic - state_overridden.sed_intrinsic)
+            / jnp.maximum(jnp.abs(state_default.sed_intrinsic), 1e-30)
+        )
+    )
+    assert rel_diff > 1e-3, (
+        f"Override didn't change SED: max rel diff = {rel_diff:.3e} "
+        "(orchestrator ignored explicit met_logzsol?)"
+    )
 
 
 # ── Sanity: both paths run, produce finite + same-shape output ────────

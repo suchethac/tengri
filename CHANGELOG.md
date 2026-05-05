@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed (Phase II-2.9 — fixed-param injection in orchestrator path)
+
+- ``SEDModel.predict_via_orchestrator(params)`` now injects fixed
+  values from ``self.spec`` for any parameter absent from ``params``,
+  matching the legacy ``predict_rest_sed`` /
+  ``predict_*`` convention via ``spec.get_fixed_values()``.
+- Before: caller had to pass the full param set (free + fixed),
+  causing ``KeyError`` on ``met_logzsol``/``redshift``/etc. when
+  using realistic free-only param dicts (the divergence cited in
+  Phase II-2.8's blocker xfail).
+- After: free-only params dicts work end-to-end through the
+  orchestrator. Explicit values still override the spec's fixed
+  defaults via standard dict-merge semantics (``{spec_fixed,
+  **user_params}``).
+- Two new tests in ``tests/integration/test_orchestrator_vs_legacy.py``
+  pin the injection (``test_orchestrator_injects_fixed_values_from_spec``)
+  and the override-precedence (``test_orchestrator_explicit_param_overrides_spec_fixed``).
+- Closes one of the two divergence sources blocking the gating
+  xfail. Remaining: DSPS joint-vs-separable mass factorization
+  (legacy and orchestrator now agree on integrated L_bol to 0.4%,
+  but per-wavelength SED shape still differs because of the
+  factorization mismatch).
+
 ### Added (Phase II-2.8 — orchestrator vs legacy gating tests)
 
 - ``tests/integration/test_orchestrator_vs_legacy.py`` pins the
