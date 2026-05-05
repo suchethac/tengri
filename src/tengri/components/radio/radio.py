@@ -887,6 +887,3 @@ def compute_radio_components(
     return {"synchrotron": synchrotron, "freefree": ff, "agn": agn, "total": total}
 
 
-from tengri._deprecated import deprecated_alias
-
-radio_components = deprecated_alias(compute_radio_components, old_name="radio_components")

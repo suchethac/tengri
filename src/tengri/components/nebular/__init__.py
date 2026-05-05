@@ -92,7 +92,6 @@ from tengri.components.nebular.mappings_photo import (
 from tengri.components.nebular.shock import (
     ShockBackend,
     compute_shock_sed,
-    shock_emission_sed,
     shock_line_ratios,
 )
 
@@ -123,7 +122,6 @@ __all__ = [
     "SynthesizerNLRBackend",
     "compute_shock_sed",
     "mix_dig_emission",
-    "shock_emission_sed",
     "shock_line_ratios",
 ]
 

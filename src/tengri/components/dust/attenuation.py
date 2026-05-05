@@ -149,11 +149,6 @@ def resolve_dust_law(name: str) -> Callable:
     return DUST_LAWS[name]
 
 
-from tengri._deprecated import deprecated_alias
-
-get_dust_law = deprecated_alias(resolve_dust_law, old_name="get_dust_law")
-
-
 # ── Utility: Drude profile for the 2175 Angstrom UV bump ──────────
 
 

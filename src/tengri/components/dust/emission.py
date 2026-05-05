@@ -170,11 +170,6 @@ def resolve_emission_model(name: str) -> Callable:
     return DUST_EMISSION_MODELS[name]
 
 
-from tengri._deprecated import deprecated_alias
-
-get_emission_model = deprecated_alias(resolve_emission_model, old_name="get_emission_model")
-
-
 def preload_emission_model(name: str) -> Callable:
     """Force lazy template loading outside any JAX JIT scope.
 

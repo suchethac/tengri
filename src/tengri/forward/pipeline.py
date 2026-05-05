@@ -406,6 +406,22 @@ def compute_sed_components(
 
     _dsps_mode = model._csp_integration in ("dsps_native", "dsps_met_table")
 
+    # SFH integration: trapz / log_trapz fall through to the
+    # DSPS-canonical trapezoidal-in-cosmic-time helper
+    # (``compute_dsps_age_weights``); log_interp keeps its
+    # Johnson+2021 matrix path; the dsps_* modes compute weights
+    # inside the metallicity dispatch block below.
+    #
+    # Replaces the legacy lookback-rectangle ``sfr_on_ssp * _csp_age_dt``
+    # rule (Hearin+ 2021 Eq. 9). See
+    # ``docs/dev/20260504-csp-integral-canonicalization.md``.
+    from tengri.components.stellar.sps.dsps_wrapper import compute_dsps_age_weights
+
+    _z_for_t_obs = p.get("redshift", 0.0)
+    _t_obs_gyr_for_weights = (
+        model._t_universe_gyr(_z_for_t_obs) if hasattr(model, "_t_universe_gyr") else 13.7
+    )
+
     if _weights is not None:
         weights = _weights
         _use_dsps_table = False
@@ -415,7 +431,12 @@ def compute_sed_components(
         elif _dsps_mode:
             weights = None  # computed in metallicity dispatch block below
         else:
-            weights = sfr_on_ssp * model._csp_age_dt
+            weights = compute_dsps_age_weights(
+                sfr_on_ssp,
+                model.ssp_ages_yr,
+                model.ssp_data.ssp_lg_age_gyr,
+                _t_obs_gyr_for_weights,
+            )
     else:
         sfr_on_ssp = jnp.interp(model.ssp_log_ages_yr, model.log_age_grid, sfr)
         if model._csp_integration == "log_interp":
@@ -423,7 +444,12 @@ def compute_sed_components(
         elif _dsps_mode:
             weights = None  # computed in metallicity dispatch block below
         else:
-            weights = sfr_on_ssp * model._csp_age_dt
+            weights = compute_dsps_age_weights(
+                sfr_on_ssp,
+                model.ssp_ages_yr,
+                model.ssp_data.ssp_lg_age_gyr,
+                _t_obs_gyr_for_weights,
+            )
         _use_dsps_table = False
 
     # Alpha-element enhancement

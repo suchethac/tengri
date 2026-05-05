@@ -59,7 +59,6 @@ from tengri.components.agn.torus import nenkova_torus, simple_torus, two_tempera
 from tengri.components.agn.unified import (
     AGN_MODELS,
     adaf_agn,
-    get_agn_model,
     kubota_done_full_agn,
     register_agn_model,
     resolve_agn_model,
@@ -86,7 +85,6 @@ __all__ = [
     "create_relagn_disc_from_grid",
     "create_silva04_from_grid",
     "create_skirtor_from_grid",
-    "get_agn_model",
     "kubota_done_disc",
     "kubota_done_full_agn",
     "multicolor_disc",
