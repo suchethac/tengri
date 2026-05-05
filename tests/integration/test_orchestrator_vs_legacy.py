@@ -279,28 +279,24 @@ def test_field_legacy_runs(stellar_field_model):
     assert jnp.any(sfh["sfr_full"] > 0.0), "legacy sfr_full all zero — field branch dead?"
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Phase II-2.3 finishing work: orchestrator's stellar SED with "
-        "field=True diverges from legacy's predict_rest_sed.sed by ~13% "
-        "(rtol=1.3e-1) — far worse than the ~0.2% field=False bar. "
-        "The component implementation supports field=True (component.py "
-        "lines 313–331) and the SFH-side `compute_field_gp` import is "
-        "shared verbatim with legacy, but the SED-side outputs differ "
-        "by orders of magnitude beyond the field=False inheritance from "
-        "the SFH-integration mismatch. Investigation needed: is the "
-        "lognormal-bias correction k0_half normalisation interpreted "
-        "consistently, or does the orchestrator's resampling of the GP "
-        "draw onto the SSP age grid in component.py:334 differ from "
-        "legacy's path? This xfail marks the finding rather than "
-        "claiming false success. Closing it is the gating criterion "
-        "for Phase II-2.6 stellar+dust+IGM cutover."
-    ),
-    strict=True,
-)
 def test_field_orchestrator_rest_sed_close_to_legacy(stellar_field_model):
     """Phase II-2.3 contract: orchestrator's stellar SED with field=True
-    must agree with legacy at ``rtol=1e-2`` (the same bar as field=False)."""
+    agrees with legacy at ``rtol=1e-2`` — the same bar as field=False.
+
+    Closed by aligning the orchestrator's SFH log-age grid with the
+    legacy ``make_log_age_grid(n_grid)`` (linspace in log10(age/yr)
+    over [6.0, 10.14]). Before that fix the orchestrator used
+    ``logspace(log10(1e5), log10(14e9), n_grid)`` — extending one
+    extra dex below 1 Myr — so the same ``xi`` produced a different
+    GP correlation pattern (``d_log_age`` differed by ~25%) and the
+    young-age portion of the SFH was sampled inconsistently. SED
+    divergence dropped from ~13% to ~0.2% with the grid alignment.
+
+    Closing the residual ~0.2% to ``rtol=1e-6`` is blocked on the
+    SFH-integration migration (legacy trapz in lookback time vs
+    DSPS canonical trapz in cosmic time), tracked in
+    ``docs/dev/20260504-csp-integral-canonicalization.md``.
+    """
     legacy = stellar_field_model.predict_rest_sed(_STELLAR_FIELD_PARAMS)
     state = stellar_field_model.predict_via_orchestrator(_STELLAR_FIELD_PARAMS)
 

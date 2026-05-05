@@ -35,7 +35,8 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from tengri.components.stellar.sfh.mean_sfh import AGEMAX_YR, dpl, truncated_skewnormal
+from tengri.components.stellar.sfh.gp_sfh import make_log_age_grid
+from tengri.components.stellar.sfh.mean_sfh import dpl, truncated_skewnormal
 from tengri.components.stellar.sps.dsps_wrapper import (
     LSUN_ERG_PER_S,
     SSPData,
@@ -286,8 +287,18 @@ class StellarSEDComponent:
         ssp_ages_yr = (10.0**ssp.ssp_lg_age_gyr) * 1e9
         n_grid = self.config.n_grid
 
-        # ── 1. SFH lookback-time grid (log-spaced, 1e5 yr → AGEMAX_YR) ──
-        sfh_lbt_grid = jnp.logspace(jnp.log10(1e5), jnp.log10(AGEMAX_YR), n_grid)
+        # ── 1. SFH lookback-time grid ───────────────────────────────────
+        # Use the SAME grid construction as the legacy SEDModel path
+        # (forward/sed_model.py:467). ``make_log_age_grid`` returns a
+        # uniform grid in log10(age/yr) over [6.0, 10.14] (1 Myr →
+        # 13.8 Gyr). This is critical for ``field=True`` parity:
+        # ``compute_field_gp`` keys on n_grid + d_log_age to build
+        # the GP correlation kernel, so both paths must construct
+        # the grid identically or the same ``xi`` vector produces
+        # different GP realisations. See the Phase II-2.3 finishing
+        # commit message + tests/integration/test_orchestrator_vs_legacy.py.
+        log_age_grid = make_log_age_grid(n_grid)
+        sfh_lbt_grid = 10.0**log_age_grid
 
         # ── 2. Evaluate mean SFH on grid (parametric models) ────────────
         # Param names + Gyr→yr conversions match
@@ -323,8 +334,7 @@ class StellarSEDComponent:
             psd_tau_myr = jnp.asarray(params["sfh_field_psd_tau_myr"])
             xi = jnp.asarray(params.get("sfh_field_xi", jnp.zeros(n_grid)))
             psd_tau_yr = psd_tau_myr * 1e6
-            log_age_grid = jnp.log10(sfh_lbt_grid)
-            d_log_age = log_age_grid[1] - log_age_grid[0]
+            d_log_age = float(log_age_grid[1] - log_age_grid[0])
             gp_x, k0_half = compute_field_gp(
                 xi, psd_sigma, psd_tau_yr, n_grid, d_log_age, field_model="drw"
             )
