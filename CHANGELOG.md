@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added (Phase II-2.8 — orchestrator vs legacy gating tests)
+
+- ``tests/integration/test_orchestrator_vs_legacy.py`` pins the
+  orchestrator-path-vs-legacy-path comparison that gates monolith
+  deletion. Three sanity tests pass (shape, finiteness, physical
+  M* agreement within 0.1 dex). One ``xfail(strict=True)`` test
+  documents the **gating criterion** for monolith deletion: strict
+  ``rtol=1e-6`` bit-exact equality between
+  ``predict_rest_sed(params).sed`` and
+  ``predict_via_orchestrator(params).sed_intrinsic``.
+- Closing that ``xfail`` is the blocking work item before any
+  ``sed_model.py`` / ``pipeline.py`` legacy branch can be deleted.
+  Documented divergence sources: (1) DSPS joint vs separable mass
+  factorization (legacy still on the separable path), (2) interface
+  mismatch — orchestrator expects fixed params in the dict; legacy
+  reads them from ``spec``.
+
 ### Added (Phase II-2.7 — filter pre-integration utility)
 
 - ``tengri.forward.preintegrate_ssp_filter_grid(ssp_data, filter_waves,
