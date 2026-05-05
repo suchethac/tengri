@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed (α-aware fallback path canonicalised on DSPS lognormal MDF)
+
+- ``interp_met_alpha_dispatch`` (the α-aware fallback when no real
+  4D α-grid is loaded) now applies the DSPS-canonical lognormal-MDF
+  triweight kernel on ``effective_metallicity(log_z, alpha_fe)``,
+  matching the no-α-enhancement path of the previous
+  Z-canonicalisation commit.
+- Result: ``alpha_fe = 0`` now reduces **bit-exactly**
+  (``rtol = 1e-12``) to the non-α path. Restored
+  ``test_alpha_zero_matches_no_alpha`` to its original strict
+  tolerance.
+- Net test suite delta after this commit: **+5 tests** (4963 →
+  4968 passing). 0 new regressions; the 3 pre-existing failures
+  (``test_dl07_hybrid_error_below_2pct``,
+  ``test_dl07_worst_case_hybrid_error_below_2pct``,
+  ``test_auto_high_d_routes_to_vi``) are unaffected.
+
 ### Added (Phase E — observation sub-namespaces)
 
 - New additive sub-namespaces under ``tengri.observation``:

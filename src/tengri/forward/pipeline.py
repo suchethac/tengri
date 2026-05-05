@@ -137,9 +137,18 @@ def interp_met_alpha_dispatch(
             log_z,
             alpha_fe,
         )
-    # Fallback: effective_metallicity on 3D grid
+    # Fallback: effective_metallicity on 3D grid, with DSPS-canonical
+    # lognormal MDF triweight kernel (Hearin+ 2021 Eq. 11). Matches
+    # the no-α-enhancement path so ``alpha_fe = 0`` reduces exactly
+    # to the non-α SED. See
+    # ``docs/dev/20260504-csp-integral-canonicalization.md``.
+    from dsps.sed.metallicity_weights import calc_lgmet_weights_from_lognormal_mdf
+
     log_z_eff = effective_metallicity(log_z, alpha_fe)
-    return interp_metallicity(model, log_z_eff, ssp_flux=ssp_flux, ssp_lgmet=ssp_lgmet)
+    flux = ssp_flux if ssp_flux is not None else model.ssp_data.ssp_flux
+    lgmet = ssp_lgmet if ssp_lgmet is not None else model.ssp_data.ssp_lgmet
+    lgmet_w = calc_lgmet_weights_from_lognormal_mdf(log_z_eff, model._lgmet_scatter, lgmet)
+    return jnp.einsum("m,maw->aw", lgmet_w, flux)
 
 
 def interp_met_alpha_evolving_dispatch(
@@ -655,12 +664,15 @@ def compute_sed_components(
             _lgmet = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
             ssp_flux_at_z = interp_met_alpha_dispatch(model, _lgmet, alpha_fe)
         else:
-            # DSPS-canonical metallicity marginalisation (Hearin+ 2021,
-            # Eq. 11): lognormal MDF triweight kernel of width
-            # ``lgmet_scatter`` over the SSP metallicity grid, applied
-            # via ``einsum("m,maw->aw", lgmet_weights, ssp_flux)``.
-            # Replaces the previous bilinear-interp path (which assumed
-            # σ_MDF = 0). See
+            # DSPS-canonical metallicity marginalisation only
+            # (Hearin+ 2021 Eq. 11): lognormal MDF triweight kernel.
+            # SFH integration stays on the legacy lookback rectangle
+            # rule because ``compute_dsps_native_weights`` derives
+            # cosmic time from SSP ages and NaN's when SSP ``lg_age``
+            # exceeds ``t_obs`` (synthetic SSP fixtures with
+            # lg_age=1.14 at z=0.1 trigger this). Closing this last
+            # gap to bit-exact orchestrator parity is a follow-up
+            # that needs SSP-grid masking. See
             # ``docs/dev/20260504-csp-integral-canonicalization.md``.
             from dsps.sed.metallicity_weights import (
                 calc_lgmet_weights_from_lognormal_mdf,

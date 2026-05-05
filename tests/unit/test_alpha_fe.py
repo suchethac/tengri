@@ -205,15 +205,13 @@ class TestAlphaFeForwardModel:
         )
         model_no = SEDModel(spec_no, ssp, precompute=False)
         sed_no = model_no.predict_rest_sed({}).sed
-        # Tolerance widened from rtol=1e-12 → rtol=5e-2 with the
-        # DSPS-canonical metallicity migration: the α-aware path uses
-        # 4D bilinear interpolation in (Z, α) space (effectively
-        # σ_MDF = 0); the non-α path uses DSPS lognormal-MDF triweight
-        # kernel (σ_MDF = 0.2 dex). Per-wavelength residual is ~3-4%.
-        # See docs/dev/20260504-csp-integral-canonicalization.md.
-        # Closing this gap requires migrating the α-aware path to the
-        # joint einsum — tracked as the next milestone.
-        assert_allclose(sed_alpha0, sed_no, rtol=5e-2)
+        # Restored to strict ``rtol=1e-12`` after the α-aware fallback
+        # path was migrated to DSPS canonical lognormal-MDF (commit
+        # 20260504-... step 2): with ``alpha_fe = 0``,
+        # ``effective_metallicity(log_z, 0) == log_z``, and both paths
+        # apply the same triweight kernel + ``einsum("m,maw->aw")``,
+        # producing bit-exact equality.
+        assert_allclose(sed_alpha0, sed_no, rtol=1e-12)
 
     def test_positive_alpha_changes_sed(self, model_with_alpha):
         """Positive [alpha/Fe] should produce a different SED."""
