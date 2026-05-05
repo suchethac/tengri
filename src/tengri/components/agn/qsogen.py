@@ -798,8 +798,3 @@ def qsogen(
         agn_frac=agn_frac,
         agn_bcnorm=agn_bcnorm,
     )
-
-
-from tengri._deprecated import deprecated_alias
-
-qsogen_sed = deprecated_alias(compute_qsogen_sed, old_name="qsogen_sed")

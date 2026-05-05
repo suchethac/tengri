@@ -18,7 +18,7 @@ from tengri.components.dust.attenuation import resolve_dust_law
 from tengri.components.nebular.shock import (
     _FALLBACK_V,
     _load_mappings_grids,
-    shock_emission_sed,
+    compute_shock_sed,
     shock_line_ratios,
 )
 
@@ -256,7 +256,7 @@ def test_ism_attenuation_reduces_shock_sed():
     wave = jnp.linspace(3000.0, 10000.0, 2000)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
-        shock_raw = shock_emission_sed(wave, 300.0, 1e7, line_sigma_aa=2.0)
+        shock_raw = compute_shock_sed(wave, 300.0, 1e7, line_sigma_aa=2.0)
 
     # Apply diffuse ISM screen — same expression as sed_pipeline.py
     k_diff = resolve_dust_law("power_law")(wave, n_slope=-0.7, dust_bump_strength=0.0)

@@ -104,71 +104,87 @@ class AGNSEDComponent:
         return [
             # Luminosity & disc
             ParamDeclaration(
-                "agn_log_lbol", Uniform(8.0, 14.0),
+                "agn_log_lbol",
+                Uniform(8.0, 14.0),
                 "log10(L_bol / Lsun) of the AGN [dimensionless]",
             ),
             ParamDeclaration(
-                "agn_frac", Fixed(1.0),
+                "agn_frac",
+                Fixed(1.0),
                 "Overall AGN scaling factor [dimensionless, in [0, 1] for fractional mode]",
             ),
             ParamDeclaration(
-                "agn_alpha", Fixed(-1.0),
+                "agn_alpha",
+                Fixed(-1.0),
                 "Power-law disc slope [dimensionless]",
             ),
             ParamDeclaration(
-                "agn_log_mbh", Fixed(8.0),
+                "agn_log_mbh",
+                Fixed(8.0),
                 "log10(M_BH / Msun) [dimensionless]",
             ),
             ParamDeclaration(
-                "agn_log_ledd", Fixed(-1.0),
+                "agn_log_ledd",
+                Fixed(-1.0),
                 "log10(L / L_Edd) [dimensionless]",
             ),
             ParamDeclaration(
-                "agn_a_spin", Fixed(0.0),
+                "agn_a_spin",
+                Fixed(0.0),
                 "BH dimensionless spin parameter [dimensionless, in [0, 0.998]]",
             ),
             # Torus
             ParamDeclaration(
-                "agn_torus_frac", Fixed(0.5),
+                "agn_torus_frac",
+                Fixed(0.5),
                 "Torus covering factor — INDEPENDENT of inclination "
                 "(do not derive from cos(theta_torus); CLAUDE.md gotcha) "
                 "[dimensionless, in [0, 1]]",
             ),
             ParamDeclaration(
-                "agn_T_torus", Fixed(1000.0),
+                "agn_T_torus",
+                Fixed(1000.0),
                 "Single-temperature torus dust temperature [K]",
             ),
             ParamDeclaration(
-                "agn_tau_torus", Fixed(3.0),
+                "agn_tau_torus",
+                Fixed(3.0),
                 "Torus optical depth [dimensionless]",
             ),
             ParamDeclaration(
-                "agn_T_hot", Fixed(1500.0),
+                "agn_T_hot",
+                Fixed(1500.0),
                 "Two-temperature torus hot dust temperature [K]",
             ),
             ParamDeclaration(
-                "agn_T_warm", Fixed(300.0),
+                "agn_T_warm",
+                Fixed(300.0),
                 "Two-temperature torus warm dust temperature [K]",
             ),
             ParamDeclaration(
-                "agn_frac_hot", Fixed(0.5),
+                "agn_frac_hot",
+                Fixed(0.5),
                 "Hot-component fraction in two-temperature torus [dimensionless, in [0, 1]]",
             ),
             # Inclination & polar dust (gotcha-aware)
             ParamDeclaration(
-                "agn_cos_inc", Fixed(0.5),
+                "agn_cos_inc",
+                Fixed(0.5),
                 "Cosine of inclination [dimensionless, in [0, 1]]",
             ),
             ParamDeclaration(
-                "agn_polar_ebv", Fixed(0.0),
+                "agn_polar_ebv",
+                Fixed(0.0),
                 "Polar dust E(B-V) [mag]",
             ),
             ParamDeclaration(
-                "agn_polar_oa", Fixed(40.0),
+                "agn_polar_oa",
+                Fixed(40.0),
                 "Polar dust opening angle [degrees]",
             ),
             ParamDeclaration(
-                "agn_ebv_disc", Fixed(0.0),
+                "agn_ebv_disc",
+                Fixed(0.0),
                 "Disc reddening E(B-V) [mag]",
             ),
         ]

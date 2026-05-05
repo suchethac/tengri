@@ -246,8 +246,3 @@ def decompose_pah(
         "fitted_pah": fitted_pah,
         "residual": residual,
     }
-
-
-from tengri._deprecated import deprecated_alias
-
-pah_template = deprecated_alias(compute_pah_template, old_name="pah_template")

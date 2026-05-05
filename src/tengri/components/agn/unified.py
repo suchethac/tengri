@@ -94,7 +94,7 @@ from collections.abc import Callable
 import jax
 import jax.numpy as jnp
 
-from tengri.components.agn.blr import blr_emission
+from tengri.components.agn.blr import compute_blr_sed
 from tengri.components.agn.cat3d_wind import cat3d_wind_analytic
 from tengri.components.agn.disc import (
     adaf_disc,
@@ -103,7 +103,7 @@ from tengri.components.agn.disc import (
     multicolor_disc,
     powerlaw_disc,
 )
-from tengri.components.agn.nlr import nlr_emission
+from tengri.components.agn.nlr import compute_nlr_sed
 from tengri.components.agn.silva04 import silva04_analytic
 from tengri.components.agn.skirtor import _find_skirtor_grid, create_skirtor_from_grid
 from tengri.components.agn.torus import simple_torus, two_temperature_torus
@@ -1381,7 +1381,7 @@ def unified_nlr_blr(
     # NLR is illuminated by the disc bolometric luminosity.
     # Pluggable: use nlr_fn if provided, else the built-in analytic template.
     l_disc_bol_erg = (1.0 - agn_torus_frac) * l_bol_erg
-    _nlr_fn = nlr_fn if nlr_fn is not None else nlr_emission
+    _nlr_fn = nlr_fn if nlr_fn is not None else compute_nlr_sed
     l_nlr = _nlr_fn(
         wavelength,
         l_disc_bol_erg=l_disc_bol_erg,
@@ -1392,7 +1392,7 @@ def unified_nlr_blr(
 
     # --- BLR emission (masked by torus) ---
     # Pluggable: use blr_fn if provided, else the built-in analytic template.
-    _blr_fn = blr_fn if blr_fn is not None else blr_emission
+    _blr_fn = blr_fn if blr_fn is not None else compute_blr_sed
     l_blr_raw = _blr_fn(
         wavelength,
         l_disc_bol_erg=l_disc_bol_erg,

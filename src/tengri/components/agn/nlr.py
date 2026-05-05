@@ -300,11 +300,3 @@ def compute_nlr_sed_richardson2014(
     l_nu_lines = jnp.sum(line_spectra, axis=0)
 
     return l_nu_lines
-
-
-from tengri._deprecated import deprecated_alias
-
-nlr_emission = deprecated_alias(compute_nlr_sed, old_name="nlr_emission")
-nlr_emission_richardson2014 = deprecated_alias(
-    compute_nlr_sed_richardson2014, old_name="nlr_emission_richardson2014"
-)

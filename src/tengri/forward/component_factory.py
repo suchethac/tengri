@@ -16,7 +16,9 @@ constructing each :class:`SEDComponent` subclass by hand::
         dust_law_bc="calzetti",
         dust_emission_model="dale2014",
         agn_model="standard",
-        use_radio=True, use_xray=True, use_igm=True,
+        use_radio=True,
+        use_xray=True,
+        use_igm=True,
     )
     state = run_components(components, PipelineState(wave=ssp.ssp_wave), params)
 
@@ -244,9 +246,7 @@ def build_components(
 
     # 3. AGN (optional)
     if agn_model is not None:
-        components.append(
-            AGNSEDComponent(config=AGNSEDComponentConfig(model=agn_model))
-        )
+        components.append(AGNSEDComponent(config=AGNSEDComponentConfig(model=agn_model)))
 
     # 4. Dust (optional)
     if use_dust:

@@ -52,7 +52,6 @@ from tengri.components.dust.drude_profiles import (
     compute_pah_template,
     decompose_pah,
     drude_profile,
-    pah_template,
 )
 from tengri.components.dust.emission import (
     DUST_EMISSION_MODELS,

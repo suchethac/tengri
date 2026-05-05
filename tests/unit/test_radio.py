@@ -7,7 +7,7 @@ Covers:
 - _synchrotron_suppression (Bell+2003 helper)
 - radio_total dispatcher (sfr_mode selection)
 - radio_freefree (Murphy+2011 thermal bremsstrahlung)
-- radio_components (component decomposition)
+- compute_radio_components (component decomposition)
 """
 
 import jax
@@ -24,7 +24,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 from tengri.components.radio.radio import (
     _L0_SYNCH,
     _synchrotron_suppression,
-    radio_components,
+    compute_radio_components,
     radio_freefree,
     radio_sfr_bell2003,
     radio_sfr_delvecchio2021,
@@ -639,37 +639,37 @@ class TestFreeFree:
         )
 
 
-# ── radio_components — diagnostic component decomposition ─────────
+# ── compute_radio_components — diagnostic component decomposition ─────────
 
 
 class TestRadioComponents:
-    """radio_components returns a dict with correct keys, values, and sum."""
+    """compute_radio_components returns a dict with correct keys, values, and sum."""
 
     def test_dict_keys_present(self):
-        comps = radio_components(_WAVE_RADIO, **_RC_KW)
+        comps = compute_radio_components(_WAVE_RADIO, **_RC_KW)
         assert set(comps.keys()) == {"synchrotron", "freefree", "agn", "total"}
 
     def test_values_sum_to_total(self):
-        comps = radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=True)
+        comps = compute_radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=True)
         recon = comps["synchrotron"] + comps["freefree"] + comps["agn"]
         assert jnp.allclose(recon, comps["total"], rtol=1e-12)
 
     def test_freefree_zero_when_disabled(self):
-        comps = radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=False)
+        comps = compute_radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=False)
         assert jnp.all(comps["freefree"] == 0.0)
 
     def test_freefree_positive_when_enabled(self):
-        comps = radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=True)
+        comps = compute_radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=True)
         assert jnp.all(comps["freefree"] > 0.0)
 
     def test_total_includes_freefree_when_enabled(self):
-        comps_off = radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=False)
-        comps_on = radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=True)
+        comps_off = compute_radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=False)
+        comps_on = compute_radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=True)
         assert jnp.all(comps_on["total"] > comps_off["total"])
 
     def test_thermal_fraction_milky_way_like(self):
         """Thermal fraction at 1.4 GHz for L_ir=1e10 Lsun: 2–25% (Bell+2003 FIRRC ~5%)."""
-        comps = radio_components(
+        comps = compute_radio_components(
             _WAVE_14GHZ, L_ir=1e10, L_agn_bol=0.0, include_freefree=True, apply_suppression=False
         )
         total = float(comps["total"][0])
@@ -678,12 +678,12 @@ class TestRadioComponents:
         assert 0.02 < f_thermal < 0.25, f"Thermal fraction {f_thermal:.3f} outside expected 2–25%"
 
     def test_shape_matches_wavelength(self):
-        comps = radio_components(_WAVE_RADIO, **_RC_KW)
+        comps = compute_radio_components(_WAVE_RADIO, **_RC_KW)
         for key in ("synchrotron", "freefree", "agn", "total"):
             assert comps[key].shape == _WAVE_RADIO.shape, f"Shape mismatch for {key}"
 
     def test_all_finite(self):
-        comps = radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=True)
+        comps = compute_radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=True)
         for key, arr in comps.items():
             assert jnp.all(jnp.isfinite(arr)), f"Non-finite values in {key}"
 
@@ -692,7 +692,7 @@ class TestRadioComponents:
 
 
 class TestLayerConsistency:
-    """radio_total output equals component-wise sum from radio_components."""
+    """radio_total output equals component-wise sum from compute_radio_components."""
 
     def _check_consistency(self, sfr_mode, wave, include_freefree, **kw):
         total_direct = radio_total(
@@ -704,7 +704,7 @@ class TestLayerConsistency:
             apply_suppression=False,
             **kw,
         )
-        comps = radio_components(
+        comps = compute_radio_components(
             wave,
             L_ir=_L_IR,
             L_agn_bol=0.0,
@@ -750,7 +750,7 @@ class TestLayerConsistency:
             include_freefree=False,
             apply_suppression=False,
         )
-        comps = radio_components(
+        comps = compute_radio_components(
             _WAVE_RADIO,
             L_ir=_L_IR,
             L_agn_bol=1e12,

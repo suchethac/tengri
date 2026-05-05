@@ -728,26 +728,6 @@ class TestResolveAgn:
         assert jnp.all(jnp.isfinite(l_nu))
         assert l_nu.shape == wavelength.shape
 
-    def test_get_agn_model_is_deprecated_alias(self):
-        """get_agn_model is a DeprecationWarning shim around resolve_agn_model.
-
-        Post-2026-05 (NAMING_CONTRACT §4 / Phase 2 of API cleanup): the
-        canonical name is ``resolve_agn_model``; ``get_agn_model`` is kept
-        as a deprecated alias until v1.0.
-        """
-        import warnings
-
-        from tengri.components.agn.unified import get_agn_model, resolve_agn_model
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            old_result = get_agn_model("kubota_done")
-            assert any(issubclass(rec.category, DeprecationWarning) for rec in w), (
-                "get_agn_model must emit DeprecationWarning"
-            )
-        new_result = resolve_agn_model("kubota_done")
-        assert old_result is new_result
-
     def test_all_canonical_models_in_registry(self):
         """All canonical model names appear in AGN_MODELS."""
         from tengri.components.agn.unified import AGN_MODELS

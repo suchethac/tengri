@@ -885,5 +885,3 @@ def compute_radio_components(
     )
     total = synchrotron + ff + agn
     return {"synchrotron": synchrotron, "freefree": ff, "agn": agn, "total": total}
-
-

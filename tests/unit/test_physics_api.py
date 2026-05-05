@@ -140,9 +140,9 @@ class TestLineEfficiencyExposed:
     def test_nlr_emission_has_line_efficiency_param(self):
         import inspect
 
-        from tengri.components.agn.nlr import nlr_emission
+        from tengri.components.agn.nlr import compute_nlr_sed
 
-        sig = inspect.signature(nlr_emission)
+        sig = inspect.signature(compute_nlr_sed)
         assert "line_efficiency" in sig.parameters
         # Default should be ~0.10
         default = sig.parameters["line_efficiency"].default
@@ -151,9 +151,9 @@ class TestLineEfficiencyExposed:
     def test_blr_emission_has_line_efficiency_param(self):
         import inspect
 
-        from tengri.components.agn.blr import blr_emission
+        from tengri.components.agn.blr import compute_blr_sed
 
-        sig = inspect.signature(blr_emission)
+        sig = inspect.signature(compute_blr_sed)
         assert "line_efficiency" in sig.parameters
         # Default should be ~0.08
         default = sig.parameters["line_efficiency"].default
@@ -161,11 +161,11 @@ class TestLineEfficiencyExposed:
 
     def test_nlr_emission_line_efficiency_scales_output(self):
         """Halving line_efficiency should roughly scale NLR luminosity."""
-        from tengri.components.agn.nlr import nlr_emission
+        from tengri.components.agn.nlr import compute_nlr_sed
 
         wave = jnp.linspace(3000.0, 8000.0, 500)
-        l1 = jnp.sum(nlr_emission(wave, 1e44, line_efficiency=0.10))
-        l2 = jnp.sum(nlr_emission(wave, 1e44, line_efficiency=0.05))
+        l1 = jnp.sum(compute_nlr_sed(wave, 1e44, line_efficiency=0.10))
+        l2 = jnp.sum(compute_nlr_sed(wave, 1e44, line_efficiency=0.05))
         ratio = float(l1 / jnp.maximum(l2, 1e-100))
         # Ratio should be >1 since l1 uses higher efficiency
         assert 1.5 < ratio < 2.2

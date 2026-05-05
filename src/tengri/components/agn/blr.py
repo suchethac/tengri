@@ -281,8 +281,3 @@ def compute_blr_sed(
     l_nu_blr = l_nu_blr + l_hbeta * fe2_spectrum
 
     return l_nu_blr
-
-
-from tengri._deprecated import deprecated_alias
-
-blr_emission = deprecated_alias(compute_blr_sed, old_name="blr_emission")

@@ -290,7 +290,7 @@ class TestShockEmissionUnits:
         log-spaced wavelength grid (grid spacing ~38 Å at Halpha → sigma/spacing ≈ 5).
         A 3 Å sigma would be unresolved and the integral would underestimate power.
         """
-        from tengri.components.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import compute_shock_sed
 
         # Dense linear grid around optical lines to ensure Gaussian is well-sampled
         wave = jnp.linspace(3500.0, 7500.0, 10000)
@@ -298,11 +298,11 @@ class TestShockEmissionUnits:
         nu = _C_AA / wave
 
         # Gaussian branch — wide sigma (200 Å) to be well-sampled by the grid
-        sed_gaussian = shock_emission_sed(
+        sed_gaussian = compute_shock_sed(
             wave, shock_velocity=200.0, l_shock_halpha=1.0, line_sigma_aa=200.0
         )
         # Delta branch
-        sed_delta = shock_emission_sed(
+        sed_delta = compute_shock_sed(
             wave, shock_velocity=200.0, l_shock_halpha=1.0, line_sigma_aa=0.0
         )
 
@@ -324,10 +324,10 @@ class TestShockEmissionUnits:
         For Halpha luminosity = 1 Lsun, the peak SED value in Lsun/Hz should be
         much smaller than 3.828e33 (which would indicate erg/s/Hz units).
         """
-        from tengri.components.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import compute_shock_sed
 
         wave = jnp.logspace(2.5, 5.0, 500)
-        sed = shock_emission_sed(wave, shock_velocity=200.0, l_shock_halpha=1.0, line_sigma_aa=3.0)
+        sed = compute_shock_sed(wave, shock_velocity=200.0, l_shock_halpha=1.0, line_sigma_aa=3.0)
         peak = float(jnp.max(sed))
         # If units were erg/s/Hz, peak would be ~3.828e33 × (1/sigma_nu) >> 1
         # In Lsun/Hz, peak should be << 3.828e33
@@ -559,13 +559,13 @@ class TestBLRFeIINormalization:
 
     def test_fe2_normalization_grid_independent(self):
         """Fe II normalization should not change significantly with wavelength grid resolution."""
-        from tengri.components.agn.blr import blr_emission
+        from tengri.components.agn.blr import compute_blr_sed
 
         wave_coarse = jnp.logspace(2.8, 4.2, 100)
         wave_fine = jnp.logspace(2.8, 4.2, 500)
 
-        sed_coarse = blr_emission(wave_coarse, l_disc_bol_erg=1e46, agn_fe2_strength=1.0)
-        sed_fine = blr_emission(wave_fine, l_disc_bol_erg=1e46, agn_fe2_strength=1.0)
+        sed_coarse = compute_blr_sed(wave_coarse, l_disc_bol_erg=1e46, agn_fe2_strength=1.0)
+        sed_fine = compute_blr_sed(wave_fine, l_disc_bol_erg=1e46, agn_fe2_strength=1.0)
 
         # The Fe II template in the 4434-4684 A window should normalize consistently.
         # Total power (integral over frequency) should agree within 10% between grids.

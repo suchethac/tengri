@@ -9,7 +9,7 @@ from tengri.components.nebular.shock import (
     _FALLBACK_LINE_NAMES,
     ShockBackend,
     _load_mappings_grids,
-    shock_emission_sed,
+    compute_shock_sed,
     shock_line_ratios,
 )
 
@@ -142,11 +142,11 @@ class TestShockLineRatios:
         )
 
 
-# ── shock_emission_sed ────────────────────────────────────────────
+# ── compute_shock_sed ────────────────────────────────────────────
 
 
 class TestShockEmissionSed:
-    """Tests for shock_emission_sed."""
+    """Tests for compute_shock_sed."""
 
     @pytest.fixture()
     def wavelength(self):
@@ -154,41 +154,41 @@ class TestShockEmissionSed:
 
     def test_output_shape(self, wavelength):
         """Output shape should match the input wavelength grid."""
-        sed = shock_emission_sed(wavelength, 300.0, 1e6)
+        sed = compute_shock_sed(wavelength, 300.0, 1e6)
         assert sed.shape == wavelength.shape
 
     def test_zero_luminosity_gives_zero_sed(self, wavelength):
         """l_shock_halpha=0 must give a zero SED."""
-        sed = shock_emission_sed(wavelength, 300.0, 0.0)
+        sed = compute_shock_sed(wavelength, 300.0, 0.0)
         assert jnp.allclose(sed, 0.0)
 
     def test_sed_non_negative(self, wavelength):
         """SED should be non-negative everywhere."""
-        sed = shock_emission_sed(wavelength, 300.0, 1e6)
+        sed = compute_shock_sed(wavelength, 300.0, 1e6)
         assert jnp.all(sed >= 0.0)
 
     def test_sed_has_peaks_at_line_wavelengths(self, wavelength):
         """SED should have peaks near Hα 6563 Å."""
-        sed = shock_emission_sed(wavelength, 300.0, 1e8, line_sigma_aa=2.0)
+        sed = compute_shock_sed(wavelength, 300.0, 1e8, line_sigma_aa=2.0)
         ha_region = jnp.abs(wavelength - 6563.0) < 10.0
         assert jnp.max(sed[ha_region]) > jnp.median(sed[sed > 0]) * 10
 
     def test_delta_function_mode(self, wavelength):
         """Delta-function mode should produce at most N_lines non-zero pixels."""
-        sed = shock_emission_sed(wavelength, 300.0, 1e6, line_sigma_aa=0.0)
+        sed = compute_shock_sed(wavelength, 300.0, 1e6, line_sigma_aa=0.0)
         n_nonzero = int(jnp.sum(sed > 0))
         assert n_nonzero <= _n_lines()
 
     def test_gaussian_mode_broader(self, wavelength):
         """Gaussian mode should spread flux over more pixels than narrow mode."""
-        sed_narrow = shock_emission_sed(wavelength, 300.0, 1e6, line_sigma_aa=1.0)
-        sed_broad = shock_emission_sed(wavelength, 300.0, 1e6, line_sigma_aa=5.0)
+        sed_narrow = compute_shock_sed(wavelength, 300.0, 1e6, line_sigma_aa=1.0)
+        sed_broad = compute_shock_sed(wavelength, 300.0, 1e6, line_sigma_aa=5.0)
         assert int(jnp.sum(sed_broad > 1e-30)) > int(jnp.sum(sed_narrow > 1e-30))
 
     def test_luminosity_scales_linearly(self, wavelength):
         """Doubling l_shock_halpha should double the SED."""
-        sed1 = shock_emission_sed(wavelength, 300.0, 1e6)
-        sed2 = shock_emission_sed(wavelength, 300.0, 2e6)
+        sed1 = compute_shock_sed(wavelength, 300.0, 1e6)
+        sed2 = compute_shock_sed(wavelength, 300.0, 2e6)
         nonzero = sed1 > 1e-30
         ratio = sed2[nonzero] / sed1[nonzero]
         assert jnp.allclose(ratio, 2.0, rtol=1e-5)
@@ -212,7 +212,7 @@ class TestShockJIT:
 
         @jax.jit
         def _compute(v, lum):
-            return shock_emission_sed(wave, v, lum)
+            return compute_shock_sed(wave, v, lum)
 
         sed = _compute(300.0, 1e6)
         assert sed.shape == wave.shape
@@ -226,7 +226,7 @@ class TestShockDifferentiable:
         wave = jnp.linspace(3000.0, 8000.0, 500)
 
         def _total_flux(v):
-            return jnp.sum(shock_emission_sed(wave, v, 1e6, line_sigma_aa=2.0))
+            return jnp.sum(compute_shock_sed(wave, v, 1e6, line_sigma_aa=2.0))
 
         grad_jax = float(jax.grad(_total_flux)(300.0))
         grad_fd = fd_grad(_total_flux, 300.0)
@@ -234,7 +234,7 @@ class TestShockDifferentiable:
             grad_jax,
             grad_fd,
             rtol=2e-1,
-            err_msg="shock_emission_sed: FD check ∂/∂velocity",
+            err_msg="compute_shock_sed: FD check ∂/∂velocity",
         )
         assert grad_jax != 0.0
 
@@ -242,7 +242,7 @@ class TestShockDifferentiable:
         wave = jnp.linspace(3000.0, 8000.0, 500)
 
         def _total_flux(lum):
-            return jnp.sum(shock_emission_sed(wave, 300.0, lum, line_sigma_aa=2.0))
+            return jnp.sum(compute_shock_sed(wave, 300.0, lum, line_sigma_aa=2.0))
 
         grad_jax = float(jax.grad(_total_flux)(1e6))
         grad_fd = fd_grad(_total_flux, 1e6)
@@ -250,7 +250,7 @@ class TestShockDifferentiable:
             grad_jax,
             grad_fd,
             rtol=2e-1,
-            err_msg="shock_emission_sed: FD check ∂/∂luminosity",
+            err_msg="compute_shock_sed: FD check ∂/∂luminosity",
         )
         assert grad_jax != 0.0
 

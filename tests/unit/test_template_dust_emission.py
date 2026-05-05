@@ -392,7 +392,7 @@ class TestRegistryAndLazyLoading:
         assert expected.issubset(set(DUST_EMISSION_MODELS.keys()))
 
     def test_get_emission_model_works(self):
-        """get_emission_model should return callable for all registered names."""
+        """resolve_emission_model should return callable for all registered names."""
         from tengri.components.dust.emission import resolve_emission_model
 
         for name in ["modified_blackbody", "draine_li2007", "dale2014", "draine_li2014"]:

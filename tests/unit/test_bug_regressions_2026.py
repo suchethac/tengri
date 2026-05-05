@@ -149,11 +149,11 @@ class TestShockSigmaNuConversion:
 
     def test_line_width_physical(self):
         """Shock Hα line with sigma=2Å should be ~2Å wide, not sub-mA."""
-        from tengri.components.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import compute_shock_sed
 
         wave = jnp.linspace(6550.0, 6580.0, 1000)
         sigma_aa = 2.0
-        sed = shock_emission_sed(wave, 300.0, 1e8, line_sigma_aa=sigma_aa)
+        sed = compute_shock_sed(wave, 300.0, 1e8, line_sigma_aa=sigma_aa)
 
         # Find FWHM of the Hα peak
         peak = float(jnp.max(sed))

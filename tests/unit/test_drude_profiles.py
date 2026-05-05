@@ -7,9 +7,9 @@ import pytest
 from tengri.components.dust.drude_profiles import (
     N_PAH_FEATURES,
     SMITH2007_PAH_FEATURES,
+    compute_pah_template,
     decompose_pah,
     drude_profile,
-    pah_template,
 )
 
 jax.config.update("jax_enable_x64", True)
@@ -90,37 +90,37 @@ class TestDrudeProfile:
 
 class TestPAHTemplate:
     def test_output_shape(self):
-        out = pah_template(_WAVE_UM)
+        out = compute_pah_template(_WAVE_UM)
         assert out.shape == _WAVE_UM.shape
 
     def test_non_negative_everywhere(self):
-        out = pah_template(_WAVE_UM)
+        out = compute_pah_template(_WAVE_UM)
         assert jnp.all(out >= 0.0)
 
     def test_default_and_explicit_strengths_match(self):
         s = jnp.array([f.strength for f in SMITH2007_PAH_FEATURES])
-        out_default = pah_template(_WAVE_UM)
-        out_explicit = pah_template(_WAVE_UM, strengths=s)
+        out_default = compute_pah_template(_WAVE_UM)
+        out_explicit = compute_pah_template(_WAVE_UM, strengths=s)
         assert jnp.allclose(out_default, out_explicit, atol=1e-12)
 
     def test_zero_strengths_gives_zero(self):
         s = jnp.zeros(N_PAH_FEATURES)
-        out = pah_template(_WAVE_UM, strengths=s)
+        out = compute_pah_template(_WAVE_UM, strengths=s)
         assert jnp.allclose(out, 0.0, atol=1e-30)
 
     def test_scale_linearity(self):
         """Doubling all strengths doubles the output."""
         s = jnp.array([f.strength for f in SMITH2007_PAH_FEATURES])
-        out1 = pah_template(_WAVE_UM, strengths=s)
-        out2 = pah_template(_WAVE_UM, strengths=2.0 * s)
+        out1 = compute_pah_template(_WAVE_UM, strengths=s)
+        out2 = compute_pah_template(_WAVE_UM, strengths=2.0 * s)
         assert jnp.allclose(out2, 2.0 * out1, rtol=1e-6)
 
     def test_gradient_is_finite(self):
-        """Gradient of sum(pah_template) w.r.t. strengths is finite."""
+        """Gradient of sum(compute_pah_template) w.r.t. strengths is finite."""
         s = jnp.array([f.strength for f in SMITH2007_PAH_FEATURES])
 
         def total(strengths):
-            return jnp.sum(pah_template(_WAVE_UM, strengths=strengths))
+            return jnp.sum(compute_pah_template(_WAVE_UM, strengths=strengths))
 
         g = jax.grad(total)(s)
         assert jnp.all(jnp.isfinite(g))
@@ -128,7 +128,7 @@ class TestPAHTemplate:
     def test_major_features_are_peaks(self):
         """The 7.60 and 6.22 μm features produce local maxima in a coarse SED."""
         wave = jnp.linspace(5.0, 15.0, 1001)
-        out = pah_template(wave)
+        out = compute_pah_template(wave)
         # Find feature values vs nearby background — just check they're non-negligible
         idx_760 = int(jnp.argmin(jnp.abs(wave - 7.6)))
         idx_622 = int(jnp.argmin(jnp.abs(wave - 6.22)))
@@ -139,7 +139,7 @@ class TestPAHTemplate:
 class TestDecomposePAH:
     def _synthetic_pah(self, wave_um, strengths):
         """Build a noiseless synthetic PAH SED for round-trip tests."""
-        return pah_template(wave_um, strengths=strengths)
+        return compute_pah_template(wave_um, strengths=strengths)
 
     def test_output_keys(self):
         s = jnp.array([f.strength for f in SMITH2007_PAH_FEATURES])

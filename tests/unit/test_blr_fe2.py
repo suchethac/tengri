@@ -10,7 +10,7 @@ jax.config.update("jax_enable_x64", True)
 
 from tengri.components.agn.blr import (
     _fe2_pseudo_continuum,
-    blr_emission,
+    compute_blr_sed,
 )
 
 
@@ -92,12 +92,12 @@ class TestFe2PseudoContinuum:
 
 
 class TestBlrEmissionWithFe2:
-    """Tests for blr_emission with agn_fe2_strength parameter."""
+    """Tests for compute_blr_sed with agn_fe2_strength parameter."""
 
     def test_backward_compatible_default(self, wavelength):
         """Default agn_fe2_strength=0.0 should match old behavior."""
-        result_default = blr_emission(wavelength, l_disc_bol_erg=1e45, covering_fraction=0.1)
-        result_explicit = blr_emission(
+        result_default = compute_blr_sed(wavelength, l_disc_bol_erg=1e45, covering_fraction=0.1)
+        result_explicit = compute_blr_sed(
             wavelength,
             l_disc_bol_erg=1e45,
             covering_fraction=0.1,
@@ -107,23 +107,23 @@ class TestBlrEmissionWithFe2:
 
     def test_fe2_adds_flux(self, wavelength):
         """Enabling Fe II should add flux, never subtract."""
-        result_no_fe2 = blr_emission(wavelength, l_disc_bol_erg=1e45, agn_fe2_strength=0.0)
-        result_with_fe2 = blr_emission(wavelength, l_disc_bol_erg=1e45, agn_fe2_strength=1.0)
+        result_no_fe2 = compute_blr_sed(wavelength, l_disc_bol_erg=1e45, agn_fe2_strength=0.0)
+        result_with_fe2 = compute_blr_sed(wavelength, l_disc_bol_erg=1e45, agn_fe2_strength=1.0)
         # Fe II should add flux in the optical bump region
         mask_opt = (wavelength > 4400.0) & (wavelength < 4700.0)
         assert jnp.all(result_with_fe2[mask_opt] >= result_no_fe2[mask_opt] - 1e-30)
 
     def test_fe2_increases_optical_bump(self, wavelength):
         """The 4400-5500 A region should show significant excess with Fe II."""
-        no_fe2 = blr_emission(wavelength, l_disc_bol_erg=1e45, agn_fe2_strength=0.0)
-        with_fe2 = blr_emission(wavelength, l_disc_bol_erg=1e45, agn_fe2_strength=1.5)
+        no_fe2 = compute_blr_sed(wavelength, l_disc_bol_erg=1e45, agn_fe2_strength=0.0)
+        with_fe2 = compute_blr_sed(wavelength, l_disc_bol_erg=1e45, agn_fe2_strength=1.5)
         mask = (wavelength > 4434.0) & (wavelength < 4684.0)
         excess = jnp.sum(with_fe2[mask]) - jnp.sum(no_fe2[mask])
         assert excess > 0.0
 
     def test_jit_with_fe2(self, wavelength):
-        """blr_emission with Fe II should be JIT-compilable."""
-        fn = jax.jit(lambda w: blr_emission(w, l_disc_bol_erg=1e45, agn_fe2_strength=1.0))
+        """compute_blr_sed with Fe II should be JIT-compilable."""
+        fn = jax.jit(lambda w: compute_blr_sed(w, l_disc_bol_erg=1e45, agn_fe2_strength=1.0))
         result = fn(wavelength)
         assert jnp.all(jnp.isfinite(result))
         assert result.shape == wavelength.shape
