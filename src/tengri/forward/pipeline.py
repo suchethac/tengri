@@ -489,10 +489,14 @@ def compute_sed_components(
         weights = weights * _total_mass_formed
 
     elif _use_dsps_table:
-        # Use DSPS calc_age_weights for proper trapezoidal integration
-        # of SFH within each SSP age bin (Hearin+2023 Eq. 9).
-        # Then our standard interpolate_metallicity + compute_csp_sed.
-        # This gives ~1-2% accuracy at observable wavelengths in 0.5 ms.
+        # Tabulated SFH path: use the user's ``sfh_t_gyr`` /
+        # ``sfh_sfr`` cosmic-time grid for SFH integration via DSPS,
+        # and apply DSPS canonical lognormal-MDF metallicity weighting
+        # (Hearin+ 2021, Eq. 11) — replacing the previous
+        # ``interp_metallicity`` bilinear path. The user's t_cosmic
+        # grid does not derive from the SSP age axis, so this avoids
+        # the negative-cosmic-time NaN failure mode that affects
+        # ``compute_dsps_native_weights`` when SSP ages exceed t_obs.
         from dsps.sed.ssp_weights import calc_age_weights_from_sfh_table
 
         dsps_age_w = calc_age_weights_from_sfh_table(
@@ -501,16 +505,24 @@ def compute_sed_components(
             ssp_lg_age_gyr=model.ssp_data.ssp_lg_age_gyr,
             t_obs=t_obs_gyr,
         )
-        # DSPS returns normalized weights (sum=1); scale to absolute mass
         _total_mass_formed = jnp.trapezoid(sfr_table, t_cosmic_gyr * 1e9)
         weights = dsps_age_w * _total_mass_formed  # (n_age,) Msun
 
-        # Metallicity: dispatch to 4D bilinear or plain interp (opt-in alpha correction)
-        log_z_solar = p.get("log_z_abs", -1.8477)
+        log_z_abs_scalar = p.get("log_z_abs", -1.8477)
         if _use_alpha_fe:
-            ssp_flux_at_z = interp_met_alpha_dispatch(model, log_z_solar, alpha_fe)
+            # α-enhancement still uses the 4D bilinear path; α-aware
+            # joint einsum is the next migration step.
+            ssp_flux_at_z = interp_met_alpha_dispatch(model, log_z_abs_scalar, alpha_fe)
         else:
-            ssp_flux_at_z = interp_metallicity(model, log_z_solar)
+            from dsps.sed.metallicity_weights import (
+                calc_lgmet_weights_from_lognormal_mdf,
+            )
+
+            lgmet_scatter = float(p.get("lgmet_scatter", getattr(model, "_lgmet_scatter", 0.2)))
+            lgmet_w = calc_lgmet_weights_from_lognormal_mdf(
+                log_z_abs_scalar, lgmet_scatter, model.ssp_data.ssp_lgmet
+            )
+            ssp_flux_at_z = jnp.einsum("m,maw->aw", lgmet_w, model.ssp_data.ssp_flux)
 
     # Metallicity interpolation (non-table path)
     # Priority: met_history (array) > evolving_metallicity > single Z
@@ -643,8 +655,23 @@ def compute_sed_components(
             _lgmet = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
             ssp_flux_at_z = interp_met_alpha_dispatch(model, _lgmet, alpha_fe)
         else:
+            # DSPS-canonical metallicity marginalisation (Hearin+ 2021,
+            # Eq. 11): lognormal MDF triweight kernel of width
+            # ``lgmet_scatter`` over the SSP metallicity grid, applied
+            # via ``einsum("m,maw->aw", lgmet_weights, ssp_flux)``.
+            # Replaces the previous bilinear-interp path (which assumed
+            # σ_MDF = 0). See
+            # ``docs/dev/20260504-csp-integral-canonicalization.md``.
+            from dsps.sed.metallicity_weights import (
+                calc_lgmet_weights_from_lognormal_mdf,
+            )
+
             _lgmet2 = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
-            ssp_flux_at_z = interp_metallicity(model, _lgmet2)
+            lgmet_scatter = float(p.get("lgmet_scatter", getattr(model, "_lgmet_scatter", 0.2)))
+            lgmet_w = calc_lgmet_weights_from_lognormal_mdf(
+                _lgmet2, lgmet_scatter, model.ssp_data.ssp_lgmet
+            )
+            ssp_flux_at_z = jnp.einsum("m,maw->aw", lgmet_w, model.ssp_data.ssp_flux)
 
         # --- Fast JIT path: dust + einsum in one compiled kernel ---
         # Eliminates ~78% Python dispatch overhead (4-14x speedup).

@@ -164,14 +164,36 @@ def test_orchestrator_vs_legacy_mstar_physical_agreement(stellar_only_model):
 # ── Strict bit-exact: gating criterion for monolith deletion ──────────
 
 
+def test_orchestrator_rest_sed_close_to_legacy(stellar_only_model):
+    """Orchestrator's stellar SED agrees with legacy's
+    ``predict_rest_sed.sed`` at ``rtol=1e-2`` after the DSPS-canonical
+    metallicity migration (commit ``20260504-csp-integral-...``).
+
+    Residual ~0.2% comes from legacy SFH integration (trapezoidal in
+    lookback time on the SSP age grid) vs DSPS canonical (trapezoidal
+    in cosmic time). Closing this residual to ``rtol=1e-6`` requires
+    migrating the SFH side too — tracked as the next milestone in
+    ``docs/dev/20260504-csp-integral-canonicalization.md``.
+    """
+    legacy = stellar_only_model.predict_rest_sed(_STELLAR_PARAMS)
+    state = stellar_only_model.predict_via_orchestrator(_STELLAR_PARAMS)
+
+    assert legacy.sed.shape == state.sed_intrinsic.shape
+
+    rel_diff = float(
+        jnp.max(
+            jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
+        )
+    )
+    assert rel_diff < 1e-2, f"max rel diff: {rel_diff:.3e}"
+
+
 @pytest.mark.xfail(
     reason=(
-        "Strict orchestrator-vs-legacy bit-exact parity is the gating "
-        "criterion for monolith deletion (Phase II-2 success bar). "
-        "Current divergence sources: (1) DSPS joint vs separable mass "
-        "factorization (legacy still on separable path), (2) interface "
-        "mismatch in fixed-param injection. Closing this xfail is the "
-        "blocking work item for the deletion phase."
+        "Strict bit-exact (rtol=1e-6) parity requires also migrating "
+        "the SFH integration in the legacy trapz path to DSPS canonical "
+        "trapezoidal-in-cosmic-time. Tracked as the next milestone in "
+        "docs/dev/20260504-csp-integral-canonicalization.md."
     ),
     strict=True,
 )
@@ -180,11 +202,6 @@ def test_orchestrator_rest_sed_bit_exact_to_legacy(stellar_only_model):
     at rtol=1e-6 for the gating-criterion sign-off."""
     legacy = stellar_only_model.predict_rest_sed(_STELLAR_PARAMS)
     state = stellar_only_model.predict_via_orchestrator(_STELLAR_PARAMS)
-
-    if legacy.sed.shape != state.sed_intrinsic.shape:
-        pytest.fail(
-            f"Shape mismatch — legacy {legacy.sed.shape} vs orch {state.sed_intrinsic.shape}"
-        )
 
     rel_diff = float(
         jnp.max(

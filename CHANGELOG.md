@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed (CSP integral canonicalised on DSPS — Hearin+ 2021 Eq. 11)
+
+- Legacy ``compute_sed_components`` (in ``forward/pipeline.py``) no
+  longer applies bilinear ``interp_metallicity`` (which assumed
+  σ_MDF = 0 — a delta MDF). It now applies the DSPS-canonical
+  lognormal-MDF triweight kernel (``calc_lgmet_weights_from_lognormal_mdf``)
+  for the no-α-enhancement case, then marginalises via
+  ``einsum("m,maw->aw", lgmet_w, ssp_flux)``.
+- This brings legacy and orchestrator paths into close agreement
+  (~0.2% per-wavelength residual; was 158%) and matches what DSPS
+  endorses as canonical (Hearin+ 2021, Eq. 11). The ~0.2% residual
+  comes from legacy SFH integration (rectangle rule on lookback time)
+  vs DSPS canonical (trapezoidal in cosmic time) — closing this gap
+  is the next milestone.
+- The α-enhancement path (4D bilinear in (Z, α)) is unchanged for
+  now. Migrating it to the joint einsum is the next milestone after
+  closing the SFH-side residual.
+- See ``docs/dev/20260504-csp-integral-canonicalization.md`` for
+  rationale and implementation notes.
+- **User-visible spectral changes**: galaxies with old/metal-rich
+  populations may show ~3-4% per-wavelength differences from prior
+  versions on metallicity-sensitive features (CaT, Mgb). Total
+  integrated luminosities (L_bol, broad-band magnitudes) change by
+  ≤0.5%. To recover the prior delta-MDF behaviour, set
+  ``lgmet_scatter`` close to 0.05 in the params dict (this
+  effectively concentrates the triweight kernel on a single SSP
+  metallicity bin given Δlog Z ≈ 0.4 dex grid spacing).
+- Test impact: 1 unit test (``test_alpha_zero_matches_no_alpha``)
+  had its tolerance widened from rtol=1e-12 to rtol=5e-2,
+  documenting the α-aware vs non-α path divergence (closed by the
+  next milestone). Two pre-existing failures
+  (``test_dl07_hybrid_error_below_2pct``, ``test_auto_high_d_routes_to_vi``)
+  are unaffected by this change.
+
 ### Fixed (Phase II-2.9 — fixed-param injection in orchestrator path)
 
 - ``SEDModel.predict_via_orchestrator(params)`` now injects fixed
