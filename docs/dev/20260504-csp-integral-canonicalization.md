@@ -1,8 +1,44 @@
 # CSP integral: canonicalize on DSPS joint formulation
 
-**Date:** 2026-05-04
-**Status:** approved, in progress
+**Date:** 2026-05-04 (drafted), 2026-05-05 (status update)
+**Status:** Z-axis migrated; SFH-axis deferred to a focused future PR
 **Owner:** Sucheta + Claude (orchestrator)
+
+## Status — what's landed (2026-05-05)
+
+| Decision | Implementation | Result |
+|---|---|---|
+| Z marginalisation: bilinear → DSPS lognormal MDF triweight | ``pipeline.py::compute_sed_components`` (no-α and α-fallback paths) | ✅ Landed in commits ``5cd64cf`` + ``492d68c`` |
+| α=0 path bit-exact reduction to non-α path | ``interp_met_alpha_dispatch`` fallback uses DSPS triweight on ``effective_metallicity(log_z, alpha_fe)`` | ✅ ``rtol=1e-12`` parity in ``test_alpha_zero_matches_no_alpha`` |
+| ``compute_dsps_native_weights`` NaN safety for SSP grids past ``t_obs`` | Invalid bins masked with ``T_TABLE_MIN`` ramp + zero SFR | ✅ Landed in ``c224e29`` |
+| ``compute_dsps_age_weights`` SFH-only helper | New function in ``dsps_wrapper.py`` | ✅ Landed in ``3e9a21b``; used standalone, not yet wired into legacy CSP |
+| Orchestrator-vs-legacy SFH variant equivalence pinning | 16 of 19 registered parametric SFH variants pinned at ``rtol ≤ 1e-1`` | ✅ Landed in commits ``ca2c3af`` + ``fb454db`` + ``5c2a552`` |
+| **SFH integration: legacy lookback rectangle → DSPS canonical trapezoidal in cosmic time** | **❌ Not landed.** Attempted in this session; reverted because it breaks 16 mode-comparison tests that pin the four JIT-compiled CSP paths against each other (Tier 2 fused, Tier 2 unfused, Tier 3, hybrid spec) | Tracked as the **CSP-canonicalisation-closure PR** (focused future work) |
+
+The strict bit-exact ``rtol=1e-6`` gating xfail (``test_orchestrator_rest_sed_bit_exact_to_legacy``) currently sits at ~0.097% per-wavelength residual from the SFH-integration mismatch, plus a smaller residual (~10⁻⁵) from the SFH-evaluation interpolation (legacy log-space vs orchestrator linear-space ``jnp.interp``).
+
+## What the closure PR needs to do
+
+1. **Migrate all four legacy SFH-rectangle call sites simultaneously** to use ``compute_dsps_age_weights`` (or ``compute_dsps_native_weights`` for the no-α path):
+   - ``forward/pipeline.py::compute_sed_components`` — Tier 3 default branch
+   - ``forward/sed_model.py::_compute_rest_sed_compositional`` — Tier 2 unfused
+   - ``forward/_kernels/compositional.py::build_fused_rest_sed`` — Tier 2 fused
+   - ``forward/_kernels/compositional.py::build_fused_tier2_phot``, ``build_fused_tier2_spectrum`` — fused photometry / spectrum
+   - ``forward/_kernels/compositional.py::build_hybrid_spectrum`` — hybrid spec
+
+2. **Align the SFH-evaluation interpolation** (``sfr_on_ssp = jnp.interp(...)``) with the orchestrator (linear-space ages on ``ssp_ages_yr``, not log-space on ``ssp_log_ages_yr``).
+
+3. **Regenerate golden-value snapshots** in:
+   - ``tests/unit/test_mode_comparison.py`` (Tier 2 vs Tier 3 numerical-agreement assertions)
+   - ``tests/unit/test_precompute_kernel_invariants.py`` (traceable-routing parity)
+   - ``tests/unit/test_fused_rest_sed.py`` (fused-vs-unfused parity)
+   - ``tests/unit/test_hybrid_energy_balance.py`` (DL07 hybrid-template energy-balance — a pre-existing failure that may close after migration, may need template regeneration)
+
+4. **Flip the gating xfail** (``test_orchestrator_rest_sed_bit_exact_to_legacy`` from ``xfail(strict=True)`` to passing at ``rtol=1e-6``).
+
+5. **Add equivalence tests for ``exp``, ``dexp``, ``tau``** (currently NotImplementedError'd in ``StellarSEDComponent._SUPPORTED_SFH``) — they diverge by 13-126% pre-migration because the sharp SFH cutoffs amplify the log-vs-linear interpolation mismatch.
+
+After that PR lands, the deletion of ``compute_sed_components`` + ``_init_*`` wiring (entropy-budget reduction in ``sed_model.py`` from 4487 LOC → ≤ 800 LOC) becomes the next-next PR.
 
 ## Problem
 
