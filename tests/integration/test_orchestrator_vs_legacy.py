@@ -677,9 +677,21 @@ def _stellar_only_spec(sfh_name: str, sfh_params: dict):
         # truncs, burst_sfr, burst_age, peak_lbt. Use multiplicative
         # bounds for those; additive ±1.5 for unconstrained params
         # like log_peak_sfr and skew.
-        positive_only = (
-            "width" in k or "trunc" in k or "burst_sfr" in k or "burst_age" in k or "peak_lbt" in k
+        # Most time/scale-like params have ``lo >= 0`` constraints in
+        # their priors. Use multiplicative bounds for any param whose
+        # name does NOT match an unconstrained suffix.
+        unconstrained_keys = (
+            "log_",
+            "skew",
+            "_alpha",
+            "_beta",
+            "ratio",
+            "flex_",
+            "tx_frac",
+            "fburst",
+            "_r_sfr",
         )
+        positive_only = not any(token in k for token in unconstrained_keys)
         if positive_only:
             free_priors[k] = Uniform(max(v * 0.1, 1e-3), max(v * 5.0, 0.5))
         else:
@@ -695,7 +707,7 @@ def _stellar_only_spec(sfh_name: str, sfh_params: dict):
     )
 
 
-def _check_sfh_variant_equivalence(ssp, sfh_name: str, sfh_params: dict):
+def _check_sfh_variant_equivalence(ssp, sfh_name: str, sfh_params: dict, rtol: float = 5e-2):
     spec = _stellar_only_spec(sfh_name, sfh_params)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -708,7 +720,7 @@ def _check_sfh_variant_equivalence(ssp, sfh_name: str, sfh_params: dict):
             jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
         )
     )
-    assert rel_diff < 5e-2, f"{sfh_name} max rel diff: {rel_diff:.3e}"
+    assert rel_diff < rtol, f"{sfh_name} max rel diff: {rel_diff:.3e}"
 
 
 def test_orchestrator_lnorm_close_to_legacy(ssp):
@@ -780,5 +792,66 @@ def test_orchestrator_norm_close_to_legacy(ssp):
             "sfh_norm_log_peak_sfr": 1.0,
             "sfh_norm_peak_lbt_gyr": 3.0,
             "sfh_norm_width_gyr": 1.0,
+        },
+    )
+
+
+# ── Phase II-2.5b: more parametric SFH variants ──────────────────────
+#
+# Tests pin orchestrator-vs-legacy parity for the smooth-SFH variants
+# that converge at ``rtol=5e-2`` (or ``rtol=1e-1`` for ``const_exp``,
+# which has a sharp quench transition — see comment on the test).
+# Variants with sharp discontinuities (``exp``, ``dexp``, ``tau``)
+# diverge by ≥ 13% per-wavelength because the legacy log-space SFR
+# interpolation and the orchestrator's linear-space interpolation
+# resolve the cutoff differently. They are pinned by the SFH-side
+# CSP-canonicalisation work (tracked in
+# ``docs/dev/20260504-csp-integral-canonicalization.md``), not here.
+# ``psb``, ``delayed_bq``, ``dense_basis_pure`` have prior-bound
+# constraints (``[0,1]`` fractions, etc.) that the test fixture's
+# generic free-prior generator cannot satisfy yet; they need
+# variant-specific fixtures and are deferred.
+
+
+def test_orchestrator_const_close_to_legacy(ssp):
+    """``const`` (constant SFH between two cosmic times) — orchestrator vs legacy."""
+    _check_sfh_variant_equivalence(
+        ssp,
+        "const",
+        {
+            "sfh_const_log_sfr": 1.0,
+            "sfh_const_start_gyr": 0.5,
+            "sfh_const_end_gyr": 5.0,
+        },
+    )
+
+
+def test_orchestrator_const_exp_close_to_legacy(ssp):
+    """``const_exp`` (constant-then-exponential SFH) — orchestrator vs legacy."""
+    _check_sfh_variant_equivalence(
+        ssp,
+        "const_exp",
+        {
+            "sfh_cexp_log_sfr": 1.0,
+            "sfh_cexp_tau_gyr": 2.0,
+            "sfh_cexp_quench_gyr": 5.0,
+            "sfh_cexp_age_gyr": 10.0,
+        },
+        rtol=1e-1,  # quench transition slightly worse than smooth SFHs
+    )
+
+
+def test_orchestrator_continuity_flex_close_to_legacy(ssp):
+    """``continuity_flex`` — orchestrator vs legacy."""
+    _check_sfh_variant_equivalence(
+        ssp,
+        "continuity_flex",
+        {
+            "sfh_cflex_log_total_mass": 10.0,
+            "sfh_cflex_ratio_young": 0.0,
+            "sfh_cflex_flex_0": 0.0,
+            "sfh_cflex_flex_1": 0.0,
+            "sfh_cflex_flex_2": 0.0,
+            "sfh_cflex_ratio_old": 0.0,
         },
     )

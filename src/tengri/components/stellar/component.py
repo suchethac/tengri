@@ -284,6 +284,18 @@ class StellarSEDComponent:
             "snorm_burst",
             "tsnorm_burst",
             "norm",
+            # Phase II-2.5b: smooth-SFH parametric variants that
+            # converge to legacy at ≤ 10% rtol. Variants with sharp
+            # discontinuities (``exp``, ``dexp``, ``tau``) diverge
+            # because legacy log-space and orchestrator linear-space
+            # SFR interpolations resolve the cutoff differently —
+            # blocked on the SFH-side CSP-canonicalisation. Variants
+            # with bounded-fraction priors (``psb``, ``delayed_bq``,
+            # ``dense_basis_pure``) need variant-specific test
+            # fixtures, deferred.
+            "const",
+            "const_exp",
+            "continuity_flex",
         )
         if self.config.sfh_model not in _SUPPORTED_SFH:
             raise NotImplementedError(

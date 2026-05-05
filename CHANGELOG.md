@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added (Phase II-2.5b — three more smooth-SFH variants pinned)
+
+- ``StellarSEDComponent._SUPPORTED_SFH`` extends to ``const``,
+  ``const_exp`` (constant-then-exponential), and ``continuity_flex``.
+  Each is pinned by an equivalence test in
+  ``tests/integration/test_orchestrator_vs_legacy.py``.
+- Variants whose SFH has a sharp discontinuity (``exp``, ``dexp``,
+  ``tau``) diverge by ≥ 13% per-wavelength because the legacy
+  log-space SFR interpolation and the orchestrator's linear-space
+  interpolation resolve the cutoff differently. They are blocked
+  on the SFH-side CSP-canonicalisation work and remain
+  unsupported by the orchestrator.
+- Variants with bounded-fraction priors (``psb``, ``delayed_bq``,
+  ``dense_basis_pure``) need variant-specific test fixtures (the
+  generic fixture's ±multiplicative-bound generator can't satisfy
+  ``[0,1]`` constraints) and are deferred.
+- Total orchestrator-supported parametric SFH variants: 13
+  (tsnorm, dpl, continuity, dirichlet, dense_basis, lnorm, snorm,
+  snorm_burst, tsnorm_burst, norm, const, const_exp,
+  continuity_flex).
+
 ### Added (Phase II-2.5 — orchestrator now supports 5 more SFH variants)
 
 - ``StellarSEDComponent._SUPPORTED_SFH`` allowlist expanded with
