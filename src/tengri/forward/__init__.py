@@ -29,6 +29,7 @@ from tengri.forward.component_factory import (
     state_to_sfh_quantities,
     state_to_xray_quantities,
 )
+from tengri.forward.filter_preintegrate import preintegrate_ssp_filter_grid
 from tengri.forward.orchestrator import run_components
 from tengri.forward.result import SEDResult
 
@@ -39,6 +40,7 @@ __all__ = [
     "XRayQuantities",
     "build_components",
     "chain_summary",
+    "preintegrate_ssp_filter_grid",
     "run_components",
     "state_to_emission_lines",
     "state_to_ionizing_quantities",

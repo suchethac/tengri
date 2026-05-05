@@ -88,18 +88,21 @@ API reference: [API](api/index.md).
    :hidden:
 
    spine/00_quickstart
-   spine/01_sed_anatomy
-   spine/02_sfh_gallery
-   spine/03_dust_gallery
-   spine/04_nebular_gallery
-   spine/05_agn_gallery
-   spine/06_multiwavelength_gallery
-   spine/07_fitting_photometry
-   spine/08_fitting_spectra
-   spine/09_degeneracies
-   spine/10_real_data
+   spine/01_why_jax
+   spine/02_sed_anatomy
+   spine/03_fitting_photometry
+   spine/04_fitting_spectra
+   spine/05_joint_photometry_spectroscopy
+   spine/06_inference_methods
+   spine/07_degeneracies
+   spine/08_sfh_advanced
+   spine/09_dust_emission
+   spine/10_agn_advanced
    spine/11_population
-   spine/12_extending_tengri
-   spine/13_tabulated_sfh_to_mock_sed
-   spine/14_joint_photometry_spectroscopy
+   spine/12_diagnostics
+   spine/13_extending_tengri
+   spine/14_stochastic_sfh
+   spine/15_vi_inference
+   spine/16_simulation_interface
+   spine/17_emission_line_measurements
 ```

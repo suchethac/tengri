@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added (Phase II-2.7 — filter pre-integration utility)
+
+- ``tengri.forward.preintegrate_ssp_filter_grid(ssp_data, filter_waves,
+  filter_trans, redshift=0.0)`` — JAX-compatible utility that convolves
+  every SSP template with every filter at construction time, returning
+  an ``(n_met, n_age, n_filters)`` array. For SDSS ugriz on the
+  PRSC-MILES grid this is **~1200× smaller** than the underlying
+  ``(n_met, n_age, n_wave=5994)`` SSP cube (63.8 MB → 53 KB).
+- This is the architectural **ingredient** for fast photometry-only
+  orchestrator workflows. Wiring it into a photometry-mode
+  ``StellarSEDComponent`` variant — and parallel photometry-mode
+  Dust / Nebular / AGN / Radio / X-ray adapters operating on the
+  ``(n_filters,)`` axis instead of ``(n_wave,)`` — is the follow-up
+  architectural pass (tracked but not blocking Phase II-2 closure).
+- New tests in ``tests/unit/test_filter_preintegrate.py`` pin the
+  shape, finiteness, redshift-shift behaviour, and ≥1000× compression
+  invariant.
+
 ### Added (Phase II-2.6 — Quantities bridges from PipelineState)
 
 - ``tengri.forward.state_to_sfh_quantities(state)`` — converts an

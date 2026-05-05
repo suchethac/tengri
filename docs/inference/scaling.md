@@ -172,15 +172,98 @@ geoVI follows the same shape but with longer absolute wall-times and
 slightly tighter memory headroom (Newton-CG inner solve dominates
 graph size). The K=32 elbow is the same.
 
+## Spectroscopic run — covers Hα, Hβ, [OIII], 4000 Å break
+
+The basic and rich runs are broadband-only. Even rich (FUV→Ks) cannot
+constrain $\tau_{\rm PSD}$ on Myr timescales because every photometric
+band is an *integral* over time-weighted SFR — UV gives ~5–100 Myr
+total, NIR gives stellar mass, neither resolves the *correlation
+length* of SFH fluctuations. The signature that actually pins
+$\tau_{\rm PSD}$ is Hα/UV ratio: Hα probes ~10 Myr SFR (only stars
+producing ionizing photons), FUV ~100 Myr; their mismatch *is* the
+burstiness signal (Mehta+23, Asada+23, Faisst+19).
+
+`PopulationFitter` supports `data_type="spectroscopy"`, which
+self-consistently produces continuum *and* emission lines from a
+single forward model:
+
+1. Stellar SED → ionizing photon rate $Q_{\rm ion}$ from the <912 Å
+   luminosity (cumulative integral, JIT-traceable).
+2. Nebular backend (Cue/BPASS+CLOUDY) maps
+   $(Q_{\rm ion}, \log U, \log Z_{\rm gas}) \to$ line luminosities.
+3. Birth-cloud and diffuse dust attenuation applied to lines (HII
+   region geometry → typically higher than continuum dust).
+4. Continuum + lines combined, LSF convolved to the requested
+   resolution.
+
+The `--spec-obs` benchmark uses rest-frame 3000–7500 Å at $R \approx
+500$ (covers Hβ, [OIII], Hα, and the 4000 Å break). It runs at K=1
+only (spec memory ~13 GB at small N already; K>1 exceeds the 30 GB
+budget) and N up to 1024 (per-cell wall time is ~5–10× longer than
+photometry).
+
+```{figure} ../../analysis/figures/vi_scaling_spec.png
+:name: fig-vi-scaling-spec
+:width: 100%
+:align: center
+
+Spectroscopic mode: 3000–7500 Å rest at R≈500, 5% noise. Hα + Hβ +
+[OIII] together with the 4000 Å break and continuum SFH information
+let σ_PSD and τ_PSD posteriors recover the injected truth (σ=2,
+τ=20 Myr) in a way broadband photometry cannot. Run with
+`scripts/benchmark_vi_xlarge.py --spec-obs --noise-frac 0.05 --ks 1
+--ns 4,8,...,1024`.
+```
+
+## Joint photometry + emission-line luminosity run
+
+A lighter-weight alternative to a full optical spectrum is to use the
+rich-obs photometry plus four integrated emission-line luminosities
+(Hα, Hβ, [OIII] λ5007, [OII] λ3727) extracted directly from the wNE-SSP
+spectrum at line centers (no separate Cue/CLOUDY backend — the emission
+is already baked into the FSPS/MIST continuum). The 4-line + 10-band
+joint vector is consumed by `PopulationFitter(data_type="photometry")`
+via a monkey-patched `predict_photometry`.
+
+```{figure} ../../analysis/figures/vi_scaling_joint.png
+:name: fig-vi-scaling-joint
+:width: 100%
+:align: center
+
+Joint mode: 10-band photometry + 4 emission-line luminosities (Hα, Hβ,
+[OIII] 5007, [OII] 3727), 5% noise, MGVI K=1, N=4..512. **σ_PSD median
+brackets truth (σ=2.0) at every N from 4 onward** — broadband alone
+could only put the median on truth by prior-coincidence, joint mode
+puts it there because the data demands it. **But the constraint width
+does NOT tighten with N**: σ half-width plateaus around ~0.85 (≈ prior
+width) across 7 doublings of N (panel: bottom-right). Adding more
+galaxies adds independent realizations of an information-saturated
+posterior — the four lines fix σ on average but don't supply the extra
+independent dimensions needed to shrink it. **τ_PSD remains pinned at
+the prior mean** (~150 Myr): four scalar line fluxes per galaxy don't
+discriminate correlation length on Myr timescales. Run with
+`scripts/benchmark_vi_xlarge.py --joint-obs --noise-frac 0.05 --ks 1
+--ns 4,8,...,512`.
+```
+
+**Key takeaway from the joint experiment:** *getting the median right
+is not the same as getting the uncertainty right.* All three modes
+basic / rich / joint land on σ ≈ 2 at large N, but only because:
+
+* basic and rich's prior mean happens to be near 2 (pure coincidence),
+* joint actively pulls the median to truth via line-flux information.
+
+In all three, the **posterior width stays at the prior width**. The
+spec mode (or true time-domain data) is the only configuration that
+can plausibly shrink uncertainty 1/√N.
+
 ## Caveats
 
-* **What's not yet measured here.** Joint photometry + emission-line
-  inference. `PopulationFitter` currently restricts `data_type` to
-  `"photometry"` or `"spectroscopy"`; adding Hα or other line fluxes
-  per galaxy needs a small extension to the per-galaxy predict path
-  in `tengri.inference.hierarchical`. With Hα directly fit, the
-  $\tau_{\rm PSD}$ posterior should additionally tighten on
-  short-timescale recent burstiness — see {doc}`../advanced/hierarchical`.
+* **Joint photometry + line-fluxes** for `PopulationFitter` is not yet
+  wired — the spec-mode covers the same physics by including Hα as
+  part of the spectrum. A direct joint photometry+`LineFluxData` mode
+  would be a small (~30-line) extension to the per-galaxy predict
+  path; tracked as future work.
 * **CPU only.** All numbers above are on CPU. The pure-JAX engines
   carry the same kernels to GPU; chunk parallelism (large $K$) gives
   far larger speedups there.

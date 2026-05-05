@@ -1,14 +1,49 @@
 /* tengri docs — custom overrides for Furo theme */
 
+/* ── Sidebar logo ─────────────────────────────────────────────────────
+   Large logo centred above the "tengri" title. */
+.sidebar-logo-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 0 0.25rem;
+}
+.sidebar-logo {
+    max-width: 140px;
+    height: auto;
+    object-fit: contain;
+    background: transparent;
+}
+/* Hide the duplicate dark-mode logo — we use one PNG for both modes. */
+.sidebar-logo.only-dark {
+    display: none !important;
+}
+.sidebar-brand-text {
+    font-size: 1.8rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
+
 /* ── Notebook output: neutral background ────────────────────────────── */
 .nboutput .output_area pre {
     background-color: var(--color-code-background);
     color: var(--color-code-foreground);
 }
-.nboutput .output_area.stderr pre {
-    background-color: var(--color-code-background);
+/* nbsphinx's default stderr styling is PINK (#fdd) to highlight warnings.
+   JAX's "Assume version compatibility" warnings fire constantly and produce
+   giant pink blocks. Neutralise to the same muted code background. */
+.nboutput .output_area.stderr pre,
+.nboutput .output_area.stderr {
+    background-color: var(--color-code-background) !important;
     color: var(--color-code-foreground);
     opacity: 0.7;
+}
+/* Hide the whole stderr cell if it contains only JAX/Protobuf boilerplate. */
+.nboutput .output_area.stderr pre:only-child:not(:empty) {
+    font-size: 0.78em;
+    line-height: 1.3;
 }
 
 /* Notebook text selectable */
@@ -39,7 +74,10 @@
     padding-left: 0.5rem;
 }
 
-/* Output images: centered with subtle shadow */
+/* Output images: centered with subtle shadow.
+   IMPORTANT: force a neutral white background behind figures.
+   nbsphinx's default and some browser dark-mode skins can tint PNG outputs
+   pink/magenta because the images have transparent regions. */
 .nboutput .output_area img,
 .nboutput .output_png img {
     display: block;
@@ -47,6 +85,17 @@
     max-width: 100%;
     border-radius: 4px;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    background-color: #ffffff;   /* neutral behind transparent PNG regions */
+    padding: 0.25rem;
+}
+
+/* Override any residual pinkish tint that Furo's dark-mode or nbsphinx
+   applies to output containers. */
+.nboutput .output_area,
+.nboutput .output_area.stderr,
+.nboutput .output_area .output_png,
+.nboutput .output_area .output_subarea {
+    background-color: transparent !important;
 }
 
 /* ── Table styling: cleaner borders ─────────────────────────────────── */

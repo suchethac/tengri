@@ -1,4 +1,8 @@
-# Known Bugs — Audit 2026-03-31 (Updated 2026-04-17)
+# Known Bugs — Audit 2026-03-31 (Updated 2026-04-30)
+
+**2026-04-30 update:** BUG-NSS-01, BUG-NSS-02, and BUG-NSS-03 (all from the HST AR proposal
+NSS work, 2026-04-16) are now FIXED. The only remaining open functional bug is PERF-01
+(DL07 dust emission JIT graph >2 GB), which is architectural and tracked separately.
 
 **Every fix MUST:**
 1. Read the original paper or reference code cited below. Do NOT guess the formula.
@@ -396,44 +400,71 @@ equivalent yet.
 
 ### BUG-NSS-01: `posterior.derived` crashes when `stellar_mass_surviving` is None
 
-**File:** `src/tengri/inference/posterior.py:101`
+**File:** `src/tengri/inference/posterior.py:29-51` (helper function), `src/tengri/inference/posterior.py:277`
 **Symptom:** `TypeError: stack requires ndarray or scalar arguments, got <class 'NoneType'>`
 when calling `posterior.derived` after NSS fit with an SSP file that lacks the
 mass-remaining table (e.g., `bpss_stars_c3k_a_chabrier.h5`).
 **Root cause:** `predict_derived()` returns `stellar_mass_surviving: None` when
 `ssp_data.ssp_mass_remaining` is absent. `posterior.derived` then tries
 `jnp.stack([None, None, ...])` which fails.
-**Workaround:** Use `model.predict_sfh_quantities(params)` per-sample instead of
-`posterior.derived` — `sfh_quantities.stellar_mass` (total formed) is always available.
-**Fix:** `posterior.derived` should filter out None-valued fields before stacking,
-or substitute NaN arrays.
-**Status:** OPEN
+**Fix (2026-04-30):** Implemented `_stack_or_nan()` helper function that filters None-valued
+fields and returns NaN arrays for missing derived quantities. The helper uses `jnp.asarray`
+defensively to ensure proper type conversion. Refactored `posterior.derived` to call the
+helper for each derived field, making the logic clearer and more robust.
+**Regression test:** `tests/unit/test_audit_regressions.py::TestBugNSS01PosteriorDerivedNone`
+verifies that when `stellar_mass_surviving` is None for all samples, `posterior.derived`
+returns a NaN-filled array (no crash) while other derived fields are stacked normally.
+**Status:** FIXED 2026-04-30
 
 ### BUG-NSS-02: `evolving_metallicity=True` causes KeyError: 'log_z_abs' in fused kernel
 
-**File:** `src/tengri/forward/_kernels/` (assembly logic, line refs approximate after 2026-04-21 rename)
-**Symptom:** `KeyError: 'log_z_abs'` when running MAP or any inference with
+**File:** `src/tengri/forward/_kernels/compositional.py` (photometry/spectrum builders)
+**Symptom:** `KeyError: 'log_z_abs'` or silently-wrong output (using only present-day
+metallicity, ignoring the ramp to initial metallicity) when running MAP or inference with
 `evolving_metallicity=True` in Parameters.
-**Root cause:** The fused kernel expects `p["log_z_abs"]` (single metallicity), but
-evolving metallicity produces `met_logzsol_0` and `met_logzsol_final` which map to
-a time-dependent Z(t). The internal param translation doesn't produce the scalar
-`log_z_abs` key that the fused kernel requires.
-**Workaround:** Use `met_logzsol=Uniform(...)` (single free metallicity) instead of
-`evolving_metallicity=True`.
-**Status:** OPEN — the fused/compositional kernel path doesn't support evolving
-metallicity yet. The exact pipeline path likely works (untested).
+**Root cause:** The fused kernel read a scalar `log_z_abs` (present-day Z only) via
+silent fallback to `log_z_abs_final`, ignoring the per-age ramp computed from
+`log_z_abs_initial` and `log_z_abs_final`. The exact path correctly computes per-age
+`lgmet_per_age` via `compute_log_z_evolving` and vmaps the metallicity interpolation.
+**Fix:** (2026-04-30) Added `met_mode` field to `SEDModelState` (line 372 of
+sed_model_types.py). At kernel-build time, detect `_met_mode == "ramp"` and:
+1. Capture `ssp_lg_age_gyr` for all csp_integration modes (not just dsps_native)
+2. Inside kernel: compute per-age `lgmet_per_age` from `compute_log_z_evolving`
+3. Call `interp_metallicity_evolving` or `interp_met_alpha_evolving_dispatch`
+   to get per-age SSP fluxes (shape n_age × n_wave)
+4. Removed silent fallback — now explicit branch on met_mode ensures correct physics
+5. Hybrid spectrum uses mean metallicity (approximation, since precomputed stellar
+   grid is not per-age; this is acceptable since hybrid is deprecated for science)
+**Regression tests:** `TestBugNSS02EvolvingMetFusedKernel` (3 tests):
+- `test_fused_kernel_evolving_metallicity_finite`: Compositional kernel returns finite
+  photometry with evolving metallicity (not crash, not silently-wrong)
+- `test_fused_vs_exact_evolving_metallicity_agreement`: Compositional and exact paths
+  agree to rtol=1e-5 (verification that ramp physics is correct)
+- `test_translate_evolving_keys_present`: Parameters correctly sets met_mode="ramp"
+  when `evolving_metallicity=True`
+**Status:** FIXED 2026-04-30
 
 ### BUG-NSS-03: qsogen AGN tracer leak — `UnexpectedTracerError` in JIT scopes
 
-**File:** `src/tengri/components/agn/qsogen.py:179`
+**File:** `src/tengri/components/agn/qsogen.py:154-190` (was 179)
 **Symptom:** `jax.errors.UnexpectedTracerError: Encountered an unexpected tracer` when
 running any JIT-compiled inference (MAP, NSS, VI) with `agn_model="qsogen"`.
-**Root cause:** `_load_emline_template()` performs lazy file I/O and Python-level
-iteration (`genexpr`) inside a JAX-traced function. The intermediate array reference
-escapes the JIT scope.
-**Workaround:** Don't use `agn_model="qsogen"` with JIT-based inference. The template
-loading needs to be moved to model init time.
-**Status:** OPEN
+**Root cause:** `_load_emline_template()` returned arrays created from a generator
+expression `tuple(jnp.array(row) for row in data)`. Generator evaluation inside
+JIT-traced `_empirical_emission_lines` caused tracer leaks.
+**Fix:** Replaced lazy loader with eager import-time load:
+  1. Renamed `_load_emline_template()` → `_load_emline_template_arrays()`
+  2. Replaced generator `tuple(jnp.array(...) for row in data)` with explicit
+     `np.asarray(row, dtype=np.float64)` per row
+  3. Load arrays once at module import into module-level variables
+     (`_EMLINE_WAV`, `_EMLINE_MED`, `_EMLINE_REF`, `_EMLINE_PEAKY`, `_EMLINE_WINDY`, `_EMLINE_NARROW`)
+  4. Updated `_empirical_emission_lines` to reference module-level arrays (closure)
+  5. Removed obsolete `@functools.cache` and import-time pre-call
+**Status:** FIXED 2026-04-30
+**Regression tests:**
+  - `tests/unit/test_audit_regressions.py::TestBugNSS03QsogenJit`
+  - `tests/unit/test_qsogen.py::TestLoadEmlineTemplateError`
+  - `tests/integration/test_user_scenarios.py::test_b2_qsogen_tracer_leak`
 
 ### NOTE-01: Dirichlet SFH produces extreme SFH spikes (~1000 M_sun/yr)
 
