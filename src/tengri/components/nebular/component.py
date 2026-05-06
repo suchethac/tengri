@@ -375,23 +375,26 @@ class NebularSEDComponent:
             return state.with_(sed_intrinsic=new_sed, derived=new_derived)
 
         # ── Photoionisation backends (Cue + CloudyGrid) ───────────────
+        # Cue / CloudyGrid both expect ``neb_logZ_gas`` in **absolute**
+        # log10(Z), matching the convention used by ``log_z``. Public
+        # params carry it in Z/Zsun, so apply the LOG10_ZSUN offset
+        # here (mirrors the legacy ``param_map`` translation in
+        # parameters/translate.py).
+        from tengri.parameters.translate import LOG10_ZSUN
+
+        _neb_logZ_gas = params.get("neb_logZ_gas")
+        if _neb_logZ_gas is not None:
+            _neb_logZ_gas = jnp.asarray(_neb_logZ_gas) + LOG10_ZSUN
         common_kwargs = {
             "ssp_wave": state.wave,
             "log_z": log_z,
             "neb_logU": jnp.asarray(params.get("neb_logU", -3.0)),
-            "neb_logZ_gas": params.get("neb_logZ_gas"),
+            "neb_logZ_gas": _neb_logZ_gas,
             "neb_fesc": jnp.asarray(params.get("neb_fesc", 0.0)),
             "neb_fesc_lya": jnp.asarray(params.get("neb_fesc_lya", 0.0)),
         }
 
         if self.config.backend == "cue":
-            # Cue picks up Q_H either from explicit ``gas_logqion`` or
-            # the published ``nion`` (stellar).
-            nion = state.derived.get("nion")
-            if "gas_logqion" in params:
-                common_kwargs["gas_logqion"] = jnp.asarray(params["gas_logqion"])
-            elif nion is not None:
-                common_kwargs["gas_logqion"] = jnp.log10(jnp.maximum(nion, 1.0))
             # Forward Cue's full 12-parameter surface. Backend signature
             # accepts ``**neb_params`` so unrecognised keys are ignored
             # safely; we forward every ``ionspec_*`` and ``gas_*`` we
@@ -412,19 +415,36 @@ class NebularSEDComponent:
             ):
                 if key in params:
                     cue_extras[key] = jnp.asarray(params[key])
+            # Prefer Cue's high-level path (``ssp_weights`` +
+            # ``ssp_log_ages_yr``) so the ionising-spectrum shape and
+            # Q_H are both SSP-derived — matches legacy
+            # ``predict_line_fluxes`` parity. Fall back to the explicit
+            # ``gas_logqion`` shortcut only if upstream did not publish
+            # ``age_weights`` (e.g. a chain without StellarSEDComponent).
+            age_weights = state.derived.get("age_weights")
+            ssp_ages_yr = state.derived.get("ssp_ages_yr")
+            if "gas_logqion" in params:
+                common_kwargs["gas_logqion"] = jnp.asarray(params["gas_logqion"])
+            elif age_weights is not None and ssp_ages_yr is not None:
+                common_kwargs["ssp_weights"] = jnp.asarray(age_weights)
+                common_kwargs["ssp_log_ages_yr"] = jnp.log10(jnp.asarray(ssp_ages_yr))
+            else:
+                nion = state.derived.get("nion")
+                if nion is not None:
+                    common_kwargs["gas_logqion"] = jnp.log10(jnp.maximum(nion, 1.0))
             nebular_sed = self.backend.predict_nebular_sed(**common_kwargs, **cue_extras)
         else:  # cloudy_grid
-            lnu_age = state.derived.get("lnu_age")
-            if lnu_age is None:
+            ssp_ages_yr = state.derived.get("ssp_ages_yr")
+            age_weights = state.derived.get("age_weights")
+            if ssp_ages_yr is None or age_weights is None:
                 raise ValueError(
-                    "CloudyGrid backend requires state.derived['lnu_age'] "
-                    "(per-age L_nu cube from StellarSEDComponent)."
+                    "CloudyGrid backend requires state.derived['ssp_ages_yr'] "
+                    "and state.derived['age_weights'] (CSP mass weights from "
+                    "StellarSEDComponent). Build the chain with a stellar "
+                    "component upstream."
                 )
-            ssp_log_ages_yr = jnp.log10(state.derived["ssp_ages_yr"])
-            # CSP weights (mass per age bin) — derive from lnu_age via
-            # the bolometric-weighted approximation if SSP unit-mass
-            # weights aren't separately available.
-            ssp_weights = jnp.ones(lnu_age.shape[0])
+            ssp_log_ages_yr = jnp.log10(jnp.asarray(ssp_ages_yr))
+            ssp_weights = jnp.asarray(age_weights)
             nebular_sed = self.backend.predict_nebular_sed(
                 ssp_weights=ssp_weights,
                 ssp_log_ages_yr=ssp_log_ages_yr,

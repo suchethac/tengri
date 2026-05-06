@@ -618,6 +618,13 @@ class StellarSEDComponent:
                 "sfr_100myr": sfr_100myr,
                 "L_age": L_age,
                 "lnu_age": lnu_age,
+                # CSP mass weights (Msun per SSP age bin), summed
+                # over the metallicity axis. Published so downstream
+                # nebular backends (Cue, CloudyGrid) can call their
+                # high-level ``predict_nebular_*(ssp_weights=...)``
+                # entry points and derive Q_H + ionising spectrum
+                # from the SSP, matching legacy parity.
+                "age_weights": age_weights,
                 "nion": nion,
                 "sfh_grid_lbt_yr": sfh_lbt_grid,
                 "sfr_history": sfr_history,

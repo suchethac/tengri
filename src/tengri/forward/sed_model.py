@@ -2307,18 +2307,24 @@ class SEDModel:
                 "No nebular backend with line prediction configured. Cannot compute line fluxes."
             )
 
-        comp = self._compute_sed_components(params)
-        weights = comp["weights"]
-        p = comp["p"]
-
-        all_waves, all_lums = backend.predict_nebular_line_luminosities(
-            ssp_weights=weights,
-            ssp_log_ages_yr=self.ssp_log_ages_yr,
-            log_z=p.get("log_z_abs", 0.0),
-            neb_logU=p.get("neb_logU", -3.0),
-            neb_logZ_gas=p.get("neb_logZ_gas", None),
-            neb_fesc=p.get("neb_fesc", 0.0),
-        )
+        # Read the discrete line catalogue published by
+        # NebularSEDComponent. The orchestrator's nebular adapter calls
+        # ``predict_nebular_line_luminosities`` with SSP-derived
+        # ``ssp_weights`` + ``ssp_log_ages_yr`` and the canonical
+        # neb_logZ_gas → absolute-log10(Z) translation, so the
+        # luminosities match the legacy ``_compute_sed_components``
+        # path within numerical tolerance.
+        state = self.predict_via_orchestrator(params)
+        if "line_waves" not in state.derived or "line_lums" not in state.derived:
+            raise ValueError(
+                "Configured nebular backend did not publish a discrete "
+                "line catalogue to state.derived (expected keys "
+                "'line_waves' and 'line_lums'). The BakedIn backend bakes "
+                "lines into the SSP grid; ShockBackend publishes a "
+                "continuous line SED instead. Switch to Cue or CloudyGrid."
+            )
+        all_waves = jnp.asarray(state.derived["line_waves"])
+        all_lums = jnp.asarray(state.derived["line_lums"])
 
         if target_wavelengths is not None:
             target_wavelengths = jnp.asarray(target_wavelengths)
@@ -3327,6 +3333,20 @@ class SEDModel:
             fluxes.append(f)
         return jnp.array(fluxes)
 
+    @staticmethod
+    def _jit_safe_params(params):
+        """Strip string-typed entries so the params dict is safe to pass into JIT.
+
+        String-typed Fixed parameters (e.g. ``shock_abundance="solar"``,
+        ``shock_component="combined"``) are config enums, not values that
+        flow through the gradient computation. Including them in the dict
+        passed to a ``jax.jit``'d function makes ``tree_flatten`` reject the
+        input with ``TypeError: ... <class 'str'> ... at path params['<name>']``.
+        Strip them here; downstream code that needs them must read from
+        ``self.spec``'s fixed values, not from the JIT params dict.
+        """
+        return {k: v for k, v in params.items() if not isinstance(v, str)}
+
     def _predict_photometry_hybrid(self, params):
         """Hybrid photometry: precomputed SSP + exact non-stellar.
 
@@ -3339,7 +3359,7 @@ class SEDModel:
         if self._hybrid.photometry is None:
             return self._predict_photometry_auto(params)
 
-        return self._hybrid.photometry(params)
+        return self._hybrid.photometry(self._jit_safe_params(params))
 
     def _predict_photometry_traceable(self, params):
         """Un-JIT'd photometry for use inside JAX tracing (NIFTy VI).
@@ -3414,7 +3434,9 @@ class SEDModel:
             # Pass ``sfr`` (full internal-grid SFH) so the closure-A branch
             # can reuse it directly for stochastic SFHs without a lossy
             # double-interp via ``sfr_on_ssp``.
-            return self._compositional.photometry(sfr_on_ssp, params, sfr_internal=sfr)
+            return self._compositional.photometry(
+                sfr_on_ssp, self._jit_safe_params(params), sfr_internal=sfr
+            )
 
         rest_sed = self._compute_rest_sed_compositional(params)
         z = self._get_redshift(params)
