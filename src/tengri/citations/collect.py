@@ -123,7 +123,112 @@ def _collect_keys(obj: Any, *, include_backend: bool = True) -> list[str]:
             if fq in FUNCTION_CITATIONS:
                 keys.extend(FUNCTION_CITATIONS[fq])
 
+    # Live registry walk (Parameters / SEDModel / Posterior) — picks up
+    # citations registered via ``@register_agn_model("…", citation=…)``,
+    # ``@register_dust_law``, SFH ``_register``, etc.  This bridges the
+    # static association tables above (which only know the canonical
+    # alternatives) with whatever is in the registry RIGHT NOW so that
+    # contributor models also appear in ``print_citations(model)``.
+    keys.extend(_keys_from_live_registry(obj))
+
     return _dedup(keys)
+
+
+# Map registered model/alternative names → BibTeX-keys present in the
+# tengri.citations registry (references.bib).  Best-effort: registered
+# alternatives without a corresponding bib entry simply aren't added —
+# they remain visible via ``tengri.cite_components(...)`` (which uses
+# the live free-form citation strings) but won't appear in formal
+# print_citations output until someone adds the bib entry.
+_LIVE_NAME_TO_BIBKEY: dict[str, str] = {
+    # SFH models
+    "dpl": "bagpipes",
+    "continuity": "leja2019",
+    "dirichlet": "leja2019",
+    "dense_basis": "iyer2020",
+    # AGN models (the unified-model registry)
+    "skirtor": "skirtor",
+    "stalevski": "skirtor",
+    "kubota_done": "kubota_done2018",
+    "kubota_done_full": "kubota_done2018",
+    "multicolor_agn": "kubota_done2018",
+    "adaf": "mahadevan1997",
+    "qsogen": "temple2021_qsogen",
+    # Dust attenuation laws
+    "calzetti": "calzetti2000",
+    "cardelli": "cardelli1989",
+    "kriek_conroy": "kriek_conroy2013",
+    "noll09": "noll2009",
+    "salim": "salim2018",
+    "salim_sbl18": "salim2018",
+    "li08": "li2008_ext",
+    "smc": "gordon2003_smc",
+    "lmc": "gordon2003_smc",
+    "power_law": "charlot_fall2000",
+    # Dust emission templates (registered alternatives strip suffixes)
+    "dl07": "draine_li2007",
+    "dl07_tabulated": "draine_li2007",
+    "draine_li2007": "draine_li2007",
+    "dl14": "draine2014",
+    "dl14_tabulated": "draine2014",
+    "dale2014": "dale2014",
+    "dale2014_tabulated": "dale2014",
+    "casey2012": "casey2012",
+    "mbb": "casey2012",
+    # Inference methods
+    "mcmc_nuts": "blackjax",
+    "mcmc": "blackjax",
+    "vi": "nifty",
+    "vi_nonlinear_fast": "nifty",
+    "mcmc_raytrace": "raytrace_behroozi",
+    "pathfinder": "pathfinder",
+    "nss": "nss",
+    "mcmc_ess": "ess_murray2010",
+}
+
+
+def _keys_from_live_registry(obj: Any) -> list[str]:
+    """Walk obj's structural choices and map to bibtex keys.
+
+    Reads ``mean_sfh_type``, ``agn_model``, ``dust_emission``, ``dust_law``,
+    ``dust_law_bc``, ``dust_law_diff`` off the spec; falls through silently
+    for objects that don't expose them.
+    """
+    out: list[str] = []
+    spec = getattr(obj, "spec", obj)
+
+    def _push(name):
+        if not name:
+            return
+        n = str(name).lower()
+        if n in _LIVE_NAME_TO_BIBKEY:
+            out.append(_LIVE_NAME_TO_BIBKEY[n])
+            return
+        # Try stripping common suffixes (e.g. "dl07_tabulated" → "dl07")
+        if n.endswith("_tabulated"):
+            n2 = n[: -len("_tabulated")]
+            if n2 in _LIVE_NAME_TO_BIBKEY:
+                out.append(_LIVE_NAME_TO_BIBKEY[n2])
+
+    sfh_types = getattr(spec, "mean_sfh_type", None)
+    if isinstance(sfh_types, str):
+        sfh_types = [sfh_types]
+    if sfh_types:
+        for s in sfh_types:
+            _push(s)
+
+    _push(getattr(spec, "agn_model", None))
+    _push(getattr(spec, "dust_emission", None))
+    _push(getattr(spec, "dust_law", None))
+    _push(getattr(spec, "dust_law_bc", None))
+    _push(getattr(spec, "dust_law_diff", None))
+
+    # Inference method (Posterior exposes .method)
+    method = getattr(obj, "method", None)
+    if method:
+        _push(method)
+
+    return out
 
 
 def collect_citations(
