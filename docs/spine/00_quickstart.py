@@ -180,6 +180,52 @@ from tengri import cosmology, plot, units
 plot.setup_style()  # serif font, tight layout, 150 dpi
 
 # %% [markdown]
+# ## 1.5. Discover what's available
+#
+# Before building a model, see what physics is on offer.  Every count
+# below is read live from the registry — adding a new model via
+# `@register_agn_model` updates these numbers immediately.
+#
+# ```python
+# import tengri
+# tengri.summary()                            # one-line counts of every menu
+# tengri.help()                               # curated cheatsheet (4 sections)
+# tengri.help("dust")                         # topical help: 21 attenuation + 7 emission
+#
+# tengri.list_agn_models()                    # 12 AGN models with citations
+# tengri.list_dust_laws(status="production")  # filter by status
+# tengri.list_inference_methods(tier="primary")
+# tengri.list_filters()                       # 242 filter curves bundled
+#
+# tengri.describe("skirtor")                  # full metadata for any name
+# tengri.search("torus")                      # cross-menu fuzzy search
+# tengri.doctor()                             # env / install / SSP health check
+# ```
+#
+# In Jupyter every `list_*()` call returns a real HTML table; in the REPL
+# they print as column-aligned ASCII tables.  Each row carries
+# `name`, `status`, `citation`, and `short_doc` so a new collaborator can
+# learn the menu without leaving the notebook.
+#
+# Equivalent CLI (no REPL needed):
+# ```
+# python -m tengri summary
+# python -m tengri doctor
+# python -m tengri search torus
+# python -m tengri describe skirtor
+# ```
+
+# %%
+import tengri  # noqa: E402
+
+tengri.summary()
+
+# %% [markdown]
+# Run `tengri.help()` for the full cheatsheet, or `tengri.help("agn")`
+# (or `"dust"`, `"sfh"`, `"nebular"`, `"components"`, `"inference"`,
+# `"filters"`) for a topical view of one menu.
+
+# %% [markdown]
 # **Stellar population synthesis grid.** Tengri ships with two
 # pre-tabulated SSP grids in `data/`. We use the MIST + C3K + Chabrier
 # IMF grid — a standard choice for nearby galaxies. The SSP grid is
@@ -547,7 +593,11 @@ result = fitter.run(
 print(f"Wall time   : {result.wall_time_s:.1f} s")
 print(f"Step size   : {result.diagnostics['step_size']:.3f}")
 print(f"Divergences : {result.diagnostics['n_divergent']}  (target 0)")
-print(result.summary_table())
+
+# Equivalent shorter form: ``result.summary()`` prints the same table
+# without needing an explicit ``print(...)`` call. Both work — pick
+# whichever reads best in your notebook.
+result.summary()
 
 # %% [markdown]
 # ## 8. Parameter posterior

@@ -105,8 +105,33 @@ Tengri's physics blocks (AGN models, dust attenuation laws, SFH variants, nebula
    def my_model(...): ...
    ```
    `citation` and `short_doc` are recommended but not required — fill what you have.
-4. **Declare new free parameters via the component's `declared_parameters()` method.** Translation entries are auto-derived from there for identity (no-unit-conversion) cases — you typically don't need to edit `parameters/translate.py`.
-5. **Open a PR.** GitHub Actions runs `tools/check_param_prefixes.py` (parameter naming guard) and a 30-second smoke test before the full suite.
+4. **Declare new free parameters via the component's `declared_parameters()` method.** Translation entries are auto-derived for identity (no-unit-conversion) cases — you typically don't need to edit `parameters/translate.py`.
+
+   For genuinely new physics components (a whole new `SEDComponent` class, not just a new alternative inside an existing menu), register the class so its `declared_parameters()` is discovered by the param map:
+   ```python
+   from tengri import register_component
+
+   @register_component
+   @dataclass(frozen=True)
+   class MyAGNComponent:
+       name = "my_agn"
+       parameter_prefix = "my_agn_"
+       def declared_parameters(self):
+           return [ParamDeclaration("my_agn_eddington",
+                                    Uniform(0, 1),
+                                    "Eddington ratio")]
+       ...
+   ```
+   `tengri.Parameters(my_agn_eddington=Uniform(0, 1))` then works without editing `translate.py`.
+5. **Verify discoverability.** After your registration loads, your model should appear in:
+   ```python
+   tengri.summary()                # count goes up by one
+   tengri.list_agn_models()        # your row in the table, with citation
+   tengri.describe("my_model")     # full metadata block
+   tengri.search("part_of_name")   # cross-menu search finds it
+   ```
+   Counts in `summary()` and `help()` are read live from the registries — no doc edit required.
+6. **Open a PR.** GitHub Actions runs `tools/check_param_prefixes.py` (parameter naming guard) and a 30-second smoke test before the full suite.
 
 Status conventions: `production` (validated), `experimental` (works but not yet validated against observations or another code), `demo` (toy model, not for science), `deprecated` (slated for removal).
 

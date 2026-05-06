@@ -91,13 +91,13 @@ Full walkthrough in [`notebooks/00_quickstart.py`](notebooks/00_quickstart.py).
 
 ## Discover what's available
 
-After installing, the first three calls to make:
+After installing, three calls answer "what does tengri do?":
 
 ```python
 import tengri
-tengri.help()           # curated cheatsheet
+tengri.help()           # curated cheatsheet (4 sections)
 tengri.summary()        # one-line counts of every menu
-tengri.<TAB>            # ~30 curated entry points (not the 175-name kitchen sink)
+tengri.<TAB>            # ~35 curated entry points (not the 175-name kitchen sink)
 ```
 
 `tengri.summary()` prints something like:
@@ -111,11 +111,17 @@ tengri — what's available:
      7  dust emission templates      tengri.list_dust_emission_models()
     34  SFH models                   tengri.list_sfh_models()
      4  nebular backends             tengri.list_nebular_backends()
+   242  photometric filters          tengri.list_filters()
      6  primary inference methods    tengri.list_inference_methods(tier='primary')
     19  total inference methods      tengri.list_inference_methods()
 ```
 
-Each `list_*()` returns a column-aligned table — no `pprint` needed:
+**All counts are read live from the registries** — adding a new model
+via `@register_agn_model` or `tengri.register_component` updates them
+without any doc edit.
+
+Each `list_*()` returns a column-aligned table in the REPL and a real
+HTML table in Jupyter — no `pprint` needed:
 
 ```python
 >>> tengri.list_inference_methods(tier="primary")
@@ -128,15 +134,74 @@ vi                 primary  NIFTy geoVI variational inference
 ...
 ```
 
-Universal lookup across every menu:
+**Universal lookup** across every menu — returns the metadata block
+including free parameters per model:
 
 ```python
-tengri.describe("skirtor")        # any AGN model, dust law, SFH variant,
-tengri.describe("mcmc_nuts")      # nebular backend, inference method,
-tengri.describe("dl07")           # or component
+>>> tengri.describe("skirtor")
+  name       skirtor
+  kind       agn_model
+  status     production
+  citation   Stalevski et al. 2012, 2016
+  short_doc  Power-law disc + SKIRTOR clumpy torus
+  params     agn_log_lbol
+             agn_frac
+             agn_tau_skirtor
+             ... (9 total)
 ```
 
-In Jupyter the same calls render as real HTML tables.
+**Cross-menu fuzzy search** (matches name, citation, short_doc, status):
+
+```python
+tengri.search("torus")    # 11 hits across components + AGN models
+tengri.search("Leja")     # 2 SFH models cited to Leja
+tengri.search("JWST")     # JWST/NIRCam, MIRI, NIRISS filter sets
+```
+
+**Topical help** for one menu:
+
+```python
+tengri.help("agn")        # 12 AGN models
+tengri.help("dust")       # 21 attenuation + 7 emission, one table
+tengri.help("filters")    # 242 filter curves
+tengri.help("inference")  # 19 methods, recommended tier first
+```
+
+**Health check** — confirms install + JAX backend + SSP files:
+
+```python
+tengri.doctor()
+```
+
+**CLI** — same surface without entering a REPL:
+
+```bash
+python -m tengri summary
+python -m tengri doctor
+python -m tengri help inference
+python -m tengri search torus
+python -m tengri describe skirtor
+```
+
+**Friendly error messages** with `Did you mean: …` suggestions:
+
+```python
+>>> tengri.list_agn_modls()
+AttributeError: module 'tengri' has no attribute 'list_agn_modls'.
+                Did you mean: 'list_agn_models'?
+
+>>> tengri.Fitter(model, data, noise).run("nutz")
+ValueError: Unknown inference method 'nutz'.
+            Recommended (tier=primary): ['map', 'mcmc', 'mcmc_nuts',
+            'mcmc_raytrace', 'vi', 'vi_nonlinear_fast'].
+            Run `tengri.list_inference_methods()` for the full list.
+
+>>> tengri.Fitter(model, data, noise).run("mcmc_nuts")
+# (with blackjax not installed)
+ImportError: Inference method 'mcmc_nuts' requires 'blackjax', which is
+             not installed.  Install it with:
+                 pip install "tengri[blackjax]"
+```
 
 ## Features
 
@@ -145,7 +210,7 @@ In Jupyter the same calls render as real HTML tables.
 - **Every inference method, same model:** `fitter.run("map" | "laplace" | "pathfinder" | "mcmc_nuts" | "mcmc_raytrace" | "evidence")`; `PopulationFitter` for hierarchical fits across catalogues.
 - **Per-component citations:** `tengri.cite_all()` returns citations for every upstream SSP grid, paper, and code contributing to your fit.
 - **Survey data readers:** SDSS/DESI/generic FITS readers; specutils bridge for flexible spectroscopy input.
-- **CLI utilities:** `tengri doctor` (dependency check), `tengri cite KEY` (targeted citations), preprocessing helpers.
+- **CLI utilities:** `python -m tengri {summary,doctor,help,search,describe}` for in-terminal discovery; `tengri doctor` (dependency check), `tengri cite KEY` (targeted citations), preprocessing helpers.
 - **GPU/TPU native:** same code runs on CPU, GPU, TPU without modification.
 
 ## How It Works
