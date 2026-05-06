@@ -186,28 +186,18 @@ class TestAlphaFeForwardModel:
         )
         return SEDModel(spec, ssp, precompute=False)
 
-    @pytest.mark.xfail(
-        reason=(
-            "Phase II-2.6 SFH-side closure-A regression. The no-α "
-            "delta-Z path now goes through "
-            "``calc_rest_sed_sfh_table_lognormal_mdf`` (matching "
-            "the orchestrator at machine epsilon — the original "
-            "gating goal). The α-aware path still uses "
-            "``interp_met_alpha_dispatch`` (bilinear in (Z, α)), "
-            "which produces a narrower metallicity distribution "
-            "than the lognormal-MDF triweight kernel used by the "
-            "no-α path. With ``α=0``, ``effective_metallicity`` "
-            "passes through unchanged, but the metallicity-kernel "
-            "difference still produces a ~50% UV-side divergence. "
-            "Closing this regression requires migrating the α-aware "
-            "path to lognormal MDF too — tracked as the next step "
-            "in ``docs/dev/20260504-csp-integral-canonicalization.md``. "
-            "Strict so the test fails loudly when that lands."
-        ),
-        strict=True,
-    )
     def test_alpha_zero_matches_no_alpha(self, model_with_alpha, ssp_data_fsps):
-        """alpha_fe=0 should give identical SED as no alpha enhancement."""
+        """alpha_fe=0 gives bit-exact match the no-α path.
+
+        Closed by extending closure-path-A to the α-aware branch in
+        ``forward/pipeline.py``: when a 4D α-grid is loaded, the
+        α-aware path does α-only bilinear interp on ``ssp_flux``,
+        then feeds the resulting 3D (n_met, n_age, n_wave) cube to
+        ``calc_rest_sed_sfh_table_lognormal_mdf`` — same kernel as
+        the no-α delta-Z path. At ``α=0`` the α-only interp is
+        bit-exact (α=0 is a grid point), so the two paths reduce
+        to the same lognormal-MDF SED.
+        """
         sed_alpha0 = model_with_alpha.predict_rest_sed({"met_alpha_fe": 0.0}).sed
         from tengri import Fixed, Parameters, SEDModel
 

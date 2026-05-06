@@ -1,10 +1,15 @@
 # CSP integral: canonicalize on DSPS joint formulation
 
 **Date:** 2026-05-04 (drafted), 2026-05-05 (status update)
-**Status:** **Closed for the no-α delta-Z path** (closure path A landed
-2026-05-05). Z-axis migrated; SFH-axis migrated; bit-exact match
-with orchestrator at machine epsilon. α-aware path still bilinear —
-next migration step.
+**Status:** **Fully closed (no-α + α-aware paths).** Closure path A
+landed 2026-05-05 across the no-α delta-Z branch and the α-aware
+branch. The α-aware path now does α-only bilinear interp on the 4D
+``ssp_flux`` (when an α-grid is loaded), then feeds the resulting
+3D ``(n_met, n_age, n_wave)`` cube to
+``calc_rest_sed_sfh_table_lognormal_mdf`` — same kernel as the no-α
+path. At ``α=0`` the two paths produce bit-exact equal SEDs
+(``test_alpha_zero_matches_no_alpha`` flipped from xfail-strict to
+passing).
 **Owner:** Sucheta + Claude (orchestrator)
 
 ## Status — what's landed (2026-05-05)

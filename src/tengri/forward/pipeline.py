@@ -422,6 +422,11 @@ def compute_sed_components(
         model._t_universe_gyr(_z_for_t_obs) if hasattr(model, "_t_universe_gyr") else 13.7
     )
 
+    # Per-call CSP-3D ssp_flux. Set by closure-path-A in the α-aware
+    # branch to the α-interpolated cube; otherwise the original 3D
+    # grid. Read by the 3D-einsum fallback at line ~752 below.
+    _ssp_flux_for_csp_3d = None
+
     if _weights is not None:
         weights = _weights
         _use_dsps_table = False
@@ -687,8 +692,111 @@ def compute_sed_components(
                 lgmet_scatter,
             )
         elif _use_alpha_fe:
+            # Closure-path-A for the α-aware branch. Mirrors the no-α
+            # branch below but feeds DSPS an α-interpolated 3D ssp_flux
+            # cube instead of the bare 3D grid:
+            #
+            # 1. If a 4D α-grid is loaded (``has_alpha_grid``), do
+            #    bilinear-only-in-α interp on ``ssp_flux`` at the
+            #    requested ``alpha_fe`` → 3D (n_met, n_age, n_wave)
+            #    cube. Use the canonical ``log_z`` for DSPS lognormal
+            #    MDF (no ``effective_metallicity`` shift — α is a real
+            #    grid axis).
+            # 2. If no α-grid, use the original 3D ssp_flux and apply
+            #    ``effective_metallicity(log_z, α)`` for DSPS lognormal
+            #    MDF (matches the no-α-grid fallback in
+            #    :func:`interp_met_alpha_dispatch`).
+            #
+            # At ``α=0``, both branches reduce exactly to the no-α
+            # delta-Z path — closes ``test_alpha_zero_matches_no_alpha``.
+            from dsps.sed.stellar_sed import (
+                calc_rest_sed_sfh_table_lognormal_mdf as _calc_rest_sed_α,
+            )
+
             _lgmet = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
-            ssp_flux_at_z = interp_met_alpha_dispatch(model, _lgmet, alpha_fe)
+            lgmet_scatter = float(p.get("lgmet_scatter", getattr(model, "_lgmet_scatter", 0.2)))
+
+            if has_alpha_grid(model.ssp_data):
+                # α-only bilinear interp on 4D ssp_flux at requested α.
+                # Shape (n_met, n_alpha, n_age, n_wave) → (n_met, n_age, n_wave).
+                _ssp_alpha_fe_grid = model.ssp_data.ssp_alpha_fe
+                _afe_clipped = jnp.clip(
+                    alpha_fe, _ssp_alpha_fe_grid[0], _ssp_alpha_fe_grid[-1]
+                )
+                _ia = jnp.clip(
+                    jnp.searchsorted(_ssp_alpha_fe_grid, _afe_clipped) - 1,
+                    0,
+                    _ssp_alpha_fe_grid.shape[0] - 2,
+                )
+                _fa = (_afe_clipped - _ssp_alpha_fe_grid[_ia]) / (
+                    _ssp_alpha_fe_grid[_ia + 1] - _ssp_alpha_fe_grid[_ia]
+                )
+                _ssp_flux_3d_alpha = (1.0 - _fa) * model.ssp_data.ssp_flux[
+                    :, _ia
+                ] + _fa * model.ssp_data.ssp_flux[:, _ia + 1]
+                _lgmet_for_dsps = _lgmet
+            else:
+                # 3D fallback: use effective_metallicity α correction +
+                # original 3D ssp_flux.
+                _ssp_flux_3d_alpha = model.ssp_data.ssp_flux
+                _lgmet_for_dsps = effective_metallicity(_lgmet, alpha_fe)
+
+            # Reuse the SFH-prep block from the no-α branch (built
+            # below into ``_dsps_canonical_sfh_inputs`` for clarity).
+            from tengri.components.stellar.sfh.gp_sfh import (
+                make_log_age_grid as _make_log_age_grid_orch_α,
+            )
+
+            _n_grid_orch_α = 64
+            _log_age_grid_orch_α = _make_log_age_grid_orch_α(_n_grid_orch_α)
+            _sfh_lbt_grid_orch_α = jnp.power(10.0, _log_age_grid_orch_α)
+            if model._uses_stochastic_sfh:
+                _sfr_orch_grid_α = sfr
+            else:
+                _kw_orch_α = {
+                    k: v for k, v in p.items() if k in model._sfh_internal_names
+                }
+                _sfr_orch_grid_α = model._sfh_fn(_sfh_lbt_grid_orch_α, **_kw_orch_α)
+            _sfr_on_ssp_α = jnp.interp(
+                model.ssp_ages_yr, _sfh_lbt_grid_orch_α, _sfr_orch_grid_α
+            )
+            _ssp_age_gyr_α = model.ssp_ages_yr / 1e9
+            _T_TABLE_MIN_α = 0.01
+            _t_cosmic_raw_α = _t_obs_gyr_for_weights - _ssp_age_gyr_α
+            _n_ssp_α = model.ssp_ages_yr.shape[0]
+            _t_cosmic_floor_α = jnp.maximum(_t_cosmic_raw_α, _T_TABLE_MIN_α)
+            _valid_α = _t_cosmic_raw_α > 0.0
+            _t_cosmic_asc_raw_α = _t_cosmic_floor_α[::-1]
+            _sfr_asc_raw_α = _sfr_on_ssp_α[::-1]
+            _n_invalid_α = jnp.sum(~_valid_α[::-1])
+            _idx_pos_α = jnp.arange(_n_ssp_α)
+            _is_invalid_pos_α = _idx_pos_α < _n_invalid_α
+            _ramp_α = _T_TABLE_MIN_α + (_T_TABLE_MIN_α * 0.5) * (
+                _idx_pos_α + 1
+            ) / jnp.maximum(_n_invalid_α, 1)
+            _t_cosmic_asc_α = jnp.where(_is_invalid_pos_α, _ramp_α, _t_cosmic_asc_raw_α)
+            _sfr_asc_α = jnp.where(_is_invalid_pos_α, 0.0, _sfr_asc_raw_α)
+            _total_mass_α = jnp.maximum(
+                jnp.trapezoid(_sfr_asc_α, _t_cosmic_asc_α * 1e9), 0.0
+            )
+
+            _dsps_result_α = _calc_rest_sed_α(
+                gal_t_table=_t_cosmic_asc_α,
+                gal_sfr_table=_sfr_asc_α,
+                gal_lgmet=_lgmet_for_dsps,
+                gal_lgmet_scatter=lgmet_scatter,
+                ssp_lgmet=model.ssp_data.ssp_lgmet,
+                ssp_lg_age_gyr=model.ssp_data.ssp_lg_age_gyr,
+                ssp_flux=_ssp_flux_3d_alpha,
+                t_obs=_t_obs_gyr_for_weights,
+            )
+            _dsps_weights_2d = _dsps_result_α.weights * _total_mass_α
+            ssp_flux_at_z = jnp.einsum(
+                "ma,maw->aw", _dsps_result_α.weights, _ssp_flux_3d_alpha
+            )
+            # Plumb the α-interpolated cube into the 3D-einsum
+            # fallback below so it sums over (m, a) at the requested α.
+            _ssp_flux_for_csp_3d = _ssp_flux_3d_alpha
         else:
             # DSPS-canonical FULL CSP integral (closure path A from
             # ``docs/dev/20260504-csp-integral-canonicalization.md``):
@@ -836,13 +944,17 @@ def compute_sed_components(
 
         dust_atten = _compute_dust_atten(model, wave_dt, p)
 
+        _ssp_flux_3d_for_einsum = (
+            _ssp_flux_for_csp_3d if _ssp_flux_for_csp_3d is not None
+            else model.ssp_data.ssp_flux
+        ).astype(dt)
         sed_attenuated = (
             _LSUN
             * jnp.einsum(
                 "ma,aw,maw->w",
                 _dsps_weights_2d,
                 dust_atten,
-                model.ssp_data.ssp_flux.astype(dt),
+                _ssp_flux_3d_for_einsum,
             )
         ).astype(jnp.float64)
 
@@ -853,7 +965,7 @@ def compute_sed_components(
                 * jnp.einsum(
                     "ma,maw->w",
                     _dsps_weights_2d,
-                    model.ssp_data.ssp_flux.astype(dt),
+                    _ssp_flux_3d_for_einsum,
                 )
             ).astype(jnp.float64)
 
