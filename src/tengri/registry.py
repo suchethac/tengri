@@ -48,7 +48,7 @@ class _RegistryTable(list):
         # Truncate very long fields for readability.
         def _cell(v: Any) -> str:
             s = "" if v is None else str(v)
-            return s if len(s) <= 60 else s[:57] + "..."
+            return s if len(s) <= 80 else s[:77] + "..."
 
         widths = {k: max(len(k), *(len(_cell(d.get(k, ""))) for d in self)) for k in cols}
         header = "  ".join(k.ljust(widths[k]) for k in cols)
@@ -274,19 +274,41 @@ def list_nebular_backends() -> _RegistryTable:
     )
 
 
+_COMPONENT_DOCS: tuple[tuple[str, str, str], ...] = (
+    (
+        "stellar",
+        "tengri.components.stellar.component",
+        "SSP integration over SFH (DSPS), metallicity history, mass remaining",
+    ),
+    (
+        "dust",
+        "tengri.components.dust.component",
+        "Two-component attenuation (BC + diffuse) — 21 laws available",
+    ),
+    (
+        "agn",
+        "tengri.components.agn.component",
+        "Disc + torus + polar dust + BLR/NLR — 12 models available",
+    ),
+    (
+        "nebular",
+        "tengri.components.nebular.component",
+        "Emission lines + continuum — BakedIn / CUE / CloudyGrid / CB19",
+    ),
+    (
+        "radio",
+        "tengri.components.radio.component",
+        "SF synchrotron + AGN jets + free-free continuum",
+    ),
+    ("igm", "tengri.components.igm.component", "IGM transmission (Inoue+2014) + DLA absorption"),
+    ("xray", "tengri.components.xray.component", "X-ray binaries + AGN corona"),
+)
+
+
 def list_components() -> _RegistryTable:
     """List the SEDComponent adapters currently wired into the forward model."""
-    components = [
-        ("stellar", "tengri.components.stellar.component"),
-        ("dust", "tengri.components.dust.component"),
-        ("agn", "tengri.components.agn.component"),
-        ("nebular", "tengri.components.nebular.component"),
-        ("radio", "tengri.components.radio.component"),
-        ("igm", "tengri.components.igm.component"),
-        ("xray", "tengri.components.xray.component"),
-    ]
     out = []
-    for name, module_path in components:
+    for name, module_path, short_doc in _COMPONENT_DOCS:
         try:
             __import__(module_path)
             out.append(
@@ -295,7 +317,7 @@ def list_components() -> _RegistryTable:
                     "kind": "component",
                     "status": "production",
                     "module": module_path,
-                    "short_doc": "",
+                    "short_doc": short_doc,
                 }
             )
         except Exception as e:
@@ -324,12 +346,13 @@ def list_inference_methods(*, tier: str | None = None) -> _RegistryTable:
 
     out = []
     for entry in all_backends():
+        # Inference methods use ``tier`` (primary | experimental) instead of
+        # ``status``; status is omitted to avoid a redundant column.
         out.append(
             {
                 "name": entry.name,
                 "kind": "inference_method",
                 "tier": entry.tier,
-                "status": "primary" if entry.tier == "primary" else "experimental",
                 "short_doc": entry.short_doc,
                 "requires": list(entry.requires),
             }
