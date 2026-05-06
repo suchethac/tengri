@@ -281,8 +281,9 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     References
     ----------
-    .. [1] G. Temple, P. J. Hewett, and M. Banerji, "QSOgen: a simulated template
-       SED for high-redshift quasars," MNRAS, 501, 3061 (2021).
+    .. [1] G. Temple, P. J. Hewett, and M. Banerji, "QSOgen: a model of the
+       UV-to-submillimetre spectral energy distributions of quasars," MNRAS, 508,
+       737–754 (2021). https://doi.org/10.1093/mnras/stab2586
 
     Notes
     -----
