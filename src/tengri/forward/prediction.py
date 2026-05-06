@@ -1713,7 +1713,16 @@ class Prediction:
         self._cache.update(comp)
 
     def _ensure_lines(self):
-        """Compute and cache nebular emission line luminosities."""
+        """Compute and cache nebular emission line luminosities.
+
+        Reads the discrete catalogue published by
+        :class:`~tengri.components.nebular.component.NebularSEDComponent`
+        (``state.derived["line_waves"]`` / ``["line_lums"]``). Matches
+        legacy-path luminosities within numerical tolerance for both
+        Cue and CloudyGrid backends after the Phase II-3 PR 5b'
+        orchestrator fixes (``age_weights`` plumbing +
+        ``neb_logZ_gas`` translation; commit b7dff1b).
+        """
         if "line_waves" in self._cache:
             return
         self._ensure_sfh()
@@ -1726,36 +1735,45 @@ class Prediction:
             self._cache["q_h_total"] = jnp.array(jnp.nan)
             return
 
-        p = self._cache["p"]
-        weights = self._cache["weights"]
+        # Pull the catalogue from the orchestrator's NebularSEDComponent
+        # publication. BakedIn / Shock backends won't publish it; fall
+        # back to all-NaN for those (matches the legacy "no catalogue"
+        # behaviour without raising).
+        state = model.predict_via_orchestrator(self._params)
+        derived = state.derived
+        if "line_waves" in derived and "line_lums" in derived:
+            self._cache["line_waves"] = jnp.asarray(derived["line_waves"])
+            self._cache["line_lums"] = jnp.asarray(derived["line_lums"])
+        else:
+            self._cache["line_waves"] = jnp.array([])
+            self._cache["line_lums"] = jnp.array([])
 
-        line_waves, line_lums = backend.predict_nebular_line_luminosities(
-            ssp_weights=weights,
-            ssp_log_ages_yr=model.ssp_log_ages_yr,
-            log_z=p.get("log_z_abs", 0.0),
-            neb_logU=p.get("neb_logU", -3.0),
-            neb_logZ_gas=p.get("neb_logZ_gas", None),
-            neb_fesc=p.get("neb_fesc", 0.0),
-        )
-
-        self._cache["line_waves"] = line_waves
-        self._cache["line_lums"] = line_lums
-
-        # Q_H: compute from backend's precomputed table if available
-        if hasattr(backend, "_qh_table") and backend._qh_table is not None:
-            log_z = p.get("log_z_abs", 0.0)
+        # Q_H: compute from backend's precomputed table if available.
+        # Uses the orchestrator-published ``age_weights`` (Msun/bin) +
+        # ``log_metallicity_history`` (present-day value) so the value
+        # matches the legacy path even when other consumers of the
+        # cache still go through the legacy ``_ensure_sed``.
+        weights_orch = derived.get("age_weights")
+        log_z_history = derived.get("log_metallicity_history")
+        if (
+            weights_orch is not None
+            and log_z_history is not None
+            and hasattr(backend, "_qh_table")
+            and backend._qh_table is not None
+        ):
+            log_z = jnp.asarray(log_z_history)[0]
             young_idx = backend._young_idx
             young_ages = model.ssp_log_ages_yr[young_idx]
-            young_weights = weights[young_idx]
+            young_weights = jnp.asarray(weights_orch)[young_idx]
 
             def _qh_one_bin(log_age_i, w_i):
-                """Compute ionizing photon production rate for one age bin."""
+                """Ionising photon production rate for one age bin."""
                 return w_i * backend._get_qh_at(log_z, log_age_i)
 
             import jax
 
             q_h_per_bin = jax.vmap(_qh_one_bin)(young_ages, young_weights)
-            neb_fesc = p.get("neb_fesc", 0.0)
+            neb_fesc = jnp.asarray(self._params.get("neb_fesc", 0.0))
             self._cache["q_h_total"] = jnp.sum(q_h_per_bin) * (1.0 - neb_fesc)
         else:
             self._cache["q_h_total"] = jnp.array(jnp.nan)
