@@ -17,7 +17,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.agn import get_agn_model
+from tengri.agn import resolve_agn_model
 from tengri.analysis.plotting import setup_style
 
 setup_style()
@@ -40,7 +40,7 @@ colors = plt.cm.plasma(np.linspace(0.1, 0.9, len(astar_values)))
 # %%
 # Load RELAGN model from registry
 try:
-    relagn_fn = get_agn_model("relagn")
+    relagn_fn = resolve_agn_model("relagn")
 except KeyError as exc:
     raise SystemExit("relagn model not registered — rebuild grid first.") from exc
 
@@ -49,21 +49,26 @@ fig, (ax_sed, ax_slope) = plt.subplots(1, 2, figsize=(12, 5))
 uv_slopes = []
 
 for astar, color in zip(astar_values, colors):
-    l_nu = np.array(relagn_fn(
-        wavelength,
-        agn_log_mbh=log_mbh,
-        agn_log_mdot=log_mdot,
-        agn_astar=float(astar),
-        agn_cos_inc=0.5,
-        agn_torus_frac=0.0,  # disc only for clarity
-    ))
+    l_nu = np.array(
+        relagn_fn(
+            wavelength,
+            agn_log_mbh=log_mbh,
+            agn_log_mdot=log_mdot,
+            agn_astar=float(astar),
+            agn_cos_inc=0.5,
+            agn_torus_frac=0.0,  # disc only for clarity
+        )
+    )
     mask = l_nu > 0
     if not mask.any():
         uv_slopes.append(np.nan)
         continue
 
     ax_sed.loglog(
-        wave_um[mask], l_nu[mask], lw=1.8, color=color,
+        wave_um[mask],
+        l_nu[mask],
+        lw=1.8,
+        color=color,
         label=rf"$a_* = {astar:.3f}$",
     )
 
@@ -77,9 +82,7 @@ for astar, color in zip(astar_values, colors):
 
 ax_sed.set_xlabel(r"Wavelength [$\mu$m]")
 ax_sed.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax_sed.set_title(
-    rf"RELAGN outer disc: $\log M = {log_mbh}$, $\log \dot{{m}} = {log_mdot}$"
-)
+ax_sed.set_title(rf"RELAGN outer disc: $\log M = {log_mbh}$, $\log \dot{{m}} = {log_mdot}$")
 ax_sed.set_xlim(0.01, 3)
 ax_sed.legend(frameon=False, fontsize=9)
 
@@ -89,8 +92,12 @@ ax_sed.legend(frameon=False, fontsize=9)
 # pushes the inner-disc temperature blueward, contributing more flux at
 # 912–3000 Å.  α = d log L_ν / d log ν; Rayleigh-Jeans limit → α = +2.
 ax_slope.plot(
-    astar_values, uv_slopes,
-    "o-", color="royalblue", lw=2, ms=7,
+    astar_values,
+    uv_slopes,
+    "o-",
+    color="royalblue",
+    lw=2,
+    ms=7,
 )
 ax_slope.set_xlabel(r"BH spin $a_*$")
 ax_slope.set_ylabel(r"UV slope $\alpha$  ($L_\nu \propto \nu^\alpha$, 912–3000 Å)")

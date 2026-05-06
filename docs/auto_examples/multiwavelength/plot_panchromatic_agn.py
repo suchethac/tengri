@@ -31,18 +31,18 @@ setup_style()
 
 # ── Wavelength grid: 1 Å (hard X-ray) to 1e10 Å (30 cm radio) ───────────────
 wave = jnp.logspace(0, 10, 3000)  # Angstrom
-wave_um = np.array(wave) / 1e4    # µm
+wave_um = np.array(wave) / 1e4  # µm
 
 # ── Physical parameters ───────────────────────────────────────────────────────
-LOG_LBOL_LSUN = 46.0         # AGN bolometric log L_bol/L_sun
+LOG_LBOL_LSUN = 46.0  # AGN bolometric log L_bol/L_sun
 L_AGN_BOL_ERG = 10**LOG_LBOL_LSUN * 3.839e33  # erg/s
-SFR = 30.0                   # host SFR [Msun/yr]
-STELLAR_MASS = 5e10          # host stellar mass [Msun]
-L_IR = 3e11 * 3.839e33       # host IR luminosity [erg/s]
-RADIO_LOUDNESS = 1.5         # log R = L_1.4GHz/L_4400Å
+SFR = 30.0  # host SFR [Msun/yr]
+STELLAR_MASS = 5e10  # host stellar mass [Msun]
+L_IR = 3e11 * 3.839e33  # host IR luminosity [erg/s]
+RADIO_LOUDNESS = 1.5  # log R = L_1.4GHz/L_4400Å
 
 # ── AGN disc (optical/UV) ─────────────────────────────────────────────────────
-wave_uv = wave[(wave >= 800) & (wave <= 1e6)]   # 800 Å – 100 µm
+wave_uv = wave[(wave >= 800) & (wave <= 1e6)]  # 800 Å – 100 µm
 l_disc = np.array(compute_qsogen_sed(jnp.asarray(wave_uv), agn_log_lbol=LOG_LBOL_LSUN))
 
 # ── X-ray corona ──────────────────────────────────────────────────────────────
@@ -59,11 +59,11 @@ l_radio_sf = np.array(radio_star_forming(wave, L_ir=L_IR, alpha_sf=0.8))
 fig, ax = plt.subplots(figsize=(11, 5))
 
 components = [
-    (np.array(wave_uv) / 1e4, l_disc,     "C1", "-",  r"QSOgen disc (UV/optical/IR)"),
-    (wave_um,                  l_xray_agn, "C3", "-",  "AGN X-ray corona"),
-    (wave_um,                  l_xrb,      "C4", "--", "Host XRBs"),
-    (wave_um,                  l_radio_agn,"C0", "-",  "AGN radio jets"),
-    (wave_um,                  l_radio_sf, "C2", "--", "Host SF synchrotron"),
+    (np.array(wave_uv) / 1e4, l_disc, "C1", "-", r"QSOgen disc (UV/optical/IR)"),
+    (wave_um, l_xray_agn, "C3", "-", "AGN X-ray corona"),
+    (wave_um, l_xrb, "C4", "--", "Host XRBs"),
+    (wave_um, l_radio_agn, "C0", "-", "AGN radio jets"),
+    (wave_um, l_radio_sf, "C2", "--", "Host SF synchrotron"),
 ]
 
 for ww, ll, color, ls, label in components:

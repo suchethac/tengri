@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.agn import AGN_MODELS, get_agn_model
+from tengri.agn import AGN_MODELS, resolve_agn_model
 from tengri.analysis.plotting import setup_style
 
 setup_style()
@@ -56,7 +56,7 @@ for name, color in zip(model_order, colors):
     if name not in AGN_MODELS:
         continue
     try:
-        model_fn = get_agn_model(name)
+        model_fn = resolve_agn_model(name)
         kwargs = model_kwargs.get(name, {"agn_log_lbol": log_lbol})
         l_nu = model_fn(wavelength, **kwargs)
         l_nu_np = np.array(l_nu)
@@ -64,7 +64,10 @@ for name, color in zip(model_order, colors):
             continue
         n_params = param_counts.get(name, "?")
         ax.loglog(
-            wave_um, l_nu_np, lw=1.8, color=color,
+            wave_um,
+            l_nu_np,
+            lw=1.8,
+            color=color,
             label=f"{name} ({n_params} params)",
         )
     except Exception:
@@ -72,9 +75,7 @@ for name, color in zip(model_order, colors):
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title(
-    rf"AGN SEDModel Hierarchy at $\log L_{{\mathrm{{bol}}}} = {log_lbol:.0f}$"
-)
+ax.set_title(rf"AGN SEDModel Hierarchy at $\log L_{{\mathrm{{bol}}}} = {log_lbol:.0f}$")
 ax.set_xlim(0.01, 50)
 ax.set_ylim(1e27, 1e32)
 ax.legend(frameon=False, fontsize=10)
