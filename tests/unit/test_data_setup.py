@@ -1,6 +1,5 @@
 """Tests for SSP data setup and download helpers."""
 
-
 import pytest
 
 from tengri._data_setup import download_ssp, list_known_ssps

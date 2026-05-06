@@ -18,7 +18,7 @@ References
 ----------
 .. [1] A. Feltre, S. Charlot, and J. Gutkin, "Updated photoionization models
        of the diffuse ionized gas in galaxies," MNRAS, 456, 3354 (2016).
-       arXiv:1511.08217. https://doi.org/10.1093/mnras/stw044
+       https://doi.org/10.1093/mnras/stv2794
 
 """
 

@@ -18,6 +18,7 @@ References
 .. [1] J. C. Richardson, et al., "Optical Spectroscopy of Post-Starburst
    Galaxies," ApJ, 782, 33 (2014). Table 3, column 'a42'.
    https://ui.adsabs.harvard.edu/abs/2014ApJ...782...33R/abstract
+   (CITATION-AUDIT NOTE: not found in ~/writing-workspace)
 .. [2] B. D. Johnson, et al., "Prospector: Inferring the Star Formation
    Histories of Galaxies from Observed Spectral Energy Distributions,"
    ApJS, 254, 22 (2021). https://doi.org/10.3847/1538-4365/abef67

@@ -20,11 +20,11 @@ References
        Release," AJ, 122, 549. arXiv:astro-ph/0105488.
 .. [2] Boroson & Green 1992, "The Emission-Line Properties of Low-Redshift
        Quasars," ApJS, 80, 109.
-.. [3] Tsuzuki et al. 2006, "An Atlas and Library of High-Resolution Synthetic
-       Optical and Near-Infrared Spectra of M-Dwarf Exoplanet Host Stars,"
-       ApJ, 650, 57. (Fe II decomposition)
+.. [3] Tsuzuki et al. 2006, ApJ, 650, 57. (UV Fe II decomposition)
+       (CITATION-AUDIT TODO: verify full title against ~/writing-workspace)
 .. [4] Vestergaard & Wilkes 2001, "AGN Black Hole Mass Estimates Based on Unified
        Models and Ten-Micron Silicate Strengths," ApJS, 134, 1. (UV Fe II)
+       (CITATION-AUDIT NOTE: not found in ~/writing-workspace)
 .. [5] Kovacevic et al. 2010, "Optical iron emission lines in quasars and AGN,"
        ApJS, 189, 15.
 

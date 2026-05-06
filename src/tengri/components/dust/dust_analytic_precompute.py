@@ -20,8 +20,8 @@ Auto-collapses axes whose corresponding parameters are ``Fixed`` in the user's
 References
 ----------
 .. [1] Casey, C. M., "Dusty star-forming galaxies at high redshift,"
-       MNRAS, 425, 3094 (2012). arXiv:1209.0284.
-       https://doi.org/10.1111/j.1365-2966.2012.21498.x
+       MNRAS, 425, 3094 (2012). arXiv:1206.1595.
+       https://doi.org/10.1111/j.1365-2966.2012.21455.x
 .. [2] Smith, J. D., et al., "The mid-infrared emission of ultraluminous
        infrared galaxies," ApJ, 656, 770 (2007). arXiv:astro-ph/0701042.
        https://doi.org/10.1086/510378
