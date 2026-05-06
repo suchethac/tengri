@@ -23,10 +23,10 @@ wavelength = jnp.logspace(0, 10, 2000)
 wave_um = np.array(wavelength) / 1e4  # micron
 
 # Galaxy parameters
-SFR = 10.0          # Msun/yr
+SFR = 10.0  # Msun/yr
 STELLAR_MASS = 1e11  # Msun
-L_IR = 1e11          # Lsun (total IR 8-1000 um)
-L_AGN_BOL = 1e44     # Lsun (AGN bolometric)
+L_IR = 1e11  # Lsun (total IR 8-1000 um)
+L_AGN_BOL = 1e44  # Lsun (AGN bolometric)
 
 # %%
 # Compute each multi-wavelength component
@@ -43,7 +43,9 @@ l_radio_sf = radio_star_forming(wavelength, L_ir=L_IR)
 
 # Radio from AGN jets (moderate radio-loudness)
 l_radio_agn = radio_agn(
-    wavelength, L_agn_bol=L_AGN_BOL, radio_loudness=1.0,
+    wavelength,
+    L_agn_bol=L_AGN_BOL,
+    radio_loudness=1.0,
 )
 
 # %%
@@ -62,8 +64,10 @@ components = [
 for l_nu, label, color, ls in components:
     l_np = np.array(l_nu)
     pos = l_np[l_np > 0]
-    print(f"DIAG {label}: n_positive={len(pos)}, min={pos.min() if len(pos) else 0:.2e}, "
-          f"max={l_np.max():.2e}")
+    print(
+        f"DIAG {label}: n_positive={len(pos)}, min={pos.min() if len(pos) else 0:.2e}, "
+        f"max={l_np.max():.2e}"
+    )
     # Mask zero-emission regions for clean plotting
     mask = l_np > 0
     if not np.any(mask):
@@ -74,8 +78,12 @@ for l_nu, label, color, ls in components:
 l_total = np.array(l_xrb + l_xray_agn + l_radio_sf + l_radio_agn)
 mask_total = l_total > 0
 ax.loglog(
-    wave_um[mask_total], l_total[mask_total],
-    "k-", lw=2.5, alpha=0.4, label="Total",
+    wave_um[mask_total],
+    l_total[mask_total],
+    "k-",
+    lw=2.5,
+    alpha=0.4,
+    label="Total",
 )
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")

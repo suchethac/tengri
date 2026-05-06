@@ -28,13 +28,16 @@ from tengri.analysis.plotting import setup_style
 setup_style()
 
 
-
 # --- Load SSP data ---
 def _find_ssp():
     """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
     name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [Path("data") / name, Path("../data") / name,
-              Path("../../data") / name, Path("../../../data") / name]:
+    for p in [
+        Path("data") / name,
+        Path("../data") / name,
+        Path("../../data") / name,
+        Path("../../../data") / name,
+    ]:
         if p.exists():
             return str(p)
     return None
@@ -44,8 +47,16 @@ SSP_PATH = _find_ssp()
 
 # Locate filter cache
 _FILTER_DIR = next(
-    (str(d) for d in [Path("data/filters"), Path("../data/filters"),
-     Path("../../data/filters"), Path("../../../data/filters")] if d.exists()),
+    (
+        str(d)
+        for d in [
+            Path("data/filters"),
+            Path("../data/filters"),
+            Path("../../data/filters"),
+            Path("../../../data/filters"),
+        ]
+        if d.exists()
+    ),
     "data/filters",
 )
 if SSP_PATH is None:

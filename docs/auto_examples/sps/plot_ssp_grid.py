@@ -41,7 +41,7 @@ if ssp_path is None:
 ssp_data = load_ssp_data(ssp_path)
 
 # Extract grid properties
-age_gyr = 10**np.array(ssp_data.ssp_lg_age_gyr)  # Convert log10(age) to age
+age_gyr = 10 ** np.array(ssp_data.ssp_lg_age_gyr)  # Convert log10(age) to age
 log_z = np.array(ssp_data.ssp_lgmet)
 ssp_wave = np.array(ssp_data.ssp_wave)
 ssp_spec = np.array(ssp_data.ssp_flux)  # Shape: (n_z, n_age, n_wave)
@@ -58,7 +58,7 @@ log_z_solar = log_z[z_idx_solar]
 # Select ages: young, intermediate, old
 age_indices = [
     np.argmin(np.abs(age_gyr - 0.01)),  # ~10 Myr
-    np.argmin(np.abs(age_gyr - 1.0)),   # ~1 Gyr
+    np.argmin(np.abs(age_gyr - 1.0)),  # ~1 Gyr
     np.argmin(np.abs(age_gyr - 10.0)),  # ~10 Gyr
 ]
 age_labels = ["10 Myr", "1 Gyr", "10 Gyr"]
@@ -86,10 +86,10 @@ age_gyr_mid = age_gyr[age_idx_mid]
 # Select metallicity range
 z_indices = [
     np.argmin(np.abs(log_z - (-0.5))),  # Sub-solar
-    np.argmin(np.abs(log_z - 0.0)),      # Solar
-    np.argmin(np.abs(log_z - 0.3)),      # Super-solar
+    np.argmin(np.abs(log_z - 0.0)),  # Solar
+    np.argmin(np.abs(log_z - 0.3)),  # Super-solar
 ]
-z_labels = [f"{10**log_z[zi]:.2f}Z$_\\odot$" for zi in z_indices]
+z_labels = [f"{10 ** log_z[zi]:.2f}Z$_\\odot$" for zi in z_indices]
 colors_z = ["C3", "C4", "C5"]
 
 for z_idx, z_lbl, color in zip(z_indices, z_labels, colors_z):

@@ -31,8 +31,7 @@ z = 0.0
 # → log10(L_bol/Lsun) ≈ 10.4–13.4  (since log10(Lsun_erg/s) = 33.58).
 for log_lbol in [10.5, 11.5, 12.5, 13.5]:
     sed = qsogen(wavelength, agn_log_lbol=log_lbol, z=z)
-    ax.loglog(wave_um, np.array(sed), lw=1.5,
-              label=f"log(L_bol/L⊙)={log_lbol:.1f}")
+    ax.loglog(wave_um, np.array(sed), lw=1.5, label=f"log(L_bol/L⊙)={log_lbol:.1f}")
 
 ax.set_xlabel(r"Rest Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
@@ -64,8 +63,7 @@ for log_lbol in [10.0, 10.5, 11.0, 11.5]:
     sed = qsogen(wavelength, agn_log_lbol=log_lbol, z=z)
     nu = 3e18 / np.array(wavelength)
     nu_lnu = np.array(sed) * nu
-    ax.loglog(wave_um, nu_lnu, lw=1.5,
-              label=f"log(L_bol/L⊙)={log_lbol:.1f}")
+    ax.loglog(wave_um, nu_lnu, lw=1.5, label=f"log(L_bol/L⊙)={log_lbol:.1f}")
 
 ax.set_xlabel(r"Rest Wavelength [$\mu$m]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")

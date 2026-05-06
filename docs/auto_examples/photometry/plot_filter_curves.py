@@ -18,8 +18,12 @@ from tengri.analysis.plotting import setup_style
 setup_style()
 
 # Locate filter cache — works from project root or sphinx-gallery cwd
-_FILTER_DIRS = [Path("data/filters"), Path("../data/filters"),
-                Path("../../data/filters"), Path("../../../data/filters")]
+_FILTER_DIRS = [
+    Path("data/filters"),
+    Path("../data/filters"),
+    Path("../../data/filters"),
+    Path("../../../data/filters"),
+]
 cache_dir = next((d for d in _FILTER_DIRS if d.exists()), "data/filters")
 
 # Load SDSS ugriz filters

@@ -33,8 +33,12 @@ setup_style()
 
 def _find_ssp():
     name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [Path("data") / name, Path("../data") / name, Path("../../data") / name,
-              Path("../../../data") / name]:
+    for p in [
+        Path("data") / name,
+        Path("../data") / name,
+        Path("../../data") / name,
+        Path("../../../data") / name,
+    ]:
         if p.exists():
             return str(p)
     return None
@@ -93,18 +97,18 @@ map_smooth = fitter_smooth.run("map", n_steps=400, verbose=False)
 
 # --- Compare SFHs ---
 sfh_true = model_stoch.predict_sfh(true_params)
-sfh_fit  = model_smooth.predict_sfh(map_smooth.params)
-t_gyr    = np.array(sfh_true["t_gyr"])
+sfh_fit = model_smooth.predict_sfh(map_smooth.params)
+t_gyr = np.array(sfh_true["t_gyr"])
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 
 # Left: SFH comparison
 ax = axes[0]
-ax.fill_between(t_gyr, 0, np.array(sfh_true["sfr_full"]),
-                alpha=0.35, color="#d62728", label="True (bursty)")
+ax.fill_between(
+    t_gyr, 0, np.array(sfh_true["sfr_full"]), alpha=0.35, color="#d62728", label="True (bursty)"
+)
 ax.plot(t_gyr, sfh_true["sfr_full"], color="#d62728", lw=1.2)
-ax.plot(t_gyr, sfh_fit["sfr_mean"], color="#1f77b4", lw=2.0, ls="--",
-        label="Smooth model MAP")
+ax.plot(t_gyr, sfh_fit["sfr_mean"], color="#1f77b4", lw=2.0, ls="--", label="Smooth model MAP")
 ax.set_xlabel("Lookback time [Gyr]")
 ax.set_ylabel(r"SFR [$M_\odot$ yr$^{-1}$]")
 ax.set_title("SFH: True vs Smooth SEDModel Fit")
@@ -112,8 +116,9 @@ ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(0, 13)
 
 # Right: residuals χ
-residuals = (np.array(mock.flux_obs) - np.array(model_smooth.predict_spectrum(map_smooth.params))
-             ) / np.array(mock.noise)
+residuals = (
+    np.array(mock.flux_obs) - np.array(model_smooth.predict_spectrum(map_smooth.params))
+) / np.array(mock.noise)
 ax = axes[1]
 ax.plot(np.array(wave_obs), residuals, "k-", lw=0.6, alpha=0.7)
 ax.axhline(0, color="grey", lw=0.5)

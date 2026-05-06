@@ -62,7 +62,7 @@ obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_sed))
 spec = Parameters(
     mean_sfh_type="tsnorm",
     dust_emission="draine_li2007",
-    sfh_tsnorm_log_peak_sfr=Fixed(1.2),      # peak SFR ~ 16 Msun/yr
+    sfh_tsnorm_log_peak_sfr=Fixed(1.2),  # peak SFR ~ 16 Msun/yr
     sfh_tsnorm_peak_lbt_gyr=Fixed(3.0),
     sfh_tsnorm_width_gyr=Fixed(2.5),
     sfh_tsnorm_skew=Fixed(0.0),
@@ -98,14 +98,20 @@ mask = l_nu > 0
 ax.loglog(wave_um[mask], l_nu[mask], color="C0", lw=2.0, label="Stellar + dust SED")
 
 mask_r = l_radio > 0
-ax.loglog(wave_radio_um[mask_r], l_radio[mask_r], color="C2", lw=2.0,
-          label="SF synchrotron (radio)")
+ax.loglog(
+    wave_radio_um[mask_r], l_radio[mask_r], color="C2", lw=2.0, label="SF synchrotron (radio)"
+)
 
 # Wavelength regime labels
 for x, lbl in [(0.15, "UV"), (0.6, "Optical"), (10.0, "Mid-IR"), (1e3, "Radio")]:
     ax.axvline(x, color="0.75", lw=0.6, ls=":")
-    ax.text(x * 1.2, ax.get_ylim()[1] * 0.5 if ax.get_ylim()[1] > 0 else 1e28,
-            lbl, fontsize=9, color="0.5")
+    ax.text(
+        x * 1.2,
+        ax.get_ylim()[1] * 0.5 if ax.get_ylim()[1] > 0 else 1e28,
+        lbl,
+        fontsize=9,
+        color="0.5",
+    )
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
