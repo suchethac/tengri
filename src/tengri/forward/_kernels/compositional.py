@@ -305,7 +305,7 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
         arrays — which keeps XLA from baking the 114 MB SSP flux grid
         into the compiled HLO.
         """
-        p = get_internal_params(params, param_map, spec, has_field)
+        p = get_internal_params(params, param_map, spec, has_field, strict_unknown_params=False)
 
         if _use_dsps_native:
             z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
@@ -696,7 +696,7 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
         them as JIT-traced inputs instead of closure-captured SSP arrays.
         Keeps XLA from baking the 114 MB SSP grid into the compiled HLO.
         """
-        p = get_internal_params(params, param_map, spec, has_field)
+        p = get_internal_params(params, param_map, spec, has_field, strict_unknown_params=False)
         if _use_dsps_native_spec:
             z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
             t_obs_gyr = (
@@ -1056,7 +1056,7 @@ def build_hybrid_spectrum(state: SEDModelState, model=None):
         JIT-traced inputs rather than closure-captured constants — keeps
         XLA from baking the full SSP grid into the compiled HLO.
         """
-        p = get_internal_params(params, param_map, spec, has_field)
+        p = get_internal_params(params, param_map, spec, has_field, strict_unknown_params=False)
 
         # ── Closure-path-A migration ──────────────────────────────────
         # Replace legacy ``compute_csp_weights`` + ``interp_metallicity``
@@ -1182,7 +1182,9 @@ def build_hybrid_spectrum(state: SEDModelState, model=None):
 
         def hybrid_spec(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
             """Single-dust hybrid spectrum."""
-            p = get_internal_params(params, param_map, spec, has_field)
+            p = get_internal_params(
+                params, param_map, spec, has_field, strict_unknown_params=False
+            )
             if state.met_mode == "ramp":
                 from tengri.components.stellar.sps.dsps_wrapper import compute_log_z_evolving
                 from tengri.utils.cosmology import age_at_z
@@ -1212,7 +1214,9 @@ def build_hybrid_spectrum(state: SEDModelState, model=None):
 
         def hybrid_spec(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
             """Two-dust hybrid spectrum."""
-            p = get_internal_params(params, param_map, spec, has_field)
+            p = get_internal_params(
+                params, param_map, spec, has_field, strict_unknown_params=False
+            )
             if state.met_mode == "ramp":
                 from tengri.components.stellar.sps.dsps_wrapper import compute_log_z_evolving
                 from tengri.utils.cosmology import age_at_z
