@@ -1,12 +1,15 @@
 """Inference engine: Fitter, Posterior, PopulationFitter, and backends."""
 
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
+from tengri.inference.catalog_fitter import CatalogFitter, CatalogPosterior
 from tengri.inference.fitter import Fitter, resolve_method
 from tengri.inference.hierarchical import PopulationFitter, PopulationPosterior
 from tengri.inference.posterior import Posterior
 from tengri.inference.vi_config import VIConfig
 
 __all__ = [
+    "CatalogFitter",
+    "CatalogPosterior",
     "Fitter",
     "PopulationFitter",
     "PopulationPosterior",
