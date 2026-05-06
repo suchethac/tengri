@@ -102,6 +102,12 @@ _AGN_IDENTITY_PARAMS = [
     "agn_r_warm_ratio",
     "agn_polar_ebv",
     "agn_polar_oa",
+    # AGN-nebular emitters (BLR, NLR-Gaussian, Feltre, Fe II)
+    "agn_blr_cf",
+    "agn_nlr_cf",
+    "agn_feltre_cf",
+    "agn_fe2_strength",
+    "agn_alpha_ion",
 ]
 
 _RADIO_IDENTITY_PARAMS = [
