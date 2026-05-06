@@ -101,23 +101,45 @@ _load_from_bib()
 # ---------------------------------------------------------------------------
 
 
-def cite(key: str) -> Citation:
-    """Look up a citation by registry key (e.g. ``"calzetti2000"``).
+def cite(thing) -> Citation | None:
+    """Look up a citation, or print every citation a model uses.
 
-    Raises
-    ------
-    KeyError
-        If ``key`` is not registered. The exception message lists available
-        keys to aid recovery from typos.
+    Polymorphic on the argument:
+
+    * ``cite(key: str)`` — look up a single bibliography entry and
+      return the :class:`Citation` (existing behavior).  Raises
+      ``KeyError`` if the key isn't registered.
+    * ``cite(parameters | sed_model | posterior)`` — print the table
+      of every component the object is configured to use plus the
+      paste-ready BibTeX block beneath, then return ``None``.  This
+      composes :func:`tengri.cite_components` and
+      :func:`tengri.print_components_bibtex` into a single call.
+
+    Examples
+    --------
+    >>> tengri.cite("calzetti2000")  # → Citation
+    >>> tengri.cite(spec)  # prints table + BibTeX
+    >>> tengri.cite(model)
+    >>> tengri.cite(posterior)
     """
-    if key in REGISTRY:
-        return REGISTRY[key]
+    if isinstance(thing, str):
+        # Existing: single-key bibliography lookup.
+        if thing in REGISTRY:
+            return REGISTRY[thing]
+        available = sorted(REGISTRY.keys())
+        suggestions = ", ".join(available[:5])
+        if len(available) > 5:
+            suggestions += f", ... ({len(available) - 5} more)"
+        raise KeyError(f"Citation key '{thing}' not found. Available keys: {suggestions}")
 
-    available = sorted(REGISTRY.keys())
-    suggestions = ", ".join(available[:5])
-    if len(available) > 5:
-        suggestions += f", ... ({len(available) - 5} more)"
-    raise KeyError(f"Citation key '{key}' not found. Available keys: {suggestions}")
+    # New: print all used components + BibTeX block.  Lazy import to
+    # avoid circular imports between citations and registry.
+    from tengri.registry import cite_components, print_components_bibtex
+
+    print(cite_components(thing))
+    print()
+    print_components_bibtex(thing)
+    return None
 
 
 def cite_all() -> list[Citation]:

@@ -1452,12 +1452,10 @@ tengri — differentiable galaxy SED fitting in JAX
 ────────────────────────────────────────────────────────────────────
 5.  Cite the components used
 ────────────────────────────────────────────────────────────────────
-    tengri.cite_components(model)         live walk of every component used
-    posterior.cite()                      same, on a finished fit
-    posterior.cite(bibtex=True)           + paste-ready BibTeX block
-    tengri.print_components_bibtex(spec)  BibTeX-only output
-    tengri.print_citations(model)         formal Bibliography report
-    tengri.help('citations')              full citation cheatsheet
+    tengri.cite_components(model_or_posterior)  live walk of every component used
+    tengri.print_components_bibtex(spec)        BibTeX-only output
+    tengri.print_citations(model)               formal Bibliography report
+    tengri.help('citations')                    full citation cheatsheet
 """
     print(text)
 
@@ -1483,9 +1481,7 @@ Acknowledging the right papers when you publish a fit:
     tengri.cite_components(spec_or_model_or_posterior)
         → table of every component used + its citation string,
           read live from the registry (so contributor models appear too).
-
-    posterior.cite()                       # convenience on Posterior
-    posterior.cite(bibtex=True)            # also print paste-ready BibTeX
+        → on a Posterior, also picks up the inference method.
 
     tengri.print_components_bibtex(spec)   # BibTeX-only output
 
