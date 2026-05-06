@@ -70,8 +70,9 @@ the canonical advertised paths until a later phase flips the default.
 
 ## Phase 2 — Verb-rule enforcement (NAMING_CONTRACT §4)
 
-Old names emit `DeprecationWarning` on call and forward to the new name.
-Both work through v0.x; old names removed in v1.0.
+The 10 names below were renamed to comply with NAMING_CONTRACT §4
+(`get_*` → `resolve_*` for build/select verbs; `*_emission` →
+`compute_*_sed` for SED-computing functions).
 
 | Old | New | Defining module |
 |---|---|---|
@@ -85,6 +86,25 @@ Both work through v0.x; old names removed in v1.0.
 | `qsogen_sed` | `compute_qsogen_sed` | `components.agn.qsogen` |
 | `pah_template` | `compute_pah_template` | `components.dust.drude_profiles` |
 | `radio_components` | `compute_radio_components` | `components.radio.radio` |
+
+**Status (2026-05).** The renames landed in `6cb9e90 refactor: implement
+naming contract (Phases 0-6)` with `deprecated_alias` shims forwarding
+the old names to the new. Those shims were subsequently audited and
+removed in two commits — `2059c72 refactor(api): Phase B — delete 5
+zero-internal-use deprecated aliases` and `73aa6a2 refactor(api): Phase
+B — delete remaining 5 deprecated aliases + dead tests` (2026-05) —
+because none of the old names had any remaining internal callers and
+external usage was assumed minimal at this pre-v1.0 stage.
+
+**Caveat.** The standard backwards-compatibility policy stated above is
+"every rename ships with a shim through the v0.x line." Phase 2 is the
+one explicit exception — the shims existed briefly, then were deleted
+ahead of v1.0 because the cost of carrying them outweighed the
+near-zero external usage. Anyone still pinned to a `v0.x` release that
+contained the old names should update before upgrading. The
+`docstring` example in `src/tengri/_deprecated.py` (`get_dust_law =
+deprecated_alias(resolve_dust_law, ...)`) is illustrative only — the
+actual binding does not exist at runtime.
 
 ## Phase 3 — Drop `_sfh` suffix inside `tengri.components.sfh`
 
@@ -112,6 +132,18 @@ work as deprecated aliases. **Registry string keys are unchanged** —
 | `continuity_sfh` | `continuity` | `components.sfh.nonparametric` |
 | `continuity_flex_sfh` | `continuity_flex` | `components.sfh.nonparametric` |
 | `psb_continuity_sfh` | `psb_continuity` | `components.sfh.nonparametric` |
+| `declining_exponential_sfh` | `declining_exponential` | `components.sfh.mean_sfh` |
+| `constant_then_exponential_sfh` | `constant_then_exponential` | `components.sfh.mean_sfh` |
+
+**Status (2026-05).** All 19 aliases are now `deprecated_alias`-wrapped
+in their defining modules and emit a one-shot `DeprecationWarning` on
+first call. The two real-def cases (`declining_exponential_sfh`,
+`constant_then_exponential_sfh`) had their function bodies renamed; the
+old names continue to resolve through the same `deprecated_alias`
+mechanism. The `SFH_REGISTRY` references the canonical short names
+internally, so registry-driven fits do **not** emit warnings — only
+direct user calls under the deprecated name do. Pinned by
+`tests/unit/test_sfh_deprecations.py`.
 
 ## Phase 4 — AGN / dust sub-namespaces
 
@@ -185,11 +217,78 @@ release.
 | `tengri.load_filter_set` | `tengri.observation.load_filter_set` |
 | `tengri.load_ssp_data` | `tengri.sps.load_ssp_data` |
 
+### Phase 6 second wave (2026-05) — relocations to canonical namespaces
+
+The data-class sprawl at the top level was moved into four sub-namespaces:
+`tengri.results`, `tengri.observation`, `tengri.inference`, `tengri.config`.
+The intent was to remove the entries from `tengri.__all__` (so they no
+longer pollute `tengri.<TAB>` and `from tengri import *`) and route the
+old top-level names through a `__getattr__` shim that emits a one-shot
+`DeprecationWarning` pointing at the new canonical path.
+
+A subsequent UX pass (`74f6a8f feat(api): silence DeprecationWarning on
+primary classes`) **reverted the deprecation half** for the most
+frequently-used names. They remain importable at top level **without**
+emitting a warning, but are still **not** in `__all__` (the canonical
+path is still the sub-namespace one). Only three rarely-used names
+still warn through the full shim. This matches users' actual habits:
+`from tengri import Photometry, Fitter, ...` is too common to warn on
+without breaking working notebooks.
+
+| Old name | Canonical path | Resolves at top level? | Warns? |
+|---|---|---|---|
+| `tengri.FitResult` | `tengri.results.FitResult` | yes (direct import) | no |
+| `tengri.Provenance` | `tengri.results.Provenance` | yes (direct import) | no |
+| `tengri.MockData` | `tengri.results.MockData` | yes (direct import) | no |
+| `tengri.Posterior` | `tengri.results.Posterior` | yes (direct import) | no |
+| `tengri.CatalogPosterior` | `tengri.results.CatalogPosterior` | yes (direct import) | no |
+| `tengri.PopulationPosterior` | `tengri.results.PopulationPosterior` | yes (direct import) | no |
+| `tengri.generate_mock` | `tengri.results.generate_mock` | yes (direct import) | no |
+| `tengri.posteriors_to_dataframe` | `tengri.results.posteriors_to_dataframe` | yes (direct import) | no |
+| `tengri.Fitter` | `tengri.inference.Fitter` | yes (direct import) | no |
+| `tengri.CatalogFitter` | `tengri.inference.CatalogFitter` | yes (direct import) | no |
+| `tengri.PopulationFitter` | `tengri.inference.PopulationFitter` | yes (direct import) | no |
+| `tengri.VIConfig` | `tengri.inference.VIConfig` | yes (direct import) | no |
+| `tengri.AGNConfig` | `tengri.config.AGNConfig` | yes (direct import) | no |
+| `tengri.DustConfig` | `tengri.config.DustConfig` | yes (direct import) | no |
+| `tengri.NebularConfig` | `tengri.config.NebularConfig` | yes (direct import) | no |
+| `tengri.SEDModelConfig` | `tengri.config.SEDModelConfig` | yes (direct import) | no |
+| `tengri.SFHConfig` | `tengri.config.SFHConfig` | yes (direct import) | no |
+| `tengri.Photometry` | `tengri.observation.Photometry` | yes (direct import) | no |
+| `tengri.Spectroscopy` | `tengri.observation.Spectroscopy` | yes (direct import) | no |
+| `tengri.NoiseModel` | `tengri.observation.NoiseModel` | yes (direct import) | no |
+| `tengri.Observation` | `tengri.observation.Observation` | yes (direct import) | no |
+| `tengri.LineList` | `tengri.observation.LineList` | yes (direct import) | no |
+| `tengri.LineFluxData` | `tengri.observation.LineFluxData` | yes (`__getattr__` shim) | **yes** |
+| `tengri.SpectralIndexDef` | `tengri.observation.SpectralIndexDef` | yes (`__getattr__` shim) | **yes** |
+| `tengri.SpectralIndexData` | `tengri.observation.SpectralIndexData` | yes (`__getattr__` shim) | **yes** |
+
+The three names that still warn — `LineFluxData`, `SpectralIndexDef`,
+`SpectralIndexData` — are rarely-used (line-flux measurements and Lick
+spectral indices). The warning encourages new code to use the
+sub-namespace path. They are listed in the `_RELOCATED` dict in
+`src/tengri/__init__.py`. Adding more names to `_RELOCATED` (rather
+than directly importing them) is the canonical way to escalate a name
+from "tolerated at top level" to "actively migrated."
+
+After this wave, `tengri.__all__` shrinks from 73 entries to ~55 and
+contains only: 3 core classes (`Galaxy`, `Parameters`, `SEDModel`); 23
+sub-namespace modules (`agn`, `dust`, `sfh`, …, `results`, `config`,
+`inference`, `observation`, …); ~17 verbs (registry introspection
+including `search`, plus cache helpers, `doctor`, `register_component`);
+6 exceptions; 6 priors. The exact count drifts as new top-level verbs
+land — the canonical source is the frozen `EXPECTED_ALL` set in
+`tests/unit/test_public_surface.py`.
+
 The slim is enforced by `tests/unit/test_public_api_surface.py`, which
 partitions names into `ALLOWED_TOP_LEVEL` (advertised) and
-`DEMOTED_BUT_IMPORTABLE` (still resolves; not advertised). Adding a new
-top-level symbol requires editing both this document and that allowlist
-in the same commit.
+`DEMOTED_BUT_IMPORTABLE` (still resolves; not advertised), plus
+`tests/unit/test_public_surface.py`, which parametrises over the
+relocation table to assert (a) every old name still resolves and warns,
+(b) every canonical path resolves cleanly. Adding a new top-level symbol
+or relocating an existing one requires editing this document, both
+allowlists, and the `_RELOCATED` dict in `src/tengri/__init__.py` in the
+same commit.
 
 ---
 

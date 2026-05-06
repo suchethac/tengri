@@ -6,6 +6,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed (Phase 6 second wave — top-level API trim, 2026-05)
+
+`tengri.__all__` shrinks from 73 to ~55 entries. 25 result/observation/
+fitter/config classes that were previously top-level are now canonical
+under sub-namespaces — old names still resolve via a `__getattr__`
+deprecation shim (PEP 562) and emit a one-shot `DeprecationWarning`
+pointing at the new path. Will be removed in v1.0.
+
+| Old | New canonical path |
+|---|---|
+| `tengri.FitResult`, `Provenance`, `MockData` | `tengri.results.*` |
+| `tengri.Posterior`, `CatalogPosterior`, `PopulationPosterior` | `tengri.results.*` |
+| `tengri.generate_mock`, `posteriors_to_dataframe` | `tengri.results.*` |
+| `tengri.Fitter`, `CatalogFitter`, `PopulationFitter`, `VIConfig` | `tengri.inference.*` |
+| `tengri.AGNConfig`, `DustConfig`, `NebularConfig`, `SEDModelConfig`, `SFHConfig` | `tengri.config.*` |
+| `tengri.Photometry`, `Spectroscopy`, `NoiseModel`, `Observation` | `tengri.observation.*` |
+| `tengri.LineList`, `LineFluxData`, `SpectralIndexDef`, `SpectralIndexData` | `tengri.observation.*` |
+
+Pinned by `tests/unit/test_public_api_surface.py` and
+`tests/unit/test_public_surface.py`. See
+`docs/dev/api_migration_v0.x.md` Phase 6 second wave.
+
+### Changed (Phase 3 — `_sfh` suffix removal, 2026-05)
+
+Inside `tengri.components.sfh`, the redundant `_sfh` suffix on 19
+functions was dropped in favour of canonical short names. Old names are
+now `deprecated_alias`-wrapped and emit a one-shot `DeprecationWarning`
+on call. The `SFH_REGISTRY` references the canonical short names
+internally, so registry-driven fits emit no warnings.
+
+Affected names: `constant_sfh`, `exponential_sfh`,
+`delayed_exponential_sfh`, `gaussian_sfh`, `lognormal_sfh`,
+`powerlaw_sfh`, `skewnormal_sfh`, `truncated_skewnormal_sfh`,
+`snorm_burst_sfh`, `snorm_trunc_burst_sfh`, `spline_sfh`,
+`dense_basis_sfh`, `dense_basis_pure_sfh`, `dirichlet_sfh`,
+`continuity_sfh`, `continuity_flex_sfh`, `psb_continuity_sfh`,
+`declining_exponential_sfh`, `constant_then_exponential_sfh`. Pinned by
+`tests/unit/test_sfh_deprecations.py`.
+
+### Fixed (gallery examples, 2026-05)
+
+`examples/{agn,dust}/*.py` and `docs/auto_examples/{agn,dust}/*.py`
+were importing names removed in the Phase B alias-deletion commits
+(`2059c72`, `73aa6a2`) — `get_dust_law`, `get_agn_model`,
+`blr_emission`, `nlr_emission`. Updated to canonical names
+(`resolve_dust_law`, `resolve_agn_model`, `compute_blr_sed`,
+`compute_nlr_sed`). 8 files affected.
+
 ### Changed (Phase II-2.6 closure path A — CSP integral canonicalised end-to-end)
 
 The CSP integral migration to the DSPS-canonical joint formulation
