@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added (5 metallicity modes wired in the orchestrator, 2026-05-06)
+
+`Parameters(met_mode="two_step" | "psb_two_step" | "bins" |
+"bins_continuity" | "table")` now have working consumers in
+`StellarSEDComponent.apply()`. Previously these modes were
+declarable through the registry (and through the auto-infer added
+in commit `b1ff2c2`) but raised `NotImplementedError` at chain
+runtime. All five dispatch to existing pure-JAX primitives in
+`components/stellar/sfh/metallicity_history.py`:
+
+- **`two_step`** — sigmoid-smoothed step at `met_step_age_gyr`
+  between `met_logzsol_old` and `met_logzsol_young`.
+- **`psb_two_step`** — step tied to the PSB SFH burst onset
+  (`sfh_psb_burstage_gyr`); pre-burst → `met_logzsol_old`,
+  burst-and-younger → `met_logzsol_burst`.
+- **`bins`** — piecewise-constant Z per age bin, parameterised by
+  `met_bin_<i>` for `i=0..N-1` (default N=6).
+- **`bins_continuity`** — cumulative delta-log-Z steps from the
+  oldest bin: `met_logzsol_base` + `met_d_log_z_<i>` for
+  `i=0..N-2`.
+- **`table`** — user-provided Z(t) on the component config:
+  `StellarSEDComponentConfig.met_table_log_age_yr` and
+  `met_table_log_z_abs` (constructor-time settings, not JAX
+  params).
+
+All five flow through DSPS's `calc_rest_sed_sfh_table_met_table`
+(per-age metallicity table) — same code path `ramp` / `chem_evol`
+already use. New `StellarSEDComponentConfig` fields: `met_n_bins`,
+`met_bin_edges_log_yr` (defaults to log-spaced 1 Myr → 13.7 Gyr,
+7 edges = 6 bins to match `MET_REGISTRY`), `met_table_log_age_yr`,
+`met_table_log_z_abs`.
+
+Limiting-case tests verify each mode reduces to `delta`-mode SED
+when configured to produce constant Z (commit `38eea6e`).
+
 ### Removed (Phase II-3 closure: `SEDModel._compute_sed_components`, 2026-05-06)
 
 - The legacy `SEDModel._compute_sed_components` wrapper is **deleted**.
