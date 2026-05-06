@@ -66,6 +66,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "list_filters",
         "list_inference_methods",
         "list_nebular_backends",
+        "list_plots",
         "list_sfh_models",
         "summary",
         # ── Subpackage namespaces (canonical import paths) ──────────

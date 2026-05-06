@@ -61,6 +61,7 @@ EXPECTED_ALL = frozenset(
         "list_filters",
         "list_inference_methods",
         "list_nebular_backends",
+        "list_plots",
         "list_sfh_models",
         "search",
         "summary",
