@@ -317,6 +317,7 @@ def _calzetti_l02_kprime(wavelength: jnp.ndarray) -> jnp.ndarray:
 @register_dust_law(
     "power_law",
     citation="Charlot & Fall 2000 (ApJ 539, 718)",
+    short_doc="Generic power-law attenuation",
 )
 def power_law(
     wavelength: jnp.ndarray,
@@ -359,7 +360,11 @@ def power_law(
     return (wavelength / 5500.0) ** n_slope
 
 
-@register_dust_law("vw07_bc")
+@register_dust_law(
+    "vw07_bc",
+    citation="Wild et al. 2007 (MNRAS 381, 543)",
+    short_doc="Wild+07 birth cloud (n=-1.3, steep UV)",
+)
 def vw07_bc(
     wavelength: jnp.ndarray,
     **_kwargs,
@@ -399,7 +404,11 @@ def vw07_bc(
     return (wavelength / 5500.0) ** (-1.3)
 
 
-@register_dust_law("vw07_diff")
+@register_dust_law(
+    "vw07_diff",
+    citation="Wild et al. 2007 (MNRAS 381, 543)",
+    short_doc="Wild+07 diffuse ISM (n=-0.7, standard)",
+)
 def vw07_diff(
     wavelength: jnp.ndarray,
     **_kwargs,
@@ -443,6 +452,7 @@ def vw07_diff(
 @register_dust_law(
     "calzetti",
     citation="Calzetti et al. 2000 (ApJ 533, 682)",
+    short_doc="Calzetti et al. starburst attenuation (R_V=4.05)",
 )
 def calzetti(
     wavelength: jnp.ndarray,
@@ -498,6 +508,7 @@ def calzetti(
 @register_dust_law(
     "kriek_conroy",
     citation="Kriek & Conroy 2013 (ApJL 775, L16)",
+    short_doc="Kriek & Conroy modified Calzetti + bump + slope",
 )
 def kriek_conroy(
     wavelength: jnp.ndarray,
@@ -635,6 +646,7 @@ _LMC_RV = 3.16
 @register_dust_law(
     "smc",
     citation="Pei 1992 (ApJ 395, 130) SMC Bar",
+    short_doc="SMC extinction (Pei 1992, no 2175 bump)",
 )
 def smc(
     wavelength: jnp.ndarray,
@@ -671,7 +683,9 @@ def smc(
     return _pei92_curve(wavelength, _SMC_LAM, _SMC_A, _SMC_B, _SMC_N, _SMC_RV)
 
 
-@register_dust_law("lmc")
+@register_dust_law(
+    "lmc", citation="Pei 1992 (ApJ 395, 130) LMC", short_doc="LMC extinction (Pei 1992, weak bump)"
+)
 def lmc(
     wavelength: jnp.ndarray,
     **_kwargs,
@@ -706,7 +720,11 @@ def lmc(
     return _pei92_curve(wavelength, _LMC_LAM, _LMC_A, _LMC_B, _LMC_N, _LMC_RV)
 
 
-@register_dust_law("prevot_smc")
+@register_dust_law(
+    "prevot_smc",
+    citation="Prevot et al. 1984 (A&A 132, 389)",
+    short_doc="Prevot et al. SMC extinction for AGN",
+)
 def prevot_smc(
     wavelength: jnp.ndarray,
     **_kwargs,
@@ -785,6 +803,7 @@ def prevot_smc(
 @register_dust_law(
     "cardelli",
     citation="Cardelli et al. 1989 (ApJ 345, 245) MW extinction",
+    short_doc="Cardelli et al. MW extinction (parameterized R_V)",
 )
 def cardelli(
     wavelength: jnp.ndarray,
@@ -876,7 +895,11 @@ def cardelli(
     return jnp.clip(a + b / dust_Rv, 0.0)
 
 
-@register_dust_law("li08")
+@register_dust_law(
+    "li08",
+    citation="Li et al. 2008 (ApJ 685, 1046)",
+    short_doc="Li et al. analytical flexible attenuation curve",
+)
 def li08(
     wavelength: jnp.ndarray,
     dust_c1: float = 6.0,
@@ -961,7 +984,11 @@ def li08(
     return jnp.clip(a_lam_over_av / a_v_over_av, 0.0)
 
 
-@register_dust_law("salim")
+@register_dust_law(
+    "salim",
+    citation="Salim et al. 2018 (ApJ 859, 11)",
+    short_doc="Salim et al. modified Calzetti (DSPS default)",
+)
 def salim(
     wavelength: jnp.ndarray,
     dust_bump_strength: float = 0.0,
@@ -1008,7 +1035,11 @@ def salim(
     )
 
 
-@register_dust_law("leitherer02")
+@register_dust_law(
+    "leitherer02",
+    citation="Leitherer et al. 2002 (ApJS 140, 303)",
+    short_doc="Leitherer et al. UV starburst attenuation",
+)
 def leitherer02(
     wavelength: jnp.ndarray,
     **_kwargs,
@@ -1068,7 +1099,11 @@ def leitherer02(
     return jnp.clip(k_prime / rv, 0.0)
 
 
-@register_dust_law("noll09")
+@register_dust_law(
+    "noll09",
+    citation="Noll et al. 2009 (A&A 507, 1793)",
+    short_doc="Noll et al. modified Calzetti + L02 + bump + slope",
+)
 def noll09(
     wavelength: jnp.ndarray,
     dust_bump_strength: float = 0.0,
@@ -1145,7 +1180,11 @@ def noll09(
     return jnp.clip(k_prime / rv, 0.0)
 
 
-@register_dust_law("salim_sbl18")
+@register_dust_law(
+    "salim_sbl18",
+    citation="Salim et al. 2018 (ApJ 859, 11)",
+    short_doc="Salim, Boquien & Lee modified Calzetti + L02",
+)
 def salim_sbl18(
     wavelength: jnp.ndarray,
     dust_bump_strength: float = 0.0,
@@ -1219,7 +1258,11 @@ def salim_sbl18(
     return jnp.clip(k_prime / rv, 0.0)
 
 
-@register_dust_law("tea")
+@register_dust_law(
+    "tea",
+    citation="Haskell et al. 2024 (arXiv:2401.11007)",
+    short_doc="TEA empirical attenuation from NIHAO-SKIRT simulations",
+)
 def tea(
     wavelength: jnp.ndarray,
     dust_delta: float = -0.2,
@@ -1271,7 +1314,11 @@ def tea(
     return kriek_conroy(wavelength, dust_delta=dust_delta, dust_bump_strength=eb)
 
 
-@register_dust_law("narayanan_z")
+@register_dust_law(
+    "narayanan_z",
+    citation="Narayanan et al. 2018 (ApJ 869, 70)",
+    short_doc="Narayanan et al. z-dependent attenuation (SIMBA)",
+)
 def narayanan_z(
     wavelength: jnp.ndarray,
     dust_delta: float = -0.2,
@@ -1329,7 +1376,11 @@ def narayanan_z(
     return kriek_conroy(wavelength, dust_delta=delta_z, dust_bump_strength=bump_z)
 
 
-@register_dust_law("conroy2010")
+@register_dust_law(
+    "conroy2010",
+    citation="Conroy et al. 2010 (ApJ 708, 58)",
+    short_doc="Conroy+10 mixed MW + power-law (FSPS default)",
+)
 def conroy2010(
     wavelength: jnp.ndarray,
     dust_Rv: float = 3.1,
@@ -2229,7 +2280,11 @@ def _grain_law_unavailable(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
     )
 
 
-@register_dust_law("wd01_smcbar")
+@register_dust_law(
+    "wd01_smcbar",
+    citation="Weingartner & Draine 2001 (ApJ 548, 296)",
+    short_doc="WD01 SMC Bar grain model attenuation",
+)
 def wd01_smcbar(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
     r"""Weingartner & Draine (2001) SMC Bar grain model attenuation curve.
 
@@ -2271,7 +2326,11 @@ def wd01_smcbar(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
     return _make_grain_law(*_WD01_SMCBAR)(wavelength)
 
 
-@register_dust_law("wd01_mwrv31")
+@register_dust_law(
+    "wd01_mwrv31",
+    citation="Weingartner & Draine 2001 (ApJ 548, 296)",
+    short_doc="WD01 MW R_V=3.1 grain model attenuation",
+)
 def wd01_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
     r"""Weingartner & Draine (2001) MW R_V=3.1 grain model attenuation curve.
 
@@ -2309,7 +2368,11 @@ def wd01_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
     return _make_grain_law(*_WD01_MWRV31)(wavelength)
 
 
-@register_dust_law("d03_mwrv31")
+@register_dust_law(
+    "d03_mwrv31",
+    citation="Draine 2003 (ARA&A 41, 241)",
+    short_doc="Draine 2003 MW R_V=3.1 grain model attenuation",
+)
 def d03_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
     r"""Draine (2003) MW R_V=3.1 updated grain model attenuation curve.
 
@@ -2346,7 +2409,11 @@ def d03_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
     return _make_grain_law(*_D03_MWRV31)(wavelength)
 
 
-@register_dust_law("hd23_mwrv31")
+@register_dust_law(
+    "hd23_mwrv31",
+    citation="Hensley & Draine 2023 (ApJ 948, 55)",
+    short_doc="Hensley & Draine 2023 astrodust+PAH grain model",
+)
 def hd23_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
     r"""Hensley & Draine (2023) astrodust+PAH MW R_V=3.1 grain model.
 

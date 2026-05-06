@@ -430,7 +430,7 @@ def unified_agn(
 # ── Pre-registered AGN models ─────────────────────────────────────
 
 
-@register_agn_model("simple")
+@register_agn_model("simple", status="demo", short_doc="Toy 3-zone disc + single-T torus")
 def simple_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
@@ -481,7 +481,7 @@ def simple_agn(
     return l_nu * agn_frac
 
 
-@register_agn_model("standard")
+@register_agn_model("standard", short_doc="Multi-color disc + 2-T torus")
 def standard_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
@@ -543,7 +543,11 @@ def standard_agn(
     return l_nu * agn_frac
 
 
-@register_agn_model("multicolor_agn")
+@register_agn_model(
+    "multicolor_agn",
+    citation="Kubota & Done 2018 (MNRAS 480, 1247)",
+    short_doc="Shakura-Sunyaev disc + 2-T torus",
+)
 def multicolor_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
@@ -625,7 +629,11 @@ def multicolor_agn(
 AGN_MODELS["kubota_done"] = multicolor_agn
 
 
-@register_agn_model("kubota_done_full")
+@register_agn_model(
+    "kubota_done_full",
+    citation="Kubota & Done 2018 (MNRAS 480, 1247)",
+    short_doc="K&D 3-zone disc + 2-T torus + Comptonization",
+)
 def kubota_done_full_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
@@ -734,7 +742,11 @@ def kubota_done_full_agn(
     return (l_disc + l_torus) * agn_frac
 
 
-@register_agn_model("skirtor")
+@register_agn_model(
+    "skirtor",
+    citation="Stalevski et al. 2012 (MNRAS 420, 2756); Stalevski et al. 2016 (MNRAS 458, 2288)",
+    short_doc="Power-law disc + SKIRTOR clumpy torus",
+)
 def skirtor_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 44.0,
@@ -807,7 +819,11 @@ def skirtor_agn(
     return (l_disc + l_torus) * agn_frac
 
 
-@register_agn_model("silva04")
+@register_agn_model(
+    "silva04",
+    citation="Silva et al. 2004 (MNRAS 355, 973)",
+    short_doc="Power-law disc + Silva+04 smooth torus",
+)
 def silva04_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 44.0,
@@ -863,7 +879,11 @@ def silva04_agn(
     return (l_disc + l_torus) * agn_frac
 
 
-@register_agn_model("cat3d_wind")
+@register_agn_model(
+    "cat3d_wind",
+    citation="Hönig & Kishimoto 2017 (ApJL 838, L20)",
+    short_doc="Power-law disc + CAT3D-Wind clumpy torus",
+)
 def cat3d_wind_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 44.0,
@@ -929,7 +949,11 @@ def cat3d_wind_agn(
     return (l_disc + l_torus) * agn_frac
 
 
-@register_agn_model("adaf")
+@register_agn_model(
+    "adaf",
+    citation="Mahadevan 1997 (ApJ 477, 585)",
+    short_doc="ADAF + truncated disc + simple torus (low-luminosity)",
+)
 def adaf_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
@@ -1019,7 +1043,11 @@ def adaf_agn(
     return (l_disc + l_torus) * agn_frac
 
 
-@register_agn_model("relagn")
+@register_agn_model(
+    "relagn",
+    citation="Hagen & Done 2023 (MNRAS 521, 251)",
+    short_doc="RELAGN relativistic disc + 2-T torus",
+)
 def relagn_agn(
     wavelength: jnp.ndarray,
     agn_log_mbh: float = 8.0,
@@ -1189,7 +1217,12 @@ def _sigmoid_mask(
 # ── Unified AGN with NLR + BLR decomposition ──────────────────────
 
 
-@register_agn_model("unified_nlr_blr")
+@register_agn_model(
+    "unified_nlr_blr",
+    citation="Lovell et al. 2025; Roper et al. 2025 (Synthesizer); Hönig & Kishimoto 2017",
+    status="experimental",
+    short_doc="Unified AGN + NLR/BLR decomposition + geometric masking",
+)
 def unified_nlr_blr(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 44.0,

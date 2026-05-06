@@ -378,7 +378,7 @@ _norm_spec = SFHModelSpec(
     },
     composition_type="additive",
 )
-_register(_norm_spec)
+_register(_norm_spec, short_doc="Gaussian SFH")
 # Register canonical name (same spec object, just different key)
 SFH_REGISTRY["gaussian_sfh"] = SFH_REGISTRY["norm"]
 
@@ -403,7 +403,7 @@ _lnorm_spec = SFHModelSpec(
     },
     composition_type="additive",
 )
-_register(_lnorm_spec)
+_register(_lnorm_spec, short_doc="Log-normal SFH")
 # Register canonical name (same spec object, just different key)
 SFH_REGISTRY["lognormal_sfh"] = SFH_REGISTRY["lnorm"]
 
@@ -434,7 +434,9 @@ _register(
             "sfh_dpl_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
         },
         composition_type="additive",
-    )
+    ),
+    citation="Carnall et al. 2018 (MNRAS 480, 4379)",
+    short_doc="Double power-law SFH",
 )
 
 # --- const (constant) ---
@@ -466,7 +468,8 @@ _register(
             "sfh_const_end_gyr": ("start", 1e9, 0.0),
         },
         composition_type="additive",
-    )
+    ),
+    short_doc="Constant SFR",
 )
 
 # --- exp (exponential) ---
@@ -492,7 +495,8 @@ _register(
             "sfh_exp_start_gyr": ("start", 1e9, 0.0),
         },
         composition_type="additive",
-    )
+    ),
+    short_doc="Exponential rise SFH",
 )
 
 # --- dexp (delayed exponential) ---
@@ -518,7 +522,8 @@ _register(
             "sfh_dexp_start_gyr": ("start", 1e9, 0.0),
         },
         composition_type="additive",
-    )
+    ),
+    short_doc="Delayed exponential SFH",
 )
 
 # --- tau (declining exponential, matches FSPS sfh=1 / bagpipes 'exponential') ---
@@ -549,7 +554,8 @@ _register(
             "sfh_tau_age_gyr": ("age", 1e9, 0.0),
         },
         composition_type="additive",
-    )
+    ),
+    short_doc="Declining exponential SFH (FSPS/bagpipes)",
 )
 
 # --- const_exp (constant + exponential decline — "quenching at time T") ---
@@ -591,7 +597,8 @@ _register(
             "sfh_cexp_age_gyr": ("age", 1e9, 0.0),
         },
         composition_type="additive",
-    )
+    ),
+    short_doc="Constant SFR then exponential quenching",
 )
 SFH_REGISTRY["constant_then_exponential"] = SFH_REGISTRY["const_exp"]
 
@@ -635,7 +642,8 @@ _register(
             "sfh_delayed_bq_r_sfr": ("r_sfr", 1.0, 0.0),
         },
         composition_type="additive",
-    )
+    ),
+    short_doc="Delayed tau with burst/quench (Ciesla et al.)",
 )
 
 
@@ -678,7 +686,8 @@ _register(
             "sfh_periodic_age_gyr": ("age_yr", 1e9, 0.0),
         },
         composition_type="additive",
-    )
+    ),
+    short_doc="Periodic SF events (Ciesla et al.)",
 )
 
 
@@ -700,7 +709,9 @@ _register(
             "sfh_buat08_velocity_km_s": ("velocity_km_s", 1.0, 0.0),
         },
         composition_type="additive",
-    )
+    ),
+    citation="Buat et al. 2008",
+    short_doc="Velocity-parameterized SFH (Buat et al.)",
 )
 
 
@@ -758,7 +769,9 @@ _register(
             "sfh_psb_fburst": ("fburst", 1.0, 0.0),
         },
         composition_type="additive",
-    )
+    ),
+    citation="Wild et al. 2020 (MNRAS 494, 529)",
+    short_doc="Post-starburst SFH (Wild et al.)",
 )
 SFH_REGISTRY["psb_wild2020"] = SFH_REGISTRY["psb"]
 
