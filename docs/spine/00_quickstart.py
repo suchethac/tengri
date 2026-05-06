@@ -196,6 +196,7 @@ plot.setup_style()  # serif font, tight layout, 150 dpi
 # tengri.list_dust_laws(status="production")  # filter by status
 # tengri.list_inference_methods(tier="primary")
 # tengri.list_filters()                       # 242 filter curves bundled
+# tengri.list_plots()                         # plotting helpers in tengri.plot
 #
 # tengri.describe("skirtor")                  # full metadata for any name
 # tengri.search("torus")                      # cross-menu fuzzy search
@@ -223,7 +224,50 @@ tengri.summary()
 # %% [markdown]
 # Run `tengri.help()` for the full cheatsheet, or `tengri.help("agn")`
 # (or `"dust"`, `"sfh"`, `"nebular"`, `"components"`, `"inference"`,
-# `"filters"`) for a topical view of one menu.
+# `"filters"`, `"plot"`) for a topical view of one menu.
+
+# %% [markdown]
+# ### 1.5.1. Narrowing tables with `.filter(...)`
+#
+# Every `list_*()` call returns a `_RegistryTable` (a real Python list)
+# with a pandas-like `.filter(**criteria)` method.  Operators are
+# `field=value` (case-insensitive equality), `field__contains=value`,
+# `field__startswith=value`, and `field__in=(a, b, c)`.
+#
+# ```python
+# # SDSS griz — astronomer-speak just works (smart-survey alias)
+# tengri.list_filters(survey="SDSS").names()
+# # → ['SLOAN_SDSS_g', 'SLOAN_SDSS_i', 'SLOAN_SDSS_r', 'SLOAN_SDSS_u', 'SLOAN_SDSS_z']
+#
+# # Same via .filter() — equivalent for the survey kwarg:
+# tengri.list_filters().filter(survey="SDSS").names()
+#
+# # Other astronomer aliases that resolve correctly:
+# tengri.list_filters(survey="DES")     # CTIO_DECam_*
+# tengri.list_filters(survey="VISTA")   # Paranal_VISTA_*
+# tengri.list_filters(survey="HSC")     # Subaru_HSC_*
+# tengri.list_filters(survey="UKIDSS")  # UKIRT_UKIDSS_*
+# tengri.list_filters(survey="PS1")     # PAN-STARRS_PS1_*
+#
+# # Combine criteria — chainable .filter(...).filter(...) or one call:
+# tengri.list_filters(survey="JWST").filter(
+#     instrument="NIRCam", band__contains="F150"
+# ).names()
+# # → ['JWST_NIRCam_F150W', 'JWST_NIRCam_F150W2']
+#
+# # Same idiom for any list_*():
+# tengri.list_agn_models().filter(status="production",
+#                                 citation__contains="Stalevski")
+# tengri.list_dust_laws().filter(citation__contains="Calzetti")
+# ```
+#
+# `.names()` returns just the string list — feeds straight into
+# `Photometry.from_names(...)` so the search-to-fit loop is one chain:
+#
+# ```python
+# bandset = tengri.list_filters(survey="SDSS").names()  # 5 SDSS filters
+# photometry = Photometry.from_names(bandset)
+# ```
 
 # %% [markdown]
 # **Stellar population synthesis grid.** Tengri ships with two

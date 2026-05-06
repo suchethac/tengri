@@ -88,15 +88,21 @@ class _RegistryTable(list):
     def filter(self, **criteria: Any) -> _RegistryTable:
         """Narrow the table by per-field criteria.
 
-        Each keyword either does an exact match (``survey="SDSS"``) or
-        uses a ``field__op`` operator suffix:
+        Each keyword either does an exact match (``status="production"``)
+        or uses a ``field__op`` operator suffix:
 
-        - ``field=value``           — exact equality
+        - ``field=value``           — case-insensitive equality
         - ``field__contains=value`` — case-insensitive substring match
         - ``field__in=(a, b, c)``   — membership in a sequence
         - ``field__startswith=v``   — prefix match (case-insensitive)
 
         All criteria must match (logical AND).
+
+        On filter tables, ``survey=`` is **smart**: a query like
+        ``survey="SDSS"`` matches both the SVO ``survey`` field
+        (``SLOAN``) AND the ``instrument`` field (``SDSS``) so the
+        astronomer-conventional name finds the right rows.  Same for
+        DES/DECam, VISTA, HSC, UKIDSS, PS1.
 
         Examples
         --------
@@ -114,8 +120,24 @@ class _RegistryTable(list):
                 else:
                     field, op = key, "eq"
                 cell = entry.get(field)
-                if op == "eq":
-                    ok = cell == val
+
+                # Smart-survey: filter tables follow the SVO convention
+                # where SDSS lives in `instrument`, not `survey`. Match
+                # both fields so astronomer-speak just works.
+                is_filter_row = entry.get("kind") == "filter"
+                if op == "eq" and field == "survey" and is_filter_row:
+                    q = str(val).lower().strip()
+                    target = _SURVEY_ALIASES.get(q, (q, q))
+                    sv_lc = str(entry.get("survey", "")).lower()
+                    in_lc = str(entry.get("instrument", "")).lower()
+                    ok = q in (sv_lc, in_lc) or target[0] == sv_lc or target[1] == in_lc
+                elif op == "eq":
+                    # Default equality is case-insensitive for strings,
+                    # exact for everything else (numbers, sequences).
+                    if isinstance(cell, str) and isinstance(val, str):
+                        ok = cell.lower() == val.lower()
+                    else:
+                        ok = cell == val
                 elif op == "contains":
                     ok = str(val).lower() in str(cell or "").lower()
                 elif op == "startswith":
@@ -494,11 +516,50 @@ def list_plots() -> _RegistryTable:
     )
 
 
-def list_filters() -> _RegistryTable:
+# SVO filter filenames are ``Telescope_Instrument_Band.dat``; for several
+# common cases the astronomer-conventional name (what people *say* in
+# papers and seminars) is the *instrument*, not the SVO "telescope":
+#
+#     SLOAN_SDSS_g   → people say "SDSS g"
+#     CTIO_DECam_*   → "DES" / "DECam"
+#     Subaru_HSC_*   → "HSC"
+#     Paranal_VISTA_*→ "VISTA"
+#     UKIRT_UKIDSS_* → "UKIDSS"
+#     PAN-STARRS_PS1_* → "PS1"
+#
+# So ``list_filters(survey="SDSS")`` should return the SLOAN/SDSS rows.
+# This map translates an astronomer-spoken survey name into the
+# ``(survey, instrument)`` pair we should match against, lowercase.
+_SURVEY_ALIASES: dict[str, tuple[str, str]] = {
+    "sdss": ("sloan", "sdss"),
+    "des": ("ctio", "decam"),
+    "decam": ("ctio", "decam"),
+    "vista": ("paranal", "vista"),
+    "hsc": ("subaru", "hsc"),
+    "suprime": ("subaru", "suprime"),
+    "ukidss": ("ukirt", "ukidss"),
+    "pan-starrs": ("pan-starrs", "ps1"),
+    "panstarrs": ("pan-starrs", "ps1"),
+    "ps1": ("pan-starrs", "ps1"),
+}
+
+
+def list_filters(survey: str | None = None) -> _RegistryTable:
     """List every filter curve bundled with tengri.
 
     Filter files live in ``data/filters/`` (relative to the install root)
-    and follow the SVO naming convention ``Survey_Instrument_Band.dat``.
+    and follow the SVO naming convention ``Telescope_Instrument_Band.dat``.
+
+    Parameters
+    ----------
+    survey : str, optional
+        Narrow to one survey/instrument family (case-insensitive).  Smart
+        about the SVO-vs-astronomer-speak mismatch: ``survey="SDSS"``
+        finds the ``SLOAN_SDSS_*`` rows even though SDSS is technically
+        the *instrument* in SVO's filename schema.  Other recognised
+        astronomer aliases: ``DES``/``DECam`` → CTIO/DECam,
+        ``VISTA`` → Paranal/VISTA, ``HSC`` → Subaru/HSC,
+        ``UKIDSS`` → UKIRT/UKIDSS, ``PS1`` → PAN-STARRS/PS1.
 
     Returns
     -------
@@ -512,6 +573,14 @@ def list_filters() -> _RegistryTable:
     Counts and groupings are computed from the live filesystem on each
     call — no hardcoding. Add a ``Survey_Instrument_Band.dat`` file to
     ``data/filters/`` and it appears here automatically.
+
+    Examples
+    --------
+    >>> tengri.list_filters(survey="SDSS")  # 5 rows
+    >>> tengri.list_filters(survey="JWST")  # all JWST instruments
+    >>> tengri.list_filters().filter(  # finer-grained
+    ...     instrument="NIRCam", band__contains="F150"
+    ... )
     """
     import os
 
@@ -531,19 +600,34 @@ def list_filters() -> _RegistryTable:
             continue
         stem = fname[:-4]
         parts = stem.split("_", 2)
-        survey = parts[0] if len(parts) >= 1 else ""
+        sv = parts[0] if len(parts) >= 1 else ""
         instr = parts[1] if len(parts) >= 2 else ""
         band = parts[2] if len(parts) >= 3 else ""
         out.append(
             {
                 "name": stem,
                 "kind": "filter",
-                "survey": survey,
+                "survey": sv,
                 "instrument": instr,
                 "band": band,
                 "use": _usage_hint(stem, "filter"),
             }
         )
+
+    # Apply optional survey filter, with astronomer-friendly aliases.
+    if survey is not None:
+        q = str(survey).lower().strip()
+        target = _SURVEY_ALIASES.get(q, (q, q))  # (survey_lc, instrument_lc)
+
+        def _match(entry: dict) -> bool:
+            sv_lc = str(entry.get("survey", "")).lower()
+            in_lc = str(entry.get("instrument", "")).lower()
+            # Match either field against either component of the alias —
+            # so "SDSS" hits SLOAN/SDSS rows and "SLOAN" still works too.
+            return q in (sv_lc, in_lc) or target[0] == sv_lc or target[1] == in_lc
+
+        out = [e for e in out if _match(e)]
+
     return _RegistryTable(out)
 
 
