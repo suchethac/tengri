@@ -6,6 +6,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed (Phase II-2.6 closure path A — CSP integral canonicalised end-to-end)
+
+The CSP integral migration to the DSPS-canonical joint formulation
+(tracked in `docs/dev/20260504-csp-integral-canonicalization.md`) is
+now **fully closed across all metallicity branches**. Every
+orchestrator-vs-legacy equivalence test in
+`tests/integration/test_orchestrator_vs_legacy.py` passes; **no
+xfails remain**. Phase B's monolith-deletion gate is unblocked.
+
+What changed numerically:
+
+- **No-α delta-Z path** (default for most users): now goes through
+  ``calc_rest_sed_sfh_table_lognormal_mdf`` with grid resolution
+  `n_grid=64` (was 256 in legacy non-stochastic) and DSPS canonical
+  trapezoidal-in-cosmic-time SFH integration. Previously used a
+  rectangle-rule lookback weighting with bilinear metallicity interp
+  + JIT-kernel two-step einsum.
+- **α-aware path** (when ``met_alpha_fe`` is free or 4D α-grid loaded):
+  now does α-only bilinear interp first (giving a 3D `(n_met, n_age,
+  n_wave)` cube at the requested α), then the same lognormal MDF
+  triweight kernel. Previously did 4D bilinear in (Z, α) directly,
+  giving a narrower metallicity distribution.
+- **chem_evol path** (gas-regulator metallicity): now passes the
+  per-age `log_z_per_age` through ``calc_rest_sed_sfh_table_met_table``.
+  Previously collapsed Z(t) to a SED-luminosity-weighted scalar +
+  bilinear interp, giving a ~50% UV-side approximation error.
+
+User-visible impact: existing spectra computed with API versions <
+this commit will differ from the new path by:
+
+- ≤0.5% on integrated luminosities (L_bol, broad-band magnitudes).
+- ~1-3% per-wavelength on metallicity-sensitive line features (CaT,
+  Mgb, NaD).
+- ~5% per-wavelength for piecewise-constant SFHs (continuity,
+  dirichlet) where the legacy rectangle rule amplified the SFH-
+  integration mismatch.
+- For chem_evol specifically, ~50% per-wavelength UV-side change —
+  the new path is the canonical formulation; the old scalar-collapse
+  was a known approximation.
+
+Strict xfails flipped to passing tests:
+- ``test_orchestrator_rest_sed_bit_exact_to_legacy``
+- ``test_orchestrator_tau_close_to_legacy``
+- ``test_alpha_zero_matches_no_alpha``
+- ``test_chem_evol_orchestrator_rest_sed_close_to_legacy``
+
 ### Added (Phase II-2.5c — three bounded-fraction SFH variants pinned)
 
 - ``StellarSEDComponent._SUPPORTED_SFH`` further extends to ``psb``
