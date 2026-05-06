@@ -789,8 +789,41 @@ class SEDModel:
 
         return None
 
+    def _warm_grid_caches(self) -> None:
+        """Warm @functools.cache loaders to avoid tracer leaks from HDF5 grids.
+
+        Some HDF5 grid loaders (@functools.cache decorators) construct jnp.array
+        objects at load time. If the first call happens inside a JAX JIT trace,
+        the jnp.array calls create DynamicJaxprTracers, which get cached and
+        permanently leak into downstream code. This method calls each loader once
+        OUTSIDE a JIT context so the cache stores concrete arrays instead.
+
+        Wrapped in try/except because grid files are optional — missing files
+        should not block SEDModel construction.
+        """
+        # MAPPINGS shock emission grids (nebular/shock.py:_load_mappings_grids)
+        if self._uses_shock:
+            try:
+                from tengri.components.nebular.shock import _load_mappings_grids
+
+                _load_mappings_grids()
+            except Exception:
+                pass
+
+        # CAT3D-Wind AGN torus grids (agn/cat3d_wind.py:_load_cat3d_default)
+        if self._agn_model == "cat3d_wind":
+            try:
+                from tengri.components.agn.cat3d_wind import _load_cat3d_default
+
+                _load_cat3d_default()
+            except Exception:
+                pass
+
     def _build_precomputed_data(self, ssp_data, precompute):
         """Build Level 1: precomputed SSP tensors."""
+        # Warm HDF5 grid caches BEFORE any JIT compilation (tracer leak prevention)
+        self._warm_grid_caches()
+
         # Photometry precomputation (Zacharegkas+2025 Section 3)
         phot = None
         if precompute and self._z_fixed is not None and self.filter_waves is not None:
@@ -1730,7 +1763,13 @@ class SEDModel:
 
         if wave is None:
             state = self.predict_via_orchestrator(params)
-            return SEDResult(wavelength=self._rest_wavelength, sed=state.sed_intrinsic)
+            # Use ``state.wave`` (the orchestrator's runtime wavelength
+            # grid, which may differ from ``self._rest_wavelength`` —
+            # e.g. when radio/xray extends the SSP grid panchromatically
+            # but the orchestrator hasn't been wired to that extension
+            # yet). Mismatched shapes would otherwise break boolean
+            # masking on (wavelength, sed) pairs in test_panchromatic_*.
+            return SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
         result = self._compute_sed_components(params, rest_wavelength=wave)
         return SEDResult(wavelength=result["rest_wavelength"], sed=result["sed_total"])
 
