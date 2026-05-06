@@ -899,6 +899,34 @@ class Posterior:
 
         return result
 
+    def cite(self, *, bibtex: bool = False) -> _RegistryTable | None:  # noqa: F821
+        """Print citations for every component used in this fit.
+
+        Convenience wrapper around :func:`tengri.cite_components` (and
+        :func:`tengri.print_components_bibtex` when ``bibtex=True``).
+        Pulls citations live from registry metadata — every contributor
+        ``@register_*_model("...", citation="Author+Year")`` appears.
+
+        Parameters
+        ----------
+        bibtex : bool
+            If ``True``, also print BibTeX-formatted entries (paste-ready
+            for your paper's ``.bib`` file).
+
+        Examples
+        --------
+        >>> posterior.cite()  # readable table
+        >>> posterior.cite(bibtex=True)  # + BibTeX entries
+        """
+        from tengri.registry import cite_components, print_components_bibtex
+
+        table = cite_components(self)
+        print(table)
+        if bibtex:
+            print()
+            print_components_bibtex(self)
+        return None
+
     def summary(self) -> None:
         """Print the per-parameter median ± 68% credible interval table.
 
@@ -2193,6 +2221,7 @@ class Posterior:
         # 1.  Inspect what came back
         "summary",
         "summary_table",
+        "cite",
         "samples",
         "params",
         "derived",

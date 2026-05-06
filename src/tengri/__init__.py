@@ -224,6 +224,7 @@ from tengri._tutorials import examples, explain, tutorial
 from tengri.registry import (
     cite_components,
     describe,
+    print_components_bibtex,
     help,
     list_agn_models,
     list_all,

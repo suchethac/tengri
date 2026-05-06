@@ -34,7 +34,16 @@ class _RegistryTable(list):
     JSON serialisation, etc. all work as usual.
     """
 
-    _PREFERRED_COLS = ("name", "kind", "tier", "status", "citation", "short_doc", "use")
+    _PREFERRED_COLS = (
+        "component",
+        "name",
+        "kind",
+        "tier",
+        "status",
+        "citation",
+        "short_doc",
+        "use",
+    )
     _ALWAYS_HIDDEN = ("module", "requires", "params")  # surfaced via describe()
 
     def _columns(self) -> list[str]:
@@ -758,6 +767,119 @@ def cite_components(obj=None) -> _RegistryTable:
     return _RegistryTable(out)
 
 
+def print_components_bibtex(obj=None) -> None:
+    """Print BibTeX entries for every component used by ``obj``.
+
+    Walks :func:`cite_components` to discover the components, then for
+    each component looks up the formal BibTeX entry in the bundled
+    citation registry (``tengri.citations.references.bib``).  Components
+    with a registered free-form ``citation=`` string but no BibTeX entry
+    in the bundled registry are emitted as a ``%`` comment line so the
+    user knows to track down the BibTeX themselves.
+
+    Output is paste-ready into a paper's ``.bib`` file.
+
+    Examples
+    --------
+    >>> spec = tengri.Parameters(
+    ...     mean_sfh_type="dpl", agn_model="skirtor", dust_emission="dl07_tabulated"
+    ... )
+    >>> tengri.print_components_bibtex(spec)
+    @article{Stalevski_2016, ...}
+    @article{Carnall_2018, ...}
+    @article{Draine_2007, ...}
+    ...
+    """
+    # Map registry-entry names → bib-key in tengri.citations.registry.REGISTRY.
+    # Best-effort — the registry currently knows ~50 keys; new contributor
+    # models that lack a bibtex entry print a TODO comment instead.
+    _NAME_TO_BIBKEY: dict[str, str] = {
+        # SFH
+        "dpl": "bagpipes",
+        "continuity": "leja2019",
+        "dirichlet": "leja2019",
+        "dense_basis": "iyer2020",
+        # AGN
+        "skirtor": "skirtor",
+        "stalevski": "skirtor",
+        "kubota_done": "kubota_done2018",
+        "kubota_done_full": "kubota_done2018",
+        "multicolor_agn": "kubota_done2018",
+        "adaf": "mahadevan1997",
+        "qsogen": "temple2021_qsogen",
+        # Dust attenuation
+        "calzetti": "calzetti2000",
+        "cardelli": "cardelli1989",
+        "kriek_conroy": "kriek_conroy2013",
+        "noll09": "noll2009",
+        "salim": "salim2018",
+        "salim_sbl18": "salim2018",
+        "li08": "li2008_ext",
+        "smc": "gordon2003_smc",
+        "lmc": "gordon2003_smc",
+        "power_law": "charlot_fall2000",
+        # Dust emission
+        "dl07": "draine_li2007",
+        "draine_li2007": "draine_li2007",
+        "dl14": "draine2014",
+        "dale2014": "dale2014",
+        "casey2012": "casey2012",
+        "mbb": "casey2012",
+        # Nebular
+        "cue": "cue",
+        "cloudy_grid": "cloudy",
+        # Inference
+        "mcmc_nuts": "blackjax",
+        "vi": "nifty",
+        "vi_nonlinear_fast": "nifty",
+        "mcmc_raytrace": "raytrace_behroozi",
+        "pathfinder": "pathfinder",
+        "nss": "nss",
+        # Frameworks (always-on)
+        "tengri": "tengri",
+        "DSPS": "dsps",
+        "JAX": "jax",
+    }
+
+    rows = cite_components(obj)
+    print("% ────────────────────────────────────────────────────────────────")
+    print(
+        f"%  Citations for {len(rows)} component{'s' if len(rows) != 1 else ''} "
+        "used by the model.  Paste into your .bib file."
+    )
+    print("% ────────────────────────────────────────────────────────────────")
+    print()
+
+    try:
+        from tengri.citations import cite as _cite_lookup
+    except ImportError:
+        _cite_lookup = None
+
+    seen_keys: set[str] = set()
+    for row in rows:
+        name = row["name"]
+        comp = row["component"]
+        bibkey = _NAME_TO_BIBKEY.get(name) or _NAME_TO_BIBKEY.get(name.lower())
+        if bibkey and bibkey not in seen_keys and _cite_lookup is not None:
+            try:
+                citation = _cite_lookup(bibkey)
+                bib_method = getattr(citation, "to_bibtex", None)
+                if callable(bib_method):
+                    print(f"% [{comp}] {name}")
+                    print(bib_method())
+                    print()
+                    seen_keys.add(bibkey)
+                    continue
+            except Exception:
+                pass
+        # Fallback: free-form citation note
+        cit = row.get("citation", "")
+        if cit:
+            print(f"% [{comp}] {name}: {cit}")
+            print("%   (no bib entry in tengri.citations — please add manually)")
+            print()
+
+
 def list_filters(survey: str | None = None) -> _RegistryTable:
     """List every filter curve bundled with tengri.
 
@@ -1229,6 +1351,10 @@ _TOPIC_HELP: dict[str, tuple[str, callable]] = {
     "filters": ("photometric filters", lambda: list_filters()),
     "plot": ("plotting helpers", lambda: list_plots()),
     "plots": ("plotting helpers", lambda: list_plots()),
+    # "citations" is handled specially in _help_topic to print the
+    # tengri.cite_components / print_components_bibtex flow
+    "citations": ("citation API", None),
+    "cite": ("citation API", None),
 }
 
 
@@ -1324,9 +1450,14 @@ tengri — differentiable galaxy SED fitting in JAX
     introspection API end-to-end.  See CONTRIBUTING.md for the 5-step recipe.
 
 ────────────────────────────────────────────────────────────────────
-5.  Cite us
+5.  Cite the components used
 ────────────────────────────────────────────────────────────────────
-    tengri.print_citations()          acknowledgements for your paper
+    tengri.cite_components(model)         live walk of every component used
+    posterior.cite()                      same, on a finished fit
+    posterior.cite(bibtex=True)           + paste-ready BibTeX block
+    tengri.print_components_bibtex(spec)  BibTeX-only output
+    tengri.print_citations(model)         formal Bibliography report
+    tengri.help('citations')              full citation cheatsheet
 """
     print(text)
 
@@ -1340,6 +1471,47 @@ def _help_topic(topic: str) -> None:
             f"Unknown help topic '{topic}'.  Valid topics: {valid}.  "
             "Or call tengri.help() with no argument for the full cheatsheet."
         )
+
+    # "citations" / "cite" → narrative cheatsheet, not a list_*() table.
+    if topic_l in ("citations", "cite"):
+        text = """
+tengri.help('citations') — citation API
+
+Acknowledging the right papers when you publish a fit:
+
+  Quick (live, walks the model's structural choices):
+    tengri.cite_components(spec_or_model_or_posterior)
+        → table of every component used + its citation string,
+          read live from the registry (so contributor models appear too).
+
+    posterior.cite()                       # convenience on Posterior
+    posterior.cite(bibtex=True)            # also print paste-ready BibTeX
+
+    tengri.print_components_bibtex(spec)   # BibTeX-only output
+
+  Canonical (formal Bibliography registry):
+    tengri.print_citations(model)          # human-readable report
+    tengri.print_bibtex(model)             # all BibTeX in one block
+    tengri.collect_citations(model)        # list[Citation]
+    tengri.cite('calzetti2000')            # look up a single key
+    tengri.cite_all()                      # every key in the registry
+    tengri.print_paper_citation()          # how to cite tengri itself
+
+The two paths coexist:
+
+  • cite_components()    — live, picks up every contributor model with a
+                           citation= string, returns a registry table.
+  • print_citations()    — formal, uses the static association table of
+                           well-known canonical alternatives → BibTeX
+                           entries in references.bib.
+
+Use cite_components for "did I cite everything I'm using?" — it
+reflects whatever is in the registry RIGHT NOW.  Use print_citations
+for paste-ready BibTeX of the canonical pieces.
+"""
+        print(text)
+        return
+
     label, fetch = _TOPIC_HELP[topic_l]
     entries = fetch()
     print(f"\ntengri.help('{topic_l}') — {label}: {len(entries)} available\n")
