@@ -91,31 +91,52 @@ Full walkthrough in [`notebooks/00_quickstart.py`](notebooks/00_quickstart.py).
 
 ## Discover what's available
 
-Tengri exposes its model menu programmatically — no need to leave the notebook:
+After installing, the first three calls to make:
 
 ```python
 import tengri
-
-# All registered AGN models (with citation and status)
-tengri.list_agn_models()
-# → [{"name": "skirtor", "status": "production", "citation": "Stalevski et al. 2012, 2016", ...}, ...]
-
-# Filter to a status
-tengri.list_agn_models(status="experimental")
-
-# Recommended inference methods
-tengri.list_inference_methods(tier="primary")
-
-# Look up any model, dust law, SFH variant, nebular backend, component, or inference method by name
-tengri.describe("skirtor")
-tengri.describe("mcmc_nuts")
-
-# One-cell overview of everything available
-tengri.list_all()
+tengri.help()           # curated cheatsheet
+tengri.summary()        # one-line counts of every menu
+tengri.<TAB>            # ~30 curated entry points (not the 175-name kitchen sink)
 ```
 
-The same applies to `tengri.list_dust_laws()`, `tengri.list_sfh_models()`,
-`tengri.list_nebular_backends()`, and `tengri.list_components()`.
+`tengri.summary()` prints something like:
+
+```
+tengri — what's available:
+
+     7  physics components           tengri.list_components()
+    12  AGN models                   tengri.list_agn_models()
+    21  dust attenuation laws        tengri.list_dust_laws()
+     7  dust emission templates      tengri.list_dust_emission_models()
+    34  SFH models                   tengri.list_sfh_models()
+     4  nebular backends             tengri.list_nebular_backends()
+     6  primary inference methods    tengri.list_inference_methods(tier='primary')
+    19  total inference methods      tengri.list_inference_methods()
+```
+
+Each `list_*()` returns a column-aligned table — no `pprint` needed:
+
+```python
+>>> tengri.list_inference_methods(tier="primary")
+name               tier     short_doc
+─────────────────  ───────  ──────────────────────────────────────────────
+map                primary  Adam MAP optimization
+mcmc_nuts          primary  No-U-Turn Sampler
+mcmc_raytrace      primary  Ray-tracing ensemble sampler (high-D)
+vi                 primary  NIFTy geoVI variational inference
+...
+```
+
+Universal lookup across every menu:
+
+```python
+tengri.describe("skirtor")        # any AGN model, dust law, SFH variant,
+tengri.describe("mcmc_nuts")      # nebular backend, inference method,
+tengri.describe("dl07")           # or component
+```
+
+In Jupyter the same calls render as real HTML tables.
 
 ## Features
 
