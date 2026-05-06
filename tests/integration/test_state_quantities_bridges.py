@@ -39,9 +39,7 @@ from tengri.forward import (
     state_to_xray_quantities,
 )
 
-_SSP_PATH = pathlib.Path(
-    "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-).resolve()
+_SSP_PATH = pathlib.Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5").resolve()
 
 
 @pytest.fixture(scope="module")
@@ -59,9 +57,7 @@ def state(ssp):
         RadioSEDComponent(),
         XRaySEDComponent(),
     ]
-    state0 = PipelineState(
-        wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave))
-    )
+    state0 = PipelineState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
     params = {
         # tsnorm SFH
         "sfh_tsnorm_log_peak_sfr": jnp.asarray(1.0),
@@ -207,12 +203,10 @@ def state_with_cue(ssp):
     cue_path = pathlib.Path("data/cue_weights.npz").resolve()
     if not cue_path.exists():
         pytest.skip(f"Cue weights not present at {cue_path}")
-    cue = CueBackend(weights_path=str(cue_path))
+    cue = CueBackend(weights_path=str(cue_path), ssp_data=ssp)
     chain = [
         StellarSEDComponent(ssp_data=ssp),
-        NebularSEDComponent(
-            config=NebularSEDComponentConfig(backend="cue"), backend=cue
-        ),
+        NebularSEDComponent(config=NebularSEDComponentConfig(backend="cue"), backend=cue),
     ]
     state0 = PipelineState(wave=ssp.ssp_wave)
     params = {

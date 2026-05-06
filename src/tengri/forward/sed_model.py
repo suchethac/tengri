@@ -1009,9 +1009,7 @@ class SEDModel:
                     )
             elif self._dust_emission_model == "casey2012":
                 try:
-                    casey2012_preint = self._precompute_dust_analytic_photometry(
-                        "casey2012"
-                    )
+                    casey2012_preint = self._precompute_dust_analytic_photometry("casey2012")
                 except Exception as e:
                     warnings.warn(
                         f"casey2012 dust preintegration failed: {e}. "
@@ -1021,9 +1019,7 @@ class SEDModel:
                     )
             elif self._dust_emission_model == "pah_drude":
                 try:
-                    pah_drude_preint = self._precompute_dust_analytic_photometry(
-                        "pah_drude"
-                    )
+                    pah_drude_preint = self._precompute_dust_analytic_photometry("pah_drude")
                 except Exception as e:
                     warnings.warn(
                         f"pah_drude dust preintegration failed: {e}. "
@@ -2786,7 +2782,16 @@ class SEDModel:
                 lgmet_scatter,
             )
         else:
-            weights = sfr_on_ssp * self._csp_age_dt
+            # Closure-A consistency: route through the orchestrator so
+            # ``predict_sfh_quantities`` returns the same stellar_mass /
+            # weights as ``predict_derived`` (which uses
+            # ``predict_via_orchestrator`` internally via
+            # ``Prediction._ensure_sfh``). Was 4.1% apart with the
+            # legacy rectangle rule (``sfr_on_ssp * _csp_age_dt``).
+            # See ``tests/integration/test_derived_quantities.py::
+            # test_mstar_consistent_between_methods``.
+            state_orch = self.predict_via_orchestrator(params)
+            weights = jnp.asarray(state_orch.derived["age_weights"])
         mass_formed = jnp.sum(weights)
 
         # Surviving mass
