@@ -215,16 +215,33 @@ def precompute(
         "_preint": _build_grid_qsogen(filter_waves, filter_trans, redshift, plslp1_grid, ebv_grid),
     }
 
-    # Auto-collapse any Fixed axes
+    # Auto-collapse any Fixed axes — including axes for params the user
+    # never declared (treat as Fixed at the qsogen default). This avoids a
+    # 0-d-vs-2-d shape mismatch in the runtime triweight interp when, e.g.,
+    # the user only declares ``agn_log_lbol`` and leaves ``agn_plslp1`` /
+    # ``agn_ebv`` untouched: precompute used to keep both axes free, but
+    # the kernel only passes ``agn_log_lbol`` → ``IndexError: tuple index
+    # out of range`` (BUG-NSS-03 regression test).
     if parameters is None:
         return result
 
+    from tengri.components.agn.qsogen import _DEFAULT_EBV, _DEFAULT_PLSLP1
+
+    _AXIS_DEFAULTS = {
+        "agn_plslp1": _DEFAULT_PLSLP1,
+        "agn_ebv": _DEFAULT_EBV,
+    }
+
     preint: PreintegratedGrid = result["_preint"]
     fixed_values = parameters.get_fixed_values()
+    free_param_names = set(parameters.free_params)
     fixed: dict[int, float] = {}
     for i, pname in enumerate(AXIS_PARAMS):
         if pname in fixed_values:
             fixed[i] = float(fixed_values[pname])
+        elif pname not in free_param_names:
+            # Param not in the spec at all — collapse axis at qsogen default.
+            fixed[i] = float(_AXIS_DEFAULTS[pname])
 
     if not fixed:
         return result
