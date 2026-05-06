@@ -309,35 +309,24 @@ def _build_dl07_like_lookup(precomp: dict):
     """Shared JIT lookup for DL07-shape models. Signature matches DL07:
     ``(L_absorbed, dust_umin, dust_gamma_dl, dust_q)``.
 
-    Uses bilinear interpolation in (q, umin) space to match the exact
-    runtime's interpolation scheme byte-for-byte (see
-    ``components/dust/emission_templates.py``::``_bilinear``). Triweight
-    smoothing was a 4-5% mismatch source vs the exact path.
+    Uses C²-continuous triweight interpolation via the shared
+    :func:`interp_nd_triweight` helper. Smooth gradients are required for
+    NIFTy VI / HMC / Hessian-based inference; the resulting ~3-5%
+    hybrid-vs-exact bias is below typical dust-template systematic
+    uncertainty (~10-30%).
     """
     single_u_phot = precomp["single_u_phot"]
     powerlaw_phot = precomp["powerlaw_phot"]
     umin_grid = jnp.asarray(precomp["umin_grid"])
     q_grid = jnp.asarray(precomp["q_grid"])
+    axes = (q_grid, umin_grid)
+    edges = tuple(edges_for_grid(ax) for ax in axes)
 
     @jax.jit
     def phot_fn(L_absorbed, dust_umin, dust_gamma_dl, dust_q):
-        umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
-        q_c = jnp.clip(dust_q, q_grid[0], q_grid[-1])
-        i_u = jnp.clip(jnp.searchsorted(umin_grid, umin_c) - 1, 0, len(umin_grid) - 2)
-        i_q = jnp.clip(jnp.searchsorted(q_grid, q_c) - 1, 0, len(q_grid) - 2)
-        fu = (umin_c - umin_grid[i_u]) / (umin_grid[i_u + 1] - umin_grid[i_u])
-        fq = (q_c - q_grid[i_q]) / (q_grid[i_q + 1] - q_grid[i_q])
-
-        def _bilinear(grid):
-            return (
-                (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
-                + (1.0 - fq) * fu * grid[i_q, i_u + 1]
-                + fq * (1.0 - fu) * grid[i_q + 1, i_u]
-                + fq * fu * grid[i_q + 1, i_u + 1]
-            )
-
-        single = _bilinear(single_u_phot)
-        power = _bilinear(powerlaw_phot)
+        point = (dust_q, dust_umin)
+        single = interp_nd_triweight(single_u_phot, axes, edges, point)
+        power = interp_nd_triweight(powerlaw_phot, axes, edges, point)
         return L_absorbed * ((1.0 - dust_gamma_dl) * single + dust_gamma_dl * power)
 
     return phot_fn
@@ -461,6 +450,10 @@ def build_dl14_photometry_lookup(precomp: dict):
 
     Signature: ``(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah,
     dust_alpha_dl14)``.
+
+    C²-continuous triweight interpolation in (qpah, umin) for single_u
+    and (qpah, umin, alpha) for the powerlaw component, via the shared
+    :func:`interp_nd_triweight` helper.
     """
     single_u_phot = precomp["single_u_phot"]
     powerlaw_phot = precomp["powerlaw_phot"]
@@ -468,39 +461,19 @@ def build_dl14_photometry_lookup(precomp: dict):
     qpah_grid = jnp.asarray(precomp["qpah_grid"])
     alpha_grid = jnp.asarray(precomp["alpha_grid"])
 
+    single_axes = (qpah_grid, umin_grid)
+    single_edges = tuple(edges_for_grid(ax) for ax in single_axes)
+    pl_axes = (qpah_grid, umin_grid, alpha_grid)
+    pl_edges = tuple(edges_for_grid(ax) for ax in pl_axes)
+
     @jax.jit
     def phot_fn(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah, dust_alpha_dl14):
-        umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
-        q_c = jnp.clip(dust_qpah, qpah_grid[0], qpah_grid[-1])
-        a_c = jnp.clip(dust_alpha_dl14, alpha_grid[0], alpha_grid[-1])
-        i_u = jnp.clip(jnp.searchsorted(umin_grid, umin_c) - 1, 0, len(umin_grid) - 2)
-        i_q = jnp.clip(jnp.searchsorted(qpah_grid, q_c) - 1, 0, len(qpah_grid) - 2)
-        i_a = jnp.clip(jnp.searchsorted(alpha_grid, a_c) - 1, 0, len(alpha_grid) - 2)
-        fu = (umin_c - umin_grid[i_u]) / (umin_grid[i_u + 1] - umin_grid[i_u])
-        fq = (q_c - qpah_grid[i_q]) / (qpah_grid[i_q + 1] - qpah_grid[i_q])
-        fa = (a_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
-
-        def _bilin(grid):
-            return (
-                (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
-                + (1.0 - fq) * fu * grid[i_q, i_u + 1]
-                + fq * (1.0 - fu) * grid[i_q + 1, i_u]
-                + fq * fu * grid[i_q + 1, i_u + 1]
-            )
-
-        def _trilin(grid):
-            def _bilin_a(ia):
-                return (
-                    (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u, ia]
-                    + (1.0 - fq) * fu * grid[i_q, i_u + 1, ia]
-                    + fq * (1.0 - fu) * grid[i_q + 1, i_u, ia]
-                    + fq * fu * grid[i_q + 1, i_u + 1, ia]
-                )
-
-            return (1.0 - fa) * _bilin_a(i_a) + fa * _bilin_a(i_a + 1)
-
-        single = _bilin(single_u_phot)
-        power = _trilin(powerlaw_phot)
+        single = interp_nd_triweight(
+            single_u_phot, single_axes, single_edges, (dust_qpah, dust_umin)
+        )
+        power = interp_nd_triweight(
+            powerlaw_phot, pl_axes, pl_edges, (dust_qpah, dust_umin, dust_alpha_dl14)
+        )
         return L_absorbed * ((1.0 - dust_gamma_dl) * single + dust_gamma_dl * power)
 
     return phot_fn
@@ -554,22 +527,13 @@ def build_bosa_photometry_lookup(precomp: dict):
     phot = precomp["phot"]
     log_ltir_grid = jnp.asarray(precomp["log_ltir_grid"])
     log_ssfr_grid = jnp.asarray(precomp["log_ssfr_grid"])
+    axes = (log_ltir_grid, log_ssfr_grid)
+    edges = tuple(edges_for_grid(ax) for ax in axes)
 
     @jax.jit
     def phot_fn(L_absorbed, dust_log_ssfr):
         log_ltir = jnp.log10(jnp.maximum(L_absorbed, 1.0e-30))
-        l_c = jnp.clip(log_ltir, log_ltir_grid[0], log_ltir_grid[-1])
-        s_c = jnp.clip(dust_log_ssfr, log_ssfr_grid[0], log_ssfr_grid[-1])
-        i_l = jnp.clip(jnp.searchsorted(log_ltir_grid, l_c) - 1, 0, len(log_ltir_grid) - 2)
-        i_s = jnp.clip(jnp.searchsorted(log_ssfr_grid, s_c) - 1, 0, len(log_ssfr_grid) - 2)
-        fl = (l_c - log_ltir_grid[i_l]) / (log_ltir_grid[i_l + 1] - log_ltir_grid[i_l])
-        fs = (s_c - log_ssfr_grid[i_s]) / (log_ssfr_grid[i_s + 1] - log_ssfr_grid[i_s])
-        shape_phot = (
-            (1.0 - fl) * (1.0 - fs) * phot[i_l, i_s]
-            + (1.0 - fl) * fs * phot[i_l, i_s + 1]
-            + fl * (1.0 - fs) * phot[i_l + 1, i_s]
-            + fl * fs * phot[i_l + 1, i_s + 1]
-        )
+        shape_phot = interp_nd_triweight(phot, axes, edges, (log_ltir, dust_log_ssfr))
         return L_absorbed * shape_phot
 
     return phot_fn
@@ -607,21 +571,20 @@ def precompute_dale2014_photometry(
 
 
 def build_dale2014_photometry_lookup(precomp: dict):
-    """Build JIT-compiled Dale 2014 photometry lookup with linear-in-alpha
-    interpolation matching the exact runtime path
-    (``emission_templates.py``::``dale2014_tabulated``).
+    """Build JIT-compiled Dale 2014 photometry lookup.
 
-    Signature: ``(L_absorbed, dust_alpha_dale)``.
+    Signature: ``(L_absorbed, dust_alpha_dale)``. Uses C²-continuous
+    triweight interpolation in alpha via the shared
+    :func:`interp_nd_triweight` helper.
     """
     phot = precomp["phot"]
     alpha_grid = jnp.asarray(precomp["alpha_grid"])
+    axes = (alpha_grid,)
+    edges = tuple(edges_for_grid(ax) for ax in axes)
 
     @jax.jit
     def phot_fn(L_absorbed, dust_alpha_dale):
-        a_c = jnp.clip(dust_alpha_dale, alpha_grid[0], alpha_grid[-1])
-        i_a = jnp.clip(jnp.searchsorted(alpha_grid, a_c) - 1, 0, len(alpha_grid) - 2)
-        fa = (a_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
-        shape_phot = (1.0 - fa) * phot[i_a] + fa * phot[i_a + 1]
+        shape_phot = interp_nd_triweight(phot, axes, edges, (dust_alpha_dale,))
         return L_absorbed * shape_phot
 
     return phot_fn

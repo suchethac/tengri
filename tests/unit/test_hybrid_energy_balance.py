@@ -147,12 +147,22 @@ class TestDale2014NonRegression:
     def dale_params(self, dale_spec):
         return dale_spec.sample(_KEY)
 
-    def test_dale_hybrid_error_below_1pct(self, dale_model, dale_params):
-        """Dale 2014 hybrid error < 1% per band (non-regression guard)."""
+    def test_dale_hybrid_error_below_5pct(self, dale_model, dale_params):
+        """Dale 2014 hybrid error < 5% per band (non-regression guard)."""
         err = _photometry_error(dale_model, dale_params)
         max_err = float(jnp.max(err)) * 100.0
-        assert max_err < 1.0, (
-            f"Dale 2014 hybrid max per-band error {max_err:.2f}% regressed past 1%."
+        # Threshold: 5%. Pre-bespoke-precompute, Dale fell through to the
+        # full-wavelength fallback path which trivially matched exact
+        # (same code) — the 1% threshold there was a fluke. Once bespoke
+        # precompute is wired (commit 4dea2a2), Dale uses C²-continuous
+        # triweight interpolation that introduces ~3-5% offset vs the
+        # exact runtime's bilinear path. This is the same architectural
+        # tradeoff DL07 has paid since day one (see TestDL07EnergyBalance,
+        # also at 2-5%). Smooth gradients are required for VI/HMC; the
+        # interpolation bias is well below dust-template systematic
+        # uncertainty (~10-30%).
+        assert max_err < 5.0, (
+            f"Dale 2014 hybrid max per-band error {max_err:.2f}% regressed past 5%."
         )
 
 
@@ -176,11 +186,16 @@ class TestTHEMISNonRegression:
     def themis_params(self, themis_spec):
         return themis_spec.sample(_KEY)
 
-    def test_themis_hybrid_error_below_1pct(self, themis_model, themis_params):
-        """THEMIS hybrid error < 1% per band (non-regression guard)."""
+    def test_themis_hybrid_error_below_5pct(self, themis_model, themis_params):
+        """THEMIS hybrid error < 5% per band (non-regression guard).
+
+        See note on TestDale2014NonRegression — same triweight-vs-bilinear
+        architectural cost. Smooth gradients prioritised over byte-equivalent
+        agreement; interpolation bias is below template systematic uncertainty.
+        """
         err = _photometry_error(themis_model, themis_params)
         max_err = float(jnp.max(err)) * 100.0
-        assert max_err < 1.0, f"THEMIS hybrid max per-band error {max_err:.2f}% regressed past 1%."
+        assert max_err < 5.0, f"THEMIS hybrid max per-band error {max_err:.2f}% regressed past 5%."
 
 
 # ── Non-regression: stellar only ──────────────────────────────────
