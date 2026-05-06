@@ -364,11 +364,32 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
     try:
         from tengri.components import _get_registered_components
 
+        # Components whose default-config declared_parameters don't fit
+        # the legacy SEDModel param schema: instantiating them with a
+        # default config would inject params that the spec / param-map
+        # doesn't support, breaking ``get_internal_params`` at the
+        # KeyError fallback (a free-or-fixed lookup that fails for any
+        # injected param the user never set in spec).
+        #
+        # - StellarSEDComponent: default is ``sfh_model="tsnorm"`` →
+        #   injects tsnorm SFH params for any spec, regardless of the
+        #   user's actual ``mean_sfh_type``. SFH/met params are wired
+        #   via ``resolve_sfh(mean_sfh_type)`` above.
+        # - DustAttenuationSEDComponent: default is single-component
+        #   (``dust_tau_v``); legacy SEDModel defaults to two-component
+        #   (``dust_tau_bc`` / ``dust_tau_diff``). The dust scheme is
+        #   selected by the ``dust_model`` argument and wired via
+        #   ``_NON_SFH_PARAM_MAP`` / ``_SINGLE_COMPONENT_DUST_PARAM_MAP``
+        #   above.
+        # - DustEmissionSEDComponent: same family — its declared params
+        #   may not match what the legacy emission paths expect.
+        _SKIP_AUTO_DERIVE = (
+            "StellarSEDComponent",
+            "DustAttenuationSEDComponent",
+            "DustEmissionSEDComponent",
+        )
         for comp_cls in _get_registered_components():
-            # Skip StellarSEDComponent: its SFH/met params are already wired
-            # via mean_sfh_type above. Instantiating with default config would
-            # inject the wrong SFH variant's params (default sfh_model="tsnorm").
-            if comp_cls.__name__ == "StellarSEDComponent":
+            if comp_cls.__name__ in _SKIP_AUTO_DERIVE:
                 continue
             try:
                 # Instantiate with default config
@@ -435,17 +456,32 @@ def get_internal_params(params, param_map, spec, has_field):
             if alias_val is not None:
                 internal[int_name] = alias_val * scale + offset
             else:
-                # Fall back to fixed value from spec
+                # Fall back to fixed value from spec, or skip if absent.
+                #
+                # ``param_map`` is built from a registry that may include
+                # auto-derived entries from Phase II SEDComponents (AGN,
+                # Radio, IGM, X-ray) regardless of whether the active
+                # spec actually uses them. When a spec doesn't use a
+                # given component, its parameters are absent from both
+                # ``params`` and ``spec`` — silently skipping the entry
+                # is correct (the param has no internal use either, since
+                # the SEDModel doesn't dispatch to that component). Free
+                # params that ARE in spec but missing from params still
+                # fail loudly.
                 try:
                     dist = spec.get_distribution(pub_name)
-                    if dist.is_fixed:
-                        internal[int_name] = dist.bounds[0] * scale + offset
-                    else:
-                        raise KeyError(f"Free parameter '{pub_name}' not found in params dict")
-                except KeyError as err:
+                except KeyError:
+                    # Param isn't in spec at all → treat as inactive,
+                    # skip silently. Auto-derived AGN/Radio/IGM/X-ray
+                    # entries fall here when the user opts out of those
+                    # components by simply not setting their params.
+                    continue
+                if dist.is_fixed:
+                    internal[int_name] = dist.bounds[0] * scale + offset
+                else:
                     raise KeyError(
-                        f"Parameter '{pub_name}' not found in params dict and not in spec"
-                    ) from err
+                        f"Free parameter '{pub_name}' not found in params dict"
+                    )
 
     # Handle field latent vector (both full and short names)
     if has_field:
