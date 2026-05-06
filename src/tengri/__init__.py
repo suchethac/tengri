@@ -222,6 +222,7 @@ from tengri import (
 # Introspection façade — public registry lookups
 from tengri._tutorials import examples, explain, tutorial
 from tengri.registry import (
+    cite_components,
     describe,
     help,
     list_agn_models,
@@ -279,6 +280,7 @@ __all__ = [
     "agn",
     "cache_size_bytes",
     "citations",
+    "cite_components",
     "clear_cache",
     "config",
     "cosmology",
@@ -441,6 +443,7 @@ _CURATED_DIR = (
     "list_all",
     "search",
     "suggest_parameters",
+    "cite_components",
     "tutorial",
     "examples",
     "explain",

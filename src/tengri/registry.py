@@ -616,6 +616,148 @@ _SURVEY_ALIASES: dict[str, tuple[str, str]] = {
 }
 
 
+def cite_components(obj=None) -> _RegistryTable:
+    """Citations for every physics component a Parameters / SEDModel / Posterior uses.
+
+    This is the "live" citation walk: read straight from the registry
+    metadata you (or contributors) populated via the
+    ``citation=`` kwarg on ``@register_agn_model`` /
+    ``@register_dust_law`` / SFH ``_register`` / etc.
+
+    Goes beyond :func:`tengri.collect_citations` (which uses a static
+    BibTeX-key association table) — every per-alternative citation is
+    pulled live, so a contributor adding a new model with a fresh
+    ``citation="Author+Year"`` immediately appears here.
+
+    Parameters
+    ----------
+    obj : Parameters or SEDModel or Posterior, optional
+        Object whose structural choices to inspect.  If ``None``, returns
+        the citations attached to the four core dependencies (tengri,
+        JAX, DSPS) plus an empty per-component slate.
+
+    Returns
+    -------
+    _RegistryTable
+        One row per component used.  Columns: ``component`` (where in
+        the SED model), ``name`` (the registered alternative chosen),
+        ``citation`` (the live string from the registry), ``kind``.
+
+    Examples
+    --------
+    >>> spec = tengri.Parameters(
+    ...     mean_sfh_type="dpl", agn_model="skirtor", dust_emission="dl07_tabulated"
+    ... )
+    >>> tengri.cite_components(spec)
+    >>>
+    >>> # Same call works on the SEDModel and Posterior — they expose .spec
+    >>> tengri.cite_components(model)
+    >>> tengri.cite_components(posterior)
+    """
+    rows: list[dict] = []
+
+    def _add(component: str, name: str | None, table_fn) -> None:
+        if not name:
+            return
+        # Strip the suffix Parameters internally adds (e.g. "dl07_tabulated"
+        # vs the registered "dl07") — fall back to the raw name if exact.
+        candidates = [name]
+        if name.endswith("_tabulated"):
+            candidates.append(name[: -len("_tabulated")])
+        for entry in table_fn():
+            if entry["name"] in candidates:
+                rows.append(
+                    {
+                        "component": component,
+                        "name": entry["name"],
+                        "citation": entry.get("citation", ""),
+                        "kind": entry.get("kind", "?"),
+                    }
+                )
+                return
+
+    # Resolve obj → underlying Parameters spec
+    spec = obj
+    if spec is None:
+        rows.append(
+            {
+                "component": "framework",
+                "name": "tengri",
+                "citation": "Cooray et al. (2026, Paper I)",
+                "kind": "framework",
+            }
+        )
+        return _RegistryTable(rows)
+
+    # SEDModel / Posterior expose .spec
+    spec = getattr(obj, "spec", obj)
+
+    # Always-present dependencies
+    rows.append(
+        {
+            "component": "framework",
+            "name": "tengri",
+            "citation": "Cooray et al. (2026, Paper I)",
+            "kind": "framework",
+        }
+    )
+    rows.append(
+        {
+            "component": "ssp",
+            "name": "DSPS",
+            "citation": "Hearin et al. 2023 (MNRAS 521, 1741)",
+            "kind": "framework",
+        }
+    )
+    rows.append(
+        {
+            "component": "framework",
+            "name": "JAX",
+            "citation": "Bradbury et al. 2018",
+            "kind": "framework",
+        }
+    )
+
+    # SFH (mean_sfh_type can be str or list[str])
+    sfh_types = getattr(spec, "mean_sfh_type", None)
+    if isinstance(sfh_types, str):
+        sfh_types = [sfh_types]
+    if sfh_types:
+        for sfh in sfh_types:
+            _add("sfh", sfh, list_sfh_models)
+
+    # AGN
+    _add("agn", getattr(spec, "agn_model", None), list_agn_models)
+
+    # Dust attenuation — bc + diff (skip plain "power_law" default if both equal it)
+    for attr in ("dust_law_bc", "dust_law_diff", "dust_law"):
+        _add("dust_attenuation", getattr(spec, attr, None), list_dust_laws)
+
+    # Dust emission
+    _add("dust_emission", getattr(spec, "dust_emission", None), list_dust_emission_models)
+
+    # Nebular
+    nebular_mode = getattr(spec, "nebular_mode", None)
+    if nebular_mode and nebular_mode != "off":
+        _add("nebular", nebular_mode, list_nebular_backends)
+
+    # Inference method (from a Posterior)
+    method = getattr(obj, "method", None)
+    if method:
+        _add("inference", method, list_inference_methods)
+
+    # Deduplicate by (component, name) preserving order
+    seen: set[tuple] = set()
+    out: list[dict] = []
+    for r in rows:
+        key = (r["component"], r["name"])
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+    return _RegistryTable(out)
+
+
 def list_filters(survey: str | None = None) -> _RegistryTable:
     """List every filter curve bundled with tengri.
 
