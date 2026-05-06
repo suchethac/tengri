@@ -37,6 +37,16 @@ from tengri.parameters._aliases import (
     _REVERSE_ALIASES,
     find_short_param,
 )
+from tengri.parameters._param_defs import (
+    _AGN_PARAMS,
+    _CUE_GAS_EXTRA_PARAMS,
+    _CUE_IONSPEC_PARAMS,
+    _DUST_EMISSION_PARAMS,
+    _NEBULAR_PARAMS,
+    _RADIO_PARAMS,
+    _SHOCK_PARAMS,
+    _XRAY_PARAMS,
+)
 
 # ── Constants ─────────────────────────────────────────────────────
 
@@ -55,111 +65,64 @@ _EVOLVING_ALPHA_PARAM_MAP = {
     "met_alpha_fe_young": ("alpha_fe_young", 1.0, 0.0),  # [alpha/Fe] at present day
 }
 
-# ── Identity param lists (no unit conversion, scale=1, offset=0) ─────
+# ── Identity param lists ──────────────────────────────────────────
+#
+# Auto-derived from the bucket dicts in :mod:`tengri.parameters._param_defs`.
+# Adding a parameter to one of those dicts automatically exposes it through
+# identity translation here — eliminating the disconnect that previously
+# bit dust-emission, AGN-nebular, magphys, and shock paths (declared in
+# ``_param_defs.py``, consumed in ``components/``, but silently dropped at
+# Model predict time because the parallel hand-written identity list never
+# got the new entry).
+#
+# Exception list: any name in ``_PARAMS_WITH_UNIT_CONVERSION`` is filtered
+# out of the auto-derived identity lists because it goes through a real
+# unit-converting entry in ``_NON_SFH_PARAM_MAP`` (or one of the other
+# explicit maps) and must NOT also receive a passthrough identity entry.
+_PARAMS_WITH_UNIT_CONVERSION: frozenset[str] = frozenset(
+    {
+        # ── Stellar/dust handled in _NON_SFH_PARAM_MAP ────────────
+        "met_logzsol",  # Z/Zsun → log(Z), LOG10_ZSUN offset
+        "met_alpha_fe",
+        "dust_tau_bc",  # rename to internal `tau_bc`
+        "dust_tau_diff",  # rename to internal `tau_diff`
+        "dust_slope",
+        "redshift",
+        "noise_frac_cal",
+        "dust_f_obscuration",  # rename to internal `f_obscuration`
+        "dust_bump_strength",
+        "dust_delta",
+        "dust_Rv",
+        "noise_dof",
+        "sigma_v_kms",
+        # ── Nebular gas metallicity ───────────────────────────────
+        # Declared in _param_defs as log10(Z_gas/Zsun); consumed in
+        # ``components/nebular/{cloudy_cb19,feltre_precompute,
+        # mappings_photo_precompute}.py`` as absolute log10(Z).
+        # Conversion lives in _NON_SFH_PARAM_MAP below.
+        "neb_logZ_gas",
+    }
+)
 
-_DUST_EMISSION_IDENTITY_PARAMS = [
-    "dust_T",
-    "dust_beta_ir",
-    "dust_alpha_mir",
-    "dust_alpha_dale",
-    "dust_umin",
-    "dust_gamma_dl",
-    "dust_qpah",
-    "dust_eta_balance",
-    "dust_alpha_dl14",
-    # Two-temperature energy_balance_split (emission.py:1157)
-    "dust_T_cold",
-    "dust_T_warm",
-    # THEMIS / DL14 hydrocarbon-fraction parameter (emission_templates.py:1516)
-    "dust_qhac",
-    # BOSA tabulated emission (emission_templates.py:1266)
-    "dust_log_ssfr",
-]
 
-_AGN_IDENTITY_PARAMS = [
-    "agn_frac",
-    "agn_log_lbol",
-    "agn_alpha",
-    "agn_T_torus",
-    "agn_tau_torus",
-    "agn_torus_frac",
-    "agn_log_mbh",
-    "agn_log_ledd",
-    "agn_tau_skirtor",
-    "agn_p_skirtor",
-    "agn_q_skirtor",
-    "agn_oa_skirtor",
-    "agn_cos_inc",
-    "agn_a_spin",
-    "agn_T_hot",
-    "agn_T_warm",
-    "agn_frac_hot",
-    "agn_f_hard",
-    "agn_gamma_warm",
-    "agn_kt_warm",
-    "agn_gamma_hard",
-    "agn_kt_hot",
-    "agn_r_warm_ratio",
-    "agn_polar_ebv",
-    "agn_polar_oa",
-    # AGN-nebular emitters (BLR, NLR-Gaussian, Feltre, Fe II)
-    "agn_blr_cf",
-    "agn_nlr_cf",
-    "agn_feltre_cf",
-    "agn_fe2_strength",
-    "agn_alpha_ion",
-]
+def _identity_params_from_bucket(bucket: dict) -> list[str]:
+    """Derive identity-mapping param list from a `_param_defs.py` bucket.
 
-_RADIO_IDENTITY_PARAMS = [
-    "radio_q_ir",
-    "radio_alpha_sf",
-    "radio_loudness",
-    "radio_alpha_agn",
-    "radio_T_e",
-    "radio_alpha_ff",
-]
+    Filters out any param that needs a unit conversion (`_PARAMS_WITH_UNIT_CONVERSION`)
+    because those go through `_NON_SFH_PARAM_MAP` instead. Sorted for stable
+    test output.
+    """
+    return sorted(name for name in bucket if name not in _PARAMS_WITH_UNIT_CONVERSION)
 
-_XRAY_IDENTITY_PARAMS = [
-    "xray_gamma_agn",
-    "xray_alpha_ox",
-    "xray_gamma_hmxb",
-    "xray_gamma_lmxb",
-    "xray_E_cut",
-]
 
-_SHOCK_IDENTITY_PARAMS = [
-    "shock_frac",
-    "shock_velocity",
-    "shock_log_density",
-    "shock_b_over_sqrt_n",
-]
-
-_NEBULAR_IDENTITY_PARAMS = [
-    "neb_logU",
-    "neb_fesc",
-    "neb_fesc_lya",
-]
-
-# Cue-only continuous abundance + density offsets (Li et al. 2025). Validated
-# in _param_defs._CUE_GAS_EXTRA_PARAMS but were silently stripped by
-# get_internal_params before this entry existed. See MISSING_FEATURES.md #16.
-_CUE_GAS_IDENTITY_PARAMS = [
-    "gas_logn",
-    "gas_logno",
-    "gas_logco",
-]
-
-# Cue ionising-spectrum coefficients (4 segment slopes + 3 segment ratios).
-# Same pre-existing plumbing gap. Registered only when nebular_mode == "cue".
-_CUE_IONSPEC_IDENTITY_PARAMS = [
-    "ionspec_index1",
-    "ionspec_index2",
-    "ionspec_index3",
-    "ionspec_index4",
-    "ionspec_logLratio1",
-    "ionspec_logLratio2",
-    "ionspec_logLratio3",
-]
+_DUST_EMISSION_IDENTITY_PARAMS = _identity_params_from_bucket(_DUST_EMISSION_PARAMS)
+_AGN_IDENTITY_PARAMS = _identity_params_from_bucket(_AGN_PARAMS)
+_RADIO_IDENTITY_PARAMS = _identity_params_from_bucket(_RADIO_PARAMS)
+_XRAY_IDENTITY_PARAMS = _identity_params_from_bucket(_XRAY_PARAMS)
+_SHOCK_IDENTITY_PARAMS = _identity_params_from_bucket(_SHOCK_PARAMS)
+_NEBULAR_IDENTITY_PARAMS = _identity_params_from_bucket(_NEBULAR_PARAMS)
+_CUE_GAS_IDENTITY_PARAMS = _identity_params_from_bucket(_CUE_GAS_EXTRA_PARAMS)
+_CUE_IONSPEC_IDENTITY_PARAMS = _identity_params_from_bucket(_CUE_IONSPEC_PARAMS)
 
 
 def identity_param_map(names: list[str]) -> dict[str, tuple[str, float, float]]:
@@ -198,6 +161,11 @@ _NON_SFH_PARAM_MAP = {
     # Spectroscopy: stellar velocity dispersion (added in quadrature
     # to the instrumental LSF in apply_lsf). See MISSING_FEATURES.md #8.
     "sigma_v_kms": ("sigma_v_kms", 1.0, 0.0),
+    # Nebular gas metallicity: declared in _param_defs as log10(Z_gas/Zsun)
+    # but consumed in cloudy_cb19.py / feltre_precompute.py /
+    # mappings_photo_precompute.py as ABSOLUTE log10(Z) — same convention as
+    # met_logzsol → log_z_abs. The LOG10_ZSUN offset bridges the two.
+    "neb_logZ_gas": ("neb_logZ_gas", 1.0, LOG10_ZSUN),
 }
 
 # (Reverse alias map now managed in _aliases.py — imported at top)
@@ -462,12 +430,23 @@ def get_internal_params(params, param_map, spec, has_field):
     internal = {}
     for pub_name, (int_name, scale, offset) in param_map.items():
         if pub_name in params:
-            internal[int_name] = params[pub_name] * scale + offset
+            value = params[pub_name]
+            # String-typed Fixed params (e.g. shock_abundance="solar") are config
+            # enums, not numeric values — pass them through verbatim so downstream
+            # code that branches on the string still sees it. Numeric params get
+            # the standard scale/offset translation.
+            if isinstance(value, str):
+                internal[int_name] = value
+            else:
+                internal[int_name] = value * scale + offset
         else:
             # Check short-form alias: find short name that maps to pub_name
             alias_val = find_short_param(params, pub_name)
             if alias_val is not None:
-                internal[int_name] = alias_val * scale + offset
+                if isinstance(alias_val, str):
+                    internal[int_name] = alias_val
+                else:
+                    internal[int_name] = alias_val * scale + offset
             else:
                 # Fall back to fixed value from spec, or skip if absent.
                 #
@@ -490,7 +469,15 @@ def get_internal_params(params, param_map, spec, has_field):
                     # components by simply not setting their params.
                     continue
                 if dist.is_fixed:
-                    internal[int_name] = dist.bounds[0] * scale + offset
+                    fixed_val = dist.bounds[0]
+                    if isinstance(fixed_val, str) or fixed_val is None:
+                        # String-typed Fixed config (e.g. shock_abundance="solar"):
+                        # bounds[0] is the literal value, not a numeric range. Pass
+                        # through verbatim — downstream code branches on the string.
+                        # None handles enum-typed Fixed where bounds isn't populated.
+                        internal[int_name] = fixed_val if fixed_val is not None else dist.value
+                    else:
+                        internal[int_name] = fixed_val * scale + offset
                 else:
                     raise KeyError(f"Free parameter '{pub_name}' not found in params dict")
 

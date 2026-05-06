@@ -68,8 +68,11 @@ class TestAGNSpinCosInc:
         assert '"agn_a_spin"' in src, "agn_a_spin must be declared in _AGN_PARAMS in parameters.py"
 
     def test_agn_a_spin_in_param_map(self):
-        src = _translate_src()
-        assert '"agn_a_spin"' in src, "agn_a_spin must be in _AGN_IDENTITY_PARAMS in translate.py"
+        from tengri.parameters.translate import _AGN_IDENTITY_PARAMS
+
+        assert "agn_a_spin" in _AGN_IDENTITY_PARAMS, (
+            "agn_a_spin must be in _AGN_IDENTITY_PARAMS in translate.py"
+        )
 
 
 # ── SKIRTOR parameter forwarding ──────────────────────────────────
@@ -101,8 +104,11 @@ class TestSKIRTORParams:
         ],
     )
     def test_skirtor_param_in_param_map(self, param):
-        src = _translate_src()
-        assert f'"{param}"' in src, f"{param} must be in _AGN_IDENTITY_PARAMS in translate.py"
+        from tengri.parameters.translate import _AGN_IDENTITY_PARAMS
+
+        assert param in _AGN_IDENTITY_PARAMS, (
+            f"{param} must be in _AGN_IDENTITY_PARAMS in translate.py"
+        )
 
 
 # ── K&D full 3-zone disc parameters ───────────────────────────────
@@ -268,8 +274,9 @@ class TestDustAlphaDL14:
         )
 
     def test_dust_alpha_dl14_in_param_map(self):
-        src = _translate_src()
-        assert '"dust_alpha_dl14"' in src, (
+        from tengri.parameters.translate import _DUST_EMISSION_IDENTITY_PARAMS
+
+        assert "dust_alpha_dl14" in _DUST_EMISSION_IDENTITY_PARAMS, (
             "dust_alpha_dl14 must be in _DUST_EMISSION_IDENTITY_PARAMS in translate.py"
         )
 
@@ -285,7 +292,8 @@ class TestShockBOverSqrtN:
         )
 
     def test_shock_b_over_sqrt_n_in_param_map(self):
-        src = _translate_src()
-        assert '"shock_b_over_sqrt_n"' in src, (
+        from tengri.parameters.translate import _SHOCK_IDENTITY_PARAMS
+
+        assert "shock_b_over_sqrt_n" in _SHOCK_IDENTITY_PARAMS, (
             "shock_b_over_sqrt_n must be in _SHOCK_IDENTITY_PARAMS in translate.py"
         )
