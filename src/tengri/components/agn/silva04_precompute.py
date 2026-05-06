@@ -257,10 +257,11 @@ def precompute(
         return result
 
     preint: PreintegratedGrid = result["_preint"]
+    fixed_values = parameters.get_fixed_values()
     fixed: dict[int, float] = {}
     for i, pname in enumerate(AXIS_PARAMS):
-        if parameters.is_fixed(pname):
-            fixed[i] = float(parameters.fixed_value(pname))
+        if pname in fixed_values:
+            fixed[i] = float(fixed_values[pname])
     if not fixed:
         return result
 

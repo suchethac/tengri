@@ -81,12 +81,25 @@ class TestIdentityMapPropagation:
             internal = get_internal_params(params, pm, self._make_spec_stub(), has_field=False)
         assert internal["ionspec_index1"] == pytest.approx(12.5)
 
-    def test_unknown_param_still_warns(self):
-        """Sanity check: a truly bogus key still triggers the unrecognised warning."""
+    def test_unknown_param_raises_by_default(self):
+        """A truly bogus key raises ValueError under the default strict mode."""
+        pm = identity_param_map(["gas_logno"])
+        params = {"gas_logno": 0.0, "definitely_not_a_param": 1.0}
+        with pytest.raises(ValueError, match="Unrecognized parameter"):
+            get_internal_params(params, pm, self._make_spec_stub(), has_field=False)
+
+    def test_unknown_param_warns_when_strict_false(self):
+        """Legacy soft mode: passing ``strict_unknown_params=False`` downgrades to a warning."""
         pm = identity_param_map(["gas_logno"])
         params = {"gas_logno": 0.0, "definitely_not_a_param": 1.0}
         with pytest.warns(UserWarning, match="Unrecognized parameter"):
-            get_internal_params(params, pm, self._make_spec_stub(), has_field=False)
+            get_internal_params(
+                params,
+                pm,
+                self._make_spec_stub(),
+                has_field=False,
+                strict_unknown_params=False,
+            )
 
 
 class TestSEDModelCueParamMap:

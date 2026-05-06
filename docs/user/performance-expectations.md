@@ -32,6 +32,28 @@ JIT-compiled functions are **cached** to disk (`~/.cache/tengri_jax_cache/`). Su
 
 **If compilation takes >120s**, you've likely hit a known performance issue (e.g., free `dust_umin` with DL07 — see `docs/known_bugs.md`).
 
+## Forward model (per-call timing)
+
+Once compiled, a single `predict_photometry()` call on the **hybrid** path runs in **microseconds**, ~30–400× faster than the `exact` reference path with sub-1% approximation error in typical configurations. Every gradient step in MCMC/VI/NSS pays this cost, so the constant matters.
+
+Selected median wall-clock from `scripts/benchmark_forward_model.py` (CPU, x64, SDSS *ugriz*, z=0.1, DPL SFH):
+
+| Configuration | exact | hybrid | speedup |
+|---|---:|---:|---:|
+| Stellar only | 23.9 ms | 59 µs | **408×** |
+| Stellar + nebular + dust IR (THEMIS) + radio + X-ray | 27.3 ms | 472 µs | 58× |
+| Kitchen sink (all emitters) | 76.1 ms | 2.45 ms | 31× |
+
+Gradient calls (`jax.grad(predict_photometry)`) are 9–19× faster on the hybrid path than the compositional path across all SFH dimensionalities (D=6 parametric to D=137 stochastic field).
+
+**Approximation error budget**:
+- Stellar / dust IR templates: 0–0.4%.
+- Nebular (CLOUDY, baked-in): 0% (precompute is exact).
+- AGN bundle: 3–5% (polar-dust factorisation; revert to compositional when polar dust matters).
+- Typical / kitchen-sink: <1%.
+
+Full breakdown by emitter family, gradient timings across SFH types, and the coverage matrix are in [`docs/dev/benchmarks/2026-05-06_forward_model_speedup.md`](../dev/benchmarks/2026-05-06_forward_model_speedup.md).
+
 ## MAP Optimization
 
 **Typical runtime**: 0.3-2s for D≤15 parameters (1000 ADAM steps).

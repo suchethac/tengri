@@ -188,6 +188,51 @@ class TestDerivedQuantities:
             err_msg="stellar_mass should match between methods",
         )
 
+    def test_mstar_paths_agree_within_tolerance(self, model, spec):
+        """Regression test: verify fixed params (dust_slope, redshift) are consistent.
+
+        Generates a fixed-seed parameter dict with dust_slope=-0.7 and
+        redshift=0.1 (both Fixed in spec), then checks both predict_derived
+        and predict_sfh_quantities return the same stellar_mass to within
+        1e-6 relative tolerance. Regression test for the refactor from
+        parameters.is_fixed(name) → parameters.get_fixed_values().
+        """
+        n_grid = spec.n_grid
+        params_with_fixed = {
+            "sfh_field_xi": jnp.zeros(n_grid),
+            "sfh_dpl_alpha": 1.0,
+            "sfh_dpl_beta": 1.5,
+            "sfh_dpl_tau_gyr": 3.0,
+            "sfh_dpl_log_peak_sfr": np.log10(5.0),
+            "sfh_field_psd_sigma": 1.0,
+            "sfh_field_psd_tau_myr": 50.0,
+            "met_logzsol": -0.2,
+            "dust_tau_bc": 1.0,
+            "dust_tau_diff": 0.3,
+            "dust_slope": -0.7,
+            "redshift": 0.1,
+        }
+
+        derived = model.predict_derived(params_with_fixed)
+        sfh = model.predict_sfh_quantities(params_with_fixed)
+
+        m_derived = float(derived["stellar_mass"])
+        m_sfh = float(sfh.stellar_mass)
+
+        # Tolerance: within 1 part per million (1e-6)
+        np.testing.assert_allclose(
+            m_sfh,
+            m_derived,
+            rtol=1e-6,
+            err_msg=(
+                f"Fixed params handled inconsistently: "
+                f"predict_derived={m_derived:.4e}, "
+                f"predict_sfh_quantities={m_sfh:.4e}"
+            ),
+        )
+        # Also assert the per-value difference
+        assert abs(m_sfh - m_derived) / m_derived < 1e-6
+
     def test_bursty_gp_changes_mass(self, model, spec):
         """A non-zero GP realization with large sigma should change M*."""
         n_grid = spec.n_grid

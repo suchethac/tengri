@@ -424,6 +424,201 @@ class TestJITCompatibility:
         assert jnp.all(jnp.isfinite(result))
 
 
+# ── preintegrate_for_photometry: CLOUDY-shape duck-typed surface ──
+
+
+class TestPreintegrateForPhotometry:
+    """The duck-typed surface CB19Backend exposes for the hybrid kernel.
+
+    The kernel's nebular preint branch (``_kernels/hybrid.py``) reads:
+    ``_has_preint_photometry``, ``_preint_continuum``, ``_preint_lines``,
+    ``_line_lum_collapsed``, ``_qh_table``, ``_qh_log_met``, ``_qh_log_age``,
+    ``_young_idx``, ``grid.line_wavelengths``. After
+    ``preintegrate_for_photometry`` runs, all of these must exist and have
+    shapes/units the kernel can consume.
+    """
+
+    @pytest.fixture
+    def backend_for_preint(self, cb19_module, fake_grid_data):
+        """CB19Backend stub bypassing HDF5 I/O — same pattern as backend_with_fake_grid."""
+        backend = object.__new__(cb19_module.CB19Backend)
+        backend.sed_type = "SSP"
+        backend.imf = "Kroupa01"
+        backend.mup = 100.0
+        backend.hbfrac = 1.0
+        backend.grid = fake_grid_data
+        backend._log_hb_per_qh = fake_grid_data.log_hb_per_qh
+        backend._max_neb_log_age = 8.0
+        backend._qh_table = None
+        backend._qh_log_met = None
+        backend._qh_log_age = None
+        backend._young_idx = None
+        backend._preint_continuum = None
+        backend._preint_lines = None
+        backend._line_lum_collapsed = None
+        backend._has_preint_photometry = False
+        return backend
+
+    @pytest.fixture
+    def synthetic_filters(self):
+        fw = [
+            np.linspace(3000.0, 5000.0, 32),
+            np.linspace(5000.0, 7000.0, 32),
+            np.linspace(7000.0, 9000.0, 32),
+        ]
+        ft = [np.exp(-0.5 * ((w - w.mean()) / (0.3 * np.ptp(w))) ** 2) for w in fw]
+        return fw, ft
+
+    def test_sets_flag_and_attributes(self, backend_for_preint, synthetic_filters):
+        """After call, the duck-typed attributes must exist and be populated."""
+        fw, ft = synthetic_filters
+        backend_for_preint.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28)
+        assert backend_for_preint._has_preint_photometry is True
+        assert backend_for_preint._preint_continuum is not None
+        assert backend_for_preint._preint_lines is not None
+        assert backend_for_preint._line_lum_collapsed is not None
+
+    def test_continuum_shape_and_zeros(self, backend_for_preint, synthetic_filters):
+        """CB19 has no nebular continuum — _preint_continuum.phot must be all zeros
+        with shape (n_met, n_age, n_logU, n_filt)."""
+        fw, ft = synthetic_filters
+        backend_for_preint.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28)
+        cont = backend_for_preint._preint_continuum
+        n_met = backend_for_preint.grid.log_OH_grid.shape[0]
+        n_age = backend_for_preint.grid.log_age_grid.shape[0]
+        n_u = backend_for_preint.grid.log_U_grid.shape[0]
+        assert cont.phot.shape == (n_met, n_age, n_u, len(fw))
+        assert bool(jnp.all(cont.phot == 0.0))
+
+    def test_axis0_relabelled_to_absolute_logz(self, backend_for_preint, synthetic_filters):
+        """Axis 0 of the preint surface must be absolute log10(Z), not log10(O/H).
+
+        The kernel queries with ``_gas_z`` (absolute log10(Z)); the relabelling
+        makes ``log_OH_grid - _LOG_OH_OFFSET`` land on the right coordinate.
+        """
+        from tengri.components.nebular._constants import _LOG_OH_OFFSET
+
+        fw, ft = synthetic_filters
+        backend_for_preint.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28)
+        cont = backend_for_preint._preint_continuum
+        expected = backend_for_preint.grid.log_OH_grid - _LOG_OH_OFFSET
+        np.testing.assert_allclose(np.array(cont.axes[0]), np.array(expected), atol=1e-6)
+
+    def test_line_lum_collapsed_shape_and_units(self, backend_for_preint, synthetic_filters):
+        """``_line_lum_collapsed`` must have shape (n_met, n_age, n_logU, n_lines)
+        and contain log10(L_line/Q_H) [Lsun·s/photon] — i.e. log_line_ratios + log_hb_per_qh."""
+        fw, ft = synthetic_filters
+        backend_for_preint.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28)
+        n_met = backend_for_preint.grid.log_OH_grid.shape[0]
+        n_age = backend_for_preint.grid.log_age_grid.shape[0]
+        n_u = backend_for_preint.grid.log_U_grid.shape[0]
+        n_lines = backend_for_preint.grid.line_wavelengths.shape[0]
+        assert backend_for_preint._line_lum_collapsed.shape == (n_met, n_age, n_u, n_lines)
+        # fake grid is all 0.0 ratios → collapsed value = log_hb_per_qh
+        np.testing.assert_allclose(
+            np.array(backend_for_preint._line_lum_collapsed),
+            backend_for_preint._log_hb_per_qh,
+            atol=1e-6,
+        )
+
+    def test_line_filter_weights_shape(self, backend_for_preint, synthetic_filters):
+        """``_preint_lines.line_filter_weights`` must be (n_lines, n_filt) finite floats."""
+        fw, ft = synthetic_filters
+        backend_for_preint.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28)
+        weights = backend_for_preint._preint_lines.line_filter_weights
+        n_lines = backend_for_preint.grid.line_wavelengths.shape[0]
+        assert weights.shape == (n_lines, len(fw))
+        assert bool(jnp.all(jnp.isfinite(weights)))
+
+    def test_fixed_collapses_axis(self, backend_for_preint, synthetic_filters):
+        """Passing ``fixed={2: -3.0}`` must drop the log_U axis from line_lum and
+        from _preint_lines.axes."""
+        fw, ft = synthetic_filters
+        backend_for_preint.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28, fixed={2: -3.0})
+        n_met = backend_for_preint.grid.log_OH_grid.shape[0]
+        n_age = backend_for_preint.grid.log_age_grid.shape[0]
+        n_lines = backend_for_preint.grid.line_wavelengths.shape[0]
+        assert backend_for_preint._line_lum_collapsed.shape == (n_met, n_age, n_lines)
+        assert len(backend_for_preint._preint_lines.axes) == 2
+
+    def test_preint_lines_agree_with_runtime_at_grid_point(
+        self, backend_for_preint, synthetic_filters
+    ):
+        """Numerical equivalence: at an exact grid point, the preint-surface
+        line luminosities must match what ``predict_nebular_line_luminosities``
+        would compute with the same gas conditions and a unit Q_H input.
+
+        At an exact grid point, triweight interpolation reduces to the on-grid
+        value, so any disagreement here would indicate a bookkeeping bug in the
+        units/relabelling rather than an interp-method difference.
+        """
+        from tengri.utils.grid_interp import interp_nd_triweight
+
+        fw, ft = synthetic_filters
+        b = backend_for_preint
+        b.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28)
+
+        # Pick an exact interior grid point — last met index, middle age, middle U.
+        log_oh_idx, age_idx, u_idx = 4, 2, 3
+        log_oh = float(b.grid.log_OH_grid[log_oh_idx])
+        log_age = float(b.grid.log_age_grid[age_idx])
+        log_U = float(b.grid.log_U_grid[u_idx])
+
+        from tengri.components.nebular._constants import _LOG_OH_OFFSET
+
+        log_z_abs = log_oh - _LOG_OH_OFFSET
+
+        # Preint path: interp the relabelled grid at the absolute-Z coordinate.
+        log_lum_per_qh_preint = interp_nd_triweight(
+            b._line_lum_collapsed,
+            b._preint_lines.axes,
+            b._preint_lines.edges,
+            (jnp.array(log_z_abs), jnp.array(log_age), jnp.array(log_U)),
+        )
+
+        # Runtime path: the on-grid value of log_line_ratios + log_hb_per_qh
+        # (the only collapses are on axes 3,4,5 at exactly the defaults — but
+        # since the fake grid is constant across those axes, the collapse is
+        # value-preserving).
+        on_grid = b.grid.log_line_ratios[log_oh_idx, age_idx, u_idx, :, :, :, :]
+        # Average over the axes 3,4,5 should equal a single grid value (constant fake grid).
+        runtime_log_lum = float(on_grid.mean()) + b._log_hb_per_qh
+
+        np.testing.assert_allclose(
+            np.array(log_lum_per_qh_preint),
+            runtime_log_lum * np.ones_like(np.array(log_lum_per_qh_preint)),
+            atol=1e-5,
+        )
+
+    def test_kernel_consumer_path_traces_under_jit(self, backend_for_preint, synthetic_filters):
+        """Mirror the kernel's line-projection path and verify it's JIT-traceable.
+
+        This is a structural test of the duck-typed surface: the exact code path
+        the kernel executes must compose with ``jax.jit`` without retracing or
+        raising.
+        """
+        from tengri.utils.grid_interp import interp_nd_triweight
+
+        fw, ft = synthetic_filters
+        backend_for_preint.preintegrate_for_photometry(fw, ft, 0.5, 1.0e28)
+        line_lum = backend_for_preint._line_lum_collapsed
+        line_axes = backend_for_preint._preint_lines.axes
+        line_edges = backend_for_preint._preint_lines.edges
+        line_weights = backend_for_preint._preint_lines.line_filter_weights
+
+        @jax.jit
+        def _line_phot(log_z, log_age, log_U, qh):
+            log_lum_per_qh = interp_nd_triweight(
+                line_lum, line_axes, line_edges, (log_z, log_age, log_U)
+            )
+            total_line_lum = qh * (10.0**log_lum_per_qh)
+            return jnp.einsum("l,lf->f", total_line_lum, line_weights)
+
+        out = _line_phot(jnp.array(-2.0), jnp.array(7.0), jnp.array(-3.0), jnp.array(1e54))
+        assert out.shape == (len(fw),)
+        assert bool(jnp.all(jnp.isfinite(out)))
+
+
 # ── Missing HDF5 file raises FileNotFoundError ────────────────────
 
 

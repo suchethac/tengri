@@ -15,6 +15,7 @@ from typing import Any
 import jax
 import numpy as np
 
+from tengri._display import _display
 from tengri._logo import logo_str
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.config.settings import SEDModelConfig
@@ -814,5 +815,5 @@ def doctor() -> str:
     lines.append("=" * 60)
 
     report = "\n".join(lines)
-    print(report)
+    _display(report)
     return report

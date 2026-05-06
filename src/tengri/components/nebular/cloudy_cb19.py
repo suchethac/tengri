@@ -158,6 +158,13 @@ import numpy as np
 
 from tengri.components.nebular._constants import _LOG_OH_OFFSET, _LSUN_ERG
 from tengri.components.nebular._shared import compute_qh, place_line_profiles
+from tengri.utils.grid_interp import (
+    PreintegratedGrid,
+    PreintegratedLines,
+    preintegrate_lines,
+    slice_fixed_axes,
+)
+from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
 # ── Physical and grid constants ───────────────────────────────────
 
@@ -531,6 +538,165 @@ class CB19Backend:
 
         if ssp_data is not None:
             self._precompute_qh(ssp_data)
+
+        # Photometry preintegration storage (mirrors CloudyGridBackend duck-type)
+        self._preint_continuum: PreintegratedGrid | None = None
+        self._preint_lines: PreintegratedLines | None = None
+        self._line_lum_collapsed: jnp.ndarray | None = None
+        self._has_preint_photometry: bool = False
+
+    def preintegrate_for_photometry(
+        self,
+        filter_waves: list,
+        filter_trans: list,
+        redshift: float,
+        dl_cm: float,
+        fixed: dict[int, float] | None = None,
+        *,
+        neb_log_nH: float = 2.0,
+        neb_co: float = -0.36,
+        neb_dno: float = 0.0,
+    ) -> None:
+        """Preintegrate CB19 lines through filters; expose CLOUDY-shaped surface.
+
+        CB19 has six continuous interpolation axes (log_OH, log_age, log_U,
+        log_nH, log_CO, dNO). The hybrid kernel's nebular preint branch
+        (``_kernels/hybrid.py``) only knows how to interpolate the
+        CLOUDY-shaped 3-axis surface ``(log_met_abs, log_age_yr, log_U)``.
+        We bridge by:
+
+        1. Adding ``log_hb_per_qh`` to ``log_line_ratios`` so the grid is in
+           log10(L_line/Q_H) [Lsun·s/photon] — the same units the kernel
+           feeds through ``10**log_lum × Q_H``.
+        2. Triweight-collapsing axes 3 (log_nH), 4 (log_CO), 5 (dNO) at the
+           caller-supplied default values (defaults: HII region, near-solar
+           C/O, ΔN/O = 0).
+        3. Relabelling axis 0 from log10(O/H) on the CLOUDY c17.01 scale to
+           absolute log10(Z) by subtracting ``_LOG_OH_OFFSET`` so the
+           kernel's ``_gas_z`` (absolute log10(Z)) lands on the correct
+           coordinates.
+        4. Filling ``_preint_continuum.phot`` with zeros — CB19 has no
+           nebular continuum component, so the kernel's continuum age-sum
+           contributes nothing.
+
+        After the call the backend exposes the same surface as
+        :class:`~tengri.components.nebular.cloudy_grid.CloudyGridBackend`:
+        ``_has_preint_photometry``, ``_preint_continuum``, ``_preint_lines``,
+        ``_line_lum_collapsed``, ``_qh_table``, ``_qh_log_met``,
+        ``_qh_log_age``, ``_young_idx``, ``grid.line_wavelengths``.
+
+        Parameters
+        ----------
+        filter_waves : list[ndarray]
+            Per-filter observed-frame wavelength grids [Angstrom].
+        filter_trans : list[ndarray]
+            Per-filter transmission curves (0-1).
+        redshift : float
+            Source redshift [dimensionless].
+        dl_cm : float
+            Luminosity distance [cm]. Currently unused (CB19 has no
+            continuum and lines are projected via filter weights), kept for
+            signature compatibility with CloudyGridBackend.
+        fixed : dict[int, float], optional
+            CLOUDY-shape axis index → value mapping. ``0`` = absolute
+            log10(Z), ``1`` = log10(age/yr), ``2`` = log10(U).
+        neb_log_nH : float, keyword-only
+            Default density to collapse the log_nH axis on. CB19 grid range
+            [1, 4]. Default 2.0 (HII region) [log10(cm^-3)].
+        neb_co : float, keyword-only
+            Default log10(C/O) for the log_CO axis collapse. Default -0.36
+            (≈ solar) [log10].
+        neb_dno : float, keyword-only
+            Default ΔN/O offset for the dNO axis collapse. Default 0.0.
+
+        Notes
+        -----
+        **JIT-compatible**: no — build-time NumPy / one-time triweight
+        collapses. The resulting attributes are JAX arrays usable inside
+        the JIT'd kernel body.
+        """
+        del dl_cm  # CB19: no continuum, lines via point-sampling — no F_nu scaling needed
+        grid = self.grid
+
+        # 1. Lift line ratios into log10(L_line/Q_H) [Lsun·s/photon].
+        log_lum_per_qh = jnp.asarray(grid.log_line_ratios) + grid.log_hb_per_qh
+
+        # 2. Collapse axes 3 (log_nH), 4 (log_CO), 5 (dNO) to defaults.
+        # Iterate from the highest axis index down so earlier indices stay valid.
+        extra_axes = (
+            jnp.asarray(grid.log_nH_grid),
+            jnp.asarray(grid.log_CO_grid),
+            jnp.asarray(grid.dNO_grid),
+        )
+        extra_vals = (neb_log_nH, neb_co, neb_dno)
+        for axis_idx in (5, 4, 3):
+            ax = extra_axes[axis_idx - 3]
+            val = extra_vals[axis_idx - 3]
+            scatter = 0.5 * float(ax[1] - ax[0])
+            w = compute_grid_weights(val, ax, scatter=scatter, edges=edges_for_grid(ax))
+            log_lum_per_qh = jnp.tensordot(w, log_lum_per_qh, axes=([0], [axis_idx]))
+        # log_lum_per_qh now: (N_OH, N_age, N_U, N_lines)
+
+        # 3. Build CLOUDY-shape surface axes (axis 0 relabelled to absolute log10(Z)).
+        log_met_abs_axis = jnp.asarray(grid.log_OH_grid) - _LOG_OH_OFFSET
+        log_age_axis = jnp.asarray(grid.log_age_grid)
+        log_U_axis = jnp.asarray(grid.log_U_grid)
+        surface_axes = (log_met_abs_axis, log_age_axis, log_U_axis)
+        surface_edges = tuple(edges_for_grid(ax) for ax in surface_axes)
+
+        # 4. Continuum: zeros (CB19 has no nebular continuum).
+        n_filters = len(filter_waves)
+        cont_zero = jnp.zeros(
+            (
+                log_met_abs_axis.shape[0],
+                log_age_axis.shape[0],
+                log_U_axis.shape[0],
+                n_filters,
+            ),
+            dtype=jnp.float64,
+        )
+        self._preint_continuum = PreintegratedGrid(
+            phot=cont_zero,
+            moment=None,
+            axes=surface_axes,
+            edges=surface_edges,
+            effective_wavelengths=jnp.zeros(n_filters),
+            effective_wavelengths_rest=jnp.zeros(n_filters),
+            flux_scale=1.0,
+            n_filters=n_filters,
+        )
+
+        # 5. Line filter weights via point-sampling (delegates to shared helper).
+        self._preint_lines = preintegrate_lines(
+            np.asarray(grid.line_wavelengths),
+            filter_waves,
+            filter_trans,
+            redshift,
+            axes=surface_axes,
+        )
+
+        # 6. Apply caller-provided fixed dict (axes are CLOUDY-shape indices: 0,1,2).
+        line_lum = log_lum_per_qh
+        if fixed:
+            self._preint_continuum = slice_fixed_axes(self._preint_continuum, fixed)
+            line_axes_remaining = list(surface_axes)
+            for axis_idx in sorted(fixed.keys(), reverse=True):
+                ax = line_axes_remaining[axis_idx]
+                val = fixed[axis_idx]
+                scatter = 0.5 * float(ax[1] - ax[0])
+                w = compute_grid_weights(val, ax, scatter=scatter, edges=edges_for_grid(ax))
+                line_lum = jnp.tensordot(w, line_lum, axes=([0], [axis_idx]))
+                line_axes_remaining.pop(axis_idx)
+            # Update PreintegratedLines.axes/edges to match the collapsed line_lum
+            new_axes = tuple(line_axes_remaining)
+            self._preint_lines = PreintegratedLines(
+                line_filter_weights=self._preint_lines.line_filter_weights,
+                axes=new_axes,
+                edges=tuple(edges_for_grid(ax) for ax in new_axes),
+            )
+
+        self._line_lum_collapsed = line_lum
+        self._has_preint_photometry = True
 
     def _precompute_qh(self, ssp_data) -> None:
         """Precompute Q_H(metallicity, age) from SSP spectra (called once at init).

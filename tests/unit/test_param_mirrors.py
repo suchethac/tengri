@@ -112,12 +112,12 @@ class TestSampleIntegration:
 
 class TestSummaryDisplay:
     def test_summary_shows_mirror_section(self, mirrored_spec):
-        text = mirrored_spec.summary()
+        text = mirrored_spec.summary_str()
         assert "Mirror(dust_delta)" in text
         assert "dust_slope" in text
 
     def test_summary_shows_mirrored_count(self, mirrored_spec):
-        text = mirrored_spec.summary()
+        text = mirrored_spec.summary_str()
         assert "1 mirrored" in text
 
     def test_summary_mirror_not_in_fixed(self):
@@ -127,7 +127,7 @@ class TestSummaryDisplay:
             dust_slope="dust_delta",
             redshift=Fixed(1.0),
         )
-        text = spec.summary()
+        text = spec.summary_str()
         lines = text.split("\n")
         fixed_lines = [l for l in lines if "Fixed" in l]
         mirror_lines = [l for l in lines if "Mirror" in l]

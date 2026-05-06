@@ -300,6 +300,10 @@ class PrecomputedData:
     ss_disc_preintegrated: object | None = None  # Preintegrated Shakura-Sunyaev disc photometry
     cigale_disc_preintegrated: object | None = None  # Preintegrated CIGALE disc photometry
     qsogen_preintegrated: object | None = None  # Preintegrated QSOgen photometry lookup
+    # Dust analytic emission adapters (PR 3).
+    modified_blackbody_preintegrated: object | None = None  # Preintegrated modified_blackbody dust
+    casey2012_preintegrated: object | None = None  # Preintegrated casey2012 dust
+    pah_drude_preintegrated: object | None = None  # Preintegrated pah_drude dust
     # Radio analytic adapters (PR 5).
     radio_synchrotron_preintegrated: object | None = None
     radio_freefree_preintegrated: object | None = None

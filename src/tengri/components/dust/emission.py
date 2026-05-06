@@ -9,6 +9,7 @@ Available Emission Models
 -------------------------
 - **modified_blackbody**: Optically-thin modified blackbody (2-3 params)
 - **casey2012**: Casey (2012) modified blackbody + mid-IR power law (3 params)
+- **pah_drude**: Smith et al. (2007) PAH Drude profiles (0 params, pure template)
 - **dale2014**: Dale et al. (2014) 1-parameter IR template family (tabulated)
 - **draine_li2007**: Draine & Li (2007) 3-parameter model (tabulated)
 - **draine_li2014**: Draine & Li (2014 update) 4-parameter model (tabulated)
@@ -858,6 +859,72 @@ def _drude_profile(
 
     denominator = (ratio - 1.0 / ratio) ** 2 + gamma**2
     return 2.0 / jnp.pi * gamma / denominator
+
+
+# ── Model 2: PAH Drude Profile Template ──
+
+
+@register_emission_model("pah_drude")
+def pah_drude(
+    wavelength_aa: jnp.ndarray,
+    L_absorbed: float,
+    redshift: float = 0.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """Smith et al. (2007) PAH Drude profiles dust emission.
+
+    A sum of 18 PAH Drude profiles (normalized to Smith+2007 SINGS median
+    strengths). Runtime evaluation prefers the precomputed lookup from
+    :mod:`~tengri.components.dust.dust_analytic_precompute`; this function
+    provides a direct full-wavelength evaluation used when precompute is
+    unavailable.
+
+    Parameters
+    ----------
+    wavelength_aa : array, shape (n_wave,)
+        Wavelength grid in Angstrom (sorted ascending). [Å]
+    L_absorbed : float
+        Total absorbed luminosity. [Lsun or erg/s, as passed]
+    redshift : float
+        Source redshift (unused for this model). [dimensionless]
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Dust emission L_nu in ``[L_absorbed units] / Hz``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — computed via triweight interpolation in precompute
+    mode; this function is a fallback stub.
+
+    **Gradient-safe**: yes — inherited from precompute lookup.
+
+    The PAH template is a pure shape (no free axes). Runtime evaluation uses the
+    precomputed lookup from :mod:`~tengri.components.dust.dust_analytic_precompute`
+    and skips the full-wavelength evaluation in the hybrid kernel.
+
+    References
+    ----------
+    .. [1] Smith, J. D., et al., "The mid-infrared emission of ultraluminous
+           infrared galaxies," ApJ, 656, 770 (2007). arXiv:astro-ph/0701042.
+           https://doi.org/10.1086/510378
+
+    """
+    from tengri.components.dust.drude_profiles import compute_pah_template
+
+    # Convert to microns for compute_pah_template
+    wavelength_um = wavelength_aa / 1e4
+
+    # Compute PAH template in L_lambda (dimensionless relative units)
+    pah_llam = compute_pah_template(wavelength_um, strengths=None)
+
+    # Convert L_lambda to L_nu: L_nu = L_lambda * lambda^2 / c
+    wave_cm = wavelength_aa * 1.0e-8  # Angstrom -> cm
+    c_cgs = 2.99792458e10  # cm/s
+    lnu = L_absorbed * pah_llam * (wave_cm**2) / c_cgs
+
+    return lnu
 
 
 @register_emission_model("schreiber2016")

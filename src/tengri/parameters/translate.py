@@ -395,7 +395,7 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
 # (find_short_param moved to _aliases.py — imported at top)
 
 
-def get_internal_params(params, param_map, spec, has_field):
+def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_params: bool = True):
     """Translate a public parameter dict to internal names with unit conversion.
 
     Conversion applied element-wise: ``internal = public * scale + offset``.
@@ -416,6 +416,12 @@ def get_internal_params(params, param_map, spec, has_field):
     has_field : bool
         Whether the model uses a stochastic field component. When ``True``
         the latent vector ``xi`` is passed through from ``params``.
+    strict_unknown_params : bool, optional
+        When ``True`` (default), raise :class:`ValueError` if ``params`` contains
+        keys that aren't in ``param_map``, the reverse-alias map, or the latent
+        vector slots. When ``False``, emit a :class:`UserWarning` instead — used
+        by JIT kernel call sites to avoid double-flagging keys already validated
+        by the outer ``Model._get_internal_params`` entry point.
 
     Returns
     -------
@@ -426,6 +432,10 @@ def get_internal_params(params, param_map, spec, has_field):
     ------
     KeyError
         If a free parameter is absent from ``params`` and not in ``spec``.
+    ValueError
+        If ``strict_unknown_params`` is ``True`` and ``params`` contains
+        unrecognized keys (typos, deleted params, or params from a component
+        that isn't active in this spec).
     """
     internal = {}
     for pub_name, (int_name, scale, offset) in param_map.items():
@@ -492,16 +502,21 @@ def get_internal_params(params, param_map, spec, has_field):
     recognized = set(param_map.keys())
     recognized.update(_REVERSE_ALIASES.keys())
     recognized.update({"sfh_field_xi", "psd_xi"})
+    # Array-data inputs consumed by ``forward/pipeline.py`` directly (not via
+    # the scalar param-map): tabulated SFH (``sfh_t_gyr`` + ``sfh_sfr``) and
+    # tabulated metallicity history (``met_history``) for chem-evolution runs.
+    recognized.update({"sfh_t_gyr", "sfh_sfr", "met_history"})
     # Also recognize internal names (for backwards compat)
     recognized.update(int_name for _, (int_name, _, _) in param_map.items())
     unrecognized = set(params.keys()) - recognized
     if unrecognized:
-        warnings.warn(
+        msg = (
             f"Unrecognized parameter names passed to Model: {sorted(unrecognized)}. "
-            f"These will be silently ignored. Did you mean one of: "
-            f"{sorted(param_map.keys())}?",
-            UserWarning,
-            stacklevel=3,
+            f"Did you mean one of: {sorted(param_map.keys())}? "
+            f"(Pass strict_unknown_params=False to downgrade to a warning.)"
         )
+        if strict_unknown_params:
+            raise ValueError(msg)
+        warnings.warn(msg, UserWarning, stacklevel=3)
 
     return internal

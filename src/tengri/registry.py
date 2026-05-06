@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from tengri._display import _display
+
 # ──────────────────────────────────────────────────────────────────
 # Pretty-printed return types (still real lists/dicts — just nicer repr)
 # ──────────────────────────────────────────────────────────────────
@@ -842,13 +844,13 @@ def print_components_bibtex(obj=None) -> None:
     }
 
     rows = cite_components(obj)
-    print("% ────────────────────────────────────────────────────────────────")
-    print(
+    _display("% ────────────────────────────────────────────────────────────────")
+    _display(
         f"%  Citations for {len(rows)} component{'s' if len(rows) != 1 else ''} "
         "used by the model.  Paste into your .bib file."
     )
-    print("% ────────────────────────────────────────────────────────────────")
-    print()
+    _display("% ────────────────────────────────────────────────────────────────")
+    _display("")
 
     try:
         from tengri.citations import cite as _cite_lookup
@@ -865,9 +867,9 @@ def print_components_bibtex(obj=None) -> None:
                 citation = _cite_lookup(bibkey)
                 bib_method = getattr(citation, "to_bibtex", None)
                 if callable(bib_method):
-                    print(f"% [{comp}] {name}")
-                    print(bib_method())
-                    print()
+                    _display(f"% [{comp}] {name}")
+                    _display(bib_method())
+                    _display("")
                     seen_keys.add(bibkey)
                     continue
             except Exception:
@@ -875,9 +877,9 @@ def print_components_bibtex(obj=None) -> None:
         # Fallback: free-form citation note
         cit = row.get("citation", "")
         if cit:
-            print(f"% [{comp}] {name}: {cit}")
-            print("%   (no bib entry in tengri.citations — please add manually)")
-            print()
+            _display(f"% [{comp}] {name}: {cit}")
+            _display("%   (no bib entry in tengri.citations — please add manually)")
+            _display("")
 
 
 def list_filters(survey: str | None = None) -> _RegistryTable:
@@ -1188,8 +1190,8 @@ def suggest_parameters(
         parts.append(f"dust_law_diff={(dust_law_diff or dust_law)!r}")
     if nebular_backend:
         parts.append(f"nebular_backend={nebular_backend!r}")
-    print(f"\nParameters configuration: {', '.join(parts)}")
-    print(f"  → {len(rows)} parameters.  Pass any subset as kwargs to tengri.Parameters().\n")
+    _display(f"\nParameters configuration: {', '.join(parts)}")
+    _display(f"  → {len(rows)} parameters.  Pass any subset as kwargs to tengri.Parameters().\n")
 
     return _RegistryTable(rows)
 
@@ -1244,7 +1246,7 @@ def search(query: str) -> _RegistryTable:
     }
     if q in _KIND_SHORTCUT:
         call, fn = _KIND_SHORTCUT[q]
-        print(f"  '{query}' is a menu name — redirecting to tengri.{call}\n")
+        _display(f"  '{query}' is a menu name — redirecting to tengri.{call}\n")
         return fn()
 
     # ``kind`` and ``use`` are structural/internal — searching them gives
@@ -1330,12 +1332,12 @@ def summary() -> None:
         ),
         (len(list_inference_methods()), "total inference methods", "list_inference_methods()"),
     ]
-    print("\ntengri — what's available:\n")
+    _display("\ntengri — what's available:\n")
     width = max(len(label) for _, label, _ in counts)
     for n, label, call in counts:
-        print(f"  {n:>4}  {label.ljust(width)}    tengri.{call}")
-    print("\n  Look up any name:                          tengri.describe('skirtor')")
-    print("  Curated cheatsheet for new users:          tengri.help()\n")
+        _display(f"  {n:>4}  {label.ljust(width)}    tengri.{call}")
+    _display("\n  Look up any name:                          tengri.describe('skirtor')")
+    _display("  Curated cheatsheet for new users:          tengri.help()\n")
 
 
 _TOPIC_HELP: dict[str, tuple[str, callable]] = {
@@ -1457,7 +1459,7 @@ tengri — differentiable galaxy SED fitting in JAX
     tengri.print_citations(model)               formal Bibliography report
     tengri.help('citations')                    full citation cheatsheet
 """
-    print(text)
+    _display(text)
 
 
 def _help_topic(topic: str) -> None:
@@ -1505,11 +1507,11 @@ Use cite_components for "did I cite everything I'm using?" — it
 reflects whatever is in the registry RIGHT NOW.  Use print_citations
 for paste-ready BibTeX of the canonical pieces.
 """
-        print(text)
+        _display(text)
         return
 
     label, fetch = _TOPIC_HELP[topic_l]
     entries = fetch()
-    print(f"\ntengri.help('{topic_l}') — {label}: {len(entries)} available\n")
-    print(entries)
-    print()
+    _display(f"\ntengri.help('{topic_l}') — {label}: {len(entries)} available\n")
+    _display(str(entries))
+    _display("")

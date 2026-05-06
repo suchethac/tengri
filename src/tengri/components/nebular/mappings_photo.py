@@ -55,8 +55,15 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.nebular._constants import _LOG10_ZSUN
+from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
 from tengri.components.nebular._shared import _interp_index_weight, compute_qh, place_line_profiles
+from tengri.utils.grid_interp import (
+    PreintegratedGrid,
+    PreintegratedLines,
+    preintegrate_lines,
+    slice_fixed_axes,
+)
+from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
 # ── Ionizing spectrum warnings ────────────────────────────────────
 
@@ -454,6 +461,12 @@ class MappingsPhotoStellarBackend:
         self._qh_log_age = None
         self._young_idx = None
 
+        # Photometry preintegration storage (mirrors CB19Backend/CloudyGridBackend duck-type)
+        self._preint_continuum: PreintegratedGrid | None = None
+        self._preint_lines: PreintegratedLines | None = None
+        self._line_lum_collapsed: jnp.ndarray | None = None
+        self._has_preint_photometry: bool = False
+
         if ssp_data is not None:
             self._precompute_qh(ssp_data)
 
@@ -610,6 +623,158 @@ class MappingsPhotoStellarBackend:
         total_line_lum = total_line_lum.at[lya_idx].multiply(lya_scale)
 
         return grid.line_wavelengths, total_line_lum
+
+    def preintegrate_for_photometry(
+        self,
+        filter_waves: list,
+        filter_trans: list,
+        redshift: float,
+        dl_cm: float,
+        fixed: dict[int, float] | None = None,
+        *,
+        neb_logn: float = 2.0,
+    ) -> None:
+        """Preintegrate MAPPINGS V lines through filters; expose CLOUDY-shaped surface.
+
+        MAPPINGS V stellar grid has four continuous interpolation axes for the
+        SED fitting use case: (ζ_O, log_age, logU, logn). The hybrid kernel's
+        nebular preint branch (``_kernels/hybrid.py``) only knows how to
+        interpolate the CLOUDY-shaped 3-axis surface ``(log_met_abs, log_age_yr, log_U)``.
+        We bridge by:
+
+        1. Converting absolute log10(Z) → ζ_O for the grid, then collapsing the
+           logn axis to the caller-supplied default (HII region by default).
+        2. Relabelling axis 0 from ζ_O (solar-relative) to absolute log10(Z) so
+           the kernel's ``_gas_z`` lands on correct coordinates.
+        3. Filling ``_preint_continuum.phot`` with zeros — MAPPINGS V provides
+           only line emission, no nebular continuum.
+
+        After the call the backend exposes the same surface as
+        :class:`~tengri.components.nebular.cloudy_grid.CloudyGridBackend`:
+        ``_has_preint_photometry``, ``_preint_continuum``, ``_preint_lines``,
+        ``_line_lum_collapsed``, ``_qh_table``, ``_qh_log_met``,
+        ``_qh_log_age``, ``_young_idx``, ``grid.line_wavelengths``.
+
+        Parameters
+        ----------
+        filter_waves : list[ndarray]
+            Per-filter observed-frame wavelength grids [Angstrom].
+        filter_trans : list[ndarray]
+            Per-filter transmission curves (0-1).
+        redshift : float
+            Source redshift [dimensionless].
+        dl_cm : float
+            Luminosity distance [cm]. Currently unused (MAPPINGS V provides only
+            line emission and lines are projected via filter weights), kept for
+            signature compatibility with CloudyGridBackend.
+        fixed : dict[int, float], optional
+            CLOUDY-shape axis index → value mapping. ``0`` = absolute
+            log10(Z), ``1`` = log10(age/yr), ``2`` = log10(U).
+        neb_logn : float, keyword-only
+            Default density to collapse the logn axis on. MAPPINGS V grid range
+            [0.5, 3.5]. Default 2.0 (typical HII region) [log10(cm^-3)].
+
+        Notes
+        -----
+        **JIT-compatible**: no — build-time NumPy / one-time triweight
+        collapses. The resulting attributes are JAX arrays usable inside
+        the JIT'd kernel body.
+        """
+        del dl_cm  # MAPPINGS V: no continuum, lines via point-sampling — no F_nu scaling needed
+        grid = self.grid
+        sfh_idx = self._sfh_idx
+
+        # 1. Collapse logn axis at the default value.
+        # Start with shape (N_z, N_a, N_s, N_u, N_n, N_lines)
+        logHB_per_logq_data = jnp.asarray(grid.logHB_per_logq)
+        line_ratios_data = jnp.asarray(grid.line_ratios)
+
+        # Slice out the discrete SFH dimension → (N_z, N_a, N_u, N_n, N_lines)
+        logHB_per_logq_data = logHB_per_logq_data[:, :, sfh_idx, :, :]
+        line_ratios_data = line_ratios_data[:, :, sfh_idx, :, :, :]
+
+        # Collapse logn axis (axis 3) to neb_logn via triweight
+        logn_ax = jnp.asarray(grid.logn_axis)
+        scatter = 0.5 * float(logn_ax[1] - logn_ax[0])
+        w_logn = compute_grid_weights(
+            neb_logn, logn_ax, scatter=scatter, edges=edges_for_grid(logn_ax)
+        )
+        # w_logn is (N_n,); tensordot contracts with axis 3
+        logHB_per_logq_data = jnp.tensordot(w_logn, logHB_per_logq_data, axes=([0], [3]))
+        line_ratios_data = jnp.tensordot(w_logn, line_ratios_data, axes=([0], [3]))
+        # Shapes now: (N_z, N_a, N_u, N_lines) each
+
+        # 2. Build CLOUDY-shape surface axes.
+        # Convert ζ_O → absolute log10(Z) for the kernel.
+        zo_axis = jnp.asarray(grid.zo_axis)
+        log_met_abs_axis = jnp.log10(zo_axis) + _LOG10_ZSUN  # ζ_O to absolute log10(Z)
+        log_age_axis = jnp.asarray(grid.log_age_yr_axis)
+        log_U_axis = jnp.asarray(grid.logU_axis)
+        surface_axes = (log_met_abs_axis, log_age_axis, log_U_axis)
+        surface_edges = tuple(edges_for_grid(ax) for ax in surface_axes)
+
+        # 3. Continuum: zeros (MAPPINGS V has no nebular continuum).
+        n_filters = len(filter_waves)
+        cont_zero = jnp.zeros(
+            (
+                log_met_abs_axis.shape[0],
+                log_age_axis.shape[0],
+                log_U_axis.shape[0],
+                n_filters,
+            ),
+            dtype=jnp.float64,
+        )
+        self._preint_continuum = PreintegratedGrid(
+            phot=cont_zero,
+            moment=None,
+            axes=surface_axes,
+            edges=surface_edges,
+            effective_wavelengths=jnp.zeros(n_filters),
+            effective_wavelengths_rest=jnp.zeros(n_filters),
+            flux_scale=1.0,
+            n_filters=n_filters,
+        )
+
+        # 4. Line filter weights via point-sampling (delegates to shared helper).
+        self._preint_lines = preintegrate_lines(
+            np.asarray(grid.line_wavelengths),
+            filter_waves,
+            filter_trans,
+            redshift,
+            axes=surface_axes,
+        )
+
+        # 5. Compute line luminosity grid: L_line/Q_H = ratio × 10^logHB_per_logq
+        # where logHB_per_logq is log10(L_Hβ / Q_H) [erg/photon], not the Lsun·s
+        # version that CB19 uses. The kernel will multiply by Q_H at runtime.
+        # logHB_per_logq is log10(L_Hβ / Q_H) [erg·s/photon]. Convert to Lsun·s/photon
+        # and take log10 so the kernel's 10**log_lum × Q_H round-trips correctly. This
+        # matches the CB19 contract (cf. cloudy_cb19.py:580-583).
+        logHB_per_logq_expanded = logHB_per_logq_data[..., jnp.newaxis]  # (N_z, N_a, N_u, 1)
+        line_lum_lsun_per_q = line_ratios_data * (10.0**logHB_per_logq_expanded) / _LSUN_ERG
+        line_lum = jnp.log10(line_lum_lsun_per_q)
+
+        # 6. Apply caller-provided fixed dict (axes are CLOUDY-shape indices: 0,1,2).
+        if fixed:
+            self._preint_continuum = slice_fixed_axes(self._preint_continuum, fixed)
+            line_axes_remaining = list(surface_axes)
+            for axis_idx in sorted(fixed.keys(), reverse=True):
+                ax = line_axes_remaining[axis_idx]
+                val = fixed[axis_idx]
+                scatter = 0.5 * float(ax[1] - ax[0])
+                w = compute_grid_weights(val, ax, scatter=scatter, edges=edges_for_grid(ax))
+                line_lum = jnp.tensordot(w, line_lum, axes=([0], [axis_idx]))
+                line_axes_remaining.pop(axis_idx)
+            # Update PreintegratedLines.axes/edges to match the collapsed line_lum
+            new_axes = tuple(line_axes_remaining)
+            self._preint_lines = PreintegratedLines(
+                line_filter_weights=self._preint_lines.line_filter_weights,
+                axes=new_axes,
+                edges=tuple(edges_for_grid(ax) for ax in new_axes),
+            )
+
+        self._line_lum_collapsed = line_lum
+        self._has_preint_photometry = True
 
     def predict_nebular_sed(
         self,

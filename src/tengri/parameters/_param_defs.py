@@ -445,7 +445,7 @@ _DUST_EMISSION_PARAMS = {
         Fixed(1.0),
     ),
     "dust_T_warm": (
-        "Warm birth-cloud grain temperature (K) — used by the two-temperature emission model (30-60K)",
+        "Warm birth-cloud grain temperature (K) — used by two-temp emission model (30-60K)",
         lambda lo, hi: lo > 0,
         "must be > 0",
         Fixed(45.0),
@@ -736,6 +736,49 @@ _AGN_PARAMS = {
         lambda lo, hi: lo > 0 and hi <= 90,
         "must be in (0, 90]",
         Fixed(45.0),
+    ),
+    # AGN-nebular emitters (BLR, NLR-Gaussian, Feltre). Reserved for an upcoming
+    # PR — declared here so collaborators can see the intended parameter shape;
+    # currently no consumer wires these into the forward model.
+    "agn_blr_cf": (
+        "BLR covering fraction — fraction of disc luminosity intercepted by BLR. "
+        "Physical bound [0, 1]; typical values 0.05-0.2.",
+        lambda lo, hi: lo >= 0 and hi <= 1.0,
+        "must be in [0, 1]",
+        Fixed(0.1),
+    ),
+    "agn_nlr_cf": (
+        "NLR Gaussian covering fraction — fraction of disc luminosity intercepted by NLR. "
+        "Physical bound [0, 1]; typical values 0.05-0.2.",
+        lambda lo, hi: lo >= 0 and hi <= 1.0,
+        "must be in [0, 1]",
+        Fixed(0.1),
+    ),
+    "agn_fe2_strength": (
+        "Fe II to H-beta flux ratio R_Fe = F(Fe II 4434-4684)/F(H-beta)",
+        lambda lo, hi: lo >= 0 and hi <= 2.0,
+        "must be in [0, 2.0]",
+        Fixed(0.0),
+    ),
+    "agn_feltre_cf": (
+        "Feltre NLR covering fraction — fraction of disc luminosity intercepted by NLR. "
+        "Physical bound [0, 1]; typical values 0.05-0.2.",
+        lambda lo, hi: lo >= 0 and hi <= 1.0,
+        "must be in [0, 1]",
+        Fixed(0.1),
+    ),
+    "agn_alpha_ion": (
+        "AGN EUV power-law slope (f_nu ~ nu^alpha) for Feltre NLR backend. "
+        "Range matches the Feltre+2016 CLOUDY grid (4 grid points: -2.0, -1.7, -1.4, -1.2).",
+        lambda lo, hi: lo >= -2.0 and hi <= -1.2,
+        "must be in [-2.0, -1.2] (grid values: -2.0, -1.7, -1.4, -1.2)",
+        Fixed(-1.7),
+    ),
+    "neb_xid": (
+        "Dust-to-metal ratio (Feltre NLR backend) [0.1, 0.3, 0.5]",
+        lambda lo, hi: lo >= 0.05 and hi <= 0.6,
+        "must be in [0.05, 0.6] (grid values: 0.1, 0.3, 0.5)",
+        Fixed(0.3),
     ),
 }
 

@@ -26,6 +26,7 @@ __all__ = [
     "H_PLANCK",
     "K_BOLTZ",
     "LSUN_ERG",
+    "compute_l_12um_from_lbol",
     "gaussian_line_profile",
     "lines_to_sed",
     "planck_lnu",
@@ -239,6 +240,64 @@ def ring_area(r_cm: float, dr_cm: float, cos_inc: float) -> float:
 
 
 # ── Line list → SED convolution ───────────────────────────────────
+
+
+def compute_l_12um_from_lbol(
+    agn_log_lbol: float | jnp.ndarray, f_12: float = 0.07
+) -> float | jnp.ndarray:
+    r"""Compute rest-frame 12 μm monochromatic luminosity from AGN bolometric luminosity.
+
+    Derives the nuclear 12 μm monochromatic luminosity density using a parametric
+    bolometric correction calibrated against AGN SED templates (Krawczyk et al. 2013).
+    This correction is used by :func:`~tengri.components.xray.xray.xray_agn_corona_lopez24`
+    to compute X-ray luminosity from the α_IRX relation.
+
+    Parameters
+    ----------
+    agn_log_lbol : float or jnp.ndarray
+        AGN bolometric luminosity. [log10(L_sun)]
+    f_12 : float, optional
+        Bolometric correction fraction L_12μm / L_bol. Default: 0.07.
+        [dimensionless]
+
+    Returns
+    -------
+    float or jnp.ndarray
+        Monochromatic luminosity density at rest 12 μm. [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives.
+
+    **Bolometric correction calibration** (Krawczyk et al. 2013 [1]_):
+    For typical Type 1 AGN, the ratio of 12 μm monochromatic flux to
+    bolometric luminosity is approximately constant:
+
+    .. math::
+
+        L_{12\mu\mathrm{m}} = f_{12} \times L_{\mathrm{bol}}
+
+    with :math:`f_{12} \approx 0.07` derived from stacking AGN SED templates
+    in the mid-infrared. This is numerically equivalent to
+
+    .. math::
+
+        L_\nu(12\mu\mathrm{m}) = f_{12} \times L_{\mathrm{bol}} / \nu_{12\mu\mathrm{m}}
+
+    where :math:`\nu_{12\mu\mathrm{m}} = c / 12 \mu\mathrm{m}`.
+
+    References
+    ----------
+    .. [1] C. Krawczyk et al., "The mid-infrared AGN fraction in the XMM-COSMOS
+       survey," ApJS, 206, 4 (2013). arXiv:1301.1688.
+       https://doi.org/10.1088/0067-0049/206/1/4
+    """
+    l_bol_erg = 10.0**agn_log_lbol * LSUN_ERG
+    # 12 μm = 1.2e5 Å; ν = c / λ [Hz]
+    nu_12um = C_LIGHT / (1.2e5 * ANGSTROM_CM)
+    l_12um_erg = f_12 * l_bol_erg
+    l_12um_erg_hz = l_12um_erg / nu_12um
+    return l_12um_erg_hz
 
 
 def lines_to_sed(

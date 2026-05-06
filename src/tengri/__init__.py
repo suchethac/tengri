@@ -224,7 +224,6 @@ from tengri._tutorials import examples, explain, tutorial
 from tengri.registry import (
     cite_components,
     describe,
-    print_components_bibtex,
     help,
     list_agn_models,
     list_all,
@@ -236,6 +235,7 @@ from tengri.registry import (
     list_nebular_backends,
     list_plots,
     list_sfh_models,
+    print_components_bibtex,
     search,
     suggest_parameters,
     summary,

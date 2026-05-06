@@ -368,7 +368,7 @@ class TestParamSpecChemEvol:
             sfh_tsnorm_skew=Fixed(0.0),
             sfh_tsnorm_trunc=Fixed(5.0),
         )
-        summary = spec.summary()
+        summary = spec.summary_str()
         assert "met=chem_evol" in summary
 
     def test_chem_evol_with_free_yield(self):

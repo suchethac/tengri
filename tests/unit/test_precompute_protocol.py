@@ -68,6 +68,67 @@ class TestAxisParamsShape:
             )
 
 
+class TestRegistryCompleteness:
+    """Every ``*_precompute.py`` module on disk must be registered.
+
+    Closes the regression door: when a contributor adds a new precompute
+    adapter under ``src/tengri/components/`` without registering it in
+    ``forward/precompute/registry.py``, this test fails. Without this guard,
+    new emitters silently fall off the kernel's fast path because nothing
+    routes runtime calls to their lookups (the bug class that the
+    2026-05-06 forward-model precompute audit had to chase down repeatedly).
+    """
+
+    @staticmethod
+    def _discover_precompute_modules() -> set[str]:
+        """Return the set of dotted module paths for every adapter on disk.
+
+        An "adapter" is any ``*_precompute.py`` under ``src/tengri/components/``
+        plus the well-known nebular-grid backend modules
+        (``cloudy_grid.py``, ``cloudy_cb19.py``) that expose the duck-typed
+        ``preintegrate_for_photometry`` surface instead of the standard
+        adapter Protocol — these are explicitly exempted from registry
+        coverage because they're consumed via a different kernel branch.
+        """
+        from pathlib import Path
+
+        repo_components = Path(__file__).resolve().parents[2] / "src" / "tengri" / "components"
+        modules: set[str] = set()
+        for adapter in repo_components.rglob("*_precompute.py"):
+            rel = adapter.relative_to(repo_components.parent.parent)
+            dotted = ".".join(rel.with_suffix("").parts)
+            modules.add(dotted)
+        return modules
+
+    # Modules that legitimately exist under ``components/`` but are NOT
+    # registered in the precompute registry by design. Justification per entry.
+    _EXEMPT: frozenset[str] = frozenset(
+        {
+            # cloudy_precompute.py is the legacy CLOUDY-grid adapter; CLOUDY's
+            # duck-typed ``preintegrate_for_photometry`` on the backend object
+            # is the active path consumed by the kernel's nebular branch, and
+            # the registry slot for "cloudy" already routes through that.
+            # See ``components/nebular/cloudy_grid.py:CloudyGridBackend``.
+            "tengri.components.nebular.cloudy_precompute",
+        }
+    )
+
+    def test_every_adapter_on_disk_is_registered(self):
+        on_disk = self._discover_precompute_modules() - self._EXEMPT
+        registered = set(_REGISTRY.values())
+        missing = on_disk - registered
+        assert not missing, (
+            "Precompute adapters exist on disk but are not registered in "
+            "src/tengri/forward/precompute/registry.py. New emitters added "
+            "without a registry entry silently fall off the kernel fast path. "
+            f"Missing entries: {sorted(missing)}. "
+            "Add an entry mapping a registry key to the dotted module path, "
+            "or — if the adapter is intentionally unregistered (e.g., "
+            "duck-typed via a backend class) — add it to the _EXEMPT "
+            "frozenset above with a one-line justification."
+        )
+
+
 class TestProtocolIsInstance:
     """runtime_checkable Protocol permits structural isinstance checks."""
 

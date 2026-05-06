@@ -270,4 +270,5 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
     return {
         "predict_lines": predict_lines,
         "line_wavelengths": line_wavelengths,
+        "line_weight_matrix": preint["line_weight_matrix"],
     }

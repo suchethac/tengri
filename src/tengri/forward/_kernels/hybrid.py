@@ -54,6 +54,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
     **Gradient-safe**: yes — differentiable w.r.t. all dust, AGN, nebular,
     and shock parameters.
     """
+    from tengri.components.agn._phys import compute_l_12um_from_lbol
     from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
     from tengri.forward.emission_helpers import (
         agn_emission,
@@ -219,17 +220,27 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
     # since non-stellar AGN is evaluated at full wavelength
 
     # === Non-stellar components (full wavelength) ===
-    # TODO(refactor): The inline per-component blocks below (~200 lines) mirror
-    # the pattern that build_fused_rest_sed was refactored away from via
-    # build_nonstell_fn() in core/nonstell.py.  Migrating this kernel is deferred
-    # because _hybrid_phot_body has two preintegrated photometry-level shortcuts —
-    # dust-IR triweight lookup (_has_preint_dust_ir) and nebular preintegration
-    # (_has_preint_neb) — that return filter-integrated quantities rather than a
-    # per-wavelength SED.  build_nonstell_fn() returns a full-wavelength SED, so
-    # the preintegrated paths cannot be incorporated without either (a) dropping
-    # the fast paths (performance loss) or (b) extending build_nonstell_fn to
-    # optionally return photometry shortcuts.  Revisit once the preintegrated paths
-    # are verified and stabilised.  Tracked in docs/dev/sessions/.
+    # Known limitation: Hybrid kernel inline per-component blocks are not refactored
+    # to table-driven dispatch yet.
+    # What is awkward: ~200 lines of per-component setup blocks (nebular, shock, dust
+    # emission, AGN, radio, X-ray) define parallel gate variables (_has_*), load data
+    # closures (_*_fn, _*_lookup, _*_axes), and preintegration shortcuts (_has_preint_*).
+    # This mirrors the structure that build_fused_rest_sed() was refactored away from
+    # via table-driven dispatch in core/nonstell.py:build_nonstell_fn().
+    # Why deferred: Migrating to build_nonstell_fn() is blocked by two preintegrated
+    # photometry-level shortcuts unique to hybrid kernel:
+    #   (a) _has_preint_dust_ir: triweight dust-IR lookup returning filter-integrated
+    #       photometry directly (not per-wavelength SED).
+    #   (b) _has_preint_neb: nebular preintegration returning filter-integrated continuum
+    #       + line photometry (not per-wavelength emission).
+    # build_nonstell_fn() architecture returns per-wavelength SEDs; the photometry
+    # shortcuts cannot be incorporated without either dropping fast paths (performance
+    # loss) or extending build_nonstell_fn to optionally return shortcuts rather than
+    # full SED. This interface redesign is too risky before preintegration paths are
+    # fully verified and stabilised in production use.
+    # Resolution: (1) Validate preintegrated paths in real-world fits for 2+ months,
+    # (2) extend build_nonstell_fn with optional photometry-shortcut mode, (3) migrate
+    # inline blocks to table-driven via dispatch loop instead of per-component if-blocks.
     ssp_wave_f64 = state.ssp_data.ssp_wave
     rest_wave_f64 = state.rest_wavelength
     _needs_extension = rest_wave_f64 is not state.ssp_data.ssp_wave
@@ -358,6 +369,35 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             _has_preint_dust_ir = True
             _dust_ir_lookup = state.precomputed.dust_ir_lookup
             _dust_model_name = state.dust_emission_model
+
+    # Analytic dust emission model preintegration gates (PR 3)
+    _has_preint_modified_blackbody = False
+    _has_preint_casey2012 = False
+    _has_preint_pah_drude = False
+    _modified_blackbody_lookup = None
+    _casey2012_lookup = None
+    _pah_drude_lookup = None
+
+    if has_dust_em_full and not _needs_extension:
+        # Each analytic model is preintegrated separately; only one is active at runtime
+        if (
+            state.dust_emission_model == "modified_blackbody"
+            and state.precomputed.modified_blackbody_preintegrated is not None
+        ):
+            _has_preint_modified_blackbody = True
+            _modified_blackbody_lookup = state.precomputed.modified_blackbody_preintegrated
+        elif (
+            state.dust_emission_model == "casey2012"
+            and state.precomputed.casey2012_preintegrated is not None
+        ):
+            _has_preint_casey2012 = True
+            _casey2012_lookup = state.precomputed.casey2012_preintegrated
+        elif (
+            state.dust_emission_model == "pah_drude"
+            and state.precomputed.pah_drude_preintegrated is not None
+        ):
+            _has_preint_pah_drude = True
+            _pah_drude_lookup = state.precomputed.pah_drude_preintegrated
 
     # AGN (full wavelength or preintegrated K&D disc)
     has_agn_full = state.agn_model is not None
@@ -1617,21 +1657,43 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                             jnp.float64(dust_log_ssfr),
                         )
                     else:
-                        # Generic template model: (L_absorbed, *grid_params)
-                        # For now, fall back to full-wavelength for other models
-                        dust_ir = dust_ir_emission(
-                            dust_emission_fn,
-                            rest_wave_f64,
-                            L_ir,
-                            dust_T=jnp.float64(dust_T),
-                            dust_beta_ir=jnp.float64(dust_beta_ir),
-                            dust_alpha_mir=jnp.float64(dust_alpha_mir),
-                            dust_alpha_dale=jnp.float64(dust_alpha_dale),
-                            dust_umin=jnp.float64(dust_umin),
-                            dust_gamma_dl=jnp.float64(dust_gamma_dl),
-                            dust_qpah=jnp.float64(dust_qpah),
-                        )
-                        non_stellar_sed = non_stellar_sed + dust_ir
+                        # Check analytic dust models (PR 3)
+                        if _has_preint_modified_blackbody:
+                            # modified_blackbody: (L_absorbed, dust_T, dust_beta_ir)
+                            dust_ir_phot_preint = _modified_blackbody_lookup(
+                                L_ir,
+                                jnp.float64(dust_T),
+                                jnp.float64(dust_beta_ir),
+                            )
+                        elif _has_preint_casey2012:
+                            # casey2012: (L_absorbed, dust_T, dust_beta_ir, dust_alpha_mir)
+                            dust_ir_phot_preint = _casey2012_lookup(
+                                L_ir,
+                                jnp.float64(dust_T),
+                                jnp.float64(dust_beta_ir),
+                                jnp.float64(dust_alpha_mir),
+                            )
+                        elif _has_preint_pah_drude:
+                            # pah_drude: (L_absorbed) — no grid axes
+                            dust_ir_phot_preint = _pah_drude_lookup(
+                                L_ir,
+                            )
+                        else:
+                            # Generic template model or analytic model without precompute:
+                            # Fall back to full-wavelength for other models
+                            dust_ir = dust_ir_emission(
+                                dust_emission_fn,
+                                rest_wave_f64,
+                                L_ir,
+                                dust_T=jnp.float64(dust_T),
+                                dust_beta_ir=jnp.float64(dust_beta_ir),
+                                dust_alpha_mir=jnp.float64(dust_alpha_mir),
+                                dust_alpha_dale=jnp.float64(dust_alpha_dale),
+                                dust_umin=jnp.float64(dust_umin),
+                                dust_gamma_dl=jnp.float64(dust_gamma_dl),
+                                dust_qpah=jnp.float64(dust_qpah),
+                            )
+                            non_stellar_sed = non_stellar_sed + dust_ir
                 else:
                     # Full-wavelength computation (fallback or if preintegration disabled)
                     dust_ir = dust_ir_emission(
@@ -1955,15 +2017,14 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                             jnp.float64(xray_alpha_ox),
                         )
                     elif _has_preint_xray_corona_lopez24:
-                        # Note: requires L_12um from state. For now, set to 0.
-                        # Uses alpha_irx instead of alpha_ox
-                        _l_12um = jnp.float64(0.0)
-                        _scale_lopez24 = jnp.float64(_l_12um / _L12_REF_XRAY)
-                        # TODO: use xray_alpha_irx when available
+                        # Compute L_12um from AGN bolometric luminosity using
+                        # Krawczyk+2013 bolometric correction (f_12 ~ 0.07)
+                        _l_12um_erg_hz = compute_l_12um_from_lbol(jnp.float64(agn_log_lbol))
+                        _scale_lopez24 = jnp.float64(_l_12um_erg_hz / _L12_REF_XRAY)
                         xray_corona_phot = _xray_corona_lopez24_lookup(
                             _scale_lopez24,
                             jnp.float64(xray_gamma_agn),
-                            jnp.float64(xray_alpha_ox),  # Placeholder
+                            jnp.float64(xray_alpha_ox),
                         )
 
                     # Accumulate preintegrated X-ray photometry
@@ -2220,7 +2281,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
 
     def hybrid_phot_fused(params):
         """params dict → photometry (end-to-end, JIT'd by caller)."""
-        p = get_internal_params(params, param_map, spec, has_field)
+        p = get_internal_params(params, param_map, spec, has_field, strict_unknown_params=False)
 
         # SFH computation (same as build_fused_tier2_photometry)
         kw = {k: v for k, v in p.items() if k in sfh_internal_names}
@@ -3243,7 +3304,7 @@ def build_hybrid_photometry_ztable(state: SEDModelState, model=None):
 
     def hybrid_phot_ztable_fused(params):
         """params dict → photometry (end-to-end JIT for z-table path)."""
-        p = get_internal_params(params, param_map, spec, has_field)
+        p = get_internal_params(params, param_map, spec, has_field, strict_unknown_params=False)
 
         # SFH computation
         kw = {k: v for k, v in p.items() if k in sfh_internal_names}

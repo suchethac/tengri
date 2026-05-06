@@ -50,6 +50,19 @@ class AGNConfig:
         Include SMC polar dust reddening. Default False.
     fe2 : bool
         Include Fe II pseudo-continuum. Default False.
+    agn_blr_enabled : bool
+        Enable BLR Gaussian emitter (additive to disc SED). Default False.
+        **Reserved**: declared for an upcoming AGN-nebular PR — no effect in
+        the current version.
+    agn_nlr_gaussian_enabled : bool
+        Enable NLR Gaussian emitter (additive to disc SED). Default False.
+        **Reserved**: declared for an upcoming AGN-nebular PR — no effect in
+        the current version.
+    agn_nlr_backend : str or None
+        Enable Feltre NLR backend. Options: None (disabled), "feltre".
+        Default None. Mutually exclusive with Cue path.
+        **Reserved**: declared for an upcoming AGN-nebular PR — no effect in
+        the current version.
 
     Attributes
     ----------
@@ -65,6 +78,12 @@ class AGNConfig:
         Whether to include SMC polar dust reddening.
     fe2 : bool
         Whether to include Fe II pseudo-continuum.
+    agn_blr_enabled : bool
+        Whether to enable BLR Gaussian emitter.
+    agn_nlr_gaussian_enabled : bool
+        Whether to enable NLR Gaussian emitter.
+    agn_nlr_backend : str or None
+        Feltre backend choice for AGN NLR.
 
     Notes
     -----
@@ -87,11 +106,15 @@ class AGNConfig:
     blr: bool = True
     polar_dust: bool = False
     fe2: bool = False
+    agn_blr_enabled: bool = False
+    agn_nlr_gaussian_enabled: bool = False
+    agn_nlr_backend: str | None = None
 
     def __post_init__(self) -> None:
         valid_disc = frozenset({"powerlaw", "multicolor", "kubota_done", "adaf"})
         valid_torus = frozenset({"simple", "two_temperature", "skirtor"})
         valid_nlr = frozenset({"analytic", "cue"})
+        valid_nlr_backend = frozenset({None, "feltre"})
         if self.disc not in valid_disc:
             raise ValueError(
                 f"AGNConfig.disc={self.disc!r} is not valid. Choose from: {sorted(valid_disc)}"
@@ -103,6 +126,11 @@ class AGNConfig:
         if self.nlr not in valid_nlr:
             raise ValueError(
                 f"AGNConfig.nlr={self.nlr!r} is not valid. Choose from: {sorted(valid_nlr)}"
+            )
+        if self.agn_nlr_backend not in valid_nlr_backend:
+            raise ValueError(
+                f"AGNConfig.agn_nlr_backend={self.agn_nlr_backend!r} is not valid. "
+                f"Choose from: {sorted(str(x) for x in valid_nlr_backend)}"
             )
 
 

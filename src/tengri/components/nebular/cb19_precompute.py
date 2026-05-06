@@ -186,9 +186,11 @@ def precompute(
 
     # Auto-collapse: identify Fixed axes
     fixed: dict[int, float] = {}
-    for i, pname in enumerate(AXIS_PARAMS):
-        if parameters is not None and parameters.is_fixed(pname):
-            fixed[i] = float(parameters.fixed_value(pname))
+    if parameters is not None:
+        fixed_values = parameters.get_fixed_values()
+        for i, pname in enumerate(AXIS_PARAMS):
+            if pname in fixed_values:
+                fixed[i] = float(fixed_values[pname])
 
     if fixed:
         collapsed = slice_fixed_axes(preint, fixed)

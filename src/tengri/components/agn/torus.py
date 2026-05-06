@@ -39,6 +39,9 @@ _MICRON_ANGSTROM = 1e4  # Micron -> Angstrom
 # Silicate feature wavelength
 _LAMBDA_SI = 9.7 * _MICRON_ANGSTROM  # 9.7 um in Angstrom
 
+# ── Module-level warning guard ────────────────────────────────────
+_WARNED: set[str] = set()
+
 
 # ── Model 1: Simple hot blackbody torus ───────────────────────────
 
@@ -94,14 +97,14 @@ def simple_torus(
 
     **JIT-compatible**: yes — uses ``jnp`` primitives only.
     """
-    warnings.warn(
-        "simple_torus is deprecated (single-temperature MBB, not radiative transfer). "
-        "Use the 'skirtor' AGN model instead (Monte Carlo radiative transfer): "
-        "resolve_agn_model('skirtor') or skirtor_analytic() "
-        "from tengri.components.agn.skirtor.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
+    if "simple_torus" not in _WARNED:
+        warnings.warn(
+            "simple_torus is a toy AGN torus model not suitable for science fits; "
+            "use the SKIRTOR-based torus components for production work.",
+            UserWarning,
+            stacklevel=2,
+        )
+        _WARNED.add("simple_torus")
     l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
     nu = _wavelength_to_nu(wavelength)
 
@@ -187,14 +190,14 @@ def two_temperature_torus(
 
     **JIT-compatible**: yes — uses ``jnp`` primitives only.
     """
-    warnings.warn(
-        "two_temperature_torus is deprecated (two-temperature MBB, not radiative transfer). "
-        "Use the 'skirtor' AGN model instead (Monte Carlo radiative transfer): "
-        "resolve_agn_model('skirtor') or skirtor_analytic() "
-        "from tengri.components.agn.skirtor.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
+    if "two_temperature_torus" not in _WARNED:
+        warnings.warn(
+            "two_temperature_torus is a toy AGN torus model not suitable for science fits; "
+            "use the SKIRTOR-based torus components for production work.",
+            UserWarning,
+            stacklevel=2,
+        )
+        _WARNED.add("two_temperature_torus")
     l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
     nu = _wavelength_to_nu(wavelength)
 

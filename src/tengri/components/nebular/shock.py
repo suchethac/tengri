@@ -146,37 +146,50 @@ def _validate_shock_params(
     inside ``jax.jit`` with a traced velocity, the check is skipped so that JIT
     compilation succeeds.
     """
+    # Component is always a string (Fixed enum, never traced).
     if shock_component not in _VALID_COMPONENTS:
         raise ValueError(
             f"shock_component={shock_component!r} is invalid. "
             f"Choose from {sorted(_VALID_COMPONENTS)}."
         )
 
+    # Each continuous param is checked independently: when traced under jax.jit
+    # the float() cast raises and we defer that one param to build-time spec
+    # validation. We must NOT bundle them in a single try block — otherwise a
+    # traced first param would also skip the bounds check on concrete later
+    # params (e.g. user passes traced velocity but a concrete out-of-range
+    # density).
     log_den_grid = np.asarray(g["log_density_cm3"])
-    if not (log_den_grid[0] <= shock_log_density <= log_den_grid[-1]):
-        raise ValueError(
-            f"shock_log_density={shock_log_density:.2f} is outside the grid "
-            f"[{log_den_grid[0]:.2f}, {log_den_grid[-1]:.2f}] log10(cm⁻³). "
-            "Use a value within this range."
-        )
+    try:
+        ld = float(shock_log_density)
+    except (TypeError, AttributeError):
+        pass
+    else:
+        if not (log_den_grid[0] <= ld <= log_den_grid[-1]):
+            raise ValueError(
+                f"shock_log_density={ld:.2f} is outside the grid "
+                f"[{log_den_grid[0]:.2f}, {log_den_grid[-1]:.2f}] log10(cm⁻³). "
+                "Use a value within this range."
+            )
 
     b_arr = np.asarray(g["b_axis"])
-    if not (b_arr[0] <= shock_b_over_sqrt_n <= b_arr[-1]):
-        raise ValueError(
-            f"shock_b_over_sqrt_n={shock_b_over_sqrt_n:.4g} μG is outside the "
-            f"grid [{b_arr[0]:.4g}, {b_arr[-1]:.4g}] μG. "
-            "Use a value within this range."
-        )
+    try:
+        b = float(shock_b_over_sqrt_n)
+    except (TypeError, AttributeError):
+        pass
+    else:
+        if not (b_arr[0] <= b <= b_arr[-1]):
+            raise ValueError(
+                f"shock_b_over_sqrt_n={b:.4g} μG is outside the "
+                f"grid [{b_arr[0]:.4g}, {b_arr[-1]:.4g}] μG. "
+                "Use a value within this range."
+            )
 
-    # Velocity: skip validation when traced under jax.jit (float() raises there).
-    # Use try/except/else so the ValueError from bounds check is NOT swallowed.
     v_arr = np.asarray(g["velocities_kms"])
     try:
         v = float(shock_velocity)
     except (TypeError, AttributeError):
-        # TypeError: JAX tracer doesn't support float() conversion
-        # AttributeError: tracer missing __float__
-        pass  # traced value — validation deferred to prior bounds
+        pass
     else:
         if not (v_arr[0] <= v <= v_arr[-1]):
             raise ValueError(

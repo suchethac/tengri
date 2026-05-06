@@ -1,8 +1,7 @@
 """Tests for parameter registration of newly-wired models.
 
-Verifies that MAGPHYS, THEMIS, BOSA, and patchy IGM parameters
-appear in the Parameters registry when their respective models
-are enabled.
+Verifies that THEMIS, BOSA, and patchy IGM parameters appear in
+the Parameters registry when their respective models are enabled.
 """
 
 import jax
@@ -10,43 +9,6 @@ import jax
 jax.config.update("jax_enable_x64", True)
 
 from tengri.parameters.parameters import Parameters
-
-
-class TestMagphysWiring:
-    """Verify MAGPHYS dust emission params appear in registry."""
-
-    def test_magphys_params_registered(self):
-        """MAGPHYS-specific params should be in registry."""
-        spec = Parameters(mean_sfh_type="dpl", dust_emission="magphys")
-        registry, defaults = spec._param_registry, spec._defaults
-        magphys_params = [
-            "dust_xi_pah",
-            "dust_xi_mir",
-            "dust_xi_warm",
-            "dust_T_hot",
-            "dust_T_warm",
-            "dust_T_cold",
-        ]
-        for p in magphys_params:
-            assert p in registry, f"Missing param: {p}"
-            assert p in defaults, f"Missing default: {p}"
-
-    def test_magphys_defaults_reasonable(self):
-        """MAGPHYS default values should match da Cunha+2008."""
-        spec = Parameters(mean_sfh_type="dpl", dust_emission="magphys")
-        defaults = spec._defaults
-        assert defaults["dust_T_hot"].value == 250.0
-        assert defaults["dust_T_warm"].value == 45.0
-        assert defaults["dust_T_cold"].value == 20.0
-        assert defaults["dust_xi_pah"].value == 0.06
-        assert defaults["dust_xi_mir"].value == 0.07
-        assert defaults["dust_xi_warm"].value == 0.25
-
-    def test_magphys_params_absent_when_no_dust_emission(self):
-        """MAGPHYS params should NOT be in registry when dust_emission=None."""
-        spec = Parameters(mean_sfh_type="dpl")
-        registry = spec._param_registry
-        assert "dust_xi_pah" not in registry
 
 
 class TestThemisWiring:
@@ -111,7 +73,7 @@ class TestDocstringUpdated:
     """Verify new models appear in dust_emission options."""
 
     def test_new_models_in_docstring(self):
-        """Parameters docstring should mention astrodust, bosa, themis, magphys."""
+        """Parameters docstring should mention astrodust, bosa, themis."""
         doc = Parameters.__doc__ or ""
-        for model in ["astrodust", "bosa", "themis", "magphys"]:
+        for model in ["astrodust", "bosa", "themis"]:
             assert model in doc.lower(), f"'{model}' not in Parameters docstring"

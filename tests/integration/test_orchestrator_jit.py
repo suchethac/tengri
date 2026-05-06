@@ -29,9 +29,7 @@ from tengri.components.xray.component import XRaySEDComponent
 from tengri.core.component import PipelineState
 from tengri.forward.orchestrator import run_components
 
-_SSP_PATH = pathlib.Path(
-    "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-).resolve()
+_SSP_PATH = pathlib.Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5").resolve()
 
 
 @pytest.fixture(scope="module")
@@ -79,9 +77,7 @@ def test_orchestrator_chain_eager(ssp, base_params):
         XRaySEDComponent(),
         IGMSEDComponent(),
     ]
-    state0 = PipelineState(
-        wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave))
-    )
+    state0 = PipelineState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
     s = run_components(components, state0, base_params)
 
     assert s.sed_intrinsic is not None
@@ -103,9 +99,7 @@ def test_orchestrator_chain_jit_matches_eager(ssp, base_params):
         XRaySEDComponent(),
         IGMSEDComponent(),
     ]
-    state0 = PipelineState(
-        wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave))
-    )
+    state0 = PipelineState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
 
     s_eager = run_components(components, state0, base_params)
     pipeline_jit = jax.jit(lambda p: run_components(components, state0, p))
@@ -157,9 +151,7 @@ def full_chain_params(base_params):
 @pytest.mark.parametrize("agn_model", ["simple", "standard"])
 @pytest.mark.parametrize("dust_law", ["power_law", "calzetti", "smc", "cardelli"])
 @pytest.mark.parametrize("emission_model", ["modified_blackbody", "casey2012"])
-def test_full_chain_composability(
-    ssp, full_chain_params, agn_model, dust_law, emission_model
-):
+def test_full_chain_composability(ssp, full_chain_params, agn_model, dust_law, emission_model):
     """Stellar + Nebular(BakedIn) + AGN + Dust + Radio + XRay + IGM
     composes for any registered AGN model × dust law × emission template.
 
@@ -190,9 +182,7 @@ def test_full_chain_composability(
         XRaySEDComponent(),
         IGMSEDComponent(),
     ]
-    state0 = PipelineState(
-        wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave))
-    )
+    state0 = PipelineState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
 
     s_eager = run_components(chain, state0, full_chain_params)
     s_jit = jax.jit(lambda p: run_components(chain, state0, p))(full_chain_params)

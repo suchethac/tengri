@@ -1589,7 +1589,18 @@ def _adaf_truncated_disc_spectrum(
     return jnp.sum(ring_contributions, axis=0)
 
 
-# TODO: Precompute adapter deferred until project_adaf_rewrite.md lands (see disc_precompute.py)
+# Known limitation: ADAF precompute is intentionally deferred.
+# What is missing: No registered precompute adapter for ``adaf_disc`` in the
+# forward-model precomputation registry (unlike ``kubota_done_full`` and ``powerlaw_disc``).
+# Why deferred: The current ``adaf_disc`` implementation contains documented physics
+# discrepancies vs Mahadevan (1997) ApJ 477 585 (audit: project memory
+# ``project_adaf_rewrite.md``). Baking broken physics into the fast precompute path
+# risks silent science errors if users switch to preintegrated mode without realizing
+# the equations are temporary. Precompute adapter must wait until the full ADAF
+# rewrite lands and passes validation.
+# Resolution: (1) Rewrite adaf_disc to match Mahadevan 1997 equations exactly,
+# (2) add regression test vs original paper, (3) wire precompute adapter via
+# components/agn/adaf_precompute.py, (4) register in forward/precompute/registry.py.
 def adaf_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,

@@ -200,13 +200,24 @@ class TestGetInternalParams:
         result = get_internal_params(params, param_map, spec, has_field=False)
         assert "xi" not in result
 
-    def test_unrecognized_keys_warn(self):
+    def test_unrecognized_keys_raise(self):
+        """Strict-by-default: unknown keys raise ValueError with a helpful message."""
+        param_map = {"met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN)}
+        spec = _DummySpec()
+        params = {"met_logzsol": 0.0, "totally_unknown_param": 99.0}
+        with pytest.raises(ValueError, match="totally_unknown_param"):
+            get_internal_params(params, param_map, spec, has_field=False)
+
+    def test_unrecognized_keys_warn_when_lenient(self):
+        """Opt-out path: strict_unknown_params=False keeps the legacy warning behavior."""
         param_map = {"met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN)}
         spec = _DummySpec()
         params = {"met_logzsol": 0.0, "totally_unknown_param": 99.0}
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            get_internal_params(params, param_map, spec, has_field=False)
+            get_internal_params(
+                params, param_map, spec, has_field=False, strict_unknown_params=False
+            )
         assert len(w) == 1
         assert "totally_unknown_param" in str(w[0].message)
         assert issubclass(w[0].category, UserWarning)

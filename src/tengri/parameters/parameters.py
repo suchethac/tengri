@@ -56,6 +56,7 @@ import copy
 import jax
 import jax.numpy as jnp
 
+from tengri._display import _display
 from tengri.parameters._aliases import (
     resolve_param_name,
     resolve_sfh_type,
@@ -1118,6 +1119,81 @@ class Parameters:
                     result[name] = float(v)
         return result
 
+    def is_fixed(self, name: str) -> bool:
+        """Check whether a parameter is fixed (non-free).
+
+        Parameters
+        ----------
+        name : str
+            Parameter name (e.g., ``"redshift"``, ``"met_logzsol"``).
+
+        Returns
+        -------
+        bool
+            ``True`` if the parameter is fixed; ``False`` if free.
+
+        Raises
+        ------
+        KeyError
+            If the parameter name is not in the specification.
+
+        Examples
+        --------
+        >>> from tengri import Parameters, Uniform, Fixed
+        >>> spec = Parameters(
+        ...     redshift=Fixed(0.1),
+        ...     dust_tau_bc=Uniform(0, 4),
+        ... )
+        >>> spec.is_fixed("redshift")
+        True
+        >>> spec.is_fixed("dust_tau_bc")
+        False
+        """
+        if name not in self._distributions:
+            raise KeyError(f"Unknown parameter '{name}'")
+        return self._distributions[name].is_fixed
+
+    def fixed_value(self, name: str) -> float | str | None:
+        """Get the fixed value of a parameter.
+
+        Parameters
+        ----------
+        name : str
+            Parameter name (e.g., ``"redshift"``).
+
+        Returns
+        -------
+        float | str | None
+            The fixed value. Numeric values are returned as float;
+            string-valued enums as str; None if the parameter is not fixed
+            or if the fixed value is None.
+
+        Raises
+        ------
+        KeyError
+            If the parameter name is not in the specification.
+        ValueError
+            If the parameter is not fixed.
+
+        Examples
+        --------
+        >>> from tengri import Parameters, Fixed
+        >>> spec = Parameters(redshift=Fixed(0.1))
+        >>> spec.fixed_value("redshift")
+        0.1
+        """
+        if name not in self._distributions:
+            raise KeyError(f"Unknown parameter '{name}'")
+        dist = self._distributions[name]
+        if not dist.is_fixed:
+            raise ValueError(f"Parameter '{name}' is not fixed")
+        v = dist.bounds[0]
+        # Try to convert to float if numeric; return as-is if string or None
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return v
+
     def merge_observation_params(self, **extra_params: Distribution) -> Parameters:
         """Return a copy augmented with extra observation-level parameters.
 
@@ -1438,7 +1514,7 @@ class Parameters:
                 lines.append(f"  {target:<32s} {mirror_str:<26s} ──►")
 
         lines.append(sep)
-        print("\n".join(lines))
+        _display("\n".join(lines))
 
     def _build_summary_str(self) -> str:
         """Build the same multi-line summary, returned as a string."""
