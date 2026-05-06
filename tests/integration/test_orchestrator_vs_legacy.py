@@ -611,6 +611,52 @@ def test_chem_evol_orchestrator_rest_sed_close_to_legacy(stellar_chem_evol_model
     assert rel_diff < 1e-2, f"max rel diff: {rel_diff:.3e}"
 
 
+# ── Phase II-2.4: ramp metallicity equivalence ───────────────────────
+
+
+@pytest.fixture(scope="module")
+def stellar_ramp_model(ssp):
+    """Stellar-only model with metallicity_model='ramp' (linear Z(t))."""
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        met_mode="ramp",
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol_0=Uniform(-2.0, 0.2),
+        met_logzsol_final=Uniform(-2.0, 0.2),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel(spec, ssp)
+
+
+_STELLAR_RAMP_PARAMS = {
+    **_STELLAR_PARAMS,
+    "met_logzsol_0": -1.5,
+    "met_logzsol_final": -0.3,
+}
+
+
+def test_ramp_orchestrator_rest_sed_close_to_legacy(stellar_ramp_model):
+    """Phase II-2.4: ramp Z(t) orchestrator-vs-legacy at ``rtol=1e-2``."""
+    legacy = stellar_ramp_model.predict_rest_sed(_STELLAR_RAMP_PARAMS)
+    state = stellar_ramp_model.predict_via_orchestrator(_STELLAR_RAMP_PARAMS)
+    assert legacy.sed.shape == state.sed_intrinsic.shape
+    rel_diff = float(
+        jnp.max(
+            jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
+        )
+    )
+    assert rel_diff < 1e-2, f"max rel diff: {rel_diff:.3e}"
+
+
 def test_field_orchestrator_rest_sed_close_to_legacy(stellar_field_model):
     """Phase II-2.3 contract: orchestrator's stellar SED with field=True
     agrees with legacy at ``rtol=1e-2`` — the same bar as field=False.

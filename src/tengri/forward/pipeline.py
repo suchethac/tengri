@@ -703,7 +703,49 @@ def compute_sed_components(
         elif _use_alpha_fe:
             ssp_flux_at_z = interp_met_alpha_evolving_dispatch(model, log_z_per_age, alpha_fe)
         else:
-            ssp_flux_at_z = interp_metallicity_evolving(model, log_z_per_age)
+            # Closure-path-A for ramp metallicity (default
+            # ``csp_integration='trapz'``): use
+            # ``calc_rest_sed_sfh_table_met_table`` with the per-age
+            # ramp-interpolated ``log_z_per_age``. Mirrors
+            # :class:`StellarSEDComponent.apply` (component.py ramp
+            # branch) so the two paths produce bit-exact equal SEDs.
+            # Replaces the previous ``interp_metallicity_evolving``
+            # 2-point bilinear path which drove a ~32% per-wavelength
+            # divergence (now pinned at rtol=1e-2 by
+            # ``test_ramp_orchestrator_rest_sed_close_to_legacy``).
+            from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
+
+            lgmet_scatter_ramp = float(
+                p.get("lgmet_scatter", getattr(model, "_lgmet_scatter", 0.2))
+            )
+
+            (
+                _t_cosmic_asc_ramp,
+                _sfr_asc_ramp,
+                _total_mass_ramp,
+                _sfh_lbt_grid_ramp,
+            ) = _closure_a_sfh_prep(model, p, sfr, _t_obs_gyr_for_weights)
+
+            # ``log_z_per_age`` is on the SSP age grid already (built
+            # via ``compute_log_z_evolving(ssp_lg_age_gyr, ...)`` above).
+            # Ramp Z(t) is grid-resolution-independent (closed-form
+            # linear interpolation between two endpoints), so the
+            # legacy ``log_z_per_age`` is fine to reuse — no need to
+            # recompute on the orchestrator grid like chem_evol.
+            _dsps_result_ramp = calc_rest_sed_sfh_table_met_table(
+                gal_t_table=_t_cosmic_asc_ramp,
+                gal_sfr_table=_sfr_asc_ramp,
+                gal_lgmet_table=log_z_per_age[::-1],
+                gal_lgmet_scatter=lgmet_scatter_ramp,
+                ssp_lgmet=model.ssp_data.ssp_lgmet,
+                ssp_lg_age_gyr=model.ssp_data.ssp_lg_age_gyr,
+                ssp_flux=model.ssp_data.ssp_flux,
+                t_obs=_t_obs_gyr_for_weights,
+            )
+            _dsps_weights_2d = _dsps_result_ramp.weights * _total_mass_ramp
+            ssp_flux_at_z = jnp.einsum(
+                "ma,maw->aw", _dsps_result_ramp.weights, model.ssp_data.ssp_flux
+            )
     elif model._met_mode == "chem_evol":
         # Chemical evolution: derive Z(t) from SFH via gas-regulator model
         from tengri.components.stellar.sfh.chemical_evolution import (
