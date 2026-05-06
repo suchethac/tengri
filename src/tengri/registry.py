@@ -368,6 +368,58 @@ _COMPONENT_DOCS: tuple[tuple[str, str, str], ...] = (
 )
 
 
+def list_filters() -> _RegistryTable:
+    """List every filter curve bundled with tengri.
+
+    Filter files live in ``data/filters/`` (relative to the install root)
+    and follow the SVO naming convention ``Survey_Instrument_Band.dat``.
+
+    Returns
+    -------
+    _RegistryTable
+        One row per filter, with columns ``name`` (file stem),
+        ``survey``, ``instrument``, ``band``. Prints as a table, also
+        renders as HTML in Jupyter.
+
+    Notes
+    -----
+    Counts and groupings are computed from the live filesystem on each
+    call — no hardcoding. Add a ``Survey_Instrument_Band.dat`` file to
+    ``data/filters/`` and it appears here automatically.
+    """
+    import os
+
+    # Resolve filter directory: prefer repo-local ``data/filters/``,
+    # fall back to package-local if installed wheel-style.
+    candidates = [
+        os.path.join(os.path.dirname(__file__), "..", "..", "data", "filters"),
+        os.path.join(os.path.dirname(__file__), "data", "filters"),
+        os.path.join(os.getcwd(), "data", "filters"),
+    ]
+    filter_dir = next((p for p in candidates if os.path.isdir(p)), None)
+    if filter_dir is None:
+        return _RegistryTable([])
+    out = []
+    for fname in sorted(os.listdir(filter_dir)):
+        if not fname.endswith(".dat"):
+            continue
+        stem = fname[:-4]
+        parts = stem.split("_", 2)
+        survey = parts[0] if len(parts) >= 1 else ""
+        instr = parts[1] if len(parts) >= 2 else ""
+        band = parts[2] if len(parts) >= 3 else ""
+        out.append(
+            {
+                "name": stem,
+                "kind": "filter",
+                "survey": survey,
+                "instrument": instr,
+                "band": band,
+            }
+        )
+    return _RegistryTable(out)
+
+
 def list_components() -> _RegistryTable:
     """List the SEDComponent adapters currently wired into the forward model."""
     out = []
@@ -502,11 +554,12 @@ def search(query: str) -> _RegistryTable:
         list_dust_emission_models,
         list_sfh_models,
         list_nebular_backends,
+        list_filters,
     ):
         for entry in fn():
-            haystack = " ".join(
-                str(entry.get(k, "")) for k in ("name", "short_doc", "citation", "status")
-            ).lower()
+            # Search every string-valued field — covers name, short_doc,
+            # citation, status, plus filter-specific survey/instrument/band.
+            haystack = " ".join(str(v) for v in entry.values() if isinstance(v, str)).lower()
             if q in haystack:
                 hits.append(entry)
     return _RegistryTable(hits)
@@ -530,6 +583,7 @@ def list_all() -> dict[str, _RegistryTable]:
         "dust_emission_models": list_dust_emission_models(),
         "sfh_models": list_sfh_models(),
         "nebular_backends": list_nebular_backends(),
+        "filters": list_filters(),
     }
 
 
@@ -556,6 +610,7 @@ def summary() -> None:
         ),
         (len(list_sfh_models()), "SFH models", "list_sfh_models()"),
         (len(list_nebular_backends()), "nebular backends", "list_nebular_backends()"),
+        (len(list_filters()), "photometric filters", "list_filters()"),
         (
             len(list_inference_methods(tier="primary")),
             "primary inference methods",
@@ -571,28 +626,74 @@ def summary() -> None:
     print("  Curated cheatsheet for new users:          tengri.help()\n")
 
 
-def help() -> None:
+_TOPIC_HELP: dict[str, tuple[str, callable]] = {
+    "agn": ("AGN models", lambda: list_agn_models()),
+    "dust": (
+        "dust attenuation + emission",
+        lambda: _RegistryTable(list(list_dust_laws()) + list(list_dust_emission_models())),
+    ),
+    "sfh": ("SFH models", lambda: list_sfh_models()),
+    "nebular": ("nebular backends", lambda: list_nebular_backends()),
+    "components": ("physics components", lambda: list_components()),
+    "inference": ("inference methods", lambda: list_inference_methods()),
+    "filters": ("photometric filters", lambda: list_filters()),
+}
+
+
+def help(topic: str | None = None) -> None:
     """Print a curated cheatsheet covering the entry points new users need.
+
+    Parameters
+    ----------
+    topic : str, optional
+        If given, narrow the cheatsheet to one menu. Recognised topics:
+        ``"agn"``, ``"dust"``, ``"sfh"``, ``"nebular"``, ``"components"``,
+        ``"inference"``, ``"filters"``. Without a topic the full
+        cheatsheet is printed.
+
+    Notes
+    -----
+    Counts are read live from the registries — adding a new model or
+    inference backend updates the cheatsheet immediately, no edit needed.
 
     This shadows :func:`builtins.help` only when accessed as ``tengri.help``;
     the global ``help()`` builtin is unaffected.
     """
-    text = """
+    if topic is not None:
+        return _help_topic(topic)
+
+    # ── Live counts so that the cheatsheet is never stale. ──
+    n_agn = len(list_agn_models())
+    n_atte = len(list_dust_laws())
+    n_emis = len(list_dust_emission_models())
+    n_sfh = len(list_sfh_models())
+    n_neb = len(list_nebular_backends())
+    n_inf = len(list_inference_methods(tier="primary"))
+    try:
+        from tengri import list_filters  # avoid circular import on cold load
+
+        n_filt = len(list_filters())
+    except Exception:
+        n_filt = "?"
+
+    text = f"""
 tengri — differentiable galaxy SED fitting in JAX
 
 ────────────────────────────────────────────────────────────────────
 1.  See what's available
 ────────────────────────────────────────────────────────────────────
     tengri.summary()                      one-line counts of every menu
-    tengri.list_agn_models()              12 AGN models (SKIRTOR, K&D, …)
-    tengri.list_dust_laws()               21 attenuation curves (UV/optical)
-    tengri.list_dust_emission_models()    7 IR emission templates (DL07, Dale, …)
-    tengri.list_sfh_models()              34 SFH variants
-    tengri.list_nebular_backends()        BakedIn / CUE / CloudyGrid / CB19
-    tengri.list_inference_methods(tier="primary")
+    tengri.list_agn_models()              {n_agn} AGN models
+    tengri.list_dust_laws()               {n_atte} attenuation curves (UV/optical)
+    tengri.list_dust_emission_models()    {n_emis} IR emission templates
+    tengri.list_sfh_models()              {n_sfh} SFH variants
+    tengri.list_nebular_backends()        {n_neb} nebular backends
+    tengri.list_inference_methods(tier="primary")  {n_inf} primary methods
+    tengri.list_filters()                 {n_filt} filter curves
     tengri.describe("skirtor")            full metadata for any name
     tengri.search("torus")                cross-menu fuzzy search
     tengri.doctor()                       env / install / SSP health check
+    tengri.help("dust")                   topical cheatsheet for one menu
 
 ────────────────────────────────────────────────────────────────────
 2.  A minimal fit
@@ -602,6 +703,7 @@ tengri — differentiable galaxy SED fitting in JAX
     model      = tengri.SEDModel(parameters, ssp_data, observation=obs)
     fitter     = tengri.Fitter(model, data, noise)
     posterior  = fitter.run("map")             # or "nuts", "vi", …
+    posterior.summary()                        # median ± 68% CI per param
 
     See examples/ for runnable scripts.
 
@@ -618,3 +720,19 @@ tengri — differentiable galaxy SED fitting in JAX
     tengri.print_citations()          acknowledgements for your paper
 """
     print(text)
+
+
+def _help_topic(topic: str) -> None:
+    """Topical help for one menu — used by ``help(topic=…)``."""
+    topic_l = topic.lower()
+    if topic_l not in _TOPIC_HELP:
+        valid = sorted(_TOPIC_HELP)
+        raise ValueError(
+            f"Unknown help topic '{topic}'.  Valid topics: {valid}.  "
+            "Or call tengri.help() with no argument for the full cheatsheet."
+        )
+    label, fetch = _TOPIC_HELP[topic_l]
+    entries = fetch()
+    print(f"\ntengri.help('{topic_l}') — {label}: {len(entries)} available\n")
+    print(entries)
+    print()

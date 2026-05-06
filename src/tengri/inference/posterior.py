@@ -899,6 +899,17 @@ class Posterior:
 
         return result
 
+    def summary(self) -> None:
+        """Print the per-parameter median ± 68% credible interval table.
+
+        Convenience wrapper around :meth:`summary_table` that prints
+        directly — typically the first call after a fit::
+
+            posterior = fitter.run("nuts")
+            posterior.summary()
+        """
+        print(self.summary_table())
+
     def summary_table(self) -> str:
         """Return a formatted string table of parameter summaries.
 

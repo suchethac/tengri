@@ -397,6 +397,32 @@ class SEDModel:
         ):
             self.precompute_spectroscopy(observation.spectroscopy.wave_obs)
 
+    def __repr__(self) -> str:
+        """One-line summary of how this model is wired."""
+        sfh = getattr(self.spec, "mean_sfh_type", "?")
+        if isinstance(sfh, list | tuple):
+            sfh_str = "+".join(str(s) for s in sfh)
+        else:
+            sfh_str = str(sfh)
+        dust_str = getattr(self, "_dust_model", "?")
+        agn_str = getattr(self, "_agn_model", None) or "off"
+        if self._nebular_backend is None:
+            neb_str = "off"
+        else:
+            neb_str = type(self._nebular_backend).__name__.replace("Backend", "").lower()
+        n_filt = "?"
+        if self.observation is not None and self.observation.photometry is not None:
+            try:
+                n_filt = len(self.observation.photometry.bands)
+            except Exception:
+                n_filt = "?"
+        n_free = self.spec.n_free
+        return (
+            f"SEDModel(sfh={sfh_str!r}, dust={dust_str!r}, "
+            f"agn={agn_str!r}, nebular={neb_str!r}, "
+            f"n_filters={n_filt}, n_free={n_free})"
+        )
+
     @staticmethod
     def _init_observation(spec, filters, observation):
         """Resolve observation/filters into a canonical Observation + spec."""
@@ -919,8 +945,6 @@ class SEDModel:
                 )
                 skirtor_preint = build_skirtor_photometry_lookup(_precomp)
             except Exception as e:
-                import warnings
-
                 warnings.warn(
                     f"SKIRTOR torus preintegration failed: {e}. "
                     "Falling back to full-wavelength evaluation.",
@@ -3283,7 +3307,10 @@ class SEDModel:
             p = self._get_internal_params(params)
             sfr = self._compute_sfr(p)
             sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-            return self._compositional.photometry(sfr_on_ssp, params)
+            # Pass ``sfr`` (full internal-grid SFH) so the closure-A branch
+            # can reuse it directly for stochastic SFHs without a lossy
+            # double-interp via ``sfr_on_ssp``.
+            return self._compositional.photometry(sfr_on_ssp, params, sfr_internal=sfr)
 
         rest_sed = self._compute_rest_sed_compositional(params)
         z = self._get_redshift(params)
@@ -3612,7 +3639,6 @@ class SEDModel:
             # so fused vs unfused compositional photometry stay bit-identical.
             from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_lognormal_mdf
 
-            from tengri.components.stellar.sfh.gp_sfh import make_log_age_grid
             from tengri.forward.pipeline import _closure_a_sfh_prep
 
             _t_obs_gyr_unfused = (
@@ -3620,44 +3646,13 @@ class SEDModel:
                 if hasattr(self, "_t_universe_gyr")
                 else 13.7
             )
-            # _closure_a_sfh_prep assumes a 64-pt orchestrator grid for
-            # stochastic SFHs. When the model uses a different ``n_grid``
-            # (e.g. 32-pt in test_fused_rest_sed::test_stochastic_sfh),
-            # the helper's internal interp fails with shape mismatch.
-            # Inline closure-A SFH prep using the kernel's approach in that case.
-            if self._uses_stochastic_sfh and self.log_age_grid.shape[0] != 64:
-                _sfh_lbt_grid_orch_64 = jnp.power(10.0, make_log_age_grid(64))
-                _sfr_orch_grid_unfused = jnp.interp(
-                    _sfh_lbt_grid_orch_64, self.ssp_ages_yr, sfr_on_ssp
-                )
-                _sfr_on_ssp_orch_unfused = jnp.interp(
-                    self.ssp_ages_yr, _sfh_lbt_grid_orch_64, _sfr_orch_grid_unfused
-                )
-                _T_TABLE_MIN = 0.01
-                _ssp_age_gyr_un = self.ssp_ages_yr / 1e9
-                _t_cosmic_raw_un = _t_obs_gyr_unfused - _ssp_age_gyr_un
-                _n_ssp_un = self.ssp_ages_yr.shape[0]
-                _t_cosmic_floor_un = jnp.maximum(_t_cosmic_raw_un, _T_TABLE_MIN)
-                _valid_un = _t_cosmic_raw_un > 0.0
-                _t_cosmic_asc_raw_un = _t_cosmic_floor_un[::-1]
-                _sfr_asc_raw_un = _sfr_on_ssp_orch_unfused[::-1]
-                _n_invalid_un = jnp.sum(~_valid_un[::-1])
-                _idx_pos_un = jnp.arange(_n_ssp_un)
-                _is_invalid_pos_un = _idx_pos_un < _n_invalid_un
-                _ramp_un = _T_TABLE_MIN + (_T_TABLE_MIN * 0.5) * (
-                    _idx_pos_un + 1
-                ) / jnp.maximum(_n_invalid_un, 1)
-                _t_cosmic_asc = jnp.where(
-                    _is_invalid_pos_un, _ramp_un, _t_cosmic_asc_raw_un
-                )
-                _sfr_asc = jnp.where(_is_invalid_pos_un, 0.0, _sfr_asc_raw_un)
-                _total_mass = jnp.maximum(
-                    jnp.trapezoid(_sfr_asc, _t_cosmic_asc * 1e9), 0.0
-                )
-            else:
-                _t_cosmic_asc, _sfr_asc, _total_mass, _ = _closure_a_sfh_prep(
-                    self, p, sfr, _t_obs_gyr_unfused
-                )
+            # ``_closure_a_sfh_prep`` now handles stochastic SFHs with
+            # ``n_grid != 64`` by interp'ing onto the orchestrator's 64-pt
+            # grid; using the helper directly keeps fused vs unfused
+            # bit-identical regardless of grid size.
+            _t_cosmic_asc, _sfr_asc, _total_mass, _ = _closure_a_sfh_prep(
+                self, p, sfr, _t_obs_gyr_unfused
+            )
             _lgmet_scatter_unfused = float(
                 p.get("lgmet_scatter", getattr(self, "_lgmet_scatter", 0.2))
             )
