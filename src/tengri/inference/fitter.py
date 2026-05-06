@@ -410,6 +410,18 @@ class Fitter:
         self._compilation_thread: threading.Thread | None = None
         self._start_background_compilation()
 
+    def __repr__(self) -> str:
+        """One-line summary of how this fitter is configured."""
+        n_free = len(self._free_names)
+        n_fixed = len(self._fixed_values)
+        n_data = int(self.data.shape[0]) if hasattr(self.data, "shape") else "?"
+        dt = getattr(self, "data_type", "?")
+        sfh = "stochastic" if self.spec.stochastic else "parametric"
+        return (
+            f"Fitter(data_type={dt!r}, n_data={n_data}, "
+            f"n_free={n_free}, n_fixed={n_fixed}, sfh={sfh!r})"
+        )
+
     def _maybe_build_default_likelihood(self):
         """Build the default Protocol likelihood for this Fitter's data.
 

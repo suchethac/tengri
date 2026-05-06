@@ -75,8 +75,16 @@ def get_backend(name: str) -> BackendEntry:
         If the method is not registered.
     """
     if name not in _BACKENDS:
-        available = sorted(set(_BACKENDS))
-        raise ValueError(f"Unknown inference method '{name}'. Available: {available}")
+        # Group available methods by tier so the error is digestible at
+        # 19 backends. Suggest the discovery API rather than dumping a flat
+        # list of every experimental sampler.
+        primary = sorted({e.name for e in _BACKENDS.values() if e.tier == "primary"})
+        raise ValueError(
+            f"Unknown inference method '{name}'.  "
+            f"Recommended (tier=primary): {primary}.  "
+            "Run `tengri.list_inference_methods()` for the full list including "
+            "experimental backends."
+        )
     return _BACKENDS[name]
 
 

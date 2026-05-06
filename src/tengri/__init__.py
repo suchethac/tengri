@@ -316,42 +316,45 @@ __all__ = [
 
 
 # ──────────────────────────────────────────────────────────────────
-# Deprecation shim for relocated symbols (Phase 2, 2026-05).
+# Re-export the primary user-facing classes at the top level.
 #
-# These classes/functions used to be importable directly from `tengri`
-# but now live under sub-namespaces (`tengri.results`, `tengri.config`,
-# `tengri.inference`, `tengri.observation`). Old import paths still
-# resolve via `__getattr__` below, but emit a one-shot DeprecationWarning
-# pointing at the new canonical location. Will be removed in v1.0.
+# These objects are advertised in ``tengri.__dir__`` and ``tengri.help()``
+# as the main entry points, so they must be importable as
+# ``tengri.Fitter`` / ``tengri.Posterior`` / ``tengri.Photometry`` etc.
+# **without** triggering a DeprecationWarning.  The canonical paths
+# (``tengri.inference.Fitter``, ``tengri.results.Posterior``, …) remain
+# valid; this is just an additional re-export, not a relocation.
 # ──────────────────────────────────────────────────────────────────
+from tengri.config.settings import (
+    DustConfig,
+    NebularConfig,
+    SEDModelConfig,
+    SFHConfig,
+)
+from tengri.inference.catalog_fitter import CatalogFitter
+from tengri.inference.fitter import Fitter
+from tengri.inference.hierarchical import PopulationFitter
+from tengri.inference.vi_config import VIConfig
+from tengri.observation.line_list import LineList
+from tengri.observation.noise_model import NoiseModel
+from tengri.observation.observation import Observation
+from tengri.observation.photometry_config import Photometry
+from tengri.observation.spectroscopy import Spectroscopy
+from tengri.results import (
+    CatalogPosterior,
+    FitResult,
+    MockData,
+    PopulationPosterior,
+    Posterior,
+    Provenance,
+    generate_mock,
+    posteriors_to_dataframe,
+)
+
+# Internal-only relocation shim — names that genuinely moved and still
+# warn when accessed via the old path. The user-facing API above is
+# *not* in this dict, so accessing those is silent and supported.
 _RELOCATED: dict[str, tuple[str, str]] = {
-    # name → (module path, attr on that module)
-    # Result classes → tengri.results
-    "FitResult": ("tengri.results", "FitResult"),
-    "Provenance": ("tengri.results", "Provenance"),
-    "MockData": ("tengri.results", "MockData"),
-    "Posterior": ("tengri.results", "Posterior"),
-    "CatalogPosterior": ("tengri.results", "CatalogPosterior"),
-    "PopulationPosterior": ("tengri.results", "PopulationPosterior"),
-    "generate_mock": ("tengri.results", "generate_mock"),
-    "posteriors_to_dataframe": ("tengri.results", "posteriors_to_dataframe"),
-    # Fitters / inference engine → tengri.inference
-    "Fitter": ("tengri.inference", "Fitter"),
-    "CatalogFitter": ("tengri.inference", "CatalogFitter"),
-    "PopulationFitter": ("tengri.inference", "PopulationFitter"),
-    "VIConfig": ("tengri.inference", "VIConfig"),
-    # Configs → tengri.config
-    "AGNConfig": ("tengri.config", "AGNConfig"),
-    "DustConfig": ("tengri.config", "DustConfig"),
-    "NebularConfig": ("tengri.config", "NebularConfig"),
-    "SEDModelConfig": ("tengri.config", "SEDModelConfig"),
-    "SFHConfig": ("tengri.config", "SFHConfig"),
-    # Observation classes → tengri.observation
-    "Photometry": ("tengri.observation", "Photometry"),
-    "Spectroscopy": ("tengri.observation", "Spectroscopy"),
-    "NoiseModel": ("tengri.observation", "NoiseModel"),
-    "Observation": ("tengri.observation", "Observation"),
-    "LineList": ("tengri.observation", "LineList"),
     "LineFluxData": ("tengri.observation", "LineFluxData"),
     "SpectralIndexDef": ("tengri.observation", "SpectralIndexDef"),
     "SpectralIndexData": ("tengri.observation", "SpectralIndexData"),
