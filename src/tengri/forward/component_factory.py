@@ -73,7 +73,7 @@ class RadioQuantities(NamedTuple):
     Fields:
 
     - ``l_1p4ghz`` (erg/s/Hz) — radio luminosity at 1.4 GHz, integrated
-      from ``state.derived["L_radio"]`` at 21 cm rest-frame.
+      from ``state.derived["sed_radio"]`` at 21 cm rest-frame.
     - ``l_thermal`` (erg/s/Hz) — free-free thermal contribution
       computed from the published ``nion`` via
       :func:`tengri.utils.sed_quantities.compute_l_radio_thermal`.
@@ -491,7 +491,7 @@ def state_to_sed_quantities(state: Any):
 def state_to_radio_quantities(state: Any) -> RadioQuantities:
     """Convert :class:`PipelineState` → :class:`RadioQuantities`.
 
-    Reads ``state.derived["L_radio"]`` (the radio-component-published
+    Reads ``state.derived["sed_radio"]`` (the radio-component-published
     SED in erg/s/Hz on the rest-frame wave grid) and interpolates at
     21 cm (= 1.4 GHz) to populate ``l_1p4ghz``. Thermal / non-thermal
     split uses the published ``nion`` and the legacy
@@ -512,14 +512,14 @@ def state_to_radio_quantities(state: Any) -> RadioQuantities:
 
     derived = state.derived
     nan_scalar = jnp.asarray(jnp.nan)
-    if "L_radio" not in derived:
+    if "sed_radio" not in derived:
         return RadioQuantities(
             l_1p4ghz=nan_scalar,
             l_thermal=nan_scalar,
             l_nonthermal=nan_scalar,
             q_ir=nan_scalar,
         )
-    L_radio = jnp.asarray(derived["L_radio"])  # erg/s/Hz on rest-frame wave grid
+    L_radio = jnp.asarray(derived["sed_radio"])  # erg/s/Hz on rest-frame wave grid
     wave = state.wave
     # 21 cm = 2.1e9 Å. The radio component computes at all wavelengths.
     wave_21cm = 21.106e8  # Å — 1.4 GHz exactly

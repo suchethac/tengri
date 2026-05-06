@@ -33,8 +33,13 @@ __version__ = "0.1.0"
 
 # --- Exception hierarchy ---
 # --- New high-level API ---
+# ── Convenient namespace aliases ──────────────────────────────────────
+# Usage: from tengri import agn; agn.unified_nlr_blr(...)
+# Or:    from tengri.agn import unified_nlr_blr
+import sys
+
+from tengri import components as _components, preprocessing, presets
 from tengri._logo import LOGO, LOGO_BANNER, print_logo
-from tengri.analysis.mock import MockData, generate_mock
 from tengri.citations import (
     Bibliography,
     Citation,
@@ -105,14 +110,6 @@ from tengri.config.exceptions import (
     TengriError,
     TengriIOError,
 )
-from tengri.config.settings import (
-    AGNConfig,
-    DustConfig,
-    MultiwavelengthConfig,
-    NebularConfig,
-    SEDModelConfig,
-    SFHConfig,
-)
 from tengri.facade import Galaxy, doctor
 from tengri.forward.convenience import catalog_summary, fit_batch
 from tengri.forward.prediction import (
@@ -125,17 +122,7 @@ from tengri.forward.prediction import (
 from tengri.forward.result import SEDResult
 from tengri.forward.sed_model import PriorPredictive, SEDModel
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
-from tengri.inference.catalog_fitter import CatalogFitter, CatalogPosterior
-from tengri.inference.fitter import Fitter
-from tengri.inference.hierarchical import (
-    PopulationFitter,
-    PopulationPosterior,
-)
-from tengri.inference.posterior import Posterior
-from tengri.inference.vi_config import VIConfig
 from tengri.observation.filters import load_filter_set
-from tengri.observation.line_flux_data import LineFluxData
-from tengri.observation.line_list import LineList
 from tengri.observation.noise import (
     compute_effective_noise,
     compute_std_inv,
@@ -146,90 +133,9 @@ from tengri.observation.noise import (
     uses_student_t,
     variable_noise_hamiltonian,
 )
-from tengri.observation.noise_model import NoiseModel
-from tengri.observation.observation import Observation
-from tengri.observation.photometry_config import Photometry
-from tengri.observation.spectral_indices import SpectralIndexData, SpectralIndexDef
-from tengri.observation.spectroscopy import Spectroscopy
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
-from tengri.results import FitResult, Provenance
 from tengri.utils import jit_logging
-
-
-def posteriors_to_dataframe(results: list, params: list[str] | None = None):
-    """Summarise a list of Posteriors into a pandas DataFrame.
-
-    Requires ``pandas`` (``pip install pandas``).
-
-    Parameters
-    ----------
-    results : list of Posterior
-        Output of ``model.fit_batch()`` or any list of Posterior objects.
-    params : list of str or None
-        Parameter names to include. Default: all scalar free parameters,
-        excluding ``psd_xi``.
-
-    Returns
-    -------
-    pandas.DataFrame
-        One row per galaxy, columns: ``{param}_median``, ``{param}_lo68``,
-        ``{param}_hi68`` for each requested parameter.
-
-    Notes
-    -----
-    **JIT-compatible**: no — pure Python, requires pandas library.
-
-    Examples
-    --------
-    >>> df = tengri.posteriors_to_dataframe(results, params=["met_logzsol", "dust_tau_bc"])
-    """
-    try:
-        import pandas as pd
-    except ImportError:
-        raise ImportError(
-            "posteriors_to_dataframe() requires pandas: pip install pandas"
-        ) from None
-
-    import numpy as np
-
-    rows = []
-    for result in results:
-        row: dict = {}
-
-        if result.samples is None:
-            # MAP: use point estimates
-            for name, val in result.params.items():
-                if name == "psd_xi":
-                    continue
-                if params is not None and name not in params:
-                    continue
-                row[f"{name}_value"] = float(np.mean(np.array(val)))
-        else:
-            # Sampling: use median + 68% CI
-            for name, arr in result.samples.items():
-                if name == "psd_xi":
-                    continue
-                if params is not None and name not in params:
-                    continue
-                arr_np = np.array(arr)
-                if arr_np.ndim != 1:
-                    continue
-                row[f"{name}_median"] = float(np.median(arr_np))
-                row[f"{name}_lo68"] = float(np.percentile(arr_np, 16))
-                row[f"{name}_hi68"] = float(np.percentile(arr_np, 84))
-
-        rows.append(row)
-
-    return pd.DataFrame(rows)
-
-
-# ── Convenient namespace aliases ──────────────────────────────────────
-# Usage: from tengri import agn; agn.unified_nlr_blr(...)
-# Or:    from tengri.agn import unified_nlr_blr
-import sys
-
-from tengri import components as _components, preprocessing, presets
 
 agn = _components.agn
 dust = _components.dust
@@ -268,12 +174,25 @@ from tengri import io
 
 sys.modules["tengri.io"] = io
 
-# New namespace hierarchy (Phase 1, see docs/dev/api_migration_v0.x.md)
+# New namespace hierarchy (Phase 1+2, see docs/dev/api_migration_v0.x.md)
 # These are pure re-exports: no behavioural change, just clearer locations.
-#   tengri.cosmology — Planck18 + distance/age helpers (was tengri.utils.cosmology)
-#   tengri.units     — F_nu/L_nu/AB-mag conversions (was utils.{conversions,magnitudes})
-#   tengri.plot      — plotting helpers (was tengri.analysis.plotting)
-from tengri import citations, cosmology, pipeline, plot, units
+#   tengri.cosmology — Planck18 + distance/age helpers
+#   tengri.units     — F_nu/L_nu/AB-mag conversions
+#   tengri.plot      — plotting helpers
+#   tengri.results   — FitResult, Posterior, MockData, generate_mock, ...
+#   tengri.inference — Fitter, CatalogFitter, PopulationFitter, VIConfig, ...
+#   tengri.config    — *Config dataclasses, exceptions
+#   tengri.observation — Photometry, Spectroscopy, NoiseModel, ...
+from tengri import (
+    citations,
+    config,
+    cosmology,
+    inference,
+    pipeline,
+    plot,
+    results,
+    units,
+)
 
 # Introspection façade — public registry lookups
 from tengri.registry import (
@@ -299,60 +218,50 @@ from tengri.registry import (
 # citation helpers, single-purpose loaders) are no longer advertised
 # but remain importable for backward compatibility — see
 # docs/dev/api_migration_v0.x.md for the full story.
+# Top-level surface, sorted alphabetically (ruff RUF022).
+# Buckets:
+#   Core classes:    Galaxy, Parameters, SEDModel
+#   Physics modules: agn, dust, igm, nebular, radio, sfh, sps, stellar, xray
+#   Layer modules:   citations, config, cosmology, filters, inference, io,
+#                    observation, pipeline, plot, preprocessing, presets,
+#                    results, units
+#   Registry verbs:  describe, help, list_*, summary
+#   Runtime verbs:   cache_size_bytes, clear_cache, doctor,
+#                    enable_persistent_cache, is_cache_enabled
+#   Exceptions:      *Error, TengriIOError
+#   Priors:          Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
 __all__ = [
-    "AGNConfig",
     "BackendError",
-    "CatalogFitter",
-    "CatalogPosterior",
     "ConfigError",
-    "DustConfig",
-    "FitResult",
-    "Fitter",
     "Fixed",
     "Galaxy",
     "Gaussian",
     "InferenceError",
-    "LineFluxData",
-    "LineList",
     "LogNormal",
     "LogUniform",
-    "MockData",
-    "NebularConfig",
-    "NoiseModel",
-    "Observation",
     "ParameterError",
     "Parameters",
-    "Photometry",
-    "PopulationFitter",
-    "PopulationPosterior",
-    "Posterior",
-    "Provenance",
     "SEDModel",
-    "SEDModelConfig",
-    "SFHConfig",
-    "SpectralIndexData",
-    "SpectralIndexDef",
-    "Spectroscopy",
     "StudentT",
     "TengriError",
     "TengriIOError",
     "Uniform",
-    "VIConfig",
     "agn",
     "cache_size_bytes",
     "citations",
     "clear_cache",
+    "config",
     "cosmology",
     "describe",
     "doctor",
     "dust",
     "enable_persistent_cache",
     "filters",
-    "generate_mock",
+    "help",
     "igm",
+    "inference",
     "io",
     "is_cache_enabled",
-    "help",
     "list_agn_models",
     "list_all",
     "list_components",
@@ -361,20 +270,82 @@ __all__ = [
     "list_inference_methods",
     "list_nebular_backends",
     "list_sfh_models",
-    "summary",
     "nebular",
     "observation",
     "pipeline",
     "plot",
-    "posteriors_to_dataframe",
     "preprocessing",
     "presets",
     "radio",
+    "results",
     "sfh",
     "sps",
+    "stellar",
+    "summary",
     "units",
     "xray",
 ]
+
+
+# ──────────────────────────────────────────────────────────────────
+# Deprecation shim for relocated symbols (Phase 2, 2026-05).
+#
+# These classes/functions used to be importable directly from `tengri`
+# but now live under sub-namespaces (`tengri.results`, `tengri.config`,
+# `tengri.inference`, `tengri.observation`). Old import paths still
+# resolve via `__getattr__` below, but emit a one-shot DeprecationWarning
+# pointing at the new canonical location. Will be removed in v1.0.
+# ──────────────────────────────────────────────────────────────────
+_RELOCATED: dict[str, tuple[str, str]] = {
+    # name → (module path, attr on that module)
+    # Result classes → tengri.results
+    "FitResult": ("tengri.results", "FitResult"),
+    "Provenance": ("tengri.results", "Provenance"),
+    "MockData": ("tengri.results", "MockData"),
+    "Posterior": ("tengri.results", "Posterior"),
+    "CatalogPosterior": ("tengri.results", "CatalogPosterior"),
+    "PopulationPosterior": ("tengri.results", "PopulationPosterior"),
+    "generate_mock": ("tengri.results", "generate_mock"),
+    "posteriors_to_dataframe": ("tengri.results", "posteriors_to_dataframe"),
+    # Fitters / inference engine → tengri.inference
+    "Fitter": ("tengri.inference", "Fitter"),
+    "CatalogFitter": ("tengri.inference", "CatalogFitter"),
+    "PopulationFitter": ("tengri.inference", "PopulationFitter"),
+    "VIConfig": ("tengri.inference", "VIConfig"),
+    # Configs → tengri.config
+    "AGNConfig": ("tengri.config", "AGNConfig"),
+    "DustConfig": ("tengri.config", "DustConfig"),
+    "NebularConfig": ("tengri.config", "NebularConfig"),
+    "SEDModelConfig": ("tengri.config", "SEDModelConfig"),
+    "SFHConfig": ("tengri.config", "SFHConfig"),
+    # Observation classes → tengri.observation
+    "Photometry": ("tengri.observation", "Photometry"),
+    "Spectroscopy": ("tengri.observation", "Spectroscopy"),
+    "NoiseModel": ("tengri.observation", "NoiseModel"),
+    "Observation": ("tengri.observation", "Observation"),
+    "LineList": ("tengri.observation", "LineList"),
+    "LineFluxData": ("tengri.observation", "LineFluxData"),
+    "SpectralIndexDef": ("tengri.observation", "SpectralIndexDef"),
+    "SpectralIndexData": ("tengri.observation", "SpectralIndexData"),
+}
+
+
+def __getattr__(name: str):
+    """Resolve relocated symbols with a DeprecationWarning (PEP 562)."""
+    if name in _RELOCATED:
+        import importlib
+
+        from tengri._deprecated import deprecated_attribute
+
+        module_path, attr = _RELOCATED[name]
+        value = getattr(importlib.import_module(module_path), attr)
+        return deprecated_attribute(
+            value,
+            old_name=f"tengri.{name}",
+            new_name=f"{module_path}.{attr}",
+        )
+    raise AttributeError(f"module 'tengri' has no attribute {name!r}")
+
 
 # Plotting utilities
 # Import observation module for namespace alias (already in imports above, adding as alias)
@@ -392,7 +363,6 @@ from tengri.analysis.plotting import (
     safe_corner,
     setup_style,
 )
-
 
 # ──────────────────────────────────────────────────────────────────
 # Curated tab-completion surface.

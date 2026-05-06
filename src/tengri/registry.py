@@ -36,6 +36,12 @@ class _RegistryTable(list):
     """
 
     _PREFERRED_COLS = ("name", "tier", "status", "citation", "short_doc")
+    _HIDDEN_COLS = (
+        "kind",
+        "module",
+        "requires",
+        "params",
+    )  # too long for table; surfaced via describe()
 
     def __repr__(self) -> str:
         if not self:
@@ -43,7 +49,7 @@ class _RegistryTable(list):
         # Column order: preferred fields first, then any extras.
         all_keys = list(self[0].keys())
         cols = [k for k in self._PREFERRED_COLS if k in all_keys]
-        cols += [k for k in all_keys if k not in cols and k not in ("kind", "module", "requires")]
+        cols += [k for k in all_keys if k not in cols and k not in self._HIDDEN_COLS]
 
         # Truncate very long fields for readability.
         def _cell(v: Any) -> str:
@@ -66,7 +72,7 @@ class _RegistryTable(list):
             return "<i>(empty)</i>"
         all_keys = list(self[0].keys())
         cols = [k for k in self._PREFERRED_COLS if k in all_keys]
-        cols += [k for k in all_keys if k not in cols and k not in ("kind", "module", "requires")]
+        cols += [k for k in all_keys if k not in cols and k not in self._HIDDEN_COLS]
         head = "".join(f"<th style='text-align:left'>{k}</th>" for k in cols)
         body = "".join(
             "<tr>"
@@ -88,12 +94,31 @@ class _DescribeRecord(dict):
         if not self:
             return "(empty)"
         width = max(len(k) for k in self) + 2
-        lines = [f"  {k.ljust(width)}{v}" for k, v in self.items()]
+        lines = []
+        for k, v in self.items():
+            if isinstance(v, list) and v and all(isinstance(x, str) for x in v):
+                # Multi-line list rendering: one item per row, indented under the key.
+                if len(v) == 0:
+                    lines.append(f"  {k.ljust(width)}(none)")
+                elif len(v) <= 4:
+                    lines.append(f"  {k.ljust(width)}{', '.join(v)}")
+                else:
+                    lines.append(f"  {k.ljust(width)}{v[0]}")
+                    for item in v[1:]:
+                        lines.append(f"  {' ' * width}{item}")
+            else:
+                lines.append(f"  {k.ljust(width)}{v}")
         return "\n".join(lines)
 
     def _repr_html_(self) -> str:
+        def _fmt(v):
+            if isinstance(v, list) and v and all(isinstance(x, str) for x in v):
+                return "<br>".join(v)
+            return str(v)
+
         rows = "".join(
-            f"<tr><th style='text-align:left'>{k}</th><td>{v}</td></tr>" for k, v in self.items()
+            f"<tr><th style='text-align:left'>{k}</th><td style='text-align:left'>{_fmt(v)}</td></tr>"
+            for k, v in self.items()
         )
         return f"<table>{rows}</table>"
 
@@ -103,15 +128,48 @@ class _DescribeRecord(dict):
 # ──────────────────────────────────────────────────────────────────
 
 
+def _extract_params(entry: Any, kind: str) -> list[str]:
+    """Best-effort free-parameter list for a registry entry.
+
+    AGN entries → introspect callable signature, keep names starting with ``agn_``.
+    SFH entries → ``callable.params`` (an ``SFHModelSpec`` field) → key list.
+    Dust laws / others → empty (parameters come from the caller, not the
+    registered function).
+    """
+    import inspect
+
+    if kind == "sfh_model":
+        spec = getattr(entry, "callable", None)
+        params = getattr(spec, "params", None)
+        if isinstance(params, dict):
+            return list(params)
+
+    if kind == "agn_model":
+        fn = getattr(entry, "callable", None)
+        if fn is None:
+            return []
+        try:
+            sig = inspect.signature(fn)
+        except (TypeError, ValueError):
+            return []
+        return [p.name for p in sig.parameters.values() if p.name.startswith("agn_")]
+
+    return []
+
+
 def _entry_to_dict(name: str, entry: Any, *, kind: str) -> dict:
     """Normalize a registry entry (varied dataclass shapes) into a uniform dict."""
-    return {
+    out = {
         "name": name,
         "kind": kind,
         "status": getattr(entry, "status", "production"),
         "citation": getattr(entry, "citation", ""),
         "short_doc": getattr(entry, "short_doc", ""),
     }
+    params = _extract_params(entry, kind)
+    if params:
+        out["params"] = params
+    return out
 
 
 # ──────────────────────────────────────────────────────────────────
