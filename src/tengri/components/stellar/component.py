@@ -36,6 +36,13 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.stellar.sfh.gp_sfh import make_log_age_grid
+from tengri.components.stellar.sfh.metallicity_history import (
+    metallicity_bins_continuity_on_ssp_grid,
+    metallicity_bins_on_ssp_grid,
+    psb_two_step_metallicity,
+    tabulated_metallicity_on_ssp_grid,
+    two_step_metallicity,
+)
 from tengri.components.stellar.sps.dsps_wrapper import (
     LSUN_ERG_PER_S,
     SSPData,
@@ -45,6 +52,12 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     has_alpha_grid,
     interpolate_mass_remaining,
 )
+
+# Default time bins for ``metallicity_model="bins"`` /
+# ``"bins_continuity"`` — log-spaced from 1 Myr to 13.7 Gyr,
+# 7 edges → 6 bins, matching ``MET_REGISTRY``'s
+# ``_N_MET_BINS_DEFAULT``.
+_DEFAULT_MET_BIN_EDGES_LOG_YR = jnp.array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14])
 from tengri.core.component import (
     ParamDeclaration,
     PipelineState,
@@ -104,6 +117,23 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     sps_backend: str = "dsps"
     use_alpha_grid: bool = False
     lgmet_scatter: float = 0.2
+    # Number of bins for ``metallicity_model="bins"`` /
+    # ``"bins_continuity"``. Defaults to 6 to match
+    # ``MET_REGISTRY``'s ``_N_MET_BINS_DEFAULT`` and the
+    # ``met_bin_<i>`` / ``met_d_log_z_<i>`` parameter declarations.
+    met_n_bins: int = 6
+    # Bin edges in ``log10(age/yr)``, sorted ascending. Used by the
+    # ``"bins"`` and ``"bins_continuity"`` metallicity modes.
+    # ``None`` falls back to :data:`_DEFAULT_MET_BIN_EDGES_LOG_YR`
+    # (log-spaced from 1 Myr to 13.7 Gyr).
+    met_bin_edges_log_yr: Any = None
+    # User-provided Z(t) table for ``metallicity_model="table"``.
+    # ``met_table_log_age_yr`` is the table's age axis in log10(age/yr),
+    # sorted ascending; ``met_table_log_z_abs`` is absolute log10(Z) at
+    # each table age. Both required if and only if
+    # ``metallicity_model == "table"``.
+    met_table_log_age_yr: Any = None
+    met_table_log_z_abs: Any = None
 
 
 @dataclass(frozen=True)
@@ -325,14 +355,21 @@ class StellarSEDComponent:
                 f"may dispatch correctly via the registry path below but "
                 f"have not been verified against legacy."
             )
-        if self.config.metallicity_model not in ("delta", "ramp", "chem_evol"):
+        _SUPPORTED_MET = (
+            "delta",
+            "ramp",
+            "chem_evol",
+            "two_step",
+            "psb_two_step",
+            "bins",
+            "bins_continuity",
+            "table",
+        )
+        if self.config.metallicity_model not in _SUPPORTED_MET:
             raise NotImplementedError(
-                f"metallicity_model={self.config.metallicity_model!r} not yet "
-                f"implemented (Phase II-2.4 supports 'delta', 'ramp', 'chem_evol'; "
-                f"'two_step', 'psb_two_step', 'bins', 'bins_continuity', 'table' "
-                f"are deferred — they exist as math primitives in "
-                f"components/stellar/sfh/metallicity_history.py but are not "
-                f"wired into the legacy CSP forward pass either)."
+                f"metallicity_model={self.config.metallicity_model!r} not in "
+                f"{_SUPPORTED_MET}. Add a branch in StellarSEDComponent.apply() "
+                f"per docs/dev/20260506-met-mode-wiring-blueprint.md."
             )
         # config.field is supported as of Phase II-2.3 (see step 2b below).
 
@@ -454,6 +491,107 @@ class StellarSEDComponent:
             # For mass-remaining interpolation use the present-day metallicity
             # (newest stars dominate the mass-loss correction).
             log_z_for_mr = log_z_final_abs
+        elif self.config.metallicity_model == "two_step":
+            # Sigmoid-smoothed step at ``met_step_age_gyr``. Stars older than
+            # the step get ``met_logzsol_old``, younger get ``met_logzsol_young``.
+            log_z_old_abs = jnp.asarray(params["met_logzsol_old"]) + LOG10_ZSUN
+            log_z_young_abs = jnp.asarray(params["met_logzsol_young"]) + LOG10_ZSUN
+            step_age_gyr = jnp.asarray(params["met_step_age_gyr"])
+            lgmet_on_ssp_ages = two_step_metallicity(
+                ssp.ssp_lg_age_gyr, log_z_old_abs, log_z_young_abs, step_age_gyr
+            )
+            sfh_lg_age_gyr = jnp.log10(jnp.maximum(sfh_lbt_grid, 1.0)) - 9.0
+            log_metallicity_history = two_step_metallicity(
+                sfh_lg_age_gyr, log_z_old_abs, log_z_young_abs, step_age_gyr
+            )
+            # Present-day Z (youngest SSP age, lookback ≈ 0).
+            log_z_for_mr = lgmet_on_ssp_ages[0]
+        elif self.config.metallicity_model == "psb_two_step":
+            # Step tied to the PSB SFH burst onset
+            # (``sfh_psb_burstage_gyr``). Pre-burst stars get
+            # ``met_logzsol_old``, burst-and-younger get
+            # ``met_logzsol_burst``.
+            log_z_old_abs = jnp.asarray(params["met_logzsol_old"]) + LOG10_ZSUN
+            log_z_burst_abs = jnp.asarray(params["met_logzsol_burst"]) + LOG10_ZSUN
+            burstage_gyr = jnp.asarray(params.get("sfh_psb_burstage_gyr", 1.0))
+            lgmet_on_ssp_ages = psb_two_step_metallicity(
+                ssp.ssp_lg_age_gyr, log_z_old_abs, log_z_burst_abs, burstage_gyr
+            )
+            sfh_lg_age_gyr = jnp.log10(jnp.maximum(sfh_lbt_grid, 1.0)) - 9.0
+            log_metallicity_history = psb_two_step_metallicity(
+                sfh_lg_age_gyr, log_z_old_abs, log_z_burst_abs, burstage_gyr
+            )
+            log_z_for_mr = lgmet_on_ssp_ages[0]
+        elif self.config.metallicity_model == "bins":
+            # Piecewise-constant Z per age bin. Bin edges from config
+            # (defaults to log-spaced 1 Myr → 13.7 Gyr); per-bin
+            # metallicities from ``met_bin_<i>`` params (i = 0..N-1).
+            n_bins = self.config.met_n_bins
+            bin_edges_log_yr = (
+                self.config.met_bin_edges_log_yr
+                if self.config.met_bin_edges_log_yr is not None
+                else _DEFAULT_MET_BIN_EDGES_LOG_YR
+            )
+            metallicities_abs = jnp.stack(
+                [jnp.asarray(params[f"met_bin_{i}"]) for i in range(n_bins)]
+            ) + LOG10_ZSUN
+            lgmet_on_ssp_ages = metallicity_bins_on_ssp_grid(
+                ssp.ssp_lg_age_gyr, jnp.asarray(bin_edges_log_yr), metallicities_abs
+            )
+            # SFH-grid history: same primitive applied to sfh_lbt_grid.
+            sfh_lg_age_yr = jnp.log10(jnp.maximum(sfh_lbt_grid, 1.0))
+            log_metallicity_history = metallicity_bins_on_ssp_grid(
+                sfh_lg_age_yr - 9.0, jnp.asarray(bin_edges_log_yr), metallicities_abs
+            )
+            log_z_for_mr = lgmet_on_ssp_ages[0]
+        elif self.config.metallicity_model == "bins_continuity":
+            # Cumulative delta-log-Z steps from oldest bin to youngest.
+            # ``met_logzsol_base`` is the oldest bin; ``met_d_log_z_<i>``
+            # are the N-1 steps. Reuses the binning primitive with
+            # convolved metallicities.
+            n_bins = self.config.met_n_bins
+            bin_edges_log_yr = (
+                self.config.met_bin_edges_log_yr
+                if self.config.met_bin_edges_log_yr is not None
+                else _DEFAULT_MET_BIN_EDGES_LOG_YR
+            )
+            log_z_base_abs = jnp.asarray(params["met_logzsol_base"]) + LOG10_ZSUN
+            d_log_z = jnp.stack(
+                [jnp.asarray(params[f"met_d_log_z_{i}"]) for i in range(n_bins - 1)]
+            )
+            lgmet_on_ssp_ages = metallicity_bins_continuity_on_ssp_grid(
+                ssp.ssp_lg_age_gyr, jnp.asarray(bin_edges_log_yr), log_z_base_abs, d_log_z
+            )
+            sfh_lg_age_yr = jnp.log10(jnp.maximum(sfh_lbt_grid, 1.0))
+            log_metallicity_history = metallicity_bins_continuity_on_ssp_grid(
+                sfh_lg_age_yr - 9.0,
+                jnp.asarray(bin_edges_log_yr),
+                log_z_base_abs,
+                d_log_z,
+            )
+            log_z_for_mr = lgmet_on_ssp_ages[0]
+        elif self.config.metallicity_model == "table":
+            # User-provided Z(t) table on the component's config (settings,
+            # not JAX params — the table is constructor-time data).
+            if (
+                self.config.met_table_log_age_yr is None
+                or self.config.met_table_log_z_abs is None
+            ):
+                raise ValueError(
+                    "metallicity_model='table' requires met_table_log_age_yr "
+                    "and met_table_log_z_abs on StellarSEDComponentConfig "
+                    "(both arrays in absolute log10(Z) and log10(age/yr))."
+                )
+            met_log_age_yr = jnp.asarray(self.config.met_table_log_age_yr)
+            met_log_z_abs = jnp.asarray(self.config.met_table_log_z_abs)
+            lgmet_on_ssp_ages = tabulated_metallicity_on_ssp_grid(
+                ssp.ssp_lg_age_gyr, met_log_age_yr, met_log_z_abs
+            )
+            sfh_lg_age_yr = jnp.log10(jnp.maximum(sfh_lbt_grid, 1.0))
+            log_metallicity_history = tabulated_metallicity_on_ssp_grid(
+                sfh_lg_age_yr - 9.0, met_log_age_yr, met_log_z_abs
+            )
+            log_z_for_mr = lgmet_on_ssp_ages[0]
         else:  # chem_evol
             from tengri.components.stellar.sfh.chemical_evolution import (
                 chem_evol_metallicity_on_ssp_grid,
