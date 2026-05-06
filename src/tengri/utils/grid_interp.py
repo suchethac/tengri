@@ -194,8 +194,14 @@ def preintegrate_grid(
         If True, precompute first spectral moment tensor. Default False.
     energy_normalize : bool
         If True, normalize each template to unit bolometric luminosity
-        before integration. Useful for DL07/SKIRTOR templates scaled
-        by L_absorbed at runtime. Default False.
+        ``∫ L_ν dν = 1`` before filter integration, so runtime
+        ``L_absorbed * lookup(...)`` produces correctly scaled photometry.
+        Inputs MUST be ``L_ν`` [erg/s/Hz] — historically this branch
+        divided by ``∫ L_ν dλ`` (frequency–wavelength mismatch), which
+        caused a wavelength-shape-dependent normalisation error. Pass
+        ``False`` if templates are already normalised at load time
+        (Dale2014/Astrodust/BOSA/THEMIS) — the divide is then an
+        unnecessary round-trip. Default False.
 
     Returns
     -------
@@ -214,13 +220,18 @@ def preintegrate_grid(
     n_grid_points = int(np.prod(grid_dims)) if grid_dims else 1
     templates_flat = templates.reshape(n_grid_points, n_wave)
 
-    # Normalize templates if requested (before integration)
+    # Normalize templates if requested (before integration).
+    # Inputs are L_ν [erg/s/Hz]; bolometric luminosity is ∫ L_ν dν, NOT
+    # ∫ L_ν dλ. Sort by ν ascending (i.e. λ descending) to keep the
+    # trapezoid sign positive.
     if energy_normalize:
-        # Integrate each template over wavelength to get bolometric luminosity
+        c_aa = 2.99792458e18  # speed of light [Å/s]
+        nu = c_aa / wave_rest
+        sort_idx = np.argsort(nu)
+        nu_sorted = nu[sort_idx]
         bol_lum = np.zeros(n_grid_points)
         for i in range(n_grid_points):
-            bol_lum[i] = _np_trapezoid(templates_flat[i], wave_rest)
-        # Normalize to unity (avoid division by zero)
+            bol_lum[i] = _np_trapezoid(templates_flat[i][sort_idx], nu_sorted)
         bol_lum = np.where(bol_lum > 0, bol_lum, 1.0)
         templates_flat = templates_flat / bol_lum[:, None]
 

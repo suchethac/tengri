@@ -53,6 +53,22 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
     "themis": (),
 }
 
+# Per-model flag: pass ``energy_normalize=True`` to ``preintegrate_grid`` only
+# for templates that are NOT pre-normalised by ∫L_ν dν=1 at load time. The
+# four models marked ``False`` already enforce ∫L_ν dν=1 in their loaders
+# (see ``components/dust/emission_templates.py``: load_dale2014_templates ~L612,
+# load_astrodust_templates ~L847, load_bosa_templates ~L1202,
+# load_themis_templates ~L1442) — re-normalising in precompute is an
+# unnecessary round-trip. DL14 has no load-time normalisation and relies on
+# the precompute-time divide.
+_GENERIC_ENERGY_NORMALIZE: dict[str, bool] = {
+    "dale2014": False,
+    "draine_li2014": True,
+    "astrodust": False,
+    "bosa": False,
+    "themis": False,
+}
+
 
 # ── DL07 / DL14 template photometry precomputation
 # (Protocol-shaped entry points below wrap the original functions)
@@ -108,36 +124,13 @@ def precompute_dl07_photometry(
     umin_grid = templates["umin_grid"]
     qpah_grid = templates["qpah_grid"]
 
-    # Convert templates from L_lambda to L_nu (rest frame)
+    # Convert templates from L_lambda to L_nu (rest frame). The universal
+    # ``preintegrate_grid(energy_normalize=True)`` branch then divides each
+    # template by ∫ L_ν dν, mirroring the exact-path renormalisation in
+    # :func:`tengri.components.dust.emission_templates.create_dl07_from_grid`.
     wave_cm = np.asarray(tmpl_wave) * _AA_TO_CM
     lnu_single_u = np.asarray(single_u) * (wave_cm**2) / _C_CGS
     lnu_powerlaw = np.asarray(powerlaw) * (wave_cm**2) / _C_CGS
-
-    # Pre-normalise to ∫ L_ν dν = 1 BEFORE filter integration. Mirrors the
-    # exact-path renormalisation in
-    # :func:`tengri.components.dust.emission_templates.create_dl07_from_grid`
-    # at line 178 (`integral = -trapezoid(sed_lnu, nu)`). Bypasses
-    # :func:`preintegrate_grid`'s ``energy_normalize=True`` because that
-    # path integrates over wavelength (∫ L_ν dλ — wrong dimensionally for
-    # L_ν inputs), producing a wavelength-shape-dependent normalisation
-    # error that was causing the SDSS z-band hybrid path to disagree with
-    # exact by 27% on DL07's warm/PAH continuum. See
-    # tests/unit/test_hybrid_energy_balance.py::TestDL07EnergyBalance.
-    nu_rest = _C_CGS / wave_cm  # ν descending with ascending λ
-    sort_idx = np.argsort(nu_rest)
-    nu_sorted = nu_rest[sort_idx]
-
-    def _normalise_lnu_by_freq(lnu_grid: np.ndarray) -> np.ndarray:
-        """Divide each template by its ∫ L_ν dν so the result has unit bolometric."""
-        flat = lnu_grid.reshape(-1, lnu_grid.shape[-1])
-        out = np.empty_like(flat)
-        for i in range(flat.shape[0]):
-            integral = np.trapezoid(flat[i][sort_idx], nu_sorted)
-            out[i] = flat[i] / max(integral, 1e-300)
-        return out.reshape(lnu_grid.shape)
-
-    lnu_single_u = _normalise_lnu_by_freq(lnu_single_u)
-    lnu_powerlaw = _normalise_lnu_by_freq(lnu_powerlaw)
 
     single_u_preint = preintegrate_grid(
         templates=lnu_single_u,
@@ -147,7 +140,7 @@ def precompute_dl07_photometry(
         redshift=redshift,
         dl_cm=1.0,
         axes=(np.asarray(qpah_grid), np.asarray(umin_grid)),
-        energy_normalize=False,  # already normalised above by ∫L_ν dν
+        energy_normalize=True,
     )
 
     powerlaw_preint = preintegrate_grid(
@@ -158,7 +151,7 @@ def precompute_dl07_photometry(
         redshift=redshift,
         dl_cm=1.0,
         axes=(np.asarray(qpah_grid), np.asarray(umin_grid)),
-        energy_normalize=False,
+        energy_normalize=True,
     )
 
     return {
@@ -355,7 +348,7 @@ def precompute(
         axes=axes,
         redshift=redshift,
         dl_cm=1.0,
-        energy_normalize=True,
+        energy_normalize=_GENERIC_ENERGY_NORMALIZE.get(model_name, True),
         units=units,
     )
     return _auto_collapse(preint, AXIS_PARAMS.get(model_name, ()), parameters)
@@ -516,7 +509,7 @@ def precompute_for_model(
         axes=axes,
         redshift=0.0,  # both use rest-frame templates
         dl_cm=1.0,
-        energy_normalize=True,
+        energy_normalize=_GENERIC_ENERGY_NORMALIZE.get(model_name, True),
         units=units,
     )
     return _auto_collapse(preint, AXIS_PARAMS.get(model_name, ()), parameters)
