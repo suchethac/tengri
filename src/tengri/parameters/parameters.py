@@ -1443,8 +1443,8 @@ class Parameters:
     def _build_summary_str(self) -> str:
         """Build the same multi-line summary, returned as a string."""
         # Reuse summary() logic by capturing stdout — simpler than refactor
-        import io
         import contextlib
+        import io
 
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):

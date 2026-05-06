@@ -351,6 +351,75 @@ _register(
 )
 
 
+# ── Auto-inference of met_mode from prior keys ────────────────────
+
+# Discriminator keys per mode: keys whose presence in the user's
+# Parameters kwargs *strongly implies* that mode. Modes are tested
+# in order of specificity (most specific first), so adding a new
+# mode means inserting a (name, discriminator_keys) tuple here.
+#
+# Excluded from this table:
+# - "delta": no positive discriminator (it's the default fallback).
+# - "chem_evol": detected separately via any `chem_*` key, since the
+#   four chem_ params can independently appear as Fixed or Free.
+# - "table": cannot be inferred — has no fittable params, so users
+#   must set ``met_mode="table"`` explicitly.
+_MET_MODE_DISCRIMINATORS: tuple[tuple[str, frozenset[str]], ...] = (
+    ("bins_continuity", frozenset({"met_logzsol_base"})),
+    ("bins", frozenset({"met_bin_0"})),
+    ("two_step", frozenset({"met_step_age_gyr"})),
+    ("psb_two_step", frozenset({"met_logzsol_burst"})),
+    ("ramp", frozenset({"met_logzsol_0", "met_logzsol_final"})),
+)
+
+
+def infer_met_mode(provided_keys: set[str] | frozenset[str]) -> str:
+    """Infer the metallicity mode from the parameter keys a user provided.
+
+    Used by :class:`tengri.parameters.Parameters` when ``met_mode`` is
+    not set explicitly: presence of mode-specific keys (e.g.
+    ``met_logzsol_0`` and ``met_logzsol_final``) implies the
+    corresponding mode (``"ramp"``).
+
+    Parameters
+    ----------
+    provided_keys : set or frozenset of str
+        The set of parameter / kwarg names the user passed to
+        :class:`Parameters`. Typically ``set(kwargs.keys())`` after
+        the constructor pops its non-prior settings.
+
+    Returns
+    -------
+    str
+        One of: ``"delta"`` (default fallback), ``"ramp"``,
+        ``"two_step"``, ``"psb_two_step"``, ``"bins"``,
+        ``"bins_continuity"``, ``"chem_evol"``.
+
+    Raises
+    ------
+    ValueError
+        If the keys imply more than one mode unambiguously (e.g. both
+        ``met_logzsol_0``+``met_logzsol_final`` and
+        ``met_step_age_gyr`` are present).
+
+    Notes
+    -----
+    **JIT-compatible**: no — pure-Python set membership at construction time.
+
+    Cannot infer ``"table"`` (no characteristic params); set explicitly.
+    """
+    keys = set(provided_keys)
+    if any(k.startswith("chem_") for k in keys):
+        return "chem_evol"
+    matches = [name for name, disc in _MET_MODE_DISCRIMINATORS if disc.issubset(keys)]
+    if len(matches) > 1:
+        raise ValueError(
+            f"Ambiguous metallicity-mode inference: parameter keys match multiple "
+            f"modes {matches}. Set met_mode=... explicitly to disambiguate."
+        )
+    return matches[0] if matches else "delta"
+
+
 # ── resolve_met() ─────────────────────────────────────────────────
 
 
