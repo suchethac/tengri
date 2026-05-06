@@ -54,6 +54,7 @@ from tengri.citations import (
     print_citations,
     print_paper_citation,
 )
+from tengri.components import register_component
 from tengri.components.dust.attenuation import two_component_dust
 from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
 from tengri.components.stellar.sfh import (
@@ -277,6 +278,7 @@ __all__ = [
     "preprocessing",
     "presets",
     "radio",
+    "register_component",
     "results",
     "sfh",
     "sps",
@@ -410,6 +412,7 @@ _CURATED_DIR = (
     "generate_mock",
     "print_citations",
     "print_logo",
+    "register_component",
     "__version__",
 )
 
