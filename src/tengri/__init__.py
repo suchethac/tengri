@@ -4,11 +4,36 @@ A modular, fully differentiable JAX pipeline:
 PSD-governed GP → SFH → DSPS SED → photometry/spectroscopy.
 """
 
+# Silence the JAX/absl/XLA C++ chatter that prints on first JAX touch:
+#
+#   "Empty bitcode string provided for eigen. Optimizations relying on …"
+#   "Assume version compatibility. PjRt-IFRT does not track …"
+#
+# These come from absl logging at min level WARNING, fired by routine
+# JAX subsystem initialization. Setting the env var BEFORE importing
+# jax suppresses them; setting absl's stderr_threshold afterwards
+# catches anything that slips through. Users who want them back can
+# set ``TENGRI_VERBOSE_JAX=1``.
+import os as _os
+
+if not _os.environ.get("TENGRI_VERBOSE_JAX"):
+    _os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+    _os.environ.setdefault("ABSL_LOG_LEVEL", "ERROR")
+
 # Enable float64 — required for cosmological distance calculations
 # (dL^2 at z>0.01 overflows float32)
 import jax
 
 jax.config.update("jax_enable_x64", True)
+
+if not _os.environ.get("TENGRI_VERBOSE_JAX"):
+    try:
+        from absl import logging as _absl_logging
+
+        _absl_logging.set_verbosity(_absl_logging.ERROR)
+        _absl_logging.set_stderrthreshold(_absl_logging.ERROR)
+    except Exception:  # absl optional / not yet wired
+        pass
 
 # Enable persistent XLA compilation cache. Universal speedup across
 # notebook restarts, slurm tasks, benchmark workers — first compile is
@@ -59,24 +84,23 @@ from tengri.components.dust.attenuation import two_component_dust
 from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
 from tengri.components.stellar.sfh import (
     AGEMAX_YR,
-    constant_sfh,
-    delayed_exponential_sfh,
+    constant,
+    delayed_exponential,
     delayed_tau,
     double_powerlaw,
     dpl,
-    exponential_sfh,
-    gaussian_sfh,
+    exponential,
+    gaussian,
     lnorm,
-    lognormal_sfh,
+    lognormal,
     norm,
-    skewnormal_sfh,
+    skewnormal,
     snorm,
     snorm_burst,
-    snorm_burst_sfh,
-    snorm_trunc_burst_sfh,
-    spline_sfh,
+    snorm_trunc_burst,
+    spline,
     triweight_burst,
-    truncated_skewnormal_sfh,
+    truncated_skewnormal,
     tsnorm,
     tsnorm_burst,
 )

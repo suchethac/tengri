@@ -697,7 +697,9 @@ def dense_basis_pure(
 
 
 # ── Deprecated aliases (Phase 3) ──────────────────────────────────
-# The `_sfh` suffix was redundant inside the `tengri.components.stellar.sfh` namespace.
-# These aliases are provided for backward compatibility and will be removed in v1.0.
-dense_basis_sfh = dense_basis
-dense_basis_pure_sfh = dense_basis_pure
+# Wrapped with `deprecated_alias` so a DeprecationWarning fires on first call.
+# Will be removed in v1.0. See docs/dev/api_migration_v0.x.md.
+from tengri._deprecated import deprecated_alias as _deprecated_alias
+
+dense_basis_sfh = _deprecated_alias(dense_basis, old_name="dense_basis_sfh")
+dense_basis_pure_sfh = _deprecated_alias(dense_basis_pure, old_name="dense_basis_pure_sfh")

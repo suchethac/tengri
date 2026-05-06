@@ -696,7 +696,9 @@ def load_dale2014_templates(filepath: str) -> dict:
             alpha_grid = np.array(f["grid"]["alpha"][:])
         else:
             wavs_aa = np.array(f["wavelength_aa"][:])
-            spectra = np.array(f["spectra"][:])
+            # Schema variant: ``templates_sf`` (current) vs ``spectra`` (legacy).
+            spectra_key = "templates_sf" if "templates_sf" in f else "spectra"
+            spectra = np.array(f[spectra_key][:])
             alpha_grid = np.array(f["alpha_grid"][:])
     return {
         "wavelength_aa": jnp.array(wavs_aa, dtype=jnp.float64),

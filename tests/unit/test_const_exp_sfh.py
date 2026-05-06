@@ -1,4 +1,4 @@
-"""Tests for constant_then_exponential_sfh and its registry entry."""
+"""Tests for constant_then_exponential and its registry entry."""
 
 import jax
 import jax.numpy as jnp
@@ -7,7 +7,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.components.sfh.mean_sfh import constant_then_exponential_sfh
+from tengri.components.sfh.mean_sfh import constant_then_exponential
 from tengri.components.sfh.registry import SFH_REGISTRY, resolve_sfh
 
 pytestmark = pytest.mark.unit
@@ -17,7 +17,7 @@ pytestmark = pytest.mark.unit
 
 
 class TestConstantThenExponentialSFH:
-    """Tests for the raw constant_then_exponential_sfh function."""
+    """Tests for the raw constant_then_exponential function."""
 
     @pytest.fixture
     def t_lookback(self):
@@ -29,7 +29,7 @@ class TestConstantThenExponentialSFH:
         tau = 1e9
         quench_age = 5e9
         age = 10e9
-        sfr = constant_then_exponential_sfh(t_lookback, log_sfr, tau, quench_age, age)
+        sfr = constant_then_exponential(t_lookback, log_sfr, tau, quench_age, age)
 
         mask = (t_lookback >= quench_age) & (t_lookback <= age)
         if jnp.any(mask):
@@ -41,7 +41,7 @@ class TestConstantThenExponentialSFH:
         tau = 1e9
         quench_age = 5e9
         age = 10e9
-        sfr = constant_then_exponential_sfh(t_lookback, log_sfr, tau, quench_age, age)
+        sfr = constant_then_exponential(t_lookback, log_sfr, tau, quench_age, age)
 
         mask = (t_lookback > 0) & (t_lookback < quench_age)
         if jnp.any(mask):
@@ -52,7 +52,7 @@ class TestConstantThenExponentialSFH:
     def test_zero_outside_age(self, t_lookback):
         """SFR is zero beyond the galaxy age."""
         age = 5e9
-        sfr = constant_then_exponential_sfh(t_lookback, 1.0, 1e9, 2e9, age)
+        sfr = constant_then_exponential(t_lookback, 1.0, 1e9, 2e9, age)
 
         mask = t_lookback > age
         np.testing.assert_allclose(sfr[mask], 0.0)
@@ -64,15 +64,15 @@ class TestConstantThenExponentialSFH:
         t_just_above = jnp.array([quench_age + eps])
         t_just_below = jnp.array([quench_age - eps])
 
-        sfr_above = constant_then_exponential_sfh(t_just_above, 1.0, 1e9, quench_age, 10e9)
-        sfr_below = constant_then_exponential_sfh(t_just_below, 1.0, 1e9, quench_age, 10e9)
+        sfr_above = constant_then_exponential(t_just_above, 1.0, 1e9, quench_age, 10e9)
+        sfr_below = constant_then_exponential(t_just_below, 1.0, 1e9, quench_age, 10e9)
 
         np.testing.assert_allclose(float(sfr_above[0]), float(sfr_below[0]), rtol=1e-6)
 
     def test_normalization(self, t_lookback):
         """Peak SFR matches 10**log_sfr."""
         log_sfr = 2.0  # 100 Msun/yr
-        sfr = constant_then_exponential_sfh(t_lookback, log_sfr, 1e9, 5e9, 10e9)
+        sfr = constant_then_exponential(t_lookback, log_sfr, 1e9, 5e9, 10e9)
 
         np.testing.assert_allclose(float(jnp.max(sfr)), 100.0, rtol=1e-10)
 
@@ -81,13 +81,13 @@ class TestConstantThenExponentialSFH:
         tau = 1e7  # 10 Myr
         quench_age = 5e9
         t_at_present = jnp.array([0.0])
-        sfr = constant_then_exponential_sfh(t_at_present, 1.0, tau, quench_age, 10e9)
+        sfr = constant_then_exponential(t_at_present, 1.0, tau, quench_age, 10e9)
 
         assert float(sfr[0]) < 1e-100
 
     def test_jit_compatible(self, t_lookback):
         """Function works under JAX JIT."""
-        fn = jax.jit(constant_then_exponential_sfh)
+        fn = jax.jit(constant_then_exponential)
         sfr = fn(t_lookback, 1.0, 1e9, 5e9, 10e9)
         assert sfr.shape == t_lookback.shape
         assert jnp.all(jnp.isfinite(sfr))
@@ -97,7 +97,7 @@ class TestConstantThenExponentialSFH:
         t = jnp.linspace(0.0, 10e9, 100)
 
         def scalar_fn(log_sfr):
-            return jnp.sum(constant_then_exponential_sfh(t, log_sfr, 1e9, 5e9, 10e9))
+            return jnp.sum(constant_then_exponential(t, log_sfr, 1e9, 5e9, 10e9))
 
         grad_val = jax.grad(scalar_fn)(1.0)
         assert jnp.isfinite(grad_val)

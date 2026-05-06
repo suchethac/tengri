@@ -16,30 +16,22 @@ import pytest
 
 import tengri
 
-# Names allowed in tengri.__all__ as of Phase 6 (2026-05).
+# Names allowed in tengri.__all__ as of Phase 2 (2026-05).
 #
-# This is intentionally tighter than what's *importable* — implementation
-# helpers (noise kernels, branding strings, individual citation
-# functions, single-purpose loaders) remain accessible via direct
-# import but are no longer advertised. Adding a new top-level symbol
-# requires editing this set AND adding a row in
-# `docs/dev/api_migration_v0.x.md`.
+# Phase 2 moved result classes, observation classes, fitters, and config
+# dataclasses into sub-namespaces (`tengri.results`, `tengri.observation`,
+# `tengri.inference`, `tengri.config`). Old top-level names still resolve
+# via a `__getattr__` deprecation shim — they belong in
+# DEMOTED_BUT_IMPORTABLE below, not here.
+#
+# Adding a new top-level symbol requires editing this set AND adding a
+# row in `docs/dev/api_migration_v0.x.md`.
 ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
     {
-        # ── Top-level user verbs (the seven a typical user types) ────
+        # ── Core classes ────────────────────────────────────────────
         "Galaxy",
-        "SEDModel",
         "Parameters",
-        "Fitter",
-        "Posterior",
-        "Observation",
-        "NoiseModel",
-        # ── Population / catalog inference ───────────────────────────
-        "CatalogFitter",
-        "CatalogPosterior",
-        "PopulationFitter",
-        "PopulationPosterior",
-        "VIConfig",
+        "SEDModel",
         # ── Priors (parameters/) ─────────────────────────────────────
         "Fixed",
         "Gaussian",
@@ -47,12 +39,6 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "LogUniform",
         "StudentT",
         "Uniform",
-        # ── Configuration ────────────────────────────────────────────
-        "AGNConfig",
-        "DustConfig",
-        "NebularConfig",
-        "SEDModelConfig",
-        "SFHConfig",
         # ── Exceptions ──────────────────────────────────────────────
         "BackendError",
         "ConfigError",
@@ -60,33 +46,35 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "ParameterError",
         "TengriError",
         "TengriIOError",
-        # ── Observation containers ──────────────────────────────────
-        "LineFluxData",
-        "LineList",
-        "Photometry",
-        "SpectralIndexData",
-        "SpectralIndexDef",
-        "Spectroscopy",
-        # ── Result / mock containers ─────────────────────────────────
-        "FitResult",
-        "MockData",
-        "Provenance",
         # ── Cache helpers ───────────────────────────────────────────
         "cache_size_bytes",
         "clear_cache",
         "enable_persistent_cache",
         "is_cache_enabled",
-        # ── Convenience top-level functions ─────────────────────────
+        # ── Top-level convenience verbs ─────────────────────────────
         "doctor",
-        "generate_mock",
-        "posteriors_to_dataframe",
+        "register_component",
+        # ── Registry introspection ──────────────────────────────────
+        "describe",
+        "help",
+        "list_agn_models",
+        "list_all",
+        "list_components",
+        "list_dust_emission_models",
+        "list_dust_laws",
+        "list_inference_methods",
+        "list_nebular_backends",
+        "list_sfh_models",
+        "summary",
         # ── Subpackage namespaces (canonical import paths) ──────────
         "agn",
         "citations",
+        "config",
         "cosmology",
         "dust",
         "filters",
         "igm",
+        "inference",
         "io",
         "nebular",
         "observation",
@@ -95,8 +83,10 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "preprocessing",
         "presets",
         "radio",
+        "results",
         "sfh",
         "sps",
+        "stellar",
         "units",
         "xray",
     }
@@ -135,6 +125,37 @@ DEMOTED_BUT_IMPORTABLE: frozenset[str] = frozenset(
         # `tengri.sps.load_ssp_data` instead
         "load_filter_set",
         "load_ssp_data",
+        # ── Phase 2 (2026-05) — relocated to sub-namespaces ─────────
+        # Resolve via `__getattr__` deprecation shim, emit DeprecationWarning.
+        # Result classes → tengri.results
+        "FitResult",
+        "MockData",
+        "Provenance",
+        "Posterior",
+        "CatalogPosterior",
+        "PopulationPosterior",
+        "generate_mock",
+        "posteriors_to_dataframe",
+        # Fitters / inference → tengri.inference
+        "Fitter",
+        "CatalogFitter",
+        "PopulationFitter",
+        "VIConfig",
+        # Configs → tengri.config
+        "AGNConfig",
+        "DustConfig",
+        "NebularConfig",
+        "SEDModelConfig",
+        "SFHConfig",
+        # Observation classes → tengri.observation
+        "Photometry",
+        "Spectroscopy",
+        "NoiseModel",
+        "Observation",
+        "LineList",
+        "LineFluxData",
+        "SpectralIndexDef",
+        "SpectralIndexData",
     }
 )
 

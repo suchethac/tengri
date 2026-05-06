@@ -1,0 +1,22 @@
+[
+  {
+    "N": 64,
+    "K": 8,
+    "method": "native_vi_linear",
+    "setup_s": 3.501904917007778,
+    "cold_run_s": 24.57661437499337,
+    "warm_run_s": 16.34125541697722,
+    "compile_proxy_s": 8.23535895801615,
+    "error": null
+  },
+  {
+    "N": 256,
+    "K": 8,
+    "method": "native_vi_linear",
+    "setup_s": 1.9560046250117011,
+    "cold_run_s": 29.89666979102185,
+    "warm_run_s": 23.27768274996197,
+    "compile_proxy_s": 6.6189870410598814,
+    "error": null
+  }
+]

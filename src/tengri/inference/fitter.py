@@ -1777,7 +1777,7 @@ class Fitter:
             method = "mcmc_nuts" if d <= threshold else "vi_nonlinear_fast"
 
         # --- Dispatch to underlying _run_* methods via registry ---
-        from tengri.inference._backend_registry import get_backend
+        from tengri.inference._backend_registry import check_requires, get_backend
 
         if method == "mcmc":
             # Special case: auto-select NUTS for low-D, raytrace for high-D
@@ -1789,6 +1789,9 @@ class Fitter:
         else:
             entry = get_backend(method)
 
+        # Friendly error if the backend's optional dependency is missing,
+        # before we descend into a deep third-party traceback.
+        check_requires(entry)
         result = entry.runner(self, key=key, init_from=init_from, **kwargs)
 
         # Attach back-reference so Posterior.refine() works
@@ -3078,6 +3081,7 @@ register_backend(
     "map",
     tier="primary",
     short_doc="Adam MAP optimization",
+    requires=("optax",),
 )(lambda fitter, *, key, init_from=None, **kw: fitter._run_map(key=key, init_from=init_from, **kw))
 
 register_backend(
@@ -3085,12 +3089,14 @@ register_backend(
     tier="primary",
     short_doc="NIFTy geoVI variational inference",
     aliases=("vi_nonlinear",),
+    requires=("nifty8",),
 )(lambda fitter, *, key, init_from=None, **kw: fitter._run_vi(key=key, init_from=init_from, **kw))
 
 register_backend(
     "vi_nonlinear_fast",
     tier="primary",
     short_doc="NIFTy geoVI without Python logging",
+    requires=("nifty8",),
 )(
     lambda fitter, *, key, init_from=None, **kw: fitter._run_nifty_fast_vi(
         key=key, init_from=init_from, **kw
@@ -3101,6 +3107,7 @@ register_backend(
     "vi_linear",
     tier="experimental",
     short_doc="NIFTy MGVI standard with logging",
+    requires=("nifty8",),
 )(
     lambda fitter, *, key, init_from=None, **kw: fitter._run_vi_linear(
         key=key, init_from=init_from, **kw
@@ -3111,6 +3118,7 @@ register_backend(
     "vi_linear_fast",
     tier="experimental",
     short_doc="NIFTy MGVI without Python logging",
+    requires=("nifty8",),
 )(
     lambda fitter, *, key, init_from=None, **kw: fitter._run_nifty_fast_vi_linear(
         key=key, init_from=init_from, **kw
@@ -3141,6 +3149,7 @@ register_backend(
     "mcmc",
     tier="primary",
     short_doc="Auto MCMC: NUTS for low-D, raytrace for high-D",
+    requires=("blackjax",),  # NUTS branch needs it; raytrace branch is pure JAX
 )(
     lambda fitter, *, key, init_from=None, **kw: (
         fitter._run_nuts(key=key, init_from=init_from, **kw)
@@ -3153,6 +3162,7 @@ register_backend(
     "mcmc_nuts",
     tier="primary",
     short_doc="No-U-Turn Sampler",
+    requires=("blackjax",),
 )(
     lambda fitter, *, key, init_from=None, **kw: fitter._run_nuts(
         key=key, init_from=init_from, **kw
@@ -3173,12 +3183,14 @@ register_backend(
     "mcmc_hmc",
     tier="experimental",
     short_doc="Hamiltonian Monte Carlo",
+    requires=("blackjax",),
 )(lambda fitter, *, key, init_from=None, **kw: fitter._run_hmc(key=key, init_from=init_from, **kw))
 
 register_backend(
     "mcmc_dynamic_hmc",
     tier="experimental",
     short_doc="Dynamic HMC with adaptive step size",
+    requires=("blackjax",),
 )(
     lambda fitter, *, key, init_from=None, **kw: fitter._run_dynamic_hmc(
         key=key, init_from=init_from, **kw
@@ -3189,6 +3201,7 @@ register_backend(
     "mcmc_ghmc",
     tier="experimental",
     short_doc="Generalized HMC",
+    requires=("blackjax",),
 )(
     lambda fitter, *, key, init_from=None, **kw: fitter._run_ghmc(
         key=key, init_from=init_from, **kw
@@ -3199,6 +3212,7 @@ register_backend(
     "mcmc_mclmc",
     tier="experimental",
     short_doc="Microcanonical Langevin Monte Carlo",
+    requires=("blackjax",),
 )(
     lambda fitter, *, key, init_from=None, **kw: fitter._run_mclmc(
         key=key, init_from=init_from, **kw
@@ -3209,6 +3223,7 @@ register_backend(
     "mcmc_adjusted_mclmc",
     tier="experimental",
     short_doc="Adjusted microcanonical Langevin sampler",
+    requires=("blackjax",),
 )(
     lambda fitter, *, key, init_from=None, **kw: fitter._run_adjusted_mclmc(
         key=key, init_from=init_from, **kw
@@ -3219,6 +3234,7 @@ register_backend(
     "mcmc_ess",
     tier="experimental",
     short_doc="Elliptical slice sampling",
+    requires=("blackjax",),
 )(
     lambda fitter, *, key, init_from=None, **kw: fitter._run_elliptical_slice(
         key=key, init_from=init_from, **kw
@@ -3245,6 +3261,7 @@ register_backend(
     "pathfinder",
     tier="experimental",
     short_doc="Pathfinder variational inference",
+    requires=("blackjax",),
 )(
     lambda fitter, *, key, init_from=None, **kw: fitter._run_pathfinder(
         key=key, init_from=init_from, **kw

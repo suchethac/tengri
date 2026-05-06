@@ -97,5 +97,11 @@ __all__ = [
     "unified_nlr_blr",
 ]
 
+
+def __dir__() -> list[str]:
+    """Curated tab-completion list — only the names in ``__all__``."""
+    return list(__all__)
+
+
 # Convenience re-exports for `from tengri.agn import ...`
 from tengri.config.settings import AGNConfig

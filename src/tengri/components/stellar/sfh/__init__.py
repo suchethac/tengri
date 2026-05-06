@@ -5,7 +5,12 @@ from tengri.components.stellar.sfh.chemical_evolution import (
     closed_box_metallicity,
     closed_box_metallicity_anchored,
 )
-from tengri.components.stellar.sfh.dense_basis import dense_basis, dense_basis_pure
+from tengri.components.stellar.sfh.dense_basis import (
+    dense_basis,
+    dense_basis_pure,
+    dense_basis_pure_sfh,
+    dense_basis_sfh,
+)
 from tengri.components.stellar.sfh.gp_sfh import (
     compute_sqrt_power_drw as compute_sqrt_power_drw,
     generate_gp_fourier as generate_gp_fourier,
@@ -14,26 +19,39 @@ from tengri.components.stellar.sfh.gp_sfh import (
 from tengri.components.stellar.sfh.mean_sfh import (
     AGEMAX_YR,
     constant,
+    constant_sfh,
+    constant_then_exponential,
     constant_then_exponential_sfh,
+    declining_exponential,
     declining_exponential_sfh,
     delayed_exponential,
+    delayed_exponential_sfh,
     delayed_tau,
     double_powerlaw,
     dpl,
     exponential,
+    exponential_sfh,
     gaussian,
+    gaussian_sfh,
     lnorm,
     lognormal,
+    lognormal_sfh,
     norm,
     powerlaw,
+    powerlaw_sfh,
     psb_wild2020,
     skewnormal,
+    skewnormal_sfh,
     snorm,
     snorm_burst,
+    snorm_burst_sfh,
     snorm_trunc_burst,
+    snorm_trunc_burst_sfh,
     spline,
+    spline_sfh,
     triweight_burst,
     truncated_skewnormal,
+    truncated_skewnormal_sfh,
     tsnorm,
     tsnorm_burst,
 )
@@ -50,10 +68,14 @@ from tengri.components.stellar.sfh.nonparametric import (
     continuity,
     continuity_flex,
     continuity_flex_prior_logp,
+    continuity_flex_sfh,
     continuity_prior_logp,
+    continuity_sfh,
     dirichlet,
+    dirichlet_sfh,
     make_agebins_from_zred,
     psb_continuity,
+    psb_continuity_sfh,
 )
 from tengri.components.stellar.sfh.psd_models import (
     psd_drw as psd_drw,
@@ -67,29 +89,10 @@ from tengri.components.stellar.sfh.registry import (
     resolve_sfh,
 )
 
-# Backward compatibility aliases — deprecated, will be removed in v1.0
-# The `_sfh` suffix was redundant inside the `tengri.components.stellar.sfh` namespace
-constant_sfh = constant
-exponential_sfh = exponential
-delayed_exponential_sfh = delayed_exponential
-gaussian_sfh = gaussian
-lognormal_sfh = lognormal
-powerlaw_sfh = powerlaw
-skewnormal_sfh = skewnormal
-snorm_burst_sfh = snorm_burst
-snorm_trunc_burst_sfh = snorm_trunc_burst
-spline_sfh = spline
-truncated_skewnormal_sfh = truncated_skewnormal
-dense_basis_sfh = dense_basis
-dense_basis_pure_sfh = dense_basis_pure
-dirichlet_sfh = dirichlet
-continuity_sfh = continuity
-continuity_flex_sfh = continuity_flex
-psb_continuity_sfh = psb_continuity
-
 # New short names are canonical; the `_sfh`-suffixed variants remain
-# accessible as deprecated aliases (defined just above in this module)
-# until v1.0. See docs/dev/api_migration_v0.x.md.
+# accessible as `deprecated_alias`-wrapped functions in the source
+# modules (mean_sfh.py, dense_basis.py, nonparametric.py) until v1.0.
+# See docs/dev/api_migration_v0.x.md.
 __all__ = [
     "AGEMAX_YR",
     "FIELD_MODEL_REGISTRY",
@@ -103,6 +106,7 @@ __all__ = [
     "compute_sqrt_power_drw",
     "constant",
     "constant_sfh",
+    "constant_then_exponential",
     "constant_then_exponential_sfh",
     "continuity",
     "continuity_flex",
@@ -110,6 +114,7 @@ __all__ = [
     "continuity_flex_sfh",
     "continuity_prior_logp",
     "continuity_sfh",
+    "declining_exponential",
     "declining_exponential_sfh",
     "delayed_exponential",
     "delayed_exponential_sfh",
@@ -163,3 +168,8 @@ __all__ = [
     "tsnorm_burst",
     "two_step_metallicity",
 ]
+
+
+def __dir__() -> list[str]:
+    """Curated tab-completion list — only the names in ``__all__``."""
+    return list(__all__)

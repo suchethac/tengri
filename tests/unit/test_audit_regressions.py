@@ -220,9 +220,9 @@ class TestBug13NonparametricJit:
 
     @pytest.mark.xfail(reason="BUG-13: len() on JAX array under JIT", strict=True)
     def test_continuity_sfh_jit(self):
-        """continuity_sfh must JIT-compile without ConcretizationTypeError."""
+        """continuity must JIT-compile without ConcretizationTypeError."""
         try:
-            from tengri.components.sfh.nonparametric import continuity_sfh
+            from tengri.components.sfh.nonparametric import continuity
         except ImportError:
             pytest.skip("nonparametric module not available")
 
@@ -231,7 +231,7 @@ class TestBug13NonparametricJit:
         age_grid = jnp.linspace(0.01, 13.0, 100)
 
         # This should work but currently raises ConcretizationTypeError
-        jitted = jax.jit(continuity_sfh)
+        jitted = jax.jit(continuity)
         result = jitted(log_ratios, age_grid, bin_edges)
         assert jnp.all(jnp.isfinite(result))
 

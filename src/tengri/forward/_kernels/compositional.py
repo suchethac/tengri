@@ -265,6 +265,25 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
 
     _met_use_smooth = state.met_interp == "smooth"
 
+    # ── Closure-path-A captures (no-α / non-ramp / non-native default) ──
+    # The exact path's ``compute_sed_components`` was migrated in Phase II-2.6
+    # to use ``calc_rest_sed_sfh_table_lognormal_mdf`` with trapezoidal
+    # cosmic-time SFH integration on the orchestrator's 64-pt grid +
+    # lognormal-MDF metallicity weighting. To match bit-exactly we replicate
+    # those semantics here. SFH type re-enters the JIT closure (Option 1
+    # accepted): switching SFH models triggers recompilation.
+    # See ``forward/pipeline.py:_closure_a_sfh_prep`` for the canonical impl.
+    _ssp_lg_age_gyr_ca = state.ssp_data.ssp_lg_age_gyr
+    from tengri.components.stellar.sfh.gp_sfh import (
+        make_log_age_grid as _make_log_age_grid_ca,
+    )
+    from tengri.utils.cosmology import age_at_z as _age_at_z_fn_ca
+
+    _sfh_lbt_grid_orch_64 = jnp.power(10.0, _make_log_age_grid_ca(64))
+    _t_obs_gyr_fixed_ca = None if is_free_z else float(_age_at_z_fn_ca(z_fixed))
+    _sfh_fn_ca = model._sfh_fn
+    _sfh_internal_names_ca = model._sfh_internal_names
+
     # --- Shared SED computation (sfr_on_ssp pre-computed by caller) ---
     def _compute_rest_sed(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
         """sfr_on_ssp, params → (rest_sed, redshift_value).
@@ -352,21 +371,113 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
                         ssp_lgmet=ssp_lgmet_traced,
                     )
                 else:
-                    # Phase II-2 trace path: prefer traced SSP arrays when
-                    # provided, fall back to closure-captured otherwise.
-                    if (
-                        _met_use_smooth
-                        and ssp_flux_traced is not None
-                        and ssp_lgmet_traced is not None
-                    ):
-                        ssp_flux_at_z = _interp_metallicity_smooth(
-                            ssp_flux_traced,
-                            ssp_lgmet_traced,
-                            _lgmet,
-                            _lgmet_scatter_closure,
+                    # CLOSURE-A: replace legacy ``compute_csp_weights`` (rectangle
+                    # rule, set above at line ~313) + ``interp_metallicity``
+                    # (single-Z bilinear, no MDF) with DSPS canonical
+                    # ``calc_rest_sed_sfh_table_lognormal_mdf``: trapezoidal
+                    # cosmic-time SFH integration on the orchestrator's 64-pt
+                    # grid + lognormal-MDF metallicity weighting (σ=lgmet_scatter).
+                    # Mirrors ``StellarSEDComponent.apply`` and
+                    # ``pipeline.py``'s closure-A branch (line ~954-1010) so the
+                    # compositional and exact paths produce bit-identical SEDs.
+                    #
+                    # Marginalisation back to the existing ``rest_sed_kernel``
+                    # (1D age weights × 2D age,wave SSP) preserves the kernel
+                    # signature: the joint ``einsum("ma,maw->w")`` decomposes
+                    # into ``einsum("a,aw->w")`` after collapsing m via the
+                    # per-age MDF average — so dust attenuation in the kernel
+                    # (``trans_1d`` or two-CSP age-mask) still applies correctly.
+                    from dsps.sed.stellar_sed import (
+                        calc_rest_sed_sfh_table_lognormal_mdf,
+                    )
+
+                    _ssp_flux_use = (
+                        ssp_flux_traced
+                        if ssp_flux_traced is not None
+                        else _ssp_flux_closure
+                    )
+                    _ssp_lgmet_use = (
+                        ssp_lgmet_traced
+                        if ssp_lgmet_traced is not None
+                        else _ssp_lgmet_closure
+                    )
+                    lgmet_scatter_ca = float(
+                        p.get("lgmet_scatter", _lgmet_scatter_closure)
+                    )
+
+                    # Re-evaluate SFH on 64-pt orchestrator grid (closure-A
+                    # canonical). For stochastic SFHs the legacy ``sfr`` already
+                    # lives on a 64-pt grid; reconstruct from caller-supplied
+                    # ``sfr_on_ssp`` via interp (matches _closure_a_sfh_prep's
+                    # stochastic-reuse semantics for the no-stochastic-loss case).
+                    if has_field:
+                        _sfr_orch_grid = jnp.interp(
+                            _sfh_lbt_grid_orch_64, ssp_ages_yr, sfr_on_ssp
                         )
                     else:
-                        ssp_flux_at_z = interp_metallicity(model, _lgmet)
+                        _sfh_kw = {
+                            k: v for k, v in p.items() if k in _sfh_internal_names_ca
+                        }
+                        _sfr_orch_grid = _sfh_fn_ca(_sfh_lbt_grid_orch_64, **_sfh_kw)
+
+                    _sfr_on_ssp_orch = jnp.interp(
+                        ssp_ages_yr, _sfh_lbt_grid_orch_64, _sfr_orch_grid
+                    )
+
+                    # NaN-safe cosmic-time prep (mirrors _closure_a_sfh_prep).
+                    _z_internal_ca = p.get(
+                        "redshift", z_fixed if z_fixed is not None else 0.0
+                    )
+                    _t_obs_gyr_ca = (
+                        _t_obs_gyr_fixed_ca
+                        if _t_obs_gyr_fixed_ca is not None
+                        else _age_at_z_fn_ca(_z_internal_ca)
+                    )
+                    _T_TABLE_MIN = 0.01
+                    _ssp_age_gyr = ssp_ages_yr / 1e9
+                    _t_cosmic_raw = _t_obs_gyr_ca - _ssp_age_gyr
+                    _n_ssp = ssp_ages_yr.shape[0]
+                    _t_cosmic_floor = jnp.maximum(_t_cosmic_raw, _T_TABLE_MIN)
+                    _valid = _t_cosmic_raw > 0.0
+                    _t_cosmic_asc_raw = _t_cosmic_floor[::-1]
+                    _sfr_asc_raw = _sfr_on_ssp_orch[::-1]
+                    _n_invalid = jnp.sum(~_valid[::-1])
+                    _idx_pos = jnp.arange(_n_ssp)
+                    _is_invalid_pos = _idx_pos < _n_invalid
+                    _ramp_ca = _T_TABLE_MIN + (_T_TABLE_MIN * 0.5) * (
+                        _idx_pos + 1
+                    ) / jnp.maximum(_n_invalid, 1)
+                    _t_cosmic_asc = jnp.where(
+                        _is_invalid_pos, _ramp_ca, _t_cosmic_asc_raw
+                    )
+                    _sfr_asc = jnp.where(_is_invalid_pos, 0.0, _sfr_asc_raw)
+                    _total_mass_ca = jnp.maximum(
+                        jnp.trapezoid(_sfr_asc, _t_cosmic_asc * 1e9), 0.0
+                    )
+
+                    _dsps_result_ca = calc_rest_sed_sfh_table_lognormal_mdf(
+                        gal_t_table=_t_cosmic_asc,
+                        gal_sfr_table=_sfr_asc,
+                        gal_lgmet=_lgmet,
+                        gal_lgmet_scatter=lgmet_scatter_ca,
+                        ssp_lgmet=_ssp_lgmet_use,
+                        ssp_lg_age_gyr=_ssp_lg_age_gyr_ca,
+                        ssp_flux=_ssp_flux_use,
+                        t_obs=_t_obs_gyr_ca,
+                    )
+                    # weights_2d shape (n_met, n_age), ∑=1; scale to Msun.
+                    _weights_2d_ca = _dsps_result_ca.weights * _total_mass_ca
+                    # Marginalise to (1D age weights, 2D MDF-averaged SSP)
+                    # so the existing rest_sed_kernel reduction
+                    # ``einsum("i,iw->w", w, ssp_z)`` reproduces the joint
+                    # ``einsum("ma,maw->w", weights_2d, ssp_flux)`` exactly.
+                    weights = _weights_2d_ca.sum(axis=0)
+                    _w_safe_ca = jnp.maximum(weights, 1e-30)
+                    ssp_flux_at_z = jnp.einsum(
+                        "ma,maw->aw",
+                        _weights_2d_ca / _w_safe_ca[None, :],
+                        _ssp_flux_use,
+                    )
 
         # Always pass current SFR — needed by nebular (Q_H scaling) and X-ray.
         p = {**p, "_sfr_current": sfr_on_ssp[-1]}

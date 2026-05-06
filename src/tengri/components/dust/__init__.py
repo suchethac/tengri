@@ -96,3 +96,69 @@ from tengri.components.dust.priors import (
     narayanan_prior,
     narayanan_tau_prior,
 )
+
+# ──────────────────────────────────────────────────────────────────
+# Curated tab-completion surface for `tengri.dust.<TAB>`.
+# Hides internal helpers (compute_*, create_*_from_grid, load_*_templates,
+# precompute_*, drude_profile, etc.) and constants. Everything is still
+# importable via attribute access — only `dir(tengri.dust)` is filtered.
+# ──────────────────────────────────────────────────────────────────
+_CURATED_DIR = (
+    # Registries
+    "DUST_LAWS",
+    "DUST_EMISSION_MODELS",
+    # Named attenuation laws
+    "calzetti",
+    "cardelli",
+    "li08",
+    "lmc",
+    "smc",
+    "prevot_smc",
+    "vw07_bc",
+    "vw07_diff",
+    "d03_mwrv31",
+    "hd23_mwrv31",
+    "wd01_mwrv31",
+    "wd01_smcbar",
+    "wg00_cloudy",
+    "wg00_dusty",
+    "wg00_shell",
+    # Named emission templates
+    "astrodust",
+    "bosa",
+    "casey2012",
+    "dale2014",
+    "draine_li2007",
+    "draine_li2014",
+    "modified_blackbody",
+    "themis",
+    # Pipeline helpers
+    "two_component_dust",
+    "single_component_dust",
+    "energy_balance_split",
+    # Registration / resolver
+    "register_dust_law",
+    "resolve_dust_law",
+    "register_emission_model",
+    "resolve_emission_model",
+    "register_astrodust_tabulated",
+    "register_bosa_tabulated",
+    "register_dale2014_tabulated",
+    "register_dl07_tabulated",
+    "register_dl14_tabulated",
+    "register_themis_tabulated",
+    # Priors
+    "narayanan_prior",
+    "narayanan_tau_prior",
+    # Submodules
+    "attenuation",
+    "emission",
+    "pah",
+    "priors",
+)
+
+
+def __dir__() -> list[str]:
+    """Curated tab-completion list. Filtering only — everything remains
+    accessible via attribute access."""
+    return list(_CURATED_DIR)

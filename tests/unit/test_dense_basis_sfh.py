@@ -1,7 +1,7 @@
 """Unit tests for the dense_basis GP-SFH model.
 
 Tests the Matérn 3/2 + Linear kernel, GP interpolation, and the
-dense_basis_sfh() function for correctness, JIT-compatibility,
+dense_basis() function for correctness, JIT-compatibility,
 differentiability, and registry integration.
 
 References
@@ -25,7 +25,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 from tengri.components.sfh.dense_basis import (
     _build_quantile_points,
     combined_kernel,
-    dense_basis_sfh,
+    dense_basis,
     gp_interpolate,
     linear_kernel,
     matern32_kernel,
@@ -202,19 +202,19 @@ class TestGPCumulativeMassAccuracy:
 
 
 class TestDenseBasisSFH:
-    """Tests for the main dense_basis_sfh function."""
+    """Tests for the main dense_basis function."""
 
     def test_output_shape(self) -> None:
-        sfr = dense_basis_sfh(AGE_YR, **DEFAULT_KW)
+        sfr = dense_basis(AGE_YR, **DEFAULT_KW)
         assert sfr.shape == AGE_YR.shape
 
     def test_non_negative(self) -> None:
-        sfr = dense_basis_sfh(AGE_YR, **DEFAULT_KW)
+        sfr = dense_basis(AGE_YR, **DEFAULT_KW)
         assert jnp.all(sfr >= 0)
 
     def test_mass_conservation(self) -> None:
         """Integrated SFR should match 10^log_total_mass within 15%."""
-        sfr = dense_basis_sfh(AGE_YR, **DEFAULT_KW)
+        sfr = dense_basis(AGE_YR, **DEFAULT_KW)
         mass = jnp.trapezoid(sfr, AGE_YR)
         target = 10.0 ** DEFAULT_KW["log_total_mass"]
         ratio = mass / target
@@ -229,13 +229,13 @@ class TestDenseBasisSFH:
         }
         # Scale both mass and SFR together (they're coupled via
         # the SFR constraint points)
-        sfr_10 = dense_basis_sfh(
+        sfr_10 = dense_basis(
             AGE_YR,
             log_total_mass=10.0,
             log_sfr_inst=0.0,
             **tx_kw,
         )
-        sfr_11 = dense_basis_sfh(
+        sfr_11 = dense_basis(
             AGE_YR,
             log_total_mass=11.0,
             log_sfr_inst=1.0,
@@ -247,15 +247,15 @@ class TestDenseBasisSFH:
         assert 5.0 < ratio < 20.0, f"Mass ratio {ratio:.1f} not ~10"
 
     def test_is_jittable(self) -> None:
-        fn_jit = jax.jit(dense_basis_sfh)
+        fn_jit = jax.jit(dense_basis)
         sfr = fn_jit(AGE_YR, **DEFAULT_KW)
-        sfr_ref = dense_basis_sfh(AGE_YR, **DEFAULT_KW)
+        sfr_ref = dense_basis(AGE_YR, **DEFAULT_KW)
         assert jnp.allclose(sfr, sfr_ref, atol=1e-10)
 
     def test_has_gradient_log_total_mass(self) -> None:
         def _sfr_sum(m: float) -> float:
             return jnp.sum(
-                dense_basis_sfh(
+                dense_basis(
                     AGE_YR,
                     log_total_mass=m,
                     log_sfr_inst=0.0,
@@ -274,13 +274,13 @@ class TestDenseBasisSFH:
             g_val,
             fd_grad(f_scalar, 10.0, eps=0.01),
             rtol=1e-3,
-            err_msg="dense_basis_sfh: FD check ∂(∑SFR)/∂log_total_mass",
+            err_msg="dense_basis: FD check ∂(∑SFR)/∂log_total_mass",
         )
 
     def test_has_gradient_tx_frac(self) -> None:
         def _sfr_sum(t0: float) -> float:
             return jnp.sum(
-                dense_basis_sfh(
+                dense_basis(
                     AGE_YR,
                     log_total_mass=10.0,
                     log_sfr_inst=0.0,
@@ -299,7 +299,7 @@ class TestDenseBasisSFH:
             g_val,
             fd_grad(f_scalar, 0.3, eps=0.01),
             rtol=5e-3,  # dense_basis uses GP-style spline interp; 0.5% agreement is sufficient
-            err_msg="dense_basis_sfh: FD check ∂(∑SFR)/∂tx_frac_0",
+            err_msg="dense_basis: FD check ∂(∑SFR)/∂tx_frac_0",
         )
 
     def test_dense_basis_tx_ordering(self) -> None:
@@ -309,7 +309,7 @@ class TestDenseBasisSFH:
         so the times at which those mass fractions are reached must be ordered.
         """
         AGE_GRID = jnp.geomspace(1e6, 13.7e9, 10000)
-        sfr = dense_basis_sfh(
+        sfr = dense_basis(
             AGE_GRID,
             log_total_mass=10.0,
             log_sfr_inst=0.0,
@@ -332,11 +332,11 @@ class TestDenseBasisSFH:
     def test_dense_basis_mass_conservation(self) -> None:
         """Integral of SFR over time must equal 10^log_total_mass within 1%.
 
-        Iyer et al. 2019, ApJ 879, 116: dense_basis_sfh is normalized so that
+        Iyer et al. 2019, ApJ 879, 116: dense_basis is normalized so that
         ∫ SFR(t) dt = 10^log_total_mass Msun.
         """
         AGE_GRID = jnp.geomspace(1e6, 13.7e9, 10000)
-        sfr = dense_basis_sfh(
+        sfr = dense_basis(
             AGE_GRID,
             log_total_mass=10.0,
             log_sfr_inst=0.0,
@@ -350,12 +350,12 @@ class TestDenseBasisSFH:
             mass,
             1e10,
             rtol=0.01,
-            err_msg="dense_basis_sfh: ∫SFR dt != 10^10 Msun (mass conservation violated)",
+            err_msg="dense_basis: ∫SFR dt != 10^10 Msun (mass conservation violated)",
         )
 
     def test_ordering_enforced(self) -> None:
         """Passing unordered tx fractions should still produce valid output."""
-        sfr = dense_basis_sfh(
+        sfr = dense_basis(
             AGE_YR,
             log_total_mass=10.0,
             log_sfr_inst=0.0,
@@ -372,7 +372,7 @@ class TestDenseBasisSFH:
 
 def _sfh_for_tx(t0: float, t1: float, t2: float) -> jnp.ndarray:
     """Helper: compute SFR on AGE_YR for given tx fractions."""
-    return dense_basis_sfh(
+    return dense_basis(
         AGE_YR,
         log_total_mass=10.0,
         log_sfr_inst=0.0,
@@ -471,7 +471,7 @@ class TestDenseBasisEdgeCases:
         import pytest
 
         with pytest.raises(ValueError, match="Missing required"):
-            dense_basis_sfh(
+            dense_basis(
                 AGE_YR,
                 log_total_mass=10.0,
                 tx_frac_0=0.3,
@@ -483,7 +483,7 @@ class TestDenseBasisEdgeCases:
         import pytest
 
         with pytest.raises(ValueError, match="at least one"):
-            dense_basis_sfh(AGE_YR, log_total_mass=10.0)
+            dense_basis(AGE_YR, log_total_mass=10.0)
 
     def test_extreme_tx_near_zero(self) -> None:
         """Very early mass assembly (all tx near 0)."""
@@ -499,7 +499,7 @@ class TestDenseBasisEdgeCases:
 
     def test_low_mass_galaxy(self) -> None:
         """log_total_mass = 8 (dwarf galaxy)."""
-        sfr = dense_basis_sfh(
+        sfr = dense_basis(
             AGE_YR,
             log_total_mass=8.0,
             log_sfr_inst=-2.0,
@@ -512,7 +512,7 @@ class TestDenseBasisEdgeCases:
 
     def test_high_mass_galaxy(self) -> None:
         """log_total_mass = 12 (massive galaxy)."""
-        sfr = dense_basis_sfh(
+        sfr = dense_basis(
             AGE_YR,
             log_total_mass=12.0,
             log_sfr_inst=2.0,
@@ -526,7 +526,7 @@ class TestDenseBasisEdgeCases:
     def test_custom_age_universe(self) -> None:
         """Higher redshift: age_universe < 13.8 Gyr."""
         age_z1 = jnp.geomspace(1e6, 5.9e9, 200)  # z~1: age ~5.9 Gyr
-        sfr = dense_basis_sfh(
+        sfr = dense_basis(
             age_z1,
             log_total_mass=10.0,
             age_universe_yr=5.9e9,
@@ -553,7 +553,7 @@ class TestJITNaNRegression:
     def test_high_sfr_no_nan_jit(self) -> None:
         """log_sfr_inst=2.93 (near prior upper bound) must not produce NaN under JIT."""
         jit_sfh = jax.jit(
-            lambda log_sfr: dense_basis_sfh(
+            lambda log_sfr: dense_basis(
                 AGE_YR,
                 log_total_mass=10.0,
                 log_sfr_inst=log_sfr,
@@ -567,7 +567,7 @@ class TestJITNaNRegression:
     def test_very_high_sfr_no_nan_jit(self) -> None:
         """Extreme SFR (log=3.0) must not produce NaN under JIT."""
         jit_sfh = jax.jit(
-            lambda log_sfr: dense_basis_sfh(
+            lambda log_sfr: dense_basis(
                 AGE_YR,
                 log_total_mass=8.0,
                 log_sfr_inst=log_sfr,
@@ -581,7 +581,7 @@ class TestJITNaNRegression:
     def test_low_sfr_no_nan_jit(self) -> None:
         """log_sfr_inst=-2.0 (prior lower bound) must not produce NaN under JIT."""
         jit_sfh = jax.jit(
-            lambda log_sfr: dense_basis_sfh(
+            lambda log_sfr: dense_basis(
                 AGE_YR,
                 log_total_mass=12.0,
                 log_sfr_inst=log_sfr,
@@ -597,7 +597,7 @@ class TestJITNaNRegression:
         """50 random prior samples must produce zero NaN under JIT."""
         key = jax.random.PRNGKey(42)
         jit_sfh = jax.jit(
-            lambda lm, ls, t0, t1, t2: dense_basis_sfh(
+            lambda lm, ls, t0, t1, t2: dense_basis(
                 AGE_YR,
                 log_total_mass=lm,
                 log_sfr_inst=ls,

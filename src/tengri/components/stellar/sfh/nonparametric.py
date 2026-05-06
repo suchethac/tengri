@@ -797,9 +797,11 @@ def continuity_flex_prior_logp(
 
 
 # ── Deprecated aliases (Phase 3) ──────────────────────────────────
-# The `_sfh` suffix was redundant inside the `tengri.components.stellar.sfh` namespace.
-# These aliases are provided for backward compatibility and will be removed in v1.0.
-continuity_sfh = continuity
-dirichlet_sfh = dirichlet
-psb_continuity_sfh = psb_continuity
-continuity_flex_sfh = continuity_flex
+# Wrapped with `deprecated_alias` so a DeprecationWarning fires on first call.
+# Will be removed in v1.0. See docs/dev/api_migration_v0.x.md.
+from tengri._deprecated import deprecated_alias as _deprecated_alias
+
+continuity_sfh = _deprecated_alias(continuity, old_name="continuity_sfh")
+dirichlet_sfh = _deprecated_alias(dirichlet, old_name="dirichlet_sfh")
+psb_continuity_sfh = _deprecated_alias(psb_continuity, old_name="psb_continuity_sfh")
+continuity_flex_sfh = _deprecated_alias(continuity_flex, old_name="continuity_flex_sfh")

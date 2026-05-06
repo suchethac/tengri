@@ -3595,8 +3595,90 @@ class SEDModel:
         if _use_alpha_fe:
             alpha_fe = p.get("alpha_fe", 0.0)
             ssp_flux_at_z = interp_met_alpha_dispatch(self, _log_z, alpha_fe)
-        else:
+        elif self._met_mode in ("ramp", "chem_evol"):
+            # Evolving-Z paths still use single-Z bilinear interp at a
+            # representative metallicity. Closure-A's per-age MDF would
+            # require the full per-age log_z table here, which is the
+            # remit of pipeline.py's ramp/chem_evol closure-A branches —
+            # not migrated to this single-Z fallback yet.
             ssp_flux_at_z = interp_metallicity(self, _log_z)
+        else:
+            # CLOSURE-A: replace legacy ``sfr_on_ssp * _csp_age_dt`` (rectangle
+            # rule, set above) + ``interp_metallicity`` (single-Z bilinear,
+            # no MDF) with DSPS canonical ``calc_rest_sed_sfh_table_lognormal_mdf``:
+            # trapezoidal cosmic-time SFH integration on the orchestrator's
+            # 64-pt grid + lognormal-MDF metallicity weighting (σ=lgmet_scatter).
+            # Mirrors ``build_fused_tier2_photometry`` (the JIT'd Tier-2 path)
+            # so fused vs unfused compositional photometry stay bit-identical.
+            from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_lognormal_mdf
+
+            from tengri.components.stellar.sfh.gp_sfh import make_log_age_grid
+            from tengri.forward.pipeline import _closure_a_sfh_prep
+
+            _t_obs_gyr_unfused = (
+                self._t_universe_gyr(p.get("redshift", 0.0))
+                if hasattr(self, "_t_universe_gyr")
+                else 13.7
+            )
+            # _closure_a_sfh_prep assumes a 64-pt orchestrator grid for
+            # stochastic SFHs. When the model uses a different ``n_grid``
+            # (e.g. 32-pt in test_fused_rest_sed::test_stochastic_sfh),
+            # the helper's internal interp fails with shape mismatch.
+            # Inline closure-A SFH prep using the kernel's approach in that case.
+            if self._uses_stochastic_sfh and self.log_age_grid.shape[0] != 64:
+                _sfh_lbt_grid_orch_64 = jnp.power(10.0, make_log_age_grid(64))
+                _sfr_orch_grid_unfused = jnp.interp(
+                    _sfh_lbt_grid_orch_64, self.ssp_ages_yr, sfr_on_ssp
+                )
+                _sfr_on_ssp_orch_unfused = jnp.interp(
+                    self.ssp_ages_yr, _sfh_lbt_grid_orch_64, _sfr_orch_grid_unfused
+                )
+                _T_TABLE_MIN = 0.01
+                _ssp_age_gyr_un = self.ssp_ages_yr / 1e9
+                _t_cosmic_raw_un = _t_obs_gyr_unfused - _ssp_age_gyr_un
+                _n_ssp_un = self.ssp_ages_yr.shape[0]
+                _t_cosmic_floor_un = jnp.maximum(_t_cosmic_raw_un, _T_TABLE_MIN)
+                _valid_un = _t_cosmic_raw_un > 0.0
+                _t_cosmic_asc_raw_un = _t_cosmic_floor_un[::-1]
+                _sfr_asc_raw_un = _sfr_on_ssp_orch_unfused[::-1]
+                _n_invalid_un = jnp.sum(~_valid_un[::-1])
+                _idx_pos_un = jnp.arange(_n_ssp_un)
+                _is_invalid_pos_un = _idx_pos_un < _n_invalid_un
+                _ramp_un = _T_TABLE_MIN + (_T_TABLE_MIN * 0.5) * (
+                    _idx_pos_un + 1
+                ) / jnp.maximum(_n_invalid_un, 1)
+                _t_cosmic_asc = jnp.where(
+                    _is_invalid_pos_un, _ramp_un, _t_cosmic_asc_raw_un
+                )
+                _sfr_asc = jnp.where(_is_invalid_pos_un, 0.0, _sfr_asc_raw_un)
+                _total_mass = jnp.maximum(
+                    jnp.trapezoid(_sfr_asc, _t_cosmic_asc * 1e9), 0.0
+                )
+            else:
+                _t_cosmic_asc, _sfr_asc, _total_mass, _ = _closure_a_sfh_prep(
+                    self, p, sfr, _t_obs_gyr_unfused
+                )
+            _lgmet_scatter_unfused = float(
+                p.get("lgmet_scatter", getattr(self, "_lgmet_scatter", 0.2))
+            )
+            _dsps_result_unfused = calc_rest_sed_sfh_table_lognormal_mdf(
+                gal_t_table=_t_cosmic_asc,
+                gal_sfr_table=_sfr_asc,
+                gal_lgmet=_log_z,
+                gal_lgmet_scatter=_lgmet_scatter_unfused,
+                ssp_lgmet=self.ssp_data.ssp_lgmet,
+                ssp_lg_age_gyr=self.ssp_data.ssp_lg_age_gyr,
+                ssp_flux=self.ssp_data.ssp_flux,
+                t_obs=_t_obs_gyr_unfused,
+            )
+            _weights_2d_unfused = _dsps_result_unfused.weights * _total_mass
+            weights = _weights_2d_unfused.sum(axis=0)
+            _w_safe_unfused = jnp.maximum(weights, 1e-30)
+            ssp_flux_at_z = jnp.einsum(
+                "ma,maw->aw",
+                _weights_2d_unfused / _w_safe_unfused[None, :],
+                self.ssp_data.ssp_flux,
+            )
 
         # Enrich p with current SFR for X-ray model
         if self._uses_xray:

@@ -178,14 +178,25 @@ def build_fused_rest_sed(state: SEDModelState, model):
     dt = state.forward_dtype
     ssp_wave = state.ssp_data.ssp_wave.astype(dt)
     _is_single_dust = state.dust_model == "single_component"
-    _dust_exact = getattr(state, "dust_scheme", "fast") == "exact"
+    # Always use the smooth-sigmoid age-dependent attenuation: the exact
+    # path's ``_compute_dust_atten`` (pipeline.py:324) always uses
+    # ``two_component_dust_fast`` with sigmoid weights, and the closure-A
+    # bit-identity invariant (compositional == exact) requires the
+    # compositional kernel to mirror that. The legacy hard-mask "fast"
+    # path was a 10 Myr step-function approximation that introduces a
+    # discontinuity at the birth-cloud boundary and is physically less
+    # accurate; it is preserved for the hybrid kernel where the 0.5%
+    # tolerance accommodates it.
+    _dust_exact = True
     if not _is_single_dust:
-        if _dust_exact:
+        if state.precomputed.dust_age_weights is not None:
             dust_age_w = state.precomputed.dust_age_weights.astype(dt)
         else:
-            _t_birth = 1e7  # 10 Myr — Charlot & Fall (2000)
-            young_mask = (state.ssp_ages_yr < _t_birth).astype(dt)
-            old_mask = dt.type(1.0) - young_mask
+            from tengri.components.dust.attenuation import (
+                precompute_dust_age_weights as _precompute_dust_age_weights,
+            )
+
+            dust_age_w = _precompute_dust_age_weights(state.ssp_ages_yr).astype(dt)
     lsun = dt.type(LSUN_ERG_PER_S)
 
     # Capture dust law functions (pure JAX, JIT-traceable)

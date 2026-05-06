@@ -43,8 +43,8 @@ from tengri.components.stellar.sfh.mean_sfh import (
     AGEMAX_YR,
     buat08,
     constant,
-    constant_then_exponential_sfh,
-    declining_exponential_sfh,
+    constant_then_exponential,
+    declining_exponential,
     delayed_bq,
     delayed_exponential,
     dpl,
@@ -544,11 +544,11 @@ _register(
 
 # --- tau (declining exponential, matches FSPS sfh=1 / bagpipes 'exponential') ---
 # SFR(t_lb) = peak * exp(-(age - t_lb)/tau): highest at galaxy formation (t_lb=age),
-# declining to present (t_lb=0).  See declining_exponential_sfh for full derivation.
+# declining to present (t_lb=0).  See declining_exponential for full derivation.
 _register(
     SFHModelSpec(
         name="tau",
-        fn=declining_exponential_sfh,
+        fn=declining_exponential,
         params={
             "sfh_tau_log_peak_sfr": ParamDef(
                 "log10 peak SFR at formation (Msun/yr)", _always_true, "", Uniform(-1.0, 3.0)
@@ -578,7 +578,7 @@ _register(
 _register(
     SFHModelSpec(
         name="const_exp",
-        fn=constant_then_exponential_sfh,
+        fn=constant_then_exponential,
         params={
             "sfh_cexp_log_sfr": ParamDef(
                 "log10 constant SFR before quenching (Msun/yr)",

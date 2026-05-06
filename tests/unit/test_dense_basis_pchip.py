@@ -1,7 +1,7 @@
 """Tests for PCHIP interpolation and pure quantile SFH in dense_basis.py.
 
 Covers the uncovered branches: pchip_interpolate (lines 173-214),
-_build_quantile_points_pure (481-506), and dense_basis_pure_sfh (547-582).
+_build_quantile_points_pure (481-506), and dense_basis_pure (547-582).
 """
 
 import jax
@@ -13,7 +13,7 @@ jax.config.update("jax_enable_x64", True)
 
 from tengri.components.sfh.dense_basis import (
     _build_quantile_points_pure,
-    dense_basis_pure_sfh,
+    dense_basis_pure,
     pchip_interpolate,
 )
 
@@ -144,7 +144,7 @@ class TestBuildQuantilePointsPure:
         assert mass_q.shape == (4,)
 
 
-# ── dense_basis_pure_sfh ──────────────────────────────────────────
+# ── dense_basis_pure ──────────────────────────────────────────
 
 
 class TestDenseBasisPureSfh:
@@ -155,26 +155,26 @@ class TestDenseBasisPureSfh:
     def test_output_shape(self):
         """Output SFR has same length as age grid."""
         age_yr = self._default_age_grid()
-        sfr = dense_basis_pure_sfh(age_yr, log_total_mass=10.0, tx_frac_0=0.3, tx_frac_1=0.6)
+        sfr = dense_basis_pure(age_yr, log_total_mass=10.0, tx_frac_0=0.3, tx_frac_1=0.6)
         assert sfr.shape == age_yr.shape
 
     def test_non_negative(self):
         """SFR is non-negative everywhere."""
         age_yr = self._default_age_grid()
-        sfr = dense_basis_pure_sfh(age_yr, log_total_mass=10.0, tx_frac_0=0.4, tx_frac_1=0.7)
+        sfr = dense_basis_pure(age_yr, log_total_mass=10.0, tx_frac_0=0.4, tx_frac_1=0.7)
         assert jnp.all(sfr >= 0.0)
 
     def test_finite_output(self):
         """SFR values are all finite."""
         age_yr = self._default_age_grid()
-        sfr = dense_basis_pure_sfh(age_yr, log_total_mass=10.0, tx_frac_0=0.3, tx_frac_1=0.6)
+        sfr = dense_basis_pure(age_yr, log_total_mass=10.0, tx_frac_0=0.3, tx_frac_1=0.6)
         assert jnp.all(jnp.isfinite(sfr))
 
     def test_total_mass_scaling(self):
         """Doubling log_total_mass by 1 dex increases integrated mass ~10x."""
         age_yr = self._default_age_grid()
-        sfr_lo = dense_basis_pure_sfh(age_yr, log_total_mass=9.0, tx_frac_0=0.5)
-        sfr_hi = dense_basis_pure_sfh(age_yr, log_total_mass=10.0, tx_frac_0=0.5)
+        sfr_lo = dense_basis_pure(age_yr, log_total_mass=9.0, tx_frac_0=0.5)
+        sfr_hi = dense_basis_pure(age_yr, log_total_mass=10.0, tx_frac_0=0.5)
         ratio = float(jnp.sum(sfr_hi)) / max(float(jnp.sum(sfr_lo)), 1e-30)
         assert 8.0 < ratio < 12.0, f"Expected ~10x mass scaling, got {ratio:.2f}"
 
@@ -182,18 +182,18 @@ class TestDenseBasisPureSfh:
         """Calling without any tx_frac_* raises ValueError."""
         age_yr = self._default_age_grid()
         with pytest.raises(ValueError, match="requires at least one"):
-            dense_basis_pure_sfh(age_yr, log_total_mass=10.0)
+            dense_basis_pure(age_yr, log_total_mass=10.0)
 
     def test_missing_tx_frac_key_raises(self):
         """Passing tx_frac_1 without tx_frac_0 raises ValueError."""
         age_yr = self._default_age_grid()
         with pytest.raises(ValueError, match="Missing required parameter"):
-            dense_basis_pure_sfh(age_yr, log_total_mass=10.0, tx_frac_1=0.5)
+            dense_basis_pure(age_yr, log_total_mass=10.0, tx_frac_1=0.5)
 
     def test_three_quantiles(self):
         """Works with three tx_frac parameters."""
         age_yr = self._default_age_grid()
-        sfr = dense_basis_pure_sfh(
+        sfr = dense_basis_pure(
             age_yr, log_total_mass=10.0, tx_frac_0=0.2, tx_frac_1=0.5, tx_frac_2=0.8
         )
         assert sfr.shape == age_yr.shape
@@ -202,20 +202,20 @@ class TestDenseBasisPureSfh:
     def test_age_universe_yr_custom(self):
         """Custom age_universe_yr changes the timescale."""
         age_yr = self._default_age_grid()
-        sfr_default = dense_basis_pure_sfh(age_yr, log_total_mass=10.0, tx_frac_0=0.5)
-        sfr_custom = dense_basis_pure_sfh(
+        sfr_default = dense_basis_pure(age_yr, log_total_mass=10.0, tx_frac_0=0.5)
+        sfr_custom = dense_basis_pure(
             age_yr, log_total_mass=10.0, age_universe_yr=10e9, tx_frac_0=0.5
         )
         # Different universes → different SFH profiles
         assert not jnp.allclose(sfr_default, sfr_custom)
 
     def test_jittable(self):
-        """dense_basis_pure_sfh can be JIT-compiled."""
+        """dense_basis_pure can be JIT-compiled."""
         age_yr = self._default_age_grid()
 
         @jax.jit
         def run(log_m, t0):
-            return dense_basis_pure_sfh(age_yr, log_total_mass=log_m, tx_frac_0=t0)
+            return dense_basis_pure(age_yr, log_total_mass=log_m, tx_frac_0=t0)
 
         sfr = run(10.0, 0.5)
         assert sfr.shape == age_yr.shape

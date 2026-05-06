@@ -1,0 +1,12 @@
+[
+  {
+    "N": 1024,
+    "K": 1,
+    "method": "native_vi_linear",
+    "setup_s": 6.7353977499878965,
+    "cold_run_s": 53.43493808299536,
+    "warm_run_s": 43.953358875005506,
+    "compile_proxy_s": 9.481579207989853,
+    "error": null
+  }
+]

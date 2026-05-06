@@ -21,7 +21,7 @@ Canonical names (short name alias in parentheses):
 - **constant_sfh** (const): flat SFR between start and end times (3 params).
 - **exponential_sfh** (exp): declining exponential from start (3 params).
 - **delayed_exponential_sfh** (dexp): peaks at start + tau (3 params).
-- **declining_exponential_sfh** (tau): FSPS/bagpipes tau model in lookback time (3 params).
+- **declining_exponential** (tau): FSPS/bagpipes tau model in lookback time (3 params).
 - **triweight_burst**: compact triweight kernel in log-age for burst component.
 - **spline_sfh**: N-node monotone cubic (PCHIP) spline in log-age space. Nodes are
   static (set at JIT-compile time); SFR values are free parameters. Use directly
@@ -622,7 +622,7 @@ def delayed_exponential(
     return jnp.where(dt >= 0, jnp.maximum(sfr, 0.0), 0.0)
 
 
-def declining_exponential_sfh(
+def declining_exponential(
     t_lookback: jnp.ndarray,
     log_peak_sfr: float,
     tau: float,
@@ -636,7 +636,7 @@ def declining_exponential_sfh(
         SFR(t_lb) = peak * exp(-(age - t_lb) / tau)  for  0 <= t_lb <= age
 
     The SFR *increases* going back in lookback time (galaxy formed with highest SFR,
-    declining to the present). This is opposite to ``exponential_sfh``.
+    declining to the present). This is opposite to ``exponential``.
 
     Parameters
     ----------
@@ -664,7 +664,7 @@ def declining_exponential_sfh(
     return jnp.where((t_lookback >= 0) & (t_lookback <= age), sfr, 0.0)
 
 
-def constant_then_exponential_sfh(
+def constant_then_exponential(
     t_lookback: jnp.ndarray,
     log_sfr: float,
     tau: float,
@@ -1529,16 +1529,29 @@ tsnorm_burst = snorm_trunc_burst
 
 
 # ── Deprecated aliases (Phase 3) ──────────────────────────────────
-# The `_sfh` suffix was redundant inside the `tengri.components.stellar.sfh` namespace.
-# These aliases are provided for backward compatibility and will be removed in v1.0.
-constant_sfh = constant
-exponential_sfh = exponential
-delayed_exponential_sfh = delayed_exponential
-gaussian_sfh = gaussian
-lognormal_sfh = lognormal
-powerlaw_sfh = powerlaw
-skewnormal_sfh = skewnormal
-snorm_burst_sfh = snorm_burst
-snorm_trunc_burst_sfh = snorm_trunc_burst
-spline_sfh = spline
-truncated_skewnormal_sfh = truncated_skewnormal
+# The `_sfh` suffix was redundant inside the `tengri.components.stellar.sfh`
+# namespace. Wrapped with `deprecated_alias` so a DeprecationWarning fires
+# on first call. Will be removed in v1.0. See docs/dev/api_migration_v0.x.md.
+from tengri._deprecated import deprecated_alias as _deprecated_alias
+
+constant_sfh = _deprecated_alias(constant, old_name="constant_sfh")
+exponential_sfh = _deprecated_alias(exponential, old_name="exponential_sfh")
+delayed_exponential_sfh = _deprecated_alias(
+    delayed_exponential, old_name="delayed_exponential_sfh"
+)
+gaussian_sfh = _deprecated_alias(gaussian, old_name="gaussian_sfh")
+lognormal_sfh = _deprecated_alias(lognormal, old_name="lognormal_sfh")
+powerlaw_sfh = _deprecated_alias(powerlaw, old_name="powerlaw_sfh")
+skewnormal_sfh = _deprecated_alias(skewnormal, old_name="skewnormal_sfh")
+snorm_burst_sfh = _deprecated_alias(snorm_burst, old_name="snorm_burst_sfh")
+snorm_trunc_burst_sfh = _deprecated_alias(snorm_trunc_burst, old_name="snorm_trunc_burst_sfh")
+spline_sfh = _deprecated_alias(spline, old_name="spline_sfh")
+truncated_skewnormal_sfh = _deprecated_alias(
+    truncated_skewnormal, old_name="truncated_skewnormal_sfh"
+)
+declining_exponential_sfh = _deprecated_alias(
+    declining_exponential, old_name="declining_exponential_sfh"
+)
+constant_then_exponential_sfh = _deprecated_alias(
+    constant_then_exponential, old_name="constant_then_exponential_sfh"
+)

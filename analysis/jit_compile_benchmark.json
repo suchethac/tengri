@@ -1,0 +1,398 @@
+[
+  {
+    "variant": "pure_lax_map",
+    "N": 256,
+    "K": 1,
+    "lower_s": 0.011739625013433397,
+    "compile_s": 0.06371304101776332,
+    "hlo_bytes": 955487,
+    "error": null
+  },
+  {
+    "variant": "pure_lax_map",
+    "N": 1024,
+    "K": 1,
+    "lower_s": 0.0076217500027269125,
+    "compile_s": 0.06685429200297222,
+    "hlo_bytes": 955517,
+    "error": null
+  },
+  {
+    "variant": "pure_lax_map",
+    "N": 4096,
+    "K": 1,
+    "lower_s": 0.00808633299311623,
+    "compile_s": 0.06276616698596627,
+    "hlo_bytes": 955517,
+    "error": null
+  },
+  {
+    "variant": "pure_lax_map",
+    "N": 16384,
+    "K": 1,
+    "lower_s": 0.0076557910069823265,
+    "compile_s": 0.06368437496712431,
+    "hlo_bytes": 955547,
+    "error": null
+  },
+  {
+    "variant": "manual_chunk",
+    "N": 256,
+    "K": 1,
+    "lower_s": 0.012076042010448873,
+    "compile_s": 0.07067112502409145,
+    "hlo_bytes": 956320,
+    "error": null
+  },
+  {
+    "variant": "manual_chunk",
+    "N": 256,
+    "K": 16,
+    "lower_s": 0.011407375044655055,
+    "compile_s": 0.1208241669810377,
+    "hlo_bytes": 956689,
+    "error": null
+  },
+  {
+    "variant": "manual_chunk",
+    "N": 256,
+    "K": 64,
+    "lower_s": 0.011638875002972782,
+    "compile_s": 0.11988704197574407,
+    "hlo_bytes": 956641,
+    "error": null
+  },
+  {
+    "variant": "manual_chunk",
+    "N": 1024,
+    "K": 1,
+    "lower_s": 0.008842125011142343,
+    "compile_s": 0.06913899997016415,
+    "hlo_bytes": 956352,
+    "error": null
+  },
+  {
+    "variant": "manual_chunk",
+    "N": 1024,
+    "K": 16,
+    "lower_s": 0.00883291696663946,
+    "compile_s": 0.11848945904057473,
+    "hlo_bytes": 956693,
+    "error": null
+  },
+  {
+    "variant": "manual_chunk",
+    "N": 1024,
+    "K": 64,
+    "lower_s": 0.008913416997529566,
+    "compile_s": 0.12081950000720099,
+    "hlo_bytes": 956673,
+    "error": null
+  },
+  {
+    "variant": "manual_chunk",
+    "N": 4096,
+    "K": 1,
+    "lower_s": 0.008909041003789753,
+    "compile_s": 0.07236595795257017,
+    "hlo_bytes": 956352,
+    "error": null
+  },
+  {
+    "variant": "manual_chunk",
+    "N": 4096,
+    "K": 16,
+    "lower_s": 0.009071082982700318,
+    "compile_s": 0.12365808297181502,
+    "hlo_bytes": 956721,
+    "error": null
+  },
+  {
+    "variant": "manual_chunk",
+    "N": 4096,
+    "K": 64,
+    "lower_s": 0.009017375006806105,
+    "compile_s": 0.12089191697305068,
+    "hlo_bytes": 956673,
+    "error": null
+  },
+  {
+    "variant": "manual_chunk",
+    "N": 16384,
+    "K": 1,
+    "lower_s": 0.00944483297644183,
+    "compile_s": 0.06938541698036715,
+    "hlo_bytes": 956384,
+    "error": null
+  },
+  {
+    "variant": "manual_chunk",
+    "N": 16384,
+    "K": 16,
+    "lower_s": 0.00927137496182695,
+    "compile_s": 0.11951795901404694,
+    "hlo_bytes": 956753,
+    "error": null
+  },
+  {
+    "variant": "manual_chunk",
+    "N": 16384,
+    "K": 64,
+    "lower_s": 0.009156499989330769,
+    "compile_s": 0.12171920802211389,
+    "hlo_bytes": 956705,
+    "error": null
+  },
+  {
+    "variant": "lax_map_batched",
+    "N": 256,
+    "K": 1,
+    "lower_s": 0.008820875023957342,
+    "compile_s": 0.07041904202196747,
+    "hlo_bytes": 956364,
+    "error": null
+  },
+  {
+    "variant": "lax_map_batched",
+    "N": 256,
+    "K": 16,
+    "lower_s": 0.009166792035102844,
+    "compile_s": 0.1196489580324851,
+    "hlo_bytes": 956733,
+    "error": null
+  },
+  {
+    "variant": "lax_map_batched",
+    "N": 256,
+    "K": 64,
+    "lower_s": 0.008835915999952704,
+    "compile_s": 0.12181470799259841,
+    "hlo_bytes": 956686,
+    "error": null
+  },
+  {
+    "variant": "lax_map_batched",
+    "N": 1024,
+    "K": 1,
+    "lower_s": 0.009205375041346997,
+    "compile_s": 0.07081720797577873,
+    "hlo_bytes": 956397,
+    "error": null
+  },
+  {
+    "variant": "lax_map_batched",
+    "N": 1024,
+    "K": 16,
+    "lower_s": 0.009057875024154782,
+    "compile_s": 0.11996754101710394,
+    "hlo_bytes": 956739,
+    "error": null
+  },
+  {
+    "variant": "lax_map_batched",
+    "N": 1024,
+    "K": 64,
+    "lower_s": 0.008826292003504932,
+    "compile_s": 0.12348449998535216,
+    "hlo_bytes": 956719,
+    "error": null
+  },
+  {
+    "variant": "lax_map_batched",
+    "N": 4096,
+    "K": 1,
+    "lower_s": 0.00891812500776723,
+    "compile_s": 0.06910604203585535,
+    "hlo_bytes": 956397,
+    "error": null
+  },
+  {
+    "variant": "lax_map_batched",
+    "N": 4096,
+    "K": 16,
+    "lower_s": 0.009096208028495312,
+    "compile_s": 0.12177475000498816,
+    "hlo_bytes": 956766,
+    "error": null
+  },
+  {
+    "variant": "lax_map_batched",
+    "N": 4096,
+    "K": 64,
+    "lower_s": 0.00928616599412635,
+    "compile_s": 0.11982316698413342,
+    "hlo_bytes": 956719,
+    "error": null
+  },
+  {
+    "variant": "lax_map_batched",
+    "N": 16384,
+    "K": 1,
+    "lower_s": 0.019469666003715247,
+    "compile_s": 0.0674631250440143,
+    "hlo_bytes": 956430,
+    "error": null
+  },
+  {
+    "variant": "lax_map_batched",
+    "N": 16384,
+    "K": 16,
+    "lower_s": 0.009094625012949109,
+    "compile_s": 0.12089650001144037,
+    "hlo_bytes": 956799,
+    "error": null
+  },
+  {
+    "variant": "lax_map_batched",
+    "N": 16384,
+    "K": 64,
+    "lower_s": 0.009695667016785592,
+    "compile_s": 0.12337195797590539,
+    "hlo_bytes": 956752,
+    "error": null
+  },
+  {
+    "variant": "pure_vmap",
+    "N": 256,
+    "K": 1,
+    "lower_s": 0.008886750030796975,
+    "compile_s": 0.11639695795020089,
+    "hlo_bytes": 953697,
+    "error": null
+  },
+  {
+    "variant": "pure_vmap",
+    "N": 1024,
+    "K": 1,
+    "lower_s": 0.008885167015250772,
+    "compile_s": 0.11645795800723135,
+    "hlo_bytes": 953743,
+    "error": null
+  },
+  {
+    "variant": "pure_vmap",
+    "N": 4096,
+    "K": 1,
+    "lower_s": 0.008711124944966286,
+    "compile_s": 0.11780820903368294,
+    "hlo_bytes": 953743,
+    "error": null
+  },
+  {
+    "variant": "pure_vmap",
+    "N": 16384,
+    "K": 1,
+    "lower_s": 0.009235417004674673,
+    "compile_s": 0.11908900004345924,
+    "hlo_bytes": 953789,
+    "error": null
+  },
+  {
+    "variant": "checkpoint_lax",
+    "N": 256,
+    "K": 1,
+    "lower_s": 0.010912499972619116,
+    "compile_s": 0.0680429590283893,
+    "hlo_bytes": 956352,
+    "error": null
+  },
+  {
+    "variant": "checkpoint_lax",
+    "N": 256,
+    "K": 16,
+    "lower_s": 0.010761250043287873,
+    "compile_s": 0.11998812499223277,
+    "hlo_bytes": 956721,
+    "error": null
+  },
+  {
+    "variant": "checkpoint_lax",
+    "N": 256,
+    "K": 64,
+    "lower_s": 0.010438790952321142,
+    "compile_s": 0.12114062503678724,
+    "hlo_bytes": 956674,
+    "error": null
+  },
+  {
+    "variant": "checkpoint_lax",
+    "N": 1024,
+    "K": 1,
+    "lower_s": 0.008589749981183559,
+    "compile_s": 0.0676605420303531,
+    "hlo_bytes": 956385,
+    "error": null
+  },
+  {
+    "variant": "checkpoint_lax",
+    "N": 1024,
+    "K": 16,
+    "lower_s": 0.008962042047642171,
+    "compile_s": 0.12249249999877065,
+    "hlo_bytes": 956727,
+    "error": null
+  },
+  {
+    "variant": "checkpoint_lax",
+    "N": 1024,
+    "K": 64,
+    "lower_s": 0.00881400000071153,
+    "compile_s": 0.12287866702536121,
+    "hlo_bytes": 956707,
+    "error": null
+  },
+  {
+    "variant": "checkpoint_lax",
+    "N": 4096,
+    "K": 1,
+    "lower_s": 0.00827420799760148,
+    "compile_s": 0.06998162501258776,
+    "hlo_bytes": 956385,
+    "error": null
+  },
+  {
+    "variant": "checkpoint_lax",
+    "N": 4096,
+    "K": 16,
+    "lower_s": 0.008730542031116784,
+    "compile_s": 0.12135125003987923,
+    "hlo_bytes": 956754,
+    "error": null
+  },
+  {
+    "variant": "checkpoint_lax",
+    "N": 4096,
+    "K": 64,
+    "lower_s": 0.00838375004241243,
+    "compile_s": 0.11937970801955089,
+    "hlo_bytes": 956707,
+    "error": null
+  },
+  {
+    "variant": "checkpoint_lax",
+    "N": 16384,
+    "K": 1,
+    "lower_s": 0.008321167028043419,
+    "compile_s": 0.07148350001079962,
+    "hlo_bytes": 956418,
+    "error": null
+  },
+  {
+    "variant": "checkpoint_lax",
+    "N": 16384,
+    "K": 16,
+    "lower_s": 0.016776166972704232,
+    "compile_s": 0.12540137500036508,
+    "hlo_bytes": 956787,
+    "error": null
+  },
+  {
+    "variant": "checkpoint_lax",
+    "N": 16384,
+    "K": 64,
+    "lower_s": 0.008770916028879583,
+    "compile_s": 0.12007791601354256,
+    "hlo_bytes": 956740,
+    "error": null
+  }
+]

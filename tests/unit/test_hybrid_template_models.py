@@ -33,19 +33,23 @@ from tengri.components.dust.dust_emission_precompute import (
     build_astrodust_photometry_lookup,
     build_bosa_photometry_lookup,
     build_dl14_photometry_lookup,
+    build_lookup,
     build_themis_photometry_lookup,
     precompute_astrodust_photometry,
     precompute_bosa_photometry,
     precompute_dl14_photometry,
+    precompute_for_model,
     precompute_themis_photometry,
 )
 from tengri.components.dust.emission_templates import (
     create_astrodust_from_grid,
     create_bosa_from_grid,
+    create_dale2014_from_grid,
     create_dl14_from_grid,
     create_themis_from_grid,
     load_astrodust_templates,
     load_bosa_templates,
+    load_dale2014_templates,
     load_dl14_templates,
     load_themis_templates,
 )
@@ -55,6 +59,7 @@ _DL14_FILE = _DATA_DIR / "dl14_templates.h5"
 _ASTRODUST_FILE = _DATA_DIR / "astrodust_templates.h5"
 _THEMIS_FILE = _DATA_DIR / "themis_templates.h5"
 _BOSA_FILE = _DATA_DIR / "bosa_templates.h5"
+_DALE_FILE = _DATA_DIR / "dale2014_templates.h5"
 
 
 def _filter_integrate(wave_rest_aa, lnu, filter_waves, filter_trans):
@@ -75,13 +80,27 @@ def ir_filters():
     """IR filters that overlap dust emission peaks (3.4–500 μm)."""
     from tengri.observation.filters import load_filter_set
 
-    return load_filter_set([
-        "wise_w1", "wise_w2", "wise_w3", "wise_w4",
-        "irac_36", "irac_45", "irac_58", "irac_80",
-        "mips_24", "mips_70", "mips_160",
-        "herschel_70", "herschel_100", "herschel_160",
-        "herschel_250", "herschel_350", "herschel_500",
-    ])
+    return load_filter_set(
+        [
+            "wise_w1",
+            "wise_w2",
+            "wise_w3",
+            "wise_w4",
+            "irac_36",
+            "irac_45",
+            "irac_58",
+            "irac_80",
+            "mips_24",
+            "mips_70",
+            "mips_160",
+            "herschel_70",
+            "herschel_100",
+            "herschel_160",
+            "herschel_250",
+            "herschel_350",
+            "herschel_500",
+        ]
+    )
 
 
 # ── Astrodust ─────────────────────────────────────────────────────
@@ -114,8 +133,14 @@ class TestAstrodustHybridVsExact:
         ]:
             phot_hybrid = np.asarray(lookup(L_abs, umin, gamma, qpah))
             sed_exact = np.asarray(
-                exact_fn(jnp.asarray(wave), L_abs, dust_umin=umin,
-                         dust_gamma_dl=gamma, dust_qpah=qpah, redshift=0.0)
+                exact_fn(
+                    jnp.asarray(wave),
+                    L_abs,
+                    dust_umin=umin,
+                    dust_gamma_dl=gamma,
+                    dust_qpah=qpah,
+                    redshift=0.0,
+                )
             )
             phot_exact = _filter_integrate(np.asarray(wave), sed_exact, fw, ft)
             nz = phot_exact > 0
@@ -161,8 +186,14 @@ class TestTHEMISHybridVsExact:
         ]:
             phot_hybrid = np.asarray(lookup(L_abs, umin, gamma, qhac))
             sed_exact = np.asarray(
-                exact_fn(jnp.asarray(wave), L_abs, dust_umin=umin,
-                         dust_gamma_dl=gamma, dust_qhac=qhac, redshift=0.0)
+                exact_fn(
+                    jnp.asarray(wave),
+                    L_abs,
+                    dust_umin=umin,
+                    dust_gamma_dl=gamma,
+                    dust_qhac=qhac,
+                    redshift=0.0,
+                )
             )
             phot_exact = _filter_integrate(np.asarray(wave), sed_exact, fw, ft)
             nz = phot_exact > 0
@@ -173,9 +204,7 @@ class TestTHEMISHybridVsExact:
             # precompute) adds a sub-percent FIR contribution. Per-band errors at
             # mid-IR (MIPS24, WISE w4) are <1%; the worst residuals sit around steep
             # PAH/silicate features at WISE w1-w3 and IRAC bands.
-            assert rel.max() < 0.05, (
-                f"THEMIS hybrid err {rel.max() * 100:.2f}% exceeds 2%"
-            )
+            assert rel.max() < 0.05, f"THEMIS hybrid err {rel.max() * 100:.2f}% exceeds 2%"
 
 
 # ── DL14 ──────────────────────────────────────────────────────────
@@ -208,8 +237,14 @@ class TestDL14HybridVsExact:
         ]:
             phot_hybrid = np.asarray(lookup(L_abs, umin, gamma, qpah, alpha))
             sed_exact = np.asarray(
-                exact_fn(jnp.asarray(wave), L_abs, dust_umin=umin,
-                         dust_gamma_dl=gamma, dust_qpah=qpah, dust_alpha_dl14=alpha)
+                exact_fn(
+                    jnp.asarray(wave),
+                    L_abs,
+                    dust_umin=umin,
+                    dust_gamma_dl=gamma,
+                    dust_qpah=qpah,
+                    dust_alpha_dl14=alpha,
+                )
             )
             phot_exact = _filter_integrate(np.asarray(wave), sed_exact, fw, ft)
             nz = phot_exact > 0
@@ -220,9 +255,7 @@ class TestDL14HybridVsExact:
             # precompute) adds a sub-percent FIR contribution. Per-band errors at
             # mid-IR (MIPS24, WISE w4) are <1%; the worst residuals sit around steep
             # PAH/silicate features at WISE w1-w3 and IRAC bands.
-            assert rel.max() < 0.05, (
-                f"DL14 hybrid err {rel.max() * 100:.2f}% exceeds 2%"
-            )
+            assert rel.max() < 0.05, f"DL14 hybrid err {rel.max() * 100:.2f}% exceeds 2%"
 
 
 # ── BOSA ──────────────────────────────────────────────────────────
@@ -270,4 +303,48 @@ class TestBOSAHybridVsExact:
             assert rel.max() < 0.05, (
                 f"BOSA hybrid err {rel.max() * 100:.2f}% exceeds 2% "
                 f"at (L={L_abs:g}, log_ssfr={log_ssfr})"
+            )
+
+
+# ── Dale2014 ──────────────────────────────────────────────────────
+
+
+@pytest.mark.skipif(not _DALE_FILE.is_file(), reason="Dale2014 templates not found")
+class TestDale2014HybridVsExact:
+    """Dale2014 uses the generic single-template precompute route (1D alpha
+    axis, L_λ → L_ν conversion handled by precompute_template_photometry)."""
+
+    @pytest.fixture(scope="class")
+    def setup(self, ir_filters):
+        fw_list, ft_list, _ = ir_filters
+        fw = [jnp.asarray(w) for w in fw_list]
+        ft = [jnp.asarray(t) for t in ft_list]
+        templates = load_dale2014_templates(str(_DALE_FILE))
+        # Use the production precompute_for_model + build_lookup since
+        # Dale2014 routes through the generic path, not a bespoke module.
+        preint = precompute_for_model("dale2014", fw, ft, redshift=0.0, parameters=None)
+        lookup = build_lookup(preint, model_name="dale2014")
+        exact_fn = create_dale2014_from_grid(str(_DALE_FILE))
+        return templates, fw, ft, lookup, exact_fn
+
+    def test_dale_hybrid_matches_exact(self, setup):
+        templates, fw, ft, lookup, exact_fn = setup
+        alpha_grid = templates["alpha_grid"]
+        wave = templates["wavelength_aa"]
+
+        for L_abs, alpha in [
+            (1e9, float(alpha_grid[10])),
+            (1e10, float(alpha_grid[30])),
+            (1e11, float(alpha_grid[50])),
+        ]:
+            phot_hybrid = np.asarray(lookup(L_abs, alpha))
+            sed_exact = np.asarray(
+                exact_fn(jnp.asarray(wave), L_abs, dust_alpha_dale=alpha, redshift=0.0)
+            )
+            phot_exact = _filter_integrate(np.asarray(wave), sed_exact, fw, ft)
+            nz = phot_exact > 0
+            rel = np.abs(phot_hybrid[nz] - phot_exact[nz]) / np.abs(phot_exact[nz])
+            assert rel.max() < 0.05, (
+                f"Dale2014 hybrid err {rel.max() * 100:.2f}% exceeds 5% "
+                f"at (L={L_abs:g}, alpha={alpha})"
             )

@@ -27,12 +27,12 @@ from tengri.components.sfh.mean_sfh import (
     AGEMAX_YR,
     _clamp_age,
     _skewed_gaussian_kernel,
-    constant_sfh,
-    delayed_exponential_sfh,
+    constant,
+    delayed_exponential,
     delayed_tau,
     double_powerlaw,
     dpl,
-    exponential_sfh,
+    exponential,
     lnorm,
     norm,
     snorm,
@@ -376,14 +376,14 @@ class TestConstantSFH:
     def test_flat_in_range(self):
         """SFR equals 10^log_sfr within the window."""
         t = jnp.linspace(1e6, 10e9, 500)
-        sfr = constant_sfh(t, log_sfr=1.0, start=0.0, end=AGEMAX_YR)
+        sfr = constant(t, log_sfr=1.0, start=0.0, end=AGEMAX_YR)
         # All points should be ~10
         assert_allclose(sfr, 10.0, rtol=1e-10)
 
     def test_zero_outside(self):
         """SFR is zero outside the window."""
         t = jnp.array([0.5e9, 1e9, 5e9, 10e9, 15e9])
-        sfr = constant_sfh(t, log_sfr=1.0, start=1e9, end=10e9)
+        sfr = constant(t, log_sfr=1.0, start=1e9, end=10e9)
         assert float(sfr[0]) == 0.0  # before start
         assert float(sfr[-1]) == 0.0  # after end
         assert float(sfr[2]) == 10.0  # inside
@@ -391,7 +391,7 @@ class TestConstantSFH:
     def test_correct_shape(self):
         """Output shape matches input."""
         t = jnp.logspace(6, 10, 42)
-        sfr = constant_sfh(t, log_sfr=0.0)
+        sfr = constant(t, log_sfr=0.0)
         assert sfr.shape == (42,)
 
 
@@ -401,18 +401,18 @@ class TestExponentialSFH:
     def test_peaks_at_start(self):
         """SFR is highest at the start time."""
         t = jnp.linspace(0, 10e9, 1000)
-        sfr = exponential_sfh(t, log_peak_sfr=1.0, tau=1e9, start=0.0)
+        sfr = exponential(t, log_peak_sfr=1.0, tau=1e9, start=0.0)
         assert jnp.argmax(sfr) < 10  # near t=0
 
     def test_declining(self):
         """SFR declines with time after start."""
         t = jnp.array([0.0, 1e9, 2e9, 5e9, 10e9])
-        sfr = exponential_sfh(t, log_peak_sfr=1.0, tau=1e9, start=0.0)
+        sfr = exponential(t, log_peak_sfr=1.0, tau=1e9, start=0.0)
         assert jnp.all(jnp.diff(sfr) <= 0)
 
     def test_zero_before_start(self):
         """SFR is zero before start."""
-        sfr = exponential_sfh(jnp.array(0.5e9), log_peak_sfr=1.0, tau=1e9, start=1e9)
+        sfr = exponential(jnp.array(0.5e9), log_peak_sfr=1.0, tau=1e9, start=1e9)
         assert float(sfr) == 0.0
 
 
@@ -424,7 +424,7 @@ class TestDelayedExponentialSFH:
         start = 1e9
         tau = 2e9
         t = jnp.linspace(start, 10e9, 5000)
-        sfr = delayed_exponential_sfh(t, log_peak_sfr=1.0, tau=tau, start=start)
+        sfr = delayed_exponential(t, log_peak_sfr=1.0, tau=tau, start=start)
         peak_t = float(t[jnp.argmax(sfr)])
         expected_peak = start + tau
         assert abs(peak_t - expected_peak) / expected_peak < 0.05
@@ -434,12 +434,12 @@ class TestDelayedExponentialSFH:
         start = 0.0
         tau = 1e9
         t = jnp.array(start + tau)
-        sfr = delayed_exponential_sfh(t, log_peak_sfr=1.0, tau=tau, start=start)
+        sfr = delayed_exponential(t, log_peak_sfr=1.0, tau=tau, start=start)
         assert_allclose(float(sfr), 10.0, rtol=1e-6)
 
     def test_zero_before_start(self):
         """SFR is zero before start."""
-        sfr = delayed_exponential_sfh(jnp.array(0.5e9), log_peak_sfr=1.0, tau=1e9, start=1e9)
+        sfr = delayed_exponential(jnp.array(0.5e9), log_peak_sfr=1.0, tau=1e9, start=1e9)
         assert float(sfr) == 0.0
 
 
@@ -528,9 +528,9 @@ class TestAllModelsJitAndGrad:
             (norm, {"log_peak_sfr": 1.0, "peak_lbt": 5e9, "width": 2e9}),
             (lnorm, {"log_peak_sfr": 1.0, "peak_lbt": 3e9, "width": 0.5}),
             (dpl, {"alpha": 1.5, "beta": 1.0, "tau": 3e9, "log_peak_sfr": 1.0}),
-            (constant_sfh, {"log_sfr": 1.0, "start": 0.0, "end": AGEMAX_YR}),
-            (exponential_sfh, {"log_peak_sfr": 1.0, "tau": 1e9, "start": 0.0}),
-            (delayed_exponential_sfh, {"log_peak_sfr": 1.0, "tau": 1e9, "start": 0.0}),
+            (constant, {"log_sfr": 1.0, "start": 0.0, "end": AGEMAX_YR}),
+            (exponential, {"log_peak_sfr": 1.0, "tau": 1e9, "start": 0.0}),
+            (delayed_exponential, {"log_peak_sfr": 1.0, "tau": 1e9, "start": 0.0}),
         ],
     )
     def test_jit(self, fn, kwargs):
@@ -547,7 +547,7 @@ class TestAllModelsJitAndGrad:
             (tsnorm, _TSNORM_KW, "log_peak_sfr"),
             (snorm, _SNORM_KW, "log_peak_sfr"),
             (dpl, {"alpha": 1.5, "beta": 1.0, "tau": 3e9, "log_peak_sfr": 1.0}, "log_peak_sfr"),
-            (exponential_sfh, {"log_peak_sfr": 1.0, "tau": 1e9, "start": 0.0}, "log_peak_sfr"),
+            (exponential, {"log_peak_sfr": 1.0, "tau": 1e9, "start": 0.0}, "log_peak_sfr"),
         ],
     )
     def test_grad(self, fn, kwargs, grad_key):

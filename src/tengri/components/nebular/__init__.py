@@ -125,4 +125,10 @@ __all__ = [
     "shock_line_ratios",
 ]
 
+
+def __dir__() -> list[str]:
+    """Curated tab-completion list — only the names in ``__all__``."""
+    return list(__all__)
+
+
 # Convenience re-exports for `from tengri.nebular import ...`

@@ -13,9 +13,22 @@ import sys as _sys
 from dataclasses import dataclass, field
 from typing import Any
 
+from tengri.analysis.mock import MockData, generate_mock
 from tengri.citations import Citation, cite as _cite
+from tengri.inference.catalog_fitter import CatalogPosterior
+from tengri.inference.hierarchical import PopulationPosterior
+from tengri.inference.posterior import Posterior
 
-__all__ = ["FitResult", "Provenance"]
+__all__ = [
+    "CatalogPosterior",
+    "FitResult",
+    "MockData",
+    "PopulationPosterior",
+    "Posterior",
+    "Provenance",
+    "generate_mock",
+    "posteriors_to_dataframe",
+]
 
 __version_fallback__ = "0.0.0"
 
@@ -536,3 +549,68 @@ class FitResult:
                 backend=backend,
                 preset=preset,
             )
+
+
+def posteriors_to_dataframe(results: list, params: list[str] | None = None):
+    """Summarise a list of Posteriors into a pandas DataFrame.
+
+    Requires ``pandas`` (``pip install pandas``).
+
+    Parameters
+    ----------
+    results : list of Posterior
+        Output of ``model.fit_batch()`` or any list of Posterior objects.
+    params : list of str or None
+        Parameter names to include. Default: all scalar free parameters,
+        excluding ``psd_xi``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per galaxy, columns: ``{param}_median``, ``{param}_lo68``,
+        ``{param}_hi68`` for each requested parameter.
+
+    Notes
+    -----
+    **JIT-compatible**: no — pure Python, requires pandas library.
+
+    Examples
+    --------
+    >>> df = tengri.results.posteriors_to_dataframe(results, params=["met_logzsol", "dust_tau_bc"])
+    """
+    try:
+        import pandas as pd
+    except ImportError:
+        raise ImportError(
+            "posteriors_to_dataframe() requires pandas: pip install pandas"
+        ) from None
+
+    import numpy as np
+
+    rows = []
+    for result in results:
+        row: dict = {}
+
+        if result.samples is None:
+            for name, val in result.params.items():
+                if name == "psd_xi":
+                    continue
+                if params is not None and name not in params:
+                    continue
+                row[f"{name}_value"] = float(np.mean(np.array(val)))
+        else:
+            for name, arr in result.samples.items():
+                if name == "psd_xi":
+                    continue
+                if params is not None and name not in params:
+                    continue
+                arr_np = np.array(arr)
+                if arr_np.ndim != 1:
+                    continue
+                row[f"{name}_median"] = float(np.median(arr_np))
+                row[f"{name}_lo68"] = float(np.percentile(arr_np, 16))
+                row[f"{name}_hi68"] = float(np.percentile(arr_np, 84))
+
+        rows.append(row)
+
+    return pd.DataFrame(rows)

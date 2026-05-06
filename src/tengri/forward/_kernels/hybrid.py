@@ -426,6 +426,9 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             xray_gamma_hmxb=2.0,
             xray_gamma_lmxb=1.6,
             xray_E_cut=300.0,
+            dust_qhac=0.17,
+            dust_alpha_dl14=2.0,
+            dust_log_ssfr=-10.0,
         ):
             """Compute hybrid photometry for single dust component."""
             return _hybrid_phot_body(
@@ -493,6 +496,9 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                 xray_gamma_hmxb,
                 xray_gamma_lmxb,
                 xray_E_cut,
+                dust_qhac,
+                dust_alpha_dl14,
+                dust_log_ssfr,
                 tau_v=tau_v,
             )
 
@@ -564,6 +570,9 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             xray_gamma_hmxb=2.0,
             xray_gamma_lmxb=1.6,
             xray_E_cut=300.0,
+            dust_qhac=0.17,
+            dust_alpha_dl14=2.0,
+            dust_log_ssfr=-10.0,
         ):
             """Compute hybrid photometry for two-component dust."""
             return _hybrid_phot_body(
@@ -1085,6 +1094,9 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
         xray_gamma_hmxb,
         xray_gamma_lmxb,
         xray_E_cut,
+        dust_qhac=0.17,
+        dust_alpha_dl14=2.0,
+        dust_log_ssfr=-10.0,
         tau_v=0.0,
     ):
         """Hybrid kernel body: stellar (precomputed) + non-stellar (exact)."""
@@ -1213,6 +1225,37 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                         dust_ir_phot_preint = _dust_ir_lookup(
                             L_ir,
                             jnp.float64(dust_alpha_dale),
+                        )
+                    elif _dust_model_name == "astrodust":
+                        # Astrodust: (L_absorbed, dust_umin, dust_gamma_dl, dust_qpah)
+                        dust_ir_phot_preint = _dust_ir_lookup(
+                            L_ir,
+                            jnp.float64(dust_umin),
+                            jnp.float64(dust_gamma_dl),
+                            jnp.float64(dust_qpah),
+                        )
+                    elif _dust_model_name == "themis":
+                        # THEMIS: (L_absorbed, dust_umin, dust_gamma_dl, dust_qhac)
+                        dust_ir_phot_preint = _dust_ir_lookup(
+                            L_ir,
+                            jnp.float64(dust_umin),
+                            jnp.float64(dust_gamma_dl),
+                            jnp.float64(dust_qhac),
+                        )
+                    elif _dust_model_name == "draine_li2014":
+                        # DL14: (L, dust_umin, dust_gamma_dl, dust_qpah, dust_alpha_dl14)
+                        dust_ir_phot_preint = _dust_ir_lookup(
+                            L_ir,
+                            jnp.float64(dust_umin),
+                            jnp.float64(dust_gamma_dl),
+                            jnp.float64(dust_qpah),
+                            jnp.float64(dust_alpha_dl14),
+                        )
+                    elif _dust_model_name == "bosa":
+                        # BOSA: (L_absorbed, dust_log_ssfr) — log_ltir is derived
+                        dust_ir_phot_preint = _dust_ir_lookup(
+                            L_ir,
+                            jnp.float64(dust_log_ssfr),
                         )
                     else:
                         # Generic template model: (L_absorbed, *grid_params)
@@ -1567,6 +1610,14 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                         ("agn_torus_frac", 0.5),
                         ("agn_log_mbh", 7.0),
                         ("agn_log_ledd", -1.0),
+                        ("dust_alpha_mir", 2.0),
+                        ("dust_alpha_dale", 2.0),
+                        ("dust_umin", 1.0),
+                        ("dust_gamma_dl", 0.01),
+                        ("dust_qpah", 2.5),
+                        ("dust_qhac", 0.17),
+                        ("dust_alpha_dl14", 2.0),
+                        ("dust_log_ssfr", -10.0),
                     ]
                 },
             )
@@ -1594,6 +1645,14 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                     ("agn_torus_frac", 0.5),
                     ("agn_log_mbh", 7.0),
                     ("agn_log_ledd", -1.0),
+                    ("dust_alpha_mir", 2.0),
+                    ("dust_alpha_dale", 2.0),
+                    ("dust_umin", 1.0),
+                    ("dust_gamma_dl", 0.01),
+                    ("dust_qpah", 2.5),
+                    ("dust_qhac", 0.17),
+                    ("dust_alpha_dl14", 2.0),
+                    ("dust_log_ssfr", -10.0),
                 ]
             },
         )
@@ -1891,6 +1950,9 @@ def build_hybrid_photometry_ztable(state: SEDModelState, model=None):
             xray_gamma_hmxb=2.0,
             xray_gamma_lmxb=1.6,
             xray_E_cut=300.0,
+            dust_qhac=0.17,
+            dust_alpha_dl14=2.0,
+            dust_log_ssfr=-10.0,
         ):
             """Compute hybrid photometry for single dust component with redshift table."""
             return _hybrid_phot_ztable_body(
@@ -1959,6 +2021,9 @@ def build_hybrid_photometry_ztable(state: SEDModelState, model=None):
                 xray_gamma_hmxb,
                 xray_gamma_lmxb,
                 xray_E_cut,
+                dust_qhac,
+                dust_alpha_dl14,
+                dust_log_ssfr,
                 tau_v=tau_v,
             )
 
@@ -2031,6 +2096,9 @@ def build_hybrid_photometry_ztable(state: SEDModelState, model=None):
             xray_gamma_hmxb=2.0,
             xray_gamma_lmxb=1.6,
             xray_E_cut=300.0,
+            dust_qhac=0.17,
+            dust_alpha_dl14=2.0,
+            dust_log_ssfr=-10.0,
         ):
             """Compute hybrid photometry for two-component dust with redshift table."""
             return _hybrid_phot_ztable_body(
@@ -2562,6 +2630,14 @@ def build_hybrid_photometry_ztable(state: SEDModelState, model=None):
                         ("agn_torus_frac", 0.5),
                         ("agn_log_mbh", 7.0),
                         ("agn_log_ledd", -1.0),
+                        ("dust_alpha_mir", 2.0),
+                        ("dust_alpha_dale", 2.0),
+                        ("dust_umin", 1.0),
+                        ("dust_gamma_dl", 0.01),
+                        ("dust_qpah", 2.5),
+                        ("dust_qhac", 0.17),
+                        ("dust_alpha_dl14", 2.0),
+                        ("dust_log_ssfr", -10.0),
                     ]
                 },
             )

@@ -62,7 +62,10 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 # unnecessary round-trip. DL14 has no load-time normalisation and relies on
 # the precompute-time divide.
 _GENERIC_ENERGY_NORMALIZE: dict[str, bool] = {
-    "dale2014": False,
+    # ``load_dale2014_templates`` returns raw L_λ — the runtime path
+    # ``create_dale2014_from_grid`` normalises per-template at factory
+    # time. The hybrid path normalises in ``preintegrate_grid`` instead.
+    "dale2014": True,
     "draine_li2014": True,
     "astrodust": False,
     "bosa": False,
@@ -559,6 +562,12 @@ def _auto_collapse(preint: PreintegratedGrid, axis_params, parameters) -> Preint
     if parameters is None or not axis_params:
         return preint
 
+    # Parameters' fixed-prior introspection API varies across the in-flight
+    # parameter-routing refactor — prefer the canonical ``is_fixed/fixed_value``
+    # pair but degrade gracefully if a different shape is in scope.
+    if not hasattr(parameters, "is_fixed") or not hasattr(parameters, "fixed_value"):
+        return preint
+
     fixed: dict[int, float] = {}
     for i, pname in enumerate(axis_params):
         if parameters.is_fixed(pname):
@@ -792,18 +801,16 @@ def precompute_for_model(
         templates = loader(path)
         return precompute_fn(templates, filter_waves, filter_trans, redshift=redshift)
 
-    # Legacy generic template path (Dale2014). Kept for the 1D-axis Dale2014
-    # case which has a distinct npz layout.
-    _GENERIC_LOADERS: dict[str, tuple[tuple[str, ...], Any, str]] = {
-        "dale2014": (("dale2014_templates.npz",), None, "llam"),
-    }
-
-    if model_name not in _GENERIC_LOADERS:
+    # Dale2014 — single 1D-axis (alpha) grid. Supported via the generic
+    # ``precompute_template_photometry`` route (single-grid schema).
+    if model_name != "dale2014":
         return None
 
-    candidate_files, loader, units = _GENERIC_LOADERS[model_name]
-
-    # Find first available data file
+    candidate_files = (
+        "dale2014_templates.h5",
+        "dale2014_templates_v2.h5",
+        "dale2014_templates.npz",
+    )
     path = None
     for fname in candidate_files:
         candidate = _find_data_file(fname)
@@ -813,24 +820,31 @@ def precompute_for_model(
     if path is None:
         return None
 
-    # Dale2014 has a distinct npz layout; extract inline.
-    if model_name == "dale2014":
-        data = np.load(path)
-        tmpl_wave = np.array(data["wavelength_aa"])
-        alpha_grid = np.array(data["alpha_grid"])
-        templates = np.array(data["templates_sf"])
-        # Normalize shape to (n_alpha, n_wave)
-        if templates.shape[0] == len(tmpl_wave) and templates.shape[1] == len(alpha_grid):
-            templates = templates.T
-        grid, axes, wavelength = templates, (alpha_grid,), tmpl_wave
+    if str(path).endswith(".h5"):
+        import h5py as _h5py
+
+        from tengri.components.dust.emission_templates import load_dale2014_templates
+
+        data = load_dale2014_templates(path)
+        wavelength = np.asarray(data["wavelength_aa"])
+        alpha_grid = np.asarray(data["alpha_grid"])
+        grid = np.asarray(data["spectra"])
+        # h5 files may store either raw L_λ or pre-normalised L_ν —
+        # respect the ``spectra_unit`` attribute when present.
+        with _h5py.File(path, "r") as _f:
+            _unit = _f.attrs.get("spectra_unit", "")
+        units = "lnu" if "L_nu" in str(_unit) else "llam"
     else:
-        # DL14, Astrodust, BOSA, THEMIS share a dict layout from their loaders.
-        data = loader(path)
-        grid = data.get("grid", None)
-        axes = data.get("axes", None)
-        wavelength = data.get("wavelength", None)
-        if grid is None or axes is None or wavelength is None:
-            return None
+        npz = np.load(path)
+        wavelength = np.array(npz["wavelength_aa"])
+        alpha_grid = np.array(npz["alpha_grid"])
+        grid = np.array(npz["templates_sf"])
+        units = "llam"
+
+    # Normalize shape to (n_alpha, n_wave)
+    if grid.shape[0] == len(wavelength) and grid.shape[1] == len(alpha_grid):
+        grid = grid.T
+    axes = (alpha_grid,)
 
     preint = precompute_template_photometry(
         templates=grid,

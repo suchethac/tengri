@@ -1,0 +1,32 @@
+[
+  {
+    "N": 64,
+    "K": 1,
+    "method": "native_vi_linear",
+    "setup_s": 3.264278666989412,
+    "cold_run_s": 23.25955725001404,
+    "warm_run_s": 16.581839709018823,
+    "compile_proxy_s": 6.677717540995218,
+    "error": null
+  },
+  {
+    "N": 256,
+    "K": 1,
+    "method": "native_vi_linear",
+    "setup_s": 1.6527941250242293,
+    "cold_run_s": 31.67313395801466,
+    "warm_run_s": 22.935472875018604,
+    "compile_proxy_s": 8.737661082996055,
+    "error": null
+  },
+  {
+    "N": 1024,
+    "K": 1,
+    "method": "native_vi_linear",
+    "setup_s": 3.9542577920365147,
+    "cold_run_s": 51.18459904199699,
+    "warm_run_s": 41.74154483299935,
+    "compile_proxy_s": 9.443054208997637,
+    "error": null
+  }
+]

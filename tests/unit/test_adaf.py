@@ -804,7 +804,7 @@ class TestMulticolorAgn:
 
     def test_kubota_done_alias_is_same_function(self):
         """AGN_MODELS['kubota_done'] wraps the same function as multicolor_agn."""
-        from tengri.components.agn.unified import AGN_MODELS, multicolor_agn
+        from tengri.components.agn.unified import AGN_MODELS
 
         # kubota_done and multicolor_agn are registry entries; check they wrap same function
         assert AGN_MODELS["kubota_done"] is AGN_MODELS["multicolor_agn"]
