@@ -626,6 +626,175 @@ _USE_CASES = _Tutorial(
 )
 
 
+# ──────────────────────────────────────────────────────────────────
+# Recipe 11 — mock recovery (validation pattern)
+# ──────────────────────────────────────────────────────────────────
+
+
+_MOCK_RECOVERY = _Tutorial(
+    name="mock_recovery",
+    title="Mock recovery — sanity-check a model on synthetic data",
+    needs_ssp=True,
+    code=textwrap.dedent(
+        """
+        # Standard validation: sample a true point, generate noisy mock photometry,
+        # fit it back, confirm the truth lands inside the posterior.
+
+        import jax
+        import tengri
+
+        # 1. Build the model exactly as you would for a real fit
+        spec = tengri.Parameters(
+            mean_sfh_type="dpl",
+            redshift=tengri.Fixed(0.1),
+            sfh_dpl_alpha=tengri.Uniform(0.5, 3.0),
+            sfh_dpl_log_peak_sfr=tengri.Uniform(-1, 2.5),
+            dust_tau_diff=tengri.Uniform(0, 2),
+            met_logzsol=tengri.Uniform(-1.5, 0.2),
+        )
+        obs = tengri.Observation(
+            photometry=tengri.Photometry.from_names(
+                tengri.list_filters(survey="SDSS").names()
+                + tengri.list_filters(instrument="2MASS").names()
+            )
+        )
+        model = tengri.SEDModel(spec, ssp_data, observation=obs)
+
+        # 2. Generate a mock at SNR=20 — returns flux_obs, noise, params (truth)
+        mock = tengri.generate_mock(model, key=jax.random.PRNGKey(0), snr=20.0)
+        truth = mock["params"]   # the ground-truth parameter dict
+
+        # 3. Fit it back — MAP for speed, then NUTS for posterior
+        fitter = tengri.Fitter(model, data=mock["flux_obs"], noise=mock["noise"])
+        map_result = fitter.run("map", n_steps=300)
+        posterior  = fitter.run("nuts", init_from=map_result, n_warmup=500)
+
+        # 4. Check truth is inside the 68% credible interval
+        posterior.summary()
+        posterior.plot_corner(truths=truth)   # red markers = injected truth
+
+        # 5. For Paper-I-style validation: repeat with N seeds, check coverage
+        for seed in range(20):
+            mock = tengri.generate_mock(model, key=jax.random.PRNGKey(seed))
+            ...
+        """
+    ).strip(),
+)
+
+
+# ──────────────────────────────────────────────────────────────────
+# Recipe 12 — model comparison
+# ──────────────────────────────────────────────────────────────────
+
+
+_COMPARE_MODELS = _Tutorial(
+    name="compare_models",
+    title="Model comparison — same data, different physics, evidence-based ranking",
+    code=textwrap.dedent(
+        """
+        # Same data, vary one structural choice (here: AGN model).
+        # Compare via Bayesian evidence (nested sampling) or out-of-sample
+        # WAIC / LOO if you have arviz.
+
+        import tengri
+        results = {}
+
+        for agn_model in (None, "skirtor", "kubota_done_full", "cat3d_wind"):
+            spec = tengri.Parameters(
+                mean_sfh_type="dpl",
+                agn_model=agn_model,                # the only thing that changes
+                redshift=tengri.Fixed(0.1),
+                sfh_dpl_alpha=tengri.Uniform(0.5, 3.0),
+                # ... shared priors ...
+            )
+            model_i  = tengri.SEDModel(spec, ssp_data, observation=obs)
+            fitter_i = tengri.Fitter(model_i, data=fluxes, noise=errors)
+            results[agn_model] = fitter_i.run("nss")    # nested sampling → log Z
+
+        # Bayes factors via log evidence
+        import math
+        baseline = results[None].log_evidence
+        for name, post in results.items():
+            log_BF = post.log_evidence - baseline
+            print(f"  {name!r:25s}  log Z = {post.log_evidence:7.2f}  "
+                  f"ΔlogBF vs no-AGN = {log_BF:+5.2f}")
+
+        # Or via WAIC (if posterior samples available — needs arviz)
+        for name, post in results.items():
+            idata = post.to_arviz()
+            print(f"  {name!r:25s}  WAIC = {idata.waic:.2f}")
+
+        # See:
+        #   tengri.describe('skirtor')  →  param details for each candidate
+        #   tengri.list_agn_models()    →  the full menu
+        """
+    ).strip(),
+)
+
+
+# ──────────────────────────────────────────────────────────────────
+# Recipe 13 — joint photometry + spectroscopy
+# ──────────────────────────────────────────────────────────────────
+
+
+_JOINT_PHOT_SPEC = _Tutorial(
+    name="joint_phot_spec",
+    title="Joint photometry + spectroscopy fit (with calibration marginalization)",
+    needs_ssp=True,
+    code=textwrap.dedent(
+        """
+        # Combine broadband photometry with a flux-calibrated spectrum.
+        # The model fits both simultaneously; spectroscopic flux calibration
+        # uncertainty is marginalized out via Chebyshev polynomials.
+
+        import tengri
+        import jax.numpy as jnp
+
+        # 1. Photometry side (same as a phot-only fit)
+        photometry = tengri.Photometry.from_names(
+            tengri.list_filters(survey="SDSS").names()
+            + tengri.list_filters(instrument="2MASS").names()
+        )
+
+        # 2. Spectroscopy side — pass the spectral grid + LSF
+        spectroscopy = tengri.Spectroscopy(
+            wave_obs=spec_wavelengths,    # observed-frame [Angstrom]
+            R=2000.0,                      # resolving power
+            mask=valid_pixels_mask,        # bool, True = use the pixel
+        )
+
+        # 3. Bundle into one Observation
+        obs = tengri.Observation(photometry=photometry,
+                                 spectroscopy=spectroscopy)
+
+        # 4. Build the spec — emission lines marginalized analytically
+        spec = tengri.Parameters(
+            mean_sfh_type="dpl",
+            redshift=tengri.Fixed(z_observed),
+            nebular_backend="cue",        # ionization-parameter free
+            eline_marginalize=True,       # closed-form line marginalization
+        )
+        model = tengri.SEDModel(spec, ssp_data, observation=obs)
+
+        # 5. Fit — pass the *concatenated* (phot, spec) flux + noise
+        joint_flux  = jnp.concatenate([phot_fluxes, spec_fluxes])
+        joint_noise = jnp.concatenate([phot_errors, spec_errors])
+
+        fitter = tengri.Fitter(
+            model, data=joint_flux, noise=joint_noise,
+            data_type="joint",
+            calibration_marginalize=True,  # Chebyshev nuisance, Prospector-style
+            cal_n_poly=3,
+        )
+        posterior = fitter.run("nuts")
+        posterior.summary()
+        posterior.plot_sed()
+        posterior.plot_spectrum_fit()      # spectrum panel with calib polynomial
+        """
+    ).strip(),
+)
+
+
 # Master registry
 _TUTORIALS: dict[str, _Tutorial] = {
     t.name: t
@@ -634,6 +803,9 @@ _TUTORIALS: dict[str, _Tutorial] = {
         _PHILOSOPHY,
         _KEY_CLASSES,
         _USE_CASES,
+        _MOCK_RECOVERY,
+        _COMPARE_MODELS,
+        _JOINT_PHOT_SPEC,
         _REGISTER_A_MODEL,
         _REGISTER_A_COMPONENT,
         _SWAP_INFERENCE,

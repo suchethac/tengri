@@ -1820,14 +1820,24 @@ class Fitter:
                 )
             except (ImportError, FileNotFoundError, OSError, KeyError, ValueError):
                 threshold = _MCMC_AUTO_D_THRESHOLD
-            entry = get_backend("mcmc_nuts" if d <= threshold else "vi_nonlinear_fast")
+            chosen = "mcmc_nuts" if d <= threshold else "vi_nonlinear_fast"
+            print(
+                f"  [auto-pick]  D={d} (threshold {threshold}) → "
+                f"using '{chosen}'.  Pass an explicit method= to override."
+            )
+            entry = get_backend(chosen)
         elif method == "mcmc":
             # Auto-select within the MCMC family: NUTS for low-D, ray tracing for high-D.
             d = self.spec.n_free
             if d <= _MCMC_AUTO_D_THRESHOLD:
-                entry = get_backend("mcmc_nuts")
+                chosen = "mcmc_nuts"
             else:
-                entry = get_backend("mcmc_raytrace")
+                chosen = "mcmc_raytrace"
+            print(
+                f"  [mcmc auto-pick]  D={d} (threshold {_MCMC_AUTO_D_THRESHOLD}) → "
+                f"using '{chosen}'.  Pass method='mcmc_nuts' or 'mcmc_raytrace' to override."
+            )
+            entry = get_backend(chosen)
         else:
             entry = get_backend(method)
 
