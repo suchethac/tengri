@@ -221,4 +221,16 @@ class DustAttenuationSEDComponent:
         new_derived = dict(state.derived)
         new_derived["dust_attenuation_factor"] = attenuation
         new_derived["L_ir"] = l_ir
-        return state.with_(sed_attenuated=attenuated, derived=new_derived)
+        new_derived["L_absorbed"] = l_ir
+        new_derived["sed_dust_attenuated"] = attenuated
+        # Phase II-3 contract: ``state.sed_intrinsic`` carries the
+        # current cumulative SED for downstream consumers (radio /
+        # xray fall-backs, ``predict_rest_sed`` return value, etc.).
+        # Overwrite with the post-attenuation value so this component
+        # matches the two-component ``DustSEDComponent`` behaviour and
+        # the chain stays composable.
+        return state.with_(
+            sed_intrinsic=attenuated,
+            sed_attenuated=attenuated,
+            derived=new_derived,
+        )

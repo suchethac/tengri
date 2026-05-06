@@ -607,6 +607,33 @@ class StellarSEDComponent:
         # take abs to recover the positive photon rate.
         nion = jnp.abs(jnp.trapezoid(integrand_masked, nu))
 
+        # ── 11b. Project to pipeline wavelength grid (PR 5f) ────────────
+        # When the orchestrator runs on a panchromatic grid (radio/X-ray
+        # extension via ``make_panchromatic_grid``), ``state.wave`` is
+        # wider than ``ssp.ssp_wave``. Both ``sed_intrinsic`` and the
+        # per-age cube ``lnu_age`` MUST live on ``state.wave`` so
+        # downstream additive emitters (radio, X-ray) and per-age
+        # transforms (dust two-component) can broadcast. Linear interp
+        # is exact at SSP grid points (panchromatic preserves them) and
+        # zero is the physically correct extrapolation outside the SSP
+        # range — the SSP templates carry no information there.
+        #
+        # The shape comparison is Python-level (both arrays exist at
+        # trace time), so the no-extension case incurs zero JIT cost.
+        if state.wave.shape[0] != wave.shape[0]:
+            target = state.wave
+            ssp_wave_arr = wave
+            outside = (target < ssp_wave_arr[0]) | (target > ssp_wave_arr[-1])
+            sed_intrinsic_proj = jnp.where(
+                outside, 0.0, jnp.interp(target, ssp_wave_arr, sed_intrinsic)
+            )
+            from jax import vmap
+
+            lnu_age_proj = vmap(lambda row: jnp.interp(target, ssp_wave_arr, row))(lnu_age)
+            lnu_age_proj = jnp.where(outside[None, :], 0.0, lnu_age_proj)
+            sed_intrinsic = sed_intrinsic_proj
+            lnu_age = lnu_age_proj
+
         # ── 12. Assemble new state ──────────────────────────────────────
         new_derived = dict(state.derived)
         new_derived.update(

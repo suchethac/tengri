@@ -566,12 +566,15 @@ class TestEnergyBalanceEndToEnd:
         the MBB approximation.
         """
         params = {"dust_T": 30.0, "dust_beta_ir": 1.8}
-        result = energy_model._compute_sed_components(params)
+        state = energy_model.predict_via_orchestrator(params)
+        derived = state.derived
 
-        wave = np.asarray(result["rest_wavelength"])
-        sed_intrinsic = np.asarray(result["sed_intrinsic"])
-        sed_attenuated = np.asarray(result["sed_attenuated"])
-        sed_total = np.asarray(result["sed_total"])
+        wave = np.asarray(state.wave)
+        # Pre-dust stellar SED reconstructed from the per-age cube the
+        # stellar adapter publishes (sums to sed_intrinsic by construction).
+        sed_intrinsic = np.asarray(np.sum(np.asarray(derived["lnu_age"]), axis=0))
+        sed_attenuated = np.asarray(derived["sed_dust_attenuated"])
+        sed_total = np.asarray(state.sed_intrinsic)
 
         nu = _C_AA / wave
 

@@ -61,7 +61,6 @@ from tengri.forward._kernels import (
     observe_spectrum_from_rest_sed,
 )
 from tengri.forward.pipeline import (
-    compute_sed_components,
     get_agn_kwargs,
     get_dust_kwargs,
     interp_metallicity,
@@ -1632,17 +1631,6 @@ class SEDModel:
             sfr_full = sfr_mean
 
         return sfr_mean, sfr_full
-
-    def _compute_sed_components(
-        self, params, _sfr=None, _weights=None, need_intrinsic=False, rest_wavelength=None
-    ):
-        """Compute all SED intermediates.
-
-        Delegates to :func:`tengri._sed_pipeline.compute_sed_components`.
-        """
-        return compute_sed_components(
-            self, params, _sfr, _weights, need_intrinsic, rest_wavelength=rest_wavelength
-        )
 
     def _get_dust_kwargs(self, p):
         """Extract dust law + emission kwargs from internal params dict."""
@@ -3240,7 +3228,16 @@ class SEDModel:
         from tengri.forward import build_components, run_components
 
         chain = self._build_component_chain()
-        wave = self.ssp_data.ssp_wave
+        # Initialise the chain on the panchromatic-extended grid when
+        # radio/xray is configured. RadioSEDComponent / XRaySEDComponent
+        # populate ``state.derived["sed_radio"]`` / ``["sed_xray"]``
+        # over the full ``state.wave`` range; downstream consumers
+        # (``predict_rest_sed.wavelength`` for the panchromatic SED,
+        # FIR–radio q ratio, X-ray luminosity diagnostics) need pixels
+        # below ~10 Å and above ~1e7 Å. Without the extension the
+        # chain runs on the SSP grid only (typically 91–100000 Å) and
+        # the multiwavelength contributions are confined to that range.
+        wave = self._rest_wavelength
         state0 = PipelineState(wave=wave, sed_observed=jnp.ones_like(wave))
         del build_components  # silence unused-import warning; used in helper
 
@@ -3303,6 +3300,7 @@ class SEDModel:
             dust_law_diff=getattr(self, "_dust_law_diff", "power_law"),
             dust_emission_model=getattr(self, "_dust_emission_model", None),
             use_dust=(getattr(self, "_dust_model", "two_component") != "off"),
+            dust_model=getattr(self, "_dust_model", "two_component"),
             use_radio=bool(getattr(self, "_uses_radio", False)),
             use_xray=bool(getattr(self, "_uses_xray", False)),
             use_igm=bool(getattr(self, "_uses_igm", False)),

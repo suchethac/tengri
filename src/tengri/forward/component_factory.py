@@ -36,6 +36,10 @@ from typing import Any, NamedTuple
 import jax.numpy as jnp
 
 from tengri.components.agn.component import AGNSEDComponent, AGNSEDComponentConfig
+from tengri.components.dust.component import (
+    DustAttenuationSEDComponent,
+    DustAttenuationSEDComponentConfig,
+)
 from tengri.components.dust.two_component import (
     DustSEDComponent,
     DustSEDComponentConfig,
@@ -143,6 +147,10 @@ def build_components(
     dust_law_diff: str = "power_law",
     dust_emission_model: str = "modified_blackbody",
     use_dust: bool = True,
+    # Single-component dust (Calzetti-style screen). Picks
+    # ``DustAttenuationSEDComponent`` instead of the two-component
+    # ``DustSEDComponent``. ``dust_law_diff`` is reused as the screen law.
+    dust_model: str = "two_component",
     # Multiwavelength
     use_radio: bool = False,
     use_xray: bool = False,
@@ -248,17 +256,29 @@ def build_components(
     if agn_model is not None:
         components.append(AGNSEDComponent(config=AGNSEDComponentConfig(model=agn_model)))
 
-    # 4. Dust (optional)
+    # 4. Dust (optional). Two-component (Charlot & Fall 2000) is the
+    # default; ``dust_model="single_component"`` picks the simpler
+    # screen attenuation adapter (no birth-cloud / diffuse split,
+    # parameterised by ``dust_tau_v`` instead of
+    # ``dust_tau_bc``+``dust_tau_diff``). The screen law mirrors
+    # ``dust_law_diff``.
     if use_dust:
-        components.append(
-            DustSEDComponent(
-                config=DustSEDComponentConfig(
-                    law_bc=dust_law_bc,
-                    law_diff=dust_law_diff,
-                    emission_model=dust_emission_model,
+        if dust_model == "single_component":
+            components.append(
+                DustAttenuationSEDComponent(
+                    config=DustAttenuationSEDComponentConfig(law=dust_law_diff)
                 )
             )
-        )
+        else:
+            components.append(
+                DustSEDComponent(
+                    config=DustSEDComponentConfig(
+                        law_bc=dust_law_bc,
+                        law_diff=dust_law_diff,
+                        emission_model=dust_emission_model,
+                    )
+                )
+            )
 
     # 5-7. Multiwavelength + IGM (each optional)
     if use_radio:
