@@ -52,6 +52,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "enable_persistent_cache",
         "is_cache_enabled",
         # ── Top-level convenience verbs ─────────────────────────────
+        "cite_components",
         "doctor",
         "register_component",
         "search",

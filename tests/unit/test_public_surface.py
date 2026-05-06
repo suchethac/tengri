@@ -70,6 +70,7 @@ EXPECTED_ALL = frozenset(
         "tutorial",
         # Runtime verbs
         "cache_size_bytes",
+        "cite_components",
         "clear_cache",
         "doctor",
         "enable_persistent_cache",
