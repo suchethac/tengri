@@ -444,41 +444,17 @@ _DUST_EMISSION_PARAMS = {
         "must be >= 0",
         Fixed(1.0),
     ),
-    "dust_T_hot": (
-        "Hot MIR grain temperature (K) for MAGPHYS (da Cunha+2008; default 250K)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(250.0),
-    ),
     "dust_T_warm": (
-        "Warm birth-cloud grain temperature (K) for MAGPHYS (30-60K)",
+        "Warm birth-cloud grain temperature (K) — used by the two-temperature emission model (30-60K)",
         lambda lo, hi: lo > 0,
         "must be > 0",
         Fixed(45.0),
     ),
     "dust_T_cold": (
-        "Cold ISM grain temperature (K) for MAGPHYS (15-25K)",
+        "Cold ISM grain temperature (K) — used by the two-temperature emission model (15-25K)",
         lambda lo, hi: lo > 0,
         "must be > 0",
         Fixed(20.0),
-    ),
-    "dust_xi_pah": (
-        "MAGPHYS PAH fractional luminosity (da Cunha+2008: 0-0.5)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.06),
-    ),
-    "dust_xi_mir": (
-        "MAGPHYS hot MIR fractional luminosity (da Cunha+2008: 0-0.3)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.07),
-    ),
-    "dust_xi_warm": (
-        "MAGPHYS warm dust fractional luminosity (da Cunha+2008: 0-0.5)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.25),
     ),
     "dust_qhac": (
         "THEMIS small hydrocarbon grain fraction (Jones+2017, 0-15%)",

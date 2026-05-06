@@ -145,14 +145,14 @@ class TestAstrodustHybridVsExact:
             phot_exact = _filter_integrate(np.asarray(wave), sed_exact, fw, ft)
             nz = phot_exact > 0
             rel = np.abs(phot_hybrid[nz] - phot_exact[nz]) / np.abs(phot_exact[nz])
-            # 5% threshold: precompute uses C²-continuous triweight interpolation
-            # vs the exact runtime's bilinear/trilinear, so even at grid nodes there
-            # is a small smoothing offset. CMB contrast (applied in exact, omitted in
-            # precompute) adds a sub-percent FIR contribution. Per-band errors at
-            # mid-IR (MIPS24, WISE w4) are <1%; the worst residuals sit around steep
-            # PAH/silicate features at WISE w1-w3 and IRAC bands.
-            assert rel.max() < 0.05, (
-                f"Astrodust hybrid err {rel.max() * 100:.2f}% exceeds 2% "
+            # 0.5% threshold: bespoke lookups use linear interpolation that
+            # matches the exact runtime exactly (linear in both paths commutes
+            # under filter integration). Residuals come only from CMB contrast
+            # (applied in exact, omitted in precompute) and float roundoff —
+            # both sub-0.1% across MIR-FIR.
+
+            assert rel.max() < 0.005, (
+                f"Astrodust hybrid err {rel.max() * 100:.2f}% exceeds 0.5% "
                 f"at (L={L_abs:g}, umin={umin}, gamma={gamma}, qpah={qpah})"
             )
 
@@ -198,13 +198,13 @@ class TestTHEMISHybridVsExact:
             phot_exact = _filter_integrate(np.asarray(wave), sed_exact, fw, ft)
             nz = phot_exact > 0
             rel = np.abs(phot_hybrid[nz] - phot_exact[nz]) / np.abs(phot_exact[nz])
-            # 5% threshold: precompute uses C²-continuous triweight interpolation
-            # vs the exact runtime's bilinear/trilinear, so even at grid nodes there
-            # is a small smoothing offset. CMB contrast (applied in exact, omitted in
-            # precompute) adds a sub-percent FIR contribution. Per-band errors at
-            # mid-IR (MIPS24, WISE w4) are <1%; the worst residuals sit around steep
-            # PAH/silicate features at WISE w1-w3 and IRAC bands.
-            assert rel.max() < 0.05, f"THEMIS hybrid err {rel.max() * 100:.2f}% exceeds 2%"
+            # 0.5% threshold: bespoke lookups use linear interpolation that
+            # matches the exact runtime exactly (linear in both paths commutes
+            # under filter integration). Residuals come only from CMB contrast
+            # (applied in exact, omitted in precompute) and float roundoff —
+            # both sub-0.1% across MIR-FIR.
+
+            assert rel.max() < 0.005, f"THEMIS hybrid err {rel.max() * 100:.2f}% exceeds 0.5%"
 
 
 # ── DL14 ──────────────────────────────────────────────────────────
@@ -249,13 +249,13 @@ class TestDL14HybridVsExact:
             phot_exact = _filter_integrate(np.asarray(wave), sed_exact, fw, ft)
             nz = phot_exact > 0
             rel = np.abs(phot_hybrid[nz] - phot_exact[nz]) / np.abs(phot_exact[nz])
-            # 5% threshold: precompute uses C²-continuous triweight interpolation
-            # vs the exact runtime's bilinear/trilinear, so even at grid nodes there
-            # is a small smoothing offset. CMB contrast (applied in exact, omitted in
-            # precompute) adds a sub-percent FIR contribution. Per-band errors at
-            # mid-IR (MIPS24, WISE w4) are <1%; the worst residuals sit around steep
-            # PAH/silicate features at WISE w1-w3 and IRAC bands.
-            assert rel.max() < 0.05, f"DL14 hybrid err {rel.max() * 100:.2f}% exceeds 2%"
+            # 0.5% threshold: bespoke lookups use linear interpolation that
+            # matches the exact runtime exactly (linear in both paths commutes
+            # under filter integration). Residuals come only from CMB contrast
+            # (applied in exact, omitted in precompute) and float roundoff —
+            # both sub-0.1% across MIR-FIR.
+
+            assert rel.max() < 0.005, f"DL14 hybrid err {rel.max() * 100:.2f}% exceeds 0.5%"
 
 
 # ── BOSA ──────────────────────────────────────────────────────────
@@ -294,14 +294,14 @@ class TestBOSAHybridVsExact:
             phot_exact = _filter_integrate(np.asarray(wave), sed_exact, fw, ft)
             nz = phot_exact > 0
             rel = np.abs(phot_hybrid[nz] - phot_exact[nz]) / np.abs(phot_exact[nz])
-            # 5% threshold: precompute uses C²-continuous triweight interpolation
-            # vs the exact runtime's bilinear/trilinear, so even at grid nodes there
-            # is a small smoothing offset. CMB contrast (applied in exact, omitted in
-            # precompute) adds a sub-percent FIR contribution. Per-band errors at
-            # mid-IR (MIPS24, WISE w4) are <1%; the worst residuals sit around steep
-            # PAH/silicate features at WISE w1-w3 and IRAC bands.
-            assert rel.max() < 0.05, (
-                f"BOSA hybrid err {rel.max() * 100:.2f}% exceeds 2% "
+            # 0.5% threshold: bespoke lookups use linear interpolation that
+            # matches the exact runtime exactly (linear in both paths commutes
+            # under filter integration). Residuals come only from CMB contrast
+            # (applied in exact, omitted in precompute) and float roundoff —
+            # both sub-0.1% across MIR-FIR.
+
+            assert rel.max() < 0.005, (
+                f"BOSA hybrid err {rel.max() * 100:.2f}% exceeds 0.5% "
                 f"at (L={L_abs:g}, log_ssfr={log_ssfr})"
             )
 
@@ -344,7 +344,7 @@ class TestDale2014HybridVsExact:
             phot_exact = _filter_integrate(np.asarray(wave), sed_exact, fw, ft)
             nz = phot_exact > 0
             rel = np.abs(phot_hybrid[nz] - phot_exact[nz]) / np.abs(phot_exact[nz])
-            assert rel.max() < 0.05, (
-                f"Dale2014 hybrid err {rel.max() * 100:.2f}% exceeds 5% "
+            assert rel.max() < 0.005, (
+                f"Dale2014 hybrid err {rel.max() * 100:.2f}% exceeds 0.5% "
                 f"at (L={L_abs:g}, alpha={alpha})"
             )

@@ -308,19 +308,36 @@ def _precompute_dl07_like_photometry(
 def _build_dl07_like_lookup(precomp: dict):
     """Shared JIT lookup for DL07-shape models. Signature matches DL07:
     ``(L_absorbed, dust_umin, dust_gamma_dl, dust_q)``.
+
+    Uses bilinear interpolation in (q, umin) space to match the exact
+    runtime's interpolation scheme byte-for-byte (see
+    ``components/dust/emission_templates.py``::``_bilinear``). Triweight
+    smoothing was a 4-5% mismatch source vs the exact path.
     """
     single_u_phot = precomp["single_u_phot"]
     powerlaw_phot = precomp["powerlaw_phot"]
     umin_grid = jnp.asarray(precomp["umin_grid"])
     q_grid = jnp.asarray(precomp["q_grid"])
-    axes = (q_grid, umin_grid)
-    edges = tuple(edges_for_grid(ax) for ax in axes)
 
     @jax.jit
     def phot_fn(L_absorbed, dust_umin, dust_gamma_dl, dust_q):
-        point = (dust_q, dust_umin)
-        single = interp_nd_triweight(single_u_phot, axes, edges, point)
-        power = interp_nd_triweight(powerlaw_phot, axes, edges, point)
+        umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
+        q_c = jnp.clip(dust_q, q_grid[0], q_grid[-1])
+        i_u = jnp.clip(jnp.searchsorted(umin_grid, umin_c) - 1, 0, len(umin_grid) - 2)
+        i_q = jnp.clip(jnp.searchsorted(q_grid, q_c) - 1, 0, len(q_grid) - 2)
+        fu = (umin_c - umin_grid[i_u]) / (umin_grid[i_u + 1] - umin_grid[i_u])
+        fq = (q_c - q_grid[i_q]) / (q_grid[i_q + 1] - q_grid[i_q])
+
+        def _bilinear(grid):
+            return (
+                (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
+                + (1.0 - fq) * fu * grid[i_q, i_u + 1]
+                + fq * (1.0 - fu) * grid[i_q + 1, i_u]
+                + fq * fu * grid[i_q + 1, i_u + 1]
+            )
+
+        single = _bilinear(single_u_phot)
+        power = _bilinear(powerlaw_phot)
         return L_absorbed * ((1.0 - dust_gamma_dl) * single + dust_gamma_dl * power)
 
     return phot_fn
@@ -451,19 +468,39 @@ def build_dl14_photometry_lookup(precomp: dict):
     qpah_grid = jnp.asarray(precomp["qpah_grid"])
     alpha_grid = jnp.asarray(precomp["alpha_grid"])
 
-    single_axes = (qpah_grid, umin_grid)
-    single_edges = tuple(edges_for_grid(ax) for ax in single_axes)
-    pl_axes = (qpah_grid, umin_grid, alpha_grid)
-    pl_edges = tuple(edges_for_grid(ax) for ax in pl_axes)
-
     @jax.jit
     def phot_fn(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah, dust_alpha_dl14):
-        single = interp_nd_triweight(
-            single_u_phot, single_axes, single_edges, (dust_qpah, dust_umin)
-        )
-        power = interp_nd_triweight(
-            powerlaw_phot, pl_axes, pl_edges, (dust_qpah, dust_umin, dust_alpha_dl14)
-        )
+        umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
+        q_c = jnp.clip(dust_qpah, qpah_grid[0], qpah_grid[-1])
+        a_c = jnp.clip(dust_alpha_dl14, alpha_grid[0], alpha_grid[-1])
+        i_u = jnp.clip(jnp.searchsorted(umin_grid, umin_c) - 1, 0, len(umin_grid) - 2)
+        i_q = jnp.clip(jnp.searchsorted(qpah_grid, q_c) - 1, 0, len(qpah_grid) - 2)
+        i_a = jnp.clip(jnp.searchsorted(alpha_grid, a_c) - 1, 0, len(alpha_grid) - 2)
+        fu = (umin_c - umin_grid[i_u]) / (umin_grid[i_u + 1] - umin_grid[i_u])
+        fq = (q_c - qpah_grid[i_q]) / (qpah_grid[i_q + 1] - qpah_grid[i_q])
+        fa = (a_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
+
+        def _bilin(grid):
+            return (
+                (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
+                + (1.0 - fq) * fu * grid[i_q, i_u + 1]
+                + fq * (1.0 - fu) * grid[i_q + 1, i_u]
+                + fq * fu * grid[i_q + 1, i_u + 1]
+            )
+
+        def _trilin(grid):
+            def _bilin_a(ia):
+                return (
+                    (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u, ia]
+                    + (1.0 - fq) * fu * grid[i_q, i_u + 1, ia]
+                    + fq * (1.0 - fu) * grid[i_q + 1, i_u, ia]
+                    + fq * fu * grid[i_q + 1, i_u + 1, ia]
+                )
+
+            return (1.0 - fa) * _bilin_a(i_a) + fa * _bilin_a(i_a + 1)
+
+        single = _bilin(single_u_phot)
+        power = _trilin(powerlaw_phot)
         return L_absorbed * ((1.0 - dust_gamma_dl) * single + dust_gamma_dl * power)
 
     return phot_fn
@@ -517,14 +554,74 @@ def build_bosa_photometry_lookup(precomp: dict):
     phot = precomp["phot"]
     log_ltir_grid = jnp.asarray(precomp["log_ltir_grid"])
     log_ssfr_grid = jnp.asarray(precomp["log_ssfr_grid"])
-    axes = (log_ltir_grid, log_ssfr_grid)
-    edges = tuple(edges_for_grid(ax) for ax in axes)
 
     @jax.jit
     def phot_fn(L_absorbed, dust_log_ssfr):
         log_ltir = jnp.log10(jnp.maximum(L_absorbed, 1.0e-30))
-        point = (log_ltir, dust_log_ssfr)
-        shape_phot = interp_nd_triweight(phot, axes, edges, point)
+        l_c = jnp.clip(log_ltir, log_ltir_grid[0], log_ltir_grid[-1])
+        s_c = jnp.clip(dust_log_ssfr, log_ssfr_grid[0], log_ssfr_grid[-1])
+        i_l = jnp.clip(jnp.searchsorted(log_ltir_grid, l_c) - 1, 0, len(log_ltir_grid) - 2)
+        i_s = jnp.clip(jnp.searchsorted(log_ssfr_grid, s_c) - 1, 0, len(log_ssfr_grid) - 2)
+        fl = (l_c - log_ltir_grid[i_l]) / (log_ltir_grid[i_l + 1] - log_ltir_grid[i_l])
+        fs = (s_c - log_ssfr_grid[i_s]) / (log_ssfr_grid[i_s + 1] - log_ssfr_grid[i_s])
+        shape_phot = (
+            (1.0 - fl) * (1.0 - fs) * phot[i_l, i_s]
+            + (1.0 - fl) * fs * phot[i_l, i_s + 1]
+            + fl * (1.0 - fs) * phot[i_l + 1, i_s]
+            + fl * fs * phot[i_l + 1, i_s + 1]
+        )
+        return L_absorbed * shape_phot
+
+    return phot_fn
+
+
+# ── Dale 2014: single-grid (alpha) — linear interpolation matching exact ─
+
+
+def precompute_dale2014_photometry(
+    templates: dict,
+    filter_waves: list[jnp.ndarray],
+    filter_trans: list[jnp.ndarray],
+    redshift: float = 0.0,
+) -> dict:
+    """Pre-integrate Dale+2014 templates through filter curves.
+
+    Dale templates are L_ν, pre-normalised at load (∫L_ν dν=1) per the h5
+    ``spectra_unit`` attribute. Free param at runtime is ``dust_alpha_dale``.
+    """
+    spectra = np.asarray(templates["spectra"])  # (n_alpha, n_wave)
+    tmpl_wave = np.asarray(templates["wavelength_aa"])
+    alpha_grid = np.asarray(templates["alpha_grid"])
+
+    preint = preintegrate_grid(
+        templates=spectra,
+        wave_rest=tmpl_wave,
+        filter_waves=[np.asarray(fw) for fw in filter_waves],
+        filter_trans=[np.asarray(ft) for ft in filter_trans],
+        redshift=redshift,
+        dl_cm=1.0,
+        axes=(alpha_grid,),
+        energy_normalize=True,
+    )
+    return {"phot": preint.phot, "alpha_grid": alpha_grid}
+
+
+def build_dale2014_photometry_lookup(precomp: dict):
+    """Build JIT-compiled Dale 2014 photometry lookup with linear-in-alpha
+    interpolation matching the exact runtime path
+    (``emission_templates.py``::``dale2014_tabulated``).
+
+    Signature: ``(L_absorbed, dust_alpha_dale)``.
+    """
+    phot = precomp["phot"]
+    alpha_grid = jnp.asarray(precomp["alpha_grid"])
+
+    @jax.jit
+    def phot_fn(L_absorbed, dust_alpha_dale):
+        a_c = jnp.clip(dust_alpha_dale, alpha_grid[0], alpha_grid[-1])
+        i_a = jnp.clip(jnp.searchsorted(alpha_grid, a_c) - 1, 0, len(alpha_grid) - 2)
+        fa = (a_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
+        shape_phot = (1.0 - fa) * phot[i_a] + fa * phot[i_a + 1]
         return L_absorbed * shape_phot
 
     return phot_fn
@@ -691,6 +788,8 @@ def build_lookup(preint, *, model_name: str):
         return build_dl14_photometry_lookup(preint)
     if model_name == "bosa":
         return build_bosa_photometry_lookup(preint)
+    if model_name == "dale2014":
+        return build_dale2014_photometry_lookup(preint)
     return build_template_photometry_lookup(preint)
 
 
@@ -766,6 +865,8 @@ def precompute_for_model(
     # dedicated precompute path. They use their own loader (not the generic
     # ``precompute_template_photometry`` route, which assumes a single-grid
     # ``{grid, axes, wavelength}`` schema that none of these loaders return).
+    from tengri.components.dust.emission_templates import load_dale2014_templates
+
     _BESPOKE_LOADERS: dict[str, tuple[tuple[str, ...], Any, Any]] = {
         "draine_li2014": (
             ("dl14_templates_v2.h5", "dl14_templates.h5"),
@@ -787,6 +888,11 @@ def precompute_for_model(
             load_bosa_templates,
             precompute_bosa_photometry,
         ),
+        "dale2014": (
+            ("dale2014_templates.h5", "dale2014_templates_v2.h5"),
+            load_dale2014_templates,
+            precompute_dale2014_photometry,
+        ),
     }
     if model_name in _BESPOKE_LOADERS:
         candidate_files, loader, precompute_fn = _BESPOKE_LOADERS[model_name]
@@ -801,60 +907,4 @@ def precompute_for_model(
         templates = loader(path)
         return precompute_fn(templates, filter_waves, filter_trans, redshift=redshift)
 
-    # Dale2014 — single 1D-axis (alpha) grid. Supported via the generic
-    # ``precompute_template_photometry`` route (single-grid schema).
-    if model_name != "dale2014":
-        return None
-
-    candidate_files = (
-        "dale2014_templates.h5",
-        "dale2014_templates_v2.h5",
-        "dale2014_templates.npz",
-    )
-    path = None
-    for fname in candidate_files:
-        candidate = _find_data_file(fname)
-        if candidate is not None:
-            path = candidate
-            break
-    if path is None:
-        return None
-
-    if str(path).endswith(".h5"):
-        import h5py as _h5py
-
-        from tengri.components.dust.emission_templates import load_dale2014_templates
-
-        data = load_dale2014_templates(path)
-        wavelength = np.asarray(data["wavelength_aa"])
-        alpha_grid = np.asarray(data["alpha_grid"])
-        grid = np.asarray(data["spectra"])
-        # h5 files may store either raw L_λ or pre-normalised L_ν —
-        # respect the ``spectra_unit`` attribute when present.
-        with _h5py.File(path, "r") as _f:
-            _unit = _f.attrs.get("spectra_unit", "")
-        units = "lnu" if "L_nu" in str(_unit) else "llam"
-    else:
-        npz = np.load(path)
-        wavelength = np.array(npz["wavelength_aa"])
-        alpha_grid = np.array(npz["alpha_grid"])
-        grid = np.array(npz["templates_sf"])
-        units = "llam"
-
-    # Normalize shape to (n_alpha, n_wave)
-    if grid.shape[0] == len(wavelength) and grid.shape[1] == len(alpha_grid):
-        grid = grid.T
-    axes = (alpha_grid,)
-
-    preint = precompute_template_photometry(
-        templates=grid,
-        wave_rest=wavelength,
-        filter_waves=filter_waves,
-        filter_trans=filter_trans,
-        axes=axes,
-        redshift=0.0,  # both use rest-frame templates
-        dl_cm=1.0,
-        energy_normalize=_GENERIC_ENERGY_NORMALIZE.get(model_name, True),
-        units=units,
-    )
-    return _auto_collapse(preint, AXIS_PARAMS.get(model_name, ()), parameters)
+    return None
