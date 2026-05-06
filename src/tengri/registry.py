@@ -34,21 +34,26 @@ class _RegistryTable(list):
     JSON serialisation, etc. all work as usual.
     """
 
-    _PREFERRED_COLS = ("name", "tier", "status", "citation", "short_doc")
-    _HIDDEN_COLS = (
-        "kind",
-        "module",
-        "requires",
-        "params",
-    )  # too long for table; surfaced via describe()
+    _PREFERRED_COLS = ("name", "kind", "tier", "status", "citation", "short_doc")
+    _ALWAYS_HIDDEN = ("module", "requires", "params")  # surfaced via describe()
+
+    def _columns(self) -> list[str]:
+        """Decide which columns to render. ``kind`` is shown only when results
+        span more than one kind (e.g. cross-menu search) so single-menu tables
+        stay narrow."""
+        kinds = {d.get("kind") for d in self}
+        hidden = set(self._ALWAYS_HIDDEN)
+        if len(kinds) <= 1:
+            hidden.add("kind")
+        all_keys = list(self[0].keys())
+        cols = [k for k in self._PREFERRED_COLS if k in all_keys and k not in hidden]
+        cols += [k for k in all_keys if k not in cols and k not in hidden]
+        return cols
 
     def __repr__(self) -> str:
         if not self:
             return "(empty)"
-        # Column order: preferred fields first, then any extras.
-        all_keys = list(self[0].keys())
-        cols = [k for k in self._PREFERRED_COLS if k in all_keys]
-        cols += [k for k in all_keys if k not in cols and k not in self._HIDDEN_COLS]
+        cols = self._columns()
 
         # Truncate very long fields for readability.
         def _cell(v: Any) -> str:
@@ -71,9 +76,7 @@ class _RegistryTable(list):
         """Jupyter HTML repr — renders as a real HTML table in notebooks."""
         if not self:
             return "<i>(empty)</i>"
-        all_keys = list(self[0].keys())
-        cols = [k for k in self._PREFERRED_COLS if k in all_keys]
-        cols += [k for k in all_keys if k not in cols and k not in self._HIDDEN_COLS]
+        cols = self._columns()
         head = "".join(f"<th style='text-align:left'>{k}</th>" for k in cols)
         body = "".join(
             "<tr>"

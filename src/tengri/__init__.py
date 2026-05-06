@@ -296,7 +296,6 @@ __all__ = [
     "list_inference_methods",
     "list_nebular_backends",
     "list_sfh_models",
-    "search",
     "nebular",
     "observation",
     "pipeline",
@@ -306,6 +305,7 @@ __all__ = [
     "radio",
     "register_component",
     "results",
+    "search",
     "sfh",
     "sps",
     "stellar",
@@ -372,7 +372,17 @@ def __getattr__(name: str):
             old_name=f"tengri.{name}",
             new_name=f"{module_path}.{attr}",
         )
-    raise AttributeError(f"module 'tengri' has no attribute {name!r}")
+    # Set ``name`` and ``obj`` so Python's built-in "Did you mean: …"
+    # suggestion (PEP 657, fired when formatting the traceback) kicks in
+    # against the curated ``__dir__``. Without these attributes a custom
+    # __getattr__ swallows the suggestion mechanism.
+    import sys as _sys
+
+    raise AttributeError(
+        f"module 'tengri' has no attribute {name!r}",
+        name=name,
+        obj=_sys.modules[__name__],
+    )
 
 
 # Plotting utilities
