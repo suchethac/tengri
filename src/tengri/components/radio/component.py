@@ -190,5 +190,5 @@ class RadioSEDComponent:
             new_sed = state.sed_intrinsic + L_radio
 
         new_derived = dict(state.derived)
-        new_derived["L_radio"] = L_radio
+        new_derived["sed_radio"] = L_radio
         return state.with_(sed_intrinsic=new_sed, derived=new_derived)

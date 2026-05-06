@@ -206,16 +206,71 @@ def _load_relagn_fn():
 
 # ── AGN model registry ────────────────────────────────────────────
 
+
+class AGNRegistryEntry:
+    """Registry entry for an AGN model with optional metadata.
+
+    Attributes
+    ----------
+    callable : Callable
+        The AGN model function.
+    citation : str
+        Optional academic citation. Default empty string.
+    status : str
+        Model status: "production", "experimental", "demo", or "deprecated".
+        Default "production".
+    short_doc : str
+        Optional one-line description. Default empty string.
+
+    Notes
+    -----
+    **JIT-compatible**: no — class for registry initialization.
+    """
+
+    def __init__(
+        self,
+        callable: Callable,
+        citation: str = "",
+        status: str = "production",
+        short_doc: str = "",
+    ) -> None:
+        self.callable = callable
+        self.citation = citation
+        self.status = status
+        self.short_doc = short_doc
+
+    def __call__(self, *args, **kwargs):
+        """Forward calls to the wrapped callable."""
+        return self.callable(*args, **kwargs)
+
+    def __getattr__(self, name: str):
+        """Forward attribute access to wrapped callable."""
+        return getattr(self.callable, name)
+
+
 AGN_MODELS: dict[str, Callable] = {}
 
 
-def register_agn_model(name: str) -> Callable:
+def register_agn_model(
+    name: str,
+    *,
+    citation: str = "",
+    status: str = "production",
+    short_doc: str = "",
+) -> Callable:
     """Register an AGN model function (decorator factory).
 
     Parameters
     ----------
     name : str
         Unique model name for the registry.
+    citation : str, optional
+        Academic citation for the model. Default empty string.
+    status : str, optional
+        Model status ("production", "experimental", "demo", "deprecated").
+        Default "production".
+    short_doc : str, optional
+        One-line description. Default empty string.
 
     Returns
     -------
@@ -228,11 +283,20 @@ def register_agn_model(name: str) -> Callable:
 
     The registered function must have signature:
         fn(wavelength, agn_log_lbol, **kwargs) -> L_nu [erg/s/Hz]
+
+    Metadata is stored in an AGNRegistryEntry for introspection via the
+    registry.list_agn_models() façade.
     """
 
     def decorator(fn: Callable) -> Callable:
         """Inner decorator that registers function in AGN_MODELS dict."""
-        AGN_MODELS[name] = fn
+        entry = AGNRegistryEntry(
+            callable=fn,
+            citation=citation,
+            status=status,
+            short_doc=short_doc,
+        )
+        AGN_MODELS[name] = entry
         return fn
 
     return decorator

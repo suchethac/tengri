@@ -315,9 +315,10 @@ class NebularSEDComponent:
         Returns
         -------
         PipelineState
-            New state with ``derived["nebular_backend"]`` published and
-            (for non-BakedIn backends) ``sed_intrinsic`` updated to
-            include nebular emission.
+            New state with ``derived["sed_nebular"]`` and
+            ``derived["sed_shock"]`` always populated (zeros for the
+            non-active branch), and (for non-BakedIn backends)
+            ``sed_intrinsic`` updated to include the active emission.
         """
         # NOTE: do not publish ``self.config.backend`` (a Python string)
         # to ``state.derived`` — strings are not JAX leaves and break
@@ -325,7 +326,18 @@ class NebularSEDComponent:
         # ``self.config.backend`` (eager-time inspection only).
         new_derived = dict(state.derived)
 
+        # Always publish both ``sed_nebular`` and ``sed_shock`` so
+        # downstream consumers (e.g. ``Posterior.sed_components``) can
+        # read them uniformly without conditioning on the active backend.
+        # Photoionised backends fill ``sed_nebular`` and leave
+        # ``sed_shock`` as zeros; the shock backend does the opposite.
+        # ``baked_in`` returns zeros for both because emission is already
+        # in the SSP grid.
+        zeros = jnp.zeros_like(state.wave)
+
         if self.config.backend == "baked_in":
+            new_derived["sed_nebular"] = zeros
+            new_derived["sed_shock"] = zeros
             return state.with_(derived=new_derived)
 
         # Stellar metallicity (absolute log10(Z)) for downstream backends.
@@ -354,7 +366,12 @@ class NebularSEDComponent:
             new_sed = (
                 nebular_sed if state.sed_intrinsic is None else state.sed_intrinsic + nebular_sed
             )
-            new_derived["sed_nebular"] = nebular_sed
+            # Shock backend: shock contribution is logically separate
+            # from photoionised continuum. Publish under ``sed_shock``
+            # and zero out ``sed_nebular`` so the legacy Posterior dict
+            # decomposition matches: photoionised vs shock are distinct.
+            new_derived["sed_shock"] = nebular_sed
+            new_derived["sed_nebular"] = zeros
             return state.with_(sed_intrinsic=new_sed, derived=new_derived)
 
         # ── Photoionisation backends (Cue + CloudyGrid) ───────────────
@@ -446,5 +463,8 @@ class NebularSEDComponent:
         else:
             new_sed = state.sed_intrinsic + nebular_sed
 
+        # Photoionised path: ``sed_nebular`` carries continuum + lines;
+        # shock contribution is zero (this branch is not the shock backend).
         new_derived["sed_nebular"] = nebular_sed
+        new_derived["sed_shock"] = zeros
         return state.with_(sed_intrinsic=new_sed, derived=new_derived)

@@ -31,6 +31,8 @@ References
 from __future__ import annotations
 
 import functools
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, NamedTuple
 
 import jax.numpy as jnp
@@ -67,6 +69,43 @@ from tengri.components.stellar.sfh.psd_models import drw_variance
 from tengri.parameters.priors import Distribution, Fixed, Uniform
 
 # ── Data structures ───────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class SFHRegistryEntry:
+    """Registry entry for an SFH model with optional metadata.
+
+    Attributes
+    ----------
+    callable : Callable
+        The pure JAX SFH function.
+    citation : str
+        Optional academic citation. Default empty string.
+    status : str
+        Model status: "production", "experimental", "demo", or "deprecated".
+        Default "production".
+    short_doc : str
+        Optional one-line description. Default empty string.
+
+    Notes
+    -----
+    **JIT-compatible**: no — dataclass for registry initialization.
+
+    """
+
+    callable: Callable
+    citation: str = ""
+    status: str = "production"
+    short_doc: str = ""
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        """Forward calls to the wrapped callable."""
+        return object.__getattribute__(self, "callable")(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        """Forward attribute access to wrapped callable (SFHModelSpec)."""
+        callable_obj = object.__getattribute__(self, "callable")
+        return getattr(callable_obj, name)
 
 
 class ParamDef(NamedTuple):
@@ -130,7 +169,7 @@ class SFHModelSpec(NamedTuple):
 
 # ── Registries ────────────────────────────────────────────────────
 
-SFH_REGISTRY: dict[str, SFHModelSpec] = {}
+SFH_REGISTRY: dict[str, Any] = {}
 
 # Field sub-model registry: PSD model name -> sqrt_power function
 FIELD_MODEL_REGISTRY: dict[str, object] = {
@@ -142,13 +181,25 @@ _lo_positive = lambda lo, hi: lo > 0  # noqa: E731
 _lo_nonneg = lambda lo, hi: lo >= 0  # noqa: E731
 
 
-def _register(spec: SFHModelSpec) -> None:
+def _register(
+    spec: SFHModelSpec,
+    citation: str = "",
+    status: str = "production",
+    short_doc: str = "",
+) -> None:
     """Register an SFH model spec in the global registry.
 
     Parameters
     ----------
     spec : SFHModelSpec
         Model specification to register.
+    citation : str, optional
+        Academic citation for the model. Default empty string.
+    status : str, optional
+        Model status ("production", "experimental", "demo", "deprecated").
+        Default "production".
+    short_doc : str, optional
+        One-line description. Default empty string.
 
     Returns
     -------
@@ -159,7 +210,13 @@ def _register(spec: SFHModelSpec) -> None:
     **JIT-compatible**: no — mutates global registry dictionary during initialization.
 
     """
-    SFH_REGISTRY[spec.name] = spec
+    entry = SFHRegistryEntry(
+        callable=spec,
+        citation=citation,
+        status=status,
+        short_doc=short_doc,
+    )
+    SFH_REGISTRY[spec.name] = entry
 
 
 # ── Register smooth (additive) models ─────────────────────────────
@@ -193,9 +250,9 @@ _tsnorm_spec = SFHModelSpec(
     },
     composition_type="additive",
 )
-_register(_tsnorm_spec)
+_register(_tsnorm_spec, citation="Bellstedt et al. 2020 (arXiv:2005.11917)")
 # Register canonical name (same spec object, just different key)
-SFH_REGISTRY["truncated_skewnormal_sfh"] = _tsnorm_spec
+SFH_REGISTRY["truncated_skewnormal_sfh"] = SFH_REGISTRY["tsnorm"]
 
 # --- snorm (skew-normal) — canonical: skewnormal_sfh ---
 _snorm_spec = SFHModelSpec(
@@ -220,9 +277,9 @@ _snorm_spec = SFHModelSpec(
     },
     composition_type="additive",
 )
-_register(_snorm_spec)
+_register(_snorm_spec, citation="Bellstedt et al. 2020 (arXiv:2005.11917)")
 # Register canonical name (same spec object, just different key)
-SFH_REGISTRY["skewnormal_sfh"] = _snorm_spec
+SFH_REGISTRY["skewnormal_sfh"] = SFH_REGISTRY["snorm"]
 
 # --- snorm_burst (skew-normal + flat burst) — canonical: snorm_burst_sfh ---
 _snorm_burst_spec = SFHModelSpec(
@@ -257,8 +314,8 @@ _snorm_burst_spec = SFHModelSpec(
     },
     composition_type="additive",
 )
-_register(_snorm_burst_spec)
-SFH_REGISTRY["snorm_burst_sfh"] = _snorm_burst_spec
+_register(_snorm_burst_spec, citation="Robotham et al. 2020 (arXiv:2002.06980) ProSpect")
+SFH_REGISTRY["snorm_burst_sfh"] = SFH_REGISTRY["snorm_burst"]
 
 # --- tsnorm_burst (truncated skew-normal + flat burst) — canonical: snorm_trunc_burst_sfh ---
 _tsnorm_burst_spec = SFHModelSpec(
@@ -297,8 +354,8 @@ _tsnorm_burst_spec = SFHModelSpec(
     },
     composition_type="additive",
 )
-_register(_tsnorm_burst_spec)
-SFH_REGISTRY["snorm_trunc_burst_sfh"] = _tsnorm_burst_spec
+_register(_tsnorm_burst_spec, citation="Robotham et al. 2020 (arXiv:2002.06980) ProSpect")
+SFH_REGISTRY["snorm_trunc_burst_sfh"] = SFH_REGISTRY["tsnorm_burst"]
 
 # --- norm (Gaussian) — canonical: gaussian_sfh ---
 _norm_spec = SFHModelSpec(
@@ -323,7 +380,7 @@ _norm_spec = SFHModelSpec(
 )
 _register(_norm_spec)
 # Register canonical name (same spec object, just different key)
-SFH_REGISTRY["gaussian_sfh"] = _norm_spec
+SFH_REGISTRY["gaussian_sfh"] = SFH_REGISTRY["norm"]
 
 # --- lnorm (log-normal) — canonical: lognormal_sfh ---
 _lnorm_spec = SFHModelSpec(
@@ -348,7 +405,7 @@ _lnorm_spec = SFHModelSpec(
 )
 _register(_lnorm_spec)
 # Register canonical name (same spec object, just different key)
-SFH_REGISTRY["lognormal_sfh"] = _lnorm_spec
+SFH_REGISTRY["lognormal_sfh"] = SFH_REGISTRY["lnorm"]
 
 # --- dpl (double power law) ---
 _register(
@@ -774,7 +831,8 @@ _register(
             **{f"sfh_cont_ratio_{i}": (f"ratio_{i}", 1.0, 0.0) for i in range(6)},
         },
         composition_type="additive",
-    )
+    ),
+    citation="Leja et al. 2019 (ApJ 876, 39)",
 )
 
 # --- continuity_flex (Leja+2019): piecewise-constant with flexible bin edges ---
@@ -856,7 +914,8 @@ _register(
             **{f"sfh_dir_z_{i}": (f"z_frac_{i}", 1.0, 0.0) for i in range(6)},
         },
         composition_type="additive",
-    )
+    ),
+    citation="Leja et al. 2017 (ApJ 837, 170)",
 )
 
 

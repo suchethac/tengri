@@ -10,7 +10,7 @@ Two layers:
    conserve energy across the attenuation/re-emission round-trip. The
    absolute energy balance won't be perfect (modified blackbody peaks
    in FIR, attenuation is in UV/optical/NIR, the integration grids
-   differ), but L_dust_emitted integrated over frequency must equal
+   differ), but sed_dust_ir integrated over frequency must equal
    ``state.derived["L_ir"]`` to ~1% in well-sampled bands.
 """
 
@@ -63,7 +63,7 @@ def test_emission_matches_modified_blackbody(dust_T, dust_beta_ir, L_ir):
     )
 
     assert jnp.allclose(final.sed_intrinsic, expected, rtol=REL_TOL, atol=0.0)
-    assert "L_dust_emitted" in final.derived
+    assert "sed_dust_ir" in final.derived
 
 
 @pytest.mark.unit
@@ -129,13 +129,13 @@ def test_closed_loop_chain_runs():
     # Emission added FIR luminosity to sed_intrinsic.
     assert jnp.any(final.sed_intrinsic > intrinsic)
     # All energy-balance keys present.
-    for key in ("L_ir", "dust_attenuation_factor", "L_dust_emitted"):
+    for key in ("L_ir", "dust_attenuation_factor", "sed_dust_ir"):
         assert key in final.derived
 
 
 @pytest.mark.unit
 def test_emitted_luminosity_integral_matches_l_ir():
-    """∫ L_dust_emitted dν ≈ L_ir to within 1%.
+    """∫ sed_dust_ir dν ≈ L_ir to within 1%.
 
     The modified-blackbody normalisation is a JAX trapezoid in
     frequency; our attenuation L_ir uses the same trapezoid scheme.
@@ -152,7 +152,7 @@ def test_emitted_luminosity_integral_matches_l_ir():
     )
 
     L_ir = float(final.derived["L_ir"])
-    L_emitted_lnu = final.derived["L_dust_emitted"]
+    L_emitted_lnu = final.derived["sed_dust_ir"]
 
     # Integrate emitted L_nu over frequency using the same convention
     # as the attenuator's L_ir computation (cgs trapezoid in ν).

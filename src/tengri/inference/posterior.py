@@ -551,14 +551,17 @@ class Posterior:
         Decomposes the model prediction into stellar (attenuated /
         intrinsic) + nebular + shock + dust IR + AGN + radio + X-ray
         for every posterior sample (or the MAP point estimate) by
-        calling the underlying ``model._compute_sed_components`` per
-        draw and stacking the results.
+        running the orchestrator pipeline per draw and reading the
+        per-component SED arrays each adapter publishes into
+        ``state.derived``.
 
         Parameters
         ----------
         wavelength : array_like, optional
-            Rest-frame wavelength grid for the decomposition. If
-            ``None`` (default), uses the model's internal grid.
+            Ignored — kept for backwards compatibility. The orchestrator
+            uses the model's SSP wavelength grid; pass-through to a
+            different grid is no longer supported here. Interpolate the
+            returned arrays externally if a different grid is needed.
 
         Returns
         -------
@@ -578,10 +581,18 @@ class Posterior:
 
         Notes
         -----
-        ``model._compute_sed_components`` is **not** JIT-compiled, so
-        for large posteriors this is a slow Python loop. Use
-        :meth:`agn_fraction` directly if you only need the AGN
-        contribution at λ.
+        Reads the orchestrator's per-component publications:
+        ``sed_dust_attenuated`` (stellar post-attenuation),
+        ``sed_dust_ir``, ``sed_nebular``, ``sed_shock``, ``sed_agn``,
+        ``sed_radio``, ``sed_xray`` — each adapter publishes its own
+        contribution into ``state.derived``. ``sed_total`` is the
+        accumulated ``state.sed_intrinsic`` after the chain runs;
+        ``sed_intrinsic`` (stellar pre-attenuation) is reconstructed
+        from the published ``lnu_age`` cube via ``sum(lnu_age, axis=0)``.
+
+        For Posterior draws this is still a Python loop (one
+        orchestrator pass per sample); JIT vectorisation across draws
+        is a separate optimisation.
 
         Examples
         --------
@@ -593,15 +604,50 @@ class Posterior:
                 "No forward model attached; cannot compute sed_components(). "
                 "Refit with the model accessible."
             )
+        del wavelength  # reserved for a future re-grid hook
 
         def _one(p: dict) -> dict:
-            return self._model._compute_sed_components(p, rest_wavelength=wavelength)
+            full_p = {**self._model.spec.get_fixed_values(), **p}
+            state = self._model.predict_via_orchestrator(full_p)
+            derived = state.derived
+            wave = jnp.asarray(state.wave)
+            n_wave = wave.shape[0]
+            zeros = jnp.zeros(n_wave)
+
+            # Stellar pre-attenuation: sum the per-age cube. Always present
+            # because StellarSEDComponent is mandatory in every chain.
+            lnu_age = derived.get("lnu_age")
+            sed_intrinsic_stellar = (
+                jnp.sum(jnp.asarray(lnu_age), axis=0) if lnu_age is not None else zeros
+            )
+
+            # Stellar post-attenuation. ``sed_dust_attenuated`` is the
+            # canonical key (DustSEDComponent); fall back to stellar
+            # intrinsic when no Dust adapter ran.
+            sed_attenuated_stellar = jnp.asarray(
+                derived.get("sed_dust_attenuated", sed_intrinsic_stellar)
+            )
+
+            return {
+                "wavelength": wave,
+                "sed_total": jnp.asarray(state.sed_intrinsic)
+                if state.sed_intrinsic is not None
+                else zeros,
+                "sed_attenuated": sed_attenuated_stellar,
+                "sed_intrinsic": sed_intrinsic_stellar,
+                "sed_nebular": jnp.asarray(derived.get("sed_nebular", zeros)),
+                "sed_shock": jnp.asarray(derived.get("sed_shock", zeros)),
+                "sed_dust_ir": jnp.asarray(derived.get("sed_dust_ir", zeros)),
+                "sed_agn": jnp.asarray(derived.get("sed_agn", zeros)),
+                "sed_radio": jnp.asarray(derived.get("sed_radio", zeros)),
+                "sed_xray": jnp.asarray(derived.get("sed_xray", zeros)),
+            }
 
         if self.samples is None:
             comp = _one(self.params)
-            out: dict = {"wavelength": jnp.asarray(comp["rest_wavelength"])}
+            out: dict = {"wavelength": comp["wavelength"]}
             for key in self._COMPONENT_KEYS:
-                out[key] = jnp.asarray(comp[key])
+                out[key] = comp[key]
             return out
 
         # Sampling path
@@ -609,13 +655,13 @@ class Posterior:
         n = int(self.samples[sample_keys[0]].shape[0]) if sample_keys else 1
 
         first = _one({k: (v[0] if v.ndim >= 1 else v) for k, v in self.samples.items()})
-        wave_out = jnp.asarray(first["rest_wavelength"])
-        stacked = {key: [jnp.asarray(first[key])] for key in self._COMPONENT_KEYS}
+        wave_out = first["wavelength"]
+        stacked = {key: [first[key]] for key in self._COMPONENT_KEYS}
         for i in range(1, n):
             params_i = {k: (v[i] if v.ndim >= 1 else v) for k, v in self.samples.items()}
             comp = _one(params_i)
             for key in self._COMPONENT_KEYS:
-                stacked[key].append(jnp.asarray(comp[key]))
+                stacked[key].append(comp[key])
         out = {"wavelength": wave_out}
         for key in self._COMPONENT_KEYS:
             out[key] = jnp.stack(stacked[key], axis=0)

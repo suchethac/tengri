@@ -845,37 +845,59 @@ class TestBalmerAv:
 # ── TestSEDComponents (#3 AGN+host decomposition) ────────────────────
 
 
-class _FakeComponentModel:
-    """Stand-in for SEDModel with a _compute_sed_components method.
+class _FakeOrchestratorState:
+    """Minimal PipelineState stand-in for tests."""
 
-    Returns a dict matching the pipeline's component-SED keys. Component
+    def __init__(self, wave, sed_intrinsic, derived):
+        self.wave = wave
+        self.sed_intrinsic = sed_intrinsic
+        self.sed_attenuated = None
+        self.sed_observed = None
+        self.derived = derived
+
+
+class _FakeSpec:
+    def get_fixed_values(self):
+        return {}
+
+
+class _FakeComponentModel:
+    """Stand-in for SEDModel with a ``predict_via_orchestrator`` method.
+
+    Returns a fake ``PipelineState`` whose ``derived`` dict carries the
+    same per-component keys the real orchestrator publishes. Component
     amplitudes are driven by a single param ``frac`` so tests can verify
     that sample-to-sample variation propagates correctly.
     """
 
     def __init__(self, wave):
-        self._wave = wave
+        self._wave = jnp.asarray(wave)
+        self.spec = _FakeSpec()
 
-    def _compute_sed_components(
-        self, params, _sfr=None, _weights=None, need_intrinsic=False, rest_wavelength=None
-    ):
-        wave = jnp.asarray(rest_wavelength) if rest_wavelength is not None else self._wave
+    def predict_via_orchestrator(self, params):
+        wave = self._wave
         f = float(params.get("frac", 0.0))
-        # Per-component SEDs: amplitudes split by frac
-        host = (1.0 - f) * jnp.ones_like(wave)
+        host_attenuated = (1.0 - f) * jnp.ones_like(wave)  # stellar post-attenuation
+        host_intrinsic = host_attenuated * 1.5  # stellar pre-attenuation
         agn = f * jnp.ones_like(wave)
-        return {
-            "rest_wavelength": wave,
-            "sed_total": host + agn,
-            "sed_attenuated": host,
-            "sed_intrinsic": host * 1.5,
-            "sed_nebular": jnp.zeros_like(wave),
-            "sed_shock": jnp.zeros_like(wave),
-            "sed_dust_ir": jnp.zeros_like(wave),
+        zeros = jnp.zeros_like(wave)
+        # Match the orchestrator semantics: state.sed_intrinsic carries
+        # the accumulated total (post-dust stellar + AGN + ...).
+        sed_total = host_attenuated + agn
+        # Encode stellar pre-attenuation via lnu_age (one age bin).
+        lnu_age = host_intrinsic[None, :]
+        derived = {
+            "lnu_age": lnu_age,
+            "ssp_ages_yr": jnp.array([1e9]),
+            "sed_dust_attenuated": host_attenuated,
+            "sed_dust_ir": zeros,
+            "sed_nebular": zeros,
+            "sed_shock": zeros,
             "sed_agn": agn,
-            "sed_radio": jnp.zeros_like(wave),
-            "sed_xray": jnp.zeros_like(wave),
+            "sed_radio": zeros,
+            "sed_xray": zeros,
         }
+        return _FakeOrchestratorState(wave=wave, sed_intrinsic=sed_total, derived=derived)
 
 
 class TestSEDComponents:
@@ -967,7 +989,9 @@ class TestSEDComponents:
         # Wavelength-flat AGN fraction → at any wavelength, median of frac samples
         assert agn_frac[0] == pytest.approx(np.median(fracs), rel=1e-6)
 
-    def test_custom_wavelength_grid(self):
+    def test_custom_wavelength_arg_is_ignored(self):
+        """``wavelength=`` is a back-compat pass-through after the orchestrator
+        migration. The returned grid is the model's SSP grid."""
         wave_default = jnp.linspace(1000.0, 1e6, 100)
         wave_custom = jnp.linspace(2000.0, 8000.0, 50)
         model = _FakeComponentModel(wave_default)
@@ -980,5 +1004,6 @@ class TestSEDComponents:
         )
         p._model = model
         out = p.sed_components(wavelength=wave_custom)
-        assert out["sed_total"].shape == (50,)
-        assert out["wavelength"].shape == (50,)
+        # Custom grid is ignored: output uses the model's SSP grid.
+        assert out["sed_total"].shape == (100,)
+        assert out["wavelength"].shape == (100,)

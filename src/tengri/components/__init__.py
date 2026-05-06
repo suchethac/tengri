@@ -19,3 +19,37 @@ __all__ = [
     "stellar",
     "xray",
 ]
+
+
+def _get_registered_components() -> list:
+    """Lazily discover all registered SEDComponent classes.
+
+    Deferred until after module initialization to avoid circular imports.
+    Called by :func:`tengri.parameters.translate._build_param_map` to
+    auto-derive identity parameter mappings.
+
+    Returns
+    -------
+    list
+        SEDComponent classes available in the current build.
+    """
+    # Import component classes directly from their modules to avoid
+    # circular dependencies and ensure they are available even if not
+    # re-exported from the submodule __init__.py.
+    from tengri.components.agn.component import AGNSEDComponent
+    from tengri.components.dust.component import DustAttenuationSEDComponent
+    from tengri.components.igm.component import IGMSEDComponent
+    from tengri.components.nebular.component import NebularSEDComponent
+    from tengri.components.radio.component import RadioSEDComponent
+    from tengri.components.stellar.component import StellarSEDComponent
+    from tengri.components.xray.component import XRaySEDComponent
+
+    return [
+        StellarSEDComponent,
+        DustAttenuationSEDComponent,
+        NebularSEDComponent,
+        AGNSEDComponent,
+        IGMSEDComponent,
+        RadioSEDComponent,
+        XRaySEDComponent,
+    ]

@@ -159,8 +159,9 @@ class DustEmissionSEDComponent:
         -------
         PipelineState
             New state with ``sed_intrinsic`` updated and
-            ``derived["L_dust_emitted"]`` published (the modified
-            blackbody L_nu profile, useful for diagnostics).
+            ``derived["sed_dust_ir"]`` published (the modified
+            blackbody L_nu profile, useful for diagnostics and consumed
+            by :meth:`tengri.Posterior.sed_components`).
 
         Notes
         -----
@@ -186,5 +187,5 @@ class DustEmissionSEDComponent:
             new_sed = state.sed_intrinsic + L_dust_lnu
 
         new_derived = dict(state.derived)
-        new_derived["L_dust_emitted"] = L_dust_lnu
+        new_derived["sed_dust_ir"] = L_dust_lnu
         return state.with_(sed_intrinsic=new_sed, derived=new_derived)

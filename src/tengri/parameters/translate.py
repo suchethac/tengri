@@ -322,7 +322,7 @@ _SINGLE_COMPONENT_DUST_PARAM_MAP = {
 
 
 def _build_param_map(mean_sfh_type, dust_model="two_component"):
-    """Build complete param map from SFH registry + non-SFH params.
+    """Build complete param map from SFH registry + non-SFH params + auto-derived components.
 
     Parameters
     ----------
@@ -335,6 +335,16 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
     -------
     dict
         public_name -> (internal_name, scale, offset)
+
+    Notes
+    -----
+    As of Phase II-2, registered SEDComponent instances auto-declare parameters
+    via :meth:`declared_parameters`. This function auto-derives identity mappings
+    from those declarations (if not already in the map) to keep the param_map
+    synchronized without manual editing.
+
+    Manual entries in the identity param lists (e.g. :data:`_AGN_IDENTITY_PARAMS`)
+    remain authoritative and are never overwritten.
     """
     from tengri.components.stellar.sfh.registry import resolve_sfh
 
@@ -348,6 +358,32 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
         result.update(_SINGLE_COMPONENT_DUST_PARAM_MAP)
     else:
         result.update(_NON_SFH_PARAM_MAP)
+
+    # Auto-derive identity entries from registered components (Phase II-2 onwards).
+    # Manual entries above always take precedence (are never overwritten).
+    try:
+        from tengri.components import _get_registered_components
+
+        for comp_cls in _get_registered_components():
+            # Skip StellarSEDComponent: its SFH/met params are already wired
+            # via mean_sfh_type above. Instantiating with default config would
+            # inject the wrong SFH variant's params (default sfh_model="tsnorm").
+            if comp_cls.__name__ == "StellarSEDComponent":
+                continue
+            try:
+                # Instantiate with default config
+                comp = comp_cls()
+                for decl in comp.declared_parameters():
+                    # Only add if not already in result (manual entries take precedence)
+                    if decl.name not in result:
+                        result[decl.name] = (decl.name, 1.0, 0.0)  # identity mapping
+            except Exception:
+                # Best-effort: skip any component that fails to instantiate or declare
+                continue
+    except (ImportError, AttributeError):
+        # _get_registered_components not available (pre-Phase-II setup)
+        pass
+
     return result
 
 

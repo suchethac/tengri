@@ -101,7 +101,14 @@ def test_full_six_adapter_chain_via_public_api():
     final = pipeline.run_components(chain, state, params)
 
     # Every published derived key from the chain should be present.
-    for key in ("L_ir", "L_dust_emitted", "dust_attenuation_factor", "L_xray", "nebular_backend"):
+    for key in (
+        "L_ir",
+        "sed_dust_ir",
+        "dust_attenuation_factor",
+        "sed_xray",
+        "sed_nebular",
+        "sed_shock",
+    ):
         assert key in final.derived, key
 
     # Attenuation slot was written and IR re-emission added flux.

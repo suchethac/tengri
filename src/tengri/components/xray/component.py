@@ -161,7 +161,7 @@ class XRaySEDComponent:
         -------
         PipelineState
             New state with ``sed_intrinsic`` updated and
-            ``derived["L_xray"]`` published for downstream readers.
+            ``derived["sed_xray"]`` published for downstream readers.
         """
         wave = state.wave
 
@@ -190,5 +190,5 @@ class XRaySEDComponent:
             new_sed = state.sed_intrinsic + L_xray
 
         new_derived = dict(state.derived)
-        new_derived["L_xray"] = L_xray
+        new_derived["sed_xray"] = L_xray
         return state.with_(sed_intrinsic=new_sed, derived=new_derived)

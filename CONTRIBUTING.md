@@ -88,6 +88,28 @@ To propose a new feature:
 
 See `.github/ISSUE_TEMPLATE/feature_request.md` for a template.
 
+## Adding a new alternative within a component
+
+Tengri's physics blocks (AGN models, dust attenuation laws, SFH variants, nebular backends) each have a registry of swappable alternatives. To add yours:
+
+1. **Pick the component.** Run `tengri.list_agn_models()` (or `list_dust_laws()`, `list_sfh_models()`, etc.) to see what's already there and what status each is at. Avoid duplicating an existing alternative.
+2. **Copy the worked example.** Start from [`examples/contrib/example_new_agn_torus.py`](examples/contrib/example_new_agn_torus.py). It registers a model, declares metadata (citation + status), and exercises introspection end-to-end.
+3. **Register with metadata.** Use the relevant decorator with `citation`, `status`, `short_doc` filled in:
+   ```python
+   @register_agn_model(
+       "my_model",
+       citation="Author+Year, ADS bibcode",
+       status="production",   # or "experimental", "demo", "deprecated"
+       short_doc="One-line description",
+   )
+   def my_model(...): ...
+   ```
+   `citation` and `short_doc` are recommended but not required — fill what you have.
+4. **Declare new free parameters via the component's `declared_parameters()` method.** Translation entries are auto-derived from there for identity (no-unit-conversion) cases — you typically don't need to edit `parameters/translate.py`.
+5. **Open a PR.** GitHub Actions runs `tools/check_param_prefixes.py` (parameter naming guard) and a 30-second smoke test before the full suite.
+
+Status conventions: `production` (validated), `experimental` (works but not yet validated against observations or another code), `demo` (toy model, not for science), `deprecated` (slated for removal).
+
 ## Development workflow
 
 **Branch naming:**

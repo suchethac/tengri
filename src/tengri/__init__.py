@@ -275,6 +275,18 @@ sys.modules["tengri.io"] = io
 #   tengri.plot      — plotting helpers (was tengri.analysis.plotting)
 from tengri import citations, cosmology, pipeline, plot, units
 
+# Introspection façade — public registry lookups
+from tengri.registry import (
+    describe,
+    list_agn_models,
+    list_all,
+    list_components,
+    list_dust_laws,
+    list_inference_methods,
+    list_nebular_backends,
+    list_sfh_models,
+)
+
 # Phase 6 (2026-05): the advertised top-level surface.
 #
 # This list is the *recommended* import paths. Everything in it is
@@ -328,6 +340,7 @@ __all__ = [
     "citations",
     "clear_cache",
     "cosmology",
+    "describe",
     "doctor",
     "dust",
     "enable_persistent_cache",
@@ -336,6 +349,13 @@ __all__ = [
     "igm",
     "io",
     "is_cache_enabled",
+    "list_agn_models",
+    "list_all",
+    "list_components",
+    "list_dust_laws",
+    "list_inference_methods",
+    "list_nebular_backends",
+    "list_sfh_models",
     "nebular",
     "observation",
     "pipeline",

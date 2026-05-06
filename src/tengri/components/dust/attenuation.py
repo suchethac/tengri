@@ -64,6 +64,7 @@ References
 """
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import jax
 import jax.numpy as jnp
@@ -71,16 +72,66 @@ import numpy as np
 
 # ── Attenuation curve registry ────────────────────────────────────
 
+
+@dataclass(frozen=True)
+class DustLawRegistryEntry:
+    """Registry entry for a dust attenuation law with optional metadata.
+
+    Attributes
+    ----------
+    callable : Callable
+        The dust attenuation law function.
+    citation : str
+        Optional academic citation. Default empty string.
+    status : str
+        Model status: "production", "experimental", "demo", or "deprecated".
+        Default "production".
+    short_doc : str
+        Optional one-line description. Default empty string.
+
+    Notes
+    -----
+    **JIT-compatible**: no — dataclass for registry initialization.
+
+    """
+
+    callable: Callable
+    citation: str = ""
+    status: str = "production"
+    short_doc: str = ""
+
+    def __call__(self, *args, **kwargs):
+        """Forward calls to the wrapped callable."""
+        return object.__getattribute__(self, "callable")(*args, **kwargs)
+
+    def __getattr__(self, name: str):
+        """Forward attribute access to wrapped callable."""
+        callable_obj = object.__getattribute__(self, "callable")
+        return getattr(callable_obj, name)
+
+
 DUST_LAWS: dict[str, Callable] = {}
 
 
-def register_dust_law(name: str) -> Callable:
+def register_dust_law(
+    name: str,
+    citation: str = "",
+    status: str = "production",
+    short_doc: str = "",
+) -> Callable:
     """Decorator factory that registers a dust attenuation curve under a name.
 
     Parameters
     ----------
     name : str
         Registry key (e.g. ``"calzetti"``, ``"power_law"``).
+    citation : str, optional
+        Academic citation for the model. Default empty string.
+    status : str, optional
+        Model status ("production", "experimental", "demo", "deprecated").
+        Default "production".
+    short_doc : str, optional
+        One-line description. Default empty string.
 
     Returns
     -------
@@ -113,7 +164,13 @@ def register_dust_law(name: str) -> Callable:
         -----
         **JIT-compatible**: depends on the decorated function.
         """
-        DUST_LAWS[name] = fn
+        entry = DustLawRegistryEntry(
+            callable=fn,
+            citation=citation,
+            status=status,
+            short_doc=short_doc,
+        )
+        DUST_LAWS[name] = entry
         return fn
 
     return decorator
@@ -257,7 +314,10 @@ def _calzetti_l02_kprime(wavelength: jnp.ndarray) -> jnp.ndarray:
 # ── Attenuation curves ────────────────────────────────────────────
 
 
-@register_dust_law("power_law")
+@register_dust_law(
+    "power_law",
+    citation="Charlot & Fall 2000 (ApJ 539, 718)",
+)
 def power_law(
     wavelength: jnp.ndarray,
     n_slope: float = -0.7,
@@ -380,7 +440,10 @@ def vw07_diff(
     return (wavelength / 5500.0) ** (-0.7)
 
 
-@register_dust_law("calzetti")
+@register_dust_law(
+    "calzetti",
+    citation="Calzetti et al. 2000 (ApJ 533, 682)",
+)
 def calzetti(
     wavelength: jnp.ndarray,
     **_kwargs,
@@ -432,7 +495,10 @@ def calzetti(
     return jnp.clip((k_prime + rv) / rv, 0.0)
 
 
-@register_dust_law("kriek_conroy")
+@register_dust_law(
+    "kriek_conroy",
+    citation="Kriek & Conroy 2013 (ApJL 775, L16)",
+)
 def kriek_conroy(
     wavelength: jnp.ndarray,
     dust_bump_strength: float = 1.0,
@@ -566,7 +632,10 @@ _LMC_N = jnp.array([2.0, 4.5, 2.0, 2.0, 2.0, 2.0])
 _LMC_RV = 3.16
 
 
-@register_dust_law("smc")
+@register_dust_law(
+    "smc",
+    citation="Pei 1992 (ApJ 395, 130) SMC Bar",
+)
 def smc(
     wavelength: jnp.ndarray,
     **_kwargs,
@@ -713,7 +782,10 @@ def prevot_smc(
     return k_norm * ramp_factor
 
 
-@register_dust_law("cardelli")
+@register_dust_law(
+    "cardelli",
+    citation="Cardelli et al. 1989 (ApJ 345, 245) MW extinction",
+)
 def cardelli(
     wavelength: jnp.ndarray,
     dust_Rv: float = 3.1,

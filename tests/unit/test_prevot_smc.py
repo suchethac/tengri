@@ -29,7 +29,10 @@ class TestRegistry:
 
     def test_registered(self):
         assert "prevot_smc" in DUST_LAWS
-        assert DUST_LAWS["prevot_smc"] is prevot_smc
+        # DUST_LAWS now stores DustLawRegistryEntry which wraps the function
+        entry = DUST_LAWS["prevot_smc"]
+        assert callable(entry)
+        assert entry.callable is prevot_smc
 
 
 class TestPrevotSMCFunction:

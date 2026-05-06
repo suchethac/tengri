@@ -166,7 +166,7 @@ def test_four_adapter_chain_runs_end_to_end():
     assert jnp.all(jnp.isfinite(final.sed_attenuated))
     assert jnp.all(jnp.isfinite(final.sed_observed))
     # All four components published their derived quantities.
-    for key in ("L_radio", "L_xray", "dust_attenuation_factor"):
+    for key in ("sed_radio", "sed_xray", "dust_attenuation_factor"):
         assert key in final.derived, f"{key} missing from final.derived"
     # Dust must have actually attenuated (not just copied).
     assert jnp.any(final.sed_attenuated < final.sed_intrinsic)

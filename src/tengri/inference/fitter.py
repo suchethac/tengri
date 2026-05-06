@@ -1776,86 +1776,20 @@ class Fitter:
                 threshold = _AUTO_D_THRESHOLD
             method = "mcmc_nuts" if d <= threshold else "vi_nonlinear_fast"
 
-        # --- Dispatch to underlying _run_* methods ---
-        if method == "map":
-            result = self._run_map(key=key, init_from=init_from, **kwargs)
+        # --- Dispatch to underlying _run_* methods via registry ---
+        from tengri.inference._backend_registry import get_backend
 
-        elif method in ("vi", "vi_nonlinear"):
-            # NIFTy geoVI standard (with logging/pickling)
-            result = self._run_vi(key=key, init_from=init_from, **kwargs)
-
-        elif method == "vi_nonlinear_fast":
-            # NIFTy geoVI, no Python logging overhead (~35% faster)
-            result = self._run_nifty_fast_vi(key=key, init_from=init_from, **kwargs)
-
-        elif method == "vi_linear":
-            # NIFTy MGVI standard (with logging/pickling)
-            result = self._run_vi_linear(key=key, init_from=init_from, **kwargs)
-
-        elif method == "vi_linear_fast":
-            # NIFTy MGVI, no Python logging overhead
-            result = self._run_nifty_fast_vi_linear(key=key, init_from=init_from, **kwargs)
-
-        elif method == "native_vi_nonlinear":
-            # Pure-JAX geoVI (experimental)
-            result = self._run_vi_native(key=key, init_from=init_from, **kwargs)
-
-        elif method == "native_vi_linear":
-            # Pure-JAX MGVI via lax.while_loop (fastest on CPU)
-            result = self._run_vi_native_linear(key=key, init_from=init_from, **kwargs)
-
-        elif method == "mcmc":
-            # Auto-select: NUTS for low-D (exact gold-standard), RT for high-D
+        if method == "mcmc":
+            # Special case: auto-select NUTS for low-D, raytrace for high-D
             d = self.spec.n_free
             if d <= _MCMC_AUTO_D_THRESHOLD:
-                result = self._run_nuts(key=key, init_from=init_from, **kwargs)
+                entry = get_backend("mcmc_nuts")
             else:
-                result = self._run_raytrace(key=key, init_from=init_from, **kwargs)
-
-        elif method == "mcmc_raytrace":
-            result = self._run_raytrace(key=key, init_from=init_from, **kwargs)
-
-        elif method == "mcmc_nuts":
-            result = self._run_nuts(key=key, init_from=init_from, **kwargs)
-
-        elif method == "mcmc_hmc":
-            result = self._run_hmc(key=key, init_from=init_from, **kwargs)
-
-        elif method == "mcmc_dynamic_hmc":
-            result = self._run_dynamic_hmc(key=key, init_from=init_from, **kwargs)
-
-        elif method == "mcmc_ghmc":
-            result = self._run_ghmc(key=key, init_from=init_from, **kwargs)
-
-        elif method == "mcmc_mclmc":
-            result = self._run_mclmc(key=key, init_from=init_from, **kwargs)
-
-        elif method == "mcmc_adjusted_mclmc":
-            result = self._run_adjusted_mclmc(key=key, init_from=init_from, **kwargs)
-
-        elif method == "mcmc_ess":
-            result = self._run_elliptical_slice(key=key, init_from=init_from, **kwargs)
-
-        elif method == "nss":
-            result = self._run_nss(key=key, init_from=init_from, **kwargs)
-
-        elif method == "laplace":
-            result = self._run_laplace(key=key, init_from=init_from, **kwargs)
-
-        elif method == "pathfinder":
-            result = self._run_pathfinder(key=key, init_from=init_from, **kwargs)
-
+                entry = get_backend("mcmc_raytrace")
         else:
-            raise ValueError(
-                f"Unknown method: '{method}'. "
-                f"Canonical names: 'vi', 'vi_linear', 'vi_nifty_fast', "
-                f"'vi_nifty_fast_linear', 'vi_native', 'vi_native_linear', "
-                f"'mcmc', 'mcmc_raytrace', 'mcmc_nuts', 'mcmc_hmc', "
-                f"'mcmc_dynamic_hmc', 'mcmc_ghmc', 'mcmc_mclmc', "
-                f"'mcmc_adjusted_mclmc', 'mcmc_ess', 'map', "
-                f"'laplace', 'pathfinder', 'nss', 'auto'. "
-                f"See Fitter.run() docstring for deprecated aliases."
-            )
+            entry = get_backend(method)
+
+        result = entry.runner(self, key=key, init_from=init_from, **kwargs)
 
         # Attach back-reference so Posterior.refine() works
         with contextlib.suppress(AttributeError):
@@ -3131,3 +3065,188 @@ class Fitter:
             results.append(result_i)
 
         return results
+
+
+# ── Backend Registry Initialization ──────────────────────────────────────────
+# Register all inference backends. Each decorator wraps a lambda that adapts
+# the backend runner to the (fitter, key, init_from, **kwargs) signature.
+
+from tengri.inference._backend_registry import register_backend
+
+# Primary backends
+register_backend(
+    "map",
+    tier="primary",
+    short_doc="Adam MAP optimization",
+)(lambda fitter, *, key, init_from=None, **kw: fitter._run_map(key=key, init_from=init_from, **kw))
+
+register_backend(
+    "vi",
+    tier="primary",
+    short_doc="NIFTy geoVI variational inference",
+    aliases=("vi_nonlinear",),
+)(lambda fitter, *, key, init_from=None, **kw: fitter._run_vi(key=key, init_from=init_from, **kw))
+
+register_backend(
+    "vi_nonlinear_fast",
+    tier="primary",
+    short_doc="NIFTy geoVI without Python logging",
+)(
+    lambda fitter, *, key, init_from=None, **kw: fitter._run_nifty_fast_vi(
+        key=key, init_from=init_from, **kw
+    )
+)
+
+register_backend(
+    "vi_linear",
+    tier="experimental",
+    short_doc="NIFTy MGVI standard with logging",
+)(
+    lambda fitter, *, key, init_from=None, **kw: fitter._run_vi_linear(
+        key=key, init_from=init_from, **kw
+    )
+)
+
+register_backend(
+    "vi_linear_fast",
+    tier="experimental",
+    short_doc="NIFTy MGVI without Python logging",
+)(
+    lambda fitter, *, key, init_from=None, **kw: fitter._run_nifty_fast_vi_linear(
+        key=key, init_from=init_from, **kw
+    )
+)
+
+register_backend(
+    "native_vi_nonlinear",
+    tier="experimental",
+    short_doc="Pure JAX geoVI variational inference",
+)(
+    lambda fitter, *, key, init_from=None, **kw: fitter._run_vi_native(
+        key=key, init_from=init_from, **kw
+    )
+)
+
+register_backend(
+    "native_vi_linear",
+    tier="experimental",
+    short_doc="Pure JAX MGVI via lax.while_loop",
+)(
+    lambda fitter, *, key, init_from=None, **kw: fitter._run_vi_native_linear(
+        key=key, init_from=init_from, **kw
+    )
+)
+
+register_backend(
+    "mcmc",
+    tier="primary",
+    short_doc="Auto MCMC: NUTS for low-D, raytrace for high-D",
+)(
+    lambda fitter, *, key, init_from=None, **kw: (
+        fitter._run_nuts(key=key, init_from=init_from, **kw)
+        if fitter.spec.n_free <= _MCMC_AUTO_D_THRESHOLD
+        else fitter._run_raytrace(key=key, init_from=init_from, **kw)
+    )
+)
+
+register_backend(
+    "mcmc_nuts",
+    tier="primary",
+    short_doc="No-U-Turn Sampler",
+)(
+    lambda fitter, *, key, init_from=None, **kw: fitter._run_nuts(
+        key=key, init_from=init_from, **kw
+    )
+)
+
+register_backend(
+    "mcmc_raytrace",
+    tier="primary",
+    short_doc="Ray-tracing ensemble sampler (high-D)",
+)(
+    lambda fitter, *, key, init_from=None, **kw: fitter._run_raytrace(
+        key=key, init_from=init_from, **kw
+    )
+)
+
+register_backend(
+    "mcmc_hmc",
+    tier="experimental",
+    short_doc="Hamiltonian Monte Carlo",
+)(lambda fitter, *, key, init_from=None, **kw: fitter._run_hmc(key=key, init_from=init_from, **kw))
+
+register_backend(
+    "mcmc_dynamic_hmc",
+    tier="experimental",
+    short_doc="Dynamic HMC with adaptive step size",
+)(
+    lambda fitter, *, key, init_from=None, **kw: fitter._run_dynamic_hmc(
+        key=key, init_from=init_from, **kw
+    )
+)
+
+register_backend(
+    "mcmc_ghmc",
+    tier="experimental",
+    short_doc="Generalized HMC",
+)(
+    lambda fitter, *, key, init_from=None, **kw: fitter._run_ghmc(
+        key=key, init_from=init_from, **kw
+    )
+)
+
+register_backend(
+    "mcmc_mclmc",
+    tier="experimental",
+    short_doc="Microcanonical Langevin Monte Carlo",
+)(
+    lambda fitter, *, key, init_from=None, **kw: fitter._run_mclmc(
+        key=key, init_from=init_from, **kw
+    )
+)
+
+register_backend(
+    "mcmc_adjusted_mclmc",
+    tier="experimental",
+    short_doc="Adjusted microcanonical Langevin sampler",
+)(
+    lambda fitter, *, key, init_from=None, **kw: fitter._run_adjusted_mclmc(
+        key=key, init_from=init_from, **kw
+    )
+)
+
+register_backend(
+    "mcmc_ess",
+    tier="experimental",
+    short_doc="Elliptical slice sampling",
+)(
+    lambda fitter, *, key, init_from=None, **kw: fitter._run_elliptical_slice(
+        key=key, init_from=init_from, **kw
+    )
+)
+
+register_backend(
+    "nss",
+    tier="experimental",
+    short_doc="Nested sampling for model comparison",
+)(lambda fitter, *, key, init_from=None, **kw: fitter._run_nss(key=key, init_from=init_from, **kw))
+
+register_backend(
+    "laplace",
+    tier="experimental",
+    short_doc="Laplace approximation",
+)(
+    lambda fitter, *, key, init_from=None, **kw: fitter._run_laplace(
+        key=key, init_from=init_from, **kw
+    )
+)
+
+register_backend(
+    "pathfinder",
+    tier="experimental",
+    short_doc="Pathfinder variational inference",
+)(
+    lambda fitter, *, key, init_from=None, **kw: fitter._run_pathfinder(
+        key=key, init_from=init_from, **kw
+    )
+)

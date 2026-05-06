@@ -68,9 +68,9 @@ def test_orchestrator_matches_direct_call(z, sfr, stellar_mass, L_agn_bol):
     )
 
     assert jnp.allclose(final.sed_intrinsic, expected, rtol=REL_TOL, atol=0.0)
-    # Adapter must publish L_xray for downstream readers.
-    assert "L_xray" in final.derived
-    assert jnp.allclose(final.derived["L_xray"], expected, rtol=REL_TOL, atol=0.0)
+    # Adapter must publish sed_xray for downstream readers.
+    assert "sed_xray" in final.derived
+    assert jnp.allclose(final.derived["sed_xray"], expected, rtol=REL_TOL, atol=0.0)
 
 
 def test_xray_no_agn_upstream_falls_back_to_zero():
@@ -189,8 +189,8 @@ def test_three_adapter_chain_runs_end_to_end():
 
     assert final.sed_intrinsic is not None
     assert jnp.all(jnp.isfinite(final.sed_intrinsic))
-    assert "L_radio" in final.derived
-    assert "L_xray" in final.derived
+    assert "sed_radio" in final.derived
+    assert "sed_xray" in final.derived
     # IGM transmission at z=8 (above the z_mid=7 reionization midpoint)
     # must reduce sed_observed at rest-frame Lyα-blue wavelengths.
     assert jnp.any(final.sed_observed < state.sed_observed)

@@ -760,7 +760,10 @@ class TestRegisterAgn:
 
         try:
             assert "_test_unit_model_a1b2" in AGN_MODELS
-            assert AGN_MODELS["_test_unit_model_a1b2"] is _dummy
+            # Registry now stores AGNRegistryEntry which wraps the function
+            entry = AGN_MODELS["_test_unit_model_a1b2"]
+            assert callable(entry)
+            assert entry.callable is _dummy
         finally:
             AGN_MODELS.pop("_test_unit_model_a1b2", None)
 
@@ -800,10 +803,11 @@ class TestMulticolorAgn:
         assert "multicolor_agn" in AGN_MODELS
 
     def test_kubota_done_alias_is_same_function(self):
-        """AGN_MODELS['kubota_done'] is the same object as multicolor_agn."""
+        """AGN_MODELS['kubota_done'] wraps the same function as multicolor_agn."""
         from tengri.components.agn.unified import AGN_MODELS, multicolor_agn
 
-        assert AGN_MODELS["kubota_done"] is multicolor_agn
+        # kubota_done and multicolor_agn are registry entries; check they wrap same function
+        assert AGN_MODELS["kubota_done"] is AGN_MODELS["multicolor_agn"]
 
     def test_agn_frac_scales_linearly(self, wavelength):
         """agn_frac multiplies the whole SED linearly."""

@@ -46,12 +46,15 @@ def test_nebular_does_not_modify_sed_intrinsic():
 
 
 @pytest.mark.unit
-def test_nebular_publishes_backend_marker():
-    """The ``state.derived["nebular_backend"]`` key is published."""
+def test_nebular_publishes_sed_keys_for_baked_in():
+    """``sed_nebular`` and ``sed_shock`` are always published (zeros for BakedIn)."""
     wave = jnp.linspace(1000.0, 10000.0, 32)
     state = PipelineState(wave=wave)
     out = NebularSEDComponent().apply(state, {"redshift": 0.0})
-    assert out.derived["nebular_backend"] == "baked_in"
+    assert "sed_nebular" in out.derived
+    assert "sed_shock" in out.derived
+    assert jnp.all(out.derived["sed_nebular"] == 0.0)
+    assert jnp.all(out.derived["sed_shock"] == 0.0)
 
 
 @pytest.mark.unit
@@ -84,8 +87,9 @@ def test_nebular_in_orchestrator_chain():
     )
 
     # All three components must have run successfully.
-    assert "nebular_backend" in final.derived
-    assert "L_radio" in final.derived
+    assert "sed_nebular" in final.derived
+    assert "sed_shock" in final.derived
+    assert "sed_radio" in final.derived
     assert final.sed_attenuated is not None
 
 
@@ -98,15 +102,14 @@ def test_merge_with_zero_param_component():
 
 
 @pytest.mark.unit
-def test_unsupported_backend_raises():
-    """Asking for a backend the adapter doesn't yet support is a clear error.
+def test_unknown_backend_string_raises():
+    """An unknown backend identifier surfaces a clear error.
 
-    CueBackend / CloudyGridBackend / shock variants will become valid
-    once Phase II-3 lands; until then the adapter must refuse them
-    rather than silently misbehaving.
+    Cue / CloudyGrid / shock are now supported (Phase II-3 closure);
+    only truly unknown identifiers should fail.
     """
-    bad = NebularSEDComponent(config=NebularSEDComponentConfig(name="nebular", backend="cue"))
-    with pytest.raises(NotImplementedError, match="Phase II-3"):
+    bad = NebularSEDComponent(
+        config=NebularSEDComponentConfig(name="nebular", backend="not_a_backend")
+    )
+    with pytest.raises((ValueError, KeyError, NotImplementedError)):
         bad.declared_parameters()
-    with pytest.raises(NotImplementedError, match="baked_in"):
-        bad.precompute()

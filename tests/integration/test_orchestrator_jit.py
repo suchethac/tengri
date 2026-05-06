@@ -90,8 +90,8 @@ def test_orchestrator_chain_eager(ssp, base_params):
     for k in ("log_mstar", "log_mstar_formed", "sfr", "lnu_age", "nion"):
         assert k in s.derived
     # Per-component derived publishes
-    assert "L_radio" in s.derived
-    assert "L_xray" in s.derived
+    assert "sed_radio" in s.derived
+    assert "sed_xray" in s.derived
     assert "igm_transmission" in s.derived
 
 
@@ -200,5 +200,5 @@ def test_full_chain_composability(
     assert bool(jnp.all(jnp.isfinite(s_eager.sed_intrinsic)))
     assert jnp.allclose(s_jit.sed_intrinsic, s_eager.sed_intrinsic, rtol=1e-12)
     # Cross-component publications all populated:
-    for k in ("L_ir", "L_agn_bol", "L_radio", "L_xray", "igm_transmission"):
+    for k in ("L_ir", "L_agn_bol", "sed_radio", "sed_xray", "igm_transmission"):
         assert k in s_eager.derived

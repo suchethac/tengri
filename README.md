@@ -42,6 +42,14 @@ JAX backend setup:
 - **CUDA:** Follow [JAX CUDA installation](https://jax.readthedocs.io/en/latest/installation.html#gpu-support).
 - **Apple Silicon:** Metal backend enabled by default via `jax_platforms=metal`. For CPU fallback, use `JAX_PLATFORMS=cpu`.
 
+### Verify your install (30 s)
+
+```bash
+.venv/bin/pytest tests/unit/test_alpha_fe.py tests/unit/test_stellar_skeleton.py -q --no-header
+```
+
+The same selection runs on every PR via GitHub Actions before the full matrix.
+
 ## SSP Grids
 
 Tengri requires pre-computed Simple Stellar Population (SSP) grids in DSPS-compatible HDF5 format. A [repository of pre-formatted templates](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/) from BC03, BPASS, FSPS, and ProGeny is publicly available.
@@ -80,6 +88,34 @@ print(result.summary_table())
 ```
 
 Full walkthrough in [`notebooks/00_quickstart.py`](notebooks/00_quickstart.py).
+
+## Discover what's available
+
+Tengri exposes its model menu programmatically — no need to leave the notebook:
+
+```python
+import tengri
+
+# All registered AGN models (with citation and status)
+tengri.list_agn_models()
+# → [{"name": "skirtor", "status": "production", "citation": "Stalevski et al. 2012, 2016", ...}, ...]
+
+# Filter to a status
+tengri.list_agn_models(status="experimental")
+
+# Recommended inference methods
+tengri.list_inference_methods(tier="primary")
+
+# Look up any model, dust law, SFH variant, nebular backend, component, or inference method by name
+tengri.describe("skirtor")
+tengri.describe("mcmc_nuts")
+
+# One-cell overview of everything available
+tengri.list_all()
+```
+
+The same applies to `tengri.list_dust_laws()`, `tengri.list_sfh_models()`,
+`tengri.list_nebular_backends()`, and `tengri.list_components()`.
 
 ## Features
 

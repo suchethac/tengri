@@ -309,7 +309,19 @@ class DustSEDComponent:
         )
 
         # ── 5. Combine and publish ─────────────────────────────────────
-        sed_total = sed_attenuated + sed_ir
+        # Preserve any non-stellar contribution that may have been added
+        # to ``sed_intrinsic`` by an upstream component (e.g. AGN,
+        # Nebular). The stellar contribution at this point equals
+        # ``sum(lnu_age, axis=0)`` exactly (Stellar is the only producer
+        # of ``lnu_age``), so ``state.sed_intrinsic - sed_intrinsic_stellar``
+        # isolates the non-stellar portion. This matches legacy
+        # ``compute_sed_components`` semantics where stellar dust does
+        # not attenuate AGN/nebular/radio/xray.
+        if state.sed_intrinsic is None:
+            non_stellar_pre_dust = jnp.zeros_like(wave)
+        else:
+            non_stellar_pre_dust = state.sed_intrinsic - sed_intrinsic_stellar
+        sed_total = non_stellar_pre_dust + sed_attenuated + sed_ir
         new_derived = dict(state.derived)
         new_derived["L_ir"] = L_ir
         new_derived["L_absorbed"] = L_absorbed
