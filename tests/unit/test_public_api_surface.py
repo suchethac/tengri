@@ -54,6 +54,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         # ── Top-level convenience verbs ─────────────────────────────
         "doctor",
         "register_component",
+        "search",
         # ── Registry introspection ──────────────────────────────────
         "describe",
         "help",
@@ -62,6 +63,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "list_components",
         "list_dust_emission_models",
         "list_dust_laws",
+        "list_filters",
         "list_inference_methods",
         "list_nebular_backends",
         "list_sfh_models",

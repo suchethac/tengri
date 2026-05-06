@@ -58,9 +58,11 @@ EXPECTED_ALL = frozenset(
         "list_components",
         "list_dust_emission_models",
         "list_dust_laws",
+        "list_filters",
         "list_inference_methods",
         "list_nebular_backends",
         "list_sfh_models",
+        "search",
         "summary",
         # Runtime verbs
         "cache_size_bytes",
