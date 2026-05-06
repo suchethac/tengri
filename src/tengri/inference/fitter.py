@@ -1779,8 +1779,21 @@ class Fitter:
         # --- Dispatch to underlying _run_* methods via registry ---
         from tengri.inference._backend_registry import check_requires, get_backend
 
-        if method == "mcmc":
-            # Special case: auto-select NUTS for low-D, raytrace for high-D
+        if method == "auto":
+            # Pre-registry semantics: low-D → NUTS (exact), high-D → geoVI (scalable).
+            # Dimensionality threshold is configurable via inference defaults.
+            d = self.spec.n_free
+            try:
+                from tengri.parameters.defaults import get_inference_defaults
+
+                threshold = int(
+                    get_inference_defaults().get("mcmc_auto_d", _MCMC_AUTO_D_THRESHOLD)
+                )
+            except (ImportError, FileNotFoundError, OSError, KeyError, ValueError):
+                threshold = _MCMC_AUTO_D_THRESHOLD
+            entry = get_backend("mcmc_nuts" if d <= threshold else "vi_nonlinear_fast")
+        elif method == "mcmc":
+            # Auto-select within the MCMC family: NUTS for low-D, ray tracing for high-D.
             d = self.spec.n_free
             if d <= _MCMC_AUTO_D_THRESHOLD:
                 entry = get_backend("mcmc_nuts")

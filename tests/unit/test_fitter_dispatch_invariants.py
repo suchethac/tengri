@@ -209,7 +209,12 @@ class TestAutoDispatchRouting:
         mock_vi.assert_not_called()
 
     def test_auto_high_d_routes_to_vi(self) -> None:
-        """auto with D > threshold should call _run_vi."""
+        """auto with D > threshold should route to NIFTy fast geoVI.
+
+        Pre-registry semantics (and the current registry-backed dispatch)
+        send high-D ``auto`` to the ``vi_nonlinear_fast`` backend, which
+        invokes ``_run_nifty_fast_vi`` rather than ``_run_vi``.
+        """
         # Build a spec with more free params than threshold
         extra = {f"sfh_dpl_xparam_{i}": Uniform(0.0, 1.0) for i in range(_AUTO_D_THRESHOLD + 5)}
         # Use a MagicMock spec with n_free above threshold instead of a real Parameters
@@ -227,7 +232,7 @@ class TestAutoDispatchRouting:
         sentinel = object()
         with (
             patch.object(fitter, "_run_nuts", return_value=sentinel) as mock_nuts,
-            patch.object(fitter, "_run_vi", return_value=sentinel) as mock_vi,
+            patch.object(fitter, "_run_nifty_fast_vi", return_value=sentinel) as mock_vi,
         ):
             fitter.run("auto", key=jax.random.PRNGKey(0))
 
