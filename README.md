@@ -52,11 +52,22 @@ The same selection runs on every PR via GitHub Actions before the full matrix.
 
 ## SSP Grids
 
-Tengri requires pre-computed Simple Stellar Population (SSP) grids in DSPS-compatible HDF5 format. A [repository of pre-formatted templates](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/) from BC03, BPASS, FSPS, and ProGeny is publicly available.
+Tengri requires pre-computed Simple Stellar Population (SSP) grids in DSPS-compatible HDF5 format. A [repository of pre-formatted templates](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/) from BC03, BPASS, FSPS, and ProGeny is publicly available. Download the default FSPS grid:
+
+```python
+import tengri
+tengri.download_ssp()  # FSPS v3.2 → data/ (or $TENGRI_DATA_DIR if set)
+```
+
+Alternatively, use the shell wrapper or wget:
 
 ```bash
+bash scripts/setup_ssp.sh
+# or
 wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/ssp_fsps_v3.2.h5 -P data/
 ```
+
+See `tengri.list_known_ssps()` for other available grids (BC03, BPASS, ProGeny).
 
 ## Quick Start
 

@@ -54,6 +54,20 @@ try:
 except Exception as _cache_err:  # never break import
     _logging.getLogger(__name__).warning("Failed to enable persistent JAX cache: %s", _cache_err)
 
+# Test/dev escape hatch: disable JIT globally so each test pays trace-only cost
+# instead of full compile cost. Useful when running large pytest suites where
+# per-test compile dominates wallclock (each test cold-compiles a fresh fused
+# kernel). Tests that explicitly assert JIT-traceability still work because
+# ``jax.jit`` becomes a transparent no-op rather than disappearing.
+#
+# Usage:
+#     TENGRI_DISABLE_JIT=1 pytest tests/ -q
+#
+# Caveat: a few tests may surface latent eager-mode bugs (closures over Python
+# floats that previously got promoted by tracers). Treat those as real findings.
+if _os.environ.get("TENGRI_DISABLE_JIT", "").lower() in ("1", "true", "yes"):
+    jax.config.update("jax_disable_jit", True)
+
 __version__ = "0.1.0"
 
 # --- Exception hierarchy ---
@@ -64,6 +78,7 @@ __version__ = "0.1.0"
 import sys
 
 from tengri import components as _components, preprocessing, presets
+from tengri._data_setup import download_ssp, list_known_ssps
 from tengri._logo import LOGO, LOGO_BANNER, print_logo
 from tengri.citations import (
     Bibliography,
@@ -287,6 +302,7 @@ __all__ = [
     "cosmology",
     "describe",
     "doctor",
+    "download_ssp",
     "dust",
     "enable_persistent_cache",
     "examples",
@@ -304,6 +320,7 @@ __all__ = [
     "list_dust_laws",
     "list_filters",
     "list_inference_methods",
+    "list_known_ssps",
     "list_nebular_backends",
     "list_plots",
     "list_sfh_models",

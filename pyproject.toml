@@ -57,6 +57,15 @@ tengri = "tengri.cli:main"
 [project.optional-dependencies]
 nuts = ["blackjax>=1.0"]
 optax = ["optax>=0.2"]
+# Hardware-accelerator extras. JAX is installed by default with CPU support;
+# these extras pull the matching jax/jaxlib build for the target backend.
+# Linux x86_64 with CUDA 12: pip install -e ".[gpu]"
+# macOS arm64 (Apple Silicon): pip install -e ".[metal]"
+# Caveat (metal): jax-metal is experimental and known to produce numerical
+# discrepancies vs CPU/CUDA on tengri's stochastic SFH path — use
+# JAX_PLATFORMS=cpu for production fits until upstream stabilises.
+gpu = ["jax[cuda12]>=0.4.20"]
+metal = ["jax-metal>=0.1.0"]
 all = [
     "blackjax>=1.0",
     "optax>=0.2",
