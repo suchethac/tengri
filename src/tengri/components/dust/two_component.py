@@ -78,12 +78,14 @@ class DustSEDComponentConfig(SEDComponentConfig):
     law_diff : str
         Attenuation-law registry key for the diffuse ISM (old star)
         component. Default ``"power_law"``.
-    emission_model : str
+    emission_model : str or None
         IR emission template registry key. One of
         ``"modified_blackbody"``, ``"casey2012"``, ``"dale2014"``,
         ``"draine_li2007"``, ``"draine_li2014"``. Default
         ``"modified_blackbody"`` because it has no template-grid
-        dependency.
+        dependency. Pass ``None`` to disable IR re-emission entirely
+        — the component then publishes ``sed_dust_ir`` as zeros and
+        omits the energy-balance accumulation.
     t_birth_yr : float
         Birth-cloud dispersal age (sigmoid centre, yr).
         Default 1e7 (10 Myr) per Charlot & Fall (2000).
@@ -94,7 +96,7 @@ class DustSEDComponentConfig(SEDComponentConfig):
     name: str = "dust"
     law_bc: str = "power_law"
     law_diff: str = "power_law"
-    emission_model: str = "modified_blackbody"
+    emission_model: str | None = "modified_blackbody"
     t_birth_yr: float = 1e7
     transition_width_dex: float = 0.3
 
@@ -292,21 +294,28 @@ class DustSEDComponent:
         L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
 
         # ── 4. IR emission template ────────────────────────────────────
-        emission_fn = resolve_emission_model(self.config.emission_model)
-        z = jnp.asarray(params.get("redshift", 0.0))
-        sed_ir = emission_fn(
-            wave,
-            L_ir,
-            dust_T=jnp.asarray(params.get("dust_T", 35.0)),
-            dust_beta_ir=jnp.asarray(params.get("dust_beta_ir", 1.6)),
-            dust_alpha_dale=jnp.asarray(params.get("dust_alpha_dale", 2.0)),
-            dust_umin=jnp.asarray(params.get("dust_umin", 1.0)),
-            dust_qpah=jnp.asarray(params.get("dust_qpah", 2.5)),
-            dust_gamma_dl=jnp.asarray(params.get("dust_gamma_dl", 0.01)),
-            dust_alpha_dl14=jnp.asarray(params.get("dust_alpha_dl14", 2.0)),
-            dust_alpha_mir=jnp.asarray(params.get("dust_alpha_mir", 2.0)),
-            redshift=z,
-        )
+        # When emission_model is None, the user opted out of IR re-emission
+        # entirely (legacy `dust_emission=None` parity). Skip the template
+        # call and publish zero — preserves the no-emission behaviour of
+        # the legacy ``_compute_sed_components`` path.
+        if self.config.emission_model is None:
+            sed_ir = jnp.zeros_like(wave)
+        else:
+            emission_fn = resolve_emission_model(self.config.emission_model)
+            z = jnp.asarray(params.get("redshift", 0.0))
+            sed_ir = emission_fn(
+                wave,
+                L_ir,
+                dust_T=jnp.asarray(params.get("dust_T", 35.0)),
+                dust_beta_ir=jnp.asarray(params.get("dust_beta_ir", 1.6)),
+                dust_alpha_dale=jnp.asarray(params.get("dust_alpha_dale", 2.0)),
+                dust_umin=jnp.asarray(params.get("dust_umin", 1.0)),
+                dust_qpah=jnp.asarray(params.get("dust_qpah", 2.5)),
+                dust_gamma_dl=jnp.asarray(params.get("dust_gamma_dl", 0.01)),
+                dust_alpha_dl14=jnp.asarray(params.get("dust_alpha_dl14", 2.0)),
+                dust_alpha_mir=jnp.asarray(params.get("dust_alpha_mir", 2.0)),
+                redshift=z,
+            )
 
         # ── 5. Combine and publish ─────────────────────────────────────
         # Preserve any non-stellar contribution that may have been added

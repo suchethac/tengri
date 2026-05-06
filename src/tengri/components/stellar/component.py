@@ -41,6 +41,8 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     SSPData,
     compute_log_z_evolving,
     compute_surviving_mass,
+    effective_metallicity,
+    has_alpha_grid,
     interpolate_mass_remaining,
 )
 from tengri.core.component import (
@@ -414,7 +416,26 @@ class StellarSEDComponent:
         # chem_evol: closed-box gas regulator — Z(t) derived from SFH self-
         # consistently (Phase II-2.4). Mirrors legacy sed_model.py:3578-3592.
         if self.config.metallicity_model == "delta":
-            log_z_abs_scalar = jnp.asarray(params["met_logzsol"]) + LOG10_ZSUN
+            # Apply alpha-Fe enhancement via effective_metallicity for 3D
+            # SSP grids (no native α axis). Mirrors the legacy
+            # ``interp_met_alpha_dispatch`` fallback in
+            # ``forward/pipeline.py:239``: when no α grid is available,
+            # the α-shift is folded into log_z via Salaris+05 / DSPS
+            # canonical relation. 4D α-grid SSPs require true bilinear
+            # collapse before the lognormal-MDF kernel — not yet wired
+            # here.
+            if has_alpha_grid(ssp):
+                raise NotImplementedError(
+                    "StellarSEDComponent: 4D SSP grids with native [α/Fe] axis "
+                    "are not yet supported by the orchestrator path. The legacy "
+                    "monolith uses interpolate_met_alpha to collapse the α axis "
+                    "before the lognormal-MDF kernel — port that path here when "
+                    "needed. For now, use a 3D SSP grid (effective_metallicity "
+                    "fallback covers met_alpha_fe scientifically)."
+                )
+            alpha_fe = jnp.asarray(params.get("met_alpha_fe", 0.0))
+            log_z_eff = effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe)
+            log_z_abs_scalar = log_z_eff + LOG10_ZSUN
             log_metallicity_history = jnp.full(n_grid, log_z_abs_scalar)
             lgmet_on_ssp_ages = jnp.full_like(ssp_ages_yr, log_z_abs_scalar)
             log_z_for_mr = log_z_abs_scalar

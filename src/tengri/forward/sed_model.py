@@ -1254,6 +1254,36 @@ class SEDModel:
         # need a new AGN-nebular kernel branch entirely. Each is a separate
         # follow-up PR with its own equivalence harness.
 
+        # Feltre NLR AGN-nebular precomputation
+        feltre_nlr_lookup = None
+        if (
+            precompute
+            and self._z_fixed is not None
+            and self.filter_waves is not None
+            and self._agn_config is not None
+            and self._agn_config.agn_nlr_backend == "feltre"
+        ):
+            try:
+                from tengri.components.nebular.feltre_precompute import (
+                    build_lookup,
+                    precompute,
+                )
+
+                _precomp = precompute(
+                    self.filter_waves,
+                    self.filter_trans,
+                    redshift=float(self._z_fixed),
+                    parameters=self.spec,
+                )
+                feltre_nlr_lookup = build_lookup(_precomp)
+            except Exception as e:
+                warnings.warn(
+                    f"Feltre NLR preintegration failed: {e}. "
+                    "Falling back to full-wavelength evaluation.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+
         return PrecomputedData(
             photometry=phot,
             dust_age_weights=dust_age_w,
@@ -1274,6 +1304,7 @@ class SEDModel:
             xray_xrb_preintegrated=xray_xrb_preint,
             xray_corona_preintegrated=xray_corona_preint,
             xray_corona_lopez24_preintegrated=xray_corona_lopez24_preint,
+            feltre_nlr_lookup=feltre_nlr_lookup,
         )
 
     def _build_compositional_kernels(self):
@@ -3172,9 +3203,7 @@ class SEDModel:
             agn_model=getattr(self, "_agn_model", None),
             dust_law_bc=getattr(self, "_dust_law_bc", "power_law"),
             dust_law_diff=getattr(self, "_dust_law_diff", "power_law"),
-            dust_emission_model=(
-                getattr(self, "_dust_emission_model", None) or "modified_blackbody"
-            ),
+            dust_emission_model=getattr(self, "_dust_emission_model", None),
             use_dust=(getattr(self, "_dust_model", "two_component") != "off"),
             use_radio=bool(getattr(self, "_uses_radio", False)),
             use_xray=bool(getattr(self, "_uses_xray", False)),
