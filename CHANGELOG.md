@@ -6,6 +6,72 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Changed (Phase II-3 closure: orchestrator path is the single truth, 2026-05-06)
+
+All five `predict_*` methods and the lazy `Prediction` wrapper now
+route through `predict_via_orchestrator`. `_compute_sed_components`
+has zero production callers; it is preserved only as an internal
+parity-check helper for 5 test files. Sub-PR commit map:
+
+- `predict_rest_sed` (default-`wave` and custom-`wave` paths) →
+  `predict_via_orchestrator` (`77704a8`, `5f1d862`).
+- `predict_line_fluxes` → `state.derived["line_lums"]` (`b7dff1b`).
+- `predict_sed_quantities` → `predict_sed_quantities_via_orchestrator`
+  (`63f036f`).
+- `Prediction._ensure_sfh` and `_ensure_sed` → orchestrator state
+  (`0c72ac5`, `6d5ee9f`); single cached `_state` keeps SFH-only and
+  SED-consuming properties on the same DSPS-canonical numerics.
+
+The orchestrator integrates the SFH on `spec.n_grid` (default 64)
+unconditionally; legacy `SEDModel` used `n_grid=256` for non-stochastic
+configs. `Prediction._ensure_sfh` interpolates `sfr_history` onto
+`model.age_yr` so age-mask consumers (`sfr_100myr`, `sfr_10myr`)
+remain valid.
+
+**Breaking-ish (semantic shift, not API)**: `luminosity_weighted_age_gyr`
+now reflects the energy-conserving DSPS-canonical CSP integration.
+For models built with `csp_integration='trapz'` (legacy default) the
+value drifts by ~12% from previous versions; with `csp_integration='dsps_native'`
+the drift is sub-0.1%. The new value is energy-conserving by construction
+(its per-age cube IS `sed_intrinsic`); the legacy trapz reconstruction
+was incoherent in that sense. Other published quantities (`l_bol`,
+`l_tir`, `irx`, `dn4000`, etc.) shift by < 0.13% under either mode.
+
+### Fixed (orchestrator-fidelity gaps surfaced by the migration)
+
+- `met_alpha_fe` was silently dropped by `StellarSEDComponent.apply()`
+  on 3D SSP grids. Fixed via the Salaris+05 `effective_metallicity`
+  shift (legacy parity); 4D α-grid SSPs raise `NotImplementedError`
+  with a clear pointer to the legacy `interpolate_met_alpha` path.
+- `dust_emission=None` was silently coerced to `"modified_blackbody"`
+  with `dust_eta_balance=1.0`, fabricating thermal IR re-emission for
+  users who didn't configure it. Now passes `None` end-to-end;
+  `DustSEDComponent.apply()` skips the emission template when
+  `emission_model is None`.
+- `NebularSEDComponent` was passing `ssp_weights=jnp.ones(n_age)`
+  (CloudyGrid) and only `gas_logqion` (Cue), so Cue used its default
+  ionising-spectrum shape. `StellarSEDComponent` now publishes
+  `age_weights` (Msun/bin); nebular calls run in high-level
+  (SSP-derived) mode.
+- `neb_logZ_gas` was passed in Z/Zsun while Cue/CloudyGrid expect
+  absolute log10(Z). `NebularSEDComponent` now applies the
+  `LOG10_ZSUN` offset (legacy `param_map` parity). Was the dominant
+  ~240× drift on Cue line luminosities before the fix.
+- `state_to_sed_quantities` `l_tir` switched to legacy semantics
+  (`compute_l_tir(sed, wave)` integration over 8–1000 μm) for parity
+  (`fd07dee`).
+
+### Added (`Parameters.met_mode` auto-inference, 2026-05-06)
+
+`Parameters` now infers `met_mode` from the metallicity-related
+prior keys present in kwargs — `met_logzsol_0` + `met_logzsol_final`
+implies `"ramp"`, any `chem_*` key implies `"chem_evol"`, etc.
+Driven by a registry-driven discriminator table
+(`_MET_MODE_DISCRIMINATORS` in
+`src/tengri/components/stellar/sfh/met_registry.py`). Explicit
+`met_mode=...` still wins; explicit + key-mismatch raises with a
+helpful hint.
+
 ### Added (precompute coverage + collaborator-handoff polish, 2026-05-06)
 
 - **Precompute coverage now spans every emitter** (commit `531bc4c`).
