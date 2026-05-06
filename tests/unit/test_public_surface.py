@@ -52,6 +52,8 @@ EXPECTED_ALL = frozenset(
         "units",
         # Registry verbs
         "describe",
+        "examples",
+        "explain",
         "help",
         "list_agn_models",
         "list_all",
@@ -65,6 +67,7 @@ EXPECTED_ALL = frozenset(
         "list_sfh_models",
         "search",
         "summary",
+        "tutorial",
         # Runtime verbs
         "cache_size_bytes",
         "clear_cache",

@@ -57,6 +57,8 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "search",
         # ── Registry introspection ──────────────────────────────────
         "describe",
+        "examples",
+        "explain",
         "help",
         "list_agn_models",
         "list_all",
@@ -69,6 +71,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "list_plots",
         "list_sfh_models",
         "summary",
+        "tutorial",
         # ── Subpackage namespaces (canonical import paths) ──────────
         "agn",
         "citations",
