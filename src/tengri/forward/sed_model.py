@@ -789,6 +789,49 @@ class SEDModel:
 
         return None
 
+    def _precompute_dust_analytic_photometry(self, model_name: str):
+        """Build preintegrated lookup for a specific analytic dust model.
+
+        Parameters
+        ----------
+        model_name : str
+            One of "modified_blackbody", "casey2012", "pah_drude".
+
+        Returns
+        -------
+        object or None
+            JIT-compiled lookup callable or None if precompute unavailable.
+        """
+        import warnings
+
+        if model_name not in ("modified_blackbody", "casey2012", "pah_drude"):
+            return None
+
+        try:
+            from tengri.components.dust.dust_analytic_precompute import (
+                build_lookup as build_lookup_analytic,
+                precompute,
+            )
+
+            precomp = precompute(
+                self.filter_waves,
+                self.filter_trans,
+                redshift=float(self._z_fixed) if self._z_fixed is not None else 0.0,
+                parameters=self.spec,
+                model=model_name,
+            )
+            if precomp is not None:
+                return build_lookup_analytic(precomp, model=model_name)
+        except Exception as e:
+            warnings.warn(
+                f"Failed to precompute dust analytic photometry for {model_name}: {e}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return None
+
+        return None
+
     def _warm_grid_caches(self) -> None:
         """Warm @functools.cache loaders to avoid tracer leaks from HDF5 grids.
 
@@ -936,6 +979,58 @@ class SEDModel:
             and self._dust_emission_model is not None
         ):
             dust_ir_lookup = self._precompute_dust_ir_photometry()
+
+        # Analytic dust emission model preintegration (PR 3).
+        # Pre-integrate modified_blackbody, casey2012, pah_drude through filters
+        # at init time for fast filter-level triweight lookup.
+        modified_blackbody_preint = None
+        casey2012_preint = None
+        pah_drude_preint = None
+        if (
+            precompute
+            and self._z_fixed is not None
+            and self.filter_waves is not None
+            and self._dust_emission_model is not None
+        ):
+            # Build separate preintegrated lookups for each analytic dust model,
+            # only when that model is selected. (Allows users to switch models
+            # at runtime without rebuilding.)
+            if self._dust_emission_model == "modified_blackbody":
+                try:
+                    modified_blackbody_preint = self._precompute_dust_analytic_photometry(
+                        "modified_blackbody"
+                    )
+                except Exception as e:
+                    warnings.warn(
+                        f"modified_blackbody dust preintegration failed: {e}. "
+                        "Falling back to full-wavelength evaluation.",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+            elif self._dust_emission_model == "casey2012":
+                try:
+                    casey2012_preint = self._precompute_dust_analytic_photometry(
+                        "casey2012"
+                    )
+                except Exception as e:
+                    warnings.warn(
+                        f"casey2012 dust preintegration failed: {e}. "
+                        "Falling back to full-wavelength evaluation.",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+            elif self._dust_emission_model == "pah_drude":
+                try:
+                    pah_drude_preint = self._precompute_dust_analytic_photometry(
+                        "pah_drude"
+                    )
+                except Exception as e:
+                    warnings.warn(
+                        f"pah_drude dust preintegration failed: {e}. "
+                        "Falling back to full-wavelength evaluation.",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
 
         # K&D 2018 AGN disc preintegration (for hybrid kernel, fixed z, K&D models)
         # Pre-integrate the three K&D disc zones through filters at init time
@@ -1323,6 +1418,9 @@ class SEDModel:
             igm_at_effective_wavelengths=igm_eff,
             effective_bandwidths_hz=eff_bw,
             dust_ir_lookup=dust_ir_lookup,
+            modified_blackbody_preintegrated=modified_blackbody_preint,
+            casey2012_preintegrated=casey2012_preint,
+            pah_drude_preintegrated=pah_drude_preint,
             kd_preintegrated=kd_preint,
             skirtor_preintegrated=skirtor_preint,
             silva04_preintegrated=silva04_preint,
@@ -2851,78 +2949,21 @@ class SEDModel:
         predict_sfh_quantities : JIT-compatible SFH quantities.
         predict_rest_sed : Full rest-frame SED (for custom analysis).
         """
-        from tengri.forward.prediction import SEDQuantities
-        from tengri.utils.sed_quantities import (
-            compute_balmer_break,
-            compute_bolometric_luminosity,
-            compute_dn4000,
-            compute_fuv_flux,
-            compute_irx,
-            compute_l_dust_absorbed,
-            compute_l_tir,
-            compute_luminosity_weighted_age,
-            compute_luminosity_weighted_metallicity,
-            compute_m_uv,
-            compute_nuv_flux,
-            compute_rest_uv_color,
-            compute_uv_luminosity_1600,
-            compute_uv_slope_beta,
-        )
-
-        comp = self._compute_sed_components(params, need_intrinsic=True)
-        sed = comp["sed_total"]
-        wave = self.ssp_data.ssp_wave
-        p = comp["p"]
-
-        l_bol = compute_bolometric_luminosity(sed, wave)
-        l_tir = compute_l_tir(sed, wave)
-
-        sed_intr = comp["sed_intrinsic"]
-        sed_atten = comp["sed_attenuated"]
-        l_dust = (
-            compute_l_dust_absorbed(sed_intr, sed_atten, wave)
-            if sed_intr is not None
-            else jnp.array(jnp.nan)
-        )
-
-        l_uv = compute_uv_luminosity_1600(sed, wave)
-        irx = compute_irx(l_tir, l_uv)
-
-        # Intrinsic UV fluxes
-        fuv_intr = compute_fuv_flux(sed_intr, wave) if sed_intr is not None else jnp.array(jnp.nan)
-        nuv_intr = compute_nuv_flux(sed_intr, wave) if sed_intr is not None else jnp.array(jnp.nan)
-
-        # Luminosity-weighted quantities
-        weights = comp["weights"]
-        ssp_flux_at_z = comp["ssp_flux_at_z"]
-        lw_age = compute_luminosity_weighted_age(weights, ssp_flux_at_z, self.ssp_ages_yr, wave)
-        lw_z = compute_luminosity_weighted_metallicity(
-            weights,
-            ssp_flux_at_z,
-            self.ssp_ages_yr,
-            wave,
-            p.get("log_z_abs", 0.0),
-            log_z_initial=p.get("log_z_abs_initial"),
-            log_z_final=p.get("log_z_abs_final"),
-        )
-
-        return SEDQuantities(
-            l_bol=l_bol,
-            l_tir=l_tir,
-            l_dust_absorbed=l_dust,
-            irx=irx,
-            uv_slope_beta=compute_uv_slope_beta(sed, wave),
-            dn4000=compute_dn4000(sed, wave),
-            balmer_break=compute_balmer_break(sed, wave),
-            m_uv=compute_m_uv(sed, wave),
-            fuv_flux=compute_fuv_flux(sed, wave),
-            nuv_flux=compute_nuv_flux(sed, wave),
-            fuv_flux_intrinsic=fuv_intr,
-            nuv_flux_intrinsic=nuv_intr,
-            rest_uv_color=compute_rest_uv_color(sed, wave),
-            luminosity_weighted_age_gyr=lw_age,
-            luminosity_weighted_metallicity=lw_z,
-        )
+        # Dispatch to the orchestrator-backed bridge. Same semantics shift
+        # PR 5a applied to ``predict_rest_sed``: the orchestrator's
+        # stellar adapter uses DSPS-canonical (lognormal-MDF) CSP
+        # integration unconditionally. For ``csp_integration='dsps_native'``
+        # the legacy path produces identical results (sub-0.1% drift on
+        # every published field). For the legacy default
+        # ``csp_integration='trapz'``, the only field that drifts
+        # noticeably (~12%) is ``luminosity_weighted_age_gyr`` — the
+        # orchestrator integrates the actual ``lnu_age`` cube whose
+        # sum-over-age IS ``sed_intrinsic``, while legacy's
+        # ``compute_per_bin_luminosity(weights, ssp_flux_at_z)``
+        # reconstruction has a hidden DSPS-joint-weight discrepancy
+        # under trapz. The orchestrator value is the physically correct
+        # one (energy-conserving by construction).
+        return self.predict_sed_quantities_via_orchestrator(params)
 
     # ── Component orchestrator path (Phase II-2.6 opt-in) ─────────────
 
