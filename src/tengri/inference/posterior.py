@@ -2184,6 +2184,47 @@ class Posterior:
             f"Posterior(method='{self.method}', n_samples={n}, wall_time={self.wall_time_s:.1f}s)"
         )
 
+    # Curated tab-completion list — the 35 public attrs/methods on
+    # Posterior overwhelm a fresh user.  These ~15 are the canonical
+    # postprocessing flow (inspect → diagnose → save → refine).  All
+    # other names remain accessible by attribute access; only
+    # ``dir(posterior)`` is filtered.
+    _CURATED_DIR = (
+        # 1.  Inspect what came back
+        "summary",
+        "summary_table",
+        "samples",
+        "params",
+        "derived",
+        "method",
+        "n_samples",
+        "wall_time_s",
+        # 2.  Diagnose the fit
+        "diagnostics_summary",
+        "effective_sample_size",
+        "rhat",
+        "check_convergence",
+        "loss_history",
+        # 3.  Plot
+        "plot_corner",
+        "plot_sed",
+        "plot_sfh",
+        # 4.  Save / share / continue
+        "save",
+        "load",
+        "to_arviz",
+        "to_param_spec",
+        "refine",
+        "resample",
+        # 5.  Post-fit physics
+        "posterior_predictive",
+        "sed_components",
+    )
+
+    def __dir__(self) -> list[str]:
+        """Curated tab-completion list. Other attrs remain accessible."""
+        return list(self._CURATED_DIR)
+
     # ── Method chaining ───────────────────────────────────────────
 
     def refine(self, method: str, **kwargs):

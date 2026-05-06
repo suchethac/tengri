@@ -16,10 +16,30 @@ from tengri.observation.photometry import FilterCurve
 
 @dataclasses.dataclass(frozen=True)
 class Photometry:
-    """Photometric observation configuration.
+    """Photometric observation configuration — filter set, not the fluxes.
 
-    Immutable container for filter transmission curves with metadata.
-    Created via factory methods rather than direct construction.
+    This class holds *which bands* the model should evaluate.  Measured
+    fluxes and uncertainties are passed separately to
+    :class:`tengri.Fitter` (``data=`` and ``noise=``).
+
+    Don't call ``Photometry(...)`` directly — use the factory:
+
+        >>> phot = tengri.Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"])
+
+    or browse the bundled set:
+
+        >>> bandset = tengri.list_filters(survey="SDSS").names()
+        >>> phot = tengri.Photometry.from_names(bandset)
+
+    Then the full fit pattern:
+
+        obs = tengri.Observation(photometry=phot)
+        spec = tengri.Parameters(redshift=0.1, ...)
+        model = tengri.SEDModel(spec, ssp_data, observation=obs)
+        fitter = tengri.Fitter(model,
+                               data=measured_fluxes,    # ← your fluxes go here
+                               noise=measured_errors)   # ← your sigma here
+        posterior = fitter.run("nuts")
 
     Parameters
     ----------
