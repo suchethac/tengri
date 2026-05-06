@@ -61,10 +61,16 @@ def _build_signal_response(fitter):
                 return model.predict_photometry_via_orchestrator(params)
             return model.predict_photometry(params, mode="_traceable")
         elif data_type == "spectroscopy":
+            if use_orchestrator:
+                return model.predict_spectrum_via_orchestrator(params, model._wave_obs)
             return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
         elif data_type == "joint":
-            p = model.predict_photometry(params, mode="_traceable")
-            s = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+            if use_orchestrator:
+                p = model.predict_photometry_via_orchestrator(params)
+                s = model.predict_spectrum_via_orchestrator(params, model._wave_obs)
+            else:
+                p = model.predict_photometry(params, mode="_traceable")
+                s = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
             return jnp.concatenate([p, s])
         raise ValueError(f"Unknown data_type: {data_type}")
 
@@ -187,10 +193,17 @@ def build_jit_engine(fitter, pos_dict):
                 else:
                     predicted = model.predict_photometry(params, mode="_traceable")
             elif data_type == "spectroscopy":
-                predicted = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                if use_orchestrator:
+                    predicted = model.predict_spectrum_via_orchestrator(params, model._wave_obs)
+                else:
+                    predicted = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
             elif data_type == "joint":
-                p = model.predict_photometry(params, mode="_traceable")
-                s = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                if use_orchestrator:
+                    p = model.predict_photometry_via_orchestrator(params)
+                    s = model.predict_spectrum_via_orchestrator(params, model._wave_obs)
+                else:
+                    p = model.predict_photometry(params, mode="_traceable")
+                    s = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
                 predicted = jnp.concatenate([p, s])
             else:
                 raise ValueError(f"Unknown data_type: {data_type}")

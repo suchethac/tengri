@@ -95,11 +95,18 @@ def _build_prediction(
             predicted = model.predict_photometry(params, mode=mode)
         pred_phot, pred_spec = predicted, None
     elif data_type == "spectroscopy":
-        predicted = model.predict_spectrum(params, model._wave_obs, mode=mode)
+        if use_orchestrator:
+            predicted = model.predict_spectrum_via_orchestrator(params, model._wave_obs)
+        else:
+            predicted = model.predict_spectrum(params, model._wave_obs, mode=mode)
         pred_phot, pred_spec = None, predicted
     elif data_type == "joint":
-        pred_phot = model.predict_photometry(params, mode=mode)
-        pred_spec = model.predict_spectrum(params, model._wave_obs, mode=mode)
+        if use_orchestrator:
+            pred_phot = model.predict_photometry_via_orchestrator(params)
+            pred_spec = model.predict_spectrum_via_orchestrator(params, model._wave_obs)
+        else:
+            pred_phot = model.predict_photometry(params, mode=mode)
+            pred_spec = model.predict_spectrum(params, model._wave_obs, mode=mode)
         predicted = jnp.concatenate([pred_phot, pred_spec])
     else:
         raise ValueError(f"Unknown data_type: {data_type}")

@@ -50,7 +50,7 @@ class _MockSpec:
 
 
 class _DualPathModel:
-    """Model exposing both legacy and orchestrator photometry paths.
+    """Model exposing both legacy and orchestrator photometry/spectrum paths.
 
     Each path returns a tagged sentinel so the test can read which one
     the loss function called.
@@ -60,12 +60,21 @@ class _DualPathModel:
         self.spec = None
         self.legacy_calls = 0
         self.orchestrator_calls = 0
+        self._wave_obs = jnp.array([4000.0, 5000.0, 6000.0])
 
     def predict_photometry(self, params, mode=None):
         self.legacy_calls += 1
         return jnp.array([1.0, 2.0, 3.0])
 
     def predict_photometry_via_orchestrator(self, params):
+        self.orchestrator_calls += 1
+        return jnp.array([10.0, 20.0, 30.0])
+
+    def predict_spectrum(self, params, wave_obs, mode=None):
+        self.legacy_calls += 1
+        return jnp.array([1.0, 2.0, 3.0])
+
+    def predict_spectrum_via_orchestrator(self, params, wave_obs):
         self.orchestrator_calls += 1
         return jnp.array([10.0, 20.0, 30.0])
 
@@ -113,8 +122,56 @@ def test_use_orchestrator_routes_through_component_path():
     assert model.orchestrator_calls == 1
 
 
-def test_use_orchestrator_rejects_non_photometry_at_construction():
-    """Until spectroscopy bridges land, Fitter must refuse the combo."""
+def _make_spectroscopy_fitter(*, use_orchestrator: bool):
+    spec = _MockSpec(free_names=["flux_scale"])
+    model = _DualPathModel()
+    model.spec = spec
+
+    fnu_obs = jnp.array([1.0, 2.0, 3.0])
+    fnu_err = jnp.array([0.1, 0.1, 0.1])
+
+    fitter = SimpleNamespace(
+        model=model,
+        data=fnu_obs,
+        noise=fnu_err,
+        data_type="spectroscopy",
+        data_mask=None,
+        spec=spec,
+        _free_names=spec.free_params,
+        _fixed_values={},
+        _bounds={"flux_scale": (-jnp.inf, jnp.inf)},
+        _data_args={"data": fnu_obs, "noise": fnu_err},
+        _user_likelihood=None,  # use legacy χ² path; data type drives routing
+        use_orchestrator=use_orchestrator,
+    )
+    return fitter, model
+
+
+def test_use_orchestrator_routes_spectrum_through_component_path():
+    """Spectroscopy now also routes through the orchestrator when opted in."""
+    fitter, model = _make_spectroscopy_fitter(use_orchestrator=True)
+    # We're not asserting numerical outcome (no user_likelihood / loss math
+    # here) — just that the dispatch in _build_prediction picks the
+    # orchestrator branch.
+    from tengri.inference.loss_functions import _build_prediction
+
+    _build_prediction(
+        model,
+        {"flux_scale": 1.0},
+        "spectroscopy",
+        "_traceable",
+        has_line_fluxes=False,
+        has_indices=False,
+        index_defs=None,
+        data_args=fitter._data_args,
+        use_orchestrator=True,
+    )
+    assert model.legacy_calls == 0
+    assert model.orchestrator_calls == 1
+
+
+def test_use_orchestrator_rejects_unknown_data_type_at_construction():
+    """Sanity: an unknown data_type with use_orchestrator=True still raises."""
     from tengri.inference.fitter import Fitter
 
     class _StubModel:
@@ -130,7 +187,7 @@ def test_use_orchestrator_rejects_non_photometry_at_construction():
             model=_StubModel(),
             data=jnp.array([1.0, 2.0]),
             noise=jnp.array([0.1, 0.1]),
-            data_type="spectroscopy",
+            data_type="not_a_real_type",
             use_orchestrator=True,
             auto_protocol_likelihood=False,
         )

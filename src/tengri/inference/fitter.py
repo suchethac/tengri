@@ -369,11 +369,10 @@ class Fitter:
         self.data_type = self._resolve_data_type(data_type, model)
         self.spec = model.spec
 
-        if self.use_orchestrator and self.data_type != "photometry":
+        if self.use_orchestrator and self.data_type not in ("photometry", "spectroscopy", "joint"):
             raise NotImplementedError(
-                "Fitter(use_orchestrator=True) currently supports only "
-                f"data_type='photometry'; got {self.data_type!r}. "
-                "Spectroscopy/joint orchestrator bridges are not yet wired."
+                "Fitter(use_orchestrator=True) currently supports "
+                f"data_type in (photometry, spectroscopy, joint); got {self.data_type!r}."
             )
 
         # ── Auto-precompute photometry ─────────────────────────────
