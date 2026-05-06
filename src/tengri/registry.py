@@ -185,14 +185,14 @@ class _DescribeRecord(dict):
     def __repr__(self) -> str:
         if not self:
             return "(empty)"
-        width = max(len(k) for k in self) + 2
-        lines = []
-        for k, v in self.items():
+        # Render every field except param_details first; render that last
+        # as an indented sub-table since it's a list-of-dicts.
+        non_details = [(k, v) for k, v in self.items() if k != "param_details"]
+        width = max((len(k) for k, _ in non_details), default=0) + 2
+        lines: list[str] = []
+        for k, v in non_details:
             if isinstance(v, list) and v and all(isinstance(x, str) for x in v):
-                # Multi-line list rendering: one item per row, indented under the key.
-                if len(v) == 0:
-                    lines.append(f"  {k.ljust(width)}(none)")
-                elif len(v) <= 4:
+                if len(v) <= 4:
                     lines.append(f"  {k.ljust(width)}{', '.join(v)}")
                 else:
                     lines.append(f"  {k.ljust(width)}{v[0]}")
@@ -200,6 +200,17 @@ class _DescribeRecord(dict):
                         lines.append(f"  {' ' * width}{item}")
             else:
                 lines.append(f"  {k.ljust(width)}{v}")
+
+        # Sub-table for parameter defaults and descriptions.
+        details = self.get("param_details")
+        if details:
+            name_w = max(len(d["name"]) for d in details)
+            def_w = max(len(d["default"]) for d in details)
+            lines.append("")
+            lines.append("  param_details (free-parameter priors):")
+            for d in details:
+                desc = d.get("description", "")
+                lines.append(f"    {d['name'].ljust(name_w)}  {d['default'].ljust(def_w)}  {desc}")
         return "\n".join(lines)
 
     def _repr_html_(self) -> str:
@@ -276,6 +287,64 @@ def _usage_hint(name: str, kind: str) -> str:
     return ""
 
 
+def _extract_param_details(entry: Any, kind: str) -> list[dict]:
+    """Per-parameter details (default prior, description) when discoverable.
+
+    Used by ``describe()`` to show *what range to put in your Uniform()*
+    for a model the user hasn't seen before — the most common new-user
+    question after "what models are available?"
+    """
+    out: list[dict] = []
+
+    if kind == "sfh_model":
+        spec = getattr(entry, "callable", None)
+        params = getattr(spec, "params", None)
+        if isinstance(params, dict):
+            for name, pdef in params.items():
+                out.append(
+                    {
+                        "name": name,
+                        "default": str(getattr(pdef, "default", "")),
+                        "description": getattr(pdef, "description", ""),
+                    }
+                )
+        return out
+
+    if kind == "agn_model":
+        # AGN param defaults live in _AGN_PARAMS keyed by param name; we
+        # match against the names that appear in the callable's signature.
+        import inspect
+
+        fn = getattr(entry, "callable", None)
+        if fn is None:
+            return out
+        try:
+            sig = inspect.signature(fn)
+        except (TypeError, ValueError):
+            return out
+        agn_names = [p.name for p in sig.parameters.values() if p.name.startswith("agn_")]
+        try:
+            from tengri.parameters._param_defs import _AGN_PARAMS
+
+            for n in agn_names:
+                meta = _AGN_PARAMS.get(n)
+                if meta is None:
+                    continue
+                description, _check, _err, default = meta
+                out.append(
+                    {
+                        "name": n,
+                        "default": str(default),
+                        "description": description,
+                    }
+                )
+        except (ImportError, AttributeError):
+            pass
+        return out
+
+    return out
+
+
 def _entry_to_dict(name: str, entry: Any, *, kind: str) -> dict:
     """Normalize a registry entry (varied dataclass shapes) into a uniform dict."""
     out = {
@@ -289,6 +358,9 @@ def _entry_to_dict(name: str, entry: Any, *, kind: str) -> dict:
     params = _extract_params(entry, kind)
     if params:
         out["params"] = params
+    details = _extract_param_details(entry, kind)
+    if details:
+        out["param_details"] = details
     return out
 
 
