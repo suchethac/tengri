@@ -400,6 +400,7 @@ def state_to_sed_quantities(state: Any):
         compute_dn4000,
         compute_fuv_flux,
         compute_irx,
+        compute_l_tir,
         compute_m_uv,
         compute_nuv_flux,
         compute_rest_uv_color,
@@ -416,13 +417,18 @@ def state_to_sed_quantities(state: Any):
     l_bol_erg = jnp.abs(jnp.trapezoid(sed, nu))
     l_bol = l_bol_erg / L_SUN
 
-    # Dust-absorbed and IR re-emission luminosities, available when
-    # DustSEDComponent ran in the chain.
+    # Dust-absorbed luminosity from the orchestrator's energy-balance
+    # bookkeeping — exact match for legacy ``compute_l_dust_absorbed``.
     derived = state.derived
-    l_ir = jnp.asarray(derived.get("L_ir", 0.0))
     l_absorbed = jnp.asarray(derived.get("L_absorbed", 0.0))
-    l_tir = l_ir / L_SUN
     l_dust_absorbed = l_absorbed / L_SUN
+    # L_TIR uses the legacy semantics (integration of the SED over the
+    # 8–1000 μm window) for parity with ``predict_sed_quantities``,
+    # not the orchestrator's energy-balance ``L_ir`` derived key —
+    # the two agree when the wavelength grid extends to FIR but
+    # differ on UV/optical-only grids (where the IR window is empty
+    # and the energy-balance value lives outside the SED).
+    l_tir = compute_l_tir(sed, wave)
 
     # UV / break diagnostics — pull from the legacy helpers, which
     # take ``(sed, wave)`` arrays directly.
