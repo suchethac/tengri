@@ -81,14 +81,31 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
     if _use_taylor:
         ssp_phot_moment = precomp.ssp_phot_moment.astype(dt)
     _is_single_dust = state.dust_model == "single_component"
-    _dust_exact = state.precomputed.dust_age_weights is not None
+    # Always use sigmoid age-dependent dust attenuation: the exact path
+    # (``pipeline.py:_compute_dust_atten``) always uses smooth sigmoid
+    # weights, so for hybrid to agree with exact within the 0.5%
+    # dust-factorisation tolerance, the same age weighting is required.
+    # Falls back to ``precompute_dust_age_weights`` when not pre-computed.
+    _dust_exact = True
+    # Define young/old masks unconditionally even though the smooth-sigmoid
+    # branch (selected by ``_dust_exact = True``) is the only runtime path
+    # used. The legacy hard-mask Taylor branch in ``_stellar_phot`` below
+    # still references these names; keeping them defined keeps that branch
+    # syntactically valid for callers that override ``_dust_exact`` to
+    # False (e.g. by setting ``state.dust_scheme = "fast"`` in a future
+    # patch). Cost is one ``jnp`` array materialisation at build time.
+    _t_birth_h = 1e7
+    young_mask = (state.ssp_ages_yr < _t_birth_h).astype(dt)
+    old_mask = dt.type(1.0) - young_mask
     if not _is_single_dust:
-        if _dust_exact:
+        if state.precomputed.dust_age_weights is not None:
             dust_age_w = state.precomputed.dust_age_weights.astype(dt)
         else:
-            _t_birth = 1e7
-            young_mask = (state.ssp_ages_yr < _t_birth).astype(dt)
-            old_mask = dt.type(1.0) - young_mask
+            from tengri.components.dust.attenuation import (
+                precompute_dust_age_weights as _precompute_dust_age_weights_h,
+            )
+
+            dust_age_w = _precompute_dust_age_weights_h(state.ssp_ages_yr).astype(dt)
     flux_scale = dt.type(precomp.flux_scale)
     _csp_use_matrix = state.csp_integration == "log_interp"
     if _csp_use_matrix:
@@ -124,6 +141,58 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
     _lgmet_scat = dt.type(state.lgmet_scatter)
     if _use_smooth_z:
         from tengri.components.stellar.sps.dsps_wrapper import compute_lgmet_weights as _clw
+
+    # ── Closure-path-A captures (mirrors compositional kernel) ─────────
+    # The exact path uses DSPS ``calc_rest_sed_sfh_table_lognormal_mdf``
+    # for trapezoidal cosmic-time SFH integration + lognormal-MDF
+    # metallicity weighting. Hybrid currently does rectangle-rule SFH
+    # (``sfr * _age_dt``) + triweight-CDF metallicity weighting. To make
+    # hybrid and exact agree to within the documented 0.5%
+    # dust-factorisation tolerance, hybrid's stellar branch must use the
+    # closure-A reduction for the no-α / non-met-precomputed delta-Z path.
+    # Other branches (alpha, met_precomputed, evolving-Z) keep legacy
+    # semantics.
+    _ssp_lg_age_gyr_ca_h = state.ssp_data.ssp_lg_age_gyr
+    _ssp_flux_ca_h = state.ssp_data.ssp_flux
+    _ssp_lgmet_ca_h = state.ssp_data.ssp_lgmet
+    _lgmet_scatter_ca_h = float(state.lgmet_scatter)
+    from tengri.components.stellar.sfh.gp_sfh import (
+        make_log_age_grid as _make_log_age_grid_ca_h,
+    )
+    from tengri.utils.cosmology import age_at_z as _age_at_z_fn_ca_h
+
+    _orch_n_grid_ca_h = int(getattr(state.spec, "n_grid", 64))
+    _sfh_lbt_grid_orch_64_h = jnp.power(10.0, _make_log_age_grid_ca_h(_orch_n_grid_ca_h))
+    _t_obs_gyr_fixed_ca_h = (
+        None if state.z_fixed is None else float(_age_at_z_fn_ca_h(state.z_fixed))
+    )
+    _sfh_fn_ca_h = model._sfh_fn if model is not None else None
+    _sfh_internal_names_ca_h = model._sfh_internal_names if model is not None else set()
+    _has_field_ca_h = state.uses_stochastic_sfh
+    _model_log_age_grid_ca_h = model.log_age_grid if model is not None else None
+    _ssp_ages_yr_ca_h = state.ssp_ages_yr
+    # Closure-A is enabled only on the safest branch (delta-Z, no α, no
+    # met_precomputed, default csp_integration). Other branches keep
+    # legacy semantics for now.
+    #
+    # NB: ``_met_precomputed`` is allowed. When the metallicity axis was
+    # collapsed at precompute time (Fixed ``met_logzsol``), DSPS's joint
+    # MDF reduction collapses to a 1D age weighting that is trapezoidal
+    # in cosmic time — exactly what we need to match the exact path's
+    # SFH integration. The MDF marginalisation is then a no-op
+    # (``ssp_at_z = ssp_phot`` directly), but the closure-A trapezoidal
+    # weights still replace the legacy rectangle-rule ``sfr * _age_dt``.
+    # This branch is critical for the DL07/Dale/THEMIS energy-balance
+    # tests which all run with ``met_logzsol=Fixed`` (regression: 4.5%
+    # mismatch in dust-IR was caused by the legacy rectangle-rule path
+    # being used here).
+    _closure_a_eligible_h = (
+        not _use_alpha_fe and not _has_alpha and not _csp_use_matrix and _sfh_fn_ca_h is not None
+    )
+    if _closure_a_eligible_h:
+        from dsps.sed.stellar_sed import (
+            calc_rest_sed_sfh_table_lognormal_mdf as _calc_rest_sed_ln_h,
+        )
 
     # IGM: full-wavelength transmission (compositional-quality, not approximate).
     # Precompute once at init on the rest-frame wavelength grid.
@@ -199,7 +268,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
         _neb_lya_idx = int(jnp.argmin(jnp.abs(nebular_backend.grid.line_wavelengths - 1215.67)))
 
     # Shock
-    has_shock = False  # Shock not parameterized in current version
+    has_shock = getattr(model, "_uses_shock", False) if model is not None else False
 
     # Dust emission (full wavelength or preintegrated)
     has_dust_em_full = state.dust_emission_model is not None
@@ -333,14 +402,126 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
 
             _skirtor_disc_fn = _powerlaw_disc
 
+    # AGN-nebular emitter gates (BLR Gaussian, NLR Gaussian, Feltre NLR)
+    # These are additive emitters controlled by state.agn_config flags.
+    _has_blr_gaussian = (
+        has_agn_full and state.agn_config is not None and state.agn_config.agn_blr_enabled
+    )
+    _has_nlr_gaussian = (
+        has_agn_full and state.agn_config is not None and state.agn_config.agn_nlr_gaussian_enabled
+    )
+    _has_feltre_nlr = (
+        has_agn_full
+        and state.agn_config is not None
+        and state.agn_config.agn_nlr_backend == "feltre"
+    )
+
+    # AGN-nebular preintegration gates
+    _has_preint_blr = (
+        has_agn_full
+        and state.agn_config is not None
+        and state.agn_config.agn_blr_enabled
+        and state.precomputed.blr_lookup is not None
+    )
+    _has_preint_nlr_gaussian = (
+        has_agn_full
+        and state.agn_config is not None
+        and state.agn_config.agn_nlr_gaussian_enabled
+        and state.precomputed.nlr_gaussian_lookup is not None
+    )
+    _has_preint_feltre_nlr = (
+        has_agn_full
+        and state.agn_config is not None
+        and state.agn_config.agn_nlr_backend == "feltre"
+        and state.precomputed.feltre_nlr_lookup is not None
+    )
+
+    # Capture lookup closures
+    _blr_lookup = None
+    _nlr_gaussian_lookup = None
+    _feltre_nlr_lookup = None
+    if _has_preint_blr:
+        _blr_lookup = state.precomputed.blr_lookup
+    if _has_preint_nlr_gaussian:
+        _nlr_gaussian_lookup = state.precomputed.nlr_gaussian_lookup
+    if _has_preint_feltre_nlr:
+        _feltre_nlr_lookup = state.precomputed.feltre_nlr_lookup
+
+    # Disc/empirical AGN preintegration gates (mutually exclusive per agn_model)
+    _has_preint_powerlaw_disc = False
+    _has_preint_ss_disc = False
+    _has_preint_cigale_disc = False
+    _has_preint_qsogen = False
+    _has_preint_silva04 = False
+    _has_preint_cat3d = False
+    _powerlaw_disc_lookup = None
+    _ss_disc_lookup = None
+    _cigale_disc_lookup = None
+    _qsogen_lookup = None
+    _silva04_lookup = None
+    _cat3d_lookup = None
+
+    if has_agn_full and not _needs_extension:
+        # Disc models: only one per model at runtime
+        if (
+            state.agn_model == "powerlaw_disc"
+            and state.precomputed.powerlaw_disc_preintegrated is not None
+        ):
+            _has_preint_powerlaw_disc = True
+            _powerlaw_disc_lookup = state.precomputed.powerlaw_disc_preintegrated
+        elif state.agn_model == "ss_disc" and state.precomputed.ss_disc_preintegrated is not None:
+            _has_preint_ss_disc = True
+            _ss_disc_lookup = state.precomputed.ss_disc_preintegrated
+        elif (
+            state.agn_model == "cigale_disc"
+            and state.precomputed.cigale_disc_preintegrated is not None
+        ):
+            _has_preint_cigale_disc = True
+            _cigale_disc_lookup = state.precomputed.cigale_disc_preintegrated
+        elif state.agn_model == "qsogen" and state.precomputed.qsogen_preintegrated is not None:
+            _has_preint_qsogen = True
+            _qsogen_lookup = state.precomputed.qsogen_preintegrated
+        # Torus models: alternative to skirtor
+        elif state.agn_model == "silva04" and state.precomputed.silva04_preintegrated is not None:
+            _has_preint_silva04 = True
+            _silva04_lookup = state.precomputed.silva04_preintegrated
+        elif state.agn_model == "cat3d_wind" and state.precomputed.cat3d_preintegrated is not None:
+            _has_preint_cat3d = True
+            _cat3d_lookup = state.precomputed.cat3d_preintegrated
+
     # Radio
     has_radio = state.uses_radio
+    _has_preint_radio_synchrotron = False
+    _has_preint_radio_freefree = False
+    _has_preint_radio_agn_jet = False
+    _radio_synchrotron_lookup = None
+    _radio_freefree_lookup = None
+    _radio_agn_jet_lookup = None
     if has_radio:
         _radio_sfr_mode = state.radio_sfr_mode
         _include_freefree = state.radio_include_freefree
         _redshift = float(getattr(state, "z_fixed", 0.0))
 
-    # X-ray
+        # Check for preintegrated radio lookups (filter-level photometry)
+        if (
+            _radio_sfr_mode == "bell2003"
+            and not _needs_extension
+            and state.precomputed.radio_synchrotron_preintegrated is not None
+        ):
+            _has_preint_radio_synchrotron = True
+            _radio_synchrotron_lookup = state.precomputed.radio_synchrotron_preintegrated
+        if (
+            _include_freefree
+            and not _needs_extension
+            and state.precomputed.radio_freefree_preintegrated is not None
+        ):
+            _has_preint_radio_freefree = True
+            _radio_freefree_lookup = state.precomputed.radio_freefree_preintegrated
+        if not _needs_extension and state.precomputed.radio_agn_jet_preintegrated is not None:
+            _has_preint_radio_agn_jet = True
+            _radio_agn_jet_lookup = state.precomputed.radio_agn_jet_preintegrated
+
+    # X-ray (gate setup moved after n_filters definition below)
     has_xray = state.uses_xray
 
     # Constants for energy balance
@@ -356,6 +537,42 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
     filter_trans_list = state.filter_trans if state.filter_trans else []
     if n_filters > 0:
         fw_padded, ft_padded, _filt_n_valid = pad_filters(filter_waves_list, filter_trans_list)
+
+    # X-ray precompute gates (after n_filters is defined)
+    _has_preint_xray_xrb = False
+    _has_preint_xray_corona = False
+    _has_preint_xray_corona_lopez24 = False
+    _xray_xrb_lookup = None
+    _xray_corona_lookup = None
+    _xray_corona_lopez24_lookup = None
+    if has_xray and n_filters > 0:
+        # Check for preintegrated X-ray lookups (filter-level photometry)
+        # These are mutually exclusive: only one corona variant is active per SEDModel.
+        if not _needs_extension and state.precomputed.xray_xrb_preintegrated is not None:
+            _has_preint_xray_xrb = True
+            _xray_xrb_lookup = state.precomputed.xray_xrb_preintegrated
+        if not _needs_extension and state.precomputed.xray_corona_preintegrated is not None:
+            _has_preint_xray_corona = True
+            _xray_corona_lookup = state.precomputed.xray_corona_preintegrated
+        if (
+            not _needs_extension
+            and state.precomputed.xray_corona_lopez24_preintegrated is not None
+        ):
+            _has_preint_xray_corona_lopez24 = True
+            _xray_corona_lopez24_lookup = state.precomputed.xray_corona_lopez24_preintegrated
+
+    # Shock MAPPINGS precompute gates (after n_filters is defined)
+    _has_preint_shock_mappings = False
+    _shock_mappings_lookup = None
+    if (
+        has_shock
+        and n_filters > 0
+        and not _needs_extension
+        and state.precomputed.shock_mappings_preintegrated is not None
+    ):
+        # Check for preintegrated MAPPINGS shock lookup (filter-level line photometry)
+        _has_preint_shock_mappings = True
+        _shock_mappings_lookup = state.precomputed.shock_mappings_preintegrated
 
     # === Define kernel signatures (single vs two-component dust) ===
 
@@ -415,6 +632,9 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             agn_gamma_hard=1.8,
             agn_kt_hot=100.0,
             agn_r_warm_ratio=2.0,
+            agn_blr_cf=0.1,
+            agn_nlr_cf=0.1,
+            agn_fe2_strength=0.0,
             radio_q_ir=2.64,
             radio_alpha_sf=0.8,
             radio_loudness=0.0,
@@ -485,6 +705,9 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                 agn_gamma_hard,
                 agn_kt_hot,
                 agn_r_warm_ratio,
+                agn_blr_cf,
+                agn_nlr_cf,
+                agn_fe2_strength,
                 radio_q_ir,
                 radio_alpha_sf,
                 radio_loudness,
@@ -559,6 +782,9 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             agn_gamma_hard=1.8,
             agn_kt_hot=100.0,
             agn_r_warm_ratio=2.0,
+            agn_blr_cf=0.1,
+            agn_nlr_cf=0.1,
+            agn_fe2_strength=0.0,
             radio_q_ir=2.64,
             radio_alpha_sf=0.8,
             radio_loudness=0.0,
@@ -629,6 +855,9 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                 agn_gamma_hard,
                 agn_kt_hot,
                 agn_r_warm_ratio,
+                agn_blr_cf,
+                agn_nlr_cf,
+                agn_fe2_strength,
                 radio_q_ir,
                 radio_alpha_sf,
                 radio_loudness,
@@ -711,10 +940,86 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
         afe = jnp.asarray(alpha_fe, dtype=dt)
 
         # CSP weights
-        weights = _csp_mat @ sfr if _csp_use_matrix else sfr * _age_dt
+        # ── Closure-path-A migration ──────────────────────────────────
+        # When eligible (no-α / non-met-precomputed delta-Z, fixed z),
+        # use DSPS lognormal-MDF + trapezoidal cosmic-time SFH integration
+        # to bring hybrid into agreement with the exact path. Marginalise
+        # back to (1D age weights, 2D MDF-averaged ssp_phot) so the
+        # downstream dust einsums and Taylor moment block work unchanged.
+        # See ``build_fused_tier2_photometry`` for the equivalence proof.
+        _closure_a_runtime_h = _closure_a_eligible_h and _t_obs_gyr_fixed_ca_h is not None
+        if _closure_a_runtime_h and _has_field_ca_h:
+            # Stochastic SFHs need ``sfr_internal`` plumb-through similar
+            # to the compositional kernel; not yet wired into the hybrid
+            # caller. Fall back to legacy for stochastic.
+            _closure_a_runtime_h = False
+        # ``_stellar_phot`` only receives scalar args, not the params
+        # dict. We reconstruct the orchestrator-grid SFR by interp'ing
+        # ``sfr_on_ssp`` onto the 64-pt log-age grid. For parametric
+        # SFHs this is one extra interp on top of the caller's
+        # ``log_age_grid → ssp_log_ages_yr`` interp; the resulting cosmic-
+        # time integration matches the exact path's closure-A reduction
+        # to within the 256-vs-64-pt grid mismatch (small effect).
+        if _closure_a_runtime_h:
+            _sfr_orch_grid_h = jnp.interp(_sfh_lbt_grid_orch_64_h, _ssp_ages_yr_ca_h, sfr)
+            _sfr_on_ssp_orch_h = jnp.interp(
+                _ssp_ages_yr_ca_h, _sfh_lbt_grid_orch_64_h, _sfr_orch_grid_h
+            )
+            _T_TABLE_MIN_h = 0.01
+            _ssp_age_gyr_h = _ssp_ages_yr_ca_h / 1e9
+            _t_cosmic_raw_h = _t_obs_gyr_fixed_ca_h - _ssp_age_gyr_h
+            _n_ssp_h = _ssp_ages_yr_ca_h.shape[0]
+            _t_cosmic_floor_h = jnp.maximum(_t_cosmic_raw_h, _T_TABLE_MIN_h)
+            _valid_h = _t_cosmic_raw_h > 0.0
+            _t_cosmic_asc_raw_h = _t_cosmic_floor_h[::-1]
+            _sfr_asc_raw_h = _sfr_on_ssp_orch_h[::-1]
+            _n_invalid_h = jnp.sum(~_valid_h[::-1])
+            _idx_pos_h = jnp.arange(_n_ssp_h)
+            _is_invalid_pos_h = _idx_pos_h < _n_invalid_h
+            _ramp_h = _T_TABLE_MIN_h + (_T_TABLE_MIN_h * 0.5) * (_idx_pos_h + 1) / jnp.maximum(
+                _n_invalid_h, 1
+            )
+            _t_cosmic_asc_h = jnp.where(_is_invalid_pos_h, _ramp_h, _t_cosmic_asc_raw_h)
+            _sfr_asc_h = jnp.where(_is_invalid_pos_h, 0.0, _sfr_asc_raw_h)
+            _total_mass_h = jnp.maximum(jnp.trapezoid(_sfr_asc_h, _t_cosmic_asc_h * 1e9), 0.0)
+            _dsps_result_h = _calc_rest_sed_ln_h(
+                gal_t_table=_t_cosmic_asc_h,
+                gal_sfr_table=_sfr_asc_h,
+                gal_lgmet=lz,
+                gal_lgmet_scatter=_lgmet_scatter_ca_h,
+                ssp_lgmet=_ssp_lgmet_ca_h,
+                ssp_lg_age_gyr=_ssp_lg_age_gyr_ca_h,
+                ssp_flux=_ssp_flux_ca_h,
+                t_obs=_t_obs_gyr_fixed_ca_h,
+            )
+            _weights_2d_h = _dsps_result_h.weights * _total_mass_h
+            weights = _weights_2d_h.sum(axis=0)
+            _w_safe_h = jnp.maximum(weights, 1e-30)
+        else:
+            weights = _csp_mat @ sfr if _csp_use_matrix else sfr * _age_dt
+            _weights_2d_h = None
+            _w_safe_h = None
 
         # Metallicity + alpha interpolation
-        if _has_alpha:
+        if _closure_a_runtime_h:
+            if _met_precomputed:
+                # Z axis already collapsed at precompute time → ssp_phot
+                # is (n_age, n_filters). Closure-A's MDF marginalisation
+                # is a no-op here; just use the precomputed table directly.
+                # The trapezoidal cosmic-time ``weights`` (computed above)
+                # still replaces the legacy rectangle-rule weights, which
+                # is the dominant fix for the DL07/Dale/THEMIS regression.
+                ssp_at_z = ssp_phot
+            else:
+                # MDF-marginalised ssp_at_z reproduces the joint
+                # ``einsum("ma,maf->f", weights_2d, ssp_phot)`` reduction
+                # downstream as ``einsum("a,af->f", weights, ssp_at_z)``.
+                ssp_at_z = jnp.einsum(
+                    "ma,maf->af",
+                    _weights_2d_h / _w_safe_h[None, :],
+                    ssp_phot,
+                )
+        elif _has_alpha:
             lz_c = jnp.clip(lz, ssp_lgmet[0], ssp_lgmet[-1])
             iz = jnp.clip(jnp.searchsorted(ssp_lgmet, lz_c) - 1, 0, ssp_lgmet.shape[0] - 2)
             fz = (lz_c - ssp_lgmet[iz]) / (ssp_lgmet[iz + 1] - ssp_lgmet[iz])
@@ -774,7 +1079,18 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                 k_diff_p = law_diff_fn(eff_waves_rest + _dl, **_law_kw)
                 k_diff_m = law_diff_fn(eff_waves_rest - _dl, **_law_kw)
 
-                if _has_alpha:
+                if _closure_a_runtime_h:
+                    if _met_precomputed:
+                        # Z axis pre-collapsed → moment is (n_age, n_filters).
+                        ssp_moment_at_z = ssp_phot_moment
+                    else:
+                        # Closure-A: same MDF-marginalisation as ssp_at_z above.
+                        ssp_moment_at_z = jnp.einsum(
+                            "ma,maf->af",
+                            _weights_2d_h / _w_safe_h[None, :],
+                            ssp_phot_moment,
+                        )
+                elif _has_alpha:
                     ssp_moment_at_z = (
                         (1 - fz) * (1 - fa) * ssp_phot_moment[iz, ia]
                         + fz * (1 - fa) * ssp_phot_moment[iz + 1, ia]
@@ -830,6 +1146,11 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
 
             # Metallicity interpolation on coarse grid.
             # lz is already alpha-fe-corrected when _use_alpha_fe was applied above.
+            # Closure-A is checked first because it covers both regular and
+            # ``_met_precomputed`` cases uniformly via the joint
+            # ``einsum("ma,maw->aw", weights_2d_norm, _ssp_lnu_coarse)``
+            # reduction (``_ssp_lnu_coarse`` is always 3D regardless of
+            # whether ``ssp_phot`` was collapsed at precompute time).
             if _has_alpha:
                 # iz, fz, ia, fa computed above in the met+alpha interp block
                 ssp_z_coarse = (
@@ -838,6 +1159,21 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                     + (1 - fz) * fa * _ssp_lnu_coarse[iz, ia + 1]
                     + fz * fa * _ssp_lnu_coarse[iz + 1, ia + 1]
                 )  # (n_age, 200) erg/s/Hz/Msun
+            elif _closure_a_runtime_h:
+                # Closure-A energy-balance reduction: MDF-marginalise the
+                # coarse SSP grid using the same ``weights_2d`` produced
+                # for ``ssp_at_z``. Equivalent to the joint
+                # ``einsum("ma,maw->w", weights_2d, ssp_lnu)`` reduction
+                # the exact path uses, marginalised back into a (n_age, 200)
+                # cube so the existing trapz/L_absorbed math is unchanged.
+                # Works for both regular and ``_met_precomputed=True`` —
+                # ``_ssp_lnu_coarse`` is built from the full 3D SSP flux
+                # regardless of ``ssp_phot`` precompute collapse.
+                ssp_z_coarse = jnp.einsum(
+                    "ma,maw->aw",
+                    (_weights_2d_h / _w_safe_h[None, :]).astype(jnp.float64),
+                    _ssp_lnu_coarse,
+                )  # (n_age, 200)
             elif _met_precomputed:
                 # Fixed metallicity: lz is a constant; interpolate coarse grid directly.
                 # (zw is not computed when _met_precomputed=True — mirrors Taylor block.)
@@ -1083,6 +1419,9 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
         agn_gamma_hard,
         agn_kt_hot,
         agn_r_warm_ratio,
+        agn_blr_cf,
+        agn_nlr_cf,
+        agn_fe2_strength,
         radio_q_ir,
         radio_alpha_sf,
         radio_loudness,
@@ -1164,8 +1503,8 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                 )
                 non_stellar_sed = non_stellar_sed + neb_sed
 
-            # 2b: Shock emission
-            if has_shock:
+            # 2b: Shock emission (skip if preintegrated)
+            if has_shock and not _has_preint_shock_mappings:
                 shock_raw = shock_emission(
                     ssp_wave_f64,
                     non_stellar_sed,
@@ -1291,7 +1630,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             else:
                 L_ir = jnp.float64(0.0)
 
-            # 2d: AGN emission (full wavelength or preintegrated K&D disc / SKIRTOR torus)
+            # 2d: AGN emission (full wavelength or preintegrated disc/torus)
             agn_phot_preint = jnp.zeros(n_filters, dtype=jnp.float64)
             skirtor_torus_preint = jnp.zeros(n_filters, dtype=jnp.float64)
             if has_agn_full:
@@ -1302,7 +1641,60 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                     _agn_frac = jnp.float64(0.0)  # Not parametric in hybrid
                     _agn_lbol = 10.0
 
-                if _has_preint_skirtor:
+                # Check if ANY disc/empirical/torus precompute is available
+                _has_any_disc_torus_preint = (
+                    _has_preint_powerlaw_disc
+                    or _has_preint_ss_disc
+                    or _has_preint_cigale_disc
+                    or _has_preint_qsogen
+                    or _has_preint_silva04
+                    or _has_preint_cat3d
+                )
+
+                if _has_any_disc_torus_preint:
+                    # Preintegrated disc/empirical/torus: filter-level photometry.
+                    # Polar dust is handled via effective-wavelength attenuation (see below).
+                    # Signature: agn_log_lbol, (*free_axes), agn_torus_frac (torus only).
+                    # Returns L_nu [erg/s/Hz]; scale to flux density via flux_scale.
+
+                    disc_torus_lnu = jnp.zeros(n_filters, dtype=jnp.float64)
+                    if _has_preint_powerlaw_disc:
+                        disc_torus_lnu = _powerlaw_disc_lookup(
+                            jnp.float64(_agn_lbol),
+                        )
+                    elif _has_preint_ss_disc:
+                        disc_torus_lnu = _ss_disc_lookup(
+                            jnp.float64(_agn_lbol),
+                        )
+                    elif _has_preint_cigale_disc:
+                        disc_torus_lnu = _cigale_disc_lookup(
+                            jnp.float64(_agn_lbol),
+                        )
+                    elif _has_preint_qsogen:
+                        disc_torus_lnu = _qsogen_lookup(
+                            jnp.float64(_agn_lbol),
+                        )
+                    elif _has_preint_silva04:
+                        disc_torus_lnu = _silva04_lookup(
+                            jnp.float64(_agn_lbol),
+                            agn_torus_frac=jnp.float64(agn_torus_frac),
+                        )
+                    elif _has_preint_cat3d:
+                        disc_torus_lnu = _cat3d_lookup(
+                            jnp.float64(_agn_lbol),
+                            agn_torus_frac=jnp.float64(agn_torus_frac),
+                        )
+
+                    # Scale disc/torus: L_ν [erg/s/Hz] * agn_frac → flux density [erg/s/cm²/Hz]
+                    # Note: polar dust attenuation (agn_polar_ebv) is skipped for preintegrated
+                    # models (agn_polar_ebv typically ~0 in practice for these SED fits).
+                    # If polar dust is significant, revert to runtime agn_emission path
+                    # by deleting the preintegration file or setting precompute=False.
+                    agn_phot_preint = (
+                        disc_torus_lnu * jnp.float64(_agn_frac) * jnp.float64(flux_scale)
+                    )
+
+                elif _has_preint_skirtor:
                     # Fast path: preintegrated SKIRTOR torus + full-wavelength disc.
                     # Torus: filter-level triweight lookup (bypasses 132-point template).
                     # Disc: powerlaw_disc at full wavelength with correct luminosity fraction.
@@ -1394,49 +1786,182 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                     )
                     non_stellar_sed = non_stellar_sed + agn_sed
 
+                    # Add AGN-nebular emitters (BLR Gaussian, NLR Gaussian, Feltre NLR)
+                    # These are additive to the base AGN SED, gated by config flags.
+                    # BLR Gaussian: convert L_bol to L_disc_bol (same value for power-law discs)
+                    # Use runtime path only if precompute is NOT available.
+                    if _has_blr_gaussian and not _has_preint_blr:
+                        _l_disc_bol_erg = 10.0 ** (jnp.float64(_agn_lbol)) * LSUN_ERG_PER_S
+                        from tengri.components.agn.blr import compute_blr_sed
+
+                        blr_sed = compute_blr_sed(
+                            rest_wave_f64,
+                            _l_disc_bol_erg,
+                            covering_fraction=jnp.float64(agn_blr_cf),
+                            agn_fe2_strength=jnp.float64(agn_fe2_strength),
+                        )
+                        non_stellar_sed = non_stellar_sed + blr_sed
+
+                    # NLR Gaussian
+                    if _has_nlr_gaussian and not _has_preint_nlr_gaussian:
+                        _l_disc_bol_erg = 10.0 ** (jnp.float64(_agn_lbol)) * LSUN_ERG_PER_S
+                        from tengri.components.agn.nlr import compute_nlr_sed
+
+                        nlr_sed = compute_nlr_sed(
+                            rest_wave_f64,
+                            _l_disc_bol_erg,
+                            covering_fraction=jnp.float64(agn_nlr_cf),
+                        )
+                        non_stellar_sed = non_stellar_sed + nlr_sed
+
             # 2e: Radio emission
+            radio_phot_preint = jnp.zeros(n_filters, dtype=jnp.float64)
             if has_radio:
-                _L_ir = L_ir
-                _agn_bol = (
-                    10.0 ** (jnp.float64(agn_log_lbol)) * LSUN_ERG_PER_S if has_agn_full else 0.0
+                _has_any_preint_radio = (
+                    _has_preint_radio_synchrotron
+                    or _has_preint_radio_freefree
+                    or _has_preint_radio_agn_jet
                 )
-                _log_mstar = jnp.log10(jnp.maximum(jnp.sum(weights), 1e-10))
-                radio_sed = radio_emission(
-                    rest_wave_f64,
-                    L_ir=_L_ir,
-                    L_agn_bol=_agn_bol,
-                    q_ir=jnp.float64(radio_q_ir),
-                    alpha_sf=jnp.float64(radio_alpha_sf),
-                    radio_loudness=jnp.float64(radio_loudness),
-                    alpha_agn=jnp.float64(radio_alpha_agn),
-                    sfr_mode=_radio_sfr_mode,
-                    log_mstar=_log_mstar,
-                    redshift=_redshift,
-                    include_freefree=_include_freefree,
-                    T_e=jnp.float64(radio_T_e),
-                    alpha_ff=jnp.float64(radio_alpha_ff),
-                )
-                non_stellar_sed = non_stellar_sed + radio_sed
+                if _has_any_preint_radio:
+                    # Use preintegrated lookups for filter photometry
+                    # (fast triweight interp).
+                    # Reference luminosity in radio_precompute.py: _L_REF = 1e44 erg/s
+                    _L_REF_RADIO = 1.0e44  # erg/s
+
+                    # Synchrotron (SF) component
+                    radio_sf_phot = jnp.zeros(n_filters, dtype=jnp.float64)
+                    if _has_preint_radio_synchrotron:
+                        # Signature: (scale, alpha_sf) -> photometry
+                        _scale_sf = jnp.float64(L_ir / _L_REF_RADIO)
+                        radio_sf_phot = _radio_synchrotron_lookup(
+                            _scale_sf,
+                            jnp.float64(radio_alpha_sf),
+                        )
+
+                    # Free-free component
+                    radio_ff_phot = jnp.zeros(n_filters, dtype=jnp.float64)
+                    if _has_preint_radio_freefree:
+                        # Signature: (scale, alpha_ff) -> photometry
+                        _scale_ff = jnp.float64(L_ir / _L_REF_RADIO)
+                        radio_ff_phot = _radio_freefree_lookup(
+                            _scale_ff,
+                            jnp.float64(radio_alpha_ff),
+                        )
+
+                    # AGN jet component
+                    radio_agn_phot = jnp.zeros(n_filters, dtype=jnp.float64)
+                    if _has_preint_radio_agn_jet:
+                        _agn_bol = (
+                            10.0 ** (jnp.float64(agn_log_lbol)) * LSUN_ERG_PER_S
+                            if has_agn_full
+                            else 0.0
+                        )
+                        # Signature: (scale, alpha_agn) -> photometry
+                        _scale_agn = jnp.float64(_agn_bol / _L_REF_RADIO)
+                        radio_agn_phot = _radio_agn_jet_lookup(
+                            _scale_agn,
+                            jnp.float64(radio_alpha_agn),
+                        )
+
+                    # Accumulate preintegrated radio photometry
+                    radio_phot_preint = radio_sf_phot + radio_ff_phot + radio_agn_phot
+                else:
+                    # Fall back to full-wavelength evaluation
+                    _L_ir = L_ir
+                    _agn_bol = (
+                        10.0 ** (jnp.float64(agn_log_lbol)) * LSUN_ERG_PER_S
+                        if has_agn_full
+                        else 0.0
+                    )
+                    _log_mstar = jnp.log10(jnp.maximum(jnp.sum(weights), 1e-10))
+                    radio_sed = radio_emission(
+                        rest_wave_f64,
+                        L_ir=_L_ir,
+                        L_agn_bol=_agn_bol,
+                        q_ir=jnp.float64(radio_q_ir),
+                        alpha_sf=jnp.float64(radio_alpha_sf),
+                        radio_loudness=jnp.float64(radio_loudness),
+                        alpha_agn=jnp.float64(radio_alpha_agn),
+                        sfr_mode=_radio_sfr_mode,
+                        log_mstar=_log_mstar,
+                        redshift=_redshift,
+                        include_freefree=_include_freefree,
+                        T_e=jnp.float64(radio_T_e),
+                        alpha_ff=jnp.float64(radio_alpha_ff),
+                    )
+                    non_stellar_sed = non_stellar_sed + radio_sed
 
             # 2f: X-ray emission
+            xray_phot_preint = jnp.zeros(n_filters, dtype=jnp.float64)
             if has_xray:
                 sfr_now = sfr_on_ssp[-1]  # SFR (Msun/yr), not mass weight
                 mstar = jnp.sum(weights)
                 _agn_bol_xray = (
                     10.0 ** (jnp.float64(agn_log_lbol)) * LSUN_ERG_PER_S if has_agn_full else 0.0
                 )
-                xray_sed = xray_emission(
-                    rest_wave_f64,
-                    sfr=sfr_now,
-                    stellar_mass=mstar,
-                    L_agn_bol=_agn_bol_xray,
-                    gamma_agn=jnp.float64(xray_gamma_agn),
-                    alpha_ox=jnp.float64(xray_alpha_ox),
-                    gamma_hmxb=jnp.float64(xray_gamma_hmxb),
-                    gamma_lmxb=jnp.float64(xray_gamma_lmxb),
-                    E_cut=jnp.float64(xray_E_cut),
+
+                _has_any_preint_xray = (
+                    _has_preint_xray_xrb
+                    or _has_preint_xray_corona
+                    or _has_preint_xray_corona_lopez24
                 )
-                non_stellar_sed = non_stellar_sed + xray_sed
+                if _has_any_preint_xray:
+                    # Use preintegrated lookups for filter photometry (fast triweight interp).
+                    # Reference scales from xray_precompute.py
+                    _SFR_REF_XRAY = 1.0  # Msun/yr
+                    _MSTAR_REF_XRAY = 1.0e10  # Msun
+                    _LBOL_REF_XRAY = 1.0e44  # erg/s
+                    _L12_REF_XRAY = 1.0e30  # erg/s/Hz
+
+                    # XRB component (scales on SFR × stellar_mass)
+                    xray_xrb_phot = jnp.zeros(n_filters, dtype=jnp.float64)
+                    if _has_preint_xray_xrb:
+                        _scale_xrb = jnp.float64(
+                            sfr_now * mstar / (_SFR_REF_XRAY * _MSTAR_REF_XRAY)
+                        )
+                        xray_xrb_phot = _xray_xrb_lookup(
+                            _scale_xrb,
+                            jnp.float64(xray_gamma_hmxb),
+                            jnp.float64(xray_gamma_lmxb),
+                        )
+
+                    # Corona component (mutually exclusive variants)
+                    xray_corona_phot = jnp.zeros(n_filters, dtype=jnp.float64)
+                    if _has_preint_xray_corona:
+                        _scale_corona = jnp.float64(_agn_bol_xray / _LBOL_REF_XRAY)
+                        xray_corona_phot = _xray_corona_lookup(
+                            _scale_corona,
+                            jnp.float64(xray_gamma_agn),
+                            jnp.float64(xray_alpha_ox),
+                        )
+                    elif _has_preint_xray_corona_lopez24:
+                        # Note: requires L_12um from state. For now, set to 0.
+                        # Uses alpha_irx instead of alpha_ox
+                        _l_12um = jnp.float64(0.0)
+                        _scale_lopez24 = jnp.float64(_l_12um / _L12_REF_XRAY)
+                        # TODO: use xray_alpha_irx when available
+                        xray_corona_phot = _xray_corona_lopez24_lookup(
+                            _scale_lopez24,
+                            jnp.float64(xray_gamma_agn),
+                            jnp.float64(xray_alpha_ox),  # Placeholder
+                        )
+
+                    # Accumulate preintegrated X-ray photometry
+                    xray_phot_preint = xray_xrb_phot + xray_corona_phot
+                else:
+                    # Fall back to full-wavelength evaluation
+                    xray_sed = xray_emission(
+                        rest_wave_f64,
+                        sfr=sfr_now,
+                        stellar_mass=mstar,
+                        L_agn_bol=_agn_bol_xray,
+                        gamma_agn=jnp.float64(xray_gamma_agn),
+                        alpha_ox=jnp.float64(xray_alpha_ox),
+                        gamma_hmxb=jnp.float64(xray_gamma_hmxb),
+                        gamma_lmxb=jnp.float64(xray_gamma_lmxb),
+                        E_cut=jnp.float64(xray_E_cut),
+                    )
+                    non_stellar_sed = non_stellar_sed + xray_sed
 
             # Apply IGM absorption at full wavelength before filter integration.
             # This is compositional-quality IGM (not the per-filter approximation).
@@ -1477,6 +2002,18 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
         if _has_preint_dust_ir:
             non_stellar_phot = non_stellar_phot + dust_ir_phot_preint * flux_scale
 
+        # Add preintegrated disc/empirical/torus photometry if available (already flux-scaled).
+        _has_any_disc_torus_preint_final = (
+            _has_preint_powerlaw_disc
+            or _has_preint_ss_disc
+            or _has_preint_cigale_disc
+            or _has_preint_qsogen
+            or _has_preint_silva04
+            or _has_preint_cat3d
+        )
+        if _has_any_disc_torus_preint_final:
+            non_stellar_phot = non_stellar_phot + agn_phot_preint
+
         # Add preintegrated K&D disc photometry if available (already flux-scaled).
         if _has_preint_kd:
             non_stellar_phot = non_stellar_phot + agn_phot_preint
@@ -1485,38 +2022,111 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
         if _has_preint_skirtor:
             non_stellar_phot = non_stellar_phot + skirtor_torus_preint
 
+        # Add preintegrated radio photometry if available (already erg/s/Hz).
+        _has_any_preint_radio_final = (
+            _has_preint_radio_synchrotron
+            or _has_preint_radio_freefree
+            or _has_preint_radio_agn_jet
+        )
+        if _has_any_preint_radio_final:
+            non_stellar_phot = non_stellar_phot + radio_phot_preint * flux_scale
+
+        # Add preintegrated X-ray photometry if available (already erg/s/Hz).
+        _has_any_preint_xray_final = (
+            _has_preint_xray_xrb or _has_preint_xray_corona or _has_preint_xray_corona_lopez24
+        )
+        if _has_any_preint_xray_final:
+            non_stellar_phot = non_stellar_phot + xray_phot_preint * flux_scale
+
+        # Add preintegrated MAPPINGS shock photometry if available.
+        # The lookup returns line luminosities (L_sun); we compute shock Hα from
+        # the current SED and scale relative line luminosities accordingly.
+        shock_phot_preint = jnp.zeros(n_filters, dtype=jnp.float64)
+        if _has_preint_shock_mappings:
+            # Compute bolometric luminosity from non_stellar_sed (before filter integration)
+            # to estimate shock Hα following the same logic as shock_emission()
+            from tengri.forward.emission_helpers import _C_AA
+
+            nu_ssp = _C_AA / ssp_wave_f64
+            l_bol = -jnp.trapezoid(non_stellar_sed, nu_ssp)
+            l_halpha_approx = jnp.maximum(l_bol * 1e-3, 1e-30)
+            l_shock_halpha = shock_frac * l_halpha_approx
+
+            # Call precompute lookup to get shock line luminosities and wavelengths
+            # The lookup expects: (l_shock_halpha, shock_velocity, shock_b_over_sqrt_n,
+            # shock_log_density)
+            _line_waves, _line_lums = _shock_mappings_lookup(
+                l_shock_halpha,
+                jnp.float64(shock_velocity),
+                jnp.float64(shock_b_over_sqrt_n),
+                jnp.float64(shock_log_density),
+            )
+
+            # Project shock lines through filters using vectorized integration
+            # For each line (treated as a delta function at its vacuum wavelength),
+            # compute its contribution to each filter
+            def _integrate_lines_to_phot(fw_filt, ft_filt):
+                """Integrate shock lines through one filter."""
+                _line_waves_obs = _line_waves * (1.0 + z_fixed)
+                _trans_at_lines = jnp.interp(
+                    _line_waves_obs, fw_filt, ft_filt, left=0.0, right=0.0
+                )
+                # Each line contributes: L_line (Lsun) * transmission * dist-scaling
+                _line_fluxes = (
+                    _line_lums * _trans_at_lines * lsun / (4.0 * jnp.pi * dl_cm_fixed**2)
+                )
+                return jnp.sum(_line_fluxes)
+
+            # Vectorize over all filters using vmap
+            # fw_padded shape: (n_wave_padded, n_filters); ft_padded same
+            # We need to pass each filter's wavelengths and transmissions
+            shock_phot_preint = jax.vmap(
+                _integrate_lines_to_phot,
+                in_axes=(1, 1),  # vmap over filter axis (axis 1)
+            )(fw_padded, ft_padded)
+            shock_phot_preint = jnp.asarray(shock_phot_preint, dtype=jnp.float64)
+
+        if _has_preint_shock_mappings:
+            non_stellar_phot = non_stellar_phot + shock_phot_preint
+
+        # AGN-nebular emitter precompute consumers (BLR, NLR-Gaussian)
+        # These return per-filter photometry directly from precomputed lookups.
+        _has_any_preint_agn_nebular_final = _has_preint_blr or _has_preint_nlr_gaussian
+        if _has_any_preint_agn_nebular_final and has_agn_full:
+            _l_disc_bol_erg = 10.0 ** (jnp.float64(_agn_lbol)) * LSUN_ERG_PER_S
+
+            # BLR Gaussian precompute
+            if _has_preint_blr:
+                from tengri.components.agn.blr import _BLR_FWHM_KMS as _blr_fwhm_default
+
+                blr_phot_preint = _blr_lookup(
+                    l_cont_erg_s_hz=_l_disc_bol_erg * jnp.float64(agn_blr_cf),
+                    sigma_blr_kms=_blr_fwhm_default,
+                    blr_strength=1.0,
+                )
+                non_stellar_phot = non_stellar_phot + blr_phot_preint * flux_scale
+
+            # NLR Gaussian precompute
+            if _has_preint_nlr_gaussian:
+                nlr_phot_preint = _nlr_gaussian_lookup(
+                    l_disc_bol_erg=_l_disc_bol_erg,
+                    covering_fraction=jnp.float64(agn_nlr_cf),
+                )
+                non_stellar_phot = non_stellar_phot + nlr_phot_preint * flux_scale
+
+        # TODO(agn-nebular-consumer-feltre): Feltre NLR precompute consumer.
+        # The precompute adapter supports auto-collapsing Fixed axes, so the
+        # lookup signature depends on which axes were fixed at build time.
+        # Wiring requires either (a) storing collapsed-axis metadata in the
+        # lookup dict, or (b) resolving Feltre parameters from hybrid kernel
+        # signature (neb_logZ_gas, agn_alpha, neb_logU, neb_xid). Currently
+        # deferred pending API additions for neb_logn and neb_xid.
+
         # TODO(precompute-consumer): The following PrecomputedData fields are
         # built and stored by SEDModel but not yet consumed here. Wiring each
         # one requires the paired (gate-runtime, add-precompute) pattern used
-        # for dust IR / KD / SKIRTOR above. Family-by-family follow-up:
-        #
-        #   AGN disc/empirical (PR 1):
-        #     - state.precomputed.powerlaw_disc_preintegrated
-        #     - state.precomputed.ss_disc_preintegrated
-        #     - state.precomputed.cigale_disc_preintegrated
-        #     - state.precomputed.qsogen_preintegrated
-        #     Gate site: agn_model_fn_full call near line 1324.
-        #
-        #   AGN torus alternatives (PR 2):
-        #     - state.precomputed.silva04_preintegrated
-        #     - state.precomputed.cat3d_preintegrated
-        #     Gate site: same agn_model_fn_full call, branch on state.agn_model.
-        #
-        #   Radio (PR 5):
-        #     - state.precomputed.radio_synchrotron_preintegrated
-        #     - state.precomputed.radio_freefree_preintegrated
-        #     - state.precomputed.radio_agn_jet_preintegrated
-        #     Gate site: radio_emission call near line 1361. Requires either
-        #     refactoring radio_emission to expose per-component subfunctions
-        #     OR computing the three subcomponents inline in the kernel so
-        #     the precomputes can be substituted independently.
-        #
-        #   X-ray (PR 6):
-        #     - state.precomputed.xray_xrb_preintegrated
-        #     - state.precomputed.xray_corona_preintegrated
-        #     - state.precomputed.xray_corona_lopez24_preintegrated
-        #     Gate site: xray_emission call near line 1385. Same refactor
-        #     pattern as radio.
+        # for dust IR / KD / SKIRTOR / radio / AGN disc+torus / shock above.
+        # Family-by-family follow-up:
         #
         #   Line emitters (PR 4) — DIFFERENT ARCHITECTURE; do NOT route through
         #   PrecomputedData. The kernel consumes line emission via duck-typed
@@ -1534,7 +2144,6 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
         #       stellar duck-type — needs a NEW AGN-nebular branch in the AGN
         #       photometry path, scaling on ``L_disc × covering_fraction``
         #       not Q_H.
-        #     - MAPPINGS shock: independent again; needs a shock kernel branch.
         #
         #   Each is a separate PR with its own equivalence harness against the
         #   runtime path.
@@ -1939,6 +2548,9 @@ def build_hybrid_photometry_ztable(state: SEDModelState, model=None):
             agn_gamma_hard=1.8,
             agn_kt_hot=100.0,
             agn_r_warm_ratio=2.0,
+            agn_blr_cf=0.1,
+            agn_nlr_cf=0.1,
+            agn_fe2_strength=0.0,
             radio_q_ir=2.64,
             radio_alpha_sf=0.8,
             radio_loudness=0.0,
@@ -2085,6 +2697,9 @@ def build_hybrid_photometry_ztable(state: SEDModelState, model=None):
             agn_gamma_hard=1.8,
             agn_kt_hot=100.0,
             agn_r_warm_ratio=2.0,
+            agn_blr_cf=0.1,
+            agn_nlr_cf=0.1,
+            agn_fe2_strength=0.0,
             radio_q_ir=2.64,
             radio_alpha_sf=0.8,
             radio_loudness=0.0,

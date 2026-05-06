@@ -308,19 +308,13 @@ class PrecomputedData:
     xray_xrb_preintegrated: object | None = None
     xray_corona_preintegrated: object | None = None
     xray_corona_lopez24_preintegrated: object | None = None
-    # Line-emitter adapters (PR 4) intentionally NOT stored on PrecomputedData.
-    # Architectural note: the photometry kernel consumes line emission through
-    # duck-typed methods on ``state.nebular_backend`` (``_has_preint_photometry``,
-    # ``_preint_continuum``, ``_preint_lines``, ``_line_lum_collapsed``,
-    # ``_young_idx``, ``_qh_table``) — see ``CloudyGridBackend.preintegrate_for_photometry``
-    # for the interface, and ``_kernels/hybrid.py`` lines 169-199 for the
-    # consumer. Wiring CB19 / MAPPINGS V to the kernel means each backend
-    # class must implement that duck-typed interface (with its precompute
-    # adapter doing the heavy lifting inside). AGN-nebular emitters (Feltre,
-    # BLR, NLR-Gaussian) do not fit the stellar duck-type at all — they need
-    # a new AGN-nebular kernel branch. The MAPPINGS shock backend is
-    # independent again. Treat each as its own PR with its own equivalence
-    # harness; do NOT route them through PrecomputedData fields.
+    shock_mappings_preintegrated: object | None = None  # Preintegrated MAPPINGS shock lines lookup
+    # AGN-nebular line-emitter adapters (PR 4).  These are separate from
+    # stellar nebular (which uses duck-typed CloudyGridBackend interface).
+    # BLR, NLR-Gaussian, and Feltre NLR use direct lookup closures.
+    blr_lookup: object | None = None  # BLR Gaussian emitter lookup closure
+    nlr_gaussian_lookup: object | None = None  # NLR Gaussian emitter lookup closure
+    feltre_nlr_lookup: object | None = None  # Feltre NLR photoionization grid lookup
 
 
 @dataclasses.dataclass
@@ -438,6 +432,7 @@ class SEDModelState:
     dust_emission_model: str | None
     nebular_backend: object
     agn_model: str | None
+    agn_config: object | None
     agn_luminosity_mode: bool
     uses_igm: bool
     uses_radio: bool

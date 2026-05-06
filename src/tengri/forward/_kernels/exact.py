@@ -187,7 +187,6 @@ def build_fused_rest_sed(state: SEDModelState, model):
     # discontinuity at the birth-cloud boundary and is physically less
     # accurate; it is preserved for the hybrid kernel where the 0.5%
     # tolerance accommodates it.
-    _dust_exact = True
     if not _is_single_dust:
         if state.precomputed.dust_age_weights is not None:
             dust_age_w = state.precomputed.dust_age_weights.astype(dt)
@@ -269,29 +268,22 @@ def build_fused_rest_sed(state: SEDModelState, model):
             trans_1d = f_obs + (1.0 - f_obs) * jnp.exp(-tau_v * k)
             sed_atten = (lsun * jnp.einsum("i,iw->w", w, ssp_z) * trans_1d).astype(jnp.float64)
             sed_intr = (lsun * jnp.einsum("i,iw->w", w, ssp_z)).astype(jnp.float64)
-        elif _dust_exact:
+        else:
+            # Smooth-sigmoid age-dependent two-component dust attenuation.
+            # ``_dust_exact`` is now hardcoded ``True`` at the top of this
+            # builder so that the compositional kernel mirrors the exact
+            # path's ``_compute_dust_atten`` (always sigmoid). The legacy
+            # hard-young/old-mask branch was dropped — it lived behind
+            # ``dust_scheme="fast"`` and produced a discontinuity at the
+            # 10 Myr birth-cloud boundary that broke compositional==exact
+            # bit-identity. The hybrid kernel keeps a similar approximation
+            # available behind its own configuration if needed.
             k_bc = law_bc_fn(ssp_wave, **_law_kw)
             k_diff = k_bc if same_law else law_diff_fn(ssp_wave, **_law_kw)
             tau = dust_age_w[:, None] * tau_bc * k_bc[None, :] + tau_diff * k_diff[None, :]
             dust_trans = f_obs + (1.0 - f_obs) * jnp.exp(-tau)
             sed_atten = (lsun * jnp.einsum("i,iw,iw->w", w, ssp_z, dust_trans)).astype(jnp.float64)
             sed_intr = (lsun * jnp.einsum("i,iw->w", w, ssp_z)).astype(jnp.float64)
-        else:
-            # Fast two-CSP decomposition
-            k_bc = law_bc_fn(ssp_wave, **_law_kw)
-            k_diff = k_bc if same_law else law_diff_fn(ssp_wave, **_law_kw)
-            trans_bc = jnp.exp(-tau_bc * k_bc)
-            trans_diff = jnp.exp(-tau_diff * k_diff)
-
-            csp_young = jnp.einsum("i,iw->w", w * young_mask, ssp_z)
-            csp_old = jnp.einsum("i,iw->w", w * old_mask, ssp_z)
-
-            flux_no_geom = trans_diff * (trans_bc * csp_young + csp_old)
-            flux_intr = csp_young + csp_old
-            sed_atten = (lsun * (f_obs * flux_intr + (1.0 - f_obs) * flux_no_geom)).astype(
-                jnp.float64
-            )
-            sed_intr = (lsun * flux_intr).astype(jnp.float64)
 
         # --- 2–9. All non-stellar components (nebular, shock, dust IR, AGN, radio, X-ray) ---
         # nonstell_fn was built once at closure time by build_nonstell_fn(); calling it

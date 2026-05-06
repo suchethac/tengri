@@ -171,7 +171,7 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
         return None
 
     from tengri.components.stellar.sps.dsps_wrapper import compute_csp_weights
-    from tengri.forward.pipeline import interp_met_alpha_dispatch, interp_metallicity
+    from tengri.forward.pipeline import interp_met_alpha_dispatch
     from tengri.observation.photometry import (
         compute_flux_density_batch,
         pad_filters,
@@ -259,9 +259,6 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
     _ssp_flux_closure = state.ssp_data.ssp_flux
     _ssp_lgmet_closure = state.ssp_data.ssp_lgmet
     _lgmet_scatter_closure = float(state.lgmet_scatter)
-    from tengri.components.stellar.sps.dsps_wrapper import (
-        interpolate_metallicity_smooth as _interp_metallicity_smooth,
-    )
 
     _met_use_smooth = state.met_interp == "smooth"
 
@@ -279,13 +276,23 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
     )
     from tengri.utils.cosmology import age_at_z as _age_at_z_fn_ca
 
-    _sfh_lbt_grid_orch_64 = jnp.power(10.0, _make_log_age_grid_ca(64))
+    # Read ``n_grid`` from spec to match orchestrator's
+    # ``StellarSEDComponentConfig.n_grid``. Variable name keeps the legacy
+    # ``_64`` suffix purely as a label; actual value is spec-driven.
+    _orch_n_grid_ca = int(getattr(state.spec, "n_grid", 64))
+    _sfh_lbt_grid_orch_64 = jnp.power(10.0, _make_log_age_grid_ca(_orch_n_grid_ca))
     _t_obs_gyr_fixed_ca = None if is_free_z else float(_age_at_z_fn_ca(z_fixed))
     _sfh_fn_ca = model._sfh_fn
     _sfh_internal_names_ca = model._sfh_internal_names
 
     # --- Shared SED computation (sfr_on_ssp pre-computed by caller) ---
-    def _compute_rest_sed(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
+    def _compute_rest_sed(
+        sfr_on_ssp,
+        params,
+        ssp_flux_traced=None,
+        ssp_lgmet_traced=None,
+        sfr_internal=None,
+    ):
         """sfr_on_ssp, params → (rest_sed, redshift_value).
 
         ``sfr_on_ssp`` is the SFH already evaluated on the SSP age grid.
@@ -392,32 +399,40 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
                     )
 
                     _ssp_flux_use = (
-                        ssp_flux_traced
-                        if ssp_flux_traced is not None
-                        else _ssp_flux_closure
+                        ssp_flux_traced if ssp_flux_traced is not None else _ssp_flux_closure
                     )
                     _ssp_lgmet_use = (
-                        ssp_lgmet_traced
-                        if ssp_lgmet_traced is not None
-                        else _ssp_lgmet_closure
+                        ssp_lgmet_traced if ssp_lgmet_traced is not None else _ssp_lgmet_closure
                     )
-                    lgmet_scatter_ca = float(
-                        p.get("lgmet_scatter", _lgmet_scatter_closure)
-                    )
+                    lgmet_scatter_ca = float(p.get("lgmet_scatter", _lgmet_scatter_closure))
 
                     # Re-evaluate SFH on 64-pt orchestrator grid (closure-A
-                    # canonical). For stochastic SFHs the legacy ``sfr`` already
-                    # lives on a 64-pt grid; reconstruct from caller-supplied
-                    # ``sfr_on_ssp`` via interp (matches _closure_a_sfh_prep's
-                    # stochastic-reuse semantics for the no-stochastic-loss case).
+                    # canonical). For stochastic SFHs we prefer the caller-
+                    # supplied ``sfr_internal`` (the GP draw on the model's
+                    # internal grid) so we don't lose precision through a
+                    # double interp via ``sfr_on_ssp``. Mirrors the helper
+                    # ``_closure_a_sfh_prep``'s stochastic branch.
                     if has_field:
-                        _sfr_orch_grid = jnp.interp(
-                            _sfh_lbt_grid_orch_64, ssp_ages_yr, sfr_on_ssp
-                        )
+                        if sfr_internal is not None and sfr_internal.shape[0] == _orch_n_grid_ca:
+                            # GP draw already on the orchestrator grid —
+                            # reuse directly to preserve the realisation.
+                            _sfr_orch_grid = sfr_internal
+                        elif sfr_internal is not None:
+                            # Defensive fallback: model's internal grid
+                            # differs from orchestrator's spec.n_grid.
+                            # Should not happen with the n_grid plumbing
+                            # in place, but interp keeps the kernel safe.
+                            _sfr_orch_grid = jnp.interp(
+                                _sfh_lbt_grid_orch_64,
+                                model.log_age_grid,
+                                sfr_internal,
+                            )
+                        else:
+                            _sfr_orch_grid = jnp.interp(
+                                _sfh_lbt_grid_orch_64, ssp_ages_yr, sfr_on_ssp
+                            )
                     else:
-                        _sfh_kw = {
-                            k: v for k, v in p.items() if k in _sfh_internal_names_ca
-                        }
+                        _sfh_kw = {k: v for k, v in p.items() if k in _sfh_internal_names_ca}
                         _sfr_orch_grid = _sfh_fn_ca(_sfh_lbt_grid_orch_64, **_sfh_kw)
 
                     _sfr_on_ssp_orch = jnp.interp(
@@ -425,9 +440,7 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
                     )
 
                     # NaN-safe cosmic-time prep (mirrors _closure_a_sfh_prep).
-                    _z_internal_ca = p.get(
-                        "redshift", z_fixed if z_fixed is not None else 0.0
-                    )
+                    _z_internal_ca = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
                     _t_obs_gyr_ca = (
                         _t_obs_gyr_fixed_ca
                         if _t_obs_gyr_fixed_ca is not None
@@ -444,16 +457,12 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
                     _n_invalid = jnp.sum(~_valid[::-1])
                     _idx_pos = jnp.arange(_n_ssp)
                     _is_invalid_pos = _idx_pos < _n_invalid
-                    _ramp_ca = _T_TABLE_MIN + (_T_TABLE_MIN * 0.5) * (
-                        _idx_pos + 1
-                    ) / jnp.maximum(_n_invalid, 1)
-                    _t_cosmic_asc = jnp.where(
-                        _is_invalid_pos, _ramp_ca, _t_cosmic_asc_raw
+                    _ramp_ca = _T_TABLE_MIN + (_T_TABLE_MIN * 0.5) * (_idx_pos + 1) / jnp.maximum(
+                        _n_invalid, 1
                     )
+                    _t_cosmic_asc = jnp.where(_is_invalid_pos, _ramp_ca, _t_cosmic_asc_raw)
                     _sfr_asc = jnp.where(_is_invalid_pos, 0.0, _sfr_asc_raw)
-                    _total_mass_ca = jnp.maximum(
-                        jnp.trapezoid(_sfr_asc, _t_cosmic_asc * 1e9), 0.0
-                    )
+                    _total_mass_ca = jnp.maximum(jnp.trapezoid(_sfr_asc, _t_cosmic_asc * 1e9), 0.0)
 
                     _dsps_result_ca = calc_rest_sed_sfh_table_lognormal_mdf(
                         gal_t_table=_t_cosmic_asc,
@@ -488,9 +497,21 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
 
     if is_free_z:
 
-        def fused_tier2_phot(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
+        def fused_tier2_phot(
+            sfr_on_ssp,
+            params,
+            ssp_flux_traced=None,
+            ssp_lgmet_traced=None,
+            sfr_internal=None,
+        ):
             """sfr_on_ssp, params dict → observed photometry (free z)."""
-            rest_sed, z = _compute_rest_sed(sfr_on_ssp, params, ssp_flux_traced, ssp_lgmet_traced)
+            rest_sed, z = _compute_rest_sed(
+                sfr_on_ssp,
+                params,
+                ssp_flux_traced,
+                ssp_lgmet_traced,
+                sfr_internal=sfr_internal,
+            )
             dl_cm = _lum_dist(z)
 
             if apply_igm:
@@ -508,9 +529,21 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
 
     else:
 
-        def fused_tier2_phot(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
+        def fused_tier2_phot(
+            sfr_on_ssp,
+            params,
+            ssp_flux_traced=None,
+            ssp_lgmet_traced=None,
+            sfr_internal=None,
+        ):
             """sfr_on_ssp, params dict → observed photometry (fixed z)."""
-            rest_sed, _z = _compute_rest_sed(sfr_on_ssp, params, ssp_flux_traced, ssp_lgmet_traced)
+            rest_sed, _z = _compute_rest_sed(
+                sfr_on_ssp,
+                params,
+                ssp_flux_traced,
+                ssp_lgmet_traced,
+                sfr_internal=sfr_internal,
+            )
 
             if igm_trans_full is not None:
                 rest_sed = rest_sed * igm_trans_full
@@ -571,7 +604,7 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
         return None
 
     from tengri.components.stellar.sps.dsps_wrapper import compute_csp_weights
-    from tengri.forward.pipeline import interp_met_alpha_dispatch, interp_metallicity
+    from tengri.forward.pipeline import interp_met_alpha_dispatch
     from tengri.observation.spectrum import compute_spectrum
     from tengri.parameters.translate import get_internal_params
 
@@ -634,12 +667,28 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
     _ssp_lgmet_closure_spec = state.ssp_data.ssp_lgmet
     _lgmet_scatter_closure_spec = float(state.lgmet_scatter)
     _met_use_smooth_spec = state.met_interp == "smooth"
-    from tengri.components.stellar.sps.dsps_wrapper import (
-        interpolate_metallicity_smooth as _interp_metallicity_smooth_spec,
+
+    # Closure-path-A captures for spectrum kernel (mirrors photometry kernel).
+    _ssp_lg_age_gyr_ca_spec = state.ssp_data.ssp_lg_age_gyr
+    from tengri.components.stellar.sfh.gp_sfh import (
+        make_log_age_grid as _make_log_age_grid_ca_spec,
     )
+    from tengri.utils.cosmology import age_at_z as _age_at_z_fn_ca_spec
+
+    _orch_n_grid_ca_spec = int(getattr(state.spec, "n_grid", 64))
+    _sfh_lbt_grid_orch_64_spec = jnp.power(10.0, _make_log_age_grid_ca_spec(_orch_n_grid_ca_spec))
+    _t_obs_gyr_fixed_ca_spec = None if is_free_z else float(_age_at_z_fn_ca_spec(z_fixed))
+    _sfh_fn_ca_spec = model._sfh_fn
+    _sfh_internal_names_ca_spec = model._sfh_internal_names
 
     # Shared SED computation (sfr_on_ssp pre-computed by caller)
-    def _compute_rest_sed_spec(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
+    def _compute_rest_sed_spec(
+        sfr_on_ssp,
+        params,
+        ssp_flux_traced=None,
+        ssp_lgmet_traced=None,
+        sfr_internal=None,
+    ):
         """Compute rest-frame SED for the spectroscopy kernel given pre-computed SFR weights.
 
         ``ssp_flux_traced`` / ``ssp_lgmet_traced`` (Phase II-2 trace path):
@@ -729,21 +778,103 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
                         ssp_lgmet=ssp_lgmet_traced,
                     )
                 else:
+                    # CLOSURE-A spectrum: same migration as photometry kernel
+                    # (see ``build_fused_tier2_photometry`` for the equivalence
+                    # proof). Mirrors ``StellarSEDComponent.apply`` /
+                    # ``pipeline.py``'s closure-A branch so compositional
+                    # spectrum is bit-identical to the exact path.
+                    from dsps.sed.stellar_sed import (
+                        calc_rest_sed_sfh_table_lognormal_mdf as _calc_rest_sed_ln_spec,
+                    )
+
                     _lgmet_s = p.get("log_z_abs", -1.8477)
-                    if (
-                        _met_use_smooth_spec
-                        and ssp_flux_traced is not None
-                        and ssp_lgmet_traced is not None
-                    ):
-                        # Phase II-2 trace path: SSP arrays as JIT inputs
-                        ssp_flux_at_z = _interp_metallicity_smooth_spec(
-                            ssp_flux_traced,
-                            ssp_lgmet_traced,
-                            _lgmet_s,
-                            _lgmet_scatter_closure_spec,
-                        )
+                    _ssp_flux_use_spec = (
+                        ssp_flux_traced if ssp_flux_traced is not None else _ssp_flux_closure_spec
+                    )
+                    _ssp_lgmet_use_spec = (
+                        ssp_lgmet_traced
+                        if ssp_lgmet_traced is not None
+                        else _ssp_lgmet_closure_spec
+                    )
+                    lgmet_scatter_ca_spec = float(
+                        p.get("lgmet_scatter", _lgmet_scatter_closure_spec)
+                    )
+
+                    if has_field:
+                        if (
+                            sfr_internal is not None
+                            and sfr_internal.shape[0] == _orch_n_grid_ca_spec
+                        ):
+                            _sfr_orch_grid_spec = sfr_internal
+                        elif sfr_internal is not None:
+                            _sfr_orch_grid_spec = jnp.interp(
+                                _sfh_lbt_grid_orch_64_spec,
+                                model.log_age_grid,
+                                sfr_internal,
+                            )
+                        else:
+                            _sfr_orch_grid_spec = jnp.interp(
+                                _sfh_lbt_grid_orch_64_spec, ssp_ages_yr, sfr_on_ssp
+                            )
                     else:
-                        ssp_flux_at_z = interp_metallicity(model, _lgmet_s)
+                        _sfh_kw_spec = {
+                            k: v for k, v in p.items() if k in _sfh_internal_names_ca_spec
+                        }
+                        _sfr_orch_grid_spec = _sfh_fn_ca_spec(
+                            _sfh_lbt_grid_orch_64_spec, **_sfh_kw_spec
+                        )
+                    _sfr_on_ssp_orch_spec = jnp.interp(
+                        ssp_ages_yr, _sfh_lbt_grid_orch_64_spec, _sfr_orch_grid_spec
+                    )
+
+                    _z_internal_ca_spec = p.get(
+                        "redshift", z_fixed if z_fixed is not None else 0.0
+                    )
+                    _t_obs_gyr_ca_spec = (
+                        _t_obs_gyr_fixed_ca_spec
+                        if _t_obs_gyr_fixed_ca_spec is not None
+                        else _age_at_z_fn_ca_spec(_z_internal_ca_spec)
+                    )
+                    _T_TABLE_MIN_spec = 0.01
+                    _ssp_age_gyr_spec = ssp_ages_yr / 1e9
+                    _t_cosmic_raw_spec = _t_obs_gyr_ca_spec - _ssp_age_gyr_spec
+                    _n_ssp_spec = ssp_ages_yr.shape[0]
+                    _t_cosmic_floor_spec = jnp.maximum(_t_cosmic_raw_spec, _T_TABLE_MIN_spec)
+                    _valid_spec = _t_cosmic_raw_spec > 0.0
+                    _t_cosmic_asc_raw_spec = _t_cosmic_floor_spec[::-1]
+                    _sfr_asc_raw_spec = _sfr_on_ssp_orch_spec[::-1]
+                    _n_invalid_spec = jnp.sum(~_valid_spec[::-1])
+                    _idx_pos_spec = jnp.arange(_n_ssp_spec)
+                    _is_invalid_pos_spec = _idx_pos_spec < _n_invalid_spec
+                    _ramp_ca_spec = _T_TABLE_MIN_spec + (_T_TABLE_MIN_spec * 0.5) * (
+                        _idx_pos_spec + 1
+                    ) / jnp.maximum(_n_invalid_spec, 1)
+                    _t_cosmic_asc_spec = jnp.where(
+                        _is_invalid_pos_spec, _ramp_ca_spec, _t_cosmic_asc_raw_spec
+                    )
+                    _sfr_asc_spec = jnp.where(_is_invalid_pos_spec, 0.0, _sfr_asc_raw_spec)
+                    _total_mass_ca_spec = jnp.maximum(
+                        jnp.trapezoid(_sfr_asc_spec, _t_cosmic_asc_spec * 1e9), 0.0
+                    )
+
+                    _dsps_result_ca_spec = _calc_rest_sed_ln_spec(
+                        gal_t_table=_t_cosmic_asc_spec,
+                        gal_sfr_table=_sfr_asc_spec,
+                        gal_lgmet=_lgmet_s,
+                        gal_lgmet_scatter=lgmet_scatter_ca_spec,
+                        ssp_lgmet=_ssp_lgmet_use_spec,
+                        ssp_lg_age_gyr=_ssp_lg_age_gyr_ca_spec,
+                        ssp_flux=_ssp_flux_use_spec,
+                        t_obs=_t_obs_gyr_ca_spec,
+                    )
+                    _weights_2d_ca_spec = _dsps_result_ca_spec.weights * _total_mass_ca_spec
+                    weights = _weights_2d_ca_spec.sum(axis=0)
+                    _w_safe_ca_spec = jnp.maximum(weights, 1e-30)
+                    ssp_flux_at_z = jnp.einsum(
+                        "ma,maw->aw",
+                        _weights_2d_ca_spec / _w_safe_ca_spec[None, :],
+                        _ssp_flux_use_spec,
+                    )
         p = {**p, "_sfr_current": sfr_on_ssp[-1]}
         rest_sed = rest_sed_kernel(weights, ssp_flux_at_z, p)
         z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
@@ -751,20 +882,40 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
 
     if is_free_z:
 
-        def fused_tier2_spec(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
+        def fused_tier2_spec(
+            sfr_on_ssp,
+            params,
+            ssp_flux_traced=None,
+            ssp_lgmet_traced=None,
+            sfr_internal=None,
+        ):
             """sfr_on_ssp, params dict → observed spectrum (free z)."""
             rest_sed, z = _compute_rest_sed_spec(
-                sfr_on_ssp, params, ssp_flux_traced, ssp_lgmet_traced
+                sfr_on_ssp,
+                params,
+                ssp_flux_traced,
+                ssp_lgmet_traced,
+                sfr_internal=sfr_internal,
             )
             dl_cm = _lum_dist_spec(z)
             return compute_spectrum(rest_sed, rest_wave, wave_obs, z, dl_cm)
 
     else:
 
-        def fused_tier2_spec(sfr_on_ssp, params, ssp_flux_traced=None, ssp_lgmet_traced=None):
+        def fused_tier2_spec(
+            sfr_on_ssp,
+            params,
+            ssp_flux_traced=None,
+            ssp_lgmet_traced=None,
+            sfr_internal=None,
+        ):
             """sfr_on_ssp, params dict → observed spectrum (fixed z)."""
             rest_sed, _z = _compute_rest_sed_spec(
-                sfr_on_ssp, params, ssp_flux_traced, ssp_lgmet_traced
+                sfr_on_ssp,
+                params,
+                ssp_flux_traced,
+                ssp_lgmet_traced,
+                sfr_internal=sfr_internal,
             )
             return compute_spectrum(rest_sed, rest_wave, wave_obs, z_fixed, dl_cm_fixed)
 
@@ -864,6 +1015,29 @@ def build_hybrid_spectrum(state: SEDModelState, model=None):
     if is_free_z:
         from tengri.utils.cosmology import luminosity_distance as _lum_dist
 
+    # ── Closure-path-A captures (mirrors photometry/spectrum kernels) ──
+    _ssp_lg_age_gyr_ca_hs = state.ssp_data.ssp_lg_age_gyr
+    _ssp_flux_ca_hs = state.ssp_data.ssp_flux
+    _ssp_lgmet_ca_hs = state.ssp_data.ssp_lgmet
+    _lgmet_scatter_ca_hs = float(state.lgmet_scatter)
+    from tengri.components.stellar.sfh.gp_sfh import (
+        make_log_age_grid as _make_log_age_grid_ca_hs,
+    )
+    from tengri.utils.cosmology import age_at_z as _age_at_z_fn_ca_hs
+
+    _orch_n_grid_ca_hs = int(getattr(state.spec, "n_grid", 64))
+    _sfh_lbt_grid_orch_64_hs = jnp.power(10.0, _make_log_age_grid_ca_hs(_orch_n_grid_ca_hs))
+    _t_obs_gyr_fixed_ca_hs = None if is_free_z else float(_age_at_z_fn_ca_hs(z_fixed))
+    _sfh_fn_ca_hs = model._sfh_fn if model is not None else None
+    _sfh_internal_names_ca_hs = model._sfh_internal_names if model is not None else set()
+    _has_field_ca_hs = state.uses_stochastic_sfh
+    _model_log_age_grid_ca_hs = model.log_age_grid if model is not None else None
+    _closure_a_eligible_hs = not _use_alpha_fe and not _has_alpha and _sfh_fn_ca_hs is not None
+    if _closure_a_eligible_hs:
+        from dsps.sed.stellar_sed import (
+            calc_rest_sed_sfh_table_lognormal_mdf as _calc_rest_sed_ln_hs,
+        )
+
     # === Core kernel body (shared for single and two-component dust) ===
 
     def _hybrid_spec_body(
@@ -883,30 +1057,85 @@ def build_hybrid_spectrum(state: SEDModelState, model=None):
         XLA from baking the full SSP grid into the compiled HLO.
         """
         p = get_internal_params(params, param_map, spec, has_field)
-        weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
 
-        # Metallicity interpolation
-        # BUG-NSS-02: Use the provided log_z_abs, don't silently fall back
+        # ── Closure-path-A migration ──────────────────────────────────
+        # Replace legacy ``compute_csp_weights`` + ``interp_metallicity``
+        # with DSPS lognormal-MDF + trapezoidal cosmic-time SFH integration
+        # so the hybrid spectrum kernel agrees with the exact path. Also
+        # produces an MDF-marginalised stellar pixel spectrum, fixing the
+        # pre-existing line that selected ``ssp_on_pixels[0]`` (always
+        # zeroth metallicity index) regardless of the requested ``log_z``.
         _lgmet_hs = log_z_abs
-        if _use_alpha_fe and _has_alpha:
-            alpha_fe_val = p.get("alpha_fe", 0.0)
-            ssp_flux_at_z = interp_met_alpha_dispatch(
-                model,
-                _lgmet_hs,
-                alpha_fe_val,
-                ssp_flux=ssp_flux_traced,
-                ssp_lgmet=ssp_lgmet_traced,
+        _closure_a_runtime_hs = _closure_a_eligible_hs and _t_obs_gyr_fixed_ca_hs is not None
+        if _closure_a_runtime_hs and _has_field_ca_hs:
+            # Stochastic eligibility deferred (sfr_internal plumbing).
+            _closure_a_runtime_hs = False
+        if _closure_a_runtime_hs:
+            _sfh_kw_hs = {k: v for k, v in p.items() if k in _sfh_internal_names_ca_hs}
+            _sfr_orch_grid_hs = _sfh_fn_ca_hs(_sfh_lbt_grid_orch_64_hs, **_sfh_kw_hs)
+            _sfr_on_ssp_orch_hs = jnp.interp(
+                ssp_ages_yr, _sfh_lbt_grid_orch_64_hs, _sfr_orch_grid_hs
             )
+            _T_TABLE_MIN_hs = 0.01
+            _ssp_age_gyr_hs = ssp_ages_yr / 1e9
+            _t_cosmic_raw_hs = _t_obs_gyr_fixed_ca_hs - _ssp_age_gyr_hs
+            _n_ssp_hs = ssp_ages_yr.shape[0]
+            _t_cosmic_floor_hs = jnp.maximum(_t_cosmic_raw_hs, _T_TABLE_MIN_hs)
+            _valid_hs = _t_cosmic_raw_hs > 0.0
+            _t_cosmic_asc_raw_hs = _t_cosmic_floor_hs[::-1]
+            _sfr_asc_raw_hs = _sfr_on_ssp_orch_hs[::-1]
+            _n_invalid_hs = jnp.sum(~_valid_hs[::-1])
+            _idx_pos_hs = jnp.arange(_n_ssp_hs)
+            _is_invalid_pos_hs = _idx_pos_hs < _n_invalid_hs
+            _ramp_hs = _T_TABLE_MIN_hs + (_T_TABLE_MIN_hs * 0.5) * (_idx_pos_hs + 1) / jnp.maximum(
+                _n_invalid_hs, 1
+            )
+            _t_cosmic_asc_hs = jnp.where(_is_invalid_pos_hs, _ramp_hs, _t_cosmic_asc_raw_hs)
+            _sfr_asc_hs = jnp.where(_is_invalid_pos_hs, 0.0, _sfr_asc_raw_hs)
+            _total_mass_hs = jnp.maximum(jnp.trapezoid(_sfr_asc_hs, _t_cosmic_asc_hs * 1e9), 0.0)
+            _dsps_result_hs = _calc_rest_sed_ln_hs(
+                gal_t_table=_t_cosmic_asc_hs,
+                gal_sfr_table=_sfr_asc_hs,
+                gal_lgmet=_lgmet_hs,
+                gal_lgmet_scatter=_lgmet_scatter_ca_hs,
+                ssp_lgmet=_ssp_lgmet_ca_hs,
+                ssp_lg_age_gyr=_ssp_lg_age_gyr_ca_hs,
+                ssp_flux=_ssp_flux_ca_hs,
+                t_obs=_t_obs_gyr_fixed_ca_hs,
+            )
+            _weights_2d_hs = _dsps_result_hs.weights * _total_mass_hs
+            weights = _weights_2d_hs.sum(axis=0)
+            _w_safe_hs = jnp.maximum(weights, 1e-30)
+            ssp_flux_at_z = jnp.einsum(
+                "ma,maw->aw",
+                _weights_2d_hs / _w_safe_hs[None, :],
+                _ssp_flux_ca_hs,
+            )
+            # Metallicity-correct stellar pixel spectrum via joint
+            # ``einsum("ma,map->p", weights_2d, ssp_on_pixels)``.
+            stellar_spec = jnp.einsum("ma,map->p", _weights_2d_hs, ssp_on_pixels)
         else:
-            ssp_flux_at_z = interp_metallicity(
-                model,
-                _lgmet_hs,
-                ssp_flux=ssp_flux_traced,
-                ssp_lgmet=ssp_lgmet_traced,
-            )
-
-        # Stellar spectrum on pixels
-        stellar_spec = jnp.dot(weights, ssp_on_pixels[0])  # (n_pix,)
+            weights = compute_csp_weights(sfr_on_ssp, ssp_ages_yr)
+            # Metallicity interpolation
+            # BUG-NSS-02: Use the provided log_z_abs, don't silently fall back
+            if _use_alpha_fe and _has_alpha:
+                alpha_fe_val = p.get("alpha_fe", 0.0)
+                ssp_flux_at_z = interp_met_alpha_dispatch(
+                    model,
+                    _lgmet_hs,
+                    alpha_fe_val,
+                    ssp_flux=ssp_flux_traced,
+                    ssp_lgmet=ssp_lgmet_traced,
+                )
+            else:
+                ssp_flux_at_z = interp_metallicity(
+                    model,
+                    _lgmet_hs,
+                    ssp_flux=ssp_flux_traced,
+                    ssp_lgmet=ssp_lgmet_traced,
+                )
+            # Stellar spectrum on pixels (legacy path: uses zeroth Z slice).
+            stellar_spec = jnp.dot(weights, ssp_on_pixels[0])  # (n_pix,)
 
         # Apply dust attenuation to stellar spectrum
         if _is_single_dust:

@@ -220,6 +220,7 @@ from tengri import (
 )
 
 # Introspection façade — public registry lookups
+from tengri._tutorials import examples, explain, tutorial
 from tengri.registry import (
     describe,
     help,
@@ -285,6 +286,8 @@ __all__ = [
     "doctor",
     "dust",
     "enable_persistent_cache",
+    "examples",
+    "explain",
     "filters",
     "help",
     "igm",
@@ -315,6 +318,7 @@ __all__ = [
     "sps",
     "stellar",
     "summary",
+    "tutorial",
     "units",
     "xray",
 ]
@@ -437,6 +441,9 @@ _CURATED_DIR = (
     "list_all",
     "search",
     "suggest_parameters",
+    "tutorial",
+    "examples",
+    "explain",
     # 2.  Build a fit
     "Parameters",
     "SEDModel",

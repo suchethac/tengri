@@ -1146,7 +1146,23 @@ tengri — differentiable galaxy SED fitting in JAX
     tengri.help("dust")                   topical cheatsheet for one menu
 
 ────────────────────────────────────────────────────────────────────
-2.  A minimal fit
+2.  Learn the design — interactive tutorials
+────────────────────────────────────────────────────────────────────
+    tengri.tutorial()                     list every available recipe
+    tengri.tutorial("philosophy")         layered architecture + IFT framework
+    tengri.tutorial("key_classes")        Parameters / SEDModel / Fitter / Posterior
+    tengri.tutorial("use_cases")          common patterns (catalog / hierarchical / mock)
+    tengri.tutorial("first_fit")          end-to-end mock-recovery recipe
+    tengri.tutorial("register_a_model", run=True)   register a new alternative
+    tengri.tutorial("custom_likelihood")  Student-t / calibration / Protocol
+    tengri.tutorial("swap_inference")     same model, NUTS → geoVI → MCMC
+    tengri.tutorial("diagnostics")        ESS / R-hat / convergence checking
+
+    tengri.explain(tengri.SEDModel)       architectural role of any class
+    tengri.examples()                     list every runnable example script
+
+────────────────────────────────────────────────────────────────────
+3.  Build a fit
 ────────────────────────────────────────────────────────────────────
     obs        = tengri.Observation(photometry=tengri.Photometry.from_names([...]))
     parameters = tengri.Parameters(...)        # priors + fixed values
@@ -1155,17 +1171,18 @@ tengri — differentiable galaxy SED fitting in JAX
     posterior  = fitter.run("map")             # or "nuts", "vi", …
     posterior.summary()                        # median ± 68% CI per param
 
-    See examples/ for runnable scripts.
+    Pick the right kwargs:
+      tengri.suggest_parameters(mean_sfh_type="dpl", agn_model="skirtor")
 
 ────────────────────────────────────────────────────────────────────
-3.  Contribute a new physics alternative
+4.  Contribute a new physics alternative
 ────────────────────────────────────────────────────────────────────
     Copy examples/contrib/example_new_agn_torus.py.  It registers a new
     AGN torus model with metadata (citation, status), then exercises the
     introspection API end-to-end.  See CONTRIBUTING.md for the 5-step recipe.
 
 ────────────────────────────────────────────────────────────────────
-4.  Cite us
+5.  Cite us
 ────────────────────────────────────────────────────────────────────
     tengri.print_citations()          acknowledgements for your paper
 """

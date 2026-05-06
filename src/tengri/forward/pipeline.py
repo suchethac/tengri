@@ -157,12 +157,18 @@ def _closure_a_sfh_prep(model, p, sfr, t_obs_gyr_for_weights):
     """
     from tengri.components.stellar.sfh.gp_sfh import make_log_age_grid
 
-    _n_grid = 64
+    # Read ``n_grid`` from the spec so the helper mirrors the orchestrator's
+    # ``StellarSEDComponentConfig.n_grid`` (which is also sourced from
+    # ``spec.n_grid`` in :func:`build_components`). For stochastic SFHs
+    # this matches the size of the GP draw baked into ``sfr`` exactly, so
+    # we can reuse ``sfr`` directly with no interpolation loss. For
+    # parametric SFHs the helper re-evaluates ``sfh_fn`` on this grid.
+    _n_grid = int(getattr(model.spec, "n_grid", 64))
     _log_age_grid = make_log_age_grid(_n_grid)
     sfh_lbt_grid_orch = jnp.power(10.0, _log_age_grid)
     if model._uses_stochastic_sfh:
-        # Stochastic SFHs already use n_grid=64 in legacy; reuse to
-        # preserve the GP draw baked into ``sfr``.
+        # Stochastic ``sfr`` is the GP draw on the spec's ``n_grid`` —
+        # which equals ``_n_grid`` here, so reuse directly.
         _sfr_orch_grid = sfr
     else:
         _kw = {k: v for k, v in p.items() if k in model._sfh_internal_names}
@@ -812,9 +818,7 @@ def compute_sed_components(
             if model._uses_stochastic_sfh:
                 _sfr_orch_grid_chem = sfr
             else:
-                _kw_orch_chem = {
-                    k: v for k, v in p.items() if k in model._sfh_internal_names
-                }
+                _kw_orch_chem = {k: v for k, v in p.items() if k in model._sfh_internal_names}
                 _sfr_orch_grid_chem = model._sfh_fn(_sfh_lbt_grid_chem, **_kw_orch_chem)
             _log_z_per_age_chem = chem_evol_metallicity_on_ssp_grid(
                 model.ssp_log_ages_yr,
@@ -906,9 +910,7 @@ def compute_sed_components(
                 # α-only bilinear interp on 4D ssp_flux at requested α.
                 # Shape (n_met, n_alpha, n_age, n_wave) → (n_met, n_age, n_wave).
                 _ssp_alpha_fe_grid = model.ssp_data.ssp_alpha_fe
-                _afe_clipped = jnp.clip(
-                    alpha_fe, _ssp_alpha_fe_grid[0], _ssp_alpha_fe_grid[-1]
-                )
+                _afe_clipped = jnp.clip(alpha_fe, _ssp_alpha_fe_grid[0], _ssp_alpha_fe_grid[-1])
                 _ia = jnp.clip(
                     jnp.searchsorted(_ssp_alpha_fe_grid, _afe_clipped) - 1,
                     0,
@@ -944,9 +946,7 @@ def compute_sed_components(
                 t_obs=_t_obs_gyr_for_weights,
             )
             _dsps_weights_2d = _dsps_result_α.weights * _total_mass_α
-            ssp_flux_at_z = jnp.einsum(
-                "ma,maw->aw", _dsps_result_α.weights, _ssp_flux_3d_alpha
-            )
+            ssp_flux_at_z = jnp.einsum("ma,maw->aw", _dsps_result_α.weights, _ssp_flux_3d_alpha)
             # Plumb the α-interpolated cube into the 3D-einsum
             # fallback below so it sums over (m, a) at the requested α.
             _ssp_flux_for_csp_3d = _ssp_flux_3d_alpha
@@ -1001,9 +1001,7 @@ def compute_sed_components(
             # Age-marginalised SSP flux cube — used downstream for
             # diagnostic publication and for non-JIT branches that
             # reach for ``ssp_flux_at_z``.
-            ssp_flux_at_z = jnp.einsum(
-                "ma,maw->aw", _dsps_result.weights, model.ssp_data.ssp_flux
-            )
+            ssp_flux_at_z = jnp.einsum("ma,maw->aw", _dsps_result.weights, model.ssp_data.ssp_flux)
 
         # --- Fast JIT path: dust + einsum in one compiled kernel ---
         # Eliminates ~78% Python dispatch overhead (4-14x speedup).
@@ -1041,8 +1039,7 @@ def compute_sed_components(
         dust_atten = _compute_dust_atten(model, wave_dt, p)
 
         _ssp_flux_3d_for_einsum = (
-            _ssp_flux_for_csp_3d if _ssp_flux_for_csp_3d is not None
-            else model.ssp_data.ssp_flux
+            _ssp_flux_for_csp_3d if _ssp_flux_for_csp_3d is not None else model.ssp_data.ssp_flux
         ).astype(dt)
         sed_attenuated = (
             _LSUN

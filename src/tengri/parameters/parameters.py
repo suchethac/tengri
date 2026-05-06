@@ -189,7 +189,7 @@ class Parameters:
         IR emission model.  Default: ``None`` (disabled).
         Options: ``"modified_blackbody"``, ``"casey2012"``, ``"dale2014"``,
         ``"draine_li2007"``, ``"draine_li2014"``, ``"dl07_tabulated"``,
-        ``"astrodust"``, ``"bosa"``, ``"themis"``, ``"magphys"``.
+        ``"astrodust"``, ``"bosa"``, ``"themis"``.
     dl07_grid_path : str
         Path to DL07 HDF5 template grid (for ``"dl07_tabulated"``).
 
@@ -666,10 +666,32 @@ class Parameters:
         self.dl07_grid_path = kwargs.pop("dl07_grid_path", None)
 
     def _init_metallicity_config(self, kwargs):
-        """Resolve metallicity evolution mode from kwargs."""
+        """Resolve metallicity evolution mode from kwargs.
+
+        Priority:
+        1. Explicit ``met_mode="..."`` always wins.
+        2. Legacy ``evolving_metallicity=True`` / ``chem_evol=True``
+           flags map onto the corresponding mode.
+        3. Auto-infer from the metallicity-related parameter keys the
+           user passed (e.g. ``met_logzsol_0`` + ``met_logzsol_final``
+           implies ``"ramp"``). Inference is data-driven from the
+           registry — adding a new mode + its discriminator keys to
+           ``met_registry._MET_MODE_DISCRIMINATORS`` is enough.
+        4. Default ``"delta"`` if nothing matches.
+
+        Validation: explicit ``met_mode`` that conflicts with the
+        keys (e.g. ``met_mode="delta"`` while passing ``met_logzsol_0``
+        and ``met_logzsol_final``) raises with a helpful message.
+        """
+        from tengri.components.stellar.sfh.met_registry import infer_met_mode
+
         _met_mode_explicit = kwargs.pop("met_mode", None)
         _evolving_met = kwargs.pop("evolving_metallicity", False)
         _chem_evol = kwargs.pop("chem_evol", False)
+
+        # Snapshot the user's keys before any further popping. Inference
+        # only sees met_/chem_ keys; everything else is irrelevant noise.
+        _inferred_mode = infer_met_mode(set(kwargs.keys()))
 
         if _met_mode_explicit is not None:
             if _evolving_met or _chem_evol:
@@ -677,6 +699,13 @@ class Parameters:
                     "Cannot use met_mode with evolving_metallicity or chem_evol. "
                     "Use met_mode='ramp' instead of evolving_metallicity=True, "
                     "or met_mode='chem_evol' instead of chem_evol=True."
+                )
+            if _inferred_mode != "delta" and _inferred_mode != _met_mode_explicit:
+                raise ValueError(
+                    f"met_mode={_met_mode_explicit!r} conflicts with parameter "
+                    f"keys that imply met_mode={_inferred_mode!r}. Either remove "
+                    f"the conflicting parameters or set met_mode={_inferred_mode!r} "
+                    f"explicitly."
                 )
             self.met_mode = _met_mode_explicit
         elif _evolving_met and _chem_evol:
@@ -690,7 +719,7 @@ class Parameters:
         elif _chem_evol:
             self.met_mode = "chem_evol"
         else:
-            self.met_mode = "delta"
+            self.met_mode = _inferred_mode
 
         # Backward-compat properties for sed_model / pipeline
         self.evolving_metallicity = self.met_mode == "ramp"
@@ -1273,12 +1302,21 @@ class Parameters:
             if not dist.is_fixed and (val < lo or val > hi):
                 raise ValueError(f"Parameter '{name}' = {val} is outside bounds [{lo}, {hi}]")
 
-    def summary(self) -> str:
-        """Return a human-readable summary of the model configuration.
+    def summary_str(self) -> str:
+        """Return the summary as a string (e.g. for logging or tests)."""
+        return self._build_summary_str()
+
+    def summary(self) -> None:
+        """Print a human-readable summary of the model configuration.
 
         Displays SFH type, enabled components (nebular, dust, AGN, etc.),
         dimensionality, and a table of all parameters grouped by category
         (free first, then fixed). Useful for printing model status before fitting.
+
+        Use :meth:`summary_str` if you need the underlying string (e.g. for
+        logging) — :meth:`summary` itself prints and returns ``None``,
+        matching the rest of the discovery API
+        (:func:`tengri.summary`, :func:`tengri.help`, etc.).
 
         Parameters
         ----------
@@ -1286,8 +1324,8 @@ class Parameters:
 
         Returns
         -------
-        str
-            Formatted multi-line summary string with ASCII table and component flags.
+        None
+            Output is printed to stdout.
 
         Notes
         -----
@@ -1400,7 +1438,18 @@ class Parameters:
                 lines.append(f"  {target:<32s} {mirror_str:<26s} ──►")
 
         lines.append(sep)
-        return "\n".join(lines)
+        print("\n".join(lines))
+
+    def _build_summary_str(self) -> str:
+        """Build the same multi-line summary, returned as a string."""
+        # Reuse summary() logic by capturing stdout — simpler than refactor
+        import io
+        import contextlib
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            self.summary()
+        return buf.getvalue().rstrip("\n")
 
     def __repr__(self) -> str:
         lines = [f"Parameters(mean_sfh_type={self._mean_sfh_type},"]

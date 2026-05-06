@@ -289,7 +289,9 @@ class SEDModel:
         approx=None,
         csp_integration="trapz",
         wave_chunk_size=None,
+        agn_config=None,
     ):
+        self._agn_config = agn_config
         # ── Observation ────────────────────────────────────────────
         observation, spec = self._init_observation(spec, filters, observation)
         self.observation = observation
@@ -373,6 +375,7 @@ class SEDModel:
             dust_emission_model=self._dust_emission_model,
             nebular_backend=self._nebular_backend,
             agn_model=self._agn_model,
+            agn_config=getattr(self, "_agn_config", None),
             agn_luminosity_mode=self._agn_luminosity_mode,
             uses_igm=self._uses_igm,
             uses_radio=self._uses_radio,
@@ -1694,8 +1697,10 @@ class SEDModel:
         """
         from tengri.forward.result import SEDResult
 
-        rest_wave = wave if wave is not None else self._rest_wavelength
-        result = self._compute_sed_components(params, rest_wavelength=rest_wave)
+        if wave is None:
+            state = self.predict_via_orchestrator(params)
+            return SEDResult(wavelength=self._rest_wavelength, sed=state.sed_intrinsic)
+        result = self._compute_sed_components(params, rest_wavelength=wave)
         return SEDResult(wavelength=result["rest_wavelength"], sed=result["sed_total"])
 
     def predict_obs_sed(self, params, wave=None):
@@ -2972,6 +2977,76 @@ class SEDModel:
             ]
         )
         return photometry
+
+    def predict_spectrum_via_orchestrator(self, params, wave_obs=None):
+        """Spectrum through the orchestrator path.
+
+        Runs the SEDComponent chain, applies the cosmological redshift +
+        luminosity-distance projection, interpolates onto ``wave_obs``,
+        and (if configured) applies the instrument LSF + velocity-dispersion
+        broadening. Mirrors the contract of the legacy
+        :meth:`predict_spectrum`'s observed-frame output but goes through
+        the SEDComponent chain rather than the fused kernel.
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict (same shape as
+            :meth:`predict_via_orchestrator`).
+        wave_obs : array_like, shape (n_pix,), optional
+            Observed-frame wavelength grid [Angstrom]. If ``None``,
+            falls back to the precomputed grid (`self._wave_obs` or
+            `self._precomputed.spectroscopy.wave_obs_pixels`).
+
+        Returns
+        -------
+        flux : ndarray, shape (n_pix,)
+            Observed-frame spectral flux density [erg/s/cm^2/Hz].
+
+        Raises
+        ------
+        ValueError
+            If no ``wave_obs`` grid is supplied or precomputed.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — :func:`run_components`, the rest→obs
+        projection in :func:`observe_spectrum_from_rest_sed`, and
+        :func:`apply_lsf` are all JIT-friendly. No calibration polynomial
+        is applied; callers that need calibration should compose it on
+        top via the user-likelihood Protocol path.
+        """
+        from tengri.forward._kernels.compositional import observe_spectrum_from_rest_sed
+        from tengri.observation.spectrum import apply_lsf
+        from tengri.utils.cosmology import luminosity_distance
+
+        if wave_obs is None and self._precomputed.spectroscopy is not None:
+            wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
+        elif wave_obs is None and hasattr(self, "_wave_obs"):
+            wave_obs = self._wave_obs
+        elif wave_obs is None:
+            raise ValueError(
+                "predict_spectrum_via_orchestrator requires a wave_obs grid "
+                "(pass it explicitly or call precompute_spectroscopy()."
+            )
+
+        state = self.predict_via_orchestrator(params)
+        z = jnp.asarray(params.get("redshift", 0.0))
+        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+
+        flux = observe_spectrum_from_rest_sed(state.sed_intrinsic, state.wave, wave_obs, z, dl_cm)
+
+        resolution = self._lsf_resolution
+        if resolution is not None:
+            flux = apply_lsf(
+                flux,
+                wave_obs,
+                resolution,
+                sigma_lib_kms=self._sigma_lib_kms,
+                n_bins=self._lsf_n_bins,
+                sigma_v_kms=self._get_sigma_v_kms(params),
+            )
+        return flux
 
     def predict_emission_lines_via_orchestrator(self, params):
         """Phase II-2.6 orchestrator-path emission-line luminosities.
