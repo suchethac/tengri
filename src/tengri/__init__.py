@@ -278,6 +278,7 @@ from tengri import citations, cosmology, pipeline, plot, units
 # Introspection façade — public registry lookups
 from tengri.registry import (
     describe,
+    help,
     list_agn_models,
     list_all,
     list_components,
@@ -285,6 +286,7 @@ from tengri.registry import (
     list_inference_methods,
     list_nebular_backends,
     list_sfh_models,
+    summary,
 )
 
 # Phase 6 (2026-05): the advertised top-level surface.
@@ -349,6 +351,7 @@ __all__ = [
     "igm",
     "io",
     "is_cache_enabled",
+    "help",
     "list_agn_models",
     "list_all",
     "list_components",
@@ -356,6 +359,7 @@ __all__ = [
     "list_inference_methods",
     "list_nebular_backends",
     "list_sfh_models",
+    "summary",
     "nebular",
     "observation",
     "pipeline",
@@ -386,3 +390,61 @@ from tengri.analysis.plotting import (
     safe_corner,
     setup_style,
 )
+
+
+# ──────────────────────────────────────────────────────────────────
+# Curated tab-completion surface.
+#
+# `tengri.<TAB>` should give a fresh user ~30 obvious entry points,
+# not the 175-item kitchen sink of every public symbol.  Everything
+# remains accessible via attribute access — only `dir(tengri)` is
+# filtered.  `__all__` (above) keeps `from tengri import *` working
+# unchanged.
+# ──────────────────────────────────────────────────────────────────
+_CURATED_DIR = (
+    # 1.  First-impression discovery
+    "help",
+    "summary",
+    "describe",
+    "list_agn_models",
+    "list_dust_laws",
+    "list_sfh_models",
+    "list_nebular_backends",
+    "list_components",
+    "list_inference_methods",
+    "list_all",
+    # 2.  Build a fit
+    "Parameters",
+    "SEDModel",
+    "Fitter",
+    "Observation",
+    "Photometry",
+    "Spectroscopy",
+    "NoiseModel",
+    "LineList",
+    # 3.  Priors / distributions
+    "Uniform",
+    "Gaussian",
+    "LogUniform",
+    "LogNormal",
+    "Fixed",
+    "StudentT",
+    # 4.  Result types
+    "Posterior",
+    "PopulationFitter",
+    "PopulationPosterior",
+    # 5.  Convenience
+    "generate_mock",
+    "print_citations",
+    "print_logo",
+    "__version__",
+)
+
+
+def __dir__() -> list[str]:
+    """Curated tab-completion list — keeps `tengri.<TAB>` readable.
+
+    Everything else remains accessible via attribute access; only the
+    completion surface is trimmed.
+    """
+    return list(_CURATED_DIR)
