@@ -6,6 +6,75 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added (precompute coverage + collaborator-handoff polish, 2026-05-06)
+
+- **Precompute coverage now spans every emitter** (commit `531bc4c`).
+  CB19 and MAPPINGS-V nebular backends expose
+  `preintegrate_for_photometry` with the duck-typed CLOUDY-shape
+  surface; pah_drude, casey2012 and modified_blackbody dust analytics
+  are wired into the hybrid kernel; AGN disc/torus, AGN-nebular,
+  MAPPINGS shock, radio and X-ray all run through the fast path.
+  Benchmark in `docs/dev/benchmarks/2026-05-06_forward_model_speedup.md`
+  shows 31–424× speedup over the exact path with sub-1 % typical error.
+  AGN BLR/NLR config knobs (`agn_blr_enabled`,
+  `agn_nlr_gaussian_enabled`, `agn_nlr_backend`) added with validation
+  in `AGNConfig.__post_init__`.
+- **`get_internal_params(strict_unknown_params=True)` is now the
+  default** (commit `531bc4c`). Unknown parameter names raise
+  `ValueError` instead of silently warning, so typos surface
+  immediately during model construction. Pass
+  `strict_unknown_params=False` to restore the legacy warn-only
+  behaviour. Test contract pinned in
+  `tests/unit/test_cue_param_translation.py`
+  (`test_unknown_param_raises_by_default` +
+  `test_unknown_param_warns_when_strict_false`).
+- **`tengri._display` sink + `TENGRI_QUIET` env var** (commit
+  `531bc4c`). 25 user-facing helper outputs (`doctor()`, citations,
+  help, search, parameter summary) now route through
+  `tengri._display._display`, which respects `TENGRI_QUIET=1` and is
+  monkey-patchable. Pinned by `tests/unit/test_display_quiet.py`.
+- **Toy AGN torus models warn on use** (commit `531bc4c`).
+  `simple_torus` and `two_temperature_torus` emit a once-per-process
+  `UserWarning` directing users to the SKIRTOR-based components for
+  science fits. They remain reachable for pedagogy.
+
+### Fixed (mstar consistency + Cue test fixture, 2026-05-06)
+
+- **`predict_sfh_quantities` ↔ `predict_derived` 4.1 % stellar-mass
+  drift** (commit `4288e4a`). The trapz path in
+  `predict_sfh_quantities` was rectangle-rule weighting where the
+  orchestrator path uses the DSPS canonical trapezoidal cosmic-time
+  integral. `predict_sfh_quantities` now routes through
+  `predict_via_orchestrator` and reads `state.derived["age_weights"]`,
+  giving bit-identical stellar mass between the two methods. Pinned
+  by `test_mstar_consistent_between_methods` and
+  `test_mstar_paths_agree_within_tolerance`.
+- **`Parameters.is_fixed()` and `Parameters.fixed_value()` restored**
+  (commit `531bc4c`). The `is_fixed`/`get_fixed_values` refactor
+  removed two single-name accessors that were still called from six
+  precompute modules (`stellar/sps`, `feltre`, `mappings_photo`,
+  `mappings_shock`, `dust_emission`, `skirtor`). Both methods are
+  back as documented public API on top of `_distributions`.
+- **CueBackend test fixture missing `ssp_data`** (commit `4288e4a`).
+  `state_with_cue` fixture in `test_state_quantities_bridges` now
+  passes `ssp_data` at construction, fixing 3 `RuntimeError`
+  collection errors.
+
+### Documented (deferred-feature limitations, 2026-05-06)
+
+- **ADAF disc precompute deferral** (`components/agn/disc.py`).
+  Replaced the bare `TODO` with a `# Known limitation:` block
+  explaining that ADAF precompute waits on the full ADAF rewrite vs
+  Mahadevan 1997 (currently flagged in `project_adaf_rewrite.md`),
+  with a four-step resolution path.
+- **Hybrid kernel mirrored per-component blocks**
+  (`forward/_kernels/hybrid.py`). Replaced two `TODO(refactor)`
+  comments with a `# Known limitation:` block describing why the
+  table-driven dispatch from `core/nonstell.py:build_nonstell_fn()`
+  cannot yet absorb the photometry-shortcut paths
+  (`_has_preint_dust_ir`, `_has_preint_neb`) and what an interface
+  redesign would need to do.
+
 ### Changed (Phase 6 second wave — top-level API trim, 2026-05)
 
 `tengri.__all__` shrinks from 73 to ~55 entries. 25 result/observation/
