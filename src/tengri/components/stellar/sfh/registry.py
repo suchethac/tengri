@@ -250,7 +250,11 @@ _tsnorm_spec = SFHModelSpec(
     },
     composition_type="additive",
 )
-_register(_tsnorm_spec, citation="Bellstedt et al. 2020 (arXiv:2005.11917)")
+_register(
+    _tsnorm_spec,
+    citation="Bellstedt et al. 2020 (arXiv:2005.11917)",
+    short_doc="Truncated skew-normal SFH (Bellstedt+2020)",
+)
 # Register canonical name (same spec object, just different key)
 SFH_REGISTRY["truncated_skewnormal_sfh"] = SFH_REGISTRY["tsnorm"]
 
@@ -277,7 +281,11 @@ _snorm_spec = SFHModelSpec(
     },
     composition_type="additive",
 )
-_register(_snorm_spec, citation="Bellstedt et al. 2020 (arXiv:2005.11917)")
+_register(
+    _snorm_spec,
+    citation="Bellstedt et al. 2020 (arXiv:2005.11917)",
+    short_doc="Skew-normal SFH (Bellstedt+2020)",
+)
 # Register canonical name (same spec object, just different key)
 SFH_REGISTRY["skewnormal_sfh"] = SFH_REGISTRY["snorm"]
 
@@ -314,7 +322,11 @@ _snorm_burst_spec = SFHModelSpec(
     },
     composition_type="additive",
 )
-_register(_snorm_burst_spec, citation="Robotham et al. 2020 (arXiv:2002.06980) ProSpect")
+_register(
+    _snorm_burst_spec,
+    citation="Robotham et al. 2020 (arXiv:2002.06980) ProSpect",
+    short_doc="Skew-normal + flat recent burst (ProSpect)",
+)
 SFH_REGISTRY["snorm_burst_sfh"] = SFH_REGISTRY["snorm_burst"]
 
 # --- tsnorm_burst (truncated skew-normal + flat burst) — canonical: snorm_trunc_burst_sfh ---
@@ -354,7 +366,11 @@ _tsnorm_burst_spec = SFHModelSpec(
     },
     composition_type="additive",
 )
-_register(_tsnorm_burst_spec, citation="Robotham et al. 2020 (arXiv:2002.06980) ProSpect")
+_register(
+    _tsnorm_burst_spec,
+    citation="Robotham et al. 2020 (arXiv:2002.06980) ProSpect",
+    short_doc="Truncated skew-normal + flat burst (ProSpect)",
+)
 SFH_REGISTRY["snorm_trunc_burst_sfh"] = SFH_REGISTRY["tsnorm_burst"]
 
 # --- norm (Gaussian) — canonical: gaussian_sfh ---
@@ -810,7 +826,8 @@ _register(
         settings={},
         internal_param_map={},
         composition_type="additive",
-    )
+    ),
+    short_doc="User-supplied tabulated SFH(t)",
 )
 
 
@@ -846,6 +863,7 @@ _register(
         composition_type="additive",
     ),
     citation="Leja et al. 2019 (ApJ 876, 39)",
+    short_doc="Non-parametric piecewise continuity SFH (Leja+19)",
 )
 
 # --- continuity_flex (Leja+2019): piecewise-constant with flexible bin edges ---
@@ -896,7 +914,8 @@ _register(
             "sfh_cflex_ratio_old": ("ratio_old", 1.0, 0.0),
         },
         composition_type="additive",
-    )
+    ),
+    short_doc="Non-parametric continuity + flexible bin edges",
 )
 
 # --- dirichlet (Leja+2017): piecewise-constant with Dirichlet mass fraction prior ---
@@ -929,6 +948,7 @@ _register(
         composition_type="additive",
     ),
     citation="Leja et al. 2017 (ApJ 837, 170)",
+    short_doc="Non-parametric Dirichlet SFH (Leja+17)",
 )
 
 
@@ -970,7 +990,8 @@ _register(
             **{f"sfh_db_tx_frac_{i}": (f"tx_frac_{i}", 1.0, 0.0) for i in range(3)},
         },
         composition_type="additive",
-    )
+    ),
+    short_doc="Dense-basis non-parametric SFH (Iyer+19)",
 )
 SFH_REGISTRY["db"] = SFH_REGISTRY["dense_basis"]
 
@@ -1006,7 +1027,8 @@ _register(
             **{f"sfh_dbp_tx_frac_{i}": (f"tx_frac_{i}", 1.0, 0.0) for i in range(3)},
         },
         composition_type="additive",
-    )
+    ),
+    short_doc="Dense-basis SFH without GP constraints",
 )
 SFH_REGISTRY["dbp"] = SFH_REGISTRY["dense_basis_pure"]
 
@@ -1038,7 +1060,8 @@ _register(
             "sfh_burst_log_tmax_myr": ("log_tmax_myr", 1.0, 0.0),
         },
         composition_type="mixture",
-    )
+    ),
+    short_doc="Triweight burst kernel (Zacharegkas+2025)",
 )
 
 
@@ -1094,7 +1117,8 @@ _register(
             "sfh_field_psd_tau_myr": ("psd_tau_yr", 1e6, 0.0),
         },
         composition_type="modulator",
-    )
+    ),
+    short_doc="GP field modulator with DRW power spectrum",
 )
 
 
