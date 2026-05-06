@@ -938,6 +938,15 @@ class Posterior:
         """
         print(self.summary_table())
 
+    def summary_str(self) -> str:
+        """Return the summary as a string (parity with Parameters.summary_str).
+
+        Same content as :meth:`summary_table` — alias for naming consistency
+        across the discovery API (``tengri.Parameters.summary_str`` returns
+        the same kind of string).
+        """
+        return self.summary_table()
+
     def summary_table(self) -> str:
         """Return a formatted string table of parameter summaries.
 
