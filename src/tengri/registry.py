@@ -3,15 +3,16 @@
 This is the first thing a new user should reach for. Open a notebook, run::
 
     import tengri
-    tengri.help()         # the cheatsheet
-    tengri.summary()      # one-line counts of every menu
+
+    tengri.help()  # the cheatsheet
+    tengri.summary()  # one-line counts of every menu
 
 then narrow down with::
 
-    tengri.list_agn_models()           # all 12 AGN models, as a pretty table
+    tengri.list_agn_models()  # all 12 AGN models, as a pretty table
     tengri.list_dust_laws(status="production")
     tengri.list_inference_methods(tier="primary")
-    tengri.describe("skirtor")         # full metadata for any name
+    tengri.describe("skirtor")  # full metadata for any name
 
 Returned values are normal Python lists, but they print as readable tables
 in a notebook or REPL — no need to wrap them in `pprint`.
@@ -43,6 +44,7 @@ class _RegistryTable(list):
         all_keys = list(self[0].keys())
         cols = [k for k in self._PREFERRED_COLS if k in all_keys]
         cols += [k for k in all_keys if k not in cols and k not in ("kind", "module", "requires")]
+
         # Truncate very long fields for readability.
         def _cell(v: Any) -> str:
             s = "" if v is None else str(v)
@@ -55,7 +57,7 @@ class _RegistryTable(list):
             "  ".join(_cell(d.get(k, "")).ljust(widths[k]) for k in cols) for d in self
         )
         kind = self[0].get("kind", "entry")
-        footer = f"\n[{len(self)} {kind}{'s' if len(self) != 1 else ''}]"
+        footer = f"\n[{len(self)} result{'s' if len(self) != 1 else ''} — {kind}]"
         return f"{header}\n{sep}\n{rows}{footer}"
 
     def _repr_html_(self) -> str:
@@ -67,13 +69,15 @@ class _RegistryTable(list):
         cols += [k for k in all_keys if k not in cols and k not in ("kind", "module", "requires")]
         head = "".join(f"<th style='text-align:left'>{k}</th>" for k in cols)
         body = "".join(
-            "<tr>" + "".join(f"<td style='text-align:left'>{d.get(k, '')}</td>" for k in cols) + "</tr>"
+            "<tr>"
+            + "".join(f"<td style='text-align:left'>{d.get(k, '')}</td>" for k in cols)
+            + "</tr>"
             for d in self
         )
         kind = self[0].get("kind", "entry")
         return (
             f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
-            f"<i>{len(self)} {kind}{'s' if len(self) != 1 else ''}</i>"
+            f"<i>{len(self)} result{'s' if len(self) != 1 else ''} — {kind}</i>"
         )
 
 
@@ -138,10 +142,87 @@ def list_agn_models(*, status: str | None = None) -> _RegistryTable:
 
 
 def list_dust_laws(*, status: str | None = None) -> _RegistryTable:
-    """List all registered dust attenuation laws."""
+    """List all registered dust **attenuation** laws.
+
+    Attenuation describes how UV/optical photons are absorbed/scattered
+    by dust along the line of sight (Calzetti, Cardelli, Charlot-Fall, …).
+    For dust **emission** templates (DL07, Dale, MBB, …), see
+    :func:`list_dust_emission_models`.
+    """
     from tengri.components.dust.attenuation import DUST_LAWS
 
-    out = [_entry_to_dict(n, e, kind="dust_law") for n, e in DUST_LAWS.items()]
+    out = [_entry_to_dict(n, e, kind="dust_attenuation") for n, e in DUST_LAWS.items()]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+# Known dust emission template families. The runtime
+# ``DUST_EMISSION_MODELS`` dict starts empty and is populated lazily
+# when ``register_*_tabulated(grid_path)`` is called with a data file.
+# We advertise the full menu so users can see what's *available* even
+# before loading templates.
+_DUST_EMISSION_MENU: tuple[dict[str, str], ...] = (
+    {
+        "name": "dl07",
+        "status": "production",
+        "citation": "Draine & Li 2007 (ApJ 657, 810)",
+        "short_doc": "Diffuse + PAH grain mixture, Umin/Umax/qpah",
+    },
+    {
+        "name": "dl14",
+        "status": "production",
+        "citation": "Draine et al. 2014 (ApJ 780, 172)",
+        "short_doc": "Updated DL with extended PAH and silicate features",
+    },
+    {
+        "name": "dale2014",
+        "status": "production",
+        "citation": "Dale et al. 2014 (ApJ 784, 83)",
+        "short_doc": "SFR-driven empirical IR template family (alpha_sf)",
+    },
+    {
+        "name": "astrodust",
+        "status": "experimental",
+        "citation": "Hensley & Draine 2023 (ApJ 948, 55)",
+        "short_doc": "Astrodust + PAH unified grain model",
+    },
+    {
+        "name": "themis",
+        "status": "experimental",
+        "citation": "Jones et al. 2017 (A&A 602, A46)",
+        "short_doc": "THEMIS amorphous-carbon grain model",
+    },
+    {
+        "name": "bosa",
+        "status": "experimental",
+        "citation": "Boquien et al. 2019 (CIGALE BOSA grids)",
+        "short_doc": "BOSA dust SED templates",
+    },
+    {
+        "name": "mbb",
+        "status": "production",
+        "citation": "Casey 2012 (MNRAS 425, 3094)",
+        "short_doc": "Single-temperature modified blackbody (analytic)",
+    },
+)
+
+
+def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
+    """List all available dust **emission** template families.
+
+    Emission templates describe the IR re-radiation of energy absorbed by
+    dust (DL07, DL14, Dale+2014, THEMIS, MBB, …). For UV/optical
+    **attenuation** laws, see :func:`list_dust_laws`.
+
+    Notes
+    -----
+    Templates are loaded lazily from data files via
+    :func:`register_dl07_tabulated` etc.; this function shows the menu
+    of *available* template families regardless of whether they have
+    been loaded into the runtime ``DUST_EMISSION_MODELS`` dict.
+    """
+    out = [{**entry, "kind": "dust_emission"} for entry in _DUST_EMISSION_MENU]
     if status:
         out = [m for m in out if m["status"] == status]
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
@@ -285,6 +366,7 @@ def describe(name: str) -> _DescribeRecord:
         list_inference_methods,
         list_agn_models,
         list_dust_laws,
+        list_dust_emission_models,
         list_sfh_models,
         list_nebular_backends,
         list_components,
@@ -314,6 +396,7 @@ def list_all() -> dict[str, _RegistryTable]:
         "inference_methods": list_inference_methods(),
         "agn_models": list_agn_models(),
         "dust_laws": list_dust_laws(),
+        "dust_emission_models": list_dust_emission_models(),
         "sfh_models": list_sfh_models(),
         "nebular_backends": list_nebular_backends(),
     }
@@ -334,10 +417,19 @@ def summary() -> None:
     counts = [
         (len(list_components()), "physics components", "list_components()"),
         (len(list_agn_models()), "AGN models", "list_agn_models()"),
-        (len(list_dust_laws()), "dust laws", "list_dust_laws()"),
+        (len(list_dust_laws()), "dust attenuation laws", "list_dust_laws()"),
+        (
+            len(list_dust_emission_models()),
+            "dust emission templates",
+            "list_dust_emission_models()",
+        ),
         (len(list_sfh_models()), "SFH models", "list_sfh_models()"),
         (len(list_nebular_backends()), "nebular backends", "list_nebular_backends()"),
-        (len(list_inference_methods(tier="primary")), "primary inference methods", "list_inference_methods(tier='primary')"),
+        (
+            len(list_inference_methods(tier="primary")),
+            "primary inference methods",
+            "list_inference_methods(tier='primary')",
+        ),
         (len(list_inference_methods()), "total inference methods", "list_inference_methods()"),
     ]
     print("\ntengri — what's available:\n")
@@ -362,7 +454,8 @@ tengri — differentiable galaxy SED fitting in JAX
 ────────────────────────────────────────────────────────────────────
     tengri.summary()                      one-line counts of every menu
     tengri.list_agn_models()              12 AGN models (SKIRTOR, K&D, …)
-    tengri.list_dust_laws()               21 attenuation curves
+    tengri.list_dust_laws()               21 attenuation curves (UV/optical)
+    tengri.list_dust_emission_models()    7 IR emission templates (DL07, Dale, …)
     tengri.list_sfh_models()              34 SFH variants
     tengri.list_nebular_backends()        BakedIn / CUE / CloudyGrid / CB19
     tengri.list_inference_methods(tier="primary")
