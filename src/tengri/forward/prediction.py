@@ -80,7 +80,6 @@ from typing import NamedTuple
 import jax.numpy as jnp
 
 from tengri.components.stellar.sps.dsps_wrapper import (
-    compute_csp_weights,
     compute_surviving_mass,
     interpolate_mass_remaining,
 )
@@ -1690,27 +1689,81 @@ class Prediction:
         self.ionizing = IonizingProperties(self)
 
     def _ensure_sfh(self):
-        """Compute and cache SFH intermediates (SFR, weights, internal params)."""
+        """Populate SFH cache (SFR history, age weights, internal params).
+
+        Reads the orchestrator's :class:`PipelineState` to keep SFH-only
+        consumers (``stellar_mass``, ``sfr_*``, ``mass_weighted_age``)
+        and SED-consuming consumers
+        (``luminosity_weighted_age``, ``dn4000``) on the same numerics.
+        ``weights`` is the orchestrator's DSPS-canonical
+        ``age_weights`` (Msun per SSP age bin); ``sfr`` is
+        ``sfr_history`` on the SFH lookback grid (same shape as
+        ``model.age_yr``). The orchestrator state itself is cached on
+        ``_state`` so :meth:`_ensure_sed` can reuse it without a
+        second forward-pass.
+        """
         if "weights" in self._cache:
             return
         p = self._model._get_internal_params(self._params)
-        sfr = self._model._compute_sfr(p)
-        sfr_on_ssp = jnp.interp(self._model.ssp_log_ages_yr, self._model.log_age_grid, sfr)
-        weights = compute_csp_weights(sfr_on_ssp, self._model.ssp_ages_yr)
-        self._cache.update({"p": p, "sfr": sfr, "weights": weights})
+        state = self._model.predict_via_orchestrator(self._params)
+        derived = state.derived
+        # The orchestrator's stellar adapter integrates the SFH on
+        # ``spec.n_grid`` (default 64) regardless of whether the model
+        # is stochastic. Legacy ``SEDModel`` uses ``n_grid=256`` for
+        # non-stochastic configs, so cache consumers index ``sfr``
+        # against ``model.age_yr`` of length 256. Resample the
+        # orchestrator's SFR history to the legacy grid so masks like
+        # ``model.age_yr <= 1e8`` still align.
+        sfh_grid = jnp.asarray(derived["sfh_grid_lbt_yr"])
+        sfr_history = jnp.asarray(derived["sfr_history"])
+        sfr_on_legacy_grid = jnp.interp(self._model.age_yr, sfh_grid, sfr_history)
+        self._cache.update(
+            {
+                "p": p,
+                "sfr": sfr_on_legacy_grid,
+                "weights": jnp.asarray(derived["age_weights"]),
+                "_state": state,
+            }
+        )
 
     def _ensure_sed(self):
-        """Compute and cache full SED intermediates."""
+        """Populate SED cache from the orchestrator's PipelineState.
+
+        Re-uses the state computed in :meth:`_ensure_sfh` (cached on
+        ``self._cache["_state"]``). Reconstructs the legacy cache
+        contract:
+
+        - ``sed_total`` ← ``state.sed_intrinsic`` (post-dust total)
+        - ``sed_intrinsic`` ← ``sum(lnu_age, axis=0)`` (pre-dust stellar)
+        - ``sed_attenuated`` ← ``state.derived["sed_dust_attenuated"]``
+        - ``ssp_flux_at_z`` ← ``lnu_age / (age_weights * LSUN_ERG)``
+          (safe-divided where ``age_weights`` is zero)
+        - ``agn_bol_erg`` ← ``state.derived["L_agn_bol"]`` if present.
+        """
         if "sed_total" in self._cache:
             return
         self._ensure_sfh()
-        comp = self._model._compute_sed_components(
-            self._params,
-            _sfr=self._cache["sfr"],
-            _weights=self._cache["weights"],
-            need_intrinsic=True,
-        )
-        self._cache.update(comp)
+        state = self._cache["_state"]
+        derived = state.derived
+
+        self._cache["sed_total"] = state.sed_intrinsic
+
+        lnu_age = derived.get("lnu_age")
+        if lnu_age is not None:
+            from tengri.utils.physics_constants import L_SUN
+
+            lnu_age_arr = jnp.asarray(lnu_age)
+            self._cache["sed_intrinsic"] = jnp.sum(lnu_age_arr, axis=0)
+            aw = jnp.asarray(self._cache["weights"])
+            aw_safe = jnp.maximum(aw, 1e-30)
+            self._cache["ssp_flux_at_z"] = lnu_age_arr / (aw_safe[:, None] * L_SUN)
+
+        sed_attenuated = derived.get("sed_dust_attenuated")
+        if sed_attenuated is not None:
+            self._cache["sed_attenuated"] = jnp.asarray(sed_attenuated)
+
+        if "L_agn_bol" in derived:
+            self._cache["agn_bol_erg"] = jnp.asarray(derived["L_agn_bol"])
 
     def _ensure_lines(self):
         """Compute and cache nebular emission line luminosities.
