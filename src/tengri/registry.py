@@ -34,17 +34,23 @@ class _RegistryTable(list):
     JSON serialisation, etc. all work as usual.
     """
 
-    _PREFERRED_COLS = ("name", "kind", "tier", "status", "citation", "short_doc")
+    _PREFERRED_COLS = ("name", "kind", "tier", "status", "citation", "short_doc", "use")
     _ALWAYS_HIDDEN = ("module", "requires", "params")  # surfaced via describe()
 
     def _columns(self) -> list[str]:
-        """Decide which columns to render. ``kind`` is shown only when results
-        span more than one kind (e.g. cross-menu search) so single-menu tables
-        stay narrow."""
+        """Decide which columns to render.
+
+        - ``kind`` is shown only when results span more than one kind
+          (e.g. cross-menu search) so single-menu tables stay narrow.
+        - ``use`` (the call-site hint) is shown only on cross-menu /
+          search tables — single-menu tables expose it via describe()
+          to keep the row width readable.
+        """
         kinds = {d.get("kind") for d in self}
         hidden = set(self._ALWAYS_HIDDEN)
         if len(kinds) <= 1:
             hidden.add("kind")
+            hidden.add("use")
         all_keys = list(self[0].keys())
         cols = [k for k in self._PREFERRED_COLS if k in all_keys and k not in hidden]
         cols += [k for k in all_keys if k not in cols and k not in hidden]
@@ -70,6 +76,13 @@ class _RegistryTable(list):
         kinds = {d.get("kind", "entry") for d in self}
         kind_label = next(iter(kinds)) if len(kinds) == 1 else "mixed"
         footer = f"\n[{len(self)} result{'s' if len(self) != 1 else ''} — {kind_label}]"
+        # Hint at how to actually use any row — only shown on single-kind
+        # tables (where the `use` column is hidden) so search tables don't
+        # repeat themselves.
+        if len(kinds) == 1 and self and "use" in self[0]:
+            example = next((d.get("use", "") for d in self if d.get("use")), "")
+            if example:
+                footer += f"\n  Use:  tengri.describe({self[0]['name']!r})  →  {example}"
         return f"{header}\n{sep}\n{rows}{footer}"
 
     def _repr_html_(self) -> str:
@@ -162,6 +175,33 @@ def _extract_params(entry: Any, kind: str) -> list[str]:
     return []
 
 
+def _usage_hint(name: str, kind: str) -> str:
+    """Return a copy-pasteable one-liner showing how to actually use this
+    entry — the missing piece between "I found a thing called skirtor"
+    and "now what?"
+
+    Patterns are based on the canonical spec/filter/fitter call sites
+    used in ``docs/spine/00_quickstart.py``.
+    """
+    if kind == "filter":
+        return f'Photometry.from_names(["{name}"])'
+    if kind == "agn_model":
+        return f'Parameters(..., agn_model="{name}")'
+    if kind == "dust_attenuation":
+        return f'Parameters(..., dust_law="{name}")'
+    if kind == "dust_emission":
+        return f'Parameters(..., dust_emission="{name}")'
+    if kind == "sfh_model":
+        return f'Parameters(..., mean_sfh_type="{name}")'
+    if kind == "nebular_backend":
+        return f'Parameters(..., nebular_backend="{name}")'
+    if kind == "inference_method":
+        return f'fitter.run("{name}")'
+    if kind == "component":
+        return f"tengri.{name}  (or tengri.list_{name}_models() / tengri.list_{name}_laws() if it has alternatives)"
+    return ""
+
+
 def _entry_to_dict(name: str, entry: Any, *, kind: str) -> dict:
     """Normalize a registry entry (varied dataclass shapes) into a uniform dict."""
     out = {
@@ -170,6 +210,7 @@ def _entry_to_dict(name: str, entry: Any, *, kind: str) -> dict:
         "status": getattr(entry, "status", "production"),
         "citation": getattr(entry, "citation", ""),
         "short_doc": getattr(entry, "short_doc", ""),
+        "use": _usage_hint(name, kind),
     }
     params = _extract_params(entry, kind)
     if params:
@@ -225,6 +266,11 @@ def list_dust_laws(*, status: str | None = None) -> _RegistryTable:
 # when ``register_*_tabulated(grid_path)`` is called with a data file.
 # We advertise the full menu so users can see what's *available* even
 # before loading templates.
+def _emission_entry(d: dict[str, str]) -> dict:
+    """Inject `use` field into a dust-emission menu row."""
+    return {**d, "use": _usage_hint(d["name"], "dust_emission")}
+
+
 _DUST_EMISSION_MENU: tuple[dict[str, str], ...] = (
     {
         "name": "dl07",
@@ -271,6 +317,9 @@ _DUST_EMISSION_MENU: tuple[dict[str, str], ...] = (
 )
 
 
+_DUST_EMISSION_MENU = tuple(_emission_entry(d) for d in _DUST_EMISSION_MENU)
+
+
 def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
     """List all available dust **emission** template families.
 
@@ -303,36 +352,28 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
 
 def list_nebular_backends() -> _RegistryTable:
     """List all available nebular emission backends."""
+    raw = [
+        (
+            "baked_in",
+            "production",
+            "DSPS / FSPS SSP-internal",
+            "Emission baked into SSP grid; zero free params",
+        ),
+        ("cue", "production", "Li+2024 (CUE neural emulator)", "Neural-network Cloudy emulator"),
+        ("cloudy_grid", "production", "Byler+2017 grids", "Trilinear interp on Cloudy grid"),
+        ("cb19", "experimental", "Charlot & Bruzual 2019", "Precomputed CB19 nebular grid"),
+    ]
     return _RegistryTable(
         [
             {
-                "name": "baked_in",
+                "name": n,
                 "kind": "nebular_backend",
-                "status": "production",
-                "citation": "DSPS / FSPS SSP-internal",
-                "short_doc": "Emission baked into SSP grid; zero free params",
-            },
-            {
-                "name": "cue",
-                "kind": "nebular_backend",
-                "status": "production",
-                "citation": "Li+2024 (CUE neural emulator)",
-                "short_doc": "Neural-network Cloudy emulator",
-            },
-            {
-                "name": "cloudy_grid",
-                "kind": "nebular_backend",
-                "status": "production",
-                "citation": "Byler+2017 grids",
-                "short_doc": "Trilinear interp on Cloudy grid",
-            },
-            {
-                "name": "cb19",
-                "kind": "nebular_backend",
-                "status": "experimental",
-                "citation": "Charlot & Bruzual 2019",
-                "short_doc": "Precomputed CB19 nebular grid",
-            },
+                "status": st,
+                "citation": cit,
+                "short_doc": doc,
+                "use": _usage_hint(n, "nebular_backend"),
+            }
+            for (n, st, cit, doc) in raw
         ]
     )
 
@@ -415,6 +456,7 @@ def list_filters() -> _RegistryTable:
                 "survey": survey,
                 "instrument": instr,
                 "band": band,
+                "use": _usage_hint(stem, "filter"),
             }
         )
     return _RegistryTable(out)
@@ -433,6 +475,7 @@ def list_components() -> _RegistryTable:
                     "status": "production",
                     "module": module_path,
                     "short_doc": short_doc,
+                    "use": _usage_hint(name, "component"),
                 }
             )
         except Exception as e:
@@ -443,6 +486,7 @@ def list_components() -> _RegistryTable:
                     "status": "broken",
                     "module": module_path,
                     "short_doc": f"import failed: {e!r}",
+                    "use": "",
                 }
             )
     return _RegistryTable(out)
@@ -470,6 +514,7 @@ def list_inference_methods(*, tier: str | None = None) -> _RegistryTable:
                 "tier": entry.tier,
                 "short_doc": entry.short_doc,
                 "requires": list(entry.requires),
+                "use": _usage_hint(entry.name, "inference_method"),
             }
         )
     if tier:
@@ -508,13 +553,15 @@ def describe(name: str) -> _DescribeRecord:
         list_sfh_models,
         list_nebular_backends,
         list_components,
+        list_filters,
     ):
         for entry in fn():
             if entry["name"] == name:
                 return _DescribeRecord(entry)
     raise KeyError(
         f"Unknown name '{name}'.  Try tengri.summary() for a menu of every "
-        "AGN model, dust law, SFH variant, nebular backend, component, or "
+        "AGN model, dust law, SFH variant, nebular backend, component, "
+        "filter, or "
         "inference method that exists."
     )
 
