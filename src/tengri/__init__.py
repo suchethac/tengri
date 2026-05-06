@@ -231,6 +231,7 @@ from tengri.registry import (
     list_inference_methods,
     list_nebular_backends,
     list_sfh_models,
+    search,
     summary,
 )
 
@@ -295,6 +296,7 @@ __all__ = [
     "list_inference_methods",
     "list_nebular_backends",
     "list_sfh_models",
+    "search",
     "nebular",
     "observation",
     "pipeline",
@@ -412,6 +414,7 @@ _CURATED_DIR = (
     "list_components",
     "list_inference_methods",
     "list_all",
+    "search",
     # 2.  Build a fit
     "Parameters",
     "SEDModel",
@@ -434,6 +437,8 @@ _CURATED_DIR = (
     "PopulationPosterior",
     # 5.  Convenience
     "generate_mock",
+    "doctor",
+    "cite",
     "print_citations",
     "print_logo",
     "register_component",

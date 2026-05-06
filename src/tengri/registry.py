@@ -61,8 +61,10 @@ class _RegistryTable(list):
         rows = "\n".join(
             "  ".join(_cell(d.get(k, "")).ljust(widths[k]) for k in cols) for d in self
         )
-        kind = self[0].get("kind", "entry")
-        footer = f"\n[{len(self)} result{'s' if len(self) != 1 else ''} — {kind}]"
+        # Footer "kind" reads "mixed" for cross-menu (search) results.
+        kinds = {d.get("kind", "entry") for d in self}
+        kind_label = next(iter(kinds)) if len(kinds) == 1 else "mixed"
+        footer = f"\n[{len(self)} result{'s' if len(self) != 1 else ''} — {kind_label}]"
         return f"{header}\n{sep}\n{rows}{footer}"
 
     def _repr_html_(self) -> str:
@@ -79,10 +81,11 @@ class _RegistryTable(list):
             + "</tr>"
             for d in self
         )
-        kind = self[0].get("kind", "entry")
+        kinds = {d.get("kind", "entry") for d in self}
+        kind_label = next(iter(kinds)) if len(kinds) == 1 else "mixed"
         return (
             f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
-            f"<i>{len(self)} result{'s' if len(self) != 1 else ''} — {kind}</i>"
+            f"<i>{len(self)} result{'s' if len(self) != 1 else ''} — {kind_label}</i>"
         )
 
 
@@ -461,6 +464,51 @@ def describe(name: str) -> _DescribeRecord:
     )
 
 
+def search(query: str) -> _RegistryTable:
+    """Cross-menu fuzzy search by name, short_doc, citation, or status.
+
+    Walks every menu — components, inference methods, AGN models, dust
+    attenuation laws, dust emission templates, SFH models, nebular
+    backends — and returns every entry whose name, short_doc, citation,
+    or status (case-insensitively) contains ``query``.
+
+    Parameters
+    ----------
+    query : str
+        Substring to match (case-insensitive).
+
+    Returns
+    -------
+    _RegistryTable
+        Matching entries from every menu, with a ``kind`` column so
+        you can tell them apart. Prints as a table in the REPL.
+
+    Examples
+    --------
+    >>> tengri.search("torus")  # find every torus model anywhere
+    >>> tengri.search("pah")  # find every PAH-related thing
+    >>> tengri.search("Leja")  # find everything Leja-cited
+    """
+    q = query.lower()
+    hits: list[dict] = []
+    for fn in (
+        list_components,
+        list_inference_methods,
+        list_agn_models,
+        list_dust_laws,
+        list_dust_emission_models,
+        list_sfh_models,
+        list_nebular_backends,
+    ):
+        for entry in fn():
+            haystack = " ".join(
+                str(entry.get(k, "")) for k in ("name", "short_doc", "citation", "status")
+            ).lower()
+            if q in haystack:
+                hits.append(entry)
+    return _RegistryTable(hits)
+
+
 def list_all() -> dict[str, _RegistryTable]:
     """Return everything available — useful for a single notebook cell overview.
 
@@ -540,6 +588,8 @@ tengri — differentiable galaxy SED fitting in JAX
     tengri.list_nebular_backends()        BakedIn / CUE / CloudyGrid / CB19
     tengri.list_inference_methods(tier="primary")
     tengri.describe("skirtor")            full metadata for any name
+    tengri.search("torus")                cross-menu fuzzy search
+    tengri.doctor()                       env / install / SSP health check
 
 ────────────────────────────────────────────────────────────────────
 2.  A minimal fit
