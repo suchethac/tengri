@@ -482,10 +482,29 @@ class StellarSEDComponent:
         # over-scaling the CSP SED by orders of magnitude.
         from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_lognormal_mdf
 
+        # NaN-safe cosmic-time prep mirroring
+        # :func:`compute_dsps_age_weights`: when SSP ages exceed
+        # ``t_obs`` (typical at z>0 with old SSPs), the implied cosmic
+        # time is negative. Bare ``jnp.clip(min=1e-3)`` collapses
+        # multiple such bins to the same boundary value, producing a
+        # degenerate ``gal_t_table`` that DSPS NaNs on. Instead, we
+        # build a strictly-monotonic ramp at the invalid end and zero
+        # the SFR there so those bins contribute nothing.
         ssp_age_gyr = ssp_ages_yr / 1e9
-        t_cosmic_gyr = jnp.clip(t_obs_gyr - ssp_age_gyr, min=1e-3)
-        t_cosmic_asc = t_cosmic_gyr[::-1]
-        sfr_asc = sfr_on_ssp[::-1]
+        T_TABLE_MIN = 0.01  # Gyr; matches dsps.constants.T_TABLE_MIN
+        t_cosmic_raw = t_obs_gyr - ssp_age_gyr
+        n_ssp_for_ramp = ssp_ages_yr.shape[0]
+        t_cosmic_floor = jnp.maximum(t_cosmic_raw, T_TABLE_MIN)
+        valid = t_cosmic_raw > 0.0
+        valid_asc = valid[::-1]
+        t_cosmic_asc_raw = t_cosmic_floor[::-1]
+        sfr_asc_raw = sfr_on_ssp[::-1]
+        n_invalid = jnp.sum(~valid_asc)
+        idx_pos = jnp.arange(n_ssp_for_ramp)
+        is_invalid_pos = idx_pos < n_invalid
+        ramp = T_TABLE_MIN + (T_TABLE_MIN * 0.5) * (idx_pos + 1) / jnp.maximum(n_invalid, 1)
+        t_cosmic_asc = jnp.where(is_invalid_pos, ramp, t_cosmic_asc_raw)
+        sfr_asc = jnp.where(is_invalid_pos, 0.0, sfr_asc_raw)
         total_mass = jnp.maximum(jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9), 0.0)
 
         if self.config.metallicity_model == "delta":

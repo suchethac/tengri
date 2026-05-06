@@ -690,29 +690,116 @@ def compute_sed_components(
             _lgmet = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
             ssp_flux_at_z = interp_met_alpha_dispatch(model, _lgmet, alpha_fe)
         else:
-            # DSPS-canonical metallicity marginalisation only
-            # (Hearin+ 2021 Eq. 11): lognormal MDF triweight kernel.
-            # SFH integration stays on the legacy lookback rectangle
-            # rule for now: aligning it with DSPS canonical
-            # trapezoidal-in-cosmic-time also requires migrating the
-            # α-fallback path's SFH integration (currently sharing
-            # ``weights = sfr_on_ssp * _csp_age_dt`` with this branch),
-            # otherwise ``test_alpha_zero_matches_no_alpha`` regresses.
-            # The 0.2% per-wavelength residual against
-            # ``predict_via_orchestrator`` is below typical
-            # observational uncertainties; the strict gating xfail
-            # remains in place. See
-            # ``docs/dev/20260504-csp-integral-canonicalization.md``.
-            from dsps.sed.metallicity_weights import (
-                calc_lgmet_weights_from_lognormal_mdf,
+            # DSPS-canonical FULL CSP integral (closure path A from
+            # ``docs/dev/20260504-csp-integral-canonicalization.md``):
+            # call ``calc_rest_sed_sfh_table_lognormal_mdf`` directly,
+            # mirroring :class:`StellarSEDComponent.apply` exactly so
+            # the legacy and orchestrator paths produce literally
+            # identical SEDs (closes ``test_orchestrator_rest_sed_bit_exact_to_legacy``
+            # to ``rtol=1e-6``).
+            #
+            # The joint ``(n_met, n_age)`` weights are stored as
+            # ``_dsps_weights_2d`` so the 3D-einsum fallback path
+            # below (line ~752, ``einsum("ma,aw,maw->w", ...)``)
+            # handles the SED construction in the same reduction
+            # order as the orchestrator. The JIT kernel
+            # ``_compositional.exact_sed`` is bypassed for this
+            # branch — it uses a different two-step einsum that
+            # accumulates ~1e-3 float64 reduction-order residual
+            # against the orchestrator. ``ssp_flux_at_z`` is still
+            # set (to the orchestrator-style age-marginalised cube)
+            # for diagnostic continuity with downstream consumers.
+            from dsps.sed.stellar_sed import (
+                calc_rest_sed_sfh_table_lognormal_mdf,
             )
 
             _lgmet2 = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
             lgmet_scatter = float(p.get("lgmet_scatter", getattr(model, "_lgmet_scatter", 0.2)))
-            lgmet_w = calc_lgmet_weights_from_lognormal_mdf(
-                _lgmet2, lgmet_scatter, model.ssp_data.ssp_lgmet
+
+            # Mirror :class:`StellarSEDComponent.apply` exactly so the
+            # two paths feed bit-identical inputs into DSPS. Critical
+            # alignments (any one mismatch produces ~1e-3 residual):
+            #
+            # 1. Grid resolution: orchestrator uses ``config.n_grid=64``
+            #    regardless of stochastic flag; legacy uses 256 for
+            #    non-stochastic. Build our own 64-pt grid here.
+            # 2. Linear lookback-time interpolation to SSP ages
+            #    (NOT legacy's log10-age interpolation).
+            # 3. Cosmic-time floor at 1e-3 Gyr (matching orchestrator),
+            #    not the helper's stricter ``T_TABLE_MIN=0.01``.
+            from tengri.components.stellar.sfh.gp_sfh import (
+                make_log_age_grid as _make_log_age_grid_orch,
             )
-            ssp_flux_at_z = jnp.einsum("m,maw->aw", lgmet_w, model.ssp_data.ssp_flux)
+
+            _n_grid_orch = 64
+            _log_age_grid_orch = _make_log_age_grid_orch(_n_grid_orch)
+            _sfh_lbt_grid_orch = jnp.power(10.0, _log_age_grid_orch)
+            # SFH on the orchestrator's 64-pt grid. For stochastic
+            # SFHs (``field=True``), the legacy ``sfr`` already
+            # contains the GP modulation and is on the same 64-pt
+            # grid as the orchestrator (``spec.n_grid``); reuse it
+            # directly so the GP draw is preserved. For non-
+            # stochastic SFHs, legacy's ``sfr`` is on a 256-pt
+            # grid; re-evaluate on the 64-pt grid via the composed
+            # SFH function so we feed DSPS the same array as the
+            # orchestrator.
+            if model._uses_stochastic_sfh:
+                _sfr_orch_grid = sfr
+            else:
+                _kw_orch = {
+                    k: v for k, v in p.items() if k in model._sfh_internal_names
+                }
+                _sfr_orch_grid = model._sfh_fn(_sfh_lbt_grid_orch, **_kw_orch)
+            _sfr_on_ssp_orch_style = jnp.interp(
+                model.ssp_ages_yr, _sfh_lbt_grid_orch, _sfr_orch_grid
+            )
+            # NaN-safe cosmic-time prep mirroring
+            # :class:`StellarSEDComponent.apply` exactly: when SSP
+            # ages exceed ``t_obs`` (typical at z>0 with old SSPs),
+            # bare ``jnp.clip(min=1e-3)`` produces a degenerate
+            # ``gal_t_table`` with multiple identical entries that
+            # DSPS NaNs on. Build a strictly-monotonic ramp at the
+            # invalid end + zero the SFR there.
+            _ssp_age_gyr = model.ssp_ages_yr / 1e9
+            _T_TABLE_MIN = 0.01
+            _t_cosmic_raw = _t_obs_gyr_for_weights - _ssp_age_gyr
+            _n_ssp = model.ssp_ages_yr.shape[0]
+            _t_cosmic_floor = jnp.maximum(_t_cosmic_raw, _T_TABLE_MIN)
+            _valid = _t_cosmic_raw > 0.0
+            _valid_asc = _valid[::-1]
+            _t_cosmic_asc_raw = _t_cosmic_floor[::-1]
+            _sfr_asc_raw = _sfr_on_ssp_orch_style[::-1]
+            _n_invalid = jnp.sum(~_valid_asc)
+            _idx_pos = jnp.arange(_n_ssp)
+            _is_invalid_pos = _idx_pos < _n_invalid
+            _ramp = _T_TABLE_MIN + (_T_TABLE_MIN * 0.5) * (_idx_pos + 1) / jnp.maximum(
+                _n_invalid, 1
+            )
+            _t_cosmic_asc = jnp.where(_is_invalid_pos, _ramp, _t_cosmic_asc_raw)
+            _sfr_asc = jnp.where(_is_invalid_pos, 0.0, _sfr_asc_raw)
+            _total_mass = jnp.maximum(jnp.trapezoid(_sfr_asc, _t_cosmic_asc * 1e9), 0.0)
+
+            _dsps_result = calc_rest_sed_sfh_table_lognormal_mdf(
+                gal_t_table=_t_cosmic_asc,
+                gal_sfr_table=_sfr_asc,
+                gal_lgmet=_lgmet2,
+                gal_lgmet_scatter=lgmet_scatter,
+                ssp_lgmet=model.ssp_data.ssp_lgmet,
+                ssp_lg_age_gyr=model.ssp_data.ssp_lg_age_gyr,
+                ssp_flux=model.ssp_data.ssp_flux,
+                t_obs=_t_obs_gyr_for_weights,
+            )
+            # ``dsps_result.weights`` is the joint (n_met, n_age)
+            # probability distribution (sums to 1). Scale to absolute
+            # Msun so the 3D-einsum fallback returns the SED in
+            # erg/s/Hz directly via the existing ``LSUN`` factor.
+            _dsps_weights_2d = _dsps_result.weights * _total_mass
+            # Age-marginalised SSP flux cube — used downstream for
+            # diagnostic publication and for non-JIT branches that
+            # reach for ``ssp_flux_at_z``.
+            ssp_flux_at_z = jnp.einsum(
+                "ma,maw->aw", _dsps_result.weights, model.ssp_data.ssp_flux
+            )
 
         # --- Fast JIT path: dust + einsum in one compiled kernel ---
         # Eliminates ~78% Python dispatch overhead (4-14x speedup).

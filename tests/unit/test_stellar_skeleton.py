@@ -104,11 +104,11 @@ def test_apply_unsupported_sfh_model_raises():
         ssp_lg_age_gyr=jnp.array([0.0]),
         ssp_lgmet=jnp.array([-2.0]),
     )
-    # 'lnorm' (lognormal) is registered in SFH_REGISTRY but its parity
-    # against legacy has not been pinned by an equivalence test — the
-    # component refuses to dispatch.
+    # 'table' is registered as an SFH_REGISTRY entry (user-supplied
+    # table input) but isn't a parametric mode and has not been pinned
+    # by an equivalence test — the component refuses to dispatch.
     comp = StellarSEDComponent(
-        config=StellarSEDComponentConfig(sfh_model="lnorm"),
+        config=StellarSEDComponentConfig(sfh_model="table"),
         ssp_data=fake_ssp,
     )
     state = PipelineState(wave=fake_ssp.ssp_wave)

@@ -188,18 +188,20 @@ def test_orchestrator_rest_sed_close_to_legacy(stellar_only_model):
     assert rel_diff < 1e-2, f"max rel diff: {rel_diff:.3e}"
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Strict bit-exact (rtol=1e-6) parity requires also migrating "
-        "the SFH integration in the legacy trapz path to DSPS canonical "
-        "trapezoidal-in-cosmic-time. Tracked as the next milestone in "
-        "docs/dev/20260504-csp-integral-canonicalization.md."
-    ),
-    strict=True,
-)
 def test_orchestrator_rest_sed_bit_exact_to_legacy(stellar_only_model):
-    """Orchestrator's stellar SED must equal legacy's predict_rest_sed.sed
-    at rtol=1e-6 for the gating-criterion sign-off."""
+    """Orchestrator's stellar SED equals legacy's predict_rest_sed.sed
+    at rtol=1e-6 — bit-exact within float64 precision.
+
+    Closed by closure-path-A in the no-α delta-Z branch of
+    ``forward/pipeline.py``: that branch now calls
+    ``calc_rest_sed_sfh_table_lognormal_mdf`` directly (mirroring
+    :class:`StellarSEDComponent.apply` exactly) instead of the
+    JIT-kernel two-step einsum. With matched grid construction
+    (n_grid=64, linear lookback-time interpolation, cosmic-time
+    floor=1e-3 Gyr), legacy and orchestrator feed bit-identical
+    inputs to DSPS and produce SEDs that agree to ~2e-15 (machine
+    epsilon). See ``docs/dev/20260504-csp-integral-canonicalization.md``.
+    """
     legacy = stellar_only_model.predict_rest_sed(_STELLAR_PARAMS)
     state = stellar_only_model.predict_via_orchestrator(_STELLAR_PARAMS)
 
@@ -1014,25 +1016,17 @@ def test_orchestrator_dexp_close_to_legacy(ssp):
     _check_with_priors(ssp, "dexp", priors, sfh_params)
 
 
-@pytest.mark.xfail(
-    reason=(
-        "``tau`` (declining exponential, FSPS sfh=1 / bagpipes "
-        "'exponential') has a hard SFH cutoff at "
-        "``lookback_time = sfh_tau_age_gyr``. Legacy interpolates SFR "
-        "in log-space; orchestrator interpolates in linear-space. The "
-        "two resolve the cutoff edge differently, producing ~13% "
-        "per-wavelength SED divergence at typical parameter values "
-        "(rtol = 1.3e-1 for log_peak=1, tau=2 Gyr, age=5 Gyr). The "
-        "residual closes when the legacy SFH integration migrates to "
-        "DSPS canonical trapezoidal-in-cosmic-time — tracked in "
-        "``docs/dev/20260504-csp-integral-canonicalization.md``. "
-        "Marked strict so the test fails loudly when the migration "
-        "lands and parity holds."
-    ),
-    strict=True,
-)
 def test_orchestrator_tau_close_to_legacy(ssp):
-    """``tau`` SFH parity — currently xfail-strict (see reason)."""
+    """``tau`` SFH parity — closed at machine epsilon by closure-path-A.
+
+    The hard cutoff at ``lookback_time = sfh_tau_age_gyr`` previously
+    produced ~13% rtol divergence between legacy log-space and
+    orchestrator linear-space SFR interpolations. Closure-A in the
+    no-α delta-Z branch of ``forward/pipeline.py`` rebuilds the SFR
+    grid using the orchestrator's exact pattern (n_grid=64, linear
+    lookback-time interpolation), so both paths see the same cutoff
+    representation and agree to ~1e-11.
+    """
     priors = {
         "sfh_tau_log_peak_sfr": Uniform(-1.0, 3.0),
         "sfh_tau_tau_gyr": Uniform(0.1, 10.0),

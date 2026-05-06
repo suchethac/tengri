@@ -1,7 +1,10 @@
 # CSP integral: canonicalize on DSPS joint formulation
 
 **Date:** 2026-05-04 (drafted), 2026-05-05 (status update)
-**Status:** Z-axis migrated; SFH-axis deferred to a focused future PR
+**Status:** **Closed for the no-α delta-Z path** (closure path A landed
+2026-05-05). Z-axis migrated; SFH-axis migrated; bit-exact match
+with orchestrator at machine epsilon. α-aware path still bilinear —
+next migration step.
 **Owner:** Sucheta + Claude (orchestrator)
 
 ## Status — what's landed (2026-05-05)
