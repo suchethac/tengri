@@ -1,13 +1,16 @@
-"""Loss and log-likelihood builders extracted from Fitter.
+"""Loss and log-likelihood builders consumed by the Fitter inference engines.
 
-These are module-level functions that take a Fitter instance and return
-compiled callables.  They were originally methods on Fitter; extracted here
-to keep fitter.py under the 800-line project limit and to make each builder
-independently testable.
+Three public builders — :func:`build_loss_fn`, :func:`build_loglikelihood_fn`,
+and :func:`build_loglikelihood_unbounded_fn` — are thin wrappers over a
+single private core, :func:`_build_data_neg_log_likelihood_fn`. The core
+routes through ``fitter._user_likelihood`` (the Phase II-1 adapter cohort
+auto-built by :meth:`Fitter._maybe_build_default_likelihood`) and falls
+through to one tiny legacy χ² branch only for the case the cohort cannot
+yet express (``data_mask + non-photometry``).
 
-The builders follow the same alias-then-close pattern: they pull all Fitter
-state into local variables at the top so that the returned closures are
-self-contained and never hold a reference to the Fitter.
+Closures returned from each builder pull Fitter state into local
+variables at construction time, so they hold no reference to the Fitter
+itself and can be reused across galaxies that share the same Model.
 """
 
 from __future__ import annotations
@@ -110,17 +113,19 @@ def _build_prediction(
 def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
     """Build the data-term function ``neg_log_lik(params, data_args) -> -log p(d|params)``.
 
-    Single source of truth for the data term. Both :func:`build_loss_fn`
-    and :func:`build_loglikelihood_fn` compose around this so the two
+    Single source of truth for the data term. All three public builders
+    (:func:`build_loss_fn`, :func:`build_loglikelihood_fn`,
+    :func:`build_loglikelihood_unbounded_fn`) compose around this so they
     cannot drift in sign / formula / branch coverage.
 
-    Routes through ``fitter._user_likelihood`` when set (the Phase II-1
-    Likelihood-adapter cohort built by
-    :meth:`Fitter._maybe_build_default_likelihood`). Otherwise falls
-    through to the legacy χ² switch — which still covers the cases the
-    auto-build does not yet handle (cloudy-prior e-line marginalisation,
-    explicitly-fitted line amplitudes, joint/spec + variable_noise, and a
-    handful of edge bail-outs).
+    Routes through ``fitter._user_likelihood`` when set (the adapter
+    cohort built by :meth:`Fitter._maybe_build_default_likelihood`). The
+    only configuration that still falls through to the inline χ² is
+    ``data_mask + non-photometry`` (censoring across the concatenated
+    data array — not yet expressible as a single-channel adapter); any
+    other configuration that reaches the fall-through hits an explicit
+    ``AssertionError`` so missing auto-build coverage is loud, not
+    silent.
 
     Takes **physical** parameters; the unstandardize transform belongs
     in the wrappers.
@@ -268,14 +273,16 @@ def build_loss_fn(fitter, mode="_traceable"):
     :math:`\\frac{1}{2}\\boldsymbol{\\xi}^\\top\\boldsymbol{\\xi}` regardless
     of prior type (Uniform, Gaussian, LogUniform, etc.).
 
-    **Likelihood variants**: Automatically branches based on Fitter config:
-
-    - Photometry: χ²(data, prediction)
-    - Spectroscopy with calibration marginalization: Integrated over polynomial
-    - Emission lines (marginalized): Integrated over line amplitudes
-    - Emission lines (fitted): Amplitudes are explicit parameters
-    - Joint photometry + spectroscopy: Separate χ² per component
-    - Noise models: Student-t or other likelihoods if configured
+    **Likelihood dispatch**: The data term ``-log p(d|params)`` is computed
+    by :func:`_build_data_neg_log_likelihood_fn`, which routes through the
+    auto-built :class:`Likelihood` adapter cohort (see
+    :meth:`Fitter._maybe_build_default_likelihood`). Each physically
+    distinct configuration — diagonal Gaussian, Student-t / variable
+    noise, censored photometry, multivariate Gaussian, calibration
+    marginalisation, emission-line marginalisation (flat or Cloudy
+    prior), explicitly-fitted line amplitudes, and the combined
+    calibration + e-line marginalisation — is handled by a dedicated
+    adapter, not by branches in this builder.
 
     **Data as explicit arguments**: Observed data, noise, and noise models are
     passed via ``data_args`` (not captured in closure). This allows multiple
@@ -289,8 +296,6 @@ def build_loss_fn(fitter, mode="_traceable"):
     .. [1] Standardized parameterization derivation and Jacobian cancellation:
        Section 2.2 and Appendix A of the tengri methods paper.
     """
-    from tengri.inference.loss_functions import _build_data_neg_log_likelihood_fn
-
     free_names = fitter._free_names
     fixed_values = fitter._fixed_values
     spec = fitter.spec
@@ -426,16 +431,14 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
 
     Notes
     -----
-    **Likelihood variants**: Automatically branches based on data_type and
-    Fitter config:
-
-    - **Photometry**: χ² = Σ(d_i - f_i)²/σ_i²
-    - **Spectroscopy with calibration**: Marginalizes Chebyshev poly
-    - **Emission lines (marginalized)**: Integrates line amplitudes analytically
-    - **Emission lines (fitted)**: Line amplitude parameters in χ²
-    - **Joint photometry + spectroscopy**: Separate χ² per component
-    - **Spectral covariance**: Uses precision matrix instead of diagonal noise
-    - **Noise models**: Student-t or other likelihoods if configured
+    Thin wrapper over :func:`_build_data_neg_log_likelihood_fn`: merges
+    fixed values, resolves mirrored parameters, then negates the data
+    term to return ``+log p(d|params)``. Dispatch over likelihood
+    variants (Gaussian, Student-t, censored, multivariate Gaussian,
+    calibration / e-line marginalisation, fitted line amplitudes) is
+    handled by the auto-built :class:`Likelihood` adapter cohort in
+    :meth:`Fitter._maybe_build_default_likelihood`, not by branches
+    here.
 
     **Data as explicit arguments**: Observed data, measurement uncertainties,
     and noise models are passed via ``data_args`` (not captured in closure).
