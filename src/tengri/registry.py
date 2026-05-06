@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # ──────────────────────────────────────────────────────────────────
 # Pretty-printed return types (still real lists/dicts — just nicer repr)
 # ──────────────────────────────────────────────────────────────────
@@ -116,10 +115,10 @@ class _DescribeRecord(dict):
                 return "<br>".join(v)
             return str(v)
 
-        rows = "".join(
-            f"<tr><th style='text-align:left'>{k}</th><td style='text-align:left'>{_fmt(v)}</td></tr>"
-            for k, v in self.items()
+        _row_tpl = (
+            "<tr><th style='text-align:left'>{k}</th><td style='text-align:left'>{v}</td></tr>"
         )
+        rows = "".join(_row_tpl.format(k=k, v=_fmt(v)) for k, v in self.items())
         return f"<table>{rows}</table>"
 
 
@@ -521,7 +520,7 @@ def summary() -> None:
     print("  Curated cheatsheet for new users:          tengri.help()\n")
 
 
-def help() -> None:  # noqa: A001 — intentional shadow inside the tengri namespace only
+def help() -> None:
     """Print a curated cheatsheet covering the entry points new users need.
 
     This shadows :func:`builtins.help` only when accessed as ``tengri.help``;

@@ -625,8 +625,11 @@ def multicolor_agn(
     return l_nu * agn_frac
 
 
-# "kubota_done" is a registered alias for multicolor_agn in the model registry
-AGN_MODELS["kubota_done"] = multicolor_agn
+# "kubota_done" is a registered alias for multicolor_agn in the model registry.
+# After the AGNRegistryEntry refactor, the alias must point to the same wrapper
+# instance so ``AGN_MODELS["kubota_done"] is AGN_MODELS["multicolor_agn"]`` and
+# both share metadata (citation, status, short_doc).
+AGN_MODELS["kubota_done"] = AGN_MODELS["multicolor_agn"]
 
 
 @register_agn_model(
