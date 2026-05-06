@@ -808,6 +808,128 @@ def describe(name: str) -> _DescribeRecord:
     )
 
 
+def suggest_parameters(
+    *,
+    mean_sfh_type: str | list[str] = "dpl",
+    agn_model: str | None = None,
+    dust_law: str | None = None,
+    dust_law_bc: str = "power_law",
+    dust_law_diff: str | None = None,
+    dust_emission: str | None = None,
+    dust_model: str = "two_component",
+    nebular_backend: str | None = None,
+    eline_mode: str = "off",
+    radio: bool = False,
+    xray: bool = False,
+    shock: bool = False,
+    chem_evol: bool = False,
+    evolving_metallicity: bool = False,
+) -> _RegistryTable:
+    """Print the full kwargs cheatsheet for a chosen Parameters() config.
+
+    ``Parameters`` accepts ``**kwargs`` — the legal parameter names are
+    determined dynamically by the structural choices (mean_sfh_type,
+    agn_model, dust_law, dust_emission, nebular_backend, …).  This
+    function answers the working question:
+
+        "I want a DPL SFH with SKIRTOR AGN and DL07 dust emission —
+        what kwargs can I pass to Parameters()?"
+
+    by building the full param registry for that configuration and
+    returning a printable table with every parameter, its default
+    Distribution, and a one-line description.
+
+    Parameters
+    ----------
+    mean_sfh_type : str or list[str], default "dpl"
+        SFH model name (or list including "field" for stochastic).  See
+        ``tengri.list_sfh_models()`` for the menu.
+    agn_model : str, optional
+        Name from ``tengri.list_agn_models()``.  ``None`` → AGN off.
+    dust_law : str, optional
+        Single-component attenuation curve.  Use either ``dust_law=`` or
+        ``dust_law_bc=`` / ``dust_law_diff=`` for two-component.
+    dust_emission : str, optional
+        IR emission template family from
+        ``tengri.list_dust_emission_models()``.
+    nebular_backend : str, optional
+        ``"baked_in"``, ``"cue"``, ``"cloudy_grid"``, or ``"cb19"``.
+    radio, xray, shock, chem_evol, evolving_metallicity : bool
+        Toggle the corresponding physics module.
+    eline_mode : str, default "off"
+        ``"off"`` | ``"marginalize"`` | ``"sample"`` for emission lines.
+
+    Returns
+    -------
+    _RegistryTable
+        One row per parameter with columns ``name``, ``default``,
+        ``description``.  Prints as a column-aligned table in the REPL,
+        as an HTML table in Jupyter.
+
+    Examples
+    --------
+    >>> tengri.suggest_parameters(
+    ...     mean_sfh_type="dpl", agn_model="skirtor", dust_emission="dl07_tabulated"
+    ... )
+
+    >>> # Stochastic SFH with the IFT field
+    >>> tengri.suggest_parameters(mean_sfh_type=["dpl", "field"])
+    """
+    from tengri.parameters._param_defs import _build_param_registry
+
+    nebular_flag = nebular_backend is not None
+    if dust_law and not dust_law_diff:
+        # Treat single dust_law= as the diffuse component for two-component
+        dust_law_diff = dust_law
+    registry, defaults = _build_param_registry(
+        mean_sfh_type=mean_sfh_type,
+        nebular=nebular_flag,
+        dust_model=dust_model,
+        dust_law_bc=dust_law_bc,
+        dust_law_diff=dust_law_diff,
+        dust_emission=dust_emission,
+        agn_model=agn_model,
+        radio=radio,
+        xray=xray,
+        shock=shock,
+        evolving_metallicity=evolving_metallicity,
+        chem_evol=chem_evol,
+        eline_mode=eline_mode,
+    )
+
+    rows: list[dict] = []
+    for name, info in registry.items():
+        # registry entry shape: (description, bound_check, bound_error, [default])
+        description = info[0] if len(info) >= 1 else ""
+        default = defaults.get(name, "—")
+        rows.append(
+            {
+                "name": name,
+                "kind": "parameter",
+                "default": str(default),
+                "description": description,
+            }
+        )
+    rows.sort(key=lambda r: r["name"])
+
+    # Print the configuration banner so the user can see what they
+    # asked for echoed back.
+    parts = []
+    parts.append(f"mean_sfh_type={mean_sfh_type!r}")
+    if agn_model:
+        parts.append(f"agn_model={agn_model!r}")
+    if dust_emission:
+        parts.append(f"dust_emission={dust_emission!r}")
+    if dust_law or dust_law_diff:
+        parts.append(f"dust_law_diff={(dust_law_diff or dust_law)!r}")
+    if nebular_backend:
+        parts.append(f"nebular_backend={nebular_backend!r}")
+    print(f"\nParameters configuration: {', '.join(parts)}")
+    print(f"  → {len(rows)} parameters.  Pass any subset as kwargs to tengri.Parameters().\n")
+
+    return _RegistryTable(rows)
+
+
 def search(query: str) -> _RegistryTable:
     """Cross-menu fuzzy search by name, short_doc, citation, or status.
 

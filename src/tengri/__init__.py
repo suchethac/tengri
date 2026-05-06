@@ -234,6 +234,7 @@ from tengri.registry import (
     list_plots,
     list_sfh_models,
     search,
+    suggest_parameters,
     summary,
 )
 
@@ -435,6 +436,7 @@ _CURATED_DIR = (
     "list_inference_methods",
     "list_all",
     "search",
+    "suggest_parameters",
     # 2.  Build a fit
     "Parameters",
     "SEDModel",
