@@ -1761,8 +1761,8 @@ class SEDModel:
         """
         from tengri.forward.result import SEDResult
 
+        state = self.predict_via_orchestrator(params)
         if wave is None:
-            state = self.predict_via_orchestrator(params)
             # Use ``state.wave`` (the orchestrator's runtime wavelength
             # grid, which may differ from ``self._rest_wavelength`` —
             # e.g. when radio/xray extends the SSP grid panchromatically
@@ -1770,8 +1770,15 @@ class SEDModel:
             # yet). Mismatched shapes would otherwise break boolean
             # masking on (wavelength, sed) pairs in test_panchromatic_*.
             return SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
-        result = self._compute_sed_components(params, rest_wavelength=wave)
-        return SEDResult(wavelength=result["rest_wavelength"], sed=result["sed_total"])
+        # Custom rest-frame wavelength grid: interpolate the orchestrator's
+        # SED onto it. Pure post-processing — keeps the orchestrator's
+        # internal grid contract (state.wave / state.derived[...]) clean
+        # and matches legacy ``_compute_sed_components(rest_wavelength=...)``
+        # at the same accuracy a user gets from
+        # ``np.interp(custom_wave, ssp_wave, sed)``.
+        wave_target = jnp.asarray(wave)
+        sed_interp = jnp.interp(wave_target, state.wave, state.sed_intrinsic)
+        return SEDResult(wavelength=wave_target, sed=sed_interp)
 
     def predict_obs_sed(self, params, wave=None):
         """Compute observed-frame SED (redshifted + IGM + DLA transmission).
