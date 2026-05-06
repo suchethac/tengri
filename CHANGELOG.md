@@ -6,6 +6,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Removed (Phase II-3 closure: `SEDModel._compute_sed_components`, 2026-05-06)
+
+- The legacy `SEDModel._compute_sed_components` wrapper is **deleted**.
+  Every production code path now goes through `predict_via_orchestrator`.
+  The five parity-check tests that referenced it have been migrated
+  to read `state.sed_intrinsic` and `state.derived["sed_dust_attenuated"]` /
+  `["lnu_age"]` from the orchestrator's `PipelineState`. The underlying
+  `_sed_pipeline.compute_sed_components` function survives as an
+  internal utility (no callers in the source tree); a separate
+  cleanup PR can prune it. (commit `72f4b64`)
+- **Single-component dust mode now wired in the orchestrator.**
+  `Parameters(dust_model="single_component", dust_tau_v=...)` now
+  routes to `DustAttenuationSEDComponent` via
+  `build_components(dust_model=...)` instead of silently falling back
+  to two-component (which would `KeyError` on the missing
+  `dust_tau_bc`). The component was updated for the Phase II-3
+  contract: it overwrites `state.sed_intrinsic` with the
+  post-attenuation SED (matching `DustSEDComponent`) and publishes
+  `L_absorbed` + `sed_dust_attenuated`. Without this update,
+  `predict_rest_sed` returned the pre-dust SED for single-component
+  models — a silent ~1.8× over-prediction. (commit `72f4b64`)
+
+### Fixed (Radio/X-ray panchromatic regression, 2026-05-06)
+
+PR 5a's `predict_rest_sed` migration silently regressed
+multiwavelength tests by switching from `self._rest_wavelength`
+(panchromatic-extended for radio/X-ray) to `state.wave`
+(= `ssp.ssp_wave`, typically 91–100000 Å). Radio/X-ray adapters
+write SED on whatever `state.wave` is initialised with, so their
+contributions were being clipped to the SSP range.
+
+`predict_via_orchestrator` now initialises `state.wave =
+self._rest_wavelength`. `StellarSEDComponent.apply()` projects
+`sed_intrinsic` and `lnu_age` onto `state.wave` via linear
+interpolation with zero-mask outside the SSP range — pure Python-
+level shape branch with zero JIT overhead in the no-extension
+case. 24/24 `test_panchromatic_integration` tests now green
+(was 21/24). (commit `72f4b64`)
+
 ### Changed (Phase II-3 closure: orchestrator path is the single truth, 2026-05-06)
 
 All five `predict_*` methods and the lazy `Prediction` wrapper now
