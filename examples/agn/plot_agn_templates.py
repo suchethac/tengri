@@ -48,8 +48,13 @@ for log_lbol, color in zip(log_lbols, colors):
     disc_l = powerlaw_disc(wavelength, agn_log_lbol=log_lbol, agn_slope=-1.5)
     torus_l = simple_torus(wavelength, agn_log_lbol=log_lbol, agn_torus_temp=1500.0)
     total = disc_l + 0.5 * torus_l
-    ax.loglog(wave_um, np.array(total), color=color, lw=1.5,
-              label=rf"$\log L_{{\mathrm{{bol}}}}/L_\odot = {log_lbol:.0f}$")
+    ax.loglog(
+        wave_um,
+        np.array(total),
+        color=color,
+        lw=1.5,
+        label=rf"$\log L_{{\mathrm{{bol}}}}/L_\odot = {log_lbol:.0f}$",
+    )
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")

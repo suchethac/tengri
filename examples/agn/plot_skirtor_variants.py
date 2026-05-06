@@ -31,8 +31,7 @@ for p in [
 
 if _grid_path is None:
     raise SystemExit(
-        "Skipping: SKIRTOR grid not found. "
-        "Run: python scripts/download_skirtor_templates.py"
+        "Skipping: SKIRTOR grid not found. Run: python scripts/download_skirtor_templates.py"
     )
 
 from tengri.analysis.plotting import setup_style

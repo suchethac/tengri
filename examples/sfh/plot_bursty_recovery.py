@@ -32,8 +32,12 @@ setup_style()
 
 def _find_ssp():
     name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [Path("data") / name, Path("../data") / name, Path("../../data") / name,
-              Path("../../../data") / name]:
+    for p in [
+        Path("data") / name,
+        Path("../data") / name,
+        Path("../../data") / name,
+        Path("../../../data") / name,
+    ]:
         if p.exists():
             return str(p)
     return None
@@ -65,10 +69,10 @@ spec = Parameters(
 model = SEDModel(spec, ssp, observation=obs)
 
 REGIMES = [
-    {"label": "Smooth",   "sigma": 0.3, "tau": 100.0, "color": "#1f77b4"},
-    {"label": "Moderate", "sigma": 1.0, "tau": 50.0,  "color": "#ff7f0e"},
-    {"label": "Bursty",   "sigma": 2.0, "tau": 20.0,  "color": "#2ca02c"},
-    {"label": "Extreme",  "sigma": 3.0, "tau": 5.0,   "color": "#d62728"},
+    {"label": "Smooth", "sigma": 0.3, "tau": 100.0, "color": "#1f77b4"},
+    {"label": "Moderate", "sigma": 1.0, "tau": 50.0, "color": "#ff7f0e"},
+    {"label": "Bursty", "sigma": 2.0, "tau": 20.0, "color": "#2ca02c"},
+    {"label": "Extreme", "sigma": 3.0, "tau": 5.0, "color": "#d62728"},
 ]
 
 fig, axes = plt.subplots(2, 2, figsize=(10, 6), sharey=False)

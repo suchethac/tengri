@@ -28,12 +28,11 @@ setup_style()
 n_grid = 256
 log_age_grid = make_log_age_grid(n_grid)
 d_log_age = float(log_age_grid[1] - log_age_grid[0])
-t_lookback = 10.0 ** log_age_grid
+t_lookback = 10.0**log_age_grid
 t_gyr = np.array(t_lookback) / 1e9
 
 # --- Smooth mean SFH ---
-mean_sfr = tsnorm(t_lookback, log_peak_sfr=1.0, peak_lbt=6e9,
-                  width=2e9, skew=0.5, trunc=3.0)
+mean_sfr = tsnorm(t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=0.5, trunc=3.0)
 
 # --- Generate GP realizations at two different PSD settings ---
 fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), sharey=True)
@@ -43,9 +42,7 @@ configs = [
 ]
 
 for ax, cfg in zip(axes, configs):
-    sqrt_p = compute_sqrt_power_drw(
-        n_grid, d_log_age, cfg["sigma"], cfg["tau_myr"] * 1e6
-    )
+    sqrt_p = compute_sqrt_power_drw(n_grid, d_log_age, cfg["sigma"], cfg["tau_myr"] * 1e6)
     ax.plot(t_gyr, np.array(mean_sfr), "k--", lw=1.5, label="Mean SFH", zorder=5)
 
     for i in range(5):

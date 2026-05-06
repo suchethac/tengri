@@ -28,7 +28,6 @@ from tengri.analysis.plotting import setup_style
 setup_style()
 
 
-
 # --- Check for SSP data ---
 def _find_ssp():
     """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""

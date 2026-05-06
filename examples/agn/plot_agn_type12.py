@@ -25,9 +25,9 @@ wave_um = wave_aa * 1e-4
 
 # --- Three inclination angles ---
 configs = [
-    {"cos_inc": 0.95, "label": "Type 1 (face-on)",    "color": "#1f77b4", "lw": 2.2},
-    {"cos_inc": 0.50, "label": "Intermediate",          "color": "#ff7f0e", "lw": 1.8},
-    {"cos_inc": 0.10, "label": "Type 2 (edge-on)",      "color": "#d62728", "lw": 2.0},
+    {"cos_inc": 0.95, "label": "Type 1 (face-on)", "color": "#1f77b4", "lw": 2.2},
+    {"cos_inc": 0.50, "label": "Intermediate", "color": "#ff7f0e", "lw": 1.8},
+    {"cos_inc": 0.10, "label": "Type 2 (edge-on)", "color": "#d62728", "lw": 2.0},
 ]
 
 fig, ax = plt.subplots(figsize=(8, 5))
@@ -44,14 +44,20 @@ for cfg in configs:
     )
     nulnu = np.array(lnu) * 3e18 / wave_aa  # νLν
     mask = nulnu > 0
-    ax.loglog(wave_um[mask], nulnu[mask],
-              color=cfg["color"], lw=cfg["lw"], label=cfg["label"])
+    ax.loglog(wave_um[mask], nulnu[mask], color=cfg["color"], lw=cfg["lw"], label=cfg["label"])
 
 # Mark key wavelengths
 for wl, lbl in [(0.1216, r"Ly$\alpha$"), (0.6563, r"H$\alpha$"), (9.7, "Silicate")]:
     ax.axvline(wl, color="grey", ls=":", lw=0.7, alpha=0.5)
-    ax.text(wl * 1.05, ax.get_ylim()[0] if ax.get_ylim()[0] > 0 else 1e35,
-            lbl, fontsize=10, color="grey", va="bottom", rotation=90)
+    ax.text(
+        wl * 1.05,
+        ax.get_ylim()[0] if ax.get_ylim()[0] > 0 else 1e35,
+        lbl,
+        fontsize=10,
+        color="grey",
+        va="bottom",
+        rotation=90,
+    )
 
 ax.set_xlim(1e-3, 100)
 ax.set_ylim(1e41, 1e46)

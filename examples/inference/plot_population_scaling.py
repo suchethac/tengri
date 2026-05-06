@@ -70,13 +70,17 @@ if RESULTS is None:
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.axis("off")
     ax.text(
-        0.5, 0.5,
+        0.5,
+        0.5,
         "Population VI scaling benchmark not yet generated.\n\n"
         "Produce the cached results once with:\n\n"
         "    JAX_PLATFORMS=cpu python scripts/benchmark_vi_xlarge.py\n\n"
         "It writes data/vi_scaling_benchmark.json, which this gallery\n"
         "script then renders without re-running the benchmark.",
-        ha="center", va="center", fontsize=11, family="monospace",
+        ha="center",
+        va="center",
+        fontsize=11,
+        family="monospace",
         bbox=dict(boxstyle="round,pad=0.7", fc="#f6f6f6", ec="#999"),
     )
     plt.show()
@@ -117,7 +121,8 @@ for method in methods:
         if n.size == 0:
             continue
         ax_t.plot(
-            n, t,
+            n,
+            t,
             color=colors[method],
             linestyle=linestyles.get(k, "-"),
             marker="o",
@@ -139,7 +144,8 @@ for method in methods:
         if n.size == 0:
             continue
         ax_m.plot(
-            n, m,
+            n,
+            m,
             color=colors[method],
             linestyle=linestyles.get(k, "-"),
             marker="s",
@@ -161,7 +167,8 @@ for method in methods:
         if n.size == 0:
             continue
         ax_i.plot(
-            n, it,
+            n,
+            it,
             color=colors[method],
             linestyle=linestyles.get(k, "-"),
             marker="^",
@@ -175,7 +182,11 @@ if not_conv:
     ax_i.scatter(
         [r["n_gal"] for r in not_conv],
         [r["n_iters_used_warm"] for r in not_conv],
-        marker="x", color="red", s=80, zorder=5, label="hit cap (NOT converged)",
+        marker="x",
+        color="red",
+        s=80,
+        zorder=5,
+        label="hit cap (NOT converged)",
     )
 
 cap = max((r["n_iters_max"] for r in rows), default=50)
@@ -192,12 +203,11 @@ TRUTH_SIGMA = 2.0
 TRUTH_TAU = 20.0
 
 
-def _constraint_series(method: str, key: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def _constraint_series(
+    method: str, key: str
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     sel = [
-        r for r in rows
-        if r["method"] == method
-        and r["forward_chunk_size"] == 1
-        and r.get(key)
+        r for r in rows if r["method"] == method and r["forward_chunk_size"] == 1 and r.get(key)
     ]
     sel.sort(key=lambda r: r["n_gal"])
     if not sel:
@@ -211,16 +221,17 @@ def _constraint_series(method: str, key: str) -> tuple[np.ndarray, np.ndarray, n
 
 for ax, (key, truth, ylabel) in zip(
     (ax_sig, ax_tau),
-    (("psd_sigma_summary", TRUTH_SIGMA, r"$\sigma_{\rm PSD}$ posterior"),
-     ("psd_tau_summary", TRUTH_TAU, r"$\tau_{\rm PSD}$ [Myr] posterior")),
+    (
+        ("psd_sigma_summary", TRUTH_SIGMA, r"$\sigma_{\rm PSD}$ posterior"),
+        ("psd_tau_summary", TRUTH_TAU, r"$\tau_{\rm PSD}$ [Myr] posterior"),
+    ),
 ):
     for method in methods:
         n, med, p16, p84 = _constraint_series(method, key)
         if n.size == 0:
             continue
         ax.fill_between(n, p16, p84, color=colors[method], alpha=0.2)
-        ax.plot(n, med, color=colors[method], marker="o", markersize=4,
-                label=labels[method])
+        ax.plot(n, med, color=colors[method], marker="o", markersize=4, label=labels[method])
     ax.axhline(truth, color="k", linestyle="--", alpha=0.7, label="truth")
     ax.set_xscale("log", base=2)
     ax.set_xlabel("N (galaxies)")
@@ -236,8 +247,11 @@ for method in methods:
         continue
     width = (p84 - p16) / 2.0  # ~1σ half-width
     ax_sig_err.plot(
-        n, width,
-        color=colors[method], marker="o", markersize=4,
+        n,
+        width,
+        color=colors[method],
+        marker="o",
+        markersize=4,
         label=f"{labels[method]}",
     )
 # 1/sqrt(N) reference, normalized to first MGVI point if available.
@@ -245,8 +259,7 @@ ref_n, _, p16r, p84r = _constraint_series("native_vi_linear", "psd_sigma_summary
 if ref_n.size > 0:
     w0 = (p84r[0] - p16r[0]) / 2.0
     ref = w0 * np.sqrt(ref_n[0] / ref_n)
-    ax_sig_err.plot(ref_n, ref, color="gray", linestyle=":",
-                    label=r"$1/\sqrt{N}$ reference")
+    ax_sig_err.plot(ref_n, ref, color="gray", linestyle=":", label=r"$1/\sqrt{N}$ reference")
 ax_sig_err.set_xscale("log", base=2)
 ax_sig_err.set_yscale("log")
 ax_sig_err.set_xlabel("N (galaxies)")

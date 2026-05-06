@@ -27,11 +27,10 @@ setup_style()
 n_grid = 256
 log_age_grid = make_log_age_grid(n_grid)
 d_log_age = float(log_age_grid[1] - log_age_grid[0])
-t_lookback = 10.0 ** log_age_grid
+t_lookback = 10.0**log_age_grid
 t_gyr = np.array(t_lookback) / 1e9
 
-mean_sfr = tsnorm(t_lookback, log_peak_sfr=1.0, peak_lbt=6e9,
-                  width=2e9, skew=0.5, trunc=3.0)
+mean_sfr = tsnorm(t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=0.5, trunc=3.0)
 
 # --- Parameter grid ---
 sigmas = [0.2, 0.6, 1.2]
@@ -59,13 +58,11 @@ for i, sigma in enumerate(sigmas):
         if i == 0:
             ax.set_title(rf"$\tau = {tau}$ Myr", fontsize=10)
         if j == 0:
-            ax.set_ylabel(rf"$\sigma = {sigma}$" + "\nSFR [M$_\\odot$/yr]",
-                          fontsize=10)
+            ax.set_ylabel(rf"$\sigma = {sigma}$" + "\nSFR [M$_\\odot$/yr]", fontsize=10)
         if i == 2:
             ax.set_xlabel("Lookback time [Gyr]")
 
-fig.suptitle("PSD Burstiness Grid: sigma (rows) vs tau (columns)",
-             fontsize=13, y=1.01)
+fig.suptitle("PSD Burstiness Grid: sigma (rows) vs tau (columns)", fontsize=13, y=1.01)
 fig.tight_layout()
 plt.savefig("plot_psd_burstiness.png", dpi=150, bbox_inches="tight")
 plt.show()

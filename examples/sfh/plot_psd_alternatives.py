@@ -43,8 +43,11 @@ try:
         psd_m = psd_matern(omega, variance=variance, length_scale=length_scale, nu=nu)
         suffix = r" $\equiv$ DRW" if nu == 0.5 else ""
         ax.loglog(
-            np.array(omega), np.array(psd_m),
-            ls=ls, lw=1.8, color=color,
+            np.array(omega),
+            np.array(psd_m),
+            ls=ls,
+            lw=1.8,
+            color=color,
             label=rf"Matern $\nu={nu}${suffix}",
         )
 except ImportError:
@@ -57,11 +60,20 @@ try:
     # Cyclic frequency f = omega / (2*pi)
     f = omega / (2.0 * jnp.pi)
     psd_reg = psd_extended_regulator(
-        f, s_reg=0.3, tau_in=300e6, tau_eq=50e6, s_dyn=0.15, tau_dyn=20e6,
+        f,
+        s_reg=0.3,
+        tau_in=300e6,
+        tau_eq=50e6,
+        s_dyn=0.15,
+        tau_dyn=20e6,
     )
     ax.loglog(
-        np.array(omega), np.array(psd_reg),
-        "-", lw=1.8, color="C4", label="Extended Regulator",
+        np.array(omega),
+        np.array(psd_reg),
+        "-",
+        lw=1.8,
+        color="C4",
+        label="Extended Regulator",
     )
 except ImportError:
     pass  # psd_extended_regulator not available

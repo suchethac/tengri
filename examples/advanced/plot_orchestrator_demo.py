@@ -109,7 +109,7 @@ _nu = 2.998e18 / ssp.ssp_wave
 _L_bol = float(jnp.abs(jnp.trapezoid(state.sed_intrinsic, _nu)))
 _logM = float(state.derived["log_mstar"])
 print(f"L_bol (stellar)        = {_L_bol:.3g} erg/s")
-print(f"log_mstar              = {_logM:.3f}  ({10 ** _logM:.3g} Msun)")
+print(f"log_mstar              = {_logM:.3f}  ({10**_logM:.3g} Msun)")
 print(f"L_ir (dust)            = {float(state.derived['L_ir']):.3g} erg/s")
 print(f"L_agn_bol              = {float(state.derived['L_agn_bol']):.3g} erg/s")
 print(f"L_radio peak           = {float(state.derived['L_radio'].max()):.3g} erg/s/Hz")
@@ -131,19 +131,22 @@ if "sed_dust_attenuated" in state.derived:
     ax.loglog(
         wave[mask],
         wave[mask] * jnp.maximum(state.derived["sed_dust_attenuated"][mask], 1e-30),
-        ":", label="stellar (post-dust)",
+        ":",
+        label="stellar (post-dust)",
     )
 if "sed_dust_ir" in state.derived:
     ax.loglog(
         wave[mask],
         wave[mask] * jnp.maximum(state.derived["sed_dust_ir"][mask], 1e-30),
-        "--", label="dust IR",
+        "--",
+        label="dust IR",
     )
 if "sed_agn" in state.derived:
     ax.loglog(
         wave[mask],
         wave[mask] * jnp.maximum(state.derived["sed_agn"][mask], 1e-30),
-        "-.", label="AGN",
+        "-.",
+        label="AGN",
     )
 ax.set_xlabel("rest-frame wavelength [Å]")
 ax.set_ylabel("λ × L_λ  [erg/s]")

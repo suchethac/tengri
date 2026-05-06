@@ -17,7 +17,7 @@ setup_style()
 
 # --- Kewley+2001 maximum starburst line ---
 log_nii_ha_grid = np.linspace(-1.5, 0.3, 200)
-log_oiii_hb_kewley = (0.61 / (log_nii_ha_grid - 0.47) + 1.19)
+log_oiii_hb_kewley = 0.61 / (log_nii_ha_grid - 0.47) + 1.19
 
 # --- Kauffmann+2003 empirical SF line ---
 log_oiii_hb_kauff = 0.61 / (log_nii_ha_grid - 0.05) + 1.3
@@ -28,8 +28,8 @@ shock_nii_ha = []
 shock_oiii_hb = []
 for v in velocities:
     r = shock_line_ratios(float(v))
-    ha  = float(r["HA_6563A"])
-    hb  = float(r.get("Hb_4861A", ha / 2.86))
+    ha = float(r["HA_6563A"])
+    hb = float(r.get("Hb_4861A", ha / 2.86))
     nii = float(r["NII_6583A"])
     oiii = float(r["O3_5007A"])
     if ha > 0 and hb > 0:
@@ -38,17 +38,27 @@ for v in velocities:
 
 # --- Typical HII region locus ---
 hii_nii_ha = np.array([-1.2, -0.9, -0.6, -0.3, -0.1])
-hii_oiii_hb = np.array([0.8,  0.5,  0.2, -0.1, -0.3])
+hii_oiii_hb = np.array([0.8, 0.5, 0.2, -0.1, -0.3])
 
 fig, ax = plt.subplots(figsize=(7, 6))
 
 # Demarcation lines
 mask_k = log_nii_ha_grid < 0.47
-ax.plot(log_nii_ha_grid[mask_k], log_oiii_hb_kewley[mask_k],
-        "k-", lw=1.5, label="Kewley+2001 (max starburst)")
+ax.plot(
+    log_nii_ha_grid[mask_k],
+    log_oiii_hb_kewley[mask_k],
+    "k-",
+    lw=1.5,
+    label="Kewley+2001 (max starburst)",
+)
 mask_kauff = log_nii_ha_grid < 0.05
-ax.plot(log_nii_ha_grid[mask_kauff], log_oiii_hb_kauff[mask_kauff],
-        "k--", lw=1.2, label="Kauffmann+2003 (empirical SF)")
+ax.plot(
+    log_nii_ha_grid[mask_kauff],
+    log_oiii_hb_kauff[mask_kauff],
+    "k--",
+    lw=1.2,
+    label="Kauffmann+2003 (empirical SF)",
+)
 
 # Region labels
 ax.text(-1.3, -0.5, "Star\nForming", fontsize=10, color="#1f77b4", ha="center")
@@ -57,14 +67,29 @@ ax.text(0.4, 1.2, "Seyfert/\nLINER", fontsize=10, color="#d62728", ha="center")
 
 # Shock track
 if shock_nii_ha:
-    sc = ax.scatter(shock_nii_ha, shock_oiii_hb,
-                    c=velocities[:len(shock_nii_ha)],
-                    cmap="plasma", s=40, zorder=5, label="Shocks (100–1000 km/s)")
+    sc = ax.scatter(
+        shock_nii_ha,
+        shock_oiii_hb,
+        c=velocities[: len(shock_nii_ha)],
+        cmap="plasma",
+        s=40,
+        zorder=5,
+        label="Shocks (100–1000 km/s)",
+    )
     plt.colorbar(sc, ax=ax, label="Shock velocity [km/s]", shrink=0.8)
 
 # HII locus
-ax.scatter(hii_nii_ha, hii_oiii_hb, color="#1f77b4", s=60, marker="^",
-           label="HII region locus", zorder=6, edgecolors="k", lw=0.5)
+ax.scatter(
+    hii_nii_ha,
+    hii_oiii_hb,
+    color="#1f77b4",
+    s=60,
+    marker="^",
+    label="HII region locus",
+    zorder=6,
+    edgecolors="k",
+    lw=0.5,
+)
 
 ax.set_xlabel(r"log [NII]6583 / H$\alpha$")
 ax.set_ylabel(r"log [OIII]5007 / H$\beta$")

@@ -34,8 +34,12 @@ setup_style()
 
 def _find_ssp():
     name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [Path("data") / name, Path("../data") / name, Path("../../data") / name,
-              Path("../../../data") / name]:
+    for p in [
+        Path("data") / name,
+        Path("../data") / name,
+        Path("../../data") / name,
+        Path("../../../data") / name,
+    ]:
         if p.exists():
             return str(p)
     return None
@@ -48,8 +52,16 @@ if SSP_PATH is None:
 ssp = load_ssp_data(SSP_PATH)
 
 _FILTER_DIR = next(
-    (str(d) for d in [Path("data/filters"), Path("../data/filters"),
-                      Path("../../data/filters"), Path("../../../data/filters")] if d.exists()),
+    (
+        str(d)
+        for d in [
+            Path("data/filters"),
+            Path("../data/filters"),
+            Path("../../data/filters"),
+            Path("../../../data/filters"),
+        ]
+        if d.exists()
+    ),
     "data/filters",
 )
 
@@ -68,32 +80,52 @@ spec = Parameters(
 )
 
 key = jax.random.PRNGKey(42)
-true_params = {**spec.sample(key),
-               "met_logzsol": jnp.array(-0.3),
-               "dust_tau_bc": jnp.array(0.8),
-               "dust_tau_diff": jnp.array(0.4)}
+true_params = {
+    **spec.sample(key),
+    "met_logzsol": jnp.array(-0.3),
+    "dust_tau_bc": jnp.array(0.8),
+    "dust_tau_diff": jnp.array(0.4),
+}
 
 FILTER_SETS = {
-    "SDSS (5)":   ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
-    "+ NIR (8)":  ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-                   "2mass_j", "2mass_h", "2mass_ks"],
-    "+ MIR (10)": ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-                   "2mass_j", "2mass_h", "2mass_ks",
-                   "wise_w1", "wise_w2"],
+    "SDSS (5)": ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
+    "+ NIR (8)": [
+        "sdss_u",
+        "sdss_g",
+        "sdss_r",
+        "sdss_i",
+        "sdss_z",
+        "2mass_j",
+        "2mass_h",
+        "2mass_ks",
+    ],
+    "+ MIR (10)": [
+        "sdss_u",
+        "sdss_g",
+        "sdss_r",
+        "sdss_i",
+        "sdss_z",
+        "2mass_j",
+        "2mass_h",
+        "2mass_ks",
+        "wise_w1",
+        "wise_w2",
+    ],
 }
 
 fisher_params = ["met_logzsol", "dust_tau_bc", "dust_tau_diff"]
-PARAM_LABELS  = [r"$\log(Z/Z_\odot)$", r"$\tau_{\rm bc}$", r"$\tau_{\rm diff}$"]
+PARAM_LABELS = [r"$\log(Z/Z_\odot)$", r"$\tau_{\rm bc}$", r"$\tau_{\rm diff}$"]
 COLORS_BAR = ["#4477AA", "#EE6677", "#228833"]
 sigmas = {}
 for fname, filters in FILTER_SETS.items():
     try:
-        obs  = Observation(photometry=Photometry.from_names(filters, cache_dir=_FILTER_DIR))
-        mdl  = SEDModel(spec, ssp, observation=obs)
+        obs = Observation(photometry=Photometry.from_names(filters, cache_dir=_FILTER_DIR))
+        mdl = SEDModel(spec, ssp, observation=obs)
         phot = jnp.abs(mdl.predict_photometry(true_params))
         noise = phot / 20.0
-        fim, _ = compute_fisher_matrix(mdl, true_params, noise,
-                                       data_type="photometry", param_names=fisher_params)
+        fim, _ = compute_fisher_matrix(
+            mdl, true_params, noise, data_type="photometry", param_names=fisher_params
+        )
         errs = np.array(fisher_parameter_errors(fim))
         # Unconstrained directions → clip to prior scale for visibility.
         errs = np.where(np.isfinite(errs) & (errs > 0), errs, 5.0)
@@ -108,8 +140,7 @@ x = np.arange(len(fisher_params))
 width = 0.22
 fig, ax = plt.subplots(figsize=(7, 4.5))
 for i, (fname, sigma_arr) in enumerate(sigmas.items()):
-    ax.bar(x + (i - 1) * width, sigma_arr, width,
-           label=fname, color=COLORS_BAR[i], alpha=0.85)
+    ax.bar(x + (i - 1) * width, sigma_arr, width, label=fname, color=COLORS_BAR[i], alpha=0.85)
 
 ax.set_yscale("log")
 ax.set_ylim(1e-3, 1e1)

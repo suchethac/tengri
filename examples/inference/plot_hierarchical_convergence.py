@@ -34,8 +34,12 @@ setup_style()
 
 def _find_ssp():
     name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [Path("data") / name, Path("../data") / name, Path("../../data") / name,
-              Path("../../../data") / name]:
+    for p in [
+        Path("data") / name,
+        Path("../data") / name,
+        Path("../../data") / name,
+        Path("../../../data") / name,
+    ]:
         if p.exists():
             return str(p)
     return None
@@ -51,7 +55,7 @@ obs = Observation(
 )
 
 TRUE_SIGMA = 1.5
-TRUE_TAU   = 40.0
+TRUE_TAU = 40.0
 
 
 def make_model(psd_sigma=TRUE_SIGMA, psd_tau_myr=TRUE_TAU):
@@ -81,7 +85,7 @@ model_gen, spec_gen = make_model()
 for i in range(N_GAL):
     key = jax.random.PRNGKey(i)
     p = spec_gen.sample(key)
-    p["sfh_field_psd_sigma"]  = jnp.array(TRUE_SIGMA)
+    p["sfh_field_psd_sigma"] = jnp.array(TRUE_SIGMA)
     p["sfh_field_psd_tau_myr"] = jnp.array(TRUE_TAU)
     m = model_gen.mock(p, snr=10.0, key=key)
     galaxies.append({"flux_obs": m.flux_obs, "noise": m.noise})
@@ -119,7 +123,7 @@ fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
 for ax, samples, truth, label, unit in [
     (axes[0], sig_s, TRUE_SIGMA, r"$\sigma_{\rm PS}$", ""),
-    (axes[1], tau_s, TRUE_TAU,   r"$\tau_{\rm PS}$",   " [Myr]"),
+    (axes[1], tau_s, TRUE_TAU, r"$\tau_{\rm PS}$", " [Myr]"),
 ]:
     ax.hist(samples, bins=30, color="#2ecc71", alpha=0.8, density=True)
     ax.axvline(truth, color="#d62728", lw=2.0, ls="--", label=f"Truth = {truth:.1f}")

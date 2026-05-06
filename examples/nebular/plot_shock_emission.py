@@ -33,12 +33,8 @@ for v_shock, color in zip(v_shock_range, colors):
             shock_b_over_sqrt_n=1.0,
         )
         # Extract [O III]/Hβ and [N II]/Hα
-        log_oiii_hb = np.log10(
-            line_ratios["O3_5007A"] / line_ratios["Hb_4861A"]
-        )
-        log_nii_ha = np.log10(
-            line_ratios["NII_6583A"] / line_ratios["HA_6563A"]
-        )
+        log_oiii_hb = np.log10(line_ratios["O3_5007A"] / line_ratios["Hb_4861A"])
+        log_nii_ha = np.log10(line_ratios["NII_6583A"] / line_ratios["HA_6563A"])
         ax.scatter(log_nii_ha, log_oiii_hb, color=color, s=80, alpha=0.7, edgecolors="k", lw=0.3)
     except Exception:
         pass
@@ -69,12 +65,8 @@ for dens, color in zip(density_range, colors):
             shock_log_density=float(np.log10(dens)),
             shock_b_over_sqrt_n=1.0,
         )
-        log_oiii_hb = np.log10(
-            line_ratios["O3_5007A"] / line_ratios["Hb_4861A"]
-        )
-        log_nii_ha = np.log10(
-            line_ratios["NII_6583A"] / line_ratios["HA_6563A"]
-        )
+        log_oiii_hb = np.log10(line_ratios["O3_5007A"] / line_ratios["Hb_4861A"])
+        log_nii_ha = np.log10(line_ratios["NII_6583A"] / line_ratios["HA_6563A"])
         ax.scatter(log_nii_ha, log_oiii_hb, color=color, s=80, alpha=0.7, edgecolors="k", lw=0.3)
     except Exception:
         pass
@@ -104,12 +96,8 @@ for v_shock in v_shock_dense:
             shock_log_density=2.0,
             shock_b_over_sqrt_n=1.0,
         )
-        line_flux_dict["[O III]5007/Hβ"].append(
-            line_ratios["O3_5007A"] / line_ratios["Hb_4861A"]
-        )
-        line_flux_dict["[O I]6300/Hα"].append(
-            line_ratios["OI_6300A"] / line_ratios["HA_6563A"]
-        )
+        line_flux_dict["[O III]5007/Hβ"].append(line_ratios["O3_5007A"] / line_ratios["Hb_4861A"])
+        line_flux_dict["[O I]6300/Hα"].append(line_ratios["OI_6300A"] / line_ratios["HA_6563A"])
         line_flux_dict["[S II]6724/Hα"].append(
             (line_ratios["SII_6716A"] + line_ratios["SII_6731A"]) / line_ratios["HA_6563A"]
         )
@@ -139,12 +127,8 @@ for b_param, color in zip(b_param_range, colors):
             shock_log_density=2.0,
             shock_b_over_sqrt_n=float(max(b_param, 1e-4)),
         )
-        log_oiii_hb = np.log10(
-            line_ratios["O3_5007A"] / line_ratios["Hb_4861A"]
-        )
-        log_nii_ha = np.log10(
-            line_ratios["NII_6583A"] / line_ratios["HA_6563A"]
-        )
+        log_oiii_hb = np.log10(line_ratios["O3_5007A"] / line_ratios["Hb_4861A"])
+        log_nii_ha = np.log10(line_ratios["NII_6583A"] / line_ratios["HA_6563A"])
         ax.scatter(log_nii_ha, log_oiii_hb, color=color, s=80, alpha=0.7, edgecolors="k", lw=0.3)
     except Exception:
         pass
