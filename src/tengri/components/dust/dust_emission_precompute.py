@@ -47,10 +47,10 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
     "draine_li2007": ("dust_qpah", "dust_umin"),
     "dl07": ("dust_qpah", "dust_umin"),  # alias
     "dale2014": ("dust_alpha",),
-    "draine_li2014": (),  # grid structure varies; populated at runtime from template data
-    "astrodust": (),  # grid structure varies
-    "bosa": (),
-    "themis": (),
+    "draine_li2014": ("dust_qpah", "dust_umin", "dust_alpha_dl14"),
+    "astrodust": ("dust_qpah", "dust_umin"),
+    "themis": ("dust_qhac", "dust_umin"),
+    "bosa": ("dust_log_ssfr",),  # log_ltir is derived from L_absorbed at runtime
 }
 
 # Per-model flag: pass ``energy_normalize=True`` to ``preintegrate_grid`` only
@@ -233,6 +233,300 @@ def build_dl07_photometry_lookup(precomp: dict):
     return dl07_phot
 
 
+# ── Astrodust / THEMIS: DL07-shaped (single_u + powerlaw, qX × umin) ───
+#
+# The Astrodust+PAH (Hensley & Draine 2023) and THEMIS (Jones+2017) loaders
+# return ``single_u`` and ``powerlaw`` arrays of shape (n_q, n_umin, n_wave),
+# pre-normalised to ``∫L_ν dν = 1`` per template at load time. The runtime
+# exact path mixes the two via ``j_ν = (1-γ)·single_u + γ·powerlaw`` then
+# scales by ``L_absorbed`` (CMB contrast applied at the wavelength level is
+# omitted from the hybrid path — same approximation as DL07).
+
+
+def _precompute_dl07_like_photometry(
+    templates: dict,
+    filter_waves: list[jnp.ndarray],
+    filter_trans: list[jnp.ndarray],
+    *,
+    q_key: str,
+    wave_key: str,
+    redshift: float = 0.0,
+) -> dict:
+    """Shared precompute for DL07-shape models (Astrodust, THEMIS).
+
+    Parameters
+    ----------
+    templates : dict
+        Loader output with ``single_u``, ``powerlaw``, ``umin_grid``,
+        the q-axis grid (``qpah_grid`` or ``qhac_grid``), and the
+        wavelength array (``wavelength`` or ``wavelength_aa``).
+    q_key : str
+        Key for the second grid axis (``"qpah_grid"`` or ``"qhac_grid"``).
+    wave_key : str
+        Key for the wavelength array (``"wavelength"`` or ``"wavelength_aa"``).
+    """
+    single_u = np.asarray(templates["single_u"])
+    powerlaw = np.asarray(templates["powerlaw"])
+    tmpl_wave = np.asarray(templates[wave_key])
+    umin_grid = np.asarray(templates["umin_grid"])
+    q_grid = np.asarray(templates[q_key])
+
+    # Templates already L_ν and pre-normalised at load time
+    # → ``energy_normalize=True`` is an idempotent guard (divides by ≈1).
+    single_u_preint = preintegrate_grid(
+        templates=single_u,
+        wave_rest=tmpl_wave,
+        filter_waves=[np.asarray(fw) for fw in filter_waves],
+        filter_trans=[np.asarray(ft) for ft in filter_trans],
+        redshift=redshift,
+        dl_cm=1.0,
+        axes=(q_grid, umin_grid),
+        energy_normalize=True,
+    )
+    powerlaw_preint = preintegrate_grid(
+        templates=powerlaw,
+        wave_rest=tmpl_wave,
+        filter_waves=[np.asarray(fw) for fw in filter_waves],
+        filter_trans=[np.asarray(ft) for ft in filter_trans],
+        redshift=redshift,
+        dl_cm=1.0,
+        axes=(q_grid, umin_grid),
+        energy_normalize=True,
+    )
+
+    return {
+        "single_u_phot": single_u_preint.phot,
+        "powerlaw_phot": powerlaw_preint.phot,
+        "umin_grid": umin_grid,
+        "q_grid": q_grid,
+    }
+
+
+def _build_dl07_like_lookup(precomp: dict):
+    """Shared JIT lookup for DL07-shape models. Signature matches DL07:
+    ``(L_absorbed, dust_umin, dust_gamma_dl, dust_q)``.
+    """
+    single_u_phot = precomp["single_u_phot"]
+    powerlaw_phot = precomp["powerlaw_phot"]
+    umin_grid = jnp.asarray(precomp["umin_grid"])
+    q_grid = jnp.asarray(precomp["q_grid"])
+    axes = (q_grid, umin_grid)
+    edges = tuple(edges_for_grid(ax) for ax in axes)
+
+    @jax.jit
+    def phot_fn(L_absorbed, dust_umin, dust_gamma_dl, dust_q):
+        point = (dust_q, dust_umin)
+        single = interp_nd_triweight(single_u_phot, axes, edges, point)
+        power = interp_nd_triweight(powerlaw_phot, axes, edges, point)
+        return L_absorbed * ((1.0 - dust_gamma_dl) * single + dust_gamma_dl * power)
+
+    return phot_fn
+
+
+def precompute_astrodust_photometry(
+    templates: dict,
+    filter_waves: list[jnp.ndarray],
+    filter_trans: list[jnp.ndarray],
+    redshift: float = 0.0,
+) -> dict:
+    """Pre-integrate Astrodust+PAH templates (Hensley & Draine 2023).
+
+    See :func:`_precompute_dl07_like_photometry`. Free param at runtime is
+    ``dust_qpah``.
+    """
+    return _precompute_dl07_like_photometry(
+        templates,
+        filter_waves,
+        filter_trans,
+        q_key="qpah_grid",
+        wave_key="wavelength_aa",
+        redshift=redshift,
+    )
+
+
+def build_astrodust_photometry_lookup(precomp: dict):
+    """Build JIT-compiled Astrodust photometry lookup.
+
+    Signature: ``(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah)``.
+    """
+    return _build_dl07_like_lookup(precomp)
+
+
+def precompute_themis_photometry(
+    templates: dict,
+    filter_waves: list[jnp.ndarray],
+    filter_trans: list[jnp.ndarray],
+    redshift: float = 0.0,
+) -> dict:
+    """Pre-integrate THEMIS templates (Jones+2017). Free param: ``dust_qhac``."""
+    return _precompute_dl07_like_photometry(
+        templates,
+        filter_waves,
+        filter_trans,
+        q_key="qhac_grid",
+        wave_key="wavelength_aa",
+        redshift=redshift,
+    )
+
+
+def build_themis_photometry_lookup(precomp: dict):
+    """Build JIT-compiled THEMIS photometry lookup.
+
+    Signature: ``(L_absorbed, dust_umin, dust_gamma_dl, dust_qhac)``.
+    """
+    return _build_dl07_like_lookup(precomp)
+
+
+# ── DL14: DL07 + extra alpha axis on the powerlaw component ───────────
+
+
+def precompute_dl14_photometry(
+    templates: dict,
+    filter_waves: list[jnp.ndarray],
+    filter_trans: list[jnp.ndarray],
+    redshift: float = 0.0,
+) -> dict:
+    """Pre-integrate DL14 templates (Draine+2014).
+
+    DL14 stores ``single_u`` of shape (n_qpah, n_umin, n_wave) and
+    ``powerlaw`` of shape (n_qpah, n_umin, n_alpha, n_wave). The runtime
+    exact path renormalises the mixed template by ``∫L_ν dν`` per call;
+    here we pre-normalise each grid point at precompute time.
+
+    Free params at runtime: ``dust_umin``, ``dust_gamma_dl``, ``dust_qpah``,
+    ``dust_alpha_dl14``.
+    """
+    single_u = np.asarray(templates["single_u"])  # (n_qpah, n_umin, n_wave)
+    powerlaw = np.asarray(templates["powerlaw"])  # (n_qpah, n_umin, n_alpha, n_wave)
+    tmpl_wave = np.asarray(templates["wavelength"])
+    umin_grid = np.asarray(templates["umin_grid"])
+    qpah_grid = np.asarray(templates["qpah_grid"])
+    alpha_grid = np.asarray(templates["alpha_grid"])
+
+    # Both grids stored as L_ν but NOT pre-normalised at load (DL14 loader
+    # leaves raw j_ν). The universal ``energy_normalize=True`` divides by
+    # ∫L_ν dν per template so runtime ``L_absorbed * lookup`` is calibrated.
+    single_u_preint = preintegrate_grid(
+        templates=single_u,
+        wave_rest=tmpl_wave,
+        filter_waves=[np.asarray(fw) for fw in filter_waves],
+        filter_trans=[np.asarray(ft) for ft in filter_trans],
+        redshift=redshift,
+        dl_cm=1.0,
+        axes=(qpah_grid, umin_grid),
+        energy_normalize=True,
+    )
+    powerlaw_preint = preintegrate_grid(
+        templates=powerlaw,
+        wave_rest=tmpl_wave,
+        filter_waves=[np.asarray(fw) for fw in filter_waves],
+        filter_trans=[np.asarray(ft) for ft in filter_trans],
+        redshift=redshift,
+        dl_cm=1.0,
+        axes=(qpah_grid, umin_grid, alpha_grid),
+        energy_normalize=True,
+    )
+
+    return {
+        "single_u_phot": single_u_preint.phot,
+        "powerlaw_phot": powerlaw_preint.phot,
+        "umin_grid": umin_grid,
+        "qpah_grid": qpah_grid,
+        "alpha_grid": alpha_grid,
+    }
+
+
+def build_dl14_photometry_lookup(precomp: dict):
+    """Build JIT-compiled DL14 photometry lookup.
+
+    Signature: ``(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah,
+    dust_alpha_dl14)``.
+    """
+    single_u_phot = precomp["single_u_phot"]
+    powerlaw_phot = precomp["powerlaw_phot"]
+    umin_grid = jnp.asarray(precomp["umin_grid"])
+    qpah_grid = jnp.asarray(precomp["qpah_grid"])
+    alpha_grid = jnp.asarray(precomp["alpha_grid"])
+
+    single_axes = (qpah_grid, umin_grid)
+    single_edges = tuple(edges_for_grid(ax) for ax in single_axes)
+    pl_axes = (qpah_grid, umin_grid, alpha_grid)
+    pl_edges = tuple(edges_for_grid(ax) for ax in pl_axes)
+
+    @jax.jit
+    def phot_fn(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah, dust_alpha_dl14):
+        single = interp_nd_triweight(
+            single_u_phot, single_axes, single_edges, (dust_qpah, dust_umin)
+        )
+        power = interp_nd_triweight(
+            powerlaw_phot, pl_axes, pl_edges, (dust_qpah, dust_umin, dust_alpha_dl14)
+        )
+        return L_absorbed * ((1.0 - dust_gamma_dl) * single + dust_gamma_dl * power)
+
+    return phot_fn
+
+
+# ── BOSA: log_ltir derived from L_absorbed at runtime ────────────────
+
+
+def precompute_bosa_photometry(
+    templates: dict,
+    filter_waves: list[jnp.ndarray],
+    filter_trans: list[jnp.ndarray],
+    redshift: float = 0.0,
+) -> dict:
+    """Pre-integrate BOSA templates (Boquien & Salim 2021).
+
+    BOSA's grid is indexed by (log L_TIR, log sSFR) where both axes affect
+    template *shape*. Runtime: ``log_ltir = log10(L_absorbed)`` selects the
+    L_TIR slice (so it's a derived axis, not free), ``dust_log_ssfr`` is
+    the free parameter, and the resulting normalised template is multiplied
+    by ``L_absorbed`` for absolute scaling.
+    """
+    spectra = np.asarray(templates["spectra"])  # (n_ltir, n_ssfr, n_wave)
+    tmpl_wave = np.asarray(templates["wavelength_aa"])
+    log_ltir_grid = np.asarray(templates["log_ltir_grid"])
+    log_ssfr_grid = np.asarray(templates["log_ssfr_grid"])
+
+    preint = preintegrate_grid(
+        templates=spectra,
+        wave_rest=tmpl_wave,
+        filter_waves=[np.asarray(fw) for fw in filter_waves],
+        filter_trans=[np.asarray(ft) for ft in filter_trans],
+        redshift=redshift,
+        dl_cm=1.0,
+        axes=(log_ltir_grid, log_ssfr_grid),
+        energy_normalize=True,
+    )
+    return {
+        "phot": preint.phot,
+        "log_ltir_grid": log_ltir_grid,
+        "log_ssfr_grid": log_ssfr_grid,
+    }
+
+
+def build_bosa_photometry_lookup(precomp: dict):
+    """Build JIT-compiled BOSA photometry lookup.
+
+    Signature: ``(L_absorbed, dust_log_ssfr)``. ``log_ltir`` is derived
+    internally as ``log10(L_absorbed)``.
+    """
+    phot = precomp["phot"]
+    log_ltir_grid = jnp.asarray(precomp["log_ltir_grid"])
+    log_ssfr_grid = jnp.asarray(precomp["log_ssfr_grid"])
+    axes = (log_ltir_grid, log_ssfr_grid)
+    edges = tuple(edges_for_grid(ax) for ax in axes)
+
+    @jax.jit
+    def phot_fn(L_absorbed, dust_log_ssfr):
+        log_ltir = jnp.log10(jnp.maximum(L_absorbed, 1.0e-30))
+        point = (log_ltir, dust_log_ssfr)
+        shape_phot = interp_nd_triweight(phot, axes, edges, point)
+        return L_absorbed * shape_phot
+
+    return phot_fn
+
+
 # ── Protocol-shaped entry points (new in restructure) ─────────────
 
 
@@ -379,8 +673,15 @@ def build_lookup(preint, *, model_name: str):
     **Gradient-safe**: yes. Use for likelihood evaluation and inference.
     """
     if model_name in ("draine_li2007", "dl07"):
-        # preint is a dict from precompute_dl07_photometry
         return build_dl07_photometry_lookup(preint)
+    if model_name == "astrodust":
+        return build_astrodust_photometry_lookup(preint)
+    if model_name == "themis":
+        return build_themis_photometry_lookup(preint)
+    if model_name == "draine_li2014":
+        return build_dl14_photometry_lookup(preint)
+    if model_name == "bosa":
+        return build_bosa_photometry_lookup(preint)
     return build_template_photometry_lookup(preint)
 
 
@@ -452,19 +753,49 @@ def precompute_for_model(
         templates = load_draine_li_templates(path)
         return precompute_dl07_photometry(templates, filter_waves, filter_trans, redshift=redshift)
 
-    # Generic template-based models share a load → extract → preintegrate shape.
-    # The per-model file paths, loader functions, and flux units are the only
-    # differences.
-    _GENERIC_LOADERS: dict[str, tuple[tuple[str, ...], Any, str]] = {
-        "dale2014": (("dale2014_templates.npz",), None, "llam"),
+    # Bespoke (DL07-shaped) models — Astrodust/THEMIS/DL14/BOSA — each has a
+    # dedicated precompute path. They use their own loader (not the generic
+    # ``precompute_template_photometry`` route, which assumes a single-grid
+    # ``{grid, axes, wavelength}`` schema that none of these loaders return).
+    _BESPOKE_LOADERS: dict[str, tuple[tuple[str, ...], Any, Any]] = {
         "draine_li2014": (
             ("dl14_templates_v2.h5", "dl14_templates.h5"),
             load_dl14_templates,
-            "lnu",
+            precompute_dl14_photometry,
         ),
-        "astrodust": (("astrodust_templates.npz",), load_astrodust_templates, "lnu"),
-        "bosa": (("bosa_templates.npz",), load_bosa_templates, "lnu"),
-        "themis": (("themis_templates.npz",), load_themis_templates, "lnu"),
+        "astrodust": (
+            ("astrodust_templates.h5", "astrodust_templates.npz"),
+            load_astrodust_templates,
+            precompute_astrodust_photometry,
+        ),
+        "themis": (
+            ("themis_templates.h5", "themis_templates.npz"),
+            load_themis_templates,
+            precompute_themis_photometry,
+        ),
+        "bosa": (
+            ("bosa_templates.h5", "bosa_templates.npz"),
+            load_bosa_templates,
+            precompute_bosa_photometry,
+        ),
+    }
+    if model_name in _BESPOKE_LOADERS:
+        candidate_files, loader, precompute_fn = _BESPOKE_LOADERS[model_name]
+        path = None
+        for fname in candidate_files:
+            candidate = _find_data_file(fname)
+            if candidate is not None:
+                path = candidate
+                break
+        if path is None:
+            return None
+        templates = loader(path)
+        return precompute_fn(templates, filter_waves, filter_trans, redshift=redshift)
+
+    # Legacy generic template path (Dale2014). Kept for the 1D-axis Dale2014
+    # case which has a distinct npz layout.
+    _GENERIC_LOADERS: dict[str, tuple[tuple[str, ...], Any, str]] = {
+        "dale2014": (("dale2014_templates.npz",), None, "llam"),
     }
 
     if model_name not in _GENERIC_LOADERS:
