@@ -67,6 +67,13 @@ _DUST_EMISSION_IDENTITY_PARAMS = [
     "dust_qpah",
     "dust_eta_balance",
     "dust_alpha_dl14",
+    # Two-temperature energy_balance_split (emission.py:1157)
+    "dust_T_cold",
+    "dust_T_warm",
+    # THEMIS / DL14 hydrocarbon-fraction parameter (emission_templates.py:1516)
+    "dust_qhac",
+    # BOSA tabulated emission (emission_templates.py:1266)
+    "dust_log_ssfr",
 ]
 
 _AGN_IDENTITY_PARAMS = [
@@ -479,9 +486,7 @@ def get_internal_params(params, param_map, spec, has_field):
                 if dist.is_fixed:
                     internal[int_name] = dist.bounds[0] * scale + offset
                 else:
-                    raise KeyError(
-                        f"Free parameter '{pub_name}' not found in params dict"
-                    )
+                    raise KeyError(f"Free parameter '{pub_name}' not found in params dict")
 
     # Handle field latent vector (both full and short names)
     if has_field:

@@ -328,6 +328,7 @@ __all__ = [
 # valid; this is just an additional re-export, not a relocation.
 # ──────────────────────────────────────────────────────────────────
 from tengri.config.settings import (
+    AGNConfig,
     DustConfig,
     NebularConfig,
     SEDModelConfig,
