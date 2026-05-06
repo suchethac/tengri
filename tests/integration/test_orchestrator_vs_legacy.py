@@ -586,28 +586,18 @@ def test_chem_evol_legacy_runs(stellar_chem_evol_model):
     assert jnp.any(legacy.sed > 0.0), "legacy SED all zero"
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Formulation difference, not a bug. The default legacy CSP "
-        "integration (csp_integration='trapz') collapses chem_evol's "
-        "per-age Z(t) to a scalar via SED-luminosity-weighted average "
-        "(sed_model.py:3578-3592), then uses bilinear `interp_metallicity` "
-        "on the (Z, age) SSP grid — a single representative Z. The "
-        "orchestrator threads the full per-age metallicity table through "
-        "DSPS's calc_rest_sed_sfh_table_met_table, which uses the "
-        "triweight-MDF kernel per-age. Disagreement ~50% on the SED is "
-        "expected: the orchestrator is the more physically correct "
-        "formulation; legacy chem_evol with default csp_integration is a "
-        "scalar-collapse approximation. "
-        "Closing this gap is Phase II-2.6 scope (migrate legacy chem_evol "
-        "to per-age met-table or accept the orchestrator as canonical "
-        "and remove the legacy collapse). Marked strict so the test "
-        "fails loudly if the formulations are unified later."
-    ),
-    strict=True,
-)
 def test_chem_evol_orchestrator_rest_sed_close_to_legacy(stellar_chem_evol_model):
-    """Phase II-2.4 finishing contract — currently xfail (see reason)."""
+    """Phase II-2.4: chem_evol orchestrator-vs-legacy agreement at rtol=1e-2.
+
+    Closed by extending closure-path-A to the chem_evol branch in
+    ``forward/pipeline.py``: the default-csp (``trapz``) chem_evol
+    path now uses ``calc_rest_sed_sfh_table_met_table`` with the
+    per-age ``log_z_per_age`` from the gas-regulator model, mirroring
+    :class:`StellarSEDComponent.apply` exactly. The previous
+    SED-luminosity-weighted scalar collapse + bilinear
+    ``interp_metallicity`` is gone; both paths now produce
+    bit-exact-equal SEDs.
+    """
     legacy = stellar_chem_evol_model.predict_rest_sed(_STELLAR_PARAMS)
     state = stellar_chem_evol_model.predict_via_orchestrator(_STELLAR_PARAMS)
 

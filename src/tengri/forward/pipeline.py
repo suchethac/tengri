@@ -653,7 +653,93 @@ def compute_sed_components(
         elif _use_alpha_fe:
             ssp_flux_at_z = interp_met_alpha_evolving_dispatch(model, log_z_per_age, alpha_fe)
         else:
-            ssp_flux_at_z = interp_metallicity_evolving(model, log_z_per_age)
+            # Closure-path-A for chem_evol (default ``csp_integration='trapz'``):
+            # use ``calc_rest_sed_sfh_table_met_table`` with the per-age
+            # ``log_z_per_age`` from the gas-regulator model. Mirrors
+            # :class:`StellarSEDComponent.apply` (component.py chem_evol
+            # branch) so the two paths produce bit-exact equal SEDs.
+            #
+            # Replaces the previous ``interp_metallicity_evolving`` 2-point
+            # bilinear path which drove the ~50% UV-side divergence
+            # documented in the (formerly xfail) test
+            # ``test_chem_evol_orchestrator_rest_sed_close_to_legacy``.
+            from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
+
+            from tengri.components.stellar.sfh.gp_sfh import (
+                make_log_age_grid as _make_log_age_grid_chem,
+            )
+
+            lgmet_scatter_chem = float(
+                p.get("lgmet_scatter", getattr(model, "_lgmet_scatter", 0.2))
+            )
+
+            # Same orchestrator-mirror SFH prep as the no-α / α-aware
+            # closure-A blocks above. Chem_evol is non-stochastic by
+            # contract (gas regulator derives Z from mean SFH; field
+            # GP modulation is orthogonal); reuse the legacy ``sfr``
+            # only when stochastic to preserve the GP draw.
+            _n_grid_chem = 64
+            _log_age_grid_chem = _make_log_age_grid_chem(_n_grid_chem)
+            _sfh_lbt_grid_chem = jnp.power(10.0, _log_age_grid_chem)
+            if model._uses_stochastic_sfh:
+                _sfr_orch_grid_chem = sfr
+            else:
+                _kw_orch_chem = {
+                    k: v for k, v in p.items() if k in model._sfh_internal_names
+                }
+                _sfr_orch_grid_chem = model._sfh_fn(_sfh_lbt_grid_chem, **_kw_orch_chem)
+            _sfr_on_ssp_chem = jnp.interp(
+                model.ssp_ages_yr, _sfh_lbt_grid_chem, _sfr_orch_grid_chem
+            )
+            _ssp_age_gyr_chem = model.ssp_ages_yr / 1e9
+            _T_TABLE_MIN_chem = 0.01
+            _t_cosmic_raw_chem = _t_obs_gyr_for_weights - _ssp_age_gyr_chem
+            _n_ssp_chem = model.ssp_ages_yr.shape[0]
+            _t_cosmic_floor_chem = jnp.maximum(_t_cosmic_raw_chem, _T_TABLE_MIN_chem)
+            _valid_chem = _t_cosmic_raw_chem > 0.0
+            _t_cosmic_asc_raw_chem = _t_cosmic_floor_chem[::-1]
+            _sfr_asc_raw_chem = _sfr_on_ssp_chem[::-1]
+            _n_invalid_chem = jnp.sum(~_valid_chem[::-1])
+            _idx_pos_chem = jnp.arange(_n_ssp_chem)
+            _is_invalid_pos_chem = _idx_pos_chem < _n_invalid_chem
+            _ramp_chem = _T_TABLE_MIN_chem + (_T_TABLE_MIN_chem * 0.5) * (
+                _idx_pos_chem + 1
+            ) / jnp.maximum(_n_invalid_chem, 1)
+            _t_cosmic_asc_chem = jnp.where(
+                _is_invalid_pos_chem, _ramp_chem, _t_cosmic_asc_raw_chem
+            )
+            _sfr_asc_chem = jnp.where(_is_invalid_pos_chem, 0.0, _sfr_asc_raw_chem)
+            _total_mass_chem = jnp.maximum(
+                jnp.trapezoid(_sfr_asc_chem, _t_cosmic_asc_chem * 1e9), 0.0
+            )
+
+            # Recompute log_z_per_age on the orchestrator-style 64-pt
+            # SFH grid + SSP ages, since chem_evol's input grid affects
+            # the integrated metallicity profile.
+            _log_z_per_age_chem = chem_evol_metallicity_on_ssp_grid(
+                model.ssp_log_ages_yr,
+                _log_age_grid_chem,
+                _sfr_orch_grid_chem,
+                yield_y=p.get("chem_yield", 0.03),
+                eta_outflow=p.get("chem_eta_outflow", 0.0),
+                f_gas_init=p.get("chem_f_gas_init", 0.9),
+                return_frac=p.get("chem_return_frac", 0.4),
+            )
+
+            _dsps_result_chem = calc_rest_sed_sfh_table_met_table(
+                gal_t_table=_t_cosmic_asc_chem,
+                gal_sfr_table=_sfr_asc_chem,
+                gal_lgmet_table=_log_z_per_age_chem[::-1],
+                gal_lgmet_scatter=lgmet_scatter_chem,
+                ssp_lgmet=model.ssp_data.ssp_lgmet,
+                ssp_lg_age_gyr=model.ssp_data.ssp_lg_age_gyr,
+                ssp_flux=model.ssp_data.ssp_flux,
+                t_obs=_t_obs_gyr_for_weights,
+            )
+            _dsps_weights_2d = _dsps_result_chem.weights * _total_mass_chem
+            ssp_flux_at_z = jnp.einsum(
+                "ma,maw->aw", _dsps_result_chem.weights, model.ssp_data.ssp_flux
+            )
     else:
         if model._csp_integration == "dsps_native":
             from tengri.components.stellar.sps.dsps_wrapper import compute_dsps_native_weights

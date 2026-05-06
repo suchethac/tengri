@@ -1,15 +1,19 @@
 # CSP integral: canonicalize on DSPS joint formulation
 
 **Date:** 2026-05-04 (drafted), 2026-05-05 (status update)
-**Status:** **Fully closed (no-α + α-aware paths).** Closure path A
-landed 2026-05-05 across the no-α delta-Z branch and the α-aware
-branch. The α-aware path now does α-only bilinear interp on the 4D
-``ssp_flux`` (when an α-grid is loaded), then feeds the resulting
-3D ``(n_met, n_age, n_wave)`` cube to
-``calc_rest_sed_sfh_table_lognormal_mdf`` — same kernel as the no-α
-path. At ``α=0`` the two paths produce bit-exact equal SEDs
-(``test_alpha_zero_matches_no_alpha`` flipped from xfail-strict to
-passing).
+**Status:** **Fully closed across all paths** (closure path A landed
+2026-05-05): no-α delta-Z, α-aware, AND chem_evol branches all
+produce bit-exact equal SEDs vs the orchestrator. Every
+orchestrator-vs-legacy equivalence test now passes; **no xfails
+remain in `tests/integration/test_orchestrator_vs_legacy.py`**.
+
+The chem_evol branch was closed by replacing the legacy default-csp
+``interp_metallicity_evolving`` 2-point bilinear path with a
+``calc_rest_sed_sfh_table_met_table`` call mirroring
+:class:`StellarSEDComponent.apply` exactly — the per-age
+``log_z_per_age`` from the gas-regulator model is recomputed on
+the orchestrator's 64-pt SFH grid and threaded directly into the
+DSPS canonical kernel.
 **Owner:** Sucheta + Claude (orchestrator)
 
 ## Status — what's landed (2026-05-05)
