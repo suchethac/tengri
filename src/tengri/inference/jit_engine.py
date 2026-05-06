@@ -38,6 +38,7 @@ def _build_signal_response(fitter):
     fixed_values = fitter._fixed_values
     spec = fitter.spec
     stochastic = spec.stochastic
+    use_orchestrator = bool(getattr(fitter, "use_orchestrator", False))
 
     def _primals_to_params(primals):
         """Convert unbounded (standardized) primals dict to bounded physical params."""
@@ -56,6 +57,8 @@ def _build_signal_response(fitter):
         """Compute predicted data from unbounded parameters."""
         params = _primals_to_params(primals)
         if data_type == "photometry":
+            if use_orchestrator:
+                return model.predict_photometry_via_orchestrator(params)
             return model.predict_photometry(params, mode="_traceable")
         elif data_type == "spectroscopy":
             return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
@@ -155,6 +158,7 @@ def build_jit_engine(fitter, pos_dict):
     # so that the compiled engine can be reused across galaxies.
     use_variable_noise = has_noise_model(fitter.spec)
     noise_dof = get_noise_dof(fitter.spec) if uses_student_t(fitter.spec) else None
+    use_orchestrator = bool(getattr(fitter, "use_orchestrator", False))
 
     # --- Signal response (physics only) ---
     # NOT JIT'd here — must remain traceable so jax.jvp/vjp (in metric_vec)
@@ -178,7 +182,10 @@ def build_jit_engine(fitter, pos_dict):
             """Return (predicted, std_inv) tuple for variable noise metric."""
             params = _primals_to_params(primals)
             if data_type == "photometry":
-                predicted = model.predict_photometry(params, mode="_traceable")
+                if use_orchestrator:
+                    predicted = model.predict_photometry_via_orchestrator(params)
+                else:
+                    predicted = model.predict_photometry(params, mode="_traceable")
             elif data_type == "spectroscopy":
                 predicted = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
             elif data_type == "joint":

@@ -68,7 +68,16 @@ def _unstandardize_parameters(params_unbounded, spec, free_names, fixed_values, 
 
 
 def _build_prediction(
-    model, params, data_type, mode, *, has_line_fluxes, has_indices, index_defs, data_args
+    model,
+    params,
+    data_type,
+    mode,
+    *,
+    has_line_fluxes,
+    has_indices,
+    index_defs,
+    data_args,
+    use_orchestrator=False,
 ):
     """Forward-model prediction in one place.
 
@@ -80,7 +89,10 @@ def _build_prediction(
     - ``pred_phot`` / ``pred_spec``: split components or ``None``.
     """
     if data_type == "photometry":
-        predicted = model.predict_photometry(params, mode=mode)
+        if use_orchestrator:
+            predicted = model.predict_photometry_via_orchestrator(params)
+        else:
+            predicted = model.predict_photometry(params, mode=mode)
         pred_phot, pred_spec = predicted, None
     elif data_type == "spectroscopy":
         predicted = model.predict_spectrum(params, model._wave_obs, mode=mode)
@@ -149,6 +161,7 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
         if obs_for_idx is not None and obs_for_idx.spectral_indices is not None:
             index_defs = obs_for_idx.spectral_indices.index_defs
     user_likelihood = getattr(fitter, "_user_likelihood", None)
+    use_orchestrator = bool(getattr(fitter, "use_orchestrator", False))
 
     def neg_log_lik(params, data_args):
         """-log p(d | params). Caller supplies physical params + data_args."""
@@ -164,6 +177,7 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
             has_indices=has_indices,
             index_defs=index_defs,
             data_args=data_args,
+            use_orchestrator=use_orchestrator,
         )
 
         # Auto-built / user-supplied Likelihood adapter handles the data

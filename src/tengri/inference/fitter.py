@@ -340,6 +340,7 @@ class Fitter:
         eline_prior_type=None,
         likelihood=None,
         auto_protocol_likelihood=True,
+        use_orchestrator=False,
     ):
         # ── User-supplied Likelihood (Phase II-1 Protocol path) ─────
         # When non-None, replaces the built-in χ² dispatch. The user
@@ -350,6 +351,16 @@ class Fitter:
         self._user_likelihood = likelihood
         self._auto_protocol_likelihood = auto_protocol_likelihood
 
+        # ── Orchestrator opt-in (Phase II step-1, 2026-05) ──────────
+        # When True, route forward predictions through
+        # :meth:`SEDModel.predict_via_orchestrator` (the SEDComponent
+        # chain) instead of the legacy fused ``predict_photometry`` /
+        # ``predict_spectrum`` kernels. Default ``False`` preserves
+        # existing inference behaviour bit-for-bit. Spectroscopy has no
+        # orchestrator bridge yet, so combining ``use_orchestrator=True``
+        # with non-photometric data_type is rejected at construction.
+        self.use_orchestrator = bool(use_orchestrator)
+
         # ── Data validation ─────────────────────────────────────────
         self.model = model
         self.data = jnp.asarray(data)
@@ -357,6 +368,13 @@ class Fitter:
         self.data_mask = jnp.asarray(data_mask) if data_mask is not None else None
         self.data_type = self._resolve_data_type(data_type, model)
         self.spec = model.spec
+
+        if self.use_orchestrator and self.data_type != "photometry":
+            raise NotImplementedError(
+                "Fitter(use_orchestrator=True) currently supports only "
+                f"data_type='photometry'; got {self.data_type!r}. "
+                "Spectroscopy/joint orchestrator bridges are not yet wired."
+            )
 
         # ── Auto-precompute photometry ─────────────────────────────
         self._auto_precompute_photometry(model)
