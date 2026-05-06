@@ -103,6 +103,92 @@ def interp_metallicity_evolving(model, log_z_per_age, ssp_flux=None, ssp_lgmet=N
     return interpolate_metallicity_evolving(flux, lgmet, log_z_per_age)
 
 
+def _closure_a_sfh_prep(model, p, sfr, t_obs_gyr_for_weights):
+    """Mirror :class:`StellarSEDComponent.apply` for closure-path-A.
+
+    Builds the orchestrator-canonical inputs to DSPS:
+    ``(t_cosmic_asc, sfr_asc, total_mass)`` and the orchestrator's
+    64-pt SFH grid. The three legacy ``compute_sed_components``
+    branches (no-α delta-Z, α-aware, chem_evol) all share these
+    inputs to feed ``calc_rest_sed_sfh_table_lognormal_mdf`` /
+    ``calc_rest_sed_sfh_table_met_table`` exactly the same way the
+    orchestrator's component does.
+
+    The three required alignments:
+
+    1. Grid resolution: ``n_grid=64`` regardless of ``spec.stochastic``
+       (legacy uses 256 for non-stochastic). For stochastic SFHs the
+       legacy ``sfr`` already lives on a 64-pt grid with the GP draw
+       baked in, so reuse it directly to preserve the realisation.
+    2. Linear lookback-time interpolation to SSP ages (NOT legacy's
+       log10-age interpolation).
+    3. NaN-safe cosmic-time prep: a strictly-monotonic ramp + SFR-
+       zeroing for invalid SSP bins (``ssp_age > t_obs``). Bare
+       ``jnp.clip(min=1e-3)`` collapses multiple invalid bins to the
+       same boundary value, producing a degenerate ``gal_t_table``
+       that DSPS NaNs on at z>0.05 with old SSPs.
+
+    Parameters
+    ----------
+    model : SEDModel
+    p : dict
+        Internal-name parameters (``model._get_internal_params(...)``).
+    sfr : array, shape (n_internal_grid,)
+        SFR on the legacy internal log_age_grid (256-pt non-stochastic,
+        64-pt stochastic). Used directly when stochastic; otherwise
+        re-evaluated on the 64-pt orchestrator grid.
+    t_obs_gyr_for_weights : float
+        Age of the universe at the observation redshift [Gyr].
+
+    Returns
+    -------
+    t_cosmic_asc : array, shape (n_ssp_age,)
+        Ascending cosmic-time grid for DSPS (Gyr).
+    sfr_asc : array, shape (n_ssp_age,)
+        SFR on the SSP age grid, ascending in cosmic time, with
+        invalid-SSP-bin SFR zeroed.
+    total_mass : scalar array
+        Total stellar mass formed [Msun] (trapezoid integral).
+    sfh_lbt_grid_orch : array, shape (64,)
+        The orchestrator-style 64-pt SFH lookback-time grid [yr];
+        useful when the caller needs to recompute mode-specific
+        quantities (e.g. chem_evol's ``log_z_per_age``) on the same
+        grid for bit-exact match.
+    """
+    from tengri.components.stellar.sfh.gp_sfh import make_log_age_grid
+
+    _n_grid = 64
+    _log_age_grid = make_log_age_grid(_n_grid)
+    sfh_lbt_grid_orch = jnp.power(10.0, _log_age_grid)
+    if model._uses_stochastic_sfh:
+        # Stochastic SFHs already use n_grid=64 in legacy; reuse to
+        # preserve the GP draw baked into ``sfr``.
+        _sfr_orch_grid = sfr
+    else:
+        _kw = {k: v for k, v in p.items() if k in model._sfh_internal_names}
+        _sfr_orch_grid = model._sfh_fn(sfh_lbt_grid_orch, **_kw)
+
+    _sfr_on_ssp_orch = jnp.interp(model.ssp_ages_yr, sfh_lbt_grid_orch, _sfr_orch_grid)
+
+    _ssp_age_gyr = model.ssp_ages_yr / 1e9
+    _T_TABLE_MIN = 0.01
+    _t_cosmic_raw = t_obs_gyr_for_weights - _ssp_age_gyr
+    _n_ssp = model.ssp_ages_yr.shape[0]
+    _t_cosmic_floor = jnp.maximum(_t_cosmic_raw, _T_TABLE_MIN)
+    _valid = _t_cosmic_raw > 0.0
+    _t_cosmic_asc_raw = _t_cosmic_floor[::-1]
+    _sfr_asc_raw = _sfr_on_ssp_orch[::-1]
+    _n_invalid = jnp.sum(~_valid[::-1])
+    _idx_pos = jnp.arange(_n_ssp)
+    _is_invalid_pos = _idx_pos < _n_invalid
+    _ramp = _T_TABLE_MIN + (_T_TABLE_MIN * 0.5) * (_idx_pos + 1) / jnp.maximum(_n_invalid, 1)
+    t_cosmic_asc = jnp.where(_is_invalid_pos, _ramp, _t_cosmic_asc_raw)
+    sfr_asc = jnp.where(_is_invalid_pos, 0.0, _sfr_asc_raw)
+    total_mass = jnp.maximum(jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9), 0.0)
+
+    return t_cosmic_asc, sfr_asc, total_mass, sfh_lbt_grid_orch
+
+
 def interp_met_alpha_dispatch(
     model, log_z, alpha_fe, ssp_flux=None, ssp_lgmet=None, ssp_alpha_fe=None
 ):
@@ -665,22 +751,22 @@ def compute_sed_components(
             # ``test_chem_evol_orchestrator_rest_sed_close_to_legacy``.
             from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
 
-            from tengri.components.stellar.sfh.gp_sfh import (
-                make_log_age_grid as _make_log_age_grid_chem,
-            )
-
             lgmet_scatter_chem = float(
                 p.get("lgmet_scatter", getattr(model, "_lgmet_scatter", 0.2))
             )
 
-            # Same orchestrator-mirror SFH prep as the no-α / α-aware
-            # closure-A blocks above. Chem_evol is non-stochastic by
-            # contract (gas regulator derives Z from mean SFH; field
-            # GP modulation is orthogonal); reuse the legacy ``sfr``
-            # only when stochastic to preserve the GP draw.
-            _n_grid_chem = 64
-            _log_age_grid_chem = _make_log_age_grid_chem(_n_grid_chem)
-            _sfh_lbt_grid_chem = jnp.power(10.0, _log_age_grid_chem)
+            # Orchestrator-canonical SFH prep — shared helper.
+            (
+                _t_cosmic_asc_chem,
+                _sfr_asc_chem,
+                _total_mass_chem,
+                _sfh_lbt_grid_chem,
+            ) = _closure_a_sfh_prep(model, p, sfr, _t_obs_gyr_for_weights)
+
+            # Recompute log_z_per_age on the orchestrator-style 64-pt
+            # SFH grid + its SFR realisation, since chem_evol's input
+            # grid affects the integrated metallicity profile.
+            _log_age_grid_chem = jnp.log10(_sfh_lbt_grid_chem)
             if model._uses_stochastic_sfh:
                 _sfr_orch_grid_chem = sfr
             else:
@@ -688,34 +774,6 @@ def compute_sed_components(
                     k: v for k, v in p.items() if k in model._sfh_internal_names
                 }
                 _sfr_orch_grid_chem = model._sfh_fn(_sfh_lbt_grid_chem, **_kw_orch_chem)
-            _sfr_on_ssp_chem = jnp.interp(
-                model.ssp_ages_yr, _sfh_lbt_grid_chem, _sfr_orch_grid_chem
-            )
-            _ssp_age_gyr_chem = model.ssp_ages_yr / 1e9
-            _T_TABLE_MIN_chem = 0.01
-            _t_cosmic_raw_chem = _t_obs_gyr_for_weights - _ssp_age_gyr_chem
-            _n_ssp_chem = model.ssp_ages_yr.shape[0]
-            _t_cosmic_floor_chem = jnp.maximum(_t_cosmic_raw_chem, _T_TABLE_MIN_chem)
-            _valid_chem = _t_cosmic_raw_chem > 0.0
-            _t_cosmic_asc_raw_chem = _t_cosmic_floor_chem[::-1]
-            _sfr_asc_raw_chem = _sfr_on_ssp_chem[::-1]
-            _n_invalid_chem = jnp.sum(~_valid_chem[::-1])
-            _idx_pos_chem = jnp.arange(_n_ssp_chem)
-            _is_invalid_pos_chem = _idx_pos_chem < _n_invalid_chem
-            _ramp_chem = _T_TABLE_MIN_chem + (_T_TABLE_MIN_chem * 0.5) * (
-                _idx_pos_chem + 1
-            ) / jnp.maximum(_n_invalid_chem, 1)
-            _t_cosmic_asc_chem = jnp.where(
-                _is_invalid_pos_chem, _ramp_chem, _t_cosmic_asc_raw_chem
-            )
-            _sfr_asc_chem = jnp.where(_is_invalid_pos_chem, 0.0, _sfr_asc_raw_chem)
-            _total_mass_chem = jnp.maximum(
-                jnp.trapezoid(_sfr_asc_chem, _t_cosmic_asc_chem * 1e9), 0.0
-            )
-
-            # Recompute log_z_per_age on the orchestrator-style 64-pt
-            # SFH grid + SSP ages, since chem_evol's input grid affects
-            # the integrated metallicity profile.
             _log_z_per_age_chem = chem_evol_metallicity_on_ssp_grid(
                 model.ssp_log_ages_yr,
                 _log_age_grid_chem,
@@ -827,43 +885,10 @@ def compute_sed_components(
                 _ssp_flux_3d_alpha = model.ssp_data.ssp_flux
                 _lgmet_for_dsps = effective_metallicity(_lgmet, alpha_fe)
 
-            # Reuse the SFH-prep block from the no-α branch (built
-            # below into ``_dsps_canonical_sfh_inputs`` for clarity).
-            from tengri.components.stellar.sfh.gp_sfh import (
-                make_log_age_grid as _make_log_age_grid_orch_α,
-            )
-
-            _n_grid_orch_α = 64
-            _log_age_grid_orch_α = _make_log_age_grid_orch_α(_n_grid_orch_α)
-            _sfh_lbt_grid_orch_α = jnp.power(10.0, _log_age_grid_orch_α)
-            if model._uses_stochastic_sfh:
-                _sfr_orch_grid_α = sfr
-            else:
-                _kw_orch_α = {
-                    k: v for k, v in p.items() if k in model._sfh_internal_names
-                }
-                _sfr_orch_grid_α = model._sfh_fn(_sfh_lbt_grid_orch_α, **_kw_orch_α)
-            _sfr_on_ssp_α = jnp.interp(
-                model.ssp_ages_yr, _sfh_lbt_grid_orch_α, _sfr_orch_grid_α
-            )
-            _ssp_age_gyr_α = model.ssp_ages_yr / 1e9
-            _T_TABLE_MIN_α = 0.01
-            _t_cosmic_raw_α = _t_obs_gyr_for_weights - _ssp_age_gyr_α
-            _n_ssp_α = model.ssp_ages_yr.shape[0]
-            _t_cosmic_floor_α = jnp.maximum(_t_cosmic_raw_α, _T_TABLE_MIN_α)
-            _valid_α = _t_cosmic_raw_α > 0.0
-            _t_cosmic_asc_raw_α = _t_cosmic_floor_α[::-1]
-            _sfr_asc_raw_α = _sfr_on_ssp_α[::-1]
-            _n_invalid_α = jnp.sum(~_valid_α[::-1])
-            _idx_pos_α = jnp.arange(_n_ssp_α)
-            _is_invalid_pos_α = _idx_pos_α < _n_invalid_α
-            _ramp_α = _T_TABLE_MIN_α + (_T_TABLE_MIN_α * 0.5) * (
-                _idx_pos_α + 1
-            ) / jnp.maximum(_n_invalid_α, 1)
-            _t_cosmic_asc_α = jnp.where(_is_invalid_pos_α, _ramp_α, _t_cosmic_asc_raw_α)
-            _sfr_asc_α = jnp.where(_is_invalid_pos_α, 0.0, _sfr_asc_raw_α)
-            _total_mass_α = jnp.maximum(
-                jnp.trapezoid(_sfr_asc_α, _t_cosmic_asc_α * 1e9), 0.0
+            # Orchestrator-canonical SFH prep, shared with the no-α
+            # and chem_evol closure-A blocks.
+            _t_cosmic_asc_α, _sfr_asc_α, _total_mass_α, _ = _closure_a_sfh_prep(
+                model, p, sfr, _t_obs_gyr_for_weights
             )
 
             _dsps_result_α = _calc_rest_sed_α(
@@ -910,68 +935,11 @@ def compute_sed_components(
             _lgmet2 = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
             lgmet_scatter = float(p.get("lgmet_scatter", getattr(model, "_lgmet_scatter", 0.2)))
 
-            # Mirror :class:`StellarSEDComponent.apply` exactly so the
-            # two paths feed bit-identical inputs into DSPS. Critical
-            # alignments (any one mismatch produces ~1e-3 residual):
-            #
-            # 1. Grid resolution: orchestrator uses ``config.n_grid=64``
-            #    regardless of stochastic flag; legacy uses 256 for
-            #    non-stochastic. Build our own 64-pt grid here.
-            # 2. Linear lookback-time interpolation to SSP ages
-            #    (NOT legacy's log10-age interpolation).
-            # 3. Cosmic-time floor at 1e-3 Gyr (matching orchestrator),
-            #    not the helper's stricter ``T_TABLE_MIN=0.01``.
-            from tengri.components.stellar.sfh.gp_sfh import (
-                make_log_age_grid as _make_log_age_grid_orch,
+            # Orchestrator-canonical SFH prep (n_grid=64, linear
+            # lookback interp, NaN-safe cosmic-time ramp).
+            _t_cosmic_asc, _sfr_asc, _total_mass, _ = _closure_a_sfh_prep(
+                model, p, sfr, _t_obs_gyr_for_weights
             )
-
-            _n_grid_orch = 64
-            _log_age_grid_orch = _make_log_age_grid_orch(_n_grid_orch)
-            _sfh_lbt_grid_orch = jnp.power(10.0, _log_age_grid_orch)
-            # SFH on the orchestrator's 64-pt grid. For stochastic
-            # SFHs (``field=True``), the legacy ``sfr`` already
-            # contains the GP modulation and is on the same 64-pt
-            # grid as the orchestrator (``spec.n_grid``); reuse it
-            # directly so the GP draw is preserved. For non-
-            # stochastic SFHs, legacy's ``sfr`` is on a 256-pt
-            # grid; re-evaluate on the 64-pt grid via the composed
-            # SFH function so we feed DSPS the same array as the
-            # orchestrator.
-            if model._uses_stochastic_sfh:
-                _sfr_orch_grid = sfr
-            else:
-                _kw_orch = {
-                    k: v for k, v in p.items() if k in model._sfh_internal_names
-                }
-                _sfr_orch_grid = model._sfh_fn(_sfh_lbt_grid_orch, **_kw_orch)
-            _sfr_on_ssp_orch_style = jnp.interp(
-                model.ssp_ages_yr, _sfh_lbt_grid_orch, _sfr_orch_grid
-            )
-            # NaN-safe cosmic-time prep mirroring
-            # :class:`StellarSEDComponent.apply` exactly: when SSP
-            # ages exceed ``t_obs`` (typical at z>0 with old SSPs),
-            # bare ``jnp.clip(min=1e-3)`` produces a degenerate
-            # ``gal_t_table`` with multiple identical entries that
-            # DSPS NaNs on. Build a strictly-monotonic ramp at the
-            # invalid end + zero the SFR there.
-            _ssp_age_gyr = model.ssp_ages_yr / 1e9
-            _T_TABLE_MIN = 0.01
-            _t_cosmic_raw = _t_obs_gyr_for_weights - _ssp_age_gyr
-            _n_ssp = model.ssp_ages_yr.shape[0]
-            _t_cosmic_floor = jnp.maximum(_t_cosmic_raw, _T_TABLE_MIN)
-            _valid = _t_cosmic_raw > 0.0
-            _valid_asc = _valid[::-1]
-            _t_cosmic_asc_raw = _t_cosmic_floor[::-1]
-            _sfr_asc_raw = _sfr_on_ssp_orch_style[::-1]
-            _n_invalid = jnp.sum(~_valid_asc)
-            _idx_pos = jnp.arange(_n_ssp)
-            _is_invalid_pos = _idx_pos < _n_invalid
-            _ramp = _T_TABLE_MIN + (_T_TABLE_MIN * 0.5) * (_idx_pos + 1) / jnp.maximum(
-                _n_invalid, 1
-            )
-            _t_cosmic_asc = jnp.where(_is_invalid_pos, _ramp, _t_cosmic_asc_raw)
-            _sfr_asc = jnp.where(_is_invalid_pos, 0.0, _sfr_asc_raw)
-            _total_mass = jnp.maximum(jnp.trapezoid(_sfr_asc, _t_cosmic_asc * 1e9), 0.0)
 
             _dsps_result = calc_rest_sed_sfh_table_lognormal_mdf(
                 gal_t_table=_t_cosmic_asc,
