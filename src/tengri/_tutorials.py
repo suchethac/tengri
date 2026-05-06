@@ -739,7 +739,13 @@ def explain(thing) -> None:
         print(_describe(thing))
         return
 
-    name = getattr(thing, "__name__", str(thing))
+    # Prefer ``__name__`` (for classes) but fall through to ``type(...)``
+    # for instances — a user with ``model = SEDModel(...)`` should be
+    # able to call ``tengri.explain(model)`` and get the SEDModel blurb.
+    if isinstance(thing, type):
+        name = thing.__name__
+    else:
+        name = type(thing).__name__
     blurbs: dict[str, str] = {
         "Parameters": (
             "PRIOR SPECIFICATION  (layer 3 — user API)\n"

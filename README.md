@@ -89,15 +89,34 @@ print(result.summary_table())
 
 Full walkthrough in [`notebooks/00_quickstart.py`](notebooks/00_quickstart.py).
 
-## Discover what's available
+## Discover what's available — and learn it interactively
 
-After installing, three calls answer "what does tengri do?":
+After installing, four calls answer "what does tengri do?" and "how do I use it?":
 
 ```python
 import tengri
-tengri.help()           # curated cheatsheet (4 sections)
-tengri.summary()        # one-line counts of every menu
-tengri.<TAB>            # ~35 curated entry points (not the 175-name kitchen sink)
+tengri.help()           # curated cheatsheet (5 sections, advertises tutorials)
+tengri.summary()        # one-line counts of every menu (live from registry)
+tengri.tutorial()       # menu of 10 runnable, copy-pasteable recipes
+tengri.<TAB>            # ~39 curated entry points (not the 175-name kitchen sink)
+```
+
+**Live tutorials** — pass a topic name to print the recipe, add `run=True` to actually
+execute it where safe:
+
+```python
+tengri.tutorial("philosophy")        # layered architecture + IFT framework
+tengri.tutorial("key_classes")       # Parameters / SEDModel / Fitter / Posterior
+tengri.tutorial("use_cases")         # 8 patterns matching real science
+tengri.tutorial("first_fit")         # mock galaxy → posterior in 30 s
+tengri.tutorial("register_a_model", run=True)   # add a new model alternative — LIVE
+tengri.tutorial("swap_inference")    # same model, NUTS → geoVI → MCMC
+tengri.tutorial("custom_likelihood") # Student-t / calibration / custom Protocol
+tengri.tutorial("diagnostics")       # ESS / R-hat / convergence checking
+tengri.tutorial("hierarchical")      # population fit across many galaxies
+
+tengri.explain(tengri.SEDModel)      # architectural role of any class or instance
+tengri.examples()                    # every runnable example script under examples/
 ```
 
 `tengri.summary()` prints something like:

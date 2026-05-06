@@ -180,11 +180,27 @@ from tengri import cosmology, plot, units
 plot.setup_style()  # serif font, tight layout, 150 dpi
 
 # %% [markdown]
-# ## 1.5. Discover what's available
+# ## 1.5. Discover what's available — and learn while you discover
 #
 # Before building a model, see what physics is on offer.  Every count
 # below is read live from the registry — adding a new model via
 # `@register_agn_model` updates these numbers immediately.
+#
+# **Three commands a brand-new user runs after install:**
+#
+# ```python
+# tengri.help()                           # 5-section cheatsheet
+# tengri.tutorial()                       # menu of 10 runnable recipes
+# tengri.tutorial("philosophy")           # the layered architecture, IFT framework
+# tengri.tutorial("key_classes")          # what each of Parameters / SEDModel /
+#                                         # Fitter / Posterior does and how they compose
+# tengri.tutorial("use_cases")            # 8 patterns: catalog / hierarchical / mock / …
+# tengri.explain(tengri.SEDModel)         # architectural role of any class
+# tengri.examples()                       # every runnable script under examples/
+# ```
+#
+# Below we walk through the introspection API the long way — but the
+# tutorials above cover the same ground in a more guided form.
 #
 # ```python
 # import tengri
