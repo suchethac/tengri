@@ -85,6 +85,58 @@ class _RegistryTable(list):
                 footer += f"\n  Use:  tengri.describe({self[0]['name']!r})  →  {example}"
         return f"{header}\n{sep}\n{rows}{footer}"
 
+    def filter(self, **criteria: Any) -> _RegistryTable:
+        """Narrow the table by per-field criteria.
+
+        Each keyword either does an exact match (``survey="SDSS"``) or
+        uses a ``field__op`` operator suffix:
+
+        - ``field=value``           — exact equality
+        - ``field__contains=value`` — case-insensitive substring match
+        - ``field__in=(a, b, c)``   — membership in a sequence
+        - ``field__startswith=v``   — prefix match (case-insensitive)
+
+        All criteria must match (logical AND).
+
+        Examples
+        --------
+        >>> tengri.list_filters().filter(survey="SDSS")
+        >>> tengri.list_filters().filter(survey="HST", band__contains="F814")
+        >>> tengri.list_agn_models().filter(status="production")
+        >>> tengri.list_dust_laws().filter(citation__contains="Calzetti")
+        """
+        out: list[dict] = []
+        for entry in self:
+            ok = True
+            for key, val in criteria.items():
+                if "__" in key:
+                    field, op = key.rsplit("__", 1)
+                else:
+                    field, op = key, "eq"
+                cell = entry.get(field)
+                if op == "eq":
+                    ok = cell == val
+                elif op == "contains":
+                    ok = str(val).lower() in str(cell or "").lower()
+                elif op == "startswith":
+                    ok = str(cell or "").lower().startswith(str(val).lower())
+                elif op == "in":
+                    ok = cell in val
+                else:
+                    raise ValueError(
+                        f"Unknown filter operator '{op}'.  Valid: eq (default), "
+                        "contains, startswith, in."
+                    )
+                if not ok:
+                    break
+            if ok:
+                out.append(entry)
+        return _RegistryTable(out)
+
+    def names(self) -> list[str]:
+        """Just the list of names — convenient for ``Photometry.from_names``."""
+        return [d["name"] for d in self]
+
     def _repr_html_(self) -> str:
         """Jupyter HTML repr — renders as a real HTML table in notebooks."""
         if not self:
@@ -409,6 +461,39 @@ _COMPONENT_DOCS: tuple[tuple[str, str, str], ...] = (
 )
 
 
+_PLOT_HELPERS: tuple[tuple[str, str], ...] = (
+    ("plot_sed_fit", "Plot observed photometry/spectrum + posterior SED + uncertainty band"),
+    ("plot_spectrum_fit", "Plot spectrum + posterior model with calibration polynomial"),
+    ("plot_sfh", "Plot single SFH(t) curve from a Parameters / Posterior"),
+    ("plot_sfh_comparison", "Overlay multiple SFH(t) curves (e.g. truth vs posterior)"),
+    ("plot_corner_comparison", "Two-posterior corner plot (e.g. with truth)"),
+    ("safe_corner", "Corner plot wrapper that handles fixed parameters gracefully"),
+    ("setup_style", "Apply tengri matplotlib style (serif, tight, 150 dpi)"),
+    ("diagnostics_table", "ESS / R-hat / divergences table for sampling diagnostics"),
+)
+
+
+def list_plots() -> _RegistryTable:
+    """List the plotting helpers in ``tengri.plot``.
+
+    These render directly with matplotlib — no separate plotting framework.
+    Each row carries the canonical call site so a notebook user can
+    discover and copy without leaving the cell.
+    """
+    return _RegistryTable(
+        [
+            {
+                "name": name,
+                "kind": "plot",
+                "status": "production",
+                "short_doc": doc,
+                "use": f"tengri.plot.{name}(...)",
+            }
+            for name, doc in _PLOT_HELPERS
+        ]
+    )
+
+
 def list_filters() -> _RegistryTable:
     """List every filter curve bundled with tengri.
 
@@ -554,6 +639,7 @@ def describe(name: str) -> _DescribeRecord:
         list_nebular_backends,
         list_components,
         list_filters,
+        list_plots,
     ):
         for entry in fn():
             if entry["name"] == name:
@@ -636,6 +722,7 @@ def search(query: str) -> _RegistryTable:
         list_sfh_models,
         list_nebular_backends,
         list_filters,
+        list_plots,
     ):
         for entry in fn():
             haystack = " ".join(
@@ -665,6 +752,7 @@ def list_all() -> dict[str, _RegistryTable]:
         "sfh_models": list_sfh_models(),
         "nebular_backends": list_nebular_backends(),
         "filters": list_filters(),
+        "plots": list_plots(),
     }
 
 
@@ -692,6 +780,7 @@ def summary() -> None:
         (len(list_sfh_models()), "SFH models", "list_sfh_models()"),
         (len(list_nebular_backends()), "nebular backends", "list_nebular_backends()"),
         (len(list_filters()), "photometric filters", "list_filters()"),
+        (len(list_plots()), "plotting helpers", "list_plots()"),
         (
             len(list_inference_methods(tier="primary")),
             "primary inference methods",
@@ -718,6 +807,8 @@ _TOPIC_HELP: dict[str, tuple[str, callable]] = {
     "components": ("physics components", lambda: list_components()),
     "inference": ("inference methods", lambda: list_inference_methods()),
     "filters": ("photometric filters", lambda: list_filters()),
+    "plot": ("plotting helpers", lambda: list_plots()),
+    "plots": ("plotting helpers", lambda: list_plots()),
 }
 
 
