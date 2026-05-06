@@ -198,7 +198,7 @@ def _usage_hint(name: str, kind: str) -> str:
     if kind == "inference_method":
         return f'fitter.run("{name}")'
     if kind == "component":
-        return f"tengri.{name}  (or tengri.list_{name}_models() / tengri.list_{name}_laws() if it has alternatives)"
+        return f"tengri.{name}  (see list_{name}_models / list_{name}_laws for alternatives)"
     return ""
 
 
@@ -591,7 +591,41 @@ def search(query: str) -> _RegistryTable:
     >>> tengri.search("pah")  # find every PAH-related thing
     >>> tengri.search("Leja")  # find everything Leja-cited
     """
-    q = query.lower()
+    q = query.lower().strip()
+
+    # Shortcut: when the query *is* a kind name, the user almost certainly
+    # wants the menu, not 242 rows that happen to all have kind=filter.
+    # Redirect to the appropriate list_*() with a hint.
+    _KIND_SHORTCUT: dict[str, tuple[str, callable]] = {
+        "filter": ("list_filters()", list_filters),
+        "filters": ("list_filters()", list_filters),
+        "agn": ("list_agn_models()", list_agn_models),
+        "agn_model": ("list_agn_models()", list_agn_models),
+        "agn_models": ("list_agn_models()", list_agn_models),
+        "sfh": ("list_sfh_models()", list_sfh_models),
+        "sfh_model": ("list_sfh_models()", list_sfh_models),
+        "sfh_models": ("list_sfh_models()", list_sfh_models),
+        "dust_attenuation": ("list_dust_laws()", list_dust_laws),
+        "dust_emission": ("list_dust_emission_models()", list_dust_emission_models),
+        "nebular": ("list_nebular_backends()", list_nebular_backends),
+        "nebular_backend": ("list_nebular_backends()", list_nebular_backends),
+        "component": ("list_components()", list_components),
+        "components": ("list_components()", list_components),
+        "inference_method": ("list_inference_methods()", list_inference_methods),
+        "inference": ("list_inference_methods()", list_inference_methods),
+    }
+    if q in _KIND_SHORTCUT:
+        call, fn = _KIND_SHORTCUT[q]
+        print(f"  '{query}' is a menu name — redirecting to tengri.{call}\n")
+        return fn()
+
+    # ``kind`` and ``use`` are structural/internal — searching them gives
+    # spurious 100%-of-table hits (e.g. "filter" matching every filter
+    # row's kind, or "fitter" matching every inference method's "use"
+    # which contains the literal word "fitter"). Match user-content
+    # fields only: name, short_doc, citation, status, survey, instrument,
+    # band — i.e. everything except kind/use.
+    _SKIP_FIELDS = {"kind", "use"}
     hits: list[dict] = []
     for fn in (
         list_components,
@@ -604,9 +638,9 @@ def search(query: str) -> _RegistryTable:
         list_filters,
     ):
         for entry in fn():
-            # Search every string-valued field — covers name, short_doc,
-            # citation, status, plus filter-specific survey/instrument/band.
-            haystack = " ".join(str(v) for v in entry.values() if isinstance(v, str)).lower()
+            haystack = " ".join(
+                str(v) for k, v in entry.items() if k not in _SKIP_FIELDS and isinstance(v, str)
+            ).lower()
             if q in haystack:
                 hits.append(entry)
     return _RegistryTable(hits)
