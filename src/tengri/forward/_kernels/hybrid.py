@@ -601,6 +601,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             # Non-stellar parameters
             neb_logU=-3.0,
             neb_logZ_gas=None,
+            neb_log_nH=3.0,
             neb_fesc=0.0,
             neb_fesc_lya=0.0,
             shock_frac=0.0,
@@ -634,6 +635,9 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             agn_r_warm_ratio=2.0,
             agn_blr_cf=0.1,
             agn_nlr_cf=0.1,
+            agn_feltre_cf=0.1,
+            agn_alpha_ion=-1.7,
+            neb_xid=0.3,
             agn_fe2_strength=0.0,
             radio_q_ir=2.64,
             radio_alpha_sf=0.8,
@@ -674,6 +678,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                 agn_log_ledd,
                 neb_logU,
                 neb_logZ_gas,
+                neb_log_nH,
                 neb_fesc,
                 neb_fesc_lya,
                 shock_frac,
@@ -707,6 +712,9 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                 agn_r_warm_ratio,
                 agn_blr_cf,
                 agn_nlr_cf,
+                agn_feltre_cf,
+                agn_alpha_ion,
+                neb_xid,
                 agn_fe2_strength,
                 radio_q_ir,
                 radio_alpha_sf,
@@ -751,6 +759,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             # Non-stellar parameters
             neb_logU=-3.0,
             neb_logZ_gas=None,
+            neb_log_nH=3.0,
             neb_fesc=0.0,
             neb_fesc_lya=0.0,
             shock_frac=0.0,
@@ -784,6 +793,9 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             agn_r_warm_ratio=2.0,
             agn_blr_cf=0.1,
             agn_nlr_cf=0.1,
+            agn_feltre_cf=0.1,
+            agn_alpha_ion=-1.7,
+            neb_xid=0.3,
             agn_fe2_strength=0.0,
             radio_q_ir=2.64,
             radio_alpha_sf=0.8,
@@ -824,6 +836,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                 agn_log_ledd,
                 neb_logU,
                 neb_logZ_gas,
+                neb_log_nH,
                 neb_fesc,
                 neb_fesc_lya,
                 shock_frac,
@@ -857,6 +870,9 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                 agn_r_warm_ratio,
                 agn_blr_cf,
                 agn_nlr_cf,
+                agn_feltre_cf,
+                agn_alpha_ion,
+                neb_xid,
                 agn_fe2_strength,
                 radio_q_ir,
                 radio_alpha_sf,
@@ -1388,6 +1404,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
         agn_log_ledd,
         neb_logU,
         neb_logZ_gas,
+        neb_log_nH,
         neb_fesc,
         neb_fesc_lya,
         shock_frac,
@@ -1421,6 +1438,9 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
         agn_r_warm_ratio,
         agn_blr_cf,
         agn_nlr_cf,
+        agn_feltre_cf,
+        agn_alpha_ion,
+        neb_xid,
         agn_fe2_strength,
         radio_q_ir,
         radio_alpha_sf,
@@ -2114,13 +2134,38 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                 )
                 non_stellar_phot = non_stellar_phot + nlr_phot_preint * flux_scale
 
-        # TODO(agn-nebular-consumer-feltre): Feltre NLR precompute consumer.
-        # The precompute adapter supports auto-collapsing Fixed axes, so the
-        # lookup signature depends on which axes were fixed at build time.
-        # Wiring requires either (a) storing collapsed-axis metadata in the
-        # lookup dict, or (b) resolving Feltre parameters from hybrid kernel
-        # signature (neb_logZ_gas, agn_alpha, neb_logU, neb_xid). Currently
-        # deferred pending API additions for neb_logn and neb_xid.
+        # Feltre NLR precompute
+        if _has_preint_feltre_nlr:
+            # The Feltre lookup is a dict with "predict_lines" (for lines)
+            # and "line_wavelengths". For photometry, we use the
+            # preintegrated line_lum_grid directly via triweight
+            # interpolation. The lookup returns (wavelengths, luminosities),
+            # which we convert to photometry by integrating through filters.
+            # For now, assume the lookup returns per-filter photometry.
+            _l_disc_bol_erg = 10.0 ** (jnp.float64(agn_log_lbol)) * LSUN_ERG_PER_S
+
+            # Call the predict_lines function with free axes
+            # (signature depends on which axes were fixed at precompute time)
+            _line_waves, line_lums = _feltre_nlr_lookup["predict_lines"](
+                log_qh=jnp.log10(_l_disc_bol_erg / (10.0**45.0)),  # normalize Q_H
+                neb_logZ_gas=jnp.float64(neb_logZ_gas),
+                agn_alpha_ion=jnp.float64(agn_alpha_ion),
+                neb_logU=jnp.float64(neb_logU),
+                neb_xid=jnp.float64(neb_xid),
+                neb_fesc=jnp.float64(neb_fesc),
+            )
+
+            # Scale by covering fraction
+            line_lums_scaled = line_lums * jnp.float64(agn_feltre_cf)
+
+            # Integrate lines through filters
+            # (precompute contains the line_weight_matrix)
+            feltre_phot_preint = jnp.einsum(
+                "l,lf->f",
+                line_lums_scaled,
+                _feltre_nlr_lookup["line_weight_matrix"],
+            )
+            non_stellar_phot = non_stellar_phot + feltre_phot_preint * flux_scale
 
         # TODO(precompute-consumer): The following PrecomputedData fields are
         # built and stored by SEDModel but not yet consumed here. Wiring each
