@@ -27,18 +27,13 @@ have :math:`\alpha_{\rm sf} \approx 0.7`–:math:`0.8`. Flat-spectrum sources
 (:math:`\alpha \approx 0`) have strong free-free contributions; steeper
 spectra (:math:`\alpha > 1`) suggest ageing of the cosmic ray electron population.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-54
+.. sphx-glr-precomputed-img:
 
-
-
-.. image-sg:: /auto_examples/radio/images/sphx_glr_plot_alpha_sf_sweep_001.png
-   :alt: Synchrotron Spectral Index Effect on Radio SED Shape
-   :srcset: /auto_examples/radio/images/sphx_glr_plot_alpha_sf_sweep_001.png
+.. image:: images/sphx_glr_plot_alpha_sf_sweep_001.png
+   :alt: plot_alpha_sf_sweep
    :class: sphx-glr-single-img
 
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 18-61
 
 .. code-block:: Python
 

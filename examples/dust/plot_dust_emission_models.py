@@ -5,6 +5,13 @@ Dust Emission Models: Overview
 All tengri dust emission models evaluated at L_absorbed = 1e10 L☉ and
 T = 35 K. Template-based models (DL07, DL14, Dale+2014) are shown only
 when data files are present; they are skipped gracefully otherwise.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_dust_emission_models_001.png
+   :alt: plot_dust_emission_models
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

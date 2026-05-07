@@ -35,7 +35,13 @@ This example sweeps :math:`L_{\rm IR}` from :math:`10^{9}` to
 expected tight linear correlation and showing how the :math:`q_{\rm IR}`
 parameter shifts the normalization.
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-89
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_fir_radio_correlation_001.png
+   :alt: plot_fir_radio_correlation
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 26-96
 
 .. code-block:: Python
 

@@ -25,7 +25,13 @@ Visualize how the two DRW PSD parameters -- sigma (amplitude) and
 tau (damping timescale) -- map to different levels of SFH burstiness.
 A 3x3 grid of GP-modulated SFHs shows the effect of each parameter.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-92
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_psd_burstiness_001.png
+   :alt: plot_psd_burstiness
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-99
 
 .. code-block:: Python
 

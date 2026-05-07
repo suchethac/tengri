@@ -8,6 +8,13 @@ is resampled 200 times to generate a posterior predictive SED ensemble.
 Shows the SED with 1σ and 2σ confidence envelopes. This workflow
 illustrates how to propagate Bayesian posterior uncertainty into
 derived predictions for robust error budgets.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_workflow_dust_mc_resampling_001.png
+   :alt: plot_workflow_dust_mc_resampling
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

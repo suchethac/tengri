@@ -7,6 +7,13 @@ the radio spectrum falls off with frequency. Typical star-forming galaxies
 have :math:`\\alpha_{\\rm sf} \\approx 0.7`–:math:`0.8`. Flat-spectrum sources
 (:math:`\\alpha \\approx 0`) have strong free-free contributions; steeper
 spectra (:math:`\\alpha > 1`) suggest ageing of the cosmic ray electron population.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_alpha_sf_sweep_001.png
+   :alt: plot_alpha_sf_sweep
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

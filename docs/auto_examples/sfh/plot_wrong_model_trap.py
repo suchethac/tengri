@@ -5,6 +5,13 @@ The Wrong-SEDModel Trap: Parametric Bias in Derived Quantities
 A smooth (parametric) model fits a bursty galaxy with χ² ≈ 1 but
 systematically underestimates recent SFR by up to 10×. The trap:
 good residuals do not guarantee unbiased physical parameters.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_wrong_model_trap_001.png
+   :alt: plot_wrong_model_trap
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

@@ -29,7 +29,13 @@ and alters the optical mass-to-light ratio.
 
 Set via ``met_alpha_fe`` parameter in ``Parameters``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-85
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_alpha_fe_sweep_001.png
+   :alt: plot_alpha_fe_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 20-92
 
 .. code-block:: Python
 

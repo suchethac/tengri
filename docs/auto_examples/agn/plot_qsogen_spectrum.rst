@@ -26,7 +26,13 @@ Shows how an empirically-trained surrogate matches observed quasar spectra
 across the UV through near-IR, with parametric control over redshift and
 luminosity.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-112
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_qsogen_spectrum_001.png
+   :alt: plot_qsogen_spectrum
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-119
 
 .. code-block:: Python
 

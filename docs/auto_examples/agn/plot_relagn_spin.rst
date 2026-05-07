@@ -31,7 +31,13 @@ of the spin-dependent inner boundary condition.
 
 Requires the precomputed grid ``data/relagn_disc_grid.h5``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-25
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_relagn_spin_001.png
+   :alt: plot_relagn_spin
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 22-32
 
 .. code-block:: Python
 
@@ -46,11 +52,11 @@ Requires the precomputed grid ``data/relagn_disc_grid.h5``.
     setup_style()
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-27
+.. GENERATED FROM PYTHON SOURCE LINES 33-34
 
 Wavelength grid: 100 Å (UV) to 3 µm (NIR)
 
-.. GENERATED FROM PYTHON SOURCE LINES 27-40
+.. GENERATED FROM PYTHON SOURCE LINES 34-47
 
 .. code-block:: Python
 
@@ -68,11 +74,11 @@ Wavelength grid: 100 Å (UV) to 3 µm (NIR)
     colors = plt.cm.plasma(np.linspace(0.1, 0.9, len(astar_values)))
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 41-42
+.. GENERATED FROM PYTHON SOURCE LINES 48-49
 
 Load RELAGN model from registry
 
-.. GENERATED FROM PYTHON SOURCE LINES 42-89
+.. GENERATED FROM PYTHON SOURCE LINES 49-96
 
 .. code-block:: Python
 
@@ -124,14 +130,14 @@ Load RELAGN model from registry
     ax_sed.legend(frameon=False, fontsize=9)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 90-94
+.. GENERATED FROM PYTHON SOURCE LINES 97-101
 
 Panel 2: UV spectral slope α vs spin
 α becomes less negative (harder) as spin increases because the shrinking ISCO
 pushes the inner-disc temperature blueward, contributing more flux at
 912–3000 Å.  α = d log L_ν / d log ν; Rayleigh-Jeans limit → α = +2.
 
-.. GENERATED FROM PYTHON SOURCE LINES 94-113
+.. GENERATED FROM PYTHON SOURCE LINES 101-120
 
 .. code-block:: Python
 

@@ -33,6 +33,13 @@ Memory policy
 -------------
 Each run is bounded to ≤ 30 GB peak per worker. Columns abort once a
 row exceeds the budget — those (N, K) cells are absent from the plot.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_population_scaling_001.png
+   :alt: plot_population_scaling
+   :class: sphx-glr-single-img
+
 """
 
 from __future__ import annotations

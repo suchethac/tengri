@@ -29,18 +29,13 @@ the "dropout" technique.
 
 ``igm_transmission(wave_obs, z)`` takes **observed-frame** wavelengths.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-80
+.. sphx-glr-precomputed-img:
 
-
-
-.. image-sg:: /auto_examples/igm/images/sphx_glr_plot_igm_redshift_001.png
-   :alt: IGM Transmission Curves (Inoue+2014), Dropout Criterion Steepens at z > 3
-   :srcset: /auto_examples/igm/images/sphx_glr_plot_igm_redshift_001.png
+.. image:: images/sphx_glr_plot_igm_redshift_001.png
+   :alt: plot_igm_redshift
    :class: sphx-glr-single-img
 
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 20-87
 
 .. code-block:: Python
 

@@ -41,47 +41,26 @@ try:
 except Exception:  # pragma: no cover - matplotlib missing on docs-only env
     pass
 
-# ── Inference / fitter scripts: precompute, do NOT re-execute ──────────────
-# Anything that constructs a Fitter and calls ``run("mcmc_*"|"vi_*"|...)``
-# is too slow for a per-build ``make html`` (minutes to tens of minutes per
-# script). Sphinx-Gallery's ``filename_pattern`` controls which files are
-# *executed*: matching files run and (re-)generate figures; non-matching
-# files still appear in the gallery and reuse whatever ``.rst``/``.ipynb``
-# and PNGs already exist under ``docs/auto_examples/<group>/`` from a prior
-# run. To opt a new heavy script in, add its basename (no path, no ``.py``)
-# to ``_DO_NOT_EXECUTE`` and commit one set of pre-rendered outputs.
-_DO_NOT_EXECUTE = [
-    # examples/inference/
-    "plot_population_scaling",
-    "plot_hierarchical_convergence",
-    "plot_convergence",
-    "plot_corner",
-    "plot_method_comparison",
-    "plot_prior_posterior_compare",
-    # examples/quickstart/
-    "plot_first_fit",
-    # examples/photometry/, examples/spectroscopy/, examples/advanced/
-    "plot_photometric_fit",
-    "plot_spectrum_fit",
-    "plot_joint_fit",
-    "plot_hierarchical",
-    # examples/workflows/  (each runs a Fitter on synthetic data)
-    "plot_workflow_method_comparison",
-    "plot_workflow_dust_mc_resampling",
-    "plot_workflow_post_starburst",
-    "plot_workflow_high_z_lbg",
-    # examples/recipes/  (Fitter + posterior I/O)
-    "plot_recipe_save_load_posterior",
-    "plot_recipe_compare_priors",
-    "plot_recipe_specific_redshift",
-    "plot_recipe_load_real_csv",
-    # examples/sfh/
-    "plot_wrong_model_trap",
-    # examples/inference legacy
-    "plot_bursty_recovery",
-    "plot_stochastic_sfh",
-]
-_skip_alt = "|".join(_DO_NOT_EXECUTE)
+# ── Skip-execution list, derived from what is already pre-rendered ─────────
+# Policy: do NOT re-execute any script whose main figure
+# ``docs/auto_examples/<group>/images/sphx_glr_<name>_001.png`` is already
+# committed. If the image is missing, the script will execute on the next
+# ``make html`` and produce one. So the contract is "fetch the current ones,
+# only reproduce if missing" — driven by what's on disk, not a hand-curated
+# list. Heavy inference scripts stay fast because their pre-rendered output
+# is committed; lightweight new scripts auto-rebuild on first build.
+import pathlib as _pl
+
+_AUTO_EXAMPLES = _pl.Path(__file__).resolve().parent / "auto_examples"
+_DO_NOT_EXECUTE = sorted(
+    {
+        p.stem.replace("sphx_glr_", "").rsplit("_", 1)[0]
+        for p in _AUTO_EXAMPLES.glob("*/images/sphx_glr_plot_*_001.png")
+    }
+)
+# Regex-safe alternation; falls back to a never-match sentinel so the
+# negative-lookahead below still matches every plot_*.py.
+_skip_alt = "|".join(_DO_NOT_EXECUTE) or "__never_match_anything__"
 
 sphinx_gallery_conf = {
     "examples_dirs": ["../examples"],

@@ -6,6 +6,13 @@ The power-law slope δ modifies the Calzetti attenuation curve shape.
 Negative δ steepens UV attenuation; positive δ flattens it. This controls
 whether dust absorbs more or less light at short wavelengths relative to
 optical.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_dust_slope_sweep_001.png
+   :alt: plot_dust_slope_sweep
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

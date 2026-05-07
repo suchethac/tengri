@@ -5,6 +5,13 @@ Gas Metallicity (log Z/Zsun)
 Gas metallicity controls [NII]/Hα and [OIII]/Hβ — the primary optical
 metallicity diagnostics. These ratios move galaxies on the BPT diagram and
 are used to measure oxygen abundances in star-forming galaxies.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_logz_gas_sweep_001.png
+   :alt: plot_logz_gas_sweep
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

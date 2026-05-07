@@ -25,7 +25,13 @@ Plot the X-ray spectrum from AGN coronae showing power-law continuum,
 reflection hump, and iron K-alpha line. Demonstrates how the X-ray
 spectrum depends on AGN bolometric luminosity and accretion efficiency.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-116
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_xray_agn_001.png
+   :alt: plot_xray_agn
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-123
 
 .. code-block:: Python
 

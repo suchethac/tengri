@@ -5,6 +5,13 @@ Torus Models Comparison: Nenkova vs Silva04
 Compare torus models spanning simple parametric (two-temperature MBB),
 smooth-torus (Silva+04), and test the effects of covering factor and
 optical depth on the infrared SED.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_torus_comparison_001.png
+   :alt: plot_torus_comparison
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

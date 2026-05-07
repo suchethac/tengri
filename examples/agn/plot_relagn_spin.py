@@ -11,6 +11,13 @@ slope.  The UV slope α (where L_ν ∝ ν^α in 912–3000 Å) is a direct obse
 of the spin-dependent inner boundary condition.
 
 Requires the precomputed grid ``data/relagn_disc_grid.h5``.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_relagn_spin_001.png
+   :alt: plot_relagn_spin
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

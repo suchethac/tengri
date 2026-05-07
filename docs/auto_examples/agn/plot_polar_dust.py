@@ -5,6 +5,13 @@ Polar Dust in AGN: IR Bump from Polar Dust Torus
 Plot polar dust emission from the narrow-line region (Stalevski et al. 2016).
 Shows how warm dust in a geometry decoupled from the equatorial torus
 creates a secondary IR peak that can dominate the near-to-mid-IR continuum.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_polar_dust_001.png
+   :alt: plot_polar_dust
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

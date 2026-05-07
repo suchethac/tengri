@@ -27,18 +27,13 @@ the ratio of radio to optical AGN luminosity. Radio-quiet AGN have
 :math:`R \sim 3`–:math:`5`. Each decade in :math:`R` adds an order of
 magnitude to the jet radio luminosity at fixed bolometric AGN power.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-55
+.. sphx-glr-precomputed-img:
 
-
-
-.. image-sg:: /auto_examples/radio/images/sphx_glr_plot_radio_loudness_sweep_001.png
-   :alt: AGN Radio Loudness: $R = \log_{10}(L_{5\,\mathrm{GHz}} / L_B)$
-   :srcset: /auto_examples/radio/images/sphx_glr_plot_radio_loudness_sweep_001.png
+.. image:: images/sphx_glr_plot_radio_loudness_sweep_001.png
+   :alt: plot_radio_loudness_sweep
    :class: sphx-glr-single-img
 
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 18-62
 
 .. code-block:: Python
 

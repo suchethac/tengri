@@ -25,7 +25,13 @@ Compare all AGN model tiers in tengri: from simple power-law disc + single
 torus (3 parameters) through the full unified NLR/BLR model (12+ parameters).
 Each tier adds physical complexity. No SSP data required.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-19
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_agn_hierarchy_001.png
+   :alt: plot_agn_hierarchy
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-26
 
 .. code-block:: Python
 
@@ -40,11 +46,11 @@ Each tier adds physical complexity. No SSP data required.
     setup_style()
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-21
+.. GENERATED FROM PYTHON SOURCE LINES 27-28
 
 Wavelength grid: 100 Angstrom (UV) to 500 micron (MIR)
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-27
+.. GENERATED FROM PYTHON SOURCE LINES 28-34
 
 .. code-block:: Python
 
@@ -55,7 +61,7 @@ Wavelength grid: 100 Angstrom (UV) to 500 micron (MIR)
     log_lbol = 12.0
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-35
+.. GENERATED FROM PYTHON SOURCE LINES 35-42
 
 Evaluate each registered AGN model
 ------------------------------------
@@ -65,7 +71,7 @@ Models shown in order of increasing physical complexity.
 "relagn" is self-normalizing from BH physics (M, Mdot, spin): parameters
 chosen so that log_Lbol ≈ 12.1 Lsun matches the reference.
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-95
+.. GENERATED FROM PYTHON SOURCE LINES 42-102
 
 .. code-block:: Python
 

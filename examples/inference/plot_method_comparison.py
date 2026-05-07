@@ -4,6 +4,13 @@ MAP vs geoVI Posterior Comparison
 
 Compares point-estimate (MAP) and variational (vi/geoVI) inference
 on mock 5-band photometry. Overlays posteriors as a corner plot.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_method_comparison_001.png
+   :alt: plot_method_comparison
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path
@@ -114,10 +121,8 @@ if fig is not None:
         axes[0, 0].legend(fontsize=10)
     fig.suptitle("MAP (dashed red) vs geoVI posteriors", y=1.02)
 
-outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
-outdir.mkdir(parents=True, exist_ok=True)
 plt.savefig(
-    str(outdir / "method_comparison_corner.png"),
+    "plot_method_comparison.png",
     dpi=150,
     bbox_inches="tight",
 )
@@ -142,9 +147,4 @@ ax_sfh.set_ylabel("SFR [Msun/yr]")
 ax_sfh.set_title("SFH recovery: MAP vs geoVI")
 ax_sfh.legend(fontsize=10, frameon=False)
 fig_sfh.tight_layout()
-plt.savefig(
-    str(outdir / "method_comparison_sfh.png"),
-    dpi=150,
-    bbox_inches="tight",
-)
 plt.show()

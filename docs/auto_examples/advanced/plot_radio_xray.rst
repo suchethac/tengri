@@ -25,7 +25,13 @@ Build a full galaxy SED spanning X-ray to radio wavelengths. Shows stellar
 emission, dust attenuation, dust IR emission, radio synchrotron, and X-ray
 binary contributions. No SSP data required for the multi-wavelength components.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-20
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_radio_xray_001.png
+   :alt: plot_radio_xray
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-27
 
 .. code-block:: Python
 
@@ -41,11 +47,11 @@ binary contributions. No SSP data required for the multi-wavelength components.
     setup_style()
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-22
+.. GENERATED FROM PYTHON SOURCE LINES 28-29
 
 Wavelength grid: 1 Angstrom (hard X-ray) to 10^10 Angstrom (30 cm radio)
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-31
+.. GENERATED FROM PYTHON SOURCE LINES 29-38
 
 .. code-block:: Python
 
@@ -59,12 +65,12 @@ Wavelength grid: 1 Angstrom (hard X-ray) to 10^10 Angstrom (30 cm radio)
     L_AGN_BOL = 1e44  # Lsun (AGN bolometric)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-34
+.. GENERATED FROM PYTHON SOURCE LINES 39-41
 
 Compute each multi-wavelength component
 -----------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 34-51
+.. GENERATED FROM PYTHON SOURCE LINES 41-58
 
 .. code-block:: Python
 
@@ -86,12 +92,12 @@ Compute each multi-wavelength component
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 52-54
+.. GENERATED FROM PYTHON SOURCE LINES 59-61
 
 Plot all components
 --------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 54-104
+.. GENERATED FROM PYTHON SOURCE LINES 61-111
 
 .. code-block:: Python
 

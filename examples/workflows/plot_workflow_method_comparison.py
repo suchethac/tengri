@@ -7,6 +7,13 @@ geoVI/VI (variational approximation), and NUTS (gold-standard MCMC).
 Shows how each method differs in capturing posterior shape and uncertainty.
 MAP underestimates uncertainty; VI approximates the shape; NUTS is the reference.
 This workflow demonstrates method choice tradeoffs for practitioners.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_workflow_method_comparison_001.png
+   :alt: plot_workflow_method_comparison
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

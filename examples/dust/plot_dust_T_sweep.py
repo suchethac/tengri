@@ -6,6 +6,13 @@ The characteristic temperature T of the modified blackbody dust emission
 controls the peak wavelength of far-infrared emission. Wien's law:
 λ_peak ≈ 2900 μm·K / T. Hotter dust (higher T) peaks at shorter
 wavelengths (more mid-IR), cooler dust peaks further into the far-IR/submm.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_dust_T_sweep_001.png
+   :alt: plot_dust_T_sweep
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

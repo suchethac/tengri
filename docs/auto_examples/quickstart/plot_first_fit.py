@@ -5,6 +5,13 @@ First Photometric Fit
 The simplest possible tengri workflow: define a parametric SFH model,
 generate mock SDSS photometry, fit it with MAP optimization, and plot
 the resulting SED fit.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_first_fit_001.png
+   :alt: plot_first_fit
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

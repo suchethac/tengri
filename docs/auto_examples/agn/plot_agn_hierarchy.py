@@ -5,6 +5,13 @@ AGN SEDModel Hierarchy
 Compare all AGN model tiers in tengri: from simple power-law disc + single
 torus (3 parameters) through the full unified NLR/BLR model (12+ parameters).
 Each tier adds physical complexity. No SSP data required.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_agn_hierarchy_001.png
+   :alt: plot_agn_hierarchy
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

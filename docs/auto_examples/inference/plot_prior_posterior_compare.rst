@@ -27,7 +27,13 @@ using observed data to obtain posteriors. This script shows how priors
 parameters (stellar mass age, metallicity, dust optical depth) after
 fitting mock photometry.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-176
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_prior_posterior_compare_001.png
+   :alt: plot_prior_posterior_compare
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 18-183
 
 .. code-block:: Python
 

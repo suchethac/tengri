@@ -24,7 +24,13 @@ MAP vs geoVI Posterior Comparison
 Compares point-estimate (MAP) and variational (vi/geoVI) inference
 on mock 5-band photometry. Overlays posteriors as a corner plot.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-144
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_method_comparison_001.png
+   :alt: plot_method_comparison
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 15-151
 
 .. code-block:: Python
 

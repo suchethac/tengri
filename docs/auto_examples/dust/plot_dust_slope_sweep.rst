@@ -26,7 +26,13 @@ Negative δ steepens UV attenuation; positive δ flattens it. This controls
 whether dust absorbs more or less light at short wavelengths relative to
 optical.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-81
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_dust_slope_sweep_001.png
+   :alt: plot_dust_slope_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-88
 
 .. code-block:: Python
 

@@ -5,6 +5,13 @@ SDSS Filter Transmission Curves
 Plot the ugriz filter transmission curves from the SDSS photometric system.
 Filters are loaded from the SVO Filter Profile Service via tengri's filter
 registry.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_filter_curves_001.png
+   :alt: plot_filter_curves
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

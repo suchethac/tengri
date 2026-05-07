@@ -24,7 +24,13 @@ Convergence Diagnostics
 Runs a quick fit and displays convergence diagnostics: ESS per parameter,
 summary table, and trace plots for a subset of parameters.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-137
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_convergence_001.png
+   :alt: plot_convergence
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 15-144
 
 .. code-block:: Python
 

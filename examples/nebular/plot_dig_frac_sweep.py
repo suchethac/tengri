@@ -6,6 +6,13 @@ Diffuse ionized gas (DIG) has lower ionization parameter than HII regions.
 When present, DIG shifts galaxies toward the LINER region on the BPT diagram
 by suppressing [OIII] relative to [NII]. f_DIG = 0 is pure HII gas;
 f_DIG = 1 is pure DIG.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_dig_frac_sweep_001.png
+   :alt: plot_dig_frac_sweep
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

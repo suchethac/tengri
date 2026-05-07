@@ -25,7 +25,13 @@ How does birth cloud dust optical depth reshape the SED of a young
 star-forming galaxy? Higher τ_BC reddens the UV and suppresses nebular
 emission from very young stars embedded in dust cocoons.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-81
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_tau_bc_sweep_001.png
+   :alt: plot_tau_bc_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-88
 
 .. code-block:: Python
 

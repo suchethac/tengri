@@ -5,6 +5,13 @@ Load and Fit Real CSV Photometry
 How do I load photometric data from a CSV file and fit it? This recipe
 demonstrates loading a table of measured fluxes and uncertainties,
 building observations per galaxy, and running a MAP fit on each.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_recipe_load_real_csv_001.png
+   :alt: plot_recipe_load_real_csv
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

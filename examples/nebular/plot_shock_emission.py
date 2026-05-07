@@ -5,6 +5,13 @@ Nebular Shock Emission (MAPPINGS V)
 Plot shock emission line diagnostics from MAPPINGS V photoionization models.
 Shows how shock velocity, density, and magnetic field affect line ratios
 and can mimic AGN-like emission in diagnostic diagrams.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_shock_emission_001.png
+   :alt: plot_shock_emission
+   :class: sphx-glr-single-img
+
 """
 
 import matplotlib.pyplot as plt

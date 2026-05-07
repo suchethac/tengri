@@ -26,7 +26,13 @@ spectral properties as a function of age and metallicity. Demonstrates
 how stellar population age and chemical abundance affect the rest-frame
 UV, optical, and near-IR spectral shapes.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-188
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_ssp_grid_001.png
+   :alt: plot_ssp_grid
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-195
 
 .. code-block:: Python
 

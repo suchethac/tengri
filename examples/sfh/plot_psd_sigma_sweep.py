@@ -4,6 +4,13 @@ Stochastic SFH: Burstiness Amplitude σ
 
 σ controls how violently star formation fluctuates around the smooth trend.
 Small σ ≈ smooth; large σ = dramatic bursts.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_psd_sigma_sweep_001.png
+   :alt: plot_psd_sigma_sweep
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

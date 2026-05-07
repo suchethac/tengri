@@ -6,6 +6,13 @@ Plot QSOgen (Temple, Hewett & Banerji 2021) empirical quasar SEDs.
 Shows how an empirically-trained surrogate matches observed quasar spectra
 across the UV through near-IR, with parametric control over redshift and
 luminosity.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_qsogen_spectrum_001.png
+   :alt: plot_qsogen_spectrum
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

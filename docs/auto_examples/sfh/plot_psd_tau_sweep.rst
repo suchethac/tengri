@@ -24,7 +24,13 @@ Stochastic SFH: Burstiness Timescale τ
 τ (in Myr) controls how long bursts last. Short τ = fast flickering;
 long τ = sustained episodes.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-76
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_psd_tau_sweep_001.png
+   :alt: plot_psd_tau_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 15-83
 
 .. code-block:: Python
 

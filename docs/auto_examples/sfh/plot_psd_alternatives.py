@@ -5,6 +5,13 @@ Alternative PSD Models
 Compare the three PSD models available for stochastic SFHs: the default
 Damped Random Walk (DRW/Lorentzian), the Matern covariance family, and the
 extended regulator model. No SSP data required.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_psd_alternatives_001.png
+   :alt: plot_psd_alternatives
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

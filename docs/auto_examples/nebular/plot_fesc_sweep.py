@@ -6,6 +6,13 @@ The escape fraction sets how many ionizing photons reach the ISM vs escape
 into the IGM. Higher f_esc suppresses all nebular emission lines since fewer
 photons remain to ionize the interstellar gas. f_esc = 0 (all photons stay),
 f_esc = 1 (all photons escape).
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_fesc_sweep_001.png
+   :alt: plot_fesc_sweep
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

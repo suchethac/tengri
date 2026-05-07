@@ -5,6 +5,13 @@ Nebular Emission Backends
 Compare tengri's three nebular emission backends: BakedIn (SSP-embedded),
 CloudyGrid (tabulated photoionization), and Cue (neural emulator).
 Shows how each backend predicts emission lines in the optical window.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_nebular_backends_001.png
+   :alt: plot_nebular_backends
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path
@@ -114,6 +121,7 @@ for ax, wmin, wmax, title, lines in regions:
 
 fig.suptitle("Nebular Emission: Backend Comparison", fontsize=12)
 fig.tight_layout(rect=[0, 0, 1, 0.95])
+plt.savefig("plot_nebular_backends.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 # --- Summary ---

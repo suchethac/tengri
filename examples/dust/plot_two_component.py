@@ -6,6 +6,13 @@ Visualize the Charlot & Fall (2000) two-component dust model: birth
 cloud attenuation affects only young stars (age < ~10 Myr), while
 diffuse ISM attenuation affects all stars. The smooth sigmoid
 transition between components is shown as a function of stellar age.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_two_component_001.png
+   :alt: plot_two_component
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

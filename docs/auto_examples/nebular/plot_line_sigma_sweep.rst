@@ -26,7 +26,13 @@ kinematically resolved) to hundreds of km/s (unresolved at typical spectroscopic
 resolution). Line broadening is crucial for fitting restframe UV emission lines
 and measuring dynamics in high-redshift galaxies.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-85
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_line_sigma_sweep_001.png
+   :alt: plot_line_sigma_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-92
 
 .. code-block:: Python
 

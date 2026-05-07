@@ -5,6 +5,13 @@ Prior Sensitivity: Gaussian vs Uniform
 How does prior choice affect the posterior? This recipe compares fitting
 with a Uniform prior vs Gaussian prior on metallicity, showing how prior
 assumptions constrain the posterior.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_recipe_compare_priors_001.png
+   :alt: plot_recipe_compare_priors
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

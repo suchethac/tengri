@@ -7,6 +7,13 @@ the ratio of radio to optical AGN luminosity. Radio-quiet AGN have
 :math:`R \\lesssim 1`; radio-loud AGN (blazars, FR I/II) can reach
 :math:`R \\sim 3`–:math:`5`. Each decade in :math:`R` adds an order of
 magnitude to the jet radio luminosity at fixed bolometric AGN power.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_radio_loudness_sweep_001.png
+   :alt: plot_radio_loudness_sweep
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

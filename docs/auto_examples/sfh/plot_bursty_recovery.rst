@@ -25,7 +25,13 @@ Four burstiness regimes — Smooth, Moderate, Bursty, Extreme — each defined b
 the PSD amplitude σ and correlation time τ. Forward-model SFH draws show the
 range of histories each regime produces before inference.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-105
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_bursty_recovery_001.png
+   :alt: plot_bursty_recovery
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-112
 
 .. code-block:: Python
 

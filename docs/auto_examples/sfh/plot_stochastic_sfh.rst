@@ -26,7 +26,13 @@ GP correlated field model. The DRW (damped random walk) PSD governs
 the burstiness: larger sigma means more variance, shorter tau means
 more rapid fluctuations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-67
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_stochastic_sfh_001.png
+   :alt: plot_stochastic_sfh
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-74
 
 .. code-block:: Python
 

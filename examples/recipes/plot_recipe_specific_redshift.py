@@ -5,6 +5,13 @@ Fix Redshift to a Known Value
 How do I fit a spectrum when redshift is known from spectroscopy? This recipe
 shows how fixing redshift with Fixed() constrains other parameters more tightly
 compared to letting it vary.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_recipe_specific_redshift_001.png
+   :alt: plot_recipe_specific_redshift
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

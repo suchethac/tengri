@@ -34,7 +34,13 @@ Components
 - **Radio jets**: AGN power-law lobe emission scaled by radio loudness.
 - **Host galaxy radio**: Star-formation-driven synchrotron.
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-88
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_panchromatic_agn_001.png
+   :alt: plot_panchromatic_agn
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 25-95
 
 .. code-block:: Python
 

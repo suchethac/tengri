@@ -26,7 +26,13 @@ hydrocarbon (PAH) mid-infrared emission features at 3.3, 6.2, 7.7, 8.6,
 and 11.3 μm. Higher q_PAH → stronger PAH features. Range: 0.47–4.58 % for
 DL07, 0.47–7.32 % for DL14.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-89
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_qpah_sweep_001.png
+   :alt: plot_qpah_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-96
 
 .. code-block:: Python
 

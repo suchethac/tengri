@@ -26,7 +26,13 @@ The Cramér-Rao bound from the Fisher Information Matrix shows that SDSS
 metallicity. Adding NIR or MIR bands breaks the degeneracy by factors of
 2–5×, quantifying the information gain from multiwavelength coverage.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-155
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_fisher_degeneracy_001.png
+   :alt: plot_fisher_degeneracy
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-162
 
 .. code-block:: Python
 

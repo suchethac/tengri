@@ -7,6 +7,13 @@ using observed data to obtain posteriors. This script shows how priors
 (dashed lines) and posteriors (histograms) differ for key physical
 parameters (stellar mass age, metallicity, dust optical depth) after
 fitting mock photometry.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_prior_posterior_compare_001.png
+   :alt: plot_prior_posterior_compare
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

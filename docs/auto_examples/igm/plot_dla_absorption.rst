@@ -25,18 +25,13 @@ Plot DLA transmission curves at high redshift (z > 2), showing
 Lyman-alpha forest absorption and strong DLA features that sculpt
 the UV-to-optical SED. Demonstrates wavelength-dependent attenuation.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-134
+.. sphx-glr-precomputed-img:
 
-
-
-.. image-sg:: /auto_examples/igm/images/sphx_glr_plot_dla_absorption_001.png
-   :alt: Damped Lyman-Alpha Absorption: High-Redshift IGM, DLA Transmission: Redshift Evolution, DLA Transmission: Column Density (z=3.0), DLA: Single vs Stacked Systems (z=2.5), DLA Impact on Galaxy SED (z=2.0)
-   :srcset: /auto_examples/igm/images/sphx_glr_plot_dla_absorption_001.png
+.. image:: images/sphx_glr_plot_dla_absorption_001.png
+   :alt: plot_dla_absorption
    :class: sphx-glr-single-img
 
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 16-141
 
 .. code-block:: Python
 

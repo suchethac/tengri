@@ -5,6 +5,13 @@ Gradient Sensitivity Heatmap
 Computes the Jacobian d(flux)/d(theta) of the forward model and displays
 it as a heatmap showing which photometric bands are sensitive to which
 physical parameters.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_gradient_sensitivity_001.png
+   :alt: plot_gradient_sensitivity
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path
@@ -117,10 +124,8 @@ ax.set_title(r"Normalized Jacobian $\partial f_{\rm band} / \partial \theta$")
 fig.colorbar(im, ax=ax, shrink=0.8, label="Normalized sensitivity")
 fig.tight_layout()
 
-outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
-outdir.mkdir(parents=True, exist_ok=True)
 plt.savefig(
-    str(outdir / "gradient_sensitivity.png"),
+    "plot_gradient_sensitivity.png",
     dpi=150,
     bbox_inches="tight",
 )

@@ -25,7 +25,13 @@ Computes the Jacobian d(flux)/d(theta) of the forward model and displays
 it as a heatmap showing which photometric bands are sensitive to which
 physical parameters.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-126
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_gradient_sensitivity_001.png
+   :alt: plot_gradient_sensitivity
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-133
 
 .. code-block:: Python
 

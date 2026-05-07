@@ -5,6 +5,13 @@ BPT Diagnostics: Star Formation, Shocks, and AGN
 The BPT diagram ([OIII]/Hβ vs [NII]/Hα) separates three sources of
 ionizing photons. Shocks (MAPPINGS V, Allen+2008) move emission-line
 galaxies into the composite and Seyfert regions as shock velocity increases.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_bpt_diagnostics_001.png
+   :alt: plot_bpt_diagnostics
+   :class: sphx-glr-single-img
+
 """
 
 import matplotlib.pyplot as plt

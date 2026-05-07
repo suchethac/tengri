@@ -24,7 +24,13 @@ Corner Plot with Truth Overlay
 Fits mock photometry and displays a corner plot with injected truth
 values marked. Uses tengri's safe_corner utility.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-96
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_corner_001.png
+   :alt: plot_corner
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 15-103
 
 .. code-block:: Python
 

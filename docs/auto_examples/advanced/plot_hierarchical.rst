@@ -25,7 +25,13 @@ Sets up a small population of mock galaxies sharing the same burstiness
 PSD parameters (sigma, tau), runs PopulationFitter briefly, and
 displays the shared PSD posterior vs truth.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-144
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_hierarchical_001.png
+   :alt: plot_hierarchical
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-151
 
 .. code-block:: Python
 

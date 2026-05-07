@@ -6,6 +6,13 @@ Demonstrates fitting a z=4 Lyman-break galaxy with JWST/HST photometry.
 A young, dust-free star-forming galaxy's SED shows a sharp UV dropout.
 This workflow shows how to recover age, dust, and redshift from
 the characteristic Lyman-break signature in broadband colors.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_workflow_high_z_lbg_001.png
+   :alt: plot_workflow_high_z_lbg
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

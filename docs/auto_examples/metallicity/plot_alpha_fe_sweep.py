@@ -9,6 +9,13 @@ elements. In the SED, enhanced alpha suppresses iron absorption features
 and alters the optical mass-to-light ratio.
 
 Set via ``met_alpha_fe`` parameter in ``Parameters``.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_alpha_fe_sweep_001.png
+   :alt: plot_alpha_fe_sweep
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

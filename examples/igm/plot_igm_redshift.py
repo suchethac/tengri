@@ -9,6 +9,13 @@ shifts into the optical, enabling photometric redshift estimation via
 the "dropout" technique.
 
 ``igm_transmission(wave_obs, z)`` takes **observed-frame** wavelengths.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_igm_redshift_001.png
+   :alt: plot_igm_redshift
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

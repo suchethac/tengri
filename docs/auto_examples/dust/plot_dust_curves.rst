@@ -25,7 +25,13 @@ Plot all available attenuation laws in tengri. Each curve k(lambda)
 describes the wavelength dependence of dust attenuation, normalized
 at 5500 A. No SSP data required.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-59
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_dust_curves_001.png
+   :alt: plot_dust_curves
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-66
 
 .. code-block:: Python
 

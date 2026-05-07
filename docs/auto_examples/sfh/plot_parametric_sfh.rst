@@ -25,7 +25,13 @@ Compare all parametric star formation history models available in
 tengri. Each model is evaluated on a lookback-time grid and plotted
 with representative parameters. No SSP data required.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-64
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_parametric_sfh_001.png
+   :alt: plot_parametric_sfh
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-71
 
 .. code-block:: Python
 

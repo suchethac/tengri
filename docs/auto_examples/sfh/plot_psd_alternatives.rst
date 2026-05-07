@@ -25,7 +25,13 @@ Compare the three PSD models available for stochastic SFHs: the default
 Damped Random Walk (DRW/Lorentzian), the Matern covariance family, and the
 extended regulator model. No SSP data required.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-19
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_psd_alternatives_001.png
+   :alt: plot_psd_alternatives
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-26
 
 .. code-block:: Python
 
@@ -40,11 +46,11 @@ extended regulator model. No SSP data required.
     setup_style()
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-21
+.. GENERATED FROM PYTHON SOURCE LINES 27-28
 
 Frequency grid (angular frequency in rad/yr)
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-27
+.. GENERATED FROM PYTHON SOURCE LINES 28-34
 
 .. code-block:: Python
 
@@ -55,11 +61,11 @@ Frequency grid (angular frequency in rad/yr)
     tau_yr = 200e6  # 200 Myr
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-29
+.. GENERATED FROM PYTHON SOURCE LINES 35-36
 
 DRW (Lorentzian) — the default model
 
-.. GENERATED FROM PYTHON SOURCE LINES 29-91
+.. GENERATED FROM PYTHON SOURCE LINES 36-98
 
 .. code-block:: Python
 

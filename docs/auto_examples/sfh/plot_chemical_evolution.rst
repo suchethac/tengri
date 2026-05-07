@@ -25,7 +25,13 @@ Plot metallicity evolution Z(t) from closed-box and leaky-box chemical
 evolution models. Shows how star formation history and gas outflows
 shape the history of metal enrichment in galaxies.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-128
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_chemical_evolution_001.png
+   :alt: plot_chemical_evolution
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-135
 
 .. code-block:: Python
 

@@ -5,6 +5,13 @@ SFH Recovery Across Four Burstiness Regimes
 Four burstiness regimes — Smooth, Moderate, Bursty, Extreme — each defined by
 the PSD amplitude σ and correlation time τ. Forward-model SFH draws show the
 range of histories each regime produces before inference.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_bursty_recovery_001.png
+   :alt: plot_bursty_recovery
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

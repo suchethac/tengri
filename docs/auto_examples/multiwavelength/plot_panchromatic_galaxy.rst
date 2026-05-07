@@ -29,7 +29,13 @@ radio components.
 
 Requires SSP grid (``data/ssp_prsc_miles_*.h5``).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-128
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_panchromatic_galaxy_001.png
+   :alt: plot_panchromatic_galaxy
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 20-135
 
 .. code-block:: Python
 

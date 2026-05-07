@@ -25,7 +25,13 @@ Plot narrow-line (NLR, FWHM ~500 km/s) and broad-line region (BLR,
 FWHM ~5000 km/s) emission spectra. Shows how BLR vanishes at high
 inclination angles (Type 2 AGN) while NLR remains visible.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-137
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_nlr_blr_lines_001.png
+   :alt: plot_nlr_blr_lines
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-144
 
 .. code-block:: Python
 

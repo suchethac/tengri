@@ -26,7 +26,13 @@ galaxy population. The posterior width on σ scales as 1/√N_galaxies,
 while individual fits are far too uncertain. This illustrates why
 population-level inference is essential for measuring burstiness.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-141
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_hierarchical_convergence_001.png
+   :alt: plot_hierarchical_convergence
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-148
 
 .. code-block:: Python
 

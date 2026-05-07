@@ -4,6 +4,13 @@ Convergence Diagnostics
 
 Runs a quick fit and displays convergence diagnostics: ESS per parameter,
 summary table, and trace plots for a subset of parameters.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_convergence_001.png
+   :alt: plot_convergence
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path
@@ -132,5 +139,5 @@ axes[2].legend(fontsize=10)
 fig.tight_layout()
 outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
 outdir.mkdir(parents=True, exist_ok=True)
-plt.savefig(str(outdir / "plot_convergence.png"), dpi=150, bbox_inches="tight")
+plt.savefig("plot_convergence.png", dpi=150, bbox_inches="tight")
 plt.show()

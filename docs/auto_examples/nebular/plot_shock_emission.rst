@@ -25,7 +25,13 @@ Plot shock emission line diagnostics from MAPPINGS V photoionization models.
 Shows how shock velocity, density, and magnetic field affect line ratios
 and can mimic AGN-like emission in diagnostic diagrams.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-148
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_shock_emission_001.png
+   :alt: plot_shock_emission
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-155
 
 .. code-block:: Python
 

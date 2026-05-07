@@ -4,6 +4,13 @@ Corner Plot with Truth Overlay
 
 Fits mock photometry and displays a corner plot with injected truth
 values marked. Uses tengri's safe_corner utility.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_corner_001.png
+   :alt: plot_corner
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path
@@ -91,7 +98,5 @@ fig = safe_corner(posterior, truths=true_params)
 if fig is not None:
     fig.suptitle("Posterior corner plot (truth = blue lines)", y=1.02)
 
-outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
-outdir.mkdir(parents=True, exist_ok=True)
-plt.savefig(str(outdir / "plot_corner.png"), dpi=150, bbox_inches="tight")
+plt.savefig("plot_corner.png", dpi=150, bbox_inches="tight")
 plt.show()

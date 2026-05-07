@@ -25,7 +25,13 @@ The simplest possible tengri workflow: define a parametric SFH model,
 generate mock SDSS photometry, fit it with MAP optimization, and plot
 the resulting SED fit.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-132
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_first_fit_001.png
+   :alt: plot_first_fit
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-139
 
 .. code-block:: Python
 

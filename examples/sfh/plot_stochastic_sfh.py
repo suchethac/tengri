@@ -6,6 +6,13 @@ Generate stochastic star formation histories using the Fourier-space
 GP correlated field model. The DRW (damped random walk) PSD governs
 the burstiness: larger sigma means more variance, shorter tau means
 more rapid fluctuations.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_stochastic_sfh_001.png
+   :alt: plot_stochastic_sfh
+   :class: sphx-glr-single-img
+
 """
 
 import jax

@@ -26,7 +26,13 @@ stellar emission and the dust-attenuated total. Uses the lazy
 ``model.predict()`` API and direct SED computation to show the
 effect of dust attenuation on the spectrum.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-127
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_sed_components_001.png
+   :alt: plot_sed_components
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-134
 
 .. code-block:: Python
 

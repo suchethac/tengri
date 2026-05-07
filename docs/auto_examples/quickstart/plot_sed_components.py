@@ -6,6 +6,13 @@ Predict a galaxy SED and visualize its components: the intrinsic
 stellar emission and the dust-attenuated total. Uses the lazy
 ``model.predict()`` API and direct SED computation to show the
 effect of dust attenuation on the spectrum.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_sed_components_001.png
+   :alt: plot_sed_components
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

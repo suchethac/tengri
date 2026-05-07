@@ -4,6 +4,13 @@ Double Power-Law SFH: Rising Slope α
 
 The rising slope α controls how quickly star formation builds up before the peak.
 Steeper α = more abrupt onset, younger mean age.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_dpl_alpha_sweep_001.png
+   :alt: plot_dpl_alpha_sweep
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

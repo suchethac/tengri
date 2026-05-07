@@ -25,35 +25,13 @@ Compare torus models spanning simple parametric (two-temperature MBB),
 smooth-torus (Silva+04), and test the effects of covering factor and
 optical depth on the infrared SED.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-127
+.. sphx-glr-precomputed-img:
 
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_torus_comparison_001.png
-   :alt: AGN Torus Models: Parametric vs Template-Based, Nenkova Simple vs Two-Temperature, Simple Torus: Temperature Sensitivity, Two-Temperature Torus: Covering Fraction, Silva+04 Smooth Torus: Column Density
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_torus_comparison_001.png
+.. image:: images/sphx_glr_plot_torus_comparison_001.png
+   :alt: plot_torus_comparison
    :class: sphx-glr-single-img
 
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/examples/agn/plot_torus_comparison.py:36: DeprecationWarning: simple_torus is deprecated (single-temperature MBB, not radiative transfer). Use the 'skirtor' AGN model instead (Monte Carlo radiative transfer): resolve_agn_model('skirtor') or skirtor_analytic() from tengri.components.agn.skirtor.
-      sed = simple_torus(wavelength, agn_log_lbol=lbol, agn_torus_temp=1500.0)
-    /Users/suchethacooray/Projects/tengri/examples/agn/plot_torus_comparison.py:38: DeprecationWarning: two_temperature_torus is deprecated (two-temperature MBB, not radiative transfer). Use the 'skirtor' AGN model instead (Monte Carlo radiative transfer): resolve_agn_model('skirtor') or skirtor_analytic() from tengri.components.agn.skirtor.
-      sed = two_temperature_torus(wavelength, agn_log_lbol=lbol, agn_torus_frac=0.5)
-    /Users/suchethacooray/Projects/tengri/examples/agn/plot_torus_comparison.py:53: DeprecationWarning: simple_torus is deprecated (single-temperature MBB, not radiative transfer). Use the 'skirtor' AGN model instead (Monte Carlo radiative transfer): resolve_agn_model('skirtor') or skirtor_analytic() from tengri.components.agn.skirtor.
-      sed = simple_torus(wavelength, agn_log_lbol=11.0, agn_torus_temp=temp)
-    /Users/suchethacooray/Projects/tengri/examples/agn/plot_torus_comparison.py:67: DeprecationWarning: two_temperature_torus is deprecated (two-temperature MBB, not radiative transfer). Use the 'skirtor' AGN model instead (Monte Carlo radiative transfer): resolve_agn_model('skirtor') or skirtor_analytic() from tengri.components.agn.skirtor.
-      sed = two_temperature_torus(wavelength, agn_log_lbol=11.0, agn_torus_frac=frac)
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 16-134
 
 .. code-block:: Python
 

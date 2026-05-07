@@ -25,7 +25,13 @@ Generate a mock galaxy with SDSS ugriz photometry and fit it using
 tengri's variational inference. Shows observed vs model photometry
 with error bars and residuals.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-146
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_photometric_fit_001.png
+   :alt: plot_photometric_fit
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-153
 
 .. code-block:: Python
 

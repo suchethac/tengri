@@ -5,6 +5,13 @@ Hierarchical PSD Inference
 Sets up a small population of mock galaxies sharing the same burstiness
 PSD parameters (sigma, tau), runs PopulationFitter briefly, and
 displays the shared PSD posterior vs truth.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_hierarchical_001.png
+   :alt: plot_hierarchical
+   :class: sphx-glr-single-img
+
 """
 
 import time

@@ -27,7 +27,13 @@ stronger absorption features and redder continua. This plot sweeps
 ``met_logzsol`` from :math:`-2` (0.01 :math:`Z_\odot`) to :math:`0.2`
 (1.6 :math:`Z_\odot`) at fixed SFH and dust.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-82
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_logzsol_sweep_001.png
+   :alt: plot_logzsol_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 18-89
 
 .. code-block:: Python
 

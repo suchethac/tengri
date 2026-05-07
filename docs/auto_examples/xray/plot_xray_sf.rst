@@ -25,18 +25,13 @@ Plot X-ray luminosity from high and low-mass X-ray binaries (HMXB + LMXB)
 as a function of star formation rate and stellar mass. Shows the different
 scaling relations for HMXB (SFR-dependent) vs LMXB (mass-dependent).
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-105
+.. sphx-glr-precomputed-img:
 
-
-
-.. image-sg:: /auto_examples/xray/images/sphx_glr_plot_xray_sf_001.png
-   :alt: X-ray Binaries: SFR and Stellar Mass Dependencies, X-ray Binary SFR Dependence (M_*=1e+11 M_sun), X-ray Binary Mass Dependence (SFR=10.0 M_sun/yr), X-ray Binary Spectral Shape, X-ray Binary SFR Range (M_*=1e+11)
-   :srcset: /auto_examples/xray/images/sphx_glr_plot_xray_sf_001.png
+.. image:: images/sphx_glr_plot_xray_sf_001.png
+   :alt: plot_xray_sf
    :class: sphx-glr-single-img
 
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 16-112
 
 .. code-block:: Python
 

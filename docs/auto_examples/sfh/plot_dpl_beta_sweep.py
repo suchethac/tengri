@@ -4,6 +4,13 @@ Double Power-Law SFH: Falling Slope β
 
 The falling slope β controls post-peak quenching. Large β gives rapid quenching;
 small β gives a gentle tail.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_dpl_beta_sweep_001.png
+   :alt: plot_dpl_beta_sweep
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

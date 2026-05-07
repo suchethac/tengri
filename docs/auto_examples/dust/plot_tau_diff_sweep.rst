@@ -25,7 +25,13 @@ The diffuse ISM attenuation affects all stellar light (not just young
 stars). Higher τ_diff reddens the optical continuum and weakens the
 4000 Å break, a signature of aging stellar populations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-80
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_tau_diff_sweep_001.png
+   :alt: plot_tau_diff_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-87
 
 .. code-block:: Python
 

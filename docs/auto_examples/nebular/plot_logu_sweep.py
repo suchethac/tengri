@@ -5,6 +5,13 @@ Ionization Parameter (logU)
 How does the ionization parameter sweep the emission line strengths and SED shape?
 Higher logU drives stronger [OIII] emission and shifts galaxies toward the Seyfert
 region on the BPT diagram.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_logu_sweep_001.png
+   :alt: plot_logu_sweep
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

@@ -25,31 +25,13 @@ Plot polar dust emission from the narrow-line region (Stalevski et al. 2016).
 Shows how warm dust in a geometry decoupled from the equatorial torus
 creates a secondary IR peak that can dominate the near-to-mid-IR continuum.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-120
+.. sphx-glr-precomputed-img:
 
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_polar_dust_001.png
-   :alt: Polar Dust Torus: Geometry Decoupled from Equatorial Dust (Stalevski+2016), Baseline: Disc + Equatorial Torus, Effect of Polar Dust on IR SED, Polar Dust: Inclination Dependence
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_polar_dust_001.png
+.. image:: images/sphx_glr_plot_polar_dust_001.png
+   :alt: plot_polar_dust
    :class: sphx-glr-single-img
 
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/examples/agn/plot_polar_dust.py:32: DeprecationWarning: simple_torus is deprecated (single-temperature MBB, not radiative transfer). Use the 'skirtor' AGN model instead (Monte Carlo radiative transfer): resolve_agn_model('skirtor') or skirtor_analytic() from tengri.components.agn.skirtor.
-      l_equat_torus = simple_torus(wavelength, agn_log_lbol=11.0, agn_torus_temp=1200.0)
-    /Users/suchethacooray/Projects/tengri/examples/agn/plot_polar_dust.py:98: DeprecationWarning: simple_torus is deprecated (single-temperature MBB, not radiative transfer). Use the 'skirtor' AGN model instead (Monte Carlo radiative transfer): resolve_agn_model('skirtor') or skirtor_analytic() from tengri.components.agn.skirtor.
-      l_equat = simple_torus(wavelength, agn_log_lbol=log_lbol, agn_torus_temp=1200.0)
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 16-127
 
 .. code-block:: Python
 

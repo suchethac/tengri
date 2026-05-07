@@ -25,7 +25,13 @@ How does the ionization parameter sweep the emission line strengths and SED shap
 Higher logU drives stronger [OIII] emission and shifts galaxies toward the Seyfert
 region on the BPT diagram.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-83
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_logu_sweep_001.png
+   :alt: plot_logu_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-90
 
 .. code-block:: Python
 

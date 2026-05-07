@@ -25,7 +25,13 @@ Gas metallicity controls [NII]/Hα and [OIII]/Hβ — the primary optical
 metallicity diagnostics. These ratios move galaxies on the BPT diagram and
 are used to measure oxygen abundances in star-forming galaxies.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-83
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_logz_gas_sweep_001.png
+   :alt: plot_logz_gas_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-90
 
 .. code-block:: Python
 

@@ -15,6 +15,13 @@ This example sweeps :math:`L_{\\rm IR}` from :math:`10^{9}` to
 :math:`10^{13}\\,L_{\\odot}` for four radio calibrations, recovering the
 expected tight linear correlation and showing how the :math:`q_{\\rm IR}`
 parameter shifts the normalization.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_fir_radio_correlation_001.png
+   :alt: plot_fir_radio_correlation
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

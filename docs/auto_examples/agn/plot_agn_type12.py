@@ -5,6 +5,13 @@ Type 1 vs Type 2 AGN: Geometric Unification
 The unified model of AGN activity: the same physical system appears as
 Type 1 (broad-line, blue disc continuum visible) or Type 2 (narrow-line only,
 torus blocks the accretion disc) depending purely on viewing angle.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_agn_type12_001.png
+   :alt: plot_agn_type12
+   :class: sphx-glr-single-img
+
 """
 
 import jax

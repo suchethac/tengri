@@ -24,7 +24,13 @@ Log-Normal SFH: Peak Lookback Time
 When did this galaxy form most of its stars? The peak lookback time shifts
 the SFH and changes UV slope, 4000 Å break, and NIR mass.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-69
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_lnorm_peak_sweep_001.png
+   :alt: plot_lnorm_peak_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 15-76
 
 .. code-block:: Python
 

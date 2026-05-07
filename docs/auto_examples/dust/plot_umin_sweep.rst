@@ -26,7 +26,13 @@ Higher U_min implies a hotter, more intense radiation field → hotter overall
 dust → shifted far-infrared peak to shorter wavelengths. Range: 0.1–25 for
 DL07, 0.1–50 for DL14.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-88
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_umin_sweep_001.png
+   :alt: plot_umin_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-95
 
 .. code-block:: Python
 

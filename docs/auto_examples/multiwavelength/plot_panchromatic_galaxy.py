@@ -9,6 +9,13 @@ into stellar continuum, dust-attenuated emission, dust IR, and
 radio components.
 
 Requires SSP grid (``data/ssp_prsc_miles_*.h5``).
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_panchromatic_galaxy_001.png
+   :alt: plot_panchromatic_galaxy
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

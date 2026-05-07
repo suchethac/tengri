@@ -24,7 +24,13 @@ AGN SED Templates
 Plot AGN spectral energy distributions showing the accretion disc and
 dust torus components at different bolometric luminosities.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-69
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_agn_templates_001.png
+   :alt: plot_agn_templates
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 15-76
 
 .. code-block:: Python
 

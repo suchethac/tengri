@@ -26,7 +26,13 @@ age and metallicity, providing complementary constraints when used together.
 D4000 rises with age; Hδ peaks at intermediate ages (A-star dominated);
 Mg b traces metallicity on the RGB/AGB branch.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-108
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_spectral_features_001.png
+   :alt: plot_spectral_features
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-115
 
 .. code-block:: Python
 

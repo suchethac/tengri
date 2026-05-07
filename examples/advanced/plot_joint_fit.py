@@ -5,6 +5,13 @@ Joint Photometry + Spectroscopy Fit
 Demonstrates tengri's Observation API for joint fitting. Creates a mock galaxy
 with both SDSS photometry and a low-resolution spectrum, fits with MAP, and
 shows the combined constraint power. Requires SSP data.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_joint_fit_001.png
+   :alt: plot_joint_fit
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

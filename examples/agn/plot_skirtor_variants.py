@@ -5,6 +5,13 @@ SKIRTOR Clumpy Torus: Inclination and Optical Depth
 Plot the SKIRTOR (Stalevski et al. 2016) clumpy torus model varying
 viewing angle (inclination) and optical depth at 9.7 μm (tau_97).
 Shows how geometric effects and dust clumping transform the torus SED.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_skirtor_variants_001.png
+   :alt: plot_skirtor_variants
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

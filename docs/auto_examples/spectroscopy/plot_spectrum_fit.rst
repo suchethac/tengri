@@ -24,7 +24,13 @@ Spectroscopic SED Fit
 Generate a mock galaxy spectrum and fit it with tengri's MAP optimizer.
 Shows the observed and model spectra with a residual panel below.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-121
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_spectrum_fit_001.png
+   :alt: plot_spectrum_fit
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 15-128
 
 .. code-block:: Python
 

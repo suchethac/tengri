@@ -25,7 +25,13 @@ Demonstrates tengri's Observation API for joint fitting. Creates a mock galaxy
 with both SDSS photometry and a low-resolution spectrum, fits with MAP, and
 shows the combined constraint power. Requires SSP data.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-35
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_joint_fit_001.png
+   :alt: plot_joint_fit
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-42
 
 .. code-block:: Python
 
@@ -56,12 +62,12 @@ shows the combined constraint power. Requires SSP data.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 36-38
+.. GENERATED FROM PYTHON SOURCE LINES 43-45
 
 Locate SSP data
 ----------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 38-60
+.. GENERATED FROM PYTHON SOURCE LINES 45-67
 
 .. code-block:: Python
 
@@ -88,12 +94,12 @@ Locate SSP data
     ssp = load_ssp_data(SSP_PATH)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 61-63
+.. GENERATED FROM PYTHON SOURCE LINES 68-70
 
 Build Observation with joint photometry + spectroscopy
 -------------------------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 63-88
+.. GENERATED FROM PYTHON SOURCE LINES 70-95
 
 .. code-block:: Python
 
@@ -123,12 +129,12 @@ Build Observation with joint photometry + spectroscopy
     obs = Observation(photometry=phot, spectroscopy=spec_config)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 89-91
+.. GENERATED FROM PYTHON SOURCE LINES 96-98
 
 Create model and generate mock data
 -------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 91-133
+.. GENERATED FROM PYTHON SOURCE LINES 98-140
 
 .. code-block:: Python
 
@@ -175,12 +181,12 @@ Create model and generate mock data
     }
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 134-136
+.. GENERATED FROM PYTHON SOURCE LINES 141-143
 
 Fit with MAP
 -------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 136-140
+.. GENERATED FROM PYTHON SOURCE LINES 143-147
 
 .. code-block:: Python
 
@@ -189,12 +195,12 @@ Fit with MAP
     posterior = fitter.run("map", optimizer="adam")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 141-143
+.. GENERATED FROM PYTHON SOURCE LINES 148-150
 
 Plot: 2-panel figure (photometry + spectrum)
 ----------------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 143-179
+.. GENERATED FROM PYTHON SOURCE LINES 150-186
 
 .. code-block:: Python
 

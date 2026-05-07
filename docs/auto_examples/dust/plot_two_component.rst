@@ -26,7 +26,13 @@ cloud attenuation affects only young stars (age < ~10 Myr), while
 diffuse ISM attenuation affects all stars. The smooth sigmoid
 transition between components is shown as a function of stellar age.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-88
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_two_component_001.png
+   :alt: plot_two_component
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-95
 
 .. code-block:: Python
 

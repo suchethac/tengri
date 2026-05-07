@@ -24,7 +24,13 @@ Delayed-τ SFH: Star Formation Timescale
 How does the e-folding timescale τ reshape the star formation history and the
 resulting galaxy SED? Shorter τ = faster quenching after the peak.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-69
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_dexp_tau_sweep_001.png
+   :alt: plot_dexp_tau_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 15-76
 
 .. code-block:: Python
 

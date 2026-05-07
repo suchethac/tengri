@@ -7,6 +7,13 @@ The FIR-radio correlation links a galaxy's infrared luminosity to its
 :math:`q_{\\rm IR} = \\log_{10}(L_{\\rm IR} / 3.75\\times10^{12} \\, L_{\\rm 1.4GHz})`.
 Higher :math:`q_{\\rm IR}` means relatively less radio per unit star formation.
 The canonical value for star-forming galaxies is 2.64 (Bell 2003).
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_q_ir_sweep_001.png
+   :alt: plot_q_ir_sweep
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

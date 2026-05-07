@@ -8,6 +8,13 @@ quenching. When fit with a smooth tau model (incorrect), the fit
 poorly recovers the truth. This shows how model misspecification
 can bias SFH inference and why flexible models matter for
 interpreting star formation histories.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_workflow_post_starburst_001.png
+   :alt: plot_workflow_post_starburst
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

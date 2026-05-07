@@ -5,6 +5,13 @@ X-ray Binary Population from Star Formation
 Plot X-ray luminosity from high and low-mass X-ray binaries (HMXB + LMXB)
 as a function of star formation rate and stellar mass. Shows the different
 scaling relations for HMXB (SFR-dependent) vs LMXB (mass-dependent).
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_xray_sf_001.png
+   :alt: plot_xray_sf
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

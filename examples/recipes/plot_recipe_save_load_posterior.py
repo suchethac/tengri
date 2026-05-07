@@ -5,6 +5,13 @@ Save and Load a Posterior
 How do I save a posterior to disk and load it later? This recipe demonstrates
 running a NUTS fit, saving the Posterior to an HDF5 file, reloading it,
 and analyzing the saved results.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_recipe_save_load_posterior_001.png
+   :alt: plot_recipe_save_load_posterior
+   :class: sphx-glr-single-img
+
 """
 
 import tempfile

@@ -25,7 +25,13 @@ The BPT diagram ([OIII]/Hβ vs [NII]/Hα) separates three sources of
 ionizing photons. Shocks (MAPPINGS V, Allen+2008) move emission-line
 galaxies into the composite and Seyfert regions as shock velocity increases.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-103
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_bpt_diagnostics_001.png
+   :alt: plot_bpt_diagnostics
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-110
 
 .. code-block:: Python
 
