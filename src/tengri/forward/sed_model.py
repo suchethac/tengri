@@ -396,8 +396,20 @@ class SEDModel:
         )
 
         # ── Kernels (consume self._state) ─────────────────────────
-        self._compositional_kernels = self._build_compositional_kernels()
-        self._hybrid_kernels = self._build_hybrid_kernels()
+        # Route through structural cache keyed on compile_signature()
+        # so two instances with identical structure share compiled kernels.
+        from tengri.inference._model_cache import get_structural_kernel_cache
+
+        sig = self.compile_signature()
+        shared_cache = get_structural_kernel_cache(sig)
+
+        if "compositional" not in shared_cache:
+            shared_cache["compositional"] = self._build_compositional_kernels()
+        self._compositional_kernels = shared_cache["compositional"]
+
+        if "hybrid" not in shared_cache:
+            shared_cache["hybrid"] = self._build_hybrid_kernels()
+        self._hybrid_kernels = shared_cache["hybrid"]
 
         if precompute is not False:
             self._maybe_auto_precompute_ztable()
@@ -710,14 +722,26 @@ class SEDModel:
     def _compositional(self):
         """Lazily build compositional kernels on first access."""
         if self._compositional_kernels is None:
-            self._compositional_kernels = self._build_compositional_kernels()
+            from tengri.inference._model_cache import get_structural_kernel_cache
+
+            sig = self.compile_signature()
+            shared_cache = get_structural_kernel_cache(sig)
+            if "compositional" not in shared_cache:
+                shared_cache["compositional"] = self._build_compositional_kernels()
+            self._compositional_kernels = shared_cache["compositional"]
         return self._compositional_kernels
 
     @property
     def _hybrid(self):
         """Lazily build hybrid kernels on first access."""
         if self._hybrid_kernels is None:
-            self._hybrid_kernels = self._build_hybrid_kernels()
+            from tengri.inference._model_cache import get_structural_kernel_cache
+
+            sig = self.compile_signature()
+            shared_cache = get_structural_kernel_cache(sig)
+            if "hybrid" not in shared_cache:
+                shared_cache["hybrid"] = self._build_hybrid_kernels()
+            self._hybrid_kernels = shared_cache["hybrid"]
         return self._hybrid_kernels
 
     def _invalidate_kernels(self):
@@ -2576,7 +2600,7 @@ class SEDModel:
         sed_erg = self.predict_rest_sed(params).sed
         return sed_erg / LSUN_CGS
 
-    def predict_line_fluxes(self, params, target_wavelengths=None):
+    def predict_line_fluxes(self, params, target_wavelengths=None, tolerance_aa=5.0):
         """Predict observed emission line fluxes.
 
         Calls the nebular backend to compute line luminosities,
@@ -2591,6 +2615,11 @@ class SEDModel:
             Rest-frame vacuum wavelengths (Angstrom) of lines to predict.
             Each wavelength is matched to the nearest backend line.
             If None, returns all lines from the nebular backend.
+        tolerance_aa : float or None, default 5.0
+            Maximum allowed wavelength delta [Angstrom] between a requested
+            target and the matched catalogue line. Raises ``ValueError`` on
+            any miss, listing the offending targets. Pass ``None`` to disable
+            (recovers legacy nearest-line-no-matter-what behaviour).
 
         Returns
         -------
@@ -2641,10 +2670,34 @@ class SEDModel:
 
         if target_wavelengths is not None:
             target_wavelengths = jnp.asarray(target_wavelengths)
-            indices = jnp.argmin(
-                jnp.abs(all_waves[None, :] - target_wavelengths[:, None]),
-                axis=1,
-            )
+            deltas = jnp.abs(all_waves[None, :] - target_wavelengths[:, None])
+            indices = jnp.argmin(deltas, axis=1)
+            min_deltas = deltas[jnp.arange(target_wavelengths.shape[0]), indices]
+            # Tolerance check: if a target has no nearby line in the catalogue,
+            # argmin silently returns whatever is closest. Catch that here so
+            # callers don't accidentally read wrong-line fluxes (e.g. asking
+            # for vacuum 5008.24 when the catalogue is in air at 5006.84 is
+            # within 1.4 Aa and OK; asking for a missing 6300 [OI] line could
+            # match Halpha 264 Aa away). ``tolerance_aa=None`` disables.
+            if tolerance_aa is not None:
+                import numpy as _np
+
+                bad = _np.asarray(min_deltas) > float(tolerance_aa)
+                if bad.any():
+                    tw = _np.asarray(target_wavelengths)
+                    mw = _np.asarray(all_waves[indices])
+                    md = _np.asarray(min_deltas)
+                    misses = "\n".join(
+                        f"  target={tw[i]:.3f} Aa  closest={mw[i]:.3f} Aa  delta={md[i]:.3f} Aa"
+                        for i in _np.where(bad)[0]
+                    )
+                    raise ValueError(
+                        f"predict_line_fluxes: {int(bad.sum())} target line(s) "
+                        f"have no match within tolerance_aa={tolerance_aa} Aa.\n"
+                        f"{misses}\n"
+                        f"Pass tolerance_aa=None to disable, or pick a backend "
+                        f"that publishes the missing line(s)."
+                    )
             selected_lums = all_lums[indices]
         else:
             selected_lums = all_lums

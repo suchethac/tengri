@@ -109,21 +109,27 @@ def persistent(enabled: bool = True):
 
 
 def lean(enabled: bool = True):
-    """Context manager: clear all shared caches before each ``Fitter.run()``.
+    """Context manager: clear inference-body caches before each ``Fitter.run()``.
 
     Usage::
 
         with tengri.lean():
-            fitter.run("map", ...)  # caches dropped before this
-            fitter.run("mcmc_hmc", ...)  # caches dropped again before this
+            fitter.run("map", ...)  # caches cleared (surgical)
+            fitter.run("mcmc_hmc", ...)  # caches cleared (surgical)
             # posterior-predictive plotting
 
-    Each ``run()`` call inside the block starts with a fresh JAX state.
-    Trades cross-phase compile reuse (~30-60 s per phase) for guaranteed
-    bounded peak RSS — the right trade-off for laptop notebooks doing
-    a single galaxy fit. Don't use inside ``PopulationFitter`` /
-    ``CatalogFitter`` — that's where the cross-galaxy cache earns its
-    keep.
+    Each ``run()`` call inside the block clears only the heavy inference
+    scan body (``_SHARED_ENGINE_CACHE``), preserving shareable forward
+    compiles (loss, gradient, logdensity, structural kernels). This keeps
+    peak RSS bounded while avoiding recompile of the smaller forward graphs.
+
+    Lean is now *surgical* — it drops the 5–6 GB inference loop body but
+    reuses the 0.5–1.5 GB forward compiles across phases, a significant
+    improvement over clearing everything (see Phase B in the compilation
+    cache architecture).
+
+    Don't use inside ``PopulationFitter`` / ``CatalogFitter`` — use
+    ``persistent()`` instead to reuse across all fits.
 
     Equivalent ``TENGRI_LEAN=1`` env var sets it process-wide.
     """
@@ -218,9 +224,30 @@ def _lru_set(cache: OrderedDict, key, value, maxsize: int) -> None:
         cache.popitem(last=False)
 
 
-def clear_shared_caches(*, drop_xla: bool = True) -> None:
-    """Drop every cached compiled artefact tengri holds in this process.
+def clear_shared_caches(*, scope: str = "all", drop_xla: bool = True) -> None:
+    """Drop cached compiled artefacts from tengri in this process.
 
+    Parameters
+    ----------
+    scope : {"all", "inference_body"}, default "all"
+        Scope of caches to clear:
+        - ``"all"``: Clear *everything* — engines, loss fns, grad fns,
+          logdensity fns, prediction kernels, per-model caches, and JAX's
+          XLA cache (if ``drop_xla=True``). Used by ``tengri.gc()``.
+        - ``"inference_body"``: Drop only the heavy inference-loop body
+          (``_SHARED_ENGINE_CACHE``) and per-model caches; preserve
+          ``_SHARED_LOSS_FN_CACHE``, ``_SHARED_GRAD_FN_CACHE``,
+          ``_SHARED_LOGDENSITY_FN_CACHE``, and structural kernel caches.
+          Suitable for ``lean()`` context manager — keeps shareable forward
+          compiles across phases.
+
+    drop_xla : bool, default True
+        Also call ``jax.clear_caches()`` to release JAX's own XLA-executable
+        and tracing caches. Set False if you have other live JAX programs
+        in the same process that you want to keep compiled.
+
+    Notes
+    -----
     Recommended pattern for notebooks that run multiple inference phases
     in the same kernel (model build → MAP → HMC → posterior-predictive)::
 
@@ -228,54 +255,53 @@ def clear_shared_caches(*, drop_xla: bool = True) -> None:
 
         # ... model build, ztable precompute, run MAP ...
         result_map = fitter.run("map", ...)
-        tengri.clear_shared_caches()
 
-        # ... HMC ...
+        # ... HMC (with surgical lean, not full clear) ...
         post = fitter.run("mcmc_hmc", ...)
-        tengri.clear_shared_caches()
 
         # ... posterior-predictive plotting ...
 
-    Each phase compiles its own JIT graphs that hold ~GB-scale executables.
-    Without clearing between phases the resident memory monotonically grows
-    until jetsam (macOS) or the OOM killer (Linux) terminates the process.
+    With the default ``lean=True`` in ``Fitter.run()``, the context
+    automatically uses ``scope="inference_body"``, keeping forward compiles
+    while dropping the 5–6 GB inference scan body.
 
-    Parameters
-    ----------
-    drop_xla : bool, default True
-        Also call ``jax.clear_caches()`` to release JAX's own XLA-executable
-        and tracing caches. Set False if you have other live JAX programs
-        in the same process that you want to keep compiled.
-
-    What gets cleared
-    -----------------
-    - Cross-fitter engine cache (``_SHARED_ENGINE_CACHE``).
-    - Cross-fitter signal-response cache (``_SHARED_SIGNAL_RESPONSE_CACHE``).
-    - Per-model caches keyed on SEDModel identity (loss fns, jit engines,
-      precompute by-products) for *all* live models.
-    - JAX's process-internal caches (when ``drop_xla=True``).
+    What gets cleared by scope="all"
+    --------------------------------
+    - All caches listed under scope="inference_body"
+    - Cross-fitter structural kernel cache (prediction kernels)
+    - JAX's process-internal caches (when ``drop_xla=True``)
 
     What does *not* get cleared
     ---------------------------
     - The on-disk persistent JAX compile cache (``~/.cache/tengri_jax_cache``).
       Use ``tengri.clear_cache()`` for that.
     """
+    if scope not in ("all", "inference_body"):
+        raise ValueError(f"scope must be 'all' or 'inference_body', got {scope!r}")
+
     with _SHARED_ENGINE_CACHE_LOCK:
         _SHARED_ENGINE_CACHE.clear()
     with _SHARED_SIGNAL_RESPONSE_CACHE_LOCK:
         _SHARED_SIGNAL_RESPONSE_CACHE.clear()
-    with _SHARED_LOSS_FN_CACHE_LOCK:
-        _SHARED_LOSS_FN_CACHE.clear()
-    with _SHARED_GRAD_FN_CACHE_LOCK:
-        _SHARED_GRAD_FN_CACHE.clear()
-    with _SHARED_LOGDENSITY_FN_CACHE_LOCK:
-        _SHARED_LOGDENSITY_FN_CACHE.clear()
-    with _SHARED_LOGLIK_FN_CACHE_LOCK:
-        _SHARED_LOGLIK_FN_CACHE.clear()
 
     from tengri.inference._model_cache import _caches as _per_model_caches
 
     _per_model_caches.clear()
+
+    # For scope="all", also drop structural kernels and all shared function caches
+    if scope == "all":
+        with _SHARED_LOSS_FN_CACHE_LOCK:
+            _SHARED_LOSS_FN_CACHE.clear()
+        with _SHARED_GRAD_FN_CACHE_LOCK:
+            _SHARED_GRAD_FN_CACHE.clear()
+        with _SHARED_LOGDENSITY_FN_CACHE_LOCK:
+            _SHARED_LOGDENSITY_FN_CACHE.clear()
+        with _SHARED_LOGLIK_FN_CACHE_LOCK:
+            _SHARED_LOGLIK_FN_CACHE.clear()
+
+        from tengri.inference._model_cache import clear_structural_kernel_cache
+
+        clear_structural_kernel_cache()
 
     if drop_xla:
         import contextlib

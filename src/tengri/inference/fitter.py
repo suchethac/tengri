@@ -1880,7 +1880,8 @@ class Fitter:
             else:
                 _user_lean = True
         if _user_lean:
-            _clear_shared_caches()
+            # Phase B: use surgical scope to preserve forward compiles
+            _clear_shared_caches(scope="inference_body")
 
         # --- Merge TOML method-specific defaults (caller kwargs win) ---
         try:
