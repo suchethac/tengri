@@ -352,8 +352,10 @@ def clear_shared_caches(
             _SHARED_LOGLIK_FN_CACHE.clear()
 
         from tengri.inference._model_cache import clear_structural_kernel_cache
+        from tengri.inference._sample_utils import _clear_vmap_to_physical_cache
 
         clear_structural_kernel_cache()
+        _clear_vmap_to_physical_cache()
 
     if drop_xla:
         import contextlib
