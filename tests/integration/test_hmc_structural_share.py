@@ -18,6 +18,9 @@ import tengri
 @pytest.mark.integration
 def test_hmc_structural_reuse_same_model():
     """Two Fitters with same model reuse HMC compile (second run faster)."""
+    # Cold start: clear all caches so the first fitter.run() pays the full
+    # compile cost (otherwise this test is order-dependent on the suite).
+    tengri.gc()
     # Load data
     try:
         ssp = tengri.load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
@@ -56,8 +59,8 @@ def test_hmc_structural_reuse_same_model():
     phot_obs = phot_true + 0.01 * phot_err * jax.random.normal(key, phot_true.shape)
 
     # Build two Fitters with the same model and data
-    fitter1 = tengri.Fitter(model, "photometry", phot_obs, phot_err)
-    fitter2 = tengri.Fitter(model, "photometry", phot_obs, phot_err)
+    fitter1 = tengri.Fitter(model, phot_obs, phot_err, data_type="photometry")
+    fitter2 = tengri.Fitter(model, phot_obs, phot_err, data_type="photometry")
 
     # Verify they have the same compile signature
     assert fitter1.compile_signature() == fitter2.compile_signature(), (
@@ -71,8 +74,7 @@ def test_hmc_structural_reuse_same_model():
             "mcmc_hmc",
             n_warmup=100,
             n_samples=100,
-            step_size=0.05,
-            dense_mass=False,
+            dense_mass_matrix=False,
             key=jax.random.PRNGKey(0),
         )
         t_first = time.perf_counter() - t0
@@ -83,8 +85,7 @@ def test_hmc_structural_reuse_same_model():
             "mcmc_hmc",
             n_warmup=100,
             n_samples=100,
-            step_size=0.05,
-            dense_mass=False,
+            dense_mass_matrix=False,
             key=jax.random.PRNGKey(1),
         )
         t_second = time.perf_counter() - t0
@@ -100,13 +101,14 @@ def test_hmc_structural_reuse_same_model():
     # Both results should be valid
     assert result1.samples is not None
     assert result2.samples is not None
-    assert len(result1.samples) == 100
-    assert len(result2.samples) == 100
+    assert next(iter(result1.samples.values())).shape[0] == 100
+    assert next(iter(result2.samples.values())).shape[0] == 100
 
 
 @pytest.mark.integration
 def test_hmc_structural_reuse_different_data():
     """Two Fitters with same model but different data reuse HMC compile."""
+    tengri.gc()
     try:
         ssp = tengri.load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
     except FileNotFoundError:
@@ -147,8 +149,8 @@ def test_hmc_structural_reuse_different_data():
     phot_obs2 = phot_true2 + 0.01 * phot_err2 * jax.random.normal(key2, phot_true2.shape)
 
     # Build Fitters with different data
-    fitter1 = tengri.Fitter(model, "photometry", phot_obs1, phot_err1)
-    fitter2 = tengri.Fitter(model, "photometry", phot_obs2, phot_err2)
+    fitter1 = tengri.Fitter(model, phot_obs1, phot_err1, data_type="photometry")
+    fitter2 = tengri.Fitter(model, phot_obs2, phot_err2, data_type="photometry")
 
     # They should have the same compile signature (same model, same data shape)
     assert fitter1.compile_signature() == fitter2.compile_signature(), (
@@ -162,8 +164,7 @@ def test_hmc_structural_reuse_different_data():
             "mcmc_hmc",
             n_warmup=100,
             n_samples=100,
-            step_size=0.05,
-            dense_mass=False,
+            dense_mass_matrix=False,
             key=jax.random.PRNGKey(0),
         )
         t_first = time.perf_counter() - t0
@@ -173,8 +174,7 @@ def test_hmc_structural_reuse_different_data():
             "mcmc_hmc",
             n_warmup=100,
             n_samples=100,
-            step_size=0.05,
-            dense_mass=False,
+            dense_mass_matrix=False,
             key=jax.random.PRNGKey(1),
         )
         t_second = time.perf_counter() - t0

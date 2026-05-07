@@ -1805,6 +1805,28 @@ class Fitter:
         Pass ``key=jax.random.PRNGKey(seed)`` to control randomness across runs.
         ``key=None`` defaults to ``PRNGKey(42)`` for reproducibility.
 
+        **Compile-cache behaviour (smart lean, 2026-05):**
+
+        ``run`` accepts a ``lean`` kwarg (default inferred from
+        ``tengri.lean()`` / ``tengri.persistent()`` context). With
+        ``lean=True`` (the default), the inference-body cache is
+        cleared of *stale* entries — every entry whose
+        ``(compile_signature, method)`` differs from the current call
+        is dropped, but the entry that matches the current call (if it
+        exists from a prior identical run) is kept. Forward-model,
+        log-density, loss, and gradient compiles survive unconditionally.
+        Implications:
+
+        - Multi-phase notebooks (MAP → HMC → posterior-predictive)
+          peak at one inference scan body in RAM, not several.
+        - Catalog loops calling ``fitter.run(method)`` repeatedly with
+          the same model and method pay one compile, not N — without
+          needing ``tengri.persistent()``.
+
+        ``tengri.gc()`` drops everything including structural caches;
+        use it between loops that build many *different* model
+        configurations.
+
         References
         ----------
         .. [1] M. D. Hoffman and A. Gelman, "The No-U-Turn Sampler: Adaptively
@@ -1880,8 +1902,14 @@ class Fitter:
             else:
                 _user_lean = True
         if _user_lean:
-            # Phase B: use surgical scope to preserve forward compiles
-            _clear_shared_caches(scope="inference_body")
+            # Phase B (smart lean, 2026-05): drop only L3 entries that do
+            # NOT match this run's (compile_sig, method). The matching
+            # entry — if it exists from a prior identical run — is kept,
+            # so a CatalogFitter loop or repeated identical fitter.run()
+            # call hits the cache instead of recompiling. Forward, loss,
+            # grad, and logdensity caches are preserved at this scope.
+            _keep_sig = (self.compile_signature(), method)
+            _clear_shared_caches(scope="inference_body", keep_sig=_keep_sig)
 
         # --- Merge TOML method-specific defaults (caller kwargs win) ---
         try:

@@ -124,3 +124,42 @@ print(tengri.cache_size_bytes() / 1024**2, "MB")
 - **Different `n_samples`** — `n_samples` is a `static_argname`, so
   changing it is a different cache key. The benchmark grid holds it
   fixed at 6.
+
+## Three-layer cache architecture (Phase B, 2026-05)
+
+The on-disk persistent cache described above is one of three independent
+caches that work together. Each handles a different reuse boundary:
+
+| Layer | Lives in | Reuse boundary | Cleared by |
+|-------|----------|----------------|------------|
+| L1 — structural prediction kernels | RAM, `_STRUCTURAL_KERNEL_CACHE` (LRU=4) | Across `SEDModel` instances with the same `compile_signature()` | `tengri.gc()` |
+| L2 — loss / grad / log-density / log-likelihood | RAM, `_SHARED_*_CACHE` keyed on `(compile_sig, mode)` | Across `Fitter` instances with the same fingerprint | `tengri.gc()` (kept by surgical lean) |
+| L3 — inference scan body (HMC leapfrog, NUTS tree, VI loop) | RAM, `_SHARED_ENGINE_CACHE` (LRU=2) | Across `Fitter.run` calls with the same `(compile_sig, method)` — kept by smart lean | Smart `lean()` drops only stale entries; `tengri.gc()` drops all |
+| Disk cache | `~/.cache/tengri_jax_cache` | Across processes, notebook restarts, slurm tasks | `tengri.clear_cache()` |
+
+`Fitter.run(lean=True)` (the default) calls
+`clear_shared_caches(scope="inference_body", keep_sig=(self.compile_signature(), method))`
+*before* the run. This drops only L3 entries whose key does **not** match
+the current run — so:
+
+- **Multi-phase notebook** (MAP → HMC → posterior-predictive): the prior
+  phase's L3 entry is dropped (different `mode`), the current phase's
+  entry is kept. Peak RSS stays at one inference body, never two.
+- **CatalogFitter loop** (100 galaxies, same model + method): every run
+  has the same `(compile_sig, method)`, so the entry is preserved and
+  the leapfrog compile is paid once for the whole catalog. No
+  `persistent()` context needed for the common case.
+
+`tengri.gc()` calls `clear_shared_caches(scope="all", drop_xla=True)` —
+nukes L1 + L2 + L3 + JAX's internal caches. Use between iteration loops
+that build many slightly-different SEDModel / Fitter configurations.
+
+`tengri.persistent()` is now only useful for the rare case where you
+want to keep a stale L3 entry alive across phases (e.g. running MAP and
+HMC repeatedly in alternation and reusing both compiles). The default
+smart-lean path covers the catalog and multi-phase cases without it.
+
+The disk cache underneath all three means even a full `tengri.gc()` on a
+warm process does not recompile from scratch on the next call: XLA reads
+the already-optimized binary from `~/.cache/tengri_jax_cache` (~3 s
+versus the ~80 s cold compile).

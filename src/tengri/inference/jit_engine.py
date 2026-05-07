@@ -224,7 +224,29 @@ def _lru_set(cache: OrderedDict, key, value, maxsize: int) -> None:
         cache.popitem(last=False)
 
 
-def clear_shared_caches(*, scope: str = "all", drop_xla: bool = True) -> None:
+def _key_matches_sig(key, keep_sig: tuple) -> bool:
+    """True if ``key`` should be kept under ``keep_sig`` (prefix match).
+
+    Cache keys are tuples like ``(fitter.compile_signature(), mode)``.
+    A ``keep_sig`` of ``(compile_sig, mode)`` keeps only entries with
+    that exact ``(sig, mode)`` pair. A shorter ``keep_sig`` of
+    ``(compile_sig,)`` keeps every mode for that signature. Used by
+    surgical lean to retain the entry that matches the call about to
+    run while dropping stale entries from prior phases.
+    """
+    if not isinstance(key, tuple) or not isinstance(keep_sig, tuple):
+        return key == keep_sig
+    if len(key) < len(keep_sig):
+        return False
+    return key[: len(keep_sig)] == keep_sig
+
+
+def clear_shared_caches(
+    *,
+    scope: str = "all",
+    drop_xla: bool = True,
+    keep_sig: tuple | None = None,
+) -> None:
     """Drop cached compiled artefacts from tengri in this process.
 
     Parameters
@@ -245,6 +267,15 @@ def clear_shared_caches(*, scope: str = "all", drop_xla: bool = True) -> None:
         Also call ``jax.clear_caches()`` to release JAX's own XLA-executable
         and tracing caches. Set False if you have other live JAX programs
         in the same process that you want to keep compiled.
+
+    keep_sig : tuple, optional
+        If supplied, entries whose key starts with this signature are
+        preserved while every other entry in the affected caches is
+        dropped. Used by ``Fitter.run(lean=True)`` to drop *stale* prior-
+        phase compiles while keeping the entry that matches the current
+        fitter — so a CatalogFitter loop over N galaxies all of the same
+        shape pays exactly one compile, not N. ``None`` (the default)
+        clears every entry in scope.
 
     Notes
     -----
@@ -279,14 +310,22 @@ def clear_shared_caches(*, scope: str = "all", drop_xla: bool = True) -> None:
     if scope not in ("all", "inference_body"):
         raise ValueError(f"scope must be 'all' or 'inference_body', got {scope!r}")
 
-    with _SHARED_ENGINE_CACHE_LOCK:
-        _SHARED_ENGINE_CACHE.clear()
-    with _SHARED_SIGNAL_RESPONSE_CACHE_LOCK:
-        _SHARED_SIGNAL_RESPONSE_CACHE.clear()
+    def _drop(cache: OrderedDict, lock: threading.Lock) -> None:
+        with lock:
+            if keep_sig is None:
+                cache.clear()
+            else:
+                stale = [k for k in cache if not _key_matches_sig(k, keep_sig)]
+                for k in stale:
+                    cache.pop(k, None)
 
-    from tengri.inference._model_cache import _caches as _per_model_caches
+    _drop(_SHARED_ENGINE_CACHE, _SHARED_ENGINE_CACHE_LOCK)
+    _drop(_SHARED_SIGNAL_RESPONSE_CACHE, _SHARED_SIGNAL_RESPONSE_CACHE_LOCK)
 
-    _per_model_caches.clear()
+    if keep_sig is None:
+        from tengri.inference._model_cache import _caches as _per_model_caches
+
+        _per_model_caches.clear()
 
     # For scope="all", also drop structural kernels and all shared function caches
     if scope == "all":

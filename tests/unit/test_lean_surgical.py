@@ -101,6 +101,39 @@ def test_lean_context_manager():
 
 
 @pytest.mark.unit
+def test_clear_shared_caches_keep_sig_drops_only_stale():
+    """keep_sig preserves the matching entry, drops others (smart lean)."""
+    sig_a = (("model_sig_a",), "mcmc_hmc")
+    sig_b = (("model_sig_a",), "map")
+    sig_c = (("model_sig_other",), "mcmc_hmc")
+
+    _SHARED_ENGINE_CACHE.clear()
+    _SHARED_ENGINE_CACHE[sig_a] = "hmc_compile"
+    _SHARED_ENGINE_CACHE[sig_b] = "map_compile"
+    _SHARED_ENGINE_CACHE[sig_c] = "other_compile"
+
+    # Lean about to run (model_sig_a, mcmc_hmc): should keep sig_a, drop sig_b/c.
+    clear_shared_caches(scope="inference_body", drop_xla=False, keep_sig=sig_a)
+
+    assert sig_a in _SHARED_ENGINE_CACHE, "matching entry must be kept"
+    assert sig_b not in _SHARED_ENGINE_CACHE, "stale prior-phase entry must be dropped"
+    assert sig_c not in _SHARED_ENGINE_CACHE, "different-shape entry must be dropped"
+    assert _SHARED_ENGINE_CACHE[sig_a] == "hmc_compile", "kept entry must be intact"
+
+
+@pytest.mark.unit
+def test_clear_shared_caches_keep_sig_no_match_drops_all():
+    """keep_sig that matches nothing in cache drops everything in scope."""
+    _SHARED_ENGINE_CACHE.clear()
+    _SHARED_ENGINE_CACHE[(("a",), "map")] = "x"
+    _SHARED_ENGINE_CACHE[(("b",), "map")] = "y"
+
+    clear_shared_caches(scope="inference_body", drop_xla=False, keep_sig=(("nonexistent",), "map"))
+
+    assert len(_SHARED_ENGINE_CACHE) == 0
+
+
+@pytest.mark.unit
 def test_gc_calls_clear_all():
     """tengri.gc() clears all caches including structural."""
     # Populate caches
