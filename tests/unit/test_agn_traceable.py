@@ -6,9 +6,6 @@ instead of being captured in closures, reducing XLA HLO size.
 
 from __future__ import annotations
 
-import pytest
-
-import jax
 import jax.numpy as jnp
 
 from tengri.components.agn.skirtor_precompute import (

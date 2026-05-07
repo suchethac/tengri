@@ -29,6 +29,7 @@ import functools
 from collections.abc import Callable
 from typing import NamedTuple
 
+import jax
 import jax.numpy as jnp
 
 from tengri.components.agn._phys import (
@@ -234,10 +235,16 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     """
     raw = _load_grid_arrays(grid_path)
 
-    grid_jax = jnp.array(raw["total"])
-    wave_grid = jnp.array(raw["wave"])
-    axes = tuple(jnp.array(ax) for ax in raw["axes"])
-    edges = tuple(edges_for_grid(ax) for ax in axes)
+    # Wrap conversion in ensure_compile_time_eval so the cached closure
+    # captures concrete arrays even if first invocation happens inside
+    # jax.jit. Without this, the @functools.cache wrapper around
+    # _load_skirtor_default would store DynamicJaxprTracer values that
+    # leak out of the trace scope (jax.errors.UnexpectedTracerError).
+    with jax.ensure_compile_time_eval():
+        grid_jax = jnp.array(raw["total"])
+        wave_grid = jnp.array(raw["wave"])
+        axes = tuple(jnp.array(ax) for ax in raw["axes"])
+        edges = tuple(edges_for_grid(ax) for ax in axes)
 
     def skirtor_grid(
         wavelength: jnp.ndarray,
@@ -347,12 +354,15 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
             "or use create_skirtor_from_grid() for total-only mode."
         )
 
-    disk_jax = jnp.array(raw["disk"])
-    dust_jax = jnp.array(raw["dust"])
-    total_jax = jnp.array(raw["total"])
-    wave_grid = jnp.array(raw["wave"])
-    axes = tuple(jnp.array(ax) for ax in raw["axes"])
-    edges = tuple(edges_for_grid(ax) for ax in axes)
+    # See note in create_skirtor_from_grid — wrap conversion in
+    # ensure_compile_time_eval to keep the cached closure trace-safe.
+    with jax.ensure_compile_time_eval():
+        disk_jax = jnp.array(raw["disk"])
+        dust_jax = jnp.array(raw["dust"])
+        total_jax = jnp.array(raw["total"])
+        wave_grid = jnp.array(raw["wave"])
+        axes = tuple(jnp.array(ax) for ax in raw["axes"])
+        edges = tuple(edges_for_grid(ax) for ax in axes)
 
     def skirtor_components(
         wavelength: jnp.ndarray,
