@@ -83,11 +83,16 @@ class TestApplyLSFVelocityDispersion:
         assert out.shape == flux.shape
         np.testing.assert_array_less(0.0, np.asarray(out).max())
 
-    def test_negative_sigma_v_raises(self):
+    def test_negative_sigma_v_clamped_to_zero(self):
+        """Negative ``sigma_v_kms`` is silently clamped to 0 inside the JIT-safe
+        path (priors guard the parameter; the clamp is purely defensive). Confirm
+        this matches calling with ``sigma_v_kms=0`` exactly — i.e., no extra
+        broadening beyond the instrument LSF."""
         wave = _log_wave_grid()
         flux = _delta_spectrum(wave, line_idx=2048)
-        with pytest.raises(ValueError, match="non-negative"):
-            apply_lsf(flux, wave, resolution=2000.0, sigma_v_kms=-50.0)
+        out_neg = apply_lsf(flux, wave, resolution=2000.0, sigma_v_kms=-50.0)
+        out_zero = apply_lsf(flux, wave, resolution=2000.0, sigma_v_kms=0.0)
+        np.testing.assert_allclose(np.asarray(out_neg), np.asarray(out_zero), atol=1e-12)
 
     def test_total_flux_conserved(self):
         """Convolution conserves the integral; broadening just spreads it."""
