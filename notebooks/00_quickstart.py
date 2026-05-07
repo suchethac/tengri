@@ -357,11 +357,26 @@ fig.tight_layout()
 plt.show()
 
 # %%
-# Run NUTS (No-U-Turn Sampler) inference
+# Run NUTS (No-U-Turn Sampler) inference.
+#
+# ``dense_mass_matrix=False`` (diagonal mass matrix) keeps the warmup peak
+# RSS bounded. With ``dense_mass_matrix=True`` (BlackJAX default) on this
+# 8-D ``dense_basis`` model the warmup vmap compile peaks at ~22 GB on
+# macOS — observed in nb00 reruns; matches the CLAUDE.md OOM gotcha but
+# narrowly escaped jetsam. Diagonal mass is appropriate here because the
+# tx_frac parameters are not strongly correlated and a quick demo doesn't
+# need full covariance adaptation. Switch to ``True`` only if you need
+# the curvature-correlation handling and have ≥32 GB of headroom.
 os.environ["TENGRI_NO_BACKGROUND_COMPILE"] = "1"
 fitter_param = Fitter(model_param, mock_param.flux_obs, mock_param.noise)
 t0 = time.perf_counter()
-result_mcmc = fitter_param.run("mcmc_nuts", n_warmup=500, n_samples=1000, verbose=False)
+result_mcmc = fitter_param.run(
+    "mcmc_nuts",
+    n_warmup=500,
+    n_samples=1000,
+    dense_mass_matrix=False,
+    verbose=False,
+)
 t_mcmc = time.perf_counter() - t0
 print(f"NUTS: {t_mcmc:.1f}s (fast, exact, JIT-compiled)")
 

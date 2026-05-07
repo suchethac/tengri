@@ -174,7 +174,7 @@ class MySEDComponent:
 - AGN torus in `torus.py` are **toy models** — use SKIRTOR for science
 - `agn_torus_frac`: do NOT auto-derive from `cos(theta_torus)` in forward pass (gradient discontinuity)
 - Inference internals use `mode="_traceable"` (safe inside JIT). User-facing defaults to `mode="auto"`
-- **One NUTS fit per notebook process.** Each warmup peaks at 3–6 GB (dense mass-matrix vmap compile). Multi-fit notebooks need `dense_mass=False` or `mcmc_hmc`. See `docs/dev/notebook_orchestration_oom.md`
+- **One NUTS fit per notebook process.** Each warmup peaks at 3–6 GB on small models (D ≤ 7 photometry) but can hit 20+ GB on D ≈ 8 with `mean_sfh_type="dense_basis"` — observed 22.78 GB peak on nb00 with default `dense_mass=True`. Multi-fit notebooks (and any single fit on D ≥ 8) need `dense_mass=False` or `mcmc_hmc`. See `docs/dev/notebook_orchestration_oom.md`
 - **Subagent rejection ≠ child kill.** A rejected subagent's `python notebook.py` keeps running. After rejecting, run `ps -axo pid,rss,comm | grep python` and `kill -9` zombies
 
 ## Testing
