@@ -13,6 +13,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
+from tengri.components.stellar.sfh.sfr_window import time_weighted_sfr
 from tengri.forward.sed_model_types import SEDModelState
 
 # ── Hybrid kernel: precomputed SSP + exact non-stellar ────────────
@@ -1530,8 +1531,8 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             L_abs_neb = jnp.float64(0.0)
 
             if has_nebular:
-                # Use SFR (Msun/yr), NOT CSP mass weight (Msun).
-                _sfr_last = sfr_on_ssp[-1]
+                # Canonical 10 Myr time-weighted SFR (Murphy+2011 timescale).
+                _sfr_last = time_weighted_sfr(sfr_on_ssp, state.ssp_ages_yr, 1e7)
                 neb_raw = nebular_emission(
                     nebular_backend,
                     weights,
@@ -1976,7 +1977,8 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             # 2f: X-ray emission
             xray_phot_preint = jnp.zeros(n_filters, dtype=jnp.float64)
             if has_xray:
-                sfr_now = sfr_on_ssp[-1]  # SFR (Msun/yr), not mass weight
+                # Canonical 10 Myr time-weighted SFR (Murphy+2011 timescale).
+                sfr_now = time_weighted_sfr(sfr_on_ssp, state.ssp_ages_yr, 1e7)
                 mstar = jnp.sum(weights)
                 _agn_bol_xray = (
                     10.0 ** (jnp.float64(agn_log_lbol)) * LSUN_ERG_PER_S if has_agn_full else 0.0
@@ -3112,7 +3114,8 @@ def build_hybrid_photometry_ztable(state: SEDModelState, model=None):
             L_abs_neb = jnp.float64(0.0)
 
             if has_nebular:
-                _sfr_last = sfr_on_ssp[-1]  # SFR (Msun/yr), not mass weight
+                # Canonical 10 Myr time-weighted SFR (Murphy+2011 timescale).
+                _sfr_last = time_weighted_sfr(sfr_on_ssp, state.ssp_ages_yr, 1e7)
                 neb_sed, _neb_lines = nebular_emission(
                     sfr_on_ssp=sfr_on_ssp,
                     logU=neb_logU,
@@ -3168,8 +3171,10 @@ def build_hybrid_photometry_ztable(state: SEDModelState, model=None):
 
             if has_radio:
                 mstar = jnp.exp(10.0 * jnp.log(10.0))  # dummy, not used in hybrid
+                # Canonical 10 Myr time-weighted SFR (Murphy+2011 timescale).
+                _sfr_radio = time_weighted_sfr(sfr_on_ssp, state.ssp_ages_yr, 1e7)
                 radio_sed = radio_emission(
-                    sfr=sfr_on_ssp[-1],
+                    sfr=_sfr_radio,
                     mstar=mstar,
                     log_lbol_agn=agn_log_lbol if has_agn_full else 10.0,
                     frac_agn=agn_frac if has_agn_full else 0.0,
@@ -3187,8 +3192,10 @@ def build_hybrid_photometry_ztable(state: SEDModelState, model=None):
 
             if has_xray:
                 mstar = jnp.exp(10.0 * jnp.log(10.0))  # dummy
+                # Canonical 10 Myr time-weighted SFR (Murphy+2011 timescale).
+                _sfr_xray = time_weighted_sfr(sfr_on_ssp, state.ssp_ages_yr, 1e7)
                 xray_sed = xray_emission(
-                    sfr=sfr_on_ssp[-1],
+                    sfr=_sfr_xray,
                     mstar=mstar,
                     log_lbol_agn=agn_log_lbol if has_agn_full else 10.0,
                     gamma_agn=xray_gamma_agn,

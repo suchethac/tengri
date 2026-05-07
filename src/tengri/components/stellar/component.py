@@ -532,9 +532,10 @@ class StellarSEDComponent:
                 if self.config.met_bin_edges_log_yr is not None
                 else _DEFAULT_MET_BIN_EDGES_LOG_YR
             )
-            metallicities_abs = jnp.stack(
-                [jnp.asarray(params[f"met_bin_{i}"]) for i in range(n_bins)]
-            ) + LOG10_ZSUN
+            metallicities_abs = (
+                jnp.stack([jnp.asarray(params[f"met_bin_{i}"]) for i in range(n_bins)])
+                + LOG10_ZSUN
+            )
             lgmet_on_ssp_ages = metallicity_bins_on_ssp_grid(
                 ssp.ssp_lg_age_gyr, jnp.asarray(bin_edges_log_yr), metallicities_abs
             )
@@ -573,10 +574,7 @@ class StellarSEDComponent:
         elif self.config.metallicity_model == "table":
             # User-provided Z(t) table on the component's config (settings,
             # not JAX params — the table is constructor-time data).
-            if (
-                self.config.met_table_log_age_yr is None
-                or self.config.met_table_log_z_abs is None
-            ):
+            if self.config.met_table_log_age_yr is None or self.config.met_table_log_z_abs is None:
                 raise ValueError(
                     "metallicity_model='table' requires met_table_log_age_yr "
                     "and met_table_log_z_abs on StellarSEDComponentConfig "
@@ -807,35 +805,16 @@ def _time_weighted_sfr(
     sfh_lbt_grid: jnp.ndarray,
     window_yr: float,
 ) -> jnp.ndarray:
-    r"""Time-weighted average of SFR over the last ``window_yr`` years.
+    """Time-weighted SFR over the last ``window_yr`` years.
 
-    Mirrors the legacy averaging in ``forward/sed_model.py`` (line ~2600):
-    ``<SFR>_T = Σ(SFR_i × Δt_i) / Σ(Δt_i)`` for grid points with
-    ``lbt ≤ window_yr``. JIT-friendly via :func:`jnp.where` masking on a
-    fixed-shape array (no boolean indexing).
-
-    Parameters
-    ----------
-    sfr_history : ndarray, shape (n_grid,)
-        SFR on the lookback grid [Msun/yr].
-    sfh_lbt_grid : ndarray, shape (n_grid,)
-        Lookback-time grid [yr], ascending.
-    window_yr : float
-        Window width [yr]. Bins with ``lbt > window_yr`` are excluded.
-
-    Returns
-    -------
-    scalar jnp.ndarray
-        Time-weighted SFR over the window [Msun/yr]. If no grid points
-        fall in the window, returns ``sfr_history[0]`` (the present-day
-        SFR) as a sensible fallback.
+    Thin wrapper around the canonical helper in
+    :mod:`tengri.components.stellar.sfh.sfr_window`. Kept for
+    StellarSEDComponent's existing call sites; new code should import
+    :func:`time_weighted_sfr` from there directly.
     """
-    bin_widths = jnp.gradient(sfh_lbt_grid)
-    in_window = sfh_lbt_grid <= window_yr
-    weights = jnp.where(in_window, bin_widths, 0.0)
-    weighted_sum = jnp.sum(sfr_history * weights)
-    weight_total = jnp.sum(weights)
-    return jnp.where(weight_total > 0.0, weighted_sum / weight_total, sfr_history[0])
+    from tengri.components.stellar.sfh.sfr_window import time_weighted_sfr
+
+    return time_weighted_sfr(sfr_history, sfh_lbt_grid, window_yr)
 
 
 # ─────────────────────────────────────────────────────────────────────

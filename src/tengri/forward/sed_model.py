@@ -3770,7 +3770,9 @@ class SEDModel:
                 lgmet_scatter,
             )
             if self._uses_xray:
-                p = {**p, "_sfr_current": sfr[-1]}
+                from tengri.components.stellar.sfh.sfr_window import time_weighted_sfr
+
+                p = {**p, "_sfr_current": time_weighted_sfr(sfr, self.age_yr, 1e7)}
             return self._compositional.rest_sed(weights, ssp_flux_at_z, p)
         elif self._csp_integration == "dsps_met_table":
             from tengri.components.stellar.sps.dsps_wrapper import compute_dsps_met_table_weights
@@ -3800,7 +3802,9 @@ class SEDModel:
                 lgmet_scatter,
             )
             if self._uses_xray:
-                p = {**p, "_sfr_current": sfr[-1]}
+                from tengri.components.stellar.sfh.sfr_window import time_weighted_sfr
+
+                p = {**p, "_sfr_current": time_weighted_sfr(sfr, self.age_yr, 1e7)}
             return self._compositional.rest_sed(weights, ssp_flux_at_z, p)
         else:
             weights = sfr_on_ssp * self._csp_age_dt
@@ -3891,9 +3895,11 @@ class SEDModel:
                 self.ssp_data.ssp_flux,
             )
 
-        # Enrich p with current SFR for X-ray model
+        # Enrich p with the canonical 10 Myr time-weighted SFR for X-ray model
         if self._uses_xray:
-            p = {**p, "_sfr_current": sfr[-1]}
+            from tengri.components.stellar.sfh.sfr_window import time_weighted_sfr
+
+            p = {**p, "_sfr_current": time_weighted_sfr(sfr, self.age_yr, 1e7)}
 
         return self._compositional.rest_sed(weights, ssp_flux_at_z, p)
 

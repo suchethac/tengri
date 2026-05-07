@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.components.stellar.sfh.sfr_window import time_weighted_sfr
 from tengri.forward._kernels.exact import build_fused_rest_sed
 from tengri.forward.sed_model_types import SEDModelState
 
@@ -488,8 +489,9 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
                         _ssp_flux_use,
                     )
 
-        # Always pass current SFR — needed by nebular (Q_H scaling) and X-ray.
-        p = {**p, "_sfr_current": sfr_on_ssp[-1]}
+        # Always pass the canonical 10 Myr time-weighted SFR — needed by
+        # nebular (Q_H scaling) and X-ray. Murphy+2011 timescale.
+        p = {**p, "_sfr_current": time_weighted_sfr(sfr_on_ssp, ssp_ages_yr, 1e7)}
 
         rest_sed = rest_sed_kernel(weights, ssp_flux_at_z, p)
         z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
@@ -875,7 +877,8 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
                         _weights_2d_ca_spec / _w_safe_ca_spec[None, :],
                         _ssp_flux_use_spec,
                     )
-        p = {**p, "_sfr_current": sfr_on_ssp[-1]}
+        # Canonical 10 Myr time-weighted SFR (Murphy+2011 timescale).
+        p = {**p, "_sfr_current": time_weighted_sfr(sfr_on_ssp, ssp_ages_yr, 1e7)}
         rest_sed = rest_sed_kernel(weights, ssp_flux_at_z, p)
         z = p.get("redshift", z_fixed if z_fixed is not None else 0.0)
         return rest_sed, z
@@ -1151,7 +1154,8 @@ def build_hybrid_spectrum(state: SEDModelState, model=None):
         # Non-stellar SED at full wavelength
         p_ns = p.copy()
         if state.uses_xray:
-            p_ns["_sfr_current"] = sfr_on_ssp[-1]
+            # Canonical 10 Myr time-weighted SFR (Murphy+2011 timescale).
+            p_ns["_sfr_current"] = time_weighted_sfr(sfr_on_ssp, ssp_ages_yr, 1e7)
         rest_sed_full = rest_sed_kernel(weights, ssp_flux_at_z, p_ns)
 
         # Interpolate to spectral pixels
