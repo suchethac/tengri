@@ -108,5 +108,5 @@ fig.tight_layout()
 # (Dovciak+2004) applies full Kerr ray-tracing per annulus up to r = 1000 Rg;
 # the Novikov-Thorne outer disc uses the non-relativistic formula beyond that.
 
-plt.savefig("relagn_spin_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_relagn_spin.png", dpi=150, bbox_inches="tight")
 plt.show()

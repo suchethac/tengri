@@ -174,5 +174,5 @@ ax.legend(frameon=False)
 
 fig.suptitle("Joint Photometry + Spectroscopy Mock", fontsize=13, y=1.02)
 fig.tight_layout()
-plt.savefig("joint_fit.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_joint_fit.png", dpi=150, bbox_inches="tight")
 plt.show()

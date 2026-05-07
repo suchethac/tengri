@@ -63,9 +63,18 @@ model = SEDModel(spec, ssp)
 key = jax.random.PRNGKey(0)
 values = [0.1, 0.5, 1.0, 2.0, 3.5]
 fig = sfh_sed_comparison(
-    model, "sfh_field_psd_sigma", values, cmap="plasma", n_stochastic=5, key=key
+    model, "sfh_field_psd_sigma", values, cmap="viridis", n_stochastic=5, key=key
 )
-fig.suptitle("Stochastic SFH: Burstiness Amplitude σ", fontsize=12, y=1.00)
+# Broad zoomed-out view: full age range and full panchromatic SED. Lets the
+# eye see the bursts in context of the full SFH and the SED across all bands.
+ax_sfh, ax_sed = fig.axes
+ax_sfh.set_xlim(0, 13.7)
+ax_sfh.set_ylim(0, 100)
+
+ax_sed.set_xlim(900, 1e7)
+ax_sed.set_ylim(1e0, 1e8)
+
+fig.suptitle(r"Stochastic SFH: Burstiness Amplitude $\sigma$", fontsize=14, y=1.00)
 plt.tight_layout()
 plt.savefig("plot_psd_sigma_sweep.png", dpi=150, bbox_inches="tight")
 plt.show()

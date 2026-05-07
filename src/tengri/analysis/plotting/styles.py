@@ -43,15 +43,15 @@ COLORS = {
 
 # Named sampler styles for consistent legends
 SAMPLER_STYLE = {
-    "MAP": {"color": COLORS["map"], "ls": "--", "lw": 1.5, "alpha": 1.0},
-    "RT": {"color": COLORS["rt"], "ls": "-", "lw": 1.5, "alpha": 1.0},
+    "MAP": {"color": COLORS["map"], "ls": "--", "lw": 2.0, "alpha": 1.0},
+    "RT": {"color": COLORS["rt"], "ls": "-", "lw": 2.0, "alpha": 1.0},
     # Canonical names
-    "VI": {"color": COLORS["vi"], "ls": "-", "lw": 1.5, "alpha": 1.0},
-    "VI_Linear": {"color": COLORS["vi_linear"], "ls": "-", "lw": 1.5, "alpha": 1.0},
-    "MCMC_NUTS": {"color": COLORS["mcmc_nuts"], "ls": "-", "lw": 1.5, "alpha": 1.0},
-    "geoVI": {"color": COLORS["geovi"], "ls": "-", "lw": 1.5, "alpha": 1.0},
-    "NUTS": {"color": COLORS["nuts"], "ls": "-", "lw": 1.5, "alpha": 1.0},
-    "MGVI": {"color": COLORS["mgvi"], "ls": "-", "lw": 1.5, "alpha": 1.0},
+    "VI": {"color": COLORS["vi"], "ls": "-", "lw": 2.0, "alpha": 1.0},
+    "VI_Linear": {"color": COLORS["vi_linear"], "ls": "-", "lw": 2.0, "alpha": 1.0},
+    "MCMC_NUTS": {"color": COLORS["mcmc_nuts"], "ls": "-", "lw": 2.0, "alpha": 1.0},
+    "geoVI": {"color": COLORS["geovi"], "ls": "-", "lw": 2.0, "alpha": 1.0},
+    "NUTS": {"color": COLORS["nuts"], "ls": "-", "lw": 2.0, "alpha": 1.0},
+    "MGVI": {"color": COLORS["mgvi"], "ls": "-", "lw": 2.0, "alpha": 1.0},
 }
 
 # SDSS effective wavelengths (Angstrom)
@@ -153,8 +153,12 @@ def setup_style(style="tengri"):
             # Legend — no frame
             "legend.frameon": False,
             "legend.handlelength": 1.5,
-            # Lines
-            "lines.linewidth": 1.6,
+            # Lines — bumped to 2.0 for better visibility in galleries
+            # and slide decks; per-call lw= overrides still win.
+            "lines.linewidth": 2.0,
+            "lines.markersize": 6.0,
+            "lines.markeredgewidth": 1.0,
+            "patch.linewidth": 1.0,
             # Image colormap — perceptually-uniform default. Specific plots
             # can override (e.g. cividis, rocket) but the default must be
             # colorblind-safe and monotonic.
@@ -207,12 +211,23 @@ SFH_XLABEL = "Lookback time (Gyr)"
 SFH_YLABEL = r"SFR (M$_\odot$ yr$^{-1}$)"
 
 SWEEP_CMAPS = {
-    "dust": "YlOrRd",  # yellow→red for reddening
-    "agn": "PuRd",  # purple→red for AGN dominance
-    "sfh": "Blues",  # light→dark for SFH variation
-    "nebular": "Greens",  # for ionization
-    "radio": "cool",  # blue→purple for radio
-    "redshift": "plasma",  # for redshift sweeps
+    # Default to viridis everywhere — perceptually-uniform, colorblind-safe,
+    # and the bright-yellow tail is suppressed by the SWEEP_VMAX clamp below
+    # so curves stay readable on light backgrounds.
+    "dust": "viridis",
+    "agn": "viridis",
+    "sfh": "viridis",
+    "nebular": "viridis",
+    "radio": "viridis",
+    "redshift": "viridis",
+    "metallicity": "cividis",  # colorblind-safe alternative for technical figures
+    "stellar_age": "cividis",
 }
 
-REFERENCE_STYLE = dict(color="0.75", lw=1.5, zorder=0, label="reference")
+# Most callers index a sweep colormap from 0 to 1; the upper end of viridis
+# (>~0.85) is bright yellow which washes out on print. Helpers should clamp
+# to this range when picking sweep colors.
+SWEEP_VMIN = 0.0
+SWEEP_VMAX = 0.85
+
+REFERENCE_STYLE = dict(color="0.55", lw=2.0, zorder=0, label="reference")

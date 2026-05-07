@@ -67,9 +67,10 @@ fig, ax = sweep_parameter(
     label_fmt=r"$\tau_{{BC}}$ = {:.1f}",
     wave_range=(1000, 10000),
 )
-ax.set_ylim(0, 2.5e5)
+ax.set_yscale("log")
+ax.set_ylim(1e-1, 1e5)
 ax.set_title("Birth Cloud Dust: Impact on Young Star-Forming Galaxy SED", fontsize=12)
-ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)")
+ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å, log scale)")
 plt.tight_layout()
 plt.savefig("plot_tau_bc_sweep.png", dpi=150, bbox_inches="tight")
 plt.show()

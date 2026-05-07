@@ -112,14 +112,14 @@ def plot_sfh(
                 ax.plot(t_gyr, sfh_arr[j], color=color, alpha=0.06, lw=0.5)
 
         # Median line
-        ax.plot(t_gyr, median, color=color, lw=1.8, zorder=4)
+        ax.plot(t_gyr, median, color=color, lw=2.0, zorder=4)
 
     else:
         # MAP: point estimate
         sfh = model.predict_sfh(posterior.params)
         t_gyr = np.array(sfh["t_gyr"])
         key = "sfr_full" if model.spec.stochastic else "sfr_mean"
-        ax.plot(t_gyr, sfh[key], color=COLORS["map"], lw=1.8, ls="--", label="MAP", zorder=3)
+        ax.plot(t_gyr, sfh[key], color=COLORS["map"], lw=2.0, ls="--", label="MAP", zorder=3)
 
     # Truth overlay (BAGPIPES convention: solid black)
     if true_params is not None:

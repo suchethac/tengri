@@ -100,6 +100,24 @@ print(result.summary_table())
 
 Full walkthrough in [`notebooks/00_quickstart.py`](notebooks/00_quickstart.py).
 
+## Tutorials
+
+The tutorial spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) is the primary learning path — Jupytext `.py` files that are also rendered into the [docs site](https://suchethacooray.github.io/tengri/).
+
+| #  | Notebook                          | What you learn                                                       |
+|----|-----------------------------------|----------------------------------------------------------------------|
+| 00 | `00_quickstart.py`                | mock galaxy → posterior in ~30 s                                     |
+| 01 | `01_why_jax.py`                   | JIT, `vmap`, `grad` — why JAX matters for SED fitting                |
+| 02 | `02_sed_anatomy.py`               | wavelength → physics map; what each component does                   |
+| 03 | `03_discovering_the_menu.py`      | the registry / discovery API (`list_*`, `describe`, `search`)        |
+| 04 | `04_building_models.py`           | compositional model construction with `Parameters`                   |
+| 05 | `05_fitting_photometry.py`        | photometric fitting workflow end-to-end                              |
+| 06 | `06_fitting_spectroscopy.py`      | optical spectroscopy with calibration nuisance parameters            |
+| 07 | `07_joint_photo_spec.py`          | joint photo + spectro fits to break degeneracies                     |
+| 08 | `08_emission_lines.py`            | BPT diagnostics, line ratios, Hα-based SFR validation                |
+
+For one-figure recipes, see the [examples gallery](https://suchethacooray.github.io/tengri/auto_examples/index.html) — 70+ thumbnailed scripts.
+
 ## Discover what's available — and learn it interactively
 
 After installing, four calls answer "what does tengri do?" and "how do I use it?":

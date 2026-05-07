@@ -1143,7 +1143,7 @@ def relagn_agn(
     nu = _c_aa / wavelength  # decreasing
     # Sort ascending for trapezoid
     lbol_disc_erg = jnp.trapezoid(jnp.flip(l_disc_full), jnp.flip(nu))
-    log_lbol_lsun = jnp.log10(jnp.maximum(lbol_disc_erg, 1e30)) - jnp.log10(3.839e33)
+    log_lbol_lsun = jnp.log10(jnp.maximum(lbol_disc_erg, 1e30)) - jnp.log10(_LSUN_ERG)
 
     # Torus re-emits agn_torus_frac of disc L_bol
     l_torus = two_temperature_torus(

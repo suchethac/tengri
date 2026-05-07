@@ -116,5 +116,5 @@ ax_res.set_ylabel(r"Residual [$\sigma$]")
 ax_res.set_ylim(-5, 5)
 
 fig.tight_layout()
-plt.savefig("spectrum_fit.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_spectrum_fit.png", dpi=150, bbox_inches="tight")
 plt.show()

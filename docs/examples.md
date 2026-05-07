@@ -7,8 +7,8 @@ is rendered into the thumbnailed gallery below by Sphinx-Gallery.
 
 **Primary learning path:** the tutorial spine in
 [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) —
-progressive, astronomer-facing chapters (00–17) that cover framework,
-forward model, fitting workflows, physics deep dives, and Paper II previews.
+progressive, astronomer-facing chapters (00–08, with more coming) that cover framework,
+forward model, fitting workflows, and physics deep dives.
 Start there if you are new to tengri; come here when you need a targeted
 reference.
 

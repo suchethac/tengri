@@ -34,6 +34,7 @@ sphinx_gallery_conf = {
     "examples_dirs": ["../examples"],
     "gallery_dirs": ["auto_examples"],
     "filename_pattern": r"plot_.+\.py$",
+    "savefig_dpi": 150,
     # Skip scripts that run heavy inference (hierarchical VI fits, long MCMC) —
     # they would block the gallery build for tens of minutes. Users can still
     # execute these directly from the source file.

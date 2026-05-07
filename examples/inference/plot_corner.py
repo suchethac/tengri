@@ -93,5 +93,5 @@ if fig is not None:
 
 outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
 outdir.mkdir(parents=True, exist_ok=True)
-plt.savefig(str(outdir / "corner.png"), dpi=150, bbox_inches="tight")
+plt.savefig(str(outdir / "plot_corner.png"), dpi=150, bbox_inches="tight")
 plt.show()

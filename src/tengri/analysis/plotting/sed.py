@@ -327,7 +327,13 @@ def sweep_parameter(
 
     cmap_obj = plt.get_cmap(cmap)
     n = len(values)
-    colors = [cmap_obj(i / max(n - 1, 1)) for i in range(n)]
+    # Clamp to SWEEP_VMIN..SWEEP_VMAX so the bright-yellow tail of viridis
+    # (>0.85) doesn't wash out on white backgrounds.
+    from .styles import SWEEP_VMAX, SWEEP_VMIN
+
+    colors = [
+        cmap_obj(SWEEP_VMIN + (SWEEP_VMAX - SWEEP_VMIN) * i / max(n - 1, 1)) for i in range(n)
+    ]
 
     xlim = wave_range if wave_range is not None else SED_XLIM
 
@@ -356,7 +362,7 @@ def sweep_parameter(
         if mask.sum() == 0:
             continue
 
-        style = REFERENCE_STYLE.copy() if i == reference_idx else {"color": colors[i], "lw": 1.8}
+        style = REFERENCE_STYLE.copy() if i == reference_idx else {"color": colors[i], "lw": 2.2}
         label_str = label_fmt.format(val)
         if unit:
             label_str += f" {unit}"
@@ -459,28 +465,69 @@ def sfh_sed_comparison(
     -------
     fig : Figure  (two-panel, figsize=(12, 4))
     """
+    import jax
+
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
     ax_sfh, ax_sed = axes
 
     cmap_obj = plt.get_cmap(cmap)
     n = len(values)
-    colors = [cmap_obj(i / max(n - 1, 1)) for i in range(n)]
+    # Clamp to SWEEP_VMIN..SWEEP_VMAX so the bright-yellow tail of viridis
+    # (>0.85) doesn't wash out on white backgrounds.
+    from .styles import SWEEP_VMAX, SWEEP_VMIN
+
+    colors = [
+        cmap_obj(SWEEP_VMIN + (SWEEP_VMAX - SWEEP_VMIN) * i / max(n - 1, 1)) for i in range(n)
+    ]
 
     for i, val in enumerate(values):
         override = {param_name: float(val)}
         color = colors[i]
         label = f"{param_name} = {val:.2g}"
 
-        # SFH panel
+        # Plot stochastic samples first (thin lines underneath)
+        if n_stochastic > 0 and key is not None and model.spec.stochastic:
+            for s in range(n_stochastic):
+                # Generate unique key for this sample
+                sample_key = jax.random.fold_in(key, i * 1000 + s)
+                # Generate xi vector for stochastic SFH
+                xi = jax.random.normal(sample_key, shape=(model._n_grid,))
+                override_with_xi = {**override, "sfh_field_xi": xi}
+
+                # SFH panel - stochastic
+                try:
+                    sfh = model.predict_sfh(override_with_xi)
+                    t_lookback = np.asarray(sfh["t_gyr"])
+                    sfr = np.asarray(sfh.get("sfr_full", sfh.get("sfr_mean")))
+                    ax_sfh.plot(t_lookback, sfr, color=color, lw=0.5, alpha=0.4)
+                except (AttributeError, TypeError, ValueError, KeyError):
+                    pass
+
+                # SED panel - stochastic
+                try:
+                    pred = model.predict_rest_sed(override_with_xi)
+                    wave = np.asarray(pred.wavelength)
+                    lnu = np.asarray(pred.sed)
+                    idx_norm = int(np.argmin(np.abs(wave - 5500.0)))
+                    norm = lnu[idx_norm]
+                    if norm > 0:
+                        lnu = lnu / norm
+                    y = lnu * wave
+                    mask = (wave >= SED_XLIM[0]) & (wave <= SED_XLIM[1])
+                    ax_sed.plot(wave[mask], y[mask], color=color, lw=0.5, alpha=0.4)
+                except (IndexError, ValueError, TypeError, AttributeError):
+                    pass
+
+        # Plot deterministic mean on top
         try:
             sfh = model.predict_sfh(override)
             t_lookback = np.asarray(sfh["t_gyr"])
-            sfr = np.asarray(sfh.get("sfr_full", sfh.get("sfr_mean")))
-            ax_sfh.plot(t_lookback, sfr, color=color, lw=1.8, label=label)
+            sfr = np.asarray(sfh.get("sfr_mean"))
+            ax_sfh.plot(t_lookback, sfr, color=color, lw=2.0, label=label)
         except (AttributeError, TypeError, ValueError, KeyError):
             pass
 
-        # SED panel
+        # SED panel - deterministic mean
         try:
             pred = model.predict_rest_sed(override)
             wave = np.asarray(pred.wavelength)
@@ -491,7 +538,7 @@ def sfh_sed_comparison(
                 lnu = lnu / norm
             y = lnu * wave
             mask = (wave >= SED_XLIM[0]) & (wave <= SED_XLIM[1])
-            ax_sed.plot(wave[mask], y[mask], color=color, lw=1.8, label=label)
+            ax_sed.plot(wave[mask], y[mask], color=color, lw=2.0, label=label)
         except (IndexError, ValueError, TypeError, AttributeError):
             pass
 
@@ -500,6 +547,7 @@ def sfh_sed_comparison(
     ax_sfh.legend(fontsize=9)
 
     ax_sed.set_xscale(SED_XSCALE)
+    ax_sed.set_yscale("log")
     ax_sed.set_xlabel(SED_XLABEL)
     ax_sed.set_ylabel(SED_YLABEL)
     ax_sed.set_xlim(SED_XLIM)

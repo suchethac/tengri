@@ -18,7 +18,7 @@
 - **GPU/TPU native**: the same code runs on CPU, GPU, and TPU without modification.
 - **BYO stellar library**: accepts any SSP in the DSPS HDF5 schema (BC03, BPASS, FSPS, ProGeny). [Pre-formatted templates here](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/).
 
-Paper I covers the framework and mock-recovery validation with smooth / parametric SFHs. Paper II introduces Information-Field-Theory (IFT) correlated-field SFHs with PSD-governed burstiness priors and the geoVI inference pathway (see the Paper II preview notebooks).
+Paper I covers the framework and mock-recovery validation with smooth / parametric SFHs. Paper II introduces Information-Field-Theory (IFT) correlated-field SFHs with PSD-governed burstiness priors and the geoVI inference pathway (Paper II preview, coming soon).
 
 ## Installation
 
@@ -74,11 +74,11 @@ See `notebooks/00_quickstart.py` for the full end-to-end walkthrough.
 | Population | `PopulationFitter(...)` | Shared hyperparameters across galaxy samples |
 | geoVI / `vi_native` | `fitter.run("vi")` / `"vi_native"` | **Paper II preview.** High-D stochastic SFHs (D ≈ 137+) |
 
-See `notebooks/06_inference_methods.py` for the decision walkthrough.
+Method choice is introduced in `notebooks/05_fitting_photometry.py`; a deeper walkthrough will land in a future spine notebook.
 
 ## Tutorial spine
 
-Tutorials live as Jupytext `.py` files in [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) and are synced to `docs/spine/*.ipynb` via `python scripts/sync_spine_notebooks_for_docs.py`. The physics galleries sit in the [Sphinx example gallery](examples.md).
+Tutorials live as Jupytext `.py` files in [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) and are synced to `docs/spine/*.ipynb` via `python scripts/sync_spine_notebooks_for_docs.py`. For one-figure recipes, see the [examples gallery](examples.md) — 70+ thumbnailed scripts, each runnable standalone.
 
 The spine is written for astronomers — physics framing, copy-paste-able code cells, progressive teaching across notebooks. Start with `00` and `01`, then branch based on your use case.
 
@@ -117,48 +117,33 @@ The spine is written for astronomers — physics framing, copy-paste-able code c
 
 ```{eval-rst}
 .. toctree::
+   :caption: Foundations
    :maxdepth: 1
-   :caption: Orient
 
    spine/00_quickstart
    spine/01_why_jax
    spine/02_sed_anatomy
+   spine/03_discovering_the_menu
+   spine/04_building_models
 
 .. toctree::
-   :maxdepth: 1
    :caption: Fitting workflows
+   :maxdepth: 1
 
-   spine/03_fitting_photometry
-   spine/04_fitting_spectra
-   spine/05_joint_photometry_spectroscopy
-   spine/06_inference_methods
-   spine/07_degeneracies
+   spine/05_fitting_photometry
+   spine/06_fitting_spectroscopy
+   spine/07_joint_photo_spec
 
 .. toctree::
-   :maxdepth: 1
    :caption: Physics deep dives
+   :maxdepth: 1
 
-   spine/08_sfh_advanced
-   spine/09_dust_emission
-   spine/10_agn_advanced
-   spine/11_population
-   spine/12_diagnostics
-   spine/13_extending_tengri
-   spine/17_emission_line_measurements
+   spine/08_emission_lines
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Paper II preview
-
-   spine/14_stochastic_sfh
-   spine/15_vi_inference
-   spine/16_simulation_interface
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Reference
+   :caption: Examples gallery
+   :maxdepth: 2
 
    examples
+   auto_examples/index
 ```
-
-The thumbnailed [examples gallery](examples.md) collects 70+ short scripts that each produce one figure — ideal starting points for your own plots.

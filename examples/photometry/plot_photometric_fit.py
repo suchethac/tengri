@@ -141,5 +141,5 @@ ax_res.set_xticks(wave_eff)
 ax_res.set_xticklabels(band_names)
 
 fig.tight_layout()
-plt.savefig("photometric_fit.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_photometric_fit.png", dpi=150, bbox_inches="tight")
 plt.show()

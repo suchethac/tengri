@@ -46,8 +46,10 @@ skirtor_fn = create_skirtor_from_grid(_grid_path)
 wavelength = jnp.logspace(np.log10(5e3), np.log10(5e6), 512)
 wave_um = np.array(wavelength) / 1e4
 
-# Figure: 2x3 grid showing tau_97 and inclination variations
-fig, axes = plt.subplots(2, 3, figsize=(14, 8))
+# Figure: 2x3 grid showing tau_97 and inclination variations.
+# sharex/sharey keep panel sizes uniform; figsize gives breathing room at 150 dpi
+# so individual axis labels and legends remain legible in the gallery.
+fig, axes = plt.subplots(2, 3, figsize=(14, 8), sharex=True, sharey=True)
 
 # Left column: fixed tau_97=9 (optically thick, grid max=11), vary inclination
 tau_97_thick = 9.0
@@ -80,8 +82,10 @@ for ax, cos_inc, title in [
     ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
     ax.set_title(f"{title} (τ_97={tau_97_thick:.0f})")
     ax.legend(fontsize=10, frameon=False)
+    # SKIRTOR torus emission peaks at 10-50 µm; widen with breathing room
+    # so context (NIR + sub-mm tails) is visible alongside the IR peak.
     ax.set_xlim(0.5, 500)
-    ax.set_ylim(1e21, 1e32)
+    ax.set_ylim(1e25, 1e32)
 
 # Middle column: fixed inclination, vary tau_97
 cos_inc_fixed = 0.5
@@ -108,8 +112,10 @@ for ax, p_frac, title in [
     ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
     ax.set_title(title)
     ax.legend(fontsize=10, frameon=False)
+    # SKIRTOR torus emission peaks at 10-50 µm; widen with breathing room
+    # so context (NIR + sub-mm tails) is visible alongside the IR peak.
     ax.set_xlim(0.5, 500)
-    ax.set_ylim(1e21, 1e32)
+    ax.set_ylim(1e25, 1e32)
 
 # Right column: Total SED landscape (3D heatmap as color)
 for row, cos_inc in enumerate([0.9, 0.3]):
@@ -143,10 +149,19 @@ for row, cos_inc in enumerate([0.9, 0.3]):
     ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
     ax.set_title(f"Luminosity landscape (θ={np.degrees(np.arccos(cos_inc)):.0f}°)")
     ax.legend(fontsize=10, frameon=False, ncol=2)
+    # SKIRTOR torus emission peaks at 10-50 µm; widen with breathing room
+    # so context (NIR + sub-mm tails) is visible alongside the IR peak.
     ax.set_xlim(0.5, 500)
-    ax.set_ylim(1e21, 1e32)
+    ax.set_ylim(1e25, 1e32)
 
-fig.suptitle("SKIRTOR Clumpy Torus: Inclination, Optical Depth, and Clumping Effects", fontsize=12)
-fig.tight_layout(rect=[0, 0, 1, 0.97])
-plt.savefig("plot_skirtor_variants.png", dpi=100, bbox_inches="tight")
+# With sharex/sharey, hide tick labels on inner panels so labels don't crowd.
+for ax in axes.flat:
+    ax.label_outer()
+
+fig.suptitle(
+    "SKIRTOR Clumpy Torus: Inclination, Optical Depth, and Clumping Effects",
+    fontsize=14,
+)
+fig.tight_layout(rect=[0, 0, 1, 0.96])
+plt.savefig("plot_skirtor_variants.png", dpi=150, bbox_inches="tight")
 plt.show()
