@@ -102,6 +102,7 @@ def test_backward_compat_solar_n1():
 # ── 3. Velocity interpolation is monotone and clamps at grid edges
 
 
+@h5_only
 def test_velocity_interpolation():
     """Velocity interpolation is continuous and clamps at grid edges."""
     velocities = [100.0, 200.0, 300.0, 500.0, 750.0, 1000.0]

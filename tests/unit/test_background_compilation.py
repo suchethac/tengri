@@ -135,6 +135,14 @@ class TestBackgroundCompilation:
             if engine_cache is not None:
                 engine_cache.clear()
 
+            # Also clear the module-level shared cache used by the background
+            # worker — see fitter._start_background_compilation. Without this
+            # the worker short-circuits on a warm signature from prior tests
+            # in the same process and never sees the patched compile().
+            from tengri.inference.jit_engine import _SHARED_ENGINE_CACHE
+
+            _SHARED_ENGINE_CACHE.clear()
+
             fitter = Fitter(
                 model, mock.flux_obs, mock.noise, data_type="photometry", compile_modes="auto"
             )

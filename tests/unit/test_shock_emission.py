@@ -1,5 +1,7 @@
 """Unit tests for MAPPINGS III + V shock emission model."""
 
+from pathlib import Path
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -11,6 +13,12 @@ from tengri.components.nebular.shock import (
     _load_mappings_grids,
     compute_shock_sed,
     shock_line_ratios,
+)
+
+_H5_PATH = Path(__file__).resolve().parents[2] / "data" / "mappings_templates.h5"
+h5_only = pytest.mark.skipif(
+    not _H5_PATH.exists(),
+    reason="data/mappings_templates.h5 not found; build via download_mappings_templates.py",
 )
 
 
@@ -59,6 +67,7 @@ class TestShockLineRatios:
             nii_ha = float(ratios["NII_6583A"]) / float(ratios["HA_6563A"])
             assert nii_ha > 0.2, f"[NII]/Hα={nii_ha:.2f} at v={v} not shock-like"
 
+    @h5_only
     def test_oiii_increases_with_velocity(self):
         """[OIII] should increase with shock velocity (higher ionization).
 
@@ -79,6 +88,7 @@ class TestShockLineRatios:
             f"[OIII] should increase from 200 to 800 km/s, got {oiii_low:.2f}→{oiii_high:.2f}"
         )
 
+    @h5_only
     def test_velocity_out_of_bounds_raises(self):
         """Velocities outside the grid range must raise ValueError immediately."""
         with pytest.raises(ValueError, match="shock_velocity"):
@@ -222,6 +232,7 @@ class TestShockJIT:
 
 
 class TestShockDifferentiable:
+    @h5_only
     def test_grad_wrt_velocity(self):
         wave = jnp.linspace(3000.0, 8000.0, 500)
 

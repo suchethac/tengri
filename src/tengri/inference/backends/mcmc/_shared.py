@@ -88,7 +88,7 @@ def _get_ghmc_kernel():
 #   use_pathfinder_warmup → picks pathfinder_adaptation vs window_adaptation (bool)
 
 
-@functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8, 9, 10))
+@functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8, 9))
 def _nuts_full_scan(
     init_flat,
     warmup_key,
@@ -97,7 +97,6 @@ def _nuts_full_scan(
     data_args,
     n_warmup,
     max_doublings,
-    n_burnin,
     use_dense,
     target_accept_rate,
     use_pathfinder_warmup: bool = False,
@@ -114,8 +113,11 @@ def _nuts_full_scan(
         Initial position in unbounded latent space.
     warmup_key : PRNGKey
         Random key for window adaptation.
-    chain_keys : ndarray, shape (n_burnin + n_samples, 2)
-        Pre-split keys for the combined burn-in + sampling chain.
+    chain_keys : ndarray, shape (n_chain, 2)
+        Pre-split keys for the chain. ``n_chain = n_burnin + n_samples``;
+        burnin is discarded by the *caller* via Python slicing rather
+        than inside JIT, so changing ``n_burnin`` while keeping
+        ``n_chain`` constant does not trigger recompilation.
     logdensity_fn_2arg : callable (static)
         ``log_p(position, data_args)`` — galaxy-agnostic log-posterior.
     data_args : pytree (traced)
@@ -124,8 +126,6 @@ def _nuts_full_scan(
         Window adaptation steps.
     max_doublings : int (static)
         Maximum NUTS tree doublings.
-    n_burnin : int (static)
-        Burn-in steps (discarded).
     use_dense : bool (static)
         Dense vs diagonal mass matrix. Ignored when ``use_pathfinder_warmup``
         is True (Pathfinder always returns a full inverse-covariance matrix
@@ -142,8 +142,9 @@ def _nuts_full_scan(
 
     Returns
     -------
-    positions : ndarray, shape (n_samples, D)
-    divergent : ndarray, shape (n_samples,)
+    positions : ndarray, shape (n_chain, D)
+    divergent : ndarray, shape (n_chain,)
+        Both include the burnin prefix; caller slices ``[n_burnin:]``.
     step_size : scalar
     inv_mass_matrix : ndarray, shape (D,) or (D, D)
     """
@@ -178,13 +179,11 @@ def _nuts_full_scan(
         s, info = kernel(k, s, ld_1arg, step_size, inv_mass_matrix, max_doublings)
         return s, (s.position, info.is_divergent)
 
-    if n_burnin > 0:
-        state, _ = jax.lax.scan(_step, state, chain_keys[:n_burnin])
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys[n_burnin:])
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
     return positions, divergent, step_size, inv_mass_matrix
 
 
-@functools.partial(jax.jit, static_argnums=(2, 6, 7))
+@functools.partial(jax.jit, static_argnums=(2, 6))
 def _nuts_chain_scan(
     state,
     chain_keys,
@@ -193,7 +192,6 @@ def _nuts_chain_scan(
     step_size,
     inv_mass_matrix,
     max_doublings,
-    n_burnin,
 ):
     """Outer JIT: NUTS burn-in + sampling with pre-computed adaptation params.
 
@@ -205,19 +203,19 @@ def _nuts_chain_scan(
     ----------
     state : NUTSState
         Initial chain state (from ``blackjax.mcmc.nuts.init``).
-    chain_keys : ndarray, shape (n_burnin + n_samples, 2)
-        Pre-split keys for the combined chain.
+    chain_keys : ndarray, shape (n_chain, 2)
+        Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
     logdensity_fn_2arg : callable (static)
     data_args : pytree (traced)
     step_size : scalar (traced)
     inv_mass_matrix : ndarray (traced)
     max_doublings : int (static)
-    n_burnin : int (static)
 
     Returns
     -------
-    positions : ndarray, shape (n_samples, D)
-    divergent : ndarray, shape (n_samples,)
+    positions : ndarray, shape (n_chain, D)
+    divergent : ndarray, shape (n_chain,)
+        Caller slices ``[n_burnin:]``.
     """
 
     def ld(pos):
@@ -230,9 +228,7 @@ def _nuts_chain_scan(
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix, max_doublings)
         return s, (s.position, info.is_divergent)
 
-    if n_burnin > 0:
-        state, _ = jax.lax.scan(_step, state, chain_keys[:n_burnin])
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys[n_burnin:])
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
     return positions, divergent
 
 
@@ -250,24 +246,25 @@ def _hmc_full_scan(
     data_args,
     n_warmup,
     n_leapfrog,
-    n_burnin,
     use_dense,
     target_accept_rate,
+    use_pathfinder_warmup: bool = False,
 ):
-    """Outer JIT: BlackJAX HMC window adaptation + burn-in + sampling.
+    """Outer JIT: BlackJAX HMC window adaptation + sampling chain.
 
-    Wraps warmup, burn-in, and sampling in a single ``jax.jit`` so the
-    HMC leapfrog kernel is compiled once. Returns adaptation params for
-    the Python-side cache.
+    Wraps warmup and the leapfrog scan in a single ``jax.jit`` so the
+    HMC kernel is compiled once. Burnin discard is done by the caller
+    Python-side, so changing ``n_burnin`` while keeping ``n_chain``
+    constant does not trigger recompilation.
 
     Parameters
     ----------
     init_flat : ndarray, shape (D,)
         Initial position in unbounded latent space.
     warmup_key : PRNGKey
-        Random key for window adaptation.
-    chain_keys : ndarray, shape (n_burnin + n_samples, 2)
-        Pre-split keys for the combined chain.
+        Random key for warmup adaptation.
+    chain_keys : ndarray, shape (n_chain, 2)
+        Pre-split keys (``n_chain = n_burnin + n_samples``).
     logdensity_fn_2arg : callable (static)
         ``log_p(position, data_args)`` — galaxy-agnostic log-posterior.
     data_args : pytree (traced)
@@ -276,17 +273,22 @@ def _hmc_full_scan(
         Window adaptation steps.
     n_leapfrog : int (static)
         Leapfrog integration steps per HMC proposal.
-    n_burnin : int (static)
-        Post-warmup burn-in steps (discarded).
     use_dense : bool (static)
-        Dense vs diagonal mass matrix.
+        Dense vs diagonal mass matrix. Ignored when
+        ``use_pathfinder_warmup=True``.
     target_accept_rate : float (static)
         Target acceptance rate for dual averaging.
+    use_pathfinder_warmup : bool (static)
+        When True, replace ``window_adaptation`` with
+        ``pathfinder_adaptation`` (L-BFGS mode-finding + dual-averaging
+        step-size refinement). Typically faster on D > ~30 problems
+        where window adaptation's regression matrix update dominates.
 
     Returns
     -------
-    positions : ndarray, shape (n_samples, D)
-    divergent : ndarray, shape (n_samples,)
+    positions : ndarray, shape (n_chain, D)
+    divergent : ndarray, shape (n_chain,)
+        Caller slices ``[n_burnin:]``.
     step_size : scalar
     inv_mass_matrix : ndarray, shape (D,) or (D, D)
     """
@@ -295,13 +297,23 @@ def _hmc_full_scan(
     def ld_1arg(pos):
         return logdensity_fn_2arg(pos, data_args)
 
-    warmup = blackjax.window_adaptation(
-        blackjax.hmc,
-        ld_1arg,
-        is_mass_matrix_diagonal=not use_dense,
-        target_acceptance_rate=target_accept_rate,
-        num_integration_steps=n_leapfrog,
-    )
+    if use_pathfinder_warmup:
+        from blackjax.adaptation.pathfinder_adaptation import pathfinder_adaptation
+
+        warmup = pathfinder_adaptation(
+            blackjax.hmc,
+            ld_1arg,
+            target_acceptance_rate=target_accept_rate,
+            num_integration_steps=n_leapfrog,
+        )
+    else:
+        warmup = blackjax.window_adaptation(
+            blackjax.hmc,
+            ld_1arg,
+            is_mass_matrix_diagonal=not use_dense,
+            target_acceptance_rate=target_accept_rate,
+            num_integration_steps=n_leapfrog,
+        )
     (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
     step_size = parameters["step_size"]
     inv_mass_matrix = parameters["inverse_mass_matrix"]
@@ -313,13 +325,11 @@ def _hmc_full_scan(
         s, info = kernel(k, s, ld_1arg, step_size, inv_mass_matrix, n_leapfrog)
         return s, (s.position, info.is_divergent)
 
-    if n_burnin > 0:
-        state, _ = jax.lax.scan(_step, state, chain_keys[:n_burnin])
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys[n_burnin:])
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
     return positions, divergent, step_size, inv_mass_matrix
 
 
-@functools.partial(jax.jit, static_argnums=(2, 6, 7))
+@functools.partial(jax.jit, static_argnums=(2, 6))
 def _hmc_chain_scan(
     state,
     chain_keys,
@@ -328,7 +338,6 @@ def _hmc_chain_scan(
     step_size,
     inv_mass_matrix,
     n_leapfrog,
-    n_burnin,
 ):
     """Outer JIT: HMC burn-in + sampling with pre-computed adaptation params.
 
@@ -336,25 +345,24 @@ def _hmc_chain_scan(
     ----------
     state : HMCState
         Initial chain state (from ``blackjax.mcmc.hmc.init``).
-    chain_keys : ndarray, shape (n_burnin + n_samples, 2)
-        Pre-split keys for the combined chain.
+    chain_keys : ndarray, shape (n_chain, 2)
+        Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
     logdensity_fn_2arg : callable (static)
         ``log_p(position, data_args)``.
     data_args : pytree (traced)
         Observed data tensors.
     step_size : scalar (traced)
-        Step size from window adaptation.
+        Step size from warmup adaptation.
     inv_mass_matrix : ndarray (traced), shape (D,) or (D, D)
-        Inverse mass matrix from window adaptation.
+        Inverse mass matrix from warmup adaptation.
     n_leapfrog : int (static)
         Leapfrog integration steps per proposal.
-    n_burnin : int (static)
-        Steps to discard at the start of the chain.
 
     Returns
     -------
-    positions : ndarray, shape (n_samples, D)
-    divergent : ndarray, shape (n_samples,)
+    positions : ndarray, shape (n_chain, D)
+    divergent : ndarray, shape (n_chain,)
+        Caller slices ``[n_burnin:]``.
     """
 
     def ld(pos):
@@ -367,9 +375,7 @@ def _hmc_chain_scan(
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix, n_leapfrog)
         return s, (s.position, info.is_divergent)
 
-    if n_burnin > 0:
-        state, _ = jax.lax.scan(_step, state, chain_keys[:n_burnin])
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys[n_burnin:])
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
     return positions, divergent
 
 

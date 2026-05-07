@@ -118,6 +118,14 @@ class TestCompileModesAuto:
         monkeypatch.delenv("TENGRI_NO_BACKGROUND_COMPILE", raising=False)
         model, mock = model_and_data_parametric
 
+        # Drop any warm cache from a prior test so the background thread
+        # actually triggers the patched compile() rather than short-circuiting
+        # on a cache hit (this fixture's signature can clash with earlier tests
+        # that share the same compile_signature).
+        from tengri.inference.jit_engine import _SHARED_ENGINE_CACHE
+
+        _SHARED_ENGINE_CACHE.clear()
+
         compile_calls = []
         original_compile = Fitter.compile
 

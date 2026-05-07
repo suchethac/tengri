@@ -210,7 +210,6 @@ def run_nuts(
                 parameters["step_size"],
                 parameters["inverse_mass_matrix"],
                 max_num_doublings,
-                n_burnin,
             )
             jax.block_until_ready(positions)
     else:
@@ -226,7 +225,6 @@ def run_nuts(
                 data_args,
                 n_warmup,
                 max_num_doublings,
-                n_burnin,
                 use_dense,
                 target_accept_rate,
                 bool(pathfinder_warmstart),
@@ -241,6 +239,12 @@ def run_nuts(
                 float(step_size),
             )
 
+    # Burnin discard happens Python-side (not inside JIT) so changing
+    # n_burnin doesn't trigger a recompile when n_burnin + n_samples is
+    # held constant.
+    if n_burnin > 0:
+        positions = positions[n_burnin:]
+        divergent = divergent[n_burnin:]
     n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0

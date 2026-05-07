@@ -1408,7 +1408,6 @@ class Fitter:
                         data_args,
                         n_warmup,
                         10,
-                        n_burnin,
                         use_dense,
                         0.85,
                     )
@@ -1421,7 +1420,6 @@ class Fitter:
                         data_args,
                         n_warmup,
                         10,
-                        n_burnin,
                         use_dense,
                         0.85,
                     )

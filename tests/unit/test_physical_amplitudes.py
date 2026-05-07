@@ -322,6 +322,15 @@ def _make_ssp_if_available():
     return load_ssp_data(str(p))
 
 
+_MAPPINGS_H5 = (
+    __import__("pathlib").Path(__file__).resolve().parents[2] / "data" / "mappings_templates.h5"
+)
+_h5_only_shock = pytest.mark.skipif(
+    not _MAPPINGS_H5.exists(),
+    reason="data/mappings_templates.h5 not found; build via download_mappings_templates.py",
+)
+
+
 class TestShockLineRatios:
     """MAPPINGS V shock models (via tengri.nebular.shock_line_ratios).
 
@@ -356,6 +365,7 @@ class TestShockLineRatios:
         balmer = r["HA_6563A"] / r["Hb_4861A"]
         assert 2.5 < balmer < 3.3, f"Hα/Hβ = {balmer:.3f}"
 
+    @_h5_only_shock
     def test_sii_doublet_is_density_sensitive(self):
         """[SII] 6716/6731 increases from ~0.45 (high n) to ~1.45 (low n)."""
         r_low = self._r(log_n=0.0)  # 1 cm^-3
