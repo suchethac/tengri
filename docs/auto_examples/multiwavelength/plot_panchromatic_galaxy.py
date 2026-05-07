@@ -56,7 +56,7 @@ if SSP_PATH is None:
 ssp = load_ssp_data(SSP_PATH)
 
 # Wavelength grid: UV through near-IR for SEDModel, radio appended separately
-wave_sed = jnp.logspace(jnp.log10(1000.0), jnp.log10(1e6), 800)  # 0.1 µm – 100 µm [Å]
+wave_sed = jnp.logspace(jnp.log10(1000.0), jnp.log10(1e7), 800)  # 0.1 µm – 1 mm [Å]
 obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_sed))
 
 spec = Parameters(
@@ -102,15 +102,19 @@ ax.loglog(
     wave_radio_um[mask_r], l_radio[mask_r], color="C2", lw=2.0, label="SF synchrotron (radio)"
 )
 
-# Wavelength regime labels
-for x, lbl in [(0.15, "UV"), (0.6, "Optical"), (10.0, "Mid-IR"), (1e3, "Radio")]:
+# Set y-limits BEFORE drawing region labels so they place correctly.
+ax.set_ylim(1e25, 1e34)
+
+# Wavelength regime labels (placed at fixed fraction of the y-axis).
+for x, lbl in [(0.15, "UV"), (0.6, "Optical"), (10.0, "Mid-IR"), (300.0, "FIR"), (1e4, "Radio")]:
     ax.axvline(x, color="0.75", lw=0.6, ls=":")
     ax.text(
         x * 1.2,
-        ax.get_ylim()[1] * 0.5 if ax.get_ylim()[1] > 0 else 1e28,
+        0.92,
         lbl,
         fontsize=9,
         color="0.5",
+        transform=ax.get_xaxis_transform(),
     )
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")

@@ -26,29 +26,7 @@ Negative δ steepens UV attenuation; positive δ flattens it. This controls
 whether dust absorbs more or less light at short wavelengths relative to
 optical.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-76
-
-
-
-.. image-sg:: /auto_examples/dust/images/sphx_glr_plot_dust_slope_sweep_001.png
-   :alt: Dust Attenuation Curve Slope: UV vs. Optical Hardness
-   :srcset: /auto_examples/dust/images/sphx_glr_plot_dust_slope_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py:517: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
-      self._nebular_backend = BakedInBackend()
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 10-81
 
 .. code-block:: Python
 
@@ -104,6 +82,11 @@ optical.
 
     # --- Sweep dust_slope ---
     values = [-1.5, -0.7, 0.0, 0.5]
+
+    # # The sweep_parameter helper creates a single SEDModel instance and calls
+    # # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
+    # # automatically via tengri's persistent compilation cache (enabled at
+    # # import time), so repeated forward model calls reuse the compiled kernel.
     fig, ax = sweep_parameter(
         model,
         "dust_slope",

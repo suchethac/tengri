@@ -26,18 +26,7 @@ Shows how an empirically-trained surrogate matches observed quasar spectra
 across the UV through near-IR, with parametric control over redshift and
 luminosity.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-114
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_qsogen_spectrum_001.png
-   :alt: QSOgen: Empirical Quasar SED Template (Temple+2021), QSOgen Luminosity Sequence (z=0.0), QSOgen Redshift Evolution (log L_bol/L⊙=11.5), Quasar SED Shape Consistency (z=0.5), Wide Luminosity Range (z=1.5)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_qsogen_spectrum_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 10-112
 
 .. code-block:: Python
 
@@ -65,8 +54,7 @@ luminosity.
     # → log10(L_bol/Lsun) ≈ 10.4–13.4  (since log10(Lsun_erg/s) = 33.58).
     for log_lbol in [10.5, 11.5, 12.5, 13.5]:
         sed = qsogen(wavelength, agn_log_lbol=log_lbol, z=z)
-        ax.loglog(wave_um, np.array(sed), lw=1.5,
-                  label=f"log(L_bol/L⊙)={log_lbol:.1f}")
+        ax.loglog(wave_um, np.array(sed), lw=1.5, label=f"log(L_bol/L⊙)={log_lbol:.1f}")
 
     ax.set_xlabel(r"Rest Wavelength [$\mu$m]")
     ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
@@ -98,8 +86,7 @@ luminosity.
         sed = qsogen(wavelength, agn_log_lbol=log_lbol, z=z)
         nu = 3e18 / np.array(wavelength)
         nu_lnu = np.array(sed) * nu
-        ax.loglog(wave_um, nu_lnu, lw=1.5,
-                  label=f"log(L_bol/L⊙)={log_lbol:.1f}")
+        ax.loglog(wave_um, nu_lnu, lw=1.5, label=f"log(L_bol/L⊙)={log_lbol:.1f}")
 
     ax.set_xlabel(r"Rest Wavelength [$\mu$m]")
     ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")

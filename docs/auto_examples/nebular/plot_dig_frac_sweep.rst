@@ -26,33 +26,7 @@ When present, DIG shifts galaxies toward the LINER region on the BPT diagram
 by suppressing [OIII] relative to [NII]. f_DIG = 0 is pure HII gas;
 f_DIG = 1 is pure DIG.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-80
-
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_dig_frac_sweep_001.png
-   :alt: Diffuse Ionized Gas: Impact on Optical Diagnostic Lines
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_dig_frac_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:91: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py:509: CueWNESSPWarning: CueBackend: the SSP grid passed via ssp_data appears to contain baked-in nebular emission ('wNE' SSPs). The maximum log10(Q_H) for SSP bins younger than 10 Myr is 42.8, well below the expected ~47–50 for bare stellar populations. Cue's ionizing-spectrum-shape fit will be unreliable and nebular luminosities will be severely under-predicted. Use a pure-continuum SSP (no baked-in nebular emission). Suppress with: CueBackend(ssp_data=None) and provide Q_H externally.
-      self._nebular_backend = CueBackend(spec.cue_weights_path, ssp_data=ssp_data)
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/pipeline.py:345: UserWarning: Unrecognized parameter names passed to Model: ['neb_dig_frac']. These will be silently ignored. Did you mean one of: ['dust_Rv', 'dust_bump_strength', 'dust_delta', 'dust_f_obscuration', 'dust_slope', 'dust_tau_bc', 'dust_tau_diff', 'met_alpha_fe', 'met_logzsol', 'neb_fesc', 'neb_fesc_lya', 'neb_logU', 'neb_logZ_gas', 'noise_dof', 'noise_frac_cal', 'redshift', 'sfh_tsnorm_log_peak_sfr', 'sfh_tsnorm_peak_lbt_gyr', 'sfh_tsnorm_skew', 'sfh_tsnorm_trunc', 'sfh_tsnorm_width_gyr']?
-      p = model._get_internal_params(params)
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 10-85
 
 .. code-block:: Python
 
@@ -113,6 +87,11 @@ f_DIG = 1 is pure DIG.
 
     # --- Sweep DIG fraction ---
     values = [0.0, 0.2, 0.4, 0.6, 0.8]
+
+    # # The sweep_parameter helper creates a single SEDModel instance and calls
+    # # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
+    # # automatically via tengri's persistent compilation cache (enabled at
+    # # import time), so repeated forward model calls reuse the compiled kernel.
     fig, ax = sweep_parameter(
         model,
         "neb_dig_frac",
@@ -126,11 +105,6 @@ f_DIG = 1 is pure DIG.
     plt.tight_layout()
     plt.savefig("plot_dig_frac_sweep.png", dpi=150, bbox_inches="tight")
     plt.show()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 9.707 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_dig_frac_sweep.py:

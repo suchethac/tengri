@@ -34,16 +34,10 @@ Each tier adds physical complexity. No SSP data required.
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri.agn import AGN_MODELS, get_agn_model
+    from tengri.agn import AGN_MODELS, resolve_agn_model
     from tengri.analysis.plotting import setup_style
 
     setup_style()
-
-
-
-
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-21
@@ -61,12 +55,6 @@ Wavelength grid: 100 Angstrom (UV) to 500 micron (MIR)
     log_lbol = 12.0
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 28-35
 
 Evaluate each registered AGN model
@@ -77,7 +65,7 @@ Models shown in order of increasing physical complexity.
 "relagn" is self-normalizing from BH physics (M, Mdot, spin): parameters
 chosen so that log_Lbol ≈ 12.1 Lsun matches the reference.
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-94
+.. GENERATED FROM PYTHON SOURCE LINES 35-95
 
 .. code-block:: Python
 
@@ -105,7 +93,7 @@ chosen so that log_Lbol ≈ 12.1 Lsun matches the reference.
         if name not in AGN_MODELS:
             continue
         try:
-            model_fn = get_agn_model(name)
+            model_fn = resolve_agn_model(name)
             kwargs = model_kwargs.get(name, {"agn_log_lbol": log_lbol})
             l_nu = model_fn(wavelength, **kwargs)
             l_nu_np = np.array(l_nu)
@@ -113,7 +101,10 @@ chosen so that log_Lbol ≈ 12.1 Lsun matches the reference.
                 continue
             n_params = param_counts.get(name, "?")
             ax.loglog(
-                wave_um, l_nu_np, lw=1.8, color=color,
+                wave_um,
+                l_nu_np,
+                lw=1.8,
+                color=color,
                 label=f"{name} ({n_params} params)",
             )
         except Exception:
@@ -121,9 +112,7 @@ chosen so that log_Lbol ≈ 12.1 Lsun matches the reference.
 
     ax.set_xlabel(r"Wavelength [$\mu$m]")
     ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-    ax.set_title(
-        rf"AGN SEDModel Hierarchy at $\log L_{{\mathrm{{bol}}}} = {log_lbol:.0f}$"
-    )
+    ax.set_title(rf"AGN SEDModel Hierarchy at $\log L_{{\mathrm{{bol}}}} = {log_lbol:.0f}$")
     ax.set_xlim(0.01, 50)
     ax.set_ylim(1e27, 1e32)
     ax.legend(frameon=False, fontsize=10)
@@ -138,31 +127,8 @@ chosen so that log_Lbol ≈ 12.1 Lsun matches the reference.
     # - **relagn**: RELAGN outer disc (Hagen & Done 2023) + KYCONV Kerr ray-tracing;
     #   self-normalizing from BH physics — shown at log_Lbol ≈ 12.1 (8 params)
 
-    plt.savefig("agn_hierarchy.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_agn_hierarchy.png", dpi=150, bbox_inches="tight")
     plt.show()
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_hierarchy_001.png
-   :alt: AGN SEDModel Hierarchy at $\log L_{\mathrm{bol}} = 12$
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_hierarchy_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/examples/agn/plot_agn_hierarchy.py:59: DeprecationWarning: `get_agn_model` is deprecated and will be removed in tengri v1.0; use `resolve_agn_model` instead.
-      model_fn = get_agn_model(name)
-
-
-
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.576 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_hierarchy.py:

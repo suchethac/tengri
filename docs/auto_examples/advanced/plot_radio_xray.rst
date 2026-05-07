@@ -41,12 +41,6 @@ binary contributions. No SSP data required for the multi-wavelength components.
     setup_style()
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 21-22
 
 Wavelength grid: 1 Angstrom (hard X-ray) to 10^10 Angstrom (30 cm radio)
@@ -59,16 +53,10 @@ Wavelength grid: 1 Angstrom (hard X-ray) to 10^10 Angstrom (30 cm radio)
     wave_um = np.array(wavelength) / 1e4  # micron
 
     # Galaxy parameters
-    SFR = 10.0          # Msun/yr
+    SFR = 10.0  # Msun/yr
     STELLAR_MASS = 1e11  # Msun
-    L_IR = 1e11          # Lsun (total IR 8-1000 um)
-    L_AGN_BOL = 1e44     # Lsun (AGN bolometric)
-
-
-
-
-
-
+    L_IR = 1e11  # Lsun (total IR 8-1000 um)
+    L_AGN_BOL = 1e44  # Lsun (AGN bolometric)
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 32-34
@@ -76,7 +64,7 @@ Wavelength grid: 1 Angstrom (hard X-ray) to 10^10 Angstrom (30 cm radio)
 Compute each multi-wavelength component
 -----------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 34-49
+.. GENERATED FROM PYTHON SOURCE LINES 34-51
 
 .. code-block:: Python
 
@@ -92,22 +80,18 @@ Compute each multi-wavelength component
 
     # Radio from AGN jets (moderate radio-loudness)
     l_radio_agn = radio_agn(
-        wavelength, L_agn_bol=L_AGN_BOL, radio_loudness=1.0,
+        wavelength,
+        L_agn_bol=L_AGN_BOL,
+        radio_loudness=1.0,
     )
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 50-52
+.. GENERATED FROM PYTHON SOURCE LINES 52-54
 
 Plot all components
 --------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 52-96
+.. GENERATED FROM PYTHON SOURCE LINES 54-104
 
 .. code-block:: Python
 
@@ -124,8 +108,10 @@ Plot all components
     for l_nu, label, color, ls in components:
         l_np = np.array(l_nu)
         pos = l_np[l_np > 0]
-        print(f"DIAG {label}: n_positive={len(pos)}, min={pos.min() if len(pos) else 0:.2e}, "
-              f"max={l_np.max():.2e}")
+        print(
+            f"DIAG {label}: n_positive={len(pos)}, min={pos.min() if len(pos) else 0:.2e}, "
+            f"max={l_np.max():.2e}"
+        )
         # Mask zero-emission regions for clean plotting
         mask = l_np > 0
         if not np.any(mask):
@@ -136,8 +122,12 @@ Plot all components
     l_total = np.array(l_xrb + l_xray_agn + l_radio_sf + l_radio_agn)
     mask_total = l_total > 0
     ax.loglog(
-        wave_um[mask_total], l_total[mask_total],
-        "k-", lw=2.5, alpha=0.4, label="Total",
+        wave_um[mask_total],
+        l_total[mask_total],
+        "k-",
+        lw=2.5,
+        alpha=0.4,
+        label="Total",
     )
 
     ax.set_xlabel(r"Wavelength [$\mu$m]")
@@ -153,28 +143,8 @@ Plot all components
         ax.text(x * 1.3, ax.get_ylim()[1] * 0.3, label, fontsize=10, color="grey")
 
     fig.tight_layout()
-    plt.savefig("radio_xray_sed.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_radio_xray.png", dpi=150, bbox_inches="tight")
     plt.show()
-
-
-
-.. image-sg:: /auto_examples/advanced/images/sphx_glr_plot_radio_xray_001.png
-   :alt: Panchromatic Galaxy SED: X-ray to Radio Components
-   :srcset: /auto_examples/advanced/images/sphx_glr_plot_radio_xray_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    DIAG XRB (HMXB + LMXB): n_positive=419, min=7.37e+21, max=7.46e+23
-    DIAG AGN corona (X-ray): n_positive=419, min=8.16e+23, max=4.00e+25
-    DIAG SF synchrotron (radio): n_positive=600, min=8.40e-07, max=2.10e-04
-    DIAG AGN jets (radio): n_positive=600, min=1.63e+28, max=2.04e+30
-
-
-
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_radio_xray.py:

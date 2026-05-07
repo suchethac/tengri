@@ -35,18 +35,7 @@ This example sweeps :math:`L_{\rm IR}` from :math:`10^{9}` to
 expected tight linear correlation and showing how the :math:`q_{\rm IR}`
 parameter shifts the normalization.
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-88
-
-
-
-.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_fir_radio_correlation_001.png
-   :alt: FIR–Radio Correlation, $q_{\rm IR}$ vs IR Luminosity
-   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_fir_radio_correlation_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 19-89
 
 .. code-block:: Python
 
@@ -65,8 +54,8 @@ parameter shifts the normalization.
     setup_style()
 
     # 1.4 GHz reference wavelength in Angstrom
-    _C_LIGHT = 2.99792458e18   # Å/s
-    NU_1P4GHZ = 1.4e9          # Hz
+    _C_LIGHT = 2.99792458e18  # Å/s
+    NU_1P4GHZ = 1.4e9  # Hz
     WAVE_1P4GHZ = _C_LIGHT / NU_1P4GHZ  # Å
 
     # Sweep IR luminosity
@@ -90,8 +79,9 @@ parameter shifts the normalization.
     for cal in calibrations:
         l_radio_arr = []
         for lir in L_ir_erg:
-            l_nu_arr = radio_star_forming(wave_ref, L_ir=float(lir),
-                                          q_ir=cal["q_ir"], alpha_sf=cal["alpha"])
+            l_nu_arr = radio_star_forming(
+                wave_ref, L_ir=float(lir), q_ir=cal["q_ir"], alpha_sf=cal["alpha"]
+            )
             l_radio_arr.append(float(np.asarray(l_nu_arr).ravel()[0]))
         l_radio = np.array(l_radio_arr)
 

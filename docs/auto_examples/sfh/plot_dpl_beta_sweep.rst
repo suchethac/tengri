@@ -24,29 +24,7 @@ Double Power-Law SFH: Falling Slope β
 The falling slope β controls post-peak quenching. Large β gives rapid quenching;
 small β gives a gentle tail.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-65
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_dpl_beta_sweep_001.png
-   :alt: Double Power-Law SFH: Falling Slope β
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_dpl_beta_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py:517: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
-      self._nebular_backend = BakedInBackend()
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 8-70
 
 .. code-block:: Python
 
@@ -102,6 +80,11 @@ small β gives a gentle tail.
 
     # Sweep parameter
     values = [0.3, 1.0, 2.0, 5.0, 10.0]
+
+    # # The sweep_parameter helper creates a single SEDModel instance and calls
+    # # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
+    # # automatically via tengri's persistent compilation cache (enabled at
+    # # import time), so repeated forward model calls reuse the compiled kernel.
     fig = sfh_sed_comparison(model, "sfh_dpl_beta", values, cmap="Reds")
     fig.suptitle("Double Power-Law SFH: Falling Slope β", fontsize=12, y=1.00)
     plt.tight_layout()

@@ -114,6 +114,7 @@ for ax, wmin, wmax, title, lines in regions:
 
 fig.suptitle("Nebular Emission: Backend Comparison", fontsize=12)
 fig.tight_layout(rect=[0, 0, 1, 0.95])
+plt.savefig("plot_nebular_backends.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 # --- Summary ---

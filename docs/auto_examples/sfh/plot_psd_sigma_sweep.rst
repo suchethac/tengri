@@ -24,29 +24,7 @@ Stochastic SFH: Burstiness Amplitude σ
 σ controls how violently star formation fluctuates around the smooth trend.
 Small σ ≈ smooth; large σ = dramatic bursts.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-71
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_psd_sigma_sweep_001.png
-   :alt: Stochastic SFH: Burstiness Amplitude σ
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_psd_sigma_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py:517: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
-      self._nebular_backend = BakedInBackend()
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 8-85
 
 .. code-block:: Python
 
@@ -106,10 +84,24 @@ Small σ ≈ smooth; large σ = dramatic bursts.
     # Sweep parameter with stochastic samples
     key = jax.random.PRNGKey(0)
     values = [0.1, 0.5, 1.0, 2.0, 3.5]
+
+    # # The sweep_parameter helper creates a single SEDModel instance and calls
+    # # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
+    # # automatically via tengri's persistent compilation cache (enabled at
+    # # import time), so repeated forward model calls reuse the compiled kernel.
     fig = sfh_sed_comparison(
-        model, "sfh_field_psd_sigma", values, cmap="plasma", n_stochastic=5, key=key
+        model, "sfh_field_psd_sigma", values, cmap="viridis", n_stochastic=5, key=key
     )
-    fig.suptitle("Stochastic SFH: Burstiness Amplitude σ", fontsize=12, y=1.00)
+    # Broad zoomed-out view: full age range and full panchromatic SED. Lets the
+    # eye see the bursts in context of the full SFH and the SED across all bands.
+    ax_sfh, ax_sed = fig.axes
+    ax_sfh.set_xlim(0, 13.7)
+    ax_sfh.set_ylim(0, 100)
+
+    ax_sed.set_xlim(900, 1e7)
+    ax_sed.set_ylim(1e0, 1e8)
+
+    fig.suptitle(r"Stochastic SFH: Burstiness Amplitude $\sigma$", fontsize=14, y=1.00)
     plt.tight_layout()
     plt.savefig("plot_psd_sigma_sweep.png", dpi=150, bbox_inches="tight")
     plt.show()

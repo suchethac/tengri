@@ -25,31 +25,7 @@ A smooth (parametric) model fits a bursty galaxy with χ² ≈ 1 but
 systematically underestimates recent SFR by up to 10×. The trap:
 good residuals do not guarantee unbiased physical parameters.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-130
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_wrong_model_trap_001.png
-   :alt: Wrong-SEDModel Trap: χ² ≈ 1 but SFH is wrong, SFH: True vs Smooth SEDModel Fit, Residuals: reduced χ² = nan (looks good!)
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_wrong_model_trap_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py:517: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
-      self._nebular_backend = BakedInBackend()
-    /Users/suchethacooray/Projects/tengri/examples/sfh/plot_wrong_model_trap.py:115: RuntimeWarning: invalid value encountered in subtract
-      residuals = (np.array(mock.flux_obs) - np.array(model_smooth.predict_spectrum(map_smooth.params))
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 9-135
 
 .. code-block:: Python
 
@@ -80,8 +56,12 @@ good residuals do not guarantee unbiased physical parameters.
 
     def _find_ssp():
         name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [Path("data") / name, Path("../data") / name, Path("../../data") / name,
-                  Path("../../../data") / name]:
+        for p in [
+            Path("data") / name,
+            Path("../data") / name,
+            Path("../../data") / name,
+            Path("../../../data") / name,
+        ]:
             if p.exists():
                 return str(p)
         return None
@@ -140,18 +120,18 @@ good residuals do not guarantee unbiased physical parameters.
 
     # --- Compare SFHs ---
     sfh_true = model_stoch.predict_sfh(true_params)
-    sfh_fit  = model_smooth.predict_sfh(map_smooth.params)
-    t_gyr    = np.array(sfh_true["t_gyr"])
+    sfh_fit = model_smooth.predict_sfh(map_smooth.params)
+    t_gyr = np.array(sfh_true["t_gyr"])
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 
     # Left: SFH comparison
     ax = axes[0]
-    ax.fill_between(t_gyr, 0, np.array(sfh_true["sfr_full"]),
-                    alpha=0.35, color="#d62728", label="True (bursty)")
+    ax.fill_between(
+        t_gyr, 0, np.array(sfh_true["sfr_full"]), alpha=0.35, color="#d62728", label="True (bursty)"
+    )
     ax.plot(t_gyr, sfh_true["sfr_full"], color="#d62728", lw=1.2)
-    ax.plot(t_gyr, sfh_fit["sfr_mean"], color="#1f77b4", lw=2.0, ls="--",
-            label="Smooth model MAP")
+    ax.plot(t_gyr, sfh_fit["sfr_mean"], color="#1f77b4", lw=2.0, ls="--", label="Smooth model MAP")
     ax.set_xlabel("Lookback time [Gyr]")
     ax.set_ylabel(r"SFR [$M_\odot$ yr$^{-1}$]")
     ax.set_title("SFH: True vs Smooth SEDModel Fit")
@@ -159,8 +139,9 @@ good residuals do not guarantee unbiased physical parameters.
     ax.set_xlim(0, 13)
 
     # Right: residuals χ
-    residuals = (np.array(mock.flux_obs) - np.array(model_smooth.predict_spectrum(map_smooth.params))
-                 ) / np.array(mock.noise)
+    residuals = (
+        np.array(mock.flux_obs) - np.array(model_smooth.predict_spectrum(map_smooth.params))
+    ) / np.array(mock.noise)
     ax = axes[1]
     ax.plot(np.array(wave_obs), residuals, "k-", lw=0.6, alpha=0.7)
     ax.axhline(0, color="grey", lw=0.5)
@@ -174,11 +155,6 @@ good residuals do not guarantee unbiased physical parameters.
     fig.tight_layout()
     plt.savefig("plot_wrong_model_trap.png", dpi=150, bbox_inches="tight")
     plt.show()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 5.444 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_wrong_model_trap.py:

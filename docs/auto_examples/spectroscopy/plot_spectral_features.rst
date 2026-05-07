@@ -26,18 +26,7 @@ age and metallicity, providing complementary constraints when used together.
 D4000 rises with age; Hδ peaks at intermediate ages (A-star dominated);
 Mg b traces metallicity on the RGB/AGB branch.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-103
-
-
-
-.. image-sg:: /auto_examples/spectroscopy/images/sphx_glr_plot_spectral_features_001.png
-   :alt: Spectral Features: Age and Metallicity Probes, D4000 Break, H$\delta$ EW, Mg b Index
-   :srcset: /auto_examples/spectroscopy/images/sphx_glr_plot_spectral_features_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 10-108
 
 .. code-block:: Python
 
@@ -58,8 +47,12 @@ Mg b traces metallicity on the RGB/AGB branch.
 
     def _find_ssp():
         name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [Path("data") / name, Path("../data") / name, Path("../../data") / name,
-                  Path("../../../data") / name]:
+        for p in [
+            Path("data") / name,
+            Path("../data") / name,
+            Path("../../data") / name,
+            Path("../../../data") / name,
+        ]:
             if p.exists():
                 return str(p)
         return None
@@ -70,6 +63,7 @@ Mg b traces metallicity on the RGB/AGB branch.
         raise FileNotFoundError("SSP data not found — skipping example")
 
     ssp = load_ssp_data(SSP_PATH)
+
 
     # --- Index measurement helpers ---
     def _d4000(wave, flux):
@@ -121,9 +115,9 @@ Mg b traces metallicity on the RGB/AGB branch.
         axes[2].plot(ages_gyr, mgb_vals, color=color, lw=1.8, label=label)
 
     for ax, title, ylabel in [
-        (axes[0], "D4000 Break",       "D4000"),
-        (axes[1], r"H$\delta$ EW",     r"H$\delta$ EW [$\AA$]"),
-        (axes[2], "Mg b Index",        r"Mg b EW [$\AA$]"),
+        (axes[0], "D4000 Break", "D4000"),
+        (axes[1], r"H$\delta$ EW", r"H$\delta$ EW [$\AA$]"),
+        (axes[2], "Mg b Index", r"Mg b EW [$\AA$]"),
     ]:
         ax.set_xlabel(r"$\log_{10}$(Age / Gyr)")
         ax.set_ylabel(ylabel)

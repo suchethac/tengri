@@ -273,4 +273,5 @@ fig.suptitle(
     fontsize=13,
 )
 
+plt.savefig("plot_population_scaling.png", dpi=150, bbox_inches="tight")
 plt.show()

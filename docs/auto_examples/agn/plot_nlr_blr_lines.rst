@@ -25,18 +25,7 @@ Plot narrow-line (NLR, FWHM ~500 km/s) and broad-line region (BLR,
 FWHM ~5000 km/s) emission spectra. Shows how BLR vanishes at high
 inclination angles (Type 2 AGN) while NLR remains visible.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-139
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_nlr_blr_lines_001.png
-   :alt: AGN Emission Lines: NLR vs BLR Behavior, NLR vs BLR Spectral Comparison, BLR: Covering Fraction Sensitivity, BLR: Iron Multiplet Strength, NLR: Line Width Sensitivity
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_nlr_blr_lines_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 9-137
 
 .. code-block:: Python
 
@@ -46,7 +35,7 @@ inclination angles (Type 2 AGN) while NLR remains visible.
     import numpy as np
 
     from tengri.analysis.plotting import setup_style
-    from tengri.components.agn import blr_emission, nlr_emission
+    from tengri.components.agn import compute_blr_sed, compute_nlr_sed
 
     setup_style()
 
@@ -70,10 +59,10 @@ inclination angles (Type 2 AGN) while NLR remains visible.
     fwhm_nlr = 500.0
     fwhm_blr = 5000.0
 
-    l_nlr = nlr_emission(
+    l_nlr = compute_nlr_sed(
         wavelength, l_disc_bol_erg=L_disc_bol_erg, covering_fraction=covering_frac, fwhm_kms=fwhm_nlr
     )
-    l_blr = blr_emission(
+    l_blr = compute_blr_sed(
         wavelength,
         l_disc_bol_erg=L_disc_bol_erg,
         covering_fraction=covering_frac,
@@ -109,7 +98,7 @@ inclination angles (Type 2 AGN) while NLR remains visible.
     ax = axes[0, 1]
 
     for covering_frac in [0.05, 0.10, 0.20]:
-        l_blr = blr_emission(
+        l_blr = compute_blr_sed(
             wavelength,
             l_disc_bol_erg=L_disc_bol_erg,
             covering_fraction=covering_frac,
@@ -131,7 +120,7 @@ inclination angles (Type 2 AGN) while NLR remains visible.
 
     covering_frac = 0.1
     for fe2_strength in [0.0, 0.5, 1.0, 2.0]:
-        l_blr = blr_emission(
+        l_blr = compute_blr_sed(
             wavelength,
             l_disc_bol_erg=L_disc_bol_erg,
             covering_fraction=covering_frac,
@@ -152,12 +141,10 @@ inclination angles (Type 2 AGN) while NLR remains visible.
     ax = axes[1, 1]
 
     for fwhm in [300.0, 500.0, 800.0, 1200.0]:
-        l_nlr = nlr_emission(
+        l_nlr = compute_nlr_sed(
             wavelength, l_disc_bol_erg=L_disc_bol_erg, covering_fraction=0.1, fwhm_kms=fwhm
         )
-        ax.semilogy(
-            wave_angstrom, np.array(l_nlr) / LSUN_ERG, lw=1.5, label=f"FWHM={fwhm:.0f} km/s"
-        )
+        ax.semilogy(wave_angstrom, np.array(l_nlr) / LSUN_ERG, lw=1.5, label=f"FWHM={fwhm:.0f} km/s")
 
     ax.set_xlabel(r"Wavelength [$\AA$]")
     ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")

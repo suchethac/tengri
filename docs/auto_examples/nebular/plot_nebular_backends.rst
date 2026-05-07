@@ -25,35 +25,7 @@ Compare tengri's three nebular emission backends: BakedIn (SSP-embedded),
 CloudyGrid (tabulated photoionization), and Cue (neural emulator).
 Shows how each backend predicts emission lines in the optical window.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-122
-
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_nebular_backends_001.png
-   :alt: Nebular Emission: Backend Comparison, H-beta + [O III], H-alpha Region
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_nebular_backends_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py:517: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
-      self._nebular_backend = BakedInBackend()
-    Backend comparison:
-      BakedIn  : 0 extra params, fastest, fixed logU and Z_gas
-      CloudyGrid: 2 extra params (logU, Z_gas), tabulated CLOUDY grids
-      Cue      : 12 extra params (abundances), neural net emulator
-
-      Note: CloudyGrid not shown (grid file not found at None)
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 9-127
 
 .. code-block:: Python
 
@@ -73,8 +45,12 @@ Shows how each backend predicts emission lines in the optical window.
     def _find_ssp():
         """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
         name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [Path("data") / name, Path("../data") / name,
-                  Path("../../data") / name, Path("../../../data") / name]:
+        for p in [
+            Path("data") / name,
+            Path("../data") / name,
+            Path("../../data") / name,
+            Path("../../../data") / name,
+        ]:
             if p.exists():
                 return str(p)
         return None
@@ -161,6 +137,7 @@ Shows how each backend predicts emission lines in the optical window.
 
     fig.suptitle("Nebular Emission: Backend Comparison", fontsize=12)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.savefig("plot_nebular_backends.png", dpi=150, bbox_inches="tight")
     plt.show()
 
     # --- Summary ---

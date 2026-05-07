@@ -25,18 +25,7 @@ Compare all parametric star formation history models available in
 tengri. Each model is evaluated on a lookback-time grid and plotted
 with representative parameters. No SSP data required.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-77
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_parametric_sfh_001.png
-   :alt: Parametric SFH Models in tengri
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_parametric_sfh_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 9-64
 
 .. code-block:: Python
 
@@ -68,31 +57,18 @@ with representative parameters. No SSP data required.
         "tsnorm (truncated skew-normal)": tsnorm(
             t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=1.0, trunc=3.0
         ),
-        "snorm (skew-normal)": snorm(
-            t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=1.5
-        ),
-        "norm (Gaussian)": norm(
-            t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9
-        ),
-        "lnorm (log-normal)": lnorm(
-            t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=0.3
-        ),
-        "dpl (double power law)": dpl(
-            t_lookback, alpha=2.0, beta=1.0, tau=5e9, log_peak_sfr=1.0
-        ),
-        "exponential": exponential_sfh(
-            t_lookback, log_peak_sfr=1.0, tau=3e9, start=1e9
-        ),
+        "snorm (skew-normal)": snorm(t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=1.5),
+        "norm (Gaussian)": norm(t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9),
+        "lnorm (log-normal)": lnorm(t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=0.3),
+        "dpl (double power law)": dpl(t_lookback, alpha=2.0, beta=1.0, tau=5e9, log_peak_sfr=1.0),
+        "exponential": exponential_sfh(t_lookback, log_peak_sfr=1.0, tau=3e9, start=1e9),
         "delayed exponential": delayed_exponential_sfh(
             t_lookback, log_peak_sfr=1.0, tau=3e9, start=1e9
         ),
-        "constant": constant_sfh(
-            t_lookback, log_sfr=0.5, start=2e9, end=10e9
-        ),
+        "constant": constant_sfh(t_lookback, log_sfr=0.5, start=2e9, end=10e9),
     }
 
-    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728",
-              "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
 
     # --- Plot ---
     fig, ax = plt.subplots(figsize=(9, 5))

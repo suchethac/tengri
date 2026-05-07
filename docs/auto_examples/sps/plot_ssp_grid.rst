@@ -28,17 +28,6 @@ UV, optical, and near-IR spectral shapes.
 
 .. GENERATED FROM PYTHON SOURCE LINES 10-188
 
-
-
-.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_ssp_grid_001.png
-   :alt: SSP Grid: Age and Metallicity Evolution, SSP Spectra: Age Sequence (Z=0.06 Z$_\odot$), SSP Spectra: Metallicity Sequence (Age=1.00 Gyr), Broad-Band Colors vs Age (Z=0.06Z$_\odot$), SSP Color-Color Diagram (all metallicities)
-   :srcset: /auto_examples/sps/images/sphx_glr_plot_ssp_grid_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 
@@ -75,7 +64,7 @@ UV, optical, and near-IR spectral shapes.
     ssp_data = load_ssp_data(ssp_path)
 
     # Extract grid properties
-    age_gyr = 10**np.array(ssp_data.ssp_lg_age_gyr)  # Convert log10(age) to age
+    age_gyr = 10 ** np.array(ssp_data.ssp_lg_age_gyr)  # Convert log10(age) to age
     log_z = np.array(ssp_data.ssp_lgmet)
     ssp_wave = np.array(ssp_data.ssp_wave)
     ssp_spec = np.array(ssp_data.ssp_flux)  # Shape: (n_z, n_age, n_wave)
@@ -92,7 +81,7 @@ UV, optical, and near-IR spectral shapes.
     # Select ages: young, intermediate, old
     age_indices = [
         np.argmin(np.abs(age_gyr - 0.01)),  # ~10 Myr
-        np.argmin(np.abs(age_gyr - 1.0)),   # ~1 Gyr
+        np.argmin(np.abs(age_gyr - 1.0)),  # ~1 Gyr
         np.argmin(np.abs(age_gyr - 10.0)),  # ~10 Gyr
     ]
     age_labels = ["10 Myr", "1 Gyr", "10 Gyr"]
@@ -120,10 +109,10 @@ UV, optical, and near-IR spectral shapes.
     # Select metallicity range
     z_indices = [
         np.argmin(np.abs(log_z - (-0.5))),  # Sub-solar
-        np.argmin(np.abs(log_z - 0.0)),      # Solar
-        np.argmin(np.abs(log_z - 0.3)),      # Super-solar
+        np.argmin(np.abs(log_z - 0.0)),  # Solar
+        np.argmin(np.abs(log_z - 0.3)),  # Super-solar
     ]
-    z_labels = [f"{10**log_z[zi]:.2f}Z$_\\odot$" for zi in z_indices]
+    z_labels = [f"{10 ** log_z[zi]:.2f}Z$_\\odot$" for zi in z_indices]
     colors_z = ["C3", "C4", "C5"]
 
     for z_idx, z_lbl, color in zip(z_indices, z_labels, colors_z):

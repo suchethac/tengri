@@ -25,18 +25,7 @@ Plot the ugriz filter transmission curves from the SDSS photometric system.
 Filters are loaded from the SVO Filter Profile Service via tengri's filter
 registry.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-56
-
-
-
-.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_filter_curves_001.png
-   :alt: SDSS ugriz Filter Curves
-   :srcset: /auto_examples/photometry/images/sphx_glr_plot_filter_curves_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 9-61
 
 .. code-block:: Python
 
@@ -52,8 +41,12 @@ registry.
     setup_style()
 
     # Locate filter cache — works from project root or sphinx-gallery cwd
-    _FILTER_DIRS = [Path("data/filters"), Path("../data/filters"),
-                    Path("../../data/filters"), Path("../../../data/filters")]
+    _FILTER_DIRS = [
+        Path("data/filters"),
+        Path("../data/filters"),
+        Path("../../data/filters"),
+        Path("../../../data/filters"),
+    ]
     cache_dir = next((d for d in _FILTER_DIRS if d.exists()), "data/filters")
 
     # Load SDSS ugriz filters
@@ -86,6 +79,7 @@ registry.
     ax.legend(frameon=False, ncol=5, loc="upper right")
     fig.tight_layout()
 
+    plt.savefig("plot_filter_curves.png", dpi=150, bbox_inches="tight")
     plt.show()
 
 

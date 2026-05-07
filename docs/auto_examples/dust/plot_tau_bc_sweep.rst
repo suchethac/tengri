@@ -25,29 +25,7 @@ How does birth cloud dust optical depth reshape the SED of a young
 star-forming galaxy? Higher τ_BC reddens the UV and suppresses nebular
 emission from very young stars embedded in dust cocoons.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-75
-
-
-
-.. image-sg:: /auto_examples/dust/images/sphx_glr_plot_tau_bc_sweep_001.png
-   :alt: Birth Cloud Dust: Impact on Young Star-Forming Galaxy SED
-   :srcset: /auto_examples/dust/images/sphx_glr_plot_tau_bc_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py:517: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
-      self._nebular_backend = BakedInBackend()
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 9-81
 
 .. code-block:: Python
 
@@ -103,6 +81,11 @@ emission from very young stars embedded in dust cocoons.
 
     # --- Sweep τ_BC ---
     values = [0.0, 0.5, 1.0, 2.0, 3.0, 4.0]
+
+    # # The sweep_parameter helper creates a single SEDModel instance and calls
+    # # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
+    # # automatically via tengri's persistent compilation cache (enabled at
+    # # import time), so repeated forward model calls reuse the compiled kernel.
     fig, ax = sweep_parameter(
         model,
         "dust_tau_bc",
@@ -111,9 +94,10 @@ emission from very young stars embedded in dust cocoons.
         label_fmt=r"$\tau_{{BC}}$ = {:.1f}",
         wave_range=(1000, 10000),
     )
-    ax.set_ylim(0, 2.5e5)
+    ax.set_yscale("log")
+    ax.set_ylim(1e-1, 1e5)
     ax.set_title("Birth Cloud Dust: Impact on Young Star-Forming Galaxy SED", fontsize=12)
-    ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)")
+    ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å, log scale)")
     plt.tight_layout()
     plt.savefig("plot_tau_bc_sweep.png", dpi=150, bbox_inches="tight")
     plt.show()

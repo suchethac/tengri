@@ -8,12 +8,50 @@ Nebular Emission
 Nebular emission backends comparison.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 
     <div class="sphx-glr-thumbnails">
 
 .. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Cue (Li+2025) emulates a 12-dimensional photoionization grid. This figure sweeps each Cue parameter individually at fixed fiducial values for the rest, showing how each one moves a single galaxy&#x27;s locus on the BPT-N plane (``log [O III]/Hβ`` vs log [N II]/Hα).">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_bpt_cue_flexibility_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_bpt_cue_flexibility`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">BPT with Cue: Every Knob, One Panel Each</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Compute three classical BPT line-ratio diagrams using the Cue emulator (Li+2025) and overplot the standard 2D nebular grid: lines of constant log U (varying gas metallicity) and lines of constant log Z_gas (varying ionization parameter). This is the canonical view in Kewley+2001/2013, Dopita+2013, and similar nebular-grid papers.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_bpt_cue_grid_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_bpt_cue_grid`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">BPT Diagrams with Cue: 2D Grid in (log U, log Z_gas)</div>
+    </div>
+
 
 .. raw:: html
 
@@ -119,6 +157,74 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Ionizing photon production declines rapidly with stellar population age (~t^-1). Compare young vs old populations to see how nebular line strength evolves.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_neb_age_dependence_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_neb_age_dependence`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Nebular Emission: Dependence on Stellar Population Age</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Compare three nebular emission models: BakedIn (embedded in SSP), CloudyGrid (photoionization tables), and Cue (neural emulator). Shows how backend choice affects emission line strengths.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_neb_backend_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_neb_backend_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Nebular Backends: BakedIn vs CloudyGrid vs Cue</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies ionization sources. Shows how the ionization parameter (logU) and metallicity drive emission galaxies along the SF→composite→Seyfert sequence.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_neb_bpt_logu_grid_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_neb_bpt_logu_grid`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">BPT Diagram: Ionization Parameter Sequence</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Gas phase metallicity affects ionization balance and emission line strengths. Higher metallicity increases cooling efficiency, affecting the nebular continuum and emission-line ratios through recombination rate changes.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_neb_density_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_neb_density_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Nebular Gas Density: Metallicity Variation</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Compare tengri&#x27;s three nebular emission backends: BakedIn (SSP-embedded), CloudyGrid (tabulated photoionization), and Cue (neural emulator). Shows how each backend predicts emission lines in the optical window.">
 
 .. only:: html
@@ -161,12 +267,18 @@ Nebular emission backends comparison.
 .. toctree::
    :hidden:
 
+   /auto_examples/nebular/plot_bpt_cue_flexibility
+   /auto_examples/nebular/plot_bpt_cue_grid
    /auto_examples/nebular/plot_bpt_diagnostics
    /auto_examples/nebular/plot_dig_frac_sweep
    /auto_examples/nebular/plot_fesc_sweep
    /auto_examples/nebular/plot_line_sigma_sweep
    /auto_examples/nebular/plot_logu_sweep
    /auto_examples/nebular/plot_logz_gas_sweep
+   /auto_examples/nebular/plot_neb_age_dependence
+   /auto_examples/nebular/plot_neb_backend_compare
+   /auto_examples/nebular/plot_neb_bpt_logu_grid
+   /auto_examples/nebular/plot_neb_density_sweep
    /auto_examples/nebular/plot_nebular_backends
    /auto_examples/nebular/plot_shock_emission
 

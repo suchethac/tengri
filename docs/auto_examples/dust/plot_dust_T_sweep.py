@@ -64,6 +64,11 @@ model = SEDModel(spec, ssp)
 # --- Sweep dust_T (Kelvin) ---
 # Far-IR range: 10 μm to 1000 μm = 1e5 Å to 1e7 Å
 values = [20, 30, 40, 60, 80]
+
+# # The sweep_parameter helper creates a single SEDModel instance and calls
+# # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
+# # automatically via tengri's persistent compilation cache (enabled at
+# # import time), so repeated forward model calls reuse the compiled kernel.
 fig, ax = sweep_parameter(
     model,
     "dust_T",

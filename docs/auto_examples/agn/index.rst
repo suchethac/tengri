@@ -8,12 +8,50 @@ AGN Models
 AGN disc and torus SED templates.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 
     <div class="sphx-glr-thumbnails">
 
 .. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A 4-panel grid (one panel per log L_bol value) showing how the X-ray corona spectrum depends jointly on bolometric luminosity and the UV-to-X-ray slope alpha_ox. Both parameters affect the X-ray normalisation; only alpha_ox shifts the relative balance between UV and X-ray emission. Sweeps cover the canonical X-ray band 0.1–1000 keV.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_alpha_ox_lbol_2d_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_agn_alpha_ox_lbol_2d`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">X-ray Corona: Spectral Index vs Bolometric Luminosity 2D Sweep</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="How does viewing geometry (inclination angle) shape the SKIRTOR torus SED? Sweeps agn_cos_inc from 0.95 (face-on) to 0.05 (edge-on), showing how the line of sight through the obscuring torus changes the infrared emission profile.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_cos_inc_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_agn_cos_inc_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SKIRTOR Torus: Viewing Angle Sweep</div>
+    </div>
+
 
 .. raw:: html
 
@@ -29,6 +67,125 @@ AGN disc and torus SED templates.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">AGN SEDModel Hierarchy</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="How does AGN bolometric luminosity shape the SED of the hot accretion disc continuum? Sweeps log L_bol/L_sun from 43 to 47, showing how the continuum power and temperature scale with the central black hole accretion rate.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_log_lbol_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_agn_log_lbol_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">QSOgen Disc Continuum: Bolometric Luminosity</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="How does the torus opening angle (θ_oa) affect the SED? Sweeps agn_oa_skirtor from 20 to 60 degrees, showing how a more open/flared torus changes the infrared emission and obscuration geometry. Fixed inclination, optical depth, and power.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_oa_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_agn_oa_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SKIRTOR Torus: Opening Angle Sweep</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="How does polar dust temperature affect the near-to-mid-IR SED? Simulates warm polar dust in a narrow cone decoupled from the equatorial torus, sweeping temperature from 1000 to 2000 K to show how warmer polar geometry enhances the mid-IR bump in edge-on systems.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_polar_dust_temp_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_agn_polar_dust_temp_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Polar Dust: Temperature Sweep in AGN Torus</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="How does AGN-intrinsic dust reddening (E(B-V)) redden the quasar SED? Sweeps agn_ebv from 0.0 to 0.4 on QSOgen at log_lbol=45, showing the transition from unobscured UV/optical slopes to significantly reddened spectra typical of obscured quasars.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_qsogen_ebv_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_agn_qsogen_ebv_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">QSOgen Dust Reddening: Intrinsic AGN Obscuration</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="How does emission-line strength shape the AGN SED in the UV and optical? Sweeps agn_emline_scale from 0.0 to 2.0 on QSOgen at fixed log_lbol=45, showing how line forests and broad lines strengthen the continuum between 1000–5000 Å and the Balmer continuum near H-alpha.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_qsogen_emline_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_agn_qsogen_emline_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">QSOgen Emission Line Scaling: Rest-UV to Optical SED</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="How does the radial dust density profile (power index p) reshape the torus IR SED? Sweeps agn_p_skirtor from 0.0 to 1.5 at fixed inclination=0.5, tau_97=7, showing the transition from flat to steep density profiles and their effect on the mid-to-far-IR peak and far-IR slope.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_skirtor_p_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_agn_skirtor_p_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SKIRTOR Torus: Radial Dust Power-Law Sweep</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="How does the optical depth (τ_9.7 μm) of the clumpy torus reshape the SED? Sweeps agn_tau_skirtor from 3 to 11, keeping inclination, opening angle, and radial power fixed. Shows the transition from optically thin to thick regimes.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_tau_skirtor_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_agn_tau_skirtor_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SKIRTOR Torus: Optical Depth Sweep</div>
     </div>
 
 
@@ -178,7 +335,16 @@ AGN disc and torus SED templates.
 .. toctree::
    :hidden:
 
+   /auto_examples/agn/plot_agn_alpha_ox_lbol_2d
+   /auto_examples/agn/plot_agn_cos_inc_sweep
    /auto_examples/agn/plot_agn_hierarchy
+   /auto_examples/agn/plot_agn_log_lbol_sweep
+   /auto_examples/agn/plot_agn_oa_sweep
+   /auto_examples/agn/plot_agn_polar_dust_temp_sweep
+   /auto_examples/agn/plot_agn_qsogen_ebv_sweep
+   /auto_examples/agn/plot_agn_qsogen_emline_sweep
+   /auto_examples/agn/plot_agn_skirtor_p_sweep
+   /auto_examples/agn/plot_agn_tau_skirtor_sweep
    /auto_examples/agn/plot_agn_templates
    /auto_examples/agn/plot_agn_type12
    /auto_examples/agn/plot_nlr_blr_lines

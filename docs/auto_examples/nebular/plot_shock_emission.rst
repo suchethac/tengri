@@ -25,18 +25,7 @@ Plot shock emission line diagnostics from MAPPINGS V photoionization models.
 Shows how shock velocity, density, and magnetic field affect line ratios
 and can mimic AGN-like emission in diagnostic diagrams.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-164
-
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_shock_emission_001.png
-   :alt: Shock Emission Diagnostics: MAPPINGS V Models, BPT Diagram: Shock Velocity Sequence, BPT Diagram: Density Sequence (v_s=200 km/s), Shock Emission: Line Ratios vs Velocity, BPT Diagram: Magnetic Field Strength (v_s=250 km/s)
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_shock_emission_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 9-148
 
 .. code-block:: Python
 
@@ -67,12 +56,8 @@ and can mimic AGN-like emission in diagnostic diagrams.
                 shock_b_over_sqrt_n=1.0,
             )
             # Extract [O III]/Hβ and [N II]/Hα
-            log_oiii_hb = np.log10(
-                line_ratios["O3_5007A"] / line_ratios["Hb_4861A"]
-            )
-            log_nii_ha = np.log10(
-                line_ratios["NII_6583A"] / line_ratios["HA_6563A"]
-            )
+            log_oiii_hb = np.log10(line_ratios["O3_5007A"] / line_ratios["Hb_4861A"])
+            log_nii_ha = np.log10(line_ratios["NII_6583A"] / line_ratios["HA_6563A"])
             ax.scatter(log_nii_ha, log_oiii_hb, color=color, s=80, alpha=0.7, edgecolors="k", lw=0.3)
         except Exception:
             pass
@@ -103,12 +88,8 @@ and can mimic AGN-like emission in diagnostic diagrams.
                 shock_log_density=float(np.log10(dens)),
                 shock_b_over_sqrt_n=1.0,
             )
-            log_oiii_hb = np.log10(
-                line_ratios["O3_5007A"] / line_ratios["Hb_4861A"]
-            )
-            log_nii_ha = np.log10(
-                line_ratios["NII_6583A"] / line_ratios["HA_6563A"]
-            )
+            log_oiii_hb = np.log10(line_ratios["O3_5007A"] / line_ratios["Hb_4861A"])
+            log_nii_ha = np.log10(line_ratios["NII_6583A"] / line_ratios["HA_6563A"])
             ax.scatter(log_nii_ha, log_oiii_hb, color=color, s=80, alpha=0.7, edgecolors="k", lw=0.3)
         except Exception:
             pass
@@ -138,12 +119,8 @@ and can mimic AGN-like emission in diagnostic diagrams.
                 shock_log_density=2.0,
                 shock_b_over_sqrt_n=1.0,
             )
-            line_flux_dict["[O III]5007/Hβ"].append(
-                line_ratios["O3_5007A"] / line_ratios["Hb_4861A"]
-            )
-            line_flux_dict["[O I]6300/Hα"].append(
-                line_ratios["OI_6300A"] / line_ratios["HA_6563A"]
-            )
+            line_flux_dict["[O III]5007/Hβ"].append(line_ratios["O3_5007A"] / line_ratios["Hb_4861A"])
+            line_flux_dict["[O I]6300/Hα"].append(line_ratios["OI_6300A"] / line_ratios["HA_6563A"])
             line_flux_dict["[S II]6724/Hα"].append(
                 (line_ratios["SII_6716A"] + line_ratios["SII_6731A"]) / line_ratios["HA_6563A"]
             )
@@ -173,12 +150,8 @@ and can mimic AGN-like emission in diagnostic diagrams.
                 shock_log_density=2.0,
                 shock_b_over_sqrt_n=float(max(b_param, 1e-4)),
             )
-            log_oiii_hb = np.log10(
-                line_ratios["O3_5007A"] / line_ratios["Hb_4861A"]
-            )
-            log_nii_ha = np.log10(
-                line_ratios["NII_6583A"] / line_ratios["HA_6563A"]
-            )
+            log_oiii_hb = np.log10(line_ratios["O3_5007A"] / line_ratios["Hb_4861A"])
+            log_nii_ha = np.log10(line_ratios["NII_6583A"] / line_ratios["HA_6563A"])
             ax.scatter(log_nii_ha, log_oiii_hb, color=color, s=80, alpha=0.7, edgecolors="k", lw=0.3)
         except Exception:
             pass

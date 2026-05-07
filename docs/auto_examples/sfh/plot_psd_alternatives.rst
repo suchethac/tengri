@@ -40,12 +40,6 @@ extended regulator model. No SSP data required.
     setup_style()
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 20-21
 
 Frequency grid (angular frequency in rad/yr)
@@ -61,17 +55,11 @@ Frequency grid (angular frequency in rad/yr)
     tau_yr = 200e6  # 200 Myr
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 28-29
 
 DRW (Lorentzian) — the default model
 
-.. GENERATED FROM PYTHON SOURCE LINES 29-79
+.. GENERATED FROM PYTHON SOURCE LINES 29-91
 
 .. code-block:: Python
 
@@ -92,8 +80,11 @@ DRW (Lorentzian) — the default model
             psd_m = psd_matern(omega, variance=variance, length_scale=length_scale, nu=nu)
             suffix = r" $\equiv$ DRW" if nu == 0.5 else ""
             ax.loglog(
-                np.array(omega), np.array(psd_m),
-                ls=ls, lw=1.8, color=color,
+                np.array(omega),
+                np.array(psd_m),
+                ls=ls,
+                lw=1.8,
+                color=color,
                 label=rf"Matern $\nu={nu}${suffix}",
             )
     except ImportError:
@@ -106,11 +97,20 @@ DRW (Lorentzian) — the default model
         # Cyclic frequency f = omega / (2*pi)
         f = omega / (2.0 * jnp.pi)
         psd_reg = psd_extended_regulator(
-            f, s_reg=0.3, tau_in=300e6, tau_eq=50e6, s_dyn=0.15, tau_dyn=20e6,
+            f,
+            s_reg=0.3,
+            tau_in=300e6,
+            tau_eq=50e6,
+            s_dyn=0.15,
+            tau_dyn=20e6,
         )
         ax.loglog(
-            np.array(omega), np.array(psd_reg),
-            "-", lw=1.8, color="C4", label="Extended Regulator",
+            np.array(omega),
+            np.array(psd_reg),
+            "-",
+            lw=1.8,
+            color="C4",
+            label="Extended Regulator",
         )
     except ImportError:
         pass  # psd_extended_regulator not available
@@ -123,19 +123,8 @@ DRW (Lorentzian) — the default model
     ax.legend(frameon=False, fontsize=10)
     fig.tight_layout()
 
-    plt.savefig("psd_alternatives.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_psd_alternatives.png", dpi=150, bbox_inches="tight")
     plt.show()
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_psd_alternatives_001.png
-   :alt: PSD Models ($\sigma=0.3$, $\tau=200$ Myr)
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_psd_alternatives_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_psd_alternatives.py:

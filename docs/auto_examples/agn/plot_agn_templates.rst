@@ -24,31 +24,7 @@ AGN SED Templates
 Plot AGN spectral energy distributions showing the accretion disc and
 dust torus components at different bolometric luminosities.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-64
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_templates_001.png
-   :alt: AGN SED Components, AGN Luminosity Sequence
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_templates_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/examples/agn/plot_agn_templates.py:24: DeprecationWarning: simple_torus is deprecated (single-temperature MBB, not radiative transfer). Use the 'skirtor' AGN model instead (Monte Carlo radiative transfer): resolve_agn_model('skirtor') or skirtor_analytic() from tengri.components.agn.skirtor.
-      torus = simple_torus(wavelength, agn_log_lbol=11.0, agn_torus_temp=1500.0)
-    /Users/suchethacooray/Projects/tengri/examples/agn/plot_agn_templates.py:49: DeprecationWarning: simple_torus is deprecated (single-temperature MBB, not radiative transfer). Use the 'skirtor' AGN model instead (Monte Carlo radiative transfer): resolve_agn_model('skirtor') or skirtor_analytic() from tengri.components.agn.skirtor.
-      torus_l = simple_torus(wavelength, agn_log_lbol=log_lbol, agn_torus_temp=1500.0)
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 8-69
 
 .. code-block:: Python
 
@@ -95,8 +71,13 @@ dust torus components at different bolometric luminosities.
         disc_l = powerlaw_disc(wavelength, agn_log_lbol=log_lbol, agn_slope=-1.5)
         torus_l = simple_torus(wavelength, agn_log_lbol=log_lbol, agn_torus_temp=1500.0)
         total = disc_l + 0.5 * torus_l
-        ax.loglog(wave_um, np.array(total), color=color, lw=1.5,
-                  label=rf"$\log L_{{\mathrm{{bol}}}}/L_\odot = {log_lbol:.0f}$")
+        ax.loglog(
+            wave_um,
+            np.array(total),
+            color=color,
+            lw=1.5,
+            label=rf"$\log L_{{\mathrm{{bol}}}}/L_\odot = {log_lbol:.0f}$",
+        )
 
     ax.set_xlabel(r"Wavelength [$\mu$m]")
     ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
@@ -106,7 +87,7 @@ dust torus components at different bolometric luminosities.
     ax.legend(frameon=False, fontsize=10)
 
     fig.tight_layout()
-    plt.savefig("agn_templates.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_agn_templates.png", dpi=150, bbox_inches="tight")
     plt.show()
 
 

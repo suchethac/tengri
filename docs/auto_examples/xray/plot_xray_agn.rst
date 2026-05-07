@@ -25,18 +25,7 @@ Plot the X-ray spectrum from AGN coronae showing power-law continuum,
 reflection hump, and iron K-alpha line. Demonstrates how the X-ray
 spectrum depends on AGN bolometric luminosity and accretion efficiency.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-113
-
-
-
-.. image-sg:: /auto_examples/xray/images/sphx_glr_plot_xray_agn_001.png
-   :alt: AGN X-ray Corona: Power-Law and Reflection, AGN X-ray Corona: Luminosity Sequence, AGN X-ray Spectral Features, AGN X-ray: Ultra-Luminous Range, AGN X-ray SED Family
-   :srcset: /auto_examples/xray/images/sphx_glr_plot_xray_agn_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 9-116
 
 .. code-block:: Python
 
@@ -50,9 +39,12 @@ spectrum depends on AGN bolometric luminosity and accretion efficiency.
 
     setup_style()
 
-    # Wavelength grid: hard X-ray (keV) to soft X-ray and UV
-    wavelength = jnp.logspace(np.log10(0.1), np.log10(1e4), 512)  # Angstrom
-    wave_keV = 1.2398e-4 / (np.array(wavelength) * 1e-8)  # Convert to keV
+    # Wavelength grid spans 0.1 keV (124 A, the function's soft cutoff) up to 1000 keV
+    # (0.0124 A). The xray_agn_corona function zeros output for lambda > 124 A.
+    # Conversion: E[keV] = 12398 / lambda[A].
+    wavelength = jnp.logspace(np.log10(0.0124), np.log10(124.0), 512)  # Angstrom
+    # E[keV] = hc/lambda with hc = 12.398 keV*A, so E[keV] = 12.398 / lambda[A].
+    wave_keV = 12.398 / np.array(wavelength)
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
@@ -69,7 +61,7 @@ spectrum depends on AGN bolometric luminosity and accretion efficiency.
     ax.set_title("AGN X-ray Corona: Luminosity Sequence")
     ax.legend(fontsize=10, frameon=False)
     ax.set_xlim(0.1, 1000)
-    ax.set_ylim(1e20, 1e27)
+    ax.set_ylim(1e22, 1e27)
 
     # --- Panel 2: Show X-ray continuum shape (Compton reflection) ---
     ax = axes[0, 1]
@@ -97,7 +89,7 @@ spectrum depends on AGN bolometric luminosity and accretion efficiency.
     ax.set_title("AGN X-ray Spectral Features")
     ax.legend(fontsize=10, frameon=False, ncol=2)
     ax.set_xlim(0.1, 1000)
-    ax.set_ylim(1e20, 1e27)
+    ax.set_ylim(1e22, 1e27)
 
     # --- Panel 3: High-luminosity AGN ---
     ax = axes[1, 0]
@@ -130,7 +122,7 @@ spectrum depends on AGN bolometric luminosity and accretion efficiency.
     ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
     ax.set_title("AGN X-ray SED Family")
     ax.set_xlim(0.1, 1000)
-    ax.set_ylim(1e20, 1e27)
+    ax.set_ylim(1e22, 1e27)
 
     # Colorbar-like legend
     sm = plt.cm.ScalarMappable(
@@ -142,13 +134,8 @@ spectrum depends on AGN bolometric luminosity and accretion efficiency.
 
     fig.suptitle("AGN X-ray Corona: Power-Law and Reflection", fontsize=12)
     fig.tight_layout(rect=[0, 0.04, 1, 0.97])
-    plt.savefig("plot_xray_agn.png", dpi=100, bbox_inches="tight")
+    plt.savefig("plot_xray_agn.png", dpi=150, bbox_inches="tight")
     plt.show()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 16.176 seconds)
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_agn.py:

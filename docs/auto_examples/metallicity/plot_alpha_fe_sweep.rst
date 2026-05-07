@@ -29,29 +29,7 @@ and alters the optical mass-to-light ratio.
 
 Set via ``met_alpha_fe`` parameter in ``Parameters``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-80
-
-
-
-.. image-sg:: /auto_examples/metallicity/images/sphx_glr_plot_alpha_fe_sweep_001.png
-   :alt: $\alpha$-element Enhancement: Impact on Optical Absorption Features
-   :srcset: /auto_examples/metallicity/images/sphx_glr_plot_alpha_fe_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py:517: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
-      self._nebular_backend = BakedInBackend()
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 13-85
 
 .. code-block:: Python
 
@@ -108,6 +86,11 @@ Set via ``met_alpha_fe`` parameter in ``Parameters``.
 
     # --- Sweep [α/Fe] ---
     values = [-0.2, 0.0, 0.2, 0.4, 0.6]
+
+    # # The sweep_parameter helper creates a single SEDModel instance and calls
+    # # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
+    # # automatically via tengri's persistent compilation cache (enabled at
+    # # import time), so repeated forward model calls reuse the compiled kernel.
     fig, ax = sweep_parameter(
         model,
         "met_alpha_fe",

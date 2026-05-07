@@ -25,31 +25,7 @@ How does the ionization parameter sweep the emission line strengths and SED shap
 Higher logU drives stronger [OIII] emission and shifts galaxies toward the Seyfert
 region on the BPT diagram.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-78
-
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_logu_sweep_001.png
-   :alt: Ionization Parameter: Impact on Optical Emission Lines
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_logu_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:91: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py:509: CueWNESSPWarning: CueBackend: the SSP grid passed via ssp_data appears to contain baked-in nebular emission ('wNE' SSPs). The maximum log10(Q_H) for SSP bins younger than 10 Myr is 42.8, well below the expected ~47–50 for bare stellar populations. Cue's ionizing-spectrum-shape fit will be unreliable and nebular luminosities will be severely under-predicted. Use a pure-continuum SSP (no baked-in nebular emission). Suppress with: CueBackend(ssp_data=None) and provide Q_H externally.
-      self._nebular_backend = CueBackend(spec.cue_weights_path, ssp_data=ssp_data)
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 9-83
 
 .. code-block:: Python
 
@@ -108,6 +84,11 @@ region on the BPT diagram.
 
     # --- Sweep ionization parameter (logU) ---
     values = [-4.0, -3.5, -3.0, -2.5, -2.0, -1.5]
+
+    # # The sweep_parameter helper creates a single SEDModel instance and calls
+    # # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
+    # # automatically via tengri's persistent compilation cache (enabled at
+    # # import time), so repeated forward model calls reuse the compiled kernel.
     fig, ax = sweep_parameter(
         model,
         "neb_logU",
@@ -122,11 +103,6 @@ region on the BPT diagram.
     plt.tight_layout()
     plt.savefig("plot_logu_sweep.png", dpi=150, bbox_inches="tight")
     plt.show()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 8.054 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_logu_sweep.py:

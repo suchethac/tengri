@@ -27,17 +27,6 @@ shape the history of metal enrichment in galaxies.
 
 .. GENERATED FROM PYTHON SOURCE LINES 9-128
 
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_chemical_evolution_001.png
-   :alt: Chemical Evolution: Metallicity History Models, Closed-Box Chemical Evolution, Chemical Evolution: Varying SFR Timescales, Leaky-Box Model: Outflow Rate Dependence, Age-Metallicity Relation
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_chemical_evolution_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 
@@ -115,9 +104,7 @@ shape the history of metal enrichment in galaxies.
 
     sfr_const = np.ones_like(t_yr)  # constant SFR
     for eta, color in zip(outflow_rates, colors):
-        log_z = closed_box_metallicity(
-            t_yr, sfr_const, yield_y=0.03, eta_outflow=eta, f_gas_init=0.9
-        )
+        log_z = closed_box_metallicity(t_yr, sfr_const, yield_y=0.03, eta_outflow=eta, f_gas_init=0.9)
         ax.plot(t_gyr, 10.0 ** np.array(log_z), lw=1.5, color=color, label=f"η={eta:.1f}")
 
     ax.set_xlabel("Look-back Time [Gyr]")
@@ -139,7 +126,9 @@ shape the history of metal enrichment in galaxies.
 
     for age_gyr, color in zip(ages_gyr, colors_amr):
         # Mock Z(age) curve: Z increases with formation time
-        z_amr = Z_sun * (age_gyr / age_uni_gyr) * 0.3  # Normalized to ~0.3 Z_sun at age age_uni_gyr Gyr
+        z_amr = (
+            Z_sun * (age_gyr / age_uni_gyr) * 0.3
+        )  # Normalized to ~0.3 Z_sun at age age_uni_gyr Gyr
         ax.scatter(age_gyr, z_amr / Z_sun, s=200, color=color, edgecolors="k", linewidth=1.0)
 
     # Interpolate

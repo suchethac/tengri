@@ -8,6 +8,10 @@ Star Formation Histories
 Parametric and stochastic star formation history models.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 
@@ -46,6 +50,23 @@ Parametric and stochastic star formation history models.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Delayed-τ SFH: Star Formation Timescale</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Visualize a 3×3 grid of double power-law SFH shapes, sweeping the rising slope α and falling slope β to show how the parameter space controls SFH morphology.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_dpl_alpha_beta_grid_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_dpl_alpha_beta_grid`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Double Power-Law SFH: 2D Parameter Grid (α × β)</div>
     </div>
 
 
@@ -187,6 +208,40 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrate a galaxy with two distinct star formation events: an old burst + a recent burst. Show how the SED reflects both young and old stellar populations.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_sfh_double_burst_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_sfh_double_burst`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SFH with Double Bursts: Old and Recent Star Formation</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Compare four galaxy quenching scenarios: unquenched (constant SFH), exponential decline, sharp truncation, and a recent burst on top of quenching.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_sfh_quenching_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_sfh_quenching_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SFH Quenching Scenarios: Constant, Exponential, Sharp, and Burst+Decay</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="A smooth (parametric) model fits a bursty galaxy with χ² ≈ 1 but systematically underestimates recent SFR by up to 10×. The trap: good residuals do not guarantee unbiased physical parameters.">
 
 .. only:: html
@@ -214,6 +269,7 @@ Parametric and stochastic star formation history models.
 
    /auto_examples/sfh/plot_chemical_evolution
    /auto_examples/sfh/plot_dexp_tau_sweep
+   /auto_examples/sfh/plot_dpl_alpha_beta_grid
    /auto_examples/sfh/plot_dpl_alpha_sweep
    /auto_examples/sfh/plot_dpl_beta_sweep
    /auto_examples/sfh/plot_lnorm_peak_sweep
@@ -222,5 +278,7 @@ Parametric and stochastic star formation history models.
    /auto_examples/sfh/plot_psd_burstiness
    /auto_examples/sfh/plot_psd_sigma_sweep
    /auto_examples/sfh/plot_psd_tau_sweep
+   /auto_examples/sfh/plot_sfh_double_burst
+   /auto_examples/sfh/plot_sfh_quenching_compare
    /auto_examples/sfh/plot_wrong_model_trap
 

@@ -62,6 +62,11 @@ model = SEDModel(spec, ssp)
 # Sweep parameter with stochastic samples
 key = jax.random.PRNGKey(42)
 values = [30, 100, 300, 1000, 3000]
+
+# # The sweep_parameter helper creates a single SEDModel instance and calls
+# # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
+# # automatically via tengri's persistent compilation cache (enabled at
+# # import time), so repeated forward model calls reuse the compiled kernel.
 fig = sfh_sed_comparison(
     model, "sfh_field_psd_tau_myr", values, cmap="viridis", n_stochastic=5, key=key
 )

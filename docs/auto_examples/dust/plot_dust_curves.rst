@@ -25,18 +25,7 @@ Plot all available attenuation laws in tengri. Each curve k(lambda)
 describes the wavelength dependence of dust attenuation, normalized
 at 5500 A. No SSP data required.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-58
-
-
-
-.. image-sg:: /auto_examples/dust/images/sphx_glr_plot_dust_curves_001.png
-   :alt: Dust Attenuation Curves in tengri
-   :srcset: /auto_examples/dust/images/sphx_glr_plot_dust_curves_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 9-59
 
 .. code-block:: Python
 
@@ -46,7 +35,7 @@ at 5500 A. No SSP data required.
     import numpy as np
 
     from tengri.analysis.plotting import setup_style
-    from tengri.dust import get_dust_law
+    from tengri.dust import resolve_dust_law
 
     setup_style()
 
@@ -57,8 +46,7 @@ at 5500 A. No SSP data required.
     curves = [
         ("power_law", {}, "Power law (Charlot & Fall 2000)"),
         ("calzetti", {}, "Calzetti+2000"),
-        ("kriek_conroy", {"dust_bump_strength": 1.0, "dust_delta": 0.0},
-         "Kriek & Conroy 2013"),
+        ("kriek_conroy", {"dust_bump_strength": 1.0, "dust_delta": 0.0}, "Kriek & Conroy 2013"),
         ("smc", {}, "SMC (Gordon+2003)"),
         ("cardelli", {"dust_Rv": 3.1}, "Cardelli+1989 (MW)"),
         ("salim", {}, "Salim+2018"),
@@ -69,16 +57,18 @@ at 5500 A. No SSP data required.
     # --- Plot ---
     fig, ax = plt.subplots(figsize=(9, 5))
     for (name, kwargs, label), color in zip(curves, colors):
-        dust_fn = get_dust_law(name)
+        dust_fn = resolve_dust_law(name)
         k = dust_fn(wavelength, **kwargs)
         ax.plot(wave_um, np.array(k), label=label, color=color, lw=1.5)
 
     ax.axvline(0.55, ls=":", color="grey", lw=0.5, alpha=0.5)
-    ax.annotate("V-band", xy=(0.56, 0.05), xycoords=("data", "axes fraction"),
-                fontsize=10, color="grey")
+    ax.annotate(
+        "V-band", xy=(0.56, 0.05), xycoords=("data", "axes fraction"), fontsize=10, color="grey"
+    )
     ax.axvline(0.2175, ls=":", color="grey", lw=0.5, alpha=0.5)
-    ax.annotate("2175 A bump", xy=(0.23, 0.85), xycoords=("data", "axes fraction"),
-                fontsize=10, color="grey")
+    ax.annotate(
+        "2175 A bump", xy=(0.23, 0.85), xycoords=("data", "axes fraction"), fontsize=10, color="grey"
+    )
 
     ax.set_xlabel(r"Wavelength [$\mu$m]")
     ax.set_ylabel(r"$k(\lambda)$ (normalized at 5500 $\AA$)")

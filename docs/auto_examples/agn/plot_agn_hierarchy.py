@@ -90,5 +90,5 @@ fig.tight_layout()
 # - **relagn**: RELAGN outer disc (Hagen & Done 2023) + KYCONV Kerr ray-tracing;
 #   self-normalizing from BH physics — shown at log_Lbol ≈ 12.1 (8 params)
 
-plt.savefig("agn_hierarchy.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_agn_hierarchy.png", dpi=150, bbox_inches="tight")
 plt.show()

@@ -25,29 +25,7 @@ The diffuse ISM attenuation affects all stellar light (not just young
 stars). Higher τ_diff reddens the optical continuum and weakens the
 4000 Å break, a signature of aging stellar populations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-75
-
-
-
-.. image-sg:: /auto_examples/dust/images/sphx_glr_plot_tau_diff_sweep_001.png
-   :alt: Diffuse ISM Dust: Impact on Galaxy Attenuation
-   :srcset: /auto_examples/dust/images/sphx_glr_plot_tau_diff_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py:517: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
-      self._nebular_backend = BakedInBackend()
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 9-80
 
 .. code-block:: Python
 
@@ -103,6 +81,11 @@ stars). Higher τ_diff reddens the optical continuum and weakens the
 
     # --- Sweep τ_diff ---
     values = [0.0, 0.3, 0.7, 1.5, 3.0]
+
+    # # The sweep_parameter helper creates a single SEDModel instance and calls
+    # # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
+    # # automatically via tengri's persistent compilation cache (enabled at
+    # # import time), so repeated forward model calls reuse the compiled kernel.
     fig, ax = sweep_parameter(
         model,
         "dust_tau_diff",

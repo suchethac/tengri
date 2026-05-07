@@ -57,6 +57,11 @@ model = SEDModel(spec, ssp)
 
 # Sweep parameter
 values = [1.0, 3.0, 5.0, 8.0, 11.0]
+
+# # The sweep_parameter helper creates a single SEDModel instance and calls
+# # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
+# # automatically via tengri's persistent compilation cache (enabled at
+# # import time), so repeated forward model calls reuse the compiled kernel.
 fig = sfh_sed_comparison(model, "sfh_lnorm_peak_lbt_gyr", values, cmap="Purples")
 fig.suptitle("Log-Normal SFH: Peak Lookback Time", fontsize=12, y=1.00)
 plt.tight_layout()

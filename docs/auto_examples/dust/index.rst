@@ -8,12 +8,33 @@ Dust Models
 Attenuation laws, two-component dust, and IR emission.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 
     <div class="sphx-glr-thumbnails">
 
 .. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="All major attenuation laws implemented in tengri evaluated at fixed τ_V = 1.0. Shows wavelength dependence (k(λ)) from UV through near-infrared, highlighting the UV bump (2175 Å) and the steepness differences between Milky Way, SMC, and starburst models.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust/images/thumb/sphx_glr_plot_attenuation_law_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust/plot_attenuation_law_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Attenuation Law Comparison</div>
+    </div>
+
 
 .. raw:: html
 
@@ -63,6 +84,40 @@ Attenuation laws, two-component dust, and IR emission.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Dust Emission Models: Overview</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Compare transmission curves for three dust geometries (Witt &amp; Gordon 2000): screen (foreground), mixed (slab), and clumpy (two-phase medium). At fixed optical depth τ_V = 1.0, geometry controls the spectral shape: screens are reddest, mixed intermediate, clumpy greyest.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust/images/thumb/sphx_glr_plot_dust_geometry_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust/plot_dust_geometry_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Dust Geometry: Screen vs Mixed vs Clumpy</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="2D grid of dust IR emission spectra showing how PAH mass fraction (q_PAH) and ISRF hardness (U_min) independently shape the mid- and far-infrared SED. Uses Draine &amp; Li 2007 templates. 3×3 panel grid covering q_PAH ∈ {0.5, 2.5, 4.5}% and U_min ∈ {0.5, 2, 10} (MW-like to very hard radiation field).">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust/images/thumb/sphx_glr_plot_dust_qpah_umin_grid_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust/plot_dust_qpah_umin_grid`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Dust IR SED: q_PAH × U_min Grid</div>
     </div>
 
 
@@ -168,6 +223,23 @@ Attenuation laws, two-component dust, and IR emission.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The 2175 Å ultraviolet bump is a distinctive feature in dust attenuation curves, attributed to polycyclic aromatic hydrocarbons (PAHs) or graphite grains. This sweep shows how UV-bump amplitude modulates the attenuation curve across 1000–10000 Å, from a smooth power law (no bump) to a strong MW-like bump.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust/images/thumb/sphx_glr_plot_uv_bump_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust/plot_uv_bump_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">UV Bump Strength (dust_bump_strength)</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -178,13 +250,17 @@ Attenuation laws, two-component dust, and IR emission.
 .. toctree::
    :hidden:
 
+   /auto_examples/dust/plot_attenuation_law_compare
    /auto_examples/dust/plot_dust_T_sweep
    /auto_examples/dust/plot_dust_curves
    /auto_examples/dust/plot_dust_emission_models
+   /auto_examples/dust/plot_dust_geometry_sweep
+   /auto_examples/dust/plot_dust_qpah_umin_grid
    /auto_examples/dust/plot_dust_slope_sweep
    /auto_examples/dust/plot_qpah_sweep
    /auto_examples/dust/plot_tau_bc_sweep
    /auto_examples/dust/plot_tau_diff_sweep
    /auto_examples/dust/plot_two_component
    /auto_examples/dust/plot_umin_sweep
+   /auto_examples/dust/plot_uv_bump_sweep
 

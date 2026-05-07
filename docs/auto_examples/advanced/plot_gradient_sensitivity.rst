@@ -25,29 +25,7 @@ Computes the Jacobian d(flux)/d(theta) of the forward model and displays
 it as a heatmap showing which photometric bands are sensitive to which
 physical parameters.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-128
-
-
-
-.. image-sg:: /auto_examples/advanced/images/sphx_glr_plot_gradient_sensitivity_001.png
-   :alt: Normalized Jacobian $\partial f_{\rm band} / \partial \theta$
-   :srcset: /auto_examples/advanced/images/sphx_glr_plot_gradient_sensitivity_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py:517: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
-      self._nebular_backend = BakedInBackend()
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 9-126
 
 .. code-block:: Python
 
@@ -162,10 +140,8 @@ physical parameters.
     fig.colorbar(im, ax=ax, shrink=0.8, label="Normalized sensitivity")
     fig.tight_layout()
 
-    outdir = Path(__file__).resolve().parent.parent / "figures" if "__file__" in dir() else Path(".")
-    outdir.mkdir(parents=True, exist_ok=True)
     plt.savefig(
-        str(outdir / "gradient_sensitivity.png"),
+        "plot_gradient_sensitivity.png",
         dpi=150,
         bbox_inches="tight",
     )

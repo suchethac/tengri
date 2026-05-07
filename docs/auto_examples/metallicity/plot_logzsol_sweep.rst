@@ -27,29 +27,7 @@ stronger absorption features and redder continua. This plot sweeps
 ``met_logzsol`` from :math:`-2` (0.01 :math:`Z_\odot`) to :math:`0.2`
 (1.6 :math:`Z_\odot`) at fixed SFH and dust.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-77
-
-
-
-.. image-sg:: /auto_examples/metallicity/images/sphx_glr_plot_logzsol_sweep_001.png
-   :alt: Stellar Metallicity: $\log\,Z/Z_\odot$ sweep
-   :srcset: /auto_examples/metallicity/images/sphx_glr_plot_logzsol_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py:517: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
-      self._nebular_backend = BakedInBackend()
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 11-82
 
 .. code-block:: Python
 
@@ -105,6 +83,11 @@ stronger absorption features and redder continua. This plot sweeps
 
     # --- Sweep stellar metallicity ---
     values = [-2.0, -1.5, -1.0, -0.5, -0.3, 0.0, 0.2]
+
+    # # The sweep_parameter helper creates a single SEDModel instance and calls
+    # # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
+    # # automatically via tengri's persistent compilation cache (enabled at
+    # # import time), so repeated forward model calls reuse the compiled kernel.
     fig, ax = sweep_parameter(
         model,
         "met_logzsol",

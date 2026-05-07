@@ -25,18 +25,7 @@ Plot the SKIRTOR (Stalevski et al. 2016) clumpy torus model varying
 viewing angle (inclination) and optical depth at 9.7 μm (tau_97).
 Shows how geometric effects and dust clumping transform the torus SED.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-154
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_skirtor_variants_001.png
-   :alt: SKIRTOR Clumpy Torus: Inclination, Optical Depth, and Clumping Effects, Face-on (θ=18°) (τ_97=9), p=0.5, vary τ_97, Luminosity landscape (θ=26°), Edge-on (θ=60°) (τ_97=9), p=1.5, vary τ_97, Luminosity landscape (θ=73°)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_skirtor_variants_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 9-168
 
 .. code-block:: Python
 
@@ -65,8 +54,7 @@ Shows how geometric effects and dust clumping transform the torus SED.
 
     if _grid_path is None:
         raise SystemExit(
-            "Skipping: SKIRTOR grid not found. "
-            "Run: python scripts/download_skirtor_templates.py"
+            "Skipping: SKIRTOR grid not found. Run: python scripts/download_skirtor_templates.py"
         )
 
     from tengri.analysis.plotting import setup_style
@@ -81,8 +69,10 @@ Shows how geometric effects and dust clumping transform the torus SED.
     wavelength = jnp.logspace(np.log10(5e3), np.log10(5e6), 512)
     wave_um = np.array(wavelength) / 1e4
 
-    # Figure: 2x3 grid showing tau_97 and inclination variations
-    fig, axes = plt.subplots(2, 3, figsize=(14, 8))
+    # Figure: 2x3 grid showing tau_97 and inclination variations.
+    # sharex/sharey keep panel sizes uniform; figsize gives breathing room at 150 dpi
+    # so individual axis labels and legends remain legible in the gallery.
+    fig, axes = plt.subplots(2, 3, figsize=(14, 8), sharex=True, sharey=True)
 
     # Left column: fixed tau_97=9 (optically thick, grid max=11), vary inclination
     tau_97_thick = 9.0
@@ -115,8 +105,10 @@ Shows how geometric effects and dust clumping transform the torus SED.
         ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
         ax.set_title(f"{title} (τ_97={tau_97_thick:.0f})")
         ax.legend(fontsize=10, frameon=False)
+        # SKIRTOR torus emission peaks at 10-50 µm; widen with breathing room
+        # so context (NIR + sub-mm tails) is visible alongside the IR peak.
         ax.set_xlim(0.5, 500)
-        ax.set_ylim(1e21, 1e32)
+        ax.set_ylim(1e25, 1e32)
 
     # Middle column: fixed inclination, vary tau_97
     cos_inc_fixed = 0.5
@@ -143,8 +135,10 @@ Shows how geometric effects and dust clumping transform the torus SED.
         ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
         ax.set_title(title)
         ax.legend(fontsize=10, frameon=False)
+        # SKIRTOR torus emission peaks at 10-50 µm; widen with breathing room
+        # so context (NIR + sub-mm tails) is visible alongside the IR peak.
         ax.set_xlim(0.5, 500)
-        ax.set_ylim(1e21, 1e32)
+        ax.set_ylim(1e25, 1e32)
 
     # Right column: Total SED landscape (3D heatmap as color)
     for row, cos_inc in enumerate([0.9, 0.3]):
@@ -178,12 +172,21 @@ Shows how geometric effects and dust clumping transform the torus SED.
         ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
         ax.set_title(f"Luminosity landscape (θ={np.degrees(np.arccos(cos_inc)):.0f}°)")
         ax.legend(fontsize=10, frameon=False, ncol=2)
+        # SKIRTOR torus emission peaks at 10-50 µm; widen with breathing room
+        # so context (NIR + sub-mm tails) is visible alongside the IR peak.
         ax.set_xlim(0.5, 500)
-        ax.set_ylim(1e21, 1e32)
+        ax.set_ylim(1e25, 1e32)
 
-    fig.suptitle("SKIRTOR Clumpy Torus: Inclination, Optical Depth, and Clumping Effects", fontsize=12)
-    fig.tight_layout(rect=[0, 0, 1, 0.97])
-    plt.savefig("plot_skirtor_variants.png", dpi=100, bbox_inches="tight")
+    # With sharex/sharey, hide tick labels on inner panels so labels don't crowd.
+    for ax in axes.flat:
+        ax.label_outer()
+
+    fig.suptitle(
+        "SKIRTOR Clumpy Torus: Inclination, Optical Depth, and Clumping Effects",
+        fontsize=14,
+    )
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.savefig("plot_skirtor_variants.png", dpi=150, bbox_inches="tight")
     plt.show()
 
 

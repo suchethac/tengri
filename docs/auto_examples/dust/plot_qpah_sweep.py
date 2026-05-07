@@ -65,6 +65,11 @@ model = SEDModel(spec, ssp)
 # --- Sweep dust_qpah (%), zoomed to mid-IR where PAH features dominate ---
 # Mid-IR zoom: 3–20 μm = 3e4 Å to 2e5 Å
 values = [0.5, 1.5, 2.5, 4.5, 6.0]
+
+# # The sweep_parameter helper creates a single SEDModel instance and calls
+# # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
+# # automatically via tengri's persistent compilation cache (enabled at
+# # import time), so repeated forward model calls reuse the compiled kernel.
 fig, ax = sweep_parameter(
     model,
     "dust_qpah",

@@ -64,5 +64,5 @@ ax.set_ylim(1e19, 1e34)
 ax.legend(frameon=False, fontsize=10)
 
 fig.tight_layout()
-plt.savefig("agn_templates.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_agn_templates.png", dpi=150, bbox_inches="tight")
 plt.show()

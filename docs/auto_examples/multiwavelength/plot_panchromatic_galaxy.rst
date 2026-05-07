@@ -29,31 +29,7 @@ radio components.
 
 Requires SSP grid (``data/ssp_prsc_miles_*.h5``).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-118
-
-
-
-.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_panchromatic_galaxy_001.png
-   :alt: Panchromatic Star-Forming Galaxy SED
-   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_panchromatic_galaxy_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py:517: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
-      self._nebular_backend = BakedInBackend()
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/pipeline.py:345: UserWarning: Unrecognized parameter names passed to Model: ['dust_T_cold', 'dust_T_hot', 'dust_T_warm', 'dust_log_ssfr', 'dust_qhac', 'dust_xi_mir', 'dust_xi_pah', 'dust_xi_warm']. These will be silently ignored. Did you mean one of: ['dust_Rv', 'dust_T', 'dust_alpha_dale', 'dust_alpha_dl14', 'dust_alpha_mir', 'dust_beta_ir', 'dust_bump_strength', 'dust_delta', 'dust_eta_balance', 'dust_f_obscuration', 'dust_gamma_dl', 'dust_qpah', 'dust_slope', 'dust_tau_bc', 'dust_tau_diff', 'dust_umin', 'met_alpha_fe', 'met_logzsol', 'noise_dof', 'noise_frac_cal', 'redshift', 'sfh_tsnorm_log_peak_sfr', 'sfh_tsnorm_peak_lbt_gyr', 'sfh_tsnorm_skew', 'sfh_tsnorm_trunc', 'sfh_tsnorm_width_gyr']?
-      p = model._get_internal_params(params)
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 13-128
 
 .. code-block:: Python
 
@@ -102,13 +78,13 @@ Requires SSP grid (``data/ssp_prsc_miles_*.h5``).
     ssp = load_ssp_data(SSP_PATH)
 
     # Wavelength grid: UV through near-IR for SEDModel, radio appended separately
-    wave_sed = jnp.logspace(jnp.log10(1000.0), jnp.log10(1e6), 800)  # 0.1 µm – 100 µm [Å]
+    wave_sed = jnp.logspace(jnp.log10(1000.0), jnp.log10(1e7), 800)  # 0.1 µm – 1 mm [Å]
     obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_sed))
 
     spec = Parameters(
         mean_sfh_type="tsnorm",
         dust_emission="draine_li2007",
-        sfh_tsnorm_log_peak_sfr=Fixed(1.2),      # peak SFR ~ 16 Msun/yr
+        sfh_tsnorm_log_peak_sfr=Fixed(1.2),  # peak SFR ~ 16 Msun/yr
         sfh_tsnorm_peak_lbt_gyr=Fixed(3.0),
         sfh_tsnorm_width_gyr=Fixed(2.5),
         sfh_tsnorm_skew=Fixed(0.0),
@@ -144,14 +120,24 @@ Requires SSP grid (``data/ssp_prsc_miles_*.h5``).
     ax.loglog(wave_um[mask], l_nu[mask], color="C0", lw=2.0, label="Stellar + dust SED")
 
     mask_r = l_radio > 0
-    ax.loglog(wave_radio_um[mask_r], l_radio[mask_r], color="C2", lw=2.0,
-              label="SF synchrotron (radio)")
+    ax.loglog(
+        wave_radio_um[mask_r], l_radio[mask_r], color="C2", lw=2.0, label="SF synchrotron (radio)"
+    )
 
-    # Wavelength regime labels
-    for x, lbl in [(0.15, "UV"), (0.6, "Optical"), (10.0, "Mid-IR"), (1e3, "Radio")]:
+    # Set y-limits BEFORE drawing region labels so they place correctly.
+    ax.set_ylim(1e25, 1e34)
+
+    # Wavelength regime labels (placed at fixed fraction of the y-axis).
+    for x, lbl in [(0.15, "UV"), (0.6, "Optical"), (10.0, "Mid-IR"), (300.0, "FIR"), (1e4, "Radio")]:
         ax.axvline(x, color="0.75", lw=0.6, ls=":")
-        ax.text(x * 1.2, ax.get_ylim()[1] * 0.5 if ax.get_ylim()[1] > 0 else 1e28,
-                lbl, fontsize=9, color="0.5")
+        ax.text(
+            x * 1.2,
+            0.92,
+            lbl,
+            fontsize=9,
+            color="0.5",
+            transform=ax.get_xaxis_transform(),
+        )
 
     ax.set_xlabel(r"Wavelength [$\mu$m]")
     ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")

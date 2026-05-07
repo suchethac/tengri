@@ -40,16 +40,10 @@ Requires the precomputed grid ``data/relagn_disc_grid.h5``.
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri.agn import get_agn_model
+    from tengri.agn import resolve_agn_model
     from tengri.analysis.plotting import setup_style
 
     setup_style()
-
-
-
-
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 26-27
@@ -74,22 +68,16 @@ Wavelength grid: 100 Å (UV) to 3 µm (NIR)
     colors = plt.cm.plasma(np.linspace(0.1, 0.9, len(astar_values)))
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 41-42
 
 Load RELAGN model from registry
 
-.. GENERATED FROM PYTHON SOURCE LINES 42-86
+.. GENERATED FROM PYTHON SOURCE LINES 42-89
 
 .. code-block:: Python
 
     try:
-        relagn_fn = get_agn_model("relagn")
+        relagn_fn = resolve_agn_model("relagn")
     except KeyError as exc:
         raise SystemExit("relagn model not registered — rebuild grid first.") from exc
 
@@ -98,21 +86,26 @@ Load RELAGN model from registry
     uv_slopes = []
 
     for astar, color in zip(astar_values, colors):
-        l_nu = np.array(relagn_fn(
-            wavelength,
-            agn_log_mbh=log_mbh,
-            agn_log_mdot=log_mdot,
-            agn_astar=float(astar),
-            agn_cos_inc=0.5,
-            agn_torus_frac=0.0,  # disc only for clarity
-        ))
+        l_nu = np.array(
+            relagn_fn(
+                wavelength,
+                agn_log_mbh=log_mbh,
+                agn_log_mdot=log_mdot,
+                agn_astar=float(astar),
+                agn_cos_inc=0.5,
+                agn_torus_frac=0.0,  # disc only for clarity
+            )
+        )
         mask = l_nu > 0
         if not mask.any():
             uv_slopes.append(np.nan)
             continue
 
         ax_sed.loglog(
-            wave_um[mask], l_nu[mask], lw=1.8, color=color,
+            wave_um[mask],
+            l_nu[mask],
+            lw=1.8,
+            color=color,
             label=rf"$a_* = {astar:.3f}$",
         )
 
@@ -126,46 +119,29 @@ Load RELAGN model from registry
 
     ax_sed.set_xlabel(r"Wavelength [$\mu$m]")
     ax_sed.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-    ax_sed.set_title(
-        rf"RELAGN outer disc: $\log M = {log_mbh}$, $\log \dot{{m}} = {log_mdot}$"
-    )
+    ax_sed.set_title(rf"RELAGN outer disc: $\log M = {log_mbh}$, $\log \dot{{m}} = {log_mdot}$")
     ax_sed.set_xlim(0.01, 3)
     ax_sed.legend(frameon=False, fontsize=9)
 
 
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_relagn_spin_001.png
-   :alt: RELAGN outer disc: $\log M = 8.5$, $\log \dot{m} = -0.5$
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_relagn_spin_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/examples/agn/plot_relagn_spin.py:43: DeprecationWarning: `get_agn_model` is deprecated and will be removed in tengri v1.0; use `resolve_agn_model` instead.
-      relagn_fn = get_agn_model("relagn")
-
-    <matplotlib.legend.Legend object at 0x10fc86ea0>
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 87-91
+.. GENERATED FROM PYTHON SOURCE LINES 90-94
 
 Panel 2: UV spectral slope α vs spin
 α becomes less negative (harder) as spin increases because the shrinking ISCO
 pushes the inner-disc temperature blueward, contributing more flux at
 912–3000 Å.  α = d log L_ν / d log ν; Rayleigh-Jeans limit → α = +2.
 
-.. GENERATED FROM PYTHON SOURCE LINES 91-106
+.. GENERATED FROM PYTHON SOURCE LINES 94-113
 
 .. code-block:: Python
 
     ax_slope.plot(
-        astar_values, uv_slopes,
-        "o-", color="royalblue", lw=2, ms=7,
+        astar_values,
+        uv_slopes,
+        "o-",
+        color="royalblue",
+        lw=2,
+        ms=7,
     )
     ax_slope.set_xlabel(r"BH spin $a_*$")
     ax_slope.set_ylabel(r"UV slope $\alpha$  ($L_\nu \propto \nu^\alpha$, 912–3000 Å)")
@@ -176,19 +152,8 @@ pushes the inner-disc temperature blueward, contributing more flux at
     # (Dovciak+2004) applies full Kerr ray-tracing per annulus up to r = 1000 Rg;
     # the Novikov-Thorne outer disc uses the non-relativistic formula beyond that.
 
-    plt.savefig("relagn_spin_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_relagn_spin.png", dpi=150, bbox_inches="tight")
     plt.show()
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_relagn_spin_002.png
-   :alt: plot relagn spin
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_relagn_spin_002.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_relagn_spin.py:
