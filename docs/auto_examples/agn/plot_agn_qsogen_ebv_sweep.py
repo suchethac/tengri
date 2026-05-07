@@ -6,6 +6,13 @@ How does AGN-intrinsic dust reddening (E(B-V)) redden the quasar SED?
 Sweeps agn_ebv from 0.0 to 0.4 on QSOgen at log_lbol=45, showing
 the transition from unobscured UV/optical slopes to significantly
 reddened spectra typical of obscured quasars.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_agn_qsogen_ebv_sweep_001.png
+   :alt: plot_agn_qsogen_ebv_sweep
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

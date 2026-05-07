@@ -41,12 +41,18 @@ to the eager path (rtol=1e-12). Cross-component data flows through
 publishes ``L_agn_bol`` for X-ray, stellar publishes ``log_mstar``
 + ``lnu_age`` + 9 more keys.
 
-.. GENERATED FROM PYTHON SOURCE LINES 27-29
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_orchestrator_demo_001.png
+   :alt: plot_orchestrator_demo
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 34-36
 
 Build the pipeline
 ------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 29-78
+.. GENERATED FROM PYTHON SOURCE LINES 36-85
 
 .. code-block:: Python
 
@@ -100,12 +106,12 @@ Build the pipeline
     print("chain:", chain_summary(components))
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 79-81
+.. GENERATED FROM PYTHON SOURCE LINES 86-88
 
 Run a forward pass
 ------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 81-124
+.. GENERATED FROM PYTHON SOURCE LINES 88-131
 
 .. code-block:: Python
 
@@ -153,12 +159,12 @@ Run a forward pass
     state = pipeline(params)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 125-127
+.. GENERATED FROM PYTHON SOURCE LINES 132-134
 
 Inspect the cross-component publications
 ----------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 127-144
+.. GENERATED FROM PYTHON SOURCE LINES 134-151
 
 .. code-block:: Python
 
@@ -180,12 +186,12 @@ Inspect the cross-component publications
         print(f"nion                   = {float(state.derived['nion']):.3g} photons/s")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 145-147
+.. GENERATED FROM PYTHON SOURCE LINES 152-154
 
 Plot the SED
 ------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 147-184
+.. GENERATED FROM PYTHON SOURCE LINES 154-191
 
 .. code-block:: Python
 
@@ -227,12 +233,12 @@ Plot the SED
     plt.show()
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 185-187
+.. GENERATED FROM PYTHON SOURCE LINES 192-194
 
 Swap the dust law and re-run — composability in action
 ------------------------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 187-204
+.. GENERATED FROM PYTHON SOURCE LINES 194-211
 
 .. code-block:: Python
 

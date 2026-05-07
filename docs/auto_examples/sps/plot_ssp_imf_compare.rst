@@ -28,7 +28,13 @@ standard IMF prescriptions (Chabrier, Kroupa, Salpeter) using published
 literature values. The effect is dramatic in the near-IR where massive stars
 dominate the mass budget.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-111
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_ssp_imf_compare_001.png
+   :alt: plot_ssp_imf_compare
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 19-118
 
 .. code-block:: Python
 

@@ -26,7 +26,13 @@ screen (foreground), mixed (slab), and clumpy (two-phase medium). At fixed
 optical depth τ_V = 1.0, geometry controls the spectral shape: screens are
 reddest, mixed intermediate, clumpy greyest.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-58
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_dust_geometry_sweep_001.png
+   :alt: plot_dust_geometry_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-65
 
 .. code-block:: Python
 

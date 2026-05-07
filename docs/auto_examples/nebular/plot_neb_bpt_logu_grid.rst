@@ -25,7 +25,13 @@ The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies ionization sources.
 Shows how the ionization parameter (logU) and metallicity drive emission
 galaxies along the SF→composite→Seyfert sequence.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-132
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_neb_bpt_logu_grid_001.png
+   :alt: plot_neb_bpt_logu_grid
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-139
 
 .. code-block:: Python
 

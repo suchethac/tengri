@@ -25,7 +25,13 @@ Compare three nebular emission models: BakedIn (embedded in SSP),
 CloudyGrid (photoionization tables), and Cue (neural emulator).
 Shows how backend choice affects emission line strengths.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-136
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_neb_backend_compare_001.png
+   :alt: plot_neb_backend_compare
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-143
 
 .. code-block:: Python
 

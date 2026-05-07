@@ -29,7 +29,13 @@ physical regions at different epochs.
 
 Requires SSP grid (``data/ssp_prsc_miles_*.h5``).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-148
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_panchromatic_redshift_sweep_001.png
+   :alt: plot_panchromatic_redshift_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 20-155
 
 .. code-block:: Python
 

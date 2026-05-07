@@ -9,6 +9,13 @@ longer observed wavelengths, enabling photometric surveys to probe different
 physical regions at different epochs.
 
 Requires SSP grid (``data/ssp_prsc_miles_*.h5``).
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_panchromatic_redshift_sweep_001.png
+   :alt: plot_panchromatic_redshift_sweep
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

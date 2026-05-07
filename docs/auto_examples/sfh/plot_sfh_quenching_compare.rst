@@ -24,7 +24,13 @@ SFH Quenching Scenarios: Constant, Exponential, Sharp, and Burst+Decay
 Compare four galaxy quenching scenarios: unquenched (constant SFH),
 exponential decline, sharp truncation, and a recent burst on top of quenching.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-159
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_sfh_quenching_compare_001.png
+   :alt: plot_sfh_quenching_compare
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 15-166
 
 .. code-block:: Python
 

@@ -6,6 +6,13 @@ How does a single stellar population age from UV-dominated blue phase through
 infrared-dominated red phase? This script selects five representative ages
 from the DSPS SSP grid at solar metallicity and plots rest-frame λF_λ on
 log-log axes to reveal the temperature inversion and dust signature.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_ssp_age_sweep_001.png
+   :alt: plot_ssp_age_sweep
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

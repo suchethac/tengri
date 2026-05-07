@@ -27,7 +27,13 @@ script sweeps infrared luminosity L_IR ∈ {10, 11, 12, 13} L_sun and shows
 resulting synchrotron + thermal radio SEDs using the canonical q_IR = 2.64
 parameter, demonstrating how more luminous starbursts produce stronger radio.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-78
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_radio_lir_relation_001.png
+   :alt: plot_radio_lir_relation
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 18-85
 
 .. code-block:: Python
 

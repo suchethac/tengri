@@ -26,7 +26,13 @@ Shows wavelength dependence (k(λ)) from UV through near-infrared, highlighting
 the UV bump (2175 Å) and the steepness differences between Milky Way, SMC, and
 starburst models.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-66
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_attenuation_law_compare_001.png
+   :alt: plot_attenuation_law_compare
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-73
 
 .. code-block:: Python
 

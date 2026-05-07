@@ -25,7 +25,13 @@ Visualize a 3×3 grid of double power-law SFH shapes, sweeping
 the rising slope α and falling slope β to show how the
 parameter space controls SFH morphology.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-99
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_dpl_alpha_beta_grid_001.png
+   :alt: plot_dpl_alpha_beta_grid
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-106
 
 .. code-block:: Python
 

@@ -25,7 +25,13 @@ Sweep signal-to-noise ratio (SNR) from {3, 5, 10, 30, 100} on a fixed mock
 photometric galaxy in SDSS ugriz. Demonstrates how measurement uncertainty
 affects photometric precision. Higher SNR = tighter error bars.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-161
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_snr_sweep_001.png
+   :alt: plot_snr_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-168
 
 .. code-block:: Python
 

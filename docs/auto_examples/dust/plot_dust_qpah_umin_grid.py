@@ -6,6 +6,13 @@ Dust IR SED: q_PAH × U_min Grid
 and ISRF hardness (U_min) independently shape the mid- and far-infrared SED.
 Uses Draine & Li 2007 templates. 3×3 panel grid covering q_PAH ∈ {0.5, 2.5, 4.5}%
 and U_min ∈ {0.5, 2, 10} (MW-like to very hard radiation field).
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_dust_qpah_umin_grid_001.png
+   :alt: plot_dust_qpah_umin_grid
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

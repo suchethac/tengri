@@ -27,7 +27,13 @@ ACS). Demonstrates how filter placement controls which spectral features are
 captured. Each panel overlays the filter throughputs (orange) on the same
 underlying SED (blue).
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-146
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_filter_set_comparison_001.png
+   :alt: plot_filter_set_comparison
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 18-153
 
 .. code-block:: Python
 

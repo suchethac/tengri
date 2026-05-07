@@ -26,7 +26,13 @@ ultraviolet through mid-infrared. Metallicity impacts stellar absorption
 features, dust opacity, and energy balance. Sweeps log(Z/Z_sun) ∈
 {-1.5, -0.7, 0.0, 0.5} on a composite SED including dust emission.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-86
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_logzsol_panchromatic_001.png
+   :alt: plot_logzsol_panchromatic
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-93
 
 .. code-block:: Python
 

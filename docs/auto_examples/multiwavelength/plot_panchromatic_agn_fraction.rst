@@ -27,7 +27,13 @@ blending a star-forming galaxy stellar continuum with an AGN accretion disc
 spectrum. Shows the transition from star-formation-dominated to AGN-dominated
 SED morphology.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-135
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_panchromatic_agn_fraction_001.png
+   :alt: plot_panchromatic_agn_fraction
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 18-142
 
 .. code-block:: Python
 

@@ -26,7 +26,13 @@ Sweeps agn_emline_scale from 0.0 to 2.0 on QSOgen at fixed log_lbol=45,
 showing how line forests and broad lines strengthen the continuum between
 1000–5000 Å and the Balmer continuum near H-alpha.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-55
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_agn_qsogen_emline_sweep_001.png
+   :alt: plot_agn_qsogen_emline_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-62
 
 .. code-block:: Python
 

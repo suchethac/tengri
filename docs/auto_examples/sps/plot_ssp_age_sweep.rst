@@ -26,7 +26,13 @@ infrared-dominated red phase? This script selects five representative ages
 from the DSPS SSP grid at solar metallicity and plots rest-frame λF_λ on
 log-log axes to reveal the temperature inversion and dust signature.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-88
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_ssp_age_sweep_001.png
+   :alt: plot_ssp_age_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-95
 
 .. code-block:: Python
 

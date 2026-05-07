@@ -27,7 +27,13 @@ grains. This sweep shows how UV-bump amplitude modulates the attenuation
 curve across 1000–10000 Å, from a smooth power law (no bump) to a strong
 MW-like bump.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-56
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_uv_bump_sweep_001.png
+   :alt: plot_uv_bump_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 18-63
 
 .. code-block:: Python
 

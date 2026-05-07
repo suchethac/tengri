@@ -10,6 +10,15 @@
 
 > **Status:** v0.1.0, active development. Core pipeline functional with 2000+ tests. Paper I in preparation.
 
+```{admonition} Quick links
+:class: tip
+
+- 📚 **[Tutorial spine](spine/00_quickstart)** — step-by-step notebooks 00 → 08
+- 🖼️ **[Examples gallery](auto_examples/index)** — 120+ one-figure recipes by category
+- 📓 **[Quickstart notebook](spine/00_quickstart)** — end-to-end fit in 2 minutes
+- 💻 **[Source on GitHub](https://github.com/suchethac/tengri)**
+```
+
 ## Why tengri
 
 - **JIT-compiled, fully differentiable**: pure JAX end-to-end. Forward model ~140 μs, gradient ~56 μs on CPU for a smooth 7-D model. JIT + `vmap` + `grad` compose — one forward model powers every inference backend.
@@ -78,9 +87,18 @@ Method choice is introduced in `notebooks/05_fitting_photometry.py`; a deeper wa
 
 ## Tutorial spine
 
-Tutorials live as Jupytext `.py` files in [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) and are synced to `docs/spine/*.ipynb` via `python scripts/sync_spine_notebooks_for_docs.py`. For one-figure recipes, see the [examples gallery](examples.md) — 70+ thumbnailed scripts, each runnable standalone.
+Tutorials live as Jupytext `.py` files in [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) and are synced to `docs/spine/*.ipynb` via `python scripts/sync_spine_notebooks_for_docs.py`.
 
 The spine is written for astronomers — physics framing, copy-paste-able code cells, progressive teaching across notebooks. Start with `00` and `01`, then branch based on your use case.
+
+## Examples gallery
+
+Looking for a one-figure recipe? Browse the
+**[examples gallery](auto_examples/index)** — 120+ thumbnailed scripts, each
+self-contained and runnable standalone. Categories: AGN, dust attenuation +
+emission, IGM, inference, metallicity, multiwavelength, nebular, photometry,
+quickstart, radio, recipes, SFH, spectroscopy, SPS, X-ray, plus end-to-end
+use-cases and workflows.
 
 ## Performance (Apple M-series CPU)
 
@@ -141,9 +159,9 @@ The spine is written for astronomers — physics framing, copy-paste-able code c
    spine/08_emission_lines
 
 .. toctree::
-   :caption: Examples gallery
-   :maxdepth: 2
+   :caption: Gallery
+   :maxdepth: 1
 
-   examples
    auto_examples/index
+   examples
 ```

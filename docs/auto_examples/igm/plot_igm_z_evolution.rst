@@ -27,7 +27,13 @@ on Inoue+2014 IGM transmission curves, showing how the Lyman alpha forest deepen
 and the Lyman break (912 Å rest-frame) sharpens at higher z, affecting photometric
 redshift estimation via dropout techniques.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-82
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_igm_z_evolution_001.png
+   :alt: plot_igm_z_evolution
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 18-89
 
 .. code-block:: Python
 

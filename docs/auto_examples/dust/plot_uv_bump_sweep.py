@@ -7,6 +7,13 @@ curves, attributed to polycyclic aromatic hydrocarbons (PAHs) or graphite
 grains. This sweep shows how UV-bump amplitude modulates the attenuation
 curve across 1000–10000 Å, from a smooth power law (no bump) to a strong
 MW-like bump.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_uv_bump_sweep_001.png
+   :alt: plot_uv_bump_sweep
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

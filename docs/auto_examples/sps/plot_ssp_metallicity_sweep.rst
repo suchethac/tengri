@@ -26,7 +26,13 @@ and near-IR? This script selects five metallicity points spanning the SSP grid a
 a fixed age (1 Gyr) and visualizes how metallicity reddens the optical and shifts
 iron-peak features in the near-IR via peak-normalized λF_λ.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-96
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_ssp_metallicity_sweep_001.png
+   :alt: plot_ssp_metallicity_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-103
 
 .. code-block:: Python
 

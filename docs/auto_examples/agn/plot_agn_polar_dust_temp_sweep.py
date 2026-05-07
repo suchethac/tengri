@@ -6,6 +6,13 @@ How does polar dust temperature affect the near-to-mid-IR SED?
 Simulates warm polar dust in a narrow cone decoupled from the
 equatorial torus, sweeping temperature from 1000 to 2000 K to show
 how warmer polar geometry enhances the mid-IR bump in edge-on systems.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_agn_polar_dust_temp_sweep_001.png
+   :alt: plot_agn_polar_dust_temp_sweep
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

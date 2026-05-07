@@ -25,7 +25,13 @@ How does AGN bolometric luminosity shape the SED of the hot accretion disc
 continuum? Sweeps log L_bol/L_sun from 43 to 47, showing how the continuum
 power and temperature scale with the central black hole accretion rate.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-54
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_agn_log_lbol_sweep_001.png
+   :alt: plot_agn_log_lbol_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-61
 
 .. code-block:: Python
 

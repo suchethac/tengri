@@ -27,7 +27,13 @@ spectrum depends jointly on bolometric luminosity and the UV-to-X-ray slope
 shifts the relative balance between UV and X-ray emission. Sweeps cover the
 canonical X-ray band 0.1–1000 keV.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-77
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_agn_alpha_ox_lbol_2d_001.png
+   :alt: plot_agn_alpha_ox_lbol_2d
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 18-84
 
 .. code-block:: Python
 

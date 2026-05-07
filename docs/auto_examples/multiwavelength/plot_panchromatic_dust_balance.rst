@@ -26,7 +26,13 @@ This script demonstrates energy conservation between attenuation and emission:
 sweeping dust optical depth τ_diff ∈ {0.0, 0.3, 0.7, 1.5, 3.0} on a
 panchromatic SED shows how UV absorption transfers energy to the IR.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-137
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_panchromatic_dust_balance_001.png
+   :alt: plot_panchromatic_dust_balance
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-144
 
 .. code-block:: Python
 

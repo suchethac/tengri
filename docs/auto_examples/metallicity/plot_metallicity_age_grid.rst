@@ -26,7 +26,13 @@ different ages. Demonstrates the age-metallicity degeneracy: a metal-rich
 young star can mimic a metal-poor old star in the optical continuum. Uses a
 3×4 panel grid: log(Z/Z_sun) ∈ {-1.0, -0.3, 0.0, 0.3} × age ∈ {0.1, 1.0, 5.0} Gyr.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-124
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_metallicity_age_grid_001.png
+   :alt: plot_metallicity_age_grid
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-131
 
 .. code-block:: Python
 

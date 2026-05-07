@@ -7,6 +7,13 @@ spectrum depends jointly on bolometric luminosity and the UV-to-X-ray slope
 ``alpha_ox``. Both parameters affect the X-ray *normalisation*; only ``alpha_ox``
 shifts the relative balance between UV and X-ray emission. Sweeps cover the
 canonical X-ray band 0.1–1000 keV.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_agn_alpha_ox_lbol_2d_001.png
+   :alt: plot_agn_alpha_ox_lbol_2d
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

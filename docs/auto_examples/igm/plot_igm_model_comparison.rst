@@ -26,7 +26,13 @@ The Inoue et al. (2014) model captures Lyman-series absorption and
 Lyman-continuum opacity; the Madau (1995) model provides a simpler analytical
 approximation. This script shows how they differ in the UV to optical regime.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-79
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_igm_model_comparison_001.png
+   :alt: plot_igm_model_comparison
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-86
 
 .. code-block:: Python
 

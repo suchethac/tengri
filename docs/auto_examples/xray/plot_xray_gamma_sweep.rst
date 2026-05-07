@@ -25,7 +25,13 @@ Demonstrates how the photon index (γ) shapes the X-ray continuum.
 Sweeps γ ∈ {1.4, 1.6, 1.8, 2.0, 2.2, 2.4} at fixed bolometric luminosity.
 Flat spectra (low γ) dominate at low energies; steep spectra (high γ) show rapid decline.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-52
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_xray_gamma_sweep_001.png
+   :alt: plot_xray_gamma_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-59
 
 .. code-block:: Python
 

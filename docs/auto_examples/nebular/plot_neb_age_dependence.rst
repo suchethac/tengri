@@ -24,7 +24,13 @@ Nebular Emission: Dependence on Stellar Population Age
 Ionizing photon production declines rapidly with stellar population age (~t^-1).
 Compare young vs old populations to see how nebular line strength evolves.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-74
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_neb_age_dependence_001.png
+   :alt: plot_neb_age_dependence
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 15-81
 
 .. code-block:: Python
 

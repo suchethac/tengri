@@ -6,6 +6,13 @@ Compare metallicity evolution Z(t) from closed-box and leaky-box chemical
 evolution models. Shows how star formation history and gas outflows shape
 the enrichment history. Demonstrates how different feedback mechanisms
 alter metal abundance relative to a closed box (maximum enrichment).
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_zh_evolution_compare_001.png
+   :alt: plot_zh_evolution_compare
+   :class: sphx-glr-single-img
+
 """
 
 import matplotlib.pyplot as plt

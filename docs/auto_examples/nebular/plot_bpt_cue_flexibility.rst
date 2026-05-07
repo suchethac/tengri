@@ -39,7 +39,13 @@ Three families, four panels each:
 Kewley+2001 (solid) and Kauffmann+2003 (dashed) demarcations on every
 panel for reference. Fiducial point shown as a black star.
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-216
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_bpt_cue_flexibility_001.png
+   :alt: plot_bpt_cue_flexibility
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 30-223
 
 .. code-block:: Python
 

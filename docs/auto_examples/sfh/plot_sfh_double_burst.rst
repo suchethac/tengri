@@ -25,7 +25,13 @@ Demonstrate a galaxy with two distinct star formation events:
 an old burst + a recent burst. Show how the SED reflects
 both young and old stellar populations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-172
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_sfh_double_burst_001.png
+   :alt: plot_sfh_double_burst
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-179
 
 .. code-block:: Python
 

@@ -25,7 +25,13 @@ How does the torus opening angle (θ_oa) affect the SED? Sweeps agn_oa_skirtor
 from 20 to 60 degrees, showing how a more open/flared torus changes the infrared
 emission and obscuration geometry. Fixed inclination, optical depth, and power.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-93
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_agn_oa_sweep_001.png
+   :alt: plot_agn_oa_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-100
 
 .. code-block:: Python
 

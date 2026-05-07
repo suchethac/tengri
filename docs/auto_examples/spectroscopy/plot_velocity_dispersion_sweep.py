@@ -6,6 +6,13 @@ Sweep stellar velocity dispersion σ_v ∈ {50, 100, 150, 250, 400} km/s to show
 how line broadening increases with dynamical heating. The Mg b absorption
 feature (~5170 Å) widens progressively, demonstrating the kinematic signature
 of higher-velocity stellar populations.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_velocity_dispersion_sweep_001.png
+   :alt: plot_velocity_dispersion_sweep
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

@@ -31,7 +31,7 @@ displays the shared PSD posterior vs truth.
    :alt: plot_hierarchical
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-151
+.. GENERATED FROM PYTHON SOURCE LINES 16-156
 
 .. code-block:: Python
 
@@ -144,8 +144,13 @@ displays the shared PSD posterior vs truth.
     print(f"Hierarchical fit: {elapsed:.1f}s")
 
     # --- Figure: shared PSD posterior ---
-    sig_samples = np.array(result.shared_samples["sfh_field_psd_sigma"])
-    tau_samples = np.array(result.shared_samples["sfh_field_psd_tau_myr"])
+    # shared_samples keys depend on the spec — print to be safe and pick the
+    # psd amplitude/timescale entries by substring match.
+    keys = list(result.shared_samples.keys())
+    sig_key = next(k for k in keys if "psd" in k and ("sigma" in k or "_u" in k or "amp" in k))
+    tau_key = next(k for k in keys if "psd" in k and ("tau" in k))
+    sig_samples = np.array(result.shared_samples[sig_key])
+    tau_samples = np.array(result.shared_samples[tau_key])
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
 

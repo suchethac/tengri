@@ -27,7 +27,13 @@ SDSS filter transmission curves at z ∈ {0.1, 0.5, 1.0, 2.0}. Demonstrates
 k-corrections: which optical/near-IR features are probed by each band
 as the galaxy evolves toward the horizon.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-164
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_redshift_filter_grid_001.png
+   :alt: plot_redshift_filter_grid
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 18-171
 
 .. code-block:: Python
 

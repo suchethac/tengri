@@ -7,6 +7,13 @@ the expanding neutral hydrogen fraction. This script sweeps redshift z ∈ {2, 3
 on Inoue+2014 IGM transmission curves, showing how the Lyman alpha forest deepens
 and the Lyman break (912 Å rest-frame) sharpens at higher z, affecting photometric
 redshift estimation via dropout techniques.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_igm_z_evolution_001.png
+   :alt: plot_igm_z_evolution
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

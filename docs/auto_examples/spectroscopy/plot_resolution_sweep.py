@@ -6,6 +6,13 @@ Sweep instrumental resolution R ∈ {500, 2000, 5000, 20000} to demonstrate how
 spectral resolution affects line profile visibility. The Hα line (~6564.6 Å
 vacuum) transforms from a single broad bump to a sharply resolved absorption
 feature as resolution increases. High-res spectroscopy reveals kinematics.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_resolution_sweep_001.png
+   :alt: plot_resolution_sweep
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

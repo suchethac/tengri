@@ -6,6 +6,13 @@ All major attenuation laws implemented in tengri evaluated at fixed τ_V = 1.0.
 Shows wavelength dependence (k(λ)) from UV through near-infrared, highlighting
 the UV bump (2175 Å) and the steepness differences between Milky Way, SMC, and
 starburst models.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_attenuation_law_compare_001.png
+   :alt: plot_attenuation_law_compare
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

@@ -26,7 +26,13 @@ spectral resolution affects line profile visibility. The Hα line (~6564.6 Å
 vacuum) transforms from a single broad bump to a sharply resolved absorption
 feature as resolution increases. High-res spectroscopy reveals kinematics.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-134
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_resolution_sweep_001.png
+   :alt: plot_resolution_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-141
 
 .. code-block:: Python
 

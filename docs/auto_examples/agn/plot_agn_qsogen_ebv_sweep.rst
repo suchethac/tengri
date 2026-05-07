@@ -26,7 +26,13 @@ Sweeps agn_ebv from 0.0 to 0.4 on QSOgen at log_lbol=45, showing
 the transition from unobscured UV/optical slopes to significantly
 reddened spectra typical of obscured quasars.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-58
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_agn_qsogen_ebv_sweep_001.png
+   :alt: plot_agn_qsogen_ebv_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-65
 
 .. code-block:: Python
 

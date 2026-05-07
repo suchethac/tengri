@@ -6,6 +6,13 @@ Dust absorbs UV and optical photons and re-emits at infrared wavelengths.
 This script demonstrates energy conservation between attenuation and emission:
 sweeping dust optical depth τ_diff ∈ {0.0, 0.3, 0.7, 1.5, 3.0} on a
 panchromatic SED shows how UV absorption transfers energy to the IR.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_panchromatic_dust_balance_001.png
+   :alt: plot_panchromatic_dust_balance
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1
