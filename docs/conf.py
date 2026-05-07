@@ -41,13 +41,27 @@ try:
 except Exception:  # pragma: no cover - matplotlib missing on docs-only env
     pass
 
+# ── Heavy gallery scripts that should NOT be re-executed by ``make html`` ──
+# These typically take >10 minutes (population scaling sweeps, multi-fitter
+# benchmarks, hierarchical VI). Sphinx-Gallery's ``filename_pattern`` controls
+# which files are *executed*: matching files run and (re-)generate figures;
+# non-matching files still appear in the gallery and reuse the precomputed
+# images already on disk under ``docs/auto_examples/<group>/images/``. So the
+# trick is a negative-lookahead regex: "match plot_*.py UNLESS the basename
+# is in this list."
+_DO_NOT_EXECUTE = [
+    "plot_population_scaling",  # multi-N hierarchical VI sweep, ~30 min
+]
+_skip_alt = "|".join(_DO_NOT_EXECUTE)
+
 sphinx_gallery_conf = {
     "examples_dirs": ["../examples"],
     "gallery_dirs": ["auto_examples"],
-    "filename_pattern": r"plot_.+\.py$",
-    # Skip scripts that run heavy inference (hierarchical VI fits, long MCMC) —
-    # they would block the gallery build for tens of minutes. Users can still
-    # execute these directly from the source file.
+    # Run any plot_*.py whose basename is NOT in _DO_NOT_EXECUTE.
+    "filename_pattern": rf"^(?!.*({_skip_alt}))plot_.+\.py$",
+    # Scripts that should be hidden from the gallery entirely (heavy inference
+    # whose figures we don't want to ship at all). Different from the list
+    # above, which keeps the rendered output visible but avoids re-execution.
     "ignore_pattern": (
         r".*(plot_hierarchical|plot_hierarchical_convergence|"
         r"plot_convergence|plot_corner|plot_method_comparison|"
