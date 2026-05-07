@@ -115,7 +115,7 @@ spec_gaussian = Parameters(
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
     sfh_tsnorm_trunc=Uniform(1.0, 10.0),
-    met_logzsol=Gaussian(loc=0.0, scale=0.3),  # ← Gaussian centered at solar, sigma=0.3
+    met_logzsol=Gaussian(mu=0.0, sigma=0.3),  # ← Gaussian centered at solar, sigma=0.3
     dust_tau_diff=Uniform(0.0, 1.5),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),

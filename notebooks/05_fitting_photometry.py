@@ -275,8 +275,8 @@ result = fitter.run(
     n_warmup=500,
     n_samples=2000,
     target_accept_rate=0.85,
-    dense_mass_matrix=False,
-    max_num_doublings=6,
+    dense_mass_matrix=True,
+    max_num_doublings=8,
     verbose=False,
     key=jax.random.PRNGKey(789),
 )

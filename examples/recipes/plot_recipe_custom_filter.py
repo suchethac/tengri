@@ -85,9 +85,10 @@ obs = Observation(photometry=phot)
 model = SEDModel(spec, ssp, observation=obs)
 
 # Compute SEDs for visualization
-spec_dict = {k: v.value if hasattr(v, "value") else v for k, v in spec._fixed_values.items()}
-sed_rest = model.predict_rest_sed(spec_dict)
-wave_rest = ssp.wave
+spec_dict = spec.get_fixed_values()
+sed_result = model.predict_rest_sed(spec_dict)
+wave_rest = sed_result.wavelength
+sed_rest = sed_result.sed
 
 # --- Plot: SED + filter responses ---
 fig, (ax_sed, ax_filters) = plt.subplots(2, 1, figsize=(10, 6), sharex=False)

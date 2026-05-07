@@ -30,11 +30,21 @@ extensions = [
 
 # -- Sphinx-Gallery ----------------------------------------------------------
 
+# Pin matplotlib savefig DPI so gallery thumbnails render at the same
+# resolution across local builds and CI. Set before sphinx-gallery's first
+# figure save. (sphinx-gallery dropped its top-level ``savefig_dpi`` key on
+# Sphinx 9 / sphinx-gallery 0.18; rcParams is the supported path.)
+try:
+    import matplotlib
+
+    matplotlib.rcParams["savefig.dpi"] = 150
+except Exception:  # pragma: no cover - matplotlib missing on docs-only env
+    pass
+
 sphinx_gallery_conf = {
     "examples_dirs": ["../examples"],
     "gallery_dirs": ["auto_examples"],
     "filename_pattern": r"plot_.+\.py$",
-    "savefig_dpi": 150,
     # Skip scripts that run heavy inference (hierarchical VI fits, long MCMC) —
     # they would block the gallery build for tens of minutes. Users can still
     # execute these directly from the source file.
