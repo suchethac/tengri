@@ -78,3 +78,6 @@ docs/_notebooks/
 .worktrees/
 .claude/
 .nb_home/
+
+# Notebook runtime data caches (SVO filter pulls, etc.)
+notebooks/data/
