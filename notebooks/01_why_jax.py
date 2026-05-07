@@ -185,9 +185,10 @@ for i, (_label, val) in enumerate([("JIT", jit_time_ms), ("Python", 100)]):
     ax.text(val, i, f"  {val:.1f} ms", va="center", fontsize=11, fontweight="bold")
 ax.grid(axis="x", alpha=0.3, linestyle="--")
 plt.tight_layout()
-plt.savefig("jax_jit_speedup.png", dpi=100, bbox_inches="tight")
+os.makedirs("notebooks/figures", exist_ok=True)
+plt.savefig("notebooks/figures/01_jit_speedup.png", dpi=200, bbox_inches="tight")
 plt.show()
-print("\n✓ Saved: jax_jit_speedup.png")
+print("\n✓ Saved: notebooks/figures/01_jit_speedup.png")
 
 # %% [markdown]
 # ---

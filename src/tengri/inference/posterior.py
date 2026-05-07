@@ -262,19 +262,17 @@ class Posterior:
             # MAP: single point
             return self._model.predict_derived(self.params)
 
-        # Sampling: compute for each sample
-        n_samples = next(iter(self.samples.values())).shape[0]
-        derived_lists = {}
+        # Sampling: use JIT-compatible vmap for efficient batch computation
+        sfh_batch = jax.vmap(self._model.predict_sfh_quantities)(self.samples)
 
-        for i in range(n_samples):
-            sample_i = {k: v[i] for k, v in self.samples.items()}
-            d_i = self._model.predict_derived(sample_i)
-            for k, v in d_i.items():
-                if k not in derived_lists:
-                    derived_lists[k] = []
-                derived_lists[k].append(v)
-
-        return {k: _stack_or_nan(v, n_samples) for k, v in derived_lists.items()}
+        # Extract and convert NamedTuple fields to dict
+        return {
+            "stellar_mass": sfh_batch.stellar_mass,
+            "stellar_mass_surviving": sfh_batch.stellar_mass_surviving,
+            "sfr_100myr": sfh_batch.sfr_100myr,
+            "sfr_10myr": sfh_batch.sfr_10myr,
+            "ssfr": sfh_batch.ssfr,
+        }
 
     def line_fluxes(self) -> dict[str, tuple[float, float, float]]:
         """Emission line flux posterior summaries.

@@ -733,35 +733,42 @@ class TestBugNSS01PosteriorDerivedNone:
     """
 
     def test_derived_with_none_field_returns_nan_array(self):
-        """Verify posterior.derived handles all-None field by returning NaN array."""
+        """Verify posterior.derived handles NaN fields by returning NaN arrays.
+
+        After optimization to use vmap(predict_sfh_quantities), the derived property
+        now returns JAX arrays with NaN values (not Python None) when data is
+        unavailable, which is correct for JIT-compatible batch computation.
+        """
         from unittest.mock import MagicMock
 
+        from tengri.forward.prediction import SFHQuantities
         from tengri.inference.posterior import Posterior
 
-        # Create a mock model that returns some real values and one None field
+        # Create a mock model
         mock_model = MagicMock()
         n_samples = 3
 
-        # Each predict_derived call returns a dict where stellar_mass_surviving is None
-        mock_model.predict_derived = MagicMock(
-            side_effect=[
-                {
-                    "stellar_mass": jnp.array(1e11),
-                    "stellar_mass_surviving": None,
-                    "sfr_100myr": jnp.array(10.0),
-                },
-                {
-                    "stellar_mass": jnp.array(1.1e11),
-                    "stellar_mass_surviving": None,
-                    "sfr_100myr": jnp.array(11.0),
-                },
-                {
-                    "stellar_mass": jnp.array(0.9e11),
-                    "stellar_mass_surviving": None,
-                    "sfr_100myr": jnp.array(9.0),
-                },
-            ]
-        )
+        # Create a function that returns single-sample output.
+        # vmap will then batch over it.
+        def mock_predict_sfh(params_dict):
+            """Return a single-sample SFHQuantities (non-batched).
+
+            vmap will apply this per sample and batch the results.
+            """
+            # We need to extract the scalar value from each batched input
+            # When vmap applies this function, params_dict values will be
+            # scalar tracers, so we just return scalar SFHQuantities.
+            return SFHQuantities(
+                stellar_mass=jnp.array(1e11),
+                stellar_mass_surviving=jnp.nan,  # NaN when unavailable
+                sfr_100myr=jnp.array(10.0),
+                sfr_10myr=jnp.array(2.0),
+                ssfr=jnp.array(1e-10),
+                mass_weighted_age_gyr=jnp.array(5.0),
+                mass_weighted_metallicity=jnp.array(-1.5),
+            )
+
+        mock_model.predict_sfh_quantities = mock_predict_sfh
 
         # Create Posterior with samples
         posterior = Posterior(
@@ -786,21 +793,17 @@ class TestBugNSS01PosteriorDerivedNone:
         assert "stellar_mass_surviving" in derived
         assert derived["stellar_mass_surviving"].shape == (n_samples,)
         assert jnp.isnan(derived["stellar_mass_surviving"]).all(), (
-            "stellar_mass_surviving should be all NaN when field is None for all samples"
+            "stellar_mass_surviving should be all NaN when unavailable for all samples"
         )
 
-        # Check that other fields are stacked normally
+        # Check that other fields are present and finite
         assert "stellar_mass" in derived
         assert derived["stellar_mass"].shape == (n_samples,)
-        assert jnp.all(jnp.isfinite(derived["stellar_mass"])), (
-            "stellar_mass should be finite (not None)"
-        )
+        assert jnp.all(jnp.isfinite(derived["stellar_mass"])), "stellar_mass should be finite"
 
         assert "sfr_100myr" in derived
         assert derived["sfr_100myr"].shape == (n_samples,)
-        assert jnp.all(jnp.isfinite(derived["sfr_100myr"])), (
-            "sfr_100myr should be finite (not None)"
-        )
+        assert jnp.all(jnp.isfinite(derived["sfr_100myr"])), "sfr_100myr should be finite"
 
 
 # ── BUG-NSS-03: qsogen AGN tracer leak ────────────────────────────
