@@ -1,13 +1,13 @@
 # Tengri
 
 [![Tests](https://github.com/suchethac/tengri/actions/workflows/tests.yml/badge.svg)](https://github.com/suchethac/tengri/actions/workflows/tests.yml)
-[![Docs](https://github.com/suchethac/tengri/actions/workflows/docs.yml/badge.svg)](https://suchethac.github.io/tengri/)
+[![Docs](https://github.com/suchethac/tengri/actions/workflows/docs.yml/badge.svg)](https://suchethacooray.com/tengri/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: BSD-3](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)](LICENSE)
 
 Tengri is a JAX framework for fitting the spectral energy distributions of galaxies — from the X-ray to the radio — with a single differentiable forward model. Stars, dust, nebular emission, AGN, and IGM components plug into one pipeline, and every inference method (MAP, Laplace, Pathfinder, NUTS, Ray Tracing, Bayesian evidence, hierarchical population, geoVI) runs against the same model with gradients available throughout. Pre-1.0 research code; JIT-compiled and GPU/TPU-native.
 
-**Documentation:** [suchethacooray.github.io/tengri](https://suchethacooray.github.io/tengri/) · **Notebooks:** [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) · **Paper:** in preparation
+**Documentation:** [suchethacooray.com/tengri](https://suchethacooray.com/tengri/) · **Notebooks:** [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) · **Paper:** in preparation
 
 ---
 
@@ -102,7 +102,7 @@ Full walkthrough in [`notebooks/00_quickstart.py`](notebooks/00_quickstart.py).
 
 ## Tutorials
 
-The tutorial spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) is the primary learning path. The `.py` files use Jupytext format and also render into the [docs site](https://suchethacooray.github.io/tengri/).
+The tutorial spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) is the primary learning path. The `.py` files use Jupytext format and also render into the [docs site](https://suchethacooray.com/tengri/).
 
 | #  | Notebook                          | What you learn                                                       |
 |----|-----------------------------------|----------------------------------------------------------------------|
@@ -116,7 +116,7 @@ The tutorial spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/ma
 | 07 | `07_joint_photo_spec.py`          | joint photo + spectro fits to break degeneracies                     |
 | 08 | `08_emission_lines.py`            | BPT diagnostics, line ratios, Hα-based SFR validation                |
 
-For one-figure recipes, see the [examples gallery](https://suchethacooray.github.io/tengri/auto_examples/index.html).
+For one-figure recipes, see the [examples gallery](https://suchethacooray.com/tengri/auto_examples/index.html).
 
 ## Discover what's there, interactively
 
