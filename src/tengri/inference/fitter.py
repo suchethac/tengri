@@ -1891,14 +1891,15 @@ class Fitter:
         # Resolve deprecated aliases and validate method
         method = resolve_method(method)
 
-        # --- Lean mode: drop prior-phase compiled state before this run ---
-        # Default: lean=True (single-galaxy interactive notebooks).
-        # Cross-galaxy fitters (CatalogFitter, PopulationFitter) pass
-        # ``lean=False`` so the per-galaxy loop reuses compiled artefacts.
-        # ``tengri.persistent()`` context manager flips the default to False
-        # for users running many sequential single-fits and wanting reuse.
-        # ``tengri.lean()`` is the (now redundant) inverse — kept for clarity.
-        # Override per-call via ``fitter.run(..., lean=True/False)``.
+        # --- Smart lean: drop only stale L3 entries before this run ---
+        # Default: lean=True. The smart-lean path (below) preserves the
+        # entry whose key matches this fitter's compile_signature, so
+        # CatalogFitter loops and repeated identical fits hit the cache
+        # without any opt-in. ``tengri.persistent()`` is rarely needed —
+        # it only matters if you want to keep *non-matching* entries
+        # alive (e.g. swapping back and forth between MAP and HMC and
+        # wanting both compiles in RAM). Override per-call via
+        # ``fitter.run(..., lean=True/False)``.
         from tengri.inference.jit_engine import (
             clear_shared_caches as _clear_shared_caches,
             is_lean_mode as _is_lean_mode,
