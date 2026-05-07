@@ -1506,12 +1506,14 @@ class Fitter:
             Forward model prediction mode. Default "_traceable" for backward
             compatibility. Pass "auto" for ~1.5x speedup with non-NIFTy methods.
         """
+        from tengri.inference.jit_engine import get_or_build_loss_fn_cached
+
         cache_key = (self._engine_cache_key(), mode)
-        cache = get_model_cache(self.model).setdefault("loss_fn", {})
-        if cache_key in cache:
-            return cache[cache_key]
-        loss_fn = self._build_loss_fn(mode=mode)
-        cache[cache_key] = loss_fn
+        per_model = get_model_cache(self.model).setdefault("loss_fn", {})
+        if cache_key in per_model:
+            return per_model[cache_key]
+        loss_fn = get_or_build_loss_fn_cached(self, mode, lambda: self._build_loss_fn(mode=mode))
+        per_model[cache_key] = loss_fn
         return loss_fn
 
     def _build_logprior_fn(self) -> Callable:
@@ -1524,12 +1526,16 @@ class Fitter:
 
     def _get_or_build_loglikelihood_fn(self, mode: str = "_traceable") -> Callable:
         """Return the cached log-likelihood function, building if needed."""
+        from tengri.inference.jit_engine import get_or_build_loglik_fn_cached
+
         cache_key = (self._engine_cache_key(), mode)
-        cache = get_model_cache(self.model).setdefault("loglik_fn", {})
-        if cache_key in cache:
-            return cache[cache_key]
-        loglik_fn = self._build_loglikelihood_fn(mode=mode)
-        cache[cache_key] = loglik_fn
+        per_model = get_model_cache(self.model).setdefault("loglik_fn", {})
+        if cache_key in per_model:
+            return per_model[cache_key]
+        loglik_fn = get_or_build_loglik_fn_cached(
+            self, mode, lambda: self._build_loglikelihood_fn(mode=mode)
+        )
+        per_model[cache_key] = loglik_fn
         return loglik_fn
 
     def _build_loglikelihood_unbounded_fn(self, mode: str = "_traceable") -> Callable:
@@ -1546,36 +1552,25 @@ class Fitter:
         explicit arguments so the compiled XLA program is reusable across
         galaxies with the same model structure.
         """
+        from tengri.inference.jit_engine import get_or_build_grad_fn_cached
+
         cache_key = (self._engine_cache_key(), mode)
-        cache = get_model_cache(self.model).setdefault("grad_fn", {})
-        if cache_key in cache:
-            return cache[cache_key]
+        per_model = get_model_cache(self.model).setdefault("grad_fn", {})
+        if cache_key in per_model:
+            return per_model[cache_key]
 
         loss_fn = self._get_or_build_loss_fn(mode=mode)
 
-        @jax.jit
-        def val_and_grad(params_u, data_args):
-            """Compute loss and gradient with respect to unbounded parameters.
+        def _build():
+            @jax.jit
+            def val_and_grad(params_u, data_args):
+                """Loss and gradient w.r.t. unbounded parameters."""
+                return jax.value_and_grad(lambda p: loss_fn(p, data_args))(params_u)
 
-            Parameters
-            ----------
-            params_u : dict
-                Unbounded parameter dict with standardized scalar values.
-            data_args : dict
-                Data arguments (``"data"``, ``"noise"``, ``"noise_inv"``).
+            return val_and_grad
 
-            Returns
-            -------
-            tuple of (float, dict)
-                Loss scalar and gradient dict (same keys as ``params_u``).
-
-            Notes
-            -----
-            **JIT-compatible**: yes — compiles to XLA.
-            """
-            return jax.value_and_grad(lambda p: loss_fn(p, data_args))(params_u)
-
-        cache[cache_key] = val_and_grad
+        val_and_grad = get_or_build_grad_fn_cached(self, mode, _build)
+        per_model[cache_key] = val_and_grad
         return val_and_grad
 
     def _get_or_build_logdensity_fn(self, mode: str = "_traceable") -> Callable:
@@ -1585,35 +1580,24 @@ class Fitter:
         should partial-apply ``data_args`` for blackjax compatibility.
         """
         cache_key = (self._engine_cache_key(), mode)
-        cache = get_model_cache(self.model).setdefault("logdensity_fn", {})
-        if cache_key in cache:
-            return cache[cache_key]
+        from tengri.inference.jit_engine import get_or_build_logdensity_fn_cached
+
+        per_model = get_model_cache(self.model).setdefault("logdensity_fn", {})
+        if cache_key in per_model:
+            return per_model[cache_key]
 
         loss_fn = self._get_or_build_loss_fn(mode=mode)
 
-        @jax.jit
-        def logdensity(params_u, data_args):
-            """Compute log posterior (negative loss) for MCMC.
+        def _build():
+            @jax.jit
+            def logdensity(params_u, data_args):
+                """Log posterior (negative loss) for MCMC."""
+                return -loss_fn(params_u, data_args)
 
-            Parameters
-            ----------
-            params_u : dict
-                Unbounded parameter dict with standardized scalar values.
-            data_args : dict
-                Data arguments (``"data"``, ``"noise"``, ``"noise_inv"``).
+            return logdensity
 
-            Returns
-            -------
-            float
-                Log posterior density (negation of loss function).
-
-            Notes
-            -----
-            **JIT-compatible**: yes — compiles to XLA.
-            """
-            return -loss_fn(params_u, data_args)
-
-        cache[cache_key] = logdensity
+        logdensity = get_or_build_logdensity_fn_cached(self, mode, _build)
+        per_model[cache_key] = logdensity
         return logdensity
 
     # ── Parameter transforms ──────────────────────────────────────────
@@ -1872,6 +1856,19 @@ class Fitter:
 
         # Resolve deprecated aliases and validate method
         method = resolve_method(method)
+
+        # --- Lean mode: drop prior-phase compiled state before this run ---
+        # Per-call lean=True forces a clean slate; tengri.lean() context
+        # manager (or TENGRI_LEAN=1 env var) sets it for an entire block.
+        # See jit_engine.lean for the rationale (single-fit notebooks pay
+        # GB-scale memory for compiled artefacts they no longer need).
+        from tengri.inference.jit_engine import (
+            clear_shared_caches as _clear_shared_caches,
+            is_lean_mode as _is_lean_mode,
+        )
+
+        if kwargs.pop("lean", False) or _is_lean_mode():
+            _clear_shared_caches()
 
         # --- Merge TOML method-specific defaults (caller kwargs win) ---
         try:

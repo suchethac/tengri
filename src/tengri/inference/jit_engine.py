@@ -26,6 +26,8 @@ __all__ = [
     "clear_shared_caches",
     "get_or_build_engine_cached",
     "get_or_build_signal_response",
+    "is_lean_mode",
+    "lean",
 ]
 
 # ── Module-level shared caches for cross-galaxy engine reuse ────────────────
@@ -41,14 +43,125 @@ __all__ = [
 #                                 (every Fitter compiles fresh). Use this if
 #                                 you can afford the recompile cost and want
 #                                 hard guarantees on memory.
-_ENGINE_CACHE_MAXSIZE = int(os.environ.get("TENGRI_ENGINE_CACHE_MAXSIZE", "8"))
+_ENGINE_CACHE_MAXSIZE = int(os.environ.get("TENGRI_ENGINE_CACHE_MAXSIZE", "2"))
 _SHARED_CACHES_DISABLED = os.environ.get("TENGRI_DISABLE_SHARED_CACHES", "") == "1"
+
+# Lean mode: when True, ``Fitter.run()`` calls ``clear_shared_caches()``
+# before dispatching to the backend. This prevents within-run
+# accumulation in single-fit notebooks (model build + ztable + mock +
+# HMC + posterior-predictive each compiles GB-scale JIT graphs that
+# don't share executable memory).  Off by default (preserves
+# cross-galaxy reuse for PopulationFitter / CatalogFitter).  Toggle via
+# the ``tengri.lean()`` context manager or env var.
+_LEAN_MODE: bool = os.environ.get("TENGRI_LEAN", "") == "1"
+_LEAN_MODE_LOCK = threading.Lock()
+
+
+def is_lean_mode() -> bool:
+    """Return True if lean mode is currently active."""
+    return _LEAN_MODE
+
+
+def lean(enabled: bool = True):
+    """Context manager: clear all shared caches before each ``Fitter.run()``.
+
+    Usage::
+
+        with tengri.lean():
+            fitter.run("map", ...)  # caches dropped before this
+            fitter.run("mcmc_hmc", ...)  # caches dropped again before this
+            # posterior-predictive plotting
+
+    Each ``run()`` call inside the block starts with a fresh JAX state.
+    Trades cross-phase compile reuse (~30-60 s per phase) for guaranteed
+    bounded peak RSS — the right trade-off for laptop notebooks doing
+    a single galaxy fit. Don't use inside ``PopulationFitter`` /
+    ``CatalogFitter`` — that's where the cross-galaxy cache earns its
+    keep.
+
+    Equivalent ``TENGRI_LEAN=1`` env var sets it process-wide.
+    """
+    import contextlib
+
+    @contextlib.contextmanager
+    def _ctx():
+        global _LEAN_MODE
+        with _LEAN_MODE_LOCK:
+            prev = _LEAN_MODE
+            _LEAN_MODE = bool(enabled)
+        try:
+            yield
+        finally:
+            with _LEAN_MODE_LOCK:
+                _LEAN_MODE = prev
+
+    return _ctx()
+
 
 _SHARED_ENGINE_CACHE: OrderedDict = OrderedDict()
 _SHARED_ENGINE_CACHE_LOCK = threading.Lock()
 
 _SHARED_SIGNAL_RESPONSE_CACHE: OrderedDict = OrderedDict()
 _SHARED_SIGNAL_RESPONSE_CACHE_LOCK = threading.Lock()
+
+# Loss / value-and-grad / log-density / log-likelihood caches.  Same
+# key shape: (compile_signature, engine_cache_key, mode).  Enables reuse
+# of the heaviest piece (the gradient compile) across:
+#   - different inference backends on the same Fitter (MAP then HMC then VI),
+#   - different Fitters on different galaxies that share shape signature.
+# Each entry holds a JIT-compiled callable; cleared by clear_shared_caches.
+_SHARED_LOSS_FN_CACHE: OrderedDict = OrderedDict()
+_SHARED_LOSS_FN_CACHE_LOCK = threading.Lock()
+
+_SHARED_GRAD_FN_CACHE: OrderedDict = OrderedDict()
+_SHARED_GRAD_FN_CACHE_LOCK = threading.Lock()
+
+_SHARED_LOGDENSITY_FN_CACHE: OrderedDict = OrderedDict()
+_SHARED_LOGDENSITY_FN_CACHE_LOCK = threading.Lock()
+
+_SHARED_LOGLIK_FN_CACHE: OrderedDict = OrderedDict()
+_SHARED_LOGLIK_FN_CACHE_LOCK = threading.Lock()
+
+
+def _shared_get_or_build(cache: OrderedDict, lock: threading.Lock, key, builder):
+    """Common wrapper: cache lookup with LRU promote on hit; build + bound on miss."""
+    if _SHARED_CACHES_DISABLED:
+        return builder()
+    with lock:
+        if key in cache:
+            cache.move_to_end(key)
+            return cache[key]
+        value = builder()
+        _lru_set(cache, key, value, _ENGINE_CACHE_MAXSIZE)
+        return value
+
+
+def get_or_build_loss_fn_cached(fitter, mode: str, builder):
+    """Module-level shared cache for loss functions."""
+    key = (fitter.compile_signature(), mode)
+    return _shared_get_or_build(_SHARED_LOSS_FN_CACHE, _SHARED_LOSS_FN_CACHE_LOCK, key, builder)
+
+
+def get_or_build_grad_fn_cached(fitter, mode: str, builder):
+    """Module-level shared cache for value_and_grad of the loss."""
+    key = (fitter.compile_signature(), mode)
+    return _shared_get_or_build(_SHARED_GRAD_FN_CACHE, _SHARED_GRAD_FN_CACHE_LOCK, key, builder)
+
+
+def get_or_build_logdensity_fn_cached(fitter, mode: str, builder):
+    """Module-level shared cache for log-density."""
+    key = (fitter.compile_signature(), mode)
+    return _shared_get_or_build(
+        _SHARED_LOGDENSITY_FN_CACHE, _SHARED_LOGDENSITY_FN_CACHE_LOCK, key, builder
+    )
+
+
+def get_or_build_loglik_fn_cached(fitter, mode: str, builder):
+    """Module-level shared cache for log-likelihood."""
+    key = (fitter.compile_signature(), mode)
+    return _shared_get_or_build(
+        _SHARED_LOGLIK_FN_CACHE, _SHARED_LOGLIK_FN_CACHE_LOCK, key, builder
+    )
 
 
 def _lru_set(cache: OrderedDict, key, value, maxsize: int) -> None:
@@ -105,6 +218,14 @@ def clear_shared_caches(*, drop_xla: bool = True) -> None:
         _SHARED_ENGINE_CACHE.clear()
     with _SHARED_SIGNAL_RESPONSE_CACHE_LOCK:
         _SHARED_SIGNAL_RESPONSE_CACHE.clear()
+    with _SHARED_LOSS_FN_CACHE_LOCK:
+        _SHARED_LOSS_FN_CACHE.clear()
+    with _SHARED_GRAD_FN_CACHE_LOCK:
+        _SHARED_GRAD_FN_CACHE.clear()
+    with _SHARED_LOGDENSITY_FN_CACHE_LOCK:
+        _SHARED_LOGDENSITY_FN_CACHE.clear()
+    with _SHARED_LOGLIK_FN_CACHE_LOCK:
+        _SHARED_LOGLIK_FN_CACHE.clear()
 
     from tengri.inference._model_cache import _caches as _per_model_caches
 
