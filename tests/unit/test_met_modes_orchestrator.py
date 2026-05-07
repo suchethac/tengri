@@ -117,9 +117,7 @@ class TestTwoStep:
         sed = m.predict_via_orchestrator({}).sed_intrinsic
         sed_delta = _delta_sed(synthetic_ssp, 1.1)  # midpoint
         assert jnp.all(jnp.isfinite(sed))
-        assert (
-            float(jnp.max(jnp.abs(sed - sed_delta) / jnp.maximum(sed_delta, 1e-30))) > 1e-3
-        )
+        assert float(jnp.max(jnp.abs(sed - sed_delta) / jnp.maximum(sed_delta, 1e-30))) > 1e-3
 
 
 # ── psb_two_step ──────────────────────────────────────────────────

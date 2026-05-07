@@ -105,7 +105,9 @@ class TestIdentityMapPropagation:
 class TestSEDModelCueParamMap:
     """If SSP fixture is available, build a Cue SEDModel and check its _param_map."""
 
-    def test_cue_model_param_map_contains_gas_logno(self, ssp_data_wne):
+    def test_cue_model_param_map_contains_gas_logno(self, ssp_data_fsps):
+        # Use bare-stellar SSP (fsps_*); Cue + wNE now raises CueWNESSPError.
+        # This test only checks _param_map structure, so SSP physics is irrelevant.
         from tengri import Fixed, Parameters, SEDModel
 
         spec = Parameters(
@@ -126,7 +128,7 @@ class TestSEDModelCueParamMap:
             gas_logno=Fixed(0.0),
             gas_logco=Fixed(-0.36),
         )
-        model = SEDModel(spec, ssp_data_wne)
+        model = SEDModel(spec, ssp_data_fsps)
         pm = model._param_map
         for name in ("gas_logn", "gas_logno", "gas_logco"):
             assert name in pm, f"{name} missing from SEDModel _param_map"

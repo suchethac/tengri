@@ -89,9 +89,8 @@ def _install_tf_mock():
 
 _install_tf_mock()
 
-import dill as pickle  # noqa: E402
-import numpy as np  # noqa: E402
-
+import dill as pickle
+import numpy as np
 
 # ---------------------------------------------------------------------------
 # Sub-network names (must match nn_name in cue/utils.py)
@@ -248,20 +247,40 @@ def convert(cue_dir: str, output_path: str) -> None:
     # ------------------------------------------------------------------
     print("Loading wavelength grids and line metadata...")
 
-    # Line wavelengths and names
+    # Line wavelengths and names.
+    #
+    # IMPORTANT — air vs vacuum, and why this script reads ``lineList_wav.npy``
+    # rather than the parallel ``cue_emlines_info.dat``:
+    #
+    # Upstream Cue ships TWO files that disagree with each other:
+    #
+    #   1. ``lineList_wav.npy`` — what the trained network is keyed against.
+    #      138 wavelengths in the order the network produces. Optical (2000 Å
+    #      < λ < 1e4 Å) values are in **air** (CLOUDY default convention).
+    #   2. ``cue_emlines_info.dat`` — newer parallel metadata file with
+    #      **vacuum** wavelengths and a **different ordering** (sorted, with
+    #      different index→line assignment). Documents intent but is not what
+    #      the network was trained against.
+    #
+    # The Li+2024 paper (arXiv:2405.04598 §2) describes the *intent* of vacuum,
+    # but the .npy that the network actually consumes was never regenerated.
+    # We read the .npy because indices must align with the network outputs.
+    # tengri's vacuum-only contract (CLAUDE.md) is enforced at the publication
+    # boundary in ``components/nebular/component.py`` instead — labels become
+    # vacuum where they exit the library, but the network-internal indexing
+    # against the .npy stays untouched.
     line_wav_path = cue_dir / "lineList_wav.npy"
     line_name_path = cue_dir / "lineList_replaceblnd_name.npy"
 
     if line_wav_path.exists():
         line_wav = np.load(str(line_wav_path))
         npz["lineList_wav"] = np.asarray(line_wav, dtype=np.float64)
-        print(f"  lineList_wav: {line_wav.shape}")
+        print(f"  lineList_wav: {line_wav.shape} (air for optical; vacuumised at boundary)")
     else:
         print(f"  WARNING: {line_wav_path} not found")
 
     if line_name_path.exists():
         line_names_arr = np.load(str(line_name_path))
-        # Store as bytes for npz compatibility
         npz["lineList_name"] = line_names_arr
         print(f"  lineList_name: {line_names_arr.shape}")
     else:
@@ -286,7 +305,7 @@ def convert(cue_dir: str, output_path: str) -> None:
     npz["n_line_networks"] = np.array(len(LINE_NAMES), dtype=np.int32)
 
     # Reconstruct nn_ion groupings and wav_selection indices
-    # (replicate the logic from cue/utils.py)
+    # (replicate the logic from cue/utils.py).
     if line_wav_path.exists() and line_name_path.exists():
         unsorted_lam = np.load(str(line_wav_path))
         unsorted_name = np.load(str(line_name_path))

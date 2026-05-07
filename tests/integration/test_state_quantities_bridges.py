@@ -39,7 +39,8 @@ from tengri.forward import (
     state_to_xray_quantities,
 )
 
-_SSP_PATH = pathlib.Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5").resolve()
+# Bare-stellar SSP — required by Cue (wNE SSPs now raise CueWNESSPError).
+_SSP_PATH = pathlib.Path("data/fsps_prsc_miles_chabrier.h5").resolve()
 
 
 @pytest.fixture(scope="module")

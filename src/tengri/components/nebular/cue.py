@@ -100,6 +100,7 @@ All functions are JIT-compatible and differentiable through JAX.
 
 """
 
+import os
 import warnings
 from typing import ClassVar, NamedTuple
 
@@ -838,28 +839,45 @@ def predict_continuum(
 
 
 class CueWNESSPWarning(UserWarning):
-    """Warning: the SSP passed to CueBackend may have baked-in nebular emission.
+    """Deprecated alias retained for backwards compatibility.
 
-    SSP grids labelled 'wNE' (with Nebular Emission) pre-absorb the ionizing
-    photons internally, so Q_H computed from the SSP spectrum is effectively
-    zero. Cue's ionizing spectrum shape fit will be unreliable and nebular
-    luminosities will be severely under-predicted.
+    Previously emitted as a warning when wNE SSPs were detected at
+    ``CueBackend`` construction; now superseded by ``CueWNESSPError``,
+    which raises immediately. Kept so any user code that filters this
+    warning class continues to import cleanly.
+    """
 
-    Parameters
+
+class CueWNESSPError(ValueError):
+    """Raised when CueBackend is constructed with a wNE (with-Nebular-Emission) SSP.
+
+    SSP grids labelled 'wNE' have nebular emission baked in: the ionizing
+    photons have already been absorbed by an internal nebular layer, so the
+    SSP spectrum reports ``log10(Q_H) ~ 0`` instead of the physical 47–50.
+    Feeding such an SSP to Cue produces line luminosities that are
+    under-predicted by 4–7 dex — silently — because Cue infers Q_H from the
+    SSP rather than receiving it explicitly.
+
+    Detection
+    ---------
+    During ``CueBackend.__init__`` with ``ssp_data`` set, if the maximum
+    ``log10(Q_H)`` across SSP bins younger than 10 Myr is below 44 (~3 dex
+    below the physical floor for bare stellar populations).
+
+    Resolution
     ----------
-    None
+    Pick one of:
 
-    Notes
-    -----
-    **When raised**: During CueBackend initialization with ssp_data, if the
-    maximum log10(Q_H) for stellar populations younger than 10 Myr is below
-    47 photons/s (expected for bare stellar populations), the SSP likely has
-    baked-in nebular emission.
-
-    **Resolution**: Use a pure-continuum SSP (no baked-in nebular emission)
-    instead. Suppress this warning by passing ``ssp_data=None`` to CueBackend
-    and providing Q_H externally. Pre-built wC (without Continuum) templates
-    are available at https://halos.as.arizona.edu/suchethacooray/ssp-spectra/
+    1. **Use a bare-stellar SSP** (no baked-in nebular). Examples in
+       ``data/``: ``fsps_prsc_miles_chabrier.h5``, ``fsps_mist_c3k_a_chabrier.h5``.
+       The hosted catalogue at https://halos.as.arizona.edu/suchethacooray/
+       ssp-spectra/ ships only bare-stellar SSPs.
+    2. **Pass ssp_data=None** to ``CueBackend`` and provide Q_H externally.
+       Suitable when you have your own ionizing-spectrum source.
+    3. **Bypass the check** (advanced) by setting environment variable
+       ``TENGRI_ALLOW_WNE_CUE=1``. Use only if you have separately validated
+       that the wNE SSP's surviving Q_H is correct for your science case.
+       The error becomes a ``CueWNESSPWarning`` in this mode.
     """
 
 
@@ -977,18 +995,21 @@ class CueBackend:
             logqion_np = np.array(self._logqion_table)  # (n_met, n_age)
             max_logqion_young = float(logqion_np[:, young_mask].max())
             if max_logqion_young < _WNE_LOGQH_THRESHOLD:
-                warnings.warn(
-                    "CueBackend: the SSP grid passed via ssp_data appears to contain "
-                    "baked-in nebular emission ('wNE' SSPs). The maximum log10(Q_H) "
-                    f"for SSP bins younger than 10 Myr is {max_logqion_young:.1f}, "
-                    f"well below the expected ~47–50 for bare stellar populations. "
-                    "Cue's ionizing-spectrum-shape fit will be unreliable and nebular "
-                    "luminosities will be severely under-predicted. "
-                    "Use a pure-continuum SSP (no baked-in nebular emission). "
-                    "Suppress with: CueBackend(ssp_data=None) and provide Q_H externally.",
-                    CueWNESSPWarning,
-                    stacklevel=3,
+                msg = (
+                    "CueBackend received a wNE (with-Nebular-Emission) SSP. "
+                    f"Max log10(Q_H) for bins younger than 10 Myr is "
+                    f"{max_logqion_young:.1f}, well below the ~47-50 floor "
+                    "for bare stellar populations. Cue's ionizing-spectrum "
+                    "fit will under-predict line luminosities by 4-7 dex. "
+                    "Fix: use a bare-stellar SSP (e.g. "
+                    "data/fsps_prsc_miles_chabrier.h5) or pass ssp_data=None "
+                    "and provide Q_H externally. To bypass for testing, set "
+                    "TENGRI_ALLOW_WNE_CUE=1 (downgrades to a warning)."
                 )
+                if os.environ.get("TENGRI_ALLOW_WNE_CUE"):
+                    warnings.warn(msg, CueWNESSPWarning, stacklevel=3)
+                else:
+                    raise CueWNESSPError(msg)
 
     def get_ionizing_params_at(
         self,

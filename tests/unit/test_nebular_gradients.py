@@ -88,12 +88,24 @@ def cloudy_triweight_backend(mock_ssp):
 def cue_backend(mock_ssp):
     if not _CUE_WEIGHTS_PATH.exists():
         pytest.skip("Cue weights not present")
+    import os
+
     from tengri.components.nebular import CueBackend
     from tengri.components.nebular.cue import CueWNESSPWarning
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", CueWNESSPWarning)
-        return CueBackend(str(_CUE_WEIGHTS_PATH), ssp_data=mock_ssp)
+    # Mock SSP mimics a wNE grid — bypass the wNE hard-error guard
+    # (CueWNESSPError) for this gradient-tracing fixture only.
+    prev = os.environ.get("TENGRI_ALLOW_WNE_CUE")
+    os.environ["TENGRI_ALLOW_WNE_CUE"] = "1"
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", CueWNESSPWarning)
+            return CueBackend(str(_CUE_WEIGHTS_PATH), ssp_data=mock_ssp)
+    finally:
+        if prev is None:
+            del os.environ["TENGRI_ALLOW_WNE_CUE"]
+        else:
+            os.environ["TENGRI_ALLOW_WNE_CUE"] = prev
 
 
 @pytest.fixture(scope="module")

@@ -99,6 +99,7 @@ References
 
 """
 
+import os
 import warnings
 from typing import NamedTuple
 
@@ -115,11 +116,19 @@ from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
 
 class CloudyGridWNESSPWarning(UserWarning):
-    """Warning: the SSP passed to CloudyGridBackend may have baked-in nebular emission.
+    """Deprecated alias retained for backwards compatibility.
 
-    SSP grids labelled 'wNE' (with Nebular Emission) pre-absorb ionizing photons,
-    so Q_H computed from the SSP spectrum is effectively zero. Nebular luminosities
-    will be severely under-predicted. Use a pure-continuum SSP instead.
+    Superseded by ``CloudyGridWNESSPError`` which raises immediately. Kept
+    so user code that filters this warning class continues to import.
+    """
+
+
+class CloudyGridWNESSPError(ValueError):
+    """Raised when CloudyGridBackend is constructed with a wNE SSP.
+
+    See :class:`tengri.components.nebular.cue.CueWNESSPError` for the same
+    failure mode applied to the Cue backend. Resolution: use a bare-stellar
+    SSP, or set ``TENGRI_ALLOW_WNE_CLOUDY_GRID=1`` to downgrade to a warning.
     """
 
 
@@ -585,16 +594,20 @@ class CloudyGridBackend:
         if very_young_mask.any():
             qh_young = np.array(self._qh_table)[:, very_young_mask]
             if float(qh_young.max()) < _WNE_QH_THRESHOLD:
-                warnings.warn(
-                    "CloudyGridBackend: the SSP grid passed via ssp_data appears to "
-                    "contain baked-in nebular emission ('wNE' SSPs). The maximum Q_H "
-                    f"for SSP bins younger than 10 Myr is {float(qh_young.max()):.2e}, "
-                    "well below the expected ~10^47–10^50 for bare stellar populations. "
-                    "Nebular luminosities will be severely under-predicted. "
-                    "Use a pure-continuum SSP (no baked-in nebular emission).",
-                    CloudyGridWNESSPWarning,
-                    stacklevel=3,
+                msg = (
+                    "CloudyGridBackend received a wNE (with-Nebular-Emission) "
+                    f"SSP. Max Q_H for bins younger than 10 Myr is "
+                    f"{float(qh_young.max()):.2e}, well below the ~10^47-10^50 "
+                    "floor for bare stellar populations. Nebular luminosities "
+                    "will be under-predicted by 4-7 dex. Fix: use a "
+                    "bare-stellar SSP (e.g. data/fsps_prsc_miles_chabrier.h5). "
+                    "To bypass for testing, set TENGRI_ALLOW_WNE_CLOUDY_GRID=1 "
+                    "(downgrades to a warning)."
                 )
+                if os.environ.get("TENGRI_ALLOW_WNE_CLOUDY_GRID"):
+                    warnings.warn(msg, CloudyGridWNESSPWarning, stacklevel=3)
+                else:
+                    raise CloudyGridWNESSPError(msg)
 
     def _get_qh_at(
         self,

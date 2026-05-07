@@ -45,6 +45,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.components.nebular.baked_in import BakedInBackend
 from tengri.core.component import (
@@ -466,6 +467,40 @@ class NebularSEDComponent:
                         ssp_log_ages_yr=ssp_log_ages_yr,
                         **common_kwargs,
                     )
+                # CLAUDE.md contract: vacuum wavelengths throughout.
+                #
+                # Upstream Cue (yi-jia-li/cue) ships TWO disagreeing files:
+                # ``lineList_wav.npy`` (what the network is keyed against —
+                # **air** in optical, CLOUDY-default convention) and
+                # ``cue_emlines_info.dat`` (newer parallel metadata —
+                # vacuum, but in a *different ordering* that does not
+                # match the network indices). The Li+2024 paper §2 states
+                # vacuum intent but the .npy never got regenerated.
+                #
+                # ``data/cue_weights.npz`` is built from the .npy because
+                # network indexing requires it. We translate at this
+                # boundary so internal indexing stays upstream-faithful
+                # while user-facing labels honour tengri's vacuum contract.
+                #
+                # Idempotency: probe the Hβ neighbourhood and only convert
+                # if it looks air (4861.333 Å) vs vacuum (4862.683 Å).
+                # The 1.35 Å gap is unambiguous — no real line sits there.
+                if self.config.backend in ("cue", "cloudy_grid"):
+                    line_waves_np = np.asarray(line_waves)
+                    near_hbeta = line_waves_np[
+                        (line_waves_np > 4859.0) & (line_waves_np < 4865.0)
+                    ]
+                    looks_air = near_hbeta.size > 0 and bool(
+                        np.any(np.abs(near_hbeta - 4861.333) < 0.1)
+                    )
+                    if looks_air:
+                        from tengri.utils.conversions import air_to_vacuum
+
+                        in_optical = (line_waves_np >= 2000.0) & (line_waves_np <= 1.0e4)
+                        converted = line_waves_np.astype(np.float64).copy()
+                        converted[in_optical] = air_to_vacuum(line_waves_np[in_optical])
+                        line_waves = jnp.asarray(converted)
+
                 new_derived["line_waves"] = line_waves
                 new_derived["line_lums"] = line_lums
             except Exception:
