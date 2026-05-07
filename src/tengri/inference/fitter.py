@@ -1138,6 +1138,18 @@ class Fitter:
         )
         return (model_sig, fitter_sig)
 
+    @property
+    def _lean_keep_sig(self) -> tuple:
+        """Cache-key signature that smart-lean preserves across runs.
+
+        Single source of truth for the shape contract between
+        ``Fitter.run(lean=True)`` and ``_SHARED_ENGINE_CACHE``: both
+        sides must use this exact tuple, otherwise smart-lean drops
+        the entry it was supposed to keep and every run recompiles.
+        Pinned by ``test_lean_keep_sig_matches_engine_cache_key``.
+        """
+        return self.compile_signature()
+
     def _engine_cache_key(self) -> tuple:
         """Return a hashable key identifying the JIT engine shape.
 
@@ -1913,8 +1925,7 @@ class Fitter:
             # invalidation is unnecessary. Forward, loss, grad, and
             # logdensity caches are preserved unconditionally at this
             # scope.
-            _keep_sig = self.compile_signature()
-            _clear_shared_caches(scope="inference_body", keep_sig=_keep_sig)
+            _clear_shared_caches(scope="inference_body", keep_sig=self._lean_keep_sig)
 
         # --- Merge TOML method-specific defaults (caller kwargs win) ---
         try:

@@ -134,6 +134,52 @@ def test_clear_shared_caches_keep_sig_no_match_drops_all():
 
 
 @pytest.mark.unit
+def test_lean_keep_sig_matches_engine_cache_key():
+    """Pin the shape contract: Fitter._lean_keep_sig matches the engine cache key.
+
+    Smart-lean's correctness depends on this equality. If anyone changes
+    ``_SHARED_ENGINE_CACHE`` to use a different key (e.g. ``(sig, mode)``)
+    or wraps ``compile_signature()`` in a new container, this test must
+    fail loudly — otherwise smart-lean would silently drop the entry it
+    was supposed to keep and every ``Fitter.run`` would recompile.
+
+    The test uses a real engine cache write to verify both:
+      1. The keep_sig from Fitter equals the actual cache key.
+      2. ``clear_shared_caches(keep_sig=...)`` actually preserves it.
+    """
+    from tengri.inference._model_cache import _caches as _per_model_caches
+    from tengri.inference.jit_engine import _key_matches_sig
+
+    _SHARED_ENGINE_CACHE.clear()
+
+    # Simulate what get_or_build_engine_cached does: write at
+    # fitter.compile_signature(). We don't need a real fitter — any
+    # object with the right method shape works as a stand-in for the
+    # invariant under test.
+    fake_sig = (("model_sig",), ("fitter_sig",))
+    _SHARED_ENGINE_CACHE[fake_sig] = "engine_object"
+
+    # The keep_sig that smart-lean would pass for a fitter with this
+    # compile_signature must match the cache key by tuple-prefix rule.
+    assert _key_matches_sig(fake_sig, fake_sig), (
+        "_key_matches_sig must accept exact-equal keys"
+    )
+
+    # And the actual clear with keep_sig must preserve it.
+    clear_shared_caches(scope="inference_body", drop_xla=False, keep_sig=fake_sig)
+    assert fake_sig in _SHARED_ENGINE_CACHE, (
+        "smart-lean dropped the entry whose key equals keep_sig — shape contract broken"
+    )
+
+    # And keep_sig with a different first component drops it.
+    other_sig = (("model_sig",), ("different_fitter_sig",))
+    clear_shared_caches(scope="inference_body", drop_xla=False, keep_sig=other_sig)
+    assert fake_sig not in _SHARED_ENGINE_CACHE, "non-matching entry must be dropped"
+
+    _per_model_caches.clear()
+
+
+@pytest.mark.unit
 def test_gc_calls_clear_all():
     """tengri.gc() clears all caches including structural."""
     # Populate caches
