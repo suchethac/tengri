@@ -150,6 +150,7 @@ would run at peak ~35 GB and hit macOS jetsam silently.
 | `notebooks/07_joint_photo_spec.py` | redrew constraint figure as MAP-points overlaid on NUTS-error-bars |
 | `notebooks/08_emission_lines.py` | switched from wNE SSP to bare `fsps_prsc_miles_chabrier.h5` for Cue compatibility |
 | `notebooks/02_sed_anatomy.py` | replaced deleted `compute_sed_components` with `predict_via_orchestrator`; second pass with τ=0 recovers the dashed pre-attenuation reference |
+| `notebooks/02_sed_anatomy.py` | rewrote as panchromatic kitchen-sink (X-ray → radio); pinned `agn_log_lbol=Fixed(11.0)` (log10 L_sun, not erg/s) and `agn_frac=Fixed(1.0)` (the registry default 0.0 zeros out AGN regardless of `agn_log_lbol`) |
 
 ## Outstanding
 
