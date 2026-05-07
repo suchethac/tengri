@@ -470,11 +470,17 @@ def get_or_build_signal_response(fitter):
     Keyed by ``_engine_cache_key()`` (captures data_type, param names, model
     structure — but not galaxy data values or shapes).
     """
+    from tengri.utils.compile_log import instrument_first_call
+
     cache_key = fitter._engine_cache_key()
 
     if _SHARED_CACHES_DISABLED:
         signal_response, _ = _build_signal_response(fitter)
-        signal_response_jit = jax.jit(signal_response)
+        signal_response_jit = instrument_first_call(
+            jax.jit(signal_response),
+            "signal_response",
+            fitter.compile_signature(),
+        )
         return (signal_response, signal_response_jit)
 
     with _SHARED_SIGNAL_RESPONSE_CACHE_LOCK:
@@ -483,7 +489,11 @@ def get_or_build_signal_response(fitter):
             result = _SHARED_SIGNAL_RESPONSE_CACHE[cache_key]
         else:
             signal_response, _ = _build_signal_response(fitter)
-            signal_response_jit = jax.jit(signal_response)
+            signal_response_jit = instrument_first_call(
+                jax.jit(signal_response),
+                "signal_response",
+                fitter.compile_signature(),
+            )
             result = (signal_response, signal_response_jit)
             _lru_set(
                 _SHARED_SIGNAL_RESPONSE_CACHE,
@@ -1425,13 +1435,32 @@ def build_jit_engine(fitter, pos_dict):
     # protobuf size limit that eager compilation can hit when the forward
     # model is large.  signal_response is already JIT'd above so it
     # won't be re-traced into these scopes.
-    draw_samples_jit = jax.jit(draw_residuals)
+    from tengri.utils.compile_log import instrument_first_call
 
-    run_evi_jit = jax.jit(run_evi, static_argnames=("n_samples",))
-
-    run_evi_geovi_jit = jax.jit(
-        run_evi_geovi,
-        static_argnames=("n_samples", "sample_mode"),
+    sig = fitter.compile_signature()
+    draw_samples_jit = instrument_first_call(
+        jax.jit(draw_residuals), "draw_samples", sig, method="vi"
+    )
+    run_evi_jit = instrument_first_call(
+        jax.jit(run_evi, static_argnames=("n_samples",)),
+        "run_evi",
+        sig,
+        method="vi",
+    )
+    run_evi_geovi_jit = instrument_first_call(
+        jax.jit(
+            run_evi_geovi,
+            static_argnames=("n_samples", "sample_mode"),
+        ),
+        "run_evi_geovi",
+        sig,
+        method="geovi",
+    )
+    draw_nonlinear_jit = instrument_first_call(
+        jax.jit(draw_nonlinear_residuals),
+        "draw_nonlinear_samples",
+        sig,
+        method="vi",
     )
 
     return {
@@ -1441,7 +1470,7 @@ def build_jit_engine(fitter, pos_dict):
         "nifty_model": _nifty_model,
         "draw_samples": draw_samples_jit,
         "native_vi_linear_draw": draw_samples_jit,  # canonical name
-        "draw_nonlinear_samples": jax.jit(draw_nonlinear_residuals),
+        "draw_nonlinear_samples": draw_nonlinear_jit,
         "draw_batch": draw_batch,
         "flatten": flatten,
         "unflatten": unflatten,

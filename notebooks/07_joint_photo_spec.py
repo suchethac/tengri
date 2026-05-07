@@ -355,10 +355,11 @@ noise_joint = np.concatenate([np.array(mock_phot.noise), np.array(mock_spec.nois
 t0 = time.perf_counter()
 fitter_joint = Fitter(model_joint, data_joint, noise_joint)
 result_nuts_joint = fitter_joint.run(
-    "mcmc_nuts",
+    "mcmc_hmc",
     n_warmup=300,
     n_samples=600,
-    dense_mass_matrix=False,  # diagonal mass — small-graph NUTS, ~3× lower compile RSS
+    n_leapfrog_steps=10,
+    dense_mass_matrix=False,  # diagonal mass — small-graph, lower compile RSS
     target_accept_rate=0.85,
     key=jax.random.PRNGKey(789),
 )

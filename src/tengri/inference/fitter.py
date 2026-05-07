@@ -1107,6 +1107,12 @@ class Fitter:
         even if they reference different SEDModel instances (as long as
         those instances have the same compile_signature).
 
+        The signature does NOT include memory_mode, as it does not change
+        the generated HLO graph — it only affects posterior-chunking
+        behavior in the analysis layer (see _draw_jit_samples and
+        _draw_nonlinear_jit_samples). Toggling memory_mode between
+        "fast" and "low" reuses the same cached engine.
+
         Returns
         -------
         tuple
@@ -1134,7 +1140,6 @@ class Fitter:
             self._eline_fitted,
             self._calibration_marginalize,
             self._eline_prior_type,
-            getattr(self, "_memory_mode", "fast"),
         )
         return (model_sig, fitter_sig)
 

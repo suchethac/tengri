@@ -170,7 +170,7 @@ print(f"SSP grid: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]}
 # Construct wavelength grid: observed z=0.1 → rest 3000–8636 Å at 1000 pix
 z_spec = 0.1
 wave_rest_lo, wave_rest_hi = 3000.0, 8636.0
-n_pix = 1000
+n_pix = 200
 wave_rest = jnp.logspace(np.log10(wave_rest_lo), np.log10(wave_rest_hi), n_pix)
 wave_obs = wave_rest * (1.0 + z_spec)
 
@@ -308,15 +308,16 @@ t0 = time.perf_counter()
 fitter_spec = Fitter(model_spec, flux_obs_np, flux_err_np)
 
 result_spec = fitter_spec.run(
-    "mcmc_nuts",
+    "mcmc_hmc",
     n_warmup=300,
     n_samples=400,
+    n_leapfrog_steps=10,
     dense_mass_matrix=False,
     verbose=False,
 )
 t_nuts = time.perf_counter() - t0
 
-print(f"\nNUTS inference: {t_nuts:.1f} s")
+print(f"\nHMC inference: {t_nuts:.1f} s")
 print(f"  {len(result_spec.samples[spec_param.free_params[0]])} samples")
 
 # %%

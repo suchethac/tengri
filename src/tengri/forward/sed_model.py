@@ -3790,9 +3790,15 @@ class SEDModel:
     def _predict_spectrum_auto(self, params, wave_obs, wave_chunk_size=None):
         """Auto mode: pick fastest available spectrum path.
 
-        The compositional path now handles all SFH types (including tabulated)
+        The compositional path handles all SFH types (including tabulated)
         because SFH is evaluated outside the JIT.  Evolving-metallicity and
         chem-evol models fall back inside ``_predict_spectrum_compositional``.
+
+        Note: the inference path uses ``mode="_traceable"``, which already
+        prefers the hybrid (precomputed SSP-on-pixels) kernel directly via
+        ``_hybrid_kernels._spectrum_raw``.  This auto-mode is for direct
+        user calls (e.g., plotting), where ``compositional`` is bit-exact
+        and only marginally slower than ``hybrid``.
         """
         import warnings
 

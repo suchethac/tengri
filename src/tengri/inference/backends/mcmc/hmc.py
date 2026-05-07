@@ -19,6 +19,7 @@ from tengri.inference.backends.mcmc._shared import (
     _hmc_full_scan,
     _set_cached_adaptation,
 )
+from tengri.utils.compile_log import compile_timer
 
 logger = logging.getLogger(__name__)
 
@@ -107,32 +108,36 @@ def run_hmc(
             )
         key, chain_key = jax.random.split(key)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
-        positions, divergent = _hmc_chain_scan(
-            state,
-            chain_keys,
-            log_posterior_flat_2arg,
-            data_args,
-            parameters["step_size"],
-            parameters["inverse_mass_matrix"],
-            n_leapfrog_steps,
-            n_burnin,
-        )
+        with compile_timer("hmc_chain_scan", fitter.compile_signature(), method="mcmc_hmc"):
+            positions, divergent = _hmc_chain_scan(
+                state,
+                chain_keys,
+                log_posterior_flat_2arg,
+                data_args,
+                parameters["step_size"],
+                parameters["inverse_mass_matrix"],
+                n_leapfrog_steps,
+                n_burnin,
+            )
+            jax.block_until_ready(positions)
     else:
         key, warmup_key = jax.random.split(key)
         key, chain_key = jax.random.split(key)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
-        positions, divergent, step_size, inv_mass_matrix = _hmc_full_scan(
-            init_flat,
-            warmup_key,
-            chain_keys,
-            log_posterior_flat_2arg,
-            data_args,
-            n_warmup,
-            n_leapfrog_steps,
-            n_burnin,
-            use_dense,
-            target_accept_rate,
-        )
+        with compile_timer("hmc_full_scan", fitter.compile_signature(), method="mcmc_hmc"):
+            positions, divergent, step_size, inv_mass_matrix = _hmc_full_scan(
+                init_flat,
+                warmup_key,
+                chain_keys,
+                log_posterior_flat_2arg,
+                data_args,
+                n_warmup,
+                n_leapfrog_steps,
+                n_burnin,
+                use_dense,
+                target_accept_rate,
+            )
+            jax.block_until_ready(positions)
         parameters = {"step_size": step_size, "inverse_mass_matrix": inv_mass_matrix}
         _set_cached_adaptation(fitter, adapt_key, parameters)
         if verbose:

@@ -20,6 +20,7 @@ from tengri.inference.backends.mcmc._shared import (
     _nuts_full_scan,
     _set_cached_adaptation,
 )
+from tengri.utils.compile_log import compile_timer
 
 logger = logging.getLogger(__name__)
 
@@ -86,9 +87,13 @@ def run_nuts(
         reducing divergences in the SED degeneracy banana. Range
         0.7-0.95; higher = smaller steps = fewer divergences but
         slower mixing.
-    max_num_doublings : int
+    max_num_doublings : int, default 10
         Maximum tree depth for NUTS trajectory (2^max_num_doublings
-        leapfrog steps per sample).
+        leapfrog steps per sample). Default 10 follows BlackJAX/Stan
+        convention. Compile cost scales with this knob but is typically
+        <3s at warm cache (see docs/inference/compilation_diagnostics.md);
+        wall-time cost is dominated by per-step forward-grad evaluation,
+        not graph size.
     dense_mass_matrix : bool
         Use a dense (full) mass matrix instead of diagonal. Captures
         parameter correlations (e.g. age-dust-metallicity) and
@@ -196,33 +201,37 @@ def run_nuts(
             )
         key, chain_key = jax.random.split(key)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
-        positions, divergent = _nuts_chain_scan(
-            state,
-            chain_keys,
-            log_posterior_flat_2arg,
-            data_args,
-            parameters["step_size"],
-            parameters["inverse_mass_matrix"],
-            max_num_doublings,
-            n_burnin,
-        )
+        with compile_timer("nuts_chain_scan", fitter.compile_signature(), method="mcmc_nuts"):
+            positions, divergent = _nuts_chain_scan(
+                state,
+                chain_keys,
+                log_posterior_flat_2arg,
+                data_args,
+                parameters["step_size"],
+                parameters["inverse_mass_matrix"],
+                max_num_doublings,
+                n_burnin,
+            )
+            jax.block_until_ready(positions)
     else:
         key, warmup_key = jax.random.split(key)
         key, chain_key = jax.random.split(key)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
-        positions, divergent, step_size, inv_mass_matrix = _nuts_full_scan(
-            init_flat,
-            warmup_key,
-            chain_keys,
-            log_posterior_flat_2arg,
-            data_args,
-            n_warmup,
-            max_num_doublings,
-            n_burnin,
-            use_dense,
-            target_accept_rate,
-            bool(pathfinder_warmstart),
-        )
+        with compile_timer("nuts_full_scan", fitter.compile_signature(), method="mcmc_nuts"):
+            positions, divergent, step_size, inv_mass_matrix = _nuts_full_scan(
+                init_flat,
+                warmup_key,
+                chain_keys,
+                log_posterior_flat_2arg,
+                data_args,
+                n_warmup,
+                max_num_doublings,
+                n_burnin,
+                use_dense,
+                target_accept_rate,
+                bool(pathfinder_warmstart),
+            )
+            jax.block_until_ready(positions)
         parameters = {"step_size": step_size, "inverse_mass_matrix": inv_mass_matrix}
         _set_cached_adaptation(fitter, adapt_key, parameters)
         if verbose:
