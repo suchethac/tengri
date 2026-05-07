@@ -441,7 +441,11 @@ plt.close()
 # ``result.plot_corner`` uses corner.py KDE which OOMs on macOS jetsam
 # at 600 samples × 8 params on top of resident HMC graph. Histograms
 # are bounded peak RSS and visually equivalent for tutorial-grade plots.
-free = list(samples_for_credible.keys())
+# Filter to actually-varying params (std > 0); fixed chains add empty cells.
+free = [
+    k for k in samples_for_credible.keys()
+    if float(np.std(np.asarray(samples_for_credible[k]))) > 1e-12
+]
 n_free = len(free)
 fig, axes = plt.subplots(n_free, n_free, figsize=(2 * n_free, 2 * n_free))
 for i, ki in enumerate(free):

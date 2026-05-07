@@ -370,7 +370,7 @@ print("\nSaved BPT diagram to notebooks/figures/08_bpt_diagram.png")
 
 # %%
 # Predict spectra in the red optical (rest-frame)
-wave_rest = np.linspace(6500, 6800, 1200)  # rest-frame Å
+wave_rest = np.linspace(6400, 6800, 1600)  # rest-frame Å (6400-6480 is line-free)
 
 params_dict = {"SF": params_sf, "Composite": params_comp, "Older": params_old}
 spec_dict = {}
@@ -396,18 +396,23 @@ colors_dict = {
     "Older": COLORS.get("data", "C2"),
 }
 
+# Normalise each spectrum by its line-free continuum (median of 6440-6480 Å
+# rest-frame, blueward of [NII]+Hα). The three galaxies have very
+# different total stellar masses, so absolute fluxes span 4+ dex; the
+# pedagogical comparison is line/continuum *contrast*, not amplitude.
 for galaxy_type in ["SF", "Composite", "Older"]:
     sed = spec_dict[galaxy_type]
     z = float(params_dict[galaxy_type]["redshift"])
     wave_obs_plot = wave_rest * (1.0 + z)
-
-    # Mask to avoid autoscale trap
-    valid = (sed > 0) & np.isfinite(sed)
+    cont_mask = (wave_rest >= 6420) & (wave_rest <= 6480)
+    cont_pix = sed[cont_mask & np.isfinite(sed) & (sed > 0)]
+    cont_level = float(np.median(cont_pix)) if cont_pix.size else 1.0
+    sed_norm = sed / max(cont_level, 1e-40)
+    valid = np.isfinite(sed_norm) & (sed_norm > 0)
     if valid.sum() > 0:
-        ymed = np.median(sed[valid])
-        ax.loglog(
+        ax.semilogy(
             wave_obs_plot[valid],
-            sed[valid],
+            sed_norm[valid],
             lw=1.5,
             label=galaxy_type,
             color=colors_dict[galaxy_type],
@@ -432,7 +437,7 @@ for lam, label in lines_annotate:
 
 ax.set_xlim(6450 * (1 + z_ref_display), 6850 * (1 + z_ref_display))
 ax.set_xlabel(f"Observed wavelength [$\\AA$] (z={z_ref_display:.1f})", fontsize=11)
-ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]", fontsize=11)
+ax.set_ylabel(r"$f_\nu / f_\nu^{\rm continuum}$ (normalised at 6460 Å rest)", fontsize=11)
 ax.set_title(r"Rest-frame Hα–[NII] Complex", fontsize=13, fontweight="bold")
 ax.legend(loc="upper left", frameon=False, fontsize=11)
 ax.grid(True, alpha=0.2, which="both")

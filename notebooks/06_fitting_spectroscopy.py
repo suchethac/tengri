@@ -416,7 +416,12 @@ plt.show()
 # Lightweight manual corner. ``plot_corner_comparison`` (corner.py KDE)
 # OOMs on macOS jetsam at ~24 GB peak when stacked on a 1000-pixel
 # NUTS graph. Histograms are bounded RSS and adequate for tutorial.
-free_p = list(result_spec.samples.keys())
+# Filter to actually-varying parameters: result.samples may include
+# fixed-as-constant chains (std == 0) which create empty corner cells.
+free_p = [
+    k for k in result_spec.samples.keys()
+    if float(np.std(np.asarray(result_spec.samples[k]))) > 1e-12
+]
 n_free_p = len(free_p)
 fig, axes = plt.subplots(n_free_p, n_free_p, figsize=(2 * n_free_p, 2 * n_free_p))
 for i, ki in enumerate(free_p):
