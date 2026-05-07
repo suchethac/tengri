@@ -42,7 +42,7 @@ if not _os.environ.get("TENGRI_VERBOSE_JAX"):
 # TENGRI_DISABLE_JAX_CACHE=1. See tengri.utils.jax_cache for details.
 import logging as _logging
 
-from tengri.inference.jit_engine import clear_shared_caches, lean
+from tengri.inference.jit_engine import clear_shared_caches, lean, persistent
 from tengri.utils.jax_cache import (
     cache_size_bytes,
     clear_cache,
@@ -329,6 +329,7 @@ __all__ = [
     "list_sfh_models",
     "nebular",
     "observation",
+    "persistent",
     "pipeline",
     "plot",
     "preprocessing",

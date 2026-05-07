@@ -1858,16 +1858,28 @@ class Fitter:
         method = resolve_method(method)
 
         # --- Lean mode: drop prior-phase compiled state before this run ---
-        # Per-call lean=True forces a clean slate; tengri.lean() context
-        # manager (or TENGRI_LEAN=1 env var) sets it for an entire block.
-        # See jit_engine.lean for the rationale (single-fit notebooks pay
-        # GB-scale memory for compiled artefacts they no longer need).
+        # Default: lean=True (single-galaxy interactive notebooks).
+        # Cross-galaxy fitters (CatalogFitter, PopulationFitter) pass
+        # ``lean=False`` so the per-galaxy loop reuses compiled artefacts.
+        # ``tengri.persistent()`` context manager flips the default to False
+        # for users running many sequential single-fits and wanting reuse.
+        # ``tengri.lean()`` is the (now redundant) inverse — kept for clarity.
+        # Override per-call via ``fitter.run(..., lean=True/False)``.
         from tengri.inference.jit_engine import (
             clear_shared_caches as _clear_shared_caches,
             is_lean_mode as _is_lean_mode,
+            is_persistent_mode as _is_persistent_mode,
         )
 
-        if kwargs.pop("lean", False) or _is_lean_mode():
+        _user_lean = kwargs.pop("lean", None)
+        if _user_lean is None:
+            if _is_persistent_mode():
+                _user_lean = False
+            elif _is_lean_mode():
+                _user_lean = True
+            else:
+                _user_lean = True
+        if _user_lean:
             _clear_shared_caches()
 
         # --- Merge TOML method-specific defaults (caller kwargs win) ---

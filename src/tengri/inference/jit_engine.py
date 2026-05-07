@@ -27,7 +27,9 @@ __all__ = [
     "get_or_build_engine_cached",
     "get_or_build_signal_response",
     "is_lean_mode",
+    "is_persistent_mode",
     "lean",
+    "persistent",
 ]
 
 # ── Module-level shared caches for cross-galaxy engine reuse ────────────────
@@ -56,10 +58,54 @@ _SHARED_CACHES_DISABLED = os.environ.get("TENGRI_DISABLE_SHARED_CACHES", "") == 
 _LEAN_MODE: bool = os.environ.get("TENGRI_LEAN", "") == "1"
 _LEAN_MODE_LOCK = threading.Lock()
 
+# Persistent mode: opt-out from the lean default. When True, ``Fitter.run()``
+# skips the auto-clear and reuses cached compiled artefacts across calls.
+# Used internally by PopulationFitter / CatalogFitter; users running many
+# sequential single-galaxy fits can ``with tengri.persistent(): ...``.
+_PERSISTENT_MODE: bool = os.environ.get("TENGRI_PERSISTENT", "") == "1"
+_PERSISTENT_MODE_LOCK = threading.Lock()
+
 
 def is_lean_mode() -> bool:
-    """Return True if lean mode is currently active."""
+    """Return True if explicit lean mode is currently active."""
     return _LEAN_MODE
+
+
+def is_persistent_mode() -> bool:
+    """Return True if persistent (cache-reuse) mode is currently active."""
+    return _PERSISTENT_MODE
+
+
+def persistent(enabled: bool = True):
+    """Context manager: keep cached compiled artefacts across ``Fitter.run()``.
+
+    Inverse of ``lean()``. Use when you're running multiple fits in the
+    same process and want them to share compiled XLA executables —
+    typical examples: a script that fits N galaxies sequentially without
+    using ``CatalogFitter``, or interactive iteration on hyperparameters.
+
+    Without ``persistent()``, ``Fitter.run()`` clears caches before each
+    call (the lean default) which keeps RSS bounded but pays ~30-60 s
+    of recompile per phase.
+
+    Equivalent ``TENGRI_PERSISTENT=1`` env var sets it process-wide.
+    Used internally by ``CatalogFitter`` / ``PopulationFitter``.
+    """
+    import contextlib
+
+    @contextlib.contextmanager
+    def _ctx():
+        global _PERSISTENT_MODE
+        with _PERSISTENT_MODE_LOCK:
+            prev = _PERSISTENT_MODE
+            _PERSISTENT_MODE = bool(enabled)
+        try:
+            yield
+        finally:
+            with _PERSISTENT_MODE_LOCK:
+                _PERSISTENT_MODE = prev
+
+    return _ctx()
 
 
 def lean(enabled: bool = True):
