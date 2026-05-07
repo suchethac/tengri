@@ -273,16 +273,15 @@ t0 = time.perf_counter()
 result = fitter.run(
     "mcmc_nuts",
     n_warmup=500,
-    n_samples=2000,
+    n_samples=600,
     target_accept_rate=0.85,
     dense_mass_matrix=True,
-    max_num_doublings=8,
     verbose=False,
     key=jax.random.PRNGKey(789),
 )
 t_fit = time.perf_counter() - t0
 
-print(f"\n✓ NUTS: {t_fit:.1f}s  (warmup=500 + samples=2000, single chain)")
+print(f"\n✓ NUTS: {t_fit:.1f}s  (warmup=500 + samples=600, single chain)")
 print(f"  Divergences: {result.diagnostics.get('n_divergent', 'n/a')}")
 print(f"  Step size:   {result.diagnostics.get('step_size', float('nan')):.4f}")
 print(f"  Samples:     {len(next(iter(result.samples.values())))}")

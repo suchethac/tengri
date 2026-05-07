@@ -67,10 +67,11 @@ pred = model.predict_rest_sed({})
 wave_rest = np.asarray(pred.wavelength)
 sed_rest = np.asarray(pred.sed)
 
-# --- Interpolate to observed frame and zoom to Hα region ---
-wave_obs_rest = wave_rest / (1.0 + REDSHIFT)
-zoom_mask = (wave_obs_rest >= 6400) & (wave_obs_rest <= 6750)
-wave_zoom = wave_obs_rest[zoom_mask]
+# --- Zoom to Hα region in the rest frame ---
+# wave_rest is already rest-frame Å from predict_rest_sed; no division by
+# (1+z) needed (that would double-blueshift and offset Hα by ~80 Å).
+zoom_mask = (wave_rest >= 6400) & (wave_rest <= 6750)
+wave_zoom = wave_rest[zoom_mask]
 sed_zoom = sed_rest[zoom_mask]
 
 # Normalize to continuum level
@@ -106,8 +107,12 @@ for r, color in zip(resolution_vals, colors):
 ax.set_xlabel(r"Rest Wavelength [$\AA$]")
 ax.set_ylabel("Normalized Flux")
 ax.set_title(r"H$\alpha$ Line: Instrumental Resolution Effects")
-ax.set_xlim(6450, 6680)
-ax.set_ylim(0.85, 1.10)
+# Zoom out enough to show the full Hα + [N II] λλ6549,6585 complex with
+# continuum context either side. Log-y keeps the bright emission peaks on
+# the same panel as the ~1% absorption-line wiggles in the continuum.
+ax.set_xlim(6450, 6700)
+ax.set_yscale("log")
+ax.set_ylim(0.7, 30.0)
 
 # Mark Hα center (vacuum) using axis-fraction transform so the text always
 # anchors to the visible top of the panel regardless of data range.
@@ -122,7 +127,7 @@ ax.text(
     color="grey",
     transform=ax.get_xaxis_transform(),
 )
-ax.legend(frameon=False, loc="lower left", fontsize=10)
+ax.legend(frameon=False, loc="upper right", fontsize=10)
 fig.tight_layout()
 plt.savefig("plot_resolution_sweep.png", dpi=150, bbox_inches="tight")
 plt.show()

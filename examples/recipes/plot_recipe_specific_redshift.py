@@ -11,6 +11,7 @@ from pathlib import Path
 
 import jax
 import matplotlib.pyplot as plt
+import numpy as np
 
 from tengri import (
     Fitter,
@@ -99,14 +100,7 @@ spec_fixed_z = Parameters(
 )
 model_fixed = SEDModel(spec_fixed_z, ssp, observation=obs)
 fitter_fixed = Fitter(model_fixed, data=mock.flux_obs, noise=mock.noise)
-fitter_fixed.run("map", optimizer="adam", n_steps=200, verbose=False)
-posterior_fixed = fitter_fixed.run(
-    "vi",
-    n_iterations=8,
-    n_samples=3,
-    n_posterior_samples=2000,
-    verbose=False,
-)
+posterior_fixed = fitter_fixed.run("map", optimizer="adam", n_steps=200, verbose=False)
 
 # --- Fit 2: Redshift FREE (photometry only) ---
 spec_free_z = Parameters(
@@ -123,48 +117,43 @@ spec_free_z = Parameters(
 )
 model_free = SEDModel(spec_free_z, ssp, observation=obs)
 fitter_free = Fitter(model_free, data=mock.flux_obs, noise=mock.noise)
-fitter_free.run("map", optimizer="adam", n_steps=200, verbose=False)
-posterior_free = fitter_free.run(
-    "vi",
-    n_iterations=8,
-    n_samples=3,
-    n_posterior_samples=2000,
-    verbose=False,
-)
+posterior_free = fitter_free.run("map", optimizer="adam", n_steps=200, verbose=False)
 
-# --- Plot corner: Fixed vs Free redshift ---
-fig = plt.figure(figsize=(14, 6))
+# --- Plot: SFH comparison with fixed vs free redshift ---
+sfh_fixed = model_fixed.predict_sfh(posterior_fixed.params)
+sfh_free = model_free.predict_sfh(posterior_free.params)
+
+fig = plt.figure(figsize=(12, 5))
 gs = fig.add_gridspec(1, 2, wspace=0.3)
 ax_fixed = fig.add_subplot(gs[0])
 ax_free = fig.add_subplot(gs[1])
 
-# Extract a subset of parameters for legibility
-params_to_plot = [
-    "sfh_tsnorm_log_peak_sfr",
-    "sfh_tsnorm_peak_lbt_gyr",
-    "met_logzsol",
-    "dust_tau_diff",
-]
+t_gyr = np.array(sfh_fixed["t_gyr"])
+mask = t_gyr < 2.0
 
+# Fixed redshift plot
+ax_fixed.plot(
+    t_gyr[mask], np.array(sfh_fixed["sfr_mean"])[mask], "C0-", lw=2.5,
+    label="Fit with z fixed"
+)
+ax_fixed.set_xlabel("Lookback time [Gyr]", fontsize=11)
+ax_fixed.set_ylabel("SFR [Msun/yr]", fontsize=11)
+ax_fixed.set_title("Fixed redshift (spec known)", fontsize=11, fontweight="bold")
+ax_fixed.set_ylim(bottom=0)
+ax_fixed.legend(frameon=False)
 
-def corner_subset(posterior, params, ax, title):
-    """Simple 2D scatter projection onto first 2 params."""
-    p1, p2 = params[0], params[1]
-    if posterior.samples and p1 in posterior.samples and p2 in posterior.samples:
-        ax.scatter(
-            posterior.samples[p1][:500],
-            posterior.samples[p2][:500],
-            alpha=0.4,
-            s=20,
-            color="C0",
-        )
-        ax.set_xlabel(p1)
-        ax.set_ylabel(p2)
-        ax.set_title(title)
-
-
-corner_subset(posterior_fixed, params_to_plot, ax_fixed, "Fixed redshift (spec known)")
-corner_subset(posterior_free, params_to_plot, ax_free, "Free redshift (photo only)")
+# Free redshift plot
+t_gyr_free = np.array(sfh_free["t_gyr"])
+mask_free = t_gyr_free < 2.0
+ax_free.plot(
+    t_gyr_free[mask_free], np.array(sfh_free["sfr_mean"])[mask_free], "C3-", lw=2.5,
+    label="Fit with z free"
+)
+ax_free.set_xlabel("Lookback time [Gyr]", fontsize=11)
+ax_free.set_ylabel("SFR [Msun/yr]", fontsize=11)
+ax_free.set_title("Free redshift (photometry only)", fontsize=11, fontweight="bold")
+ax_free.set_ylim(bottom=0)
+ax_free.legend(frameon=False)
 
 fig.suptitle("Impact of Redshift Prior: Fixed vs Free", fontsize=12, y=1.02)
 plt.savefig("plot_recipe_specific_redshift.png", dpi=150, bbox_inches="tight")

@@ -59,11 +59,11 @@ ssp = load_ssp_data(ssp_path)
 # Wavelength grid: UV through radio (in rest-frame Å)
 wave_sed = jnp.logspace(jnp.log10(1000.0), jnp.log10(1e7), 800)
 
-# Redshifts to sweep
-redshifts = [0.1, 0.5, 1.0, 2.0, 4.0]
+# Redshifts to sweep (limited to 4 to avoid crowding)
+redshifts = [0.2, 0.8, 1.5, 3.0]
 colors = plt.cm.viridis(np.linspace(0.0, 0.85, len(redshifts)))
 
-fig, ax = plt.subplots(figsize=(11, 6))
+fig, ax = plt.subplots(figsize=(12, 7))
 
 key = jax.random.PRNGKey(0)
 
@@ -135,12 +135,12 @@ for z, color in zip(redshifts, colors):
             alpha=0.8,
         )
 
-ax.set_xlabel(r"Observed Wavelength [$\mu$m]", fontsize=11)
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]", fontsize=11)
-ax.set_title("Panchromatic Galaxy SED: Redshift Evolution", fontsize=12)
-ax.legend(fontsize=10, frameon=False, loc="upper right", title="Redshift")
-ax.set_xlim(0.08, 3e5)
-ax.set_ylim(1e20, 1e34)
+ax.set_xlabel(r"Observed Wavelength [$\mu$m]", fontsize=12)
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]", fontsize=12)
+ax.set_title("Panchromatic Galaxy SED: Redshift Evolution", fontsize=13)
+ax.legend(fontsize=11, frameon=False, loc="upper right", title="Redshift")
+ax.set_xlim(0.05, 1e6)
+ax.set_ylim(1e19, 1e35)
 ax.grid(True, alpha=0.3, which="both")
 
 fig.tight_layout()

@@ -78,16 +78,19 @@ MODELS = [
     ("Dale+2014", "C6", _dale()),
 ]
 
-fig, ax = plt.subplots(figsize=(9, 5.5))
+fig, ax = plt.subplots(figsize=(10, 6))
 for label, color, lnu in MODELS:
     if lnu is None:
         continue
     y = np.array(lnu)
     mask = (wave_um > 1) & (y > 0)
-    ax.loglog(wave_um[mask], y[mask], color=color, lw=1.8, label=label)
+    ax.loglog(wave_um[mask], y[mask], color=color, lw=2.0, label=label)
 
+# Zoom out to standard astro IR-SED window (1 µm – 1 mm) and span ~5
+# decades in L_nu so the PAH features (~6–15 µm in DL07/DL14) sit clearly
+# above the floor instead of being clipped under the FIR peak.
 ax.set_xlim(1, 1000)
-ax.set_ylim(1e29, 1e32)
+ax.set_ylim(1e27, 5e31)
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title(r"Dust Emission Models ($L_{\rm abs} = 10^{10}\,L_\odot$, $T = 35$ K)")
@@ -96,7 +99,8 @@ ax.legend(fontsize=10, frameon=False, ncol=2)
 # Mark key wavelengths
 for wl_um, name in [(8, "PAH"), (25, "mid-IR"), (100, "far-IR peak"), (850, "submm")]:
     ax.axvline(wl_um, color="grey", ls=":", lw=0.5, alpha=0.5)
-    ax.text(wl_um * 1.05, ax.get_ylim()[1] * 0.6, name, fontsize=10, color="grey", rotation=90)
+    ax.text(wl_um * 1.05, 0.97, name, fontsize=10, color="grey", rotation=90,
+            transform=ax.get_xaxis_transform(), va="top")
 
 fig.tight_layout()
 plt.savefig("plot_dust_emission_models.png", dpi=150, bbox_inches="tight")

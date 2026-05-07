@@ -84,7 +84,23 @@ spec = Parameters(
 )
 
 # --- Plot three panels ---
-fig, axes = plt.subplots(3, 1, figsize=(9, 8))
+# Larger figsize + per-panel xlim keeps each survey's bands centred and
+# avoids tight_layout title/axis collisions on cramped 3-stack figures.
+fig, axes = plt.subplots(3, 1, figsize=(11, 11))
+
+# Per-survey wavelength windows (Angstrom) — chosen to frame the bands with
+# breathing room either side instead of one shared 3000-25000 axis that
+# squeezes the SDSS panel and shows mostly empty space for HST.
+panel_xlim = {
+    "SDSS": (3000, 11000),
+    "2MASS": (8000, 25000),
+    "HST": (3000, 11000),
+}
+
+# Median-smooth the SED for display so Hα/Hβ/[OIII] spikes don't overpower
+# the continuum once we use log-y. The smoothed curve is for visualisation
+# only; predicted broadband fluxes still use the spiky SED internally.
+from scipy.ndimage import median_filter
 
 for ax, (survey_name, bands) in zip(axes, filter_sets.items()):
     obs = Observation(
@@ -92,32 +108,35 @@ for ax, (survey_name, bands) in zip(axes, filter_sets.items()):
     )
     model = SEDModel(spec, ssp_data, observation=obs)
 
-    # Predict on this filter set
     pred = model.predict_rest_sed({})
     wave = np.asarray(pred.wavelength)
     sed = np.asarray(pred.sed)
+    sed_smooth = median_filter(sed, size=51)
 
-    # Get filter information
     waves, trans, curves = load_filter_set(bands, cache_dir=_FILTER_DIR)
 
-    # Plot SED
-    ax.plot(wave, sed, "C0-", lw=2.0, label="SED (rest frame)")
+    # SED line — smoothed continuum so emission lines don't dominate the eye.
+    ax.semilogy(wave, sed_smooth, color="C0", lw=2.0, label="SED (rest frame)")
 
-    # Overlay filter throughputs scaled to SED
+    # Filter throughputs: shaded band scaled to a fixed fraction of the
+    # panel's continuum level so each filter is clearly visible above zero
+    # on a log axis (filling from 0 doesn't render on log-y).
+    xlo, xhi = panel_xlim[survey_name]
+    panel_mask = (wave >= xlo) & (wave <= xhi)
+    sed_continuum = np.median(sed_smooth[panel_mask])
+    y_floor = sed_continuum * 0.05
+    y_ceil = sed_continuum * 0.8
     for fc in curves:
         wave_f = np.array(fc.wave)
-        trans_f = np.array(fc.trans)
-        trans_f_scaled = trans_f * np.max(sed) * 0.5
-        ax.fill_between(wave_f, 0, trans_f_scaled, alpha=0.2, color="C1")
-        ax.plot(wave_f, trans_f_scaled, lw=1.0, color="C1", alpha=0.6)
+        trans_f = np.array(fc.trans) / np.max(fc.trans)
+        scaled = y_floor + trans_f * (y_ceil - y_floor)
+        ax.fill_between(wave_f, y_floor, scaled, alpha=0.25, color="C1")
+        ax.plot(wave_f, scaled, lw=1.2, color="C1", alpha=0.8)
 
     ax.set_ylabel(r"$L_\nu$ (arbitrary)")
-    ax.set_xlim(3000, 25000)
-    # Set y-limit to twice the median continuum so emission-line spikes don't
-    # compress the rest of the SED. We don't care about the spike's peak here.
-    sed_continuum = np.median(sed[(wave >= 3000) & (wave <= 25000)])
-    ax.set_ylim(0, 4 * sed_continuum)
-    ax.set_title(f"{survey_name}: {len(bands)} filters", fontsize=12)
+    ax.set_xlim(*panel_xlim[survey_name])
+    ax.set_ylim(sed_continuum * 0.02, sed_continuum * 4)
+    ax.set_title(f"{survey_name}: {len(bands)} filters", fontsize=13, pad=8)
     ax.legend(frameon=False, loc="upper right", fontsize=10)
 
 axes[-1].set_xlabel(r"Wavelength [$\AA$]")

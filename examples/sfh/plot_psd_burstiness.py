@@ -36,7 +36,7 @@ mean_sfr = tsnorm(t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=0.
 sigmas = [0.2, 0.6, 1.2]
 taus_myr = [30, 200, 1000]
 
-fig, axes = plt.subplots(3, 3, figsize=(13, 9), sharex=True, sharey=True)
+fig, axes = plt.subplots(3, 3, figsize=(14, 12), sharex=True, sharey=True)
 key_base = jax.random.PRNGKey(7)
 mean_color = "0.30"
 realiz_cmap = plt.get_cmap("viridis")
@@ -84,8 +84,8 @@ for i, sigma in enumerate(sigmas):
 fig.suptitle(
     r"PSD Burstiness Grid: amplitude $\sigma$ (rows) vs damping $\tau$ (columns)",
     fontsize=14,
-    y=0.995,
+    y=0.993,
 )
-fig.tight_layout(rect=[0, 0, 1, 0.97])
+fig.tight_layout(rect=[0, 0, 1, 0.96])
 plt.savefig("plot_psd_burstiness.png", dpi=150, bbox_inches="tight")
 plt.show()

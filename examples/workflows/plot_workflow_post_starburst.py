@@ -127,7 +127,7 @@ spec_wrong = Parameters(
     sfh_dpl_log_peak_sfr=Uniform(0.5, 2.5),
     sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
     sfh_dpl_alpha=Fixed(1.0),
-    sfh_dpl_beta=Fixed(0.0),
+    sfh_dpl_beta=Fixed(0.1),
     met_logzsol=Fixed(-0.1),
     dust_tau_bc=Fixed(0.2),
     dust_tau_diff=Fixed(0.1),
@@ -189,7 +189,7 @@ ax.set_title(
     fontsize=12,
     fontweight="bold",
 )
-ax.legend(fontsize=10, frameon=False, loc="upper right", lw=2.0)
+ax.legend(fontsize=10, frameon=False, loc="upper right")
 ax.set_ylim(bottom=0)
 
 fig.tight_layout()

@@ -44,7 +44,8 @@ ax.set_title(
     r"(L$_{\mathrm{bol}}=10^{45}$ erg/s)"
 )
 ax.set_xlim(0.1, 1000)
-ax.set_ylim(1e21, 5e24)
+# Span ~7 decades so every alpha_ox curve stays on-axis across 0.1-1000 keV.
+ax.set_ylim(1e20, 1e27)
 ax.legend(fontsize=11, frameon=False)
 ax.grid(True, alpha=0.3, which="both")
 

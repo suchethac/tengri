@@ -115,12 +115,19 @@ posterior = fitter.run(
 # --- Posterior predictive resampling ---
 # Draw 200 samples from posterior and predict photometry for each
 n_resample = 200
-posterior_samples = posterior.samples  # shape: (n_draws, n_params)
+posterior_samples = posterior.samples  # dict mapping param name -> array of samples
 posterior_photometry = []
 
+# Determine number of samples available
+n_samples = len(next(iter(posterior_samples.values()))) if posterior_samples else 0
+
 key_pred = jax.random.PRNGKey(999)
-for i in range(min(n_resample, len(posterior_samples))):
-    params_i = {spec.free_params[j]: posterior_samples[i, j] for j in range(len(spec.free_params))}
+for i in range(min(n_resample, n_samples)):
+    # Extract i-th sample from each parameter in the posterior dict
+    params_i = {
+        param_name: float(sample_array[i])
+        for param_name, sample_array in posterior_samples.items()
+    }
     phot_i = model.predict_photometry(params_i)
     posterior_photometry.append(np.array(phot_i))
 
@@ -194,7 +201,7 @@ ax.set_title(
     fontsize=12,
     fontweight="bold",
 )
-ax.legend(fontsize=10, frameon=False, loc="upper right", lw=2.0)
+ax.legend(fontsize=10, frameon=False, loc="upper right")
 ax.set_xticks(wave_eff)
 ax.set_xticklabels(band_labels)
 

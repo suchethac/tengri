@@ -24,7 +24,6 @@ from tengri import (
     SEDModel,
     Uniform,
     load_ssp_data,
-    safe_corner,
     setup_style,
 )
 
@@ -104,29 +103,17 @@ mock = model.mock(true_params, snr=20.0, key=key)
 fitter = Fitter(model, data=mock.flux_obs, noise=mock.noise)
 post_map = fitter.run("map", optimizer="adam", n_steps=400, verbose=False)
 
-# --- Fit 2: geoVI/VI ---
-fitter.compile(verbose=False)
-post_vi = fitter.run(
-    "vi",
-    n_iterations=15,
-    n_samples=4,
-    n_posterior_samples=2000,
-    verbose=False,
-)
-
-# --- Fit 3: NUTS ---
+# --- Fit 2: NUTS only (skip VI for speed) ---
 post_nuts = fitter.run(
     "mcmc_nuts",
-    n_steps=200,
-    n_walkers=2,
-    n_warmup=100,
+    n_warmup=50,
+    n_samples=100,
     verbose=False,
 )
 
-# --- Plot 1: SFH comparison (MAP vs VI vs NUTS) ---
+# --- Plot 1: SFH comparison (MAP vs NUTS) ---
 sfh_true = model.predict_sfh(true_params)
 sfh_map = model.predict_sfh(post_map.params)
-sfh_vi = model.predict_sfh(post_vi.params)
 sfh_nuts = model.predict_sfh(post_nuts.params)
 
 fig_sfh, ax_sfh = plt.subplots(figsize=(9, 5))
@@ -151,62 +138,20 @@ ax_sfh.plot(
 )
 ax_sfh.plot(
     t_gyr_true[mask],
-    np.array(sfh_vi["sfr_mean"])[mask],
-    "--",
-    color="C1",
-    lw=1.8,
-    label="geoVI (variational)",
-)
-ax_sfh.plot(
-    t_gyr_true[mask],
     np.array(sfh_nuts["sfr_mean"])[mask],
     "--",
     color="C0",
     lw=1.8,
-    label="NUTS (gold standard)",
+    label="NUTS (MCMC)",
 )
 
 ax_sfh.set_xlabel("Lookback time [Gyr]", fontsize=12)
 ax_sfh.set_ylabel("SFR [Msun/yr]", fontsize=12)
 ax_sfh.set_title("Method Comparison: SFH Recovery", fontsize=12, fontweight="bold")
-ax_sfh.legend(fontsize=10, frameon=False, loc="upper right", lw=2.0)
+ax_sfh.legend(fontsize=10, frameon=False, loc="upper right")
 ax_sfh.set_ylim(bottom=0)
 
 fig_sfh.tight_layout()
-plt.savefig("plot_workflow_method_comparison_sfh.png", dpi=150, bbox_inches="tight")
-
-# --- Plot 2: Corner plot (VI with NUTS sample points overlaid) ---
-fig_corner = safe_corner(post_vi, truths=true_params)
-if fig_corner is not None:
-    fig_corner.suptitle(
-        "geoVI posterior (2D) with truth and MAP (dashed)",
-        y=1.02,
-        fontsize=12,
-        fontweight="bold",
-    )
-
-    # Overlay MAP as vertical/horizontal lines on 1D/2D axes
-    map_vals = [float(post_map.params[p]) for p in spec.free_params]
-    n = len(spec.free_params)
-    n_axes = int(np.ceil(np.sqrt(len(fig_corner.axes))))
-    if n_axes > 0:
-        axes = np.array(fig_corner.axes).reshape(n_axes, n_axes)
-    else:
-        axes = np.array(fig_corner.axes)
-
-    for i in range(n):
-        if i < n_axes:
-            label_str = "MAP" if i == 0 else ""
-            axes[i, i].axvline(map_vals[i], color="C3", ls=":", lw=1.5, label=label_str)
-            for j in range(i):
-                if j < n_axes:
-                    axes[i, j].scatter(
-                        [map_vals[j]], [map_vals[i]], color="C3", s=30, marker="x", zorder=5
-                    )
-    if n_axes > 0 and len(fig_corner.axes) > n_axes * n_axes - n_axes:
-        axes[0, 0].legend(fontsize=9)
-
-    fig_corner.tight_layout()
-    plt.savefig("plot_workflow_method_comparison_corner.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_workflow_method_comparison.png", dpi=150, bbox_inches="tight")
 
 plt.show()

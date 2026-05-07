@@ -29,7 +29,7 @@ umin_values = [0.5, 2.0, 10.0]  # ISRF hardness
 # --- Color map (viridis across panels) ---
 colors_grid = plt.cm.viridis(np.linspace(0.0, 0.85, 3))
 
-fig, axes = plt.subplots(3, 3, figsize=(12, 10))
+fig, axes = plt.subplots(3, 3, figsize=(15, 13))
 fig.suptitle(
     r"Dust Emission: q$_{\rm PAH}$ × U$_{\rm min}$ Grid (Draine & Li 2007)",
     fontsize=13,
@@ -61,16 +61,16 @@ for i, umin in enumerate(umin_values):
         ax.loglog(wave_um[mask], y[mask], color=colors_grid[j], lw=2.0)
 
         # --- Panel labels and metadata ---
-        ax.set_xlabel(r"Wavelength [$\mu$m]", fontsize=9)
-        ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]", fontsize=9)
+        ax.set_xlabel(r"Wavelength [$\mu$m]", fontsize=12)
+        ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]", fontsize=12)
         ax.set_xlim(1, 1000)
         ax.set_ylim(1e29, 1e32)
-        ax.tick_params(labelsize=8)
+        ax.tick_params(labelsize=11)
 
         # Title shows parameters
         ax.set_title(
             f"q$_{{\\rm PAH}}$ = {qpah:.1f}%, U$_{{\\rm min}}$ = {umin:.1f}",
-            fontsize=10,
+            fontsize=13,
             fontweight="bold",
         )
 
