@@ -55,6 +55,23 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Generate a mock galaxy with SDSS ugriz photometry and fit it using tengri&#x27;s variational inference. Shows observed vs model photometry with error bars and residuals.">
+
+.. only:: html
+
+  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_photometric_fit_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/photometry/plot_photometric_fit`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Photometric SED Fit</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="How do SDSS ugriz filters sample a galaxy SED at different redshifts? This script shows rest-frame stellar continuum overlaid with redshifted SDSS filter transmission curves at z ∈ {0.1, 0.5, 1.0, 2.0}. Demonstrates k-corrections: which optical/near-IR features are probed by each band as the galaxy evolves toward the horizon.">
 
 .. only:: html
@@ -99,6 +116,7 @@ Filter curves and photometric fitting.
 
    /auto_examples/photometry/plot_filter_curves
    /auto_examples/photometry/plot_filter_set_comparison
+   /auto_examples/photometry/plot_photometric_fit
    /auto_examples/photometry/plot_redshift_filter_grid
    /auto_examples/photometry/plot_snr_sweep
 

@@ -73,11 +73,11 @@ exponential decline, sharp truncation, and a recent burst on top of quenching.
         redshift=Fixed(0.1),
     )
 
-    # Scenario 1: Constant star formation (dpl with beta = 0)
+    # Scenario 1: Constant star formation (dpl with shallow alpha and beta)
     spec1 = Parameters(
         mean_sfh_type="dpl",
-        sfh_dpl_alpha=Fixed(0.0),  # flat rising
-        sfh_dpl_beta=Fixed(0.0),  # flat falling → constant
+        sfh_dpl_alpha=Fixed(0.1),  # nearly flat rising
+        sfh_dpl_beta=Fixed(0.1),  # nearly flat falling → nearly constant
         sfh_dpl_tau_gyr=Fixed(3.0),
         sfh_dpl_log_peak_sfr=Fixed(1.0),
         **shared,
@@ -124,8 +124,8 @@ exponential decline, sharp truncation, and a recent burst on top of quenching.
     sed1 = model1.predict_rest_sed(
         {
             **params_eval,
-            "sfh_dpl_alpha": 0.0,
-            "sfh_dpl_beta": 0.0,
+            "sfh_dpl_alpha": 0.1,
+            "sfh_dpl_beta": 0.1,
             "sfh_dpl_tau_gyr": 3.0,
             "sfh_dpl_log_peak_sfr": 1.0,
         }
@@ -163,7 +163,7 @@ exponential decline, sharp truncation, and a recent burst on top of quenching.
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    ax.loglog(wave, np.array(sed1), "k-", lw=2.0, label="Constant (α=0, β=0)")
+    ax.loglog(wave, np.array(sed1), "k-", lw=2.0, label="Nearly constant (α=0.1, β=0.1)")
     ax.loglog(wave, np.array(sed2), "C1--", lw=2.0, label="Exponential decline (β=2)")
     ax.loglog(wave, np.array(sed3), "C2:", lw=2.0, label="Sharp truncation (α=3, β=3)")
     ax.loglog(wave, np.array(sed4), "C3-.", lw=2.0, label="Recent burst")

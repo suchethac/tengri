@@ -55,6 +55,23 @@ Spectroscopic fitting and spectral features.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Generate a mock galaxy spectrum and fit it with tengri&#x27;s MAP optimizer. Shows the observed and model spectra with a residual panel below.">
+
+.. only:: html
+
+  .. image:: /auto_examples/spectroscopy/images/thumb/sphx_glr_plot_spectrum_fit_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/spectroscopy/plot_spectrum_fit`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Spectroscopic SED Fit</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Sweep stellar velocity dispersion σ_v ∈ {50, 100, 150, 250, 400} km/s to show how line broadening increases with dynamical heating. The Mg b absorption feature (~5170 Å) widens progressively, demonstrating the kinematic signature of higher-velocity stellar populations.">
 
 .. only:: html
@@ -82,5 +99,6 @@ Spectroscopic fitting and spectral features.
 
    /auto_examples/spectroscopy/plot_resolution_sweep
    /auto_examples/spectroscopy/plot_spectral_features
+   /auto_examples/spectroscopy/plot_spectrum_fit
    /auto_examples/spectroscopy/plot_velocity_dispersion_sweep
 

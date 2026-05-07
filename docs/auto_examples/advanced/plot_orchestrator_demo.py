@@ -28,6 +28,7 @@ publishes ``L_agn_bol`` for X-ray, stellar publishes ``log_mstar``
 # ------------------
 
 import os
+from pathlib import Path
 
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
@@ -39,7 +40,26 @@ from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.core.component import PipelineState
 from tengri.forward import build_components, chain_summary, run_components
 
-ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
+
+def _find_ssp():
+    """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
+    name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+    for p in [
+        Path("data") / name,
+        Path("../data") / name,
+        Path("../../data") / name,
+        Path("../../../data") / name,
+    ]:
+        if p.exists():
+            return str(p)
+    return None
+
+
+SSP_PATH = _find_ssp()
+if SSP_PATH is None:
+    raise FileNotFoundError("SSP data not found — skipping example")
+
+ssp = load_ssp_data(SSP_PATH)
 
 components = build_components(
     ssp_data=ssp,
@@ -112,10 +132,14 @@ print(f"L_bol (stellar)        = {_L_bol:.3g} erg/s")
 print(f"log_mstar              = {_logM:.3f}  ({10**_logM:.3g} Msun)")
 print(f"L_ir (dust)            = {float(state.derived['L_ir']):.3g} erg/s")
 print(f"L_agn_bol              = {float(state.derived['L_agn_bol']):.3g} erg/s")
-print(f"L_radio peak           = {float(state.derived['L_radio'].max()):.3g} erg/s/Hz")
-print(f"L_xray peak            = {float(state.derived['L_xray'].max()):.3g} erg/s/Hz")
-print(f"sfr_10myr              = {float(state.derived['sfr_10myr']):.3f} Msun/yr")
-print(f"nion                   = {float(state.derived['nion']):.3g} photons/s")
+if 'sed_radio' in state.derived:
+    print(f"L_radio peak           = {float(state.derived['sed_radio'].max()):.3g} erg/s/Hz")
+if 'sed_xray' in state.derived:
+    print(f"L_xray peak            = {float(state.derived['sed_xray'].max()):.3g} erg/s/Hz")
+if 'sfr_10myr' in state.derived:
+    print(f"sfr_10myr              = {float(state.derived['sfr_10myr']):.3f} Msun/yr")
+if 'nion' in state.derived:
+    print(f"nion                   = {float(state.derived['nion']):.3g} photons/s")
 
 # %%
 # Plot the SED

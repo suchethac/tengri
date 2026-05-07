@@ -1,4 +1,13 @@
 {
+ "Path": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "Path"
+  }
+ ],
  "PipelineState": [
   {
    "is_class": false,

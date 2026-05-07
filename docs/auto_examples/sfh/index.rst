@@ -21,6 +21,23 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Four burstiness regimes — Smooth, Moderate, Bursty, Extreme — each defined by the PSD amplitude σ and correlation time τ. Forward-model SFH draws show the range of histories each regime produces before inference.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_bursty_recovery_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_bursty_recovery`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SFH Recovery Across Four Burstiness Regimes</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Plot metallicity evolution Z(t) from closed-box and leaky-box chemical evolution models. Shows how star formation history and gas outflows shape the history of metal enrichment in galaxies.">
 
 .. only:: html
@@ -242,6 +259,23 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Generate stochastic star formation histories using the Fourier-space GP correlated field model. The DRW (damped random walk) PSD governs the burstiness: larger sigma means more variance, shorter tau means more rapid fluctuations.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_stochastic_sfh_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_stochastic_sfh`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Stochastic SFH from GP Correlated Fields</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="A smooth (parametric) model fits a bursty galaxy with χ² ≈ 1 but systematically underestimates recent SFR by up to 10×. The trap: good residuals do not guarantee unbiased physical parameters.">
 
 .. only:: html
@@ -267,6 +301,7 @@ Parametric and stochastic star formation history models.
 .. toctree::
    :hidden:
 
+   /auto_examples/sfh/plot_bursty_recovery
    /auto_examples/sfh/plot_chemical_evolution
    /auto_examples/sfh/plot_dexp_tau_sweep
    /auto_examples/sfh/plot_dpl_alpha_beta_grid
@@ -280,5 +315,6 @@ Parametric and stochastic star formation history models.
    /auto_examples/sfh/plot_psd_tau_sweep
    /auto_examples/sfh/plot_sfh_double_burst
    /auto_examples/sfh/plot_sfh_quenching_compare
+   /auto_examples/sfh/plot_stochastic_sfh
    /auto_examples/sfh/plot_wrong_model_trap
 

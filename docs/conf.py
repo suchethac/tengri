@@ -41,16 +41,45 @@ try:
 except Exception:  # pragma: no cover - matplotlib missing on docs-only env
     pass
 
-# ── Heavy gallery scripts that should NOT be re-executed by ``make html`` ──
-# These typically take >10 minutes (population scaling sweeps, multi-fitter
-# benchmarks, hierarchical VI). Sphinx-Gallery's ``filename_pattern`` controls
-# which files are *executed*: matching files run and (re-)generate figures;
-# non-matching files still appear in the gallery and reuse the precomputed
-# images already on disk under ``docs/auto_examples/<group>/images/``. So the
-# trick is a negative-lookahead regex: "match plot_*.py UNLESS the basename
-# is in this list."
+# ── Inference / fitter scripts: precompute, do NOT re-execute ──────────────
+# Anything that constructs a Fitter and calls ``run("mcmc_*"|"vi_*"|...)``
+# is too slow for a per-build ``make html`` (minutes to tens of minutes per
+# script). Sphinx-Gallery's ``filename_pattern`` controls which files are
+# *executed*: matching files run and (re-)generate figures; non-matching
+# files still appear in the gallery and reuse whatever ``.rst``/``.ipynb``
+# and PNGs already exist under ``docs/auto_examples/<group>/`` from a prior
+# run. To opt a new heavy script in, add its basename (no path, no ``.py``)
+# to ``_DO_NOT_EXECUTE`` and commit one set of pre-rendered outputs.
 _DO_NOT_EXECUTE = [
-    "plot_population_scaling",  # multi-N hierarchical VI sweep, ~30 min
+    # examples/inference/
+    "plot_population_scaling",
+    "plot_hierarchical_convergence",
+    "plot_convergence",
+    "plot_corner",
+    "plot_method_comparison",
+    "plot_prior_posterior_compare",
+    # examples/quickstart/
+    "plot_first_fit",
+    # examples/photometry/, examples/spectroscopy/, examples/advanced/
+    "plot_photometric_fit",
+    "plot_spectrum_fit",
+    "plot_joint_fit",
+    "plot_hierarchical",
+    # examples/workflows/  (each runs a Fitter on synthetic data)
+    "plot_workflow_method_comparison",
+    "plot_workflow_dust_mc_resampling",
+    "plot_workflow_post_starburst",
+    "plot_workflow_high_z_lbg",
+    # examples/recipes/  (Fitter + posterior I/O)
+    "plot_recipe_save_load_posterior",
+    "plot_recipe_compare_priors",
+    "plot_recipe_specific_redshift",
+    "plot_recipe_load_real_csv",
+    # examples/sfh/
+    "plot_wrong_model_trap",
+    # examples/inference legacy
+    "plot_bursty_recovery",
+    "plot_stochastic_sfh",
 ]
 _skip_alt = "|".join(_DO_NOT_EXECUTE)
 
@@ -59,15 +88,10 @@ sphinx_gallery_conf = {
     "gallery_dirs": ["auto_examples"],
     # Run any plot_*.py whose basename is NOT in _DO_NOT_EXECUTE.
     "filename_pattern": rf"^(?!.*({_skip_alt}))plot_.+\.py$",
-    # Scripts that should be hidden from the gallery entirely (heavy inference
-    # whose figures we don't want to ship at all). Different from the list
-    # above, which keeps the rendered output visible but avoids re-execution.
-    "ignore_pattern": (
-        r".*(plot_hierarchical|plot_hierarchical_convergence|"
-        r"plot_convergence|plot_corner|plot_method_comparison|"
-        r"plot_photometric_fit|plot_spectrum_fit|plot_joint_fit|"
-        r"plot_bursty_recovery|plot_first_fit|plot_stochastic_sfh)\.py"
-    ),
+    # ignore_pattern HIDES files from the gallery entirely. Reserved for
+    # truly-broken WIP scripts; everything else stays visible via the
+    # precompute path above.
+    "ignore_pattern": r"^$",
     "download_all_examples": False,
     # Locally we execute (default). On CI (e.g. GitHub Actions sets CI=true) we
     # use the pre-rendered docs/auto_examples/ that the developer committed so

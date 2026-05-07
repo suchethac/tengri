@@ -113,6 +113,40 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Sets up a small population of mock galaxies sharing the same burstiness PSD parameters (sigma, tau), runs PopulationFitter briefly, and displays the shared PSD posterior vs truth.">
+
+.. only:: html
+
+  .. image:: /auto_examples/advanced/images/thumb/sphx_glr_plot_hierarchical_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/advanced/plot_hierarchical`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Hierarchical PSD Inference</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates tengri&#x27;s Observation API for joint fitting. Creates a mock galaxy with both SDSS photometry and a low-resolution spectrum, fits with MAP, and shows the combined constraint power. Requires SSP data.">
+
+.. only:: html
+
+  .. image:: /auto_examples/advanced/images/thumb/sphx_glr_plot_joint_fit_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/advanced/plot_joint_fit`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Joint Photometry + Spectroscopy Fit</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Build a full multiwavelength SED — stellar + nebular + AGN + dust + radio + X-ray + IGM — without going through tengri.SEDModel, using tengri.forward.build_components and tengri.forward.run_components (Phase II-2.6 public API).">
 
 .. only:: html
@@ -834,6 +868,74 @@ Comparing inference methods and convergence diagnostics.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Runs a quick fit and displays convergence diagnostics: ESS per parameter, summary table, and trace plots for a subset of parameters.">
+
+.. only:: html
+
+  .. image:: /auto_examples/inference/images/thumb/sphx_glr_plot_convergence_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/inference/plot_convergence`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Convergence Diagnostics</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Fits mock photometry and displays a corner plot with injected truth values marked. Uses tengri&#x27;s safe_corner utility.">
+
+.. only:: html
+
+  .. image:: /auto_examples/inference/images/thumb/sphx_glr_plot_corner_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/inference/plot_corner`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Corner Plot with Truth Overlay</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Hierarchical inference recovers the shared PSD parameters (σ, τ) of a galaxy population. The posterior width on σ scales as 1/√N_galaxies, while individual fits are far too uncertain. This illustrates why population-level inference is essential for measuring burstiness.">
+
+.. only:: html
+
+  .. image:: /auto_examples/inference/images/thumb/sphx_glr_plot_hierarchical_convergence_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/inference/plot_hierarchical_convergence`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Population PSD Recovery: 1/√N Convergence</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Compares point-estimate (MAP) and variational (vi/geoVI) inference on mock 5-band photometry. Overlays posteriors as a corner plot.">
+
+.. only:: html
+
+  .. image:: /auto_examples/inference/images/thumb/sphx_glr_plot_method_comparison_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/inference/plot_method_comparison`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">MAP vs geoVI Posterior Comparison</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Renders the wall-time / peak-memory / iteration scaling of tengri&#x27;s two pure-JAX population variational engines on a 5-band SDSS photometry catalog with a stochastic-SFH forward model:">
 
 .. only:: html
@@ -1422,6 +1524,23 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Generate a mock galaxy with SDSS ugriz photometry and fit it using tengri&#x27;s variational inference. Shows observed vs model photometry with error bars and residuals.">
+
+.. only:: html
+
+  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_photometric_fit_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/photometry/plot_photometric_fit`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Photometric SED Fit</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="How do SDSS ugriz filters sample a galaxy SED at different redshifts? This script shows rest-frame stellar continuum overlaid with redshifted SDSS filter transmission curves at z ∈ {0.1, 0.5, 1.0, 2.0}. Demonstrates k-corrections: which optical/near-IR features are probed by each band as the galaxy evolves toward the horizon.">
 
 .. only:: html
@@ -1476,6 +1595,23 @@ Getting started with tengri — first fit and SED visualization.
     <div class="sphx-glr-thumbnails">
 
 .. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The simplest possible tengri workflow: define a parametric SFH model, generate mock SDSS photometry, fit it with MAP optimization, and plot the resulting SED fit.">
+
+.. only:: html
+
+  .. image:: /auto_examples/quickstart/images/thumb/sphx_glr_plot_first_fit_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/quickstart/plot_first_fit`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">First Photometric Fit</div>
+    </div>
+
 
 .. raw:: html
 
@@ -1607,6 +1743,23 @@ Parametric and stochastic star formation history models.
     <div class="sphx-glr-thumbnails">
 
 .. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Four burstiness regimes — Smooth, Moderate, Bursty, Extreme — each defined by the PSD amplitude σ and correlation time τ. Forward-model SFH draws show the range of histories each regime produces before inference.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_bursty_recovery_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_bursty_recovery`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SFH Recovery Across Four Burstiness Regimes</div>
+    </div>
+
 
 .. raw:: html
 
@@ -1831,6 +1984,23 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Generate stochastic star formation histories using the Fourier-space GP correlated field model. The DRW (damped random walk) PSD governs the burstiness: larger sigma means more variance, shorter tau means more rapid fluctuations.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_stochastic_sfh_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_stochastic_sfh`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Stochastic SFH from GP Correlated Fields</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="A smooth (parametric) model fits a bursty galaxy with χ² ≈ 1 but systematically underestimates recent SFR by up to 10×. The trap: good residuals do not guarantee unbiased physical parameters.">
 
 .. only:: html
@@ -1900,6 +2070,23 @@ Spectroscopic fitting and spectral features.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Key Spectral Features as Age and Metallicity Probes</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Generate a mock galaxy spectrum and fit it with tengri&#x27;s MAP optimizer. Shows the observed and model spectra with a residual panel below.">
+
+.. only:: html
+
+  .. image:: /auto_examples/spectroscopy/images/thumb/sphx_glr_plot_spectrum_fit_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/spectroscopy/plot_spectrum_fit`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Spectroscopic SED Fit</div>
     </div>
 
 

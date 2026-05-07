@@ -78,9 +78,6 @@ spec_old = Parameters(
     redshift=Fixed(0.1),
 )
 model_old = SEDModel(spec_old, ssp)
-params_old = {k: float(v.value) for k, v in spec_old.__dict__.items() if isinstance(v, Fixed)}
-params_old = {k: float(v.value) for k, v in spec_old._fixed_params.items() if hasattr(v, "value")}
-sed_old_vals = list(spec_old.__dict__.values())
 params_old = {
     "sfh_tsnorm_log_peak_sfr": 0.8,
     "sfh_tsnorm_peak_lbt_gyr": 5.0,

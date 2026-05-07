@@ -25,7 +25,7 @@ Compare three nebular emission models: BakedIn (embedded in SSP),
 CloudyGrid (photoionization tables), and Cue (neural emulator).
 Shows how backend choice affects emission line strengths.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-139
+.. GENERATED FROM PYTHON SOURCE LINES 9-136
 
 .. code-block:: Python
 
@@ -100,9 +100,6 @@ Shows how backend choice affects emission line strengths.
         redshift=Fixed(0.1),
     )
     model_old = SEDModel(spec_old, ssp)
-    params_old = {k: float(v.value) for k, v in spec_old.__dict__.items() if isinstance(v, Fixed)}
-    params_old = {k: float(v.value) for k, v in spec_old._fixed_params.items() if hasattr(v, "value")}
-    sed_old_vals = list(spec_old.__dict__.values())
     params_old = {
         "sfh_tsnorm_log_peak_sfr": 0.8,
         "sfh_tsnorm_peak_lbt_gyr": 5.0,
