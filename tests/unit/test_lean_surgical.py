@@ -20,6 +20,7 @@ from tengri.inference.jit_engine import (
     _SHARED_GRAD_FN_CACHE,
     _SHARED_LOGDENSITY_FN_CACHE,
     _SHARED_LOSS_FN_CACHE,
+    _SHARED_SIGNAL_RESPONSE_CACHE,
     clear_shared_caches,
 )
 
@@ -50,6 +51,15 @@ def test_clear_shared_caches_inference_body_scope():
         "Logdensity cache should survive inference_body clear"
     )
 
+    # Signal-response cache is forward-model artefact — survives inference_body
+    _SHARED_SIGNAL_RESPONSE_CACHE[("sigresp_key",)] = "sigresp_value"
+    clear_shared_caches(scope="inference_body", drop_xla=False)
+    assert len(_SHARED_SIGNAL_RESPONSE_CACHE) > 0, (
+        "Signal-response cache should survive inference_body clear "
+        "(its key shape doesn't match keep_sig prefix; clearing it would silently "
+        "wipe a useful forward compile every Fitter.run)"
+    )
+
     # Structural cache should survive
     assert len(_STRUCTURAL_KERNEL_CACHE) > 0, (
         "Structural cache should survive inference_body clear"
@@ -61,6 +71,7 @@ def test_clear_shared_caches_all_scope():
     """scope='all' (default) drops everything."""
     # Populate all caches
     _SHARED_ENGINE_CACHE[("engine_key",)] = "engine_value"
+    _SHARED_SIGNAL_RESPONSE_CACHE[("sigresp_key",)] = "sigresp_value"
     _SHARED_LOSS_FN_CACHE[("loss_key",)] = "loss_value"
     _SHARED_GRAD_FN_CACHE[("grad_key",)] = "grad_value"
     _SHARED_LOGDENSITY_FN_CACHE[("logdensity_key",)] = "logdensity_value"
@@ -74,6 +85,7 @@ def test_clear_shared_caches_all_scope():
 
     # All caches should be empty
     assert len(_SHARED_ENGINE_CACHE) == 0, "Engine cache should be cleared"
+    assert len(_SHARED_SIGNAL_RESPONSE_CACHE) == 0, "Signal-response cache should be cleared"
     assert len(_SHARED_LOSS_FN_CACHE) == 0, "Loss cache should be cleared"
     assert len(_SHARED_GRAD_FN_CACHE) == 0, "Grad cache should be cleared"
     assert len(_SHARED_LOGDENSITY_FN_CACHE) == 0, "Logdensity cache should be cleared"

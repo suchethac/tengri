@@ -260,9 +260,11 @@ def clear_shared_caches(
           logdensity fns, prediction kernels, per-model caches, and JAX's
           XLA cache (if ``drop_xla=True``). Used by ``tengri.gc()``.
         - ``"inference_body"``: Drop only the heavy inference-loop body
-          (``_SHARED_ENGINE_CACHE``) and per-model caches; preserve
+          (``_SHARED_ENGINE_CACHE``); preserve every forward-model
+          cache (``_SHARED_SIGNAL_RESPONSE_CACHE``,
           ``_SHARED_LOSS_FN_CACHE``, ``_SHARED_GRAD_FN_CACHE``,
-          ``_SHARED_LOGDENSITY_FN_CACHE``, and structural kernel caches.
+          ``_SHARED_LOGDENSITY_FN_CACHE``, ``_SHARED_LOGLIK_FN_CACHE``,
+          structural kernels) and per-model caches.
           Suitable for ``lean()`` context manager — keeps shareable forward
           compiles across phases.
 
@@ -322,8 +324,14 @@ def clear_shared_caches(
                 for k in stale:
                     cache.pop(k, None)
 
+    # Engine cache is the heavy inference-loop artefact (5-6 GB).
+    # Signal-response is a forward-model JIT keyed on _engine_cache_key()
+    # (a different shape from compile_signature) — keep_sig prefix
+    # matching cannot preserve it, so clearing it on every Fitter.run
+    # would silently nuke a useful forward compile. Treat it like the
+    # other forward-model caches (loss/grad/logdensity) and only drop
+    # it at scope="all".
     _drop(_SHARED_ENGINE_CACHE, _SHARED_ENGINE_CACHE_LOCK)
-    _drop(_SHARED_SIGNAL_RESPONSE_CACHE, _SHARED_SIGNAL_RESPONSE_CACHE_LOCK)
 
     if keep_sig is None:
         from tengri.inference._model_cache import _caches as _per_model_caches
@@ -332,6 +340,8 @@ def clear_shared_caches(
 
     # For scope="all", also drop structural kernels and all shared function caches
     if scope == "all":
+        with _SHARED_SIGNAL_RESPONSE_CACHE_LOCK:
+            _SHARED_SIGNAL_RESPONSE_CACHE.clear()
         with _SHARED_LOSS_FN_CACHE_LOCK:
             _SHARED_LOSS_FN_CACHE.clear()
         with _SHARED_GRAD_FN_CACHE_LOCK:
