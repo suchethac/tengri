@@ -151,7 +151,7 @@ def precompute_skirtor_photometry(
     }
 
 
-def build_skirtor_photometry_lookup(precomp: dict):
+def build_skirtor_photometry_lookup(precomp: dict, grid_arrays_traced: tuple | None = None):
     """Build a JIT-compiled SKIRTOR torus photometry function.
 
     Uses triweight interpolation for C²-continuous gradients.
@@ -161,6 +161,11 @@ def build_skirtor_photometry_lookup(precomp: dict):
     precomp : dict
         Output of :func:`precompute_skirtor_photometry` or :func:`precompute`
         (the Protocol-shaped entry point).
+    grid_arrays_traced : tuple or None, optional
+        Tuple of (grid_phot, axes) to pass as JIT-traced arguments instead of
+        capturing them in closure. When None (default), captures from precomp
+        for backward compatibility. Threading these as kwargs avoids closure-
+        captured XLA constants. Default: None.
 
     Returns
     -------
@@ -169,7 +174,10 @@ def build_skirtor_photometry_lookup(precomp: dict):
 
             fn(agn_log_lbol, agn_tau_skirtor, agn_p_skirtor,
                agn_q_skirtor, agn_oa_skirtor, agn_cos_inc,
-               agn_torus_frac) -> ndarray, shape (n_filters,)
+               agn_torus_frac, *grid_arrays_traced) -> ndarray, shape (n_filters,)
+
+        When grid_arrays_traced is provided, the returned function expects
+        (grid_phot, axes) as additional positional arguments.
 
         Returns torus L_ν [erg/s/Hz].  Caller applies
         ``flux_scale = (1+z) / (4π d_L²)`` to get flux density.
@@ -191,11 +199,69 @@ def build_skirtor_photometry_lookup(precomp: dict):
     gradients for autodiff, unlike nearest-neighbor or linear interpolation.
     This is important for robust inference when SKIRTOR parameters are
     fitted via gradient descent.
+
+    **Compile-time performance**: Passing grid_arrays_traced avoids closure-
+    captured constants in XLA, reducing HLO size and compile time.
     """
     grid_phot = precomp["grid_phot"]
     axes = precomp["axes"]
     edges = tuple(edges_for_grid(ax) for ax in axes)
 
+    if grid_arrays_traced is not None:
+        # Runtime-passed arrays (JIT-traced): no closure capture
+        @jax.jit
+        def skirtor_phot(
+            agn_log_lbol,
+            agn_tau_skirtor,
+            agn_p_skirtor,
+            agn_q_skirtor,
+            agn_oa_skirtor,
+            agn_cos_inc,
+            agn_torus_frac,
+            grid_phot_traced,
+            axes_traced,
+        ):
+            """Compute SKIRTOR torus photometry via triweight interpolation on 5D grid.
+
+            Returns filter-integrated L_nu [erg/s/Hz] at runtime.
+            """
+            edges_traced = tuple(edges_for_grid(ax) for ax in axes_traced)
+            l_bol_lsun = 10.0**agn_log_lbol
+            point = (
+                agn_tau_skirtor,
+                agn_p_skirtor,
+                agn_q_skirtor,
+                agn_oa_skirtor,
+                agn_cos_inc,
+            )
+            phot_per_lsun = interp_nd_triweight(grid_phot_traced, axes_traced, edges_traced, point)
+            return l_bol_lsun * agn_torus_frac * phot_per_lsun
+
+        # Return wrapper that inserts traced arrays
+        def wrapper(
+            agn_log_lbol,
+            agn_tau_skirtor,
+            agn_p_skirtor,
+            agn_q_skirtor,
+            agn_oa_skirtor,
+            agn_cos_inc,
+            agn_torus_frac,
+        ):
+            return skirtor_phot(
+                agn_log_lbol,
+                agn_tau_skirtor,
+                agn_p_skirtor,
+                agn_q_skirtor,
+                agn_oa_skirtor,
+                agn_cos_inc,
+                agn_torus_frac,
+                grid_arrays_traced[0],
+                grid_arrays_traced[1],
+            )
+
+        return wrapper
+
+    # Backward-compatibility: closure-captured (original behavior)
     @jax.jit
     def skirtor_phot(
         agn_log_lbol,

@@ -277,8 +277,10 @@ class PrecomputedData:
     igm_at_effective_wavelengths: jnp.ndarray | None = None  # IGM T(λ_eff) for fixed z
     effective_bandwidths_hz: jnp.ndarray | None = None  # Voronoi Δν per filter (Hz)
     dust_ir_lookup: object | None = None  # Preintegrated template-based dust IR photometry
-    kd_preintegrated: object | None = None  # KDPreintegratedData for K&D AGN disc
+    dust_ir_grid_arrays: tuple | None = None  # JIT-traceable IR grid arrays (phonetic-shaped)
     skirtor_preintegrated: object | None = None  # Preintegrated SKIRTOR torus photometry lookup
+    skirtor_grid_arrays: tuple | None = None  # JIT-traceable SKIRTOR grid arrays (grid_phot, axes)
+    kd_preintegrated: object | None = None  # KDPreintegratedData for K&D AGN disc
     silva04_preintegrated: object | None = None  # Preintegrated Silva+04 torus photometry lookup
     cat3d_preintegrated: object | None = None  # Preintegrated CAT3D-Wind torus photometry lookup
     # ── Shelved precomputes ───────────────────────────────────────────

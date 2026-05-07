@@ -728,9 +728,11 @@ class SEDModel:
 
         Returns
         -------
-        object or None
-            JIT-compiled ``(L_absorbed, *grid_params) -> phot[n_filters]``
-            lookup, or ``None`` for data-missing cases.
+        tuple (lookup, grid_arrays) or (None, None)
+            Tuple of (JIT-compiled lookup, JIT-traceable grid arrays).
+            For template-based models, grid_arrays is a tuple of arrays that
+            can be passed as traced inputs to the lookup function.
+            For analytic models or data-missing cases, returns (None, None).
         """
         import warnings
 
@@ -740,6 +742,7 @@ class SEDModel:
         try:
             from tengri.components.dust.dust_emission_precompute import (
                 build_lookup as build_lookup_template,
+                extract_grid_arrays,
                 precompute_for_model,
             )
 
@@ -751,7 +754,9 @@ class SEDModel:
                 parameters=self.spec,
             )
             if precomp is not None:
-                return build_lookup_template(precomp, model_name=model_name)
+                lookup = build_lookup_template(precomp, model_name=model_name)
+                grid_arrays = extract_grid_arrays(precomp, model_name=model_name)
+                return lookup, grid_arrays
         except Exception as e:
             warnings.warn(
                 f"Failed to precompute dust IR photometry (template path) for "
@@ -776,7 +781,8 @@ class SEDModel:
                     model=model_name,
                 )
                 if precomp is not None:
-                    return build_lookup_analytic(precomp, model=model_name)
+                    lookup = build_lookup_analytic(precomp, model=model_name)
+                    return lookup, None  # Analytic models don't have grid arrays
             except Exception as e:
                 warnings.warn(
                     f"Failed to precompute dust IR photometry (analytic path) for "
@@ -784,9 +790,9 @@ class SEDModel:
                     RuntimeWarning,
                     stacklevel=2,
                 )
-                return None
+                return None, None
 
-        return None
+        return None, None
 
     def _precompute_dust_analytic_photometry(self, model_name: str):
         """Build preintegrated lookup for a specific analytic dust model.
@@ -970,14 +976,16 @@ class SEDModel:
         # Dust IR emission template preintegration (for hybrid kernel, fixed z)
         # For template-based dust models (DL07, Dale2014, etc.), pre-integrate
         # templates through filters at init time for fast runtime triweight lookup.
+        # Also extract grid arrays for threading as JIT-traced inputs (Phase II-3).
         dust_ir_lookup = None
+        dust_ir_grid_arrays = None
         if (
             precompute
             and self._z_fixed is not None
             and self.filter_waves is not None
             and self._dust_emission_model is not None
         ):
-            dust_ir_lookup = self._precompute_dust_ir_photometry()
+            dust_ir_lookup, dust_ir_grid_arrays = self._precompute_dust_ir_photometry()
 
         # Analytic dust emission model preintegration (PR 3).
         # Pre-integrate modified_blackbody, casey2012, pah_drude through filters
@@ -1049,6 +1057,7 @@ class SEDModel:
         # Pre-integrate SKIRTOR torus templates through filters at init time for
         # fast filter-level triweight lookup instead of wavelength-level computation.
         skirtor_preint = None
+        skirtor_grid_arrays = None
         if (
             precompute
             and self._z_fixed is not None
@@ -1069,7 +1078,11 @@ class SEDModel:
                     self.filter_trans,
                     redshift=float(self._z_fixed),
                 )
-                skirtor_preint = build_skirtor_photometry_lookup(_precomp)
+                # Store grid arrays as JIT-traced kwargs to avoid closure capture
+                skirtor_grid_arrays = (_precomp["grid_phot"], _precomp["axes"])
+                skirtor_preint = build_skirtor_photometry_lookup(
+                    _precomp, grid_arrays_traced=skirtor_grid_arrays
+                )
             except Exception as e:
                 warnings.warn(
                     f"SKIRTOR torus preintegration failed: {e}. "
@@ -1077,6 +1090,7 @@ class SEDModel:
                     RuntimeWarning,
                     stacklevel=2,
                 )
+                skirtor_grid_arrays = None
 
         # Silva+04 AGN torus preintegration
         # Pre-integrate through filters at init time for fast triweight lookup.
@@ -1413,11 +1427,13 @@ class SEDModel:
             igm_at_effective_wavelengths=igm_eff,
             effective_bandwidths_hz=eff_bw,
             dust_ir_lookup=dust_ir_lookup,
+            dust_ir_grid_arrays=dust_ir_grid_arrays,
             modified_blackbody_preintegrated=modified_blackbody_preint,
             casey2012_preintegrated=casey2012_preint,
             pah_drude_preintegrated=pah_drude_preint,
             kd_preintegrated=kd_preint,
             skirtor_preintegrated=skirtor_preint,
+            skirtor_grid_arrays=skirtor_grid_arrays,
             silva04_preintegrated=silva04_preint,
             cat3d_preintegrated=cat3d_preint,
             powerlaw_disc_preintegrated=powerlaw_disc_preint,
@@ -1803,9 +1819,10 @@ class SEDModel:
 
         Notes
         -----
-        **JIT-compatible**: no — computes SED components via
-        :func:`_compute_sed_components` which is not JIT'd. For JIT-compatible
-        SED access, use :meth:`predict_sed_quantities` instead.
+        **JIT-compatible**: no — computes SED components via the
+        orchestrator path (:meth:`predict_via_orchestrator`) which is not
+        JIT'd. For JIT-compatible SED access, use
+        :meth:`predict_sed_quantities` instead.
 
         **Physical units**:
 
@@ -1854,8 +1871,7 @@ class SEDModel:
             return SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
         # Custom rest-frame wavelength grid: interpolate the orchestrator's
         # SED onto it. Pure post-processing — keeps the orchestrator's
-        # internal grid contract (state.wave / state.derived[...]) clean
-        # and matches legacy ``_compute_sed_components(rest_wavelength=...)``
+        # internal grid contract (state.wave / state.derived[...]) clean,
         # at the same accuracy a user gets from
         # ``np.interp(custom_wave, ssp_wave, sed)``.
         wave_target = jnp.asarray(wave)
@@ -2439,9 +2455,7 @@ class SEDModel:
         # NebularSEDComponent. The orchestrator's nebular adapter calls
         # ``predict_nebular_line_luminosities`` with SSP-derived
         # ``ssp_weights`` + ``ssp_log_ages_yr`` and the canonical
-        # neb_logZ_gas → absolute-log10(Z) translation, so the
-        # luminosities match the legacy ``_compute_sed_components``
-        # path within numerical tolerance.
+        # neb_logZ_gas → absolute-log10(Z) translation.
         state = self.predict_via_orchestrator(params)
         if "line_waves" not in state.derived or "line_lums" not in state.derived:
             raise ValueError(
@@ -3504,7 +3518,11 @@ class SEDModel:
             # Evolving-Z / chem-evol: the end-to-end JIT has no met-table path;
             # fall back to the REST-SED kernel + Python filter integration.
             if self._met_mode == "ramp" or self._met_mode == "chem_evol":
-                rest_sed = self._compute_rest_sed_compositional(params)
+                rest_sed = self._compute_rest_sed_compositional(
+                    params,
+                    ssp_flux_traced=self.ssp_data.ssp_flux,
+                    ssp_lgmet_traced=self.ssp_data.ssp_lgmet,
+                )
                 z = self._get_redshift(params)
                 dl_cm = self._get_dl_cm(params)
                 return observe_photometry_from_rest_sed(
@@ -3528,7 +3546,11 @@ class SEDModel:
                 sfr_on_ssp, self._jit_safe_params(params), sfr_internal=sfr
             )
 
-        rest_sed = self._compute_rest_sed_compositional(params)
+        rest_sed = self._compute_rest_sed_compositional(
+            params,
+            ssp_flux_traced=self.ssp_data.ssp_flux,
+            ssp_lgmet_traced=self.ssp_data.ssp_lgmet,
+        )
         z = self._get_redshift(params)
         dl_cm = self._get_dl_cm(params)
         return observe_photometry_from_rest_sed(
@@ -3701,7 +3723,11 @@ class SEDModel:
             )
             # Apply LSF if needed (below)
         else:
-            rest_sed = self._compute_rest_sed_compositional(params)
+            rest_sed = self._compute_rest_sed_compositional(
+                params,
+                ssp_flux_traced=self.ssp_data.ssp_flux,
+                ssp_lgmet_traced=self.ssp_data.ssp_lgmet,
+            )
             z = self._get_redshift(params)
             dl_cm = self._get_dl_cm(params)
 
@@ -3729,7 +3755,9 @@ class SEDModel:
 
         return flux
 
-    def _compute_rest_sed_compositional(self, params):
+    def _compute_rest_sed_compositional(
+        self, params, ssp_flux_traced=None, ssp_lgmet_traced=None, ssp_alpha_fe_traced=None
+    ):
         """Compute rest-frame SED via the compositional JIT kernel.
 
         Handles SFH computation, metallicity interpolation, and delegates
@@ -3739,6 +3767,15 @@ class SEDModel:
         ----------
         params : dict
             Parameter values (public names).
+        ssp_flux_traced : ndarray, optional
+            Traced override for ``model.ssp_data.ssp_flux``. When provided
+            with ``ssp_lgmet_traced``, the SSP arrays enter the JIT graph as
+            runtime tensors instead of closure-captured constants
+            (Phase III trace path; see ``docs/dev/quickstart_oom_diagnosis.md``).
+        ssp_lgmet_traced : ndarray, optional
+            Traced override for ``model.ssp_data.ssp_lgmet``.
+        ssp_alpha_fe_traced : ndarray, optional
+            Traced override for ``model.ssp_data.ssp_alpha_fe``.
 
         Returns
         -------
@@ -3841,14 +3878,23 @@ class SEDModel:
             _log_z = p.get("log_z_abs", p.get("log_z_abs_final", -1.8477))
         if _use_alpha_fe:
             alpha_fe = p.get("alpha_fe", 0.0)
-            ssp_flux_at_z = interp_met_alpha_dispatch(self, _log_z, alpha_fe)
+            ssp_flux_at_z = interp_met_alpha_dispatch(
+                self,
+                _log_z,
+                alpha_fe,
+                ssp_flux=ssp_flux_traced,
+                ssp_lgmet=ssp_lgmet_traced,
+                ssp_alpha_fe=ssp_alpha_fe_traced,
+            )
         elif self._met_mode in ("ramp", "chem_evol"):
             # Evolving-Z paths still use single-Z bilinear interp at a
             # representative metallicity. Closure-A's per-age MDF would
             # require the full per-age log_z table here, which is the
             # remit of pipeline.py's ramp/chem_evol closure-A branches —
             # not migrated to this single-Z fallback yet.
-            ssp_flux_at_z = interp_metallicity(self, _log_z)
+            ssp_flux_at_z = interp_metallicity(
+                self, _log_z, ssp_flux=ssp_flux_traced, ssp_lgmet=ssp_lgmet_traced
+            )
         else:
             # CLOSURE-A: replace legacy ``sfr_on_ssp * _csp_age_dt`` (rectangle
             # rule, set above) + ``interp_metallicity`` (single-Z bilinear,
@@ -3876,14 +3922,20 @@ class SEDModel:
             _lgmet_scatter_unfused = float(
                 p.get("lgmet_scatter", getattr(self, "_lgmet_scatter", 0.2))
             )
+            _ssp_flux_use = (
+                ssp_flux_traced if ssp_flux_traced is not None else self.ssp_data.ssp_flux
+            )
+            _ssp_lgmet_use = (
+                ssp_lgmet_traced if ssp_lgmet_traced is not None else self.ssp_data.ssp_lgmet
+            )
             _dsps_result_unfused = calc_rest_sed_sfh_table_lognormal_mdf(
                 gal_t_table=_t_cosmic_asc,
                 gal_sfr_table=_sfr_asc,
                 gal_lgmet=_log_z,
                 gal_lgmet_scatter=_lgmet_scatter_unfused,
-                ssp_lgmet=self.ssp_data.ssp_lgmet,
+                ssp_lgmet=_ssp_lgmet_use,
                 ssp_lg_age_gyr=self.ssp_data.ssp_lg_age_gyr,
-                ssp_flux=self.ssp_data.ssp_flux,
+                ssp_flux=_ssp_flux_use,
                 t_obs=_t_obs_gyr_unfused,
             )
             _weights_2d_unfused = _dsps_result_unfused.weights * _total_mass
@@ -3892,7 +3944,7 @@ class SEDModel:
             ssp_flux_at_z = jnp.einsum(
                 "ma,maw->aw",
                 _weights_2d_unfused / _w_safe_unfused[None, :],
-                self.ssp_data.ssp_flux,
+                _ssp_flux_use,
             )
 
         # Enrich p with the canonical 10 Myr time-weighted SFR for X-ray model
