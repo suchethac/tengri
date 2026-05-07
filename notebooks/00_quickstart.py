@@ -198,12 +198,12 @@ warnings.filterwarnings(
 )
 _z_q = 0.1
 spec_pan = Parameters(
-    mean_sfh_type="dense_basis",
-    sfh_db_log_total_mass=Fixed(10.0),
-    sfh_db_log_sfr_inst=Fixed(0.5),
-    sfh_db_tx_frac_0=Fixed(0.2),
-    sfh_db_tx_frac_1=Fixed(0.4),
-    sfh_db_tx_frac_2=Fixed(0.4),
+    mean_sfh_type="tsnorm",
+    sfh_tsnorm_log_peak_sfr=Fixed(1.5),
+    sfh_tsnorm_peak_lbt_gyr=Fixed(5.0),
+    sfh_tsnorm_width_gyr=Fixed(3.0),
+    sfh_tsnorm_skew=Fixed(0.5),
+    sfh_tsnorm_trunc=Fixed(1.0),
     met_logzsol=Fixed(0.0),
     dust_tau_bc=Fixed(0.8),
     dust_tau_diff=Fixed(0.4),
@@ -250,17 +250,17 @@ del (
 # %%
 # Define 7-parameter model (dense basis SFH + stellar mass, metallicity, dust)
 spec_param = Parameters(
-    sfh_db_log_total_mass=Uniform(8, 12),
-    sfh_db_log_sfr_inst=Uniform(-2, 3),
-    sfh_db_tx_frac_0=Uniform(0.05, 0.95),
-    sfh_db_tx_frac_1=Uniform(0.05, 0.95),
-    sfh_db_tx_frac_2=Uniform(0.05, 0.95),
+    mean_sfh_type="tsnorm",
+    sfh_tsnorm_log_peak_sfr=Fixed(1.5),
+    sfh_tsnorm_peak_lbt_gyr=Fixed(5.0),
+    sfh_tsnorm_width_gyr=Fixed(3.0),
+    sfh_tsnorm_skew=Fixed(0.5),
+    sfh_tsnorm_trunc=Fixed(1.0),
     met_logzsol=Uniform(-2.0, 0.2),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 1.5),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    mean_sfh_type="dense_basis",
 )
 print(f"Free parameters ({spec_param.n_free}): {', '.join(spec_param.free_params)}")
 
@@ -289,11 +289,6 @@ print(f"Forward model: {t_raw:.1f} ms (raw) → {t_jit:.0f} µs (JIT)")
 key = jax.random.PRNGKey(42)
 true_params_param = spec_param.sample(key)
 true_params_param = {**true_params_param}
-true_params_param["sfh_db_log_total_mass"] = jnp.array(10.5)
-true_params_param["sfh_db_log_sfr_inst"] = jnp.array(1.30)  # ~20 Msun/yr now
-true_params_param["sfh_db_tx_frac_0"] = jnp.array(0.05)  # 5% of mass by tx_0
-true_params_param["sfh_db_tx_frac_1"] = jnp.array(0.18)  # 18% of mass by tx_1
-true_params_param["sfh_db_tx_frac_2"] = jnp.array(0.45)  # 45% of mass by tx_2
 true_params_param["met_logzsol"] = jnp.array(-0.1)
 true_params_param["dust_tau_bc"] = jnp.array(0.5)
 true_params_param["dust_tau_diff"] = jnp.array(0.3)
