@@ -177,7 +177,7 @@ params = spec_full.sample(jax.random.PRNGKey(42))
 # %% [markdown]
 # ## Section 1: Panchromatic SED decomposition (X-ray → radio)
 #
-# We use the forward pipeline's `compute_sed_components()` to obtain each physical
+# We use ``model.predict_via_orchestrator()`` to obtain each physical
 # emission channel in a **single** consistent call. All outputs are in
 # erg s⁻¹ Hz⁻¹ (CGS); we convert to νL_ν [L☉] for the plot so different
 # wavelength decades are directly comparable.
@@ -188,22 +188,35 @@ params = spec_full.sample(jax.random.PRNGKey(42))
 
 # %%
 import matplotlib.ticker as ticker
-from tengri.forward.pipeline import compute_sed_components
 
 # ── Wavelength / frequency grids ────────────────────────────────────────────
+# Use the orchestrator's native wave grid (X-ray to radio, fixed at chain
+# build time) and interpolate display-side — keeps every component on a
+# single physically-consistent grid. ``predict_via_orchestrator`` is the
+# public bridge that replaced the old private ``compute_sed_components``
+# during the SEDComponent refactor (2026-04 → 05).
 _C_AA_S = 2.99792458e18  # speed of light in Å s⁻¹
 _LSUN_ERG = 3.828e33  # IAU 2015 nominal solar luminosity [erg/s]
 
-# 0.12 Å (≈100 keV hard X-ray) → 3×10^11 Å (≈300 MHz radio)
-_WAVE_AA = np.logspace(np.log10(0.12), np.log10(3e11), 3000)
-_WAVE_UM = _WAVE_AA * 1e-4  # μm  (primary axis)
-_NU_HZ = _C_AA_S / _WAVE_AA  # Hz
-
 # ── Compute all SED components at z = 0 (rest-frame) ────────────────────────
 _params_z0 = {**params, "redshift": jnp.array(0.0)}
-_comp = compute_sed_components(
-    model_full, _params_z0, need_intrinsic=True, rest_wavelength=jnp.array(_WAVE_AA)
-)
+_state = model_full.predict_via_orchestrator(_params_z0)
+
+# A second pass with dust τ → 0 gives the **intrinsic stellar+nebular**
+# spectrum (dashed reference in the figure). This is the cleanest way
+# to recover the pre-attenuation curve under the SEDComponent API —
+# state.derived no longer caches it as a standalone key.
+_params_nodust = {
+    **_params_z0,
+    "dust_tau_bc": jnp.array(0.0),
+    "dust_tau_diff": jnp.array(0.0),
+}
+_state_nodust = model_full.predict_via_orchestrator(_params_nodust)
+
+# Native chain wave grid (panchromatic 0.1 Å → 3×10¹¹ Å, ~6000 points).
+_WAVE_AA = np.asarray(_state.wave)
+_WAVE_UM = _WAVE_AA * 1e-4  # μm (primary axis)
+_NU_HZ = _C_AA_S / _WAVE_AA  # Hz
 
 
 def _nulnu(lnu):
@@ -211,14 +224,19 @@ def _nulnu(lnu):
     return np.maximum(np.array(lnu) * _NU_HZ / _LSUN_ERG, 0.0)
 
 
+# ``state.sed_intrinsic`` is the running total threaded through the
+# component chain (stellar → nebular → dust attenuation → dust IR →
+# radio → x-ray) and at the end equals the panchromatic sum. The
+# individual components are exposed as separate keys in ``state.derived``.
+_d = _state.derived
 _nl = {
-    "intrinsic": _nulnu(_comp["sed_intrinsic"]),
-    "stellar": _nulnu(_comp["sed_attenuated"]),
-    "nebular": _nulnu(_comp["sed_nebular"]),
-    "dust_ir": _nulnu(_comp["sed_dust_ir"]),
-    "xray": _nulnu(_comp["sed_xray"]),
-    "radio": _nulnu(_comp["sed_radio"]),
-    "total": _nulnu(_comp["sed_total"]),
+    "intrinsic": _nulnu(_state_nodust.derived["sed_dust_attenuated"]),
+    "stellar": _nulnu(_d["sed_dust_attenuated"]),
+    "nebular": _nulnu(_d["sed_nebular"]),
+    "dust_ir": _nulnu(_d["sed_dust_ir"]),
+    "xray": _nulnu(_d["sed_xray"]),
+    "radio": _nulnu(_d["sed_radio"]),
+    "total": _nulnu(_state.sed_intrinsic),
 }
 
 # ── Colour palette (perceptually ordered, colourblind-safe) ─────────────────
@@ -594,7 +612,7 @@ print(
 # %% [markdown]
 # ## What You Learned
 #
-# - Panchromatic anatomy via `compute_sed_components()`
+# - Panchromatic anatomy via `model.predict_via_orchestrator()`
 # - Component isolation: stars, nebular, dust attenuation, IR/radio/X-ray
 # - Redshift + IGM handling is automatic in `predict_spectrum()`
 # - Safe optical-only models for inference

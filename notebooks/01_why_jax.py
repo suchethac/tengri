@@ -53,6 +53,11 @@ if os.path.isdir(os.path.join(_src, "tengri")):
 sys.path.insert(0, _repo_root)
 sys.path.insert(0, _nb_dir)
 
+# nbconvert runs the kernel with cwd = notebooks/. Switch to repo root so
+# relative ``data/...`` paths resolve identically to direct .py execution.
+if os.path.isdir(os.path.join(_repo_root, "data")):
+    os.chdir(_repo_root)
+
 import jax
 import jax.numpy as jnp
 import matplotlib
@@ -144,12 +149,12 @@ def measure_speedup(model, params, n_warmup=1, n_timed=10):
 
     # Warm-up (trigger XLA compile if not cached)
     for _ in range(n_warmup):
-        _ = model.predict_photometry(params, mode="exact")
+        _ = model.predict_photometry(params, mode="compositional")
 
     # Time subsequent calls (pure JIT execution)
     for _ in range(n_timed):
         t0 = time.perf_counter()
-        _ = model.predict_photometry(params, mode="exact")
+        _ = model.predict_photometry(params, mode="compositional")
         times.append((time.perf_counter() - t0) * 1e3)  # ms
 
     return times
@@ -199,23 +204,28 @@ print("\n✓ Saved: notebooks/figures/01_jit_speedup.png")
 # This is why every modern inference method works: MAP (gradient descent), Laplace (curvature), Pathfinder (iterative grad), HMC (alternating forward+grad) all reuse the same model.
 
 # %%
+# Pre-compute a FIXED mock observation at the truth params. This must be
+# evaluated *once* outside the likelihood — earlier versions of this
+# notebook recomputed sed_obs from sed_pred at every call, which collapses
+# χ² to a constant and zeroes the gradient (the figure was numerical noise).
+_sed_obs_fixed = model.predict_photometry(params, mode="compositional")
+_noise_fixed = _sed_obs_fixed * 0.1     # 10% fractional uncertainty
+
 def log_likelihood_chi2(params_dict, model):
     """Negative χ² likelihood for the 7-D model.
 
-    In practice, the observed SED is a real photometric catalog; here we
-    mock it as 95% of the model prediction.
+    The observation is fixed at the truth params (set above); only the
+    model prediction varies with `params_dict`, so χ² has real structure.
 
     Returns: log p(data | params) = -0.5 * χ²
     """
-    sed_pred = model.predict_photometry(params_dict, mode="exact")
-    sed_obs = sed_pred * 0.95  # mock observation
-    noise = sed_pred * 0.1     # 10% fractional uncertainty
-    chi2 = jnp.sum(((sed_pred - sed_obs) / noise) ** 2)
+    sed_pred = model.predict_photometry(params_dict, mode="compositional")
+    chi2 = jnp.sum(((sed_pred - _sed_obs_fixed) / _noise_fixed) ** 2)
     return -0.5 * chi2
 
 # Compile forward pass
 print("\nCompiling forward model for gradient computation...")
-sed = model.predict_photometry(params, mode="exact")
+sed = model.predict_photometry(params, mode="compositional")
 print(f"  Model output: shape {sed.shape}, range [{sed.min():.2e}, {sed.max():.2e}] erg/s/Hz")
 
 # Define and JIT the gradient function. We close over `model` so JAX doesn't
@@ -239,7 +249,7 @@ grad_time = (time.perf_counter() - t0) / n_evals * 1e3
 
 t0 = time.perf_counter()
 for _ in range(n_evals):
-    _ = model.predict_photometry(params, mode="exact")
+    _ = model.predict_photometry(params, mode="compositional")
     _ = _.block_until_ready()
 fwd_time = (time.perf_counter() - t0) / n_evals * 1e3
 
@@ -257,6 +267,137 @@ print("  • Pathfinder (iterative grad):      ~10–50 steps → ~500 ms")
 print("  • HMC (50 steps per sample):        ~50 steps × 3× per sample")
 print("  • VI (gradient of ELBO):            scales with latent dimension")
 print("\n  All use the same forward model and gradient. No reimplementation.")
+
+# %% [markdown]
+# ---
+#
+# ### Figure A: Gradient Field over Likelihood Landscape
+#
+# The gradient at each point in parameter space tells us the direction of steepest ascent.
+# Here we visualize a 2D slice of the log-likelihood landscape (over dust_tau_diff and met_logzsol)
+# with the gradient field overlaid as arrows. This shows that automatic differentiation gives
+# directionally-meaningful gradients everywhere — even far from the truth.
+
+# %%
+print("\n" + "="*70)
+print("FIGURE A: GRADIENT FIELD LANDSCAPE")
+print("="*70)
+
+import matplotlib.patches as mpatches
+
+# Create a grid over the two focal parameters
+n_grid = 30
+dust_tau_diff_range = np.linspace(0.01, 1.5, n_grid)
+met_logzsol_range = np.linspace(-2, 0.2, n_grid)
+dust_grid, met_grid = np.meshgrid(dust_tau_diff_range, met_logzsol_range)
+
+# Truth point
+params_truth = spec.sample(jax.random.PRNGKey(42))
+truth_dust = params_truth["dust_tau_diff"]
+truth_met = params_truth["met_logzsol"]
+
+print(f"\nTruth: dust_tau_diff={truth_dust:.3f}, met_logzsol={truth_met:.3f}")
+
+# Function to evaluate log-likelihood at a single point
+def eval_ll_at_point(dust_val, met_val):
+    """Evaluate log-likelihood with fixed dust_tau_diff and met_logzsol."""
+    p = params.copy()
+    p["dust_tau_diff"] = dust_val
+    p["met_logzsol"] = met_val
+    return log_likelihood_chi2(p, model)
+
+# Vectorize over the grid: build a 2D array of log-likelihoods
+# Using vmap to avoid Python loops
+vmap_over_dust = jax.vmap(
+    lambda d: jax.vmap(
+        lambda m: eval_ll_at_point(d, m)
+    )(met_logzsol_range),
+    in_axes=(0,)
+)
+ll_grid = vmap_over_dust(dust_tau_diff_range)
+
+print(f"Log-likelihood grid shape: {ll_grid.shape}")
+print(f"Log-likelihood range: [{ll_grid.min():.2f}, {ll_grid.max():.2f}]")
+
+# Compute gradients at grid points using vmap(grad())
+def grad_ll_at_point(dust_val, met_val):
+    """Gradient of log-likelihood w.r.t. both parameters."""
+    p = params.copy()
+    p["dust_tau_diff"] = dust_val
+    p["met_logzsol"] = met_val
+
+    # Gradient w.r.t. just these two
+    def ll_partial(d, m):
+        p2 = p.copy()
+        p2["dust_tau_diff"] = d
+        p2["met_logzsol"] = m
+        return log_likelihood_chi2(p2, model)
+
+    grad_fn = jax.grad(ll_partial, argnums=(0, 1))
+    return grad_fn(dust_val, met_val)
+
+# Compute gradient field via double vmap
+print("\nComputing gradient field (vmap over 900 grid points)...")
+
+# Build gradient grid manually: for each dust and met, compute grad
+grad_dust = np.zeros((n_grid, n_grid))
+grad_met = np.zeros((n_grid, n_grid))
+
+for i, d in enumerate(dust_tau_diff_range):
+    for j, m in enumerate(met_logzsol_range):
+        g_d, g_m = grad_ll_at_point(d, m)
+        grad_dust[i, j] = float(g_d)
+        grad_met[i, j] = float(g_m)
+
+# Normalize gradient field for quiver plotting
+grad_mag = np.sqrt(grad_dust**2 + grad_met**2)
+grad_dust_norm = np.where(grad_mag > 1e-8, grad_dust / grad_mag, 0)
+grad_met_norm = np.where(grad_mag > 1e-8, grad_met / grad_mag, 0)
+
+# Create figure with contours + quiver
+fig, ax = plt.subplots(figsize=(9, 6.5))
+
+# Contour plot of log-likelihood
+levels = np.linspace(ll_grid.min(), ll_grid.max(), 15)
+contour = ax.contourf(dust_grid, met_grid, ll_grid, levels=levels, cmap="viridis", alpha=0.7)
+cs = ax.contour(dust_grid, met_grid, ll_grid, levels=levels[::2], colors="white", linewidths=0.5, alpha=0.3)
+
+# Quiver field (subsample to avoid clutter)
+stride = 4
+dust_sub = dust_grid[::stride, ::stride]
+met_sub = met_grid[::stride, ::stride]
+grad_dust_sub = grad_dust_norm[::stride, ::stride]
+grad_met_sub = grad_met_norm[::stride, ::stride]
+
+ax.quiver(
+    dust_sub,
+    met_sub,
+    grad_dust_sub,
+    grad_met_sub,
+    color="white",
+    alpha=0.7,
+    scale=25,
+    width=0.003
+)
+
+# Mark truth
+ax.plot(truth_dust, truth_met, "r*", markersize=20, markeredgecolor="white", markeredgewidth=1.5, label="Truth")
+
+ax.set_xlabel(r"$\tau_{\rm dust, diff}$", fontsize=12)
+ax.set_ylabel(r"$\log_{10}(Z/Z_\odot)$", fontsize=12)
+ax.set_title("Gradient Field: Log-Likelihood Landscape", fontweight="bold", fontsize=13)
+ax.legend(fontsize=11, loc="upper right", frameon=False)
+
+# Colorbar
+cbar = fig.colorbar(contour, ax=ax, label="Log-likelihood")
+cbar.ax.tick_params(labelsize=10)
+
+plt.tight_layout()
+os.makedirs("notebooks/figures", exist_ok=True)
+plt.savefig("notebooks/figures/01_grad_field.png", dpi=200, bbox_inches="tight")
+plt.close()
+print("✓ Saved: notebooks/figures/01_grad_field.png")
+
 
 # %% [markdown]
 # ---
@@ -286,7 +427,7 @@ def batch_forward(params_batch):
     axis 0 of each entry produces a stacked photometry array (n_galaxies, n_bands).
     """
     def single_galaxy(param_dict):
-        return model.predict_photometry(param_dict, mode="exact")
+        return model.predict_photometry(param_dict, mode="compositional")
 
     return jax.vmap(single_galaxy)(params_batch)
 
@@ -306,6 +447,74 @@ print("  No Python loop: ✗")
 print("  No JAX control flow (where): ✗")
 print("  One compiled function: ✓")
 print("  Scales to GPU/TPU naturally: ✓")
+
+# %% [markdown]
+# ---
+#
+# ### Figure B: vmap Throughput Scaling
+#
+# One of vmap's superpowers is that it scales efficiently to larger batches.
+# Here we benchmark the time per galaxy as a function of batch size,
+# comparing a pure JAX vmap vs. a naive Python loop. vmap shows near-constant time per galaxy;
+# the Python loop scales linearly (overhead of Python interpreter dominates).
+
+# %%
+print("\n" + "="*70)
+print("FIGURE B: VMAP THROUGHPUT SCALING")
+print("="*70)
+
+# Batch sizes to test
+batch_sizes = np.array([1, 2, 5, 10, 20, 50, 100])
+times_vmap = []
+times_python = []
+
+print(f"\nBenchmarking batch sizes: {batch_sizes}")
+
+for n in batch_sizes:
+    # Generate random parameters
+    params_batch_test = spec.sample_batch(jax.random.PRNGKey(int(n)), n)
+
+    # Warm-up
+    _ = batch_forward(params_batch_test)
+
+    # Time vmap version (3 runs)
+    times = []
+    for _ in range(3):
+        t0 = time.perf_counter()
+        _ = batch_forward(params_batch_test)
+        times.append((time.perf_counter() - t0) * 1e3)
+    times_vmap.append(np.mean(times) / n)  # Per-galaxy time
+
+    # Time Python loop version (3 runs)
+    times = []
+    for _ in range(3):
+        t0 = time.perf_counter()
+        for i in range(n):
+            p_i = {k: v[i] for k, v in params_batch_test.items()}
+            _ = model.predict_photometry(p_i, mode="compositional")
+        times.append((time.perf_counter() - t0) * 1e3)
+    times_python.append(np.mean(times) / n)  # Per-galaxy time
+
+    print(f"  n={n:3d}: vmap={times_vmap[-1]:.3f} ms/gal, python={times_python[-1]:.3f} ms/gal")
+
+# Create figure
+fig, ax = plt.subplots(figsize=(9, 6))
+
+ax.loglog(batch_sizes, times_vmap, "o-", linewidth=2.5, markersize=8,
+          label="JAX vmap", color=plt.cm.tab10(2))
+ax.loglog(batch_sizes, times_python, "s--", linewidth=2.5, markersize=8,
+          label="Python loop", color=plt.cm.tab10(3))
+
+ax.set_xlabel("Batch size (galaxies)", fontsize=12)
+ax.set_ylabel("Time per galaxy [ms]", fontsize=12)
+ax.set_title("vmap Throughput Scaling: JAX vs Python Loops", fontweight="bold", fontsize=13)
+ax.legend(fontsize=11, loc="upper left", frameon=False)
+ax.grid(True, alpha=0.3, which="both", linestyle="--")
+
+plt.tight_layout()
+plt.savefig("notebooks/figures/01_vmap_throughput.png", dpi=200, bbox_inches="tight")
+plt.close()
+print("\n✓ Saved: notebooks/figures/01_vmap_throughput.png")
 
 # %% [markdown]
 # ---

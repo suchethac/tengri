@@ -136,7 +136,10 @@ from tengri import (
 )
 from tengri.observation import Photometry
 
-ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
+# Cue/CloudyGrid backends need a *bare-stellar* SSP (no baked-in nebular).
+# The wNE variants (with-Nebular-Emission baked in) silently under-predict
+# line luminosities by 4–7 dex when fed to Cue — see CueWNESSPWarning.
+ssp_data = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
 print(f"SSP: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]} ages × {ssp_data.ssp_flux.shape[-1]} λ")
 
 # List available nebular backends

@@ -351,7 +351,7 @@ for i in range(0, n_samp, thin):
 draw_median = {}
 for k, v in result_spec.samples.items():
     draw_median[k] = jnp.array(np.percentile(v, 50))
-spec_median = model_spec.predict_spectrum(draw_median, wavelengths=wave_rest)
+spec_median = model_spec.predict_spectrum(draw_median, wave_obs=wave_obs)
 spec_median_np = np.array(spec_median)
 
 ax_spec.plot(wave_obs_np[mask_good], flux_obs_np[mask_good], "o", ms=4,
@@ -413,17 +413,44 @@ plt.show()
 
 # %%
 # --- FIGURE 3: Corner plot ---
-fig = plot_corner_comparison(
-    [result_spec],
-    labels=["NUTS (optical)"],
-    colors=[COLORS.get("mcmc_nuts", "C0")],
-    truths=true_params,
-)
-if fig is not None:
-    fig.suptitle(f"Posterior: Age + Metallicity from Optical Continuum ({spec_param.n_free} parameters, {t_nuts:.0f}s)",
-                 y=1.002)
-    fig.savefig(os.path.join(FIGDIR, "06_corner.png"), dpi=200, bbox_inches="tight")
-plt.show()
+# Lightweight manual corner. ``plot_corner_comparison`` (corner.py KDE)
+# OOMs on macOS jetsam at ~24 GB peak when stacked on a 1000-pixel
+# NUTS graph. Histograms are bounded RSS and adequate for tutorial.
+free_p = list(result_spec.samples.keys())
+n_free_p = len(free_p)
+fig, axes = plt.subplots(n_free_p, n_free_p, figsize=(2 * n_free_p, 2 * n_free_p))
+for i, ki in enumerate(free_p):
+    xi = np.asarray(result_spec.samples[ki])
+    truth_i = float(true_params[ki]) if ki in true_params else None
+    for j, kj in enumerate(free_p):
+        ax2 = axes[i, j]
+        if i == j:
+            ax2.hist(xi, bins=30, color=COLORS.get("mcmc_nuts", "C0"), alpha=0.7, edgecolor="k", lw=0.3)
+            if truth_i is not None:
+                ax2.axvline(truth_i, color=COLORS.get("truth", "C2"), ls="--", lw=1.5)
+        elif j < i:
+            xj = np.asarray(result_spec.samples[kj])
+            ax2.hist2d(xj, xi, bins=30, cmap="Blues", cmin=1)
+            tj = float(true_params[kj]) if kj in true_params else None
+            if truth_i is not None and tj is not None:
+                ax2.plot(tj, truth_i, "*", ms=11, color=COLORS.get("truth", "C2"), mec="k", mew=0.5)
+        else:
+            ax2.set_visible(False)
+        if i < n_free_p - 1:
+            ax2.set_xticklabels([])
+        if j > 0:
+            ax2.set_yticklabels([])
+        if i == n_free_p - 1:
+            ax2.set_xlabel(kj.replace("sfh_lnorm_", "").replace("dust_", "d_").replace("met_", ""), fontsize=8)
+        if j == 0:
+            ax2.set_ylabel(ki.replace("sfh_lnorm_", "").replace("dust_", "d_").replace("met_", ""), fontsize=8)
+        ax2.tick_params(labelsize=7)
+fig.suptitle(f"Posterior: Age + Metallicity from Optical Continuum ({spec_param.n_free} params, {t_nuts:.0f}s)",
+             y=1.001, fontsize=12)
+fig.tight_layout()
+fig.savefig(os.path.join(FIGDIR, "06_corner.png"), dpi=180, bbox_inches="tight")
+plt.close(fig)
+print("✓ Saved 06_corner.png", flush=True)
 
 # %%
 # --- FIGURE 4: SFH recovery ---

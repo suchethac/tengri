@@ -344,23 +344,29 @@ result_map_spec = fitter_spec.run("map", n_steps=300, verbose=False)
 t_map_spec = time.perf_counter() - t0
 print(f"  Completed in {t_map_spec:.1f}s")
 
-# 3. MAP fit on joint data (THE HEADLINE FIT)
-print("\n[3/3] MAP fit on joint photometry + spectroscopy...")
+# 3. NUTS fit on joint data (THE HEADLINE FIT). Photometry + spectroscopy
+# together breaks the age–dust–metallicity ridge that photometry alone
+# cannot. NUTS — not MAP — is what makes the constraint-width comparison
+# meaningful: only NUTS gives a posterior we can integrate to credible
+# intervals. Per the OOM-orchestration rule we run *one* NUTS per process.
+print("\n[3/3] NUTS fit on joint photometry + spectroscopy...")
 data_joint = np.concatenate([np.array(mock_phot.flux_obs), np.array(mock_spec.flux_obs)])
 noise_joint = np.concatenate([np.array(mock_phot.noise), np.array(mock_spec.noise)])
 t0 = time.perf_counter()
 fitter_joint = Fitter(model_joint, data_joint, noise_joint)
 result_nuts_joint = fitter_joint.run(
-    "map",
-    n_steps=300,
-    verbose=False,
+    "mcmc_nuts",
+    n_warmup=300,
+    n_samples=600,
+    dense_mass_matrix=False,  # diagonal mass — small-graph NUTS, ~3× lower compile RSS
+    target_accept_rate=0.85,
+    key=jax.random.PRNGKey(789),
 )
 t_nuts_joint = time.perf_counter() - t0
 print(f"  Completed in {t_nuts_joint:.1f}s")
+print(f"  Divergences: {result_nuts_joint.diagnostics.get('n_divergent', 'n/a')}")
 
 print(f"\n{'Total wall time:':<40s} {t_map_phot + t_map_spec + t_nuts_joint:.1f}s")
-
-print("\nMethod: Three independent MAP fits (point estimates)")
 
 # %%
 # Extract posterior statistics: for MAP, use Laplace covariance (Hessian-based)
@@ -381,54 +387,54 @@ def estimate_laplace_sigma(result_map, param_names):
 map_phot_stats = estimate_laplace_sigma(result_map_phot, spec.free_params)
 map_spec_stats = estimate_laplace_sigma(result_map_spec, spec.free_params)
 
-# For MAP joint fit, extract point estimate
+# NUTS joint posterior — proper percentiles
 nuts_joint_stats = {}
-if result_nuts_joint.samples is None:
-    # MAP result: use point estimate with NaN for credible intervals
-    for name in spec.free_params:
-        med = float(result_nuts_joint.params[name])
-        nuts_joint_stats[name] = (med, np.nan, np.nan)
-else:
-    # NUTS/MCMC result: extract percentiles from posterior samples
-    for name in spec.free_params:
-        samples = result_nuts_joint.samples[name]
-        p16, p50, p84 = np.percentile(samples, [16, 50, 84])
-        nuts_joint_stats[name] = (p50, p16, p84)
+for name in spec.free_params:
+    samples = np.asarray(result_nuts_joint.samples[name])
+    p16, p50, p84 = np.percentile(samples, [16, 50, 84])
+    nuts_joint_stats[name] = (p50, p16, p84)
 
 # %%
-# --- FIGURE 2: Constraint Widths ---
-fig, ax = plt.subplots(figsize=(10, 5))
+# --- FIGURE 2: Constraint widths and MAP recovery ---
+#
+# Pedagogical message: photometry alone leaves the joint age–dust–metallicity
+# direction degenerate. Spectroscopy alone constrains age + Z but lacks dust.
+# Joint NUTS posterior pins all four. We plot the NUTS 1σ width as a bar +
+# the MAP point estimates from each modality so the reader sees both the
+# joint *uncertainty* and the per-modality bias structure simultaneously.
 
-# Parameters to show: age-proxy (alpha), dust (tau_diff), metallicity, birth cloud dust
+fig, ax = plt.subplots(figsize=(11, 5))
 key_params = ["sfh_dpl_alpha", "dust_tau_diff", "met_logzsol", "dust_tau_bc"]
-param_labels = [r"$\alpha$ (SFH slope)", r"$\tau_{\mathrm{diff}}$", r"$\log(Z/Z_\odot)$", r"$\tau_{\mathrm{bc}}$"]
-
-widths_nuts_joint = []
-
-for pname in key_params:
-    med_nj, lo_nj, hi_nj = nuts_joint_stats[pname]
-    width_nj = (hi_nj - lo_nj) / 2.0
-
-    widths_nuts_joint.append(width_nj)
+param_labels = [r"$\alpha$ (SFH slope)", r"$\tau_{\mathrm{diff}}$",
+                r"$\log(Z/Z_\odot)$", r"$\tau_{\mathrm{bc}}$"]
 
 x_pos = np.arange(len(key_params))
-width_bar = 0.6
-
-# Plot NUTS joint widths
-ax.bar(
-    x_pos,
-    widths_nuts_joint,
-    width_bar,
-    label="NUTS (joint)",
-    color=COLORS.get("mcmc_nuts", "C0"),
-    alpha=0.8,
-)
+for i, pname in enumerate(key_params):
+    p50, p16, p84 = nuts_joint_stats[pname]
+    truth_v = float(truth[pname])
+    map_phot = float(result_map_phot.params[pname])
+    map_spec = float(result_map_spec.params[pname])
+    # Joint NUTS 68% credible interval
+    ax.errorbar(i, p50, yerr=[[p50 - p16], [p84 - p50]], fmt="o",
+                ms=10, lw=2, capsize=6,
+                color=COLORS.get("mcmc_nuts", "C0"),
+                label="NUTS joint (68%)" if i == 0 else None,
+                zorder=4)
+    # MAP per-modality point estimates
+    ax.plot(i - 0.18, map_phot, "s", ms=9, color=COLORS.get("phot", "C2"),
+            label="MAP (phot only)" if i == 0 else None, zorder=3)
+    ax.plot(i + 0.18, map_spec, "^", ms=10, color=COLORS.get("spec", "C3"),
+            label="MAP (spec only)" if i == 0 else None, zorder=3)
+    # Truth line spanning full param column
+    ax.hlines(truth_v, i - 0.4, i + 0.4, color=COLORS.get("truth", "k"),
+              ls="--", lw=1.5, alpha=0.7,
+              label="Truth" if i == 0 else None, zorder=2)
 
 ax.set_xticks(x_pos)
 ax.set_xticklabels(param_labels, fontsize=11)
-ax.set_ylabel(r"1$\sigma$ credible width")
-ax.set_title(r"Joint NUTS Posterior: Constraint Widths on Key Parameters")
-ax.legend(fontsize=11, loc="upper right")
+ax.set_ylabel("Parameter value")
+ax.set_title("Joint vs. single-modality fits: NUTS 68% CI + MAP point estimates")
+ax.legend(fontsize=10, loc="best", ncol=2, frameon=False)
 ax.grid(True, alpha=0.3, axis="y")
 
 fig.tight_layout()
@@ -479,16 +485,12 @@ for name in spec.free_params:
 
 # %%
 # Summary statistics
-if result_nuts_joint.samples is not None:
-    n_nuts = len(next(iter(result_nuts_joint.samples.values())))
-    ess_per_sec = n_nuts / t_nuts_joint if t_nuts_joint > 0 else 0
-    print("\nVI Summary:")
-    print(f"  samples: {n_nuts}")
-    print(f"  wall time: {t_nuts_joint:.1f}s")
-else:
-    print("\nJoint MAP Summary (point estimate):")
-    print("  n_steps:  300")
-    print(f"  wall time: {t_nuts_joint:.1f}s")
+n_nuts = len(next(iter(result_nuts_joint.samples.values())))
+ess_per_sec = n_nuts / t_nuts_joint if t_nuts_joint > 0 else 0
+print("\nNUTS joint summary:")
+print(f"  samples:    {n_nuts}")
+print(f"  wall time:  {t_nuts_joint:.1f} s")
+print(f"  divergent:  {result_nuts_joint.diagnostics.get('n_divergent', 'n/a')}")
 
 # %%
 print("\n" + "=" * 70)
@@ -503,7 +505,7 @@ with suppress(Exception):
     tg.cite(result_nuts_joint)
 
 # %%
-print("\n✓ Joint photometry + spectroscopy fitting (VI) complete.")
+print("\n✓ Joint photometry + spectroscopy fitting (NUTS) complete.")
 
 # %% [markdown]
 # ## Next Steps

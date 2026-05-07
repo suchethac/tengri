@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.4
+#       jupytext_version: 1.19.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -324,7 +324,7 @@ for row, (sfh_name, truth_sfh) in enumerate(sfh_families):
     ax_sed.grid(True, alpha=0.2, which="both")
 
 fig.suptitle("SFH families: SFR(t) and rest-frame SED", fontsize=12, y=0.995)
-plt.savefig("notebooks/figures/04_sfh_family_grid.png", dpi=200, bbox_inches="tight")
+plt.savefig(str(_repo_root / "notebooks" / "figures" / "04_sfh_family_grid.png"), dpi=200, bbox_inches="tight")
 plt.close()
 
 # %% [markdown]
@@ -479,7 +479,7 @@ ax_sed.legend(loc="upper right", frameon=False, fontsize=9)
 ax_sed.set_title("Attenuated spectra (τ = 0.5)")
 
 fig.suptitle("Dust attenuation law comparison", fontsize=12, y=1.00)
-plt.savefig("notebooks/figures/04_dust_law_grid.png", dpi=200, bbox_inches="tight")
+plt.savefig(str(_repo_root / "notebooks" / "figures" / "04_dust_law_grid.png"), dpi=200, bbox_inches="tight")
 plt.close()
 
 # %% [markdown]
@@ -632,7 +632,7 @@ ax_balance.set_title("Energy conservation check")
 ax_balance.grid(True, alpha=0.2, axis="y")
 
 fig.suptitle("Dust IR emission model comparison", fontsize=12, y=1.00)
-plt.savefig("notebooks/figures/04_dust_emission_grid.png", dpi=200, bbox_inches="tight")
+plt.savefig(str(_repo_root / "notebooks" / "figures" / "04_dust_emission_grid.png"), dpi=200, bbox_inches="tight")
 plt.close()
 
 # %% [markdown]

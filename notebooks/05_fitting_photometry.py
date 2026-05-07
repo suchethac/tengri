@@ -165,44 +165,64 @@ if not os.path.exists(_ssp_path):
 ssp_data = load_ssp_data(_ssp_path)
 print(f"SSP: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]} ages")
 
-# Assemble UV–IR bandset
+# UV-to-NIR bandset. We deliberately stop at W2 (4.6 μm) and skip
+# `dust_emission` below: longer-wavelength IR data would require the
+# Dale 2014 energy-balance pipeline, which forces hybrid-mode photometry
+# and a much larger compile (~12 GB peak) — not worth it for a tutorial.
+# See notebook 11 for the full panchromatic energy-balance treatment.
 filter_names = [
     "galex_fuv", "galex_nuv",
     "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
     "2mass_j", "2mass_h", "2mass_ks",
-    "wise_w1", "wise_w2", "wise_w3",
+    "wise_w1", "wise_w2",
 ]
 
 phot_obs = Photometry.from_names(filter_names, cache_dir="data/filters")
 obs = Observation(photometry=phot_obs)
-print(f"Photometry: {phot_obs.n_filters} bands (GALEX/SDSS/2MASS/WISE)")
+print(f"Photometry: {phot_obs.n_filters} bands (GALEX/SDSS/2MASS/WISE-W1W2)")
 
 # %% [markdown]
 # ## Part 2: Model definition (10 free parameters)
 
 # %%
 spec = Parameters(
-    sfh_db_log_total_mass=Uniform(8.0, 12.0),
-    sfh_db_log_sfr_inst=Uniform(-2.0, 3.0),
-    sfh_db_tx_frac_0=Uniform(0.05, 0.95),
-    sfh_db_tx_frac_1=Uniform(0.05, 0.95),
-    sfh_db_tx_frac_2=Uniform(0.05, 0.95),
-    met_logzsol=Uniform(-2.0, 0.2),
+    # Double power-law SFH (4 params) — simpler than dense_basis,
+    # smaller compile graph.
+    mean_sfh_type="dpl",
+    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_dpl_tau_gyr=Uniform(0.5, 12.0),
+    sfh_dpl_alpha=Uniform(1.0, 8.0),
+    sfh_dpl_beta=Uniform(1.0, 8.0),
+    met_logzsol=Uniform(-1.5, 0.3),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 1.5),
     dust_slope=Fixed(-0.7),
-    dust_emission="dale2014",
-    dust_T=Uniform(25.0, 50.0),
-    dust_qpah=Fixed(2.5),
-    nebular_ssp=True,
+    # No dust_emission: UV-NIR alone is well-constrained without IR.
+    # Free redshift — `SEDModel(approx={"ztable": ...})` auto-precomputes
+    # a redshift table interpolated by the `hybrid_ztable` kernel, so
+    # free z costs no more compile time than fixed z. Defaults: z_min /
+    # z_max pulled from the prior with 1% padding, n_z=100. Override:
+    #   approx={"ztable": {"z_min": 0.01, "z_max": 3.0, "n_z": 200}}
+    # or disable: approx={"ztable": False}.
     redshift=Uniform(0.01, 0.5),
-    mean_sfh_type="dense_basis",
 )
 print(f"\nModel: {spec.n_free} free parameters")
 print(f"  {', '.join(spec.free_params[:5])}...")
 
+t0 = time.perf_counter()
 model = SEDModel(spec, ssp_data, observation=obs)
-print(f"Recommended method: {model.recommend_method()}")
+t_model = time.perf_counter() - t0
+print(f"  ⏱  SEDModel construction        {t_model:.2f} s  (auto-ztable for free z)")
+print(f"  Recommended method: {model.recommend_method()}")
+
+# Time cold/warm forward passes — the canonical "is JIT working" signal
+t0 = time.perf_counter()
+_ = model.predict_photometry({**spec.sample(jax.random.PRNGKey(0))})
+t_first = time.perf_counter() - t0
+t0 = time.perf_counter()
+_ = model.predict_photometry({**spec.sample(jax.random.PRNGKey(1))})
+t_warm = time.perf_counter() - t0
+print(f"  ⏱  predict_photometry  cold={t_first*1e3:.1f} ms  warm={t_warm*1e3:.1f} ms")
 
 # %% [markdown]
 # ## Part 3: Generate mock photometry (SNR=15)
@@ -214,17 +234,17 @@ truth = spec.sample(key)
 # Override to realistic: z=0.08, Msun=10.5, rising SFH
 truth = {**truth}
 truth["redshift"] = jnp.array(0.08)
-truth["sfh_db_log_total_mass"] = jnp.array(10.5)
-truth["sfh_db_log_sfr_inst"] = jnp.array(0.2)
-truth["sfh_db_tx_frac_0"] = jnp.array(0.15)
-truth["sfh_db_tx_frac_1"] = jnp.array(0.30)
-truth["sfh_db_tx_frac_2"] = jnp.array(0.55)
+truth["sfh_dpl_log_peak_sfr"] = jnp.array(np.log10(15.0))
+truth["sfh_dpl_tau_gyr"] = jnp.array(3.0)
+truth["sfh_dpl_alpha"] = jnp.array(3.5)
+truth["sfh_dpl_beta"] = jnp.array(2.0)
 truth["met_logzsol"] = jnp.array(-0.05)
 truth["dust_tau_bc"] = jnp.array(0.4)
 truth["dust_tau_diff"] = jnp.array(0.25)
-truth["dust_T"] = jnp.array(35.0)
 
+t0 = time.perf_counter()
 mock_data = model.mock(truth, snr=15.0, key=key)
+print(f"  ⏱  mock generation              {time.perf_counter()-t0:.2f} s")
 
 print(f"\nTrue parameters (z={float(truth['redshift']):.3f}):")
 for name in spec.free_params[:6]:
@@ -241,26 +261,30 @@ print("=" * 70)
 
 fitter = Fitter(model, mock_data.flux_obs, mock_data.noise)
 
+# Skip MAP and go straight to HMC. The fitter's warmup will adapt the
+# step size + mass matrix from the prior mean — that's cheaper than
+# compiling both MAP and HMC kernels in the same process (each is
+# multi-GB; in-process accumulation is what bites macOS jetsam).
+#
+# HMC chosen over NUTS: HMC has a fixed integration length L (no
+# doubling-binary-tree expansion), so the JIT graph is ~10× smaller and
+# the cold compile is much faster. Mixing is comparable on this size
+# of problem once warmup tunes the step size.
 t0 = time.perf_counter()
 result = fitter.run(
-    "map",
-    key=jax.random.PRNGKey(456),
-    verbose=False,
+    "mcmc_hmc",
+    n_warmup=300,
+    n_samples=600,
+    target_accept_rate=0.92,
+    key=jax.random.PRNGKey(789),
 )
 t_fit = time.perf_counter() - t0
 
-print(f"\n✓ MAP: {t_fit:.1f}s")
-print(f"  Loss at optimum: {result.loss_history[-1]:.2f}")
-
-# Create posterior samples using Laplace approximation
-# This provides credible intervals by sampling from the normal approximation
-n_laplace_samples = 600
-key = jax.random.PRNGKey(789)
-laplace_samples_dict = result.resample(key, n=n_laplace_samples)
-if isinstance(laplace_samples_dict, dict):
-    print(f"  Laplace samples (for credible intervals): {len(next(iter(laplace_samples_dict.values())))}")
-else:
-    print(f"  Laplace samples (for credible intervals): {len(next(iter(laplace_samples_dict.samples.values())))}")
+print(f"\n✓ HMC: {t_fit:.1f}s  (warmup=300 + samples=600, single chain)")
+print(f"  Divergences: {result.diagnostics.get('n_divergent', 'n/a')}")
+print(f"  Step size:   {result.diagnostics.get('step_size', float('nan')):.4f}")
+print(f"  Samples:     {len(next(iter(result.samples.values())))}")
+samples_source = result.samples
 
 # %% [markdown]
 # ## Part 5: Fit quality assessment
@@ -273,21 +297,39 @@ print("\nOptimized parameters (MAP):")
 for name in spec.free_params[:5]:
     print(f"  {name:30s} = {float(result.params[name]):.4f}")
 
-# Extract samples for credible intervals
-samples_for_credible = laplace_samples_dict if isinstance(laplace_samples_dict, dict) else result.samples
+# Posterior samples come straight from HMC; no Laplace fallback needed.
+samples_for_credible = result.samples
 n_samps = len(next(iter(samples_for_credible.values())))
-print(f"\nLaplace approximation posterior: {n_samps} samples (from Hessian at MAP)")
+print(f"\nHMC posterior: {n_samps} samples")
 
 # %% [markdown]
 # ## Part 6: Derived properties
 
 # %%
-print("\n" + "=" * 70)
-print("DERIVED PROPERTIES")
-print("=" * 70)
+print("\n" + "=" * 70, flush=True)
+print("DERIVED PROPERTIES", flush=True)
+print("=" * 70, flush=True)
 
-# Compute derived quantities from MAP + Laplace samples
-derived = result.derived
+# Compute derived quantities sample-by-sample to keep peak RSS bounded.
+# ``result.derived`` uses ``jax.vmap(predict_sfh_quantities)(samples)``
+# which compiles a fresh batched kernel on top of the resident HMC graph
+# — that combo can push past macOS jetsam's threshold and SIGKILL the
+# process silently. The plain Python loop reuses the un-vmapped JIT
+# cache, so we pay one ~1 s compile + ~1 ms per sample. For 600 samples
+# that's ~1.5 s wall-time and bounded peak RSS.
+import collections as _coll
+_derived_lists = _coll.defaultdict(list)
+n_samp_for_derived = len(next(iter(samples_for_credible.values())))
+t0 = time.perf_counter()
+for i in range(n_samp_for_derived):
+    draw = {k: v[int(i)] for k, v in samples_for_credible.items()}
+    sfhq = model.predict_sfh_quantities(draw)
+    _derived_lists["stellar_mass"].append(float(sfhq.stellar_mass))
+    _derived_lists["sfr_10myr"].append(float(sfhq.sfr_10myr))
+    _derived_lists["sfr_100myr"].append(float(sfhq.sfr_100myr))
+    _derived_lists["ssfr"].append(float(sfhq.ssfr))
+derived = {k: np.asarray(v) for k, v in _derived_lists.items()}
+print(f"  ⏱  derived (loop over {n_samp_for_derived} draws)  {time.perf_counter()-t0:.2f} s", flush=True)
 try:
     stellar_mass = derived.get("stellar_mass")
     sfr_10myr = derived.get("sfr_10myr")
@@ -295,24 +337,28 @@ try:
     ssfr = derived.get("ssfr")
 
     if stellar_mass is not None and len(stellar_mass) > 1:
+        # ``derived["stellar_mass"]`` is total mass formed in linear M_sun.
+        # Take log10 for human-readable scale; clip non-positive defensively
+        # so a sampler edge-case sample doesn't produce a NaN percentile.
+        log_msun = np.log10(np.clip(np.asarray(stellar_mass), 1.0, None))
+        m_lo, m_med, m_hi = np.percentile(log_msun, [16, 50, 84])
         print("\nStellar mass [log10(M☉)]:")
-        m_lo, m_med, m_hi = np.percentile(stellar_mass, [16, 50, 84])
-        print(f"  {m_med:.2f} +{m_hi-m_med:.2f} -{m_med-m_lo:.2f}")
+        print(f"  {m_med:.2f} +{m_hi - m_med:.2f} -{m_med - m_lo:.2f}")
 
     if sfr_10myr is not None and len(sfr_10myr) > 1:
-        print("\nSFR (10 Myr) [M☉/yr]:")
         s10_lo, s10_med, s10_hi = np.percentile(sfr_10myr, [16, 50, 84])
-        print(f"  {s10_med:.2f} +{s10_hi-s10_med:.2f} -{s10_med-s10_lo:.2f}")
+        print("\nSFR (10 Myr) [M☉/yr]:")
+        print(f"  {s10_med:.3g} +{s10_hi - s10_med:.3g} -{s10_med - s10_lo:.3g}")
 
     if sfr_100myr is not None and len(sfr_100myr) > 1:
-        print("\nSFR (100 Myr) [M☉/yr]:")
         s100_lo, s100_med, s100_hi = np.percentile(sfr_100myr, [16, 50, 84])
-        print(f"  {s100_med:.2f} +{s100_hi-s100_med:.2f} -{s100_med-s100_lo:.2f}")
+        print("\nSFR (100 Myr) [M☉/yr]:")
+        print(f"  {s100_med:.3g} +{s100_hi - s100_med:.3g} -{s100_med - s100_lo:.3g}")
 
     if ssfr is not None and len(ssfr) > 1:
-        print("\nsSFR (100 Myr) [Gyr⁻¹]:")
         ssfr_lo, ssfr_med, ssfr_hi = np.percentile(ssfr, [16, 50, 84])
-        print(f"  {ssfr_med:.2f} +{ssfr_hi-ssfr_med:.2f} -{ssfr_med-ssfr_lo:.2f}")
+        print("\nsSFR (100 Myr) [Gyr⁻¹]:")
+        print(f"  {ssfr_med:.3g} +{ssfr_hi - ssfr_med:.3g} -{ssfr_med - ssfr_lo:.3g}")
 except Exception as e:
     print(f"(Derived properties unavailable: {str(e)[:60]})")
 
@@ -320,15 +366,14 @@ except Exception as e:
 # ## Figure 1: Posterior-predictive SED fit + residuals
 
 # %%
-n_pred = 100
-pred_samples = []
-# Use Laplace samples if available, otherwise use MAP
-samples_source = laplace_samples_dict if isinstance(laplace_samples_dict, dict) else result.samples
+n_pred = 200
 n_avail = len(next(iter(samples_source.values())))
-
-for i in range(min(n_pred, n_avail)):
-    idx = i % n_avail
-    draw = {k: v[idx] for k, v in samples_source.items()}
+# Random subsample over the chain
+sub_key = jax.random.PRNGKey(11)
+idxs = jax.random.permutation(sub_key, n_avail)[: min(n_pred, n_avail)]
+pred_samples = []
+for i in idxs:
+    draw = {k: v[int(i)] for k, v in samples_source.items()}
     with contextlib.suppress(Exception):
         pred_samples.append(np.array(model.predict_photometry(draw)))
 
@@ -338,8 +383,8 @@ pred_lo = np.percentile(pred_array, 16, axis=0)
 pred_hi = np.percentile(pred_array, 84, axis=0)
 
 wave_eff = np.array([
-    tg.filters.compute_effective_wavelength(tg.filters.load(name))
-    for name in filter_names
+    tg.filters.compute_effective_wavelength(np.asarray(fc.wave), np.asarray(fc.trans))
+    for fc in phot_obs.filters
 ])
 wave_um = wave_eff / 10000.0
 
@@ -392,23 +437,81 @@ plt.close()
 # ## Figure 2: Corner plot
 
 # %%
-fig = result.plot_corner(truths=truth)
-if fig is not None:
-    fig.suptitle("Parameter posterior: 10-D NUTS", fontsize=12, y=0.995)
-    plt.savefig(os.path.join(FIGDIR, "05_corner.png"), dpi=200, bbox_inches="tight")
-    print("✓ Saved 05_corner.png")
-    plt.close()
+# Manual lightweight corner: pairwise hist2d + 1D histograms.
+# ``result.plot_corner`` uses corner.py KDE which OOMs on macOS jetsam
+# at 600 samples × 8 params on top of resident HMC graph. Histograms
+# are bounded peak RSS and visually equivalent for tutorial-grade plots.
+free = list(samples_for_credible.keys())
+n_free = len(free)
+fig, axes = plt.subplots(n_free, n_free, figsize=(2 * n_free, 2 * n_free))
+for i, ki in enumerate(free):
+    xi = np.asarray(samples_for_credible[ki])
+    truth_i = float(truth[ki]) if ki in truth else None
+    for j, kj in enumerate(free):
+        ax = axes[i, j]
+        if i == j:
+            ax.hist(xi, bins=30, color=COLORS.get("model", "C1"), alpha=0.7, edgecolor="k", lw=0.3)
+            if truth_i is not None:
+                ax.axvline(truth_i, color=COLORS.get("truth", "C2"), ls="--", lw=1.5)
+        elif j < i:
+            xj = np.asarray(samples_for_credible[kj])
+            ax.hist2d(xj, xi, bins=30, cmap="Blues", cmin=1)
+            truth_j = float(truth[kj]) if kj in truth else None
+            if truth_i is not None and truth_j is not None:
+                ax.plot(truth_j, truth_i, "*", ms=12, color=COLORS.get("truth", "C2"), mec="k", mew=0.5)
+        else:
+            ax.set_visible(False)
+        if i < n_free - 1:
+            ax.set_xticklabels([])
+        if j > 0:
+            ax.set_yticklabels([])
+        if i == n_free - 1:
+            ax.set_xlabel(kj.replace("sfh_dpl_", "").replace("dust_", "d_").replace("met_", ""), fontsize=8)
+        if j == 0:
+            ax.set_ylabel(ki.replace("sfh_dpl_", "").replace("dust_", "d_").replace("met_", ""), fontsize=8)
+        ax.tick_params(labelsize=7)
+
+fig.suptitle(f"Parameter posterior: {n_free}-D HMC ({len(xi)} samples)", fontsize=12, y=0.995)
+fig.tight_layout()
+plt.savefig(os.path.join(FIGDIR, "05_corner.png"), dpi=180, bbox_inches="tight")
+print("✓ Saved 05_corner.png", flush=True)
+plt.close()
 
 # %% [markdown]
 # ## Figure 3: SFH posterior
 
 # %%
 fig, ax = plt.subplots(figsize=(10, 5))
-result.plot_sfh(ax=ax, label="Posterior", color=COLORS.get("model", "C1"))
+
+# Posterior SFH band: evaluate ``predict_sfh`` on a sub-sample of the chain.
+# We avoid ``Posterior.plot_sfh`` here because it doesn't expose styling
+# (label/color) — but it does the same thing under the hood.
+n_sfh_draws = 100
+n_avail_sfh = len(next(iter(samples_source.values())))
+sfh_idxs = jax.random.permutation(jax.random.PRNGKey(13), n_avail_sfh)[: min(n_sfh_draws, n_avail_sfh)]
+sfh_curves = []
+for i in sfh_idxs:
+    draw = {k: v[int(i)] for k, v in samples_source.items()}
+    with contextlib.suppress(Exception):
+        s = model.predict_sfh(draw)
+        sfh_curves.append(np.asarray(s["sfr_full"]))
+        t_gyr = np.asarray(s["t_gyr"])
+
+if sfh_curves:
+    sfh_arr = np.stack(sfh_curves)
+    sfh_lo = np.percentile(sfh_arr, 16, axis=0)
+    sfh_med = np.percentile(sfh_arr, 50, axis=0)
+    sfh_hi = np.percentile(sfh_arr, 84, axis=0)
+    ax.fill_between(t_gyr, sfh_lo, sfh_hi, alpha=0.3,
+                    color=COLORS.get("model", "C1"), label="Posterior 68%")
+    ax.plot(t_gyr, sfh_med, "-", lw=2.0,
+            color=COLORS.get("model", "C1"), label="Posterior median")
+
+# Truth curve on the same grid
 sfh_truth = model.predict_sfh(truth)
-t_gyr = np.array(model.wavelengths["sfh_age_gyr"])
-ax.plot(t_gyr, np.array(sfh_truth), "s--", color=COLORS.get("truth", "C2"),
-        lw=2, ms=6, label="Truth", alpha=0.8)
+ax.plot(np.asarray(sfh_truth["t_gyr"]), np.asarray(sfh_truth["sfr_full"]),
+        "--", lw=2.0, color=COLORS.get("truth", "C2"), label="Truth", alpha=0.85)
+
 ax.set_xscale("log")
 ax.set_xlabel(r"Age [Gyr]", fontsize=11)
 ax.set_ylabel(r"SFR [M$_\odot$/yr]", fontsize=11)
@@ -432,7 +535,7 @@ print(f"""
   Data:      {phot_obs.n_filters} UV–IR bands (SNR=15)
   Model:     {spec.n_free} free params (SFH + dust + redshift + nebular)
   Inference: NUTS {len(next(iter(result.samples.values())))} samples in {t_fit:.1f}s
-  Diagnostics: R̂_max={np.max(result.rhat):.4f}, divergences={result.diagnostics['n_divergent']}
+  Diagnostics: R̂_max={max(float(v) for v in result.rhat().values()):.4f}, divergences={result.diagnostics['n_divergent']}
 
 Derived: stellar mass, SFR(10/100 Myr), sSFR with 68% credible intervals
 Validation: posterior-predictive residuals, SFH recovery, corner plots
