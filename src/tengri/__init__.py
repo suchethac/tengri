@@ -43,6 +43,24 @@ if not _os.environ.get("TENGRI_VERBOSE_JAX"):
 import logging as _logging
 
 from tengri.inference.jit_engine import clear_shared_caches, lean, persistent
+
+
+def gc() -> None:
+    """Drop tengri JIT caches + JAX caches + run Python GC.
+
+    Shorthand for ``clear_shared_caches(drop_xla=True)``. Use between
+    notebook cells when iterating on hyperparameters or model variants —
+    each ``jax.jit`` over a new closure leaks compile artefacts that
+    ``Fitter.run(lean=True)`` does not see.
+
+    Examples
+    --------
+    >>> for tau_gyr in (0.1, 0.3, 1.0, 3.0):
+    ...     spec = make_spec(tau_gyr)
+    ...     result = fit(spec)
+    ...     tengri.gc()  # one line of cleanup between configurations
+    """
+    clear_shared_caches(drop_xla=True)
 from tengri.utils.jax_cache import (
     cache_size_bytes,
     clear_cache,
@@ -310,6 +328,7 @@ __all__ = [
     "examples",
     "explain",
     "filters",
+    "gc",
     "help",
     "igm",
     "inference",

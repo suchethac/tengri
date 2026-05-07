@@ -135,6 +135,19 @@ def load_ssp_data(filepath: str) -> SSPData:
     except ImportError:
         raise ImportError("h5py required for SSP loading: pip install h5py") from None
 
+    import os
+    from pathlib import Path
+
+    fp = Path(filepath)
+    if not fp.exists() and not os.environ.get("TENGRI_DISABLE_SSP_AUTODOWNLOAD"):
+        # Auto-fetch from the public catalogue if the basename is known.
+        from tengri._data_setup import _KNOWN_SSPS, KNOWN_SSP_FILENAMES, download_ssp
+
+        if fp.name in KNOWN_SSP_FILENAMES:
+            short = next(k for k, v in _KNOWN_SSPS.items() if v == fp.name)
+            print(f"[tengri] {fp} not found — fetching '{short}' from public catalogue...")
+            download_ssp(short, dest=fp.parent if fp.parent != Path("") else "data")
+
     with h5py.File(filepath, "r") as f:
         mass_remaining = None
         if "ssp_mass_remaining" in f:

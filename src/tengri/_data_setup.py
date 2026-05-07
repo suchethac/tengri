@@ -5,16 +5,42 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-__all__ = ["download_ssp", "list_known_ssps"]
+__all__ = ["KNOWN_SSP_FILENAMES", "download_ssp", "list_known_ssps"]
 
 SSP_BASE_URL = "https://halos.as.arizona.edu/suchethacooray/ssp-spectra/"
 
+# Short alias → filename, matches the live public catalogue. The catalogue
+# only ships *bare-stellar* SSPs; the ``_wNE_*`` variants in local ``data/``
+# trees are post-processed (FSPS+nebular). Cue / CloudyGrid backends require
+# bare SSPs and will silently under-predict if fed wNE.
 _KNOWN_SSPS = {
-    "fsps_v3.2": "ssp_fsps_v3.2.h5",
-    "bc03_v3.2": "ssp_bc03_v3.2.h5",
-    "bpass_v3.2": "ssp_bpass_v3.2.h5",
-    "progeny_v3.2": "ssp_progeny_v3.2.h5",
+    "fsps_prsc_miles_chabrier": "fsps_prsc_miles_chabrier.h5",
+    "fsps_mist_c3k_a_chabrier": "fsps_mist_c3k_a_chabrier.h5",
+    "fsps_mist_miles_chabrier": "fsps_mist_miles_chabrier.h5",
+    "fsps_pdva_miles_chabrier": "fsps_pdva_miles_chabrier.h5",
+    "fsps_pdva_c3k_a_chabrier": "fsps_pdva_c3k_a_chabrier.h5",
+    "fsps_bsti_miles_chabrier": "fsps_bsti_miles_chabrier.h5",
+    "fsps_bsti_c3k_a_chabrier": "fsps_bsti_c3k_a_chabrier.h5",
+    "fsps_bsti_basel_chabrier": "fsps_bsti_basel_chabrier.h5",
+    "fsps_mist_basel_chabrier": "fsps_mist_basel_chabrier.h5",
+    "fsps_pdva_basel_chabrier": "fsps_pdva_basel_chabrier.h5",
+    "fsps_prsc_basel_chabrier": "fsps_prsc_basel_chabrier.h5",
+    "fsps_prsc_c3k_a_chabrier": "fsps_prsc_c3k_a_chabrier.h5",
+    "bc03_pdva_stelib_chabrier": "bc03_pdva_stelib_chabrier.h5",
+    "bpss_stars_c3k_a_chabrier": "bpss_stars_c3k_a_chabrier.h5",
+    "pgny_mist_c3k_chabrier": "pgny_mist_c3k_chabrier.h5",
+    # Alternative IMFs
+    "fsps_mist_c3k_a_kroupa": "fsps_mist_c3k_a_kroupa.h5",
+    "fsps_mist_c3k_a_salpeter": "fsps_mist_c3k_a_salpeter.h5",
+    "fsps_prsc_miles_kroupa": "fsps_prsc_miles_kroupa.h5",
+    "fsps_prsc_miles_salpeter": "fsps_prsc_miles_salpeter.h5",
+    "fsps_prsc_c3k_a_kroupa": "fsps_prsc_c3k_a_kroupa.h5",
+    "fsps_prsc_c3k_a_salpeter": "fsps_prsc_c3k_a_salpeter.h5",
 }
+
+# Reverse lookup used by ``load_ssp_data`` to auto-fetch a missing local
+# file when the basename matches a known catalogue entry.
+KNOWN_SSP_FILENAMES = frozenset(_KNOWN_SSPS.values())
 
 
 def list_known_ssps() -> dict[str, str]:
@@ -37,7 +63,7 @@ def list_known_ssps() -> dict[str, str]:
 
 
 def download_ssp(
-    name: str = "fsps_v3.2",
+    name: str = "fsps_prsc_miles_chabrier",
     dest: str | os.PathLike | None = None,
     force: bool = False,
 ) -> Path:
@@ -46,7 +72,9 @@ def download_ssp(
     Parameters
     ----------
     name : str, optional
-        Short SSP identifier. See ``list_known_ssps()``. Defaults to ``"fsps_v3.2"``.
+        Short SSP identifier. See ``list_known_ssps()``. Defaults to
+        ``"fsps_prsc_miles_chabrier"`` (FSPS PARSEC tracks + MILES library,
+        Chabrier IMF — bare-stellar, Cue/CloudyGrid-compatible).
     dest : path-like, optional
         Target directory. Defaults to ``$TENGRI_DATA_DIR`` if set, else ``data/``
         relative to the current working directory.
