@@ -90,10 +90,16 @@ def run_nuts(
     max_num_doublings : int, default 10
         Maximum tree depth for NUTS trajectory (2^max_num_doublings
         leapfrog steps per sample). Default 10 follows BlackJAX/Stan
-        convention. Compile cost scales with this knob but is typically
-        <3s at warm cache (see docs/inference/compilation_diagnostics.md);
-        wall-time cost is dominated by per-step forward-grad evaluation,
-        not graph size.
+        convention. Lower to 7 (2^7=128 leapfrogs/step) if you observe
+        a chain running far longer than expected and want to bound the
+        worst-case per-sample cost — at the price of higher
+        autocorrelation on heavy-tailed or strongly-curved posteriors.
+        See ``docs/dev/benchmarks/2026-05-06_compile_vs_sampling_breakdown.md``
+        for the prior measurement that found 10→8 gave no benefit on
+        nb06's well-conditioned spec posterior; the cap matters only
+        when NUTS is hitting deep trees, which is workload-specific.
+        Compile cost scales with this knob but is typically <3s at
+        warm cache (see docs/inference/compilation_diagnostics.md).
     dense_mass_matrix : bool
         Use a dense (full) mass matrix instead of diagonal. Captures
         parameter correlations (e.g. age-dust-metallicity) and

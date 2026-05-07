@@ -314,8 +314,6 @@ ax.grid(True, alpha=0.25, which="both")
 
 plt.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "02_sed_anatomy_hero.png"), dpi=200, bbox_inches="tight")
-plt.close()
-print("✓ Saved 02_sed_anatomy_hero.png")
 
 # %% [markdown]
 # ## Part 4: Component isolation — same panel, one component at a time
@@ -355,8 +353,6 @@ for ax_p in axes[:, 0]:
 fig.suptitle("Each component on its own (faint grey = full panchromatic total)", fontsize=12)
 plt.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "02_component_isolation.png"), dpi=200, bbox_inches="tight")
-plt.close()
-print("✓ Saved 02_component_isolation.png")
 
 # %% [markdown]
 # ## Part 5: IGM transmission and dust attenuation as multiplicative factors
@@ -405,8 +401,6 @@ ax_dust.grid(True, alpha=0.25)
 
 plt.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "02_redshift_igm.png"), dpi=200, bbox_inches="tight")
-plt.close()
-print("✓ Saved 02_redshift_igm.png")
 
 # %% [markdown]
 # ## Part 6: Layer-by-layer build
@@ -501,8 +495,6 @@ ax.legend(loc="lower center", frameon=False, fontsize=10, ncol=2)
 ax.grid(True, alpha=0.25, which="both")
 plt.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "02_layer_anatomy.png"), dpi=200, bbox_inches="tight")
-plt.close()
-print("✓ Saved 02_layer_anatomy.png")
 
 # %% [markdown]
 # ## Part 7: Units convention reference
@@ -550,8 +542,6 @@ ax.grid(True, alpha=0.25, which="both")
 
 plt.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "02_units_convention.png"), dpi=200, bbox_inches="tight")
-plt.close()
-print("✓ Saved 02_units_convention.png")
 
 # %% [markdown]
 # ## Recap
@@ -575,4 +565,4 @@ print("✓ Saved 02_units_convention.png")
 
 # %%
 tg.cite(model_full)
-print("\n✓ Notebook 02 (SED anatomy) complete. Next: 03_discovering_the_menu.py")
+print("Notebook 02 (SED anatomy) complete. Next: 03_discovering_the_menu.py")

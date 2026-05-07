@@ -319,14 +319,11 @@ ax_spec.grid(True, alpha=0.3)
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "07_data.png"), dpi=200, bbox_inches="tight")
-plt.close(fig)
 print("Saved: notebooks/figures/07_data.png")
 
 # %%
 # Run three fits: MAP (phot only), MAP (spec only), NUTS (joint)
-print("\n" + "=" * 70)
 print("FITTING STAGE: MAP (photometry) → MAP (spectroscopy) → NUTS (joint)")
-print("=" * 70)
 
 # 1. MAP fit on photometry only
 print("\n[1/3] MAP fit on photometry only...")
@@ -371,9 +368,7 @@ print(f"\n{'Total wall time:':<40s} {t_map_phot + t_map_spec + t_nuts_joint:.1f}
 
 # %%
 # Extract posterior statistics: for MAP, use Laplace covariance (Hessian-based)
-print("\n" + "=" * 70)
 print("POSTERIOR STATISTICS")
-print("=" * 70)
 
 # For MAP fits, compute Laplace covariance from Hessian diagonal (1-sigma)
 
@@ -440,7 +435,6 @@ ax.grid(True, alpha=0.3, axis="y")
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "07_constraint_widths.png"), dpi=200, bbox_inches="tight")
-plt.close(fig)
 print("Saved: notebooks/figures/07_constraint_widths.png")
 
 # %%
@@ -451,16 +445,13 @@ try:
         fig.suptitle("NUTS Joint Posterior: Photometry + Spectroscopy", y=0.995, fontsize=13)
         fig.tight_layout()
         fig.savefig(os.path.join(FIGDIR, "07_joint_posterior.png"), dpi=200, bbox_inches="tight")
-        plt.close(fig)
         print("Saved: notebooks/figures/07_joint_posterior.png")
 except Exception as e:
     print(f"Corner plot generation failed: {e}")
 
 # %%
 # Convergence diagnostics
-print("\n" + "=" * 70)
 print("CONVERGENCE DIAGNOSTICS (NUTS joint fit)")
-print("=" * 70)
 try:
     rhat = result_nuts_joint.rhat
     print("\nR-hat (NUTS convergence, all < 1.05 is good):")
@@ -473,9 +464,7 @@ except Exception:
 
 # %%
 # Parameter recovery table
-print("\n" + "=" * 70)
 print("PARAMETER RECOVERY (NUTS joint fit)")
-print("=" * 70)
 print(f"{'Parameter':<30s} {'Truth':>8s} {'Median':>8s} {'16–84%':>20s} {'Cover':>5s}")
 print("-" * 75)
 for name in spec.free_params:
@@ -494,9 +483,7 @@ print(f"  wall time:  {t_nuts_joint:.1f} s")
 print(f"  divergent:  {result_nuts_joint.diagnostics.get('n_divergent', 'n/a')}")
 
 # %%
-print("\n" + "=" * 70)
-print("✓ Joint photometry + spectroscopy fit complete")
-print("=" * 70)
+print("Joint photometry + spectroscopy fit complete")
 print("\nKey finding: Joint data breaks degeneracies visible in single-modality fits\n")
 
 # %%
@@ -506,7 +493,7 @@ with suppress(Exception):
     tg.cite(result_nuts_joint)
 
 # %%
-print("\n✓ Joint photometry + spectroscopy fitting (NUTS) complete.")
+print("Joint photometry + spectroscopy fitting (NUTS) complete.")
 
 # %% [markdown]
 # ## Next Steps

@@ -322,9 +322,7 @@ print(f"  {len(result_spec.samples[spec_param.free_params[0]])} samples")
 
 # %%
 # Parameter recovery
-print("\n" + "="*70)
 print("PARAMETER RECOVERY (absorption-line constraining age + metallicity)")
-print("="*70)
 for name in spec_param.free_params:
     if name in true_params:
         truth = float(true_params[name])
@@ -455,8 +453,7 @@ fig.suptitle(f"Posterior: Age + Metallicity from Optical Continuum ({spec_param.
              y=1.001, fontsize=12)
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "06_corner.png"), dpi=180, bbox_inches="tight")
-plt.close(fig)
-print("✓ Saved 06_corner.png", flush=True)
+print("Saved 06_corner.png", flush=True)
 
 # %%
 # --- FIGURE 4: SFH recovery ---
@@ -470,9 +467,7 @@ fig.savefig(os.path.join(FIGDIR, "06_sfh_recovery.png"), dpi=200, bbox_inches="t
 plt.show()
 
 # %%
-print("\n" + "="*70)
 print("SUMMARY")
-print("="*70)
 print("Spectroscopic fitting (optical continuum only):")
 print(f"  Grid:   {n_pix} pixels, {n_good} unmasked (8 emission lines masked)")
 print(f"  Time:   {t_nuts:.1f}s (NUTS warmup + sampling)")
@@ -480,7 +475,7 @@ print("  Model:  lognormal SFH, Calzetti dust, solar metallicity priors")
 print("  Result: Age + metallicity recovered from absorption features (Hβ, Mgb, 4000 Å break)")
 print("\nKey insight: Emission lines must be masked to avoid continuum bias.")
 print("Calibration floor (1%) marginalizes over instrumental uncertainty.")
-print("\n✓ Spectroscopy notebook complete: continuum-only SED fitting (optical absorption features)")
+print("Spectroscopy notebook complete: continuum-only SED fitting (optical absorption features)")
 
 # %%
 tg.cite(result_spec)

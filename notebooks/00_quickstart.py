@@ -282,19 +282,19 @@ t_jit = (time.perf_counter() - t0) / 100 * 1e6
 print(f"Forward model: {t_raw:.1f} ms (raw) → {t_jit:.0f} µs (JIT)")
 
 # %%
-# Generate mock photometry: monotonically increasing SFH with high SFR (30 Msun/yr)
+# Generate mock photometry. Use a smoothly rising SFH — a young, gas-rich
+# galaxy with most mass formed recently. tx_frac_* are cumulative mass
+# fractions at evenly-spaced cosmic epochs; setting them low and stretching
+# them toward the late epoch puts most of the mass in recent lookback time.
 key = jax.random.PRNGKey(42)
 true_params_param = spec_param.sample(key)
-# Override to monotonically rising SFH: early low → now high SFR
 true_params_param = {**true_params_param}
-true_params_param["sfh_db_log_total_mass"] = jnp.array(10.8)
-true_params_param["sfh_db_log_sfr_inst"] = jnp.array(1.48)  # log(30) ≈ 1.48 Msun/yr
-true_params_param["sfh_db_tx_frac_0"] = jnp.array(0.1)  # Early epoch (low weight)
-true_params_param["sfh_db_tx_frac_1"] = jnp.array(0.25)  # Middle epoch
-true_params_param["sfh_db_tx_frac_2"] = jnp.array(
-    0.65
-)  # Recent epoch (high weight, rising profile)
-true_params_param["met_logzsol"] = jnp.array(-0.1)  # Solar-ish metallicity
+true_params_param["sfh_db_log_total_mass"] = jnp.array(10.5)
+true_params_param["sfh_db_log_sfr_inst"] = jnp.array(1.30)  # ~20 Msun/yr now
+true_params_param["sfh_db_tx_frac_0"] = jnp.array(0.05)  # 5% of mass by tx_0
+true_params_param["sfh_db_tx_frac_1"] = jnp.array(0.18)  # 18% of mass by tx_1
+true_params_param["sfh_db_tx_frac_2"] = jnp.array(0.45)  # 45% of mass by tx_2
+true_params_param["met_logzsol"] = jnp.array(-0.1)
 true_params_param["dust_tau_bc"] = jnp.array(0.5)
 true_params_param["dust_tau_diff"] = jnp.array(0.3)
 mock_param = model_param.mock(true_params_param, snr=50.0, key=key)
@@ -437,6 +437,7 @@ plot_sfh(
     color=COLORS["mcmc_nuts"],
     label="NUTS",
     method="NUTS",
+    xlim=(0, 6),
 )
 ax.set_title("SFH Recovery: Monotonically Rising Profile (D = 7, NUTS)")
 fig.tight_layout()

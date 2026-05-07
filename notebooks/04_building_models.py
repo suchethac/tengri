@@ -109,9 +109,7 @@ print(f"  {', '.join([b.replace('galex_', 'GALEX-').replace('sdss_', 'SDSS-').re
 
 # %%
 # ─── Model 1: Minimal (just SFH + metallicity) ──────────────────────
-print("=" * 70)
 print("MODEL 1: Minimal (SFH only)")
-print("=" * 70)
 
 spec_minimal = Parameters(
     mean_sfh_type="tsnorm",
@@ -129,9 +127,7 @@ print(f"Free parameters ({len(spec_minimal.free_params)}): {spec_minimal.free_pa
 print(f"Fixed parameters ({len(spec_minimal.fixed_params)}): {spec_minimal.fixed_params}")
 
 # ─── Model 2: Add dust attenuation ────────────────────────────────────
-print("\n" + "=" * 70)
 print("MODEL 2: + Dust attenuation (two-component)")
-print("=" * 70)
 
 spec_dust_atten = Parameters(
     mean_sfh_type="tsnorm",
@@ -154,9 +150,7 @@ print(f"Free parameters ({len(spec_dust_atten.free_params)}): {spec_dust_atten.f
 print(f"Fixed parameters ({len(spec_dust_atten.fixed_params)}): {spec_dust_atten.fixed_params}")
 
 # ─── Model 3: Full energy-balance model ──────────────────────────────
-print("\n" + "=" * 70)
 print("MODEL 3: Full energy-balance (+ dust IR emission)")
-print("=" * 70)
 
 spec_full = Parameters(
     mean_sfh_type="tsnorm",
@@ -228,7 +222,6 @@ sfh_families = [
 ]
 
 print("\nSFH Family Comparison")
-print("=" * 70)
 for sfh_name, _ in sfh_families:
     spec_sfh = Parameters(
         mean_sfh_type=sfh_name,
@@ -325,7 +318,6 @@ for row, (sfh_name, truth_sfh) in enumerate(sfh_families):
 
 fig.suptitle("SFH families: SFR(t) and rest-frame SED", fontsize=12, y=0.995)
 plt.savefig(str(_repo_root / "notebooks" / "figures" / "04_sfh_family_grid.png"), dpi=200, bbox_inches="tight")
-plt.close()
 
 # %% [markdown]
 # ## 5. Vary Dust Attenuation Law
@@ -345,7 +337,6 @@ dust_laws = [
 ]
 
 print("\nDust Law Comparison")
-print("=" * 70)
 for dust_law in dust_laws:
     spec = Parameters(
         mean_sfh_type="tsnorm",
@@ -480,7 +471,6 @@ ax_sed.set_title("Attenuated spectra (τ = 0.5)")
 
 fig.suptitle("Dust attenuation law comparison", fontsize=12, y=1.00)
 plt.savefig(str(_repo_root / "notebooks" / "figures" / "04_dust_law_grid.png"), dpi=200, bbox_inches="tight")
-plt.close()
 
 # %% [markdown]
 # ## 7. Vary Dust Emission Model
@@ -497,7 +487,6 @@ dust_emissions = [
 ]
 
 print("\nDust Emission Model Comparison")
-print("=" * 70)
 for emission in dust_emissions:
     try:
         spec = Parameters(
@@ -633,7 +622,6 @@ ax_balance.grid(True, alpha=0.2, axis="y")
 
 fig.suptitle("Dust IR emission model comparison", fontsize=12, y=1.00)
 plt.savefig(str(_repo_root / "notebooks" / "figures" / "04_dust_emission_grid.png"), dpi=200, bbox_inches="tight")
-plt.close()
 
 # %% [markdown]
 # ## 9. Free vs Fixed Parameters
@@ -643,7 +631,6 @@ plt.close()
 
 # %%
 print("\nFree vs Fixed Parameter Tracking")
-print("=" * 70)
 
 # Build a reference model to show summary()
 spec_ref = Parameters(
@@ -772,7 +759,6 @@ for i in range(n_iter):
 t_loop = time.perf_counter() - t0
 
 print("\nForward Model Performance")
-print("=" * 70)
 print(f"Single prediction:            {t_single*1000:.2f} ms")
 print(f"50 sequential predictions:    {t_loop:.3f} s ({t_loop/n_iter*1000:.2f} ms per call)")
 print(f"Per-call overhead (amortized):{(t_loop / n_iter - t_single)*1000:.2f} ms")

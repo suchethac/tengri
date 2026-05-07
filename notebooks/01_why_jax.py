@@ -97,7 +97,7 @@ if not os.path.exists(_SSP_PATH):
 
 ssp_data = load_ssp_data(_SSP_PATH)
 print(
-    f"✓ Loaded SSP grid: flux{tuple(ssp_data.ssp_flux.shape)}, "
+    f"SSP grid: flux{tuple(ssp_data.ssp_flux.shape)}, "
     f"n_age={ssp_data.ssp_lg_age_gyr.size}, n_met={ssp_data.ssp_lgmet.size}"
 )
 
@@ -126,10 +126,9 @@ spec = Parameters(
 model = SEDModel(spec, ssp_data, observation=obs)
 params = spec.sample(jax.random.PRNGKey(42))
 
-print(f"\n✓ Model: {len(spec.free_params)} free parameters")
+print(f"{len(spec.free_params)} free parameters; first three at the truth point:")
 for p in spec.free_params[:3]:
     print(f"  {p}: {params[p]:.4f}")
-print("  ...")
 
 # %% [markdown]
 # ---
@@ -193,7 +192,6 @@ plt.tight_layout()
 os.makedirs("notebooks/figures", exist_ok=True)
 plt.savefig("notebooks/figures/01_jit_speedup.png", dpi=200, bbox_inches="tight")
 plt.show()
-print("\n✓ Saved: notebooks/figures/01_jit_speedup.png")
 
 # %% [markdown]
 # ---
@@ -260,13 +258,9 @@ print(f"Gradient (jax.grad): {grad_time:>7.2f} ms")
 print(f"Overhead:            {overhead:>7.1f}x")
 
 # %%
-print("\n✓ **Why this matters:**")
-print("  • MAP (scipy.optimize.minimize):    ~100 steps → ~100 ms")
-print("  • Laplace (one grad + Hessian):     ~200 ms")
-print("  • Pathfinder (iterative grad):      ~10–50 steps → ~500 ms")
-print("  • HMC (50 steps per sample):        ~50 steps × 3× per sample")
-print("  • VI (gradient of ELBO):            scales with latent dimension")
-print("\n  All use the same forward model and gradient. No reimplementation.")
+# All MAP, Laplace, Pathfinder, HMC, and VI inference reuse the same
+# gradient — no reimplementation per method. Cost stays within ~3× of a
+# forward pass.
 
 # %% [markdown]
 # ---
@@ -279,10 +273,6 @@ print("\n  All use the same forward model and gradient. No reimplementation.")
 # directionally-meaningful gradients everywhere — even far from the truth.
 
 # %%
-print("\n" + "="*70)
-print("FIGURE A: GRADIENT FIELD LANDSCAPE")
-print("="*70)
-
 import matplotlib.patches as mpatches
 
 # Create a grid over the two focal parameters
@@ -395,8 +385,6 @@ cbar.ax.tick_params(labelsize=10)
 plt.tight_layout()
 os.makedirs("notebooks/figures", exist_ok=True)
 plt.savefig("notebooks/figures/01_grad_field.png", dpi=200, bbox_inches="tight")
-plt.close()
-print("✓ Saved: notebooks/figures/01_grad_field.png")
 
 
 # %% [markdown]
@@ -442,11 +430,8 @@ print(f"  Per-galaxy time:            {per_galaxy:>7.2f} ms")
 print(f"  Output shape:               {seds_batch.shape}  [n_galaxies, n_bands]")
 
 # %%
-print("\n✓ **What vmap does:**")
-print("  No Python loop: ✗")
-print("  No JAX control flow (where): ✗")
-print("  One compiled function: ✓")
-print("  Scales to GPU/TPU naturally: ✓")
+# No Python loop, no `jnp.where` for branching — one compiled function
+# that scales naturally to GPU/TPU.
 
 # %% [markdown]
 # ---
@@ -459,11 +444,6 @@ print("  Scales to GPU/TPU naturally: ✓")
 # the Python loop scales linearly (overhead of Python interpreter dominates).
 
 # %%
-print("\n" + "="*70)
-print("FIGURE B: VMAP THROUGHPUT SCALING")
-print("="*70)
-
-# Batch sizes to test
 batch_sizes = np.array([1, 2, 5, 10, 20, 50, 100])
 times_vmap = []
 times_python = []
@@ -513,8 +493,6 @@ ax.grid(True, alpha=0.3, which="both", linestyle="--")
 
 plt.tight_layout()
 plt.savefig("notebooks/figures/01_vmap_throughput.png", dpi=200, bbox_inches="tight")
-plt.close()
-print("\n✓ Saved: notebooks/figures/01_vmap_throughput.png")
 
 # %% [markdown]
 # ---
@@ -550,17 +528,10 @@ print(f"  Batch time (100 galaxies):  {batch_like_time:>7.1f} ms")
 print(f"  Output shape:               {loglikes.shape}  [n_galaxies,]")
 print(f"  Median log-likelihood:      {jnp.median(loglikes):>7.2f}")
 
-# %%
-print("\n✓ **The JAX Mantra:**")
-print("  ```python")
-print("  @jax.jit")
-print("  def inference(batch):")
-print("      return jax.vmap(jax.grad(jax.vmap(model)))(batch)")
-print("  ```")
-print("\n  This single function can:")
-print("  • Compute a batch of gradients (for HMC ensemble)")
-print("  • Be differentiated again (for variational inference)")
-print("  • Run on GPU with zero code changes")
+# %% [markdown]
+# The composable shape that falls out of this — `jit(vmap(grad(vmap(model))))` —
+# is one function that gives you batch gradients (for HMC ensembles), is itself
+# differentiable (for variational inference), and runs on GPU with no rewrite.
 
 # %% [markdown]
 # ---
@@ -592,10 +563,6 @@ noise = mock * 0.05  # 5% Gaussian uncertainty per band
 
 fitter_demo = Fitter(model, mock, noise)
 
-print("\n" + "=" * 70)
-print("TIMING NUTS: compile-once cost vs steady-state sampling")
-print("=" * 70)
-
 _NUTS_KW = dict(
     n_warmup=100,
     n_samples=100,
@@ -604,33 +571,31 @@ _NUTS_KW = dict(
     verbose=False,
 )
 
-print("\nFirst call (compile + sample):", flush=True)
+# Cold call: pays compile + sample.
 t0 = time.perf_counter()
 result_cold = fitter_demo.run(
     "mcmc_nuts", key=jax.random.PRNGKey(0), **_NUTS_KW
 )
 t_cold = time.perf_counter() - t0
-print(f"  wall = {t_cold:.1f} s")
+print(f"first call (compile + sample): {t_cold:.1f} s")
 
-print("\nSecond call (warm — same shapes, new key):", flush=True)
+# Warm call: same shapes → reuses the compiled scan body.
 t0 = time.perf_counter()
 result_warm = fitter_demo.run(
     "mcmc_nuts", key=jax.random.PRNGKey(1), **_NUTS_KW
 )
 t_warm = time.perf_counter() - t0
-print(f"  wall = {t_warm:.1f} s")
+print(f"second call (warm):            {t_warm:.1f} s")
 
 t_compile = max(t_cold - t_warm, 0.0)
 n_iter = _NUTS_KW["n_warmup"] + _NUTS_KW["n_samples"]
 ms_per_iter = (t_warm / n_iter) * 1e3
 
-print("\n" + "-" * 70)
-print(f"One-time compile cost:    {t_compile:>7.1f} s")
-print(f"Steady-state sampling:    {ms_per_iter:>7.2f} ms / iter (warm)")
-print(f"For a 1000-iter chain:    ~{ms_per_iter * 1000 / 1e3:.1f} s after compile")
-print("-" * 70)
-print("\nTakeaway: budget the compile *once* per process. Sampling itself is")
-print("microsecond-per-leapfrog-step compiled code — the chain length is free.")
+print(
+    f"\ncompile cost (one-time):  {t_compile:.1f} s\n"
+    f"steady-state sampling:    {ms_per_iter:.2f} ms / iter\n"
+    f"projected 1000-iter run:  ~{ms_per_iter * 1000 / 1e3:.1f} s after compile"
+)
 
 # %% [markdown]
 # ---

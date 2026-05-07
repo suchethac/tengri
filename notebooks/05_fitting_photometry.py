@@ -139,6 +139,7 @@ import tengri as tg
 from tengri import (
     Fitter,
     Fixed,
+    LogUniform,
     Observation,
     Parameters,
     Photometry,
@@ -147,10 +148,8 @@ from tengri import (
     load_ssp_data,
 )
 
-print("=" * 70)
 tg.print_logo()
 print(f"tengri {tg.__version__}")
-print("=" * 70)
 
 # %% [markdown]
 # ## Part 1: Load SSP and assemble bandset
@@ -189,13 +188,17 @@ spec = Parameters(
     # Double power-law SFH (4 params) — simpler than dense_basis,
     # smaller compile graph.
     mean_sfh_type="dpl",
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_dpl_tau_gyr=Uniform(0.5, 12.0),
-    sfh_dpl_alpha=Uniform(1.0, 8.0),
-    sfh_dpl_beta=Uniform(1.0, 8.0),
-    met_logzsol=Uniform(-1.5, 0.3),
-    dust_tau_bc=Uniform(0.0, 2.0),
-    dust_tau_diff=Uniform(0.0, 1.5),
+    # Reparameterised: positive-definite physical quantities use LogUniform
+    # so the unconstrained xi-space is roughly Gaussian — flattens the
+    # geometry near the lower boundary (tau→0, alpha→1) where Uniform
+    # priors create steep gradients and trigger NUTS divergences.
+    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),  # already in log space
+    sfh_dpl_tau_gyr=LogUniform(0.5, 12.0),
+    sfh_dpl_alpha=LogUniform(1.0, 8.0),
+    sfh_dpl_beta=LogUniform(1.0, 8.0),
+    met_logzsol=Uniform(-1.5, 0.3),  # already a log quantity
+    dust_tau_bc=LogUniform(0.01, 2.0),
+    dust_tau_diff=LogUniform(0.01, 1.5),
     dust_slope=Fixed(-0.7),
     # No dust_emission: UV-NIR alone is well-constrained without IR.
     # Free redshift — `SEDModel(approx={"ztable": ...})` auto-precomputes
@@ -255,9 +258,7 @@ print(f"\nMock: {len(mock_data.flux_obs)} bands, SNR=15")
 # ## Part 4: Inference with MAP
 
 # %%
-print("\n" + "=" * 70)
 print("FITTING: MAP optimization")
-print("=" * 70)
 
 fitter = Fitter(model, mock_data.flux_obs, mock_data.noise)
 
@@ -281,7 +282,7 @@ result = fitter.run(
 )
 t_fit = time.perf_counter() - t0
 
-print(f"\n✓ NUTS: {t_fit:.1f}s  (warmup=500 + samples=600, single chain)")
+print(f"NUTS: {t_fit:.1f}s  (warmup=500 + samples=600, single chain)")
 print(f"  Divergences: {result.diagnostics.get('n_divergent', 'n/a')}")
 print(f"  Step size:   {result.diagnostics.get('step_size', float('nan')):.4f}")
 print(f"  Samples:     {len(next(iter(result.samples.values())))}")
@@ -291,9 +292,7 @@ samples_source = result.samples
 # ## Part 5: Fit quality assessment
 
 # %%
-print("\n" + "=" * 70)
 print("FIT SUMMARY")
-print("=" * 70)
 print("\nOptimized parameters (MAP):")
 for name in spec.free_params[:5]:
     print(f"  {name:30s} = {float(result.params[name]):.4f}")
@@ -307,10 +306,6 @@ print(f"\nNUTS posterior: {n_samps} samples")
 # ## Part 6: Derived properties
 
 # %%
-print("\n" + "=" * 70, flush=True)
-print("DERIVED PROPERTIES", flush=True)
-print("=" * 70, flush=True)
-
 # Compute derived quantities sample-by-sample to keep peak RSS bounded.
 # ``result.derived`` uses ``jax.vmap(predict_sfh_quantities)(samples)``
 # which compiles a fresh batched kernel on top of the resident NUTS graph
@@ -431,8 +426,6 @@ ax_res.set_ylabel(r"Residual [σ]", fontsize=11)
 ax_res.grid(True, alpha=0.3, which="major")
 
 plt.savefig(os.path.join(FIGDIR, "05_posterior_predictive.png"), dpi=200, bbox_inches="tight")
-print("✓ Saved 05_posterior_predictive.png")
-plt.close()
 
 # %% [markdown]
 # ## Figure 2: Corner plot
@@ -479,8 +472,7 @@ for i, ki in enumerate(free):
 fig.suptitle(f"Parameter posterior: {n_free}--D NUTS ({len(xi)} samples)", fontsize=12, y=0.995)
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "05_corner.png"), dpi=180, bbox_inches="tight")
-print("✓ Saved 05_corner.png", flush=True)
-plt.close()
+print("Saved 05_corner.png", flush=True)
 
 # %% [markdown]
 # ## Figure 3: SFH posterior
@@ -524,16 +516,12 @@ ax.set_title("Star formation history posterior", fontsize=12)
 ax.legend(loc="upper right", frameon=False, fontsize=10)
 ax.grid(True, alpha=0.3, which="both")
 plt.savefig(os.path.join(FIGDIR, "05_sfh_posterior.png"), dpi=200, bbox_inches="tight")
-print("✓ Saved 05_sfh_posterior.png")
-plt.close()
 
 # %% [markdown]
 # ## Summary
 
 # %%
-print("\n" + "=" * 70)
 print("SUMMARY: Photometric SED Fitting")
-print("=" * 70)
 
 print(f"""
 ✓ Complete workflow:
@@ -551,8 +539,7 @@ Solution: Add spectroscopy (notebook 06) to constrain stellar age.
 Next: 06_fitting_spectroscopy.py for optical spectrum + line diagnostics
 """)
 
-print("=" * 70)
 
 tg.cite(result)
 
-print("\n✓ Notebook complete: photometric SED fitting, NUTS inference, posterior validation")
+print("Notebook complete: photometric SED fitting, NUTS inference, posterior validation")

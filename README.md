@@ -5,13 +5,13 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: BSD-3](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)](LICENSE)
 
-Tengri is a JAX framework for differentiable galaxy SED fitting. One modular forward model spans stars, dust, nebular emission, AGN, and IGM — X-ray to radio. Every inference method (MAP, Laplace, Pathfinder, NUTS, Ray Tracing, Bayesian evidence, hierarchical population) runs on the same model, with gradients available everywhere. Pre-1.0 research code; JIT-compiled and GPU/TPU-native. Information-Field-Theory stochastic SFH priors and geoVI are Paper II preview material.
+Tengri is a JAX framework for fitting the spectral energy distributions of galaxies — from the X-ray to the radio — with a single differentiable forward model. Stars, dust, nebular emission, AGN, and IGM components plug into one pipeline, and every inference method (MAP, Laplace, Pathfinder, NUTS, Ray Tracing, Bayesian evidence, hierarchical population, geoVI) runs against the same model with gradients available throughout. Pre-1.0 research code; JIT-compiled and GPU/TPU-native.
 
-**Documentation:** [https://suchethacooray.github.io/tengri/](https://suchethacooray.github.io/tengri/) · **Notebooks:** [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) · **Paper:** [In preparation]
+**Documentation:** [suchethacooray.github.io/tengri](https://suchethacooray.github.io/tengri/) · **Notebooks:** [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) · **Paper:** in preparation
 
 ---
 
-*The name [Tengri](https://en.wikipedia.org/wiki/Tengri) comes from the all-encompassing God of Heaven in traditional Turkic, Mongolic, and other Central Asian nomadic religions. Tengri is the supreme sky deity in Tengrism, the eternal source of order in the natural world. A fitting name for a code that models the light of galaxies across cosmic time. This name is chosen with respect for the cultural and spiritual traditions it originates from; no religious claim or appropriation is intended.*
+*The name [Tengri](https://en.wikipedia.org/wiki/Tengri) is the all-encompassing God of Heaven in traditional Turkic, Mongolic, and Central Asian nomadic religions — the eternal source of order in the natural world. A fitting name for a code that models the light of galaxies across cosmic time. The name is used with respect for the cultural and spiritual traditions it originates from.*
 
 ---
 
@@ -35,39 +35,39 @@ cd tengri
 pip install -e ".[dev]"
 ```
 
-**Requirements:** Python >= 3.11, JAX >= 0.4.20, DSPS >= 0.4.6, NIFTy.re >= 8.5
+**Requirements:** Python ≥ 3.11, JAX ≥ 0.4.20, DSPS ≥ 0.4.6, NIFTy.re ≥ 8.5
 
 JAX backend setup:
-- **CPU (default):** Works out-of-the-box.
-- **CUDA:** Follow [JAX CUDA installation](https://jax.readthedocs.io/en/latest/installation.html#gpu-support).
-- **Apple Silicon:** Metal backend enabled by default via `jax_platforms=metal`. For CPU fallback, use `JAX_PLATFORMS=cpu`.
+- **CPU (default):** works out of the box.
+- **CUDA:** follow [JAX CUDA installation](https://jax.readthedocs.io/en/latest/installation.html#gpu-support).
+- **Apple Silicon:** Metal backend is enabled by default. For CPU fallback, set `JAX_PLATFORMS=cpu`.
 
-### Verify your install (30 s)
+### Verify your install
 
 ```bash
 .venv/bin/pytest tests/unit/test_alpha_fe.py tests/unit/test_stellar_skeleton.py -q --no-header
 ```
 
-The same selection runs on every PR via GitHub Actions before the full matrix.
+The same selection runs as a smoke gate on every PR before the full matrix.
 
 ## SSP Grids
 
-Tengri requires pre-computed Simple Stellar Population (SSP) grids in DSPS-compatible HDF5 format. A [repository of pre-formatted templates](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/) from BC03, BPASS, FSPS, and ProGeny is publicly available. Download the default FSPS grid:
+Tengri needs pre-computed Simple Stellar Population (SSP) grids in DSPS-compatible HDF5 format. A [public mirror of pre-formatted templates](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/) (BC03, BPASS, FSPS, ProGeny) is available. Pull the default FSPS grid from Python:
 
 ```python
 import tengri
 tengri.download_ssp()  # FSPS v3.2 → data/ (or $TENGRI_DATA_DIR if set)
 ```
 
-Alternatively, use the shell wrapper or wget:
+Or via shell:
 
 ```bash
 bash scripts/setup_ssp.sh
-# or
+# or:
 wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/ssp_fsps_v3.2.h5 -P data/
 ```
 
-See `tengri.list_known_ssps()` for other available grids (BC03, BPASS, ProGeny).
+`tengri.list_known_ssps()` shows the other available grids.
 
 ## Quick Start
 
@@ -102,7 +102,7 @@ Full walkthrough in [`notebooks/00_quickstart.py`](notebooks/00_quickstart.py).
 
 ## Tutorials
 
-The tutorial spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) is the primary learning path — Jupytext `.py` files that are also rendered into the [docs site](https://suchethacooray.github.io/tengri/).
+The tutorial spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) is the primary learning path. The `.py` files use Jupytext format and also render into the [docs site](https://suchethacooray.github.io/tengri/).
 
 | #  | Notebook                          | What you learn                                                       |
 |----|-----------------------------------|----------------------------------------------------------------------|
@@ -116,180 +116,89 @@ The tutorial spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/ma
 | 07 | `07_joint_photo_spec.py`          | joint photo + spectro fits to break degeneracies                     |
 | 08 | `08_emission_lines.py`            | BPT diagnostics, line ratios, Hα-based SFR validation                |
 
-For one-figure recipes, see the [examples gallery](https://suchethacooray.github.io/tengri/auto_examples/index.html) — 70+ thumbnailed scripts.
+For one-figure recipes, see the [examples gallery](https://suchethacooray.github.io/tengri/auto_examples/index.html).
 
-## Discover what's available — and learn it interactively
+## Discover what's there, interactively
 
 After installing, four calls answer "what does tengri do?" and "how do I use it?":
 
 ```python
 import tengri
-tengri.help()           # curated cheatsheet (5 sections, advertises tutorials)
-tengri.summary()        # one-line counts of every menu (live from registry)
-tengri.tutorial()       # menu of 10 runnable, copy-pasteable recipes
-tengri.<TAB>            # ~39 curated entry points (not the 175-name kitchen sink)
+tengri.help()           # curated cheatsheet
+tengri.summary()        # one-line counts of every menu, live from the registry
+tengri.tutorial()       # menu of runnable, copy-pasteable recipes
+tengri.<TAB>            # curated entry points (not the kitchen sink)
 ```
 
-**Live tutorials** — pass a topic name to print the recipe, add `run=True` to actually
-execute it where safe:
+`tengri.tutorial(topic)` prints a recipe; pass `run=True` to execute it where safe:
 
 ```python
 tengri.tutorial("philosophy")        # layered architecture + IFT framework
-tengri.tutorial("key_classes")       # Parameters / SEDModel / Fitter / Posterior
-tengri.tutorial("use_cases")         # 8 patterns matching real science
-tengri.tutorial("first_fit")         # mock galaxy → posterior in 30 s
-tengri.tutorial("register_a_model", run=True)   # add a new model alternative — LIVE
+tengri.tutorial("first_fit")         # mock galaxy → posterior
 tengri.tutorial("swap_inference")    # same model, NUTS → geoVI → MCMC
-tengri.tutorial("custom_likelihood") # Student-t / calibration / custom Protocol
-tengri.tutorial("diagnostics")       # ESS / R-hat / convergence checking
 tengri.tutorial("hierarchical")      # population fit across many galaxies
-
-tengri.explain(tengri.SEDModel)      # architectural role of any class or instance
-tengri.examples()                    # every runnable example script under examples/
+tengri.tutorial("register_a_model", run=True)   # add a new model — LIVE
 ```
 
-`tengri.summary()` prints something like:
+`tengri.summary()` reads counts directly from the registries — adding a new model via `@register_agn_model` updates them without any doc edit. Each `list_*()` returns a clean table in the REPL and a real HTML table in Jupyter.
 
-```
-tengri — what's available:
+`tengri.describe(name)` and `tengri.search(query)` look up models by name or keyword across every menu (components, AGN models, dust laws, SFH models, nebular backends, filters, inference methods).
 
-     7  physics components           tengri.list_components()
-    12  AGN models                   tengri.list_agn_models()
-    21  dust attenuation laws        tengri.list_dust_laws()
-     7  dust emission templates      tengri.list_dust_emission_models()
-    34  SFH models                   tengri.list_sfh_models()
-     4  nebular backends             tengri.list_nebular_backends()
-   242  photometric filters          tengri.list_filters()
-     6  primary inference methods    tengri.list_inference_methods(tier='primary')
-    19  total inference methods      tengri.list_inference_methods()
-```
+`tengri.doctor()` confirms install + JAX backend + SSP files.
 
-**All counts are read live from the registries** — adding a new model
-via `@register_agn_model` or `tengri.register_component` updates them
-without any doc edit.
-
-Each `list_*()` returns a column-aligned table in the REPL and a real
-HTML table in Jupyter — no `pprint` needed:
-
-```python
->>> tengri.list_inference_methods(tier="primary")
-name               tier     short_doc
-─────────────────  ───────  ──────────────────────────────────────────────
-map                primary  Adam MAP optimization
-mcmc_nuts          primary  No-U-Turn Sampler
-mcmc_raytrace      primary  Ray-tracing ensemble sampler (high-D)
-vi                 primary  NIFTy geoVI variational inference
-...
-```
-
-**Universal lookup** across every menu — returns the metadata block
-including free parameters per model:
-
-```python
->>> tengri.describe("skirtor")
-  name       skirtor
-  kind       agn_model
-  status     production
-  citation   Stalevski et al. 2012, 2016
-  short_doc  Power-law disc + SKIRTOR clumpy torus
-  params     agn_log_lbol
-             agn_frac
-             agn_tau_skirtor
-             ... (9 total)
-```
-
-**Cross-menu fuzzy search** (matches name, citation, short_doc, status):
-
-```python
-tengri.search("torus")    # 11 hits across components + AGN models
-tengri.search("Leja")     # 2 SFH models cited to Leja
-tengri.search("JWST")     # JWST/NIRCam, MIRI, NIRISS filter sets
-```
-
-**Topical help** for one menu:
-
-```python
-tengri.help("agn")        # 12 AGN models
-tengri.help("dust")       # 21 attenuation + 7 emission, one table
-tengri.help("filters")    # 242 filter curves
-tengri.help("inference")  # 19 methods, recommended tier first
-```
-
-**Health check** — confirms install + JAX backend + SSP files:
-
-```python
-tengri.doctor()
-```
-
-**CLI** — same surface without entering a REPL:
+The same surface is available without entering Python:
 
 ```bash
 python -m tengri summary
 python -m tengri doctor
-python -m tengri help inference
-python -m tengri search torus
 python -m tengri describe skirtor
+python -m tengri search torus
+python -m tengri help inference
 ```
 
-**Friendly error messages** with `Did you mean: …` suggestions:
+## Inference methods
 
-```python
->>> tengri.list_agn_modls()
-AttributeError: module 'tengri' has no attribute 'list_agn_modls'.
-                Did you mean: 'list_agn_models'?
+Parameters declare priors, SSP grids hold pre-computed stellar populations, `SEDModel` ties them into a differentiable forward model, and `Fitter` runs inference and returns a `Posterior`.
 
->>> tengri.Fitter(model, data, noise).run("nutz")
-ValueError: Unknown inference method 'nutz'.
-            Recommended (tier=primary): ['map', 'mcmc', 'mcmc_nuts',
-            'mcmc_raytrace', 'vi', 'vi_nonlinear_fast'].
-            Run `tengri.list_inference_methods()` for the full list.
+| Method        | Command                            | Best for                                                  |
+|---------------|------------------------------------|-----------------------------------------------------------|
+| MAP           | `fitter.run("map")`                | Point estimates, initialization                           |
+| Laplace       | `fitter.run("laplace")`            | Gaussian posterior from Hessian at the MAP                |
+| Pathfinder    | `fitter.run("pathfinder")`         | Fast approximate posterior; good NUTS warm-start          |
+| NUTS          | `fitter.run("mcmc_nuts")`          | Gold-standard posterior (D ≲ 30)                          |
+| Ray Tracing   | `fitter.run("mcmc_raytrace")`      | Exact MCMC, scales beyond D = 30                          |
+| Evidence      | `fitter.run("evidence")`           | Bayesian evidence for model comparison                    |
+| Population    | `PopulationFitter(...)`            | Shared hyperparameters across galaxy samples              |
+| geoVI         | `fitter.run("vi")`                 | High-dim stochastic SFHs (Paper II preview)               |
 
->>> tengri.Fitter(model, data, noise).run("mcmc_nuts")
-# (with blackjax not installed)
-ImportError: Inference method 'mcmc_nuts' requires 'blackjax', which is
-             not installed.  Install it with:
-                 pip install "tengri[blackjax]"
-```
+## What's modular
 
-## Features
+- **Stars** — DSPS SSPs (BC03, BPASS, FSPS, ProGeny).
+- **SFH** — parametric, non-parametric, and stochastic (IFT-correlated fields with PSD-governed burstiness).
+- **Dust** — multiple attenuation laws and emission templates, swappable via the registry.
+- **Nebular** — BakedIn / CloudyGrid / Cue backends.
+- **AGN** — disc + torus + BLR/NLR, unified across optical/IR/X-ray.
+- **IGM, radio, X-ray** — first-class components.
+- **Filters** — large catalogue of photometric bandpasses (`tengri.list_filters()`).
 
-- **JIT-compiled, fully differentiable:** pure JAX end-to-end. Forward model ~140 μs, gradient ~56 μs on CPU for a smooth 7-D model. JIT + `vmap` + `grad` compose — one forward model powers every inference backend.
-- **Modular physics:** stars (DSPS SSPs), SFH (parametric, non-parametric, stochastic IFT), dust attenuation (15+ laws) and emission, nebular (BakedIn / CloudyGrid / Cue), unified AGN (disc + torus + BLR/NLR), IGM absorption, radio and X-ray. Each is a swappable pure function.
-- **Every inference method, same model:** `fitter.run("map" | "laplace" | "pathfinder" | "mcmc_nuts" | "mcmc_raytrace" | "evidence")`; `PopulationFitter` for hierarchical fits across catalogues.
-- **Per-component citations:** `tengri.cite_all()` returns citations for every upstream SSP grid, paper, and code contributing to your fit.
-- **Survey data readers:** SDSS/DESI/generic FITS readers; specutils bridge for flexible spectroscopy input.
-- **CLI utilities:** `python -m tengri {summary,doctor,help,search,describe}` for in-terminal discovery; `tengri doctor` (dependency check), `tengri cite KEY` (targeted citations), preprocessing helpers.
-- **GPU/TPU native:** same code runs on CPU, GPU, TPU without modification.
+Each is a swappable pure JAX function. JIT, `vmap`, and `grad` compose throughout.
 
-## How It Works
-
-Parameters declare free parameters and priors (SFH shape, dust, metallicity, redshift). SSP grids hold pre-computed stellar population spectra (any DSPS-compatible HDF5). Model combines them into a differentiable forward model that maps physical parameters to predicted photometry or spectra. Fitter runs inference (MAP, VI, MCMC) and returns a Posterior with samples, diagnostics, and provenance.
-
-| Inference Method | Command | Best For |
-|------------------|---------|----------|
-| MAP | `fitter.run("map")` | Point estimates, initialization |
-| Laplace | `fitter.run("laplace")` | Gaussian posterior from Hessian at MAP |
-| Pathfinder | `fitter.run("pathfinder")` | Fast approximate posterior; good NUTS warm-start |
-| NUTS | `fitter.run("mcmc_nuts")` | Gold-standard posterior (D ≲ 30) |
-| Ray Tracing | `fitter.run("mcmc_raytrace")` | Exact MCMC, noise-robust, scales past D = 30 |
-| Evidence (NSS) | `fitter.run("evidence")` | Bayesian evidence for model comparison |
-| Population | `PopulationFitter(...)` | Shared hyperparameters across galaxy samples |
-| geoVI / vi_native | `fitter.run("vi")` / `"vi_native"` | **Paper II preview.** High-D stochastic SFHs (D ≈ 137+) |
+`tengri.cite_all()` returns BibTeX citations for every upstream SSP grid, paper, and code that contributed to a fit, so reproducibility is not a separate task.
 
 ## Status
 
-Pre-1.0, active development. Core pipeline fully functional with 2000+ unit and integration tests. Paper in preparation. API may change.
+Pre-1.0; active development; API may change. Paper in preparation.
 
 ## Community
 
-- [CONTRIBUTING.md](CONTRIBUTING.md) — Bug reports, feature requests, pull requests.
-- [GOVERNANCE.md](GOVERNANCE.md) — Decision-making and core team.
-- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Community standards.
-- [SECURITY.md](SECURITY.md) — Security reporting.
-- [SUPPORT.md](SUPPORT.md) — Getting help.
-- [VERIFICATION.md](VERIFICATION.md) — Component verification status.
-- [CHANGELOG.md](CHANGELOG.md) — Version history.
-- [ROADMAP.md](ROADMAP.md) — Planned features.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — bug reports, feature requests, pull requests
+- [GOVERNANCE.md](GOVERNANCE.md) — decision-making and core team
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — community standards
+- [SECURITY.md](SECURITY.md) — security reporting
+- [SUPPORT.md](SUPPORT.md) — getting help
+- [VERIFICATION.md](VERIFICATION.md) — component verification status
+- [CHANGELOG.md](CHANGELOG.md) — version history
+- [ROADMAP.md](ROADMAP.md) — planned features
 
 ## Citation
 
