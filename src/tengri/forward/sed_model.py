@@ -1607,16 +1607,18 @@ class SEDModel:
         z = self._get_redshift(params)
         return luminosity_distance(z)
 
-    def _get_sigma_v_kms(self, params) -> float:
+    def _get_sigma_v_kms(self, params):
         """Get stellar velocity dispersion sigma_v_kms from params.
 
-        Falls back to the fixed value declared in the spec, then to 0.0
-        when the parameter is absent (i.e., spectroscopic broadening
-        skipped). Always returned as a Python float so the value can
-        flow through ``apply_lsf``'s sign check.
+        Returns a *traceable* value when ``sigma_v_kms`` is in the
+        params dict (typical for spec fits with sigma_v as a free
+        param) or the JAX/Python scalar from the spec's fixed
+        distribution otherwise. Falls back to 0.0 when the parameter
+        is absent. ``apply_lsf`` clamps via ``jnp.maximum`` so traced
+        values flow through without breaking JIT.
         """
         if "sigma_v_kms" in params:
-            return float(params["sigma_v_kms"])
+            return params["sigma_v_kms"]
         try:
             dist = self.spec.get_distribution("sigma_v_kms")
         except KeyError:

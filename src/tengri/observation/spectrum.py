@@ -365,8 +365,10 @@ def apply_lsf(
     >>> spectrum_smoothed = apply_lsf(spectrum, wave_obs, resolution=R_custom)
 
     """
-    if float(sigma_v_kms) < 0.0:
-        raise ValueError(f"sigma_v_kms must be non-negative, got {sigma_v_kms}")
+    # Clamp non-negative (priors enforce this; clamp keeps trace-safe path
+    # for callers that pass sigma_v_kms in via the params dict — the prior
+    # guards against negatives, so this is purely defensive).
+    sigma_v_kms = jnp.maximum(jnp.asarray(sigma_v_kms), 0.0)
 
     resolution = jnp.asarray(resolution)
 
