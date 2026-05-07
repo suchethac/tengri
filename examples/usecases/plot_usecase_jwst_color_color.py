@@ -108,9 +108,9 @@ for i in range(70):
         pred = model.predict_photometry(params)
         # Simple color: f277w / f150w (rest-frame UV slope) and f444w / f277w (IR)
         try:
-            f1 = float(pred.flux_obs[1])
-            f0 = float(pred.flux_obs[0])
-            f2 = float(pred.flux_obs[2])
+            f1 = float(pred[1])
+            f0 = float(pred[0])
+            f2 = float(pred[2])
             color1 = -2.5 * np.log10(f1 / f0) if f1 > 0 else 0
             color2 = -2.5 * np.log10(f2 / f1) if f2 > 0 else 0
             colors_sf.append([color1, color2])
@@ -122,7 +122,9 @@ for i in range(35):
     z = np.random.uniform(1.0, 3.0)
     spec = Parameters(
         sfh_tsnorm_log_peak_sfr=Uniform(-2.0, -0.5),  # Old, quenched
-        sfh_tsnorm_peak_lbt_gyr=Uniform(8.0, 13.0),  # Peaked early
+        # Peak before the galaxy's age at z=1-3 (~3-6 Gyr after Big Bang)
+        # so the SFH actually places mass; >8 Gyr lookback gives zero flux.
+        sfh_tsnorm_peak_lbt_gyr=Uniform(2.0, 4.5),
         sfh_tsnorm_width_gyr=Uniform(0.2, 1.0),
         sfh_tsnorm_skew=Uniform(-2.0, 0.0),
         sfh_tsnorm_trunc=Uniform(1.0, 3.0),
@@ -138,9 +140,9 @@ for i in range(35):
         params = spec.sample(k)
         pred = model.predict_photometry(params)
         try:
-            f1 = float(pred.flux_obs[1])
-            f0 = float(pred.flux_obs[0])
-            f2 = float(pred.flux_obs[2])
+            f1 = float(pred[1])
+            f0 = float(pred[0])
+            f2 = float(pred[2])
             color1 = -2.5 * np.log10(f1 / f0) if f1 > 0 else 0
             color2 = -2.5 * np.log10(f2 / f1) if f2 > 0 else 0
             colors_passive.append([color1, color2])
@@ -168,9 +170,9 @@ for i in range(45):
         params = spec.sample(k)
         pred = model.predict_photometry(params)
         try:
-            f1 = float(pred.flux_obs[1])
-            f0 = float(pred.flux_obs[0])
-            f2 = float(pred.flux_obs[2])
+            f1 = float(pred[1])
+            f0 = float(pred[0])
+            f2 = float(pred[2])
             color1 = -2.5 * np.log10(f1 / f0) if f1 > 0 else 0
             color2 = -2.5 * np.log10(f2 / f1) if f2 > 0 else 0
             colors_agn.append([color1, color2])
@@ -227,14 +229,11 @@ ax.set_title(
 )
 ax.grid(True, alpha=0.3, linestyle="--")
 ax.legend(frameon=False, fontsize=11, loc="best")
-ax.set_xlim(-1.0, 3.0)
-ax.set_ylim(-1.0, 3.0)
+# Frame on the actual color cluster with breathing room either side.
+ax.set_xlim(-1.5, 0.5)
+ax.set_ylim(-0.5, 0.5)
 
 fig.tight_layout()
 
-outdir = (
-    Path(__file__).resolve().parent.parent.parent / "figures" if "__file__" in dir() else Path(".")
-)
-outdir.mkdir(parents=True, exist_ok=True)
-plt.savefig(str(outdir / "usecase_jwst_color_color.png"), dpi=150, bbox_inches="tight")
+plt.savefig("plot_usecase_jwst_color_color.png", dpi=150, bbox_inches="tight")
 plt.show()

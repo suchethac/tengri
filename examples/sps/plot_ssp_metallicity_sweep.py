@@ -53,10 +53,15 @@ ssp_spec = np.array(ssp_data.ssp_flux)  # Shape: (n_z, n_age, n_wave)
 # Fixed age: 1 Gyr
 age_idx = np.argmin(np.abs(age_gyr - 1.0))
 
-# Select 5 metallicities spanning the grid
-log_z_targets = [-1.5, -1.0, -0.3, 0.0, 0.3]
+# Select 5 metallicities spanning the grid. ssp_lgmet stores absolute
+# log10(Z); convert user-friendly log(Z/Zsun) targets via LOG10_ZSUN so
+# the requested values land on distinct grid points instead of all
+# clipping to the grid maximum.
+LOG10_ZSUN = -1.848
+log_zsol_targets = [-1.5, -1.0, -0.3, 0.0, 0.3]
+log_z_targets = [t + LOG10_ZSUN for t in log_zsol_targets]
 met_indices = [np.argmin(np.abs(log_z - t)) for t in log_z_targets]
-met_labels = [f"log Z = {log_z[i]:.2f}" for i in met_indices]
+met_labels = [f"log Z/Z$_\\odot$ = {log_z[i] - LOG10_ZSUN:+.2f}" for i in met_indices]
 
 # Clamp viridis colormap to 0.0–0.85
 colors = plt.cm.viridis(np.linspace(0.0, 0.85, len(met_indices)))
