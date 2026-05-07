@@ -237,7 +237,7 @@ def _nuts_chain_scan(
 # ---------------------------------------------------------------------------
 
 
-@functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8, 9))
+@functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8))
 def _hmc_full_scan(
     init_flat,
     warmup_key,
@@ -248,7 +248,6 @@ def _hmc_full_scan(
     n_leapfrog,
     use_dense,
     target_accept_rate,
-    use_pathfinder_warmup: bool = False,
 ):
     """Outer JIT: BlackJAX HMC window adaptation + sampling chain.
 
@@ -274,15 +273,9 @@ def _hmc_full_scan(
     n_leapfrog : int (static)
         Leapfrog integration steps per HMC proposal.
     use_dense : bool (static)
-        Dense vs diagonal mass matrix. Ignored when
-        ``use_pathfinder_warmup=True``.
+        Dense vs diagonal mass matrix.
     target_accept_rate : float (static)
         Target acceptance rate for dual averaging.
-    use_pathfinder_warmup : bool (static)
-        When True, replace ``window_adaptation`` with
-        ``pathfinder_adaptation`` (L-BFGS mode-finding + dual-averaging
-        step-size refinement). Typically faster on D > ~30 problems
-        where window adaptation's regression matrix update dominates.
 
     Returns
     -------
@@ -297,23 +290,13 @@ def _hmc_full_scan(
     def ld_1arg(pos):
         return logdensity_fn_2arg(pos, data_args)
 
-    if use_pathfinder_warmup:
-        from blackjax.adaptation.pathfinder_adaptation import pathfinder_adaptation
-
-        warmup = pathfinder_adaptation(
-            blackjax.hmc,
-            ld_1arg,
-            target_acceptance_rate=target_accept_rate,
-            num_integration_steps=n_leapfrog,
-        )
-    else:
-        warmup = blackjax.window_adaptation(
-            blackjax.hmc,
-            ld_1arg,
-            is_mass_matrix_diagonal=not use_dense,
-            target_acceptance_rate=target_accept_rate,
-            num_integration_steps=n_leapfrog,
-        )
+    warmup = blackjax.window_adaptation(
+        blackjax.hmc,
+        ld_1arg,
+        is_mass_matrix_diagonal=not use_dense,
+        target_acceptance_rate=target_accept_rate,
+        num_integration_steps=n_leapfrog,
+    )
     (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
     step_size = parameters["step_size"]
     inv_mass_matrix = parameters["inverse_mass_matrix"]

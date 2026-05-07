@@ -35,7 +35,6 @@ def run_hmc(
     n_leapfrog_steps=10,
     target_accept_rate=0.85,
     dense_mass_matrix=True,
-    pathfinder_warmstart=False,
     verbose=True,
 ):
     """HMC sampling via BlackJAX.
@@ -60,13 +59,6 @@ def run_hmc(
         Target acceptance rate for step size adaptation.
     dense_mass_matrix : bool
         Use dense mass matrix. Set False for D>30.
-    pathfinder_warmstart : bool, default False
-        When True, replace ``window_adaptation`` with
-        ``pathfinder_adaptation`` (L-BFGS mode-finding + dual-averaging
-        step-size refinement). Typically faster on D > ~30 problems
-        where window adaptation dominates the warmup cost. Yields a
-        full inverse-covariance matrix from the L-BFGS Hessian
-        approximation; ``dense_mass_matrix`` is ignored when True.
     verbose : bool
         Print progress.
     """
@@ -100,7 +92,7 @@ def run_hmc(
 
     t0 = time.time()
 
-    adapt_key = ("hmc", not use_dense, bool(pathfinder_warmstart))
+    adapt_key = ("hmc", not use_dense)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     if cached is not None:
@@ -144,7 +136,6 @@ def run_hmc(
                 n_leapfrog_steps,
                 use_dense,
                 target_accept_rate,
-                bool(pathfinder_warmstart),
             )
             jax.block_until_ready(positions)
         parameters = {"step_size": step_size, "inverse_mass_matrix": inv_mass_matrix}
