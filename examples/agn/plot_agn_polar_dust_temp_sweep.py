@@ -62,9 +62,7 @@ for temp_polar, color in zip(temp_values, colors):
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title(
-    "Polar dust temperature sweep: effect on mid-to-far-IR continuum", fontsize=12
-)
+ax.set_title("Polar dust temperature sweep: effect on mid-to-far-IR continuum", fontsize=12)
 ax.legend(fontsize=10, frameon=False, loc="best")
 # Breathing room in axis limits
 ax.set_xlim(0.05, 100)

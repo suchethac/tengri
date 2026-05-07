@@ -61,6 +61,8 @@ def gc() -> None:
     ...     tengri.gc()  # one line of cleanup between configurations
     """
     clear_shared_caches(drop_xla=True)
+
+
 from tengri.utils.jax_cache import (
     cache_size_bytes,
     clear_cache,

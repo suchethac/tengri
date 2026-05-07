@@ -67,9 +67,15 @@ fig, ax = plt.subplots(figsize=(11, 6))
 
 key = jax.random.PRNGKey(0)
 
+# Observation setup (shared across loop)
+obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_sed))
+
 for z, color in zip(redshifts, colors):
     # Rebuild spec with fixed redshift
-    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_sed))
+    # Note: Each new SEDModel(spec_z, ...) initializes photometry precomputation
+    # (fast <100ms), so the cumulative loop cost is acceptable. The actual
+    # predict_rest_sed call is JIT-compiled and cached automatically via
+    # tengri's persistent JAX cache (subsequent calls reuse the compiled kernel).
     spec_z = Parameters(
         mean_sfh_type="tsnorm",
         dust_emission="draine_li2007",

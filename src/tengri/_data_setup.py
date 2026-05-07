@@ -49,15 +49,15 @@ def list_known_ssps() -> dict[str, str]:
     Returns
     -------
     dict[str, str]
-        Mapping of short SSP identifier (e.g., "fsps_v3.2") to filename
-        (e.g., "ssp_fsps_v3.2.h5").
+        Mapping of short SSP identifier (e.g., ``"fsps_prsc_miles_chabrier"``)
+        to filename (e.g., ``"fsps_prsc_miles_chabrier.h5"``).
 
     Examples
     --------
     >>> import tengri
     >>> ssps = tengri.list_known_ssps()
-    >>> print(ssps)
-    {'fsps_v3.2': 'ssp_fsps_v3.2.h5', 'bc03_v3.2': 'ssp_bc03_v3.2.h5', ...}
+    >>> "fsps_prsc_miles_chabrier" in ssps
+    True
     """
     return _KNOWN_SSPS.copy()
 

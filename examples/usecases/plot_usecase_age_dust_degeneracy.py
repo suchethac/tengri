@@ -239,9 +239,7 @@ fig.suptitle(
 fig.tight_layout()
 
 outdir = (
-    Path(__file__).resolve().parent.parent.parent / "figures"
-    if "__file__" in dir()
-    else Path(".")
+    Path(__file__).resolve().parent.parent.parent / "figures" if "__file__" in dir() else Path(".")
 )
 outdir.mkdir(parents=True, exist_ok=True)
 plt.savefig(str(outdir / "usecase_age_dust_degeneracy.png"), dpi=150, bbox_inches="tight")

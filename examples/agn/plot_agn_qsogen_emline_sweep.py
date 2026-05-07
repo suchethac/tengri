@@ -42,9 +42,7 @@ for emline_scale, color in zip(emline_scale_values, colors):
 
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title(
-    f"QSOgen: Emission-line scaling at log L_bol/L_sun = {log_lbol}", fontsize=12
-)
+ax.set_title(f"QSOgen: Emission-line scaling at log L_bol/L_sun = {log_lbol}", fontsize=12)
 ax.legend(fontsize=10, frameon=False, loc="lower left")
 # Broader axis limits for context
 ax.set_xlim(0.1, 2.0)

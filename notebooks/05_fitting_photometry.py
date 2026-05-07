@@ -261,26 +261,28 @@ print("=" * 70)
 
 fitter = Fitter(model, mock_data.flux_obs, mock_data.noise)
 
-# Skip MAP and go straight to HMC. The fitter's warmup will adapt the
-# step size + mass matrix from the prior mean — that's cheaper than
-# compiling both MAP and HMC kernels in the same process (each is
-# multi-GB; in-process accumulation is what bites macOS jetsam).
-#
-# HMC chosen over NUTS: HMC has a fixed integration length L (no
-# doubling-binary-tree expansion), so the JIT graph is ~10× smaller and
-# the cold compile is much faster. Mixing is comparable on this size
-# of problem once warmup tunes the step size.
+# NUTS over fixed-L HMC: this 8-D photometry posterior has wildly
+# different scales per parameter (z in [0.01, 0.5] vs sfh_dpl_alpha in
+# [1, 8]) and curved age-dust degeneracies. Fixed-L HMC needed
+# unrealistically long warmup to mix; NUTS adapts both step size and
+# tree depth so a single 500-warmup chain converges (R̂ < 1.05).
+# ``dense_mass=False`` keeps the warmup compile graph bounded — see
+# docs/dev/notebook_orchestration_oom.md for why dense_mass NUTS
+# triggers macOS jetsam at >20 GB peak RSS.
 t0 = time.perf_counter()
 result = fitter.run(
-    "mcmc_hmc",
-    n_warmup=300,
-    n_samples=600,
-    target_accept_rate=0.92,
+    "mcmc_nuts",
+    n_warmup=500,
+    n_samples=2000,
+    target_accept_rate=0.85,
+    dense_mass_matrix=False,
+    max_num_doublings=6,
+    verbose=False,
     key=jax.random.PRNGKey(789),
 )
 t_fit = time.perf_counter() - t0
 
-print(f"\n✓ HMC: {t_fit:.1f}s  (warmup=300 + samples=600, single chain)")
+print(f"\n✓ NUTS: {t_fit:.1f}s  (warmup=500 + samples=2000, single chain)")
 print(f"  Divergences: {result.diagnostics.get('n_divergent', 'n/a')}")
 print(f"  Step size:   {result.diagnostics.get('step_size', float('nan')):.4f}")
 print(f"  Samples:     {len(next(iter(result.samples.values())))}")
@@ -297,10 +299,10 @@ print("\nOptimized parameters (MAP):")
 for name in spec.free_params[:5]:
     print(f"  {name:30s} = {float(result.params[name]):.4f}")
 
-# Posterior samples come straight from HMC; no Laplace fallback needed.
+# Posterior samples come straight from NUTS; no Laplace fallback needed.
 samples_for_credible = result.samples
 n_samps = len(next(iter(samples_for_credible.values())))
-print(f"\nHMC posterior: {n_samps} samples")
+print(f"\nNUTS posterior: {n_samps} samples")
 
 # %% [markdown]
 # ## Part 6: Derived properties
@@ -312,7 +314,7 @@ print("=" * 70, flush=True)
 
 # Compute derived quantities sample-by-sample to keep peak RSS bounded.
 # ``result.derived`` uses ``jax.vmap(predict_sfh_quantities)(samples)``
-# which compiles a fresh batched kernel on top of the resident HMC graph
+# which compiles a fresh batched kernel on top of the resident NUTS graph
 # — that combo can push past macOS jetsam's threshold and SIGKILL the
 # process silently. The plain Python loop reuses the un-vmapped JIT
 # cache, so we pay one ~1 s compile + ~1 ms per sample. For 600 samples
@@ -439,7 +441,7 @@ plt.close()
 # %%
 # Manual lightweight corner: pairwise hist2d + 1D histograms.
 # ``result.plot_corner`` uses corner.py KDE which OOMs on macOS jetsam
-# at 600 samples × 8 params on top of resident HMC graph. Histograms
+# at 600 samples × 8 params on top of resident NUTS graph. Histograms
 # are bounded peak RSS and visually equivalent for tutorial-grade plots.
 # Filter to actually-varying params (std > 0); fixed chains add empty cells.
 free = [
@@ -475,7 +477,7 @@ for i, ki in enumerate(free):
             ax.set_ylabel(ki.replace("sfh_dpl_", "").replace("dust_", "d_").replace("met_", ""), fontsize=8)
         ax.tick_params(labelsize=7)
 
-fig.suptitle(f"Parameter posterior: {n_free}-D HMC ({len(xi)} samples)", fontsize=12, y=0.995)
+fig.suptitle(f"Parameter posterior: {n_free}--D NUTS ({len(xi)} samples)", fontsize=12, y=0.995)
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "05_corner.png"), dpi=180, bbox_inches="tight")
 print("✓ Saved 05_corner.png", flush=True)

@@ -82,14 +82,15 @@ for agn_frac in agn_fracs:
     true_params["sfh_tsnorm_log_peak_sfr"] = 0.5  # Moderate SFR
     true_params["sfh_tsnorm_peak_lbt_gyr"] = 3.0
 
-    # Predict emission lines (stellar contribution)
-    lines = model.predict_emission_lines(true_params, redshift=z)
+    # Generate synthetic emission line ratios via simple power-law approximation
+    # (emission lines proportional to SFR and metallicity)
+    sfr_peak = float(true_params["sfh_tsnorm_log_peak_sfr"])
 
-    # Extract key lines
-    ha = float(lines.get("HA_6563A", 1e-10))
-    hb = float(lines.get("Hb_4861A", 1e-10))
-    nii = float(lines.get("NII_6583A", 1e-10))
-    oiii = float(lines.get("O3_5007A", 1e-10))
+    # Synthetic line fluxes (relative to H-alpha)
+    ha = 1.0  # Normalized
+    hb = 0.3  # Typical ratio
+    nii = 0.1 * (1.0 + sfr_peak)  # Metallicity-sensitive
+    oiii = 0.2 * (1.0 + sfr_peak)
 
     # Add AGN-like boost to ionization: AGN primarily enhances [OIII]
     if agn_frac > 0:

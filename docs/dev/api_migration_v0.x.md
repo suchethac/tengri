@@ -316,6 +316,28 @@ The shims will be removed in v1.0.
 
 ---
 
+## Phase II-2.2 — Inference cache verbs + SSP data setup (2026-05-07)
+
+Six top-level convenience verbs were added to `tengri.__all__` so that
+common fitter/cache control and SSP-data ergonomics are reachable
+without remembering subpackage paths. None of these names existed
+previously, so the move is purely additive — no shim is required.
+
+| New top-level name           | Lives in                     | Purpose                                                    |
+| ---------------------------- | ---------------------------- | ---------------------------------------------------------- |
+| `tengri.lean`                | `tengri.inference._cache`    | Default lean compile mode (drops engine cache after run)   |
+| `tengri.persistent`          | `tengri.inference._cache`    | Opt back into engine reuse for repeated same-shape fits    |
+| `tengri.clear_shared_caches` | `tengri.inference._cache`    | Drop module-level loss/grad/logdens caches + jax caches    |
+| `tengri.gc`                  | `tengri.inference._cache`    | One-shot user-facing garbage-collect verb                  |
+| `tengri.list_known_ssps`     | `tengri.utils.data_setup`    | Public SSP catalogue mapping (slug → filename)             |
+| `tengri.download_ssp`        | `tengri.utils.data_setup`    | Auto-fetch a missing SSP from the public catalogue         |
+
+`ALLOWED_TOP_LEVEL` and `EXPECTED_ALL` in
+`tests/unit/test_public_api_surface.py` and
+`tests/unit/test_public_surface.py` were updated in the same commit.
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in

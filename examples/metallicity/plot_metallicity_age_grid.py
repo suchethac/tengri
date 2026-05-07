@@ -78,6 +78,7 @@ for i, age_gyr in enumerate(age_gyr_values):
 
         # Sample parameters and generate SED
         import jax.random
+
         key = jax.random.PRNGKey(0)
         params = spec.sample(key)
         pred = model.predict_rest_sed(params)

@@ -86,7 +86,7 @@ spec = Parameters(
 # --- Plot three panels ---
 fig, axes = plt.subplots(3, 1, figsize=(9, 8))
 
-for (ax, (survey_name, bands)) in zip(axes, filter_sets.items()):
+for ax, (survey_name, bands) in zip(axes, filter_sets.items()):
     obs = Observation(
         photometry=Photometry.from_names(bands, cache_dir=_FILTER_DIR),
     )

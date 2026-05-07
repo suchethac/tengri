@@ -233,9 +233,7 @@ ax.set_ylim(-1.0, 3.0)
 fig.tight_layout()
 
 outdir = (
-    Path(__file__).resolve().parent.parent.parent / "figures"
-    if "__file__" in dir()
-    else Path(".")
+    Path(__file__).resolve().parent.parent.parent / "figures" if "__file__" in dir() else Path(".")
 )
 outdir.mkdir(parents=True, exist_ok=True)
 plt.savefig(str(outdir / "usecase_jwst_color_color.png"), dpi=150, bbox_inches="tight")

@@ -141,18 +141,10 @@ wave = ssp.ssp_wave
 
 fig, ax = plt.subplots(figsize=(10, 6))
 
-ax.loglog(
-    wave, np.array(sed1), "k-", lw=2.0, label="Constant (α=0, β=0)"
-)
-ax.loglog(
-    wave, np.array(sed2), "C1--", lw=2.0, label="Exponential decline (β=2)"
-)
-ax.loglog(
-    wave, np.array(sed3), "C2:", lw=2.0, label="Sharp truncation (α=3, β=3)"
-)
-ax.loglog(
-    wave, np.array(sed4), "C3-.", lw=2.0, label="Recent burst"
-)
+ax.loglog(wave, np.array(sed1), "k-", lw=2.0, label="Constant (α=0, β=0)")
+ax.loglog(wave, np.array(sed2), "C1--", lw=2.0, label="Exponential decline (β=2)")
+ax.loglog(wave, np.array(sed3), "C2:", lw=2.0, label="Sharp truncation (α=3, β=3)")
+ax.loglog(wave, np.array(sed4), "C3-.", lw=2.0, label="Recent burst")
 
 ax.set_xlabel(r"Wavelength [$\AA$]", fontsize=11)
 ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=11)

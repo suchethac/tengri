@@ -53,9 +53,16 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "is_cache_enabled",
         # ── Top-level convenience verbs ─────────────────────────────
         "cite_components",
+        "clear_shared_caches",
         "doctor",
+        "gc",
+        "lean",
+        "persistent",
         "register_component",
         "search",
+        # ── SSP data setup ──────────────────────────────────────────
+        "download_ssp",
+        "list_known_ssps",
         # ── Registry introspection ──────────────────────────────────
         "describe",
         "examples",

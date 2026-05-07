@@ -61,6 +61,7 @@ true_spec = Parameters(
     sfh_tsnorm_skew=Fixed(0.1),
     sfh_tsnorm_trunc=Fixed(5.0),
     met_logzsol=Fixed(-0.2),
+    dust_tau_bc=Fixed(0.1),
     dust_tau_diff=Fixed(0.25),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(TRUE_REDSHIFT),
@@ -69,7 +70,19 @@ true_spec = Parameters(
 model_true = SEDModel(true_spec, ssp, observation=obs)
 
 key = jax.random.PRNGKey(42)
-mock = model_true.mock(true_spec, snr=25.0, key=key)
+true_params_dict = {
+    "sfh_tsnorm_log_peak_sfr": 1.2,
+    "sfh_tsnorm_peak_lbt_gyr": 2.5,
+    "sfh_tsnorm_width_gyr": 1.8,
+    "sfh_tsnorm_skew": 0.1,
+    "sfh_tsnorm_trunc": 5.0,
+    "met_logzsol": -0.2,
+    "dust_tau_bc": 0.1,
+    "dust_tau_diff": 0.25,
+    "dust_slope": -0.7,
+    "redshift": TRUE_REDSHIFT,
+}
+mock = model_true.mock(true_params_dict, snr=25.0, key=key)
 
 # --- Fit 1: Redshift FIXED (spectroscopy known) ---
 spec_fixed_z = Parameters(

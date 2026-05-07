@@ -80,7 +80,7 @@ fitter.run("map", optimizer="adam", n_steps=150, verbose=False)
 posterior = fitter.run(
     "mcmc_nuts",
     n_warmup=50,
-    n_draws=100,
+    n_samples=100,
     verbose=False,
 )
 

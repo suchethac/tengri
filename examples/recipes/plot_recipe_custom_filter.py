@@ -85,7 +85,8 @@ obs = Observation(photometry=phot)
 model = SEDModel(spec, ssp, observation=obs)
 
 # Compute SEDs for visualization
-sed_rest = model.predict_sed_rest(spec)
+spec_dict = {k: v.value if hasattr(v, "value") else v for k, v in spec._fixed_values.items()}
+sed_rest = model.predict_rest_sed(spec_dict)
 wave_rest = ssp.wave
 
 # --- Plot: SED + filter responses ---
@@ -93,7 +94,7 @@ fig, (ax_sed, ax_filters) = plt.subplots(2, 1, figsize=(10, 6), sharex=False)
 
 # Top: SED with photometric points
 phot_wave = np.array([float(jnp.mean(w)) for w in phot.filter_waves])  # Effective wavelengths
-phot_flux = np.array(model.predict_photometry(spec))
+phot_flux = np.array(model.predict_photometry(spec_dict))
 
 ax_sed.loglog(wave_rest, sed_rest, color="C0", lw=2.0, label="Model SED (rest-frame)")
 ax_sed.plot(phot_wave, phot_flux, "o", color="C3", ms=8, label="Photometry", zorder=10)

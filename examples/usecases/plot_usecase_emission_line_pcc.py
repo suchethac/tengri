@@ -145,7 +145,7 @@ try:
                         sii_ha = 10**log_z * 0.3 + np.random.randn() * 0.03
 
                         # [SII]/[OIII] (anticorrelated: high Z → low ionization)
-                        sii_oiii = 10**(-log_u) * 0.2 + np.random.randn() * 0.02
+                        sii_oiii = 10 ** (-log_u) * 0.2 + np.random.randn() * 0.02
 
                         line_ratios.append(
                             [
@@ -172,7 +172,7 @@ try:
             ha_hb = 2.86 * (1 + 0.1 * dust)
             nii_ha = 10**log_z * 0.5 + np.random.randn() * 0.1
             sii_ha = 10**log_z * 0.3 + np.random.randn() * 0.05
-            sii_oiii = 10**(-log_u) * 0.2 + np.random.randn() * 0.05
+            sii_oiii = 10 ** (-log_u) * 0.2 + np.random.randn() * 0.05
 
             line_ratios.append(
                 [

@@ -34,9 +34,7 @@ class TestSKIRTORTracedArrays:
 
         # Build with traced arrays
         grid_arrays_traced = (grid_phot_mock, axes_mock)
-        lookup = build_skirtor_photometry_lookup(
-            precomp, grid_arrays_traced=grid_arrays_traced
-        )
+        lookup = build_skirtor_photometry_lookup(precomp, grid_arrays_traced=grid_arrays_traced)
 
         # Verify the lookup is callable
         assert callable(lookup)

@@ -61,6 +61,7 @@ true_spec = Parameters(
     sfh_tsnorm_skew=Fixed(0.1),
     sfh_tsnorm_trunc=Fixed(5.0),
     met_logzsol=Fixed(-0.5),  # Subsolar: true value
+    dust_tau_bc=Fixed(0.1),
     dust_tau_diff=Fixed(0.2),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
@@ -69,7 +70,19 @@ true_spec = Parameters(
 model_true = SEDModel(true_spec, ssp, observation=obs)
 
 key = jax.random.PRNGKey(42)
-mock = model_true.mock(true_spec, snr=20.0, key=key)
+true_params_dict = {
+    "sfh_tsnorm_log_peak_sfr": 0.8,
+    "sfh_tsnorm_peak_lbt_gyr": 2.0,
+    "sfh_tsnorm_width_gyr": 1.5,
+    "sfh_tsnorm_skew": 0.1,
+    "sfh_tsnorm_trunc": 5.0,
+    "met_logzsol": -0.5,
+    "dust_tau_bc": 0.1,
+    "dust_tau_diff": 0.2,
+    "dust_slope": -0.7,
+    "redshift": 0.1,
+}
+mock = model_true.mock(true_params_dict, snr=20.0, key=key)
 
 # --- Fit 1: Uniform prior on metallicity ---
 spec_uniform = Parameters(

@@ -82,6 +82,10 @@ dev = [
     "optax>=0.2",
     "blackjax>=1.0",
     "jaxopt>=0.8",
+    # Required by tests/unit/test_physical_amplitudes.py for grain-model dust
+    # laws (D03/HD23/WD01). Runtime imports inside attenuation.py are guarded,
+    # but the test class exercises them directly.
+    "dust-extinction>=1.5",
 ]
 crossval = [
     "bagpipes>=1.0",

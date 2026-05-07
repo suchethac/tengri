@@ -124,8 +124,10 @@ post_correct = fitter_c.run("map", optimizer="adam", n_steps=400, verbose=False)
 
 # --- Fit 2: wrong model (delayed-tau, smooth) ---
 spec_wrong = Parameters(
+    sfh_dpl_log_peak_sfr=Uniform(0.5, 2.5),
     sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-    sfh_dpl_tage_gyr=Uniform(0.1, 13.0),
+    sfh_dpl_alpha=Fixed(1.0),
+    sfh_dpl_beta=Fixed(0.0),
     met_logzsol=Fixed(-0.1),
     dust_tau_bc=Fixed(0.2),
     dust_tau_diff=Fixed(0.1),

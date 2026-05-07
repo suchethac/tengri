@@ -105,11 +105,17 @@ print(
 
 # Star-forming, moderately dusty, modest AGN, z = 0.5
 spec_full = Parameters(
-    # Stellar population — delayed exponential SFH, sub-solar metallicity
-    mean_sfh_type="dexp",
-    sfh_dexp_log_peak_sfr=Fixed(1.0),
-    sfh_dexp_start_gyr=Fixed(0.5),
-    sfh_dexp_tau_gyr=Fixed(1.5),
+    # Stellar population — truncated normal SFH peaking 0.3 Gyr ago,
+    # 1 Gyr wide. Choosing a star-forming SFH here so Cue's nebular
+    # continuum + line predictions are non-trivially populated; a
+    # passive SFH (e.g. ``dexp`` with peak in the distant past)
+    # produces ~zero recent Q_H and Cue floors at 1e-100 internally.
+    mean_sfh_type="tsnorm",
+    sfh_tsnorm_log_peak_sfr=Fixed(0.7),  # 5 Msun/yr peak
+    sfh_tsnorm_peak_lbt_gyr=Fixed(0.3),  # peaked 300 Myr ago
+    sfh_tsnorm_width_gyr=Fixed(1.0),
+    sfh_tsnorm_skew=Fixed(0.1),
+    sfh_tsnorm_trunc=Fixed(13.8),
     met_logzsol=Fixed(-0.3),
     # Two-component dust attenuation (birth-cloud + diffuse)
     dust_tau_bc=Fixed(0.8),
@@ -443,10 +449,12 @@ stages = [
 # For simplicity, run the parameter-only stages from the existing model.
 # (Stages 2-4 only flip parameters; stage 1 is computed separately.)
 spec_no_emit = Parameters(
-    mean_sfh_type="dexp",
-    sfh_dexp_log_peak_sfr=Fixed(1.0),
-    sfh_dexp_start_gyr=Fixed(0.5),
-    sfh_dexp_tau_gyr=Fixed(1.5),
+    mean_sfh_type="tsnorm",
+    sfh_tsnorm_log_peak_sfr=Fixed(0.7),
+    sfh_tsnorm_peak_lbt_gyr=Fixed(0.3),
+    sfh_tsnorm_width_gyr=Fixed(1.0),
+    sfh_tsnorm_skew=Fixed(0.1),
+    sfh_tsnorm_trunc=Fixed(13.8),
     met_logzsol=Fixed(-0.3),
     dust_tau_bc=Fixed(0.0), dust_tau_diff=Fixed(0.0), dust_slope=Fixed(-0.7),
     nebular_cue=True,

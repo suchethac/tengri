@@ -133,23 +133,24 @@ for sigma in sigmas:
     for j in range(n_per_sigma):
         k = jax.random.fold_in(key, int(sigma * 1000) + j)
         params = spec.sample(k)
-        pred = model.predict_photometry(params)
+        pred = model.predict_photometry(params)  # Returns array of fluxes
+        pred_array = np.array(pred)
 
         # Synthetic SFR estimates:
         # 1. UV (1500 Å rest-frame, ~NUV scale): proportional to log(nuv flux)
-        nuv_flux = float(pred.flux_obs[0])  # GALEX NUV is first filter
+        nuv_flux = float(pred_array[5])  # GALEX NUV is 6th filter (index 5)
         sfr_uv_est = 0.1 * np.log10(nuv_flux + 1e-10)
 
         # 2. Hα (synthetic): ~peak SFR from SFH
         sfr_halpha_est = float(params.get("sfh_tsnorm_log_peak_sfr", 0.0))
 
         # 3. FIR (8–1000 µm): WISE W3 + W4 proxy
-        w3_flux = float(pred.flux_obs[-2])  # WISE W3
-        w4_flux = float(pred.flux_obs[-1])  # WISE W4
+        w3_flux = float(pred_array[-2])  # WISE W3
+        w4_flux = float(pred_array[-1])  # WISE W4
         sfr_fir_est = np.log10(w3_flux + w4_flux + 1e-10)
 
         # 4. Bolometric: average across all fluxes
-        sfr_bol_est = np.mean(np.log10(np.array(pred.flux_obs) + 1e-10))
+        sfr_bol_est = np.mean(np.log10(pred_array + 1e-10))
 
         sfr_uv.append(sfr_uv_est)
         sfr_halpha.append(sfr_halpha_est)
@@ -203,15 +204,13 @@ for ax, y_data, _label in [
     sigma_fit = np.linspace(sigma_list.min(), sigma_list.max(), 100)
     ax.plot(sigma_fit, p(sigma_fit), "r--", lw=2.0, alpha=0.5)
 
-fig.suptitle("SFR Indicators: Burstiness Dependence\n(z=0.1, τ=50 Myr PSD)",
-             fontsize=13, fontweight="bold", y=0.995)
+fig.suptitle(
+    "SFR Indicators: Burstiness Dependence\n(z=0.1, τ=50 Myr PSD)",
+    fontsize=13,
+    fontweight="bold",
+    y=0.995,
+)
 fig.tight_layout()
 
-outdir = (
-    Path(__file__).resolve().parent.parent.parent / "figures"
-    if "__file__" in dir()
-    else Path(".")
-)
-outdir.mkdir(parents=True, exist_ok=True)
-plt.savefig(str(outdir / "usecase_sfr_indicator_compare.png"), dpi=150, bbox_inches="tight")
+plt.savefig("plot_usecase_sfr_indicator_compare.png", dpi=150, bbox_inches="tight")
 plt.show()

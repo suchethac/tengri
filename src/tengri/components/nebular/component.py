@@ -487,9 +487,7 @@ class NebularSEDComponent:
                 # The 1.35 Å gap is unambiguous — no real line sits there.
                 if self.config.backend in ("cue", "cloudy_grid"):
                     line_waves_np = np.asarray(line_waves)
-                    near_hbeta = line_waves_np[
-                        (line_waves_np > 4859.0) & (line_waves_np < 4865.0)
-                    ]
+                    near_hbeta = line_waves_np[(line_waves_np > 4859.0) & (line_waves_np < 4865.0)]
                     looks_air = near_hbeta.size > 0 and bool(
                         np.any(np.abs(near_hbeta - 4861.333) < 0.1)
                     )

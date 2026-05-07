@@ -161,9 +161,7 @@ def test_lean_keep_sig_matches_engine_cache_key():
 
     # The keep_sig that smart-lean would pass for a fitter with this
     # compile_signature must match the cache key by tuple-prefix rule.
-    assert _key_matches_sig(fake_sig, fake_sig), (
-        "_key_matches_sig must accept exact-equal keys"
-    )
+    assert _key_matches_sig(fake_sig, fake_sig), "_key_matches_sig must accept exact-equal keys"
 
     # And the actual clear with keep_sig must preserve it.
     clear_shared_caches(scope="inference_body", drop_xla=False, keep_sig=fake_sig)

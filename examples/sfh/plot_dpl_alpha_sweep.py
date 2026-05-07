@@ -58,6 +58,11 @@ model = SEDModel(spec, ssp)
 
 # Sweep parameter
 values = [0.3, 0.7, 1.5, 3.0, 6.0]
+
+# # The sweep_parameter helper creates a single SEDModel instance and calls
+# # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
+# # automatically via tengri's persistent compilation cache (enabled at
+# # import time), so repeated forward model calls reuse the compiled kernel.
 fig = sfh_sed_comparison(model, "sfh_dpl_alpha", values, cmap="Oranges")
 fig.suptitle("Double Power-Law SFH: Rising Slope α", fontsize=12, y=1.00)
 plt.tight_layout()

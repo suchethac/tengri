@@ -155,15 +155,9 @@ ax1.legend(fontsize=10, frameon=False)
 ax1.grid(True, alpha=0.2)
 
 # Right: Log-log (full SED)
-ax2.loglog(
-    wave, np.array(sed_old), "C0-", lw=2.0, label="Old burst only"
-)
-ax2.loglog(
-    wave, np.array(sed_recent), "C1-", lw=2.0, label="Recent burst only"
-)
-ax2.loglog(
-    wave, np.array(sed_double), "k--", lw=2.0, label="Double burst"
-)
+ax2.loglog(wave, np.array(sed_old), "C0-", lw=2.0, label="Old burst only")
+ax2.loglog(wave, np.array(sed_recent), "C1-", lw=2.0, label="Recent burst only")
+ax2.loglog(wave, np.array(sed_double), "k--", lw=2.0, label="Double burst")
 ax2.set_xlabel(r"Wavelength [$\AA$]", fontsize=11)
 ax2.set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=11)
 ax2.set_title("Log Scale (Full SED)", fontsize=11)

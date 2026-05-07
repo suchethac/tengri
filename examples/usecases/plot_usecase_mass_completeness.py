@@ -231,9 +231,7 @@ ax_inset.grid(True, alpha=0.3, linestyle=":")
 fig.tight_layout()
 
 outdir = (
-    Path(__file__).resolve().parent.parent.parent / "figures"
-    if "__file__" in dir()
-    else Path(".")
+    Path(__file__).resolve().parent.parent.parent / "figures" if "__file__" in dir() else Path(".")
 )
 outdir.mkdir(parents=True, exist_ok=True)
 plt.savefig(str(outdir / "usecase_mass_completeness.png"), dpi=150, bbox_inches="tight")

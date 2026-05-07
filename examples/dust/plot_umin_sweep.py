@@ -64,6 +64,11 @@ model = SEDModel(spec, ssp)
 
 # --- Sweep dust_umin ---
 values = [0.1, 1.0, 5.0, 25.0]
+
+# # The sweep_parameter helper creates a single SEDModel instance and calls
+# # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
+# # automatically via tengri's persistent compilation cache (enabled at
+# # import time), so repeated forward model calls reuse the compiled kernel.
 fig, ax = sweep_parameter(
     model,
     "dust_umin",

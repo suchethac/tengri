@@ -128,6 +128,10 @@ class TestQSOgenPrecomputeConsumer:
 class TestSilva04PrecomputeConsumer:
     """Test silva04 torus adapter in hybrid kernel."""
 
+    @pytest.mark.skipif(
+        not (_DATA / "silva04_torus_grid.h5").exists(),
+        reason="Silva+04 torus grid not available; build via scripts/build_silva04_grid.py.",
+    )
     def test_smoke_lookup_jit_compatible(self, simple_agn_filters):
         """Lookup is JIT-compatible."""
         from tengri.components.agn import silva04_precompute as adapter
@@ -150,6 +154,10 @@ class TestSilva04PrecomputeConsumer:
 class TestCat3dPrecomputeConsumer:
     """Test cat3d_wind torus adapter in hybrid kernel."""
 
+    @pytest.mark.skipif(
+        not (_DATA / "cat3d_wind_torus_grid.h5").exists(),
+        reason="CAT3D-Wind torus grid not available; build via scripts/build_cat3d_wind_grid.py.",
+    )
     def test_smoke_lookup_jit_compatible(self, simple_agn_filters):
         """Lookup is JIT-compatible."""
         from tengri.components.agn import cat3d_precompute as adapter

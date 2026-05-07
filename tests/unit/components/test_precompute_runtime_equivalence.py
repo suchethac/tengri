@@ -408,9 +408,16 @@ class TestQSOgenPrecomputeEquivalence:
         )
 
 
+_REPO_DATA = __import__("pathlib").Path(__file__).resolve().parents[3] / "data"
+
+
 class TestSilva04PrecomputeEquivalence:
     """Test silva04 precompute↔runtime equivalence."""
 
+    @pytest.mark.skipif(
+        not (_REPO_DATA / "silva04_torus_grid.h5").exists(),
+        reason="Silva+04 torus grid not available; build via scripts/build_silva04_grid.py.",
+    )
     def test_silva04(self, agn_torus_filter_set, synthetic_ssp):
         """Silva+04 torus: log_NH axis."""
         waves, trans = agn_torus_filter_set
@@ -444,6 +451,10 @@ class TestSilva04PrecomputeEquivalence:
 class TestCAT3DWindPrecomputeEquivalence:
     """Test cat3d_wind precompute↔runtime equivalence."""
 
+    @pytest.mark.skipif(
+        not (_REPO_DATA / "cat3d_wind_torus_grid.h5").exists(),
+        reason="CAT3D-Wind torus grid not available; build via scripts/build_cat3d_wind_grid.py.",
+    )
     def test_cat3d_wind(self, agn_torus_filter_set, synthetic_ssp):
         """CAT3D-Wind torus: cos_inc, a, fwd axes."""
         waves, trans = agn_torus_filter_set

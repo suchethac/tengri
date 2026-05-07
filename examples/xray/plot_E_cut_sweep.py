@@ -38,7 +38,8 @@ ax.set_xlabel("Energy [keV]")
 ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title(
     r"AGN X-ray Corona: High-Energy Cutoff E$_{\mathrm{cut}}$ Variation"
-    "\n" r"(γ=1.8, L$_{\mathrm{bol}}=10^{45}$ erg/s)"
+    "\n"
+    r"(γ=1.8, L$_{\mathrm{bol}}=10^{45}$ erg/s)"
 )
 ax.set_xlim(0.1, 1000)
 ax.set_ylim(1e21, 5e24)

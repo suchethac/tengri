@@ -107,9 +107,8 @@ fitter.compile(verbose=False)
 # Run NUTS with modest settings for speed
 posterior = fitter.run(
     "mcmc_nuts",
-    n_steps=200,
-    n_walkers=2,
     n_warmup=100,
+    n_samples=200,
     verbose=False,
 )
 

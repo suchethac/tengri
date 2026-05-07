@@ -47,8 +47,9 @@ for panel_idx, log_lbol in enumerate(log_lbol_values):
             alpha_ox=alpha_ox,
         )
         sed_safe = np.where(np.array(sed) > 0, np.array(sed), np.nan)
-        ax.loglog(energy_keV, sed_safe, lw=2.2, color=color,
-                  label=rf"$\alpha_{{ox}} = {alpha_ox}$")
+        ax.loglog(
+            energy_keV, sed_safe, lw=2.2, color=color, label=rf"$\alpha_{{ox}} = {alpha_ox}$"
+        )
 
     ax.set_title(rf"$\log L_{{\mathrm{{bol}}}} [{{\rm erg/s}}] = {log_lbol}$", fontsize=13)
     # Broad axes with breathing room above and below the data — show

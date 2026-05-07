@@ -66,9 +66,7 @@ fig, ax = sweep_parameter(
     label_fmt=r"Peak age = {:.2f} Gyr",
     wave_range=(4000, 8000),
 )
-ax.set_title(
-    "Nebular Emission: Age Dependence of Ionizing Photon Production", fontsize=12
-)
+ax.set_title("Nebular Emission: Age Dependence of Ionizing Photon Production", fontsize=12)
 ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)")
 ax.set_ylim(0, 30_000)
 plt.tight_layout()
