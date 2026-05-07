@@ -319,6 +319,7 @@ ax_spec.grid(True, alpha=0.3)
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "07_data.png"), dpi=200, bbox_inches="tight")
+plt.show()
 print("Saved: notebooks/figures/07_data.png")
 
 # %%
@@ -435,6 +436,7 @@ ax.grid(True, alpha=0.3, axis="y")
 
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "07_constraint_widths.png"), dpi=200, bbox_inches="tight")
+plt.show()
 print("Saved: notebooks/figures/07_constraint_widths.png")
 
 # %%
@@ -445,6 +447,7 @@ try:
         fig.suptitle("NUTS Joint Posterior: Photometry + Spectroscopy", y=0.995, fontsize=13)
         fig.tight_layout()
         fig.savefig(os.path.join(FIGDIR, "07_joint_posterior.png"), dpi=200, bbox_inches="tight")
+        plt.show()
         print("Saved: notebooks/figures/07_joint_posterior.png")
 except Exception as e:
     print(f"Corner plot generation failed: {e}")

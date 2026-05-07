@@ -318,6 +318,7 @@ for row, (sfh_name, truth_sfh) in enumerate(sfh_families):
 
 fig.suptitle("SFH families: SFR(t) and rest-frame SED", fontsize=12, y=0.995)
 plt.savefig(str(_repo_root / "notebooks" / "figures" / "04_sfh_family_grid.png"), dpi=200, bbox_inches="tight")
+plt.show()
 
 # %% [markdown]
 # ## 5. Vary Dust Attenuation Law
@@ -471,6 +472,7 @@ ax_sed.set_title("Attenuated spectra (τ = 0.5)")
 
 fig.suptitle("Dust attenuation law comparison", fontsize=12, y=1.00)
 plt.savefig(str(_repo_root / "notebooks" / "figures" / "04_dust_law_grid.png"), dpi=200, bbox_inches="tight")
+plt.show()
 
 # %% [markdown]
 # ## 7. Vary Dust Emission Model
@@ -622,6 +624,7 @@ ax_balance.grid(True, alpha=0.2, axis="y")
 
 fig.suptitle("Dust IR emission model comparison", fontsize=12, y=1.00)
 plt.savefig(str(_repo_root / "notebooks" / "figures" / "04_dust_emission_grid.png"), dpi=200, bbox_inches="tight")
+plt.show()
 
 # %% [markdown]
 # ## 9. Free vs Fixed Parameters

@@ -426,6 +426,7 @@ ax_res.set_ylabel(r"Residual [σ]", fontsize=11)
 ax_res.grid(True, alpha=0.3, which="major")
 
 plt.savefig(os.path.join(FIGDIR, "05_posterior_predictive.png"), dpi=200, bbox_inches="tight")
+plt.show()
 
 # %% [markdown]
 # ## Figure 2: Corner plot
@@ -472,6 +473,7 @@ for i, ki in enumerate(free):
 fig.suptitle(f"Parameter posterior: {n_free}--D NUTS ({len(xi)} samples)", fontsize=12, y=0.995)
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "05_corner.png"), dpi=180, bbox_inches="tight")
+plt.show()
 print("Saved 05_corner.png", flush=True)
 
 # %% [markdown]
@@ -516,6 +518,7 @@ ax.set_title("Star formation history posterior", fontsize=12)
 ax.legend(loc="upper right", frameon=False, fontsize=10)
 ax.grid(True, alpha=0.3, which="both")
 plt.savefig(os.path.join(FIGDIR, "05_sfh_posterior.png"), dpi=200, bbox_inches="tight")
+plt.show()
 
 # %% [markdown]
 # ## Summary

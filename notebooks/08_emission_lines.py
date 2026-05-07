@@ -359,6 +359,7 @@ ax.legend(loc="lower right", frameon=False, fontsize=11)
 ax.grid(True, alpha=0.2)
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "08_bpt_diagram.png"), dpi=200, bbox_inches="tight")
+plt.show()
 print("\nSaved BPT diagram to notebooks/figures/08_bpt_diagram.png")
 
 # %% [markdown]
@@ -442,6 +443,7 @@ ax.legend(loc="upper left", frameon=False, fontsize=11)
 ax.grid(True, alpha=0.2, which="both")
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "08_line_spectrum.png"), dpi=200, bbox_inches="tight")
+plt.show()
 print("Saved line spectrum to notebooks/figures/08_line_spectrum.png")
 
 # %% [markdown]
@@ -535,6 +537,7 @@ ax.grid(True, alpha=0.3)
 ax.set_aspect("equal")
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "08_sfr_validation.png"), dpi=200, bbox_inches="tight")
+plt.show()
 print("Saved SFR validation to notebooks/figures/08_sfr_validation.png")
 
 # %%

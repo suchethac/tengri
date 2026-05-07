@@ -385,6 +385,7 @@ cbar.ax.tick_params(labelsize=10)
 plt.tight_layout()
 os.makedirs("notebooks/figures", exist_ok=True)
 plt.savefig("notebooks/figures/01_grad_field.png", dpi=200, bbox_inches="tight")
+plt.show()
 
 
 # %% [markdown]
@@ -493,6 +494,7 @@ ax.grid(True, alpha=0.3, which="both", linestyle="--")
 
 plt.tight_layout()
 plt.savefig("notebooks/figures/01_vmap_throughput.png", dpi=200, bbox_inches="tight")
+plt.show()
 
 # %% [markdown]
 # ---
