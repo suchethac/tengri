@@ -565,6 +565,76 @@ print("  • Run on GPU with zero code changes")
 # %% [markdown]
 # ---
 #
+# ## Idea 5: Compile once, sample forever — HMC/NUTS as JIT functions
+#
+# The same compile-once tradeoff applies to MCMC. The first call to
+# `fitter.run("mcmc_nuts", …)` pays an XLA compile cost: BlackJAX builds a
+# `lax.scan` over the leapfrog integrator, fuses your forward model into it,
+# and produces one optimized HLO graph. **Subsequent calls reuse that graph**
+# — sampling cost is then just per-iteration leapfrog work, microseconds in
+# fully-compiled code.
+#
+# tengri also enables a **persistent on-disk JAX cache** (default
+# `~/.cache/tengri_jax_cache`), so the compile survives kernel restarts and
+# slurm tasks: only the very first run on a fresh machine pays the full cost.
+#
+# We'll measure this directly. We run NUTS twice with identical shapes —
+# the second call hits the in-process compiled graph, so its wall time is
+# pure sampling.
+
+# %%
+from tengri import Fitter
+
+# Tiny mock dataset for the timing demo. 7 free params is enough to make
+# NUTS non-trivial; we just want clean compile-vs-warm timings.
+mock = model.predict_photometry(params, mode="compositional")
+noise = mock * 0.05  # 5% Gaussian uncertainty per band
+
+fitter_demo = Fitter(model, mock, noise)
+
+print("\n" + "=" * 70)
+print("TIMING NUTS: compile-once cost vs steady-state sampling")
+print("=" * 70)
+
+_NUTS_KW = dict(
+    n_warmup=100,
+    n_samples=100,
+    target_accept_rate=0.85,
+    dense_mass_matrix=False,
+    verbose=False,
+)
+
+print("\nFirst call (compile + sample):", flush=True)
+t0 = time.perf_counter()
+result_cold = fitter_demo.run(
+    "mcmc_nuts", key=jax.random.PRNGKey(0), **_NUTS_KW
+)
+t_cold = time.perf_counter() - t0
+print(f"  wall = {t_cold:.1f} s")
+
+print("\nSecond call (warm — same shapes, new key):", flush=True)
+t0 = time.perf_counter()
+result_warm = fitter_demo.run(
+    "mcmc_nuts", key=jax.random.PRNGKey(1), **_NUTS_KW
+)
+t_warm = time.perf_counter() - t0
+print(f"  wall = {t_warm:.1f} s")
+
+t_compile = max(t_cold - t_warm, 0.0)
+n_iter = _NUTS_KW["n_warmup"] + _NUTS_KW["n_samples"]
+ms_per_iter = (t_warm / n_iter) * 1e3
+
+print("\n" + "-" * 70)
+print(f"One-time compile cost:    {t_compile:>7.1f} s")
+print(f"Steady-state sampling:    {ms_per_iter:>7.2f} ms / iter (warm)")
+print(f"For a 1000-iter chain:    ~{ms_per_iter * 1000 / 1e3:.1f} s after compile")
+print("-" * 70)
+print("\nTakeaway: budget the compile *once* per process. Sampling itself is")
+print("microsecond-per-leapfrog-step compiled code — the chain length is free.")
+
+# %% [markdown]
+# ---
+#
 # ## Summary: Why JAX for SED Fitting
 #
 # **One model, any method.**
