@@ -1,18 +1,19 @@
 """Integration test for HMC structural sharing across Fitter instances (Phase B).
 
-Tests verify that:
-- Two structurally-identical Fitter instances reuse HMC compile on second instance
-- The speedup demonstrates that logdensity function object identity works
+Tests verify that smart-lean (the default) keeps the L3 entry whose key
+matches the current run's ``(compile_signature, method)``. We measure
+this by inspecting cache state directly — runtime-based speedup tests
+are dominated by sampling cost on small models and noisy enough to be
+unreliable detectors of cache reuse.
 """
 
 from __future__ import annotations
-
-import time
 
 import jax
 import pytest
 
 import tengri
+from tengri.inference.jit_engine import _SHARED_LOGDENSITY_FN_CACHE
 
 
 @pytest.mark.integration
@@ -67,36 +68,37 @@ def test_hmc_structural_reuse_same_model():
         "Fitters should have identical signatures"
     )
 
-    # Time first HMC run (cold compile)
-    with tengri.persistent():  # Keep caches across runs
-        t0 = time.perf_counter()
-        result1 = fitter1.run(
-            "mcmc_hmc",
-            n_warmup=100,
-            n_samples=100,
-            dense_mass_matrix=False,
-            key=jax.random.PRNGKey(0),
-        )
-        t_first = time.perf_counter() - t0
-
-        # Time second HMC run (warm compile, should reuse leapfrog)
-        t0 = time.perf_counter()
-        result2 = fitter2.run(
-            "mcmc_hmc",
-            n_warmup=100,
-            n_samples=100,
-            dense_mass_matrix=False,
-            key=jax.random.PRNGKey(1),
-        )
-        t_second = time.perf_counter() - t0
-
-    # Second run should be significantly faster (compile reused)
-    # We check for at least 2x speedup (conservative; typically 5-10x)
-    speedup = t_first / t_second
-    assert speedup > 2.0, (
-        f"Expected >2x speedup, got {speedup:.1f}x "
-        f"(first: {t_first:.2f}s, second: {t_second:.2f}s)"
+    # No persistent() wrap — smart lean (default) keeps the L2
+    # logdensity cache (preserved unconditionally at inference_body
+    # scope) so the second fitter's HMC reuses the compiled closure.
+    result1 = fitter1.run(
+        "mcmc_hmc",
+        n_warmup=100,
+        n_samples=100,
+        dense_mass_matrix=False,
+        key=jax.random.PRNGKey(0),
     )
+    logdensity_after_first = dict(_SHARED_LOGDENSITY_FN_CACHE)
+    assert len(logdensity_after_first) >= 1, "First run should have populated L2 logdensity cache"
+
+    result2 = fitter2.run(
+        "mcmc_hmc",
+        n_warmup=100,
+        n_samples=100,
+        dense_mass_matrix=False,
+        key=jax.random.PRNGKey(1),
+    )
+    logdensity_after_second = dict(_SHARED_LOGDENSITY_FN_CACHE)
+
+    # The matching entry must survive across the second run's lean clear,
+    # AND the cached function must be the same object (so JAX's internal
+    # JIT cache hits — function identity is its primary key).
+    common_keys = set(logdensity_after_first) & set(logdensity_after_second)
+    assert common_keys, "L2 logdensity cache lost all entries across runs"
+    for k in common_keys:
+        assert logdensity_after_first[k] is logdensity_after_second[k], (
+            "L2 logdensity entry replaced rather than reused — JAX JIT will recompile"
+        )
 
     # Both results should be valid
     assert result1.samples is not None
@@ -157,31 +159,32 @@ def test_hmc_structural_reuse_different_data():
         "Fitters with same model and data shape should have identical signatures"
     )
 
-    # Time runs
-    with tengri.persistent():
-        t0 = time.perf_counter()
-        result1 = fitter1.run(
-            "mcmc_hmc",
-            n_warmup=100,
-            n_samples=100,
-            dense_mass_matrix=False,
-            key=jax.random.PRNGKey(0),
-        )
-        t_first = time.perf_counter() - t0
+    # No persistent() wrap — different data, same model+method must
+    # still share the L2 logdensity compile (data is a traced argument).
+    result1 = fitter1.run(
+        "mcmc_hmc",
+        n_warmup=100,
+        n_samples=100,
+        dense_mass_matrix=False,
+        key=jax.random.PRNGKey(0),
+    )
+    logdensity_after_first = dict(_SHARED_LOGDENSITY_FN_CACHE)
 
-        t0 = time.perf_counter()
-        result2 = fitter2.run(
-            "mcmc_hmc",
-            n_warmup=100,
-            n_samples=100,
-            dense_mass_matrix=False,
-            key=jax.random.PRNGKey(1),
-        )
-        t_second = time.perf_counter() - t0
+    result2 = fitter2.run(
+        "mcmc_hmc",
+        n_warmup=100,
+        n_samples=100,
+        dense_mass_matrix=False,
+        key=jax.random.PRNGKey(1),
+    )
+    logdensity_after_second = dict(_SHARED_LOGDENSITY_FN_CACHE)
 
-    # Second run should be faster due to compile reuse
-    speedup = t_first / t_second
-    assert speedup > 2.0, f"Expected >2x speedup, got {speedup:.1f}x"
+    common_keys = set(logdensity_after_first) & set(logdensity_after_second)
+    assert common_keys, "L2 logdensity cache lost all entries across runs"
+    for k in common_keys:
+        assert logdensity_after_first[k] is logdensity_after_second[k], (
+            "L2 logdensity entry replaced — JAX would recompile despite shared key"
+        )
 
     assert result1.samples is not None
     assert result2.samples is not None

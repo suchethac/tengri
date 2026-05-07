@@ -59,9 +59,12 @@ _LEAN_MODE: bool = os.environ.get("TENGRI_LEAN", "") == "1"
 _LEAN_MODE_LOCK = threading.Lock()
 
 # Persistent mode: opt-out from the lean default. When True, ``Fitter.run()``
-# skips the auto-clear and reuses cached compiled artefacts across calls.
-# Used internally by PopulationFitter / CatalogFitter; users running many
-# sequential single-galaxy fits can ``with tengri.persistent(): ...``.
+# skips the auto-clear entirely and keeps every prior compile in RAM.
+# After smart lean (2026-05) was wired to keep the matching ``(sig, method)``
+# entry across runs, ``persistent()`` is rarely needed — smart lean already
+# preserves what catalog and same-method loops want. ``persistent()`` is now
+# only useful for keeping *non-matching* entries (e.g. an MAP and HMC
+# compile alive simultaneously, swapping back and forth).
 _PERSISTENT_MODE: bool = os.environ.get("TENGRI_PERSISTENT", "") == "1"
 _PERSISTENT_MODE_LOCK = threading.Lock()
 
@@ -77,19 +80,18 @@ def is_persistent_mode() -> bool:
 
 
 def persistent(enabled: bool = True):
-    """Context manager: keep cached compiled artefacts across ``Fitter.run()``.
+    """Context manager: keep ALL cached compiled artefacts across ``Fitter.run()``.
 
-    Inverse of ``lean()``. Use when you're running multiple fits in the
-    same process and want them to share compiled XLA executables —
-    typical examples: a script that fits N galaxies sequentially without
-    using ``CatalogFitter``, or interactive iteration on hyperparameters.
+    After smart lean (2026-05), this is rarely needed. Smart lean already
+    keeps the entry that matches the upcoming run's
+    ``(compile_signature, method)`` — so a CatalogFitter loop or repeated
+    identical fit hits the cache without any wrapping context.
 
-    Without ``persistent()``, ``Fitter.run()`` clears caches before each
-    call (the lean default) which keeps RSS bounded but pays ~30-60 s
-    of recompile per phase.
+    Use ``persistent()`` only when you genuinely want to keep *non-matching*
+    L3 entries alive — e.g. swapping back and forth between MAP and HMC
+    on the same fitter and wanting both compiles in RAM simultaneously.
 
     Equivalent ``TENGRI_PERSISTENT=1`` env var sets it process-wide.
-    Used internally by ``CatalogFitter`` / ``PopulationFitter``.
     """
     import contextlib
 
@@ -128,8 +130,9 @@ def lean(enabled: bool = True):
     improvement over clearing everything (see Phase B in the compilation
     cache architecture).
 
-    Don't use inside ``PopulationFitter`` / ``CatalogFitter`` — use
-    ``persistent()`` instead to reuse across all fits.
+    Safe inside ``CatalogFitter`` / ``PopulationFitter`` — smart lean
+    keeps the matching entry across the loop, so you get reuse without
+    needing ``persistent()``.
 
     Equivalent ``TENGRI_LEAN=1`` env var sets it process-wide.
     """

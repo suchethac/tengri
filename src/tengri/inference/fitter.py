@@ -1902,13 +1902,18 @@ class Fitter:
             else:
                 _user_lean = True
         if _user_lean:
-            # Phase B (smart lean, 2026-05): drop only L3 entries that do
-            # NOT match this run's (compile_sig, method). The matching
-            # entry — if it exists from a prior identical run — is kept,
-            # so a CatalogFitter loop or repeated identical fitter.run()
-            # call hits the cache instead of recompiling. Forward, loss,
-            # grad, and logdensity caches are preserved at this scope.
-            _keep_sig = (self.compile_signature(), method)
+            # Smart lean (2026-05): drop only L3 entries that do NOT match
+            # this fitter's compile_signature(). The matching entry — if
+            # it exists from a prior identical run — is kept, so a
+            # CatalogFitter loop or repeated identical fitter.run() call
+            # hits the cache instead of recompiling. The engine cache
+            # (``_SHARED_ENGINE_CACHE``) is keyed on the bare
+            # ``compile_signature()``; the engine itself contains
+            # compiled functions for every method, so per-method
+            # invalidation is unnecessary. Forward, loss, grad, and
+            # logdensity caches are preserved unconditionally at this
+            # scope.
+            _keep_sig = self.compile_signature()
             _clear_shared_caches(scope="inference_body", keep_sig=_keep_sig)
 
         # --- Merge TOML method-specific defaults (caller kwargs win) ---
