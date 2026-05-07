@@ -59,17 +59,66 @@ def _lru_set(cache: OrderedDict, key, value, maxsize: int) -> None:
         cache.popitem(last=False)
 
 
-def clear_shared_caches() -> None:
-    """Drop every entry from the cross-fitter engine and signal-response caches.
+def clear_shared_caches(*, drop_xla: bool = True) -> None:
+    """Drop every cached compiled artefact tengri holds in this process.
 
-    Safe to call from notebooks between long-running fits to release memory.
-    Does not affect the per-model JAX persistent cache or
-    `tengri.clear_cache()` (which clears that).
+    Recommended pattern for notebooks that run multiple inference phases
+    in the same kernel (model build → MAP → HMC → posterior-predictive)::
+
+        import tengri
+
+        # ... model build, ztable precompute, run MAP ...
+        result_map = fitter.run("map", ...)
+        tengri.clear_shared_caches()
+
+        # ... HMC ...
+        post = fitter.run("mcmc_hmc", ...)
+        tengri.clear_shared_caches()
+
+        # ... posterior-predictive plotting ...
+
+    Each phase compiles its own JIT graphs that hold ~GB-scale executables.
+    Without clearing between phases the resident memory monotonically grows
+    until jetsam (macOS) or the OOM killer (Linux) terminates the process.
+
+    Parameters
+    ----------
+    drop_xla : bool, default True
+        Also call ``jax.clear_caches()`` to release JAX's own XLA-executable
+        and tracing caches. Set False if you have other live JAX programs
+        in the same process that you want to keep compiled.
+
+    What gets cleared
+    -----------------
+    - Cross-fitter engine cache (``_SHARED_ENGINE_CACHE``).
+    - Cross-fitter signal-response cache (``_SHARED_SIGNAL_RESPONSE_CACHE``).
+    - Per-model caches keyed on SEDModel identity (loss fns, jit engines,
+      precompute by-products) for *all* live models.
+    - JAX's process-internal caches (when ``drop_xla=True``).
+
+    What does *not* get cleared
+    ---------------------------
+    - The on-disk persistent JAX compile cache (``~/.cache/tengri_jax_cache``).
+      Use ``tengri.clear_cache()`` for that.
     """
     with _SHARED_ENGINE_CACHE_LOCK:
         _SHARED_ENGINE_CACHE.clear()
     with _SHARED_SIGNAL_RESPONSE_CACHE_LOCK:
         _SHARED_SIGNAL_RESPONSE_CACHE.clear()
+
+    from tengri.inference._model_cache import _caches as _per_model_caches
+
+    _per_model_caches.clear()
+
+    if drop_xla:
+        import contextlib
+
+        with contextlib.suppress(AttributeError):
+            jax.clear_caches()
+
+    import gc
+
+    gc.collect()
 
 
 def get_or_build_engine_cached(fitter, pos_dict):
