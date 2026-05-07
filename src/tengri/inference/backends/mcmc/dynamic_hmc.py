@@ -114,7 +114,6 @@ def run_dynamic_hmc(
             data_args,
             parameters["step_size"],
             parameters["inverse_mass_matrix"],
-            n_burnin,
         )
     else:
         key, warmup_key = jax.random.split(key)
@@ -129,7 +128,6 @@ def run_dynamic_hmc(
             log_posterior_flat_2arg,
             data_args,
             n_warmup,
-            n_burnin,
             use_dense,
             target_accept_rate,
         )
@@ -142,6 +140,11 @@ def run_dynamic_hmc(
                 float(step_size),
             )
 
+    # Burnin discarded Python-side so n_burnin is not part of the
+    # JIT compile key.
+    if n_burnin > 0:
+        positions = positions[n_burnin:]
+        divergent = divergent[n_burnin:]
     n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0

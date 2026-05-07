@@ -367,7 +367,7 @@ def _hmc_chain_scan(
 # ---------------------------------------------------------------------------
 
 
-@functools.partial(jax.jit, static_argnums=(4, 6, 7, 8, 9))
+@functools.partial(jax.jit, static_argnums=(4, 6, 7, 8))
 def _dynamic_hmc_full_scan(
     init_flat,
     warmup_key,
@@ -376,15 +376,16 @@ def _dynamic_hmc_full_scan(
     logdensity_fn_2arg,
     data_args,
     n_warmup,
-    n_burnin,
     use_dense,
     target_accept_rate,
 ):
-    """Outer JIT: HMC warmup + dynamic HMC init + burn-in + sampling.
+    """Outer JIT: HMC warmup + dynamic HMC init + sampling chain.
 
     Uses HMC window adaptation to tune step size and mass matrix, then
     initialises a dynamic HMC state inside the same JIT so the kernel is
-    compiled once.
+    compiled once. Burnin discard is done by the caller Python-side, so
+    changing ``n_burnin`` while keeping ``n_chain`` constant does not
+    trigger recompilation.
 
     Parameters
     ----------
@@ -394,16 +395,14 @@ def _dynamic_hmc_full_scan(
         Random key for HMC window adaptation.
     dhmc_init_key : PRNGKey (traced)
         Random key for ``dynamic_hmc.init`` (requires a random generator arg).
-    chain_keys : ndarray, shape (n_burnin + n_samples, 2)
-        Pre-split keys for the combined chain.
+    chain_keys : ndarray, shape (n_chain, 2)
+        Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
     logdensity_fn_2arg : callable (static)
         ``log_p(position, data_args)`` — galaxy-agnostic log-posterior.
     data_args : pytree (traced)
         Observed data tensors; changing these does NOT trigger recompilation.
     n_warmup : int (static)
         Window adaptation steps.
-    n_burnin : int (static)
-        Post-warmup burn-in steps (discarded).
     use_dense : bool (static)
         Dense vs diagonal mass matrix for HMC warmup.
     target_accept_rate : float (static)
@@ -411,8 +410,9 @@ def _dynamic_hmc_full_scan(
 
     Returns
     -------
-    positions : ndarray, shape (n_samples, D)
-    divergent : ndarray, shape (n_samples,)
+    positions : ndarray, shape (n_chain, D)
+    divergent : ndarray, shape (n_chain,)
+        Caller slices ``[n_burnin:]``.
     step_size : scalar
     inv_mass_matrix : ndarray, shape (D,) or (D, D)
     """
@@ -440,13 +440,11 @@ def _dynamic_hmc_full_scan(
         s, info = kernel(k, s, ld_1arg, step_size, inv_mass_matrix)
         return s, (s.position, info.is_divergent)
 
-    if n_burnin > 0:
-        state, _ = jax.lax.scan(_step, state, chain_keys[:n_burnin])
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys[n_burnin:])
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
     return positions, divergent, step_size, inv_mass_matrix
 
 
-@functools.partial(jax.jit, static_argnums=(2, 6))
+@functools.partial(jax.jit, static_argnums=(2,))
 def _dynamic_hmc_chain_scan(
     state,
     chain_keys,
@@ -454,16 +452,15 @@ def _dynamic_hmc_chain_scan(
     data_args,
     step_size,
     inv_mass_matrix,
-    n_burnin,
 ):
-    """Outer JIT: dynamic HMC burn-in + sampling with pre-computed adaptation params.
+    """Outer JIT: dynamic HMC sampling with pre-computed adaptation params.
 
     Parameters
     ----------
     state : DynamicHMCState
         Initial chain state (from ``blackjax.mcmc.dynamic_hmc.init``).
-    chain_keys : ndarray, shape (n_burnin + n_samples, 2)
-        Pre-split keys for the combined chain.
+    chain_keys : ndarray, shape (n_chain, 2)
+        Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
     logdensity_fn_2arg : callable (static)
         ``log_p(position, data_args)``.
     data_args : pytree (traced)
@@ -472,13 +469,12 @@ def _dynamic_hmc_chain_scan(
         Step size from HMC window adaptation.
     inv_mass_matrix : ndarray (traced), shape (D,) or (D, D)
         Inverse mass matrix from HMC window adaptation.
-    n_burnin : int (static)
-        Steps to discard at the start of the chain.
 
     Returns
     -------
-    positions : ndarray, shape (n_samples, D)
-    divergent : ndarray, shape (n_samples,)
+    positions : ndarray, shape (n_chain, D)
+    divergent : ndarray, shape (n_chain,)
+        Caller slices ``[n_burnin:]``.
     """
 
     def ld(pos):
@@ -491,9 +487,7 @@ def _dynamic_hmc_chain_scan(
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix)
         return s, (s.position, info.is_divergent)
 
-    if n_burnin > 0:
-        state, _ = jax.lax.scan(_step, state, chain_keys[:n_burnin])
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys[n_burnin:])
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
     return positions, divergent
 
 
@@ -502,7 +496,7 @@ def _dynamic_hmc_chain_scan(
 # ---------------------------------------------------------------------------
 
 
-@functools.partial(jax.jit, static_argnums=(4, 6, 7, 8, 9, 10))
+@functools.partial(jax.jit, static_argnums=(4, 6, 7, 8, 9))
 def _ghmc_full_scan(
     init_flat,
     warmup_key,
@@ -511,16 +505,16 @@ def _ghmc_full_scan(
     logdensity_fn_2arg,
     data_args,
     n_warmup,
-    n_burnin,
     target_accept_rate,
     alpha,
     delta,
 ):
-    """Outer JIT: HMC warmup + GHMC init + burn-in + sampling.
+    """Outer JIT: HMC warmup + GHMC init + sampling chain.
 
     GHMC requires a diagonal mass matrix (momentum generator constraint),
     so HMC warmup always uses diagonal regardless of the ``dense_mass_matrix``
-    flag. Returns step size and diagonal momentum inverse scale.
+    flag. Returns step size and diagonal momentum inverse scale. Burnin
+    discard happens caller-side.
 
     Parameters
     ----------
@@ -530,16 +524,14 @@ def _ghmc_full_scan(
         Random key for HMC window adaptation.
     ghmc_init_key : PRNGKey (traced)
         Random key for ``ghmc.init`` momentum initialisation.
-    chain_keys : ndarray, shape (n_burnin + n_samples, 2)
-        Pre-split keys for the combined chain.
+    chain_keys : ndarray, shape (n_chain, 2)
+        Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
     logdensity_fn_2arg : callable (static)
         ``log_p(position, data_args)`` — galaxy-agnostic log-posterior.
     data_args : pytree (traced)
         Observed data tensors; changing these does NOT trigger recompilation.
     n_warmup : int (static)
         HMC window adaptation steps.
-    n_burnin : int (static)
-        Post-warmup burn-in steps (discarded).
     target_accept_rate : float (static)
         Target acceptance rate for HMC dual averaging.
     alpha : float (static)
@@ -549,8 +541,9 @@ def _ghmc_full_scan(
 
     Returns
     -------
-    positions : ndarray, shape (n_samples, D)
-    divergent : ndarray, shape (n_samples,)
+    positions : ndarray, shape (n_chain, D)
+    divergent : ndarray, shape (n_chain,)
+        Caller slices ``[n_burnin:]``.
     step_size : scalar
     momentum_inv_scale : ndarray, shape (D,)
     """
@@ -578,13 +571,11 @@ def _ghmc_full_scan(
         s, info = kernel(k, s, ld_1arg, step_size, momentum_inv_scale, alpha, delta)
         return s, (s.position, info.is_divergent)
 
-    if n_burnin > 0:
-        state, _ = jax.lax.scan(_step, state, chain_keys[:n_burnin])
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys[n_burnin:])
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
     return positions, divergent, step_size, momentum_inv_scale
 
 
-@functools.partial(jax.jit, static_argnums=(2, 8, 9, 10))
+@functools.partial(jax.jit, static_argnums=(2, 8, 9))
 def _ghmc_chain_scan(
     state,
     chain_keys,
@@ -594,18 +585,17 @@ def _ghmc_chain_scan(
     momentum_inv_scale,
     alpha,
     delta,
-    n_burnin,
     alpha_static,
     delta_static,
 ):
-    """Outer JIT: GHMC burn-in + sampling with pre-computed adaptation params.
+    """Outer JIT: GHMC sampling chain with pre-computed adaptation params.
 
     Parameters
     ----------
     state : GHMCState
         Initial chain state (from ``blackjax.mcmc.ghmc.init``).
-    chain_keys : ndarray, shape (n_burnin + n_samples, 2)
-        Pre-split keys for the combined chain.
+    chain_keys : ndarray, shape (n_chain, 2)
+        Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
     logdensity_fn_2arg : callable (static)
         ``log_p(position, data_args)``.
     data_args : pytree (traced)
@@ -618,8 +608,6 @@ def _ghmc_chain_scan(
         Momentum persistence passed to the GHMC kernel.
     delta : float (traced)
         Step size scaling passed to the GHMC kernel.
-    n_burnin : int (static)
-        Steps to discard at the start of the chain.
     alpha_static : float (static)
         Mirrors ``alpha`` as a static arg; belongs in the XLA cache key
         because it controls the momentum-refresh geometry. Pass the same value.
@@ -628,8 +616,9 @@ def _ghmc_chain_scan(
 
     Returns
     -------
-    positions : ndarray, shape (n_samples, D)
-    divergent : ndarray, shape (n_samples,)
+    positions : ndarray, shape (n_chain, D)
+    divergent : ndarray, shape (n_chain,)
+        Caller slices ``[n_burnin:]``.
     """
 
     def ld(pos):
@@ -642,9 +631,7 @@ def _ghmc_chain_scan(
         s, info = kernel(k, s, ld, step_size, momentum_inv_scale, alpha, delta)
         return s, (s.position, info.is_divergent)
 
-    if n_burnin > 0:
-        state, _ = jax.lax.scan(_step, state, chain_keys[:n_burnin])
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys[n_burnin:])
+    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
     return positions, divergent
 
 

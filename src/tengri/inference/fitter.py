@@ -1434,7 +1434,6 @@ class Fitter:
                         log_posterior_flat_2arg,
                         data_args,
                         n_warmup,
-                        n_burnin,
                         use_dense,
                         0.85,
                     )
@@ -1449,7 +1448,6 @@ class Fitter:
                         log_posterior_flat_2arg,
                         data_args,
                         n_warmup,
-                        n_burnin,
                         0.85,
                         0.8,
                         0.65,

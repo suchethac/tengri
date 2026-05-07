@@ -126,7 +126,6 @@ def run_ghmc(
             parameters["inverse_mass_matrix"],
             alpha,
             delta,
-            n_burnin,
             alpha,
             delta,
         )
@@ -143,7 +142,6 @@ def run_ghmc(
             log_posterior_flat_2arg,
             data_args,
             n_warmup,
-            n_burnin,
             target_accept_rate,
             alpha,
             delta,
@@ -157,6 +155,11 @@ def run_ghmc(
                 float(step_size),
             )
 
+    # Burnin discarded Python-side so n_burnin is not part of the
+    # JIT compile key.
+    if n_burnin > 0:
+        positions = positions[n_burnin:]
+        divergent = divergent[n_burnin:]
     n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
