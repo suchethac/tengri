@@ -1421,11 +1421,21 @@ class SEDModel:
                     stacklevel=2,
                 )
 
+        # Build component_grid_arrays dict from registry for Phase II-6 extension.
+        # This dict holds JIT-traceable arrays that can be threaded as kwargs
+        # to component lookups, avoiding closure capture of large constants.
+        component_grid_arrays_dict: dict[str, tuple] = {}
+        if dust_ir_grid_arrays is not None:
+            component_grid_arrays_dict["dust_ir"] = dust_ir_grid_arrays
+        if skirtor_grid_arrays is not None:
+            component_grid_arrays_dict["agn:skirtor"] = skirtor_grid_arrays
+
         return PrecomputedData(
             photometry=phot,
             dust_age_weights=dust_age_w,
             igm_at_effective_wavelengths=igm_eff,
             effective_bandwidths_hz=eff_bw,
+            component_grid_arrays=component_grid_arrays_dict,
             dust_ir_lookup=dust_ir_lookup,
             dust_ir_grid_arrays=dust_ir_grid_arrays,
             modified_blackbody_preintegrated=modified_blackbody_preint,
@@ -2072,6 +2082,156 @@ class SEDModel:
         from tengri.forward.prediction import Prediction
 
         return Prediction(self, params)
+
+    def compile_signature(self) -> tuple:
+        """Return a hashable signature identifying JIT-graph shape and structure.
+
+        Two SEDModel instances with the same compile_signature() will produce
+        identical XLA compilation graphs (for identical Fitter configurations),
+        enabling cross-galaxy engine reuse in PopulationFitter and CatalogFitter.
+
+        The signature captures every JIT-affecting field: SSP array shapes,
+        filter grid dimensions, dust/AGN/nebular model identities, and all
+        configuration flags that determine the control flow during inference.
+
+        Returns
+        -------
+        tuple
+            Hashable immutable signature. Entries are immutable types
+            (int, str, tuple, bool, None) or tuples thereof.
+
+        Notes
+        -----
+        This signature is used by Fitter._get_or_build_engine to key the
+        module-level _SHARED_ENGINE_CACHE. Changes to SEDModel initialization
+        that affect JIT graph shape MUST be added to this method to avoid
+        silent miscompilation.
+        """
+        # SSP grid shapes (n_met, n_age, n_wave)
+        ssp_flux_shape = tuple(self.ssp_data.ssp_flux.shape)
+        ssp_lgmet_shape = tuple(self.ssp_data.ssp_lgmet.shape)
+
+        # Alpha-Fe enhancement presence
+        has_alpha_fe = hasattr(self.ssp_data, "ssp_alpha_fe")
+
+        # Filter grid dimensions
+        n_filters = len(self.filter_waves) if self.filter_waves is not None else 0
+        filter_wave_shape = tuple(self.filter_waves[0].shape) if self.filter_waves else ()
+        filter_trans_dtype = str(self.filter_trans[0].dtype) if self.filter_trans else "none"
+
+        # Dust configuration
+        dust_model = str(self._dust_model)
+        dust_scheme = str(self._dust_scheme)
+        dust_emission_model = str(self._dust_emission_model or "none")
+
+        # Dust law functions (by name to avoid closure capture)
+        dust_law_bc_fn_name = self._dust_law_bc_fn.__name__ if self._dust_law_bc_fn else "none"
+        dust_law_diff_fn_name = (
+            self._dust_law_diff_fn.__name__ if self._dust_law_diff_fn else "none"
+        )
+
+        # Nebular backend (by class name)
+        nebular_backend_name = (
+            type(self._nebular_backend).__name__ if self._nebular_backend is not None else "none"
+        )
+
+        # IGM configuration
+        uses_igm = bool(self._uses_igm)
+        igm_model = str(self._igm_model or "none")
+        uses_dla = bool(self._uses_dla)
+
+        # AGN configuration
+        agn_model = str(self._agn_model or "none")
+        agn_luminosity_mode = bool(self._agn_luminosity_mode)
+
+        # Radio and X-ray
+        uses_radio = bool(self._uses_radio)
+        uses_xray = bool(self._uses_xray)
+        uses_shock = bool(self._uses_shock)
+
+        # SFH configuration
+        mean_sfh_type = str(self.spec.mean_sfh_type)
+        met_mode = str(self._met_mode)
+        stochastic = bool(self.spec.stochastic)
+        n_grid = int(self._n_grid)
+
+        # Alpha-Fe evolution
+        alpha_fe_evolving = bool(self._alpha_fe_evolving)
+
+        # Redshift configuration
+        z_fixed = bool(self._z_fixed is not None)
+
+        # Instrument/spectroscopy
+        has_spectroscopy = self.observation is not None and self.observation.can_do_spectroscopy
+        if has_spectroscopy:
+            spec_wave_shape = tuple(self.observation.spectroscopy.wave_obs.shape)
+            sigma_lib_kms = float(self._sigma_lib_kms)
+            lsf_resolution = self._lsf_resolution
+        else:
+            spec_wave_shape = ()
+            sigma_lib_kms = 0.0
+            lsf_resolution = None
+
+        # CSP integration method
+        csp_integration = str(self._csp_integration)
+
+        # Forward dtype
+        forward_dtype = str(self._forward_dtype)
+
+        # Metallicity interpolation mode
+        met_interp = str(self._met_interp)
+        z_interp = str(self._z_interp)
+
+        # Radio-specific flags
+        radio_include_freefree = (
+            bool(self._radio_include_freefree)
+            if hasattr(self, "_radio_include_freefree")
+            else False
+        )
+        radio_sfr_mode = str(self._radio_sfr_mode) if hasattr(self, "_radio_sfr_mode") else "none"
+
+        # Velocity dispersion
+        has_sigma_v = bool(self._has_sigma_v)
+
+        return (
+            ssp_flux_shape,
+            ssp_lgmet_shape,
+            has_alpha_fe,
+            n_filters,
+            filter_wave_shape,
+            filter_trans_dtype,
+            dust_model,
+            dust_scheme,
+            dust_emission_model,
+            dust_law_bc_fn_name,
+            dust_law_diff_fn_name,
+            nebular_backend_name,
+            uses_igm,
+            igm_model,
+            uses_dla,
+            agn_model,
+            agn_luminosity_mode,
+            uses_radio,
+            uses_xray,
+            uses_shock,
+            mean_sfh_type,
+            met_mode,
+            stochastic,
+            n_grid,
+            alpha_fe_evolving,
+            z_fixed,
+            has_spectroscopy,
+            spec_wave_shape,
+            sigma_lib_kms,
+            lsf_resolution,
+            csp_integration,
+            forward_dtype,
+            met_interp,
+            z_interp,
+            radio_include_freefree,
+            radio_sfr_mode,
+            has_sigma_v,
+        )
 
     def predict_photometry(self, params, mode="auto", approx=None):
         """Compute observed photometric flux densities through all filters.

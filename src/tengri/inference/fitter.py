@@ -261,6 +261,23 @@ class Fitter:
         ``"cloudy"`` (grid-interpolated from Cloudy models).
         ``None`` auto-detects from ``Spectroscopy.eline_prior_type``.
         Default ``None``.
+    compile_modes : tuple[str, ...] or str or None, optional
+        Control background JIT compilation during ``__init__``. Accepted values:
+
+        - ``None`` (default) → no background compile; first ``run()`` compiles
+          lazily.
+        - ``"auto"`` → inspect ``spec.stochastic`` and ``data_type`` to select
+          sensible defaults: stochastic → ``("linear_resample", "nonlinear_update")``
+          (VI modes); non-stochastic photometry → ``("mcmc_nuts",)``; otherwise
+          → ``("mcmc_nuts",)``.
+        - explicit ``tuple[str, ...]`` (e.g., ``("mcmc_nuts",)``) → queue exactly
+          those modes in the background thread.
+        - explicit ``str`` (e.g., ``"mcmc_nuts"``) → wrap into a 1-tuple
+          ``("mcmc_nuts",)``.
+
+        Compile modes are passed to ``compile(modes=...)`` and determine which
+        inference engines are pre-JIT-compiled before the first ``run()`` call.
+        See ``compile()`` docstring for valid mode names.
 
     Returns
     -------
@@ -287,11 +304,14 @@ class Fitter:
     (thread compilation, caching). The *returned* loss function and sampler
     engines are fully JIT-compiled and reusable across galaxies.
 
-    **Background compilation**: Upon initialization, a daemon thread spawns to
-    pre-compile the JIT engine (gradient computation, linear solve). The first
-    ``run()`` call waits for this thread (typically <1s if warm, or the full
-    compile time on cold XLA). Set ``TENGRI_NO_BACKGROUND_COMPILE=1`` to
-    disable (test environments).
+    **Background compilation**: Background compilation is now opt-in via the
+    ``compile_modes`` parameter (default ``None`` = no background thread).
+    The first ``run()`` call will compile lazily. Set ``compile_modes="auto"``
+    or ``compile_modes=("mcmc_nuts",)`` to spawn a daemon thread and pre-compile
+    specified inference modes before ``run()`` is called (typically <1s if warm,
+    or the full compile time on cold XLA). Set ``TENGRI_NO_BACKGROUND_COMPILE=1``
+    in the environment to disable even when ``compile_modes`` is set (test
+    environments).
 
     **Engine caching**: Compiled engines are cached on the Model object so that
     multiple Fitters created with the same Model but different data reuse the
@@ -341,6 +361,7 @@ class Fitter:
         likelihood=None,
         auto_protocol_likelihood=True,
         use_orchestrator=False,
+        compile_modes=None,
     ):
         # ── User-supplied Likelihood (Phase II-1 Protocol path) ─────
         # When non-None, replaces the built-in χ² dispatch. The user
@@ -418,6 +439,11 @@ class Fitter:
         # (doing so invalidates _jit_sampler and triggers a rebuild).
         self._memory_mode = "low" if self.spec.stochastic else "fast"
         self._posterior_chunk_size = None
+
+        # ── Background compilation modes ───────────────────────────
+        # Process compile_modes parameter: None → (), "auto" → infer,
+        # str → wrap, tuple → use as-is. Empty tuple skips background compile.
+        self._target_modes = self._resolve_compile_modes(compile_modes)
 
         # ── Background compilation ─────────────────────────────────
         self._jit_sampler = None
@@ -972,22 +998,76 @@ class Fitter:
 
     # ── Compilation ───────────────────────────────────────────────────
 
+    def _resolve_compile_modes(
+        self, compile_modes: tuple[str, ...] | str | None
+    ) -> tuple[str, ...]:
+        """Normalize compile_modes parameter to a tuple.
+
+        Parameters
+        ----------
+        compile_modes : tuple[str, ...] or str or None
+            User-provided compile modes specification.
+
+        Returns
+        -------
+        tuple[str, ...]
+            Normalized modes. Empty tuple means skip background compile.
+
+        Notes
+        -----
+        - ``None`` → ``()`` (no background compile)
+        - ``"auto"`` → infer from ``spec.stochastic`` and ``data_type``
+        - ``str`` → wrap as ``(str,)``
+        - ``tuple`` → return as-is
+        """
+        if compile_modes is None:
+            return ()
+
+        if isinstance(compile_modes, str):
+            if compile_modes == "auto":
+                return self._infer_default_compile_modes()
+            return (compile_modes,)
+
+        if isinstance(compile_modes, tuple):
+            return compile_modes
+
+        raise TypeError(
+            f"compile_modes must be None, str, or tuple[str, ...]; "
+            f"got {type(compile_modes).__name__}"
+        )
+
+    def _infer_default_compile_modes(self) -> tuple[str, ...]:
+        """Infer sensible compile modes from model and data configuration.
+
+        Returns
+        -------
+        tuple[str, ...]
+            Recommended modes: VI for stochastic SFH, NUTS for parametric.
+        """
+        if self.spec.stochastic:
+            return ("linear_resample", "nonlinear_update")
+
+        if self.data_type == "photometry":
+            return ("mcmc_nuts",)
+
+        return ("mcmc_nuts",)
+
     def _start_background_compilation(self) -> None:
-        """Spawn a daemon thread to pre-compile the JIT engine.
+        """Spawn a daemon thread to pre-compile the JIT engine (if enabled).
 
-        XLA C++ compilation releases the GIL, so this runs in genuine
-        parallel with the caller's Python setup code.  The
-        ``_compilation_event`` is set before the first ``run("vi")``
-        call can proceed past ``_get_or_build_engine``.
+        Background compilation is controlled by the ``compile_modes`` parameter
+        passed to ``__init__``. If ``_target_modes`` is empty or the environment
+        variable ``TENGRI_NO_BACKGROUND_COMPILE`` is set, no thread is spawned
+        and ``_compilation_event`` is set immediately.
 
-        Set ``TENGRI_NO_BACKGROUND_COMPILE=1`` to disable (used in tests
-        to avoid spawning dozens of concurrent compilations per session).
+        When enabled, XLA C++ compilation releases the GIL, so this runs in
+        genuine parallel with the caller's Python setup code. The
+        ``_compilation_event`` is set before the first ``run()`` call can
+        proceed past ``_get_or_build_engine``.
         """
         import os
 
-        if os.environ.get("TENGRI_NO_BACKGROUND_COMPILE"):
-            # In test environments, skip background compilation entirely.
-            # _get_or_build_engine will compile lazily on first run() call.
+        if os.environ.get("TENGRI_NO_BACKGROUND_COMPILE") or not self._target_modes:
             self._compilation_event.set()
             return
 
@@ -995,22 +1075,15 @@ class Fitter:
             """Background thread that compiles the JIT engine."""
             try:
                 with self._compilation_lock:
-                    # Mirror the full cache key shape used in
-                    # _get_or_build_engine so we don't double-compile when
-                    # a Fitter later runs with the default memory_mode.
-                    cache_key = (
-                        self._engine_cache_key(),
-                        getattr(self, "_memory_mode", "fast"),
-                    )
-                    cache = get_model_cache(self.model).setdefault("jit_engine", {})
-                    if cache_key not in cache:
+                    from tengri.inference.jit_engine import _SHARED_ENGINE_CACHE
+
+                    sig = self.compile_signature()
+                    if sig not in _SHARED_ENGINE_CACHE:
                         self.compile(
-                            modes=("linear_resample", "nonlinear_update"),
+                            modes=self._target_modes,
                             verbose=False,
                         )
             except Exception as exc:
-                # Compilation errors (JAX tracing, type mismatches, etc.) are stored
-                # and re-raised when the engine is first accessed via _get_or_build_engine()
                 logger.error(
                     "Background JIT compilation failed: %s: %s",
                     type(exc).__name__,
@@ -1024,6 +1097,46 @@ class Fitter:
         thread = threading.Thread(target=_worker, daemon=True)
         self._compilation_thread = thread
         thread.start()
+
+    def compile_signature(self) -> tuple:
+        """Return a hashable signature for cross-galaxy engine reuse.
+
+        Combines SEDModel's compile_signature() with Fitter-specific
+        parameters that affect the compiled inference engine. Two Fitters
+        with matching signatures can share the same XLA-compiled engine,
+        even if they reference different SEDModel instances (as long as
+        those instances have the same compile_signature).
+
+        Returns
+        -------
+        tuple
+            Hashable immutable signature suitable for keying into
+            the module-level _SHARED_ENGINE_CACHE.
+
+        Notes
+        -----
+        Used by _get_or_build_engine to enable cross-galaxy engine reuse
+        in PopulationFitter and CatalogFitter. The signature is computed
+        ONCE per Fitter construction and cached to avoid recomputation
+        in tight loops.
+        """
+        from tengri.observation.noise import has_noise_model
+
+        model_sig = self.model.compile_signature()
+        fitter_sig = (
+            self.data_type,
+            self.spec.stochastic,
+            self.spec.n_grid if self.spec.stochastic else 0,
+            len(self.data),
+            tuple(sorted(self._free_names)),
+            has_noise_model(self.spec),
+            self._eline_marginalize,
+            self._eline_fitted,
+            self._calibration_marginalize,
+            self._eline_prior_type,
+            getattr(self, "_memory_mode", "fast"),
+        )
+        return (model_sig, fitter_sig)
 
     def _engine_cache_key(self) -> tuple:
         """Return a hashable key identifying the JIT engine shape.
@@ -1051,9 +1164,13 @@ class Fitter:
     def _get_or_build_engine(self, pos_dict: dict) -> dict:
         """Return the JIT engine, reusing a cached version when possible.
 
-        Engines are cached on the Model object so that multiple Fitters
-        created with the same Model (but different data) share the same
-        compiled XLA programs.
+        Engines are cached in a module-level shared cache keyed by
+        compile_signature(), enabling zero-recompile fits when multiple
+        Fitters share the same model structure (e.g., catalog fits with
+        different SSP files of identical shape).
+
+        Also maintains a backward-compat per-model cache for any code
+        that reads directly from get_model_cache(self.model)["jit_engine"].
 
         Blocks until the background compilation thread (started in
         ``__init__``) has finished.  On an XLA cache hit the wait is
@@ -1071,19 +1188,16 @@ class Fitter:
         if self._jit_sampler is not None:
             return self._jit_sampler
 
-        # Engine-specific key includes memory_mode — a "low" engine wraps
-        # signal_response in jax.checkpoint, so it must not collide with
-        # a "fast" engine. Other caches (grad_fn, logdensity_fn) use the
-        # base _engine_cache_key() because they don't go through
-        # build_jit_engine and are unaffected by memory_mode.
-        cache_key = (self._engine_cache_key(), getattr(self, "_memory_mode", "fast"))
-        cache = get_model_cache(self.model).setdefault("jit_engine", {})
-        if cache_key in cache:
-            self._jit_sampler = cache[cache_key]
-            return self._jit_sampler
+        # Look up in shared cross-galaxy cache first
+        from tengri.inference.jit_engine import get_or_build_engine_cached
 
-        engine = self._build_jit_engine(pos_dict)
-        cache[cache_key] = engine
+        engine = get_or_build_engine_cached(self, pos_dict)
+
+        # Write-through to per-model cache for backward compat
+        cache_key = (self._engine_cache_key(), getattr(self, "_memory_mode", "fast"))
+        per_model_cache = get_model_cache(self.model).setdefault("jit_engine", {})
+        per_model_cache[cache_key] = engine
+
         self._jit_sampler = engine
         return engine
 

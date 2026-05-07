@@ -12,12 +12,63 @@ drawing, and nonlinear curving algorithms.  Mathematical equivalence with
 
 from __future__ import annotations
 
+import threading
+
 import jax
 import jax.numpy as jnp
 
 from tengri.inference._model_cache import get_model_cache
 
-__all__ = ["build_jit_engine", "get_or_build_signal_response"]
+__all__ = [
+    "build_jit_engine",
+    "get_or_build_engine_cached",
+    "get_or_build_signal_response",
+]
+
+# ── Module-level shared cache for cross-galaxy engine reuse ─────────────────
+# Maps compile_signature() → compiled engine dict.
+# Regular dict (not WeakValueDictionary) because engine dicts cannot be
+# weakly referenced. Engines are long-lived and tied to Fitter lifetimes.
+# Lock protects against concurrent compilation.
+_SHARED_ENGINE_CACHE: dict = {}
+_SHARED_ENGINE_CACHE_LOCK = threading.Lock()
+
+# Signal response cache (data-free, model-structure-only)
+# Maps _engine_cache_key() → (signal_response, signal_response_jit)
+_SHARED_SIGNAL_RESPONSE_CACHE: dict = {}
+_SHARED_SIGNAL_RESPONSE_CACHE_LOCK = threading.Lock()
+
+
+def get_or_build_engine_cached(fitter, pos_dict):
+    """Get or build a JIT engine from the shared cross-galaxy cache.
+
+    Two Fitters with the same compile_signature() will receive the same
+    compiled engine, enabling zero-recompile fits across different SEDModel
+    instances that share shape and structure (e.g., different SSP files of
+    the same shape in a catalog fit).
+
+    Parameters
+    ----------
+    fitter : Fitter
+        The Fitter instance requesting the engine.
+    pos_dict : dict
+        Position dict for computing static shapes.
+
+    Returns
+    -------
+    dict
+        Compiled engine with functions for all inference methods.
+    """
+    sig = fitter.compile_signature()
+
+    with _SHARED_ENGINE_CACHE_LOCK:
+        if sig in _SHARED_ENGINE_CACHE:
+            return _SHARED_ENGINE_CACHE[sig]
+
+        # Cache miss → build and store
+        engine = build_jit_engine(fitter, pos_dict)
+        _SHARED_ENGINE_CACHE[sig] = engine
+        return engine
 
 
 def _build_signal_response(fitter):
@@ -78,15 +129,15 @@ def _build_signal_response(fitter):
 
 
 def get_or_build_signal_response(fitter):
-    """Return ``(signal_response, signal_response_jit)`` cached on the Model.
+    """Return ``(signal_response, signal_response_jit)`` from shared cache.
 
     The physics stack (stellar populations, dust, nebular, AGN) is the
     "reproducible component": it does not depend on any galaxy's data.
-    Caching it on the Model gives two compile-once guarantees:
+    Caching it in a module-level dict enables cross-galaxy reuse:
 
     1. **Native path** — the same ``signal_response`` closure is used inside
        ``build_jit_engine``.  Because the outer ``run_evi_geovi_jit`` is
-       itself cached per ``_engine_cache_key()``, the physics is traced only
+       itself cached per compile_signature(), the physics is traced only
        once per model structure regardless of galaxy count.
 
     2. **NIFTy path** — ``signal_response_jit`` is the stable function object
@@ -100,17 +151,22 @@ def get_or_build_signal_response(fitter):
     structure — but not galaxy data values or shapes).
     """
     cache_key = fitter._engine_cache_key()
-    cache = get_model_cache(fitter.model).setdefault("signal_response", {})
-    if cache_key in cache:
-        return cache[cache_key]
 
-    signal_response, _ = _build_signal_response(fitter)
-    # JIT-compile the standalone version for NIFTy and eager calls.
-    # The native VI path uses the unwrapped closure so the outer
-    # run_evi_geovi_jit can inline and differentiate through it.
-    signal_response_jit = jax.jit(signal_response)
-    result = (signal_response, signal_response_jit)
-    cache[cache_key] = result
+    with _SHARED_SIGNAL_RESPONSE_CACHE_LOCK:
+        if cache_key in _SHARED_SIGNAL_RESPONSE_CACHE:
+            result = _SHARED_SIGNAL_RESPONSE_CACHE[cache_key]
+        else:
+            signal_response, _ = _build_signal_response(fitter)
+            # JIT-compile the standalone version for NIFTy and eager calls.
+            # The native VI path uses the unwrapped closure so the outer
+            # run_evi_geovi_jit can inline and differentiate through it.
+            signal_response_jit = jax.jit(signal_response)
+            result = (signal_response, signal_response_jit)
+            _SHARED_SIGNAL_RESPONSE_CACHE[cache_key] = result
+
+    # Also write-through to per-model cache for backward compat
+    per_model_cache = get_model_cache(fitter.model).setdefault("signal_response", {})
+    per_model_cache[cache_key] = result
     return result
 
 

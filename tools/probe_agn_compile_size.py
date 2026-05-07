@@ -1,21 +1,16 @@
 #!/usr/bin/env python3
-"""Probe compile size + closure-captured constants for tengri SED models.
+"""Probe compile size + closure-captured constants for tengri AGN models.
 
-Lowers ``Fitter._get_or_build_loss_fn`` to StableHLO for several
-``dust_emission`` settings and reports:
-
-- HLO text size (bytes)
-- count and shape of constants > 1 MB (these are the closure-captured
-  arrays that drive XLA's algebraic_simplifier into multi-second
-  constant-fold storms)
+Extends tools/probe_compile_size.py to test K&D disc, nthcomp, and radio models.
 
 Usage:
+    JAX_PLATFORMS=cpu .venv/bin/python tools/probe_agn_compile_size.py
 
-    JAX_PLATFORMS=cpu .venv/bin/python tools/probe_compile_size.py
-
-The script is a *baseline* tool used to measure the OOM/compile-time
-fixes tracked in ``docs/dev/quickstart_oom_diagnosis.md``. Run it before
-and after each phase; the >1 MB constant count should approach 0.
+Tests closure constants in:
+- AGN K&D disc (nthcomp tables)
+- AGN RELAGN disc
+- Radio models
+- X-ray models
 """
 
 from __future__ import annotations
@@ -78,22 +73,23 @@ def _scan_large_constants(hlo_text: str, threshold_bytes: int = 1_048_576):
     return sorted(found, reverse=True)
 
 
-def _build_params(dust_emission: str | None) -> Parameters:
+def _build_params_with_agn(agn_model: str | None = None) -> Parameters:
     extra: dict[str, Any] = {}
-    if dust_emission == "draine_li2014":
+    if agn_model:
         extra.update(
-            dust_umin=Uniform(0.1, 25.0),
-            dust_qpah=Uniform(0.5, 4.5),
-            dust_alpha_dl14=Uniform(1.0, 3.0),
-            dust_gamma_dl=Uniform(0.0, 0.2),
+            agn_log_lbol=Uniform(40.0, 47.0),
         )
-    elif dust_emission == "dale2014":
-        extra.update(dust_alpha_dale=Uniform(0.0625, 4.0))
-    elif dust_emission == "modified_blackbody":
-        extra.update(
-            dust_T=Uniform(15.0, 60.0),
-            dust_beta_ir=Uniform(1.0, 2.5),
-        )
+        if agn_model in ("kubota_done_full", "kubota_done_disc"):
+            extra.update(
+                agn_log_mbh=Uniform(6.0, 10.0),
+                agn_log_ledd=Uniform(-3.0, 0.0),
+            )
+        elif agn_model == "relagn":
+            extra.update(
+                agn_log_mbh=Uniform(7.0, 10.0),
+                agn_a_spin=Uniform(0.0, 0.998),
+                agn_cos_inc=Uniform(0.1, 1.0),
+            )
     return Parameters(
         mean_sfh_type="tsnorm",
         sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
@@ -105,16 +101,14 @@ def _build_params(dust_emission: str | None) -> Parameters:
         dust_law_bc="calzetti",
         dust_tau_bc=Uniform(0.0, 3.0),
         dust_tau_diff=Uniform(0.0, 2.0),
-        dust_emission=dust_emission,
-        nebular_ssp=True,
-        apply_igm=True,
         redshift=Fixed(1.0),
+        agn_model=agn_model,
         **extra,
     )
 
 
-def _make_fitter(dust_emission: str | None, ssp_data) -> Fitter:
-    params = _build_params(dust_emission)
+def _make_fitter(agn_model: str | None, ssp_data) -> Fitter:
+    params = _build_params_with_agn(agn_model)
     filters = load_filter_set(FILTER_NAMES)
     obs = Observation(photometry=Photometry.from_filter_set(filters))
     model = SEDModel(params, ssp_data, observation=obs)
@@ -125,26 +119,40 @@ def _make_fitter(dust_emission: str | None, ssp_data) -> Fitter:
     return Fitter(model, flux, sigma)
 
 
-def probe(dust_emission: str | None, ssp_data) -> dict[str, Any]:
-    print(f"\n=== dust_emission = {dust_emission!r} ===", flush=True)
+def probe(agn_model: str | None, ssp_data) -> dict[str, Any]:
+    print(f"\n=== agn_model = {agn_model!r} ===", flush=True)
     t0 = time.perf_counter()
-    fitter = _make_fitter(dust_emission, ssp_data)
-    fitter._compilation_event.wait(timeout=0.0)  # ensure no background compile
-    loss_fn = fitter._get_or_build_loss_fn(mode="auto")
-    data_args = fitter._data_args
-    key = jax.random.PRNGKey(0)
-    params = fitter._initialize_unbounded(key)
-    build_s = time.perf_counter() - t0
+    try:
+        fitter = _make_fitter(agn_model, ssp_data)
+        fitter._compilation_event.wait(timeout=0.0)  # ensure no background compile
+        loss_fn = fitter._get_or_build_loss_fn(mode="auto")
+        data_args = fitter._data_args
+        key = jax.random.PRNGKey(0)
+        params = fitter._initialize_unbounded(key)
+        build_s = time.perf_counter() - t0
+    except Exception as e:
+        print(f"  BUILD FAILED: {type(e).__name__}: {e}")
+        return {
+            "agn_model": agn_model,
+            "error": f"BUILD: {type(e).__name__}: {e}"
+        }
 
     t0 = time.perf_counter()
-    lowered = jax.jit(lambda p: loss_fn(p, data_args)).lower(params)
-    hlo = lowered.as_text()
-    lower_s = time.perf_counter() - t0
+    try:
+        lowered = jax.jit(lambda p: loss_fn(p, data_args)).lower(params)
+        hlo = lowered.as_text()
+        lower_s = time.perf_counter() - t0
+    except Exception as e:
+        print(f"  LOWER FAILED: {type(e).__name__}: {e}")
+        return {
+            "agn_model": agn_model,
+            "error": f"LOWER: {type(e).__name__}: {e}"
+        }
 
     constants = _scan_large_constants(hlo)
     total_const_bytes = sum(c[0] for c in constants)
     return {
-        "dust_emission": dust_emission,
+        "agn_model": agn_model,
         "build_s": build_s,
         "lower_s": lower_s,
         "hlo_bytes": len(hlo),
@@ -163,24 +171,24 @@ def main() -> int:
     print(f"loading SSP from {SSP_PATH.name} ...", flush=True)
     ssp_data = load_ssp_data(str(SSP_PATH))
 
-    cases: tuple[str | None, ...] = (None, "modified_blackbody", "dale2014", "draine_li2014")
+    cases: tuple[str | None, ...] = (None, "kubota_done_full", "relagn")
     rows = []
-    for dust in cases:
+    for agn in cases:
         try:
-            rows.append(probe(dust, ssp_data))
+            rows.append(probe(agn, ssp_data))
         except Exception as e:
-            print(f"  FAILED: {type(e).__name__}: {e}")
-            rows.append({"dust_emission": dust, "error": f"{type(e).__name__}: {e}"})
+            print(f"  EXCEPTION: {type(e).__name__}: {e}")
+            rows.append({"agn_model": agn, "error": f"{type(e).__name__}: {e}"})
 
     print()
-    print("| dust_emission        | hlo MB | >1MB count | largest MB | largest shape    |")
+    print("| agn_model            | hlo MB | >1MB count | largest MB | largest shape    |")
     print("|----------------------|--------|------------|------------|------------------|")
     for r in rows:
         if "error" in r:
-            print(f"| {r['dust_emission']!s:<20} | ERROR: {r['error']}")
+            print(f"| {r['agn_model']!s:<20} | ERROR: {r['error'][:50]}")
             continue
         print(
-            f"| {r['dust_emission']!s:<20} "
+            f"| {r['agn_model']!s:<20} "
             f"| {r['hlo_bytes']/1e6:6.1f} "
             f"| {r['n_large_consts']:>10} "
             f"| {r['largest_const_mb']:>10.1f} "

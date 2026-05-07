@@ -165,20 +165,24 @@ def precompute_dl07_photometry(
     }
 
 
-def build_dl07_photometry_lookup(precomp: dict):
+def build_dl07_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None):
     """Build a JIT-compiled DL07 photometry function from precomputed tables.
 
     Parameters
     ----------
     precomp : dict
         Output of ``precompute_dl07_photometry()``.
+    grid_arrays : tuple or None
+        Optional tuple of (single_u_phot, powerlaw_phot, umin_grid, qpah_grid)
+        passed as JIT-traced inputs. When None, grids are closure-captured
+        (backwards compatible).
 
     Returns
     -------
     callable
-        Signature: ``(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah) ->``
-        ``ndarray, shape (n_filters,)``. Returns filter-integrated L_ν
-        [erg/s/Hz or L_sun/Hz] at each filter.
+        Signature: ``(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah,
+        grid_arrays_traced=None) -> ndarray, shape (n_filters,)``.
+        Returns filter-integrated L_ν [erg/s/Hz or L_sun/Hz] at each filter.
 
     Notes
     -----
@@ -186,15 +190,21 @@ def build_dl07_photometry_lookup(precomp: dict):
 
     **Gradient-safe**: yes. Use for likelihood evaluation and inference.
     """
-    single_u_phot = precomp["single_u_phot"]
-    powerlaw_phot = precomp["powerlaw_phot"]
-    umin_grid = jnp.asarray(precomp["umin_grid"])
-    qpah_grid = jnp.asarray(precomp["qpah_grid"])
-    axes = (qpah_grid, umin_grid)
-    edges = tuple(edges_for_grid(ax) for ax in axes)
+    single_u_phot_closure = jnp.asarray(precomp["single_u_phot"])
+    powerlaw_phot_closure = jnp.asarray(precomp["powerlaw_phot"])
+    umin_grid_closure = jnp.asarray(precomp["umin_grid"])
+    qpah_grid_closure = jnp.asarray(precomp["qpah_grid"])
+    axes_closure = (qpah_grid_closure, umin_grid_closure)
+    edges_closure = tuple(edges_for_grid(ax) for ax in axes_closure)
 
     @jax.jit
-    def dl07_phot(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah):
+    def dl07_phot(
+        L_absorbed,
+        dust_umin,
+        dust_gamma_dl,
+        dust_qpah,
+        grid_arrays_traced=None,
+    ):
         """Compute DL07 dust emission photometry via triweight interpolation on precomputed grid.
 
         Parameters
@@ -208,6 +218,10 @@ def build_dl07_photometry_lookup(precomp: dict):
             [dimensionless, in [0, 1]].
         dust_qpah : float
             PAH mass fraction [dimensionless].
+        grid_arrays_traced : tuple or None
+            Optional JIT-traced (single_u_phot, powerlaw_phot, umin_grid,
+            qpah_grid). When provided, these arrays are used instead of
+            closure-captured versions.
 
         Returns
         -------
@@ -224,6 +238,19 @@ def build_dl07_photometry_lookup(precomp: dict):
         precomputed grid, then mixes single-U and power-law components
         via the gamma parameter, and finally scales by L_absorbed.
         """
+        # Use traced arrays if provided, else fall back to closure
+        if grid_arrays_traced is not None:
+            single_u_phot, powerlaw_phot, umin_grid, qpah_grid = grid_arrays_traced
+            axes = (qpah_grid, umin_grid)
+            edges = tuple(edges_for_grid(ax) for ax in axes)
+        else:
+            single_u_phot = single_u_phot_closure
+            powerlaw_phot = powerlaw_phot_closure
+            umin_grid = umin_grid_closure
+            qpah_grid = qpah_grid_closure
+            axes = axes_closure
+            edges = edges_closure
+
         point = (dust_qpah, dust_umin)
         # 2D triweight interpolation (C²-continuous gradients)
         single = interp_nd_triweight(single_u_phot, axes, edges, point)
@@ -305,25 +332,46 @@ def _precompute_dl07_like_photometry(
     }
 
 
-def _build_dl07_like_lookup(precomp: dict):
+def _build_dl07_like_lookup(precomp: dict, grid_arrays: tuple | None = None):
     """Shared JIT lookup for DL07-shape models. Signature matches DL07:
-    ``(L_absorbed, dust_umin, dust_gamma_dl, dust_q)``.
+    ``(L_absorbed, dust_umin, dust_gamma_dl, dust_q, grid_arrays_traced=None)``.
 
     Uses C²-continuous triweight interpolation via the shared
     :func:`interp_nd_triweight` helper. Smooth gradients are required for
     NIFTy VI / HMC / Hessian-based inference; the resulting ~3-5%
     hybrid-vs-exact bias is below typical dust-template systematic
     uncertainty (~10-30%).
+
+    Parameters
+    ----------
+    precomp : dict
+        Precomputed photometry data from precompute function.
+    grid_arrays : tuple or None
+        Optional tuple of (single_u_phot, powerlaw_phot, q_grid, umin_grid)
+        to be passed as JIT-traced inputs. When None, grids are closure-captured.
     """
-    single_u_phot = precomp["single_u_phot"]
-    powerlaw_phot = precomp["powerlaw_phot"]
-    umin_grid = jnp.asarray(precomp["umin_grid"])
-    q_grid = jnp.asarray(precomp["q_grid"])
-    axes = (q_grid, umin_grid)
-    edges = tuple(edges_for_grid(ax) for ax in axes)
+    single_u_phot_closure = jnp.asarray(precomp["single_u_phot"])
+    powerlaw_phot_closure = jnp.asarray(precomp["powerlaw_phot"])
+    umin_grid_closure = jnp.asarray(precomp["umin_grid"])
+    q_grid_closure = jnp.asarray(precomp["q_grid"])
+    axes_closure = (q_grid_closure, umin_grid_closure)
+    edges_closure = tuple(edges_for_grid(ax) for ax in axes_closure)
 
     @jax.jit
-    def phot_fn(L_absorbed, dust_umin, dust_gamma_dl, dust_q):
+    def phot_fn(L_absorbed, dust_umin, dust_gamma_dl, dust_q, grid_arrays_traced=None):
+        # Use traced arrays if provided, else fall back to closure
+        if grid_arrays_traced is not None:
+            single_u_phot, powerlaw_phot, q_grid, umin_grid = grid_arrays_traced
+            axes = (q_grid, umin_grid)
+            edges = tuple(edges_for_grid(ax) for ax in axes)
+        else:
+            single_u_phot = single_u_phot_closure
+            powerlaw_phot = powerlaw_phot_closure
+            q_grid = q_grid_closure
+            umin_grid = umin_grid_closure
+            axes = axes_closure
+            edges = edges_closure
+
         point = (dust_q, dust_umin)
         single = interp_nd_triweight(single_u_phot, axes, edges, point)
         power = interp_nd_triweight(powerlaw_phot, axes, edges, point)
@@ -445,29 +493,63 @@ def precompute_dl14_photometry(
     }
 
 
-def build_dl14_photometry_lookup(precomp: dict):
+def build_dl14_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None):
     """Build JIT-compiled DL14 photometry lookup.
 
     Signature: ``(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah,
-    dust_alpha_dl14)``.
+    dust_alpha_dl14, grid_arrays_traced=None)``.
 
     C²-continuous triweight interpolation in (qpah, umin) for single_u
     and (qpah, umin, alpha) for the powerlaw component, via the shared
     :func:`interp_nd_triweight` helper.
-    """
-    single_u_phot = precomp["single_u_phot"]
-    powerlaw_phot = precomp["powerlaw_phot"]
-    umin_grid = jnp.asarray(precomp["umin_grid"])
-    qpah_grid = jnp.asarray(precomp["qpah_grid"])
-    alpha_grid = jnp.asarray(precomp["alpha_grid"])
 
-    single_axes = (qpah_grid, umin_grid)
-    single_edges = tuple(edges_for_grid(ax) for ax in single_axes)
-    pl_axes = (qpah_grid, umin_grid, alpha_grid)
-    pl_edges = tuple(edges_for_grid(ax) for ax in pl_axes)
+    Parameters
+    ----------
+    precomp : dict
+        Precomputed photometry data.
+    grid_arrays : tuple or None
+        Optional tuple of (single_u_phot, powerlaw_phot, qpah_grid, umin_grid,
+        alpha_grid) passed as JIT-traced inputs. When None, grids are
+        closure-captured.
+    """
+    single_u_phot_closure = jnp.asarray(precomp["single_u_phot"])
+    powerlaw_phot_closure = jnp.asarray(precomp["powerlaw_phot"])
+    umin_grid_closure = jnp.asarray(precomp["umin_grid"])
+    qpah_grid_closure = jnp.asarray(precomp["qpah_grid"])
+    alpha_grid_closure = jnp.asarray(precomp["alpha_grid"])
+
+    single_axes_closure = (qpah_grid_closure, umin_grid_closure)
+    single_edges_closure = tuple(edges_for_grid(ax) for ax in single_axes_closure)
+    pl_axes_closure = (qpah_grid_closure, umin_grid_closure, alpha_grid_closure)
+    pl_edges_closure = tuple(edges_for_grid(ax) for ax in pl_axes_closure)
 
     @jax.jit
-    def phot_fn(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah, dust_alpha_dl14):
+    def phot_fn(
+        L_absorbed,
+        dust_umin,
+        dust_gamma_dl,
+        dust_qpah,
+        dust_alpha_dl14,
+        grid_arrays_traced=None,
+    ):
+        # Use traced arrays if provided, else fall back to closure
+        if grid_arrays_traced is not None:
+            single_u_phot, powerlaw_phot, qpah_grid, umin_grid, alpha_grid = grid_arrays_traced
+            single_axes = (qpah_grid, umin_grid)
+            single_edges = tuple(edges_for_grid(ax) for ax in single_axes)
+            pl_axes = (qpah_grid, umin_grid, alpha_grid)
+            pl_edges = tuple(edges_for_grid(ax) for ax in pl_axes)
+        else:
+            single_u_phot = single_u_phot_closure
+            powerlaw_phot = powerlaw_phot_closure
+            qpah_grid = qpah_grid_closure
+            umin_grid = umin_grid_closure
+            alpha_grid = alpha_grid_closure
+            single_axes = single_axes_closure
+            single_edges = single_edges_closure
+            pl_axes = pl_axes_closure
+            pl_edges = pl_edges_closure
+
         single = interp_nd_triweight(
             single_u_phot, single_axes, single_edges, (dust_qpah, dust_umin)
         )
@@ -518,20 +600,40 @@ def precompute_bosa_photometry(
     }
 
 
-def build_bosa_photometry_lookup(precomp: dict):
+def build_bosa_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None):
     """Build JIT-compiled BOSA photometry lookup.
 
-    Signature: ``(L_absorbed, dust_log_ssfr)``. ``log_ltir`` is derived
-    internally as ``log10(L_absorbed)``.
+    Signature: ``(L_absorbed, dust_log_ssfr, grid_arrays_traced=None)``.
+    ``log_ltir`` is derived internally as ``log10(L_absorbed)``.
+
+    Parameters
+    ----------
+    precomp : dict
+        Precomputed photometry data.
+    grid_arrays : tuple or None
+        Optional tuple of (phot, log_ltir_grid, log_ssfr_grid) passed as
+        JIT-traced inputs. When None, grids are closure-captured.
     """
-    phot = precomp["phot"]
-    log_ltir_grid = jnp.asarray(precomp["log_ltir_grid"])
-    log_ssfr_grid = jnp.asarray(precomp["log_ssfr_grid"])
-    axes = (log_ltir_grid, log_ssfr_grid)
-    edges = tuple(edges_for_grid(ax) for ax in axes)
+    phot_closure = jnp.asarray(precomp["phot"])
+    log_ltir_grid_closure = jnp.asarray(precomp["log_ltir_grid"])
+    log_ssfr_grid_closure = jnp.asarray(precomp["log_ssfr_grid"])
+    axes_closure = (log_ltir_grid_closure, log_ssfr_grid_closure)
+    edges_closure = tuple(edges_for_grid(ax) for ax in axes_closure)
 
     @jax.jit
-    def phot_fn(L_absorbed, dust_log_ssfr):
+    def phot_fn(L_absorbed, dust_log_ssfr, grid_arrays_traced=None):
+        # Use traced arrays if provided, else fall back to closure
+        if grid_arrays_traced is not None:
+            phot, log_ltir_grid, log_ssfr_grid = grid_arrays_traced
+            axes = (log_ltir_grid, log_ssfr_grid)
+            edges = tuple(edges_for_grid(ax) for ax in axes)
+        else:
+            phot = phot_closure
+            log_ltir_grid = log_ltir_grid_closure
+            log_ssfr_grid = log_ssfr_grid_closure
+            axes = axes_closure
+            edges = edges_closure
+
         log_ltir = jnp.log10(jnp.maximum(L_absorbed, 1.0e-30))
         shape_phot = interp_nd_triweight(phot, axes, edges, (log_ltir, dust_log_ssfr))
         return L_absorbed * shape_phot
@@ -570,20 +672,39 @@ def precompute_dale2014_photometry(
     return {"phot": preint.phot, "alpha_grid": alpha_grid}
 
 
-def build_dale2014_photometry_lookup(precomp: dict):
+def build_dale2014_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None):
     """Build JIT-compiled Dale 2014 photometry lookup.
 
-    Signature: ``(L_absorbed, dust_alpha_dale)``. Uses C²-continuous
-    triweight interpolation in alpha via the shared
+    Signature: ``(L_absorbed, dust_alpha_dale, grid_arrays_traced=None)``.
+    Uses C²-continuous triweight interpolation in alpha via the shared
     :func:`interp_nd_triweight` helper.
+
+    Parameters
+    ----------
+    precomp : dict
+        Precomputed photometry data.
+    grid_arrays : tuple or None
+        Optional tuple of (phot, alpha_grid) passed as JIT-traced inputs.
+        When None, grids are closure-captured.
     """
-    phot = precomp["phot"]
-    alpha_grid = jnp.asarray(precomp["alpha_grid"])
-    axes = (alpha_grid,)
-    edges = tuple(edges_for_grid(ax) for ax in axes)
+    phot_closure = jnp.asarray(precomp["phot"])
+    alpha_grid_closure = jnp.asarray(precomp["alpha_grid"])
+    axes_closure = (alpha_grid_closure,)
+    edges_closure = tuple(edges_for_grid(ax) for ax in axes_closure)
 
     @jax.jit
-    def phot_fn(L_absorbed, dust_alpha_dale):
+    def phot_fn(L_absorbed, dust_alpha_dale, grid_arrays_traced=None):
+        # Use traced arrays if provided, else fall back to closure
+        if grid_arrays_traced is not None:
+            phot, alpha_grid = grid_arrays_traced
+            axes = (alpha_grid,)
+            edges = tuple(edges_for_grid(ax) for ax in axes)
+        else:
+            phot = phot_closure
+            alpha_grid = alpha_grid_closure
+            axes = axes_closure
+            edges = edges_closure
+
         shape_phot = interp_nd_triweight(phot, axes, edges, (dust_alpha_dale,))
         return L_absorbed * shape_phot
 
@@ -715,6 +836,75 @@ def precompute(
         units=units,
     )
     return _auto_collapse(preint, AXIS_PARAMS.get(model_name, ()), parameters)
+
+
+def extract_grid_arrays(preint, *, model_name: str) -> tuple | None:
+    """Extract JIT-traceable grid arrays from a precompute result.
+
+    Returns a tuple of arrays that can be passed as grid_arrays_traced
+    to the corresponding build_*_lookup function. Used to thread IR
+    template grids through the JIT boundary as runtime inputs rather
+    than closure-captured constants.
+
+    Parameters
+    ----------
+    preint : dict or PreintegratedGrid
+        Precomputed photometry grid from ``precompute()``.
+    model_name : str
+        Dust model identifier.
+
+    Returns
+    -------
+    tuple or None
+        Tuple of arrays in model-specific order, or None if not applicable.
+
+    Notes
+    -----
+    **JIT-compatible**: no — returns arrays for factory-time use.
+
+    **Gradient-safe**: no — used at model initialization time.
+    """
+    if model_name in ("draine_li2007", "dl07"):
+        return (
+            jnp.asarray(preint["single_u_phot"]),
+            jnp.asarray(preint["powerlaw_phot"]),
+            jnp.asarray(preint["umin_grid"]),
+            jnp.asarray(preint["qpah_grid"]),
+        )
+    if model_name == "astrodust":
+        return (
+            jnp.asarray(preint["single_u_phot"]),
+            jnp.asarray(preint["powerlaw_phot"]),
+            jnp.asarray(preint["q_grid"]),
+            jnp.asarray(preint["umin_grid"]),
+        )
+    if model_name == "themis":
+        return (
+            jnp.asarray(preint["single_u_phot"]),
+            jnp.asarray(preint["powerlaw_phot"]),
+            jnp.asarray(preint["q_grid"]),
+            jnp.asarray(preint["umin_grid"]),
+        )
+    if model_name == "draine_li2014":
+        return (
+            jnp.asarray(preint["single_u_phot"]),
+            jnp.asarray(preint["powerlaw_phot"]),
+            jnp.asarray(preint["qpah_grid"]),
+            jnp.asarray(preint["umin_grid"]),
+            jnp.asarray(preint["alpha_grid"]),
+        )
+    if model_name == "bosa":
+        return (
+            jnp.asarray(preint["phot"]),
+            jnp.asarray(preint["log_ltir_grid"]),
+            jnp.asarray(preint["log_ssfr_grid"]),
+        )
+    if model_name == "dale2014":
+        return (
+            jnp.asarray(preint["phot"]),
+            jnp.asarray(preint["alpha_grid"]),
+        )
+    return None
 
 
 def build_lookup(preint, *, model_name: str):
@@ -871,3 +1061,75 @@ def precompute_for_model(
         return precompute_fn(templates, filter_waves, filter_trans, redshift=redshift)
 
     return None
+
+
+# ── Component registry entries (Phase II-6) ────────────────────────────────
+# Each dust-emission model is registered so that sed_model.py and _kernels/hybrid.py
+# can use a registry-driven dispatch instead of hard-coded if/elif chains.
+
+
+def _make_dust_ir_spec(model_name: str, axis_names: tuple[str, ...]):
+    """Factory for dust IR component specs. Avoids long lambda lines."""
+    from tengri.forward._component_registry import ComponentSpec
+
+    def _precompute(filter_waves, filter_trans, redshift, parameters):
+        return precompute_for_model(model_name, filter_waves, filter_trans, redshift, parameters)
+
+    def _extract(precomp):
+        return extract_grid_arrays(precomp, model_name=model_name) if precomp is not None else ()
+
+    def _build(precomp, *, grid_arrays_traced=None):
+        return build_lookup(precomp, model_name=model_name)
+
+    def _activate(spec, parameters):
+        return (
+            hasattr(parameters, "_dust_emission_model")
+            and parameters._dust_emission_model == model_name
+        )
+
+    return ComponentSpec(
+        name=f"dust_ir:{model_name}",
+        precompute=_precompute,
+        extract_arrays=_extract,
+        build_lookup=_build,
+        apply_signature=axis_names,
+        activation=_activate,
+    )
+
+
+def _register_dust_ir_components():
+    """Register dust IR component specs at module load time."""
+    from tengri.forward._component_registry import register
+
+    # DL07 (Draine & Li 2007): 2D grid in (qpah, umin)
+    # Signature: (L_absorbed, dust_umin, dust_gamma_dl, dust_qpah)
+    register(_make_dust_ir_spec("draine_li2007", ("dust_umin", "dust_gamma_dl", "dust_qpah")))
+
+    # DL14 (Draine & Li 2014): 3D grid in (qpah, umin, alpha_dl14)
+    # Signature: (L_absorbed, dust_umin, dust_gamma_dl, dust_qpah, dust_alpha_dl14)
+    register(
+        _make_dust_ir_spec(
+            "draine_li2014",
+            ("dust_umin", "dust_gamma_dl", "dust_qpah", "dust_alpha_dl14"),
+        )
+    )
+
+    # Dale2014: 1D grid in (alpha)
+    # Signature: (L_absorbed, dust_alpha_dale)
+    register(_make_dust_ir_spec("dale2014", ("dust_alpha_dale",)))
+
+    # Astrodust (Hensley & Draine 2023): DL07-shaped 2D grid in (q, umin)
+    # Signature: (L_absorbed, dust_umin, dust_gamma_dl, dust_qpah)
+    register(_make_dust_ir_spec("astrodust", ("dust_umin", "dust_gamma_dl", "dust_qpah")))
+
+    # THEMIS (Jones+2017): DL07-shaped 2D grid in (qhac, umin)
+    # Signature: (L_absorbed, dust_umin, dust_gamma_dl, dust_qhac)
+    register(_make_dust_ir_spec("themis", ("dust_umin", "dust_gamma_dl", "dust_qhac")))
+
+    # BOSA (Boss-Agn): 1D grid in (log_ssfr)
+    # Signature: (L_absorbed, dust_log_ssfr)
+    register(_make_dust_ir_spec("bosa", ("dust_log_ssfr",)))
+
+
+# Register at module load time
+_register_dust_ir_components()

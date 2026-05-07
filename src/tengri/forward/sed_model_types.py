@@ -276,6 +276,9 @@ class PrecomputedData:
     dust_age_weights: jnp.ndarray | None = None  # sigmoid weights for two-component dust
     igm_at_effective_wavelengths: jnp.ndarray | None = None  # IGM T(λ_eff) for fixed z
     effective_bandwidths_hz: jnp.ndarray | None = None  # Voronoi Δν per filter (Hz)
+    component_grid_arrays: dict[str, tuple] = dataclasses.field(
+        default_factory=dict
+    )  # Registry-driven JIT-traceable arrays per component: {name → (arr1, arr2, ...)}
     dust_ir_lookup: object | None = None  # Preintegrated template-based dust IR photometry
     dust_ir_grid_arrays: tuple | None = None  # JIT-traceable IR grid arrays (phonetic-shaped)
     skirtor_preintegrated: object | None = None  # Preintegrated SKIRTOR torus photometry lookup

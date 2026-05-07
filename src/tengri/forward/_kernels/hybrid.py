@@ -14,6 +14,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.components.stellar.sfh.sfr_window import time_weighted_sfr
+from tengri.forward._component_registry import REGISTRY as _COMPONENT_REGISTRY
 from tengri.forward.sed_model_types import SEDModelState
 
 # ── Hybrid kernel: precomputed SSP + exact non-stellar ────────────
@@ -369,6 +370,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
         if state.precomputed.dust_ir_lookup is not None and not _needs_extension:
             _has_preint_dust_ir = True
             _dust_ir_lookup = state.precomputed.dust_ir_lookup
+            _dust_ir_grid_arrays = state.precomputed.dust_ir_grid_arrays
             _dust_model_name = state.dust_emission_model
 
     # Analytic dust emission model preintegration gates (PR 3)
@@ -1610,52 +1612,28 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                 )
 
                 if _has_preint_dust_ir:
-                    # Use preintegrated template lookup (fast triweight interp)
-                    # Signature varies by dust model
-                    if _dust_model_name == "draine_li2007":
-                        # DL07: (L_absorbed, dust_umin, dust_gamma_dl, dust_qpah)
-                        dust_ir_phot_preint = _dust_ir_lookup(
-                            L_ir,
-                            jnp.float64(dust_umin),
-                            jnp.float64(dust_gamma_dl),
-                            jnp.float64(dust_qpah),
+                    # Registry-driven dispatch: adding a new templated dust IR
+                    # backend means registering a ComponentSpec — no edit here.
+                    # See docs/dev/closure_capture_extension.md.
+                    _dust_ir_spec = _COMPONENT_REGISTRY.get(f"dust_ir:{_dust_model_name}")
+                    if _dust_ir_spec is not None:
+                        _dust_ir_param_locals = {
+                            "dust_alpha_dale": dust_alpha_dale,
+                            "dust_umin": dust_umin,
+                            "dust_gamma_dl": dust_gamma_dl,
+                            "dust_qpah": dust_qpah,
+                            "dust_qhac": dust_qhac,
+                            "dust_alpha_dl14": dust_alpha_dl14,
+                            "dust_log_ssfr": dust_log_ssfr,
+                        }
+                        _dust_ir_args = tuple(
+                            jnp.float64(_dust_ir_param_locals[name])
+                            for name in _dust_ir_spec.apply_signature
                         )
-                    elif _dust_model_name == "dale2014":
-                        # Dale2014: (L_absorbed, dust_alpha_dale)
                         dust_ir_phot_preint = _dust_ir_lookup(
                             L_ir,
-                            jnp.float64(dust_alpha_dale),
-                        )
-                    elif _dust_model_name == "astrodust":
-                        # Astrodust: (L_absorbed, dust_umin, dust_gamma_dl, dust_qpah)
-                        dust_ir_phot_preint = _dust_ir_lookup(
-                            L_ir,
-                            jnp.float64(dust_umin),
-                            jnp.float64(dust_gamma_dl),
-                            jnp.float64(dust_qpah),
-                        )
-                    elif _dust_model_name == "themis":
-                        # THEMIS: (L_absorbed, dust_umin, dust_gamma_dl, dust_qhac)
-                        dust_ir_phot_preint = _dust_ir_lookup(
-                            L_ir,
-                            jnp.float64(dust_umin),
-                            jnp.float64(dust_gamma_dl),
-                            jnp.float64(dust_qhac),
-                        )
-                    elif _dust_model_name == "draine_li2014":
-                        # DL14: (L, dust_umin, dust_gamma_dl, dust_qpah, dust_alpha_dl14)
-                        dust_ir_phot_preint = _dust_ir_lookup(
-                            L_ir,
-                            jnp.float64(dust_umin),
-                            jnp.float64(dust_gamma_dl),
-                            jnp.float64(dust_qpah),
-                            jnp.float64(dust_alpha_dl14),
-                        )
-                    elif _dust_model_name == "bosa":
-                        # BOSA: (L_absorbed, dust_log_ssfr) — log_ltir is derived
-                        dust_ir_phot_preint = _dust_ir_lookup(
-                            L_ir,
-                            jnp.float64(dust_log_ssfr),
+                            *_dust_ir_args,
+                            grid_arrays_traced=_dust_ir_grid_arrays,
                         )
                     else:
                         # Check analytic dust models (PR 3)

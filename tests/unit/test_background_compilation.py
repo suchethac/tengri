@@ -61,7 +61,9 @@ class TestBackgroundCompilation:
     def test_compilation_event_is_set(self, model_and_data):
         """_compilation_event must be set (thread finished) before we call run."""
         model, mock = model_and_data
-        fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
+        fitter = Fitter(
+            model, mock.flux_obs, mock.noise, data_type="photometry", compile_modes="auto"
+        )
         # Wait up to 300s — cold-start compilation can take ~60s for two modes;
         # on a warm XLA cache this returns in milliseconds.
         assert fitter._compilation_event.wait(timeout=300), (
@@ -80,7 +82,9 @@ class TestBackgroundCompilation:
             return t
 
         monkeypatch.setattr(threading, "Thread", capturing_thread)
-        fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
+        fitter = Fitter(
+            model, mock.flux_obs, mock.noise, data_type="photometry", compile_modes="auto"
+        )
         fitter._compilation_event.wait(timeout=120)
 
         assert spawned, "No thread was created"
@@ -90,7 +94,9 @@ class TestBackgroundCompilation:
         """Two Fitters with the same SEDModel + cache key compile only once."""
         model, mock = model_and_data
         # Ensure the cache is populated by the first Fitter.
-        fitter1 = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
+        fitter1 = Fitter(
+            model, mock.flux_obs, mock.noise, data_type="photometry", compile_modes="auto"
+        )
         fitter1._compilation_event.wait(timeout=120)
 
         compile_calls: list[int] = []
@@ -101,7 +107,9 @@ class TestBackgroundCompilation:
             return original_compile(self, **kwargs)
 
         with patch.object(Fitter, "compile", counting_compile):
-            fitter2 = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
+            fitter2 = Fitter(
+                model, mock.flux_obs, mock.noise, data_type="photometry", compile_modes="auto"
+            )
             fitter2._compilation_event.wait(timeout=120)
 
         # compile() should NOT have been called again — cache was already warm.
@@ -127,7 +135,9 @@ class TestBackgroundCompilation:
             if engine_cache is not None:
                 engine_cache.clear()
 
-            fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
+            fitter = Fitter(
+                model, mock.flux_obs, mock.noise, data_type="photometry", compile_modes="auto"
+            )
             fitter._compilation_event.wait(timeout=30)
 
             assert fitter._compilation_error is not None, (
