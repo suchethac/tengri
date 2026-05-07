@@ -269,6 +269,14 @@ class SEDModel:
         "dust_attenuation": True,
         "dust_emission": True,
         "igm": True,
+        # When True (default), an SEDModel built with a *free* redshift prior
+        # and photometry filters will automatically call ``precompute_ztable``
+        # at construction so forward evaluation under inference uses the
+        # hybrid_ztable kernel (compact graph, fast first-call) instead of
+        # the compositional full-wave fallback.  Set to False to opt out;
+        # set to a dict like ``{"ztable": {"n_z": 200, "z_min": 0.01}}`` to
+        # tune the grid.
+        "ztable": True,
     }
 
     _PREDICTION_MODES: ClassVar[frozenset] = frozenset(
@@ -390,6 +398,9 @@ class SEDModel:
         # ── Kernels (consume self._state) ─────────────────────────
         self._compositional_kernels = self._build_compositional_kernels()
         self._hybrid_kernels = self._build_hybrid_kernels()
+
+        if precompute is not False:
+            self._maybe_auto_precompute_ztable()
 
         if (
             observation is not None
@@ -4845,6 +4856,44 @@ class SEDModel:
                 self._hybrid.spectrum = jax.jit(_raw) if _raw else None
 
         return self
+
+    def _maybe_auto_precompute_ztable(self) -> None:
+        """Auto-fire ``precompute_ztable`` for free-z photometry models.
+
+        Triggered when:
+        - ``self._approx["ztable"]`` is truthy (default True);
+        - redshift is a free parameter (``self._z_fixed is None``);
+        - photometry filters are available (``self.filter_waves is not None``).
+
+        Pulls ``z_min``/``z_max`` from the redshift prior and uses
+        ``n_z=100`` by default (override via
+        ``approx={"ztable": {"n_z": 200, ...}}``). Failures are swallowed —
+        we fall back to the compositional path silently rather than blocking
+        construction.
+        """
+        ztable_cfg = self._approx.get("ztable", True)
+        if not ztable_cfg:
+            return
+        if self._z_fixed is not None:
+            return
+        if getattr(self, "filter_waves", None) is None:
+            return
+        try:
+            redshift_dist = self.spec.get_distribution("redshift")
+            z_lo, z_hi = float(redshift_dist.bounds[0]), float(redshift_dist.bounds[1])
+        except Exception:
+            return
+
+        kwargs = {
+            "z_min": max(0.001, z_lo - 0.01 * (z_hi - z_lo)),
+            "z_max": z_hi + 0.01 * (z_hi - z_lo),
+            "n_z": 100,
+        }
+        if isinstance(ztable_cfg, dict):
+            kwargs.update({k: v for k, v in ztable_cfg.items() if k in {"z_min", "z_max", "n_z"}})
+
+        with contextlib.suppress(Exception):
+            self.precompute_ztable(**kwargs)
 
     def precompute_ztable(self, z_grid=None, z_min=0.001, z_max=3.0, n_z=100):
         """Pre-compute SSP photometry on a redshift grid for free-z fitting.
