@@ -796,7 +796,7 @@ SFH_REGISTRY["psb_wild2020"] = SFH_REGISTRY["psb"]
 
 
 def _table_sfh_placeholder(t_lookback, **kwargs):
-    """Placeholder — tabulated SFH is handled directly in Model._compute_sed_components.
+    """Placeholder — tabulated SFH is handled directly in the orchestrator path.
 
     Parameters
     ----------

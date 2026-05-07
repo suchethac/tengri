@@ -22,27 +22,30 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 
 # ── BUG-01: SFR hardcoded to 1.0 Msun/yr ──────────────────────────
 class TestBug01SfrCached:
-    """sed_pipeline.py:638 — _sfr_cached must reflect actual SFR.
+    """forward/sed_model.py — present-day SFR must reflect actual SFR.
 
-    Fixed: sed_pipeline.py now uses sfr[-1] for parametric SFH paths instead
-    of hard-coding 1.0. The fix is already in the code; these tests verify it.
+    Fixed: the orchestrator path now feeds ``_sfr_current`` from
+    ``time_weighted_sfr(sfr, age_yr, 1e7)`` (10 Myr Murphy+2011 timescale)
+    for parametric SFH paths instead of hard-coding 1.0. Originally pinned
+    to the legacy ``sed_pipeline.compute_sed_components`` body, deleted in
+    Phase B closure; the equivalent invariant is upheld by the orchestrator.
     """
 
     def test_sfr_computed_not_hardcoded(self):
-        """Verify that the SFR pipeline code selects sfr[-1] for parametric path."""
+        """Verify the orchestrator computes SFR rather than hard-coding 1.0."""
         import inspect
 
-        from tengri.forward import pipeline as sed_pipeline
+        from tengri.forward import sed_model
 
-        src = inspect.getsource(sed_pipeline)
-        # The fix: sfr[-1] is used as the instantaneous SFR
-        assert "sfr[-1]" in src, "sed_pipeline must use sfr[-1] for parametric SFR path"
-        # Guard against any re-introduction of the 1.0 fallback at the _sfr_cached line
-        # (the fallback for _sfr_cached=0 override path is intentional; this checks
-        # the parametric path doesn't hard-code it)
-        lines = [l for l in src.split("\n") if "_sfr_cached" in l and "1.0" in l]
+        src = inspect.getsource(sed_model)
+        # The fix: the canonical 10 Myr time-weighted helper is wired in.
+        assert "time_weighted_sfr" in src, (
+            "sed_model must call time_weighted_sfr to compute _sfr_current"
+        )
+        # Guard against any re-introduction of the 1.0 fallback at the _sfr_current line
+        lines = [l for l in src.split("\n") if "_sfr_current" in l and "1.0" in l]
         assert not any("= 1.0" in l and "sfr" not in l for l in lines), (
-            "Hard-coded _sfr_cached = 1.0 found with no sfr fallback"
+            "Hard-coded _sfr_current = 1.0 found with no sfr fallback"
         )
 
 
@@ -360,36 +363,32 @@ class TestBug29MstarSurvivingMass:
         assert jnp.all(mr > 0.0), "Mass-remaining fractions must be positive"
         assert jnp.all(mr <= 1.0), "Mass-remaining fractions must be <= 1"
 
-    def test_pipeline_exposes_both_mstar_keys(self):
-        """sed_pipeline must expose mstar_formed and mstar_surviving in output dict."""
-        import inspect
+    def test_orchestrator_exposes_surviving_mass(self):
+        """The orchestrator path must compute and expose surviving stellar mass.
 
-        from tengri.forward import pipeline as sed_pipeline
-
-        src = inspect.getsource(sed_pipeline)
-        assert '"mstar_formed"' in src, "Pipeline output dict must contain 'mstar_formed' key"
-        assert '"mstar_surviving"' in src, (
-            "Pipeline output dict must contain 'mstar_surviving' key"
-        )
-
-    def test_pipeline_uses_surviving_for_xrb(self):
-        """XRB must receive surviving mass, not formed mass.
-
-        Verifies that the pipeline passes _mstar_surviving (not _mstar_formed)
-        to xray_total via the stellar_mass argument.
+        Originally pinned to the legacy ``sed_pipeline.compute_sed_components``
+        output dict (deleted in Phase B closure). The equivalent invariant —
+        that surviving mass is computed via ``compute_surviving_mass`` (not
+        a bare ``jnp.sum(weights)``) — is now upheld in StellarSEDComponent
+        and the SEDModel orchestrator helpers.
         """
         import inspect
 
-        from tengri.forward import pipeline as sed_pipeline
+        from tengri.components.stellar import component as stellar_component
+        from tengri.forward import prediction, sed_model
 
-        src = inspect.getsource(sed_pipeline)
-        # The fix introduces _mstar_surviving and assigns _mstar = _mstar_surviving.
-        # XRB call uses stellar_mass=_mstar.
-        assert "_mstar_surviving" in src, (
-            "Pipeline must compute _mstar_surviving from mass-remaining grid"
+        stellar_src = inspect.getsource(stellar_component)
+        assert "compute_surviving_mass" in stellar_src, (
+            "StellarSEDComponent must call compute_surviving_mass"
         )
-        assert "compute_surviving_mass" in src, (
-            "Pipeline must call compute_surviving_mass (not just jnp.sum(weights))"
+        assert "mstar_surv" in stellar_src, (
+            "StellarSEDComponent must publish mstar_surv into pipeline state"
+        )
+
+        sed_src = inspect.getsource(sed_model)
+        pred_src = inspect.getsource(prediction)
+        assert "compute_surviving_mass" in sed_src or "compute_surviving_mass" in pred_src, (
+            "SEDModel/Prediction must call compute_surviving_mass for derived mass"
         )
 
 

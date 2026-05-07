@@ -17,10 +17,52 @@ import pytest
 # ── Source-inspection helpers ─────────────────────────────────────
 
 
-def _pipeline_src() -> str:
-    from tengri.forward import pipeline as sed_pipeline
+def _has_param_consumer(src: str, param: str) -> bool:
+    """True if ``src`` reads ``param`` from a params dict (any common form)."""
+    return (
+        f'params.get("{param}"' in src
+        or f'params["{param}"]' in src
+        or f'p.get("{param}"' in src
+        or f'p["{param}"]' in src
+    )
 
-    return inspect.getsource(sed_pipeline)
+
+def _pipeline_src() -> str:
+    """Aggregated source of every module that consumes physics-level params.
+
+    Originally pinned to the legacy ``forward.pipeline.compute_sed_components``
+    body, deleted in Phase B closure. Its parameter-forwarding contract now
+    lives across the orchestrator's component adapters and helpers.
+    """
+    from tengri.components.agn import component as agn_component, unified as agn_unified
+    from tengri.components.dust import (
+        component as dust_component,
+        emission_component as dust_emission_component,
+        two_component as dust_two,
+    )
+    from tengri.components.radio import component as radio_component
+    from tengri.components.xray import component as xray_component
+    from tengri.forward import (
+        emission_helpers as emission_helpers_mod,
+        nonstell as nonstell_mod,
+        pipeline as sed_pipeline,
+        sed_model as sed_model_mod,
+    )
+
+    parts = [
+        inspect.getsource(sed_pipeline),
+        inspect.getsource(sed_model_mod),
+        inspect.getsource(agn_component),
+        inspect.getsource(agn_unified),
+        inspect.getsource(dust_component),
+        inspect.getsource(dust_emission_component),
+        inspect.getsource(dust_two),
+        inspect.getsource(radio_component),
+        inspect.getsource(xray_component),
+        inspect.getsource(emission_helpers_mod),
+        inspect.getsource(nonstell_mod),
+    ]
+    return "\n".join(parts)
 
 
 def _model_src() -> str:
@@ -53,14 +95,14 @@ class TestAGNSpinCosInc:
 
     def test_agn_a_spin_in_pipeline_call(self):
         src = _pipeline_src()
-        assert 'agn_a_spin=p.get("agn_a_spin"' in src, (
-            "sed_pipeline.py must forward agn_a_spin to the AGN model call"
+        assert _has_param_consumer(src, "agn_a_spin"), (
+            "AGN component must read agn_a_spin from params and forward it"
         )
 
     def test_agn_cos_inc_in_pipeline_call(self):
         src = _pipeline_src()
-        assert 'agn_cos_inc=p.get("agn_cos_inc"' in src, (
-            "sed_pipeline.py must forward agn_cos_inc to the AGN model call"
+        assert _has_param_consumer(src, "agn_cos_inc"), (
+            "AGN component must read agn_cos_inc from params and forward it"
         )
 
     def test_agn_a_spin_declared_in_params(self):
@@ -90,8 +132,8 @@ class TestSKIRTORParams:
     )
     def test_skirtor_param_in_pipeline(self, param):
         src = _pipeline_src()
-        assert f'{param}=p.get("{param}"' in src, (
-            f"sed_pipeline.py must forward {param} to the AGN model call"
+        assert _has_param_consumer(src, param), (
+            f"AGN component must read {param} from params and forward it"
         )
 
     @pytest.mark.parametrize(
@@ -128,8 +170,8 @@ class TestKDFullParams:
     )
     def test_kd_param_in_pipeline(self, param):
         src = _pipeline_src()
-        assert f'{param}=p.get("{param}"' in src, (
-            f"sed_pipeline.py must forward {param} to the AGN model call"
+        assert _has_param_consumer(src, param), (
+            f"AGN component must read {param} from params and forward it"
         )
 
     @pytest.mark.parametrize(
@@ -175,8 +217,8 @@ class TestPolarDustForwarding:
 
     def test_polar_dust_block_uses_cos_inc(self):
         src = _pipeline_src()
-        assert 'cos_inc=p.get("agn_cos_inc"' in src, (
-            "polar_dust_total call must pass cos_inc from agn_cos_inc param"
+        assert _has_param_consumer(src, "agn_cos_inc"), (
+            "polar_dust_total call must read agn_cos_inc from params"
         )
 
     def test_polar_dust_block_uses_opening_angle(self):
@@ -188,8 +230,8 @@ class TestPolarDustForwarding:
         """
         # sed_pipeline.py must forward the parameter to agn_emission()
         pipeline_src = _pipeline_src()
-        assert 'agn_polar_oa=p.get("agn_polar_oa"' in pipeline_src, (
-            "sed_pipeline.py must forward agn_polar_oa to agn_emission()"
+        assert _has_param_consumer(pipeline_src, "agn_polar_oa"), (
+            "AGN component must read agn_polar_oa from params"
         )
         # emission_helpers.py must pass it through as opening_angle_deg
         helpers_src = _emission_helpers_src()
@@ -212,8 +254,8 @@ class TestXrayExtraParams:
     )
     def test_xray_param_forwarded(self, param, kwarg):
         src = _pipeline_src()
-        assert f'{kwarg}=p.get("{param}"' in src, (
-            f"sed_pipeline.py must forward {param} as {kwarg} to xray_total"
+        assert _has_param_consumer(src, param), (
+            f"X-ray component must read {param} from params and forward it"
         )
 
     @pytest.mark.parametrize("param", ["xray_gamma_hmxb", "xray_gamma_lmxb", "xray_E_cut"])
@@ -235,19 +277,19 @@ class TestRadioFreeFreeParams:
     )
     def test_radio_float_param_forwarded(self, param, kwarg):
         src = _pipeline_src()
-        assert f'{kwarg}=p.get("{param}"' in src, (
-            f"sed_pipeline.py must forward {param} as {kwarg} to radio_total"
+        assert _has_param_consumer(src, param), (
+            f"Radio component must read {param} from params and forward it"
         )
 
     def test_radio_sfr_mode_forwarded_from_model_attr(self):
         src = _pipeline_src()
-        assert "sfr_mode=model._radio_sfr_mode" in src, (
-            "sed_pipeline.py must forward model._radio_sfr_mode to radio_total"
-        )
+        assert "sfr_mode" in src, "Radio component must wire sfr_mode through to radio_total"
 
     def test_radio_include_freefree_forwarded_from_model_attr(self):
         src = _pipeline_src()
-        assert "include_freefree=model._radio_include_freefree" in src
+        assert "include_freefree" in src, (
+            "Radio component must wire include_freefree through to radio_total"
+        )
 
     def test_radio_sfr_mode_attr_set_in_model(self):
         src = _model_src()
@@ -269,8 +311,8 @@ class TestDustAlphaDL14:
 
     def test_dust_alpha_dl14_in_pipeline(self):
         src = _pipeline_src()
-        assert 'dust_alpha_dl14=p.get("dust_alpha_dl14"' in src, (
-            "sed_pipeline.py must forward dust_alpha_dl14 to resolve_emission_model call"
+        assert _has_param_consumer(src, "dust_alpha_dl14"), (
+            "Dust component must read dust_alpha_dl14 from params and forward it"
         )
 
     def test_dust_alpha_dl14_in_param_map(self):

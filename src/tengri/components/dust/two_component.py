@@ -295,9 +295,8 @@ class DustSEDComponent:
 
         # ── 4. IR emission template ────────────────────────────────────
         # When emission_model is None, the user opted out of IR re-emission
-        # entirely (legacy `dust_emission=None` parity). Skip the template
-        # call and publish zero — preserves the no-emission behaviour of
-        # the legacy ``_compute_sed_components`` path.
+        # entirely (`dust_emission=None`). Skip the template call and
+        # publish zero — preserves the no-emission behaviour.
         if self.config.emission_model is None:
             sed_ir = jnp.zeros_like(wave)
         else:
@@ -323,9 +322,8 @@ class DustSEDComponent:
         # Nebular). The stellar contribution at this point equals
         # ``sum(lnu_age, axis=0)`` exactly (Stellar is the only producer
         # of ``lnu_age``), so ``state.sed_intrinsic - sed_intrinsic_stellar``
-        # isolates the non-stellar portion. This matches legacy
-        # ``compute_sed_components`` semantics where stellar dust does
-        # not attenuate AGN/nebular/radio/xray.
+        # isolates the non-stellar portion. Stellar dust does not attenuate
+        # AGN/nebular/radio/xray.
         if state.sed_intrinsic is None:
             non_stellar_pre_dust = jnp.zeros_like(wave)
         else:
