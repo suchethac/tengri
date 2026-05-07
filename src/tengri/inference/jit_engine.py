@@ -12,7 +12,9 @@ drawing, and nonlinear curving algorithms.  Mathematical equivalence with
 
 from __future__ import annotations
 
+import os
 import threading
+from collections import OrderedDict
 
 import jax
 import jax.numpy as jnp
@@ -21,22 +23,53 @@ from tengri.inference._model_cache import get_model_cache
 
 __all__ = [
     "build_jit_engine",
+    "clear_shared_caches",
     "get_or_build_engine_cached",
     "get_or_build_signal_response",
 ]
 
-# ── Module-level shared cache for cross-galaxy engine reuse ─────────────────
-# Maps compile_signature() → compiled engine dict.
-# Regular dict (not WeakValueDictionary) because engine dicts cannot be
-# weakly referenced. Engines are long-lived and tied to Fitter lifetimes.
-# Lock protects against concurrent compilation.
-_SHARED_ENGINE_CACHE: dict = {}
+# ── Module-level shared caches for cross-galaxy engine reuse ────────────────
+# Each cached entry holds a compiled XLA executable that can be hundreds of MB.
+# Without bounding, repeated fits with slightly different signatures (each
+# notebook re-run, each parameter tweak) accumulate engines indefinitely and
+# the process RSS grows by ~1 GB per fit. Hence: bounded LRU + explicit clear
+# helper + an env-var opt-out.
+#
+# Tuning:
+#   TENGRI_ENGINE_CACHE_MAXSIZE   default 8; max number of engines held.
+#   TENGRI_DISABLE_SHARED_CACHES  if set to "1", caches are never populated
+#                                 (every Fitter compiles fresh). Use this if
+#                                 you can afford the recompile cost and want
+#                                 hard guarantees on memory.
+_ENGINE_CACHE_MAXSIZE = int(os.environ.get("TENGRI_ENGINE_CACHE_MAXSIZE", "8"))
+_SHARED_CACHES_DISABLED = os.environ.get("TENGRI_DISABLE_SHARED_CACHES", "") == "1"
+
+_SHARED_ENGINE_CACHE: OrderedDict = OrderedDict()
 _SHARED_ENGINE_CACHE_LOCK = threading.Lock()
 
-# Signal response cache (data-free, model-structure-only)
-# Maps _engine_cache_key() → (signal_response, signal_response_jit)
-_SHARED_SIGNAL_RESPONSE_CACHE: dict = {}
+_SHARED_SIGNAL_RESPONSE_CACHE: OrderedDict = OrderedDict()
 _SHARED_SIGNAL_RESPONSE_CACHE_LOCK = threading.Lock()
+
+
+def _lru_set(cache: OrderedDict, key, value, maxsize: int) -> None:
+    """Insert into an LRU dict; evict oldest entries past ``maxsize``."""
+    cache[key] = value
+    cache.move_to_end(key)
+    while len(cache) > maxsize:
+        cache.popitem(last=False)
+
+
+def clear_shared_caches() -> None:
+    """Drop every entry from the cross-fitter engine and signal-response caches.
+
+    Safe to call from notebooks between long-running fits to release memory.
+    Does not affect the per-model JAX persistent cache or
+    `tengri.clear_cache()` (which clears that).
+    """
+    with _SHARED_ENGINE_CACHE_LOCK:
+        _SHARED_ENGINE_CACHE.clear()
+    with _SHARED_SIGNAL_RESPONSE_CACHE_LOCK:
+        _SHARED_SIGNAL_RESPONSE_CACHE.clear()
 
 
 def get_or_build_engine_cached(fitter, pos_dict):
@@ -59,15 +92,18 @@ def get_or_build_engine_cached(fitter, pos_dict):
     dict
         Compiled engine with functions for all inference methods.
     """
+    if _SHARED_CACHES_DISABLED:
+        return build_jit_engine(fitter, pos_dict)
+
     sig = fitter.compile_signature()
 
     with _SHARED_ENGINE_CACHE_LOCK:
         if sig in _SHARED_ENGINE_CACHE:
+            _SHARED_ENGINE_CACHE.move_to_end(sig)
             return _SHARED_ENGINE_CACHE[sig]
 
-        # Cache miss → build and store
         engine = build_jit_engine(fitter, pos_dict)
-        _SHARED_ENGINE_CACHE[sig] = engine
+        _lru_set(_SHARED_ENGINE_CACHE, sig, engine, _ENGINE_CACHE_MAXSIZE)
         return engine
 
 
@@ -152,19 +188,26 @@ def get_or_build_signal_response(fitter):
     """
     cache_key = fitter._engine_cache_key()
 
+    if _SHARED_CACHES_DISABLED:
+        signal_response, _ = _build_signal_response(fitter)
+        signal_response_jit = jax.jit(signal_response)
+        return (signal_response, signal_response_jit)
+
     with _SHARED_SIGNAL_RESPONSE_CACHE_LOCK:
         if cache_key in _SHARED_SIGNAL_RESPONSE_CACHE:
+            _SHARED_SIGNAL_RESPONSE_CACHE.move_to_end(cache_key)
             result = _SHARED_SIGNAL_RESPONSE_CACHE[cache_key]
         else:
             signal_response, _ = _build_signal_response(fitter)
-            # JIT-compile the standalone version for NIFTy and eager calls.
-            # The native VI path uses the unwrapped closure so the outer
-            # run_evi_geovi_jit can inline and differentiate through it.
             signal_response_jit = jax.jit(signal_response)
             result = (signal_response, signal_response_jit)
-            _SHARED_SIGNAL_RESPONSE_CACHE[cache_key] = result
+            _lru_set(
+                _SHARED_SIGNAL_RESPONSE_CACHE,
+                cache_key,
+                result,
+                _ENGINE_CACHE_MAXSIZE,
+            )
 
-    # Also write-through to per-model cache for backward compat
     per_model_cache = get_model_cache(fitter.model).setdefault("signal_response", {})
     per_model_cache[cache_key] = result
     return result
