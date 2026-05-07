@@ -6,6 +6,13 @@ How does emission-line strength shape the AGN SED in the UV and optical?
 Sweeps agn_emline_scale from 0.0 to 2.0 on QSOgen at fixed log_lbol=45,
 showing how line forests and broad lines strengthen the continuum between
 1000–5000 Å and the Balmer continuum near H-alpha.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_agn_qsogen_emline_sweep_001.png
+   :alt: plot_agn_qsogen_emline_sweep
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

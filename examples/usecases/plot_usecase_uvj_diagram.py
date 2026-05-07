@@ -17,6 +17,13 @@ The Williams+2009 quiescent wedge (z < 1) is overplotted:
 Galaxies above the wedge: passive / quiescent.
 Galaxies below the wedge: star-forming, including dusty starbursts that
 extend to red V-J.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_usecase_uvj_diagram_001.png
+   :alt: plot_usecase_uvj_diagram
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

@@ -7,6 +7,13 @@ This script shows rest-frame stellar continuum overlaid with redshifted
 SDSS filter transmission curves at z ∈ {0.1, 0.5, 1.0, 2.0}. Demonstrates
 k-corrections: which optical/near-IR features are probed by each band
 as the galaxy evolves toward the horizon.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_redshift_filter_grid_001.png
+   :alt: plot_redshift_filter_grid
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

@@ -10,6 +10,13 @@ photometry breaks this degeneracy, illustrating why UV coverage is
 critical for accurate stellar population age dating.
 
 Synthetic data: SDSS+GALEX matched at z=0.1.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_usecase_age_dust_degeneracy_001.png
+   :alt: plot_usecase_age_dust_degeneracy
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

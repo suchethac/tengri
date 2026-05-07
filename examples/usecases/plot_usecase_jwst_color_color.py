@@ -9,6 +9,13 @@ diagnostic diagram. Demonstrates how JWST color-color plots separate
 UV-to-IR spectral types for high-redshift source classification.
 
 Synthetic data: Pure SEDs at fixed redshifts, no noise.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_usecase_jwst_color_color_001.png
+   :alt: plot_usecase_jwst_color_color
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

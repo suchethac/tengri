@@ -5,6 +5,13 @@ X-ray Spectral Index Variation
 Demonstrates how the photon index (γ) shapes the X-ray continuum.
 Sweeps γ ∈ {1.4, 1.6, 1.8, 2.0, 2.2, 2.4} at fixed bolometric luminosity.
 Flat spectra (low γ) dominate at low energies; steep spectra (high γ) show rapid decline.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_xray_gamma_sweep_001.png
+   :alt: plot_xray_gamma_sweep
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

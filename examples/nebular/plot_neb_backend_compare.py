@@ -5,6 +5,13 @@ Nebular Backends: BakedIn vs CloudyGrid vs Cue
 Compare three nebular emission models: BakedIn (embedded in SSP),
 CloudyGrid (photoionization tables), and Cue (neural emulator).
 Shows how backend choice affects emission line strengths.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_neb_backend_compare_001.png
+   :alt: plot_neb_backend_compare
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

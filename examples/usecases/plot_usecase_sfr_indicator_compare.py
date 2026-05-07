@@ -9,6 +9,13 @@ and total bolometric SFR. Demonstrates how stochastic SFHs bias different
 indicators, with Hα showing highest variance and bolometric most stable.
 
 Synthetic data: z=0.1 IFT burstiness grid, SED fixed at τ=50 Myr PSD.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_usecase_sfr_indicator_compare_001.png
+   :alt: plot_usecase_sfr_indicator_compare
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

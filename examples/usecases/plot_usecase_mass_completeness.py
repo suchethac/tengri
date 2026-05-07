@@ -10,6 +10,13 @@ and measures the 95% completeness threshold: the stellar mass below which
 and sample construction.
 
 Synthetic data: z=0.1 SDSS photometry with realistic SNR degradation.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_usecase_mass_completeness_001.png
+   :alt: plot_usecase_mass_completeness
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

@@ -5,6 +5,13 @@ SFH with Double Bursts: Old and Recent Star Formation
 Demonstrate a galaxy with two distinct star formation events:
 an old burst + a recent burst. Show how the SED reflects
 both young and old stellar populations.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_sfh_double_burst_001.png
+   :alt: plot_sfh_double_burst
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

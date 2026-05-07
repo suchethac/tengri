@@ -7,6 +7,13 @@ with mixed star-forming and AGN fractions. Plots the BPT diagram
 ([OIII]/Hβ vs [NII]/Hα) and overlays Kewley+2001 and Kauffmann+2003
 demarcation lines to show how emission-line diagnostics separate
 ionization mechanisms.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_workflow_bpt_classification_001.png
+   :alt: plot_workflow_bpt_classification
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

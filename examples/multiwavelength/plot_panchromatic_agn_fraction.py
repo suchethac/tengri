@@ -7,6 +7,13 @@ This script sweeps the AGN fraction f_AGN ∈ {0.0, 0.1, 0.3, 0.5, 0.8, 1.0}
 blending a star-forming galaxy stellar continuum with an AGN accretion disc
 spectrum. Shows the transition from star-formation-dominated to AGN-dominated
 SED morphology.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_panchromatic_agn_fraction_001.png
+   :alt: plot_panchromatic_agn_fraction
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

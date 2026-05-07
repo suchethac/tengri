@@ -10,6 +10,13 @@ line ratios are independent diagnostics (low correlation) vs degenerate
 (high correlation), directly applicable to BPT-like classification schemes.
 
 Synthetic data: Cloudy nebular components, z=0.1 rest-frame.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_usecase_emission_line_pcc_001.png
+   :alt: plot_usecase_emission_line_pcc
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

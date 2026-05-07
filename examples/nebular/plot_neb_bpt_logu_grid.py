@@ -5,6 +5,13 @@ BPT Diagram: Ionization Parameter Sequence
 The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies ionization sources.
 Shows how the ionization parameter (logU) and metallicity drive emission
 galaxies along the SF→composite→Seyfert sequence.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_neb_bpt_logu_grid_001.png
+   :alt: plot_neb_bpt_logu_grid
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

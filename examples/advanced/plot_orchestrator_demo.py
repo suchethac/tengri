@@ -21,6 +21,13 @@ to the eager path (rtol=1e-12). Cross-component data flows through
 ``state.derived``: dust publishes ``L_ir`` for radio + X-ray, AGN
 publishes ``L_agn_bol`` for X-ray, stellar publishes ``log_mstar``
 + ``lnu_age`` + 9 more keys.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_orchestrator_demo_001.png
+   :alt: plot_orchestrator_demo
+   :class: sphx-glr-single-img
+
 """
 
 # %%

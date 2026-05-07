@@ -24,6 +24,13 @@ Increasing log U pushes the grid up and to the left (harder ionization
 field, more high-ionization lines like [O III]). Increasing log Z_gas
 boosts collisionally-excited lines like [N II], [S II], [O I] relative
 to the recombination lines, pulling the grid to the right.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_bpt_cue_grid_001.png
+   :alt: plot_bpt_cue_grid
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

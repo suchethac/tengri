@@ -5,6 +5,13 @@ High-Energy Cutoff Variation
 Demonstrates how the exponential cutoff at high energies shapes the spectrum.
 Sweeps E_cut ∈ {100, 200, 300, 500, 1000} keV at fixed γ=1.8, α_ox=-1.4, L_bol=1e45 erg/s.
 The spectrum diverges from the power-law above E ≥ 0.3*E_cut, showing rapid roll-off.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_E_cut_sweep_001.png
+   :alt: plot_E_cut_sweep
+   :class: sphx-glr-single-img
+
 """
 
 import jax.numpy as jnp

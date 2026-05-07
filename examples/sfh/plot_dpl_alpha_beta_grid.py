@@ -5,6 +5,13 @@ Double Power-Law SFH: 2D Parameter Grid (α × β)
 Visualize a 3×3 grid of double power-law SFH shapes, sweeping
 the rising slope α and falling slope β to show how the
 parameter space controls SFH morphology.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_dpl_alpha_beta_grid_001.png
+   :alt: plot_dpl_alpha_beta_grid
+   :class: sphx-glr-single-img
+
 """
 
 # sphinx_gallery_thumbnail_number = 1

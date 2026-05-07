@@ -5,6 +5,13 @@ Register and Use Custom Filters
 How do I register a custom photometric filter and use it in SED modeling?
 This recipe generates a synthetic filter response and uses it to compute
 photometry through a model SED.
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_recipe_custom_filter_001.png
+   :alt: plot_recipe_custom_filter
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path

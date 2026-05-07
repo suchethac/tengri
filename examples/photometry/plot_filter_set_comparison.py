@@ -7,6 +7,13 @@ mock galaxy SED — SDSS (optical ugriz), 2MASS (NIR JHKs), and HST (UV/optical
 ACS). Demonstrates how filter placement controls which spectral features are
 captured. Each panel overlays the filter throughputs (orange) on the same
 underlying SED (blue).
+
+.. sphx-glr-precomputed-img:
+
+.. image:: images/sphx_glr_plot_filter_set_comparison_001.png
+   :alt: plot_filter_set_comparison
+   :class: sphx-glr-single-img
+
 """
 
 from pathlib import Path
