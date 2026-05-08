@@ -141,6 +141,112 @@ class PopulationPosterior:
             result.append(SimpleNamespace(samples=samp, params=params))
         return result
 
+    def population_diagnostics(
+        self,
+        exclude_prefixes: tuple[str, ...] = ("psd_xi",),
+    ) -> dict:
+        """Convergence diagnostics for the population fit.
+
+        Computes split-Rhat and effective sample size for the shared PSD
+        block, and (when ``individual_samples`` is present) aggregates
+        per-galaxy diagnostics into population-level summaries.
+
+        Parameters
+        ----------
+        exclude_prefixes : tuple of str, optional
+            Parameter-name prefixes to skip when computing per-galaxy
+            diagnostics. Default ``("psd_xi",)`` skips the GP latent
+            fields, which carry one chain entry per grid point and
+            inflate dict size without adding interpretable information.
+
+        Returns
+        -------
+        dict
+            Two-level structure::
+
+                {
+                    "shared": {
+                        param_name: {"rhat": float, "ess": float},
+                        ...
+                    },
+                    "per_galaxy": {                # only if individual_samples is set
+                        param_name: {
+                            "rhat_p50": float,    # median across galaxies
+                            "rhat_p90": float,
+                            "rhat_max": float,
+                            "ess_p50": float,
+                            "ess_min": float,
+                            "n_galaxies": int,
+                        },
+                        ...
+                    },
+                }
+
+            Use ``"per_galaxy"`` to spot a single galaxy whose chain has
+            stalled — a high ``rhat_max`` with low ``rhat_p50`` is the
+            signature.
+
+        Notes
+        -----
+        Reuses :func:`tengri.analysis.diagnostics.rhat` and
+        :func:`tengri.analysis.diagnostics.effective_sample_size`. Static
+        (zero-variance) parameters are dropped silently.
+
+        Examples
+        --------
+        >>> result = fitter.run("vi", n_iterations=20)
+        >>> diag = result.population_diagnostics()
+        >>> diag["shared"]["sfh_field_psd_sigma"]
+        {'rhat': 1.012, 'ess': 318.4}
+        """
+        from tengri.analysis.diagnostics.autocorrelation import (
+            effective_sample_size,
+            rhat,
+        )
+
+        rhat_shared = rhat(self.shared_samples, exclude_prefixes=exclude_prefixes)
+        ess_shared = effective_sample_size(self.shared_samples)
+        out: dict = {
+            "shared": {
+                name: {
+                    "rhat": float(rhat_shared.get(name, float("nan"))),
+                    "ess": float(ess_shared.get(name, float("nan"))),
+                }
+                for name in rhat_shared
+            }
+        }
+
+        if self.individual_samples is None or not self.individual_samples:
+            return out
+
+        # Aggregate per-galaxy diagnostics: for every parameter present in
+        # at least one galaxy, collect that galaxy's rhat / ess and report
+        # the median, 90th percentile, and (for rhat) max across galaxies.
+        per_param_rhats: dict[str, list[float]] = {}
+        per_param_esss: dict[str, list[float]] = {}
+        for samp in self.individual_samples:
+            r_i = rhat(samp, exclude_prefixes=exclude_prefixes)
+            e_i = effective_sample_size(samp)
+            for name, val in r_i.items():
+                per_param_rhats.setdefault(name, []).append(float(val))
+            for name, val in e_i.items():
+                per_param_esss.setdefault(name, []).append(float(val))
+
+        per_galaxy: dict = {}
+        for name in per_param_rhats:
+            r = np.array(per_param_rhats[name])
+            e = np.array(per_param_esss.get(name, []))
+            per_galaxy[name] = {
+                "rhat_p50": float(np.median(r)) if r.size else float("nan"),
+                "rhat_p90": float(np.percentile(r, 90)) if r.size else float("nan"),
+                "rhat_max": float(np.max(r)) if r.size else float("nan"),
+                "ess_p50": float(np.median(e)) if e.size else float("nan"),
+                "ess_min": float(np.min(e)) if e.size else float("nan"),
+                "n_galaxies": int(r.size),
+            }
+        out["per_galaxy"] = per_galaxy
+        return out
+
     def plot_population(self, params=("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"), ax=None):
         """Scatter plot of shared PSD parameter posteriors.
 

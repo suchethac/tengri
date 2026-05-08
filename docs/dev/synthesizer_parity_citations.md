@@ -186,11 +186,31 @@ Bibkeys recorded below all resolve in source #1 unless otherwise noted.
 
 ### Remaining blockers
 
-To add to `~/writing-workspace/projects/tengri/99-references.bib` (correct bibcodes unknown):
-
-1. van der Wel 2007 — vW07 attenuation (verified bibcode 2007ApJ...670..206V is morphology-density, not sizes)
-2. Gordon et al. 2024 — R(V)-dependent extinction (verified bibcode 2024ApJ...970...51G is SMC UV extinction, not Milky Way)
-3. Dopita et al. 2013 — Mappings abundance set (bibcode 2013Ap&SS.350...81D returns 404)
+> **⚠️ POLLUTED BIBKEYS — DO NOT CITE.**
+>
+> The keys `Vanderwel_2007`, `Gordon_2024`, and `Dopita_2013` already
+> resolve in `~/writing-workspace/projects/tengri/99-references.bib`,
+> but they point to **completely unrelated papers** (likely from a
+> bulk import that mismatched bibkeys to content). Verify before
+> using; do **not** rely on the key alone.
+>
+> | Key | What you'd want | What's actually there |
+> |-----|------------------|------------------------|
+> | `Vanderwel_2007` | van der Wel 2007 size–mass relation | Linder, "The Mirage of w=-1" (cosmology dark-energy) |
+> | `Gordon_2024` | Gordon+2024 R(V)-dependent UV extinction | Du+, "Speaker Embedding-aware Neural Diarization" *(an ML audio paper)* |
+> | `Dopita_2013` | Dopita+2013 Mappings abundances | Fendt & Sheikhnezami, "Bipolar jets launched from accretion disks" |
+>
+> The fetch attempts on 2026-05-08 turned up the same identifier
+> ambiguities (wrong-paper matches via bibcode), so the manifest is
+> still gating the corresponding Workstream B items:
+>
+> 1. van der Wel 2007 — vW07 dust-attenuation curve (correct paper unverified)
+> 2. Gordon+2024 — R(V)-dependent extinction extension (correct paper unverified)
+> 3. Dopita+2013 — Mappings abundance set (correct paper unverified)
+>
+> Action item for the user: either (a) delete the polluted entries and
+> add the correct ones, or (b) provide the canonical DOI/bibcode for
+> each so a follow-up fetch can land them under unambiguous bibkeys.
 
 ### Newly-verified entries (fetched 2026-05-08)
 
