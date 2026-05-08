@@ -40,6 +40,7 @@ SPINE_SLUGS = [
     "06_fitting_spectroscopy",
     "07_joint_photo_spec",
     "08_emission_lines",
+    "09_parameter_sweeps",
 ]
 
 # Human-readable titles for Sphinx sidebar (keyed by slug).

@@ -119,6 +119,7 @@ The notebook spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/ma
 | 06 | `06_fitting_spectroscopy.py`   | optical spectroscopy with calibration nuisance parameters   |
 | 07 | `07_joint_photo_spec.py`       | joint photo + spec to break degeneracies                    |
 | 08 | `08_emission_lines.py`         | BPT diagnostics, line ratios, Hα-based SFR validation       |
+| 09 | `09_parameter_sweeps.py`       | Building intuition by varying one (or two) knobs            |
 
 For single-figure recipes, see the [examples gallery](https://suchethacooray.com/tengri/auto_examples/index.html).
 

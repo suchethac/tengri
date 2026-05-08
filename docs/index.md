@@ -157,6 +157,7 @@ use-cases and workflows.
    :maxdepth: 1
 
    spine/08_emission_lines
+   spine/09_parameter_sweeps
 
 .. toctree::
    :caption: Gallery
