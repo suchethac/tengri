@@ -20,8 +20,9 @@ References
        Release," AJ, 122, 549. arXiv:astro-ph/0105488.
 .. [2] Boroson & Green 1992, "The Emission-Line Properties of Low-Redshift
        Quasars," ApJS, 80, 109.
-.. [3] Tsuzuki et al. 2006, ApJ, 650, 57. (UV Fe II decomposition)
-       (CITATION-AUDIT TODO: verify full title against ~/writing-workspace)
+.. [3] Tsuzuki et al. 2006, "Fe II Emission in 14 Low-Redshift Quasars.
+       I. Observations," ApJ, 650, 57. (UV Fe II decomposition)
+       Verified against ~/writing-workspace/projects/tengri/99-references.bib:Tsuzuki_2006.
 .. [4] Vestergaard & Wilkes 2001, "AGN Black Hole Mass Estimates Based on Unified
        Models and Ten-Micron Silicate Strengths," ApJS, 134, 1. (UV Fe II)
        (CITATION-AUDIT NOTE: not found in ~/writing-workspace)
