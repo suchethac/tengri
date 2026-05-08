@@ -64,16 +64,44 @@ Pre-registered configurations
 - **kubota_done**: multi-color disc with BH physics + clumpy torus (8+ params).
 - **unified_nlr_blr**: full Synthesizer-inspired model with NLR/BLR + polar dust.
 
+.. warning::
+
+   ``agn_log_lbol`` is **log10(L_bol / L_sun)**, not log10(L_bol / [erg/s]).
+   See the convention note below before setting this parameter.
+
+Convention for ``agn_log_lbol``
+--------------------------------
+``agn_log_lbol`` is :math:`\\log_{10}(L_{\\rm bol} / L_\\odot)` — the
+bolometric luminosity expressed **in solar luminosities**, not erg/s.
+This matches the internal computation in ``components/agn/_phys.py``
+(``l_bol_erg = 10**agn_log_lbol * L_SUN``).
+
+* Typical bright Seyfert: :math:`L_{\\rm bol}\\!\\sim\\!10^{44}` erg/s
+  :math:`\\Rightarrow` ``agn_log_lbol = 10.5``.
+* Bright quasar: :math:`L_{\\rm bol}\\!\\sim\\!10^{46}` erg/s
+  :math:`\\Rightarrow` ``agn_log_lbol = 12.5``.
+* Synthesizer's ``bolometric_luminosity`` is in **erg/s**; convert with
+  ``agn_log_lbol = log10(L_bol_erg) - log10(L_SUN_erg)``,
+  i.e. subtract :math:`\\approx 33.58` from synthesizer's value.
+
+Defaults of ``agn_log_lbol=44.0`` in the function signatures of this module
+are inherited from early test fixtures and correspond to
+:math:`L_{\\rm bol}\\!\\approx\\!4\\times 10^{77}` erg/s — **not a physical AGN
+luminosity**. They are kept for backward-compatibility with the existing test
+suite. Always set this parameter explicitly in production fits; do not rely on
+the default.
+
 Usage::
 
     from tengri.components.agn.unified import unified_agn, resolve_agn_model
 
-    # Use a named configuration
+    # Use a named configuration. agn_log_lbol = 11 → L_bol ≈ 4e44 erg/s
+    # (a typical bright Seyfert nucleus).
     model_fn = resolve_agn_model("simple")
-    l_nu = model_fn(wavelength, agn_log_lbol=44.0, agn_frac=0.1, ...)
+    l_nu = model_fn(wavelength, agn_log_lbol=11.0, agn_frac=0.1, ...)
 
-    # Or use the generic combiner directly
-    l_nu = unified_agn(wavelength, agn_log_lbol=44.0, disc_model="powerlaw", ...)
+    # Or use the generic combiner directly.
+    l_nu = unified_agn(wavelength, agn_log_lbol=11.0, disc_model="powerlaw", ...)
 
 References
 ----------
@@ -1330,7 +1358,14 @@ def unified_nlr_blr(
     wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
-        log10(L_bol / Lsun). Total AGN bolometric luminosity. Default 44.0.
+        :math:`\\log_{10}(L_{\\rm bol} / L_\\odot)` — total AGN bolometric
+        luminosity expressed in **solar luminosities** (not erg/s).
+        Convert from synthesizer's ``bolometric_luminosity`` [erg/s] via
+        ``agn_log_lbol = log10(L_bol_erg) - log10(L_SUN_erg)``,
+        i.e. subtract :math:`\\approx 33.58`. Typical bright Seyfert: 10.5;
+        bright quasar: 12.5. The default ``44.0`` is a legacy test fixture
+        that is **not a physical AGN luminosity** — set this parameter
+        explicitly. See module-level "Convention" note. Default 44.0.
     agn_cos_inc : float
         Cosine of inclination angle (0 = edge-on/Type 2,
         1 = face-on/Type 1). Synthesizer uses inclination in degrees;

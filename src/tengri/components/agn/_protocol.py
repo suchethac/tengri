@@ -55,7 +55,8 @@ class AGNModel(Protocol):
         from tengri.components.agn.unified import resolve_agn_model
 
         model = resolve_agn_model("my_powerlaw_disc")
-        sed = model(wavelengths, agn_log_lbol=44.0, alpha=-0.4)
+        sed = model(wavelengths, agn_log_lbol=11.0, alpha=-0.4)
+        # ``agn_log_lbol`` is log10(L_bol / L_sun); 11 ⇒ L_bol ≈ 4e44 erg/s.
     """
 
     def __call__(
