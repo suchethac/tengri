@@ -47,6 +47,8 @@ Example::
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import jax
 import jax.numpy as jnp
 
@@ -784,3 +786,239 @@ def apply_zp_floor(
 
     sys_term = floor_arr * jnp.abs(flux_arr)
     return jnp.sqrt(noise_arr**2 + sys_term**2)
+
+
+# ── Photon-limited Poisson likelihood ─────────────────────────────
+
+
+@dataclass(frozen=True)
+class PoissonNoiseLikelihood:
+    """Photon-limited Poisson likelihood with sky and read-noise terms.
+
+    Implements Gaussian approximation to Poisson counting noise, valid
+    when observed count rates are ≥ ~5 photons (Newberry 1991).
+
+    The variance combines:
+    - Poisson shot noise: σ²_shot = F / g (counts → e⁻)
+    - Sky background: σ²_sky = σ_sky² / g
+    - Read noise: σ²_read = σ_read² / g²
+    - Flux-dependent systematic floor: σ²_sys = (f_sys · F)²
+
+    Total: σ²_eff = F/g + σ_sky²/g + σ_read²/g² + (f_sys · F)²
+
+    For SED fitting (source-level photometry), the per-source variance
+    in detected counts is typically σ² = F + σ_back², where F is the
+    source photon count and σ_back is the background variance in count
+    space.
+
+    Parameters
+    ----------
+    gain : float
+        CCD gain in electrons per ADU [e⁻/ADU]. Default 1.0 (pure Poisson
+        in ADU counts).
+    sky_var : float
+        Background (sky + dark) variance in count space [counts²].
+        Default 0.0.
+    read_noise : float
+        Read noise standard deviation in electrons [e⁻]. Default 0.0.
+    systematic_floor : float
+        Fractional flux-dependent systematic uncertainty added in quadrature
+        [dimensionless]. Typical range: 0.01–0.05. Default 0.0.
+
+    Attributes
+    ----------
+    gain : float
+    sky_var : float
+    read_noise : float
+    systematic_floor : float
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX, differentiable w.r.t. predicted flux.
+
+    For source counts F (in detected photons), the effective Gaussian
+    variance is:
+
+    .. math::
+
+        \\sigma^2_{\rm eff} = \frac{F}{g} + \frac{\\sigma^2_{\rm sky}}{g}
+        + \frac{\\sigma^2_{\rm read}}{g^2} + \bigl(f_{\rm sys} \\cdot F\bigr)^2
+
+    When all background terms are zero, reduces to σ² = F (pure Poisson).
+    Handles predicted=0 safely by clamping to small positive value.
+
+    References
+    ----------
+    .. [1] Bevington, P. R. & Robinson, D. K. (2003). *Data Reduction and
+           Error Analysis for the Physical Sciences*, 3rd edn.
+           McGraw-Hill. Section 3.6 (Poisson distributions).
+    """
+
+    gain: float = 1.0
+    sky_var: float = 0.0
+    read_noise: float = 0.0
+    systematic_floor: float = 0.0
+
+    def log_prob(
+        self,
+        observed: jnp.ndarray,
+        predicted: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Gaussian log-likelihood for Poisson photon counts.
+
+        Parameters
+        ----------
+        observed : array, shape (n_data,)
+            Observed flux or counts [counts or flux units, depending on gain].
+        predicted : array, shape (n_data,)
+            Model-predicted flux [same units as observed].
+
+        Returns
+        -------
+        log_prob : array, shape (n_data,)
+            Per-datum log-likelihood (likelihood, not log-likelihood energy).
+            Caller is responsible for summing and negating for energy.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — pure ``jnp`` arithmetic.
+
+        Computes log(p(obs | pred)) under Gaussian approximation to Poisson.
+        Avoids singularities by clamping predicted flux to ≥ eps internally.
+
+        Examples
+        --------
+        >>> import jax.numpy as jnp
+        >>> from tengri.observation.noise import PoissonNoiseLikelihood
+        >>> lh = PoissonNoiseLikelihood(gain=1.0, sky_var=0.0)
+        >>> obs = jnp.array([100.0, 200.0])
+        >>> pred = jnp.array([95.0, 205.0])
+        >>> lp = lh.log_prob(obs, pred)
+        >>> lp.shape
+        (2,)
+        """
+        # Clamp predicted to small positive value to avoid div-by-zero
+        eps = 1e-8
+        pred_safe = jnp.maximum(predicted, eps)
+
+        # Effective variance: shot + sky + read + systematic
+        shot_var = pred_safe / self.gain
+        sky_term = self.sky_var / self.gain
+        read_term = (self.read_noise / self.gain) ** 2
+        sys_term = (self.systematic_floor * pred_safe) ** 2
+
+        sigma2_eff = shot_var + sky_term + read_term + sys_term
+        sigma_eff = jnp.sqrt(sigma2_eff)
+
+        # Gaussian log-likelihood: -0.5 * (residual / sigma)^2 - log(sigma)
+        residual = observed - predicted
+        chi2 = (residual / sigma_eff) ** 2
+        return -0.5 * chi2 - jnp.log(sigma_eff)
+
+
+# ── Student-t robust likelihood (outlier-resistant) ────────────────
+
+
+@dataclass(frozen=True)
+class StudentTLikelihood:
+    """Heavy-tailed Student-t likelihood for outlier-robust SED fitting.
+
+    Implements the outlier-robust noise model of Hogg, Bovy & Lang (2010),
+    using a Student-t distribution with ν degrees of freedom.
+
+    For ν → ∞, reduces to Gaussian. For low ν (e.g., 2–4), the heavy
+    tails make outliers far less damaging to the posterior. Typical use:
+    ν is either fixed (e.g., 2, 4, 10) or fitted as a free parameter.
+
+    Parameters
+    ----------
+    dof : float
+        Degrees of freedom ν [dimensionless]. Default 4.0. Smaller values
+        give heavier tails; ν=1 is Cauchy. Typical range: [1, 30].
+
+    Attributes
+    ----------
+    dof : float
+        Degrees of freedom.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.scipy.stats.t.logpdf``.
+
+    The log-likelihood per data point is:
+
+    .. math::
+
+        \\ln p(d | m, \\sigma, \nu) = \\ln T_\nu\\!\\left(\frac{d - m}{\\sigma}; \nu\right)
+        - \\ln \\sigma
+
+    where :math:`T_\nu` is the Student-t PDF with :math:`\nu` degrees of freedom.
+
+    The residual scale σ should be supplied by the caller; this class does
+    not manage observational uncertainties — use a noise model (e.g.
+    ``compute_effective_noise``) to construct σ from data.
+
+    References
+    ----------
+    .. [1] Hogg, D. W., Bovy, J., & Lang, D. (2010).
+           "Data analysis recipes. I. Fitting a model to data."
+           *The Astrophysical Journal*, 710(2), 1362–1384.
+           DOI: `10.1088/0004-637X/710/2/1362
+           <https://doi.org/10.1088/0004-637X/710/2/1362>`_
+           arXiv: `0905.3340 <https://arxiv.org/abs/0905.3340>`_
+    """
+
+    dof: float = 4.0
+
+    def log_prob(
+        self,
+        observed: jnp.ndarray,
+        predicted: jnp.ndarray,
+        sigma: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Student-t log-likelihood.
+
+        Parameters
+        ----------
+        observed : array, shape (n_data,)
+            Observed values [arbitrary units].
+        predicted : array, shape (n_data,)
+            Model-predicted values [same units as observed].
+        sigma : array, shape (n_data,)
+            Noise standard deviation per datum [same units as observed].
+            Typically computed via ``compute_effective_noise(...)`` or
+            similar noise model.
+
+        Returns
+        -------
+        log_prob : array, shape (n_data,)
+            Per-datum log-likelihood. Caller sums for total likelihood.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — delegates to
+        ``jax.scipy.stats.t.logpdf``.
+
+        Avoids numerical instability by clamping σ to ≥ eps internally.
+
+        Examples
+        --------
+        >>> import jax.numpy as jnp
+        >>> from tengri.observation.noise import StudentTLikelihood
+        >>> lh = StudentTLikelihood(dof=4.0)
+        >>> obs = jnp.array([1.0, 2.0, 5.0])  # 5.0 is outlier
+        >>> pred = jnp.array([1.0, 2.0, 1.5])
+        >>> sigma = jnp.array([0.5, 0.5, 0.5])
+        >>> lp = lh.log_prob(obs, pred, sigma)
+        >>> lp.shape
+        (3,)
+        """
+        # Clamp sigma to avoid numerical issues
+        eps = 1e-8
+        sigma_safe = jnp.maximum(sigma, eps)
+
+        # Standardize residuals
+        residual = (observed - predicted) / sigma_safe
+
+        # Student-t log-pdf from JAX; include -log(sigma) normalization
+        return jax.scipy.stats.t.logpdf(residual, self.dof) - jnp.log(sigma_safe)

@@ -200,3 +200,95 @@ def test_log_lbol_scaling_is_logarithmic(wave_uv_to_fir):
         f"SED at 1000 Å scales as {ratio:.2f} for +2 dex in log_lbol; "
         "expected ≈ 100. Possible normalisation bug."
     )
+
+
+# ---------------------------------------------------------------------------
+# P-3 / inclination-conditional polar dust
+# ---------------------------------------------------------------------------
+# Ensures polar dust reddening only affects face-on (Type 1) views.
+# Synthesizer parity: matches the inclination-conditional pattern in
+# synthesizer's UnifiedAGN polar dust masking.
+
+
+def test_polar_dust_off_edge_on_no_effect(wave_uv_to_fir, physical_log_lbol):
+    """At edge-on (agn_cos_inc=0), polar dust has negligible effect on SED.
+
+    When cos_inc ≈ 0 (edge-on / Type 2), the disc and BLR are already
+    obscured by the torus. The visibility mask ≈ 0, so the inclination-weighted
+    polar-dust transmission approaches unity (no reddening). Changing agn_polar_ebv
+    should have < 1% effect on the total SED amplitude.
+
+    Pitfall: P-3 — guards against the polar-dust factor being applied
+    unconditionally, regardless of inclination. The old code had a bug where
+    polar dust reddened even at edge-on, when it should have no effect.
+    """
+    sed_no_polar = unified_nlr_blr(
+        wave_uv_to_fir,
+        agn_log_lbol=physical_log_lbol,
+        agn_cos_inc=0.0,  # edge-on / Type 2
+        agn_polar_ebv=0.0,
+        agn_nlr_cf=0.1,
+        agn_blr_cf=0.1,
+    )
+    sed_with_polar = unified_nlr_blr(
+        wave_uv_to_fir,
+        agn_log_lbol=physical_log_lbol,
+        agn_cos_inc=0.0,  # edge-on / Type 2
+        agn_polar_ebv=0.3,  # strong polar dust
+        agn_nlr_cf=0.1,
+        agn_blr_cf=0.1,
+    )
+    # Difference must be tiny (< 1% of baseline).
+    # The small residual is due to numerical bleed-through in the sigmoid;
+    # it should be much smaller than if polar dust were applied unconditionally.
+    diff_max = jnp.max(jnp.abs(sed_with_polar - sed_no_polar))
+    baseline_max = jnp.max(jnp.abs(sed_no_polar))
+    fractional_diff = float(diff_max / baseline_max)
+    assert fractional_diff < 0.01, (
+        f"Polar dust changed edge-on SED by {100.0 * fractional_diff:.1f}%; "
+        f"expected < 1%. Inclination-weighting may be broken."
+    )
+
+
+def test_polar_dust_on_face_on_reddens_uv(wave_uv_to_fir, physical_log_lbol):
+    """At face-on (agn_cos_inc=1), polar dust SMC extinction reddens UV more than optical.
+
+    When cos_inc ≈ 1 (face-on / Type 1), the visibility mask ≈ 1, so the full
+    SMC polar-dust reddening applies. The SMC law has a strong UV rise in
+    extinction (k(λ) increases toward shorter wavelengths), so doubling
+    agn_polar_ebv should reduce the UV SED more than the optical.
+
+    Pitfall: P-3 — guards against the extinction law being applied incorrectly
+    (e.g., wrong sign, missing factor, or law not matched to SMC).
+    """
+    sed_no_polar = unified_nlr_blr(
+        wave_uv_to_fir,
+        agn_log_lbol=physical_log_lbol,
+        agn_cos_inc=1.0,  # face-on / Type 1
+        agn_polar_ebv=0.0,
+        agn_nlr_cf=0.1,
+        agn_blr_cf=0.1,
+    )
+    sed_with_polar = unified_nlr_blr(
+        wave_uv_to_fir,
+        agn_log_lbol=physical_log_lbol,
+        agn_cos_inc=1.0,  # face-on / Type 1
+        agn_polar_ebv=0.2,
+        agn_nlr_cf=0.1,
+        agn_blr_cf=0.1,
+    )
+    # Select UV and optical wavelengths (roughly)
+    uv_idx = int(jnp.argmin(jnp.abs(wave_uv_to_fir - 1500.0)))  # ~1500 Å
+    opt_idx = int(jnp.argmin(jnp.abs(wave_uv_to_fir - 5500.0)))  # ~5500 Å
+    # Fractional attenuation
+    frac_atten_uv = float((sed_no_polar[uv_idx] - sed_with_polar[uv_idx]) / sed_no_polar[uv_idx])
+    frac_atten_opt = float(
+        (sed_no_polar[opt_idx] - sed_with_polar[opt_idx]) / sed_no_polar[opt_idx]
+    )
+    # SMC law: UV extinction much stronger than optical. UV attenuation should
+    # be significantly larger.
+    assert frac_atten_uv > frac_atten_opt, (
+        f"Polar dust attenuates UV ({frac_atten_uv:.3f}) less than optical "
+        f"({frac_atten_opt:.3f}); SMC law expected UV > optical. "
+        "Extinction law may be wrong or reversed."
+    )

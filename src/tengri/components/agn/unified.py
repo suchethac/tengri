@@ -1342,16 +1342,18 @@ def unified_nlr_blr(
     .. math::
 
         L_{\\rm AGN}(\\lambda) =
-            \\sigma(i, \\theta_t)\\, A_{\\rm pol}(\\lambda)\\, L_{\\rm disc}(\\lambda)
+            \\sigma(i, \\theta_t)\\, A_{\\rm pol,eff}(\\lambda)\\, L_{\\rm disc}(\\lambda)
             + L_{\\rm torus}(\\lambda)
             + f_{\\rm NLR}\\, \\eta_{\\rm NLR}(\\lambda)\\, L_{\\rm bol,disc}
-            + \\sigma(i, \\theta_t)\\, A_{\\rm pol}(\\lambda)\\,
+            + \\sigma(i, \\theta_t)\\, A_{\\rm pol,eff}(\\lambda)\\,
               f_{\\rm BLR}\\, \\eta_{\\rm BLR}(\\lambda)\\, L_{\\rm bol,disc}
 
     where :math:`\\sigma(i, \\theta_t)` is the smooth sigmoid mask
-    (1 = visible, 0 = obscured), :math:`A_{\\rm pol}` is the SMC polar dust
-    transmission, :math:`f_{\\rm NLR/BLR}` are the covering fractions, and
-    :math:`\\eta_{\\rm NLR/BLR}` are the normalised line templates.
+    (1 = visible, 0 = obscured), :math:`A_{\\rm pol,eff}(\\lambda) = 1 + \\sigma(i, \\theta_t) \\,
+    (A_{\\rm pol}(\\lambda) - 1)` is the visibility-weighted SMC polar dust transmission
+    (SMC law; only reddens when disc is visible to the observer), :math:`f_{\\rm NLR/BLR}`
+    are the covering fractions, and :math:`\\eta_{\\rm NLR/BLR}` are the normalised
+    line templates.
 
     Parameters
     ----------
@@ -1491,14 +1493,22 @@ def unified_nlr_blr(
     # --- Polar dust extinction (Type 1 reddening, SMC law) ---
     # Applied to disc and BLR when visible (mask > 0).
     # Uses SMC law since AGN sightlines typically lack a 2175 A bump.
+    # Inclination-conditional: polar dust effect scales with visibility mask,
+    # so edge-on (Type 2) views have no polar-dust reddening since the disc/BLR
+    # are already torus-obscured.
     from tengri.components.dust.attenuation import smc as _smc_law
 
     k_polar = _smc_law(wavelength)  # k(λ)/k(V), normalized at 5500 A
     # R_V(SMC) = 2.93; A(λ) = E(B-V) * R_V * k(λ)
     _RV_SMC = 2.93
-    polar_trans = jnp.exp(-0.921 * agn_polar_ebv * _RV_SMC * k_polar)
+    polar_trans_base = jnp.exp(-0.921 * agn_polar_ebv * _RV_SMC * k_polar)
+    # Effective polar transmission: visibility-weighted.
+    # When visibility ≈ 0 (edge-on/Type-2), polar_trans_eff → 1 (no effect).
+    # When visibility ≈ 1 (face-on/Type-1), polar_trans_eff → polar_trans_base.
+    # Smooth interpolation: 1 + visibility * (polar_trans - 1)
+    polar_trans = 1.0 + mask_disc * (polar_trans_base - 1.0)
 
-    # Apply geometric masking + polar dust to disc
+    # Apply geometric masking + visibility-weighted polar dust to disc
     l_disc_masked = mask_disc * l_disc * polar_trans
 
     # --- Torus emission (always visible) ---
@@ -1525,7 +1535,7 @@ def unified_nlr_blr(
         **_kwargs,
     )
 
-    # --- BLR emission (masked by torus) ---
+    # --- BLR emission (masked by torus + visibility-weighted polar dust) ---
     # Pluggable: use blr_fn if provided, else the built-in analytic template.
     _blr_fn = blr_fn if blr_fn is not None else compute_blr_sed
     l_blr_raw = _blr_fn(
@@ -1535,7 +1545,7 @@ def unified_nlr_blr(
         fwhm_kms=agn_blr_fwhm,
         **_kwargs,
     )
-    l_blr = mask_blr * polar_trans * l_blr_raw
+    l_blr = mask_blr * l_blr_raw * polar_trans
 
     # --- Total ---
     l_total = l_disc_masked + l_torus + l_nlr + l_blr
