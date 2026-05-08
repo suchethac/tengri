@@ -72,6 +72,10 @@ Bibkeys recorded below all resolve in source #1 unless otherwise noted.
 | Haskell et al. 2024 (TEA) | `Haskell_2024` | |
 | Narayanan et al. 2018 | `Narayanan_2018` | |
 | Li & Draine 2008 | `ALi_2008` *(also `Li_2008` exists in `_global_context`)* | Verify which is the dust-grain paper before citing |
+| Weingartner & Draine 2001 (WD01 grain-model curve) | `Weingartner_2001` | **Already implemented** in `attenuation.py:2273` via `dust_extinction.grain_models.WD01("MWRV31")`; canonical MW R_V=3.1 grain-model attenuation. |
+| Draine 2003 (D03 grain-model review) | `Draine_2003` | **Already implemented** in `attenuation.py:2274` via `dust_extinction.grain_models.D03("MWRV31")`. |
+
+**Note (2026-05-08):** Workstream B-DA initially listed "Draine & Li 2007" as a candidate dust-attenuation curve. That paper (`Draine_2007` — *"Infrared Emission from Interstellar Dust"*) is about dust **emission**, not attenuation; it's already used by tengri's DL07 emission-template path. The corresponding **attenuation** curves are Weingartner & Draine 2001 and Draine 2003, both of which are already exposed in tengri's dust-law registry under `wd01_mwrv31` / `d03_mwrv31`. No additional implementation required.
 
 **MISSING in B-DA — adding requires user to update primary bib:**
 - Fitzpatrick & Massa 2007
