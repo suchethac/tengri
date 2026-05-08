@@ -185,6 +185,8 @@ from tengri.forward.sed_model import PriorPredictive, SEDModel
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
 from tengri.observation.filters import load_filter_set
 from tengri.observation.noise import (
+    PoissonNoiseLikelihood,
+    StudentTLikelihood,
     compute_effective_noise,
     compute_std_inv,
     exp_squared_kernel,
