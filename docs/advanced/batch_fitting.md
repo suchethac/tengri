@@ -218,6 +218,6 @@ for the same model configuration.
 
 See {doc}`hierarchical` for population-level inference with `PopulationFitter`.
 
-Worked examples: [`07_fitting_photometry.py`](https://github.com/suchethac/tengri/blob/main/notebooks/07_fitting_photometry.py) (catalog batching),
-[`10_real_data.py`](https://github.com/suchethac/tengri/blob/main/notebooks/10_real_data.py), and
-[`08_fitting_spectra.py`](https://github.com/suchethac/tengri/blob/main/notebooks/08_fitting_spectra.py) (redshift / spectral coverage).
+For a single-galaxy version of the workflow, see the
+[`05_fitting_photometry`](../spine/05_fitting_photometry) and
+[`06_fitting_spectroscopy`](../spine/06_fitting_spectroscopy) spine notebooks.
