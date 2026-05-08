@@ -49,6 +49,7 @@ from tengri.components.stellar.sfh.mean_sfh import (
     delayed_exponential,
     dpl,
     exponential,
+    gaussian_burst,
     lnorm,
     norm,
     periodic,
@@ -56,6 +57,7 @@ from tengri.components.stellar.sfh.mean_sfh import (
     snorm,
     snorm_burst,
     snorm_trunc_burst,
+    top_hat,
     triweight_burst,
     tsnorm,
 )
@@ -790,6 +792,87 @@ _register(
     short_doc="Post-starburst SFH (Wild et al.)",
 )
 SFH_REGISTRY["psb_wild2020"] = SFH_REGISTRY["psb"]
+
+
+# --- top_hat (constant-window with smooth sigmoid edges) ---
+_register(
+    SFHModelSpec(
+        name="top_hat",
+        fn=top_hat,
+        params={
+            "sfh_top_hat_amplitude": ParamDef(
+                "Constant SFR inside window (Msun/yr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.01, 100.0),
+            ),
+            "sfh_top_hat_t_start_gyr": ParamDef(
+                "Older lookback boundary / SF onset (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.1, 13.0),
+            ),
+            "sfh_top_hat_t_end_gyr": ParamDef(
+                "Younger lookback boundary / SF cessation (Gyr)",
+                _lo_nonneg,
+                "must have lo >= 0",
+                Uniform(0.0, 12.0),
+            ),
+            "sfh_top_hat_smooth_width_gyr": ParamDef(
+                "Sigmoid transition width (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Fixed(0.1),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "sfh_top_hat_amplitude": ("amplitude", 1.0, 0.0),
+            "sfh_top_hat_t_start_gyr": ("t_start", 1e9, 0.0),
+            "sfh_top_hat_t_end_gyr": ("t_end", 1e9, 0.0),
+            "sfh_top_hat_smooth_width_gyr": ("smooth_width", 1e9, 0.0),
+        },
+        composition_type="additive",
+    ),
+    short_doc="Constant-SFR window with smooth edges (top-hat)",
+)
+
+# --- gaussian_burst (Gaussian-in-age burst, Robotham+2020) ---
+_register(
+    SFHModelSpec(
+        name="gaussian_burst",
+        fn=gaussian_burst,
+        params={
+            "sfh_gaussian_burst_amplitude": ParamDef(
+                "Peak burst SFR (Msun/yr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.01, 100.0),
+            ),
+            "sfh_gaussian_burst_t_peak_gyr": ParamDef(
+                "Burst peak age / lookback time (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.01, 13.0),
+            ),
+            "sfh_gaussian_burst_sigma_gyr": ParamDef(
+                "Gaussian width / standard deviation (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.01, 5.0),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "sfh_gaussian_burst_amplitude": ("amplitude", 1.0, 0.0),
+            "sfh_gaussian_burst_t_peak_gyr": ("t_peak", 1e9, 0.0),
+            "sfh_gaussian_burst_sigma_gyr": ("sigma", 1e9, 0.0),
+        },
+        composition_type="additive",
+    ),
+    citation="Robotham et al. 2020 (arXiv:2002.06980) ProSpect",
+    short_doc="Gaussian-in-age burst (Robotham+2020)",
+)
 
 
 # ── Register tabulated SFH model (for simulations) ────────────────

@@ -1528,6 +1528,150 @@ def snorm_trunc_burst(
 tsnorm_burst = snorm_trunc_burst
 
 
+def top_hat(
+    t_lookback: jnp.ndarray,
+    amplitude: float,
+    t_start: float,
+    t_end: float,
+    smooth_width: float = 1e8,
+) -> jnp.ndarray:
+    """Top-hat (constant-window) SFH with smooth sigmoid edges.
+
+    A constant SFR amplitude between t_start and t_end, smoothly tapering
+    to zero outside this window via sigmoid functions. Useful for modeling
+    bursty episodes or isolated star-forming events.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
+    amplitude : float
+        Constant SFR inside the window [Msun/yr].
+    t_start : float
+        Older lookback boundary [yr]. Must have t_start > t_end.
+    t_end : float
+        Younger lookback boundary [yr]. Must have t_end < t_start.
+    smooth_width : float, optional
+        Width of sigmoid transition region [yr]. Controls gradient smoothness
+        at edges. Default 1e8 (100 Myr). Typical range: 1e7 - 1e9.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jax.nn.sigmoid`` for smooth edges.
+
+    **Gradient-safe**: yes — sigmoid ensures differentiability everywhere.
+
+    The SFH is:
+
+    .. math::
+
+        \\mathrm{SFR}(t) = A \\cdot \\sigma\\left(\\frac{t_{{\\rm start}} - t}{w}\\right)
+        \\cdot \\sigma\\left(\\frac{t - t_{{\\rm end}}}{w}\\right)
+
+    where :math:`A` is amplitude [Msun/yr], :math:`t_{{\\rm start}}` and
+    :math:`t_{{\\rm end}}` are the window boundaries [yr], :math:`w` is the
+    sigmoid smoothing width [yr], and :math:`\\sigma(x) = 1/(1+e^{-x})`
+    is the logistic sigmoid function.
+
+    The window is centered around :math:`(t_{{\\rm start}} + t_{{\\rm end}})/2`
+    with full-width (at half-maximum) approximately :math:`t_{{\\rm start}} - t_{{\\rm end}}`.
+
+    References
+    ----------
+    .. [1] Robotham, A. S. G., et al. "ProSpect: generating spectral energy
+       distributions with complex star formation and metallicity histories,"
+       MNRAS, 495, 905 (2020). arXiv:2002.06980.
+       https://doi.org/10.1093/mnras/staa1116
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri.components.stellar.sfh import top_hat
+    >>> t = jnp.logspace(7, 10.14, 64)
+    >>> sfr = top_hat(t, amplitude=1.0, t_start=5e9, t_end=3e9, smooth_width=1e8)
+    >>> sfr.shape
+    (64,)
+    """
+    # Sigmoid functions for smooth edges
+    s_start = jax.nn.sigmoid((t_start - t_lookback) / smooth_width)
+    s_end = jax.nn.sigmoid((t_lookback - t_end) / smooth_width)
+    return amplitude * s_start * s_end
+
+
+def gaussian_burst(
+    t_lookback: jnp.ndarray,
+    amplitude: float,
+    t_peak: float,
+    sigma: float,
+) -> jnp.ndarray:
+    """Gaussian-in-age burst component (Robotham+2020).
+
+    A parametric burst modeled as a Gaussian envelope in lookback time.
+    This form is compatible with composition as an additive component
+    on top of any other parametric SFH model.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
+    amplitude : float
+        Peak SFR of the burst [Msun/yr].
+    t_peak : float
+        Peak lookback time (age of burst) [yr].
+    sigma : float
+        Standard deviation of the Gaussian envelope [yr]. The FWHM is
+        approximately 2.355 * sigma.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives for Gaussian kernel.
+
+    **Gradient-safe**: yes — differentiable everywhere.
+
+    The SFH is:
+
+    .. math::
+
+        \\mathrm{SFR}(t) = A \\exp\\left( -\\frac{(t - t_{{\\rm peak}})^2}{2\\sigma^2} \\right)
+
+    where :math:`A` is amplitude [Msun/yr], :math:`t_{{\\rm peak}}` is the
+    burst age [yr], and :math:`\\sigma` is the width parameter [yr].
+
+    **Integration**: The integrated mass in the burst is approximately
+    :math:`A \\cdot \\sigma \\cdot \\sqrt{2\\pi}` for a Gaussian with
+    sufficient tail coverage.
+
+    References
+    ----------
+    .. [1] Robotham, A. S. G., et al. "ProSpect: generating spectral energy
+       distributions with complex star formation and metallicity histories,"
+       MNRAS, 495, 905 (2020). arXiv:2002.06980.
+       https://doi.org/10.1093/mnras/staa1116
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri.components.stellar.sfh import gaussian_burst
+    >>> t = jnp.logspace(7, 10.14, 64)
+    >>> sfr = gaussian_burst(t, amplitude=5.0, t_peak=1e9, sigma=1e8)
+    >>> sfr.shape
+    (64,)
+    """
+    dt = t_lookback - t_peak
+    exponent = -0.5 * (dt / sigma) ** 2
+    return amplitude * jnp.exp(exponent)
+
+
 # ── Deprecated aliases (Phase 3) ──────────────────────────────────
 # The `_sfh` suffix was redundant inside the `tengri.components.stellar.sfh`
 # namespace. Wrapped with `deprecated_alias` so a DeprecationWarning fires
