@@ -165,6 +165,7 @@ use-cases and workflows.
 
    performance/index
    performance/memory
+   units
 
 .. toctree::
    :caption: Gallery

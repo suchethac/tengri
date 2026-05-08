@@ -77,11 +77,12 @@ Bibkeys recorded below all resolve in source #1 unless otherwise noted.
 
 **Note (2026-05-08):** Workstream B-DA initially listed "Draine & Li 2007" as a candidate dust-attenuation curve. That paper (`Draine_2007` — *"Infrared Emission from Interstellar Dust"*) is about dust **emission**, not attenuation; it's already used by tengri's DL07 emission-template path. The corresponding **attenuation** curves are Weingartner & Draine 2001 and Draine 2003, both of which are already exposed in tengri's dust-law registry under `wd01_mwrv31` / `d03_mwrv31`. No additional implementation required.
 
+| Fitzpatrick & Massa 2007 (UV extinction V) | `Fitzpatrick_2007` | Fetched 2026-05-08 |
+| Conroy, Schiminovich & Blanton 2010 (disk-galaxy dust) | `Conroy_2010b` | Fetched 2026-05-08 |
+
 **MISSING in B-DA — adding requires user to update primary bib:**
-- Fitzpatrick & Massa 2007
-- Conroy, Schiminovich & Blanton 2010
-- van der Wel 2007 (vW07)
-- Gordon et al. 2024 (UV extinction extension) — *only `Gordon_2003` is in bib*
+- van der Wel 2007 (vW07) — verified bibcode 2007ApJ...670..206V is about morphology-density, not sizes; correct bibkey unknown
+- Gordon et al. 2024 (UV extinction extension) — verified bibcode 2024ApJ...970...51G is about SMC UV extinction, not R(V)-dependent Milky Way; correct bibkey unknown
 
 ---
 
@@ -98,9 +99,10 @@ Bibkeys recorded below all resolve in source #1 unless otherwise noted.
 | Jones et al. 2017 (THEMIS) | `Jones_2017` | |
 | Galliano et al. 2018 (review) | `Galliano_2018` | |
 
-**MISSING in B-DE:**
-- Chary & Elbaz 2001
-- Rieke et al. 2009 IR templates
+| Chary & Elbaz 2001 (IR background / SED templates) | `Chary_2001` | Fetched 2026-05-08 |
+| Rieke et al. 2009 (Spitzer IR SED templates) | `Rieke_2009` | Fetched 2026-05-08 |
+
+**MISSING in B-DE:** none.
 
 ---
 
@@ -113,10 +115,11 @@ Bibkeys recorded below all resolve in source #1 unless otherwise noted.
 | Ferland et al. 2017 (Cloudy 17) | `Ferland_2017` | |
 | Li et al. 2024 (Cue NN emulator) | `Li_2024a` | Disambiguate — `Li_2024b` is a different ALMA paper |
 
+| Storey & Zeippen 2000 ([O III] line ratios) | `Storey_2000` | Fetched 2026-05-08 |
+| Ferland et al. 2023 (Cloudy 23) | `Ferland_2023` | Fetched 2026-05-08 |
+
 **MISSING in B-NEB:**
-- Dopita et al. 2013
-- Storey & Zeippen 2000
-- Ferland et al. 2023 (Cloudy 23)
+- Dopita et al. 2013 (Mappings) — bibcode 2013Ap&SS.350...81D returns 404; correct bibkey unknown
 
 ---
 
@@ -133,10 +136,10 @@ Bibkeys recorded below all resolve in source #1 unless otherwise noted.
 | Ueda et al. 2014 (X-ray luminosity function) | `Ueda_2014` | |
 | Lovell et al. 2025 (synthesizer UnifiedAGN methods) | `Lovell_2025` | Architectural inspiration only — not a physics source |
 | Roper et al. 2025 (geometric masking) | `Roper_2025` | |
+| Vanden Berk et al. 2001 (BLR composite quasar template) | `VandenBerk_2001` | Fetched 2026-05-08 |
+| Hönig & Kishimoto 2010 (original CAT3D torus) | `Hoenig_2010` | Fetched 2026-05-08 |
 
-**MISSING in B-AGN:**
-- Vanden Berk et al. 2001 (BLR composite quasar template) — *only co-author mentions found in other entries*
-- Hönig & Kishimoto 2010 (original CAT3D) — *workaround: cite `Hoenig_2017` as already done in code*
+**MISSING in B-AGN:** none.
 
 ---
 
@@ -147,9 +150,9 @@ Bibkeys recorded below all resolve in source #1 unless otherwise noted.
 | Madau 1995 | `Madau_1995` | |
 | Inoue et al. 2014 | `Inoue_2014` | |
 | Asada et al. 2025 | `Asada_2025` | |
+| Meiksin 2006 (IGM attenuation) | `Meiksin_2006` | Fetched 2026-05-08 |
 
-**MISSING in B-IGM:**
-- Meiksin 2006
+**MISSING in B-IGM:** none.
 
 ---
 
@@ -158,51 +161,53 @@ Bibkeys recorded below all resolve in source #1 unless otherwise noted.
 | Model | Bibkey | Notes |
 |-------|--------|-------|
 | Moustakas et al. 2023 (FastSpecFit) | `Moustakas_2023` | |
+| Storey & Zeippen 2000 (atomic transition probabilities) | `Storey_2000` | Fetched 2026-05-08 |
 
-**MISSING in B-LINE:**
-- Storey & Zeippen 2000 (atomic transition probabilities) — *also gates B-NEB*
+**MISSING in B-LINE:** none.
 
 ---
 
 ## B-NOISE — Noise & uncertainty models
 
-**MISSING in B-NOISE:**
-- Hogg, Bovy & Lang 2010 (outlier-robust likelihoods, mixture model + Student-t).
-  *Note (2026-05-08):* `StudentTLikelihood` has been **provisionally** implemented
-  in `src/tengri/observation/noise.py:922` against this citation — the paper info
-  in the docstring (DOI 10.1088/0004-637X/710/2/1362; arXiv 0905.3340) is real,
-  but the bib entry has not yet been added to the workspace bib. Add the entry
-  there to lift the citation from "provisional" to "authoritative" per the
-  citation rule in the plan.
+| Model | Bibkey | Notes |
+|-------|--------|-------|
+| Hogg, Bovy & Lang 2010 (outlier-robust likelihoods) | `Hogg_2010b` | Fetched 2026-05-08 |
+
+**MISSING in B-NOISE:** none.
 
 ---
 
 ## Summary
 
-- **Verified bibkeys:** 36 across 8 areas.
-- **Missing entries that gate Workstream B items:** 13 (listed above per area).
+**Updated 2026-05-08:** Fetched 10 of 13 missing entries from NASA ADS public export.
 
-### Missing-entry checklist for the user
+- **Verified bibkeys:** 46 across 8 areas (was 36).
+- **Missing entries remaining:** 3 (could not fetch/verify).
 
-To add to `~/writing-workspace/projects/tengri/99-references.bib`:
+### Remaining blockers
 
-1. Vanden Berk et al. 2001 — composite quasar SDSS spectrum (BLR)
-2. Hönig & Kishimoto 2010 — CAT3D torus (or accept `Hoenig_2017` substitute)
-3. Fitzpatrick & Massa 2007 — UV extinction
-4. Conroy, Schiminovich & Blanton 2010 — dust attenuation
-5. van der Wel 2007 — vW07 attenuation
-6. Gordon et al. 2024 — UV extinction extension
-7. Chary & Elbaz 2001 — IR templates
-8. Rieke et al. 2009 — IR templates
-9. Dopita et al. 2013 — abundance set
-10. Storey & Zeippen 2000 — atomic transition probabilities
-11. Ferland et al. 2023 — Cloudy 23 release
-12. Meiksin 2006 — IGM transmission
-13. Hogg, Bovy & Lang 2010 — outlier-robust likelihoods
+To add to `~/writing-workspace/projects/tengri/99-references.bib` (correct bibcodes unknown):
 
-Implementation of the corresponding physics in tengri will not proceed
-for these models until their bib entry exists. **No paraphrased or
-memory-derived citations.**
+1. van der Wel 2007 — vW07 attenuation (verified bibcode 2007ApJ...670..206V is morphology-density, not sizes)
+2. Gordon et al. 2024 — R(V)-dependent extinction (verified bibcode 2024ApJ...970...51G is SMC UV extinction, not Milky Way)
+3. Dopita et al. 2013 — Mappings abundance set (bibcode 2013Ap&SS.350...81D returns 404)
+
+### Newly-verified entries (fetched 2026-05-08)
+
+1. `VandenBerk_2001` — composite quasar SDSS spectrum (B-AGN)
+2. `Hoenig_2010` — CAT3D torus (B-AGN)
+3. `Fitzpatrick_2007` — UV extinction (B-DA)
+4. `Conroy_2010b` — dust attenuation (B-DA)
+5. `Chary_2001` — IR templates (B-DE)
+6. `Rieke_2009` — IR templates (B-DE)
+7. `Storey_2000` — [O III] line ratios (B-NEB, B-LINE)
+8. `Ferland_2023` — Cloudy 23 release (B-NEB)
+9. `Meiksin_2006` — IGM attenuation (B-IGM)
+10. `Hogg_2010b` — outlier-robust likelihoods (B-NOISE)
+
+Implementation of the corresponding physics in tengri may now proceed for
+these 10 models. Remaining 3 blockers require ADS bibcode verification or
+alternative sources.
 
 ---
 

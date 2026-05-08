@@ -962,18 +962,9 @@ class StudentTLikelihood:
     ----------
     .. [1] Hogg, D. W., Bovy, J., & Lang, D. (2010).
            "Data analysis recipes. I. Fitting a model to data."
-           *The Astrophysical Journal*, 710(2), 1362–1384.
-           DOI: `10.1088/0004-637X/710/2/1362
-           <https://doi.org/10.1088/0004-637X/710/2/1362>`_
-           arXiv: `0905.3340 <https://arxiv.org/abs/0905.3340>`_
-
-    .. note::
-       This citation is **not yet** in tengri's workspace bib
-       (``~/writing-workspace/projects/tengri/99-references.bib``).
-       It is listed as MISSING in
-       ``docs/dev/synthesizer_parity_citations.md`` and must be added
-       before this docstring is taken as authoritative under the
-       Tier-2 docstring standard. Implementation is provisional.
+           arXiv:1008.4686
+           ADS: 2010arXiv1008.4686H
+           https://doi.org/10.48550/arXiv.1008.4686
     """
 
     dof: float = 4.0

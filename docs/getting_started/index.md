@@ -89,10 +89,12 @@ Jupyter. `tengri.search("torus")` does a keyword search across every menu.
 - [SED anatomy](../spine/02_sed_anatomy) — what each component contributes
   to the spectrum, by wavelength
 - [Examples gallery](../auto_examples/index) — one-figure recipes by topic
+- [Running on a GPU](gpu.md) — JAX-CUDA setup and what to expect
 
 ```{toctree}
 :maxdepth: 1
 :hidden:
 
 ../install
+gpu
 ```
