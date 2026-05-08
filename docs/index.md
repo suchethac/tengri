@@ -10,24 +10,19 @@
 
 > **Status:** v0.1.0, active development. Core pipeline functional with 2000+ tests. Paper I in preparation.
 
-```{admonition} Quick links
-:class: tip
-
-- 📚 **[Tutorial spine](spine/00_quickstart)** — step-by-step notebooks 00 → 08
-- 🖼️ **[Examples gallery](auto_examples/index)** — 120+ one-figure recipes by category
-- 📓 **[Quickstart notebook](spine/00_quickstart)** — end-to-end fit in 2 minutes
-- 💻 **[Source on GitHub](https://github.com/suchethac/tengri)**
-```
+- **[Tutorial spine](spine/00_quickstart)** — notebooks 00 → 08
+- **[Examples gallery](auto_examples/index)** — one-figure recipes by category
+- **[Source on GitHub](https://github.com/suchethac/tengri)**
 
 ## Why tengri
 
-- **JIT-compiled, fully differentiable**: pure JAX end-to-end. Forward model ~140 μs, gradient ~56 μs on CPU for a smooth 7-D model. JIT + `vmap` + `grad` compose — one forward model powers every inference backend.
-- **Modular physics**: stars (DSPS SSPs), SFH (parametric and non-parametric), dust attenuation (15+ laws) and emission, nebular (BakedIn / CloudyGrid / Cue), unified AGN (disc + torus + BLR/NLR), IGM absorption, radio and X-ray components. Each is a swappable pure function.
-- **Every inference method, same model**: `fitter.run("map" | "laplace" | "pathfinder" | "mcmc_nuts" | "mcmc_raytrace" | "evidence")`. Add `PopulationFitter` for hierarchical fits across catalogues.
-- **GPU/TPU native**: the same code runs on CPU, GPU, and TPU without modification.
-- **BYO stellar library**: accepts any SSP in the DSPS HDF5 schema (BC03, BPASS, FSPS, ProGeny). [Pre-formatted templates here](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/).
+The forward model is pure JAX end-to-end: the same code that produces an SED also gives you its gradient. That makes every inference method — MAP, Laplace, Pathfinder, NUTS, Ray Tracing, geoVI, nested sampling — a thin wrapper over the same model. There are no separate fast/slow paths, no Fortran/C extensions to keep in sync, no manual derivatives to maintain.
 
-Paper I covers the framework and mock-recovery validation with smooth / parametric SFHs. Paper II introduces Information-Field-Theory (IFT) correlated-field SFHs with PSD-governed burstiness priors and the geoVI inference pathway (Paper II preview, coming soon).
+The physics is modular: stars (DSPS SSPs — BC03, BPASS, FSPS, ProGeny), SFH (parametric, non-parametric, and IFT correlated-field), dust attenuation and emission, nebular (BakedIn / CloudyGrid / Cue), a unified AGN block (disc + torus + BLR/NLR), IGM absorption, radio, X-ray. Each component is a pure function you can swap, vmap, or differentiate without touching the rest of the pipeline.
+
+On a smooth 7-parameter model the forward call runs in ~140 μs on CPU and the gradient in ~56 μs. The same source runs unchanged on GPU and TPU. SSPs come from any HDF5 file matching the DSPS schema; [pre-formatted grids are mirrored here](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/).
+
+Paper I covers the framework and parametric mock recovery. Paper II introduces stochastic, IFT correlated-field SFHs with PSD-governed burstiness priors, fit through geoVI.
 
 ## Installation
 
@@ -42,6 +37,7 @@ Requirements: Python ≥ 3.10, JAX ≥ 0.4.20, DSPS ≥ 0.3, NIFTy.re ≥ 8.5.
 ## Quick start
 
 ```python
+import jax
 from tengri import (
     SEDModel, Parameters, Fitter,
     Uniform, Gaussian,
@@ -63,12 +59,16 @@ spec = Parameters(
 )
 
 model = SEDModel(spec, ssp, observation=obs)
-fitter = Fitter(model, obs_flux, obs_noise)
-result = fitter.run("mcmc_nuts")   # swap for "map", "laplace", "pathfinder", etc.
+
+key = jax.random.PRNGKey(0)
+mock = model.mock(spec.sample(key), key=key)
+
+fitter = Fitter(model, mock["flux_obs"], mock["noise"])
+result = fitter.run("mcmc_nuts")
 print(result.summary_table())
 ```
 
-See `notebooks/00_quickstart.py` for the full end-to-end walkthrough.
+The full walkthrough — including how the mock is constructed, what the priors do, and how to read the corner plot — is in [`notebooks/00_quickstart.py`](spine/00_quickstart).
 
 ## Inference methods
 
@@ -131,7 +131,7 @@ use-cases and workflows.
 - Murray, I., Adams, R. P. & MacKay, D. J. C. (2010). *Elliptical Slice Sampling.* [arXiv:1001.0175](https://arxiv.org/abs/1001.0175)
 - Ensslin, T. A. (2019). *Information Field Theory.* [arXiv:1804.03350](https://arxiv.org/abs/1804.03350)
 
-**License:** MIT
+**License:** BSD-3-Clause
 
 ```{eval-rst}
 .. toctree::

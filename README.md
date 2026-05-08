@@ -69,13 +69,13 @@ wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/ssp_fsps_v3.2.h5 -P
 
 `tengri.list_known_ssps()` shows the other available grids.
 
-## Quick Start
+## Quick start
 
 ```python
+import jax
 from tengri import (
     SEDModel, Parameters, Fitter,
-    Uniform, Gaussian,
-    Observation, Photometry, load_ssp_data,
+    Uniform, Gaussian, Observation, Photometry, load_ssp_data,
 )
 
 ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
@@ -91,10 +91,14 @@ spec = Parameters(
     dust_tau_bc=Uniform(0, 4),
     redshift=0.1,
 )
-
 model = SEDModel(spec, ssp, observation=obs)
-fitter = Fitter(model, obs_flux, obs_noise)
-result = fitter.run("mcmc_nuts")   # or "map", "laplace", "pathfinder", "mcmc_raytrace"
+
+# Mock recovery. For real data, pass your own (flux, noise) to Fitter.
+key = jax.random.PRNGKey(0)
+mock = model.mock(spec.sample(key), key=key)
+
+fitter = Fitter(model, mock["flux_obs"], mock["noise"])
+result = fitter.run("mcmc_nuts")
 print(result.summary_table())
 ```
 
