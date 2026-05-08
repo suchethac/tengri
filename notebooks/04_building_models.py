@@ -14,27 +14,17 @@
 # ---
 
 # %% [markdown]
-# # Building Models Compositionally: The Parameters Object
+# # Building models with `Parameters`
 #
-# *How to inspect free vs fixed parameters, swap physics components, and
-# understand the SED under compositional changes.*
+# A `Parameters` object is just a declarative dict: keys name physical
+# parameters, values are priors (`Uniform`, `Gaussian`, `Fixed`, ...) or
+# string flags for component choices. Free vs fixed is tracked automatically
+# from the prior type.
 #
-# **What you'll do.** Build multiple galaxy models by varying one
-# structural axis at a time — star formation history family, dust attenuation
-# law, and dust emission template — while holding other physics fixed. For
-# each configuration, peek inside `spec.free_params` and `spec.fixed_params`
-# to see how the parameter registry tracks the free/fixed split automatically.
-# Plot the resulting SEDs side-by-side to see how physics choices shape the
-# emergent spectrum from the UV through the mid-IR. Finish with a timing
-# benchmark showing that JIT compilation is a one-time cost.
-#
-# **Why compositional building.** The tengri forward model is a **pipeline**
-# where each physics block (SFH, stellar synthesis, dust attenuation, IR
-# emission) is swappable via string flags in `Parameters(...)`.
-# No code changes; just different kwargs. A single `SEDModel` object then
-# orchestrates the logic automatically. This notebook teaches the
-# builder pattern — how to assemble models, inspect them, and reason about
-# the resulting SEDs.
+# This notebook varies one structural axis at a time — SFH family, dust
+# attenuation law, dust emission template — and plots the resulting SEDs
+# side by side, then times a few JIT-compiled forward calls to show the
+# one-off compile cost amortizes.
 
 # %% [markdown]
 # ## 1. Setup

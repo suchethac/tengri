@@ -14,18 +14,22 @@
 # ---
 
 # %% [markdown]
-# # Why JAX? Four ideas that change SED fitting
+# # Why JAX
 #
-# JAX is Python with **supercharged functions**. In 30 minutes, you'll see:
+# Four things JAX gives you that NumPy doesn't, and what each is worth for
+# SED fitting:
 #
-# 1. **JIT compilation:** Write once, run 100× faster. A galaxy SED evaluates in ~1 ms instead of 100 ms.
-# 2. **Automatic differentiation:** Free gradients. The cost of `∇L/∇θ` is the same as the forward pass.
-# 3. **Vectorization without loops:** `vmap` turns your single-galaxy model into a batch-of-1000 model with one decorator.
-# 4. **One model, any inference method:** MAP, Laplace, Pathfinder, HMC, VI all use the same JAX forward model. No reimplementation.
+# - **JIT.** A galaxy SED that takes ~100 ms in NumPy compiles to ~1 ms.
+# - **Autodiff.** `grad` of the forward model costs about the same as one
+#   forward call. Every gradient-based backend (MAP, NUTS, geoVI) becomes cheap.
+# - **`vmap`.** A single-galaxy model turns into a batch model with one
+#   decorator — no Python loops.
+# - **One model, every backend.** The same JAX function powers MAP, Laplace,
+#   Pathfinder, NUTS, VI, and nested sampling. No re-derivations.
 #
-# This notebook uses real tengri physics (blackbody SEDs, photometric fitting) to teach JAX *via doing*, not toy examples.
-#
-# **What you already know:** NumPy, the physics of stellar spectra and dust attenuation, the likelihood χ² and its role in Bayesian inference.
+# We'll show each on real tengri physics (blackbody SED, then a photometric
+# fit) instead of toy NumPy snippets. Assumed: NumPy literacy and basic
+# Bayesian inference.
 
 # %% [markdown]
 # ## Setup

@@ -14,34 +14,22 @@
 # ---
 
 # %% [markdown]
-# # Fitting photometry: from data to posterior
+# # Fitting photometry
 #
-# **What you'll learn:**
-# - Load and fit multi-wavelength UV-to-MIR photometry with NUTS
-# - Extract derived properties (stellar mass, star formation rates) with credible intervals
-# - Assess convergence via diagnostic tables and effective sample size
-# - Visualize posterior-predictive SED fits and residuals
-# - Interpret degeneracies and model adequacy
+# Where [`00_quickstart`](00_quickstart.py) was a fast demo, this is the
+# real workflow: realistic mock data, NUTS, convergence checks, credible
+# intervals on derived properties, and posterior-predictive validation.
 #
-# **Prerequisites:** [`00_quickstart.py`](00_quickstart.py), [`04_building_models.py`](04_building_models.py).
-# **Next:** [`06_fitting_spectroscopy.py`](06_fitting_spectroscopy.py) to break age–dust–metallicity degeneracies.
+# Physics: double-power-law SFH, Calzetti two-component dust, Dale et al.
+# (2014) infrared template, free redshift, nebular continuum on. The
+# point isn't that any of these are exotic — it's that they *fit* in the
+# usual sense, with proper diagnostics.
 #
-# ---
-#
-# End-to-end photometric SED fitting: generate realistic mock data with noise,
-# run NUTS (No-U-Turn Sampler) to recover the posterior, validate convergence,
-# and extract science-ready derived properties. Where [`00_quickstart.py`](00_quickstart.py)
-# was a rapid demo, this notebook shows **how to do it for real**: convergence checks,
-# credible intervals on derived quantities, and posterior-predictive model validation.
-#
-# **Physics:** Star formation history as power-law (dpl), Calzetti two-component dust,
-# Dale et al. (2014) infrared emission template, free redshift with broad prior,
-# and nebular continuum enabled.
-#
-# **Why photometry alone is hard:** UV–MIR data constrain *combinations* of age, dust, and
-# metallicity, but not each uniquely. The posterior is degenerate — recovery is possible
-# only if the prior is tight. Spectroscopy (notebook 06) adds a powerful constraint that
-# breaks these degeneracies by pinning stellar population age via Balmer breaks.
+# UV–MIR photometry constrains combinations of age, dust, and metallicity
+# rather than each on its own. The posterior is degenerate; tight priors
+# or extra data (spectroscopy in
+# [`06_fitting_spectroscopy`](06_fitting_spectroscopy.py)) are how you
+# break it.
 
 # %% [markdown]
 # ## Setup
@@ -527,7 +515,7 @@ plt.show()
 print("SUMMARY: Photometric SED Fitting")
 
 print(f"""
-✓ Complete workflow:
+Complete workflow:
   Data:      {phot_obs.n_filters} UV–IR bands (SNR=15)
   Model:     {spec.n_free} free params (SFH + dust + redshift + nebular)
   Inference: NUTS {len(next(iter(result.samples.values())))} samples in {t_fit:.1f}s

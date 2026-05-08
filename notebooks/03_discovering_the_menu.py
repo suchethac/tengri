@@ -14,24 +14,18 @@
 # ---
 
 # %% [markdown]
-# # Discovering the menu: tengri's introspection API
+# # Discovering the menu
 #
-# *Learn what physics tengri offers, without writing a single model or fit.*
+# Tengri keeps its physics in registries — every SFH family, dust law,
+# AGN model, filter, and inference backend lives behind a name. This
+# notebook walks through the API for asking what's there: `list_*()`,
+# `describe()`, `search()`, `doctor()`. Pure introspection, no fitting,
+# runs in a couple of seconds.
 #
-# **What you'll do.** Walk through every discovery entrypoint — the `list_*()`,
-# `describe()`, `search()`, and `doctor()` functions — to learn what's available
-# in the registry. You'll filter tables by status or citation, probe the
-# metadata for a single model, cross-menu search for a concept, and check
-# whether your installation is healthy.
-#
-# **Why this matters.** Before you build a model, you need to know what
-# physics is on offer. Tengri exposes this live — you discover as you go,
-# in the REPL or notebook, without leaving Python. Everything returns
-# real Python lists and dicts — no weird DSLs or CLIs.
-#
-# **Runtime budget.** ~2 seconds total. Pure introspection, no compilation,
-# no fitting, no downloads. Filter tables, print metadata, search the
-# registry. Everything runs on the CPU regardless of GPU availability.
+# Why bother? Because the alternative — reading the source — is slower
+# and you'll miss models registered by plugins or recent commits.
+# `tengri.summary()` reads the live registry; if someone adds a new AGN
+# model with `@register_agn_model`, the count updates here too.
 
 # %% [markdown]
 # ## 1. Global overview
@@ -456,7 +450,7 @@ for name in all_filter_names:
             'lam_eff': lam_eff
         })
     except KeyError as e:
-        print(f"⚠ Skipping {name}: {e}")
+        print(f"warn: Skipping {name}: {e}")
 
 print(f"Loaded {len(filters_data)} filters\n")
 
@@ -548,7 +542,7 @@ print(f"  Filter names: {photometry.names}\n")
 
 # 4. Bundle into an Observation (the object SEDModel expects)
 obs = Observation(photometry=photometry)
-print(f"✓ Observation ready with {obs.photometry.n_filters} photometric bands")
+print(f"Observation ready with {obs.photometry.n_filters} photometric bands")
 
 # %% [markdown]
 # That entire workflow — from `list_filters()` all the way to an `Observation`

@@ -14,24 +14,21 @@
 # ---
 
 # %% [markdown]
-# # SED anatomy: kitchen-sink panchromatic decomposition
+# # SED anatomy
 #
-# **What you'll learn:**
-# - How every emission channel that ``tengri`` models — stellar, nebular,
-#   dust attenuation, dust IR re-emission, AGN (disc + torus), X-ray, radio —
-#   contributes to a galaxy's panchromatic SED from 0.1 Å (hard X-ray) to
-#   3×10¹¹ Å (radio).
-# - That *isolating* each component is one ``Parameters`` flag away — the
-#   same model construction grammar used to fit data.
-# - That the orchestrator's published wavelength grid is the canonical
-#   substrate: ``state.sed_intrinsic`` is the running total at chain end,
-#   ``state.derived["sed_<name>"]`` keys are the per-component bookkeeping.
+# Pull the panchromatic galaxy SED apart, channel by channel: stars,
+# nebular, dust attenuation, dust IR re-emission, AGN disc + torus, X-ray,
+# radio. Each one is a flag in `Parameters(...)` — the same grammar used to
+# build a model for fitting — and isolating a component just means zeroing
+# the rest.
 #
-# **Prerequisites:** [``00_quickstart.py``](00_quickstart.py),
-# [``01_why_jax.py``](01_why_jax.py).
-# **Next:** [``03_discovering_the_menu.py``](03_discovering_the_menu.py)
-# to learn the ``list_*().filter().names()`` discovery API.
-# **Runtime budget:** ≤ 60 s on CPU.
+# Components live on the orchestrator's running wavelength grid:
+# `state.sed_intrinsic` is the cumulative total at the end of the chain,
+# `state.derived["sed_<name>"]` is the per-component contribution.
+#
+# Runs in under a minute on CPU. Builds on
+# [`00_quickstart`](00_quickstart.py) and [`01_why_jax`](01_why_jax.py).
+# Next: [`03_discovering_the_menu`](03_discovering_the_menu.py).
 
 # %%
 import os

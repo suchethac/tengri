@@ -16,33 +16,18 @@
 # %% [markdown]
 # # Quickstart
 #
-# **What you'll learn:**
-# - Build a `SEDModel` with free parameters and priors
-# - Generate mock photometry from a known galaxy
-# - Run NUTS (exact, JIT-compiled inference) to recover parameters
-# - Validate parameter recovery via corner plots and convergence diagnostics
+# Build a 7-parameter SED model, generate mock photometry from a known
+# galaxy, fit it back with NUTS, and check the recovery. About two minutes
+# end-to-end on a laptop CPU. No prerequisites.
 #
-# **Prerequisites:** None (standalone entry point).
-# **Next:** [`02_sed_anatomy.py`](02_sed_anatomy.py) for component decomposition.
+# The forward model is pure JAX, so the same code that produces the spectrum
+# also gives us its gradient. NUTS uses that gradient to sample the posterior
+# directly — no hand-tuned proposals, no MH ratio. Every other backend
+# (`map`, `laplace`, `pathfinder`, `vi`, `mcmc_raytrace`, `evidence`) runs
+# against the *same* model.
 #
-# ---
-#
-# tengri is a JAX SED fitting framework: one unified forward model, every major inference backend, fully differentiable and JIT-compiled.
-#
-# A **7-parameter galaxy SED fit** from photometric mock data. The same differentiable JAX code handles:
-# - **Forward model:** stellar continuum (DSPS SSP), nebular emission, dust attenuation, infrared re-radiation.
-# - **Inference:** NUTS (No-U-Turn Sampler), JIT-compiled, exact sampling.
-# - **Diagnostics:** corner plot, SFH recovery, posterior predictive checks.
-#
-# **Physics:** Star formation history as truncated skew-normal (7 free parameters); dust as two-component attenuation (birth cloud + ISM);
-# metallicity from SSP grid; nebular continuum from ionizing spectrum.
-#
-# **Why differentiable:** Every inference method shares the same scalar objective—the information Hamiltonian
-# $\mathcal{H} = \frac{1}{2}\chi^2 + \frac{1}{2}\xi^\top\xi$—ensuring consistency.
-# The forward model is pure JAX: fully differentiable, JIT-compiled to GPU/CPU, composable with any optimizer.
-
-# %% [markdown]
-# **Spine location:** `notebooks/00_quickstart.py` (not `notebook_code/`).
+# Next stop: [`02_sed_anatomy.py`](02_sed_anatomy.py) breaks the SED apart
+# component by component.
 
 # %%
 import os
@@ -183,12 +168,11 @@ print(f"SSP: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]} ages
 print(f"Photometry ({phot_obs.n_filters} bands): {', '.join(phot_obs.names)}")
 
 # %% [markdown]
-# ## Part 0: One SED from X-ray to radio
+# ## One SED, X-ray to radio
 #
-# The fits below use only a **small slice** in wavelength. First, plot the **full
-# panchromatic** prediction (stellar + nebular in the SSP, dust attenuation and IR
-# re-radiation, radio and X-ray scalings) on a single log–log axis. The shaded band
-# marks the optical window used in Part A.
+# Before fitting anything, look at the full forward prediction. The shaded
+# strip is the optical window the photometric fit will actually use — every-
+# thing else is along for the ride.
 
 # %%
 warnings.filterwarnings(
@@ -227,7 +211,7 @@ valid = np.isfinite(sed_pan_np) & (sed_pan_np > 0)
 
 fig0, ax0 = plt.subplots(figsize=(12, 4.2))
 ax0.loglog(wave_pan_np[valid], sed_pan_np[valid], color=COLORS.get("model", "C0"), lw=1.2)
-ax0.axvspan(3800.0, 9200.0, alpha=0.25, color="0.5", label="Part A spectrum window (obs. Å)")
+ax0.axvspan(3800.0, 9200.0, alpha=0.25, color="0.5", label="Optical window (obs. Å)")
 ax0.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]")
 ax0.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]")
 ax0.set_title("Panchromatic forward model (same SSP family as the fits below)")
@@ -248,7 +232,8 @@ del (
 )  # free SSP device memory before inference
 
 # %%
-# Define 7-parameter model (dense basis SFH + stellar mass, metallicity, dust)
+# 3 free parameters (metallicity + two dust optical depths). Everything else is
+# fixed at the panchromatic-truth value above so the recovery test is clean.
 spec_param = Parameters(
     mean_sfh_type="tsnorm",
     sfh_tsnorm_log_peak_sfr=Fixed(1.5),
@@ -282,10 +267,8 @@ t_jit = (time.perf_counter() - t0) / 100 * 1e6
 print(f"Forward model: {t_raw:.1f} ms (raw) → {t_jit:.0f} µs (JIT)")
 
 # %%
-# Generate mock photometry. Use a smoothly rising SFH — a young, gas-rich
-# galaxy with most mass formed recently. tx_frac_* are cumulative mass
-# fractions at evenly-spaced cosmic epochs; setting them low and stretching
-# them toward the late epoch puts most of the mass in recent lookback time.
+# Generate mock photometry. The truth point sits at solar metallicity and
+# moderate two-component dust — close to a typical low-z star-forming galaxy.
 key = jax.random.PRNGKey(42)
 true_params_param = spec_param.sample(key)
 true_params_param = {**true_params_param}
@@ -294,12 +277,12 @@ true_params_param["dust_tau_bc"] = jnp.array(0.5)
 true_params_param["dust_tau_diff"] = jnp.array(0.3)
 mock_param = model_param.mock(true_params_param, snr=50.0, key=key)
 
-print("True parameters (monotonically rising SFH, SFR_inst = 30 Msun/yr):")
+print("True (free) parameters:")
 for name in spec_param.free_params:
     print(f"  {name:30s} = {float(true_params_param[name]):.4f}")
 
 # %%
-# --- FIGURE 1: Mock Multi-Wavelength Photometry ---
+# Plot the mock photometry colour-coded by wavelength regime.
 fig, ax = plt.subplots(figsize=(12, 4))
 band_names = list(phot_obs.names)
 band_idx = np.arange(len(band_names))
@@ -343,9 +326,7 @@ if n_bands >= 10:
 ax.set_xticks(band_idx)
 ax.set_xticklabels(band_names, rotation=45, ha="right", fontsize=10)
 ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]", fontsize=10)
-ax.set_title(
-    "Mock SED: Multi-Wavelength Photometry (Monotonically Rising SFH, SFR = 30 $M_\\odot$/yr)"
-)
+ax.set_title("Mock photometry (truncated skew-normal SFH, SNR = 50)")
 ax.legend(fontsize=10, loc="upper left", ncol=2)
 ax.grid(True, alpha=0.3, axis="y")
 fig.tight_layout()
@@ -372,10 +353,10 @@ result_mcmc = fitter_param.run(
     verbose=False,
 )
 t_mcmc = time.perf_counter() - t0
-print(f"NUTS: {t_mcmc:.1f}s (fast, exact, JIT-compiled)")
+print(f"NUTS: {t_mcmc:.1f}s")
 
 # %%
-# --- FIGURE 2: NUTS Photometric Fit ---
+# Posterior predictive check: draw 50 samples and overplot.
 phot_samples = []
 n_draws = 50
 
@@ -429,14 +410,14 @@ ax.plot(band_idx, true_np, "s", color=COLORS["truth"], ms=9, alpha=0.8, label="T
 ax.set_xticks(band_idx)
 ax.set_xticklabels(band_names, rotation=45, ha="right", fontsize=10)
 ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]")
-ax.set_title("NUTS: Photometric Fit (Monotonic Rising SFH, SFR = 30 $M_\\odot$/yr)")
+ax.set_title("NUTS posterior predictive vs. truth")
 ax.legend(fontsize=10, loc="upper left")
 ax.grid(True, alpha=0.3, axis="y")
 fig.tight_layout()
 plt.show()
 
 # %%
-# --- FIGURE 3: SFH Recovery ---
+# SFH recovery: posterior median + band against the (fixed) truth.
 fig, ax = plt.subplots(figsize=(10, 4))
 plot_sfh(
     model_param,
@@ -448,21 +429,19 @@ plot_sfh(
     method="NUTS",
     xlim=(0, 6),
 )
-ax.set_title("SFH Recovery: Monotonically Rising Profile (D = 7, NUTS)")
+ax.set_title("SFH recovery (NUTS)")
 fig.tight_layout()
 # plt.savefig(os.path.join(FIGDIR, "fig03_sfh_param.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %%
-# --- FIGURE 4: Corner Plot ---
+# Corner plot: posterior with truth overlaid.
 fig = plot_corner_comparison(
     [result_mcmc],
     labels=["NUTS"],
     colors=[COLORS["mcmc_nuts"]],
     truths=true_params_param,
 )
-if fig is not None:
-    fig.suptitle("NUTS: Parametric Posterior (Monotonic Rising SFH, D = 7)", y=1.02)
 plt.show()
 
 # %%
@@ -474,20 +453,20 @@ print("-" * 70)
 for name in spec_param.free_params:
     truth = float(true_params_param[name])
     lo, med, hi = np.percentile(result_mcmc.samples[name], [16, 50, 84])
-    covered = "✓" if lo <= truth <= hi else "MISS"
+    covered = "ok" if lo <= truth <= hi else "MISS"
     print(f"  {name:<28s} {truth:8.3f} {med:8.3f} [{lo:6.3f}, {hi:6.3f}] {covered:>6s}")
 
 n_mcmc = len(next(iter(result_mcmc.samples.values())))
 print(f"\nNUTS: {t_mcmc:.1f}s, {n_mcmc} samples, {n_mcmc/t_mcmc:.0f} ESS/s")
 
-# %%
-print("\n✓ Quickstart complete: NUTS inference on mock photometry (7 parameters, <5s)")
-
 # %% [markdown]
-# ## What You Learned
+# ## What just happened
 #
-# - End-to-end SED fitting: mock generation → inference → diagnostics
-# - NUTS scales to 7 parameters on photometry with <5s runtime
-# - Tight parameter recovery validates model architecture
+# Mock photometry, NUTS, and posterior diagnostics — all the same JAX
+# forward model under the hood. The 16–84% intervals should bracket the
+# truth in every row of the table; if any row says `MISS`, that's a sign
+# the model is mis-specified or the SNR is too low to constrain that
+# parameter.
 #
-# **Next:** [`02_sed_anatomy.py`](02_sed_anatomy.py) for panchromatic decomposition, then real-data workflows in 03–05.
+# Next: [`02_sed_anatomy.py`](02_sed_anatomy.py) takes the panchromatic SED
+# from the top of this notebook apart, component by component.

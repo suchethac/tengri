@@ -14,27 +14,19 @@
 # ---
 
 # %% [markdown]
-# # Emission Lines: BPT Diagnostics, Line Ratios, and Hα SFR Validation
+# # Emission lines, BPT, and Hα-SFR
 #
-# **What you'll learn:**
-# - Extract rest-frame emission line fluxes from the forward model
-# - Plot classical diagnostic diagrams (BPT-NII) separating star formation from AGN
-# - Validate Hα-inferred SFR against recent SFH (10 Myr) — a consistency check built into tengri
-# - Compare star-forming, composite, and AGN-dominated galaxy spectra
+# The same forward model that produces the continuum also produces
+# discrete line fluxes — the nebular backend handles both. This notebook
+# does three things with that:
 #
-# **Prerequisites:** Complete [`00_quickstart.py`](00_quickstart.py) and [`02_sed_anatomy.py`](02_sed_anatomy.py).
-# **Next:** [`09_dust_emission.py`](09_dust_emission.py) for IR continuum and dust physics.
-#
-# ---
-#
-# Emission lines are a first-class observational probe of star formation, metallicity,
-# and AGN activity. tengri makes them transparent: the same forward model that predicts
-# the continuum also predicts discrete line fluxes via the nebular emission backend
-# (SSP-baked by default; Cue for AGN ionization). We show three complementary analyses:
-#
-# 1. **Forward models of three galaxy types:** star-forming, composite, AGN-dominated
-# 2. **BPT diagram:** classical diagnostic using [OIII]/Hβ vs [NII]/Hα separates AGN from SF
-# 3. **Hα → SFR:** empirical validation (Kennicutt 1998) vs integrated SFH from stellar component
+# 1. Build forward models for star-forming, composite, and AGN-dominated
+#    galaxies and compare their spectra side by side.
+# 2. Plot the [NII] BPT diagram (Baldwin, Phillips & Terlevich 1981) and
+#    show the three galaxies land on the expected branches.
+# 3. Cross-check Hα → SFR via Kennicutt (1998) against the stellar-component
+#    SFR averaged over the last 10 Myr — a consistency knob built into the
+#    forward model.
 
 # %%
 import os

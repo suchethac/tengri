@@ -14,35 +14,21 @@
 # ---
 
 # %% [markdown]
-# # Fitting Optical Spectroscopy
+# # Fitting optical spectroscopy
 #
-# **What you'll do:**
-# - Construct an optical spectrum with realistic wavelength grid and spectral resolution
-# - Mask emission lines that dominate the continuum
-# - Generate mock spectroscopy with flux calibration uncertainty
-# - Run NUTS inference to recover stellar age, metallicity, and dust from absorption features
+# Optical absorption-line spectroscopy is how you pin down stellar age and
+# metallicity tightly: Balmer lines (Hβ, Hγ, Hδ) trace age, the Mgb triplet
+# and Fe blends trace metallicity, and the 4000 Å break does both at once.
+# Photometry alone leaves these degenerate (see
+# [`05_fitting_photometry`](05_fitting_photometry.py)); a single optical
+# spectrum breaks the degeneracy.
 #
-# **What you'll learn:**
-# - Spectroscopy constrains age + metallicity tightly via Balmer / Lick indices (Mgb, Hβ, 4000 Å break)
-# - Emission lines must be masked to avoid biasing continuum fits
-# - Instrumental flux calibration errors are marginalized via multiplicative polynomial
-#
-# **Prerequisites:** Run `00_quickstart.py` or `04_building_models.py` first for context.
-# **Runtime budget:** ≤ 180 s on CPU; NUTS compiles slower for 1000-pixel spectra.
-# **Next:** [`07_degeneracies.py`](07_degeneracies.py) for param space topology.
-#
-# ---
-#
-# Absorption-line spectroscopy is the gold standard for measuring galaxy age and metallicity.
-# A single optical spectrum (3500–9500 Å rest) contains hundreds of stellar absorption features:
-# - Balmer lines (Hβ at 4862 Å, Hγ, Hδ) → strongly age-sensitive
-# - Mgb triplet (5100–5200 Å) → metallicity proxy
-# - 4000 Å break → age (discontinuity in continuum slope)
-# - Carbon, iron, TiO bands → finer metallicity gradation
-#
-# Fitting the continuum requires masking emission lines (Hα, [OIII], [NII], [SII]) that may dominate
-# low-mass, low-metallicity, or AGN systems. We marginalize the instrumental flux calibration
-# (0–3% error typical) as a nuisance parameter.
+# This notebook builds a 3500–9500 Å rest-frame spectrum with realistic
+# resolution, masks the strong emission lines (Hα, [OIII], [NII], [SII])
+# so they don't bias the continuum fit, marginalizes a multiplicative
+# polynomial for instrumental flux calibration, and runs NUTS. ~3 min on
+# CPU; NUTS compile is slower than for photometry because the spectrum
+# has ~1000 pixels.
 
 # %%
 import os
@@ -330,11 +316,11 @@ for name in spec_param.free_params:
         lo, hi = float(np.percentile(result_spec.samples[name], 16)), \
                  float(np.percentile(result_spec.samples[name], 84))
         bias = (med - truth) / truth * 100 if truth != 0 else med - truth
-        status = "✓" if (lo <= truth <= hi) else "MISS"
+        status = "ok" if (lo <= truth <= hi) else "MISS"
         print(f"{name:30s} truth={truth:7.3f}  med={med:7.3f}  ±{(hi-lo)/2:6.3f}  [{bias:+5.1f}%]  {status}")
 
 # %%
-# --- FIGURE 1: Spectrum fit + residuals ---
+# Plot: spectrum fit + residuals
 fig, (ax_spec, ax_resid) = plt.subplots(2, 1, figsize=(13, 7), gridspec_kw={"height_ratios": [3, 1]})
 
 n_draw = 50
@@ -387,7 +373,7 @@ fig.savefig(os.path.join(FIGDIR, "06_spectrum_fit.png"), dpi=200, bbox_inches="t
 plt.show()
 
 # %%
-# --- FIGURE 2: Hβ–Mgb absorption feature zoom ---
+# Plot: hβ–mgb absorption feature zoom
 fig, ax = plt.subplots(figsize=(12, 4.5))
 
 mask_hbeta_mgb = (wave_obs_np >= 4500 * (1.0 + z_spec)) & (wave_obs_np <= 5500 * (1.0 + z_spec))
@@ -411,7 +397,7 @@ fig.savefig(os.path.join(FIGDIR, "06_continuum_features.png"), dpi=200, bbox_inc
 plt.show()
 
 # %%
-# --- FIGURE 3: Corner plot ---
+# Plot: corner plot
 # Lightweight manual corner. ``plot_corner_comparison`` (corner.py KDE)
 # OOMs on macOS jetsam at ~24 GB peak when stacked on a 1000-pixel
 # NUTS graph. Histograms are bounded RSS and adequate for tutorial.
@@ -456,7 +442,7 @@ fig.savefig(os.path.join(FIGDIR, "06_corner.png"), dpi=180, bbox_inches="tight")
 print("Saved 06_corner.png", flush=True)
 
 # %%
-# --- FIGURE 4: SFH recovery ---
+# Plot: sfh recovery
 fig, ax = plt.subplots(figsize=(10, 4))
 plot_sfh(model_spec, result_spec, true_params=true_params, ax=ax,
          color=COLORS.get("mcmc_nuts", "C0"), label="NUTS (optical)",

@@ -14,34 +14,17 @@
 # ---
 
 # %% [markdown]
-# # Joint Photometry + Spectroscopy: Breaking Degeneracies
+# # Joint photometry + spectroscopy
 #
-# **What you'll do:**
-# - Generate synthetic photometry (12 bands: UV–MIR) and low-resolution optical spectrum
-# - Fit photometry only with MAP (point estimate + Laplace covariance)
-# - Fit spectroscopy only with MAP (same)
-# - Fit jointly with NUTS (full posterior)
-# - Visualize how joint data collapses age–dust–metallicity degeneracy
+# Surveys like SDSS deliver both broadband photometry and fiber
+# spectroscopy. Using only one leaves information on the table. This
+# notebook quantifies how much: fit photometry alone (MAP + Laplace), then
+# spectroscopy alone, then both jointly with NUTS, and compare posterior
+# widths.
 #
-# **What you'll learn:**
-# - Photometry alone leaves age, dust, and metallicity loosely constrained
-# - Spectroscopy (Balmer jump, metal lines) breaks degeneracies independently
-# - Joint fitting exploits synergy: broadband anchors continuum, spectrum pins detail
-# - Posterior widths shrink dramatically when combining both data types
-#
-# **Prerequisites:** [`00_quickstart.py`](00_quickstart.py).
-# **Runtime budget:** ~180 s (two MAPs ~10 s each + one NUTS ~120 s).
-# **Next:** [`08_sfh_advanced.py`](08_sfh_advanced.py) for stochastic SFH constraints.
-#
-# ---
-#
-# **The physics:** Star formation histories as power-law + exponential tail.
-# Two-component dust (birth cloud + ISM, Calzetti). Nebular emission ON.
-# IR re-radiation via empirical templates (Dale 2014).
-#
-# **Why joint?** SDSS and similar surveys always deliver both photometry and fiber
-# spectroscopy. Using only one leaves information on the table. This notebook shows
-# quantitatively how much tighter the posteriors become.
+# Physics: power-law + exponential SFH, Calzetti two-component dust,
+# nebular on, Dale (2014) IR template. Twelve UV–MIR bands plus a
+# low-resolution optical spectrum. ~3 min total on CPU.
 
 # %%
 import os
@@ -241,7 +224,7 @@ print(f"  Photometry: SNR=20 across {phot_obs.n_filters} bands")
 print(f"  Spectrum: SNR=15 per pixel, {N_PIX_SPEC} pixels")
 
 # %%
-# --- FIGURE 1: Data Overview ---
+# Plot: data overview
 fig, (ax_phot, ax_spec) = plt.subplots(2, 1, figsize=(11, 6))
 
 # Photometry on log-log with masked autoscale
@@ -392,7 +375,7 @@ for name in spec.free_params:
     nuts_joint_stats[name] = (p50, p16, p84)
 
 # %%
-# --- FIGURE 2: Constraint widths and MAP recovery ---
+# Plot: constraint widths and map recovery
 #
 # Pedagogical message: photometry alone leaves the joint age–dust–metallicity
 # direction degenerate. Spectroscopy alone constrains age + Z but lacks dust.
@@ -440,7 +423,7 @@ plt.show()
 print("Saved: notebooks/figures/07_constraint_widths.png")
 
 # %%
-# --- FIGURE 3: Joint Posterior (Corner Plot) ---
+# Plot: joint posterior (corner plot)
 try:
     fig = result_nuts_joint.plot_corner(truths=truth)
     if fig is not None:
@@ -460,7 +443,7 @@ try:
     print("\nR-hat (NUTS convergence, all < 1.05 is good):")
     for name in spec.free_params:
         rh = rhat[name]
-        status = "✓" if rh < 1.05 else "⚠"
+        status = "ok" if rh < 1.05 else "warn"
         print(f"  {status} {name:25s} {float(rh):.4f}")
 except Exception:
     print("  (R-hat unavailable)")
@@ -473,7 +456,7 @@ print("-" * 75)
 for name in spec.free_params:
     truth_val = float(truth[name])
     med, lo, hi = nuts_joint_stats[name]
-    covered = "✓" if lo <= truth_val <= hi else "✗"
+    covered = "ok" if lo <= truth_val <= hi else "miss"
     print(f"  {name:<28s} {truth_val:8.3f} {med:8.3f} [{lo:7.3f}, {hi:7.3f}] {covered:>5s}")
 
 # %%
