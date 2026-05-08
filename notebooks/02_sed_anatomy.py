@@ -81,7 +81,7 @@ FIGDIR = os.path.join("notebooks", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
 # %% [markdown]
-# ## Part 1: Build the kitchen-sink model
+# ## Build the kitchen-sink model
 #
 # Every component flag ``Parameters`` accepts is set here. With
 # ``predict_via_orchestrator``, each component's contribution is published
@@ -165,7 +165,7 @@ params_no_dust = {**params, "dust_tau_bc": jnp.array(0.0), "dust_tau_diff": jnp.
 state_no_dust = model_full.predict_via_orchestrator(params_no_dust)
 
 # %% [markdown]
-# ## Part 2: Inspect what's in the state
+# ## Inspect what's in the state
 #
 # Each component's published quantities live in ``state.derived``. The
 # top-level ``state.sed_intrinsic`` is the running sum threaded through
@@ -190,7 +190,7 @@ for k in (
         print(f"  {k:<30s} {peak:>12.3e}")
 
 # %% [markdown]
-# ## Part 3: The kitchen-sink figure
+# ## The kitchen-sink figure
 #
 # Plot every component on a single panchromatic ν L_ν panel. Wavelength
 # bands are shaded so the reader can see at a glance which channel
@@ -314,7 +314,7 @@ plt.savefig(os.path.join(FIGDIR, "02_sed_anatomy_hero.png"), dpi=200, bbox_inche
 plt.show()
 
 # %% [markdown]
-# ## Part 4: Component isolation — same panel, one component at a time
+# ## Component isolation — same panel, one component at a time
 #
 # Useful for explaining what each component contributes in isolation.
 # Same wavelength grid as above, identical normalization. The bottom
@@ -354,7 +354,7 @@ plt.savefig(os.path.join(FIGDIR, "02_component_isolation.png"), dpi=200, bbox_in
 plt.show()
 
 # %% [markdown]
-# ## Part 5: IGM transmission and dust attenuation as multiplicative factors
+# ## IGM transmission and dust attenuation as multiplicative factors
 #
 # IGM (Lyman-alpha forest) at z=0.5 is mild — most of the action lives at
 # z ≳ 2. Re-running with z=3 makes it dramatic. Dust attenuation
@@ -403,7 +403,7 @@ plt.savefig(os.path.join(FIGDIR, "02_redshift_igm.png"), dpi=200, bbox_inches="t
 plt.show()
 
 # %% [markdown]
-# ## Part 6: Layer-by-layer build
+# ## Layer-by-layer build
 #
 # Same model, parameters peeled back one at a time. Lets the reader see
 # what each component *adds* (or removes) from the cumulative SED.
@@ -498,7 +498,7 @@ plt.savefig(os.path.join(FIGDIR, "02_layer_anatomy.png"), dpi=200, bbox_inches="
 plt.show()
 
 # %% [markdown]
-# ## Part 7: Units convention reference
+# ## Units convention reference
 #
 # tengri carries SED quantities as **L_ν in erg/s/Hz** through the chain.
 # The same number gets reinterpreted as **f_ν in erg/s/cm²/Hz** when

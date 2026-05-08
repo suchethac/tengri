@@ -137,7 +137,7 @@ for p in spec.free_params[:3]:
 # %% [markdown]
 # ---
 #
-# ## Idea 1: JIT Compilation — From Python to Machine Code
+# ## JIT: from Python to machine code
 #
 # JAX's **JIT (Just-In-Time) compiler** converts Python functions into fused XLA kernels.
 # The **first call compiles** (~100–500 ms); **subsequent calls are pure compiled code** (~1–5 ms).
@@ -200,7 +200,7 @@ plt.show()
 # %% [markdown]
 # ---
 #
-# ## Idea 2: Automatic Differentiation — Gradients are Cheap
+# ## Autodiff: gradients are cheap
 #
 # **Key insight:** In JAX, the cost of `∇L/∂θ` is **the same as the forward pass** (within 2–3×).
 # This is why every modern inference method works: MAP (gradient descent), Laplace (curvature), Pathfinder (iterative grad), HMC (alternating forward+grad) all reuse the same model.
@@ -395,7 +395,7 @@ plt.show()
 # %% [markdown]
 # ---
 #
-# ## Idea 3: Vectorization without Loops — `vmap`
+# ## `vmap`: vectorization without loops
 #
 # **vmap** (vectorized map) lets you broadcast a single-sample function across a batch.
 # Write the model once for one galaxy, then apply `vmap(model)` to fit 100 galaxies in parallel—
@@ -503,7 +503,7 @@ plt.show()
 # %% [markdown]
 # ---
 #
-# ## Idea 4: Combine JIT + Grad + Vmap — The JAX Philosophy
+# ## Composing JIT + grad + vmap
 #
 # The real power is **composition**: stack these transformations to build complex inference pipelines.
 
@@ -542,7 +542,7 @@ print(f"  Median log-likelihood:      {jnp.median(loglikes):>7.2f}")
 # %% [markdown]
 # ---
 #
-# ## Idea 5: Compile once, sample forever — HMC/NUTS as JIT functions
+# ## Compile once, sample forever: HMC/NUTS
 #
 # The same compile-once tradeoff applies to MCMC. The first call to
 # `fitter.run("mcmc_nuts", …)` pays an XLA compile cost: BlackJAX builds a
@@ -606,7 +606,7 @@ print(
 # %% [markdown]
 # ---
 #
-# ## Summary: Why JAX for SED Fitting
+# ## Recap
 #
 # **One model, any method.**
 #

@@ -140,7 +140,7 @@ tg.print_logo()
 print(f"tengri {tg.__version__}")
 
 # %% [markdown]
-# ## Part 1: Load SSP and assemble bandset
+# ## Load SSP and assemble bandset
 
 # %%
 _ssp_name = "ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
@@ -169,7 +169,7 @@ obs = Observation(photometry=phot_obs)
 print(f"Photometry: {phot_obs.n_filters} bands (GALEX/SDSS/2MASS/WISE-W1W2)")
 
 # %% [markdown]
-# ## Part 2: Model definition (10 free parameters)
+# ## Model definition (10 free parameters)
 
 # %%
 spec = Parameters(
@@ -216,7 +216,7 @@ t_warm = time.perf_counter() - t0
 print(f"  ⏱  predict_photometry  cold={t_first*1e3:.1f} ms  warm={t_warm*1e3:.1f} ms")
 
 # %% [markdown]
-# ## Part 3: Generate mock photometry (SNR=15)
+# ## Generate mock photometry (SNR=15)
 
 # %%
 key = jax.random.PRNGKey(123)
@@ -243,7 +243,7 @@ for name in spec.free_params[:6]:
 print(f"\nMock: {len(mock_data.flux_obs)} bands, SNR=15")
 
 # %% [markdown]
-# ## Part 4: Inference with MAP
+# ## Inference with MAP
 
 # %%
 print("FITTING: MAP optimization")
@@ -277,7 +277,7 @@ print(f"  Samples:     {len(next(iter(result.samples.values())))}")
 samples_source = result.samples
 
 # %% [markdown]
-# ## Part 5: Fit quality assessment
+# ## Fit quality assessment
 
 # %%
 print("FIT SUMMARY")
@@ -291,7 +291,7 @@ n_samps = len(next(iter(samples_for_credible.values())))
 print(f"\nNUTS posterior: {n_samps} samples")
 
 # %% [markdown]
-# ## Part 6: Derived properties
+# ## Derived properties
 
 # %%
 # Compute derived quantities sample-by-sample to keep peak RSS bounded.
@@ -347,7 +347,7 @@ except Exception as e:
     print(f"(Derived properties unavailable: {str(e)[:60]})")
 
 # %% [markdown]
-# ## Figure 1: Posterior-predictive SED fit + residuals
+# ## Posterior-predictive SED fit + residuals
 
 # %%
 n_pred = 200
@@ -417,7 +417,7 @@ plt.savefig(os.path.join(FIGDIR, "05_posterior_predictive.png"), dpi=200, bbox_i
 plt.show()
 
 # %% [markdown]
-# ## Figure 2: Corner plot
+# ## Corner plot
 
 # %%
 # Manual lightweight corner: pairwise hist2d + 1D histograms.
@@ -465,7 +465,7 @@ plt.show()
 print("Saved 05_corner.png", flush=True)
 
 # %% [markdown]
-# ## Figure 3: SFH posterior
+# ## SFH posterior
 
 # %%
 fig, ax = plt.subplots(figsize=(10, 5))

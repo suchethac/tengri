@@ -28,7 +28,7 @@
 # model with `@register_agn_model`, the count updates here too.
 
 # %% [markdown]
-# ## 1. Global overview
+# ## Global overview
 #
 # Start with a bird's-eye view of everything in tengri.
 
@@ -46,7 +46,7 @@ tengri.summary()
 # via `@register_agn_model` and this number updates automatically.
 
 # %% [markdown]
-# ## 2. The full cheatsheet
+# ## The full cheatsheet
 #
 # **`tengri.help()`** is a 5-section narrative. Read it once to see the
 # entire surface area of the library.
@@ -64,7 +64,7 @@ tengri.help()
 tengri.help("dust")
 
 # %% [markdown]
-# ## 3. Listing menus
+# ## Listing menus
 #
 # Each menu is a `_RegistryTable` — a real Python list that prints as a
 # nice table. You can filter it, iterate it, or slice it like any list.
@@ -218,7 +218,7 @@ filter_names = jwst_nircam_f150.names()
 print(f"Filter names for Photometry():\n{filter_names}")
 
 # %% [markdown]
-# ## 4. API discovery surface
+# ## API discovery surface
 #
 # Tengri exposes more discovery helpers beyond the menus above.
 #
@@ -356,7 +356,7 @@ in_tuple = (
 print(f"In tuple (instrument__in=...): {in_tuple}\n")
 
 # %% [markdown]
-# ## 5. Single-entry lookup
+# ## Single-entry lookup
 #
 # Use **`describe()`** to get full metadata for any name — model, method,
 # component, or filter.
@@ -383,7 +383,7 @@ tengri.describe("mcmc_nuts")
 tengri.describe("dale2014")
 
 # %% [markdown]
-# ## 5. Cross-menu search
+# ## Cross-menu search
 #
 # **`search()`** walks every registry and returns every entry whose name,
 # short_doc, citation, or status (case-insensitive) contains your query.
@@ -405,7 +405,7 @@ tengri.search("dirichlet")
 tengri.search("Leja")
 
 # %% [markdown]
-# ## 9. Environment health
+# ## Environment health
 #
 # **`doctor()`** checks whether your install is healthy: Python version,
 # JAX configuration, SSP data files, GPU availability.
@@ -414,7 +414,7 @@ tengri.search("Leja")
 tengri.doctor()
 
 # %% [markdown]
-# ## 8. Hero figure: Photometric filter coverage
+# ## Photometric filter coverage
 #
 # Build a multi-wavelength filter set and visualize their transmission curves.
 # Color by effective wavelength to reveal the spectral coverage, and annotate
@@ -496,7 +496,7 @@ plt.tight_layout()
 import os
 os.makedirs("figures", exist_ok=True)
 plt.savefig("figures/03_filter_coverage.png", dpi=200, bbox_inches="tight")
-print("\n✓ Saved hero figure to figures/03_filter_coverage.png")
+print("\nSaved hero figure to figures/03_filter_coverage.png")
 plt.show()
 
 # %% [markdown]
@@ -506,7 +506,7 @@ plt.show()
 # for constraining age, dust, and metallicity in local galaxies.
 
 # %% [markdown]
-# ## 7. Putting it together: discovery API to Observation
+# ## From discovery API to Observation
 #
 # Demonstrate the full workflow — from introspection to building an
 # `Observation` ready for a model.
@@ -550,7 +550,7 @@ print(f"Observation ready with {obs.photometry.n_filters} photometric bands")
 # building are tightly coupled, not separate.
 
 # %% [markdown]
-# ## 10. CLI mirror
+# ## CLI mirror
 #
 # The same introspection functions are available from the command line:
 #

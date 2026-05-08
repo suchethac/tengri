@@ -27,7 +27,7 @@
 # one-off compile cost amortizes.
 
 # %% [markdown]
-# ## 1. Setup
+# ## Setup
 
 # %%
 import os
@@ -83,7 +83,7 @@ print(f"Photometry: {photometry.n_filters} filters spanning UV→IR")
 print(f"  {', '.join([b.replace('galex_', 'GALEX-').replace('sdss_', 'SDSS-').replace('wise_', 'WISE-') for b in filter_names])}")
 
 # %% [markdown]
-# ## 2. Three Pillars: Structural Choices, Priors, and Free Parameters
+# ## Structural choices, priors, and the free/fixed split
 #
 # Every `Parameters(...)` instance holds:
 #
@@ -164,7 +164,7 @@ print(f"Free parameters ({len(spec_full.free_params)}): {spec_full.free_params}"
 print(f"Fixed parameters ({len(spec_full.fixed_params)}): {spec_full.fixed_params}")
 
 # %% [markdown]
-# ## 3. Vary SFH Family
+# ## Vary the SFH family
 #
 # The parameter registry is **structure-aware**: when you swap
 # `mean_sfh_type`, the free-parameter list updates automatically.
@@ -232,7 +232,7 @@ print("\n[TIP] Use tengri.describe(name) to inspect any SFH family or component 
 print("Example: tengri.describe('delayed_bq') shows the parametrization and physics.")
 
 # %% [markdown]
-# ## 4. SED Changes Under SFH Family Swap
+# ## SED under different SFH families
 #
 # Build a truth dict for each SFH family and compute the resulting SEDs.
 # Notice how the spectral shape — especially the recent star formation
@@ -311,7 +311,7 @@ plt.savefig(str(_repo_root / "notebooks" / "figures" / "04_sfh_family_grid.png")
 plt.show()
 
 # %% [markdown]
-# ## 5. Vary Dust Attenuation Law
+# ## Vary the dust attenuation law
 #
 # Keep the SFH fixed (tsnorm) and sweep dust attenuation law. The amount
 # of attenuation and the detailed shape of the extinction curve affect
@@ -350,7 +350,7 @@ for dust_law in dust_laws:
     print(f"{dust_law:20s}  dust free params: {free_dust}")
 
 # %% [markdown]
-# ## 6. SED Changes Under Dust Attenuation Law Swap
+# ## SED under different attenuation laws
 #
 # Dust law choice affects the UV-optical tilt and features like the 2175 Å
 # bump (present in Milky Way + starburst templates, absent in SMC-like laws).
@@ -465,7 +465,7 @@ plt.savefig(str(_repo_root / "notebooks" / "figures" / "04_dust_law_grid.png"), 
 plt.show()
 
 # %% [markdown]
-# ## 7. Vary Dust Emission Model
+# ## Vary the dust emission model
 #
 # Three IR templates with different assumptions: empirical energy balance
 # (Dale 2014), semi-analytic grain physics (DL07), and parametric blackbody.
@@ -504,7 +504,7 @@ for emission in dust_emissions:
         print(f"{emission:20s}  SKIPPED ({str(e)[:40]}...)")
 
 # %% [markdown]
-# ## 8. SED Changes Under Dust Emission Model Swap
+# ## SED under different IR templates
 #
 # Different IR templates (empirical Dale, semi-analytic DL07, observed Casey,
 # parametric blackbody) produce different mid-to-far IR shapes. The energy
@@ -617,7 +617,7 @@ plt.savefig(str(_repo_root / "notebooks" / "figures" / "04_dust_emission_grid.pn
 plt.show()
 
 # %% [markdown]
-# ## 9. Free vs Fixed Parameters
+# ## Free vs fixed parameters
 #
 # Same physical model, different parameter freedom. We demonstrate:
 # free redshift vs fixed redshift, and free metallicity vs fixed.
@@ -695,7 +695,7 @@ print(f"  Free z   has 'redshift': {'redshift' in spec_free_z.free_params}")
 print(f"  Fixed z has 'redshift': {'redshift' in spec_fixed_z.free_params}")
 
 # %% [markdown]
-# ## 10. Forward Model Speed & Sensitivity Studies
+# ## Forward-model timing and sensitivity
 #
 # JAX's JIT compilation makes subsequent runs fast, and vmap
 # enables vectorized predictions over many parameters. Here we time a
@@ -760,7 +760,7 @@ print("Key lesson: Once compiled, calls are fast (~10-30 ms). Use sequential")
 print("loops for sensitivity studies, or vmap() for full batch vectorization.")
 
 # %% [markdown]
-# ## API Summary & Where to Go Next
+# ## Where to go next
 #
 # This notebook threaded:
 #

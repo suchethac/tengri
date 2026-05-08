@@ -146,7 +146,7 @@ ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.
 print(f"SSP grid: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]} ages × {ssp_data.ssp_flux.shape[-1]} λ")
 
 # %% [markdown]
-# ## Part A: Wavelength Grid + Emission Line Masks
+# ## Wavelength grid and emission-line masks
 #
 # Observed-frame wavelength: 3500–9500 Å at z=0.1 (rest: 3000–8636 Å).
 # Resolution R ≈ 2000 → 1000 pixels keeps compile budget tight (~80 s NUTS warmup).
@@ -210,7 +210,7 @@ print(f"Spectroscopy: {n_pix} pixels, R={resolution}")
 print("Noise: cal_floor=1%, Gaussian likelihood")
 
 # %% [markdown]
-# ## Part B: Parameters + Truth Values
+# ## Parameters and truth values
 #
 # Age + metallicity dominates absorption features; dust attenuation softens the continuum.
 # Metallicity `met_logzsol` governs line strengths (Mgb, Fe lines); age sets Balmer decrement.
@@ -285,7 +285,7 @@ fig.savefig(os.path.join(FIGDIR, "06_spectrum_input.png"), dpi=200, bbox_inches=
 plt.show()
 
 # %% [markdown]
-# ## Part C: NUTS Inference with dense_mass=False
+# ## NUTS inference (diagonal mass matrix)
 #
 # Single NUTS chain with `dense_mass=False` to avoid OOM on 1000-pixel compile.
 

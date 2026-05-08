@@ -160,7 +160,7 @@ obs = Observation(photometry=phot_obs)
 print(f"Photometry ({phot_obs.n_filters} bands): {', '.join(phot_obs.names)}")
 
 # %% [markdown]
-# ## Part 1: Define Three Galaxy Variants (BPT Positions)
+# ## Three galaxies along the BPT plane
 #
 # We create three SED models with different ionization regimes:
 # 1. **Star-forming:** high recent SFR, young stellar population → below Kauffmann line
@@ -243,7 +243,7 @@ print(f"  Metallicity [Zsol]: {float(params_old['met_logzsol']):.2f}")
 print(f"  Dust (birth cloud): τ={float(params_old['dust_tau_bc']):.2f}")
 
 # %% [markdown]
-# ## Part 2: Compute SFR and Extract Emission Line Fluxes
+# ## SFR and emission-line fluxes
 #
 # Extract SFR_10Myr from the integrated SFH. Then predict full spectrum
 # to extract emission line fluxes at key wavelengths (Hα, Hβ, [OIII], [NII]).
@@ -285,7 +285,7 @@ for galaxy_type, model, params in [("SF", model_sf, params_sf),
         fluxes_dict[galaxy_type] = None
 
 # %% [markdown]
-# ## Part 3: BPT Diagram
+# ## BPT diagram
 #
 # Plot [OIII]/Hβ (y-axis) vs [NII]/Hα (x-axis) with Kauffmann+03 and Kewley+01 demarcation curves.
 
@@ -355,7 +355,7 @@ plt.show()
 print("\nSaved BPT diagram to notebooks/figures/08_bpt_diagram.png")
 
 # %% [markdown]
-# ## Part 4: Rest-Frame Line Spectrum Zoom
+# ## Rest-frame line spectrum zoom
 #
 # High-resolution spectrum in the Hα–[NII]–[SII] region (6500–6800 Å rest-frame)
 # showing line profile differences between galaxy types.
@@ -439,7 +439,7 @@ plt.show()
 print("Saved line spectrum to notebooks/figures/08_line_spectrum.png")
 
 # %% [markdown]
-# ## Part 5: Hα SFR Validation
+# ## Hα-derived SFR vs the stellar component
 #
 # Kennicutt (1998) empirical SFR calibration: SFR [M☉/yr] = 7.9e-42 × L_Hα [erg/s].
 # Compare Hα-derived SFR against SFR_10Myr from the integrated SFH.
