@@ -83,9 +83,7 @@ def cue_default_params() -> dict:
 # line luminosities will NOT scale with (1 - fesc).
 
 
-def test_fesc_zero_vs_half_reduces_nebular(
-    cue_backend, cue_default_params
-):
+def test_fesc_zero_vs_half_reduces_nebular(cue_backend, cue_default_params):
     """With neb_fesc=0.5, nebular continuum is ~50% lower than neb_fesc=0.0.
 
     Pitfall P-9: If fesc is unwired, both outputs will be identical.
@@ -98,7 +96,7 @@ def test_fesc_zero_vs_half_reduces_nebular(
     wav_neb_0, lum_neb_cont_0 = cue_backend.predict_nebular_continuum(
         **cue_default_params, neb_fesc=0.0
     )
-    wav_neb_lines_0, lum_neb_lines_0 = cue_backend.predict_nebular_line_luminosities(
+    _, lum_neb_lines_0 = cue_backend.predict_nebular_line_luminosities(
         **cue_default_params, neb_fesc=0.0
     )
 
@@ -106,7 +104,7 @@ def test_fesc_zero_vs_half_reduces_nebular(
     wav_neb_half, lum_neb_cont_half = cue_backend.predict_nebular_continuum(
         **cue_default_params, neb_fesc=0.5
     )
-    wav_neb_lines_half, lum_neb_lines_half = cue_backend.predict_nebular_line_luminosities(
+    _, lum_neb_lines_half = cue_backend.predict_nebular_line_luminosities(
         **cue_default_params, neb_fesc=0.5
     )
 
@@ -119,13 +117,15 @@ def test_fesc_zero_vs_half_reduces_nebular(
     lines_half_total = float(jnp.sum(lum_neb_lines_half))
 
     # Assert: fesc=0.5 output is lower than fesc=0.0 (P-9 bug detection)
-    assert (
-        cont_half_total < cont_0_total
-    ), f"P-9 BUG: nebular continuum did not decrease with fesc. fesc=0: {cont_0_total:.3e}, fesc=0.5: {cont_half_total:.3e}"
+    assert cont_half_total < cont_0_total, (
+        f"P-9 BUG: nebular continuum did not decrease with fesc. "
+        f"fesc=0: {cont_0_total:.3e}, fesc=0.5: {cont_half_total:.3e}"
+    )
 
-    assert (
-        lines_half_total < lines_0_total
-    ), f"P-9 BUG: nebular line flux did not decrease with fesc. fesc=0: {lines_0_total:.3e}, fesc=0.5: {lines_half_total:.3e}"
+    assert lines_half_total < lines_0_total, (
+        f"P-9 BUG: nebular line flux did not decrease with fesc. "
+        f"fesc=0: {lines_0_total:.3e}, fesc=0.5: {lines_half_total:.3e}"
+    )
 
 
 def test_fesc_unity_suppresses_all_nebular(cue_backend, cue_default_params):
@@ -140,7 +140,7 @@ def test_fesc_unity_suppresses_all_nebular(cue_backend, cue_default_params):
     wav_neb_all, lum_neb_cont_all = cue_backend.predict_nebular_continuum(
         **cue_default_params, neb_fesc=1.0
     )
-    wav_neb_lines_all, lum_neb_lines_all = cue_backend.predict_nebular_line_luminosities(
+    _, lum_neb_lines_all = cue_backend.predict_nebular_line_luminosities(
         **cue_default_params, neb_fesc=1.0
     )
 
@@ -150,13 +150,13 @@ def test_fesc_unity_suppresses_all_nebular(cue_backend, cue_default_params):
 
     # With fesc=1.0, output should be near zero (machine epsilon)
     # Allow 1% relative tolerance for numerical noise in the neural net
-    assert (
-        cont_all_total < 1e-2
-    ), f"P-9 BUG: nebular continuum not suppressed at fesc=1.0. Got {cont_all_total:.3e}"
+    assert cont_all_total < 1e-2, (
+        f"P-9 BUG: nebular continuum not suppressed at fesc=1.0. Got {cont_all_total:.3e}"
+    )
 
-    assert (
-        lines_all_total < 1e-2
-    ), f"P-9 BUG: nebular lines not suppressed at fesc=1.0. Got {lines_all_total:.3e}"
+    assert lines_all_total < 1e-2, (
+        f"P-9 BUG: nebular lines not suppressed at fesc=1.0. Got {lines_all_total:.3e}"
+    )
 
 
 def test_fesc_linearity(cue_backend, cue_default_params):
@@ -189,44 +189,56 @@ def test_fesc_linearity(cue_backend, cue_default_params):
         ratio = cont_high_total / cont_low_total
         expected_ratio = (1.0 - 0.4) / (1.0 - 0.2)  # = 0.75
 
-        assert (
-            0.6 <= ratio <= 0.95
-        ), f"P-9 BUG: fesc linearity broken. Ratio of L_neb(fesc=0.4)/L_neb(fesc=0.2) = {ratio:.3f}, expected ≈ {expected_ratio:.3f}"
+        assert 0.6 <= ratio <= 0.95, (
+            f"P-9 BUG: fesc linearity broken. "
+            f"Ratio of L_neb(fesc=0.4)/L_neb(fesc=0.2) = {ratio:.3f}, "
+            f"expected ≈ {expected_ratio:.3f}"
+        )
     else:
         pytest.skip("Continuum luminosity too small to test linearity")
 
 
-def test_fesc_gradient_is_nonzero(cue_backend, cue_default_params):
-    """Gradient ∂L_neb/∂fesc is non-zero (fesc is wired to forward pass).
+def test_fesc_gradient_matches_expected_linear_wiring(cue_backend, cue_default_params):
+    """Verify fesc is wired to JAX's differentiable computation graph.
 
-    Pitfall P-9: If fesc is declared but never used, JAX gradient will be
-    identically zero everywhere. This test computes the gradient of the total
-    nebular continuum luminosity w.r.t. fesc and asserts it's non-zero.
+    Pitfall P-9: Even if forward-pass values scale with fesc correctly, if fesc
+    is *not* part of JAX's traced computation, gradient-based inference (VI,
+    HMC) will see flat posteriors for ``neb_fesc`` (zero gradient signal).
 
-    Test strategy: Define loss = ∫ L_neb_cont dλ. Compute ∂loss/∂neb_fesc via jax.grad.
-    Assert gradient magnitude is measurably non-zero.
+    The wiring in tengri's Cue backend is
+    ``cont_lum_out = cont_lum * (1 - neb_fesc)``
+    (cue.py:1519), which is a JAX-traced multiplication. Therefore
+    ``∂(Σ L_neb) / ∂(neb_fesc) = − Σ cont_lum``. We assert the actual
+    gradient equals this *expected* linear-wiring value to one part in 1e-4
+    — much stricter than an absolute-magnitude threshold, and robust to the
+    fact that Cue's continuum has a small numerical scale (~1e-8 for the
+    default params here).
+
+    If fesc were applied outside the traced region (the P-9 bug), the gradient
+    would be exactly 0, not ``−Σ cont_lum``, and this test would fail.
     """
 
-    def loss_fn(fesc):
-        """Loss function: integrated nebular continuum luminosity."""
-        wav, lum = cue_backend.predict_nebular_continuum(
-            **cue_default_params, neb_fesc=fesc
-        )
-        # Use Simpson's rule via JAX for gradient compatibility
+    def loss_fn(fesc_traced):
+        _, lum = cue_backend.predict_nebular_continuum(**cue_default_params, neb_fesc=fesc_traced)
         return jnp.sum(lum)
 
-    # Compute gradient at fesc=0.3
-    grad_at_03 = jax.grad(loss_fn)(0.3)
-    grad_magnitude = float(jnp.abs(grad_at_03))
+    # Reference: continuum sum at the linearisation point, evaluated directly.
+    _, lum_ref = cue_backend.predict_nebular_continuum(**cue_default_params, neb_fesc=0.0)
+    sum_ref = float(jnp.sum(lum_ref))
 
-    # Gradient should be measurably non-zero (negative, since higher fesc → lower output)
-    assert grad_magnitude > 1e-6, (
-        f"P-9 BUG: ∂L_neb/∂fesc is zero (gradient = {grad_magnitude:.3e}). "
-        "fesc parameter is unwired — never reaches forward computation."
+    grad_at_03 = jax.grad(loss_fn)(jnp.array(0.3))
+    actual = float(grad_at_03)
+    expected = -sum_ref  # linear wiring prediction
+
+    # Test that the gradient is non-trivially within machine precision of the
+    # linear-wiring expectation. P-9 unwiring would manifest as `actual == 0`
+    # while expected != 0, which fails this rel-error check decisively.
+    assert sum_ref > 0.0, (
+        f"Continuum sum at fesc=0 is non-positive ({sum_ref}); test setup invalid."
     )
-
-    # Sanity: gradient should be negative (more escape → less nebular emission)
-    assert float(grad_at_03) < 0.0, (
-        f"Physics error: gradient should be negative (more escape → less nebular), "
-        f"got {grad_at_03:.3e}"
+    rel_err = abs(actual - expected) / abs(expected)
+    assert rel_err < 1e-4, (
+        f"P-9 BUG: ∂L_neb/∂fesc = {actual:.3e}, expected ≈ {expected:.3e} "
+        f"(linear wiring of (1−fesc)). Relative error {rel_err:.3e} > 1e-4. "
+        "fesc may be applied as a Python scalar outside the JAX trace."
     )
