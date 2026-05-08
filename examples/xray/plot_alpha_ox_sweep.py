@@ -2,9 +2,9 @@
 X-ray Normalisation via UV-to-X-ray Slope
 ===========================================
 
-Demonstrates how the UV-to-X-ray slope (α_ox) shifts X-ray normalisation.
-Sweeps α_ox ∈ {-1.0, -1.2, -1.4, -1.6, -1.8} at fixed bolometric luminosity.
-Steeper α_ox (more negative) depresses the X-ray relative to the UV.
+Sweep the UV-to-X-ray slope α_ox ∈ {-1.0, -1.2, -1.4, -1.6, -1.8} at
+fixed bolometric luminosity. More negative α_ox depresses the X-ray
+relative to the UV — the canonical X-ray-quiet quasar regime.
 
 .. sphx-glr-precomputed-img:
 
