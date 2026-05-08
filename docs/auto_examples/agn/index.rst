@@ -8,10 +8,6 @@ AGN Models
 AGN disc and torus SED templates.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -38,7 +34,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does viewing geometry (inclination angle) shape the SKIRTOR torus SED? Sweeps agn_cos_inc from 0.95 (face-on) to 0.05 (edge-on), showing how the line of sight through the obscuring torus changes the infrared emission profile.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep agn_cos_inc from 0.95 (face-on) to 0.05 (edge-on) and watch the infrared emission profile change as the line of sight cuts through more of the SKIRTOR torus.">
 
 .. only:: html
 
@@ -72,7 +68,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does AGN bolometric luminosity shape the SED of the hot accretion disc continuum? Sweeps log L_bol/L_sun from 43 to 47, showing how the continuum power and temperature scale with the central black hole accretion rate.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep log L_bol / L_sun from 43 to 47 on the QSOgen disc continuum. The continuum normalisation tracks luminosity directly; the disc temperature shifts more subtly with the implied accretion rate.">
 
 .. only:: html
 
@@ -89,7 +85,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does the torus opening angle (θ_oa) affect the SED? Sweeps agn_oa_skirtor from 20 to 60 degrees, showing how a more open/flared torus changes the infrared emission and obscuration geometry. Fixed inclination, optical depth, and power.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep agn_oa_skirtor from 20° to 60° at fixed inclination, optical depth, and power. A more open torus exposes more of the disc and shifts the IR emission peak.">
 
 .. only:: html
 
@@ -106,7 +102,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does polar dust temperature affect the near-to-mid-IR SED? Simulates warm polar dust in a narrow cone decoupled from the equatorial torus, sweeping temperature from 1000 to 2000 K to show how warmer polar geometry enhances the mid-IR bump in edge-on systems.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep polar-dust temperature from 1000 to 2000 K. The polar component is a narrow warm cone decoupled from the equatorial torus; hotter polar dust enhances the mid-IR bump in edge-on systems.">
 
 .. only:: html
 
@@ -123,7 +119,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does AGN-intrinsic dust reddening (E(B-V)) redden the quasar SED? Sweeps agn_ebv from 0.0 to 0.4 on QSOgen at log_lbol=45, showing the transition from unobscured UV/optical slopes to significantly reddened spectra typical of obscured quasars.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep agn_ebv from 0.0 to 0.4 on a QSOgen disc at log L_bol = 45. The transition from unobscured UV/optical slopes to reddened spectra traces the obscured-quasar regime.">
 
 .. only:: html
 
@@ -140,7 +136,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does emission-line strength shape the AGN SED in the UV and optical? Sweeps agn_emline_scale from 0.0 to 2.0 on QSOgen at fixed log_lbol=45, showing how line forests and broad lines strengthen the continuum between 1000–5000 Å and the Balmer continuum near H-alpha.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep agn_emline_scale from 0.0 to 2.0 on QSOgen at log L_bol = 45. The scale knob controls the contribution of UV/optical line forests and the broad Balmer continuum on top of the underlying disc.">
 
 .. only:: html
 
@@ -157,7 +153,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does the radial dust density profile (power index p) reshape the torus IR SED? Sweeps agn_p_skirtor from 0.0 to 1.5 at fixed inclination=0.5, tau_97=7, showing the transition from flat to steep density profiles and their effect on the mid-to-far-IR peak and far-IR slope.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep the radial dust density power index p from 0.0 to 1.5 at fixed inclination = 0.5 and τ₉.₇ = 7. Steeper profiles concentrate the dust closer to the disc and push the mid-to-far-IR peak hotter.">
 
 .. only:: html
 
@@ -174,7 +170,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does the optical depth (τ_9.7 μm) of the clumpy torus reshape the SED? Sweeps agn_tau_skirtor from 3 to 11, keeping inclination, opening angle, and radial power fixed. Shows the transition from optically thin to thick regimes.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep agn_tau_skirtor from 3 to 11 at fixed inclination, opening angle, and radial power. The transition from optically thin to thick shifts the silicate feature from emission to absorption.">
 
 .. only:: html
 

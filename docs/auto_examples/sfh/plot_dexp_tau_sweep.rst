@@ -21,8 +21,8 @@
 Delayed-τ SFH: Star Formation Timescale
 ========================================
 
-How does the e-folding timescale τ reshape the star formation history and the
-resulting galaxy SED? Shorter τ = faster quenching after the peak.
+The delayed-exponential timescale `τ` sets how quickly the SFH falls
+after its peak. Shorter `τ` means faster quenching, older mean stellar age.
 
 .. sphx-glr-precomputed-img:
 

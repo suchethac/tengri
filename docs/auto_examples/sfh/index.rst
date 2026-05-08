@@ -8,10 +8,6 @@ Star Formation Histories
 Parametric and stochastic star formation history models.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -55,7 +51,7 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does the e-folding timescale τ reshape the star formation history and the resulting galaxy SED? Shorter τ = faster quenching after the peak.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The delayed-exponential timescale τ sets how quickly the SFH falls after its peak. Shorter τ means faster quenching, older mean stellar age.">
 
 .. only:: html
 

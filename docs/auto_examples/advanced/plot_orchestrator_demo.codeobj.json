@@ -13,7 +13,7 @@
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.core.component",
-   "module_short": "tengri.core.component",
+   "module_short": "tengri.core",
    "name": "PipelineState"
   }
  ],
@@ -94,7 +94,7 @@
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.components.stellar.sps.dsps_wrapper",
-   "module_short": "tengri.components.stellar.sps.dsps_wrapper",
+   "module_short": "tengri.components.stellar.sps",
    "name": "load_ssp_data"
   }
  ],

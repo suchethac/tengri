@@ -8,10 +8,6 @@ Dust Models
 Attenuation laws, two-component dust, and IR emission.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -157,7 +153,7 @@ Attenuation laws, two-component dust, and IR emission.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does birth cloud dust optical depth reshape the SED of a young star-forming galaxy? Higher τ_BC reddens the UV and suppresses nebular emission from very young stars embedded in dust cocoons.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Birth-cloud dust optical depth τ_BC controls how much of the youngest stellar light escapes the cocoon. Higher τ_BC reddens the UV and suppresses nebular emission from embedded HII regions.">
 
 .. only:: html
 
@@ -225,7 +221,7 @@ Attenuation laws, two-component dust, and IR emission.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The 2175 Å ultraviolet bump is a distinctive feature in dust attenuation curves, attributed to polycyclic aromatic hydrocarbons (PAHs) or graphite grains. This sweep shows how UV-bump amplitude modulates the attenuation curve across 1000–10000 Å, from a smooth power law (no bump) to a strong MW-like bump.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The 2175 Å UV bump in dust attenuation curves is usually attributed to PAHs or small graphite grains. Sweeping the bump amplitude from zero to MW-like takes the attenuation curve from a smooth power law to the characteristic MW shape.">
 
 .. only:: html
 

@@ -4,7 +4,7 @@
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.components.agn.qsogen",
-   "module_short": "tengri.components.agn.qsogen",
+   "module_short": "tengri.components.agn",
    "name": "compute_qsogen_sed"
   }
  ],

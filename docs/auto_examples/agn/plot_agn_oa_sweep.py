@@ -2,9 +2,9 @@
 SKIRTOR Torus: Opening Angle Sweep
 ===================================
 
-How does the torus opening angle (θ_oa) affect the SED? Sweeps agn_oa_skirtor
-from 20 to 60 degrees, showing how a more open/flared torus changes the infrared
-emission and obscuration geometry. Fixed inclination, optical depth, and power.
+Sweep `agn_oa_skirtor` from 20° to 60° at fixed inclination, optical
+depth, and power. A more open torus exposes more of the disc and shifts
+the IR emission peak.
 
 .. sphx-glr-precomputed-img:
 

@@ -8,10 +8,6 @@ Spectroscopy
 Spectroscopic fitting and spectral features.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 

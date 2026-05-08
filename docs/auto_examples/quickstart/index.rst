@@ -8,10 +8,6 @@ Quick Start
 Getting started with tengri — first fit and SED visualization.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 

@@ -21,10 +21,10 @@
 Stellar Population Aging: SSP at Solar Metallicity
 ===================================================
 
-How does a single stellar population age from UV-dominated blue phase through
-infrared-dominated red phase? This script selects five representative ages
-from the DSPS SSP grid at solar metallicity and plots rest-frame λF_λ on
-log-log axes to reveal the temperature inversion and dust signature.
+Five representative ages from the DSPS SSP grid at solar metallicity.
+A single stellar population transitions from UV-dominated (young, hot)
+to NIR-dominated (old, red); rest-frame `λF_λ` on log-log axes makes
+the temperature inversion visible.
 
 .. sphx-glr-precomputed-img:
 

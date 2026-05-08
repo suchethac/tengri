@@ -21,11 +21,10 @@
 Filter Sampling Across Redshift
 =================================
 
-How do SDSS ugriz filters sample a galaxy SED at different redshifts?
-This script shows rest-frame stellar continuum overlaid with redshifted
-SDSS filter transmission curves at z ∈ {0.1, 0.5, 1.0, 2.0}. Demonstrates
-k-corrections: which optical/near-IR features are probed by each band
-as the galaxy evolves toward the horizon.
+Rest-frame stellar continuum overlaid with redshifted SDSS ugriz
+transmission curves at z ∈ {0.1, 0.5, 1.0, 2.0}. The plot shows which
+features each band actually samples as a galaxy moves out — the
+textbook source of k-correction sign.
 
 .. sphx-glr-precomputed-img:
 
@@ -33,7 +32,7 @@ as the galaxy evolves toward the horizon.
    :alt: plot_redshift_filter_grid
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-171
+.. GENERATED FROM PYTHON SOURCE LINES 17-170
 
 .. code-block:: Python
 

@@ -4,7 +4,7 @@
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.utils.cosmology",
-   "module_short": "tengri.utils.cosmology",
+   "module_short": "tengri.utils",
    "name": "age_at_z0"
   }
  ],

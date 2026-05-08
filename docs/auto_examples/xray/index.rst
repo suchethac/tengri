@@ -11,10 +11,6 @@ Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB), and AGN coronae
 - ``plot_xray_agn.py`` — AGN X-ray spectrum and Compton reflection
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -24,7 +20,7 @@ Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB), and AGN coronae
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates how the exponential cutoff at high energies shapes the spectrum. Sweeps E_cut ∈ {100, 200, 300, 500, 1000} keV at fixed γ=1.8, α_ox=-1.4, L_bol=1e45 erg/s. The spectrum diverges from the power-law above E ≥ 0.3*E_cut, showing rapid roll-off.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep the exponential cutoff E_cut ∈ {100, 200, 300, 500, 1000} keV at fixed γ = 1.8, α_ox = −1.4, L_bol = 10⁴⁵ erg/s. The spectrum departs from the power-law above ~0.3 × E_cut and rolls over rapidly at higher energies.">
 
 .. only:: html
 
@@ -41,7 +37,7 @@ Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB), and AGN coronae
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates how the UV-to-X-ray slope (α_ox) shifts X-ray normalisation. Sweeps α_ox ∈ {-1.0, -1.2, -1.4, -1.6, -1.8} at fixed bolometric luminosity. Steeper α_ox (more negative) depresses the X-ray relative to the UV.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep the UV-to-X-ray slope α_ox ∈ {-1.0, -1.2, -1.4, -1.6, -1.8} at fixed bolometric luminosity. More negative α_ox depresses the X-ray relative to the UV — the canonical X-ray-quiet quasar regime.">
 
 .. only:: html
 
@@ -75,7 +71,7 @@ Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB), and AGN coronae
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates how the photon index (γ) shapes the X-ray continuum. Sweeps γ ∈ {1.4, 1.6, 1.8, 2.0, 2.2, 2.4} at fixed bolometric luminosity. Flat spectra (low γ) dominate at low energies; steep spectra (high γ) show rapid decline.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep the X-ray photon index γ ∈ {1.4, 1.6, 1.8, 2.0, 2.2, 2.4} at fixed bolometric luminosity. Flat spectra (low γ) push photons to higher energies; steep spectra (high γ) drop off quickly above a few keV.">
 
 .. only:: html
 

@@ -8,10 +8,6 @@ Nebular Emission
 Nebular emission backends comparison.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -123,7 +119,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does the ionization parameter sweep the emission line strengths and SED shape? Higher logU drives stronger [OIII] emission and shifts galaxies toward the Seyfert region on the BPT diagram.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Higher ionisation parameter log U drives stronger [OIII] emission and pulls the galaxy toward the Seyfert region on the BPT diagram.">
 
 .. only:: html
 
@@ -191,7 +187,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies ionization sources. Shows how the ionization parameter (logU) and metallicity drive emission galaxies along the SF→composite→Seyfert sequence.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies the ionising source. Varying log U and metallicity moves the predicted location along the star-forming → composite → Seyfert sequence.">
 
 .. only:: html
 

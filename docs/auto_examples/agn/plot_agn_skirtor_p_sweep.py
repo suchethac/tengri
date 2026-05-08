@@ -2,10 +2,9 @@
 SKIRTOR Torus: Radial Dust Power-Law Sweep
 ===========================================
 
-How does the radial dust density profile (power index p) reshape the torus
-IR SED? Sweeps agn_p_skirtor from 0.0 to 1.5 at fixed inclination=0.5,
-tau_97=7, showing the transition from flat to steep density profiles and
-their effect on the mid-to-far-IR peak and far-IR slope.
+Sweep the radial dust density power index `p` from 0.0 to 1.5 at fixed
+inclination = 0.5 and τ₉.₇ = 7. Steeper profiles concentrate the dust
+closer to the disc and push the mid-to-far-IR peak hotter.
 
 .. sphx-glr-precomputed-img:
 

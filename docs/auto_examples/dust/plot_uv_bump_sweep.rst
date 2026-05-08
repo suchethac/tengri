@@ -21,11 +21,10 @@
 UV Bump Strength (dust_bump_strength)
 =====================================
 
-The 2175 Å ultraviolet bump is a distinctive feature in dust attenuation
-curves, attributed to polycyclic aromatic hydrocarbons (PAHs) or graphite
-grains. This sweep shows how UV-bump amplitude modulates the attenuation
-curve across 1000–10000 Å, from a smooth power law (no bump) to a strong
-MW-like bump.
+The 2175 Å UV bump in dust attenuation curves is usually attributed to
+PAHs or small graphite grains. Sweeping the bump amplitude from zero to
+MW-like takes the attenuation curve from a smooth power law to the
+characteristic MW shape.
 
 .. sphx-glr-precomputed-img:
 
@@ -33,7 +32,7 @@ MW-like bump.
    :alt: plot_uv_bump_sweep
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-63
+.. GENERATED FROM PYTHON SOURCE LINES 17-62
 
 .. code-block:: Python
 

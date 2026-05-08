@@ -21,10 +21,10 @@
 Stellar Metallicity Effects on SED
 ===================================
 
-How does stellar metallicity change the rest-frame SED shape across UV, optical,
-and near-IR? This script selects five metallicity points spanning the SSP grid at
-a fixed age (1 Gyr) and visualizes how metallicity reddens the optical and shifts
-iron-peak features in the near-IR via peak-normalized λF_λ.
+Five metallicity points spanning the SSP grid at fixed age (1 Gyr).
+Metallicity reddens the optical and shifts iron-peak features in the
+near-IR; we plot peak-normalised `λF_λ` to compare shape, not
+normalisation.
 
 .. sphx-glr-precomputed-img:
 

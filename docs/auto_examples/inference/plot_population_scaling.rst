@@ -33,11 +33,11 @@ chunks. Each cell is run in a fresh Python subprocess so the peak-RSS
 reading is clean.
 
 This script is **render-only**: it loads results from
-``data/vi_scaling_benchmark.json`` produced by
+``bench/results/vi_scaling_benchmark.json`` produced by
 
 .. code-block:: bash
 
-    JAX_PLATFORMS=cpu python scripts/benchmark_vi_xlarge.py
+    JAX_PLATFORMS=cpu python bench/scripts/benchmark_vi_xlarge.py
 
 If the JSON is absent, the script prints instructions and exits.
 
@@ -103,8 +103,8 @@ row exceeds the budget — those (N, K) cells are absent from the plot.
             0.5,
             "Population VI scaling benchmark not yet generated.\n\n"
             "Produce the cached results once with:\n\n"
-            "    JAX_PLATFORMS=cpu python scripts/benchmark_vi_xlarge.py\n\n"
-            "It writes data/vi_scaling_benchmark.json, which this gallery\n"
+            "    JAX_PLATFORMS=cpu python bench/scripts/benchmark_vi_xlarge.py\n\n"
+            "It writes bench/results/vi_scaling_benchmark.json, which this gallery\n"
             "script then renders without re-running the benchmark.",
             ha="center",
             va="center",

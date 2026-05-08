@@ -136,6 +136,8 @@ from tengri.components.agn.silva04 import silva04_analytic
 from tengri.components.agn.skirtor import _find_skirtor_grid, create_skirtor_from_grid
 from tengri.components.agn.torus import simple_torus, two_temperature_torus
 from tengri.components.dust.attenuation import prevot_smc
+from tengri.components.radio.radio import radio_total
+from tengri.components.xray.xray import xray_agn_corona
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 
@@ -1275,6 +1277,15 @@ def unified_nlr_blr(
     agn_polar_ebv: float = 0.0,
     nlr_fn: "Callable | None" = None,
     blr_fn: "Callable | None" = None,
+    include_xray: bool = False,
+    xray_gamma_agn: float = 1.8,
+    xray_alpha_ox: float = -1.4,
+    xray_E_cut: float = 300.0,
+    include_radio: bool = False,
+    radio_q_ir: float = 2.64,
+    radio_alpha_sf: float = 0.8,
+    radio_loudness: float = 0.0,
+    radio_alpha_agn: float = 0.7,
     **_kwargs,
 ) -> jnp.ndarray:
     """Unified AGN SED with NLR/BLR decomposition and geometric masking.
@@ -1347,13 +1358,16 @@ def unified_nlr_blr(
             + f_{\\rm NLR}\\, \\eta_{\\rm NLR}(\\lambda)\\, L_{\\rm bol,disc}
             + \\sigma(i, \\theta_t)\\, A_{\\rm pol,eff}(\\lambda)\\,
               f_{\\rm BLR}\\, \\eta_{\\rm BLR}(\\lambda)\\, L_{\\rm bol,disc}
+            + \\mathbb{1}_{\\rm X-ray} \\, L_{\\rm X-ray}(\\lambda)
+            + \\mathbb{1}_{\\rm radio} \\, L_{\\rm radio}(\\lambda)
 
     where :math:`\\sigma(i, \\theta_t)` is the smooth sigmoid mask
     (1 = visible, 0 = obscured), :math:`A_{\\rm pol,eff}(\\lambda) = 1 + \\sigma(i, \\theta_t) \\,
     (A_{\\rm pol}(\\lambda) - 1)` is the visibility-weighted SMC polar dust transmission
     (SMC law; only reddens when disc is visible to the observer), :math:`f_{\\rm NLR/BLR}`
-    are the covering fractions, and :math:`\\eta_{\\rm NLR/BLR}` are the normalised
-    line templates.
+    are the covering fractions, :math:`\\eta_{\\rm NLR/BLR}` are the normalised
+    line templates, and :math:`\\mathbb{1}_{\\rm X-ray/radio}` are indicator functions
+    controlling whether X-ray and radio components are included.
 
     Parameters
     ----------
@@ -1427,6 +1441,25 @@ def unified_nlr_blr(
         BLR emission backend. Same signature as ``nlr_fn``. Default ``None``
         uses the built-in analytic template from
         :func:`~tengri.components.agn.blr.blr_emission`.
+    include_xray : bool
+        If True, include X-ray corona emission. Default False (UV-optical-IR only).
+    xray_gamma_agn : float
+        X-ray photon index (power-law slope). Default 1.8. Valid range: 1.4–2.4.
+    xray_alpha_ox : float
+        UV-to-X-ray slope. Default -1.4. Valid range: -2.0 to -1.0. Controls
+        the relative normalization of X-ray vs. optical SED.
+    xray_E_cut : float
+        X-ray exponential cutoff energy [keV]. Default 300.0.
+    include_radio : bool
+        If True, include radio synchrotron + AGN radio jet emission. Default False.
+    radio_q_ir : float
+        FIR–radio correlation parameter (Bell+2003 mode). Default 2.64.
+    radio_alpha_sf : float
+        Star-forming synchrotron spectral index. Default 0.8.
+    radio_loudness : float
+        AGN radio-loudness log10(L_5GHz/L_B). Default 0.0 (no radio AGN).
+    radio_alpha_agn : float
+        AGN radio spectral index. Default 0.7.
 
     Returns
     -------
@@ -1439,6 +1472,20 @@ def unified_nlr_blr(
     (the default analytic templates are; Cue-backed closures are also JIT-safe
     since the weights are closed over as static pytree leaves).
 
+    **X-ray and radio components** (when included):
+
+    - X-ray: Power-law corona emission normalised via the alpha_OX relation
+      (Tananbaum+1979). Wavelength range: λ < 124 Å (E > ~100 eV). Computed
+      via :func:`~tengri.components.xray.xray_agn_corona` [4]_.
+    - Radio: Synchrotron + optional free-free + AGN jet emission. Wavelength
+      range: λ > 1 mm (ν < 300 GHz). Computed via
+      :func:`~tengri.components.radio.radio_total` [5]_.
+
+    When both ``include_xray=False`` and ``include_radio=False``, the function
+    returns the UV-optical-FIR unified AGN SED (original behaviour). The new
+    components are additive and do not affect existing parameters or output
+    ranges.
+
     References
     ----------
     .. [1] Lovell C. C. et al. 2025, Open Journal of Astrophysics,
@@ -1450,6 +1497,12 @@ def unified_nlr_blr(
     .. [3] G. Yang et al. 2020, MNRAS, 491, 740, "X-CIGALE: Fitting AGN/galaxy
            SEDs from X-ray to infrared" (skirtor2016 module),
            https://doi.org/10.1093/mnras/stz3001
+    .. [4] C. Ricci et al. 2017, ApJS, 233, 17, "Swift/BAT and XMM-Newton
+           observations of the hard X-ray selected active galactic nuclei
+           sample" (X-ray AGN sample), https://doi.org/10.3847/1538-4365/aa96ad
+    .. [5] Murphy E.~J. et al. 2011, ApJ, 737, 67, "The Radio Flux and
+           Infrared Properties of the GOODS-North Radio Sources",
+           https://doi.org/10.1088/0004-637X/737/2/67
 
     Examples
     --------
@@ -1547,8 +1600,34 @@ def unified_nlr_blr(
     )
     l_blr = mask_blr * l_blr_raw * polar_trans
 
+    # --- X-ray corona (optional) ---
+    l_xray_contrib = jnp.zeros_like(wavelength)
+    if include_xray:
+        l_xray_contrib = xray_agn_corona(
+            wavelength,
+            L_agn_bol=l_bol_erg,
+            gamma=xray_gamma_agn,
+            E_cut=xray_E_cut,
+            alpha_ox=xray_alpha_ox,
+        )
+
+    # --- Radio emission (optional) ---
+    l_radio_contrib = jnp.zeros_like(wavelength)
+    if include_radio:
+        l_radio_contrib = radio_total(
+            wavelength,
+            L_ir=0.0,  # No IR contribution to radio for AGN-only model
+            L_agn_bol=l_bol_erg,
+            q_ir=radio_q_ir,
+            alpha_sf=radio_alpha_sf,
+            radio_loudness=radio_loudness,
+            alpha_agn=radio_alpha_agn,
+            sfr_mode="bell2003",
+            **_kwargs,
+        )
+
     # --- Total ---
-    l_total = l_disc_masked + l_torus + l_nlr + l_blr
+    l_total = l_disc_masked + l_torus + l_nlr + l_blr + l_xray_contrib + l_radio_contrib
     return l_total * agn_frac
 
 

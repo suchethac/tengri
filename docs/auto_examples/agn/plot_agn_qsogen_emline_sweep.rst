@@ -21,10 +21,9 @@
 QSOgen Emission Line Scaling: Rest-UV to Optical SED
 =====================================================
 
-How does emission-line strength shape the AGN SED in the UV and optical?
-Sweeps agn_emline_scale from 0.0 to 2.0 on QSOgen at fixed log_lbol=45,
-showing how line forests and broad lines strengthen the continuum between
-1000–5000 Å and the Balmer continuum near H-alpha.
+Sweep `agn_emline_scale` from 0.0 to 2.0 on QSOgen at log L_bol = 45.
+The scale knob controls the contribution of UV/optical line forests and
+the broad Balmer continuum on top of the underlying disc.
 
 .. sphx-glr-precomputed-img:
 
@@ -32,7 +31,7 @@ showing how line forests and broad lines strengthen the continuum between
    :alt: plot_agn_qsogen_emline_sweep
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-62
+.. GENERATED FROM PYTHON SOURCE LINES 16-61
 
 .. code-block:: Python
 

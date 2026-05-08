@@ -2,9 +2,9 @@
 QSOgen Disc Continuum: Bolometric Luminosity
 ==============================================
 
-How does AGN bolometric luminosity shape the SED of the hot accretion disc
-continuum? Sweeps log L_bol/L_sun from 43 to 47, showing how the continuum
-power and temperature scale with the central black hole accretion rate.
+Sweep `log L_bol / L_sun` from 43 to 47 on the QSOgen disc continuum.
+The continuum normalisation tracks luminosity directly; the disc
+temperature shifts more subtly with the implied accretion rate.
 
 .. sphx-glr-precomputed-img:
 

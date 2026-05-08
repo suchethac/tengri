@@ -2,9 +2,9 @@
 X-ray Spectral Index Variation
 ===============================
 
-Demonstrates how the photon index (γ) shapes the X-ray continuum.
-Sweeps γ ∈ {1.4, 1.6, 1.8, 2.0, 2.2, 2.4} at fixed bolometric luminosity.
-Flat spectra (low γ) dominate at low energies; steep spectra (high γ) show rapid decline.
+Sweep the X-ray photon index γ ∈ {1.4, 1.6, 1.8, 2.0, 2.2, 2.4} at
+fixed bolometric luminosity. Flat spectra (low γ) push photons to higher
+energies; steep spectra (high γ) drop off quickly above a few keV.
 
 .. sphx-glr-precomputed-img:
 

@@ -21,9 +21,9 @@
 Birth Cloud Optical Depth (τ_BC)
 =================================
 
-How does birth cloud dust optical depth reshape the SED of a young
-star-forming galaxy? Higher τ_BC reddens the UV and suppresses nebular
-emission from very young stars embedded in dust cocoons.
+Birth-cloud dust optical depth `τ_BC` controls how much of the youngest
+stellar light escapes the cocoon. Higher `τ_BC` reddens the UV and
+suppresses nebular emission from embedded HII regions.
 
 .. sphx-glr-precomputed-img:
 

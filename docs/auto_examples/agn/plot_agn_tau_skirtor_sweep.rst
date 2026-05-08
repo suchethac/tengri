@@ -21,9 +21,9 @@
 SKIRTOR Torus: Optical Depth Sweep
 ===================================
 
-How does the optical depth (τ_9.7 μm) of the clumpy torus reshape the SED?
-Sweeps agn_tau_skirtor from 3 to 11, keeping inclination, opening angle,
-and radial power fixed. Shows the transition from optically thin to thick regimes.
+Sweep `agn_tau_skirtor` from 3 to 11 at fixed inclination, opening
+angle, and radial power. The transition from optically thin to thick
+shifts the silicate feature from emission to absorption.
 
 .. sphx-glr-precomputed-img:
 

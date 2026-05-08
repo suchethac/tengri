@@ -56,10 +56,6 @@ grid — fetch one with::
     tengri.download_ssp()  # default fsps_prsc_miles_chabrier; see list_known_ssps()
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -79,10 +75,6 @@ Advanced Topics
 Hierarchical inference, gradient sensitivity, batch fitting, panchromatic SED
 with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -205,10 +197,6 @@ AGN Models
 AGN disc and torus SED templates.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -235,7 +223,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does viewing geometry (inclination angle) shape the SKIRTOR torus SED? Sweeps agn_cos_inc from 0.95 (face-on) to 0.05 (edge-on), showing how the line of sight through the obscuring torus changes the infrared emission profile.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep agn_cos_inc from 0.95 (face-on) to 0.05 (edge-on) and watch the infrared emission profile change as the line of sight cuts through more of the SKIRTOR torus.">
 
 .. only:: html
 
@@ -269,7 +257,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does AGN bolometric luminosity shape the SED of the hot accretion disc continuum? Sweeps log L_bol/L_sun from 43 to 47, showing how the continuum power and temperature scale with the central black hole accretion rate.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep log L_bol / L_sun from 43 to 47 on the QSOgen disc continuum. The continuum normalisation tracks luminosity directly; the disc temperature shifts more subtly with the implied accretion rate.">
 
 .. only:: html
 
@@ -286,7 +274,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does the torus opening angle (θ_oa) affect the SED? Sweeps agn_oa_skirtor from 20 to 60 degrees, showing how a more open/flared torus changes the infrared emission and obscuration geometry. Fixed inclination, optical depth, and power.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep agn_oa_skirtor from 20° to 60° at fixed inclination, optical depth, and power. A more open torus exposes more of the disc and shifts the IR emission peak.">
 
 .. only:: html
 
@@ -303,7 +291,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does polar dust temperature affect the near-to-mid-IR SED? Simulates warm polar dust in a narrow cone decoupled from the equatorial torus, sweeping temperature from 1000 to 2000 K to show how warmer polar geometry enhances the mid-IR bump in edge-on systems.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep polar-dust temperature from 1000 to 2000 K. The polar component is a narrow warm cone decoupled from the equatorial torus; hotter polar dust enhances the mid-IR bump in edge-on systems.">
 
 .. only:: html
 
@@ -320,7 +308,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does AGN-intrinsic dust reddening (E(B-V)) redden the quasar SED? Sweeps agn_ebv from 0.0 to 0.4 on QSOgen at log_lbol=45, showing the transition from unobscured UV/optical slopes to significantly reddened spectra typical of obscured quasars.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep agn_ebv from 0.0 to 0.4 on a QSOgen disc at log L_bol = 45. The transition from unobscured UV/optical slopes to reddened spectra traces the obscured-quasar regime.">
 
 .. only:: html
 
@@ -337,7 +325,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does emission-line strength shape the AGN SED in the UV and optical? Sweeps agn_emline_scale from 0.0 to 2.0 on QSOgen at fixed log_lbol=45, showing how line forests and broad lines strengthen the continuum between 1000–5000 Å and the Balmer continuum near H-alpha.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep agn_emline_scale from 0.0 to 2.0 on QSOgen at log L_bol = 45. The scale knob controls the contribution of UV/optical line forests and the broad Balmer continuum on top of the underlying disc.">
 
 .. only:: html
 
@@ -354,7 +342,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does the radial dust density profile (power index p) reshape the torus IR SED? Sweeps agn_p_skirtor from 0.0 to 1.5 at fixed inclination=0.5, tau_97=7, showing the transition from flat to steep density profiles and their effect on the mid-to-far-IR peak and far-IR slope.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep the radial dust density power index p from 0.0 to 1.5 at fixed inclination = 0.5 and τ₉.₇ = 7. Steeper profiles concentrate the dust closer to the disc and push the mid-to-far-IR peak hotter.">
 
 .. only:: html
 
@@ -371,7 +359,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does the optical depth (τ_9.7 μm) of the clumpy torus reshape the SED? Sweeps agn_tau_skirtor from 3 to 11, keeping inclination, opening angle, and radial power fixed. Shows the transition from optically thin to thick regimes.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep agn_tau_skirtor from 3 to 11 at fixed inclination, opening angle, and radial power. The transition from optically thin to thick shifts the silicate feature from emission to absorption.">
 
 .. only:: html
 
@@ -534,10 +522,6 @@ Dust Models
 Attenuation laws, two-component dust, and IR emission.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -683,7 +667,7 @@ Attenuation laws, two-component dust, and IR emission.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does birth cloud dust optical depth reshape the SED of a young star-forming galaxy? Higher τ_BC reddens the UV and suppresses nebular emission from very young stars embedded in dust cocoons.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Birth-cloud dust optical depth τ_BC controls how much of the youngest stellar light escapes the cocoon. Higher τ_BC reddens the UV and suppresses nebular emission from embedded HII regions.">
 
 .. only:: html
 
@@ -751,7 +735,7 @@ Attenuation laws, two-component dust, and IR emission.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The 2175 Å ultraviolet bump is a distinctive feature in dust attenuation curves, attributed to polycyclic aromatic hydrocarbons (PAHs) or graphite grains. This sweep shows how UV-bump amplitude modulates the attenuation curve across 1000–10000 Å, from a smooth power law (no bump) to a strong MW-like bump.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The 2175 Å UV bump in dust attenuation curves is usually attributed to PAHs or small graphite grains. Sweeping the bump amplitude from zero to MW-like takes the attenuation curve from a smooth power law to the characteristic MW shape.">
 
 .. only:: html
 
@@ -777,10 +761,6 @@ IGM
 
 Intergalactic medium absorption and Lyman-forest effects on observed SEDs.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -868,10 +848,6 @@ Inference Methods
 
 Comparing inference methods and convergence diagnostics.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -994,10 +970,6 @@ Metallicity
 Stellar metallicity Z and α-element enhancement effects on the SED.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -1104,10 +1076,6 @@ Panchromatic SED examples spanning X-ray to radio.
 These short scripts complement the main tutorial notebooks — each produces a
 single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -1230,10 +1198,6 @@ Nebular Emission
 Nebular emission backends comparison.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -1345,7 +1309,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does the ionization parameter sweep the emission line strengths and SED shape? Higher logU drives stronger [OIII] emission and shifts galaxies toward the Seyfert region on the BPT diagram.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Higher ionisation parameter log U drives stronger [OIII] emission and pulls the galaxy toward the Seyfert region on the BPT diagram.">
 
 .. only:: html
 
@@ -1413,7 +1377,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies ionization sources. Shows how the ionization parameter (logU) and metallicity drive emission galaxies along the SF→composite→Seyfert sequence.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies the ionising source. Varying log U and metallicity moves the predicted location along the star-forming → composite → Seyfert sequence.">
 
 .. only:: html
 
@@ -1491,10 +1455,6 @@ Photometry
 Filter curves and photometric fitting.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -1555,7 +1515,7 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How do SDSS ugriz filters sample a galaxy SED at different redshifts? This script shows rest-frame stellar continuum overlaid with redshifted SDSS filter transmission curves at z ∈ {0.1, 0.5, 1.0, 2.0}. Demonstrates k-corrections: which optical/near-IR features are probed by each band as the galaxy evolves toward the horizon.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Rest-frame stellar continuum overlaid with redshifted SDSS ugriz transmission curves at z ∈ {0.1, 0.5, 1.0, 2.0}. The plot shows which features each band actually samples as a galaxy moves out — the textbook source of k-correction sign.">
 
 .. only:: html
 
@@ -1598,10 +1558,6 @@ Quick Start
 
 Getting started with tengri — first fit and SED visualization.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -1655,10 +1611,6 @@ Radio
 
 Star-formation radio emission and the FIR–radio correlation.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -1747,10 +1699,6 @@ Star Formation Histories
 Parametric and stochastic star formation history models.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -1794,7 +1742,7 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does the e-folding timescale τ reshape the star formation history and the resulting galaxy SED? Shorter τ = faster quenching after the peak.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The delayed-exponential timescale τ sets how quickly the SFH falls after its peak. Shorter τ means faster quenching, older mean stellar age.">
 
 .. only:: html
 
@@ -2042,10 +1990,6 @@ Spectroscopy
 Spectroscopic fitting and spectral features.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -2135,10 +2079,6 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 - ``plot_ssp_grid.py`` — SSP grid visualization (age, metallicity, spectrum)
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -2148,7 +2088,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does a single stellar population age from UV-dominated blue phase through infrared-dominated red phase? This script selects five representative ages from the DSPS SSP grid at solar metallicity and plots rest-frame λF_λ on log-log axes to reveal the temperature inversion and dust signature.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Five representative ages from the DSPS SSP grid at solar metallicity. A single stellar population transitions from UV-dominated (young, hot) to NIR-dominated (old, red); rest-frame λF_λ on log-log axes makes the temperature inversion visible.">
 
 .. only:: html
 
@@ -2199,7 +2139,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does stellar metallicity change the rest-frame SED shape across UV, optical, and near-IR? This script selects five metallicity points spanning the SSP grid at a fixed age (1 Gyr) and visualizes how metallicity reddens the optical and shifts iron-peak features in the near-IR via peak-normalized λF_λ.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Five metallicity points spanning the SSP grid at fixed age (1 Gyr). Metallicity reddens the optical and shifts iron-peak features in the near-IR; we plot peak-normalised λF_λ to compare shape, not normalisation.">
 
 .. only:: html
 
@@ -2229,10 +2169,6 @@ Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB), and AGN coronae
 - ``plot_xray_agn.py`` — AGN X-ray spectrum and Compton reflection
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -2242,7 +2178,7 @@ Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB), and AGN coronae
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates how the exponential cutoff at high energies shapes the spectrum. Sweeps E_cut ∈ {100, 200, 300, 500, 1000} keV at fixed γ=1.8, α_ox=-1.4, L_bol=1e45 erg/s. The spectrum diverges from the power-law above E ≥ 0.3*E_cut, showing rapid roll-off.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep the exponential cutoff E_cut ∈ {100, 200, 300, 500, 1000} keV at fixed γ = 1.8, α_ox = −1.4, L_bol = 10⁴⁵ erg/s. The spectrum departs from the power-law above ~0.3 × E_cut and rolls over rapidly at higher energies.">
 
 .. only:: html
 
@@ -2259,7 +2195,7 @@ Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB), and AGN coronae
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates how the UV-to-X-ray slope (α_ox) shifts X-ray normalisation. Sweeps α_ox ∈ {-1.0, -1.2, -1.4, -1.6, -1.8} at fixed bolometric luminosity. Steeper α_ox (more negative) depresses the X-ray relative to the UV.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep the UV-to-X-ray slope α_ox ∈ {-1.0, -1.2, -1.4, -1.6, -1.8} at fixed bolometric luminosity. More negative α_ox depresses the X-ray relative to the UV — the canonical X-ray-quiet quasar regime.">
 
 .. only:: html
 
@@ -2293,7 +2229,7 @@ Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB), and AGN coronae
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates how the photon index (γ) shapes the X-ray continuum. Sweeps γ ∈ {1.4, 1.6, 1.8, 2.0, 2.2, 2.4} at fixed bolometric luminosity. Flat spectra (low γ) dominate at low energies; steep spectra (high γ) show rapid decline.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep the X-ray photon index γ ∈ {1.4, 1.6, 1.8, 2.0, 2.2, 2.4} at fixed bolometric luminosity. Flat spectra (low γ) push photons to higher energies; steep spectra (high γ) drop off quickly above a few keV.">
 
 .. only:: html
 

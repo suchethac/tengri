@@ -21,9 +21,9 @@
 SKIRTOR Torus: Viewing Angle Sweep
 ===================================
 
-How does viewing geometry (inclination angle) shape the SKIRTOR torus SED?
-Sweeps agn_cos_inc from 0.95 (face-on) to 0.05 (edge-on), showing how the
-line of sight through the obscuring torus changes the infrared emission profile.
+Sweep `agn_cos_inc` from 0.95 (face-on) to 0.05 (edge-on) and watch the
+infrared emission profile change as the line of sight cuts through more of
+the SKIRTOR torus.
 
 .. sphx-glr-precomputed-img:
 
