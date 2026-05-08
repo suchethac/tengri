@@ -146,8 +146,8 @@ tracks which scripts are due for a re-run.
   ~1.5 GB. NUTS warmup with `dense_mass=True` peaks 3–6× steady state
   on small models and can hit 20+ GB on D ≥ 8 with `dense_basis` SFHs;
   multi-fit notebooks need `dense_mass=False`. See
-  [`docs/dev/notebook_orchestration_oom.md`](https://github.com/suchethac/tengri/blob/main/docs/dev/notebook_orchestration_oom.md)
-  for the full operational rules.
+  [Memory expectations](memory.md) for the full table and the two
+  recurring OOM patterns.
 
 ## When numbers look wrong
 

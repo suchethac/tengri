@@ -164,6 +164,7 @@ use-cases and workflows.
    :maxdepth: 1
 
    performance/index
+   performance/memory
 
 .. toctree::
    :caption: Gallery
