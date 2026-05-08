@@ -1,5 +1,9 @@
 """Star formation history models: PSD kernels, GP generation, mean SFH, registry."""
 
+from tengri.components.stellar.sfh._prior_sampling import (
+    DEFAULT_AGE_GRID_YR,
+    sample_sfh_prior,
+)
 from tengri.components.stellar.sfh.chemical_evolution import (
     chem_evol_metallicity_on_ssp_grid,
     closed_box_metallicity,
@@ -95,6 +99,7 @@ from tengri.components.stellar.sfh.registry import (
 # See docs/dev/api_migration_v0.x.md.
 __all__ = [
     "AGEMAX_YR",
+    "DEFAULT_AGE_GRID_YR",
     "FIELD_MODEL_REGISTRY",
     "MET_REGISTRY",
     "SFH_REGISTRY",
@@ -151,6 +156,7 @@ __all__ = [
     "psd_matern",
     "resolve_met",
     "resolve_sfh",
+    "sample_sfh_prior",
     "skewnormal",
     "skewnormal_sfh",
     "snorm",
