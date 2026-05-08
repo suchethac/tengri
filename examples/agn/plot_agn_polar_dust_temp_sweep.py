@@ -2,10 +2,9 @@
 Polar Dust: Temperature Sweep in AGN Torus
 ===========================================
 
-How does polar dust temperature affect the near-to-mid-IR SED?
-Simulates warm polar dust in a narrow cone decoupled from the
-equatorial torus, sweeping temperature from 1000 to 2000 K to show
-how warmer polar geometry enhances the mid-IR bump in edge-on systems.
+Sweep polar-dust temperature from 1000 to 2000 K. The polar component
+is a narrow warm cone decoupled from the equatorial torus; hotter polar
+dust enhances the mid-IR bump in edge-on systems.
 
 .. sphx-glr-precomputed-img:
 

@@ -1078,7 +1078,7 @@ class TestUnifiedNlrBlr:
             agn_log_lbol=44.0,
             agn_cos_inc=0.0,
             agn_theta_torus=30.0,
-            agn_covering_nlr=0.3,
+            agn_nlr_cf=0.3,
         )
         assert float(jnp.sum(l_type2)) > 0.0
 

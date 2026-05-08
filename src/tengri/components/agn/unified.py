@@ -1259,8 +1259,8 @@ def unified_nlr_blr(
     agn_log_lbol: float = 44.0,
     agn_cos_inc: float = 0.5,
     agn_theta_torus: float = 30.0,
-    agn_covering_nlr: float = 0.1,
-    agn_covering_blr: float = 0.1,
+    agn_nlr_cf: float = 0.1,
+    agn_blr_cf: float = 0.1,
     agn_log_mbh: float = 7.0,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
@@ -1296,8 +1296,8 @@ def unified_nlr_blr(
     ==================  =====================================  ============================
     agn_cos_inc         ``cos(inclination)``                   Synth uses inclination [deg]
     agn_theta_torus     ``theta_torus`` [deg]                  Same meaning
-    agn_covering_nlr    ``covering_fraction_nlr``              Identical semantics
-    agn_covering_blr    ``covering_fraction_blr``              Identical semantics
+    agn_nlr_cf          ``covering_fraction_nlr``              Identical semantics
+    agn_blr_cf          ``covering_fraction_blr``              Identical semantics
     agn_torus_frac      ``torus_fraction = theta_torus/90°``   **Different**: independent param
     agn_blr_fwhm        ``velocity_dispersion_blr`` [km/s]     tengri uses FWHM directly
     agn_nlr_fwhm        ``velocity_dispersion_nlr`` [km/s]     Same
@@ -1374,11 +1374,11 @@ def unified_nlr_blr(
         Torus half-opening angle [degrees]. Controls the critical inclination
         above which the disc and BLR are obscured. Same meaning as
         ``theta_torus`` in Synthesizer. Default 30.0.
-    agn_covering_nlr : float
+    agn_nlr_cf : float
         NLR covering fraction (0 to 1). Fraction of disc luminosity
         reprocessed into NLR emission. Synthesizer: ``covering_fraction_nlr``.
         Default 0.1.
-    agn_covering_blr : float
+    agn_blr_cf : float
         BLR covering fraction (0 to 1). Fraction of disc luminosity
         reprocessed into BLR emission. Synthesizer: ``covering_fraction_blr``.
         Default 0.1.
@@ -1520,7 +1520,7 @@ def unified_nlr_blr(
     l_nlr = _nlr_fn(
         wavelength,
         l_disc_bol_erg=l_disc_bol_erg,
-        covering_fraction=agn_covering_nlr,
+        covering_fraction=agn_nlr_cf,
         fwhm_kms=agn_nlr_fwhm,
         **_kwargs,
     )
@@ -1531,7 +1531,7 @@ def unified_nlr_blr(
     l_blr_raw = _blr_fn(
         wavelength,
         l_disc_bol_erg=l_disc_bol_erg,
-        covering_fraction=agn_covering_blr,
+        covering_fraction=agn_blr_cf,
         fwhm_kms=agn_blr_fwhm,
         **_kwargs,
     )

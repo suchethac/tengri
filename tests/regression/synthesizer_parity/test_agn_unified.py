@@ -82,8 +82,8 @@ def test_unified_agn_is_finite_and_nonnegative(wave_uv_to_fir, physical_log_lbol
     sed = unified_nlr_blr(
         wave_uv_to_fir,
         agn_log_lbol=physical_log_lbol,
-        agn_covering_nlr=0.1,
-        agn_covering_blr=0.1,
+        agn_nlr_cf=0.1,
+        agn_blr_cf=0.1,
     )
     assert sed.shape == wave_uv_to_fir.shape
     assert bool(jnp.all(jnp.isfinite(sed))), "non-finite values in unified-AGN SED"
@@ -105,14 +105,14 @@ def test_zero_covering_fractions_remove_line_emission(wave_uv_to_fir, physical_l
     sed_no_lines = unified_nlr_blr(
         wave_uv_to_fir,
         agn_log_lbol=physical_log_lbol,
-        agn_covering_nlr=0.0,
-        agn_covering_blr=0.0,
+        agn_nlr_cf=0.0,
+        agn_blr_cf=0.0,
     )
     sed_with_lines = unified_nlr_blr(
         wave_uv_to_fir,
         agn_log_lbol=physical_log_lbol,
-        agn_covering_nlr=0.2,
-        agn_covering_blr=0.2,
+        agn_nlr_cf=0.2,
+        agn_blr_cf=0.2,
     )
     # Difference must be non-negative everywhere (lines are additive emission).
     diff = sed_with_lines - sed_no_lines
@@ -134,20 +134,20 @@ def test_line_emission_scales_with_covering_fraction(wave_uv_to_fir, physical_lo
     sed_baseline = unified_nlr_blr(
         wave_uv_to_fir,
         agn_log_lbol=physical_log_lbol,
-        agn_covering_nlr=0.0,
-        agn_covering_blr=0.0,
+        agn_nlr_cf=0.0,
+        agn_blr_cf=0.0,
     )
     sed_one_x = unified_nlr_blr(
         wave_uv_to_fir,
         agn_log_lbol=physical_log_lbol,
-        agn_covering_nlr=0.1,
-        agn_covering_blr=0.0,
+        agn_nlr_cf=0.1,
+        agn_blr_cf=0.0,
     )
     sed_two_x = unified_nlr_blr(
         wave_uv_to_fir,
         agn_log_lbol=physical_log_lbol,
-        agn_covering_nlr=0.2,
-        agn_covering_blr=0.0,
+        agn_nlr_cf=0.2,
+        agn_blr_cf=0.0,
     )
 
     # Total NLR contribution = ∫ (sed_x - sed_baseline) dν (in erg/s units after dν).
@@ -181,14 +181,14 @@ def test_log_lbol_scaling_is_logarithmic(wave_uv_to_fir):
     sed_a = unified_nlr_blr(
         wave_uv_to_fir,
         agn_log_lbol=log_lbol_a,
-        agn_covering_nlr=0.0,
-        agn_covering_blr=0.0,
+        agn_nlr_cf=0.0,
+        agn_blr_cf=0.0,
     )
     sed_b = unified_nlr_blr(
         wave_uv_to_fir,
         agn_log_lbol=log_lbol_b,
-        agn_covering_nlr=0.0,
-        agn_covering_blr=0.0,
+        agn_nlr_cf=0.0,
+        agn_blr_cf=0.0,
     )
 
     # Pick a wavelength where the disc dominates (~1000 Å) to avoid the

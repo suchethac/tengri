@@ -70,8 +70,8 @@ Each parameter below can be passed to `Parameters(sfh_dpl_alpha=...)` or set via
 | `agn_theta_torus` | `theta_torus` (deg) | [0, 90] degrees | kwarg only (not in `_param_defs.py`) | Half-opening angle of torus (kwarg of `unified_nlr_blr`). |
 | `agn_oa_skirtor` | `theta_torus` (SKIRTOR axis) | [10, 80] degrees | registry | SKIRTOR-grid torus opening angle. |
 | `agn_torus_frac` | `torus_fraction = theta_torus/90°` (derived in synth) | [0, 1] | registry | **Decoupled** from `theta_torus` in tengri (avoids gradient discontinuity, see `unified.py:47-53`). |
-| `agn_blr_cf` ⚠️ | `covering_fraction_blr` | [0, 1] | registry | BLR covering fraction in registry & forward kernel. **Naming drift:** the standalone `unified_nlr_blr(...)` function uses kwarg `agn_covering_blr` — same physical meaning, different name. Both pass through to `compute_blr_sed(covering_fraction=...)`. CI guard `tools/check_param_prefixes.py` does not flag this because both are valid `agn_*` prefixed names. |
-| `agn_nlr_cf` ⚠️ | `covering_fraction_nlr` | [0, 1] | registry | NLR equivalent of `agn_blr_cf`; same naming drift with `agn_covering_nlr`. |
+| `agn_blr_cf` | `covering_fraction_blr` | [0, 1] | registry | BLR covering fraction in registry & forward kernel. Unified with `unified_nlr_blr(...)` kwarg as of 2026-05-08. |
+| `agn_nlr_cf` | `covering_fraction_nlr` | [0, 1] | registry | NLR equivalent of `agn_blr_cf`; kwarg names unified in `unified_nlr_blr(...)` as of 2026-05-08. |
 | `agn_polar_ebv` | (CIGALE skirtor2016 only) | E(B-V), [0, 0.5] mag | registry | Polar dust reddening (SMC law) for Type 1 sightlines; absent from synthesizer default UnifiedAGN. |
 | `neb_logU` | `log_ionization_parameter` | [-5, 0] dex | `Fixed(-3.0)` | Ionization parameter; higher U → harder ionizing spectrum ionizes more ions |
 | `neb_logZ_gas` | `metallicity` (gas-phase in CLOUDY) | log10(Z_gas/Zsun) | `Fixed(-0.3)` | Gas-phase metallicity (excludes grain-depleted metals; P-6) |
