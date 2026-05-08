@@ -7,11 +7,21 @@ runs against the same compiled computation graph. That makes
 This page summarises what the existing benchmark suite measures, the
 headline numbers from the last full run, and how to reproduce them on
 your hardware. The full benchmark suite ships under
-[`scripts/benchmark_*.py`](https://github.com/suchethac/tengri/tree/main/scripts)
+[`bench/scripts/benchmark_*.py`](https://github.com/suchethac/tengri/tree/main/bench/scripts)
 and is consolidated behind one entry point — see
 [Health check & dispatcher](#health-check-and-dispatcher) below.
 
-## Headline numbers (Apple M-series CPU, x64, JAX 0.9, May 2026)
+```{warning}
+The headline numbers below were measured in **April–May 2026**. Several
+have not been re-run after recent forward-model changes and may be
+stale. Treat them as ballpark, not authoritative; re-run the relevant
+script (see [Reproducing the headline numbers](#reproducing-the-headline-numbers))
+before quoting in a paper or PR. The
+[bench/reports/](https://github.com/suchethac/tengri/tree/main/bench/reports)
+directory carries the date of every measurement event.
+```
+
+## Headline numbers (Apple M-series CPU, x64, JAX 0.9, last run May 2026)
 
 Forward photometric prediction on SDSS *ugriz* at z = 0.1, 5 bands,
 running on a single CPU core:
@@ -25,7 +35,7 @@ running on a single CPU core:
 | + radio + X-ray + AGN | 76.4 ms | 4.6 ms | 2.44 ms (31×) |
 | Kitchen sink (all emitters) | **76.1 ms** | **4.6 ms** | **2.45 ms** (31×) |
 
-— *full table at [`docs/dev/benchmarks/2026-05-06_forward_model_speedup.md`](https://github.com/suchethac/tengri/blob/main/docs/dev/benchmarks/2026-05-06_forward_model_speedup.md)*
+— *full table at [`bench/reports/2026-05-06_forward_model_speedup.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-05-06_forward_model_speedup.md)*
 
 Inference backends on a 7-parameter mock fit (compile + sample wall):
 
@@ -38,7 +48,7 @@ Inference backends on a 7-parameter mock fit (compile + sample wall):
 | `vi_native` (geoVI, JAX-native) | ~10 s | **2.3 s** |
 | `vi` (NIFTy.re) | ~75 s | 43.7 s |
 
-— *full breakdowns: [`2026-04-17_native_vs_nifty.md`](https://github.com/suchethac/tengri/blob/main/docs/dev/benchmarks/2026-04-17_native_vs_nifty.md), [`2026-04-22_pathfinder_vs_window_nuts.md`](https://github.com/suchethac/tengri/blob/main/docs/dev/benchmarks/2026-04-22_pathfinder_vs_window_nuts.md), [`2026-05-06_compile_vs_sampling_breakdown.md`](https://github.com/suchethac/tengri/blob/main/docs/dev/benchmarks/2026-05-06_compile_vs_sampling_breakdown.md)*
+— *full breakdowns: [`2026-04-17_native_vs_nifty.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-04-17_native_vs_nifty.md), [`2026-04-22_pathfinder_vs_window_nuts.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-04-22_pathfinder_vs_window_nuts.md), [`2026-05-06_compile_vs_sampling_breakdown.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-05-06_compile_vs_sampling_breakdown.md)*
 
 `vi_native` is **19–25× faster** than the NIFTy path on smooth-SFH fits
 but is **not drop-in posterior-equivalent**: PSD-timescale parameters
@@ -117,9 +127,11 @@ JAX_PLATFORMS=cpu python -m tengri.bench forward_model
 JAX_PLATFORMS=cpu python -m tengri.bench inference_engines
 ```
 
-Each script writes its dated report to `docs/dev/benchmarks/` (or to
+Each script writes its dated report to `bench/reports/` (or to
 stdout, depending on the script). The reports there are the source of
 truth for every number quoted on this page.
+[`bench/RERUN.md`](https://github.com/suchethac/tengri/blob/main/bench/RERUN.md)
+tracks which scripts are due for a re-run.
 
 ## Hardware notes
 

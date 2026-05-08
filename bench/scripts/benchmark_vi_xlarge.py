@@ -15,10 +15,10 @@ row exceeds budget the rest of that column is skipped (memory grows with
 N for some configs; aborting saves time).
 
 Usage:
-    JAX_PLATFORMS=cpu .venv/bin/python scripts/benchmark_vi_xlarge.py
-    JAX_PLATFORMS=cpu .venv/bin/python scripts/benchmark_vi_xlarge.py --linear-only
-    JAX_PLATFORMS=cpu .venv/bin/python scripts/benchmark_vi_xlarge.py --geovi-only
-    JAX_PLATFORMS=cpu .venv/bin/python scripts/benchmark_vi_xlarge.py --ks 1,2,4
+    JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_vi_xlarge.py
+    JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_vi_xlarge.py --linear-only
+    JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_vi_xlarge.py --geovi-only
+    JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_vi_xlarge.py --ks 1,2,4
 """
 
 from __future__ import annotations

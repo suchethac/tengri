@@ -37,7 +37,7 @@ exploration, real-time visualization).
 
 ## Benchmarks (Apple M-series CPU, post-JIT warmup, SDSS ugriz, z=0.1, float64)
 
-Run `scripts/benchmark_forward_model.py` to regenerate these numbers.
+Run `bench/scripts/benchmark_forward_model.py` to regenerate these numbers.
 
 ### Full component benchmark (Dense Basis D=8, SDSS ugriz, z=0.1)
 

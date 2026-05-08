@@ -10,11 +10,11 @@ Four checks:
 Each (N, method, K) combination runs in a fresh subprocess so RSS is clean.
 
 Usage:
-    JAX_PLATFORMS=cpu .venv/bin/python scripts/benchmark_population_native.py
-    JAX_PLATFORMS=cpu .venv/bin/python scripts/benchmark_population_native.py --smoke
-    JAX_PLATFORMS=cpu .venv/bin/python scripts/benchmark_population_native.py --chunk-only
-    JAX_PLATFORMS=cpu .venv/bin/python scripts/benchmark_population_native.py --large
-    JAX_PLATFORMS=cpu .venv/bin/python scripts/benchmark_population_native.py --worker 10 native_vi_linear 3 2 1
+    JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_population_native.py
+    JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_population_native.py --smoke
+    JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_population_native.py --chunk-only
+    JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_population_native.py --large
+    JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_population_native.py --worker 10 native_vi_linear 3 2 1
 """
 
 from __future__ import annotations

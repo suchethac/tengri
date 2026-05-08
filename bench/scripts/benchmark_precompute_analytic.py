@@ -18,7 +18,7 @@ per-call wall time and the precompute speed-up factor.
 
 Run::
 
-    JAX_PLATFORMS=cpu .venv/bin/python scripts/benchmark_precompute_analytic.py
+    JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_precompute_analytic.py
 
 The intent is to answer: for these closed-form components, is the precompute
 layer actually faster than just running the analytic spectrum on a wavelength

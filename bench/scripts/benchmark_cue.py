@@ -5,8 +5,8 @@ Measures forward pass, gradient, and memory for the JAX re-implementation.
 TF benchmarks are run in a separate environment (/tmp/tf_env) if available.
 
 Usage:
-    python scripts/benchmark_cue.py              # JAX only
-    python scripts/benchmark_cue.py --with-tf    # JAX + TF comparison
+    python bench/scripts/benchmark_cue.py              # JAX only
+    python bench/scripts/benchmark_cue.py --with-tf    # JAX + TF comparison
 """
 
 import argparse

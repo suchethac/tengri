@@ -126,15 +126,21 @@ def _find_ssp() -> Path | None:
 
 
 def _find_scripts_dir() -> Path | None:
-    """Locate the repo's scripts/ directory (only when running from a checkout)."""
+    """Locate the repo's ``bench/scripts/`` directory (when running from a checkout).
+
+    Falls back to legacy ``scripts/`` for users on a checkout that pre-dates
+    the bench/ consolidation.
+    """
     here = Path(__file__).resolve()
     for parent in here.parents:
-        candidate = parent / "scripts"
+        for sub in ("bench/scripts", "scripts"):
+            candidate = parent / sub
+            if candidate.is_dir() and any(candidate.glob("benchmark_*.py")):
+                return candidate
+    for sub in ("bench/scripts", "scripts"):
+        candidate = Path.cwd() / sub
         if candidate.is_dir() and any(candidate.glob("benchmark_*.py")):
             return candidate
-    cwd = Path.cwd() / "scripts"
-    if cwd.is_dir() and any(cwd.glob("benchmark_*.py")):
-        return cwd
     return None
 
 

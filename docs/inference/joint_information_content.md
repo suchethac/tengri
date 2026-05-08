@@ -124,7 +124,7 @@ in the table.
 
 ## End-to-end validation: status
 
-`scripts/benchmark_joint_indices_e2e.py` was written to validate the
+`bench/scripts/benchmark_joint_indices_e2e.py` was written to validate the
 prior-predictive projection (N≈154 for 3σ σ_PSD discrimination with
 joint+indices) against an actual `PopulationFitter` posterior at
 N=256, 512, 1024.
@@ -298,7 +298,7 @@ NIRSpec result remains the best-available external calibration point.
 - `scripts/joint_prior_predictive.py`
 - `scripts/joint_discrimination_scaling.py`
 - `scripts/joint_indices_discrimination.py`
-- `scripts/benchmark_joint_indices_e2e.py` — end-to-end PopulationFitter
+- `bench/scripts/benchmark_joint_indices_e2e.py` — end-to-end PopulationFitter
   validation (joint+indices observable, 99 wave points)
 - `analysis/figures/joint_prior_predictive_hist.png` — per-observable
   marginal distributions

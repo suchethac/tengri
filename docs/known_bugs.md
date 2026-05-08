@@ -608,7 +608,7 @@ if _has_any_nonstell:
 ## Performance & Consistency Backlog (2026-04-17)
 
 Non-bug items surfaced while benchmarking `vi_native` vs `vi` (see
-`docs/dev/benchmarks/2026-04-17_native_vs_nifty.md`). These are
+`bench/reports/2026-04-17_native_vs_nifty.md`). These are
 consistency or perf improvements, not correctness bugs.
 
 - **PERF-02 — vi / vi_native are not posterior-equivalent.** Benchmark shows

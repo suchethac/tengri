@@ -191,7 +191,7 @@ def measure(variant: Variant, N: int, K: int) -> dict:
 
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("--out", default="analysis/jit_compile_benchmark.json")
+    p.add_argument("--out", default="bench/results/jit_compile_benchmark.json")
     p.add_argument("--Ns", type=int, nargs="+", default=[256, 1024, 4096, 16384])
     p.add_argument("--Ks", type=int, nargs="+", default=[1, 16, 64])
     p.add_argument("--variants", nargs="+", default=[v.name for v in VARIANTS])

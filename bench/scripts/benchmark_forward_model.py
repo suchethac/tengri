@@ -8,7 +8,7 @@ parametric (DPL, D=6), non-parametric (dense_basis, D=8), and stochastic
 
 Usage:
     source .venv/bin/activate
-    JAX_PLATFORMS=cpu python scripts/benchmark_forward_model.py
+    JAX_PLATFORMS=cpu python bench/scripts/benchmark_forward_model.py
 
 Reference doc: docs/dev/optimization-architecture.md
 """

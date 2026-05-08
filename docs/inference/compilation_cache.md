@@ -104,7 +104,7 @@ print(tengri.cache_size_bytes() / 1024**2, "MB")
 - **Slurm arrays.** Each task is a fresh process; without persistent
   cache each pays full compile, possibly hundreds of times. With it:
   pay once globally.
-- **Benchmark sweeps.** `scripts/benchmark_vi_xlarge.py` spawns one
+- **Benchmark sweeps.** `bench/scripts/benchmark_vi_xlarge.py` spawns one
   subprocess per `(N, K)` cell for clean peak-RSS measurement; the
   cache amortizes compile cost across the entire grid.
 - **Resume after crash.** Cache entries are persisted at compile

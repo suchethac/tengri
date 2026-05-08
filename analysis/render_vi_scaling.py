@@ -1,6 +1,6 @@
 """Render the population-VI scaling figure to analysis/figures/.
 
-Reads data/vi_scaling_benchmark.json (written by scripts/benchmark_vi_xlarge.py)
+Reads bench/results/vi_scaling_benchmark.json (written by bench/scripts/benchmark_vi_xlarge.py)
 and produces a 6-panel figure: wall-time, peak ΔRSS, VI iterations, σ_PSD
 recovery, τ_PSD recovery, and σ-half-width vs N.
 
@@ -251,7 +251,7 @@ def _render_placeholder() -> None:
     ax.text(
         0.5, 0.5,
         f"Benchmark JSON not yet generated:\n  {RESULTS_PATH.name}\n\n"
-        "Run scripts/benchmark_vi_xlarge.py to produce it.",
+        "Run bench/scripts/benchmark_vi_xlarge.py to produce it.",
         ha="center", va="center", fontsize=11, family="monospace",
         bbox=dict(boxstyle="round,pad=0.7", fc="#f6f6f6", ec="#999"),
     )

@@ -19,7 +19,7 @@ the lax.map refactor, and where the actual N-scaling cost lives.
 
 ## Diagnosis: where compile time *doesn't* scale
 
-### Synthetic benchmark — `scripts/benchmark_jit_compile.py`
+### Synthetic benchmark — `bench/scripts/benchmark_jit_compile.py`
 
 A toy forward model (closed-over SSP-like and filter-like arrays, softmax SFH,
 matrix multiply) is compiled AOT via `jit(f).lower(*abs_args).compile()` for
@@ -38,7 +38,7 @@ five batching strategies and `N ∈ {256, 1024, 4096, 16384}`, `K ∈ {1, 16, 64
 as the compile-time culprit. The two compile-time cost classes are:
 `K=1 lax.map` (~0.07 s) and `K>1 vmap-inside-or-`pure_vmap` (~0.12 s).
 
-### Real-path benchmark — `scripts/benchmark_jit_real_path.py`
+### Real-path benchmark — `bench/scripts/benchmark_jit_real_path.py`
 
 Production code (`PopulationFitter.run("native_vi_linear")`, 12 SDSS+GALEX
 filters, n_iterations=2) with the persistent JAX cache enabled. Cold = first
@@ -211,7 +211,7 @@ NIFTy-CFM hierarchical geoVI path.
 
 ### Measured impact (real-path benchmark)
 
-`scripts/benchmark_jit_real_path.py` with `native_vi_linear`, K=1:
+`bench/scripts/benchmark_jit_real_path.py` with `native_vi_linear`, K=1:
 
 | N    | setup (Python) | setup (vmap) | warm (Python) | warm (vmap) | warm Δ |
 |------|----------------|--------------|---------------|-------------|--------|
@@ -260,5 +260,5 @@ becomes minutes of wall-time and the vectorized path stays bounded.
 
 - `docs/inference/scaling.md` — wall-time scaling and PSD posterior recovery.
 - `docs/inference/compilation_cache.md` — persistent JAX cache.
-- `scripts/benchmark_jit_compile.py` — synthetic compile-time benchmark.
-- `scripts/benchmark_jit_real_path.py` — real-path compile-time benchmark.
+- `bench/scripts/benchmark_jit_compile.py` — synthetic compile-time benchmark.
+- `bench/scripts/benchmark_jit_real_path.py` — real-path compile-time benchmark.

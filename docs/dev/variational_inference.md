@@ -219,7 +219,7 @@ tengri has two VI paths with the same variational objective but different driver
 
 **Deprecated aliases** `"native_geovi"`, `"native_mgvi"`, `"native_evi"`, `"geovi"`, `"mgvi"`, `"evi"` still work (with `DeprecationWarning`) but should not be used in new code.
 
-**Important equivalence caveat:** A 2026-04-17 benchmark (`docs/dev/benchmarks/2026-04-17_native_vs_nifty.md`) compared `"vi"` vs `"vi_native"` on a 7-parameter parametric setup (15 KL iterations, 6 samples, matched `init_from="random"`). Native was 18.5× faster on warm run, but converged posterior means disagreed by up to 2.3σ on some parameters. **The two paths target the same objective with different solver details and land in different modes on multi-modal problems.** Treat `"vi_native"` as "fast but not identical" — validate per-problem with NUTS (for D ≤ 20) before trusting its posterior.
+**Important equivalence caveat:** A 2026-04-17 benchmark (`bench/reports/2026-04-17_native_vs_nifty.md`) compared `"vi"` vs `"vi_native"` on a 7-parameter parametric setup (15 KL iterations, 6 samples, matched `init_from="random"`). Native was 18.5× faster on warm run, but converged posterior means disagreed by up to 2.3σ on some parameters. **The two paths target the same objective with different solver details and land in different modes on multi-modal problems.** Treat `"vi_native"` as "fast but not identical" — validate per-problem with NUTS (for D ≤ 20) before trusting its posterior.
 
 ### OptimizationSchedule factories
 

@@ -11,7 +11,7 @@ Reports per-N:
     compile_proxy  : cold - warm  (≈ compile cost)
 
 Usage:
-    JAX_PLATFORMS=cpu .venv/bin/python scripts/benchmark_jit_real_path.py \\
+    JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_jit_real_path.py \\
         --Ns 64 256 1024 4096 --method native_vi_linear --K 1
 """
 
@@ -108,7 +108,7 @@ def main() -> None:
     p.add_argument("--Ns", type=int, nargs="+", default=[64, 256, 1024, 4096])
     p.add_argument("--method", default="native_vi_linear")
     p.add_argument("--K", type=int, default=1)
-    p.add_argument("--out", default="analysis/jit_real_path_benchmark.json")
+    p.add_argument("--out", default="bench/results/jit_real_path_benchmark.json")
     args = p.parse_args()
 
     print("Loading SSP data...")

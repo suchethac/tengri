@@ -21,16 +21,16 @@ This is a worst case: steep spectrum + broad fractional bandwidth.
 Usage
 -----
     # accuracy only (no SSP file needed):
-    python scripts/benchmark_precompute_quad.py
+    python bench/scripts/benchmark_precompute_quad.py
 
     # accuracy + timing (needs data/ssp*.h5):
-    python scripts/benchmark_precompute_quad.py --timing
+    python bench/scripts/benchmark_precompute_quad.py --timing
 
     # specific n_quad values:
-    python scripts/benchmark_precompute_quad.py --n-quad 3 5 7
+    python bench/scripts/benchmark_precompute_quad.py --n-quad 3 5 7
 
     # N timing repeats:
-    python scripts/benchmark_precompute_quad.py --timing --n-repeats 500
+    python bench/scripts/benchmark_precompute_quad.py --timing --n-repeats 500
 """
 from __future__ import annotations
 

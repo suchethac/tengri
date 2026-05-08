@@ -21,16 +21,16 @@ For each scenario and n_z value, reports:
 
 Usage
 -----
-    python scripts/benchmark_ztable_interp.py
+    python bench/scripts/benchmark_ztable_interp.py
 
     # custom n_z sweep:
-    python scripts/benchmark_ztable_interp.py --n-z 25 50 100 200
+    python bench/scripts/benchmark_ztable_interp.py --n-z 25 50 100 200
 
     # custom z range:
-    python scripts/benchmark_ztable_interp.py --z-max 6.0
+    python bench/scripts/benchmark_ztable_interp.py --z-max 6.0
 
     # with real SDSS filters (default uses synthetic box filters):
-    python scripts/benchmark_ztable_interp.py --real-filters
+    python bench/scripts/benchmark_ztable_interp.py --real-filters
 """
 
 from __future__ import annotations

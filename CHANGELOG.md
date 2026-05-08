@@ -154,7 +154,7 @@ helpful hint.
   surface; pah_drude, casey2012 and modified_blackbody dust analytics
   are wired into the hybrid kernel; AGN disc/torus, AGN-nebular,
   MAPPINGS shock, radio and X-ray all run through the fast path.
-  Benchmark in `docs/dev/benchmarks/2026-05-06_forward_model_speedup.md`
+  Benchmark in `bench/reports/2026-05-06_forward_model_speedup.md`
   shows 31–424× speedup over the exact path with sub-1 % typical error.
   AGN BLR/NLR config knobs (`agn_blr_enabled`,
   `agn_nlr_gaussian_enabled`, `agn_nlr_backend`) added with validation
@@ -713,7 +713,7 @@ prediction is sourced from ``run_components``.
 
 ### Performance (Phase II — orchestrator JIT compile-time benchmark, refreshed 2026-05-04)
 
-- New benchmark file ``analysis/orchestrator_jit_benchmark.json``
+- New benchmark file ``bench/results/orchestrator_jit_benchmark.json``
   records cold (cache-hit) and warm (in-process) JIT-compile times
   for the orchestrator path on PRSC-MILES SSP, CPU. Sample numbers:
 
@@ -735,7 +735,7 @@ prediction is sourced from ``run_components``.
 - Cold compile of the full 7-component chain
   (Stellar+Nebular+AGN+Dust+Radio+XRay+IGM) at z=0 on PRSC-MILES SSP:
   **~885 ms**. Warm runs: **~2 ms**. The plan's 2× ceiling (vs
-  ~64 ms per-fusion baseline at `analysis/jit_compile_benchmark.json`)
+  ~64 ms per-fusion baseline at `bench/results/jit_compile_benchmark.json`)
   is exceeded for cold compile; the baseline was a single tier-2
   photometry fusion, not the full chain. Warm-run latency is in line
   with legacy. Cold-compile optimisation is deferred follow-up.

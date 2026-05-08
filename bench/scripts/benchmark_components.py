@@ -5,7 +5,7 @@ Measures per-call timing for each physics module after JIT warmup.
 Useful for identifying bottlenecks and tracking performance regressions.
 
 Usage:
-    python scripts/benchmark_components.py
+    python bench/scripts/benchmark_components.py
 """
 
 import time

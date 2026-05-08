@@ -265,7 +265,7 @@ So even a "recompile" with the same SSP grid + filters is **fast** because JAX r
 
 ## Benchmark: Cache Performance
 
-From `scripts/benchmark_inference_engines.py` (2026-04-21):
+From `bench/scripts/benchmark_inference_engines.py` (2026-04-21):
 
 ### **Scenario: A1 Optical Simple (D=7)**
 
@@ -313,7 +313,7 @@ for method in methods:
 - 20 methods × 85MB = 1.7GB leaked without cleanup
 - JAX cache growth: Each method variant compiles separate code paths
 
-See `scripts/benchmark_inference_engines.py` for implementation.
+See `bench/scripts/benchmark_inference_engines.py` for implementation.
 
 ---
 
@@ -408,7 +408,7 @@ Cache is machine-specific (CPU architecture, GPU type). Copy/pasting `~/.cache/t
 
 - **JAX compilation docs:** https://jax.readthedocs.io/en/latest/aot.html
 - **Persistent compilation cache:** https://jax.readthedocs.io/en/latest/persistent_compilation_cache.html
-- **Benchmark script:** `scripts/benchmark_inference_engines.py`
+- **Benchmark script:** `bench/scripts/benchmark_inference_engines.py`
 - **Implementation:** `src/tengri/inference/fitter.py` (cache methods)
 
 ---

@@ -7,13 +7,13 @@ than NIFTy's ``optimize_kl`` while producing the same posterior.
 Runs the two quickstart-notebook Fitter setups (7-param parametric + optional
 137-param stochastic) under both methods with matched iteration budgets and
 random seeds. Compares posterior means and 1-sigma intervals per free
-parameter. Writes a markdown verdict to ``docs/dev/benchmarks/``.
+parameter. Writes a markdown verdict to ``bench/reports/``.
 
 Usage
 -----
-    .venv/bin/python scripts/benchmark_vi_native_vs_nifty.py           # parametric only
-    .venv/bin/python scripts/benchmark_vi_native_vs_nifty.py --full    # + stochastic
-    .venv/bin/python scripts/benchmark_vi_native_vs_nifty.py --smoke   # shortest
+    .venv/bin/python bench/scripts/benchmark_vi_native_vs_nifty.py           # parametric only
+    .venv/bin/python bench/scripts/benchmark_vi_native_vs_nifty.py --full    # + stochastic
+    .venv/bin/python bench/scripts/benchmark_vi_native_vs_nifty.py --smoke   # shortest
 """
 
 from __future__ import annotations

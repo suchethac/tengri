@@ -8,7 +8,7 @@ recovery** as the catalog size $N$ and the forward-chunk size $K$ change.
 The data is produced once by
 
 ```bash
-JAX_PLATFORMS=cpu python scripts/benchmark_vi_xlarge.py
+JAX_PLATFORMS=cpu python bench/scripts/benchmark_vi_xlarge.py
 ```
 
 and rendered by `analysis/render_vi_scaling.py`. The figures below are
@@ -96,10 +96,10 @@ filter age-sensitivity widths).
 
 ```bash
 # Basic SDSS-only run, full K sweep:
-JAX_PLATFORMS=cpu .venv/bin/python scripts/benchmark_vi_xlarge.py
+JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_vi_xlarge.py
 
 # Rich-obs run (the one that actually constrains σ):
-JAX_PLATFORMS=cpu .venv/bin/python scripts/benchmark_vi_xlarge.py \
+JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_vi_xlarge.py \
     --rich-obs --noise-frac 0.05 --ks 1
 
 # Render figures:
@@ -137,7 +137,7 @@ the speedup saturates; past K=64 it regresses.
 | 64 | 207 s | ~50% (saturated) | ~11 GB |
 | 128 | 229 s | ~45% (regression) | ~12 GB |
 
-Source: `data/vi_scaling_benchmark.json`, MGVI rows at N=8192, CPU.
+Source: `bench/results/vi_scaling_benchmark.json`, MGVI rows at N=8192, CPU.
 
 **How to read this:**
 
@@ -211,7 +211,7 @@ Spectroscopic mode: 3000–7500 Å rest at R≈500, 5% noise. Hα + Hβ +
 [OIII] together with the 4000 Å break and continuum SFH information
 let σ_PSD and τ_PSD posteriors recover the injected truth (σ=2,
 τ=20 Myr) in a way broadband photometry cannot. Run with
-`scripts/benchmark_vi_xlarge.py --spec-obs --noise-frac 0.05 --ks 1
+`bench/scripts/benchmark_vi_xlarge.py --spec-obs --noise-frac 0.05 --ks 1
 --ns 4,8,...,1024`.
 ```
 
@@ -242,7 +242,7 @@ posterior — the four lines fix σ on average but don't supply the extra
 independent dimensions needed to shrink it. **τ_PSD remains pinned at
 the prior mean** (~150 Myr): four scalar line fluxes per galaxy don't
 discriminate correlation length on Myr timescales. Run with
-`scripts/benchmark_vi_xlarge.py --joint-obs --noise-frac 0.05 --ks 1
+`bench/scripts/benchmark_vi_xlarge.py --joint-obs --noise-frac 0.05 --ks 1
 --ns 4,8,...,512`.
 ```
 

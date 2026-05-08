@@ -14,7 +14,7 @@ All evaluated from one ``predict_spectrum`` call concatenating line windows
 + index bands. Noise: 5% relative for photometry/lines; D4000 σ=0.02;
 EW indices σ=0.3 Å (typical SDSS values).
 
-Comparison: ``data/vi_scaling_benchmark_joint.json`` has the joint-only
+Comparison: ``bench/results/vi_scaling_benchmark_joint.json`` has the joint-only
 (14-component) cells at the same N values. The σ_PSD posterior std should
 tighten by roughly the projected ratio (joint N=200, joint+indices N=154,
 i.e. ~30% lower σ_PSD posterior width if the marginalization tax is
@@ -372,8 +372,8 @@ def main() -> None:
         Path(args.out).write_text(json.dumps(rows, indent=2))
 
     print(f"\nWrote {args.out}")
-    print("\n=== Joint-only baseline (data/vi_scaling_benchmark_joint.json) ===")
-    bp = Path("data/vi_scaling_benchmark_joint.json")
+    print("\n=== Joint-only baseline (bench/results/vi_scaling_benchmark_joint.json) ===")
+    bp = Path("bench/results/vi_scaling_benchmark_joint.json")
     if bp.exists():
         baseline = json.loads(bp.read_text())
         for r in baseline:

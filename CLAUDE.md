@@ -21,7 +21,7 @@ Differentiable SED fitting code in JAX. Models galaxy star formation histories a
 .venv/bin/pytest tests/ -q
 
 # Benchmarks (run after changes to forward model or inference)
-JAX_PLATFORMS=cpu .venv/bin/python scripts/benchmark_forward_model.py
+JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_forward_model.py
 JAX_PLATFORMS=cpu .venv/bin/python scripts/test_vi_memory_hybrid.py
 
 # Notebook sync (jupytext percent-format)
@@ -166,7 +166,7 @@ class MySEDComponent:
 - Ray Tracing: step_size=0.05 for D~137; sharp viability cliff at ~0.06 (acceptance drops to 0%)
 - NIFTy geoVI: use 4-12 samples per KL iteration, not 80
 - `VIConfig.n_samples=3` doubles to 6 effective samples via `mirror_samples=True` — when tuning, think in effective samples
-- `"vi"` (NIFTy) and `"vi_native"` (pure-JAX) target the same objective but are NOT posterior-equivalent. Native is ~19× faster warm on 7-D and ~25× on 137-D stochastic (2.8s vs 71s), but PSD timescale `sfh_field_psd_tau_myr` differs by an order of magnitude between paths (82 vs 6 Myr). Validate per-problem before swapping. See `docs/dev/benchmarks/2026-04-17_native_vs_nifty.md`
+- `"vi"` (NIFTy) and `"vi_native"` (pure-JAX) target the same objective but are NOT posterior-equivalent. Native is ~19× faster warm on 7-D and ~25× on 137-D stochastic (2.8s vs 71s), but PSD timescale `sfh_field_psd_tau_myr` differs by an order of magnitude between paths (82 vs 6 Myr). Validate per-problem before swapping. See `bench/reports/2026-04-17_native_vs_nifty.md`
 - Use `.shape[0]` instead of `len()` on JAX arrays to avoid `ConcretizationTypeError` under JIT
 - Use tolerance comparison (`abs(x - default) < 1e-6`) not `==` for float equality on traced values
 - IGM `igm_transmission(wave_obs, z)` takes **observed-frame** wavelengths (not rest-frame)
