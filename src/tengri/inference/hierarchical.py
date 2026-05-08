@@ -210,7 +210,8 @@ class PopulationPosterior:
             "shared": {
                 name: {
                     "rhat": float(rhat_shared.get(name, float("nan"))),
-                    "ess": float(ess_shared.get(name, float("nan"))),
+                    # effective_sample_size returns a dict-of-dicts; pull the scalar.
+                    "ess": float(ess_shared.get(name, {}).get("ess", float("nan"))),
                 }
                 for name in rhat_shared
             }
@@ -230,7 +231,9 @@ class PopulationPosterior:
             for name, val in r_i.items():
                 per_param_rhats.setdefault(name, []).append(float(val))
             for name, val in e_i.items():
-                per_param_esss.setdefault(name, []).append(float(val))
+                # effective_sample_size returns dict-of-dicts; pick the scalar.
+                ess_scalar = val.get("ess", float("nan")) if isinstance(val, dict) else val
+                per_param_esss.setdefault(name, []).append(float(ess_scalar))
 
         per_galaxy: dict = {}
         for name in per_param_rhats:

@@ -11,6 +11,7 @@ missing dependency produces a clear ImportError with install guidance.
 from __future__ import annotations
 
 from tengri.io.arrays import SpectrumTuple
+from tengri.io.catalog import load_catalog
 from tengri.io.desi import read_desi
 from tengri.io.fits_reader import read_generic_fits_spectrum
 from tengri.io.sdss import read_sdss
@@ -19,6 +20,7 @@ from tengri.io.specutils_bridge import from_spectrum1d
 __all__ = [
     "SpectrumTuple",
     "from_spectrum1d",
+    "load_catalog",
     "read_desi",
     "read_generic_fits_spectrum",
     "read_sdss",
