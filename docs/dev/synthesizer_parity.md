@@ -54,15 +54,15 @@ Each parameter below can be passed to `Parameters(sfh_dpl_alpha=...)` or set via
 
 | Tengri parameter | Synthesizer name | Units / range | Default | Notes |
 |------------------|------------------|---------------|---------|-------|
-| `sfh_dpl_alpha` | `alpha` (DPL) | [0.1, 10] Gyr⁻¹ | `Uniform(0.1, 3.0)` | e-folding timescale inverse; DPL = (t/τ) × exp(-t/τ) |
-| `sfh_dpl_beta` | `beta` (DPL) | [0.0, 3.0] dimensionless | `Uniform(0.0, 2.0)` | Early-time power-law index; DPL = t^β × exp(-t/τ) |
-| `sfh_dpl_tau` | `tau` (DPL) | [0.5, 15] Gyr | `Uniform(0.5, 10.0)` | e-folding timescale |
-| `sfh_field_psd_sigma` | (no direct equiv; GP variance) | [0.01, 2.0] log Msun/yr | `Uniform(0.1, 1.0)` | IFT PSD amplitude (stochastic component); only if `"field"` in `mean_type` |
-| `sfh_field_psd_tau_myr` | (no direct equiv; GP correlation length) | [1, 1000] Myr | `Uniform(10, 500)` | Burstiness timescale (correlation time); Tengri is Myr (user-facing) |
-| `met_logzsol` | `metallicity_initial` | log10(Z/Zsun) | `Fixed(-0.3)` | Uniform metallicity (no Z(t) evolution unless `evolving_metallicity=True`) |
-| `dust_tau_bc` | `tau_v_young` / `dust_bc` | [0.0, 4.0] mag | `Uniform(0.0, 3.0)` | Birth-cloud optical depth (age < t_birth ~10 Myr) |
-| `dust_tau_diff` | `tau_v_old` / `dust_ism` | [0.0, 3.0] mag | `Uniform(0.0, 2.0)` | Diffuse ISM optical depth (all ages) |
-| `dust_slope` | (implicit in power-law) | [-0.7] (fixed for PL) | `Fixed(-0.7)` | Power-law index if `law_bc/law_diff="power_law"` |
+| `sfh_dpl_alpha` | `alpha` (DPL) | Gyr⁻¹ | registry | e-folding timescale inverse; DPL = (t/τ) × exp(-t/τ) |
+| `sfh_dpl_beta` | `beta` (DPL) | dimensionless | registry | Early-time power-law index; DPL = t^β × exp(-t/τ) |
+| `sfh_dpl_tau` | `tau` (DPL) | Gyr | registry | e-folding timescale |
+| `sfh_field_psd_sigma` | (no direct equiv; GP variance) | log Msun/yr | registry | IFT PSD amplitude (stochastic component); only if `"field"` in `mean_type` |
+| `sfh_field_psd_tau_myr` | (no direct equiv; GP correlation length) | Myr | registry | Burstiness timescale (correlation time); Tengri exposes in **Myr** at the user-facing API; internal compute is in years (CLAUDE.md gotcha). |
+| `met_logzsol` | `metallicity_initial` | log10(Z/Zsun) | `Uniform(-2.0, 0.2)` | Free in default fitter (registry default is Uniform, not Fixed). Uniform-Z assumption unless `SFHConfig.evolving_metallicity=True`. |
+| `dust_tau_bc` | `tau_v_young` / `dust_bc` | mag, lo ≥ 0 | `Uniform(0.0, 4.0)` | Birth-cloud optical depth (age < t_birth ~10 Myr); registry default = `Uniform(0, 4)`. |
+| `dust_tau_diff` | `tau_v_old` / `dust_ism` | mag, lo ≥ 0 | `Uniform(0.0, 3.0)` | Diffuse ISM optical depth (all ages); registry default = `Uniform(0, 3)`. |
+| `dust_slope` | (implicit in power-law) | dimensionless | `Fixed(-0.7)` | Power-law index if `law_bc/law_diff="power_law"`. |
 | `agn_log_lbol` | `bolometric_luminosity` (erg/s) | **log10(L/L_sun)**, ~[10, 14] | declared in registry | AGN bolometric luminosity. Synthesizer expresses L_bol in erg/s; tengri uses L_sun. Add `LOG10(L_SUN_ERG) ≈ 33.58` when porting (test: `test_log_lbol_unit_convention_is_l_sun`). The `unified_nlr_blr(...)` function default (`agn_log_lbol=44.0`) is **unphysical** under the L_sun convention (implies L_bol ≈ 4×10^77 erg/s) — see TODO at `unified.py:1243`. P-2. |
 | `agn_log_mbh` | `black_hole_mass` | log10(M/M_sun), ~[6, 10] | registry | BH mass; used to compute Eddington luminosity. |
 | `agn_log_ledd` | (derived: L_bol / L_Edd in synthesizer) | log10(eddington ratio) | registry | Stored as log Eddington ratio. P-2: convert L_bol and L_Edd to same units before division. |
@@ -73,11 +73,11 @@ Each parameter below can be passed to `Parameters(sfh_dpl_alpha=...)` or set via
 | `agn_blr_cf` | `covering_fraction_blr` | [0, 1] | registry | BLR covering fraction in registry & forward kernel. Unified with `unified_nlr_blr(...)` kwarg as of 2026-05-08. |
 | `agn_nlr_cf` | `covering_fraction_nlr` | [0, 1] | registry | NLR equivalent of `agn_blr_cf`; kwarg names unified in `unified_nlr_blr(...)` as of 2026-05-08. |
 | `agn_polar_ebv` | (CIGALE skirtor2016 only) | E(B-V), [0, 0.5] mag | registry | Polar dust reddening (SMC law) for Type 1 sightlines; absent from synthesizer default UnifiedAGN. |
-| `neb_logU` | `log_ionization_parameter` | [-5, 0] dex | `Fixed(-3.0)` | Ionization parameter; higher U → harder ionizing spectrum ionizes more ions |
-| `neb_logZ_gas` | `metallicity` (gas-phase in CLOUDY) | log10(Z_gas/Zsun) | `Fixed(-0.3)` | Gas-phase metallicity (excludes grain-depleted metals; P-6) |
-| `neb_fesc` | `fesc` (ionizing photon) | [0.0, 1.0] fraction | `Fixed(0.0)` | Ionizing photon escape fraction; P-9: must reduce nebular continuum |
-| `neb_fesc_lya` | `fesc_lya` | [0.0, 1.0] fraction | `Fixed(0.0)` | Lyα resonant scattering escape; 0 = Lyα stays in nebula |
-| `neb_dig_frac` | `dig_fraction` | [0.0, 1.0] fraction | `Fixed(0.0)` | DIG (diffuse ionized gas) fraction; Tacchella et al. 2022 decomposition |
+| `neb_logU` | `log_ionization_parameter` | log10(U), [-5, 0] | `Fixed(-3.0)` | Ionization parameter; higher U → harder ionizing spectrum ionizes more ions. |
+| `neb_logZ_gas` | `metallicity` (gas-phase in CLOUDY) | log10(Z_gas/Zsun) | `Fixed(-0.3)` | Gas-phase metallicity (excludes grain-depleted metals; P-6). Default is Fixed but a `_NEBULAR_PARAMS` comment notes "will be overridden to match met_logzsol if not set". |
+| `neb_fesc` | `fesc` (ionizing photon) | fraction, [0, 1] | `Fixed(0.0)` | Ionizing photon escape fraction; P-9 verified wired into Cue's gradient at `cue.py:1172,1519`. |
+| `neb_fesc_lya` | `fesc_lya` | fraction, [0, 1] | `Fixed(0.0)` | Lyα resonant scattering escape; 0 = Lyα stays in nebula. |
+| `neb_dig_frac` | `dig_fraction` | fraction, [0, 1] | `Fixed(0.0)` | DIG (diffuse ionized gas) fraction; Tacchella et al. 2022 decomposition. |
 | `noise_frac_cal` | (photometric calibration) | [0, 0.1] fraction | registry | Fractional systematic error. |
 | `noise_dof` | (Student-t robust noise dof) | [2, ∞) | registry | If using outlier-robust likelihood (`Hogg_2010` MISSING from bib). |
 | `redshift` | `redshift` | [0, ∞) | n/a (passed in fitter) | Source redshift; IGM transmission requires **observed-frame** wavelengths (P-20). |

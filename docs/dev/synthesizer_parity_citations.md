@@ -167,7 +167,13 @@ Bibkeys recorded below all resolve in source #1 unless otherwise noted.
 ## B-NOISE — Noise & uncertainty models
 
 **MISSING in B-NOISE:**
-- Hogg, Bovy & Lang 2010 (outlier-robust likelihoods, mixture model + Student-t)
+- Hogg, Bovy & Lang 2010 (outlier-robust likelihoods, mixture model + Student-t).
+  *Note (2026-05-08):* `StudentTLikelihood` has been **provisionally** implemented
+  in `src/tengri/observation/noise.py:922` against this citation — the paper info
+  in the docstring (DOI 10.1088/0004-637X/710/2/1362; arXiv 0905.3340) is real,
+  but the bib entry has not yet been added to the workspace bib. Add the entry
+  there to lift the citation from "provisional" to "authoritative" per the
+  citation rule in the plan.
 
 ---
 

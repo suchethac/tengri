@@ -966,6 +966,14 @@ class StudentTLikelihood:
            DOI: `10.1088/0004-637X/710/2/1362
            <https://doi.org/10.1088/0004-637X/710/2/1362>`_
            arXiv: `0905.3340 <https://arxiv.org/abs/0905.3340>`_
+
+    .. note::
+       This citation is **not yet** in tengri's workspace bib
+       (``~/writing-workspace/projects/tengri/99-references.bib``).
+       It is listed as MISSING in
+       ``docs/dev/synthesizer_parity_citations.md`` and must be added
+       before this docstring is taken as authoritative under the
+       Tier-2 docstring standard. Implementation is provisional.
     """
 
     dof: float = 4.0
