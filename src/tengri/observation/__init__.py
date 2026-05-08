@@ -42,6 +42,7 @@ from tengri.observation.eline_priors import (
     cloudy_line_priors,
     marginalize_emission_lines_cloudy,
 )
+from tengri.observation.instrument import Instrument, list_instruments
 from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.line_list import LineList
 from tengri.observation.line_mask import build_line_mask
@@ -77,6 +78,7 @@ __all__ = [
     "SSP_LIBRARY_RESOLUTIONS",
     "STANDARD_INDICES",
     "UPPER_LIMIT",
+    "Instrument",
     "LineFluxData",
     "LineList",
     "NoiseModel",
@@ -100,6 +102,7 @@ __all__ = [
     "constants",
     "containers",
     "double_calibration_polynomial",
+    "list_instruments",
     "marginalize_calibration",
     "marginalize_emission_lines",
     "marginalize_emission_lines_cloudy",
