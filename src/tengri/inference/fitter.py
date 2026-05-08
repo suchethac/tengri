@@ -1788,7 +1788,7 @@ class Fitter:
           The native version is ~19× faster but produces different posterior shapes
           on some problems (e.g., PSD timescale can differ by order of magnitude).
           Validate before swapping methods. See
-          :doc:`docs/dev/benchmarks/2026-04-17_native_vs_nifty.md`.
+          :doc:`bench/reports/2026-04-17_native_vs_nifty.md`.
 
         - **VIConfig.n_samples doubling**: In geoVI, when ``mirror_samples=True``
           (default), ``n_samples=3`` produces 6 effective samples (3 + 3 mirrors).

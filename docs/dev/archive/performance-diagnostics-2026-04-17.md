@@ -96,7 +96,7 @@ From `docs/dev/variational-inference.md`:
 
 ### Alternative: vi_native
 
-From `docs/dev/benchmarks/2026-04-17_native_vs_nifty.md`:
+From `bench/reports/2026-04-17_native_vs_nifty.md`:
 - vi_native: 2.22s vs vi (geoVI): 41.06s (18.5× speedup)
 - **BUT**: Posteriors diverge (dust_tau_diff 2.3σ apart)
 - Verdict: **FAIL** — not a drop-in replacement

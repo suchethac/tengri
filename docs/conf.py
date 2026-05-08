@@ -141,6 +141,7 @@ myst_enable_extensions = [
     "fieldlist",
     "tasklist",
 ]
+myst_heading_anchors = 3  # auto-generate IDs for h1–h3 (lets [text](#anchor) work)
 
 source_suffix = {
     ".rst": "restructuredtext",

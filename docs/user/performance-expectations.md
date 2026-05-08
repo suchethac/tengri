@@ -52,7 +52,7 @@ Gradient calls (`jax.grad(predict_photometry)`) are 9–19× faster on the hybri
 - AGN bundle: 3–5% (polar-dust factorisation; revert to compositional when polar dust matters).
 - Typical / kitchen-sink: <1%.
 
-Full breakdown by emitter family, gradient timings across SFH types, and the coverage matrix are in [`bench/reports/2026-05-06_forward_model_speedup.md`](../dev/benchmarks/2026-05-06_forward_model_speedup.md).
+Full breakdown by emitter family, gradient timings across SFH types, and the coverage matrix are in [`bench/reports/2026-05-06_forward_model_speedup.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-05-06_forward_model_speedup.md).
 
 ## MAP Optimization
 

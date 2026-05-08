@@ -94,7 +94,7 @@ def run_nuts(
         a chain running far longer than expected and want to bound the
         worst-case per-sample cost — at the price of higher
         autocorrelation on heavy-tailed or strongly-curved posteriors.
-        See ``docs/dev/benchmarks/2026-05-06_compile_vs_sampling_breakdown.md``
+        See ``bench/reports/2026-05-06_compile_vs_sampling_breakdown.md``
         for the prior measurement that found 10→8 gave no benefit on
         nb06's well-conditioned spec posterior; the cap matters only
         when NUTS is hitting deep trees, which is workload-specific.
@@ -115,7 +115,7 @@ def run_nuts(
 
         **At low D (<~20), window adaptation is faster and produces
         better posterior geometry.** See
-        ``docs/dev/benchmarks/2026-04-22_pathfinder_vs_window_nuts.md``.
+        ``bench/reports/2026-04-22_pathfinder_vs_window_nuts.md``.
         If you enable this, keep ``n_warmup >= 300`` — reducing it
         blindly gives a poorly-conditioned mass matrix that silently
         saturates NUTS tree depth and slows sampling 10-20x.
