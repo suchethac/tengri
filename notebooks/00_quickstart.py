@@ -355,13 +355,12 @@ plt.show()
 # Run NUTS (No-U-Turn Sampler) inference.
 #
 # ``dense_mass_matrix=False`` (diagonal mass matrix) keeps the warmup peak
-# RSS bounded. With ``dense_mass_matrix=True`` (BlackJAX default) on this
-# 8-D ``dense_basis`` model the warmup vmap compile peaks at ~22 GB on
-# macOS — observed in nb00 reruns; matches the CLAUDE.md OOM gotcha but
-# narrowly escaped jetsam. Diagonal mass is appropriate here because the
-# tx_frac parameters are not strongly correlated and a quick demo doesn't
-# need full covariance adaptation. Switch to ``True`` only if you need
-# the curvature-correlation handling and have ≥32 GB of headroom.
+# RSS bounded. The 3-D fit here is fine on either setting, but the kwarg
+# stays explicit so users who edit this template to free more SFH
+# parameters don't accidentally hit the dense-mass OOM gotcha — D ≥ 8
+# with ``dense_mass_matrix=True`` peaks ~22 GB during the warmup vmap
+# compile and can jetsam on machines with < 32 GB. Switch to ``True``
+# only if you have free strongly-correlated parameters and the headroom.
 os.environ["TENGRI_NO_BACKGROUND_COMPILE"] = "1"
 fitter_param = Fitter(model_param, mock_param.flux_obs, mock_param.noise)
 t0 = time.perf_counter()
