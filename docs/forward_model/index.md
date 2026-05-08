@@ -1,17 +1,20 @@
 # Forward model
 
-The differentiable forward chain follows paper **§3** (SFH → SPS → nebular/AGN → dust → IGM → observables). **Narrative notebooks** at the repo root (Jupytext `.py`):
+The differentiable forward chain follows the standard SED-fitting cascade:
+star formation history → simple stellar populations → nebular and AGN
+emission → dust attenuation and re-emission → IGM absorption → the
+observables (photometry and spectroscopy). Each step is a pure JAX
+function, so the whole chain is JIT-compiled, gradient-traceable, and
+batchable through `vmap`.
+
+Spine notebooks that exercise the forward model:
 
 | Notebook | Focus |
 |----------|-------|
-| [`01_sed_anatomy.py`](https://github.com/suchethac/tengri/blob/main/notebooks/01_sed_anatomy.py) | SED anatomy, wavelength ↔ physics |
-| [`02_sfh_gallery.py`](https://github.com/suchethac/tengri/blob/main/notebooks/02_sfh_gallery.py) | SFH parametrization + stochastic field / PSD |
-| [`13_tabulated_sfh_to_mock_sed.py`](https://github.com/suchethac/tengri/blob/main/notebooks/13_tabulated_sfh_to_mock_sed.py) | Tabulated SFH → SED / mock photometry (`simulate`) |
-| [`03_dust_gallery.py`](https://github.com/suchethac/tengri/blob/main/notebooks/03_dust_gallery.py) | Dust attenuation + IR emission |
-| [`04_nebular_gallery.py`](https://github.com/suchethac/tengri/blob/main/notebooks/04_nebular_gallery.py) | Nebular |
-| [`05_agn_gallery.py`](https://github.com/suchethac/tengri/blob/main/notebooks/05_agn_gallery.py) | AGN |
-| [`06_multiwavelength_gallery.py`](https://github.com/suchethac/tengri/blob/main/notebooks/06_multiwavelength_gallery.py) | IGM, radio, X-ray |
+| [`02_sed_anatomy`](../spine/02_sed_anatomy) | The panchromatic SED, component by component |
+| [`04_building_models`](../spine/04_building_models) | Building models with `Parameters`; swapping SFH families, dust laws, and IR templates |
+| [`08_emission_lines`](../spine/08_emission_lines) | Nebular line fluxes, BPT diagnostics, Hα-derived SFR |
 
-Pedagogical order in the spine is **SFH → tabulated SFH option → dust → nebular → AGN → multi-λ**, not necessarily the strict internal call order.
-
-Internal refactor notes for contributors: [DOCS_REFACTOR_REFINED.md](https://github.com/suchethac/tengri/blob/main/docs/dev/DOCS_REFACTOR_REFINED.md).
+The pedagogical order in the spine is *SFH → dust → nebular → AGN →
+multi-wavelength*, which mirrors the order of decisions a user typically
+makes rather than the strict internal call order.

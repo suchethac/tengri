@@ -1,15 +1,20 @@
 # Inference
 
-tengri exposes one standardized objective to **MAP**, **variational**, and **MCMC** backends (paper **§2–4**). Canonical method strings are passed to `fitter.run(...)` (e.g. `"vi"`, `"mcmc_nuts"`, `"mcmc_raytrace"`). See [NAMING_CONTRACT.md](https://github.com/suchethac/tengri/blob/main/docs/dev/NAMING_CONTRACT.md).
+Tengri exposes one standardized objective to MAP, variational, and MCMC
+backends. The backend is just a string passed to `fitter.run(...)`:
+`"map"`, `"laplace"`, `"pathfinder"`, `"mcmc_nuts"`, `"mcmc_raytrace"`,
+`"evidence"`, `"vi"`. Canonical names are recorded in the
+[naming contract](https://github.com/suchethac/tengri/blob/main/docs/dev/NAMING_CONTRACT.md);
+the same forward model powers all of them.
 
-**Notebooks** (full spine: [Reader spine](../index.md#reader-spine-notebooks)):
+The spine notebooks introduce inference progressively:
 
-- [`00_quickstart.py`](https://github.com/suchethac/tengri/blob/main/notebooks/00_quickstart.py) — first fits, method comparison
-- [`07_fitting_photometry.py`](https://github.com/suchethac/tengri/blob/main/notebooks/07_fitting_photometry.py) — photometry + batch
-- [`08_fitting_spectra.py`](https://github.com/suchethac/tengri/blob/main/notebooks/08_fitting_spectra.py) — spectroscopy
-- [`14_joint_photometry_spectroscopy.py`](https://github.com/suchethac/tengri/blob/main/notebooks/14_joint_photometry_spectroscopy.py) — joint phot + spec posteriors
-- [`09_degeneracies.py`](https://github.com/suchethac/tengri/blob/main/notebooks/09_degeneracies.py) — constraints and degeneracies
-- [`11_population.py`](https://github.com/suchethac/tengri/blob/main/notebooks/11_population.py) — hierarchical / population
+- [`00_quickstart`](../spine/00_quickstart) — first NUTS fit on mock photometry
+- [`05_fitting_photometry`](../spine/05_fitting_photometry) — full photometric workflow with diagnostics
+- [`06_fitting_spectroscopy`](../spine/06_fitting_spectroscopy) — spectroscopy with calibration nuisance parameters
+- [`07_joint_photo_spec`](../spine/07_joint_photo_spec) — joint posteriors
+
+Reference pages:
 
 - [Convergence diagnostics](../advanced/convergence.md)
 - [Hierarchical fitting](../advanced/hierarchical.md)

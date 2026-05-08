@@ -1,16 +1,14 @@
 # Examples gallery
 
-Short, self-contained scripts that each produce one figure. Use these when you
-want to see a specific physics variation quickly without reading a full tutorial.
-Every example under [`examples/`](https://github.com/suchethac/tengri/tree/main/examples)
-is rendered into the thumbnailed gallery below by Sphinx-Gallery.
+Short, self-contained scripts that each produce one figure. Useful when
+you want to see a specific physics variation quickly without reading a
+full tutorial. Each script under
+[`examples/`](https://github.com/suchethac/tengri/tree/main/examples) is
+rendered into the thumbnailed gallery by Sphinx-Gallery.
 
-**Primary learning path:** the tutorial spine in
-[`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) —
-progressive, astronomer-facing chapters (00–08, with more coming) that cover framework,
-forward model, fitting workflows, and physics deep dives.
-Start there if you are new to tengri; come here when you need a targeted
-reference.
+The main learning path is the spine notebooks
+(`00_quickstart` through `08_emission_lines`); start there if you are
+new and come here for a targeted reference.
 
 ## How to run an example locally
 

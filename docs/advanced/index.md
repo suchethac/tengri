@@ -1,11 +1,10 @@
-# Advanced Topics
+# Advanced topics
 
-Power-user guides for convergence diagnostics, batch fitting, extending tengri
-with custom physics, and hierarchical population inference.
-
-These pages assume familiarity with the core API. If you are new to tengri,
-start with {doc}`../getting_started/index` and the reader spine on
-{doc}`../index` (GitHub: `notebooks/00_quickstart.py` through `14_joint_photometry_spectroscopy.py`).
+Reference material for convergence diagnostics, batch fitting, custom
+physics components, and hierarchical population inference. These pages
+assume familiarity with the core API; if you're new, start with
+{doc}`../getting_started/index` and the spine notebooks
+(`00_quickstart` through `08_emission_lines`).
 
 ```{toctree}
 :maxdepth: 1

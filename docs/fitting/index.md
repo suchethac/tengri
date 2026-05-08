@@ -1,14 +1,17 @@
 # Fitting workflows
 
-Practical photometry, spectroscopy, joint data, degeneracies, and real data are covered in the root spine notebooks (paper **§6**-style usage). Full table: [Reader spine](../index.md#reader-spine-notebooks).
+The fitting notebooks in the spine cover photometry, spectroscopy, joint
+data, and the degeneracies that come with each.
 
 | Notebook | Topic |
 |----------|-------|
-| [`07_fitting_photometry.py`](https://github.com/suchethac/tengri/blob/main/notebooks/07_fitting_photometry.py) | Single-galaxy and batch photometry |
-| [`08_fitting_spectra.py`](https://github.com/suchethac/tengri/blob/main/notebooks/08_fitting_spectra.py) | Spectroscopy, calibration, lines |
-| [`14_joint_photometry_spectroscopy.py`](https://github.com/suchethac/tengri/blob/main/notebooks/14_joint_photometry_spectroscopy.py) | `Observation` with phot + spec, joint posteriors |
-| [`09_degeneracies.py`](https://github.com/suchethac/tengri/blob/main/notebooks/09_degeneracies.py) | Degeneracy structure |
-| [`10_real_data.py`](https://github.com/suchethac/tengri/blob/main/notebooks/10_real_data.py) | Real-data-style example |
+| [`05_fitting_photometry`](../spine/05_fitting_photometry) | Photometric fit end to end, with proper convergence diagnostics |
+| [`06_fitting_spectroscopy`](../spine/06_fitting_spectroscopy) | Optical spectroscopy: Lick indices, line masking, calibration polynomial |
+| [`07_joint_photo_spec`](../spine/07_joint_photo_spec) | Joint photo + spec to break age/dust/metallicity degeneracies |
+| [`08_emission_lines`](../spine/08_emission_lines) | Emission-line diagnostics (BPT, Hα-SFR consistency) |
+
+For batch fitting many galaxies with shared infrastructure, see
+[advanced/batch_fitting](../advanced/batch_fitting).
 
 ```{toctree}
 :maxdepth: 1
