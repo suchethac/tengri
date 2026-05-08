@@ -71,6 +71,10 @@ from tengri.components.nebular.agn_nebular import (
     SynthesizerNLRBackend,
 )
 from tengri.components.nebular.baked_in import BakedInBackend, BakedInNebularWarning
+from tengri.components.nebular.cloudy23_inputs import (
+    Cloudy23Deck,
+    build_cloudy23_deck,
+)
 from tengri.components.nebular.cloudy_cb19 import (
     CB19Backend,
     CB19IonizingSpectrumWarning,
@@ -104,6 +108,7 @@ __all__ = [
     "CB19Backend",
     "CB19IonizingSpectrumWarning",
     "CB19NoContinuumWarning",
+    "Cloudy23Deck",
     "CloudyGridBackend",
     "CloudyGridIonizingSpectrumWarning",
     "CloudyGridWNESSPWarning",
@@ -120,6 +125,7 @@ __all__ = [
     "ShockBackend",
     "SynthesizerGridData",
     "SynthesizerNLRBackend",
+    "build_cloudy23_deck",
     "compute_shock_sed",
     "mix_dig_emission",
     "shock_line_ratios",
