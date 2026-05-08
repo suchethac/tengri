@@ -1,28 +1,106 @@
-"""``python -m tengri.bench`` — quick performance health check.
+"""``python -m tengri.bench`` — performance health check + benchmark dispatcher.
 
-Prints, in order:
+Two modes:
 
-1. tengri version, JAX version, JAX backend + devices, x64 mode.
-2. Persistent compile cache status: directory, on-disk size, file count.
-3. A 1-galaxy forward photometry timing (raw + JIT) on SDSS *ugriz*.
-4. A 100-galaxy ``predict_photometry_batch`` timing (vmap-batched).
-5. Speedup of vmap over the equivalent Python loop.
+1. **Health check** (``python -m tengri.bench``, no args):
+   Prints tengri / JAX versions, default device, persistent compile-cache
+   status, a 1-galaxy forward photometry timing, a 100-galaxy
+   ``predict_photometry_batch`` timing, and the speedup of vmap over the
+   equivalent Python loop. ~30 s on CPU after a warm cache.
+
+2. **Benchmark dispatch** (``python -m tengri.bench <name>``):
+   Runs one of the comprehensive benchmark scripts that ship under
+   ``scripts/benchmark_*.py``. Use ``python -m tengri.bench list`` to
+   see what's available; use ``python -m tengri.bench help <name>`` to
+   read a script's docstring.
+
+The health check is read-only (touches no caches, no files) and exits 0
+on success, 1 if no SSP grid is available. Dispatched scripts inherit
+their own exit codes.
 
 Mirrors the spirit of Synthesizer's ``check_openmp()`` — answers
-"is my install fast?" in one command without writing any code.
-
-The script is read-only (touches no files, no caches) and exits 0
-on success, 1 if no SSP grid is available.
+"is my install fast?" in one command.
 """
 
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
 
-__all__ = ["run"]
+__all__ = ["BENCHMARK_SCRIPTS", "run"]
+
+
+# ── Catalogue of consolidated bench scripts ───────────────────────
+#
+# Maps short name -> (script_filename, one-line description). The full
+# scripts live under ``scripts/`` at the repo root; this catalogue is
+# the public list of what's available, surfaced via ``bench list``.
+
+BENCHMARK_SCRIPTS: dict[str, tuple[str, str]] = {
+    "forward_model": (
+        "benchmark_forward_model.py",
+        "Forward photometry: exact / compositional / hybrid across all emitters and 3 SFHs.",
+    ),
+    "components": (
+        "benchmark_components.py",
+        "Per-component (stellar, dust, nebular, AGN, ...) wall-clock timing.",
+    ),
+    "jit_compile": (
+        "benchmark_jit_compile.py",
+        "Population-scale JIT compile time vs N galaxies, various batching strategies.",
+    ),
+    "jit_real_path": (
+        "benchmark_jit_real_path.py",
+        "JIT compile time on the production forward-model path (not synthetic).",
+    ),
+    "inference_engines": (
+        "benchmark_inference_engines.py",
+        "MAP / Laplace / NUTS / VI / NSS across D=7, 12, 20 model complexities.",
+    ),
+    "vi_native_vs_nifty": (
+        "benchmark_vi_native_vs_nifty.py",
+        "geoVI: pure-JAX `vi_native` vs the NIFTy.re reference path.",
+    ),
+    "vi_xlarge": (
+        "benchmark_vi_xlarge.py",
+        "VI scaling on stochastic-SFH problems with D >> 100.",
+    ),
+    "population_native": (
+        "benchmark_population_native.py",
+        "Hierarchical PopulationFitter: per-iteration cost vs N galaxies.",
+    ),
+    "adam_vs_lbfgs": (
+        "benchmark_adam_vs_lbfgs.py",
+        "MAP optimizers head-to-head: Adam vs L-BFGS.",
+    ),
+    "cue": (
+        "benchmark_cue.py",
+        "Cue (Li+2025) nebular emulator timing in isolation.",
+    ),
+    "loss_timing": (
+        "benchmark_loss_timing.py",
+        "Per-call loss / negative-log-posterior timing.",
+    ),
+    "joint_indices_e2e": (
+        "benchmark_joint_indices_e2e.py",
+        "End-to-end timing for joint photometry + spectral-index fits.",
+    ),
+    "precompute_analytic": (
+        "benchmark_precompute_analytic.py",
+        "Analytic precompute lookup vs full-spectrum integration.",
+    ),
+    "precompute_quad": (
+        "benchmark_precompute_quad.py",
+        "Quadrature precompute: accuracy vs grid resolution.",
+    ),
+    "ztable_interp": (
+        "benchmark_ztable_interp.py",
+        "Metallicity-table interpolation kernel timing.",
+    ),
+}
 
 
 def _human_bytes(n: int) -> str:
@@ -35,8 +113,8 @@ def _human_bytes(n: int) -> str:
 
 def _find_ssp() -> Path | None:
     """Locate any DSPS-format SSP file under ``data/`` or ``$TENGRI_DATA_DIR``."""
-    candidates: list[Path] = []
     env = os.environ.get("TENGRI_DATA_DIR")
+    candidates: list[Path] = []
     if env:
         candidates.append(Path(env))
     candidates.extend([Path("data"), Path("../data"), Path.cwd() / "data"])
@@ -47,10 +125,26 @@ def _find_ssp() -> Path | None:
     return None
 
 
+def _find_scripts_dir() -> Path | None:
+    """Locate the repo's scripts/ directory (only when running from a checkout)."""
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        candidate = parent / "scripts"
+        if candidate.is_dir() and any(candidate.glob("benchmark_*.py")):
+            return candidate
+    cwd = Path.cwd() / "scripts"
+    if cwd.is_dir() and any(cwd.glob("benchmark_*.py")):
+        return cwd
+    return None
+
+
 def _print_header(label: str) -> None:
     print()
     print(label)
     print("-" * len(label))
+
+
+# ── Health-check sections ─────────────────────────────────────────
 
 
 def _backend_section() -> None:
@@ -59,9 +153,10 @@ def _backend_section() -> None:
     import tengri
 
     devs = jax.devices()
+    plural = "" if len(devs) == 1 else "s"
     print(f"  tengri:        {tengri.__version__}")
     print(f"  jax:           {jax.__version__}")
-    print(f"  default device: {devs[0].platform} ({len(devs)} device{'s' if len(devs) != 1 else ''})")
+    print(f"  default device: {devs[0].platform} ({len(devs)} device{plural})")
     print(f"  x64:           {jax.config.read('jax_enable_x64')}")
 
 
@@ -76,13 +171,13 @@ def _cache_section() -> None:
     enabled = is_cache_enabled()
     size = cache_size_bytes(cache_dir)
     n_files = sum(1 for _ in cache_dir.rglob("*") if _.is_file()) if cache_dir.exists() else 0
+    plural = "" if n_files == 1 else "s"
     print(f"  enabled:       {enabled}")
     print(f"  directory:     {cache_dir}")
-    print(f"  size on disk:  {_human_bytes(size)} ({n_files} file{'s' if n_files != 1 else ''})")
+    print(f"  size on disk:  {_human_bytes(size)} ({n_files} file{plural})")
 
 
-def _forward_timing_section(ssp_path: Path) -> bool:
-    """Time a 1-galaxy and 100-galaxy forward photometry call. Returns True on success."""
+def _forward_timing_section(ssp_path: Path) -> None:
     import jax
     import jax.numpy as jnp
 
@@ -114,45 +209,39 @@ def _forward_timing_section(ssp_path: Path) -> bool:
     key = jax.random.PRNGKey(0)
     params_one = spec.sample(key)
 
-    # ── 1-galaxy: raw vs JIT ────────────────────────────────────────
-    # Cold call (forces compile if not cached).
+    # 1-galaxy raw + JIT
     t0 = time.perf_counter()
     _ = model.predict_photometry(params_one)
     t_cold = (time.perf_counter() - t0) * 1e3
 
     jit_predict = jax.jit(model.predict_photometry)
-    _ = jit_predict(params_one).block_until_ready()       # warmup
+    _ = jit_predict(params_one).block_until_ready()
     n = 50
     t0 = time.perf_counter()
     for _ in range(n):
         _ = jit_predict(params_one).block_until_ready()
-    t_jit = (time.perf_counter() - t0) / n * 1e6           # µs
+    t_jit = (time.perf_counter() - t0) / n * 1e6  # µs
 
     print(f"  1 galaxy, raw call:  {t_cold:7.1f} ms (includes JIT compile if cold)")
     print(f"  1 galaxy, JIT'd:     {t_jit:7.0f} µs/call (median of {n})")
 
-    # ── 100-galaxy vmap ────────────────────────────────────────────
+    # 100-galaxy vmap
     n_batch = 100
     keys = jax.random.split(key, n_batch)
     params_batch = {k: jnp.stack([spec.sample(kk)[k] for kk in keys]) for k in params_one}
-    _ = model.predict_photometry_batch(params_batch).block_until_ready()  # warmup
+    _ = model.predict_photometry_batch(params_batch).block_until_ready()
     t0 = time.perf_counter()
     for _ in range(5):
         _ = model.predict_photometry_batch(params_batch).block_until_ready()
-    t_batch = (time.perf_counter() - t0) / 5 * 1e3        # ms total
-    per_gal = t_batch / n_batch * 1e3                      # µs/galaxy
-
+    t_batch = (time.perf_counter() - t0) / 5 * 1e3  # ms total
+    per_gal = t_batch / n_batch * 1e3  # µs/galaxy
     print(f"  {n_batch} galaxies, vmap:  {t_batch:7.1f} ms total, {per_gal:5.0f} µs/galaxy")
 
     speedup = (t_jit * n_batch) / (t_batch * 1e3) if t_batch > 0 else float("inf")
     print(f"  vmap speedup vs JIT loop: {speedup:5.1f}×")
-    return True
 
 
-def run(argv: list[str] | None = None) -> int:
-    """Entry point. Returns shell exit code (0 = OK, 1 = no SSP found)."""
-    _ = argv  # accepted for symmetry with click-style entry points; unused here.
-
+def _health_check() -> int:
     _print_header("environment")
     _backend_section()
 
@@ -171,3 +260,92 @@ def run(argv: list[str] | None = None) -> int:
     _forward_timing_section(ssp_path)
     print()
     return 0
+
+
+# ── Benchmark dispatcher ──────────────────────────────────────────
+
+
+def _list_benchmarks() -> int:
+    """Print the catalogue of available bench scripts."""
+    name_w = max(len(n) for n in BENCHMARK_SCRIPTS) + 2
+    print("Available benchmarks:")
+    print()
+    for name, (_script, desc) in BENCHMARK_SCRIPTS.items():
+        print(f"  {name:<{name_w}}{desc}")
+    print()
+    print("Run one with:    python -m tengri.bench <name>")
+    print("Read its docs:   python -m tengri.bench help <name>")
+    return 0
+
+
+def _help_for(name: str) -> int:
+    if name not in BENCHMARK_SCRIPTS:
+        print(f"unknown benchmark '{name}'", file=sys.stderr)
+        print(f"available: {', '.join(BENCHMARK_SCRIPTS)}", file=sys.stderr)
+        return 2
+    scripts_dir = _find_scripts_dir()
+    if scripts_dir is None:
+        print(
+            "scripts/ directory not found — install from a git checkout to use this.",
+            file=sys.stderr,
+        )
+        return 2
+    script_path = scripts_dir / BENCHMARK_SCRIPTS[name][0]
+    if not script_path.is_file():
+        print(f"script {script_path} not found", file=sys.stderr)
+        return 2
+    text = script_path.read_text()
+    # Skip the shebang line if present, then read the leading docstring.
+    if text.startswith("#!"):
+        text = text.split("\n", 1)[1] if "\n" in text else ""
+    body = text.lstrip()
+    if body.startswith('"""'):
+        end = body.find('"""', 3)
+        if end > 0:
+            print(body[3:end].strip())
+            return 0
+    print(script_path.read_text().splitlines()[0])
+    return 0
+
+
+def _dispatch(name: str, extra: list[str]) -> int:
+    if name not in BENCHMARK_SCRIPTS:
+        print(f"unknown benchmark '{name}'", file=sys.stderr)
+        print("run `python -m tengri.bench list` to see options", file=sys.stderr)
+        return 2
+    scripts_dir = _find_scripts_dir()
+    if scripts_dir is None:
+        print(
+            "scripts/ directory not found — install from a git checkout to dispatch benchmarks.",
+            file=sys.stderr,
+        )
+        return 2
+    script_path = scripts_dir / BENCHMARK_SCRIPTS[name][0]
+    cmd = [sys.executable, str(script_path), *extra]
+    print(f"$ {' '.join(cmd)}", flush=True)
+    return subprocess.call(cmd)
+
+
+# ── Public entry point ────────────────────────────────────────────
+
+
+def run(argv: list[str] | None = None) -> int:
+    """Entry point. Returns shell exit code."""
+    argv = list(argv) if argv is not None else []
+
+    if not argv:
+        return _health_check()
+
+    head, *rest = argv
+    if head in ("-h", "--help", "help") and not rest:
+        print(__doc__ or "")
+        print()
+        return _list_benchmarks()
+    if head == "list":
+        return _list_benchmarks()
+    if head == "help":
+        if not rest:
+            print(__doc__ or "")
+            return _list_benchmarks()
+        return _help_for(rest[0])
+    return _dispatch(head, rest)

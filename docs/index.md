@@ -160,6 +160,12 @@ use-cases and workflows.
    spine/09_parameter_sweeps
 
 .. toctree::
+   :caption: Reference
+   :maxdepth: 1
+
+   performance/index
+
+.. toctree::
    :caption: Gallery
    :maxdepth: 1
 
