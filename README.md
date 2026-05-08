@@ -5,7 +5,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: BSD-3](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)](LICENSE)
 
-Tengri is a JAX framework for fitting the spectral energy distributions of galaxies — from the X-ray to the radio — with a single differentiable forward model. Stars, dust, nebular emission, AGN, and IGM components plug into one pipeline, and every inference method (MAP, Laplace, Pathfinder, NUTS, Ray Tracing, Bayesian evidence, hierarchical population, geoVI) runs against the same model with gradients available throughout. Pre-1.0 research code; JIT-compiled and GPU/TPU-native.
+Tengri fits galaxy spectral energy distributions in JAX. One differentiable forward model spans stars, dust, nebular emission, AGN, and IGM, from X-ray to radio. Every inference method — MAP, Laplace, Pathfinder, NUTS, Ray Tracing, Bayesian evidence, hierarchical population, geoVI — runs against that same model. JIT-compiled and GPU/TPU-native; pre-1.0 research code.
 
 **Documentation:** [suchethacooray.com/tengri](https://suchethacooray.com/tengri/) · **Notebooks:** [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) · **Paper:** in preparation
 
@@ -106,63 +106,48 @@ Full walkthrough in [`notebooks/00_quickstart.py`](notebooks/00_quickstart.py).
 
 ## Tutorials
 
-The tutorial spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) is the primary learning path. The `.py` files use Jupytext format and also render into the [docs site](https://suchethacooray.com/tengri/).
+The notebook spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) is the main learning path. The `.py` files are Jupytext source; the rendered notebooks live on the [docs site](https://suchethacooray.com/tengri/).
 
-| #  | Notebook                          | What you learn                                                       |
-|----|-----------------------------------|----------------------------------------------------------------------|
-| 00 | `00_quickstart.py`                | mock galaxy → posterior in ~30 s                                     |
-| 01 | `01_why_jax.py`                   | JIT, `vmap`, `grad` — why JAX matters for SED fitting                |
-| 02 | `02_sed_anatomy.py`               | wavelength → physics map; what each component does                   |
-| 03 | `03_discovering_the_menu.py`      | the registry / discovery API (`list_*`, `describe`, `search`)        |
-| 04 | `04_building_models.py`           | compositional model construction with `Parameters`                   |
-| 05 | `05_fitting_photometry.py`        | photometric fitting workflow end-to-end                              |
-| 06 | `06_fitting_spectroscopy.py`      | optical spectroscopy with calibration nuisance parameters            |
-| 07 | `07_joint_photo_spec.py`          | joint photo + spectro fits to break degeneracies                     |
-| 08 | `08_emission_lines.py`            | BPT diagnostics, line ratios, Hα-based SFR validation                |
+| #  | Notebook                       | Topic                                                       |
+|----|--------------------------------|-------------------------------------------------------------|
+| 00 | `00_quickstart.py`             | mock galaxy → posterior in ~30 s                            |
+| 01 | `01_why_jax.py`                | JIT, `vmap`, `grad` and what they buy for SED fitting       |
+| 02 | `02_sed_anatomy.py`            | the panchromatic SED, component by component                |
+| 03 | `03_discovering_the_menu.py`   | discovery API (`list_*`, `describe`, `search`)              |
+| 04 | `04_building_models.py`        | building models with `Parameters`                           |
+| 05 | `05_fitting_photometry.py`     | photometric fit, end to end                                 |
+| 06 | `06_fitting_spectroscopy.py`   | optical spectroscopy with calibration nuisance parameters   |
+| 07 | `07_joint_photo_spec.py`       | joint photo + spec to break degeneracies                    |
+| 08 | `08_emission_lines.py`         | BPT diagnostics, line ratios, Hα-based SFR validation       |
 
-For one-figure recipes, see the [examples gallery](https://suchethacooray.com/tengri/auto_examples/index.html).
+For single-figure recipes, see the [examples gallery](https://suchethacooray.com/tengri/auto_examples/index.html).
 
-## Discover what's there, interactively
+## Discover what's installed
 
-After installing, four calls answer "what does tengri do?" and "how do I use it?":
+A handful of calls answer "what's in this library?" and "is my install healthy?":
 
 ```python
 import tengri
+tengri.summary()        # live counts from every registry
 tengri.help()           # curated cheatsheet
-tengri.summary()        # one-line counts of every menu, live from the registry
-tengri.tutorial()       # menu of runnable, copy-pasteable recipes
-tengri.<TAB>            # curated entry points (not the kitchen sink)
+tengri.list_filters()   # also: list_sfh_models, list_agn_models, ...
+tengri.describe("skirtor")
+tengri.search("torus")
+tengri.doctor()         # install + JAX backend + SSP files
 ```
 
-`tengri.tutorial(topic)` prints a recipe; pass `run=True` to execute it where safe:
-
-```python
-tengri.tutorial("philosophy")        # layered architecture + IFT framework
-tengri.tutorial("first_fit")         # mock galaxy → posterior
-tengri.tutorial("swap_inference")    # same model, NUTS → geoVI → MCMC
-tengri.tutorial("hierarchical")      # population fit across many galaxies
-tengri.tutorial("register_a_model", run=True)   # add a new model — LIVE
-```
-
-`tengri.summary()` reads counts directly from the registries — adding a new model via `@register_agn_model` updates them without any doc edit. Each `list_*()` returns a clean table in the REPL and a real HTML table in Jupyter.
-
-`tengri.describe(name)` and `tengri.search(query)` look up models by name or keyword across every menu (components, AGN models, dust laws, SFH models, nebular backends, filters, inference methods).
-
-`tengri.doctor()` confirms install + JAX backend + SSP files.
-
-The same surface is available without entering Python:
+`tengri.summary()` and the `list_*()` calls read the registries directly, so a model registered through `@register_agn_model` shows up here without a doc edit. The same commands are available from the shell:
 
 ```bash
 python -m tengri summary
-python -m tengri doctor
 python -m tengri describe skirtor
 python -m tengri search torus
-python -m tengri help inference
+python -m tengri doctor
 ```
 
 ## Inference methods
 
-Parameters declare priors, SSP grids hold pre-computed stellar populations, `SEDModel` ties them into a differentiable forward model, and `Fitter` runs inference and returns a `Posterior`.
+`Parameters` declares priors. The SSP grid holds pre-computed stellar populations. `SEDModel` ties them into a differentiable forward model, and `Fitter` runs inference, returning a `Posterior`.
 
 | Method        | Command                            | Best for                                                  |
 |---------------|------------------------------------|-----------------------------------------------------------|
@@ -177,21 +162,13 @@ Parameters declare priors, SSP grids hold pre-computed stellar populations, `SED
 
 ## What's modular
 
-- **Stars** — DSPS SSPs (BC03, BPASS, FSPS, ProGeny).
-- **SFH** — parametric, non-parametric, and stochastic (IFT-correlated fields with PSD-governed burstiness).
-- **Dust** — multiple attenuation laws and emission templates, swappable via the registry.
-- **Nebular** — BakedIn / CloudyGrid / Cue backends.
-- **AGN** — disc + torus + BLR/NLR, unified across optical/IR/X-ray.
-- **IGM, radio, X-ray** — first-class components.
-- **Filters** — large catalogue of photometric bandpasses (`tengri.list_filters()`).
+Stars come from DSPS SSPs (BC03, BPASS, FSPS, ProGeny). The SFH layer covers parametric families (15+, registry-driven), non-parametric reconstructions (Leja+ continuity, Dirichlet), and stochastic fields (IFT correlated fields with PSD-governed burstiness). Dust is swappable on both the attenuation and emission sides; nebular emission has six backends (BakedIn, CloudyGrid, Cue, CB19, MAPPINGS-stellar, MAPPINGS-AGN). AGN spans disc, torus, and BLR/NLR, unified across optical / IR / X-ray. IGM, radio, and X-ray are first-class components; filters are pulled from a large bandpass catalogue (`tengri.list_filters()`).
 
-Each is a swappable pure JAX function. JIT, `vmap`, and `grad` compose throughout.
-
-`tengri.cite_all()` returns BibTeX citations for every upstream SSP grid, paper, and code that contributed to a fit, so reproducibility is not a separate task.
+Every component is a pure JAX function — `jit`, `vmap`, and `grad` compose throughout. `tengri.cite_all()` returns BibTeX for every SSP, model, and code that contributed to a fit, so reproducibility doesn't require a separate citation pass.
 
 ## Status
 
-Pre-1.0; active development; API may change. Paper in preparation.
+Pre-1.0, actively developed, and API-unstable. Paper I in preparation.
 
 ## Community
 

@@ -762,25 +762,16 @@ print("loops for sensitivity studies, or vmap() for full batch vectorization.")
 # %% [markdown]
 # ## Where to go next
 #
-# This notebook threaded:
+# Most of the API surface a model-builder needs is in this notebook:
+# `Parameters.with_params(**kw)` for immutable swaps,
+# `Parameters.summary()` for introspection, `model.predict_sfh(...)` and
+# `predict_photometry_batch(...)` for diagnostics, `tengri.describe(name)`
+# and `tengri.cite(...)` for registry and citations.
 #
-# - `Parameters.with_params(**kw)` — immutable component swap
-# - `Parameters.summary() / summary_str()` — model introspection
-# - `Parameters.is_fixed(name) / get_distribution(name)` — parameter queries
-# - `model.predict_sfh(truth)` and `predict_sfh_quantities(truth)` — SFH diagnostics
-# - `model.predict_photometry_batch(batch_truths)` — vectorized predictions
-# - `tengri.describe(name)` — registry introspection
-# - `tengri.cite(parameters_object)` — full citation table
-#
-# **Next steps:**
-#
-# - **Fitting** — Use `Fitter(...).run("mcmc_nuts", ...)` to recover posteriors
-#   (notebook `05_fitting_photometry`).
-# - **Stochastic SFH** — Enable bursty fields with `sfh_field_psd_*` parameters.
-# - **Joint constraints** — Add spectroscopy to break age-dust-metallicity
-#   degeneracies.
-# - **AGN** — Swap in AGN disc/torus via `agn_disc=` and `agn_torus=`.
-# - **Model comparison** — Nested sampling for Bayesian evidence.
-#
-# Every component lives in the registry. Build your own SFH family or dust law,
-# register it, and the parameter tracking + forward model work unchanged.
+# Natural next steps: [`05_fitting_photometry`](05_fitting_photometry.py)
+# runs a real fit and reads its posterior;
+# [`06_fitting_spectroscopy`](06_fitting_spectroscopy.py) breaks age, dust,
+# and metallicity degeneracies with a spectrum. Stochastic SFHs live
+# behind the `sfh_field_psd_*` parameters; AGN behind `agn_disc=` and
+# `agn_torus=`. Build your own component, register it, and the parameter
+# tracking and forward model pick it up unchanged.

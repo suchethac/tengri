@@ -608,39 +608,13 @@ print(
 #
 # ## Recap
 #
-# **One model, any method.**
+# A pure-JAX forward model is the load-bearing idea. Once you have it,
+# JIT makes it fast, `grad` makes it differentiable, `vmap` makes it
+# batchable, and every gradient-based inference method (MAP, Laplace,
+# HMC/NUTS, VI) is downstream of those three. There is no separate fast
+# path or autodiff harness — same function, every backend.
 #
-# ```
-# Parameters
-#     ↓
-# forward_model(θ)  [pure JAX function, JIT-compiled once]
-#     ↓
-# ┌──────────────────────────────────────┐
-# │  Inference Methods (all reuse forward_model)
-# │                                       │
-# │  MAP:        minimize(-log p)         │
-# │  Laplace:    one grad + curvature     │
-# │  HMC:        alternating forward+grad │
-# │  VI:         gradient of ELBO         │
-# │  Nested Sampl: sequential             │
-# └──────────────────────────────────────┘
-#     ↓
-# Posterior samples, uncertainties, evidence
-# ```
-#
-# **What you learned:**
-# 1. JIT compilation: write Python, run compiled machine code.
-# 2. Autodiff: gradients are free (2–3× forward cost).
-# 3. vmap: one model becomes a batch model, no loops.
-# 4. Composability: stack these to build inference pipelines.
-#
-# **Next steps:**
-# - **Notebook 02** ([`02_sed_anatomy.py`](02_sed_anatomy.py)): Trace the SED from stellar continuum to dust to emission lines. Understand the forward model piece by piece.
-# - **Notebook 03** ([`03_fitting_photometry.py`](03_fitting_photometry.py)): Fit mock photometry with MAP, Laplace, and HMC. See inference methods in action.
-# - **Notebook 06** ([`06_inference_methods.py`](06_inference_methods.py)): Detailed comparison of all inference backends (MAP, VI, HMC, Pathfinder, Nested Sampling).
-
-# %% [markdown]
-# ---
-#
-# **Questions?** See [`docs/user/`](../docs/user/) for detailed API docs, or open an issue on GitHub.
-# tengri is open-source (MIT) and welcomes contributions.
+# Next: [`02_sed_anatomy`](02_sed_anatomy.py) takes the panchromatic
+# galaxy SED apart component by component, and
+# [`05_fitting_photometry`](05_fitting_photometry.py) shows the full
+# fitting workflow with proper diagnostics.

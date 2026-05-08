@@ -512,25 +512,17 @@ plt.show()
 # ## Summary
 
 # %%
-print("SUMMARY: Photometric SED Fitting")
+n_samples = len(next(iter(result.samples.values())))
+rhat_max = max(float(v) for v in result.rhat().values())
+n_div = result.diagnostics["n_divergent"]
 
-print(f"""
-Complete workflow:
-  Data:      {phot_obs.n_filters} UV–IR bands (SNR=15)
-  Model:     {spec.n_free} free params (SFH + dust + redshift + nebular)
-  Inference: NUTS {len(next(iter(result.samples.values())))} samples in {t_fit:.1f}s
-  Diagnostics: R̂_max={max(float(v) for v in result.rhat().values()):.4f}, divergences={result.diagnostics['n_divergent']}
-
-Derived: stellar mass, SFR(10/100 Myr), sSFR with 68% credible intervals
-Validation: posterior-predictive residuals, SFH recovery, corner plots
-
-Limitation: Photometry alone cannot break age–dust–metallicity degeneracy.
-Solution: Add spectroscopy (notebook 06) to constrain stellar age.
-
-Next: 06_fitting_spectroscopy.py for optical spectrum + line diagnostics
-""")
-
-
+print(
+    f"NUTS on {phot_obs.n_filters} UV–IR bands, {spec.n_free} free parameters: "
+    f"{n_samples} samples in {t_fit:.1f}s, R-hat_max = {rhat_max:.3f}, "
+    f"{n_div} divergent transitions."
+)
+print(
+    "Photometry alone leaves age, dust, and metallicity coupled. "
+    "06_fitting_spectroscopy.py adds an optical spectrum to break the degeneracy."
+)
 tg.cite(result)
-
-print("Notebook complete: photometric SED fitting, NUTS inference, posterior validation")
