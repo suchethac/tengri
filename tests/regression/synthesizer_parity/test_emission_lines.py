@@ -27,7 +27,7 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.observation.line_list import LineList, _DOUBLET_RATIOS
+from tengri.observation.line_list import _DOUBLET_RATIOS, LineList
 
 
 def test_doublet_ratio_oiii_enforced():
@@ -77,7 +77,7 @@ def test_doublet_ratio_nii_enforced():
     Pitfall P-12: [NII] doublet constraints must match transition probabilities.
     Storey & Zeippen 2000: [NII] λ6584 / λ6548 ≈ 2.94:1.
     """
-    line_list = DEFAULT_LINE_LIST
+    line_list = LineList.default_optical()
     names = list(line_list.names)
 
     # Locate the [NII] doublet
@@ -111,7 +111,7 @@ def test_nev_doublet_ratio_enforced():
 
     NIST Atomic Spectra Database + Storey & Zeippen 2000: [Ne V] λ3426 / λ3346 ≈ 1.3.
     """
-    line_list = DEFAULT_LINE_LIST
+    line_list = LineList.default_optical()
     names = list(line_list.names)
 
     try:
@@ -146,7 +146,7 @@ def test_halpha_wavelength_is_vacuum():
 
     Reference: IAU 2015 standard; Byler et al. 2017.
     """
-    line_list = DEFAULT_LINE_LIST
+    line_list = LineList.default_optical()
     names = list(line_list.names)
 
     try:
@@ -181,7 +181,7 @@ def test_lyman_alpha_wavelength_is_vacuum():
 
     Reference: IAU 2015; NIST Atomic Spectra Database (transition 2P → 1S, n=2→1).
     """
-    line_list = DEFAULT_LINE_LIST
+    line_list = LineList.default_optical()
     names = list(line_list.names)
 
     try:
@@ -205,7 +205,7 @@ def test_all_wavelengths_positive_and_reasonable():
     Pitfall P-12 (implicit): guards against corrupted line list entries with negative
     or zero wavelengths, which would break interp + photometry pipelines.
     """
-    line_list = DEFAULT_LINE_LIST
+    line_list = LineList.default_optical()
 
     for i, (name, wav) in enumerate(zip(line_list.names, line_list.wavelengths)):
         wav_float = float(wav)
