@@ -780,8 +780,14 @@ def prevot_smc(
     """
     # Convert wavelength from Å to μm
     wavelength_um = wavelength / 1e4
-    # Raw Prevot+1984 form: A(lambda)/E(B-V) with lambda in μm
-    k_raw = 1.39 * jnp.power(wavelength_um, -1.2) - 0.38
+    # Raw Prevot+1984 form: A(lambda)/E(B-V) with lambda in μm. The
+    # published fit is only calibrated for 1200–3200 Å (UV); beyond
+    # ~5–10 μm the analytic form goes negative because of the constant
+    # offset (k_raw → -0.38 as λ → ∞). Clamp to zero to enforce the
+    # physical constraint k(λ) ≥ 0 — extrapolation past the calibrated
+    # range gets no attenuation rather than negative attenuation. This
+    # mirrors synthesizer PR #980 for the Calzetti grid extrapolation.
+    k_raw = jnp.maximum(1.39 * jnp.power(wavelength_um, -1.2) - 0.38, 0.0)
     # Normalise to k(V) = 1 (V band = 5500 Å = 0.55 μm) so that
     # the result is A(lambda)/A(V), matching tengri's dust-law convention.
     k_v_raw = 1.39 * (0.55) ** (-1.2) - 0.38  # ≈ 2.4683
