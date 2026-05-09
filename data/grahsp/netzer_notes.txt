@@ -1,0 +1,22 @@
+Hagai Netzer on the meaning of the L(line)/L5100:
+
+The way I think about it is to first construct an emission line spectrum
+made of all the lines and then combine with the disk contiuum.
+Take Hb as an example: (everything is done in erg/sec/A units)
+Calculate a simple line shape e.g. a Gaussian with
+FWHM of 3000 km/sec. The actual width does not matter but the constant
+that you get by integrating over this profile does.
+If you normalized this integral to be 0.02 erg/sec this would be just
+right for a continuum whose 5100A luminosity ( L(5100)) is 1 erg/sec -
+this is the meaning of L(Hb)/L(5100)=0.02.
+You propably want a continuum spectrum in units of L_lambda in which case
+L_5000 (erg/sec/A) is L(5100)/5100=1.96e-4 erg/sec/A.
+So you have a gaussian shaped line whoe  total luminosity is 0.02 erg/sec
+and a continuum whose luminosity per erg per Angstrom at 5100A is 1.96e-4.
+You can now combine the two to have a 'real" spectrum made of lines
+and continuum
+(the equivalent width of
+this Hb is roughly 102A - about the average in many observed AGNs -
+you can measure what was constructed to make sure it  was done
+correctly)
+

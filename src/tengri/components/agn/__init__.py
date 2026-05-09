@@ -67,6 +67,15 @@ from tengri.components.agn.unified import (
     unified_agn,
     unified_nlr_blr,
 )
+from tengri.components.agn.grahsp import (
+    GRAHSPSED,
+    GRAHSPParams,
+    GRAHSPSEDComponent,
+    GRAHSPSEDComponentConfig,
+    compute_grahsp_sed,
+    evaluate_grahsp_agn,
+    grahsp,
+)
 
 # New names
 
@@ -84,8 +93,15 @@ __all__ = [
     "compute_qsogen_sed",
     "create_cat3d_wind_from_grid",
     "create_relagn_disc_from_grid",
+    "GRAHSPParams",
+    "GRAHSPSED",
+    "GRAHSPSEDComponent",
+    "GRAHSPSEDComponentConfig",
+    "compute_grahsp_sed",
     "create_silva04_from_grid",
     "create_skirtor_from_grid",
+    "evaluate_grahsp_agn",
+    "grahsp",
     "kubota_done_disc",
     "kubota_done_full_agn",
     "multicolor_disc",
