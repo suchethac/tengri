@@ -468,6 +468,12 @@ _DUST_EMISSION_PARAMS = {
         "",
         Fixed(-10.0),
     ),
+    "dust_lgU": (
+        "log10(U) starlight intensity in mMMP units for Draine+2021 PAHspec (0..7)",
+        lambda lo, hi: lo >= 0.0 and hi <= 7.0,
+        "must be in [0, 7]",
+        Fixed(0.0),
+    ),
 }
 
 _RADIO_PARAMS = {
@@ -779,6 +785,134 @@ _AGN_PARAMS = {
         lambda lo, hi: lo >= 0.05 and hi <= 0.6,
         "must be in [0.05, 0.6] (grid values: 0.1, 0.3, 0.5)",
         Fixed(0.3),
+    ),
+    # GRAHSP AGN model (Buchner+ 2024, arXiv:2405.19297). Activated by
+    # ``agn_model="grahsp"``. Parameters mirror the upstream ``activate*``
+    # CIGALE modules; see :mod:`tengri.components.agn.grahsp`.
+    "agn_grahsp_l5100": (
+        "GRAHSP lambda*L_lambda(5100Å) [erg/s] (paper L_AGN). "
+        "Sets the AGN normalisation; typical 1e42-1e47 for Sy1 to QSO.",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(1.0e44),
+    ),
+    "agn_grahsp_uvslope": (
+        "GRAHSP BBB UV power-law index alpha_1 (paper uvslope). "
+        "Typical 0; must satisfy uvslope > plslope.",
+        lambda lo, hi: True,
+        "",
+        Fixed(0.0),
+    ),
+    "agn_grahsp_plslope": (
+        "GRAHSP BBB optical power-law index alpha_2 (paper plslope). "
+        "Typical -2.7 to -1; must satisfy uvslope > plslope.",
+        lambda lo, hi: True,
+        "",
+        Fixed(-1.7),
+    ),
+    "agn_grahsp_plbendloc_nm": (
+        "GRAHSP BBB bend wavelength lambda_break [nm] (paper plbendloc). "
+        "Typical 50-200 nm.",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(100.0),
+    ),
+    "agn_grahsp_plbendwidth": (
+        "GRAHSP BBB bend width Lambda [dex] (paper plbendwidth). "
+        "Typical 0.1-10.",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(1.0),
+    ),
+    "agn_grahsp_cutoff_nm": (
+        "GRAHSP BBB IR cutoff [nm]; -1 disables (paper cutoff). Default 1e4.",
+        lambda lo, hi: True,
+        "",
+        Fixed(10000.0),
+    ),
+    "agn_grahsp_a_lines": (
+        "GRAHSP line strength scale (paper Alines). Typical 0.3-20.",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(1.0),
+    ),
+    "agn_grahsp_a_feii": (
+        "GRAHSP FeII forest strength relative to broad H-beta (paper AFeII). "
+        "Typical 2-10.",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(5.0),
+    ),
+    "agn_grahsp_linewidth_kms": (
+        "GRAHSP emission-line FWHM [km/s] (paper Wline). Typical 100-30000.",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(5000.0),
+    ),
+    "agn_grahsp_fcov": (
+        "GRAHSP torus covering factor at 12 um (paper fcov). "
+        "Typical 0.05-0.95; relates to Stalevski+2016 geometric f_cov.",
+        lambda lo, hi: lo >= 0 and hi <= 1.0,
+        "must be in [0, 1]",
+        Fixed(0.4),
+    ),
+    "agn_grahsp_si": (
+        "GRAHSP Si feature strength (paper Si). Negative=absorption, "
+        "positive=emission. Typical -4 to +4.",
+        lambda lo, hi: True,
+        "",
+        Fixed(0.0),
+    ),
+    "agn_grahsp_cool_lam_um": (
+        "GRAHSP cool dust peak wavelength [um] (paper COOLlam). "
+        "Typical 10-30 um.",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(17.0),
+    ),
+    "agn_grahsp_cool_width": (
+        "GRAHSP cool dust log-width [dex] (paper COOLwidth). "
+        "Typical 0.2-0.65.",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(0.45),
+    ),
+    "agn_grahsp_hot_lam_um": (
+        "GRAHSP hot dust peak wavelength [um] (paper HOTlam). "
+        "Typical 1-5.5 um.",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(2.0),
+    ),
+    "agn_grahsp_hot_width": (
+        "GRAHSP hot dust log-width [dex] (paper HOTwidth). Typical 0.2-0.65.",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+        Fixed(0.5),
+    ),
+    "agn_grahsp_hot_fcov": (
+        "GRAHSP hot/cool peak ratio in lambda*L_lambda (paper f_hot). "
+        "Typical 0.04-10.",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(1.0),
+    ),
+    "agn_grahsp_ebv": (
+        "GRAHSP baseline E(B-V) [mag] applied to the AGN bi-attenuation "
+        "(paper E(B-V)). In the upstream CIGALE pipeline this is also the "
+        "galaxy E(B-V); in tengri it parameterises only the AGN-side "
+        "attenuation — galaxy attenuation is handled by the standard "
+        "tengri ``dust_*`` component (configure them consistently).",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(0.0),
+    ),
+    "agn_grahsp_ebv_agn": (
+        "GRAHSP additional AGN-only E(B-V) [mag] (paper E(B-V)-AGN). "
+        "Stacks with agn_grahsp_ebv to attenuate the AGN spectrum.",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(0.0),
     ),
 }
 

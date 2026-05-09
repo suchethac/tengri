@@ -2,13 +2,14 @@
 """GRAHSPSEDComponent: composable SEDComponent adapter for the GRAHSP model.
 
 Mirrors the canonical adapter pattern of :mod:`tengri.components.radio.component`.
-The component publishes:
+The component publishes (all under ``state.derived``):
 
-- An additive contribution to ``sed_intrinsic`` (BBB + lines + FeII + torus + Si)
-  in :math:`L_\\nu` [erg/s/Hz] on the rest-frame Å grid.
-- ``state.derived["L_agn_bol"]`` — bolometric BBB luminosity (Eq. 2.1.4).
-- ``state.derived["L_agn_torus"]`` — torus bolometric luminosity.
-- ``state.derived["sed_grahsp"]`` — the GRAHSP AGN-side SED (for diagnostics).
+- ``sed_grahsp`` — :math:`L_\\nu` [erg/s/Hz] of the full GRAHSP AGN-side SED.
+- ``L_agn_bol`` — bolometric BBB luminosity (paper §2.1.4 ``lumBolBBB``).
+- ``L_agn_torus`` — torus bolometric luminosity (``lumBolTOR``).
+- ``L_agn_absorbed`` — energy absorbed by the AGN bi-attenuation (the
+  intrinsic-minus-attenuated integral over the AGN-side spectrum). Useful
+  for energy-budget diagnostics; see "Energy balance" below.
 
 Composition
 -----------
@@ -23,8 +24,25 @@ Users compose via :class:`GRAHSPSEDComponentConfig`:
 
 This makes it possible to mix GRAHSP pieces with **other** tengri AGN
 models (e.g. SKIRTOR torus + GRAHSP BBB; or QSOgen + GRAHSP attenuation).
-Galaxy-side dust re-emission is handled by the existing
-:mod:`tengri.components.dust` pipeline.
+
+Energy balance
+--------------
+Two notes that matter for getting realistic IR SEDs:
+
+1. **Galaxy attenuation is *not* this component's job.** In the upstream
+   CIGALE ``biattenuation`` module, ``E(B-V)`` attenuates *both* galaxy
+   and AGN. In tengri's component model the galaxy SED is owned by the
+   stellar+dust pipeline and is attenuated by :mod:`tengri.components.dust`.
+   This component's ``agn_grahsp_ebv`` is therefore the **AGN baseline
+   line-of-sight extinction**, not the galaxy's. To reproduce upstream
+   behaviour, configure ``dust_*`` with the same E(B-V) and an SMC-like
+   law (see :func:`tengri.components.dust.attenuation.prevot_smc`).
+2. **The AGN side does not need an explicit re-emission loop.** GRAHSP's
+   torus parameters (``fcov``, cool/hot log-Gaussians) already empirically
+   model the dust re-radiation of absorbed UV/optical AGN light (paper
+   §2.1.5). We publish ``L_agn_absorbed`` for diagnostics only — it is
+   *not* fed into the Dale 2014 dust-emission component, since doing so
+   would double-count the torus contribution.
 
 Parameter contract
 ------------------
@@ -364,8 +382,8 @@ class GRAHSPSEDComponent:
         # Mirror upstream activategtorus: clip si so total torus stays >= 0.
         si = jnp.maximum(si, -torus)
 
-        bbb_total = bbb + broad + narrow + feii
-        torus_total = torus + si
+        bbb_intrinsic = bbb + broad + narrow + feii
+        torus_intrinsic = torus + si
 
         if cfg.apply_attenuation:
             _, factor_agn = attenuation_factors(
@@ -373,8 +391,11 @@ class GRAHSPSEDComponent:
                 ebv=jnp.asarray(params["agn_grahsp_ebv"]),
                 ebv_agn=jnp.asarray(params["agn_grahsp_ebv_agn"]),
             )
-            bbb_total = bbb_total * factor_agn
-            torus_total = torus_total * factor_agn
+            bbb_total = bbb_intrinsic * factor_agn
+            torus_total = torus_intrinsic * factor_agn
+        else:
+            bbb_total = bbb_intrinsic
+            torus_total = torus_intrinsic
 
         # L_lambda [erg/s/nm] -> L_nu [erg/s/Hz]: L_nu = L_lambda * lambda^2 / c
         L_lambda_total = bbb_total + torus_total
@@ -386,11 +407,18 @@ class GRAHSPSEDComponent:
             new_sed = state.sed_intrinsic + L_nu
 
         # Bolometric quantities (computed from L_lambda on the nm grid).
-        L_bol_BBB = bolometric_luminosity_bbb(wave_nm, bbb + broad + narrow + feii)
-        L_bol_torus = bolometric_luminosity_torus(wave_nm, torus + si)
+        L_bol_BBB = bolometric_luminosity_bbb(wave_nm, bbb_intrinsic)
+        L_bol_torus = bolometric_luminosity_torus(wave_nm, torus_intrinsic)
+        # Diagnostic: integrated AGN-side absorbed luminosity (intrinsic - attenuated).
+        # Reported but NOT injected into the Dale 2014 dust-emission loop —
+        # GRAHSP's torus already empirically captures dust re-radiation.
+        L_agn_absorbed = jnp.trapezoid(
+            (bbb_intrinsic + torus_intrinsic) - L_lambda_total, wave_nm
+        )
 
         new_derived = dict(state.derived)
         new_derived["sed_grahsp"] = L_nu
         new_derived["L_agn_bol"] = L_bol_BBB
         new_derived["L_agn_torus"] = L_bol_torus
+        new_derived["L_agn_absorbed"] = L_agn_absorbed
         return state.with_(sed_intrinsic=new_sed, derived=new_derived)

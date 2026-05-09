@@ -388,6 +388,25 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
                 agn_gamma_hard=p.get("agn_gamma_hard", 1.8),
                 agn_kt_hot=p.get("agn_kt_hot", 100.0),
                 agn_r_warm_ratio=p.get("agn_r_warm_ratio", 2.0),
+                # GRAHSP (Buchner+ 2024) — only consumed when agn_model="grahsp"
+                agn_grahsp_l5100=p.get("agn_grahsp_l5100", 1.0e44),
+                agn_grahsp_uvslope=p.get("agn_grahsp_uvslope", 0.0),
+                agn_grahsp_plslope=p.get("agn_grahsp_plslope", -1.7),
+                agn_grahsp_plbendloc_nm=p.get("agn_grahsp_plbendloc_nm", 100.0),
+                agn_grahsp_plbendwidth=p.get("agn_grahsp_plbendwidth", 1.0),
+                agn_grahsp_cutoff_nm=p.get("agn_grahsp_cutoff_nm", 10000.0),
+                agn_grahsp_a_lines=p.get("agn_grahsp_a_lines", 1.0),
+                agn_grahsp_a_feii=p.get("agn_grahsp_a_feii", 5.0),
+                agn_grahsp_linewidth_kms=p.get("agn_grahsp_linewidth_kms", 5000.0),
+                agn_grahsp_fcov=p.get("agn_grahsp_fcov", 0.4),
+                agn_grahsp_si=p.get("agn_grahsp_si", 0.0),
+                agn_grahsp_cool_lam_um=p.get("agn_grahsp_cool_lam_um", 17.0),
+                agn_grahsp_cool_width=p.get("agn_grahsp_cool_width", 0.45),
+                agn_grahsp_hot_lam_um=p.get("agn_grahsp_hot_lam_um", 2.0),
+                agn_grahsp_hot_width=p.get("agn_grahsp_hot_width", 0.5),
+                agn_grahsp_hot_fcov=p.get("agn_grahsp_hot_fcov", 1.0),
+                agn_grahsp_ebv=p.get("agn_grahsp_ebv", 0.0),
+                agn_grahsp_ebv_agn=p.get("agn_grahsp_ebv_agn", 0.0),
             )
             sed = sed + agn_sed
 

@@ -109,6 +109,23 @@ def test_parameter_prefix_invariant():
         assert decl.name.startswith("agn_grahsp_") or decl.name in ("redshift",)
 
 
+def test_publishes_l_agn_absorbed():
+    """L_agn_absorbed must be non-negative and zero when attenuation is off."""
+    component_atten = GRAHSPSEDComponent(
+        config=GRAHSPSEDComponentConfig(apply_attenuation=True)
+    )
+    component_no_atten = GRAHSPSEDComponent(
+        config=GRAHSPSEDComponentConfig(apply_attenuation=False)
+    )
+    state = PipelineState(wave=jnp.logspace(3, 6, 200))
+    out_atten = component_atten.apply(state, _default_params())
+    out_no_atten = component_no_atten.apply(state, _default_params())
+    # Attenuated: positive absorption; unattenuated: exactly zero.
+    assert "L_agn_absorbed" in out_atten.derived
+    assert float(out_atten.derived["L_agn_absorbed"]) > 0
+    assert float(out_no_atten.derived["L_agn_absorbed"]) == 0.0
+
+
 def test_jit_apply():
     import jax
 
