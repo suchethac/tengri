@@ -51,6 +51,7 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
     "astrodust": ("dust_qpah", "dust_umin"),
     "themis": ("dust_qhac", "dust_umin"),
     "bosa": ("dust_log_ssfr",),  # log_ltir is derived from L_absorbed at runtime
+    "draine2021_pah": ("dust_lgU",),
 }
 
 # Per-model flag: pass ``energy_normalize=True`` to ``preintegrate_grid`` only
@@ -407,6 +408,148 @@ def build_astrodust_photometry_lookup(precomp: dict):
     Signature: ``(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah)``.
     """
     return _build_dl07_like_lookup(precomp)
+
+
+def precompute_draine2021_pah_photometry(
+    templates: Any,
+    filter_waves: list[jnp.ndarray],
+    filter_trans: list[jnp.ndarray],
+    redshift: float = 0.0,
+    *,
+    starlight: str = "mMMP",
+    ionization: str = "st",
+    size_distribution: str = "std",
+    slab: bool = False,
+) -> dict:
+    r"""Pre-integrate Draine+2021 PAHspec templates through filter curves.
+
+    Slices the 6-D PAHspec grid to a 1-D :math:`\lg U` axis at the
+    chosen ``(starlight, ionization, size_distribution, slab)``
+    configuration, converts :math:`\nu P_\nu` to :math:`L_\nu`, and
+    pre-integrates through filters.  The result has the same
+    photometry-grid shape as DL07 / Astrodust precomputes, with a
+    single runtime free parameter :math:`\lg U`.
+
+    Parameters
+    ----------
+    templates : Draine2021PAHTemplates
+        Loader output from :func:`load_draine2021_pahspec_templates`.
+    filter_waves, filter_trans : list of array_like
+        Filter curves (observed-frame Å, dimensionless).
+    redshift : float
+        Source redshift; defaults to rest-frame photometry.
+    starlight, ionization, size_distribution, slab :
+        Categorical PAHspec axes to slice.  See
+        :class:`tengri.components.dust.draine2021_pah_component.Draine2021PAHConfig`
+        for valid values.
+
+    Returns
+    -------
+    dict
+        Keys: ``single_u_phot`` (shape ``(n_filt, n_lgU)``),
+        ``lgU_grid`` (shape ``(n_lgU,)``),
+        ``wavelength_aa`` (template wave grid in Å).
+
+    Notes
+    -----
+    **JIT-compatible**: no — file I/O and template slicing happen at
+    factory time.
+    """
+    from tengri.components.dust.emission_templates import Draine2021PAHTemplates
+
+    if not isinstance(templates, Draine2021PAHTemplates):
+        raise TypeError(
+            "precompute_draine2021_pah_photometry expects a "
+            "Draine2021PAHTemplates instance from "
+            "load_draine2021_pahspec_templates"
+        )
+
+    if starlight not in templates.starlight_names:
+        raise ValueError(
+            f"starlight={starlight!r} not in template grid {templates.starlight_names}"
+        )
+    if ionization not in templates.ion_names:
+        raise ValueError(f"ionization={ionization!r} not in {templates.ion_names}")
+    if size_distribution not in templates.size_names:
+        raise ValueError(f"size_distribution={size_distribution!r} not in {templates.size_names}")
+
+    i_sl = templates.starlight_names.index(starlight)
+    i_ion = templates.ion_names.index(ionization)
+    i_size = templates.size_names.index(size_distribution)
+    slab_arr = np.asarray(templates.slab)
+    matches = np.where(slab_arr == bool(slab))[0]
+    if matches.size == 0:
+        raise ValueError(f"slab={slab} not present (have slab={slab_arr})")
+    i_slab = int(matches[0])
+
+    nu_pnu = np.asarray(
+        templates.nu_pnu_total[i_sl, i_slab, :, i_ion, i_size, :]
+    )  # (n_lgU, n_wave_um)
+    wave_um = np.asarray(templates.wavelength_um)
+    wave_aa = wave_um * 1.0e4  # to Angstrom
+    # nu = c / lam_cm.  L_nu = (nu*P_nu) / nu = (nu*P_nu) * lam_cm / c.
+    lam_cm = wave_um * 1.0e-4
+    L_nu_template = nu_pnu * lam_cm[None, :] / _C_CGS  # (n_lgU, n_wave) erg/s/Hz/H
+
+    lgU_grid = np.asarray(templates.lgU)
+
+    preint = preintegrate_grid(
+        templates=L_nu_template,
+        wave_rest=wave_aa,
+        filter_waves=[np.asarray(fw) for fw in filter_waves],
+        filter_trans=[np.asarray(ft) for ft in filter_trans],
+        redshift=redshift,
+        dl_cm=1.0,
+        axes=(lgU_grid,),
+        energy_normalize=True,
+    )
+
+    return {
+        "single_u_phot": preint.phot,  # (n_filt, n_lgU)
+        "lgU_grid": lgU_grid,
+        "wavelength_aa": wave_aa,
+        "starlight": starlight,
+        "ionization": ionization,
+        "size_distribution": size_distribution,
+        "slab": bool(slab),
+    }
+
+
+def build_draine2021_pah_photometry_lookup(precomp: dict):
+    r"""Build JIT-compiled photometry lookup for Draine+2021 PAHspec.
+
+    The returned callable has signature
+    ``(L_absorbed, dust_lgU) -> photometry``: linearly interpolates the
+    pre-integrated photometry grid in :math:`\lg U` (clipped to the
+    template support [0, 7]) and rescales by ``L_absorbed`` so the
+    integrated bolometric output equals the absorbed luminosity passed
+    in.
+
+    Parameters
+    ----------
+    precomp : dict
+        Output of :func:`precompute_draine2021_pah_photometry`.
+
+    Returns
+    -------
+    callable
+        JIT-compiled function ``(L_absorbed, dust_lgU) -> ndarray``.
+    """
+    phot = jnp.asarray(precomp["single_u_phot"])  # (n_lgU, n_filt)
+    lgU_grid = jnp.asarray(precomp["lgU_grid"])
+
+    @jax.jit
+    def _lookup(L_absorbed, dust_lgU):
+        lgU = jnp.clip(dust_lgU, lgU_grid[0], lgU_grid[-1])
+        # Per-filter linear interpolation along the lgU axis.
+        # phot has shape (n_lgU, n_filt); vmap over the filter axis (=1).
+        per_filt = jax.vmap(
+            lambda col: jnp.interp(lgU, lgU_grid, col),
+            in_axes=1,
+        )(phot)
+        return L_absorbed * per_filt
+
+    return _lookup
 
 
 def precompute_themis_photometry(
@@ -943,6 +1086,8 @@ def build_lookup(preint, *, model_name: str):
         return build_bosa_photometry_lookup(preint)
     if model_name == "dale2014":
         return build_dale2014_photometry_lookup(preint)
+    if model_name == "draine2021_pah":
+        return build_draine2021_pah_photometry_lookup(preint)
     return build_template_photometry_lookup(preint)
 
 
@@ -1060,6 +1205,53 @@ def precompute_for_model(
         templates = loader(path)
         return precompute_fn(templates, filter_waves, filter_trans, redshift=redshift)
 
+    if model_name == "draine2021_pah":
+        # Categorical config from environment (no-op fallback to standard model).
+        # Path discovery: env override > data/ default > None (returns None below).
+        import os as _os
+
+        from tengri.components.dust.emission_templates import (
+            load_draine2021_pahspec_templates,
+        )
+
+        path_str = _os.environ.get("TENGRI_PAHSPEC_PATH")
+        if path_str is None:
+            for fname in ("pahspec_draine2021.h5",):
+                candidate = _find_data_file(fname)
+                if candidate is not None:
+                    path_str = candidate
+                    break
+        if path_str is None or not _os.path.isfile(path_str):
+            return None
+
+        templates_obj = load_draine2021_pahspec_templates(path_str)
+        cfg_starlight = _os.environ.get("TENGRI_PAHSPEC_STARLIGHT", "mMMP")
+        cfg_ion = _os.environ.get("TENGRI_PAHSPEC_ION", "st")
+        cfg_size = _os.environ.get("TENGRI_PAHSPEC_SIZE", "std")
+        cfg_slab = _os.environ.get("TENGRI_PAHSPEC_SLAB", "0").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        # Optional: parameters object can override via attributes.
+        if parameters is not None:
+            cfg_starlight = getattr(parameters, "_pahspec_starlight", cfg_starlight)
+            cfg_ion = getattr(parameters, "_pahspec_ionization", cfg_ion)
+            cfg_size = getattr(parameters, "_pahspec_size_distribution", cfg_size)
+            cfg_slab = getattr(parameters, "_pahspec_slab", cfg_slab)
+
+        return precompute_draine2021_pah_photometry(
+            templates_obj,
+            filter_waves,
+            filter_trans,
+            redshift=redshift,
+            starlight=cfg_starlight,
+            ionization=cfg_ion,
+            size_distribution=cfg_size,
+            slab=cfg_slab,
+        )
+
     return None
 
 
@@ -1129,6 +1321,11 @@ def _register_dust_ir_components():
     # BOSA (Boss-Agn): 1D grid in (log_ssfr)
     # Signature: (L_absorbed, dust_log_ssfr)
     register(_make_dust_ir_spec("bosa", ("dust_log_ssfr",)))
+
+    # Draine, Li, Hensley et al. 2021 (arXiv:2011.07046): 1D grid in (lgU)
+    # after slicing by categorical (starlight, ionization, size, slab) config.
+    # Signature: (L_absorbed, dust_lgU)
+    register(_make_dust_ir_spec("draine2021_pah", ("dust_lgU",)))
 
 
 # Register at module load time

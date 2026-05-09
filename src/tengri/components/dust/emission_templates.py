@@ -23,6 +23,7 @@ Re-exported here from emission.py:
 """
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -1708,3 +1709,96 @@ def _dl07_lazy_wrapper(*args, **kwargs):
                 "Run: python scripts/convert_dl07_templates.py"
             )
     return emission.DUST_EMISSION_MODELS["draine_li2007"](*args, **kwargs)
+
+
+# ===========================================================================
+# Draine, Li, Hensley et al. 2021 PAHspec template loader
+# ===========================================================================
+
+
+@dataclass(frozen=True)
+class Draine2021PAHTemplates:
+    """Frozen container for the Draine+2021 PAHspec template grid.
+
+    All spectrum arrays are :math:`\nu P_\nu` in erg/s/H (per H atom),
+    shaped ``(n_starlight, n_slab, n_lgU, n_ion, n_size, n_wave)``.
+    The spectra are emitted-power per H atom: galaxy-scale rescaling is
+    handled downstream by the SEDComponent via energy balance with the
+    absorbed luminosity ``L_ir``.
+    """
+
+    wavelength_um: jnp.ndarray
+    lgU: jnp.ndarray
+    nu_pnu_total: jnp.ndarray
+    nu_pnu_astrodust: jnp.ndarray
+    nu_pnu_pah_plus: jnp.ndarray
+    nu_pnu_pah_neutral: jnp.ndarray
+    tir_total: jnp.ndarray
+    present: jnp.ndarray
+    starlight_names: tuple[str, ...]
+    ion_names: tuple[str, ...]
+    size_names: tuple[str, ...]
+    slab: jnp.ndarray
+    paper: str = "Draine, Li, Hensley, Hunt, Sandstrom, Smith 2021, ApJ 917, 3"
+    arxiv: str = "2011.07046"
+
+
+def load_draine2021_pahspec_templates(filepath: str) -> Draine2021PAHTemplates:
+    """Load a PAHspec HDF5 grid built by ``scripts/build_pahspec_hdf5.py``.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to the HDF5 file.  See ``scripts/build_pahspec_hdf5.py``
+        for the layout.
+
+    Returns
+    -------
+    Draine2021PAHTemplates
+        Frozen dataclass with JAX arrays for all spectrum cubes.
+
+    Notes
+    -----
+    **JIT-compatible**: no — file I/O.  Call once outside the JIT
+    boundary (typically in ``SEDComponent.precompute()``).
+
+    References
+    ----------
+    .. [1] Draine, B.T., Li, A., Hensley, B.S., Hunt, L.K.,
+       Sandstrom, K., Smith, J.-D.T., 2021, "Excitation of PAH
+       Emission: Dependence on Size Distribution, Ionization, and
+       Starlight Spectrum and Intensity", ApJ, 917, 3,
+       arXiv:2011.07046.
+    """
+    import h5py
+
+    with h5py.File(filepath, "r") as f:
+        wave_um = jnp.asarray(f["wavelength_um"][:])
+        lgU = jnp.asarray(f["lgU"][:])
+        nu_pnu_total = jnp.asarray(f["nu_pnu_total"][...])
+        nu_pnu_astrodust = jnp.asarray(f["nu_pnu_astrodust"][...])
+        nu_pnu_pah_plus = jnp.asarray(f["nu_pnu_pah_plus"][...])
+        nu_pnu_pah_neutral = jnp.asarray(f["nu_pnu_pah_neutral"][...])
+        tir_total = jnp.asarray(f["tir_total"][...])
+        present = jnp.asarray(f["present"][...])
+        starlight_names = tuple(
+            n.decode() if isinstance(n, bytes) else n for n in f["starlight_names"][:]
+        )
+        ion_names = tuple(n.decode() if isinstance(n, bytes) else n for n in f["ion_names"][:])
+        size_names = tuple(n.decode() if isinstance(n, bytes) else n for n in f["size_names"][:])
+        slab = jnp.asarray(f["slab"][:])
+
+    return Draine2021PAHTemplates(
+        wavelength_um=wave_um,
+        lgU=lgU,
+        nu_pnu_total=nu_pnu_total,
+        nu_pnu_astrodust=nu_pnu_astrodust,
+        nu_pnu_pah_plus=nu_pnu_pah_plus,
+        nu_pnu_pah_neutral=nu_pnu_pah_neutral,
+        tir_total=tir_total,
+        present=present,
+        starlight_names=starlight_names,
+        ion_names=ion_names,
+        size_names=size_names,
+        slab=slab,
+    )

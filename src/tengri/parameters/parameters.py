@@ -190,7 +190,7 @@ class Parameters:
         IR emission model.  Default: ``None`` (disabled).
         Options: ``"modified_blackbody"``, ``"casey2012"``, ``"dale2014"``,
         ``"draine_li2007"``, ``"draine_li2014"``, ``"dl07_tabulated"``,
-        ``"astrodust"``, ``"bosa"``, ``"themis"``.
+        ``"astrodust"``, ``"bosa"``, ``"themis"``, ``"draine2021_pah"``.
     dl07_grid_path : str
         Path to DL07 HDF5 template grid (for ``"dl07_tabulated"``).
 

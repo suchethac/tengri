@@ -91,6 +91,18 @@ from tengri.components.dust.emission import (
     themis,
 )
 
+# SEDComponent adapter (Phase II Protocol shape) — dispatches IR
+# templates via ``DustEmissionSEDComponentConfig.template``.
+from tengri.components.dust.emission_component import (
+    DustEmissionSEDComponent,
+    DustEmissionSEDComponentConfig,
+    DustEmissionSEDComponentState,
+)
+from tengri.components.dust.emission_templates import (
+    Draine2021PAHTemplates,
+    load_draine2021_pahspec_templates,
+)
+
 # New names
 from tengri.components.dust.priors import (
     narayanan_prior,
@@ -132,6 +144,13 @@ _CURATED_DIR = (
     "draine_li2014",
     "modified_blackbody",
     "themis",
+    # Composable SEDComponent adapter (template= dispatch)
+    "DustEmissionSEDComponent",
+    "DustEmissionSEDComponentConfig",
+    "DustEmissionSEDComponentState",
+    # Draine+2021 PAHspec template loader
+    "Draine2021PAHTemplates",
+    "load_draine2021_pahspec_templates",
     # Pipeline helpers
     "two_component_dust",
     "single_component_dust",

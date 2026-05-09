@@ -1730,6 +1730,7 @@ class SEDModel:
             kw["dust_umin"] = p.get("dust_umin", 1.0)
             kw["dust_gamma_dl"] = p.get("dust_gamma_dl", 0.01)
             kw["dust_qpah"] = p.get("dust_qpah", 2.5)
+            kw["dust_lgU"] = p.get("dust_lgU", 0.0)
         # AGN (full params for exact evaluation)
         if self._agn_model is not None:
             kw["agn_polar_ebv"] = p.get("agn_polar_ebv", 0.0)
