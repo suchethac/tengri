@@ -1,0 +1,191 @@
+# SPDX-License-Identifier: BSD-3-Clause
+"""Non-GRAHSP block implementations — proof that the block protocol mixes
+across models.
+
+Each adapter wraps an existing tengri AGN function (or dust attenuation
+law) in the block-protocol signature so users can compose recipes like::
+
+    agn_disc_block      = "grahsp_sbpl"        # GRAHSP UV-optical
+    agn_lines_block     = "none"               # skip
+    agn_feii_block      = "none"               # skip
+    agn_torus_block     = "two_temperature"    # tengri's existing 2-T torus
+    agn_attenuation_block = "smc_prevot"       # Prevot 1984 SMC
+
+Importing this module side-effects all registrations.
+
+Unit conversions
+----------------
+The block protocol uses :math:`L_\\lambda` [erg/s/Å]. Tengri's existing
+disc / torus functions (``powerlaw_disc``, ``two_temperature_torus``,
+etc.) return :math:`L_\\nu` [erg/s/Hz]. The adapters perform the standard
+conversion :math:`L_\\lambda = L_\\nu \\, c / \\lambda^2` at the block
+boundary.
+"""
+
+from __future__ import annotations
+
+import jax.numpy as jnp
+from jax import Array
+
+from tengri.components.agn.blocks._protocol import register_agn_block
+from tengri.components.agn.disc import powerlaw_disc
+from tengri.components.agn.torus import simple_torus, two_temperature_torus
+from tengri.components.dust.attenuation import prevot_smc
+
+__all__: list[str] = []  # registrations only
+
+#: Speed of light in Å × Hz, for L_ν → L_λ conversion.
+_C_AA_PER_S: float = 2.99792458e18
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Disc alternates
+# ──────────────────────────────────────────────────────────────────────
+
+
+@register_agn_block("disc", "powerlaw")
+def powerlaw_disc_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    *,
+    agn_alpha: float = -1.0,
+    agn_T_max: float = 1.0e5,
+    **_params,
+) -> Array:
+    r"""tengri ``powerlaw_disc`` as a disc-stage block.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Å].
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
+    agn_alpha : float, optional
+        Power-law spectral index in :math:`L_\nu`. Default ``-1.0``.
+    agn_T_max : float, optional
+        UV cutoff temperature [K]. Default ``1e5``.
+
+    Returns
+    -------
+    L_lambda : ndarray, shape (n_wave,)
+        Disc :math:`L_\lambda` [erg/s/Å].
+    """
+    wave_aa = jnp.asarray(wavelength)
+    L_nu = powerlaw_disc(
+        wave_aa,
+        agn_log_lbol=agn_log_lbol,
+        agn_frac=1.0,
+        agn_alpha=agn_alpha,
+        agn_T_max=agn_T_max,
+    )
+    # L_nu [erg/s/Hz] -> L_lambda [erg/s/Å]: L_lambda = L_nu * c / lambda^2.
+    return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Torus alternates
+# ──────────────────────────────────────────────────────────────────────
+
+
+@register_agn_block("torus", "simple")
+def simple_torus_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_T_torus: float = 1000.0,
+    agn_torus_frac: float = 0.5,
+    **_params,
+) -> Array:
+    r"""tengri ``simple_torus`` (single-temperature greybody) block.
+
+    The torus is normalised by ``agn_torus_frac × 10^agn_log_lbol`` —
+    *not* by ``l5100_disc`` — so this block ignores the disc 5100Å
+    luminosity. That choice matches upstream :func:`unified_agn`.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+    agn_log_lbol : float
+    l5100_disc : array_like, scalar
+        Ignored (kept for protocol compatibility).
+    agn_T_torus : float, optional
+        Greybody temperature [K]. Default ``1000``.
+    agn_torus_frac : float, optional
+        Fraction of :math:`L_{\rm bol}` re-emitted by torus. Default ``0.5``.
+    """
+    del l5100_disc  # unused: simple torus normalises off agn_log_lbol directly.
+    wave_aa = jnp.asarray(wavelength)
+    L_nu = simple_torus(
+        wave_aa,
+        agn_log_lbol=agn_log_lbol,
+        agn_T_torus=agn_T_torus,
+        agn_torus_frac=agn_torus_frac,
+    )
+    return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+@register_agn_block("torus", "two_temperature")
+def two_temperature_torus_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_T_hot: float = 1200.0,
+    agn_T_warm: float = 300.0,
+    agn_frac_hot: float = 0.3,
+    agn_torus_frac: float = 0.5,
+    **_params,
+) -> Array:
+    r"""tengri ``two_temperature_torus`` block.
+
+    Hot + warm dust greybody. As with :func:`simple_torus_block`, the
+    normalisation comes from ``agn_log_lbol``, not the disc 5100Å
+    luminosity.
+    """
+    del l5100_disc
+    wave_aa = jnp.asarray(wavelength)
+    L_nu = two_temperature_torus(
+        wave_aa,
+        agn_log_lbol=agn_log_lbol,
+        agn_T_hot=agn_T_hot,
+        agn_T_warm=agn_T_warm,
+        agn_frac_hot=agn_frac_hot,
+        agn_torus_frac=agn_torus_frac,
+    )
+    return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Attenuation alternates
+# ──────────────────────────────────────────────────────────────────────
+
+
+@register_agn_block("attenuation", "smc_prevot")
+def smc_prevot_block(
+    wavelength: Array,
+    *,
+    agn_attenuation_ebv: float = 0.0,
+    **_params,
+) -> Array:
+    r"""Prevot 1984 SMC attenuation curve as an attenuation-stage block.
+
+    Returns the multiplicative factor :math:`10^{-A_\lambda/2.5}` where
+    :math:`A_\lambda = E(B-V) \times k_\lambda` and :math:`k_\lambda` is
+    Prevot+ 1984's SMC k-curve (the same curve underlying GRAHSP's
+    :func:`grahsp_biatten_block`, but exposed here under the more
+    discoverable ``"smc_prevot"`` name and with a single ``ebv`` param).
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Å].
+    agn_attenuation_ebv : float, optional
+        :math:`E(B-V)` extinction [mag]. Default ``0.0`` (no attenuation).
+    """
+    wave_aa = jnp.asarray(wavelength)
+    # tengri prevot_smc returns A_lambda/A_V; multiply by E(B-V) * R_V to get A_lambda.
+    # Convert to multiplicative factor 10^(-A_lambda / 2.5).
+    k_curve = prevot_smc(wave_aa)  # k = A_lambda / E(B-V)
+    A_lambda = k_curve * agn_attenuation_ebv
+    return 10.0 ** (-A_lambda / 2.5)

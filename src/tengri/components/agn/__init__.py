@@ -76,6 +76,19 @@ from tengri.components.agn.grahsp import (
     evaluate_grahsp_agn,
     grahsp,
 )
+# Importing ``blocks`` side-effects all @register_agn_block calls plus
+# AGN_MODELS["composable"]. Must come after grahsp import so GRAHSP
+# blocks see the GRAHSP package fully initialised.
+from tengri.components.agn import blocks  # noqa: F401
+from tengri.components.agn.blocks import (
+    AGN_BLOCKS,
+    BLOCK_CATEGORIES,
+    RecipeWarning,
+    composable_agn_l_nu,
+    register_agn_block,
+    resolve_agn_block,
+    validate_block_recipe,
+)
 
 # New names
 
@@ -95,14 +108,22 @@ __all__ = [
     "create_relagn_disc_from_grid",
     "GRAHSPParams",
     "GRAHSPSED",
+    "AGN_BLOCKS",
+    "BLOCK_CATEGORIES",
     "GRAHSPSEDComponent",
     "GRAHSPSEDComponentConfig",
+    "RecipeWarning",
+    "blocks",
+    "composable_agn_l_nu",
     "compute_grahsp_sed",
     "create_silva04_from_grid",
     "create_skirtor_from_grid",
     "evaluate_grahsp_agn",
     "grahsp",
     "kubota_done_disc",
+    "register_agn_block",
+    "resolve_agn_block",
+    "validate_block_recipe",
     "kubota_done_full_agn",
     "multicolor_disc",
     "nenkova_torus",

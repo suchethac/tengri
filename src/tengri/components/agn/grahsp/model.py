@@ -280,6 +280,7 @@ def compute_grahsp_sed(
     wavelength: Array,
     agn_log_lbol: float = 45.0,
     agn_frac: float = 1.0,
+    agn_grahsp_l5100: float | None = None,
     agn_grahsp_uvslope: float = _DEFAULT_UVSLOPE,
     agn_grahsp_plslope: float = _DEFAULT_PLSLOPE,
     agn_grahsp_plbendloc_nm: float = _DEFAULT_PLBENDLOC_NM,
@@ -396,9 +397,14 @@ agn_grahsp_hot_fcov
     )
     sed_unit = evaluate_grahsp_agn(wave_nm, unit_params, templates)
     # Total bolometric luminosity at l5100 = 1.
-    l_bol_unit = sed_unit.l_bol_bbb + sed_unit.l_bol_torus
-    target_l_bol = 10.0**agn_log_lbol * LSUN_ERG * agn_frac
-    l5100 = target_l_bol / l_bol_unit
+    if agn_grahsp_l5100 is not None:
+        # Honour the explicit l5100 override (matches composable runner
+        # semantics; see :mod:`tengri.components.agn.blocks`).
+        l5100 = agn_grahsp_l5100
+    else:
+        l_bol_unit = sed_unit.l_bol_bbb + sed_unit.l_bol_torus
+        target_l_bol = 10.0**agn_log_lbol * LSUN_ERG * agn_frac
+        l5100 = target_l_bol / l_bol_unit
 
     # Re-scale: GRAHSP outputs are linear in l5100, so a single multiply
     # gives the correctly-normalised SED without a second evaluation.
