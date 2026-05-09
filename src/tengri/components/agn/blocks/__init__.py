@@ -21,8 +21,13 @@ Public API
 # circular imports — registry depends on the runner being defined.
 from tengri.components.agn.blocks import (
     alternates,
+    atten_blocks,
+    disc_blocks,
     grahsp_blocks,
+    lines_blocks,
+    qsogen_blocks,
     registry,
+    torus_blocks,
 )
 from tengri.components.agn.blocks._protocol import (
     AGN_BLOCKS,

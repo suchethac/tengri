@@ -402,6 +402,29 @@ class Parameters:
         self.igm_patchy = kwargs.pop("igm_patchy", False)
         self.dla = kwargs.pop("dla", False)
         self.agn_model = kwargs.pop("agn_model", None)
+        # AGN block-recipe selectors (consumed when agn_model="composable").
+        # Validation of the (category, name) pair is deferred to
+        # validate_block_recipe in the runner; we only extract the strings
+        # here and let typo-detection happen at composition time so the
+        # error message points at the right registry.
+        self.agn_disc_block = kwargs.pop("agn_disc_block", "none")
+        self.agn_lines_block = kwargs.pop("agn_lines_block", "none")
+        self.agn_feii_block = kwargs.pop("agn_feii_block", "none")
+        self.agn_torus_block = kwargs.pop("agn_torus_block", "none")
+        self.agn_attenuation_block = kwargs.pop("agn_attenuation_block", "none")
+        # Eagerly validate block selectors so a typo raises *before* the
+        # forward model is built. Mirrors how unknown agn_model values are
+        # caught by resolve_agn_model().
+        if self.agn_model == "composable":
+            from tengri.components.agn.blocks import validate_block_recipe
+
+            validate_block_recipe(
+                agn_disc_block=self.agn_disc_block,
+                agn_lines_block=self.agn_lines_block,
+                agn_feii_block=self.agn_feii_block,
+                agn_torus_block=self.agn_torus_block,
+                agn_attenuation_block=self.agn_attenuation_block,
+            )
         self.radio = kwargs.pop("radio", False)
         self.xray = kwargs.pop("xray", False)
         self.shock = kwargs.pop("shock", False)

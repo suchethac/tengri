@@ -591,6 +591,93 @@ def _lbol_to_m_i(log_lbol_lsun: float) -> float:
     return -2.5 * (log_lbol_lsun - 12.5) + _BENORM
 
 
+def _qsogen_components(
+    wavelength: jnp.ndarray,
+    *,
+    agn_plslp1: float,
+    agn_plslp2: float,
+    agn_plbrk: float,
+    agn_tbb: float,
+    agn_bbnorm: float,
+    agn_emline_scale: float,
+    agn_ebv: float,
+    agn_log_lbol: float,
+    agn_bcnorm: float,
+) -> dict[str, jnp.ndarray]:
+    """Compute per-component ``L_nu`` for a QSOgen recipe.
+
+    Returns a dict keyed by component (``"continuum"``, ``"hot_dust"``,
+    ``"emission_lines"``, ``"balmer_continuum"``, ``"smc_factor"``) so each
+    can be addressed independently by the
+    :mod:`tengri.components.agn.blocks` runner.
+
+    Each spectral component is the *L_nu contribution* before SMC reddening;
+    ``smc_factor`` is the multiplicative attenuation factor in (0, 1].
+    Reconstructing the monolithic :func:`compute_qsogen_sed` output is::
+
+        sum_l_nu = continuum + hot_dust + emission_lines + balmer_continuum
+        result = sum_l_nu * smc_factor
+
+    All components share the joint cont+BB bolometric normalisation so the
+    sum bit-for-bit reproduces :func:`compute_qsogen_sed` (rtol < 1e-12).
+
+    Notes
+    -----
+    JIT-compatible. Internal helper; not part of the public API. The block
+    adapters in :mod:`tengri.components.agn.blocks.qsogen_blocks` call this
+    once per block invocation; JIT folds the redundant trace.
+    """
+    continuum_unscaled = _broken_powerlaw_continuum(
+        wavelength, agn_plslp1, agn_plslp2, agn_plbrk
+    )
+    hot_dust_unscaled = _hot_dust_blackbody(
+        wavelength, continuum_unscaled, agn_tbb, agn_bbnorm
+    )
+    f_nu_cont = continuum_unscaled + hot_dust_unscaled
+
+    nu = _wavelength_to_nu(wavelength)
+    idx_sort = jnp.argsort(nu)
+    integral_nu = jnp.trapezoid(f_nu_cont[idx_sort], nu[idx_sort])
+    integral_nu = jnp.maximum(jnp.abs(integral_nu), 1e-30)
+
+    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
+    norm_factor = l_bol_erg / integral_nu
+
+    continuum = continuum_unscaled * norm_factor
+    hot_dust = hot_dust_unscaled * norm_factor
+
+    # Emission lines anchor on the normalised continuum-only L_nu (matches
+    # upstream order: lines added before BC, BC sees lines).
+    m_i = _lbol_to_m_i(agn_log_lbol)
+    emission_lines = _empirical_emission_lines(
+        wavelength,
+        continuum + hot_dust,
+        agn_emline_scale,
+        m_i,
+    )
+
+    # Balmer continuum sees cont + hot_dust + lines.
+    balmer_continuum = _balmer_continuum(
+        wavelength,
+        continuum + hot_dust + emission_lines,
+        agn_bcnorm,
+    )
+
+    # SMC reddening as a pure multiplicative factor.
+    k_lam = smc_curve(wavelength)
+    rv_smc = 2.93
+    a_lam = agn_ebv * rv_smc * k_lam
+    smc_factor = 10.0 ** (-0.4 * a_lam)
+
+    return {
+        "continuum": continuum,
+        "hot_dust": hot_dust,
+        "emission_lines": emission_lines,
+        "balmer_continuum": balmer_continuum,
+        "smc_factor": smc_factor,
+    }
+
+
 def compute_qsogen_sed(
     wavelength: jnp.ndarray,
     agn_plslp1: float = _DEFAULT_PLSLP1,
@@ -665,58 +752,24 @@ def compute_qsogen_sed(
     The emission line template is loaded from disk at module import time
     to avoid file I/O inside JIT-traced functions.
     """
-    # --- Component 1: Broken power-law continuum ---
-    continuum = _broken_powerlaw_continuum(
+    components = _qsogen_components(
         wavelength,
-        agn_plslp1,
-        agn_plslp2,
-        agn_plbrk,
+        agn_plslp1=agn_plslp1,
+        agn_plslp2=agn_plslp2,
+        agn_plbrk=agn_plbrk,
+        agn_tbb=agn_tbb,
+        agn_bbnorm=agn_bbnorm,
+        agn_emline_scale=agn_emline_scale,
+        agn_ebv=agn_ebv,
+        agn_log_lbol=agn_log_lbol,
+        agn_bcnorm=agn_bcnorm,
     )
-
-    # --- Component 2: Hot dust blackbody ---
-    hot_dust = _hot_dust_blackbody(wavelength, continuum, agn_tbb, agn_bbnorm)
-
-    # --- Continuum shape (cont + BB, no lines yet) ---
-    f_nu_cont = continuum + hot_dust
-
-    # --- Normalize continuum to bolometric luminosity ---
-    # Matches original qsogen: normalize cont+BB first, then add lines
-    # and BC on top as additive excess (not re-normalized).
-    nu = _wavelength_to_nu(wavelength)
-    idx_sort = jnp.argsort(nu)
-    integral_nu = jnp.trapezoid(f_nu_cont[idx_sort], nu[idx_sort])
-    integral_nu = jnp.maximum(jnp.abs(integral_nu), 1e-30)
-
-    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
-    norm_factor = l_bol_erg / integral_nu
-    l_nu = f_nu_cont * norm_factor
-
-    # --- Component 3: Emission lines (added AFTER normalization) ---
-    # Matches original qsogen where add_emission_lines() runs after
-    # convert_fnu_flambda(). Lines are additive excess on top of the
-    # normalized continuum, so they do not dilute the continuum level.
-    m_i = _lbol_to_m_i(agn_log_lbol)
-    emission_lines = _empirical_emission_lines(
-        wavelength,
-        l_nu,
-        agn_emline_scale,
-        m_i,
-    )
-    l_nu = l_nu + emission_lines
-
-    # --- Component 4: Balmer continuum (additive excess) ---
-    # Added AFTER L_bol normalization so it is not cancelled by
-    # the bolometric integral. The BC is normalized relative to the
-    # already-scaled continuum at 3000 A, matching the original
-    # qsogen's add_balmer_continuum() which runs after convert_fnu_flambda().
-    bc = _balmer_continuum(wavelength, l_nu, agn_bcnorm)
-    l_nu = l_nu + bc
-
-    # --- Dust reddening (applied last, to quasar SED including lines) ---
-    # Matches original qsogen where redden_spectrum() is called after
-    # emission lines are added.
-    l_nu = _apply_dust_reddening(wavelength, l_nu, agn_ebv)
-
+    l_nu = (
+        components["continuum"]
+        + components["hot_dust"]
+        + components["emission_lines"]
+        + components["balmer_continuum"]
+    ) * components["smc_factor"]
     return l_nu * agn_frac
 
 

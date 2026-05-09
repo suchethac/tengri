@@ -638,6 +638,15 @@ class SEDModel:
     def _init_agn(self, spec):
         """Configure AGN model and detect parametric vs. fraction mode."""
         self._agn_model = getattr(spec, "agn_model", None)
+        # Static block selectors for the "composable" AGN recipe; default to
+        # "none" so non-composable models receive harmless no-op selectors.
+        self._agn_disc_block = getattr(spec, "agn_disc_block", "none")
+        self._agn_lines_block = getattr(spec, "agn_lines_block", "none")
+        self._agn_feii_block = getattr(spec, "agn_feii_block", "none")
+        self._agn_torus_block = getattr(spec, "agn_torus_block", "none")
+        self._agn_attenuation_block = getattr(
+            spec, "agn_attenuation_block", "none"
+        )
         self._agn_luminosity_mode = False
         if self._agn_model:
             agn_dists = getattr(spec, "_distributions", {})

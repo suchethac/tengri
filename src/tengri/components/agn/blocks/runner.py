@@ -90,11 +90,20 @@ _DISCS_WITH_5100A_CONTINUUM: frozenset[str] = frozenset({
 })
 
 # Downstream blocks that *require* a sensible disc 5100Å luminosity.
+# Includes BLR/NLR (their λL_λ → L_disc_bol conversion uses the Krawczyk+2013
+# bolometric correction, which assumes a UV/optical continuum at 5100Å).
 _DOWNSTREAM_NEEDS_L5100: dict[str, frozenset[str]] = {
-    "lines": frozenset({"grahsp"}),
+    "lines": frozenset({"grahsp", "blr", "nlr"}),
     "feii": frozenset({"grahsp"}),
     "torus": frozenset({"grahsp"}),
 }
+
+# Disc impls covered by the multicolor / Kubota-Done set are added to the
+# 5100Å-OK list. ADAF deliberately is NOT (its inner flow is X-ray dominated;
+# any 5100Å contribution is from the truncated outer disc only).
+_DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset({
+    "multicolor", "kubota_done", "qsogen",
+})
 
 #: Speed of light in Å × Hz, used for L_λ → L_ν conversion.
 C_AA_PER_S: float = 2.99792458e18
@@ -157,6 +166,13 @@ def validate_block_recipe(
        generic, so this is technically valid; warn that the user might
        prefer the more clearly named ``"smc_prevot"`` block (when wrapped
        in a future PR).
+    6. **BLR / NLR without UV/optical disc** — these lines blocks convert
+       :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` to a bolometric disc
+       luminosity via the Krawczyk+ 2013 correction. A non-5100Å disc
+       triggers the same warning as rule 4.
+    7. **Polar-dust block with E(B-V)=0** — the ``polar_dust`` attenuation
+       block is a no-op when ``agn_polar_ebv = 0``; warn to surface unset
+       params before the user wonders why the SED is unattenuated.
 
     Parameters
     ----------
@@ -178,7 +194,6 @@ agn_attenuation_block : str
     ValueError
         If any selector points at a name not in :data:`AGN_BLOCKS`.
     """
-    del params  # unused for now
     selectors = {
         "disc": agn_disc_block,
         "lines": agn_lines_block,
@@ -243,6 +258,18 @@ agn_attenuation_block : str
                 f"at 5100A: {sorted(_DISCS_WITH_5100A_CONTINUUM)}. "
                 f"Verify your disc impl emits sensible flux at 5100A."
             )
+
+    # Rule 7: polar dust selected but E(B-V) defaults to 0 (no-op).
+    if (
+        selectors["attenuation"] == "polar_dust"
+        and params is not None
+        and float(params.get("agn_polar_ebv", 0.0)) == 0.0
+    ):
+        _emit(
+            "Composable AGN: agn_attenuation_block='polar_dust' but "
+            "agn_polar_ebv=0 (no extinction applied). Either set "
+            "agn_polar_ebv > 0 or pick agn_attenuation_block='none'."
+        )
 
     return issues
 

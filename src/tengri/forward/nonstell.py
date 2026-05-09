@@ -191,6 +191,17 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
         from tengri.forward.emission_helpers import agn_emission
 
         agn_model_fn = resolve_agn_model(model._agn_model)
+        # Composable-AGN block selectors are static strings on the model
+        # (not traced via the ``p`` dict). When the user picks a non-composable
+        # ``agn_model``, these default to ``"none"`` and the strings reach
+        # the registered fn as kwargs that get absorbed by its **_kwargs.
+        _agn_disc_block = getattr(model, "_agn_disc_block", "none")
+        _agn_lines_block = getattr(model, "_agn_lines_block", "none")
+        _agn_feii_block = getattr(model, "_agn_feii_block", "none")
+        _agn_torus_block = getattr(model, "_agn_torus_block", "none")
+        _agn_attenuation_block = getattr(
+            model, "_agn_attenuation_block", "none"
+        )
 
     # --- Radio ---
     has_radio = model._uses_radio
@@ -407,6 +418,18 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
                 agn_grahsp_hot_fcov=p.get("agn_grahsp_hot_fcov", 1.0),
                 agn_grahsp_ebv=p.get("agn_grahsp_ebv", 0.0),
                 agn_grahsp_ebv_agn=p.get("agn_grahsp_ebv_agn", 0.0),
+                # Composable AGN block selectors. These are static Python
+                # strings captured from ``model`` at trace-build time —
+                # they are NOT traced JAX values, so they cannot live in
+                # ``p`` (whose values become DynamicJaxprTracers under
+                # ``@jax.jit``). The SEDModel constructor copies them off
+                # the spec into ``_agn_*_block`` attributes which are
+                # closed over here.
+                agn_disc_block=_agn_disc_block,
+                agn_lines_block=_agn_lines_block,
+                agn_feii_block=_agn_feii_block,
+                agn_torus_block=_agn_torus_block,
+                agn_attenuation_block=_agn_attenuation_block,
             )
             sed = sed + agn_sed
 

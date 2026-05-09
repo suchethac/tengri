@@ -513,6 +513,50 @@ _RADIO_PARAMS = {
         "",
         Fixed(-0.1),
     ),
+    # AGNfitter-rx double power-law AGN radio model parameters
+    # (Martinez-Ramirez+2024 Eq. 9-10). Activated by
+    # ``RadioSEDComponentConfig.agn_radio_model="dpl"``; ignored otherwise.
+    "radio_alpha_thin": (
+        "AGN-DPL optically-thin (steep) spectral slope (typical -0.75)",
+        lambda lo, hi: True,
+        "",
+        Fixed(-0.75),
+    ),
+    "radio_alpha_thick": (
+        "AGN-DPL optically-thick (flat/inverted) spectral slope (typical -0.1)",
+        lambda lo, hi: True,
+        "",
+        Fixed(-0.1),
+    ),
+    "radio_log_nu_t": (
+        "AGN-DPL log10(transition frequency / Hz); typical 9-11",
+        lambda lo, hi: True,
+        "",
+        Fixed(10.0),
+    ),
+    "radio_log_nu_cut": (
+        "AGN-DPL log10(synchrotron aging exponential cutoff / Hz); typical 12-14",
+        lambda lo, hi: True,
+        "",
+        Fixed(13.0),
+    ),
+    # Reserved for JP/KP/Tribble physical-aging kernels (Harwood+2013).
+    # Declared now per the reserved-params pattern so infrastructure
+    # (this PR) and physics (follow-up) can split cleanly. Both are
+    # ``Fixed`` defaults so the radio component is a no-op extension
+    # until the kernel tables land.
+    "radio_alpha_inj": (
+        "JP/KP/Tribble injection spectral index (Harwood+2013 typical 0.5-0.8)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+        Fixed(0.6),
+    ),
+    "radio_log_nu_break": (
+        "JP/KP/Tribble log10(spectral break frequency / Hz); typical 9-11",
+        lambda lo, hi: True,
+        "",
+        Fixed(10.0),
+    ),
 }
 
 _XRAY_PARAMS = {
@@ -811,15 +855,13 @@ _AGN_PARAMS = {
         Fixed(-1.7),
     ),
     "agn_grahsp_plbendloc_nm": (
-        "GRAHSP BBB bend wavelength lambda_break [nm] (paper plbendloc). "
-        "Typical 50-200 nm.",
+        "GRAHSP BBB bend wavelength lambda_break [nm] (paper plbendloc). Typical 50-200 nm.",
         lambda lo, hi: lo > 0,
         "must be > 0",
         Fixed(100.0),
     ),
     "agn_grahsp_plbendwidth": (
-        "GRAHSP BBB bend width Lambda [dex] (paper plbendwidth). "
-        "Typical 0.1-10.",
+        "GRAHSP BBB bend width Lambda [dex] (paper plbendwidth). Typical 0.1-10.",
         lambda lo, hi: lo > 0,
         "must be > 0",
         Fixed(1.0),
@@ -837,8 +879,7 @@ _AGN_PARAMS = {
         Fixed(1.0),
     ),
     "agn_grahsp_a_feii": (
-        "GRAHSP FeII forest strength relative to broad H-beta (paper AFeII). "
-        "Typical 2-10.",
+        "GRAHSP FeII forest strength relative to broad H-beta (paper AFeII). Typical 2-10.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
         Fixed(5.0),
@@ -864,22 +905,19 @@ _AGN_PARAMS = {
         Fixed(0.0),
     ),
     "agn_grahsp_cool_lam_um": (
-        "GRAHSP cool dust peak wavelength [um] (paper COOLlam). "
-        "Typical 10-30 um.",
+        "GRAHSP cool dust peak wavelength [um] (paper COOLlam). Typical 10-30 um.",
         lambda lo, hi: lo > 0,
         "must be > 0",
         Fixed(17.0),
     ),
     "agn_grahsp_cool_width": (
-        "GRAHSP cool dust log-width [dex] (paper COOLwidth). "
-        "Typical 0.2-0.65.",
+        "GRAHSP cool dust log-width [dex] (paper COOLwidth). Typical 0.2-0.65.",
         lambda lo, hi: lo > 0,
         "must be > 0",
         Fixed(0.45),
     ),
     "agn_grahsp_hot_lam_um": (
-        "GRAHSP hot dust peak wavelength [um] (paper HOTlam). "
-        "Typical 1-5.5 um.",
+        "GRAHSP hot dust peak wavelength [um] (paper HOTlam). Typical 1-5.5 um.",
         lambda lo, hi: lo > 0,
         "must be > 0",
         Fixed(2.0),
@@ -891,8 +929,7 @@ _AGN_PARAMS = {
         Fixed(0.5),
     ),
     "agn_grahsp_hot_fcov": (
-        "GRAHSP hot/cool peak ratio in lambda*L_lambda (paper f_hot). "
-        "Typical 0.04-10.",
+        "GRAHSP hot/cool peak ratio in lambda*L_lambda (paper f_hot). Typical 0.04-10.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
         Fixed(1.0),
@@ -944,6 +981,12 @@ SETTINGS_KEYS = frozenset(
         "dl07_grid_path",
         # AGN
         "agn_model",
+        # AGN block-recipe selectors (consumed by agn_model="composable")
+        "agn_disc_block",
+        "agn_lines_block",
+        "agn_feii_block",
+        "agn_torus_block",
+        "agn_attenuation_block",
         # Radio & X-ray
         "radio",
         "xray",
