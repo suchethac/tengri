@@ -1,0 +1,110 @@
+{
+ "Path": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "pathlib",
+   "module_short": "pathlib",
+   "name": "Path"
+  }
+ ],
+ "jax.config.update": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jax.config",
+   "module_short": "jax.config",
+   "name": "update"
+  }
+ ],
+ "load_pahspec_or_raise": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.dust.draine2021_pah",
+   "module_short": "tengri.components.dust.draine2021_pah",
+   "name": "load_pahspec_or_raise"
+  }
+ ],
+ "np.abs": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "abs"
+  }
+ ],
+ "np.arange": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "arange"
+  }
+ ],
+ "np.argmin": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "argmin"
+  }
+ ],
+ "np.asarray": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "asarray"
+  }
+ ],
+ "np.pi": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "pi"
+  }
+ ],
+ "plt.get_cmap": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "get_cmap"
+  }
+ ],
+ "plt.show": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "show"
+  }
+ ],
+ "plt.subplots": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "subplots"
+  }
+ ],
+ "select_pahspec_axes": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.dust.draine2021_pah",
+   "module_short": "tengri.components.dust.draine2021_pah",
+   "name": "select_pahspec_axes"
+  }
+ ]
+}

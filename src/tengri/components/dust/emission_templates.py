@@ -817,7 +817,45 @@ def load_astrodust_templates(filepath: str) -> dict:
             already_lnu = (
                 f.attrs.get("spectra_unit", "") == "L_nu normalized (integral over nu = 1)"
             )
-            if "wavelength_aa" in f:
+            # New canonical Hensley & Draine 2023 schema (lgU axis only,
+            # single fiducial size distribution / qpah).  Translate to the
+            # legacy (qpah, umin) interface by treating umin = 10**lgU and
+            # placing all spectra at a single qpah row matching the H&D
+            # 2022 fiducial value (~3.79%).  ``dust_qpah`` then becomes a
+            # no-op for the legacy registry path; users wanting real qpah-
+            # axis variation should use the modern SEDComponent dispatch.
+            if "L_nu_total" in f and "lgU" in f and "umin_grid" not in f:
+                wave_um = np.array(f["wavelength_um"][:])
+                wavs_aa = wave_um * 1.0e4
+                lgU = np.array(f["lgU"][:])  # (n_lgU,)
+                L_nu_total = np.array(f["L_nu_total"][:])  # (n_lgU, n_wave)
+                # H&D 2022 fiducial size distribution → q_PAH ≈ 3.79%
+                # (matches Draine+2021 PAHspec "standard" reference).
+                qpah_fiducial = 3.79
+                # Legacy interp needs >= 2 qpah points; duplicate the
+                # single-fiducial spectrum so ``dust_qpah`` becomes a
+                # no-op in the H&D 2023 model (real qpah variation
+                # requires the per-grain cross-section dataset PEXRD0).
+                qpah_grid = np.array([qpah_fiducial, qpah_fiducial + 1.0])
+                umin_grid = 10.0 ** np.asarray(lgU, dtype=np.float64)
+                # Per-H L_nu values are O(1e-30); the legacy registry
+                # expects per-template ∫L_ν dν = 1.  Normalise each
+                # lgU slice; the energy-balance rescale to L_absorbed
+                # happens downstream.
+                wave_cm_aa = wavs_aa * _AA_TO_CM
+                nu_aa = _C_CGS / wave_cm_aa  # descending
+                norms = np.zeros(L_nu_total.shape[0])
+                for i in range(L_nu_total.shape[0]):
+                    integral = -np.trapezoid(L_nu_total[i], nu_aa)
+                    norms[i] = integral if integral > 0 else 1.0
+                L_nu_normed = L_nu_total / norms[:, None]
+                spectra = np.broadcast_to(
+                    L_nu_normed[None, :, :], (2, *L_nu_normed.shape)
+                ).copy()
+                single_u = spectra
+                powerlaw = spectra
+                already_lnu = True   # we normalised explicitly above
+            elif "wavelength_aa" in f:
                 # Standardized HDF5 (already Angstrom + L_nu normalized)
                 wavs_aa = np.array(f["wavelength_aa"][:])
                 single_u = np.array(f["single_u"][:])

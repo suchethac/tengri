@@ -1396,7 +1396,22 @@ def _make_lazy_loader(
             path = _find_data_file(v2_name) or _find_data_file(template_filename)
             if path is not None:
                 loader = globals()[loader_fn_name]
-                tabulated = loader(path)
+                try:
+                    tabulated = loader(path)
+                except (KeyError, ValueError) as exc:
+                    # Schema mismatch — file exists but doesn't match the
+                    # legacy (qpah, umin) layout this loader expects.  This
+                    # happens for astrodust / bosa / themis after the
+                    # synthetic placeholder was replaced with real published
+                    # data that has a different schema.
+                    raise RuntimeError(
+                        f"Template file '{path}' has an incompatible schema "
+                        f"for the legacy {name!r} registry path: {exc!r}. "
+                        f"Use the modern DustEmissionSEDComponent dispatch "
+                        f"(template={name!r}) or the model-specific loader "
+                        f"(load_astrodust_hd23_or_raise / load_bosa_*) "
+                        f"instead."
+                    ) from exc
                 DUST_EMISSION_MODELS[name] = tabulated
                 return tabulated(*args, **kwargs)
             else:
@@ -1406,6 +1421,15 @@ def _make_lazy_loader(
                     f"produced scientifically incorrect results. Download templates "
                     f"or register manually via register_*_tabulated()."
                 )
+        # Already resolved.  If the slot still holds *this* lazy wrapper the
+        # earlier resolution failed silently — fail loudly instead of
+        # recursing forever.
+        if DUST_EMISSION_MODELS[name] is _lazy_wrapper:
+            raise RuntimeError(
+                f"{name!r} lazy loader is in an inconsistent state — the "
+                f"first resolution did not replace the registry entry. "
+                f"Check {template_filename} or use the modern SEDComponent path."
+            )
         return DUST_EMISSION_MODELS[name](*args, **kwargs)
 
     _lazy_wrapper.__name__ = name
