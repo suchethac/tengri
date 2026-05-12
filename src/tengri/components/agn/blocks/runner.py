@@ -283,6 +283,7 @@ def compose_l_nu(
     agn_feii_block: str,
     agn_torus_block: str,
     agn_attenuation_block: str,
+    template_state: dict | None = None,
     **params,
 ) -> Array:
     r"""Compose AGN-side :math:`L_\nu` from per-stage block implementations.
@@ -306,6 +307,13 @@ def compose_l_nu(
 agn_attenuation_block : str
         Names of the registered block implementations to use. **Static**
         under JIT (Python strings; the runner resolves them at trace time).
+    template_state : dict, optional
+        Pre-loaded template bundles keyed by family name (e.g.
+        ``{"grahsp": GRAHSPTemplates}``). When supplied, each block reads
+        templates from this dict instead of calling its own
+        ``load_*_templates()`` helper at trace time — keeps HDF5 / file
+        I/O out of the JIT trace boundary. ``None`` (default) falls back
+        to the in-block lru_cache load.
     **params
         Per-impl free parameters. Each block consumes the keys it
         recognises and ignores the rest.
@@ -323,10 +331,22 @@ agn_attenuation_block : str
     equivalent to :func:`tengri.components.agn.grahsp.compute_grahsp_sed`.
     """
     wave = jnp.asarray(wavelength)
+    # If templates are pre-loaded, forward them under a stable kwarg name
+    # blocks recognise (``templates``). When None, blocks fall back to their
+    # own lru_cache load. We strip the kwarg afterwards so blocks that don't
+    # take it never see it.
+    grahsp_templates = (
+        template_state.get("grahsp") if template_state is not None else None
+    )
 
     # Stage 1: disc continuum (L_lambda [erg/s/Å]).
     disc_fn = resolve_agn_block("disc", agn_disc_block)
-    L_lambda_disc = disc_fn(wave, agn_log_lbol=agn_log_lbol, **params)
+    L_lambda_disc = disc_fn(
+        wave,
+        agn_log_lbol=agn_log_lbol,
+        templates=grahsp_templates,
+        **params,
+    )
 
     # Compute lambda*L_lambda(5100Å) for downstream block normalisations.
     # L_lambda is on the user's wave grid; jnp.interp pulls the value at 5100Å.
@@ -335,19 +355,31 @@ agn_attenuation_block : str
     # Stage 2: emission lines.
     lines_fn = resolve_agn_block("lines", agn_lines_block)
     L_lambda_lines = lines_fn(
-        wave, agn_log_lbol=agn_log_lbol, l5100_disc=l5100_disc, **params
+        wave,
+        agn_log_lbol=agn_log_lbol,
+        l5100_disc=l5100_disc,
+        templates=grahsp_templates,
+        **params,
     )
 
     # Stage 3: FeII forest.
     feii_fn = resolve_agn_block("feii", agn_feii_block)
     L_lambda_feii = feii_fn(
-        wave, agn_log_lbol=agn_log_lbol, l5100_disc=l5100_disc, **params
+        wave,
+        agn_log_lbol=agn_log_lbol,
+        l5100_disc=l5100_disc,
+        templates=grahsp_templates,
+        **params,
     )
 
     # Stage 4: IR torus.
     torus_fn = resolve_agn_block("torus", agn_torus_block)
     L_lambda_torus = torus_fn(
-        wave, agn_log_lbol=agn_log_lbol, l5100_disc=l5100_disc, **params
+        wave,
+        agn_log_lbol=agn_log_lbol,
+        l5100_disc=l5100_disc,
+        templates=grahsp_templates,
+        **params,
     )
 
     # Stage 5: attenuation factor (multiplicative).
@@ -371,6 +403,7 @@ def composable_agn_l_nu(
     agn_feii_block: str = "none",
     agn_torus_block: str = "none",
     agn_attenuation_block: str = "none",
+    template_state: dict | None = None,
     **params,
 ) -> Array:
     r"""AGN_MODELS["composable"] entry point — :data:`L_ν` in erg/s/Hz.
@@ -422,5 +455,6 @@ agn_attenuation_block : str, optional
         agn_feii_block=agn_feii_block,
         agn_torus_block=agn_torus_block,
         agn_attenuation_block=agn_attenuation_block,
+        template_state=template_state,
         **params,
     )

@@ -1321,6 +1321,47 @@ class SEDModel:
                     stacklevel=2,
                 )
 
+        # Composable AGN precompute. Builds a triweight lookup from the
+        # user-supplied recipe + axis grids; mirrors the qsogen branch
+        # above. The user opts in by setting ``agn_axis_grids`` on the
+        # ``Parameters`` spec (a ``dict[str, ndarray]``); when absent we
+        # skip precompute and the runtime path is used.
+        composable_preint = None
+        if (
+            precompute
+            and self._z_fixed is not None
+            and self.filter_waves is not None
+            and self._agn_model == "composable"
+            and getattr(self.spec, "agn_axis_grids", None)
+        ):
+            try:
+                from tengri.components.agn.blocks import Recipe
+                from tengri.components.agn.blocks.composable_precompute import (
+                    build_lookup as _cmp_build_lookup,
+                    precompute as _cmp_precompute,
+                )
+
+                _recipe = Recipe.from_parameters(
+                    self.spec,
+                    axis_params=tuple(self.spec.agn_axis_grids.keys()),
+                )
+                _precomp = _cmp_precompute(
+                    self.filter_waves,
+                    self.filter_trans,
+                    redshift=float(self._z_fixed),
+                    parameters=self.spec,
+                    recipe=_recipe,
+                    axis_grids=self.spec.agn_axis_grids,
+                )
+                composable_preint = _cmp_build_lookup(_precomp)
+            except Exception as e:
+                warnings.warn(
+                    f"composable AGN preintegration failed: {e}. "
+                    "Falling back to full-wavelength evaluation.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+
         # Radio analytic precomputes (PR 5).  These build cleanly per the
         # protocol but the kernel does not yet consume them; they are stored
         # on PrecomputedData so a future kernel branch can swap in the lookup
@@ -1494,6 +1535,7 @@ class SEDModel:
             ss_disc_preintegrated=ss_disc_preint,
             cigale_disc_preintegrated=cigale_disc_preint,
             qsogen_preintegrated=qsogen_preint,
+            composable_preintegrated=composable_preint,
             radio_synchrotron_preintegrated=radio_synchrotron_preint,
             radio_freefree_preintegrated=radio_freefree_preint,
             radio_agn_jet_preintegrated=radio_agn_jet_preint,

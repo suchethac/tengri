@@ -19,9 +19,12 @@ Public API
 # Importing these submodules side-effects @register_agn_block calls.
 # Side-effect: registers AGN_MODELS["composable"]. Imported last to avoid
 # circular imports — registry depends on the runner being defined.
+# composable_precompute is the third (precomputed-lookup) evaluation mode;
+# mirror of qsogen_precompute / skirtor_precompute for the composable runner.
 from tengri.components.agn.blocks import (
     alternates,
     atten_blocks,
+    composable_precompute,
     disc_blocks,
     grahsp_blocks,
     lines_blocks,
@@ -35,6 +38,7 @@ from tengri.components.agn.blocks._protocol import (
     register_agn_block,
     resolve_agn_block,
 )
+from tengri.components.agn.blocks.recipe import Recipe
 from tengri.components.agn.blocks.runner import (
     BLOCK_SELECTOR_KEYS,
     DEFAULT_BLOCK_SELECTORS,
@@ -49,8 +53,10 @@ __all__ = [
     "BLOCK_CATEGORIES",
     "BLOCK_SELECTOR_KEYS",
     "DEFAULT_BLOCK_SELECTORS",
+    "Recipe",
     "RecipeWarning",
     "composable_agn_l_nu",
+    "composable_precompute",
     "compose_l_nu",
     "register_agn_block",
     "resolve_agn_block",

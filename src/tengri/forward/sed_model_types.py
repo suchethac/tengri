@@ -305,6 +305,12 @@ class PrecomputedData:
     ss_disc_preintegrated: object | None = None  # Preintegrated Shakura-Sunyaev disc photometry
     cigale_disc_preintegrated: object | None = None  # Preintegrated CIGALE disc photometry
     qsogen_preintegrated: object | None = None  # Preintegrated QSOgen photometry lookup
+    composable_preintegrated: object | None = None  # Preintegrated composable-recipe lookup
+    # ^ Built by tengri.components.agn.blocks.composable_precompute. The
+    # SEDModel populates this when the user sets agn_model='composable' and
+    # provides agn_axis_grids on the spec. Like the radio/xray preints
+    # below, this is stored but **not yet consumed by the kernel** — a
+    # future kernel branch will swap it in without re-touching SEDModel.
     # Dust analytic emission adapters (PR 3).
     modified_blackbody_preintegrated: object | None = None  # Preintegrated modified_blackbody dust
     casey2012_preintegrated: object | None = None  # Preintegrated casey2012 dust

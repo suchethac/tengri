@@ -123,16 +123,26 @@ def grahsp_lines_block(
     agn_grahsp_a_lines: float = 1.0,
     agn_grahsp_linewidth_kms: float = 5000.0,
     agn_type: int = 1,
+    templates=None,
     **_params,
 ) -> Array:
     r"""GRAHSP broad + narrow emission-line Gaussians as a lines-stage block.
 
     Uses the disc's :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` as the
     line-luminosity normalisation reference (matching upstream §2.1.2).
+
+    Parameters
+    ----------
+    templates : GRAHSPTemplates, optional
+        Pre-loaded template bundle threaded in via the runner's
+        ``template_state``. When ``None`` (default), the block falls back to
+        the lru_cache-backed :func:`load_grahsp_templates` for backwards
+        compatibility — keeps the block usable as a standalone callable.
     """
     wave_aa = jnp.asarray(wavelength)
     wave_nm = wave_aa * 0.1
-    templates = load_grahsp_templates()
+    if templates is None:
+        templates = load_grahsp_templates()
     broad, narrow = gaussian_lines(
         wave_nm=wave_nm,
         line_wave_nm=templates.line_wave_nm,
@@ -160,12 +170,20 @@ def grahsp_feii_block(
     *,
     agn_grahsp_a_lines: float = 1.0,
     agn_grahsp_a_feii: float = 5.0,
+    templates=None,
     **_params,
 ) -> Array:
-    r"""GRAHSP Bruhweiler+Verner 2008 FeII forest as a feii-stage block."""
+    r"""GRAHSP Bruhweiler+Verner 2008 FeII forest as a feii-stage block.
+
+    Parameters
+    ----------
+    templates : GRAHSPTemplates, optional
+        Same template-hoist contract as :func:`grahsp_lines_block`.
+    """
     wave_aa = jnp.asarray(wavelength)
     wave_nm = wave_aa * 0.1
-    templates = load_grahsp_templates()
+    if templates is None:
+        templates = load_grahsp_templates()
     feii = feii_forest(
         wave_nm=wave_nm,
         template_wave_nm=templates.feii_wave_nm,
