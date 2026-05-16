@@ -221,6 +221,57 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Single recipe (all-GRAHSP), but each pipeline stage rendered independently on top of the disc continuum. Demonstrates how the five blocks (``disc → lines → feii → torus → attenuation``) contribute to the total SED — useful for understanding which knob controls which feature.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_composable_block_toggles_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_composable_block_toggles`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Composable AGN: per-block contribution breakdown</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The composable AGN block subsystem (``agn_model=&quot;composable&quot;``) lets users pick one block per pipeline stage and combine across models. This example compares four recipes built from the registered block set:">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_composable_recipes_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_composable_recipes`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Composable AGN: mix-and-match recipes</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The composable AGN runner exposes three evaluation modes (see docs/dev/three_evaluation_modes.md):">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_composable_three_modes_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_composable_three_modes`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Composable AGN: three evaluation modes side-by-side</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Plot narrow-line (NLR, FWHM ~500 km/s) and broad-line region (BLR, FWHM ~5000 km/s) emission spectra. Shows how BLR vanishes at high inclination angles (Type 2 AGN) while NLR remains visible.">
 
 .. only:: html
@@ -343,6 +394,9 @@ AGN disc and torus SED templates.
    /auto_examples/agn/plot_agn_tau_skirtor_sweep
    /auto_examples/agn/plot_agn_templates
    /auto_examples/agn/plot_agn_type12
+   /auto_examples/agn/plot_composable_block_toggles
+   /auto_examples/agn/plot_composable_recipes
+   /auto_examples/agn/plot_composable_three_modes
    /auto_examples/agn/plot_nlr_blr_lines
    /auto_examples/agn/plot_polar_dust
    /auto_examples/agn/plot_qsogen_spectrum
