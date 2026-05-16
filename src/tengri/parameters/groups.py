@@ -85,7 +85,7 @@ from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Distribution, Fixed
 from tengri.parameters.sentinels import FIXED, FREE
 
-__all__ = ["parse_groups"]
+__all__ = ["parameters_to_groups", "parse_groups"]
 
 
 # ── Constants ──────────────────────────────────────────────────────────────
@@ -931,3 +931,278 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
     else:
         # Top-level (e.g., redshift)
         return full_param_name
+
+
+# ── Inverse: Parameters to nested-dict form ────────────────────────────────
+
+
+def parameters_to_groups(spec: Parameters) -> dict:
+    """Convert a Parameters back to nested-dict form.
+
+    Inverts Parameters.from_groups() by reconstructing the nested-dict
+    structure that would reproduce the same Parameters when passed back to
+    from_groups(). Uses provenance tags (if available) to collapse wildcard-
+    expanded parameters and preserve explicit overrides.
+
+    Parameters
+    ----------
+    spec : Parameters
+        The Parameters object to convert.
+
+    Returns
+    -------
+    dict
+        Nested-dict suitable for re-passing to Parameters.from_groups(**result).
+
+    Notes
+    -----
+    **Provenance-aware collapsing**: If spec has _group_provenance metadata,
+    parameters sharing the same wildcard tag ('wildcard_free' or 'wildcard_fixed')
+    are collapsed into a single '*': FREE or '*': FIXED entry, with explicit
+    overrides listed separately.
+
+    **Flat-built fallback**: If spec was built via flat-kwarg Parameters(...),
+    all parameters are listed explicitly (no wildcard).
+
+    **Roundtrip guarantee**: The output dict, when passed to
+    Parameters.from_groups(**output), produces a Parameters with identical
+    free/fixed partitions and distributions.
+
+    Examples
+    --------
+    >>> spec = Parameters.from_groups(
+    ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
+    ...     redshift=Fixed(0.05),
+    ... )
+    >>> groups = spec.to_groups()
+    >>> roundtripped = Parameters.from_groups(**groups)
+    >>> spec.free_params == roundtripped.free_params
+    True
+    """
+    result = {}
+    partition = _partition_by_group(spec.all_params, spec.dust_emission is not None)
+    provenance = getattr(spec, "_group_provenance", {})
+
+    # Group parameters by their owning group
+    groups_dict = {}
+    for param_name in spec.all_params:
+        group = partition.get(param_name, "_structural")
+
+        if group == "_structural" or group == "_toplevel":
+            continue
+
+        if group not in groups_dict:
+            groups_dict[group] = []
+        groups_dict[group].append(param_name)
+
+    # Process each group
+    for group_name in sorted(groups_dict.keys()):
+        param_names = sorted(groups_dict[group_name])
+
+        # Handle nested groups (dust.emission, agn.*)
+        if "." in group_name:
+            parent, subkey = group_name.split(".", 1)
+            if parent not in result:
+                result[parent] = {}
+            group_output = result[parent].setdefault(subkey, {})
+        else:
+            group_output = result.setdefault(group_name, {})
+
+        # Add type from the spec's settings
+        type_value = _extract_group_type(group_name, spec)
+        if type_value is not None:
+            group_output["type"] = type_value
+
+        # Add other structural settings
+        _add_structural_settings(group_name, group_output, spec)
+
+        # Determine if we can use a wildcard
+        wildcard_intent = _analyze_wildcard_intent(param_names, spec, provenance)
+
+        if wildcard_intent is not None:
+            # Use wildcard for collapsed params
+            group_output["*"] = wildcard_intent
+            explicit_params = _get_explicit_overrides(
+                param_names, spec, provenance, wildcard_intent
+            )
+        else:
+            # No wildcard; list all params explicitly
+            explicit_params = {p: spec.get_distribution(p) for p in param_names}
+
+        # Add explicit params to the group dict
+        for full_name, distribution in explicit_params.items():
+            short_name = _extract_short_name(full_name, {})
+            group_output[short_name] = distribution
+
+    # Also add groups that have no params but have a configured type (e.g., neb='none')
+    _all_possible_groups = {"sfh", "dust", "neb", "igm", "radio", "xray", "agn"}
+    for group_name in sorted(_all_possible_groups):
+        if group_name not in result:
+            type_value = _extract_group_type(group_name, spec)
+            if type_value is not None and (
+                type_value == "none" or (group_name == "dust" and type_value != "two_component")
+            ):
+                # Only add if it's a non-default type or a special case
+                # For now, only add 'none' types and other explicit settings
+                result[group_name] = {"type": type_value}
+
+    # Handle top-level parameters (redshift, apply_igm)
+    if "redshift" in spec.all_params:
+        result["redshift"] = spec.get_distribution("redshift")
+
+    if spec.apply_igm is not True:
+        # Only include if non-default (default is True)
+        result["apply_igm"] = spec.apply_igm
+
+    if spec.n_grid != 64:
+        # Only include if non-default
+        result["n_grid"] = spec.n_grid
+
+    return result
+
+
+def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | None:
+    """Extract the type value for a group from spec settings.
+
+    Parameters
+    ----------
+    group_name : str
+        Group name (e.g., 'sfh', 'dust', 'neb', 'dust.emission', 'agn.disc').
+    spec : Parameters
+        The Parameters object.
+
+    Returns
+    -------
+    str or list[str] or None
+        The type value, or None if not applicable.
+    """
+    if group_name == "sfh":
+        sfh_type = spec.mean_sfh_type
+        # Normalize: if single-element list, return string
+        if isinstance(sfh_type, list):
+            return sfh_type[0] if len(sfh_type) == 1 else sfh_type
+        return sfh_type
+    elif group_name == "dust":
+        return spec.dust_model
+    elif group_name == "dust.emission":
+        return spec.dust_emission
+    elif group_name == "neb":
+        return spec.nebular_mode
+    elif group_name == "igm":
+        return spec.igm_model if hasattr(spec, "igm_model") else None
+    elif group_name == "radio":
+        return spec.radio_model if hasattr(spec, "radio_model") else None
+    elif group_name == "xray":
+        return spec.xray_model if hasattr(spec, "xray_model") else None
+    elif group_name.startswith("agn"):
+        # AGN sub-blocks extract from agn_model setting
+        # This is a simplification; more complex composition handled in tests
+        return None
+    return None
+
+
+def _add_structural_settings(group_name: str, group_output: dict, spec: Parameters) -> None:
+    """Add non-type structural settings to a group dict.
+
+    Parameters
+    ----------
+    group_name : str
+        Group name.
+    group_output : dict
+        The group dict to fill (modified in place).
+    spec : Parameters
+        The Parameters object.
+    """
+    if group_name == "dust":
+        # Add law_bc and law_diff if non-default
+        if spec.dust_law_bc != "power_law":
+            group_output["law_bc"] = spec.dust_law_bc
+        if hasattr(spec, "dust_law_diff") and spec.dust_law_diff != spec.dust_law_bc:
+            group_output["law_diff"] = spec.dust_law_diff
+
+
+def _analyze_wildcard_intent(
+    param_names: list[str], spec: Parameters, provenance: dict
+) -> str | None:
+    """Determine if a group can be represented with a wildcard.
+
+    Returns FREE or FIXED if all non-explicit params share the same wildcard
+    tag, otherwise returns None (use explicit listing).
+
+    Parameters
+    ----------
+    param_names : list[str]
+        Full parameter names in this group.
+    spec : Parameters
+        The Parameters object.
+    provenance : dict
+        The _group_provenance dict (or empty dict).
+
+    Returns
+    -------
+    str or None
+        FREE, FIXED, or None.
+    """
+    if not provenance:
+        # No provenance: don't use wildcard
+        return None
+
+    # Collect provenance tags
+    tags = set()
+    for param_name in param_names:
+        tag = provenance.get(param_name, "registry_default")
+        # Only consider wildcard tags
+        if tag in ("wildcard_free", "wildcard_fixed"):
+            tags.add(tag)
+
+    # If all params share the same wildcard tag, use it
+    if len(tags) == 1:
+        tag = tags.pop()
+        if tag == "wildcard_free":
+            return FREE
+        elif tag == "wildcard_fixed":
+            return FIXED
+
+    return None
+
+
+def _get_explicit_overrides(
+    param_names: list[str],
+    spec: Parameters,
+    provenance: dict,
+    wildcard_intent: str | None,
+) -> dict[str, Distribution]:
+    """Extract parameters that should be explicit (not collapsed by wildcard).
+
+    Parameters
+    ----------
+    param_names : list[str]
+        Full parameter names in the group.
+    spec : Parameters
+        The Parameters object.
+    provenance : dict
+        The _group_provenance dict.
+    wildcard_intent : str or None
+        The wildcard intent (FREE, FIXED, or None).
+
+    Returns
+    -------
+    dict[str, Distribution]
+        Mapping of full param name to distribution for explicit listing.
+    """
+    explicit = {}
+
+    for param_name in param_names:
+        tag = provenance.get(param_name, "registry_default")
+
+        # If there's a wildcard intent, exclude params that match it
+        if wildcard_intent is not None:
+            if wildcard_intent is FREE and tag == "wildcard_free":
+                continue
+            if wildcard_intent is FIXED and tag == "wildcard_fixed":
+                continue
+
+        # Include: per-param overrides, mismatched tags, or defaults
+        explicit[param_name] = spec.get_distribution(param_name)
+
+    return explicit

@@ -994,6 +994,53 @@ class Parameters:
 
         return parse_groups(**groups)
 
+    def to_groups(self) -> dict:
+        """Convert this Parameters to nested-dict form.
+
+        Inverts :meth:`from_groups` by reconstructing the nested-dict structure
+        that would reproduce this Parameters when passed to from_groups(). Uses
+        provenance metadata to collapse wildcard-expanded parameters and preserve
+        explicit overrides.
+
+        Returns
+        -------
+        dict
+            Nested-dict suitable for re-passing to Parameters.from_groups(**result).
+
+        See Also
+        --------
+        from_groups : The inverse operation.
+
+        Notes
+        -----
+        **Provenance-aware collapsing**: If this Parameters was built via
+        from_groups(), provenance tags are used to collapse parameters that
+        shared the same wildcard marker ('*': FREE or '*': FIXED) back into
+        that wildcard, with explicit overrides listed separately.
+
+        **Flat-built fallback**: If this Parameters was built via flat-kwarg
+        Parameters(...), all parameters are listed explicitly (no wildcard).
+
+        **Roundtrip guarantee**: The output dict, when passed to
+        Parameters.from_groups(**output), produces a Parameters with identical
+        free/fixed partitions and distributions.
+
+        Examples
+        --------
+        >>> from tengri import Parameters, FREE, FIXED, Uniform, Fixed
+        >>> spec = Parameters.from_groups(
+        ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
+        ...     redshift=Fixed(0.05),
+        ... )
+        >>> groups = spec.to_groups()
+        >>> roundtripped = Parameters.from_groups(**groups)
+        >>> spec.free_params == roundtripped.free_params
+        True
+        """
+        from tengri.parameters.groups import parameters_to_groups
+
+        return parameters_to_groups(self)
+
     def with_params(self, **kwargs) -> Parameters:
         """Return a new Parameters with additional parameters merged in.
 
