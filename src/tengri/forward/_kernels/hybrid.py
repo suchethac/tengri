@@ -497,12 +497,14 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
     _has_preint_qsogen = False
     _has_preint_silva04 = False
     _has_preint_cat3d = False
+    _has_preint_composable = False
     _powerlaw_disc_lookup = None
     _ss_disc_lookup = None
     _cigale_disc_lookup = None
     _qsogen_lookup = None
     _silva04_lookup = None
     _cat3d_lookup = None
+    _composable_lookup = None
 
     if has_agn_full and not _needs_extension:
         # Disc models: only one per model at runtime
@@ -531,6 +533,22 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
         elif state.agn_model == "cat3d_wind" and state.precomputed.cat3d_preintegrated is not None:
             _has_preint_cat3d = True
             _cat3d_lookup = state.precomputed.cat3d_preintegrated
+        elif (
+            state.agn_model == "composable"
+            and state.precomputed.composable_preintegrated is not None
+        ):
+            # The kernel currently consumes only single-axis composable
+            # recipes whose axis is ``agn_log_lbol`` — matches the qsogen
+            # signature and covers the most common interactive-fit case.
+            # Multi-axis recipes are still built and stored on
+            # PrecomputedData; callers can invoke the lookup directly via
+            # ``composable_precompute.build_lookup`` for those.
+            _composable_axis_names = getattr(
+                state.precomputed.composable_preintegrated, "axis_names", ()
+            )
+            if _composable_axis_names == ("agn_log_lbol",):
+                _has_preint_composable = True
+                _composable_lookup = state.precomputed.composable_preintegrated
 
     # Radio
     has_radio = state.uses_radio
@@ -1710,6 +1728,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                     or _has_preint_qsogen
                     or _has_preint_silva04
                     or _has_preint_cat3d
+                    or _has_preint_composable
                 )
 
                 if _has_any_disc_torus_preint:
@@ -1744,6 +1763,16 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                         disc_torus_lnu = _cat3d_lookup(
                             jnp.float64(_agn_lbol),
                             agn_torus_frac=jnp.float64(agn_torus_frac),
+                        )
+                    elif _has_preint_composable:
+                        # Composable lookup signature is (scale, *axes); we
+                        # gated on axis_names == ("agn_log_lbol",), so the
+                        # only axis is the bolometric luminosity. The scale
+                        # is 1.0 since the lookup already returns absolute
+                        # L_ν; agn_frac is applied below via flux_scale.
+                        disc_torus_lnu = _composable_lookup(
+                            jnp.float64(1.0),
+                            jnp.float64(_agn_lbol),
                         )
 
                     # Scale disc/torus: L_ν [erg/s/Hz] * agn_frac → flux density [erg/s/cm²/Hz]
@@ -2071,6 +2100,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             or _has_preint_qsogen
             or _has_preint_silva04
             or _has_preint_cat3d
+            or _has_preint_composable
         )
         if _has_any_disc_torus_preint_final:
             non_stellar_phot = non_stellar_phot + agn_phot_preint

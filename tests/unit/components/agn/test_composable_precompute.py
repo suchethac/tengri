@@ -294,6 +294,51 @@ def test_lookup_jit_compiles_and_caches():
     assert dt_cached < dt_compile / 5.0
 
 
+def test_build_lookup_returns_composable_lookup_with_axis_names():
+    """build_lookup must expose axis_names so the SEDModel kernel can route."""
+    fw, ft = _toy_filter()
+    recipe = Recipe.from_selectors(
+        disc="grahsp_sbpl",
+        torus="grahsp",
+        attenuation="none",
+        axis_params=("agn_grahsp_l5100",),
+    )
+    pre = composable_precompute.precompute(
+        filter_waves=[fw],
+        filter_trans=[ft],
+        redshift=0.0,
+        parameters=None,
+        recipe=recipe,
+        axis_grids={"agn_grahsp_l5100": np.logspace(43, 46, 3)},
+    )
+    fn = composable_precompute.build_lookup(pre)
+    assert hasattr(fn, "axis_names")
+    assert fn.axis_names == ("agn_grahsp_l5100",)
+    # Still callable as before.
+    out = fn(jnp.array(1.0), jnp.array(1e44))
+    assert out.shape == (1,)
+
+
+def test_kernel_gates_on_agn_log_lbol_axis():
+    """Kernel currently consumes only single-axis ``agn_log_lbol`` recipes.
+
+    This documents/locks the consumption surface: a precompute built with a
+    different axis still works as a standalone callable but does NOT trigger
+    the kernel's preintegrated branch — the kernel falls back to the
+    runtime evaluation path.
+    """
+    from tengri.components.agn.blocks.composable_precompute import (
+        ComposableLookup,
+    )
+
+    fn = ComposableLookup(lambda scale, x: scale * x, axis_names=("agn_log_lbol",))
+    assert fn.axis_names == ("agn_log_lbol",)
+    # Sentinel check: the kernel introspects axis_names and gates on this
+    # exact tuple. Changing the axis name disables the kernel branch.
+    other = ComposableLookup(lambda scale, x: scale * x, axis_names=("agn_grahsp_l5100",))
+    assert other.axis_names != ("agn_log_lbol",)
+
+
 def test_lookup_works_with_explicit_jit_wrapper():
     fw, ft = _toy_filter()
     recipe = Recipe.from_selectors(

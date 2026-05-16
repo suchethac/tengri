@@ -224,6 +224,7 @@ def precompute(
         "grid_phot": preint.phot,
         "axes": tuple(jnp.asarray(axis_grids[name]) for name in axis_names),
         "_preint": preint,
+        "_axis_names": tuple(axis_names),
     }
 
     if parameters is None:
@@ -250,17 +251,51 @@ def precompute(
         "grid_phot": collapsed.phot,
         "axes": remaining_axes,
         "_preint": collapsed,
+        "_axis_names": tuple(axis_names),
         "_collapsed_axes": fixed_indices,
     }
+
+
+class ComposableLookup:
+    """Callable wrapper exposing the precompute's axis names statically.
+
+    The :func:`build_lookup` callable from this module is bundled with the
+    list of axis parameter names so the JIT-compiled kernel can extract
+    the right values from its local namespace at trace time. Existing
+    callers continue to use it as a callable.
+
+    Attributes
+    ----------
+    lookup : callable
+        The JIT-compiled ``(scale, *free_axis_values) -> photometry``
+        function from :func:`build_template_photometry_lookup`.
+    axis_names : tuple of str
+        Names of the remaining (non-collapsed) axis parameters, in the
+        order ``lookup`` expects.
+    """
+
+    # Note: no __slots__. ``jax.jit(ComposableLookup_instance)`` weak-refs
+    # the wrapper internally; __slots__ would block that.
+
+    def __init__(self, lookup, axis_names: tuple[str, ...]) -> None:
+        self.lookup = lookup
+        self.axis_names = axis_names
+
+    def __call__(self, *args, **kwargs):
+        return self.lookup(*args, **kwargs)
 
 
 def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = None):
     r"""Build the runtime photometry lookup from a preintegrated dict.
 
-    Returns a JIT-compiled callable matching the shared
-    :func:`build_template_photometry_lookup` signature::
+    Returns a :class:`ComposableLookup` whose ``__call__`` matches the
+    shared :func:`build_template_photometry_lookup` signature::
 
         fn(scale, *free_axis_values) -> ndarray, shape (n_filters,)
+
+    The ``axis_names`` attribute lists the remaining free-axis parameter
+    names so downstream consumers (e.g. the SEDModel kernel) can pass the
+    right values positionally at JIT trace time.
 
     Parameters
     ----------
@@ -271,8 +306,21 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
         unused but accepted for API symmetry with sibling modules.
     """
     del free_param_names
-    if not preint.get("_collapsed_axes"):
-        return build_template_photometry_lookup(preint["_preint"])
+
+    # Reconstruct the surviving axis-name list from the preint dict.
+    # ``precompute`` stored the full list under ``_axis_names`` and any
+    # auto-collapsed indices under ``_collapsed_axes`` (keys = axis index).
+    full_names: tuple[str, ...] = preint.get("_axis_names", ())
+    collapsed = preint.get("_collapsed_axes") or {}
+    surviving_names = tuple(
+        name for i, name in enumerate(full_names) if i not in collapsed
+    )
+
+    if not collapsed:
+        return ComposableLookup(
+            build_template_photometry_lookup(preint["_preint"]),
+            axis_names=surviving_names,
+        )
 
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
@@ -286,4 +334,4 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
         normed = interp_nd_triweight(grid_phot, axes, edges, tuple(free_axis_values))
         return scale * normed
 
-    return _lookup_collapsed
+    return ComposableLookup(_lookup_collapsed, axis_names=surviving_names)
