@@ -64,7 +64,24 @@ parameters via [`slice_fixed_axes`](../../src/tengri/utils/grid_interp.py).
 The composable AGN block subsystem demonstrates all three modes through one
 runner. A user composes a recipe out of five pipeline stages —
 `disc → lines → feii → torus → attenuation` — picking one of 26 registered
-blocks per stage.
+blocks per stage. Three rendered gallery examples cover the surface:
+
+| Gallery entry | Demonstrates |
+|---|---|
+| [`plot_composable_recipes`](../auto_examples/agn/plot_composable_recipes.html) | Same call site, four different recipe selector tuples (all-GRAHSP, all-QSOgen, GRAHSP BBB + SKIRTOR torus + SMC, multicolor disc + Nenkova). Cross-model mixing in one figure. |
+| [`plot_composable_block_toggles`](../auto_examples/agn/plot_composable_block_toggles.html) | Cumulative per-stage breakdown: disc only → + lines → + FeII → + torus → + attenuation. Five side-by-side panels showing which knob controls which spectral feature. |
+| [`plot_composable_three_modes`](../auto_examples/agn/plot_composable_three_modes.html) | Same recipe through all three evaluation modes side-by-side: spectral overlay (exact ≡ JIT) + bar chart of cached per-call timing (44× lookup speedup). |
+
+![cross-model mixing](../auto_examples/agn/images/sphx_glr_plot_composable_recipes_001.png)
+*Four composable AGN recipes built from the registered block set. Only the
+selector strings differ between them — the call site is identical.
+([gallery entry](../auto_examples/agn/plot_composable_recipes.html))*
+
+![per-stage block decomposition](../auto_examples/agn/images/sphx_glr_plot_composable_block_toggles_001.png)
+*Cumulative per-block contribution: disc → + lines → + FeII → + torus →
++ attenuation. Each panel adds one pipeline stage to the SED; the dashed
+grey curve is the all-blocks-on reference.
+([gallery entry](../auto_examples/agn/plot_composable_block_toggles.html))*
 
 ### Exact
 
@@ -152,6 +169,12 @@ dict the inference layer feeds the kernel; multi-axis recipes are supported
 (see the benchmark below).
 
 ### Benchmarked numbers
+
+![three modes side-by-side](../auto_examples/agn/images/sphx_glr_plot_composable_three_modes_001.png)
+*The same recipe through all three modes: exact and JIT-composable produce
+bit-for-bit identical spectra (they share the same algorithm); the bar
+chart shows the cached per-call timing of all three.
+([gallery entry](../auto_examples/agn/plot_composable_three_modes.html))*
 
 From [`bench/scripts/benchmark_composable_precompute.py`](../../bench/scripts/benchmark_composable_precompute.py)
 on a template-heavy recipe (GRAHSP BBB + SKIRTOR torus + SMC attenuation; 1500
