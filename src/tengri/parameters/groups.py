@@ -853,7 +853,13 @@ def _resolve_value(
                 center = registry_default.unstandardize(0.0)
                 return Fixed(float(center)), "wildcard_fixed"
         else:
-            return registry_default, "registry_default"
+            # Bad wildcard value — only FREE or FIXED are accepted in the '*' slot
+            raise ValueError(
+                f"Wildcard '*' must be FREE or FIXED (the sentinels exported "
+                f"from tengri), got {wildcard!r}. "
+                f"Did you mean ``'*': FREE`` or ``'*': FIXED``? "
+                f"Note: string 'free'/'fixed' is not accepted — use the sentinel."
+            )
 
     # No override, no wildcard: fall through to registry default (auto-fixed)
     if registry_default.is_fixed:
