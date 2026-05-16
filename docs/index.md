@@ -135,6 +135,13 @@ use-cases and workflows.
 
 ```{eval-rst}
 .. toctree::
+   :caption: Examples gallery
+   :maxdepth: 1
+
+   auto_examples/index
+   examples
+
+.. toctree::
    :caption: Foundations
    :maxdepth: 1
 
@@ -166,11 +173,4 @@ use-cases and workflows.
    performance/index
    performance/memory
    units
-
-.. toctree::
-   :caption: Gallery
-   :maxdepth: 1
-
-   auto_examples/index
-   examples
 ```
