@@ -287,6 +287,47 @@ The lognormal correction `exp(-sigma^2/2)` ensures that `E[SFR] = mean_SFR`
 regardless of the GP amplitude, so the parametric envelope directly controls
 the average star formation history.
 
+## User-facing model builder: nested-dict interface
+
+Users build models via `SEDModel.from_groups()` or
+`Parameters.from_groups()`, which delegate to `parse_groups()` in
+`parameters/groups.py`. The nested-dict interface translates hierarchical
+parameter groups into the flat `Parameters` object:
+
+```python
+# User specifies nested dict
+groups = {
+    "sfh": {"type": "dpl", "*": FREE},
+    "dust": {
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": FREE,
+        "emission": {"type": "dale2014", "*": FIXED},
+    },
+    "neb": {"type": "cue", "*": FIXED},
+    "redshift": Uniform(0.01, 6.0),
+}
+
+# Translator delegates to parse_groups() (parameters/groups.py):
+#   Pass 1: Structural translation (sfh.type='dpl' -> mean_sfh_type='dpl')
+#   Pass 2: Parameter resolution (wildcard expansion, defaults)
+#   Returns: flat Parameters object
+
+spec = Parameters.from_groups(**groups)
+```
+
+The translator is the single source of truth for:
+- **Group name → config key mapping** (sfh → mean_sfh_type, etc.)
+- **Wildcard semantics** ('*': FREE/FIXED applies to undeclared params)
+- **Parameter declaration lookups** (what params does each SFH family declare?)
+
+The `parse_groups()` function is not JAX-traced and runs at model-build
+time only. The output `Parameters` object contains the flat `theta` vector
+and unstandardize function, which flow into the forward model.
+
+See `docs/dev/api_migration_v0.x.md` section "Nested-dict model builder" for
+user examples and recipes module documentation.
+
 ## The IFT framework
 
 Information Field Theory treats the SFH as a continuous field `x(t)`.

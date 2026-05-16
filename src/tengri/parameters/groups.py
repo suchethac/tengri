@@ -96,25 +96,39 @@ _DUST_EMISSION_PARAM_NAMES = frozenset(_DUST_EMISSION_PARAMS.keys())
 
 #: Valid SFH model types (from the registry).
 _VALID_SFH_TYPES = {
+    # Smooth (additive)
     "tsnorm",
     "snorm",
+    "snorm_burst",
+    "tsnorm_burst",
     "norm",
     "lnorm",
+    "dpl",
     "const",
     "exp",
     "dexp",
-    "burst",
-    "field",
-    "dpl",
+    "tau",
+    "const_exp",
+    "delayed_bq",
+    "periodic",
+    "buat08",
     "psb",
+    "top_hat",
+    "gaussian_burst",
+    "continuity",
+    "continuity_flex",
+    "dirichlet",
     "dense_basis",
     "dense_basis_pure",
+    "table",
+    # Compositors
+    "burst",
+    "field",
     # Aliases
     "truncated_skewnormal_sfh",
     "skewnormal_sfh",
     "gaussian_sfh",
     "lognormal_sfh",
-    "const_exp",
     "constant_then_exponential",
     "psb_wild2020",
     "db",
@@ -178,6 +192,7 @@ _VALID_DUST_LAWS = {
     "cardelli",
     "salim",
     "li08",
+    "noll09",
 }
 
 #: Valid AGN disc block types.

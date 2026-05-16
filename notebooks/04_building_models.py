@@ -14,17 +14,22 @@
 # ---
 
 # %% [markdown]
-# # Building models with `Parameters`
+# # Building models with nested-dict API
 #
-# A `Parameters` object is just a declarative dict: keys name physical
-# parameters, values are priors (`Uniform`, `Gaussian`, `Fixed`, ...) or
-# string flags for component choices. Free vs fixed is tracked automatically
-# from the prior type.
+# The nested-dict **model builder** provides a structured, Bagpipes-style
+# interface for composing galaxy SED models. Instead of flat parameter lists,
+# you organize physics into semantic groups (`sfh`, `dust`, `neb`, `agn`, etc.)
+# and specify free/fixed status with sentinels.
 #
-# This notebook varies one structural axis at a time — SFH family, dust
-# attenuation law, dust emission template — and plots the resulting SEDs
-# side by side, then times a few JIT-compiled forward calls to show the
-# one-off compile cost amortizes.
+# This notebook demonstrates:
+#
+# 1. **Three equivalent construction paths** — recipes, from_groups direct,
+#    and round-trip edits — showing they all produce identical results.
+# 2. **Parameter provenance** — the `summary()` method displays how each
+#    parameter got its value: user-specified, wildcard-free, or registry default.
+# 3. **Structural variation** — swapping SFH/dust families by editing nested dicts.
+# 4. **Physical comparison** — sweeping SFH families, dust laws, and IR templates
+#    to visualize their impact on the SED.
 
 # %% [markdown]
 # ## Setup
@@ -49,13 +54,16 @@ from tengri import (
     SEDModel,
     Uniform,
     load_ssp_data,
+    recipes,
 )
 from tengri import cosmology, plot, units
+from tengri.parameters.sentinels import FIXED, FREE
 
 plot.setup_style()
 
-# Load SSP grid (MIST + C3K, Chabrier IMF)
-_ssp_name = "ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+# Load SSP grid: bare-stellar FSPS+MILES (required by Cue nebular backend
+# used in the canonical recipes; wNE files cannot be paired with Cue).
+_ssp_name = "fsps_prsc_miles_chabrier.h5"
 _repo_root = next(
     p for p in [Path.cwd(), *Path.cwd().parents] if (p / "data" / _ssp_name).exists()
 )
@@ -64,172 +72,197 @@ ssp = load_ssp_data(str(_repo_root / "data" / _ssp_name))
 # Lightweight photometry (pre-downloaded, no SVO API calls)
 # Span optical → IR for meaningful SED comparisons
 filter_names = [
-    "galex_fuv",    # Far-UV (1539 Å)
-    "galex_nuv",    # Near-UV (2316 Å)
-    "sdss_u",       # Optical (blue)
-    "sdss_g",       # Optical (green)
-    "sdss_r",       # Optical (red)
-    "sdss_i",       # Optical (near-IR)
-    "sdss_z",       # Optical (far-red)
-    "wise_w1",      # Mid-IR (3.4 μm)
-    "wise_w2",      # Mid-IR (4.6 μm)
-    "wise_w3",      # Mid-IR (12 μm)
+    "galex_fuv",  # Far-UV (1539 Å)
+    "galex_nuv",  # Near-UV (2316 Å)
+    "sdss_u",  # Optical (blue)
+    "sdss_g",  # Optical (green)
+    "sdss_r",  # Optical (red)
+    "sdss_i",  # Optical (near-IR)
+    "sdss_z",  # Optical (far-red)
+    "wise_w1",  # Mid-IR (3.4 μm)
+    "wise_w2",  # Mid-IR (4.6 μm)
+    "wise_w3",  # Mid-IR (12 μm)
 ]
 photometry = Photometry.from_names(filter_names)
 observation = Observation(photometry=photometry)
 
 print(f"Loaded SSP grid: {_ssp_name}")
 print(f"Photometry: {photometry.n_filters} filters spanning UV→IR")
-print(f"  {', '.join([b.replace('galex_', 'GALEX-').replace('sdss_', 'SDSS-').replace('wise_', 'WISE-') for b in filter_names])}")
+print(
+    f"  {', '.join([b.replace('galex_', 'GALEX-').replace('sdss_', 'SDSS-').replace('wise_', 'WISE-') for b in filter_names])}"
+)
 
 # %% [markdown]
-# ## Structural choices, priors, and the free/fixed split
+# ## Three construction paths (all equivalent)
 #
-# Every `Parameters(...)` instance holds:
+# The nested-dict API offers three ways to build a model:
 #
-# 1. **Structural choices** — flags like `mean_sfh_type`, `dust_law_bc`,
-#    `dust_emission` that select from the registry of physics models.
-# 2. **Priors on free parameters** — distributions (`Uniform`, `Gaussian`)
-#    bound to parameter names.
-# 3. **Fixed values** — parameters wrapped in `Fixed(value)` are pinned
-#    and never appear in `spec.free_params`.
-#
-# Let's build three `Parameters` objects of increasing complexity and
-# inspect each one.
+# 1. **Recipe** — curated template for a common scenario
+# 2. **from_groups direct** — hand-built nested dict
+# 3. **Round-trip** — extract from existing model, tweak, rebuild
 
 # %%
-# ─── Model 1: Minimal (just SFH + metallicity) ──────────────────────
-print("MODEL 1: Minimal (SFH only)")
+# Path 1: Recipe (curated template)
+print("PATH 1: Recipe")
+recipe_dict = recipes.star_forming_photometry()
+model1 = SEDModel.from_groups(ssp_data=ssp, observation=observation, **recipe_dict)
+print(f"  Model: {model1.spec.n_free} free params from recipe")
+print(f"  SFH family: {recipe_dict['sfh']['type']}")
+print()
 
-spec_minimal = Parameters(
-    mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-1.0, 1.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
-    met_logzsol=Uniform(-1.5, 0.3),
-    redshift=Fixed(0.05),
-    apply_igm=False,
+# Path 2: From-groups direct (hand-built nested dict)
+print("PATH 2: From-groups direct")
+groups_dict = {
+    "sfh": {"type": "dpl", "*": FREE, "logzsol": Fixed(-0.1)},
+    "dust": {
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": FREE,
+        "emission": {"type": "dale2014", "*": FIXED, "logzsol": Fixed(-0.1)},
+    },
+    "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+    "redshift": Uniform(0.01, 6.0),
+    "apply_igm": True,
+}
+model2 = SEDModel.from_groups(ssp_data=ssp, observation=observation, **groups_dict)
+print(f"  Model: {model2.spec.n_free} free params from direct dict")
+print(
+    f"  Free params match recipe: {set(model1.spec.free_params) == set(model2.spec.free_params)}"
 )
+print()
 
-print(f"Free parameters ({len(spec_minimal.free_params)}): {spec_minimal.free_params}")
-print(f"Fixed parameters ({len(spec_minimal.fixed_params)}): {spec_minimal.fixed_params}")
+# Path 3: Round-trip (extract → edit → rebuild)
+print("PATH 3: Round-trip")
+groups_from_model = model1.spec.to_groups()
+# Tweak: change metallicity to free (lives inside the sfh group as 'logzsol')
+groups_from_model.setdefault("sfh", {})["logzsol"] = FREE
+model3 = SEDModel.from_groups(ssp_data=ssp, observation=observation, **groups_from_model)
+print(f"  Model: {model3.spec.n_free} free params from round-trip + edit")
+print(f"  Added metallicity freedom: {'met_logzsol' in model3.spec.free_params}")
 
-# ─── Model 2: Add dust attenuation ────────────────────────────────────
-print("MODEL 2: + Dust attenuation (two-component)")
+# %% [markdown]
+# ## Parameter provenance and summary
+#
+# Use `model.spec.summary_str()` to inspect how each parameter got its value.
+# The tags show the source:
+#
+# - `[user]` — explicitly specified in your nested dict
+# - `[* FREE]` — matched by wildcard directive
+# - `[* FIXED]` — matched by wildcard directive
+# - `[default]` — registry default (usually fixed at median)
 
-spec_dust_atten = Parameters(
-    mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-1.0, 1.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
-    met_logzsol=Uniform(-1.5, 0.3),
-    dust_model="two_component",
-    dust_law_bc="calzetti",
-    dust_tau_bc=Uniform(0.0, 2.0),
-    dust_tau_diff=Uniform(0.0, 1.5),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.05),
-    apply_igm=False,
-)
-
-print(f"Free parameters ({len(spec_dust_atten.free_params)}): {spec_dust_atten.free_params}")
-print(f"Fixed parameters ({len(spec_dust_atten.fixed_params)}): {spec_dust_atten.fixed_params}")
-
-# ─── Model 3: Full energy-balance model ──────────────────────────────
-print("MODEL 3: Full energy-balance (+ dust IR emission)")
-
-spec_full = Parameters(
-    mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-1.0, 1.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
-    met_logzsol=Uniform(-1.5, 0.3),
-    dust_model="two_component",
-    dust_law_bc="calzetti",
-    dust_tau_bc=Uniform(0.0, 2.0),
-    dust_tau_diff=Uniform(0.0, 1.5),
-    dust_slope=Fixed(-0.7),
-    dust_emission="dale2014",
-    redshift=Fixed(0.05),
-    apply_igm=False,
-)
-
-print(f"Free parameters ({len(spec_full.free_params)}): {spec_full.free_params}")
-print(f"Fixed parameters ({len(spec_full.fixed_params)}): {spec_full.fixed_params}")
+# %%
+# Build a model with mixed provenance
+base_groups = {
+    "sfh": {
+        "type": "tsnorm",
+        "*": FREE,
+        "skew": Uniform(-1.0, 1.0),
+    },  # skew is [user], others are [* FREE]
+    "dust": {
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": FIXED,  # All dust params are [* FIXED]
+        "tau_bc": 0.5,  # Override to explicit value (still fixed)
+    },
+    "neb": {"type": "cue"},  # No wildcard → all use [default]
+    "redshift": Fixed(0.05),
+    "apply_igm": False,
+}
+spec = Parameters.from_groups(**base_groups)
+print("Parameter Summary with Provenance Tags:")
+print(spec.summary_str())
 
 # %% [markdown]
 # ## Vary the SFH family
 #
-# The parameter registry is **structure-aware**: when you swap
-# `mean_sfh_type`, the free-parameter list updates automatically.
-# Each SFH family carries different parameter names and priors.
+# The nested-dict interface makes it simple to swap structural choices.
+# Each SFH family carries different parameter names — the parser handles
+# this automatically.
+#
+# Below we show how a single base dict + one-line edits capture the same
+# physics as the old six Parameters(...) blocks.
 
 # %%
 sfh_families = [
-    ("tsnorm", {
-        "sfh_tsnorm_log_peak_sfr": np.log10(15.0),
-        "sfh_tsnorm_peak_lbt_gyr": 3.0,
-        "sfh_tsnorm_width_gyr": 2.5,
-        "sfh_tsnorm_skew": 0.2,
-        "sfh_tsnorm_trunc": 4.0,
-    }),
-    ("dpl", {
-        "sfh_dpl_log_peak_sfr": np.log10(15.0),
-        "sfh_dpl_alpha": 2.0,
-        "sfh_dpl_beta": 1.5,
-        "sfh_dpl_tau_gyr": 2.0,
-    }),
-    ("dexp", {
-        # Delayed exponential SFH: exponential decay exp(-t/tau) from z=0.
-        # Produces star-forming main sequence morphology.
-        "sfh_dexp_log_peak_sfr": np.log10(15.0),
-        "sfh_dexp_tau_gyr": 2.5,
-    }),
-    ("lnorm", {
-        "sfh_lnorm_log_peak_sfr": np.log10(15.0),
-        "sfh_lnorm_peak_lbt_gyr": 3.0,
-        "sfh_lnorm_width_gyr": 0.6,
-    }),
-    ("dirichlet", {
-        # Non-parametric Dirichlet SFH: piecewise constant SFR in 6 age bins,
-        # constrained by Dirichlet prior. Fractions (z_*) are RAW simplex values
-        # on Uniform(0.01, 0.99), NOT log values. This sequence represents
-        # "rising then plateauing" star formation: higher fractions at late times.
-        "sfh_dir_log_total_mass": np.log10(1e10),
-        "sfh_dir_z_0": 0.6,   # Earliest bin: 60% of remaining mass
-        "sfh_dir_z_1": 0.5,   # 50% of remaining
-        "sfh_dir_z_2": 0.4,   # 40% of remaining
-        "sfh_dir_z_3": 0.3,   # 30% of remaining
-        "sfh_dir_z_4": 0.2,   # 20% of remaining
-        "sfh_dir_z_5": 0.15,  # Most recent: 15% of remaining
-    }),
+    (
+        "tsnorm",
+        {
+            "sfh_tsnorm_log_peak_sfr": np.log10(15.0),
+            "sfh_tsnorm_peak_lbt_gyr": 3.0,
+            "sfh_tsnorm_width_gyr": 2.5,
+            "sfh_tsnorm_skew": 0.2,
+            "sfh_tsnorm_trunc": 4.0,
+        },
+    ),
+    (
+        "dpl",
+        {
+            "sfh_dpl_log_peak_sfr": np.log10(15.0),
+            "sfh_dpl_alpha": 2.0,
+            "sfh_dpl_beta": 1.5,
+            "sfh_dpl_tau_gyr": 2.0,
+        },
+    ),
+    (
+        "dexp",
+        {
+            "sfh_dexp_log_peak_sfr": np.log10(15.0),
+            "sfh_dexp_tau_gyr": 2.5,
+        },
+    ),
+    (
+        "lnorm",
+        {
+            "sfh_lnorm_log_peak_sfr": np.log10(15.0),
+            "sfh_lnorm_peak_lbt_gyr": 3.0,
+            "sfh_lnorm_width_gyr": 0.6,
+        },
+    ),
+    (
+        "dirichlet",
+        {
+            "sfh_dir_log_total_mass": np.log10(1e10),
+            "sfh_dir_z_0": 0.6,
+            "sfh_dir_z_1": 0.5,
+            "sfh_dir_z_2": 0.4,
+            "sfh_dir_z_3": 0.3,
+            "sfh_dir_z_4": 0.2,
+            "sfh_dir_z_5": 0.15,
+        },
+    ),
 ]
 
 print("\nSFH Family Comparison")
-for sfh_name, _ in sfh_families:
-    spec_sfh = Parameters(
-        mean_sfh_type=sfh_name,
-        met_logzsol=Fixed(-0.1),
-        dust_model="two_component",
-        dust_law_bc="calzetti",
-        dust_tau_bc=Fixed(0.5),
-        dust_tau_diff=Fixed(0.3),
-        dust_slope=Fixed(-0.7),
-        dust_emission="dale2014",
-        redshift=Fixed(0.05),
-        apply_igm=False,
-    )
-    sfh_params = [p for p in spec_sfh.free_params if p.startswith("sfh_")]
-    print(f"{sfh_name:20s}  {len(sfh_params):2d} SFH params: {', '.join(sfh_params)}")
+print("─" * 70)
 
-print("\n[TIP] Use tengri.describe(name) to inspect any SFH family or component in detail.")
-print("Example: tengri.describe('delayed_bq') shows the parametrization and physics.")
+# Base groups dict: reused for all SFH families, only type changes
+base_groups_sfh = {
+    "dust": {
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "tau_bc": Fixed(0.5),
+        "tau_diff": Fixed(0.3),
+        "slope": Fixed(-0.7),
+        "emission": {"type": "dale2014"},
+    },
+    "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+    "redshift": Fixed(0.05),
+    "apply_igm": False,
+}
+
+for sfh_name, _ in sfh_families:
+    # Swap SFH family: one-line edit
+    groups_variant = base_groups_sfh.copy()
+    groups_variant["sfh"] = {"type": sfh_name, "*": FIXED, "logzsol": Fixed(-0.1)}
+
+    spec_sfh = Parameters.from_groups(**groups_variant)
+    sfh_params = [p for p in spec_sfh.free_params if p.startswith("sfh_")]
+    print(f"{sfh_name:20s}  {len(sfh_params):2d} SFH params (all fixed for this demo)")
+
+print()
+print("[TIP] Use tengri.describe(name) to inspect any SFH family or component in detail.")
+print("Example: tengri.describe('dpl') shows the parametrization and physics.")
 
 # %% [markdown]
 # ## SED under different SFH families
@@ -237,10 +270,6 @@ print("Example: tengri.describe('delayed_bq') shows the parametrization and phys
 # Build a truth dict for each SFH family and compute the resulting SEDs.
 # Notice how the spectral shape — especially the recent star formation
 # signature — changes with the SFH family.
-#
-# **New API surface:** Use `model.predict_sfh_quantities(truth)` to extract
-# mass-weighted age and other diagnostics; overlay on SFR(t) to teach the
-# model's expectations about age structure.
 
 # %%
 n_sfh = len(sfh_families)
@@ -252,18 +281,21 @@ dl_cm = float(cosmology.luminosity_distance(z))
 
 for row, (sfh_name, truth_sfh) in enumerate(sfh_families):
     # Build model for this SFH family
-    spec = Parameters(
-        mean_sfh_type=sfh_name,
-        met_logzsol=Fixed(-0.1),
-        dust_model="two_component",
-        dust_law_bc="calzetti",
-        dust_tau_bc=Fixed(0.5),
-        dust_tau_diff=Fixed(0.3),
-        dust_slope=Fixed(-0.7),
-        dust_emission="dale2014",
-        redshift=Fixed(z),
-        apply_igm=False,
-    )
+    groups_sfh_fig = {
+        "sfh": {"type": sfh_name, "*": FIXED, "logzsol": Fixed(-0.1)},
+        "dust": {
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "tau_bc": Fixed(0.5),
+            "tau_diff": Fixed(0.3),
+            "slope": Fixed(-0.7),
+            "emission": {"type": "dale2014"},
+        },
+        "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+        "redshift": Fixed(z),
+        "apply_igm": False,
+    }
+    spec = Parameters.from_groups(**groups_sfh_fig)
     model = SEDModel(spec, ssp, observation=observation)
 
     # Build truth dict
@@ -283,8 +315,7 @@ for row, (sfh_name, truth_sfh) in enumerate(sfh_families):
     sfr_values = np.asarray(sfr_curve["sfr_mean"])
 
     color = plot.COLORS["seq"][row % len(plot.COLORS["seq"])]
-    ax_sfr.loglog(t_lookback, np.maximum(sfr_values, 1e-3), lw=2,
-                  color=color, label=sfh_name)
+    ax_sfr.loglog(t_lookback, np.maximum(sfr_values, 1e-3), lw=2, color=color, label=sfh_name)
     ax_sfr.set_xlabel("Lookback time [Gyr]")
     ax_sfr.set_ylabel("SFR [M$_\\odot$ yr$^{-1}$]")
     ax_sfr.grid(True, alpha=0.2, which="both")
@@ -307,7 +338,11 @@ for row, (sfh_name, truth_sfh) in enumerate(sfh_families):
     ax_sed.grid(True, alpha=0.2, which="both")
 
 fig.suptitle("SFH families: SFR(t) and rest-frame SED", fontsize=12, y=0.995)
-plt.savefig(str(_repo_root / "notebooks" / "figures" / "04_sfh_family_grid.png"), dpi=200, bbox_inches="tight")
+plt.savefig(
+    str(_repo_root / "notebooks" / "figures" / "04_sfh_family_grid.png"),
+    dpi=200,
+    bbox_inches="tight",
+)
 plt.show()
 
 # %% [markdown]
@@ -316,6 +351,9 @@ plt.show()
 # Keep the SFH fixed (tsnorm) and sweep dust attenuation law. The amount
 # of attenuation and the detailed shape of the extinction curve affect
 # the UV-to-optical ratio and the overall SED tilt.
+#
+# This is where the nested-dict approach shines: swap the `law_bc` value,
+# and the parser automatically re-declares the relevant dust parameters.
 
 # %%
 dust_laws = [
@@ -328,24 +366,37 @@ dust_laws = [
 ]
 
 print("\nDust Law Comparison")
+print("─" * 70)
+
+# Base groups dict: dust law is the only thing that changes
+base_groups_dust = {
+    "sfh": {
+        "type": "tsnorm",
+        "log_peak_sfr": Fixed(np.log10(15.0)),
+        "peak_lbt_gyr": Fixed(3.0),
+        "width_gyr": Fixed(2.5),
+        "skew": Fixed(0.2),
+        "trunc": Fixed(4.0),
+    },
+    "dust": {
+        "type": "two_component",
+        "tau_bc": Fixed(0.5),
+        "tau_diff": Fixed(0.3),
+        "slope": Fixed(-0.7),
+        "emission": {"type": "dale2014"},
+    },
+    "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+    "redshift": Fixed(0.05),
+    "apply_igm": False,
+}
+
 for dust_law in dust_laws:
-    spec = Parameters(
-        mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Fixed(np.log10(15.0)),
-        sfh_tsnorm_peak_lbt_gyr=Fixed(3.0),
-        sfh_tsnorm_width_gyr=Fixed(2.5),
-        sfh_tsnorm_skew=Fixed(0.2),
-        sfh_tsnorm_trunc=Fixed(4.0),
-        met_logzsol=Fixed(-0.1),
-        dust_model="two_component",
-        dust_law_bc=dust_law,
-        dust_tau_bc=Fixed(0.5),
-        dust_tau_diff=Fixed(0.3),
-        dust_slope=Fixed(-0.7),
-        dust_emission="dale2014",
-        redshift=Fixed(0.05),
-        apply_igm=False,
-    )
+    # Swap dust law: one-line edit
+    groups_dust_var = base_groups_dust.copy()
+    groups_dust_var["dust"] = base_groups_dust["dust"].copy()
+    groups_dust_var["dust"]["law_bc"] = dust_law
+
+    spec = Parameters.from_groups(**groups_dust_var)
     free_dust = [p for p in spec.free_params if p.startswith("dust_")]
     print(f"{dust_law:20s}  dust free params: {free_dust}")
 
@@ -373,19 +424,29 @@ truth_sfh = {
 # LEFT: Intrinsic SED (zero dust) as reference
 ax_ref = fig.add_subplot(gs[0])
 
-spec_nodust = Parameters(
-    mean_sfh_type="tsnorm",
-    **{f"{k}": Fixed(v) for k, v in truth_sfh.items()},
-    met_logzsol=Fixed(-0.1),
-    dust_model="two_component",
-    dust_law_bc="calzetti",
-    dust_tau_bc=Fixed(0.0),  # Zero attenuation
-    dust_tau_diff=Fixed(0.0),
-    dust_slope=Fixed(-0.7),
-    dust_emission="dale2014",
-    redshift=Fixed(z),
-    apply_igm=False,
-)
+# Base groups for no-dust comparison
+groups_nodust = {
+    "sfh": {
+        "type": "tsnorm",
+        "log_peak_sfr": Fixed(np.log10(15.0)),
+        "peak_lbt_gyr": Fixed(3.0),
+        "width_gyr": Fixed(2.5),
+        "skew": Fixed(0.2),
+        "trunc": Fixed(4.0),
+    },
+    "dust": {
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Fixed(0.0),
+        "slope": Fixed(-0.7),
+        "emission": {"type": "dale2014"},
+    },
+    "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+    "redshift": Fixed(z),
+    "apply_igm": False,
+}
+spec_nodust = Parameters.from_groups(**groups_nodust)
 model_nodust = SEDModel(spec_nodust, ssp, observation=observation)
 
 truth_nodust = {
@@ -403,8 +464,13 @@ sed_fnu_nodust = np.asarray(units.lnu_to_fnu(sed_nodust.sed, dl_cm, z))
 
 # Clip to visible window — keeps log-autoscale honest
 _mask_ref = (wave_obs_um >= 0.1) & (wave_obs_um <= 30)
-ax_ref.loglog(wave_obs_um[_mask_ref], sed_fnu_nodust[_mask_ref], lw=2.5,
-              color="black", label="Intrinsic (τ=0)")
+ax_ref.loglog(
+    wave_obs_um[_mask_ref],
+    sed_fnu_nodust[_mask_ref],
+    lw=2.5,
+    color="black",
+    label="Intrinsic (τ=0)",
+)
 ax_ref.set_xlabel(r"Observed wavelength [$\mu$m]")
 ax_ref.set_ylabel(r"$f_\nu$ [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
 ax_ref.set_xlim(0.1, 30)
@@ -417,20 +483,30 @@ ax_ref.set_title("Intrinsic spectrum (no attenuation)")
 # RIGHT: SEDs with each dust law
 ax_sed = fig.add_subplot(gs[1])
 
+# Reuse base and swap law_bc
 for idx, dust_law in enumerate(dust_laws):
-    spec = Parameters(
-        mean_sfh_type="tsnorm",
-        **{f"{k}": Fixed(v) for k, v in truth_sfh.items()},
-        met_logzsol=Fixed(-0.1),
-        dust_model="two_component",
-        dust_law_bc=dust_law,
-        dust_tau_bc=Fixed(0.5),
-        dust_tau_diff=Fixed(0.3),
-        dust_slope=Fixed(-0.7),
-        dust_emission="dale2014",
-        redshift=Fixed(z),
-        apply_igm=False,
-    )
+    groups_dustlaw_fig = {
+        "sfh": {
+            "type": "tsnorm",
+            "log_peak_sfr": Fixed(np.log10(15.0)),
+            "peak_lbt_gyr": Fixed(3.0),
+            "width_gyr": Fixed(2.5),
+            "skew": Fixed(0.2),
+            "trunc": Fixed(4.0),
+        },
+        "dust": {
+            "type": "two_component",
+            "law_bc": dust_law,
+            "tau_bc": Fixed(0.5),
+            "tau_diff": Fixed(0.3),
+            "slope": Fixed(-0.7),
+            "emission": {"type": "dale2014"},
+        },
+        "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+        "redshift": Fixed(z),
+        "apply_igm": False,
+    }
+    spec = Parameters.from_groups(**groups_dustlaw_fig)
     model = SEDModel(spec, ssp, observation=observation)
 
     truth = {
@@ -461,7 +537,11 @@ ax_sed.legend(loc="upper right", frameon=False, fontsize=9)
 ax_sed.set_title("Attenuated spectra (τ = 0.5)")
 
 fig.suptitle("Dust attenuation law comparison", fontsize=12, y=1.00)
-plt.savefig(str(_repo_root / "notebooks" / "figures" / "04_dust_law_grid.png"), dpi=200, bbox_inches="tight")
+plt.savefig(
+    str(_repo_root / "notebooks" / "figures" / "04_dust_law_grid.png"),
+    dpi=200,
+    bbox_inches="tight",
+)
 plt.show()
 
 # %% [markdown]
@@ -479,25 +559,38 @@ dust_emissions = [
 ]
 
 print("\nDust Emission Model Comparison")
+print("─" * 70)
+
+# Base groups dict: emission type is the only thing that changes
+base_groups_emission = {
+    "sfh": {
+        "type": "tsnorm",
+        "log_peak_sfr": Fixed(np.log10(15.0)),
+        "peak_lbt_gyr": Fixed(3.0),
+        "width_gyr": Fixed(2.5),
+        "skew": Fixed(0.2),
+        "trunc": Fixed(4.0),
+    },
+    "dust": {
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "tau_bc": Fixed(0.5),
+        "tau_diff": Fixed(0.3),
+        "slope": Fixed(-0.7),
+    },
+    "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+    "redshift": Fixed(0.05),
+    "apply_igm": False,
+}
+
 for emission in dust_emissions:
     try:
-        spec = Parameters(
-            mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Fixed(np.log10(15.0)),
-            sfh_tsnorm_peak_lbt_gyr=Fixed(3.0),
-            sfh_tsnorm_width_gyr=Fixed(2.5),
-            sfh_tsnorm_skew=Fixed(0.2),
-            sfh_tsnorm_trunc=Fixed(4.0),
-            met_logzsol=Fixed(-0.1),
-            dust_model="two_component",
-            dust_law_bc="calzetti",
-            dust_tau_bc=Fixed(0.5),
-            dust_tau_diff=Fixed(0.3),
-            dust_slope=Fixed(-0.7),
-            dust_emission=emission,
-            redshift=Fixed(0.05),
-            apply_igm=False,
-        )
+        # Swap emission type: one-line edit
+        groups_emission_var = base_groups_emission.copy()
+        groups_emission_var["dust"] = base_groups_emission["dust"].copy()
+        groups_emission_var["dust"]["emission"] = {"type": emission}
+
+        spec = Parameters.from_groups(**groups_emission_var)
         emission_params = [p for p in spec.free_params if p.startswith("dust_")]
         print(f"{emission:20s}  dust free params: {emission_params}")
     except Exception as e:
@@ -532,23 +625,28 @@ truth_base = {
 ax_sed = fig.add_subplot(gs[0])
 
 for idx, emission in enumerate(dust_emissions):
-    spec = Parameters(
-        mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Fixed(np.log10(15.0)),
-        sfh_tsnorm_peak_lbt_gyr=Fixed(3.0),
-        sfh_tsnorm_width_gyr=Fixed(2.5),
-        sfh_tsnorm_skew=Fixed(0.2),
-        sfh_tsnorm_trunc=Fixed(4.0),
-        met_logzsol=Fixed(-0.1),
-        dust_model="two_component",
-        dust_law_bc="calzetti",
-        dust_tau_bc=Fixed(0.5),
-        dust_tau_diff=Fixed(0.3),
-        dust_slope=Fixed(-0.7),
-        dust_emission=emission,
-        redshift=Fixed(z),
-        apply_igm=False,
-    )
+    groups_emission_fig = {
+        "sfh": {
+            "type": "tsnorm",
+            "log_peak_sfr": Fixed(np.log10(15.0)),
+            "peak_lbt_gyr": Fixed(3.0),
+            "width_gyr": Fixed(2.5),
+            "skew": Fixed(0.2),
+            "trunc": Fixed(4.0),
+        },
+        "dust": {
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "tau_bc": Fixed(0.5),
+            "tau_diff": Fixed(0.3),
+            "slope": Fixed(-0.7),
+            "emission": {"type": emission},
+        },
+        "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+        "redshift": Fixed(z),
+        "apply_igm": False,
+    }
+    spec = Parameters.from_groups(**groups_emission_fig)
     model = SEDModel(spec, ssp, observation=observation)
 
     sed = model.predict_rest_sed(truth_base)
@@ -575,23 +673,28 @@ ax_balance = fig.add_subplot(gs[1])
 # Extract derived quantities (L_IR, L_dust_absorbed) from each model
 l_ir_values = []
 for emission in dust_emissions:
-    spec = Parameters(
-        mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Fixed(np.log10(15.0)),
-        sfh_tsnorm_peak_lbt_gyr=Fixed(3.0),
-        sfh_tsnorm_width_gyr=Fixed(2.5),
-        sfh_tsnorm_skew=Fixed(0.2),
-        sfh_tsnorm_trunc=Fixed(4.0),
-        met_logzsol=Fixed(-0.1),
-        dust_model="two_component",
-        dust_law_bc="calzetti",
-        dust_tau_bc=Fixed(0.5),
-        dust_tau_diff=Fixed(0.3),
-        dust_slope=Fixed(-0.7),
-        dust_emission=emission,
-        redshift=Fixed(z),
-        apply_igm=False,
-    )
+    groups_energy_fig = {
+        "sfh": {
+            "type": "tsnorm",
+            "log_peak_sfr": Fixed(np.log10(15.0)),
+            "peak_lbt_gyr": Fixed(3.0),
+            "width_gyr": Fixed(2.5),
+            "skew": Fixed(0.2),
+            "trunc": Fixed(4.0),
+        },
+        "dust": {
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "tau_bc": Fixed(0.5),
+            "tau_diff": Fixed(0.3),
+            "slope": Fixed(-0.7),
+            "emission": {"type": emission},
+        },
+        "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+        "redshift": Fixed(z),
+        "apply_igm": False,
+    }
+    spec = Parameters.from_groups(**groups_energy_fig)
     model = SEDModel(spec, ssp, observation=observation)
     derived = model.predict_derived(truth_base)
     l_ir = derived.get("L_ir_rest", 1.0)  # Use fallback 1.0 if not available
@@ -601,8 +704,14 @@ for emission in dust_emissions:
 l_ir_norm = np.array(l_ir_values) / l_ir_values[0]
 
 colors = [plot.COLORS["seq"][i % len(plot.COLORS["seq"])] for i in range(len(dust_emissions))]
-bars = ax_balance.bar(range(len(dust_emissions)), l_ir_norm,
-                       color=colors, alpha=0.7, edgecolor="black", linewidth=1.2)
+bars = ax_balance.bar(
+    range(len(dust_emissions)),
+    l_ir_norm,
+    color=colors,
+    alpha=0.7,
+    edgecolor="black",
+    linewidth=1.2,
+)
 ax_balance.axhline(y=1.0, color="red", linestyle="--", linewidth=1.5, label="Energy balance (=1)")
 ax_balance.set_ylabel(r"$L_{IR}$ (normalized)")
 ax_balance.set_xticks(range(len(dust_emissions)))
@@ -613,78 +722,71 @@ ax_balance.set_title("Energy conservation check")
 ax_balance.grid(True, alpha=0.2, axis="y")
 
 fig.suptitle("Dust IR emission model comparison", fontsize=12, y=1.00)
-plt.savefig(str(_repo_root / "notebooks" / "figures" / "04_dust_emission_grid.png"), dpi=200, bbox_inches="tight")
+plt.savefig(
+    str(_repo_root / "notebooks" / "figures" / "04_dust_emission_grid.png"),
+    dpi=200,
+    bbox_inches="tight",
+)
 plt.show()
 
 # %% [markdown]
 # ## Free vs fixed parameters
 #
-# Same physical model, different parameter freedom. We demonstrate:
-# free redshift vs fixed redshift, and free metallicity vs fixed.
+# Same physical model, different parameter freedom. We demonstrate how the
+# nested-dict API tracks free/fixed status via wildcard directives.
 
 # %%
 print("\nFree vs Fixed Parameter Tracking")
+print("─" * 70)
 
 # Build a reference model to show summary()
-spec_ref = Parameters(
-    mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-1.0, 1.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
-    met_logzsol=Uniform(-1.5, 0.3),
-    dust_model="two_component",
-    dust_law_bc="calzetti",
-    dust_tau_bc=Uniform(0.0, 2.0),
-    dust_tau_diff=Uniform(0.0, 1.5),
-    dust_slope=Fixed(-0.7),
-    dust_emission="dale2014",
-    redshift=Uniform(0.01, 0.1),
-    apply_igm=False,
-)
+groups_ref = {
+    "sfh": {"type": "tsnorm", "*": FREE, "logzsol": Fixed(-0.1)},
+    "dust": {
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": FREE,
+        "slope": Fixed(-0.7),
+        "emission": {"type": "dale2014", "*": FIXED, "logzsol": Fixed(-0.1)},
+    },
+    "redshift": Uniform(0.01, 0.1),
+    "apply_igm": False,
+}
+spec_ref = Parameters.from_groups(**groups_ref)
 print("\nModel Summary (using Parameters.summary_str()):")
 print(spec_ref.summary_str())
 
 # Model 1: free redshift
-spec_free_z = Parameters(
-    mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-1.0, 1.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
-    met_logzsol=Uniform(-1.5, 0.3),
-    dust_model="two_component",
-    dust_law_bc="calzetti",
-    dust_tau_bc=Uniform(0.0, 2.0),
-    dust_tau_diff=Uniform(0.0, 1.5),
-    dust_slope=Fixed(-0.7),
-    dust_emission="dale2014",
-    redshift=Uniform(0.01, 0.1),  # FREE
-    apply_igm=False,
-)
+groups_free_z = {
+    "sfh": {"type": "tsnorm", "*": FREE, "logzsol": Fixed(-0.1)},
+    "dust": {
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": FREE,
+        "slope": Fixed(-0.7),
+        "emission": {"type": "dale2014", "*": FIXED, "logzsol": Fixed(-0.1)},
+    },
+    "redshift": Uniform(0.01, 0.1),  # FREE
+    "apply_igm": False,
+}
+spec_free_z = Parameters.from_groups(**groups_free_z)
 
 # Model 2: fixed redshift
-spec_fixed_z = Parameters(
-    mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-1.0, 1.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
-    met_logzsol=Uniform(-1.5, 0.3),
-    dust_model="two_component",
-    dust_law_bc="calzetti",
-    dust_tau_bc=Uniform(0.0, 2.0),
-    dust_tau_diff=Uniform(0.0, 1.5),
-    dust_slope=Fixed(-0.7),
-    dust_emission="dale2014",
-    redshift=Fixed(0.05),  # FIXED
-    apply_igm=False,
-)
+groups_fixed_z = {
+    "sfh": {"type": "tsnorm", "*": FREE, "logzsol": Fixed(-0.1)},
+    "dust": {
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": FREE,
+        "slope": Fixed(-0.7),
+        "emission": {"type": "dale2014", "*": FIXED, "logzsol": Fixed(-0.1)},
+    },
+    "redshift": Fixed(0.05),  # FIXED
+    "apply_igm": False,
+}
+spec_fixed_z = Parameters.from_groups(**groups_fixed_z)
 
-print(f"Free redshift       : {len(spec_free_z.free_params):2d} free params")
+print(f"\nFree redshift       : {len(spec_free_z.free_params):2d} free params")
 print(f"  {spec_free_z.free_params}")
 print()
 print(f"Fixed redshift      : {len(spec_fixed_z.free_params):2d} free params")
@@ -703,24 +805,27 @@ print(f"  Fixed z has 'redshift': {'redshift' in spec_fixed_z.free_params}")
 
 # %%
 # Build a representative model
-spec_perf = Parameters(
-    mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Fixed(np.log10(15.0)),
-    sfh_tsnorm_peak_lbt_gyr=Fixed(3.0),
-    sfh_tsnorm_width_gyr=Fixed(2.5),
-    sfh_tsnorm_skew=Fixed(0.2),
-    sfh_tsnorm_trunc=Fixed(4.0),
-    met_logzsol=Fixed(-0.1),
-    dust_model="two_component",
-    dust_law_bc="calzetti",
-    dust_tau_bc=Fixed(0.5),
-    dust_tau_diff=Fixed(0.3),
-    dust_slope=Fixed(-0.7),
-    dust_emission="dale2014",
-    redshift=Fixed(0.05),
-    apply_igm=False,
-)
-
+groups_perf = {
+    "sfh": {
+        "type": "tsnorm",
+        "log_peak_sfr": Fixed(np.log10(15.0)),
+        "peak_lbt_gyr": Fixed(3.0),
+        "width_gyr": Fixed(2.5),
+        "skew": Fixed(0.2),
+        "trunc": Fixed(4.0),
+    },
+    "dust": {
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "tau_bc": Fixed(0.5),
+        "tau_diff": Fixed(0.3),
+        "slope": Fixed(-0.7),
+        "emission": {"type": "dale2014"},
+    },
+    "redshift": Fixed(0.05),
+    "apply_igm": False,
+}
+spec_perf = Parameters.from_groups(**groups_perf)
 model_perf = SEDModel(spec_perf, ssp, observation=observation)
 
 # Base truth dict
@@ -752,9 +857,10 @@ for i in range(n_iter):
 t_loop = time.perf_counter() - t0
 
 print("\nForward Model Performance")
-print(f"Single prediction:            {t_single*1000:.2f} ms")
-print(f"50 sequential predictions:    {t_loop:.3f} s ({t_loop/n_iter*1000:.2f} ms per call)")
-print(f"Per-call overhead (amortized):{(t_loop / n_iter - t_single)*1000:.2f} ms")
+print("─" * 70)
+print(f"Single prediction:            {t_single * 1000:.2f} ms")
+print(f"50 sequential predictions:    {t_loop:.3f} s ({t_loop / n_iter * 1000:.2f} ms per call)")
+print(f"Per-call overhead (amortized):{(t_loop / n_iter - t_single) * 1000:.2f} ms")
 print()
 print("Key lesson: Once compiled, calls are fast (~10-30 ms). Use sequential")
 print("loops for sensitivity studies, or vmap() for full batch vectorization.")
@@ -762,16 +868,19 @@ print("loops for sensitivity studies, or vmap() for full batch vectorization.")
 # %% [markdown]
 # ## Where to go next
 #
-# Most of the API surface a model-builder needs is in this notebook:
-# `Parameters.with_params(**kw)` for immutable swaps,
-# `Parameters.summary()` for introspection, `model.predict_sfh(...)` and
-# `predict_photometry_batch(...)` for diagnostics, `tengri.describe(name)`
-# and `tengri.cite(...)` for registry and citations.
+# The nested-dict model builder is the recommended entry point for new models.
+# The old flat Parameters(...) constructor remains available as an escape hatch.
+#
+# Key affordances:
+# - `recipes.*()` curated templates for common scenarios
+# - `SEDModel.from_groups(..., filters=...)` one-liner to build and evaluate
+# - `model.spec.to_groups()` extract structure for inspection/round-trip edits
+# - `model.spec.summary_str()` provenance-tagged parameter listing
 #
 # Natural next steps: [`05_fitting_photometry`](05_fitting_photometry.py)
 # runs a real fit and reads its posterior;
 # [`06_fitting_spectroscopy`](06_fitting_spectroscopy.py) breaks age, dust,
 # and metallicity degeneracies with a spectrum. Stochastic SFHs live
-# behind the `sfh_field_psd_*` parameters; AGN behind `agn_disc=` and
-# `agn_torus=`. Build your own component, register it, and the parameter
-# tracking and forward model pick it up unchanged.
+# under `sfh={'type': ['dpl', 'field'], ...}`; AGN under
+# `agn={'disc': ..., 'torus': ...}`. Build your own component, register it,
+# and the parameter tracking and forward model pick it up unchanged.

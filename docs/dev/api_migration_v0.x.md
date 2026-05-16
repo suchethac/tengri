@@ -338,6 +338,145 @@ previously, so the move is purely additive — no shim is required.
 
 ---
 
+## Nested-dict model builder (v0.x)
+
+The **nested-dict model builder** is the recommended entry point for
+constructing galaxy SED models. It provides a Bagpipes-style hierarchical
+interface that groups parameters by physics (sfh, dust, neb, agn, etc.)
+and uses sentinels (`FREE`, `FIXED`) plus wildcard directives to specify
+parameter freedom.
+
+### Three equivalent construction paths
+
+```python
+from tengri import SEDModel, FREE, FIXED, Uniform, recipes, Parameters
+
+# Path 1: Recipe (curated template)
+model = SEDModel.from_groups(
+    ssp_data=ssp,
+    filters=['sdss_u', 'sdss_g'],
+    **recipes.star_forming_photometry(),
+)
+
+# Path 2: From-groups direct (hand-built nested dict)
+model = SEDModel.from_groups(
+    ssp_data=ssp,
+    filters=['sdss_u', 'sdss_g'],
+    sfh={'type': 'dpl', '*': FREE},
+    dust={
+        'type': 'two_component',
+        'law_bc': 'calzetti',
+        '*': FREE,
+        'emission': {'type': 'dale2014', '*': FIXED},
+    },
+    neb={'type': 'cue', '*': FIXED},
+    redshift=Uniform(0.01, 6.0),
+    apply_igm=True,
+)
+
+# Path 3: Round-trip (extract → edit → rebuild)
+groups = model.spec.to_groups()
+groups['dust']['tau_bc'] = Fixed(0.8)  # Tweak in-place
+model2 = SEDModel.from_groups(ssp_data=ssp, filters=['sdss_u'], **groups)
+```
+
+### Parameter provenance via summary()
+
+Every parameter is tagged with its source:
+
+```python
+spec.summary_str()
+
+# Output shows [user], [* FREE], [* FIXED], or [default]
+# indicating whether the value came from explicit specification,
+# wildcard matching, or registry defaults.
+```
+
+### Wildcard semantics
+
+The `'*'` key in a sub-dict sets a default (`FREE` or `FIXED`) for all
+parameters in that group not explicitly overridden:
+
+```python
+dust={
+    'type': 'two_component',
+    'law_bc': 'calzetti',
+    '*': FIXED,  # All dust params are [* FIXED]
+    'tau_bc': Uniform(0, 1),  # Override: explicitly free
+}
+```
+
+### Sentinels and roundtrip
+
+`FREE` and `FIXED` are singleton sentinels that preserve identity across
+copy and pickle operations. They work in both dictionaries and as explicit
+values:
+
+```python
+from tengri.parameters.sentinels import FREE, FIXED
+
+# In group dicts
+groups = {'sfh': {'type': 'dpl', '*': FREE}}
+
+# As explicit values
+groups = {'redshift': FIXED, 'met': {'logzsol': FREE}}
+
+# Via Prior classes
+groups = {'redshift': Fixed(0.05), 'met': {'logzsol': Uniform(-1, 0)}}
+```
+
+### Recipes module
+
+Five curated recipes ship with tengri:
+
+- `star_forming_photometry()` — DPL SFH, Calzetti dust, optical-to-MIR
+- `quiescent_z0()` — dexp SFH, minimal dust, z=0.05 local universe
+- `agn_panchromatic()` — DPL + AGN disc/torus, panchromatic coverage
+- `stochastic_sfh_jwst()` — DPL + stochastic field, JWST high-z
+- `mock_recovery_minimal()` — Minimal model for benchmarks and tests
+
+Each returns a nested dict ready to splice into `from_groups()`:
+
+```python
+from tengri import recipes
+
+recipe_dict = recipes.star_forming_photometry()
+model = SEDModel.from_groups(ssp_data=ssp, filters=filters, **recipe_dict)
+```
+
+### Migration from flat Parameters
+
+The old flat-kwarg `Parameters(...)` constructor remains available for
+expert use but is no longer the recommended path:
+
+```python
+# Old (still works, but not recommended)
+spec = Parameters(
+    mean_sfh_type='dpl',
+    sfh_dpl_alpha=Uniform(0.5, 3.0),
+    sfh_dpl_beta=Uniform(0.5, 3.0),
+    dust_model='two_component',
+    dust_law_bc='calzetti',
+    # ... 15 more kwargs
+)
+
+# New (recommended)
+spec = Parameters.from_groups(
+    sfh={'type': 'dpl', '*': FREE},
+    dust={'type': 'two_component', 'law_bc': 'calzetti', '*': FREE},
+)
+```
+
+### See also
+
+- `notebooks/04_building_models.py` — interactive examples of all three
+  construction paths, parameter provenance, and structural variation.
+- `src/tengri/parameters/groups.py` — parse_groups() and
+  parameters_to_groups() documentation.
+- `src/tengri/recipes/__init__.py` — curated recipe implementations.
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in
