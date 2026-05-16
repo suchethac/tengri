@@ -48,8 +48,7 @@ def test_sbpl_matches_upstream(fixture):
             )
         )
         # rel-err < 1e-6 finite, abs floor for tiny values
-        np.testing.assert_allclose(out, expected[i], rtol=1e-9, atol=0.0,
-                                    err_msg=f"case {i}")
+        np.testing.assert_allclose(out, expected[i], rtol=1e-9, atol=0.0, err_msg=f"case {i}")
 
 
 def test_sbpl_normalisation_at_5100A():

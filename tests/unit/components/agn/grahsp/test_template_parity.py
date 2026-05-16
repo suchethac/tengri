@@ -70,17 +70,13 @@ def test_line_table_matches_upstream_loader():
         ours_sy2 = f["netzer1990_lines/narrow_sy2"][:]
         ours_liner = f["netzer1990_lines/narrow_liner"][:]
     assert ours_wave.size == upstream_wave.size, "line count mismatch"
-    np.testing.assert_allclose(np.sort(ours_wave), np.sort(upstream_wave),
-                                rtol=1e-7, atol=0.0)
+    np.testing.assert_allclose(np.sort(ours_wave), np.sort(upstream_wave), rtol=1e-7, atol=0.0)
     # Compare element-wise after sorting by wavelength
     order_us = np.argsort(ours_wave)
     order_up = np.argsort(upstream_wave)
-    np.testing.assert_allclose(ours_broad[order_us], upstream_broad[order_up],
-                                rtol=1e-6, atol=0.0)
-    np.testing.assert_allclose(ours_sy2[order_us], upstream_sy2[order_up],
-                                rtol=1e-6, atol=0.0)
-    np.testing.assert_allclose(ours_liner[order_us], upstream_liner[order_up],
-                                rtol=1e-6, atol=0.0)
+    np.testing.assert_allclose(ours_broad[order_us], upstream_broad[order_up], rtol=1e-6, atol=0.0)
+    np.testing.assert_allclose(ours_sy2[order_us], upstream_sy2[order_up], rtol=1e-6, atol=0.0)
+    np.testing.assert_allclose(ours_liner[order_us], upstream_liner[order_up], rtol=1e-6, atol=0.0)
 
 
 @pytest.mark.skipif(not UPSTREAM.exists(), reason="upstream GRAHSP repo not cloned")

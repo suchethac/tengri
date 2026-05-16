@@ -18,9 +18,9 @@ if _missing:
         allow_module_level=True,
     )
 
-from tengri.config.settings import SEDModelConfig  # noqa: E402
-from tengri.parameters.parameters import Parameters  # noqa: E402
-from tengri.presets import (  # noqa: E402
+from tengri.config.settings import SEDModelConfig
+from tengri.parameters.parameters import Parameters
+from tengri.presets import (
     agn_host,
     describe,
     high_z,

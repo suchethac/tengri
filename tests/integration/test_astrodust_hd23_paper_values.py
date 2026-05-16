@@ -20,7 +20,6 @@ import h5py
 import numpy as np
 import pytest
 
-
 HDF5 = Path("data/astrodust_templates.h5")
 
 
@@ -28,8 +27,7 @@ HDF5 = Path("data/astrodust_templates.h5")
 def hdf5():
     if not HDF5.is_file():
         pytest.skip(
-            f"Astrodust HDF5 not built at {HDF5}; "
-            "run scripts/build_astrodust_hdf5.py --download"
+            f"Astrodust HDF5 not built at {HDF5}; run scripts/build_astrodust_hdf5.py --download"
         )
     with h5py.File(HDF5, "r") as f:
         size_dist = np.asarray(f["size_distribution"])
@@ -91,7 +89,7 @@ def test_dust_mass_per_H(hdf5):
     dn_Ad = sd[:, 1]
     dn_PAH = sd[:, 2]
 
-    rho_Ad = 2.74        # g/cm^3, porosity 0.2 (Hensley & Draine 2023, §2)
+    rho_Ad = 2.74  # g/cm^3, porosity 0.2 (Hensley & Draine 2023, §2)
     rho_PAH = 2.0
     mp = 1.6726218e-24
 
@@ -308,6 +306,4 @@ def test_spinning_dust_peaks_in_AME_band(hdf5):
         pytest.skip("spinning dust empty in microwave window")
     peak_nu = nu_hz[mw][np.argmax(nu_Inu[mw])]
     peak_ghz = peak_nu * 1.0e-9
-    assert 15.0 <= peak_ghz <= 50.0, (
-        f"AME peak at {peak_ghz:.1f} GHz; expected 20-30 GHz range"
-    )
+    assert 15.0 <= peak_ghz <= 50.0, f"AME peak at {peak_ghz:.1f} GHz; expected 20-30 GHz range"

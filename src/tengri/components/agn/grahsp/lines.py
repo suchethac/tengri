@@ -137,19 +137,25 @@ def gaussian_lines(
             wave_nm, line_wave_nm, l_broad * jnp.asarray(line_broad), linewidth_kms
         )
         narrow_total = _add_gaussians(
-            wave_nm, line_wave_nm, l_narrow * jnp.asarray(line_narrow_sy2),
+            wave_nm,
+            line_wave_nm,
+            l_narrow * jnp.asarray(line_narrow_sy2),
             linewidth_kms,
         )
     elif agn_type == AGN_TYPE_SY2:
         broad_total = jnp.zeros_like(wave_nm)
         narrow_total = _add_gaussians(
-            wave_nm, line_wave_nm, l_narrow * jnp.asarray(line_narrow_sy2),
+            wave_nm,
+            line_wave_nm,
+            l_narrow * jnp.asarray(line_narrow_sy2),
             linewidth_kms,
         )
     elif agn_type == AGN_TYPE_LINER:
         broad_total = jnp.zeros_like(wave_nm)
         narrow_total = _add_gaussians(
-            wave_nm, line_wave_nm, l_narrow * jnp.asarray(line_narrow_liner),
+            wave_nm,
+            line_wave_nm,
+            l_narrow * jnp.asarray(line_narrow_liner),
             linewidth_kms,
         )
     else:

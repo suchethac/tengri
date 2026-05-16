@@ -32,6 +32,7 @@ def test_precompute_collapses_fixed_axes():
     from tengri.components.agn.grahsp.precompute import precompute
 
     fw, ft = _toy_filter()
+
     # Build a Parameters object that fixes ebv but leaves plslope free.
     # NOTE: tengri.Parameters auto-detects component params; using a
     # mock-ish minimal stub is simpler than configuring the full SFH suite.

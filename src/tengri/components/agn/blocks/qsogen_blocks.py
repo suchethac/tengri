@@ -75,9 +75,7 @@ def _resolve_qsogen_kwargs(params: dict, agn_log_lbol: float) -> dict:
         agn_plbrk=params.get("agn_plbrk", _QSOGEN_KW_DEFAULTS["agn_plbrk"]),
         agn_tbb=params.get("agn_tbb", _QSOGEN_KW_DEFAULTS["agn_tbb"]),
         agn_bbnorm=params.get("agn_bbnorm", _QSOGEN_KW_DEFAULTS["agn_bbnorm"]),
-        agn_emline_scale=params.get(
-            "agn_emline_scale", _QSOGEN_KW_DEFAULTS["agn_emline_scale"]
-        ),
+        agn_emline_scale=params.get("agn_emline_scale", _QSOGEN_KW_DEFAULTS["agn_emline_scale"]),
         agn_ebv=params.get("agn_ebv", _QSOGEN_KW_DEFAULTS["agn_ebv"]),
         agn_bcnorm=params.get("agn_bcnorm", _QSOGEN_KW_DEFAULTS["agn_bcnorm"]),
     )
@@ -93,9 +91,7 @@ def _l_nu_to_l_lambda(L_nu: Array, wave_aa: Array) -> Array:
 
 
 @register_agn_block("disc", "qsogen")
-def qsogen_continuum_block(
-    wavelength: Array, agn_log_lbol: float, **params
-) -> Array:
+def qsogen_continuum_block(wavelength: Array, agn_log_lbol: float, **params) -> Array:
     r"""QSOgen broken power-law continuum block.
 
     The continuum is the *blue + red* power-law (split at ``agn_plbrk``)
@@ -116,9 +112,7 @@ def qsogen_continuum_block(
         ``agn_bcnorm``. Unrecognised keys are absorbed silently.
     """
     wave_aa = jnp.asarray(wavelength)
-    comps = _qsogen_components(
-        wave_aa, **_resolve_qsogen_kwargs(params, agn_log_lbol)
-    )
+    comps = _qsogen_components(wave_aa, **_resolve_qsogen_kwargs(params, agn_log_lbol))
     return _l_nu_to_l_lambda(comps["continuum"], wave_aa)
 
 
@@ -148,9 +142,7 @@ def qsogen_hot_dust_block(
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
-    comps = _qsogen_components(
-        wave_aa, **_resolve_qsogen_kwargs(params, agn_log_lbol)
-    )
+    comps = _qsogen_components(wave_aa, **_resolve_qsogen_kwargs(params, agn_log_lbol))
     return _l_nu_to_l_lambda(comps["hot_dust"], wave_aa)
 
 
@@ -181,9 +173,7 @@ def qsogen_emlines_block(
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
-    comps = _qsogen_components(
-        wave_aa, **_resolve_qsogen_kwargs(params, agn_log_lbol)
-    )
+    comps = _qsogen_components(wave_aa, **_resolve_qsogen_kwargs(params, agn_log_lbol))
     return _l_nu_to_l_lambda(comps["emission_lines"], wave_aa)
 
 
@@ -215,9 +205,7 @@ def qsogen_balmer_block(
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
-    comps = _qsogen_components(
-        wave_aa, **_resolve_qsogen_kwargs(params, agn_log_lbol)
-    )
+    comps = _qsogen_components(wave_aa, **_resolve_qsogen_kwargs(params, agn_log_lbol))
     return _l_nu_to_l_lambda(comps["balmer_continuum"], wave_aa)
 
 

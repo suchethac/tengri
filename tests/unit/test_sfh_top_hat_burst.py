@@ -239,7 +239,7 @@ class TestEvolvingMetallicity:
 
         assert "sed" in result
         assert result["sed"].shape[0] > 0
-        assert jnp.all(jnp.isfinite(result["sed"]))  # noqa: RUF015
+        assert jnp.all(jnp.isfinite(result["sed"]))
 
     def test_simulate_z_scalar_vs_array(self):
         """Test scalar and array metallicity give consistent results."""
@@ -265,6 +265,4 @@ class TestEvolvingMetallicity:
         result_array = sed_from_sfh(t_gyr, sfr, ssp, log_z=-0.3 * jnp.ones_like(t_gyr))
 
         # Results should be nearly identical
-        assert jnp.allclose(
-            result_scalar["sed"], result_array["sed"], rtol=1e-3
-        )  # noqa: RUF015
+        assert jnp.allclose(result_scalar["sed"], result_array["sed"], rtol=1e-3)

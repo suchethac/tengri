@@ -546,9 +546,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             # ``("agn_log_lbol",)`` and multi-axis recipes are both
             # supported.
             _composable_lookup = state.precomputed.composable_preintegrated
-            _composable_axis_names = getattr(
-                _composable_lookup, "axis_names", ()
-            )
+            _composable_axis_names = getattr(_composable_lookup, "axis_names", ())
             _has_preint_composable = True
 
     # Radio
@@ -2310,9 +2308,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
         # tuple is empty when no composable lookup is present (default
         # path); the kernel body's preint branch is gated on
         # _has_preint_composable, so unused empty tuples are harmless.
-        _composable_axis_values = tuple(
-            p.get(name, 0.0) for name in _composable_axis_names
-        )
+        _composable_axis_values = tuple(p.get(name, 0.0) for name in _composable_axis_names)
 
         # SFH computation (same as build_fused_tier2_photometry)
         kw = {k: v for k, v in p.items() if k in sfh_internal_names}

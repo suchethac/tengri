@@ -54,11 +54,11 @@ def _log_gaussian_pair(
     hot_width: float,
     hot_fcov: float,
 ) -> Array:
-    cool = jnp.exp(-((log_wave_um - log_cool_um) / cool_width) ** 2)
+    cool = jnp.exp(-(((log_wave_um - log_cool_um) / cool_width) ** 2))
     hot = (
         hot_fcov
         * 10.0 ** (log_cool_um - log_hot_um)
-        * jnp.exp(-((log_wave_um - log_hot_um) / hot_width) ** 2)
+        * jnp.exp(-(((log_wave_um - log_hot_um) / hot_width) ** 2))
     )
     return cool + hot
 

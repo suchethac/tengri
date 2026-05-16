@@ -7,6 +7,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+# load_catalog needs pandas for CSV/TSV ingestion. Skip the whole module
+# when pandas is unavailable (e.g. minimal CI dependency closures) rather
+# than failing every test with ImportError.
+pytest.importorskip("pandas")
+
 from tengri.io import load_catalog
 
 

@@ -92,9 +92,7 @@ BLOCK_CATEGORIES: tuple[str, ...] = ("disc", "lines", "feii", "torus", "attenuat
 """Fixed canonical pipeline order; do not reorder without updating runner."""
 
 # Two-level dict: category -> name -> callable.
-AGN_BLOCKS: dict[str, dict[str, Callable]] = {
-    cat: {} for cat in BLOCK_CATEGORIES
-}
+AGN_BLOCKS: dict[str, dict[str, Callable]] = {cat: {} for cat in BLOCK_CATEGORIES}
 
 
 def register_agn_block(category: BlockCategory, name: str) -> Callable:
@@ -125,13 +123,10 @@ def register_agn_block(category: BlockCategory, name: str) -> Callable:
     Examples
     --------
     >>> @register_agn_block("torus", "grahsp")
-    ... def grahsp_torus_block(wavelength, agn_log_lbol, l5100_disc, **params):
-    ...     ...
+    ... def grahsp_torus_block(wavelength, agn_log_lbol, l5100_disc, **params): ...
     """
     if category not in AGN_BLOCKS:
-        raise KeyError(
-            f"Unknown block category {category!r}; expected one of {BLOCK_CATEGORIES}."
-        )
+        raise KeyError(f"Unknown block category {category!r}; expected one of {BLOCK_CATEGORIES}.")
 
     def decorator(fn: Callable) -> Callable:
         if name in AGN_BLOCKS[category]:
@@ -166,9 +161,7 @@ def resolve_agn_block(category: BlockCategory, name: str) -> Callable:
         raise KeyError(f"Unknown category {category!r}; expected {BLOCK_CATEGORIES}.")
     if name not in AGN_BLOCKS[category]:
         available = sorted(AGN_BLOCKS[category])
-        raise ValueError(
-            f"Unknown {category} block {name!r}. Available: {available}."
-        )
+        raise ValueError(f"Unknown {category} block {name!r}. Available: {available}.")
     return AGN_BLOCKS[category][name]
 
 
@@ -185,25 +178,19 @@ def _disc_none(wavelength: Array, agn_log_lbol: float, **_params) -> Array:
 
 
 @register_agn_block("lines", "none")
-def _lines_none(
-    wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **_params
-) -> Array:
+def _lines_none(wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **_params) -> Array:
     r"""Skip the line stage: emit zero L_lambda."""
     return jnp.zeros_like(jnp.asarray(wavelength))
 
 
 @register_agn_block("feii", "none")
-def _feii_none(
-    wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **_params
-) -> Array:
+def _feii_none(wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **_params) -> Array:
     r"""Skip the FeII stage: emit zero L_lambda."""
     return jnp.zeros_like(jnp.asarray(wavelength))
 
 
 @register_agn_block("torus", "none")
-def _torus_none(
-    wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **_params
-) -> Array:
+def _torus_none(wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **_params) -> Array:
     r"""Skip the torus stage: emit zero L_lambda."""
     return jnp.zeros_like(jnp.asarray(wavelength))
 

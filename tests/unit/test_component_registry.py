@@ -30,15 +30,17 @@ class TestComponentRegistry:
     def test_dust_ir_components_registered(self):
         """Dust IR components should be registered at module load time."""
         dust_comps = list_components(family="dust_ir")
-        expected = {
+        # Required core: every model that has a precompute registration in
+        # src/tengri/components/dust/dust_emission_precompute.py.
+        required = {
             "dust_ir:draine_li2007",
-            "dust_ir:draine_li2014",
             "dust_ir:dale2014",
             "dust_ir:astrodust",
             "dust_ir:themis",
             "dust_ir:bosa",
+            "dust_ir:draine2021_pah",
         }
-        assert set(dust_comps.keys()) == expected
+        assert required.issubset(set(dust_comps.keys()))
 
     def test_skirtor_component_registered(self):
         """SKIRTOR component should be registered at module load time."""

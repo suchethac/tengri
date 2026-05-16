@@ -175,8 +175,7 @@ def precompute(
     if ebv_grid is None:
         ebv_grid = np.array([0.0, 0.05, 0.1, 0.3, 1.0], dtype=np.float64)
 
-    preint = _build_grid_grahsp(filter_waves, filter_trans, redshift,
-                                 plslope_grid, ebv_grid)
+    preint = _build_grid_grahsp(filter_waves, filter_trans, redshift, plslope_grid, ebv_grid)
     result = {
         "grid_phot": preint.phot,
         "axes": (jnp.asarray(plslope_grid), jnp.asarray(ebv_grid)),

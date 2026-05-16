@@ -16,6 +16,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from tests._data_skip import requires_grahsp
 
 from tengri.components.agn import AGN_MODELS, resolve_agn_model
 from tengri.components.agn.blocks import (
@@ -54,9 +55,7 @@ def test_grahsp_blocks_registered_for_all_categories():
 def test_at_least_one_alternate_per_category():
     """For mix-and-match to be meaningful, need >= 1 non-GRAHSP, non-none impl."""
     for cat in ("disc", "torus", "attenuation"):
-        non_default = [
-            n for n in AGN_BLOCKS[cat] if n != "none" and not n.startswith("grahsp")
-        ]
+        non_default = [n for n in AGN_BLOCKS[cat] if n != "none" and not n.startswith("grahsp")]
         assert non_default, f"{cat} has no non-GRAHSP alternate"
 
 
@@ -72,6 +71,7 @@ def test_resolve_unknown_block_raises():
 def test_register_duplicate_raises():
     """register_agn_block must reject duplicate (category, name) pairs."""
     with pytest.raises(ValueError, match="already registered"):
+
         @register_agn_block("disc", "grahsp_sbpl")
         def _redefine(*args, **kwargs):
             return None
@@ -175,6 +175,7 @@ def _grahsp_params():
     )
 
 
+@requires_grahsp
 def test_all_grahsp_recipe_matches_compute_grahsp_sed():
     """Every selector = 'grahsp*' should reproduce compute_grahsp_sed exactly."""
     from tengri.components.agn.grahsp import compute_grahsp_sed
@@ -251,6 +252,7 @@ def test_disc_only_recipe_is_pure_continuum():
 # ──────────────────────────────────────────────────────────────────────
 
 
+@requires_grahsp
 def test_runner_jit_compatible():
     """Selectors are static; param values are dynamic."""
     wave_aa = jnp.logspace(2, 6, 200)
@@ -288,6 +290,4 @@ def test_resolve_via_agn_models_registry():
     )
     out_registry = fn_via_registry(wave_aa, agn_log_lbol=44.5, **p)
     out_direct = composable_agn_l_nu(wave_aa, agn_log_lbol=44.5, **p)
-    np.testing.assert_allclose(
-        np.asarray(out_registry), np.asarray(out_direct), rtol=1e-12
-    )
+    np.testing.assert_allclose(np.asarray(out_registry), np.asarray(out_direct), rtol=1e-12)

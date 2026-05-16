@@ -19,10 +19,7 @@ from jax import Array
 __all__ = ["DEFAULT_TEMPLATE_PATH", "GRAHSPTemplates", "load_grahsp_templates"]
 
 DEFAULT_TEMPLATE_PATH: Path = (
-    Path(__file__).resolve().parents[5]
-    / "data"
-    / "grahsp"
-    / "grahsp_templates.h5"
+    Path(__file__).resolve().parents[5] / "data" / "grahsp" / "grahsp_templates.h5"
 )
 
 
@@ -87,8 +84,7 @@ def load_grahsp_templates(
         line_narrow_sy2 = jnp.asarray(f["netzer1990_lines/narrow_sy2"][:])
         line_narrow_liner = jnp.asarray(f["netzer1990_lines/narrow_liner"][:])
         line_names = tuple(
-            n.decode("utf-8") if isinstance(n, bytes) else n
-            for n in f["netzer1990_lines/name"][:]
+            n.decode("utf-8") if isinstance(n, bytes) else n for n in f["netzer1990_lines/name"][:]
         )
         torus_wave = jnp.asarray(f["torus/wave_nm"][:])
     return GRAHSPTemplates(

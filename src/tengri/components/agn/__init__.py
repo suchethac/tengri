@@ -37,6 +37,19 @@ References
 - Temple, Hewett & Banerji 2021, MNRAS, 508, 737
 """
 
+# Importing ``blocks`` side-effects all @register_agn_block calls plus
+# AGN_MODELS["composable"]. Must come after grahsp import so GRAHSP
+# blocks see the GRAHSP package fully initialised.
+from tengri.components.agn import blocks
+from tengri.components.agn.blocks import (
+    AGN_BLOCKS,
+    BLOCK_CATEGORIES,
+    RecipeWarning,
+    composable_agn_l_nu,
+    register_agn_block,
+    resolve_agn_block,
+    validate_block_recipe,
+)
 from tengri.components.agn.blr import compute_blr_sed
 from tengri.components.agn.cat3d_wind import cat3d_wind_analytic, create_cat3d_wind_from_grid
 from tengri.components.agn.disc import (
@@ -47,6 +60,15 @@ from tengri.components.agn.disc import (
     kubota_done_disc,
     multicolor_disc,
     powerlaw_disc,
+)
+from tengri.components.agn.grahsp import (
+    GRAHSPSED,
+    GRAHSPParams,
+    GRAHSPSEDComponent,
+    GRAHSPSEDComponentConfig,
+    compute_grahsp_sed,
+    evaluate_grahsp_agn,
+    grahsp,
 )
 from tengri.components.agn.nlr import (
     compute_nlr_sed,
@@ -67,75 +89,53 @@ from tengri.components.agn.unified import (
     unified_agn,
     unified_nlr_blr,
 )
-from tengri.components.agn.grahsp import (
-    GRAHSPSED,
-    GRAHSPParams,
-    GRAHSPSEDComponent,
-    GRAHSPSEDComponentConfig,
-    compute_grahsp_sed,
-    evaluate_grahsp_agn,
-    grahsp,
-)
-# Importing ``blocks`` side-effects all @register_agn_block calls plus
-# AGN_MODELS["composable"]. Must come after grahsp import so GRAHSP
-# blocks see the GRAHSP package fully initialised.
-from tengri.components.agn import blocks  # noqa: F401
-from tengri.components.agn.blocks import (
-    AGN_BLOCKS,
-    BLOCK_CATEGORIES,
-    RecipeWarning,
-    composable_agn_l_nu,
-    register_agn_block,
-    resolve_agn_block,
-    validate_block_recipe,
-)
 
 # New names
 
 __all__ = [
+    "AGN_BLOCKS",
     "AGN_MODELS",
+    "BLOCK_CATEGORIES",
+    "GRAHSPSED",
     "AGNConfig",
+    "GRAHSPParams",
+    "GRAHSPSEDComponent",
+    "GRAHSPSEDComponentConfig",
+    "RecipeWarning",
     "adaf_agn",
     "adaf_disc",
     "beloborodov_gamma_hot",
+    "blocks",
     "cat3d_wind_analytic",
+    "composable_agn_l_nu",
     "compute_blr_sed",
+    "compute_grahsp_sed",
     "compute_l2500",
     "compute_nlr_sed",
     "compute_nlr_sed_richardson2014",
     "compute_qsogen_sed",
     "create_cat3d_wind_from_grid",
     "create_relagn_disc_from_grid",
-    "GRAHSPParams",
-    "GRAHSPSED",
-    "AGN_BLOCKS",
-    "BLOCK_CATEGORIES",
-    "GRAHSPSEDComponent",
-    "GRAHSPSEDComponentConfig",
-    "RecipeWarning",
-    "blocks",
-    "composable_agn_l_nu",
-    "compute_grahsp_sed",
     "create_silva04_from_grid",
     "create_skirtor_from_grid",
     "evaluate_grahsp_agn",
     "grahsp",
     "kubota_done_disc",
-    "register_agn_block",
-    "resolve_agn_block",
-    "validate_block_recipe",
     "kubota_done_full_agn",
     "multicolor_disc",
     "nenkova_torus",
     "powerlaw_disc",
     "qsogen",
+    "register_agn_block",
     "register_agn_model",
+    "resolve_agn_block",
     "resolve_agn_model",
     "silva04_analytic",
     "simple_torus",
     "two_temperature_torus",
     "unified_agn",
     "unified_nlr_blr",
+    "validate_block_recipe",
 ]
 
 

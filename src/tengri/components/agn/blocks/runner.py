@@ -17,6 +17,7 @@ Example
 GRAHSP-pure recipe (every stage uses the GRAHSP impl)::
 
     from tengri import Parameters
+
     p = Parameters(
         agn_model="composable",
         agn_disc_block="grahsp_sbpl",
@@ -82,12 +83,14 @@ class RecipeWarning(UserWarning):
 # (i.e. compatible with GRAHSP-style downstream blocks that normalise to
 # λL_λ(5100Å)). Block impls outside this set may emit zero or NaN at
 # 5100Å, breaking the downstream normalisation silently.
-_DISCS_WITH_5100A_CONTINUUM: frozenset[str] = frozenset({
-    "grahsp_sbpl",
-    "powerlaw",
-    "multicolor",
-    "kubota_done_3zone",
-})
+_DISCS_WITH_5100A_CONTINUUM: frozenset[str] = frozenset(
+    {
+        "grahsp_sbpl",
+        "powerlaw",
+        "multicolor",
+        "kubota_done_3zone",
+    }
+)
 
 # Downstream blocks that *require* a sensible disc 5100Å luminosity.
 # Includes BLR/NLR (their λL_λ → L_disc_bol conversion uses the Krawczyk+2013
@@ -101,9 +104,13 @@ _DOWNSTREAM_NEEDS_L5100: dict[str, frozenset[str]] = {
 # Disc impls covered by the multicolor / Kubota-Done set are added to the
 # 5100Å-OK list. ADAF deliberately is NOT (its inner flow is X-ray dominated;
 # any 5100Å contribution is from the truncated outer disc only).
-_DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset({
-    "multicolor", "kubota_done", "qsogen",
-})
+_DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
+    {
+        "multicolor",
+        "kubota_done",
+        "qsogen",
+    }
+)
 
 #: Speed of light in Å × Hz, used for L_λ → L_ν conversion.
 C_AA_PER_S: float = 2.99792458e18
@@ -206,10 +213,7 @@ agn_attenuation_block : str
     for category, name in selectors.items():
         if name not in AGN_BLOCKS[category]:
             available = sorted(AGN_BLOCKS[category])
-            raise ValueError(
-                f"Unknown {category} block {name!r}. "
-                f"Available: {available}."
-            )
+            raise ValueError(f"Unknown {category} block {name!r}. Available: {available}.")
 
     issues: list[str] = []
 
@@ -226,9 +230,7 @@ agn_attenuation_block : str
         )
 
     # Rule 3: no disc, active downstream.
-    downstream_active = any(
-        selectors[cat] != "none" for cat in ("lines", "feii", "torus")
-    )
+    downstream_active = any(selectors[cat] != "none" for cat in ("lines", "feii", "torus"))
     if selectors["disc"] == "none" and downstream_active:
         active = [
             f"{cat}={selectors[cat]!r}"
@@ -335,9 +337,7 @@ agn_attenuation_block : str
     # blocks recognise (``templates``). When None, blocks fall back to their
     # own lru_cache load. We strip the kwarg afterwards so blocks that don't
     # take it never see it.
-    grahsp_templates = (
-        template_state.get("grahsp") if template_state is not None else None
-    )
+    grahsp_templates = template_state.get("grahsp") if template_state is not None else None
 
     # Stage 1: disc continuum (L_lambda [erg/s/Å]).
     disc_fn = resolve_agn_block("disc", agn_disc_block)
@@ -386,9 +386,7 @@ agn_attenuation_block : str
     atten_fn = resolve_agn_block("attenuation", agn_attenuation_block)
     factor = atten_fn(wave, **params)
 
-    L_lambda_total = (
-        L_lambda_disc + L_lambda_lines + L_lambda_feii + L_lambda_torus
-    ) * factor
+    L_lambda_total = (L_lambda_disc + L_lambda_lines + L_lambda_feii + L_lambda_torus) * factor
 
     # L_lambda [erg/s/Å] -> L_nu [erg/s/Hz]: L_nu = L_lambda * lambda^2 / c.
     return L_lambda_total * wave**2 / C_AA_PER_S

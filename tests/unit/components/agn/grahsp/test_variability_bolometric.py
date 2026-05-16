@@ -10,6 +10,7 @@ import pytest
 # ---- NEV ----
 def test_nev_low_lum_capped_at_0p1():
     from tengri.components.agn.grahsp.variability import normalised_excess_variance
+
     out = float(normalised_excess_variance(1.0e40))
     assert out == pytest.approx(0.1)
 
@@ -17,12 +18,14 @@ def test_nev_low_lum_capped_at_0p1():
 def test_nev_at_l45_eq_1_matches_paper():
     """At L_bol = 1e45, NEV = 10^-1.43 = 0.0372 (Buchner+ 2024 Eq. NEV)."""
     from tengri.components.agn.grahsp.variability import normalised_excess_variance
+
     out = float(normalised_excess_variance(1.0e45))
     assert out == pytest.approx(10.0**-1.43, rel=1e-12)
 
 
 def test_nev_decreases_with_luminosity():
     from tengri.components.agn.grahsp.variability import normalised_excess_variance
+
     L = jnp.array([1.0e44, 1.0e45, 1.0e46, 1.0e47])
     out = np.asarray(normalised_excess_variance(L))
     # Strictly decreasing in the unsaturated regime.
@@ -33,6 +36,7 @@ def test_nev_jit():
     import jax
 
     from tengri.components.agn.grahsp.variability import normalised_excess_variance
+
     fn = jax.jit(normalised_excess_variance)
     assert float(fn(1.0e45)) == pytest.approx(10.0**-1.43, rel=1e-12)
 
@@ -43,6 +47,7 @@ def test_lumbol_bbb_excludes_below_lyman_limit():
         LYMAN_LIMIT_NM,
         bolometric_luminosity_bbb,
     )
+
     wave = jnp.linspace(50.0, 1000.0, 1001)
     L = jnp.ones_like(wave)
     out = float(bolometric_luminosity_bbb(wave, L))
@@ -54,6 +59,7 @@ def test_lumbol_bbb_excludes_below_lyman_limit():
 
 def test_lumbol_torus_full_integral():
     from tengri.components.agn.grahsp.bolometric import bolometric_luminosity_torus
+
     wave = jnp.linspace(1000.0, 100000.0, 1001)
     L = jnp.ones_like(wave)
     out = float(bolometric_luminosity_torus(wave, L))
@@ -63,6 +69,7 @@ def test_lumbol_torus_full_integral():
 
 def test_fracagn_dale_zero_when_no_agn():
     from tengri.components.agn.grahsp.bolometric import agn_fraction_dale
+
     wave = jnp.linspace(3000.0, 30000.0, 1001)
     L_agn = jnp.zeros_like(wave)
     L_gal = jnp.ones_like(wave)
@@ -72,6 +79,7 @@ def test_fracagn_dale_zero_when_no_agn():
 
 def test_fracagn_dale_one_when_no_galaxy():
     from tengri.components.agn.grahsp.bolometric import agn_fraction_dale
+
     wave = jnp.linspace(3000.0, 30000.0, 1001)
     L_agn = jnp.ones_like(wave)
     L_gal = jnp.zeros_like(wave)
@@ -81,6 +89,7 @@ def test_fracagn_dale_one_when_no_galaxy():
 
 def test_fracagn_dale_half():
     from tengri.components.agn.grahsp.bolometric import agn_fraction_dale
+
     wave = jnp.linspace(3000.0, 30000.0, 1001)
     L_agn = jnp.full_like(wave, 2.0)
     L_gal = jnp.full_like(wave, 2.0)

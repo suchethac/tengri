@@ -36,9 +36,7 @@ def test_qsogen_blocks_sum_to_monolithic(params):
     wave_aa = jnp.logspace(2.96, 5.0, 600)
     agn_log_lbol = 45.5
 
-    out_monolithic = compute_qsogen_sed(
-        wave_aa, agn_log_lbol=agn_log_lbol, **params
-    )
+    out_monolithic = compute_qsogen_sed(wave_aa, agn_log_lbol=agn_log_lbol, **params)
     out_composable = composable_agn_l_nu(
         wave_aa,
         agn_log_lbol=agn_log_lbol,

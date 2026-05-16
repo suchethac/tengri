@@ -61,4 +61,3 @@ class TestFromGroupsBridge:
         """Unknown group keys raise the same ValueError as parse_groups."""
         with pytest.raises(ValueError, match="Unknown group key"):
             Parameters.from_groups(foo={"type": "x"})
-

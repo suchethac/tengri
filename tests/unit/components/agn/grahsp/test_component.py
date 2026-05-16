@@ -111,9 +111,7 @@ def test_parameter_prefix_invariant():
 
 def test_publishes_l_agn_absorbed():
     """L_agn_absorbed must be non-negative and zero when attenuation is off."""
-    component_atten = GRAHSPSEDComponent(
-        config=GRAHSPSEDComponentConfig(apply_attenuation=True)
-    )
+    component_atten = GRAHSPSEDComponent(config=GRAHSPSEDComponentConfig(apply_attenuation=True))
     component_no_atten = GRAHSPSEDComponent(
         config=GRAHSPSEDComponentConfig(apply_attenuation=False)
     )

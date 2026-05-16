@@ -58,10 +58,12 @@ def test_lines_match_upstream(fixture, line_table):
             linewidth_kms=float(p["line_width_kms"]),
             agn_type=int(p["agn_type"]),
         )
-        np.testing.assert_allclose(np.asarray(bl), expected_bl[i], rtol=1e-9, atol=1e-200,
-                                    err_msg=f"broad case {i}")
-        np.testing.assert_allclose(np.asarray(nl), expected_nl[i], rtol=1e-9, atol=1e-200,
-                                    err_msg=f"narrow case {i}")
+        np.testing.assert_allclose(
+            np.asarray(bl), expected_bl[i], rtol=1e-9, atol=1e-200, err_msg=f"broad case {i}"
+        )
+        np.testing.assert_allclose(
+            np.asarray(nl), expected_nl[i], rtol=1e-9, atol=1e-200, err_msg=f"narrow case {i}"
+        )
 
 
 def test_feii_forest_matches_upstream(fixture):
@@ -91,12 +93,12 @@ def test_feii_forest_matches_upstream(fixture):
         # We compare the JAX output (uses de-redshifted) against re-derived
         # expected via the same template.
         # Re-derive expected on-the-fly with the de-redshifted template:
-        expected_dered = np.interp(wave_grid, feii_wave_nm_dered, feii_lumin,
-                                    left=0.0, right=0.0)
+        expected_dered = np.interp(wave_grid, feii_wave_nm_dered, feii_lumin, left=0.0, right=0.0)
         l_broadlines = 0.02 * (float(p["lum5100A"]) / 510.0) * float(p["A_lines"])
         expected_dered = expected_dered * float(p["A_FeII"]) * l_broadlines
-        np.testing.assert_allclose(np.asarray(out), expected_dered, rtol=1e-9,
-                                    atol=0.0, err_msg=f"feii case {i}")
+        np.testing.assert_allclose(
+            np.asarray(out), expected_dered, rtol=1e-9, atol=0.0, err_msg=f"feii case {i}"
+        )
 
 
 def test_jit_compatible(line_table):

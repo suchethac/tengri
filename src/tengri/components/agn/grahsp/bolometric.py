@@ -37,8 +37,9 @@ LYMAN_LIMIT_NM: float = 91.2
 """Lyman limit at 91.2 nm — lower bound for ``lumBolBBB`` integration."""
 
 
-def _trapz_above(wave_nm: Array, L_lambda: Array, lower_nm: float,
-                 upper_nm: float | None = None) -> Array:
+def _trapz_above(
+    wave_nm: Array, L_lambda: Array, lower_nm: float, upper_nm: float | None = None
+) -> Array:
     """Trapezoidal integral of L_lambda over [lower, upper] (nm, inclusive)."""
     mask = wave_nm >= lower_nm
     if upper_nm is not None:
@@ -75,8 +76,7 @@ def bolometric_luminosity_bbb(
     deliberately excluded — see paper §2.1.4: that band is rarely observed
     and a model-dependent correction is left to the user.
     """
-    return _trapz_above(jnp.asarray(wave_nm), jnp.asarray(L_lambda_bbb_total),
-                         LYMAN_LIMIT_NM)
+    return _trapz_above(jnp.asarray(wave_nm), jnp.asarray(L_lambda_bbb_total), LYMAN_LIMIT_NM)
 
 
 def bolometric_luminosity_torus(
@@ -133,9 +133,8 @@ def agn_fraction_dale(
     """
     lower_nm = lower_um * 1000.0
     upper_nm = upper_um * 1000.0
-    L_agn = _trapz_above(jnp.asarray(wave_nm), jnp.asarray(L_lambda_agn_total),
-                          lower_nm, upper_nm)
-    L_total = L_agn + _trapz_above(jnp.asarray(wave_nm),
-                                    jnp.asarray(L_lambda_gal_total),
-                                    lower_nm, upper_nm)
+    L_agn = _trapz_above(jnp.asarray(wave_nm), jnp.asarray(L_lambda_agn_total), lower_nm, upper_nm)
+    L_total = L_agn + _trapz_above(
+        jnp.asarray(wave_nm), jnp.asarray(L_lambda_gal_total), lower_nm, upper_nm
+    )
     return jnp.where(L_total > 0, L_agn / L_total, 0.0)

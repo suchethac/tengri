@@ -412,9 +412,7 @@ class GRAHSPSEDComponent:
         # Diagnostic: integrated AGN-side absorbed luminosity (intrinsic - attenuated).
         # Reported but NOT injected into the Dale 2014 dust-emission loop —
         # GRAHSP's torus already empirically captures dust re-radiation.
-        L_agn_absorbed = jnp.trapezoid(
-            (bbb_intrinsic + torus_intrinsic) - L_lambda_total, wave_nm
-        )
+        L_agn_absorbed = jnp.trapezoid((bbb_intrinsic + torus_intrinsic) - L_lambda_total, wave_nm)
 
         new_derived = dict(state.derived)
         new_derived["sed_grahsp"] = L_nu

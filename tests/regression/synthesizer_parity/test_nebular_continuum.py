@@ -79,9 +79,7 @@ def test_nebular_continuum_and_lines_are_separable(
     independently.
     """
     wav_cont, lum_cont = cue_backend.predict_nebular_continuum(**cue_test_params, neb_fesc=0.0)
-    _, lum_lines = cue_backend.predict_nebular_line_luminosities(
-        **cue_test_params, neb_fesc=0.0
-    )
+    _, lum_lines = cue_backend.predict_nebular_line_luminosities(**cue_test_params, neb_fesc=0.0)
 
     # Both must be finite arrays
     assert bool(jnp.all(jnp.isfinite(lum_cont))), "Nebular continuum has NaN/inf"

@@ -244,9 +244,7 @@ def precompute(
         return result
 
     collapsed = slice_fixed_axes(preint, fixed_indices)
-    remaining_axes = tuple(
-        ax for i, ax in enumerate(result["axes"]) if i not in fixed_indices
-    )
+    remaining_axes = tuple(ax for i, ax in enumerate(result["axes"]) if i not in fixed_indices)
     return {
         "grid_phot": collapsed.phot,
         "axes": remaining_axes,
@@ -312,9 +310,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     # auto-collapsed indices under ``_collapsed_axes`` (keys = axis index).
     full_names: tuple[str, ...] = preint.get("_axis_names", ())
     collapsed = preint.get("_collapsed_axes") or {}
-    surviving_names = tuple(
-        name for i, name in enumerate(full_names) if i not in collapsed
-    )
+    surviving_names = tuple(name for i, name in enumerate(full_names) if i not in collapsed)
 
     if not collapsed:
         return ComposableLookup(

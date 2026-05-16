@@ -627,12 +627,8 @@ def _qsogen_components(
     adapters in :mod:`tengri.components.agn.blocks.qsogen_blocks` call this
     once per block invocation; JIT folds the redundant trace.
     """
-    continuum_unscaled = _broken_powerlaw_continuum(
-        wavelength, agn_plslp1, agn_plslp2, agn_plbrk
-    )
-    hot_dust_unscaled = _hot_dust_blackbody(
-        wavelength, continuum_unscaled, agn_tbb, agn_bbnorm
-    )
+    continuum_unscaled = _broken_powerlaw_continuum(wavelength, agn_plslp1, agn_plslp2, agn_plbrk)
+    hot_dust_unscaled = _hot_dust_blackbody(wavelength, continuum_unscaled, agn_tbb, agn_bbnorm)
     f_nu_cont = continuum_unscaled + hot_dust_unscaled
 
     nu = _wavelength_to_nu(wavelength)

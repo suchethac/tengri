@@ -28,8 +28,7 @@ def test_no_attenuation_recovers_intrinsic():
     p = GRAHSPParams(l5100=1.0e44, ebv=0.0, ebv_agn=0.0)
     sed = evaluate_grahsp_agn(wave_nm, p)
     intrinsic = sed.bbb + sed.broad_lines + sed.narrow_lines + sed.feii
-    np.testing.assert_allclose(np.asarray(sed.bbb_attenuated), np.asarray(intrinsic),
-                                rtol=1e-12)
+    np.testing.assert_allclose(np.asarray(sed.bbb_attenuated), np.asarray(intrinsic), rtol=1e-12)
 
 
 def test_higher_extinction_lowers_bbb():

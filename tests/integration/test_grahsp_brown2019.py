@@ -140,7 +140,9 @@ def test_brown2019_torus_normalisation(source):
     # We verify the dust continuum alone:
     expected_lam_Llam = 2.5 * params.l5100 * params.fcov
     np.testing.assert_allclose(
-        float(sed.torus[0] * 12000.0), expected_lam_Llam, rtol=1e-6,
+        float(sed.torus[0] * 12000.0),
+        expected_lam_Llam,
+        rtol=1e-6,
     )
 
 

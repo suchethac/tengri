@@ -5,11 +5,11 @@ across models.
 Each adapter wraps an existing tengri AGN function (or dust attenuation
 law) in the block-protocol signature so users can compose recipes like::
 
-    agn_disc_block      = "grahsp_sbpl"        # GRAHSP UV-optical
-    agn_lines_block     = "none"               # skip
-    agn_feii_block      = "none"               # skip
-    agn_torus_block     = "two_temperature"    # tengri's existing 2-T torus
-    agn_attenuation_block = "smc_prevot"       # Prevot 1984 SMC
+    agn_disc_block = "grahsp_sbpl"  # GRAHSP UV-optical
+    agn_lines_block = "none"  # skip
+    agn_feii_block = "none"  # skip
+    agn_torus_block = "two_temperature"  # tengri's existing 2-T torus
+    agn_attenuation_block = "smc_prevot"  # Prevot 1984 SMC
 
 Importing this module side-effects all registrations.
 

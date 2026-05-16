@@ -17,6 +17,7 @@ import warnings
 import jax
 import jax.numpy as jnp
 import pytest
+from tests._data_skip import requires_nenkova
 
 from tengri.components.agn.blocks import (
     AGN_BLOCKS,
@@ -82,6 +83,11 @@ def test_disc_block_smoke(disc):
 
 @pytest.mark.parametrize("torus", ["nenkova", "two_temperature", "simple"])
 def test_torus_block_smoke(torus):
+    if torus == "nenkova":
+        from tests._data_skip import _nenkova_path as _np
+
+        if _np is None or not _np.is_file():
+            pytest.skip("Nenkova+2008 data not available (SPS_HOME unset)")
     """Each new torus block produces a finite L_nu (skirtor/silva04/cat3d need
     grids, smoke them via separate fixture-aware tests if grids are present)."""
     wave_aa = jnp.logspace(3, 6, 200)
@@ -140,6 +146,7 @@ def test_nlr_lines_smoke():
     assert float(out.sum()) > 0
 
 
+@requires_nenkova
 def test_jit_through_alternate_recipe():
     """JIT-compile a cross-model recipe (multicolor disc + nenkova torus)."""
     wave_aa = jnp.logspace(3, 6, 200)

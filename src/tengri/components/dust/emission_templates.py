@@ -849,12 +849,10 @@ def load_astrodust_templates(filepath: str) -> dict:
                     integral = -np.trapezoid(L_nu_total[i], nu_aa)
                     norms[i] = integral if integral > 0 else 1.0
                 L_nu_normed = L_nu_total / norms[:, None]
-                spectra = np.broadcast_to(
-                    L_nu_normed[None, :, :], (2, *L_nu_normed.shape)
-                ).copy()
+                spectra = np.broadcast_to(L_nu_normed[None, :, :], (2, *L_nu_normed.shape)).copy()
                 single_u = spectra
                 powerlaw = spectra
-                already_lnu = True   # we normalised explicitly above
+                already_lnu = True  # we normalised explicitly above
             elif "wavelength_aa" in f:
                 # Standardized HDF5 (already Angstrom + L_nu normalized)
                 wavs_aa = np.array(f["wavelength_aa"][:])

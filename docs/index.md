@@ -160,16 +160,16 @@ use-cases and workflows.
    spine/09_parameter_sweeps
 
 .. toctree::
+   :caption: Examples gallery
+   :maxdepth: 1
+
+   examples
+
+.. toctree::
    :caption: Reference
    :maxdepth: 1
 
    performance/index
    performance/memory
    units
-
-.. toctree::
-   :caption: Examples gallery
-   :maxdepth: 1
-
-   examples
 ```

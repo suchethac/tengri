@@ -19,6 +19,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from tests._data_skip import requires_grahsp
 
 from tengri.components.agn.blocks import (
     Recipe,
@@ -32,9 +33,7 @@ from tengri.components.agn.blocks import (
 
 
 def test_recipe_from_selectors_clean():
-    r = Recipe.from_selectors(
-        disc="grahsp_sbpl", torus="grahsp", attenuation="grahsp_biatten"
-    )
+    r = Recipe.from_selectors(disc="grahsp_sbpl", torus="grahsp", attenuation="grahsp_biatten")
     assert r.agn_disc_block == "grahsp_sbpl"
     assert r.agn_torus_block == "grahsp"
     assert r.agn_attenuation_block == "grahsp_biatten"
@@ -75,6 +74,7 @@ def test_recipe_summary():
 # ──────────────────────────────────────────────────────────────────────
 
 
+@requires_grahsp
 def test_template_hoist_returns_same_output_as_lru_load():
     """Passing pre-loaded templates must match the in-block load path."""
     from tengri.components.agn.grahsp.templates import load_grahsp_templates
@@ -92,12 +92,8 @@ def test_template_hoist_returns_same_output_as_lru_load():
     )
     out_no_hoist = composable_agn_l_nu(wave, **params)
     templates = load_grahsp_templates()
-    out_hoisted = composable_agn_l_nu(
-        wave, template_state={"grahsp": templates}, **params
-    )
-    np.testing.assert_allclose(
-        np.asarray(out_hoisted), np.asarray(out_no_hoist), rtol=1e-12
-    )
+    out_hoisted = composable_agn_l_nu(wave, template_state={"grahsp": templates}, **params)
+    np.testing.assert_allclose(np.asarray(out_hoisted), np.asarray(out_no_hoist), rtol=1e-12)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -111,6 +107,7 @@ def _toy_filter():
     return wave, trans
 
 
+@requires_grahsp
 def test_precompute_returns_documented_keys():
     fw, ft = _toy_filter()
     recipe = Recipe.from_selectors(
@@ -152,6 +149,7 @@ def test_precompute_requires_axis_params():
 # ──────────────────────────────────────────────────────────────────────
 
 
+@requires_grahsp
 def test_auto_collapse_fixed_axis():
     """When the spec pins one axis-param to Fixed, the grid collapses."""
     fw, ft = _toy_filter()
@@ -195,6 +193,7 @@ def test_auto_collapse_fixed_axis():
 # ──────────────────────────────────────────────────────────────────────
 
 
+@requires_grahsp
 def test_parity_at_grid_centre():
     """Lookup at an exact grid-centre point matches the runtime evaluation
     integrated through the same filter to triweight-interp precision."""
@@ -244,8 +243,9 @@ def test_parity_at_grid_centre():
     trans_interp = np.interp(wave_obs, fw, ft, left=0.0, right=0.0)
     nu = c_aa_per_s / wave_obs
     order = np.argsort(nu)
-    photo_ref = np.trapezoid((f_nu * trans_interp / nu)[order], nu[order]) / \
-        np.trapezoid((trans_interp / nu)[order], nu[order])
+    photo_ref = np.trapezoid((f_nu * trans_interp / nu)[order], nu[order]) / np.trapezoid(
+        (trans_interp / nu)[order], nu[order]
+    )
 
     # Triweight-interp precision: ~few % at grid centres.
     np.testing.assert_allclose(photo_lookup, photo_ref, rtol=5e-2)
@@ -256,6 +256,7 @@ def test_parity_at_grid_centre():
 # ──────────────────────────────────────────────────────────────────────
 
 
+@requires_grahsp
 def test_lookup_jit_compiles_and_caches():
     fw, ft = _toy_filter()
     recipe = Recipe.from_selectors(
@@ -294,6 +295,7 @@ def test_lookup_jit_compiles_and_caches():
     assert dt_cached < dt_compile / 5.0
 
 
+@requires_grahsp
 def test_build_lookup_returns_composable_lookup_with_axis_names():
     """build_lookup must expose axis_names so the SEDModel kernel can route."""
     fw, ft = _toy_filter()
@@ -330,9 +332,7 @@ def test_kernel_accepts_arbitrary_axis_names():
         ComposableLookup,
     )
 
-    single = ComposableLookup(
-        lambda scale, x: scale * x, axis_names=("agn_log_lbol",)
-    )
+    single = ComposableLookup(lambda scale, x: scale * x, axis_names=("agn_log_lbol",))
     multi = ComposableLookup(
         lambda scale, a, b: scale * (a + b),
         axis_names=("agn_grahsp_l5100", "agn_grahsp_ebv"),
@@ -397,6 +397,7 @@ def test_parameters_agn_axis_grids_rejects_empty():
         )
 
 
+@requires_grahsp
 def test_lookup_works_with_explicit_jit_wrapper():
     fw, ft = _toy_filter()
     recipe = Recipe.from_selectors(

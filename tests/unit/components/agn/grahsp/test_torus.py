@@ -7,13 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-FIXTURE = (
-    Path(__file__).resolve().parents[5]
-    / "tests"
-    / "fixtures"
-    / "grahsp"
-    / "torus.npz"
-)
+FIXTURE = Path(__file__).resolve().parents[5] / "tests" / "fixtures" / "grahsp" / "torus.npz"
 
 
 @pytest.fixture(scope="module")
@@ -46,8 +40,7 @@ def test_torus_dust_matches_upstream(fixture):
             )
         )
         # Same wave grid as upstream — should match to numerical precision.
-        np.testing.assert_allclose(out, expected[i], rtol=1e-10, atol=0.0,
-                                    err_msg=f"case {i}")
+        np.testing.assert_allclose(out, expected[i], rtol=1e-10, atol=0.0, err_msg=f"case {i}")
 
 
 def test_si_feature_matches_upstream(fixture):
@@ -65,8 +58,7 @@ def test_si_feature_matches_upstream(fixture):
                 si=float(p["Si"]),
             )
         )
-        np.testing.assert_allclose(out, expected[i], rtol=1e-10, atol=0.0,
-                                    err_msg=f"case {i}")
+        np.testing.assert_allclose(out, expected[i], rtol=1e-10, atol=0.0, err_msg=f"case {i}")
 
 
 def test_torus_normalisation_at_12um(fixture):
@@ -92,8 +84,7 @@ def test_torus_normalisation_at_12um(fixture):
         # By eq. fcov: lambda*L_lambda(12um) = 2.5 * lum5100A * fcov
         # so L_lambda(12um) = 2.5 * lum5100A * fcov / 12000nm
         expected_lam_Llam = 2.5 * float(p["lum5100A"]) * float(p["fcov"])
-        np.testing.assert_allclose(out[norm_idx] * 12000.0, expected_lam_Llam,
-                                    rtol=1e-10)
+        np.testing.assert_allclose(out[norm_idx] * 12000.0, expected_lam_Llam, rtol=1e-10)
 
 
 def test_jit_compatible():
@@ -106,11 +97,9 @@ def test_jit_compatible():
     )
 
     fn1 = jax.jit(torus_dust_continuum)
-    out = fn1(jnp.array([1000.0, 12000.0, 50000.0]),
-              1.0e36, 0.4, 20.0, 0.5, 3.0, 0.5, 1.0)
+    out = fn1(jnp.array([1000.0, 12000.0, 50000.0]), 1.0e36, 0.4, 20.0, 0.5, 3.0, 0.5, 1.0)
     assert out.shape == (3,)
     assert jnp.all(jnp.isfinite(out))
     fn2 = jax.jit(si_feature)
-    out2 = fn2(jnp.array([8000.0, 9841.0, 14224.0, 20000.0]),
-               1.0e36, 0.4, 1.0)
+    out2 = fn2(jnp.array([8000.0, 9841.0, 14224.0, 20000.0]), 1.0e36, 0.4, 1.0)
     assert jnp.all(jnp.isfinite(out2))
