@@ -64,7 +64,10 @@ def _time(fn, n_warmup=1, n_repeat=20) -> tuple[float, float]:
     for _ in range(n_warmup + n_repeat):
         t = time.time()
         out = fn()
-        jax.tree.map(lambda x: x.block_until_ready() if hasattr(x, "block_until_ready") else x, out)
+        jax.tree.map(
+            lambda x: x.block_until_ready() if hasattr(x, "block_until_ready") else x,
+            out,
+        )
         samples.append(time.time() - t)
     return t_first, float(np.median(samples[n_warmup:]))
 
@@ -161,7 +164,7 @@ def main() -> None:
     print("─" * 67)
     print(f"  Recipe: {dict(recipe_kw)}")
     print(f"  Wave grid: {wave_aa.size} points; 1 filter")
-    print(f"  Repeat = 20, median reported.")
+    print("  Repeat = 20, median reported.")
     print()
     print(f"{'mode':<25}{'first call':>15}{'cached':>15}{'speedup':>12}")
     print("─" * 67)
@@ -188,6 +191,51 @@ def main() -> None:
         f"{t_pre_first*1e3:>12.1f} ms"
         f"{t_pre_med*1e3:>12.3f} ms"
         f"{t_eager_med/t_pre_med:>12.1f}x"
+    )
+    print()
+
+    # ──────────────────────────────────────────────────────────────────
+    # Mode 3b: multi-axis precompute — vary (l5100, plslope) jointly.
+    # ──────────────────────────────────────────────────────────────────
+    recipe2d = Recipe.from_selectors(
+        disc="grahsp_sbpl",
+        lines="grahsp",
+        feii="grahsp",
+        torus="skirtor",
+        attenuation="smc_prevot",
+        axis_params=("agn_grahsp_l5100", "agn_grahsp_plslope"),
+    )
+    t_build2 = time.time()
+    pre2 = precompute(
+        filter_waves=[fw],
+        filter_trans=[ft],
+        redshift=0.0,
+        parameters=None,
+        recipe=recipe2d,
+        axis_grids={
+            "agn_grahsp_l5100": np.logspace(43, 46, 5),
+            "agn_grahsp_plslope": np.linspace(-2.5, -1.0, 5),
+        },
+    )
+    fn2 = build_lookup(pre2)
+    t_build2 = time.time() - t_build2
+    t_pre2_first, t_pre2_med = _time(
+        lambda: fn2(jnp.array(1.0), jnp.array(1.0e44), jnp.array(-1.7))
+    )
+
+    print("multi-axis (2D: l5100 × plslope, 5×5 grid)")
+    print("─" * 67)
+    print(
+        f"{'precompute (build)':<25}"
+        f"{t_build2*1e3:>12.1f} ms"
+        f"{'-':>15}"
+        f"{'-':>12}"
+    )
+    print(
+        f"{'precompute (lookup)':<25}"
+        f"{t_pre2_first*1e3:>12.1f} ms"
+        f"{t_pre2_med*1e3:>12.3f} ms"
+        f"{t_eager_med/t_pre2_med:>12.1f}x"
     )
     print()
 

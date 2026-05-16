@@ -425,6 +425,26 @@ class Parameters:
                 agn_torus_block=self.agn_torus_block,
                 agn_attenuation_block=self.agn_attenuation_block,
             )
+        # Composable AGN precompute axes. ``dict[param_name → ndarray]``;
+        # SEDModel consumes this to build a triweight lookup at construction
+        # time. Defaults to None → precompute disabled, runtime path used.
+        self.agn_axis_grids = kwargs.pop("agn_axis_grids", None)
+        if self.agn_axis_grids is not None:
+            if self.agn_model != "composable":
+                raise ValueError(
+                    "agn_axis_grids requires agn_model='composable'; got "
+                    f"{self.agn_model!r}."
+                )
+            if not isinstance(self.agn_axis_grids, dict):
+                raise TypeError(
+                    "agn_axis_grids must be a dict[param_name → ndarray]; "
+                    f"got {type(self.agn_axis_grids).__name__}."
+                )
+            if not self.agn_axis_grids:
+                raise ValueError(
+                    "agn_axis_grids must contain at least one axis when set; "
+                    "use agn_axis_grids=None (default) to disable precompute."
+                )
         self.radio = kwargs.pop("radio", False)
         self.xray = kwargs.pop("xray", False)
         self.shock = kwargs.pop("shock", False)
@@ -929,6 +949,51 @@ class Parameters:
         return dict(self._mirrors)
 
     # ── Public API ────────────────────────────────────────────────────
+
+    @classmethod
+    def from_groups(cls, **groups) -> Parameters:
+        """Build a Parameters from the Bagpipes-style nested-dict form.
+
+        Thin convenience wrapper around :func:`tengri.parameters.parse_groups`.
+        Lets users construct a model via grouped dicts (one per physics block,
+        with a ``'type'`` key and an optional ``'*'`` wildcard) instead of the
+        flat-kwarg form. Anything left unspecified auto-fills from the registry.
+
+        Parameters
+        ----------
+        **groups : dict
+            One keyword per physics group (``sfh``, ``dust``, ``neb``, ``igm``,
+            ``radio``, ``xray``) plus top-level kwargs (``redshift``,
+            ``apply_igm``). Each group is a dict containing a ``'type'`` key,
+            an optional ``'*'`` wildcard set to :data:`~tengri.FREE` or
+            :data:`~tengri.FIXED`, and per-parameter overrides. See
+            :func:`parse_groups` for the full grammar.
+
+        Returns
+        -------
+        Parameters
+            A fully-resolved Parameters identical to what the equivalent
+            flat-kwarg ``Parameters(...)`` call would produce.
+
+        See Also
+        --------
+        tengri.parameters.parse_groups : The underlying parser.
+
+        Examples
+        --------
+        >>> from tengri import Parameters, Fixed, FREE, FIXED, Uniform
+        >>> spec = Parameters.from_groups(
+        ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
+        ...     dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+        ...     neb={"type": "cue", "*": FIXED},
+        ...     redshift=Fixed(0.05),
+        ... )
+        >>> "sfh_dpl_beta" in spec.free_params
+        True
+        """
+        from tengri.parameters.groups import parse_groups
+
+        return parse_groups(**groups)
 
     def with_params(self, **kwargs) -> Parameters:
         """Return a new Parameters with additional parameters merged in.

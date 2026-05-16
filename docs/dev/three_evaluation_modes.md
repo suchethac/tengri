@@ -121,10 +121,35 @@ fn = build_lookup(pre)                # JIT-compiled triweight lookup
 photometry = fn(jnp.array(1.0), jnp.array(1e44))  # (n_filters,)
 ```
 
-When the user sets `agn_model="composable"` and provides `agn_axis_grids` on
-the `Parameters` spec, the `SEDModel` builds this lookup automatically and
-threads it through the hybrid kernel via
+### Through the standard `Parameters` API
+
+The above is the low-level entry point. For users running through the
+normal tengri inference pipeline, set `agn_axis_grids` on `Parameters`:
+
+```python
+from tengri import Parameters
+
+spec = Parameters(
+    agn_model="composable",
+    agn_disc_block="grahsp_sbpl",
+    agn_torus_block="skirtor",
+    agn_attenuation_block="smc_prevot",
+    agn_log_lbol=Uniform(43, 47),
+    agn_axis_grids={
+        "agn_grahsp_l5100": np.logspace(43, 46, 5),
+    },
+    # ... other free / fixed params ...
+)
+model = SEDModel(spec, ...)   # precompute fires here, lookup baked in
+```
+
+The `SEDModel` constructor builds the lookup at init time and threads it
+through the hybrid kernel via
 [`PrecomputedData.composable_preintegrated`](../../src/tengri/forward/sed_model_types.py).
+Every subsequent likelihood eval is a triweight interp — no recompile, no
+template loading inside the JIT trace. The axis values come from the param
+dict the inference layer feeds the kernel; multi-axis recipes are supported
+(see the benchmark below).
 
 ### Benchmarked numbers
 
@@ -137,13 +162,16 @@ wavelength points; 1 filter):
 | exact (no JIT) | 1693 ms | 2.6 ms | 1× |
 | JIT-composable | 502 ms | 0.35 ms | **7.5×** |
 | precompute (build) | 470 ms | — | — |
-| precompute (lookup) | 40 ms | 0.06 ms | **44×** |
+| precompute (lookup, 1D) | 40 ms | 0.06 ms | **44×** |
+| precompute (lookup, 2D 5×5) | 49 ms | 0.09 ms | **31×** |
 
 Numbers will vary by hardware and recipe. The key qualitative pattern:
 **precompute compile is ~12× faster than JIT-composable compile**, and the
-cached lookup is ~6× faster than the JIT-composable cached call. For
-template-heavy recipes the precompute advantage grows; for analytic-only
-recipes (powerlaw disc + SMC atten) JIT-composable is competitive.
+cached lookup is ~6× faster than the JIT-composable cached call. Multi-axis
+precompute scales sub-linearly in the lookup cost (the triweight interp
+dominates over the underlying grid size). For template-heavy recipes the
+precompute advantage grows; for analytic-only recipes (powerlaw disc + SMC
+atten) JIT-composable is competitive.
 
 ## When to use which
 

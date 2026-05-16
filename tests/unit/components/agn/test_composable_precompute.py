@@ -341,6 +341,62 @@ def test_kernel_accepts_arbitrary_axis_names():
     assert multi.axis_names == ("agn_grahsp_l5100", "agn_grahsp_ebv")
 
 
+def test_parameters_agn_axis_grids_accepted():
+    """tengri.Parameters accepts agn_axis_grids when agn_model='composable'."""
+    from tengri import Parameters
+    from tengri.parameters.priors import Fixed
+
+    p = Parameters(
+        agn_model="composable",
+        agn_disc_block="grahsp_sbpl",
+        agn_torus_block="skirtor",
+        agn_attenuation_block="none",
+        agn_log_lbol=Fixed(45.0),
+        agn_log_mbh=Fixed(8.0),
+        agn_log_ledd=Fixed(-1.0),
+        agn_tau_skirtor=Fixed(7.0),
+        agn_axis_grids={
+            "agn_grahsp_l5100": np.logspace(43, 46, 4),
+        },
+    )
+    assert p.agn_axis_grids is not None
+    assert "agn_grahsp_l5100" in p.agn_axis_grids
+    assert p.agn_disc_block == "grahsp_sbpl"
+
+
+def test_parameters_agn_axis_grids_rejects_non_composable():
+    """agn_axis_grids without agn_model='composable' must raise."""
+    from tengri import Parameters
+
+    with pytest.raises(ValueError, match="requires agn_model='composable'"):
+        Parameters(
+            agn_model="qsogen",
+            agn_axis_grids={"agn_log_lbol": np.array([43.0, 45.0, 47.0])},
+        )
+
+
+def test_parameters_agn_axis_grids_rejects_non_dict():
+    from tengri import Parameters
+
+    with pytest.raises(TypeError, match="must be a dict"):
+        Parameters(
+            agn_model="composable",
+            agn_disc_block="grahsp_sbpl",
+            agn_axis_grids=[1.0, 2.0, 3.0],  # wrong type
+        )
+
+
+def test_parameters_agn_axis_grids_rejects_empty():
+    from tengri import Parameters
+
+    with pytest.raises(ValueError, match="at least one axis"):
+        Parameters(
+            agn_model="composable",
+            agn_disc_block="grahsp_sbpl",
+            agn_axis_grids={},
+        )
+
+
 def test_lookup_works_with_explicit_jit_wrapper():
     fw, ft = _toy_filter()
     recipe = Recipe.from_selectors(

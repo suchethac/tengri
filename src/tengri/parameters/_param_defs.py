@@ -987,6 +987,11 @@ SETTINGS_KEYS = frozenset(
         "agn_feii_block",
         "agn_torus_block",
         "agn_attenuation_block",
+        # AGN composable-precompute axes: dict[param_name → np.ndarray grid].
+        # When set with agn_model="composable", SEDModel builds the
+        # composable_precompute lookup at construction time and threads
+        # it through the hybrid kernel via PrecomputedData.
+        "agn_axis_grids",
         # Radio & X-ray
         "radio",
         "xray",
