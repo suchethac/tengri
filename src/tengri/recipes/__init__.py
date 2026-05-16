@@ -46,6 +46,11 @@ def star_forming_photometry() -> dict:
     Suitable for optical+NIR+MIR photometry fits of star-forming galaxies
     at low-to-intermediate redshift.
 
+    **SSP requirement:** bare-stellar (e.g., ``fsps_prsc_miles_chabrier.h5``,
+    ``fsps_mist_c3k_a_chabrier.h5``). The Cue nebular backend cannot be paired
+    with wNE (with-nebular-emission) SSP files; doing so raises
+    ``CueWNESSPError``.
+
     **Configuration:**
     - **SFH**: Dual power-law (DPL) with all parameters free
     - **Dust**: Two-component Calzetti attenuation (both optical depths free)
@@ -101,6 +106,9 @@ def quiescent_z0() -> dict:
 
     Suitable for local quiescent galaxy samples (e.g., SDSS passive galaxies).
 
+    **SSP requirement:** bare-stellar (Cue nebular backend; see
+    :func:`star_forming_photometry` for details).
+
     **Configuration:**
     - **SFH**: Delayed-exponential (dexp) with all parameters free
     - **Dust**: Two-component Calzetti attenuation (both optical depths free,
@@ -153,6 +161,9 @@ def agn_panchromatic() -> dict:
 
     Suitable for AGN host galaxy fitting using UV through radio data
     (panchromatic coverage).
+
+    **SSP requirement:** bare-stellar (Cue nebular backend; see
+    :func:`star_forming_photometry` for details).
 
     **Configuration:**
     - **SFH**: DPL (free)
@@ -228,6 +239,9 @@ def stochastic_sfh_jwst() -> dict:
     Suitable for JWST spectrophotometry of 0.5 < z < 12 galaxies
     where burstiness and temporal structure in star formation matter.
 
+    **SSP requirement:** bare-stellar (Cue nebular backend; see
+    :func:`star_forming_photometry` for details).
+
     **Configuration:**
     - **SFH**: DPL + stochastic field composition (both free)
     - **Dust**: Two-component Calzetti attenuation (free)
@@ -282,6 +296,9 @@ def mock_recovery_minimal() -> dict:
 
     Suitable for fast mock data fits, parameter recovery tests, and
     forward-model benchmarking.
+
+    **SSP requirement:** any. Nebular emission is disabled, so this recipe
+    works with both bare-stellar and wNE SSP files.
 
     **Configuration:**
     - **SFH**: Truncated skew-normal (tsnorm) with ~4 free params

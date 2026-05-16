@@ -112,6 +112,50 @@ Phase 4 sub-namespaces (additive re-export modules; added 2026-05):
 - `components/agn/{disc_api,torus_api,lines,compose}.py`
 - `components/dust/{attenuation_models,emission_models,pah}.py`
 
+## Model construction API (CURRENT)
+
+User-facing model construction has two surfaces. The **recommended path** is
+the nested-dict builder shipped in 2026-05 (`parameters/groups.py`):
+
+```python
+from tengri import SEDModel, FREE, FIXED, Fixed, Uniform, recipes
+
+# Preferred: from a recipe
+model = SEDModel.from_groups(ssp_data=ssp, observation=obs,
+                              **recipes.star_forming_photometry())
+
+# Or hand-rolled with the nested-dict grammar
+model = SEDModel.from_groups(
+    ssp_data=ssp, observation=obs,
+    sfh={'type': 'dpl', '*': FREE, 'beta': Uniform(1, 3)},
+    dust={'type': 'two_component', 'law_bc': 'calzetti', '*': FIXED,
+          'tau_bc': 0.5, 'emission': {'type': 'dale2014', '*': FIXED}},
+    neb={'type': 'cue', '*': FIXED},
+    redshift=Fixed(0.05),
+)
+model.spec.summary()    # provenance-tagged: [user] / [* FREE] / [* FIXED] / [default]
+groups = model.spec.to_groups()    # round-trip for inspection/editing
+```
+
+- Grammar: each group dict accepts `'type'` (structural choice), `'*'`
+  wildcard (`FREE`/`FIXED`; default `FIXED`), and per-parameter short-form
+  overrides (e.g. `'beta'` inside the sfh group resolves to `sfh_dpl_beta`).
+- Sub-blocks: `dust.emission`, plus the five AGN composable selectors —
+  `agn.disc`, `agn.torus`, `agn.lines`, `agn.feii`, `agn.atten`. Each nests as
+  a dict with its own `'type'`, `'*'`, and per-param keys.
+- Sentinels (`FREE`, `FIXED`) are singletons exported from `tengri`.
+- Recipes: `tengri.recipes.*` — five curated starting points
+  (`star_forming_photometry`, `quiescent_z0`, `agn_panchromatic`,
+  `stochastic_sfh_jwst`, `mock_recovery_minimal`). Each docstring states its
+  SSP requirement (bare-stellar vs any).
+- The flat-kwarg `Parameters(...)` form is the **expert escape hatch** — still
+  works, still used internally, but not the recommended user-facing path.
+
+See `docs/dev/api_migration_v0.x.md` for the full grammar reference and
+`notebooks/04_building_models.py` for a worked example covering recipe usage,
+variant swapping, and round-trip editing. Design plan:
+`~/.claude/plans/i-feel-like-its-serene-emerson.md`.
+
 ## Key conventions
 
 - **Physical constants**: Import from `utils/physics_constants.py` — do NOT define local constant literals. Exception: `L_SUN_CUE = 3.839e33` in `cue.py` is intentional (Cue training convention, not IAU 2015).
