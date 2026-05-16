@@ -62,7 +62,3 @@ class TestFromGroupsBridge:
         with pytest.raises(ValueError, match="Unknown group key"):
             Parameters.from_groups(foo={"type": "x"})
 
-    def test_from_groups_propagates_agn_deferral(self):
-        """AGN group raises NotImplementedError, identical to parse_groups."""
-        with pytest.raises(NotImplementedError, match="AGN"):
-            Parameters.from_groups(agn={"type": "simple"})

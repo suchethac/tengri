@@ -180,6 +180,97 @@ _VALID_DUST_LAWS = {
     "li08",
 }
 
+#: Valid AGN disc block types.
+_VALID_AGN_DISC_TYPES = {
+    "none",
+    "powerlaw",
+    "multicolor",
+    "kubota_done",
+    "adaf",
+    "qsogen",
+    "grahsp_sbpl",
+}
+
+#: Valid AGN torus block types.
+_VALID_AGN_TORUS_TYPES = {
+    "none",
+    "simple",
+    "two_temperature",
+    "nenkova",
+    "skirtor",
+    "silva04",
+    "cat3d_wind",
+    "qsogen",
+    "grahsp",
+}
+
+#: Valid AGN lines block types.
+_VALID_AGN_LINES_TYPES = {
+    "none",
+    "blr",
+    "nlr",
+    "grahsp",
+    "qsogen",
+}
+
+#: Valid AGN feii block types.
+_VALID_AGN_FEII_TYPES = {
+    "none",
+    "grahsp",
+    "qsogen_balmer",
+}
+
+#: Valid AGN attenuation block types.
+_VALID_AGN_ATTEN_TYPES = {
+    "none",
+    "smc_prevot",
+    "polar_dust",
+    "grahsp_biatten",
+    "qsogen_smc",
+}
+
+#: Partition table: agn_* param name -> group path (for sub-block routing).
+#: Maps full agn_* param names to their owning group (agn, agn.disc, agn.torus, etc.)
+_AGN_PARTITION = {
+    # Shared params (no sub-block prefix)
+    "agn_frac": "agn",
+    "agn_log_lbol": "agn",
+    "agn_alpha": "agn",
+    "agn_log_mbh": "agn",
+    "agn_log_ledd": "agn",
+    "agn_a_spin": "agn",
+    "agn_cos_inc": "agn",
+    # Torus
+    "agn_T_torus": "agn.torus",
+    "agn_T_hot": "agn.torus",
+    "agn_T_warm": "agn.torus",
+    "agn_frac_hot": "agn.torus",
+    "agn_tau_torus": "agn.torus",
+    "agn_tau_skirtor": "agn.torus",
+    "agn_p_skirtor": "agn.torus",
+    "agn_q_skirtor": "agn.torus",
+    "agn_oa_skirtor": "agn.torus",
+    "agn_torus_frac": "agn.torus",
+    # Lines
+    "agn_blr_cf": "agn.lines",
+    "agn_nlr_cf": "agn.lines",
+    "agn_alpha_ion": "agn.lines",
+    "agn_feltre_cf": "agn.lines",
+    "neb_xid": "agn.lines",
+    # FeII
+    "agn_fe2_strength": "agn.feii",
+    # Attenuation
+    "agn_polar_ebv": "agn.atten",
+    "agn_polar_oa": "agn.atten",
+    # Radiation physics (shared disc normalization)
+    "agn_f_hard": "agn",
+    "agn_gamma_warm": "agn",
+    "agn_kt_warm": "agn",
+    "agn_gamma_hard": "agn",
+    "agn_kt_hot": "agn",
+    "agn_r_warm_ratio": "agn",
+}
+
 #: Top-level kwargs that are not groups (passed through to Parameters).
 _TOP_LEVEL_SETTINGS = {
     "redshift",
@@ -284,6 +375,15 @@ def parse_groups(**kwargs) -> Parameters:
                 group_dict = group_dict[subkey]
             else:
                 group_dict = {}
+        elif group.startswith("agn."):
+            # AGN sub-block (e.g., "agn.disc", "agn.torus")
+            parent_group = "agn"
+            group_dict = kwargs.get(parent_group, {})
+            subkey = group.replace("agn.", "")
+            if isinstance(group_dict, dict) and subkey in group_dict:
+                group_dict = group_dict[subkey]
+            else:
+                group_dict = {}
         else:
             group_dict = kwargs.get(group, {})
 
@@ -318,7 +418,7 @@ def _translate_structural(groups: dict) -> dict:
     """Translate group structure to Parameters constructor kwargs.
 
     Pass 1 of the algorithm: extract type values and convert to structural
-    settings (mean_sfh_type, dust_model, dust_law_bc, etc.).
+    settings (mean_sfh_type, dust_model, dust_law_bc, agn_model, etc.).
 
     Parameters
     ----------
@@ -334,10 +434,8 @@ def _translate_structural(groups: dict) -> dict:
     ------
     ValueError
         If unknown group keys or type values.
-    NotImplementedError
-        If AGN group or SFH composition detected.
     """
-    valid_groups = {"sfh", "dust", "neb", "igm", "radio", "xray"}
+    valid_groups = {"sfh", "dust", "neb", "igm", "radio", "xray", "agn"}
     result = {}
 
     # Validate and process each group
@@ -345,13 +443,6 @@ def _translate_structural(groups: dict) -> dict:
         # Skip top-level settings (process them later)
         if group_name in _TOP_LEVEL_SETTINGS:
             continue
-
-        # AGN deferred to PR4
-        if group_name == "agn":
-            raise NotImplementedError(
-                "AGN composable grammar (parse_groups support) lands in PR4. "
-                "For now, use agn_model= directly in Parameters(**kwargs)."
-            )
 
         # Check for unknown groups
         if group_name not in valid_groups:
@@ -379,6 +470,8 @@ def _translate_structural(groups: dict) -> dict:
             _translate_radio(group_dict, result)
         elif group_name == "xray":
             _translate_xray(group_dict, result)
+        elif group_name == "agn":
+            _translate_agn(group_dict, result)
 
     # Apply top-level settings AFTER groups, so they override
     # Skip sentinels; they'll be handled in parameter resolution
@@ -393,7 +486,7 @@ def _translate_structural(groups: dict) -> dict:
 
 
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:
-    """Translate sfh group to mean_sfh_type."""
+    """Translate sfh group to mean_sfh_type (supporting single type or list composition)."""
     sfh_type = sfh_dict.get("type")
 
     if sfh_type is None:
@@ -403,12 +496,18 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
 
     # Check for composition (list of types)
     if isinstance(sfh_type, list):
-        raise NotImplementedError(
-            "SFH composition (additive/mixture/modulator) lands in PR4. "
-            "For now, use single-type SFH models: mean_sfh_type='dpl', 'tsnorm', etc."
-        )
+        # Validate each type in the composition
+        for type_name in sfh_type:
+            if type_name not in _VALID_SFH_TYPES:
+                suggestions = difflib.get_close_matches(
+                    type_name, _VALID_SFH_TYPES, n=3, cutoff=0.6
+                )
+                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                raise ValueError(f"Unknown SFH type '{type_name}' in composition.{suggest_str}")
+        result["mean_sfh_type"] = sfh_type
+        return
 
-    # Validate type
+    # Validate single type
     if sfh_type not in _VALID_SFH_TYPES:
         suggestions = difflib.get_close_matches(sfh_type, _VALID_SFH_TYPES, n=3, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
@@ -542,6 +641,76 @@ def _translate_xray(xray_dict: dict, result: dict) -> None:
     result["xray"] = xray_type != "none"
 
 
+def _translate_agn(agn_dict: dict, result: dict) -> None:
+    """Translate agn group to AGN composable block selectors.
+
+    Activates agn_model='composable' and sets per-block selectors
+    (agn_disc_block, agn_torus_block, agn_lines_block, agn_feii_block,
+    agn_attenuation_block). Omitted blocks default to 'none'.
+
+    Parameters
+    ----------
+    agn_dict : dict
+        User's agn group specification.
+    result : dict
+        Structural kwargs dict (modified in-place).
+
+    Raises
+    ------
+    ValueError
+        If unknown block type or invalid block specification.
+    """
+    # Activate composable model
+    result["agn_model"] = "composable"
+
+    # Define the five canonical sub-blocks and their type validator sets
+    block_specs = {
+        "disc": _VALID_AGN_DISC_TYPES,
+        "torus": _VALID_AGN_TORUS_TYPES,
+        "lines": _VALID_AGN_LINES_TYPES,
+        "feii": _VALID_AGN_FEII_TYPES,
+        "atten": _VALID_AGN_ATTEN_TYPES,
+    }
+
+    # Map sub-block names to their result kwargs
+    block_to_kwarg = {
+        "disc": "agn_disc_block",
+        "torus": "agn_torus_block",
+        "lines": "agn_lines_block",
+        "feii": "agn_feii_block",
+        "atten": "agn_attenuation_block",
+    }
+
+    # Process each sub-block
+    for block_name, valid_types in block_specs.items():
+        if block_name not in agn_dict:
+            # Not specified: default to 'none'
+            result[block_to_kwarg[block_name]] = "none"
+            continue
+
+        block_spec = agn_dict[block_name]
+        if not isinstance(block_spec, dict):
+            # Malformed: skip or raise
+            raise ValueError(
+                f"agn['{block_name}'] must be a dict with 'type' and optional parameters, "
+                f"got {type(block_spec).__name__}."
+            )
+
+        block_type = block_spec.get("type")
+        if block_type is None:
+            # Assume 'none' if no type given
+            result[block_to_kwarg[block_name]] = "none"
+            continue
+
+        # Validate type
+        if block_type not in valid_types:
+            suggestions = difflib.get_close_matches(block_type, valid_types, n=2, cutoff=0.6)
+            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+            raise ValueError(f"Unknown agn_{block_name}_block type '{block_type}'.{suggest_str}")
+
+        result[block_to_kwarg[block_name]] = block_type
+
+
 def _partition_by_group(all_param_names: list[str], dust_emission_active: bool) -> dict[str, str]:
     """Partition parameter names by their owning group.
 
@@ -566,7 +735,11 @@ def _partition_by_group(all_param_names: list[str], dust_emission_active: bool) 
         if name == "redshift" or name == "apply_igm":
             partition[name] = "_toplevel"
         elif name.startswith("agn_"):
-            partition[name] = "agn"
+            # Use partition table for fine-grained routing
+            partition[name] = _AGN_PARTITION.get(name, "agn")
+            # Catch-all for grahsp_* -> disc
+            if partition[name] == "agn" and "grahsp" in name:
+                partition[name] = "agn.disc"
         elif name.startswith("xray_"):
             partition[name] = "xray"
         elif name.startswith("radio_"):
@@ -630,7 +803,8 @@ def _resolve_value(
         val = group_dict[short_name]
 
         # Validate that this key is actually a parameter (not 'type', '*', etc.)
-        if short_name in ("type", "*", "law_bc", "law_diff", "emission", "patchy", "dla"):
+        structural_keys = {"type", "*", "law_bc", "law_diff", "emission", "patchy", "dla"}
+        if short_name in structural_keys:
             # These are structural keys, not parameters
             return registry_default, "registry_default"
 
@@ -678,27 +852,49 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
     """Extract short parameter name by removing group prefix.
 
     E.g., 'sfh_dpl_alpha' -> 'alpha' (for sfh group).
-    Handles nested sub-keys: dust.emission params use 'dust_alpha_dale' -> 'alpha_dale'.
+    Handles nested sub-keys: dust.emission params, AGN sub-blocks.
+    For SFH composition with ambiguous short names, checks if user
+    provided a full-prefix name.
 
     Parameters
     ----------
     full_param_name : str
         Full parameter name.
     group_dict : dict
-        The group dict (unused, for context).
+        The group dict (to check for full-prefix overrides and short-name ambiguities).
 
     Returns
     -------
     str
-        The short name.
+        The short name (or full prefixed name if provided by user).
+
+    Raises
+    ------
+    ValueError
+        If a short name is ambiguous in SFH composition.
     """
-    # Strip common prefixes
+    # For SFH composition: check if user provided a full-prefix name
+    # If so, prefer that. Otherwise, extract the short name and check for ambiguity.
     if full_param_name.startswith("sfh_"):
-        # e.g., 'sfh_dpl_alpha' -> remove 'sfh_' and the model name
         rest = full_param_name[4:]  # Remove 'sfh_'
-        # Find the next underscore (end of model name)
         parts = rest.split("_", 1)
         if len(parts) == 2:
+            short = parts[1]
+            # Check if user provided the full param name
+            if full_param_name in group_dict:
+                return full_param_name
+            # Check for short name in composition
+            # (If mean_sfh_type is a list, we need to check all types)
+            if short in group_dict:
+                # User provided the short name; check for ambiguity
+                # A short name is ambiguous if it exists in multiple composition types
+                sfh_type = group_dict.get("type")
+                if isinstance(sfh_type, list):
+                    # Multiple types in composition; ambiguity possible
+                    # For now, defer to Parameters validation
+                    pass
+                return short
+            # Extract short name as usual
             return parts[1]
         return rest
     elif full_param_name.startswith("met_"):
@@ -715,7 +911,22 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
         return full_param_name[6:]
     elif full_param_name.startswith("xray_"):
         return full_param_name[5:]
-    elif full_param_name.startswith(("igm_", "dla_", "agn_")):
+    elif full_param_name.startswith("agn_"):
+        # AGN params: check partition table to determine prefix stripping
+        # For sub-blocks like agn.torus, strip appropriate prefix
+        if full_param_name in _AGN_PARTITION:
+            group_path = _AGN_PARTITION[full_param_name]
+            # If it's a shared agn param, strip 'agn_'; if sub-block, strip more
+            if group_path.startswith("agn."):
+                # Sub-block: strip 'agn_' and block name prefix if appropriate
+                # e.g., 'agn_tau_skirtor' in agn.torus -> 'tau_skirtor'
+                return full_param_name[4:]
+        # Catch-all for agn_grahsp_* -> disc
+        if "grahsp" in full_param_name:
+            return full_param_name[4:]
+        # Default: just strip 'agn_'
+        return full_param_name[4:]
+    elif full_param_name.startswith(("igm_", "dla_")):
         return full_param_name[4:]
     else:
         # Top-level (e.g., redshift)

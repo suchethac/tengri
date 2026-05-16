@@ -173,14 +173,16 @@ class TestFlatEquivalence:
 class TestValidation:
     """Errors from the parser must propagate out of SEDModel.from_groups."""
 
-    def test_agn_group_raises_not_implemented(self, ssp):
-        with pytest.raises(NotImplementedError, match="AGN"):
-            SEDModel.from_groups(
-                ssp_data=ssp,
-                sfh={"type": "dpl", "*": FIXED},
-                agn={"type": "simple"},
-                redshift=Fixed(0.1),
-            )
+    def test_agn_group_builds_composable_model(self, ssp):
+        """AGN group activates composable AGN model (was deferred until PR4)."""
+        model = SEDModel.from_groups(
+            ssp_data=ssp,
+            sfh={"type": "dpl", "*": FIXED},
+            agn={"disc": {"type": "powerlaw", "*": FIXED}},
+            redshift=Fixed(0.1),
+        )
+        assert model.spec.agn_model == "composable"
+        assert model.spec.agn_disc_block == "powerlaw"
 
     def test_unknown_type_raises_value_error(self, ssp):
         with pytest.raises(ValueError):

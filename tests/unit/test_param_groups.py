@@ -375,22 +375,6 @@ class TestValidation:
                 redshift=Fixed(0.1),
             )
 
-    def test_agn_group_raises_not_implemented(self):
-        """AGN group should raise NotImplementedError with deferral message."""
-        with pytest.raises(NotImplementedError, match="AGN"):
-            parse_groups(
-                agn={"type": "simple"},
-                redshift=Fixed(0.1),
-            )
-
-    def test_sfh_type_list_raises_not_implemented(self):
-        """SFH type as list should raise NotImplementedError."""
-        with pytest.raises(NotImplementedError, match=r"SFH.*composition"):
-            parse_groups(
-                sfh={"type": ["tsnorm", "burst"]},
-                redshift=Fixed(0.1),
-            )
-
     def test_unknown_neb_type_raises_value_error(self):
         """Unknown nebular type should raise ValueError."""
         with pytest.raises(ValueError, match=r"nebular|invalid"):
