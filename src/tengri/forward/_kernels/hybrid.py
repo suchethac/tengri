@@ -505,6 +505,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
     _silva04_lookup = None
     _cat3d_lookup = None
     _composable_lookup = None
+    _composable_axis_names: tuple[str, ...] = ()
 
     if has_agn_full and not _needs_extension:
         # Disc models: only one per model at runtime
@@ -537,18 +538,18 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             state.agn_model == "composable"
             and state.precomputed.composable_preintegrated is not None
         ):
-            # The kernel currently consumes only single-axis composable
-            # recipes whose axis is ``agn_log_lbol`` — matches the qsogen
-            # signature and covers the most common interactive-fit case.
-            # Multi-axis recipes are still built and stored on
-            # PrecomputedData; callers can invoke the lookup directly via
-            # ``composable_precompute.build_lookup`` for those.
+            # Composable lookup consumed in the kernel for any axis tuple.
+            # ``axis_names`` is read at trace-build time (Python-side); the
+            # fused entry point extracts the matching values from the
+            # param dict and forwards them as the
+            # ``_composable_axis_values`` tuple kwarg. Single-axis
+            # ``("agn_log_lbol",)`` and multi-axis recipes are both
+            # supported.
+            _composable_lookup = state.precomputed.composable_preintegrated
             _composable_axis_names = getattr(
-                state.precomputed.composable_preintegrated, "axis_names", ()
+                _composable_lookup, "axis_names", ()
             )
-            if _composable_axis_names == ("agn_log_lbol",):
-                _has_preint_composable = True
-                _composable_lookup = state.precomputed.composable_preintegrated
+            _has_preint_composable = True
 
     # Radio
     has_radio = state.uses_radio
@@ -714,6 +715,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             dust_qhac=0.17,
             dust_alpha_dl14=2.0,
             dust_log_ssfr=-10.0,
+            _composable_axis_values: tuple = (),
         ):
             """Compute hybrid photometry for single dust component."""
             return _hybrid_phot_body(
@@ -792,6 +794,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                 dust_alpha_dl14,
                 dust_log_ssfr,
                 tau_v=tau_v,
+                _composable_axis_values=_composable_axis_values,
             )
 
     else:
@@ -872,6 +875,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             dust_qhac=0.17,
             dust_alpha_dl14=2.0,
             dust_log_ssfr=-10.0,
+            _composable_axis_values: tuple = (),
         ):
             """Compute hybrid photometry for two-component dust."""
             return _hybrid_phot_body(
@@ -946,6 +950,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                 xray_gamma_hmxb,
                 xray_gamma_lmxb,
                 xray_E_cut,
+                _composable_axis_values=_composable_axis_values,
             )
 
     def _stellar_phot(
@@ -1518,8 +1523,14 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
         dust_alpha_dl14=2.0,
         dust_log_ssfr=-10.0,
         tau_v=0.0,
+        _composable_axis_values: tuple = (),
     ):
-        """Hybrid kernel body: stellar (precomputed) + non-stellar (exact)."""
+        """Hybrid kernel body: stellar (precomputed) + non-stellar (exact).
+
+        ``_composable_axis_values`` carries the JAX scalars matching the
+        composable lookup's ``axis_names``; supplied by the fused entry
+        point so the kernel body never introspects the param dict.
+        """
         # === STEP 1: Stellar photometry ===
         flux_attenuated, L_absorbed_stellar, weights = _stellar_phot(
             sfr_on_ssp,
@@ -1765,14 +1776,16 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                             agn_torus_frac=jnp.float64(agn_torus_frac),
                         )
                     elif _has_preint_composable:
-                        # Composable lookup signature is (scale, *axes); we
-                        # gated on axis_names == ("agn_log_lbol",), so the
-                        # only axis is the bolometric luminosity. The scale
-                        # is 1.0 since the lookup already returns absolute
-                        # L_ν; agn_frac is applied below via flux_scale.
+                        # Composable lookup signature is (scale, *axes).
+                        # ``_composable_axis_values`` is a tuple of JAX
+                        # scalars extracted at fused-entry time based on
+                        # the lookup's ``axis_names`` (Python-side static).
+                        # Scale 1.0 since the lookup already returns
+                        # absolute L_ν; agn_frac is applied below via
+                        # flux_scale.
                         disc_torus_lnu = _composable_lookup(
                             jnp.float64(1.0),
-                            jnp.float64(_agn_lbol),
+                            *_composable_axis_values,
                         )
 
                     # Scale disc/torus: L_ν [erg/s/Hz] * agn_frac → flux density [erg/s/cm²/Hz]
@@ -2292,6 +2305,14 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
     def hybrid_phot_fused(params):
         """params dict → photometry (end-to-end, JIT'd by caller)."""
         p = get_internal_params(params, param_map, spec, has_field, strict_unknown_params=False)
+        # Composable AGN lookup: extract axis values from p based on the
+        # static axis_names captured in the gate-setup block above. The
+        # tuple is empty when no composable lookup is present (default
+        # path); the kernel body's preint branch is gated on
+        # _has_preint_composable, so unused empty tuples are harmless.
+        _composable_axis_values = tuple(
+            p.get(name, 0.0) for name in _composable_axis_names
+        )
 
         # SFH computation (same as build_fused_tier2_photometry)
         kw = {k: v for k, v in p.items() if k in sfh_internal_names}
@@ -2345,6 +2366,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                         ("dust_log_ssfr", -10.0),
                     ]
                 },
+                _composable_axis_values=_composable_axis_values,
             )
         return hybrid_phot(
             sfr_on_ssp,
@@ -2380,6 +2402,7 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
                     ("dust_log_ssfr", -10.0),
                 ]
             },
+            _composable_axis_values=_composable_axis_values,
         )
 
     return hybrid_phot_fused

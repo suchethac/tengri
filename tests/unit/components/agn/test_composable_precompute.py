@@ -319,24 +319,26 @@ def test_build_lookup_returns_composable_lookup_with_axis_names():
     assert out.shape == (1,)
 
 
-def test_kernel_gates_on_agn_log_lbol_axis():
-    """Kernel currently consumes only single-axis ``agn_log_lbol`` recipes.
+def test_kernel_accepts_arbitrary_axis_names():
+    """Kernel now supports any axis_names tuple via _composable_axis_values.
 
-    This documents/locks the consumption surface: a precompute built with a
-    different axis still works as a standalone callable but does NOT trigger
-    the kernel's preintegrated branch — the kernel falls back to the
-    runtime evaluation path.
+    The kernel reads ``axis_names`` from the lookup at Python (trace-build)
+    time and extracts matching values from the param dict at runtime. Any
+    axis (or combination) is supported.
     """
     from tengri.components.agn.blocks.composable_precompute import (
         ComposableLookup,
     )
 
-    fn = ComposableLookup(lambda scale, x: scale * x, axis_names=("agn_log_lbol",))
-    assert fn.axis_names == ("agn_log_lbol",)
-    # Sentinel check: the kernel introspects axis_names and gates on this
-    # exact tuple. Changing the axis name disables the kernel branch.
-    other = ComposableLookup(lambda scale, x: scale * x, axis_names=("agn_grahsp_l5100",))
-    assert other.axis_names != ("agn_log_lbol",)
+    single = ComposableLookup(
+        lambda scale, x: scale * x, axis_names=("agn_log_lbol",)
+    )
+    multi = ComposableLookup(
+        lambda scale, a, b: scale * (a + b),
+        axis_names=("agn_grahsp_l5100", "agn_grahsp_ebv"),
+    )
+    assert single.axis_names == ("agn_log_lbol",)
+    assert multi.axis_names == ("agn_grahsp_l5100", "agn_grahsp_ebv")
 
 
 def test_lookup_works_with_explicit_jit_wrapper():
