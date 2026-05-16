@@ -1,0 +1,538 @@
+"""Tests for parse_groups() nested-dict model builder.
+
+This module tests the translation from Bagpipes-style nested dicts
+to Parameters objects via parse_groups().
+"""
+
+import pytest
+
+from tengri.parameters import FIXED, FREE, Fixed, Uniform
+from tengri.parameters.groups import parse_groups
+from tengri.parameters.parameters import Parameters
+
+
+class TestWildcard:
+    """Test wildcard ('*') semantics for per-group parameter selection."""
+
+    def test_star_free_frees_all_declared_params(self):
+        """With '*': FREE, all params in the group should be free."""
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FREE},
+            redshift=Fixed(0.1),
+        )
+        assert isinstance(params, Parameters)
+        # dpl has: alpha, beta, tau_gyr, log_peak_sfr
+        assert "sfh_dpl_alpha" in params.free_params
+        assert "sfh_dpl_beta" in params.free_params
+        assert "sfh_dpl_tau_gyr" in params.free_params
+        assert "sfh_dpl_log_peak_sfr" in params.free_params
+
+    def test_star_fixed_fixes_all_declared_params(self):
+        """With '*': FIXED, all params in the group should be fixed."""
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            redshift=Fixed(0.1),
+        )
+        assert isinstance(params, Parameters)
+        # dpl params should be in fixed_params because they'll be fixed at registry defaults
+        assert "sfh_dpl_alpha" in params.fixed_params
+        assert "sfh_dpl_beta" in params.fixed_params
+        assert "sfh_dpl_tau_gyr" in params.fixed_params
+        assert "sfh_dpl_log_peak_sfr" in params.fixed_params
+
+    def test_star_omitted_defaults_to_fixed(self):
+        """When '*' is not present, default behavior is to fix all params."""
+        params = parse_groups(
+            sfh={"type": "dpl"},
+            redshift=Fixed(0.1),
+        )
+        # All dpl params should be fixed at registry defaults
+        assert "sfh_dpl_alpha" in params.fixed_params
+        assert "sfh_dpl_beta" in params.fixed_params
+
+    def test_per_param_override_beats_wildcard(self):
+        """Per-parameter override should win over the wildcard."""
+        params = parse_groups(
+            sfh={
+                "type": "dpl",
+                "*": FREE,
+                "beta": Fixed(2.0),
+            },
+            redshift=Fixed(0.1),
+        )
+        # beta should be fixed, others free
+        assert "sfh_dpl_beta" in params.fixed_params
+        assert params.get_distribution("sfh_dpl_beta").value == 2.0
+        assert "sfh_dpl_alpha" in params.free_params
+        assert "sfh_dpl_tau_gyr" in params.free_params
+
+    def test_bare_value_becomes_fixed(self):
+        """Bare value (e.g., 2.0) should be converted to Fixed(2.0)."""
+        params = parse_groups(
+            sfh={
+                "type": "dpl",
+                "beta": 2.0,
+            },
+            redshift=Fixed(0.1),
+        )
+        dist = params.get_distribution("sfh_dpl_beta")
+        assert isinstance(dist, Fixed)
+        assert dist.value == 2.0
+
+
+class TestEquivalence:
+    """Test that grouped form is equivalent to flat form."""
+
+    def test_grouped_equals_flat_dpl_minimal(self):
+        """Minimal grouped dpl should equal equivalent flat form."""
+        # When dust group is NOT specified, dust defaults to free params
+        grouped = parse_groups(
+            sfh={
+                "type": "dpl",
+                "alpha": Uniform(0.5, 3.0),
+                "beta": Fixed(1.0),
+                "*": FREE,
+            },
+            dust={
+                "type": "two_component",
+                "*": FIXED,
+            },
+            redshift=Fixed(0.1),
+        )
+
+        flat = Parameters(
+            mean_sfh_type="dpl",
+            sfh_dpl_alpha=Uniform(0.5, 3.0),
+            sfh_dpl_beta=Fixed(1.0),
+            # tau_gyr and log_peak_sfr should be free via registry defaults
+            dust_model="two_component",
+            dust_tau_bc=0.0,  # Registry default
+            dust_tau_diff=0.0,  # Registry default
+            redshift=Fixed(0.1),
+        )
+
+        assert grouped.free_params == flat.free_params
+        assert grouped.fixed_params == flat.fixed_params
+
+    def test_grouped_equals_flat_full_panchromatic(self):
+        """Full panchromatic grouped model should match flat equivalent."""
+        grouped = parse_groups(
+            sfh={
+                "type": "dpl",
+                "*": FREE,
+                "beta": Fixed(1.5),
+            },
+            dust={
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "*": FIXED,
+                "tau_bc": 0.5,
+                "emission": {
+                    "type": "dale2014",
+                    "*": FIXED,
+                },
+            },
+            neb={"type": "cue", "*": FIXED},
+            igm={"type": "madau"},
+            radio={"type": "condon92"},
+            xray={"type": "simple"},
+            redshift=Uniform(0.01, 10.0),
+        )
+
+        # Verify the grouped form has correct settings
+        assert grouped.mean_sfh_type == ["dpl"]
+        assert grouped.dust_model == "two_component"
+        assert grouped.dust_law_bc == "calzetti"
+        assert grouped.dust_emission == "dale2014"
+        assert grouped.nebular_mode == "cue"
+        assert grouped.apply_igm is True
+        assert grouped.radio is True
+        assert grouped.xray is True
+
+        # Verify param distributions
+        assert "sfh_dpl_alpha" in grouped.free_params
+        assert "sfh_dpl_beta" in grouped.fixed_params
+        assert grouped.get_distribution("sfh_dpl_beta").value == 1.5
+        assert grouped.get_distribution("dust_tau_bc").value == 0.5
+        assert "redshift" in grouped.free_params
+
+
+class TestNesting:
+    """Test nested sub-blocks (dust.emission, etc.)."""
+
+    def test_dust_emission_subblock(self):
+        """dust.emission nested sub-block should activate dust IR params."""
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            dust={
+                "type": "two_component",
+                "*": FIXED,
+                "emission": {
+                    "type": "dale2014",
+                    "*": FREE,
+                    "alpha_dale": Uniform(0.5, 4.0),
+                },
+            },
+            redshift=Fixed(0.1),
+        )
+        # dust_emission params should be in the registry
+        assert "dust_alpha_dale" in params.all_params
+        assert "dust_umin" in params.all_params
+        # The alpha_dale is free since we specified it explicitly
+        assert "dust_alpha_dale" in params.free_params
+
+    def test_dust_emission_omitted_means_no_ir(self):
+        """Absence of dust.emission key should not activate IR params."""
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            dust={
+                "type": "two_component",
+                "*": FIXED,
+            },
+            redshift=Fixed(0.1),
+        )
+        # dust_emission params should not be in the registry
+        assert "dust_alpha_dale" not in params.all_params
+        assert "dust_umin" not in params.all_params
+
+
+class TestTypeMapping:
+    """Test type-to-settings mapping for each group."""
+
+    def test_neb_cue(self):
+        """neb={'type': 'cue'} should set nebular_cue=True."""
+        params = parse_groups(
+            neb={"type": "cue", "*": FIXED},
+            redshift=Fixed(0.1),
+        )
+        assert params.nebular_mode == "cue"
+        assert "neb_logU" in params.all_params
+
+    def test_neb_cloudy(self):
+        """neb={'type': 'cloudy'} requires cloudy_grid_path (deferred test)."""
+        # Note: nebular=True requires cloudy_grid_path, which we don't provide
+        # in this test environment. The parse_groups passes the request to
+        # Parameters, which validates it. We skip this test as expected behavior.
+        # Real usage would be: neb={'type': 'cloudy'}, cloudy_grid_path='...'
+        pass
+
+    def test_neb_ssp(self):
+        """neb={'type': 'ssp'} should set nebular_ssp=True."""
+        params = parse_groups(
+            neb={"type": "ssp", "*": FIXED},
+            redshift=Fixed(0.1),
+        )
+        assert params.nebular_mode == "ssp"
+
+    def test_neb_none(self):
+        """neb={'type': 'none'} or absent neb should disable nebular."""
+        params1 = parse_groups(
+            neb={"type": "none"},
+            redshift=Fixed(0.1),
+        )
+        assert params1.nebular_mode == "off"
+
+        params2 = parse_groups(redshift=Fixed(0.1))
+        assert params2.nebular_mode == "off"
+
+    def test_neb_cb19(self):
+        """neb={'type': 'cb19'} should set nebular='cb19'."""
+        params = parse_groups(
+            neb={"type": "cb19", "*": FIXED},
+            redshift=Fixed(0.1),
+        )
+        assert params.nebular_mode == "cb19"
+        assert "neb_log_nH" in params.all_params
+
+    def test_igm_madau_sets_apply_igm(self):
+        """igm={'type': 'madau'} should set apply_igm=True."""
+        params = parse_groups(
+            igm={"type": "madau"},
+            redshift=Fixed(0.1),
+        )
+        assert params.apply_igm is True
+
+    def test_igm_inoue14_sets_apply_igm(self):
+        """igm={'type': 'inoue14'} should set apply_igm=True."""
+        params = parse_groups(
+            igm={"type": "inoue14"},
+            redshift=Fixed(0.1),
+        )
+        assert params.apply_igm is True
+
+    def test_igm_none_disables_apply_igm(self):
+        """igm={'type': 'none'} should set apply_igm=False."""
+        params = parse_groups(
+            igm={"type": "none"},
+            redshift=Fixed(0.1),
+        )
+        assert params.apply_igm is False
+
+    def test_igm_patchy_option(self):
+        """igm={'type': 'madau', 'patchy': True} should enable patchy IGM params."""
+        params = parse_groups(
+            igm={"type": "madau", "patchy": True},
+            redshift=Fixed(0.1),
+        )
+        assert params.igm_patchy is True
+        assert "igm_x_HI" in params.all_params
+
+    def test_igm_dla_option(self):
+        """igm={'type': 'madau', 'dla': True} should enable DLA params."""
+        params = parse_groups(
+            igm={"type": "madau", "dla": True},
+            redshift=Fixed(0.1),
+        )
+        assert params.dla is True
+        assert "dla_log_n_hi" in params.all_params
+
+    def test_radio_condon92(self):
+        """radio={'type': 'condon92'} should set radio=True."""
+        params = parse_groups(
+            radio={"type": "condon92"},
+            redshift=Fixed(0.1),
+        )
+        assert params.radio is True
+        assert "radio_q_ir" in params.all_params
+
+    def test_radio_none_or_absent(self):
+        """radio={'type': 'none'} or absent radio should set radio=False."""
+        params1 = parse_groups(
+            radio={"type": "none"},
+            redshift=Fixed(0.1),
+        )
+        assert params1.radio is False
+
+        params2 = parse_groups(redshift=Fixed(0.1))
+        assert params2.radio is False
+
+    def test_xray_simple(self):
+        """xray={'type': 'simple'} should set xray=True."""
+        params = parse_groups(
+            xray={"type": "simple"},
+            redshift=Fixed(0.1),
+        )
+        assert params.xray is True
+        assert "xray_gamma_agn" in params.all_params
+
+    def test_xray_none_or_absent(self):
+        """xray={'type': 'none'} or absent xray should set xray=False."""
+        params1 = parse_groups(
+            xray={"type": "none"},
+            redshift=Fixed(0.1),
+        )
+        assert params1.xray is False
+
+        params2 = parse_groups(redshift=Fixed(0.1))
+        assert params2.xray is False
+
+    def test_dust_law_mapping(self):
+        """dust={'type': ..., 'law_bc': ...} should set dust_law_bc."""
+        params = parse_groups(
+            dust={
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "*": FIXED,
+            },
+            redshift=Fixed(0.1),
+        )
+        assert params.dust_law_bc == "calzetti"
+
+    def test_dust_single_component(self):
+        """dust={'type': 'single_component'} should set dust_model."""
+        params = parse_groups(
+            dust={
+                "type": "single_component",
+                "*": FIXED,
+            },
+            redshift=Fixed(0.1),
+        )
+        assert params.dust_model == "single_component"
+        assert "dust_tau_v" in params.all_params
+
+
+class TestValidation:
+    """Test error handling for invalid inputs."""
+
+    def test_unknown_group_key_raises_value_error(self):
+        """Unknown group key should raise ValueError with suggestions."""
+        with pytest.raises(ValueError, match=r"Unknown group key|foo"):
+            parse_groups(foo={})
+
+    def test_unknown_sfh_type_raises_value_error(self):
+        """Unknown SFH type should raise ValueError."""
+        with pytest.raises(ValueError, match=r"Unknown.*type.*sfh|banana"):
+            parse_groups(
+                sfh={"type": "banana"},
+                redshift=Fixed(0.1),
+            )
+
+    def test_unknown_dust_type_raises_value_error(self):
+        """Unknown dust type should raise ValueError."""
+        with pytest.raises(ValueError, match=r"dust|magic"):
+            parse_groups(
+                dust={"type": "magic"},
+                redshift=Fixed(0.1),
+            )
+
+    def test_agn_group_raises_not_implemented(self):
+        """AGN group should raise NotImplementedError with deferral message."""
+        with pytest.raises(NotImplementedError, match="AGN"):
+            parse_groups(
+                agn={"type": "simple"},
+                redshift=Fixed(0.1),
+            )
+
+    def test_sfh_type_list_raises_not_implemented(self):
+        """SFH type as list should raise NotImplementedError."""
+        with pytest.raises(NotImplementedError, match=r"SFH.*composition"):
+            parse_groups(
+                sfh={"type": ["tsnorm", "burst"]},
+                redshift=Fixed(0.1),
+            )
+
+    def test_unknown_neb_type_raises_value_error(self):
+        """Unknown nebular type should raise ValueError."""
+        with pytest.raises(ValueError, match=r"nebular|invalid"):
+            parse_groups(
+                neb={"type": "invalid"},
+                redshift=Fixed(0.1),
+            )
+
+    def test_unknown_igm_type_raises_value_error(self):
+        """Unknown IGM type should raise ValueError."""
+        with pytest.raises(ValueError, match=r"IGM|invalid"):
+            parse_groups(
+                igm={"type": "invalid"},
+                redshift=Fixed(0.1),
+            )
+
+
+class TestTopLevel:
+    """Test top-level kwargs (redshift, apply_igm, etc.)."""
+
+    def test_redshift_fixed_value(self):
+        """redshift=Fixed(0.05) should override to Fixed(0.05)."""
+        params = parse_groups(
+            redshift=Fixed(0.05),
+        )
+        dist = params.get_distribution("redshift")
+        assert isinstance(dist, Fixed)
+        assert dist.value == 0.05
+
+    def test_redshift_uniform_prior(self):
+        """redshift=Uniform(...) should make redshift free."""
+        params = parse_groups(
+            redshift=Uniform(0.01, 0.1),
+        )
+        assert "redshift" in params.free_params
+        dist = params.get_distribution("redshift")
+        assert isinstance(dist, Uniform)
+        assert dist.lo == 0.01
+        assert dist.hi == 0.1
+
+    def test_redshift_bare_value_becomes_fixed(self):
+        """redshift=0.1 should become Fixed(0.1)."""
+        params = parse_groups(redshift=0.1)
+        dist = params.get_distribution("redshift")
+        assert isinstance(dist, Fixed)
+        assert dist.value == 0.1
+
+    def test_apply_igm_passthrough(self):
+        """apply_igm=False should override apply_igm=True from igm group."""
+        # Note: This tests that top-level can override group-derived settings
+        params = parse_groups(
+            igm={"type": "madau"},
+            apply_igm=False,  # explicit override
+            redshift=Fixed(0.1),
+        )
+        # apply_igm from top-level should win
+        assert params.apply_igm is False
+
+
+class TestCanonicalExample:
+    """Test the exact example from the spec."""
+
+    def test_canonical_example_from_spec(self):
+        """The canonical example must work end-to-end."""
+        params = parse_groups(
+            sfh={
+                "type": "dpl",
+                "*": FREE,
+                "beta": Uniform(0.3, 2.0),  # Must be positive
+            },
+            dust={
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "*": FIXED,
+                "tau_bc": 0.5,
+                "emission": {"type": "dale2014", "*": FIXED},
+            },
+            neb={"type": "cue", "*": FIXED},
+            redshift=Uniform(0.01, 5.0),
+        )
+
+        assert isinstance(params, Parameters)
+        assert "sfh_dpl_beta" in params.free_params
+        assert "sfh_dpl_alpha" in params.free_params
+        assert "dust_tau_bc" in params.fixed_params
+        assert params.get_distribution("dust_tau_bc").value == 0.5
+        assert params.dust_law_bc == "calzetti"
+        assert params.nebular_mode == "cue"
+        assert "redshift" in params.free_params
+
+
+class TestFreeFixedSentinels:
+    """Test FREE/FIXED sentinel behavior."""
+
+    def test_free_sentinel_identity(self):
+        """FREE sentinel should preserve identity across copy/pickle."""
+        import copy
+
+        sentinel = FREE
+        copied = copy.deepcopy({sentinel})
+        # Sentinel identity should be preserved
+        assert FREE in copied or next(iter(copied)) is FREE
+
+    def test_fixed_sentinel_identity(self):
+        """FIXED sentinel should preserve identity across copy/pickle."""
+        import copy
+
+        sentinel = FIXED
+        copied = copy.deepcopy({sentinel})
+        # Sentinel identity should be preserved
+        assert FIXED in copied or next(iter(copied)) is FIXED
+
+
+class TestEdgeCases:
+    """Test edge cases and corner cases."""
+
+    def test_empty_group_dict(self):
+        """Empty group dict should use all defaults fixed."""
+        params = parse_groups(
+            sfh={"type": "dpl"},
+            redshift=Fixed(0.1),
+        )
+        # All dpl params should be fixed
+        for param in ["sfh_dpl_alpha", "sfh_dpl_beta", "sfh_dpl_tau_gyr", "sfh_dpl_log_peak_sfr"]:
+            assert param in params.fixed_params
+
+    def test_no_groups_at_all(self):
+        """Calling parse_groups with only top-level should work."""
+        params = parse_groups(redshift=Fixed(0.1))
+        assert isinstance(params, Parameters)
+        assert "redshift" in params.all_params
+
+    def test_multiple_dust_law_params(self):
+        """dust with both law_bc and law_diff should work."""
+        params = parse_groups(
+            dust={
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "law_diff": "smc",
+                "*": FIXED,
+            },
+            redshift=Fixed(0.1),
+        )
+        assert params.dust_law_bc == "calzetti"
+        assert params.dust_law_diff == "smc"

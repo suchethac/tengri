@@ -198,6 +198,7 @@ from tengri.observation.noise import (
 )
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
+from tengri.parameters.sentinels import FIXED, FREE
 from tengri.utils import jit_logging
 
 agn = _components.agn
