@@ -432,8 +432,7 @@ class Parameters:
         if self.agn_axis_grids is not None:
             if self.agn_model != "composable":
                 raise ValueError(
-                    "agn_axis_grids requires agn_model='composable'; got "
-                    f"{self.agn_model!r}."
+                    f"agn_axis_grids requires agn_model='composable'; got {self.agn_model!r}."
                 )
             if not isinstance(self.agn_axis_grids, dict):
                 raise TypeError(
@@ -1573,10 +1572,24 @@ class Parameters:
             lines.append(f"  Modules:     {', '.join(modules)}")
         lines.append("")
 
+        # Provenance tagging (only present when built via parse_groups)
+        provenance = getattr(self, "_group_provenance", None)
+        _TAGS = {
+            "user_prior": "[user]",
+            "user_fixed": "[user]",
+            "user_free": "[user FREE]",
+            "wildcard_free": "[* FREE]",
+            "wildcard_fixed": "[* FIXED]",
+            "registry_default": "[default]",
+        }
+
         # Parameter table
-        hdr = f"  {'Parameter':<32s} {'Prior':<26s} {'Bounds'}"
+        if provenance:
+            hdr = f"  {'Parameter':<32s} {'Prior':<26s} {'Bounds':<22s} {'Source'}"
+        else:
+            hdr = f"  {'Parameter':<32s} {'Prior':<26s} {'Bounds'}"
         lines.append(hdr)
-        lines.append("  " + "─" * 64)
+        lines.append("  " + "─" * (90 if provenance else 64))
 
         # Group: free parameters first, then fixed
         for name in self.free_params:
@@ -1584,16 +1597,25 @@ class Parameters:
             lo, hi = dist.bounds
             prior_str = repr(dist)
             bounds_str = f"[{lo:.4g}, {hi:.4g}]"
-            lines.append(f"  {name:<32s} {prior_str:<26s} {bounds_str}")
+            if provenance:
+                tag = _TAGS.get(provenance.get(name, "registry_default"), "")
+                lines.append(f"  {name:<32s} {prior_str:<26s} {bounds_str:<22s} {tag}")
+            else:
+                lines.append(f"  {name:<32s} {prior_str:<26s} {bounds_str}")
 
         if self.fixed_params:
-            lines.append("  " + "─" * 64)
+            lines.append("  " + "─" * (90 if provenance else 64))
             for name in self.fixed_params:
                 if name in self._mirrors:
                     continue
                 dist = self._distributions[name]
                 val = dist.bounds[0]
-                lines.append(f"  {name:<32s} {'Fixed':<26s} {val:.4g}")
+                if provenance:
+                    tag = _TAGS.get(provenance.get(name, "registry_default"), "")
+                    val_str = f"{val:.4g}"
+                    lines.append(f"  {name:<32s} {'Fixed':<26s} {val_str:<22s} {tag}")
+                else:
+                    lines.append(f"  {name:<32s} {'Fixed':<26s} {val:.4g}")
 
         if self._mirrors:
             lines.append("  " + "─" * 64)

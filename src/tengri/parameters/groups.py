@@ -241,6 +241,7 @@ def parse_groups(**kwargs) -> Parameters:
 
     # Resolve each parameter's final distribution
     resolved_kwargs = dict(structural_kwargs)
+    provenance: dict[str, str] = {}
 
     for param_name in structural_params.all_params:
         group = param_partition.get(param_name, None)
@@ -254,22 +255,23 @@ def parse_groups(**kwargs) -> Parameters:
                 val = kwargs[param_name]
                 # Resolve sentinels
                 if val is FREE:
-                    # FREE: use registry default
                     resolved_kwargs[param_name] = structural_params.get_distribution(param_name)
+                    provenance[param_name] = "user_free"
                 elif val is FIXED:
-                    # FIXED: convert registry default to Fixed at center
                     registry_default = structural_params.get_distribution(param_name)
                     if registry_default.is_fixed:
                         resolved_kwargs[param_name] = registry_default
                     else:
                         center = registry_default.unstandardize(0.0)
                         resolved_kwargs[param_name] = Fixed(float(center))
+                    provenance[param_name] = "user_fixed"
                 else:
-                    # Regular value - convert if needed
                     if isinstance(val, Distribution):
                         resolved_kwargs[param_name] = val
+                        provenance[param_name] = "user_fixed" if val.is_fixed else "user_prior"
                     else:
                         resolved_kwargs[param_name] = Fixed(val)
+                        provenance[param_name] = "user_fixed"
             continue
 
         # Get the group dict from the input for group-based parameters
@@ -290,17 +292,23 @@ def parse_groups(**kwargs) -> Parameters:
             # Group was not a dict (or is a sub-key); use structural default
             continue
 
-        final_dist = _resolve_value(
+        final_dist, tag = _resolve_value(
             param_name, group_dict, structural_params.get_distribution(param_name)
         )
 
         # Only override if there's an actual per-param or wildcard in the group dict
         if group_dict or group == "_toplevel":
             resolved_kwargs[param_name] = final_dist
+            provenance[param_name] = tag
 
     # ── Construct final Parameters ────────────────────────────────────
 
-    return Parameters(**resolved_kwargs)
+    final_params = Parameters(**resolved_kwargs)
+    # Fill in provenance for params not touched by user/wildcard
+    for name in list(final_params._distributions.keys()):
+        provenance.setdefault(name, "registry_default")
+    object.__setattr__(final_params, "_group_provenance", provenance)
+    return final_params
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────
@@ -582,7 +590,7 @@ def _partition_by_group(all_param_names: list[str], dust_emission_active: bool) 
 
 def _resolve_value(
     param_name: str, group_dict: dict, registry_default: Distribution
-) -> Distribution:
+) -> tuple[Distribution, str]:
     """Resolve the final distribution for a single parameter.
 
     Checks (in order):
@@ -601,8 +609,12 @@ def _resolve_value(
 
     Returns
     -------
-    Distribution
+    distribution : Distribution
         The resolved distribution (or Fixed wrapper).
+    provenance : str
+        Tag describing why this resolution was chosen. One of:
+        ``"user_prior"``, ``"user_fixed"``, ``"user_free"``,
+        ``"wildcard_free"``, ``"wildcard_fixed"``, ``"registry_default"``.
 
     Raises
     ------
@@ -620,44 +632,46 @@ def _resolve_value(
         # Validate that this key is actually a parameter (not 'type', '*', etc.)
         if short_name in ("type", "*", "law_bc", "law_diff", "emission", "patchy", "dla"):
             # These are structural keys, not parameters
-            return registry_default
+            return registry_default, "registry_default"
 
         if val is FREE:
             # FREE: use registry default (which may be Fixed; that's ok)
-            return registry_default
+            return registry_default, "user_free"
         elif val is FIXED:
             # FIXED: convert registry default to Fixed at its center
             if registry_default.is_fixed:
-                return registry_default
+                return registry_default, "user_fixed"
             else:
-                # Use the center of the distribution
                 center = registry_default.unstandardize(0.0)
-                return Fixed(float(center))
+                return Fixed(float(center)), "user_fixed"
         elif isinstance(val, Distribution):
             # Explicit distribution: use as-is
-            return val
+            tag = "user_fixed" if val.is_fixed else "user_prior"
+            return val, tag
         else:
             # Bare value: wrap in Fixed
-            return Fixed(val)
+            return Fixed(val), "user_fixed"
 
     # Check for wildcard
-    wildcard = group_dict.get("*", FIXED)  # Default to FIXED
-
-    if wildcard is FREE:
-        # FREE: use registry default
-        return registry_default
-    elif wildcard is FIXED:
-        # FIXED: convert to Fixed at center if needed
-        if registry_default.is_fixed:
-            return registry_default
+    if "*" in group_dict:
+        wildcard = group_dict["*"]
+        if wildcard is FREE:
+            return registry_default, "wildcard_free"
+        elif wildcard is FIXED:
+            if registry_default.is_fixed:
+                return registry_default, "wildcard_fixed"
+            else:
+                center = registry_default.unstandardize(0.0)
+                return Fixed(float(center)), "wildcard_fixed"
         else:
-            center = registry_default.unstandardize(0.0)
-            return Fixed(float(center))
-    else:
-        # Wildcard is some other value (shouldn't happen in normal use)
-        return registry_default
+            return registry_default, "registry_default"
 
-    return registry_default
+    # No override, no wildcard: fall through to registry default (auto-fixed)
+    if registry_default.is_fixed:
+        return registry_default, "registry_default"
+    else:
+        center = registry_default.unstandardize(0.0)
+        return Fixed(float(center)), "registry_default"
 
 
 def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
