@@ -644,9 +644,7 @@ class SEDModel:
         self._agn_lines_block = getattr(spec, "agn_lines_block", "none")
         self._agn_feii_block = getattr(spec, "agn_feii_block", "none")
         self._agn_torus_block = getattr(spec, "agn_torus_block", "none")
-        self._agn_attenuation_block = getattr(
-            spec, "agn_attenuation_block", "none"
-        )
+        self._agn_attenuation_block = getattr(spec, "agn_attenuation_block", "none")
         self._agn_luminosity_mode = False
         if self._agn_model:
             agn_dists = getattr(spec, "_distributions", {})
@@ -4432,6 +4430,100 @@ class SEDModel:
             filters=filters,
             wave_obs=wave_obs,
             priors=priors,
+            **model_kwargs,
+        )
+
+    @classmethod
+    def from_groups(
+        cls,
+        ssp_data,
+        *,
+        sfh=None,
+        dust=None,
+        neb=None,
+        agn=None,
+        igm=None,
+        radio=None,
+        xray=None,
+        redshift=None,
+        apply_igm=None,
+        filters=None,
+        observation=None,
+        **model_kwargs,
+    ) -> SEDModel:
+        """Build an SEDModel from the Bagpipes-style nested-dict form.
+
+        Convenience constructor that translates grouped dicts (one per physics
+        block) into a ``Parameters`` via
+        :meth:`tengri.Parameters.from_groups`, then constructs the
+        ``SEDModel``. Anything left unspecified auto-fills from the registry.
+
+        Parameters
+        ----------
+        ssp_data : SSPData
+            Pre-loaded SSP grid (from :func:`load_ssp_data`).
+        sfh, dust, neb, agn, igm, radio, xray : dict, optional
+            Per-component nested dicts. Each may carry ``'type'``, ``'*'``
+            (wildcard set to :data:`~tengri.FREE` or :data:`~tengri.FIXED`),
+            and per-parameter overrides. See
+            :func:`tengri.parameters.parse_groups` for the full grammar.
+        redshift, apply_igm : scalar, Distribution, or sentinel, optional
+            Top-level kwargs forwarded into the parameter resolution.
+        filters : list of str, optional
+            Filter names; forwarded to ``__init__``.
+        observation : Observation, optional
+            Observation object; forwarded to ``__init__``.
+        **model_kwargs
+            Additional keywords forwarded to :meth:`__init__` (e.g.
+            ``precompute``, ``forward_dtype``, ``approx``).
+
+        Returns
+        -------
+        SEDModel
+            Fully initialised model, identical to one built via
+            ``SEDModel(Parameters.from_groups(**groups), ssp_data, ...)``.
+
+        See Also
+        --------
+        tengri.Parameters.from_groups : The underlying Parameters builder.
+        SEDModel.from_config : String-based grouped configuration with
+            defaults from ``defaults.toml``.
+
+        Examples
+        --------
+        >>> from tengri import SEDModel, FREE, FIXED, Uniform, Fixed
+        >>> model = SEDModel.from_groups(
+        ...     ssp_data=ssp,
+        ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
+        ...     dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+        ...     neb={"type": "cue", "*": FIXED},
+        ...     redshift=Fixed(0.05),
+        ...     filters=["sdss_u", "sdss_g", "sdss_r"],
+        ... )
+        """
+        groups = {
+            k: v
+            for k, v in dict(
+                sfh=sfh,
+                dust=dust,
+                neb=neb,
+                agn=agn,
+                igm=igm,
+                radio=radio,
+                xray=xray,
+                redshift=redshift,
+                apply_igm=apply_igm,
+            ).items()
+            if v is not None
+        }
+        from tengri.parameters.parameters import Parameters
+
+        spec = Parameters.from_groups(**groups)
+        return cls(
+            spec,
+            ssp_data,
+            filters=filters,
+            observation=observation,
             **model_kwargs,
         )
 
