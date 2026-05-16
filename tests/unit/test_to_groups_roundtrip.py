@@ -13,6 +13,27 @@ from tengri.parameters import FIXED, FREE, Fixed, Uniform
 from tengri.parameters.parameters import Parameters
 
 
+def test_roundtrip_with_nebular_off():
+    """Regression: to_groups must emit 'none' (not 'off') for disabled nebular.
+
+    spec.nebular_mode returns 'off' when the nebular backend is disabled, but
+    the parser's _VALID_NEBULAR_TYPES uses 'none'. Without translation, the
+    round-trip would error: ``Unknown nebular type 'off'``.
+    """
+    orig = Parameters.from_groups(
+        sfh={"type": "dpl", "*": FIXED},
+        redshift=Fixed(0.1),
+    )
+    assert orig.nebular_mode == "off"
+    groups = orig.to_groups()
+    neb = groups.get("neb", None)
+    if neb is not None:
+        assert neb.get("type") == "none", f"Expected 'none', got {neb.get('type')!r}"
+    # Round-trip must not raise
+    rebuilt = Parameters.from_groups(**groups)
+    assert rebuilt.nebular_mode == "off"
+
+
 class TestToGroupsBasic:
     """Basic structure and shape tests for to_groups()."""
 
