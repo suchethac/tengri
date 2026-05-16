@@ -186,31 +186,24 @@ Bibkeys recorded below all resolve in source #1 unless otherwise noted.
 
 ### Remaining blockers
 
-> **⚠️ POLLUTED BIBKEYS — DO NOT CITE.**
+> **✅ POLLUTED BIBKEYS RESOLVED (2026-05-16).**
 >
-> The keys `Vanderwel_2007`, `Gordon_2024`, and `Dopita_2013` already
-> resolve in `~/writing-workspace/projects/tengri/99-references.bib`,
-> but they point to **completely unrelated papers** (likely from a
-> bulk import that mismatched bibkeys to content). Verify before
-> using; do **not** rely on the key alone.
+> The three keys `Vanderwel_2007`, `Gordon_2024`, and `Dopita_2013`
+> were replaced in
+> `~/writing-workspace/projects/tengri/99-references.bib` with the
+> correct papers (verified via CrossRef DOI lookup, not bibcode
+> matching, to avoid the original mismatch). The bibkey strings
+> themselves were preserved because downstream tengri docstrings
+> already reference them.
 >
-> | Key | What you'd want | What's actually there |
-> |-----|------------------|------------------------|
-> | `Vanderwel_2007` | van der Wel 2007 size–mass relation | Linder, "The Mirage of w=-1" (cosmology dark-energy) |
-> | `Gordon_2024` | Gordon+2024 R(V)-dependent UV extinction | Du+, "Speaker Embedding-aware Neural Diarization" *(an ML audio paper)* |
-> | `Dopita_2013` | Dopita+2013 Mappings abundances | Fendt & Sheikhnezami, "Bipolar jets launched from accretion disks" |
+> | Key | Now resolves to | DOI |
+> |-----|-----------------|-----|
+> | `Vanderwel_2007` | van der Wel, Holden, Zirm et al. 2008, ApJ 688, 48 — "Recent Structural Evolution of Early-Type Galaxies: Size Growth from z=1 to z=0" | `10.1086/592267` |
+> | `Gordon_2024` | Gordon, Fitzpatrick, Massa, Bohlin et al. 2024, ApJ 970, 51 — "Expanded Sample of Small Magellanic Cloud Ultraviolet Dust Extinction Curves" (correlations between 2175 Å bump, q_PAH, UV extinction shape, and N(H I)/A(V)) | `10.3847/1538-4357/ad4be1` |
+> | `Dopita_2013` | Dopita, Sutherland, Nicholls, Kewley, Vogt 2013, ApJS 208, 10 — "New Strong-Line Abundance Diagnostics for H II Regions: Effects of κ-Distributed Electron Energies and New Atomic Data" | `10.1088/0067-0049/208/1/10` |
 >
-> The fetch attempts on 2026-05-08 turned up the same identifier
-> ambiguities (wrong-paper matches via bibcode), so the manifest is
-> still gating the corresponding Workstream B items:
->
-> 1. van der Wel 2007 — vW07 dust-attenuation curve (correct paper unverified)
-> 2. Gordon+2024 — R(V)-dependent extinction extension (correct paper unverified)
-> 3. Dopita+2013 — Mappings abundance set (correct paper unverified)
->
-> Action item for the user: either (a) delete the polluted entries and
-> add the correct ones, or (b) provide the canonical DOI/bibcode for
-> each so a follow-up fetch can land them under unambiguous bibkeys.
+> Note that `Vanderwel_2007` resolves to the 2008 ApJ paper; the key
+> name kept the original "2007" string for backward compatibility.
 
 ### Newly-verified entries (fetched 2026-05-08)
 
