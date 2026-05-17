@@ -192,11 +192,23 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
     """
     component_list = list(components)
 
+    # ``publishes`` / ``requires`` are optional on a SEDComponent (the
+    # runtime-checkable Protocol does not require them). Components that
+    # haven't been annotated yet contribute nothing — they neither produce
+    # nor consume declared cross-component data, which is the safe default.
+    def _publishes(c: SEDComponent) -> tuple[DerivedKey, ...]:
+        fn = getattr(c, "publishes", None)
+        return tuple(fn()) if callable(fn) else ()
+
+    def _requires(c: SEDComponent) -> tuple[DerivedKey, ...]:
+        fn = getattr(c, "requires", None)
+        return tuple(fn()) if callable(fn) else ()
+
     # Stage 1: build the publish map (component-order indexed) and check
     # duplicate publish + canonical-units agreement on the publish side.
     publishers: dict[str, tuple[int, SEDComponent, DerivedKey]] = {}
     for idx, component in enumerate(component_list):
-        for key in component.publishes():
+        for key in _publishes(component):
             if not isinstance(key, DerivedKey):
                 raise PipelineContractError(
                     f"Component {type(component).__name__!r} publishes() returned "
@@ -230,7 +242,7 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
     # Stage 2: walk consumers in order; check each required key is
     # published by an *earlier* component with matching units.
     for idx, component in enumerate(component_list):
-        for needed in component.requires():
+        for needed in _requires(component):
             if not isinstance(needed, DerivedKey):
                 raise PipelineContractError(
                     f"Component {type(component).__name__!r} requires() returned "

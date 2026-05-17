@@ -365,50 +365,19 @@ class SEDComponent(Protocol):
         """
         ...
 
-    def publishes(self) -> tuple[DerivedKey, ...]:
-        """Derived keys this component writes into :attr:`PipelineState.derived`.
-
-        Returns
-        -------
-        tuple of :class:`DerivedKey`
-            One entry per cross-component datum this component is
-            responsible for producing. The default is the empty tuple,
-            which is correct for components that do not publish anything
-            for downstream consumers (most additive emitters, IGM, the
-            current generation of opportunistic-read components).
-
-        Notes
-        -----
-        Consumed at :class:`tengri.SEDModel` construction by
-        :func:`tengri.forward.orchestrator.validate_pipeline`. Has no
-        runtime cost — the contract is metadata, not a trace-time check.
-        """
-        return ()
-
-    def requires(self) -> tuple[DerivedKey, ...]:
-        """Derived keys this component reads from :attr:`PipelineState.derived`.
-
-        Returns
-        -------
-        tuple of :class:`DerivedKey`
-            One entry per upstream-published datum this component cannot
-            run without. The default is the empty tuple. Components that
-            read upstream data with a documented fallback (e.g. radio
-            reading ``L_ir`` with a ``0.0`` default when no dust component
-            is configured) should NOT declare those reads here — only
-            declare a key if the component genuinely cannot produce a
-            correct answer without it.
-
-        Notes
-        -----
-        Every required key must be published by some upstream component
-        in the pipeline, with a units string matching the consumer's
-        declaration. Otherwise
-        :func:`tengri.forward.orchestrator.validate_pipeline` raises
-        :class:`PipelineContractError` at construction time, before any
-        JIT trace.
-        """
-        return ()
+    # ``publishes()`` and ``requires()`` are intentionally NOT part of the
+    # runtime-checkable Protocol surface. The validator at
+    # :func:`tengri.forward.orchestrator.validate_pipeline` consults them
+    # via ``getattr(c, "publishes", lambda: ())()`` so components that
+    # have not yet been annotated still satisfy ``isinstance(c, SEDComponent)``.
+    # Concrete components that DO declare cross-component data should add
+    # methods with the signature::
+    #
+    #     def publishes(self) -> tuple[DerivedKey, ...]: ...
+    #     def requires(self) -> tuple[DerivedKey, ...]: ...
+    #
+    # See ``RadioSEDComponent`` (the canonical adapter) for the expected
+    # docstring shape, and ADR-0004 for the full rationale.
 
     def precompute(
         self,
