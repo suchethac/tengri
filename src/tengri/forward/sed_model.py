@@ -2245,8 +2245,18 @@ class SEDModel:
         # Alpha-Fe evolution
         alpha_fe_evolving = bool(self._alpha_fe_evolving)
 
-        # Redshift configuration
-        z_fixed = bool(self._z_fixed is not None)
+        # Redshift configuration. The actual fixed-z value is part of the
+        # structural fingerprint because the compiled kernels close over
+        # ``_dl_cm_fixed``, ``_igm_fn`` precomputed tables, and effective
+        # rest wavelengths — all derived from ``_z_fixed`` at construction.
+        # Without the value, two models at different fixed z would share
+        # a cached kernel and produce identical photometry (the kernel
+        # built first wins). Float is rounded to a stable hash key.
+        z_fixed = (
+            ("fixed", round(float(self._z_fixed), 8))
+            if self._z_fixed is not None
+            else ("free",)
+        )
 
         # Instrument/spectroscopy
         has_spectroscopy = self.observation is not None and self.observation.can_do_spectroscopy
