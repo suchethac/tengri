@@ -99,7 +99,7 @@ __version__ = "0.1.0"
 import sys
 
 from tengri import components as _components, preprocessing, presets, recipes
-from tengri._data_setup import download_ssp, list_known_ssps
+from tengri._data_setup import data_path, download_ssp, list_known_ssps
 from tengri._logo import LOGO, LOGO_BANNER, print_logo
 from tengri.citations import (
     Bibliography,

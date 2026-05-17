@@ -5,7 +5,47 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-__all__ = ["KNOWN_SSP_FILENAMES", "download_ssp", "list_known_ssps"]
+__all__ = ["KNOWN_SSP_FILENAMES", "data_path", "download_ssp", "list_known_ssps"]
+
+
+def data_path(filename: str) -> Path:
+    """Locate a bundled data file by walking parent dirs for ``data/<filename>``.
+
+    Sphinx-gallery ``chdir``s into each script's directory before exec, so
+    hand-coded relative paths like ``"data/foo.h5"`` resolve to
+    ``examples/<section>/data/foo.h5`` — which does not exist. This helper
+    walks from ``Path.cwd()`` upward until it finds a sibling ``data/``
+    directory containing the requested file.
+
+    Parameters
+    ----------
+    filename : str
+        Basename of the data file, e.g. ``"bosa_templates.h5"``.
+
+    Returns
+    -------
+    pathlib.Path
+        Absolute path to the file.
+
+    Raises
+    ------
+    FileNotFoundError
+        If no ``data/<filename>`` exists in any ancestor directory.
+
+    Examples
+    --------
+    >>> from tengri import data_path
+    >>> templates = data_path("bosa_templates.h5")
+    >>> import h5py; h5py.File(templates).keys()
+    """
+    for parent in [Path.cwd(), *Path.cwd().parents]:
+        candidate = parent / "data" / filename
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(
+        f"Data file 'data/{filename}' not found in any ancestor of {Path.cwd()}. "
+        f"Place it under <project_root>/data/."
+    )
 
 SSP_BASE_URL = "https://halos.as.arizona.edu/suchethacooray/ssp-spectra/"
 

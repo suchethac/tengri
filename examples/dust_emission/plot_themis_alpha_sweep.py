@@ -2,65 +2,32 @@ r"""
 THEMIS: power-law slope alpha sweep
 ====================================
 
-Sweep ``alpha`` (the power-law slope :math:`dU/dM \propto U^\alpha`
-of the radiation-field distribution) over the full published 21-point
-CIGALE grid (1.0 to 3.0 in 0.1 dex steps) at the fiducial
-``q_HAC = 0.17`` and ``U_min = 1.0``.  Lower :math:`\alpha` puts
-more mass at high :math:`U` → warmer SED with the FIR peak shifted
-blueward; higher :math:`\alpha` collapses toward the single-U limit.
+Sweep radiation-field distribution slope across the THEMIS grid at fixed
+grain content and minimum intensity. Lower alpha shifts weight toward high U,
+warming dust and shifting FIR peak blueward; higher alpha approaches single-U.
 
-The full 4-D grid (``q_HAC × U_min × alpha × wavelength``) is stored
-in ``data/themis_templates.h5`` under the ``powerlaw_alpha`` dataset.
-The legacy ``powerlaw`` dataset holds a 3-D slice at ``alpha = 2``
-for back-compat with the existing dust-emission registry.
+.. sphx-glr-precomputed-img:
 
-Reference
----------
-Jones, A.P., Köhler, M., Ysard, N., et al. 2017, A&A 602, A46
-(arXiv:1703.00775). Templates via CIGALE
-(https://gitlab.lam.fr/cigale/cigale).
+.. image:: images/sphx_glr_plot_themis_alpha_sweep_001.png
+   :alt: plot_themis_alpha_sweep
+   :class: sphx-glr-single-img
+
 """
 
-# sphinx_gallery_thumbnail_number = 1
-
-from pathlib import Path
-
 import h5py
-import jax
 import matplotlib.pyplot as plt
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
-
+from tengri import data_path
 from tengri.analysis.plotting import setup_style
 
 setup_style()
 
-
-def _find_h5():
-    for p in (
-        Path("data/themis_templates.h5"),
-        Path("../data/themis_templates.h5"),
-        Path("../../data/themis_templates.h5"),
-    ):
-        if p.exists():
-            return str(p)
-    return None
-
-
-_PATH = _find_h5()
-if _PATH is None:
-    raise FileNotFoundError(
-        "THEMIS HDF5 not found. Build with "
-        "`python scripts/build_themis_hdf5.py --clone`."
-    )
-
-with h5py.File(_PATH, "r") as f:
+with h5py.File(data_path("themis_templates.h5"), "r") as f:
     wave_aa = np.asarray(f["wavelength_aa"][:])
     qhac_grid = np.asarray(f["qhac_grid"][:])
     umin_grid = np.asarray(f["umin_grid"][:])
     alpha_grid = np.asarray(f["alpha_grid"][:])
-    # Full 4-D grid: (n_qhac, n_umin, n_alpha, n_wave)
     powerlaw_alpha = np.asarray(f["powerlaw_alpha"][:])
 
 wave_um = wave_aa * 1.0e-4
@@ -69,35 +36,29 @@ i_umin = int(np.argmin(np.abs(umin_grid - 1.0)))
 c_aa_per_s = 2.99792458e18
 nu = c_aa_per_s / wave_aa
 
-fig, ax = plt.subplots(figsize=(8.0, 5.5), constrained_layout=True)
-ax.set_xscale("log")
-ax.set_yscale("log")
-ax.set_xlabel(r"$\lambda\ [\mu\mathrm{m}]$", fontsize=12)
-ax.set_ylabel(
-    r"$\nu L_\nu\ [\mathrm{normalised}\ \int L_\nu d\nu = 1]$",
-    fontsize=11,
-)
-ax.set_xlim(2.0, 1.0e3)
-ax.set_ylim(1.0e-26, 1.0e-22)
-
+fig, ax = plt.subplots(figsize=(8.0, 5.5))
 cmap = plt.get_cmap("plasma")
-# Show all 21 alpha values from the published grid, every other one
-# for a clean legend (1.0, 1.2, 1.4, ..., 3.0 → 11 curves).
 idx_show = np.arange(0, len(alpha_grid), 2)
 for k, ia in enumerate(idx_show):
     L_nu = powerlaw_alpha[i_qhac, i_umin, ia]
     ax.plot(
-        wave_um, nu * L_nu,
+        wave_um,
+        nu * L_nu,
         color=cmap(k / max(1, len(idx_show) - 1)),
         lw=1.3,
         label=rf"$\alpha={alpha_grid[ia]:.1f}$",
     )
-
-ax.legend(loc="lower center", frameon=False, fontsize=8, ncol=3)
-ax.set_title(
-    rf"THEMIS (Jones+2017) at $q_{{\rm HAC}}={qhac_grid[i_qhac]:.2f}$, "
+ax.set(
+    xscale="log",
+    yscale="log",
+    xlabel=r"$\lambda\ [\mu\mathrm{m}]$",
+    ylabel=r"$\nu L_\nu\ [\mathrm{normalised}\ \int L_\nu d\nu = 1]$",
+    xlim=(2.0, 1.0e3),
+    ylim=(1.0e-26, 1.0e-22),
+    title=rf"THEMIS (Jones+2017) at $q_{{\rm HAC}}={qhac_grid[i_qhac]:.2f}$, "
     rf"$U_{{\rm min}}={umin_grid[i_umin]:.2f}$",
-    fontsize=11,
 )
-
+ax.legend(loc="lower center", frameon=False, fontsize=8, ncol=3)
+fig.tight_layout()
+plt.savefig("plot_themis_alpha_sweep.png", dpi=150, bbox_inches="tight")
 plt.show()
