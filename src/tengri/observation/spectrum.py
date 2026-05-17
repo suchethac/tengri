@@ -30,7 +30,7 @@ SSP_LIBRARY_RESOLUTIONS: dict[str, float] = {
 
 # ── Speed of light ────────────────────────────────────────────────
 _C_KM_S = 299792.458  # km/s
-_FWHM_TO_SIGMA = 2.3548200  # 2*sqrt(2*ln(2))
+_FWHM_TO_SIGMA = 2.354820045030949  # 2*sqrt(2*ln(2))
 
 
 # ── Instrument resolution profiles ────────────────────────────────
@@ -266,7 +266,7 @@ def apply_lsf(
         \\sigma_\\mathrm{eff}(\\lambda) =
             \\sqrt{\\sigma_\\mathrm{inst}(\\lambda)^2 - \\sigma_\\mathrm{lib}^2}
 
-    where :math:`\\sigma_\\mathrm{inst}(\\lambda) = c / (2.355 \\times R(\\lambda))`
+    where :math:`\\sigma_\\mathrm{inst}(\\lambda) = c / (2.3548 \\times R(\\lambda))`
     is the instrument's velocity dispersion [km/s] from spectral resolution
     :math:`R(\\lambda) = \\lambda / \\Delta\\lambda`.
 
@@ -606,7 +606,7 @@ def blend_emission_lines(
     JIT-compatible: yes — vmapped over lines. Gradient-safe: yes.
 
     The Gaussian FWHM at each line is FWHM = lambda_obs / R, giving
-    sigma = lambda_obs / (2.355 * R). The profile is normalized to
+    sigma = lambda_obs / (2.3548 * R). The profile is normalized to
     integrate to 1 in wavelength space. Luminosity is converted from
     L_sun (wavelength-integrated) to L_sun/Hz (spectral density).
 
@@ -629,7 +629,7 @@ def blend_emission_lines(
 
         """
         lam_obs = lam_rest * (1.0 + redshift)
-        sigma_aa = lam_obs / (2.355 * spectral_resolution)
+        sigma_aa = lam_obs / (_FWHM_TO_SIGMA * spectral_resolution)
 
         # Gaussian profile normalized in wavelength space: integral = 1
         profile = jnp.exp(-0.5 * ((wave_out - lam_obs) / sigma_aa) ** 2) / (
