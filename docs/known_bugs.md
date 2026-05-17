@@ -309,6 +309,29 @@ lnu_lsun = np.array(result["sed"]) / LSUN   # was needed before the unit refacto
 **Impact:** Resolved. All SED component functions now return erg/s/Hz. The assembled SED
 (stellar + AGN + radio + X-ray + nebular) is consistently in erg/s/Hz throughout the pipeline.
 
+**Scope clarification (2026-05-17).** The 2026-04-08 standardization applies to
+**continuous SED density** outputs (`predict_nebular_sed`, the assembled SED, all
+`SEDComponent.apply` returns). Two **discrete primitives** follow a separate
+[Lsun] convention to match upstream FSPS/CLOUDY tabulations, keep the Cue NN
+backward pass numerically safe, and align with the documented
+`state_to_emission_lines` bridge contract in `component_factory.py`:
+
+| Method | Unit | Backends |
+|---|---|---|
+| `predict_nebular_sed` | [erg/s/Hz] | CueBackend, CloudyGridBackend, CB19Backend, MappingsPhotoBackend |
+| `predict_nebular_line_luminosities` | **[Lsun]** | all four |
+| `predict_nebular_continuum` | **[Lsun/Hz]** | all four |
+
+Prior to 2026-05-17 `CueBackend.predict_nebular_line_luminosities` mistakenly
+multiplied by `_LSUN_ERG` and `CueBackend.predict_nebular_continuum`'s docstring
+falsely claimed `[erg/s/Hz]`. Both fixed; see commit
+`fix(nebular): unify CueBackend on Lsun for line/continuum primitives` on the
+`fix/nebular-robustness-2026-05-16` branch (merged 2026-05-16).
+
+Side effect: removing the spurious `* _LSUN_ERG` brought the Cue NN backward
+pass into a float32-safe magnitude range, fixing a long-standing NaN-autodiff
+xfail (`tests/unit/test_cue_and_ionizing.py::test_gradient_through_cue`).
+
 ### BUG-API-02: `compute_qh` returns ~0 for `wNE` SSP spectra (FIXED 2026-04-08)
 
 **File:** `src/tengri/models/nebular/_shared.py` — `compute_qh`
