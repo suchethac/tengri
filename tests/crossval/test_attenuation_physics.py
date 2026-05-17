@@ -64,8 +64,8 @@ class TestAllCurvesUniversalPhysics:
         """k(5500A) = 1.0 for all curves (normalization convention)."""
         name, fn = curve
         k = fn(jnp.array([5500.0]))
-        assert abs(float(k[0]) - 1.0) < 0.05, (
-            f"{name}: k(5500A) should be 1.0, got {float(k[0]):.3f}"
+        assert abs(float(k[0]) - 1.0) < 1e-3, (
+            f"{name}: k(5500A) should be 1.0, got {float(k[0]):.6f}"
         )
 
     def test_k_positive_optical_uv(self, curve):

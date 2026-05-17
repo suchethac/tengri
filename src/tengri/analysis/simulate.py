@@ -48,6 +48,7 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     interpolate_metallicity,
     interpolate_metallicity_evolving,
 )
+from tengri.parameters.translate import LOG10_ZSUN
 from tengri.utils.cosmology import luminosity_distance
 
 # ── Constants ─────────────────────────────────────────────────────
@@ -163,7 +164,7 @@ def sed_from_sfh(
     # Metallicity interpolation
     if isinstance(log_z, (float, int)) or (hasattr(log_z, "ndim") and log_z.ndim == 0):
         # Scalar metallicity — convert to absolute log(Z)
-        log_z_abs = float(log_z) + (-1.8477)  # solar offset
+        log_z_abs = float(log_z) + LOG10_ZSUN  # solar offset
         ssp_flux_at_z = interpolate_metallicity(
             ssp_data.ssp_flux,
             ssp_data.ssp_lgmet,
