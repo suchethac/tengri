@@ -11,7 +11,32 @@ rather than data tables.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
+from tengri.core.component import ParamDeclaration
 from tengri.parameters.priors import Fixed, Uniform
+
+
+def _bucket_from_declarations(
+    decls: Iterable[ParamDeclaration],
+) -> dict[str, tuple[str, object, str, object]]:
+    """Adapter: component-owned :class:`ParamDeclaration` tuple → legacy
+    4-tuple bucket dict consumed by :func:`_build_param_registry` and by
+    :mod:`tengri.parameters.translate`.
+
+    A ``bound_check`` of ``None`` is normalised to ``lambda lo, hi: True``
+    so the downstream code that always calls the check stays branch-free.
+    """
+    return {
+        d.name: (
+            d.description,
+            d.bound_check if d.bound_check is not None else (lambda lo, hi: True),
+            d.bound_error,
+            d.prior,
+        )
+        for d in decls
+    }
+
 
 # ── Non-SFH parameter registry ─────────────────────────────────────────
 
@@ -476,88 +501,13 @@ _DUST_EMISSION_PARAMS = {
     ),
 }
 
-_RADIO_PARAMS = {
-    "radio_q_ir": (
-        "FIR-radio correlation q_IR (Bell 2003: 2.64, evolves with z)",
-        lambda lo, hi: True,
-        "",
-        Fixed(2.64),
-    ),
-    "radio_alpha_sf": (
-        "SF synchrotron spectral index (typical 0.7-0.8)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.8),
-    ),
-    "radio_loudness": (
-        "AGN radio-loudness log10(L_5GHz/L_B) (>1 = radio-loud)",
-        lambda lo, hi: True,
-        "",
-        Fixed(0.0),
-    ),
-    "radio_alpha_agn": (
-        "AGN radio spectral index (typical 0.7)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.7),
-    ),
-    "radio_T_e": (
-        "Electron temperature [K] for thermal free-free emission (typical 1e4)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1e4),
-    ),
-    "radio_alpha_ff": (
-        "Thermal free-free spectral index (typical -0.1)",
-        lambda lo, hi: True,
-        "",
-        Fixed(-0.1),
-    ),
-    # AGNfitter-rx double power-law AGN radio model parameters
-    # (Martinez-Ramirez+2024 Eq. 9-10). Activated by
-    # ``RadioSEDComponentConfig.agn_radio_model="dpl"``; ignored otherwise.
-    "radio_alpha_thin": (
-        "AGN-DPL optically-thin (steep) spectral slope (typical -0.75)",
-        lambda lo, hi: True,
-        "",
-        Fixed(-0.75),
-    ),
-    "radio_alpha_thick": (
-        "AGN-DPL optically-thick (flat/inverted) spectral slope (typical -0.1)",
-        lambda lo, hi: True,
-        "",
-        Fixed(-0.1),
-    ),
-    "radio_log_nu_t": (
-        "AGN-DPL log10(transition frequency / Hz); typical 9-11",
-        lambda lo, hi: True,
-        "",
-        Fixed(10.0),
-    ),
-    "radio_log_nu_cut": (
-        "AGN-DPL log10(synchrotron aging exponential cutoff / Hz); typical 12-14",
-        lambda lo, hi: True,
-        "",
-        Fixed(13.0),
-    ),
-    # Reserved for JP/KP/Tribble physical-aging kernels (Harwood+2013).
-    # Declared now per the reserved-params pattern so infrastructure
-    # (this PR) and physics (follow-up) can split cleanly. Both are
-    # ``Fixed`` defaults so the radio component is a no-op extension
-    # until the kernel tables land.
-    "radio_alpha_inj": (
-        "JP/KP/Tribble injection spectral index (Harwood+2013 typical 0.5-0.8)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.6),
-    ),
-    "radio_log_nu_break": (
-        "JP/KP/Tribble log10(spectral break frequency / Hz); typical 9-11",
-        lambda lo, hi: True,
-        "",
-        Fixed(10.0),
-    ),
-}
+# Radio priors now live in :mod:`tengri.components.radio._params`
+# (PR2 of the parameter-registry consolidation). The bucket below is a
+# derived view kept for backwards compatibility with consumers that
+# still iterate the legacy 4-tuple shape. Resolution is deferred via
+# module ``__getattr__`` (see bottom of file) because eager import of
+# ``tengri.components.radio._params`` triggers the components package
+# init, which transitively re-enters this module.
 
 _XRAY_PARAMS = {
     "xray_gamma_agn": (
@@ -1144,8 +1094,12 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Radio params (only when radio=True)
+    # Radio params (only when radio=True). Bucket is resolved via the
+    # module-level ``__getattr__`` defined below — eager import would
+    # trigger a circular load through ``tengri.components``.
     if radio:
+        from tengri.parameters._param_defs import _RADIO_PARAMS
+
         for pname, (desc, check, err, default) in _RADIO_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
@@ -1187,3 +1141,28 @@ def _build_param_registry(
             defaults[pname] = default
 
     return registry, defaults
+
+
+# ── Lazy bucket resolution (PR2+) ─────────────────────────────────────
+#
+# Component-owned ``PARAMS`` tuples are imported lazily here to avoid a
+# circular import: ``tengri.components/__init__.py`` eagerly loads every
+# component subpackage, and some of those transitively re-enter
+# :mod:`tengri.parameters._param_defs`. Resolving on first attribute
+# access defers the components import until this module has finished
+# initialising.
+_LAZY_DECL_SOURCES: dict[str, str] = {
+    "_RADIO_PARAMS": "tengri.components.radio._params",
+}
+
+
+def __getattr__(name: str) -> dict:
+    src = _LAZY_DECL_SOURCES.get(name)
+    if src is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    import importlib
+
+    mod = importlib.import_module(src)
+    bucket = _bucket_from_declarations(mod.PARAMS)
+    globals()[name] = bucket  # cache so __getattr__ runs only once per name
+    return bucket

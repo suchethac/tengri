@@ -26,6 +26,10 @@ SKELETON_MODULES = (
     "tengri.components.stellar.sps._params",
 )
 
+# Skeletons whose ``PARAMS`` have been populated by later PRs in the
+# consolidation. Excluded from the empty-sentinel assertion.
+POPULATED_MODULES = frozenset({"tengri.components.radio._params"})
+
 
 @pytest.mark.parametrize("module_name", SKELETON_MODULES)
 def test_skeleton_imports_and_shape(module_name: str) -> None:
@@ -37,14 +41,13 @@ def test_skeleton_imports_and_shape(module_name: str) -> None:
     )
 
 
-@pytest.mark.parametrize("module_name", SKELETON_MODULES)
+@pytest.mark.parametrize("module_name", sorted(set(SKELETON_MODULES) - POPULATED_MODULES))
 def test_skeleton_currently_empty(module_name: str) -> None:
-    # Sentinel — PR2 deletes this assertion as it populates the first
-    # skeleton.
+    # Sentinel — each later PR removes its module from POPULATED_MODULES.
     mod = importlib.import_module(module_name)
     assert mod.PARAMS == (), (
-        f"{module_name}.PARAMS is no longer empty — remove this assertion "
-        "when populating the skeleton in PR2."
+        f"{module_name}.PARAMS is no longer empty — add it to "
+        "POPULATED_MODULES at the top of this test file."
     )
 
 
@@ -55,6 +58,21 @@ def test_param_declaration_three_arg_construction() -> None:
     assert decl.description == "FIR-radio correlation"
     assert decl.bound_check is None
     assert decl.bound_error == ""
+
+
+def test_radio_legacy_bucket_matches_canonical_tuple() -> None:
+    # PR2 contract: the legacy 4-tuple bucket in _param_defs must be a
+    # pure derived view of the canonical RADIO PARAMS tuple. Names,
+    # priors, descriptions, and bound_error must agree byte-for-byte.
+    from tengri.components.radio._params import PARAMS as canonical
+    from tengri.parameters._param_defs import _RADIO_PARAMS as bucket
+
+    assert set(bucket) == {d.name for d in canonical}
+    for decl in canonical:
+        desc, _check, err, default = bucket[decl.name]
+        assert desc == decl.description
+        assert err == decl.bound_error
+        assert default is decl.prior
 
 
 def test_param_declaration_five_arg_construction() -> None:

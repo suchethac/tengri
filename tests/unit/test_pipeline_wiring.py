@@ -301,8 +301,12 @@ class TestRadioFreeFreeParams:
 
     @pytest.mark.parametrize("param", ["radio_T_e", "radio_alpha_ff"])
     def test_radio_param_declared(self, param):
-        src = _params_src()
-        assert f'"{param}"' in src, f"{param} must be declared in _RADIO_PARAMS in parameters.py"
+        from tengri.parameters._param_defs import _RADIO_PARAMS
+
+        assert param in _RADIO_PARAMS, (
+            f"{param} must be declared in _RADIO_PARAMS "
+            "(canonical source: tengri.components.radio._params.PARAMS)"
+        )
 
 
 # ── Dust emission alpha_dl14 ──────────────────────────────────────

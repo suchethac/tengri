@@ -13,6 +13,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `tengri.core.component.ParamDeclaration` with optional `bound_check`
   and `bound_error` fields. No user-visible change; priors still live
   in `tengri.parameters._param_defs`.
+- Moved radio priors into `tengri.components.radio._params.PARAMS`
+  (PR2/5). `tengri.parameters._param_defs._RADIO_PARAMS` is now a
+  derived view via module-level `__getattr__`, and
+  `RadioSEDComponent.declared_parameters()` returns the same tuple —
+  drift between the two paths is now structurally impossible. No
+  user-visible change.
 
 ### Added (5 metallicity modes wired in the orchestrator, 2026-05-06)
 
