@@ -208,6 +208,52 @@ def resolve_dust_law(name: str) -> Callable:
     return DUST_LAWS[name]
 
 
+# Curated headline subset for gallery comparisons. Each entry's value is the
+# canonical kwargs to evaluate the law at "nominal" tuning; callers pass
+# wavelengths positionally and get k(lambda) at tau_V=1.
+_HEADLINE_LAWS: dict[str, tuple[str, dict]] = {
+    "Calzetti+2000":             ("calzetti",     {}),
+    "Charlot & Fall (slope=-0.7)": ("power_law",  {"n_slope": -0.7}),
+    "Cardelli+1989 (MW, Rv=3.1)": ("cardelli",    {"dust_Rv": 3.1}),
+    "SMC (Gordon+2003)":         ("smc",          {}),
+    "Kriek & Conroy 2013":        ("kriek_conroy", {"dust_bump_strength": 1.0, "dust_delta": 0.0}),
+    "Salim+2018":                ("salim",        {}),
+}
+
+
+def list_laws(headline: bool = True) -> dict[str, Callable[[jnp.ndarray], jnp.ndarray]]:
+    """Return attenuation laws as a dict of one-arg callables.
+
+    Each value is ``fn(wave_aa) -> k(wave)`` at the law's canonical
+    parameters with ``tau_V = 1``. Use for plotting k(lambda) comparisons
+    without restating each law's argument signature.
+
+    Parameters
+    ----------
+    headline : bool, optional
+        If True (default) return the 6 textbook laws keyed by display
+        label with citation. If False return every registered law keyed
+        by registry name with no kwargs baked in.
+
+    Returns
+    -------
+    dict
+        ``{label: fn(wave_aa) -> k(wave)}``.
+
+    Examples
+    --------
+    >>> from tengri.dust import list_laws
+    >>> for label, fn in list_laws().items():
+    ...     plt.plot(wave, fn(wave), label=label)
+    """
+    if headline:
+        return {
+            label: (lambda w, _n=name, _kw=kwargs: DUST_LAWS[_n](w, **_kw))
+            for label, (name, kwargs) in _HEADLINE_LAWS.items()
+        }
+    return {name: fn for name, fn in DUST_LAWS.items()}
+
+
 # ── Utility: Drude profile for the 2175 Angstrom UV bump ──────────
 
 

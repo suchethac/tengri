@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:05.971** total execution time for 8 files **from auto_examples/dust_attenuation**:
+**00:03.024** total execution time for 8 files **from auto_examples/dust_attenuation**:
 
 .. container::
 
@@ -32,27 +32,27 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_slope_sweep.py` (``plot_dust_slope_sweep.py``)
-     - 00:02.139
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_attenuation_law_compare.py` (``plot_attenuation_law_compare.py``)
-     - 00:01.233
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_two_component.py` (``plot_two_component.py``)
-     - 00:00.808
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_tau_bc_sweep.py` (``plot_tau_bc_sweep.py``)
-     - 00:00.513
+     - 00:02.520
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_tau_diff_sweep.py` (``plot_tau_diff_sweep.py``)
-     - 00:00.427
+     - 00:00.504
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_uv_bump_sweep.py` (``plot_uv_bump_sweep.py``)
-     - 00:00.305
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_attenuation_law_compare.py` (``plot_attenuation_law_compare.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_curves.py` (``plot_dust_curves.py``)
-     - 00:00.273
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_geometry_sweep.py` (``plot_dust_geometry_sweep.py``)
-     - 00:00.272
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_slope_sweep.py` (``plot_dust_slope_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_two_component.py` (``plot_two_component.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_uv_bump_sweep.py` (``plot_uv_bump_sweep.py``)
+     - 00:00.000
      - 0.0

@@ -1,11 +1,10 @@
 """
 Attenuation Curve Slope (δ)
-============================
+===========================
 
-The power-law slope δ modifies the Calzetti attenuation curve shape.
-Negative δ steepens UV attenuation; positive δ flattens it. This controls
-whether dust absorbs more or less light at short wavelengths relative to
-optical.
+The power-law slope δ steepens (negative) or flattens (positive) UV
+attenuation relative to the optical. Controls whether dust absorbs
+more or less light at short wavelengths.
 
 .. sphx-glr-precomputed-img:
 
@@ -15,74 +14,34 @@ optical.
 
 """
 
-# sphinx_gallery_thumbnail_number = 1
-
-from pathlib import Path
-
-import jax
 import matplotlib.pyplot as plt
 
-jax.config.update("jax_enable_x64", True)
-
-from tengri import Fixed, Parameters, SEDModel, load_ssp_data
+from tengri import SEDModel, load_ssp, recipes
 from tengri.analysis.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
 
 setup_style()
 
+# Bump τ_BC and τ_diff above their recipe defaults — slope effects are clearest
+# on a dust-attenuated continuum (and a nonzero τ_BC prevents the unattenuated
+# nebular spike from dominating the λF_λ display at high δ).
+recipe = recipes.dust_demo()
+recipe["dust"].update(tau_bc=1.0, tau_diff=0.5)
+model = SEDModel.from_groups(ssp_data=load_ssp(), **recipe)
 
-def _find_ssp():
-    """Find SSP data file in standard locations."""
-    name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [
-        Path("data") / name,
-        Path("../data") / name,
-        Path("../../data") / name,
-        Path("../../../data") / name,
-    ]:
-        if p.exists():
-            return str(p)
-    return None
-
-
-SSP_PATH = _find_ssp()
-if SSP_PATH is None:
-    raise FileNotFoundError("SSP data not found — skipping example")
-
-ssp = load_ssp_data(SSP_PATH)
-
-# --- Build model: typical galaxy ---
-spec = Parameters(
-    sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-    sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),
-    sfh_tsnorm_width_gyr=Fixed(1.5),
-    sfh_tsnorm_skew=Fixed(0.2),
-    sfh_tsnorm_trunc=Fixed(3.0),
-    met_logzsol=Fixed(-0.3),
-    dust_tau_bc=Fixed(1.0),
-    dust_tau_diff=Fixed(0.5),
-    dust_slope=Fixed(-0.7),  # Will sweep this
-    redshift=Fixed(0.1),
-)
-model = SEDModel(spec, ssp)
-
-# --- Sweep dust_slope ---
-values = [-1.5, -0.7, 0.0, 0.5]
-
-# # The sweep_parameter helper creates a single SEDModel instance and calls
-# # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
-# # automatically via tengri's persistent compilation cache (enabled at
-# # import time), so repeated forward model calls reuse the compiled kernel.
-fig, ax = sweep_parameter(
+fig, ax = plt.subplots(figsize=(8, 5))
+sweep_parameter(
     model,
     "dust_slope",
-    values,
+    [-1.5, -0.7, 0.0, 0.5],
+    ax=ax,
     cmap=SWEEP_CMAPS["dust"],
     label_fmt=r"$\delta$ = {:.1f}",
     wave_range=(1000, 10000),
-    normalize_at=5500.0,
 )
-ax.set_title("Dust Attenuation Curve Slope: UV vs. Optical Hardness", fontsize=12)
-ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)")
-plt.tight_layout()
+ax.set(
+    title="Dust Attenuation Curve Slope: UV vs Optical Hardness",
+    ylabel=r"$\lambda F_\lambda$ (normalized at 5500 Å)",
+)
+fig.tight_layout()
 plt.savefig("plot_dust_slope_sweep.png", dpi=150, bbox_inches="tight")
 plt.show()

@@ -588,7 +588,7 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="All major attenuation laws implemented in tengri evaluated at fixed τ_V = 1.0. Shows wavelength dependence (k(λ)) from UV through near-infrared, highlighting the UV bump (2175 Å) and the steepness differences between Milky Way, SMC, and starburst models.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The six headline attenuation laws at fixed τ_V = 1, UV through NIR. Highlights the 2175 Å bump and the slope differences between Milky Way, SMC, and starburst families.">
 
 .. only:: html
 
@@ -605,7 +605,7 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Plot all available attenuation laws in tengri. Each curve k(lambda) describes the wavelength dependence of dust attenuation, normalized at 5500 A. No SSP data required.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Same six headline laws as plot_attenuation_law_compare, but plotted over the full UV-through-NIR range (0.1–3 μm) instead of zooming into the UV bump region.">
 
 .. only:: html
 
@@ -616,13 +616,13 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Dust Attenuation Curves</div>
+      <div class="sphx-glr-thumbnail-title">Dust Attenuation Curves (UV to NIR)</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare transmission curves for three dust geometries (Witt &amp; Gordon 2000): screen (foreground), mixed (slab), and clumpy (two-phase medium). At fixed optical depth τ_V = 1.0, geometry controls the spectral shape: screens are reddest, mixed intermediate, clumpy greyest.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Three dust geometries proxied by their characteristic laws (Witt &amp; Gordon 2000): foreground screen (power law), mixed slab (Calzetti), clumpy two-phase (SMC). At fixed τ_V = 1, geometry controls the spectral shape — screens are reddest, clumpy is greyest.">
 
 .. only:: html
 
@@ -639,7 +639,7 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The power-law slope δ modifies the Calzetti attenuation curve shape. Negative δ steepens UV attenuation; positive δ flattens it. This controls whether dust absorbs more or less light at short wavelengths relative to optical.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The power-law slope δ steepens (negative) or flattens (positive) UV attenuation relative to the optical. Controls whether dust absorbs more or less light at short wavelengths.">
 
 .. only:: html
 
@@ -656,7 +656,7 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Birth-cloud dust optical depth τ_BC controls how much of the youngest stellar light escapes the cocoon. Higher τ_BC reddens the UV and suppresses nebular emission from embedded HII regions.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Birth-cloud dust τ_BC controls how much of the youngest stellar light escapes the cocoon. Higher τ_BC reddens the UV and suppresses nebular emission from embedded HII regions.">
 
 .. only:: html
 
@@ -673,7 +673,7 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The diffuse ISM attenuation affects all stellar light (not just young stars). Higher τ_diff reddens the optical continuum and weakens the 4000 Å break, a signature of aging stellar populations.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Diffuse ISM dust τ_diff attenuates all stellar light (young + old). Higher τ_diff reddens the optical continuum and weakens the 4000 Å break — a signature of aging stellar populations.">
 
 .. only:: html
 
@@ -690,7 +690,7 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Visualize the Charlot &amp; Fall (2000) two-component dust model: birth cloud attenuation affects only young stars (age &lt; ~10 Myr), while diffuse ISM attenuation affects all stars. The smooth sigmoid transition between components is shown as a function of stellar age.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Birth-cloud dust attenuates only young stars (age &lt; ~10 Myr), the diffuse ISM dust attenuates all stars. Two views:">
 
 .. only:: html
 
@@ -701,13 +701,13 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Two-Component Dust SEDModel</div>
+      <div class="sphx-glr-thumbnail-title">Two-Component Dust (Charlot & Fall 2000)</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The 2175 Å UV bump in dust attenuation curves is usually attributed to PAHs or small graphite grains. Sweeping the bump amplitude from zero to MW-like takes the attenuation curve from a smooth power law to the characteristic MW shape.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The 2175 Å UV bump (PAHs / small graphite grains) sweeps from zero to MW-like via the Kriek &amp; Conroy 2013 dust_bump_strength knob. At zero the curve is a smooth power law; at MW-like values the bump dominates the UV.">
 
 .. only:: html
 
@@ -718,7 +718,7 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">UV Bump Strength (dust_bump_strength)</div>
+      <div class="sphx-glr-thumbnail-title">UV Bump Strength</div>
     </div>
 
 

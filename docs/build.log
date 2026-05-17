@@ -1,13 +1,12 @@
 Running Sphinx v9.1.0
 loading translations [en]... done
-making output directory... done
 Using Sphinx-Gallery to convert rst text blocks to markdown for .ipynb files.
-myst v5.0.0: MdParserConfig(commonmark_only=False, gfm_only=False, enable_extensions={'fieldlist', 'dollarmath', 'tasklist', 'colon_fence'}, disable_syntax=[], all_links_external=False, links_external_new_tab=False, url_schemes=('http', 'https', 'mailto', 'ftp'), ref_domains=None, fence_as_directive=set(), number_code_blocks=[], title_to_header=False, heading_anchors=3, heading_slug_func=None, html_meta={}, footnote_sort=True, footnote_transition=True, words_per_minute=200, substitutions={}, linkify_fuzzy_links=True, dmath_allow_labels=True, dmath_allow_space=True, dmath_allow_digits=True, dmath_double_inline=False, update_mathjax=True, mathjax_classes='tex2jax_process|mathjax_process|math|output_area', enable_checkboxes=False, suppress_warnings=[], highlight_code_blocks=True)
-Writing evaluated template result to /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/_build/html/_static/nbsphinx-code-cells.css
+myst v5.0.0: MdParserConfig(commonmark_only=False, gfm_only=False, enable_extensions={'colon_fence', 'dollarmath', 'tasklist', 'fieldlist'}, disable_syntax=[], all_links_external=False, links_external_new_tab=False, url_schemes=('http', 'https', 'mailto', 'ftp'), ref_domains=None, fence_as_directive=set(), number_code_blocks=[], title_to_header=False, heading_anchors=3, heading_slug_func=None, html_meta={}, footnote_sort=True, footnote_transition=True, words_per_minute=200, substitutions={}, linkify_fuzzy_links=True, dmath_allow_labels=True, dmath_allow_space=True, dmath_allow_digits=True, dmath_double_inline=False, update_mathjax=True, mathjax_classes='tex2jax_process|mathjax_process|math|output_area', enable_checkboxes=False, suppress_warnings=[], highlight_code_blocks=True)
+Writing evaluated template result to /Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/_build/html/_static/nbsphinx-code-cells.css
 [autosummary] generating autosummary for: adr/0001-adopt-adrs.md, adr/0002-license-bsd3.md, adr/0003-ai-assisted-development.md, adr/README.md, api/core.rst, api/diagnostics.rst, api/distributions.rst, api/index.md, api/inference.rst, api/models.rst, ..., spine/02_sed_anatomy.ipynb, spine/03_discovering_the_menu.ipynb, spine/04_building_models.ipynb, spine/05_fitting_photometry.ipynb, spine/06_fitting_spectroscopy.ipynb, spine/07_joint_photo_spec.ipynb, spine/08_emission_lines.ipynb, spine/09_parameter_sweeps.ipynb, units.md, user/performance-expectations.md
-# 2026-05-17 12:01:46,724 INFO jax._src.xla_bridge xla_bridge.py:841 -- Unable to initialize backend 'tpu': INTERNAL: Failed to open libtpu.so: dlopen(libtpu.so, 0x0001): tried: 'libtpu.so' (no such file), '/System/Volumes/Preboot/Cryptexes/OSlibtpu.so' (no such file), '/opt/anaconda3/bin/../lib/libtpu.so' (no such file), '/usr/lib/libtpu.so' (no such file, not in dyld cache), 'libtpu.so' (no such file)
+# 2026-05-17 14:13:18,071 INFO jax._src.xla_bridge xla_bridge.py:841 -- Unable to initialize backend 'tpu': INTERNAL: Failed to open libtpu.so: dlopen(libtpu.so, 0x0001): tried: 'libtpu.so' (no such file), '/System/Volumes/Preboot/Cryptexes/OSlibtpu.so' (no such file), '/opt/anaconda3/bin/../lib/libtpu.so' (no such file), '/usr/lib/libtpu.so' (no such file, not in dyld cache), 'libtpu.so' (no such file)
 
-# 2026-05-17 12:01:46,792 INFO tengri.utils.jax_cache jax_cache.py:164 -- tengri JAX persistent cache enabled at /Users/suchethacooray/.cache/tengri_jax_cache (min_compile_time=0.5s, current size=34865.3 MB)
+# 2026-05-17 14:13:18,163 INFO tengri.utils.jax_cache jax_cache.py:164 -- tengri JAX persistent cache enabled at /Users/suchethacooray/.cache/tengri_jax_cache (min_compile_time=0.5s, current size=35880.9 MB)
 
 loading intersphinx inventory 'python' from https://docs.python.org/3/objects.inv ...
 loading intersphinx inventory 'numpy' from https://numpy.org/doc/stable/objects.inv ...
@@ -180,10 +179,10 @@ generating gallery for auto_examples/xray... [ 80%] plot_xray_gamma_sweep.py
 generating gallery for auto_examples/xray... [100%] plot_xray_sf.py
 
 computation time summary:
-    - ../examples/dust_attenuation/plot_dust_slope_sweep.py:                             2.14 sec   0.0 MB
+    - ../examples/dust_attenuation/plot_tau_bc_sweep.py:                                 2.52 sec   0.0 MB
 building [mo]: targets for 0 po files that are out of date
 writing output... 
-building [html]: targets for 184 source files that are out of date
+building [html]: targets for 215 source files that are out of date
 updating environment: [new config] 217 added, 0 changed, 0 removed
 reading sources... [  0%] adr/0001-adopt-adrs
 reading sources... [  1%] adr/0002-license-bsd3
@@ -403,15 +402,15 @@ reading sources... [ 99%] spine/09_parameter_sweeps
 reading sources... [100%] units
 reading sources... [100%] user/performance-expectations
 
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_derived:13: ERROR: Unexpected indentation. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_derived:14: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_derived:17: ERROR: Unexpected indentation. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_hbeta:51: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_obs_sed:63: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_obs_sed:66: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_photometry:76: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/parameters/parameters.py:docstring of tengri.parameters.parameters.Parameters:209: ERROR: Unexpected indentation. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/parameters/parameters.py:docstring of tengri.parameters.parameters.Parameters:210: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_derived:13: ERROR: Unexpected indentation. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_derived:14: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_derived:17: ERROR: Unexpected indentation. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_hbeta:51: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_obs_sed:63: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_obs_sed:66: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_photometry:76: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/parameters/parameters.py:docstring of tengri.parameters.parameters.Parameters:209: ERROR: Unexpected indentation. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/parameters/parameters.py:docstring of tengri.parameters.parameters.Parameters:210: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
 <unknown>:1: WARNING: duplicate object description of tengri.Parameters.all_params, other instance in api/core, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Parameters.fixed_params, other instance in api/core, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Parameters.free_params, other instance in api/core, use :no-index: for one of them
@@ -419,8 +418,8 @@ reading sources... [100%] user/performance-expectations
 <unknown>:1: WARNING: duplicate object description of tengri.Parameters.n_free, other instance in api/core, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Parameters.n_grid, other instance in api/core, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Parameters.stochastic, other instance in api/core, use :no-index: for one of them
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/parameters/parameters.py:docstring of tengri.parameters.parameters.Parameters.to_groups:8: WARNING: Inline strong start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/parameters/parameters.py:docstring of tengri.parameters.parameters.Parameters.to_groups:26: WARNING: Inline strong start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/parameters/parameters.py:docstring of tengri.parameters.parameters.Parameters.to_groups:8: WARNING: Inline strong start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/parameters/parameters.py:docstring of tengri.parameters.parameters.Parameters.to_groups:26: WARNING: Inline strong start-string without end-string. [docutils]
 <unknown>:1: WARNING: duplicate object description of tengri.Prediction.ionizing, other instance in api/core, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Prediction.lines, other instance in api/core, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Prediction.radio, other instance in api/core, use :no-index: for one of them
@@ -471,8 +470,8 @@ reading sources... [100%] user/performance-expectations
 <unknown>:1: WARNING: duplicate object description of tengri.Observation.photometry, other instance in api/core, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Observation.spectral_indices, other instance in api/core, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Observation.spectroscopy, other instance in api/core, use :no-index: for one of them
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/observation/photometry_config.py:docstring of tengri.observation.photometry_config.Photometry:22: ERROR: Unexpected indentation. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/observation/photometry_config.py:docstring of tengri.observation.photometry_config.Photometry:24: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/observation/photometry_config.py:docstring of tengri.observation.photometry_config.Photometry:22: ERROR: Unexpected indentation. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/observation/photometry_config.py:docstring of tengri.observation.photometry_config.Photometry:24: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
 <unknown>:1: WARNING: duplicate object description of tengri.Photometry.filter_trans, other instance in api/core, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Photometry.filter_waves, other instance in api/core, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Photometry.filters, other instance in api/core, use :no-index: for one of them
@@ -501,15 +500,15 @@ reading sources... [100%] user/performance-expectations
 <unknown>:1: WARNING: duplicate object description of tengri.VIConfig.n_samples, other instance in api/core, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.VIConfig.nonlinearly_update_kwargs, other instance in api/core, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.VIConfig.use_vmap, other instance in api/core, use :no-index: for one of them
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel:66: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel:72: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_hbeta:41: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_obs_sed:25: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_obs_sed:29: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_photometry:48: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/analysis/diagnostics/green_functions.py:docstring of tengri.analysis.diagnostics.green_functions.compute_window_function_fourier:3: WARNING: Inline substitution_reference start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/analysis/diagnostics/green_functions.py:docstring of tengri.analysis.diagnostics.green_functions.compute_window_function_fourier:7: WARNING: Inline substitution_reference start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/analysis/diagnostics/green_functions.py:docstring of tengri.analysis.diagnostics.green_functions.compute_window_function_fourier:14: WARNING: Inline substitution_reference start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel:66: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel:72: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_hbeta:41: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_obs_sed:25: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_obs_sed:29: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.predict_photometry:48: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/analysis/diagnostics/green_functions.py:docstring of tengri.analysis.diagnostics.green_functions.compute_window_function_fourier:3: WARNING: Inline substitution_reference start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/analysis/diagnostics/green_functions.py:docstring of tengri.analysis.diagnostics.green_functions.compute_window_function_fourier:7: WARNING: Inline substitution_reference start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/analysis/diagnostics/green_functions.py:docstring of tengri.analysis.diagnostics.green_functions.compute_window_function_fourier:14: WARNING: Inline substitution_reference start-string without end-string. [docutils]
 <unknown>:1: WARNING: duplicate object description of tengri.Uniform.bounds, other instance in api/distributions, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Uniform.hi, other instance in api/distributions, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Uniform.lo, other instance in api/distributions, use :no-index: for one of them
@@ -527,12 +526,12 @@ reading sources... [100%] user/performance-expectations
 <unknown>:1: WARNING: duplicate object description of tengri.StudentT.bounds, other instance in api/distributions, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Fixed.bounds, other instance in api/distributions, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Fixed.value, other instance in api/distributions, use :no-index: for one of them
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/inference/fitter.py:docstring of tengri.inference.fitter.Fitter.fit_batch:27: ERROR: Unexpected indentation. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/inference/fitter.py:docstring of tengri.inference.fitter.Fitter.fit_batch:28: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/inference/fitter.py:docstring of tengri.inference.fitter.Fitter.run:165: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/inference/posterior.py:docstring of tengri.inference.posterior.Posterior.balmer_av:31: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/inference/posterior.py:docstring of tengri.inference.posterior.Posterior.bpt_class:43: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/inference/posterior.py:docstring of tengri.inference.posterior.Posterior.bpt_class:44: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/inference/fitter.py:docstring of tengri.inference.fitter.Fitter.fit_batch:27: ERROR: Unexpected indentation. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/inference/fitter.py:docstring of tengri.inference.fitter.Fitter.fit_batch:28: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/inference/fitter.py:docstring of tengri.inference.fitter.Fitter.run:165: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/inference/posterior.py:docstring of tengri.inference.posterior.Posterior.balmer_av:31: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/inference/posterior.py:docstring of tengri.inference.posterior.Posterior.bpt_class:43: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/inference/posterior.py:docstring of tengri.inference.posterior.Posterior.bpt_class:44: WARNING: Duplicate explicit target name: "2". [docutils]
 <unknown>:1: WARNING: duplicate object description of tengri.Posterior.diagnostics, other instance in api/inference, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Posterior.eline_flux_cov, other instance in api/inference, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Posterior.eline_fluxes, other instance in api/inference, use :no-index: for one of them
@@ -544,19 +543,19 @@ reading sources... [100%] user/performance-expectations
 <unknown>:1: WARNING: duplicate object description of tengri.Posterior.params, other instance in api/inference, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Posterior.samples, other instance in api/inference, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.Posterior.wall_time_s, other instance in api/inference, use :no-index: for one of them
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/inference/fitter.py:docstring of tengri.inference.fitter.Fitter.run:172: WARNING: Footnote [3] is not referenced. [ref.footnote]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/inference/fitter.py:docstring of tengri.inference.fitter.Fitter.run:176: WARNING: Footnote [4] is not referenced. [ref.footnote]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/inference/posterior.py:docstring of tengri.inference.posterior.Posterior.balmer_av:3: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/inference/posterior.py:docstring of tengri.inference.posterior.Posterior.bpt_class:5: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/inference/posterior.py:docstring of tengri.inference.posterior.Posterior.bpt_class:7: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/mean_sfh.py:docstring of tengri.components.stellar.sfh.mean_sfh.double_powerlaw:49: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/mean_sfh.py:docstring of tengri.components.stellar.sfh.mean_sfh.double_powerlaw:53: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/inference/fitter.py:docstring of tengri.inference.fitter.Fitter.run:172: WARNING: Footnote [3] is not referenced. [ref.footnote]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/inference/fitter.py:docstring of tengri.inference.fitter.Fitter.run:176: WARNING: Footnote [4] is not referenced. [ref.footnote]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/inference/posterior.py:docstring of tengri.inference.posterior.Posterior.balmer_av:3: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/inference/posterior.py:docstring of tengri.inference.posterior.Posterior.bpt_class:5: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/inference/posterior.py:docstring of tengri.inference.posterior.Posterior.bpt_class:7: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/mean_sfh.py:docstring of tengri.components.stellar.sfh.mean_sfh.double_powerlaw:49: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/mean_sfh.py:docstring of tengri.components.stellar.sfh.mean_sfh.double_powerlaw:53: WARNING: Duplicate explicit target name: "2". [docutils]
 WARNING: autodoc: failed to import 'constant_sfh' from module 'tengri'; the following exception was raised:
 Traceback (most recent call last):
   File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
     return getattr(obj, name, *defargs)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/__init__.py", line 443, in __getattr__
+  File "/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/__init__.py", line 444, in __getattr__
     raise AttributeError(
 AttributeError: module 'tengri' has no attribute 'constant_sfh'
 
@@ -578,7 +577,7 @@ Traceback (most recent call last):
   File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
     return getattr(obj, name, *defargs)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/__init__.py", line 443, in __getattr__
+  File "/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/__init__.py", line 444, in __getattr__
     raise AttributeError(
 AttributeError: module 'tengri' has no attribute 'exponential_sfh'
 
@@ -600,7 +599,7 @@ Traceback (most recent call last):
   File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
     return getattr(obj, name, *defargs)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/__init__.py", line 443, in __getattr__
+  File "/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/__init__.py", line 444, in __getattr__
     raise AttributeError(
 AttributeError: module 'tengri' has no attribute 'delayed_exponential_sfh'
 
@@ -617,362 +616,358 @@ Traceback (most recent call last):
     raise AttributeError(name) from exc
 AttributeError: delayed_exponential_sfh
  [autodoc.import_object]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/mean_sfh.py:docstring of tengri.components.stellar.sfh.mean_sfh.triweight_burst:40: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/registry.py:docstring of tengri.components.stellar.sfh.registry.resolve_sfh:11: WARNING: Inline strong start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/__init__.py:docstring of tengri.SFH_REGISTRY:3: ERROR: Unexpected indentation. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/__init__.py:docstring of tengri.SFH_REGISTRY:4: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/__init__.py:docstring of tengri.SFH_REGISTRY:7: ERROR: Unexpected indentation. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/__init__.py:docstring of tengri.SFH_REGISTRY:8: WARNING: Inline strong start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/__init__.py:docstring of tengri.FIELD_MODEL_REGISTRY:3: ERROR: Unexpected indentation. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/__init__.py:docstring of tengri.FIELD_MODEL_REGISTRY:4: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/__init__.py:docstring of tengri.FIELD_MODEL_REGISTRY:7: ERROR: Unexpected indentation. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/__init__.py:docstring of tengri.FIELD_MODEL_REGISTRY:8: WARNING: Inline strong start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/psd_models.py:docstring of tengri.components.stellar.sfh.psd_models.psd_drw:31: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/psd_models.py:docstring of tengri.components.stellar.sfh.psd_models.drw_variance:4: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/mean_sfh.py:docstring of tengri.components.stellar.sfh.mean_sfh.triweight_burst:40: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/registry.py:docstring of tengri.components.stellar.sfh.registry.resolve_sfh:11: WARNING: Inline strong start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/__init__.py:docstring of tengri.SFH_REGISTRY:3: ERROR: Unexpected indentation. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/__init__.py:docstring of tengri.SFH_REGISTRY:4: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/__init__.py:docstring of tengri.SFH_REGISTRY:7: ERROR: Unexpected indentation. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/__init__.py:docstring of tengri.SFH_REGISTRY:8: WARNING: Inline strong start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/__init__.py:docstring of tengri.FIELD_MODEL_REGISTRY:3: ERROR: Unexpected indentation. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/__init__.py:docstring of tengri.FIELD_MODEL_REGISTRY:4: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/__init__.py:docstring of tengri.FIELD_MODEL_REGISTRY:7: ERROR: Unexpected indentation. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/__init__.py:docstring of tengri.FIELD_MODEL_REGISTRY:8: WARNING: Inline strong start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/psd_models.py:docstring of tengri.components.stellar.sfh.psd_models.psd_drw:31: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/psd_models.py:docstring of tengri.components.stellar.sfh.psd_models.drw_variance:4: ERROR: Unexpected section title.
 
 Parameters
 ---------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/psd_models.py:docstring of tengri.components.stellar.sfh.psd_models.drw_variance:9: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/psd_models.py:docstring of tengri.components.stellar.sfh.psd_models.drw_variance:9: ERROR: Unexpected section title.
 
 Returns
 ------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/psd_models.py:docstring of tengri.components.stellar.sfh.psd_models.drw_variance:14: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/psd_models.py:docstring of tengri.components.stellar.sfh.psd_models.drw_variance:14: ERROR: Unexpected section title.
 
 Notes
 ----- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/psd_models.py:docstring of tengri.components.stellar.sfh.psd_models.drw_variance:22: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/psd_models.py:docstring of tengri.components.stellar.sfh.psd_models.drw_variance:24: WARNING: Inline interpreted text or phrase reference start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/psd_models.py:docstring of tengri.components.stellar.sfh.psd_models.drw_variance:25: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/psd_models.py:docstring of tengri.components.stellar.sfh.psd_models.drw_variance:28: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/psd_models.py:docstring of tengri.components.stellar.sfh.psd_models.drw_variance:22: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/psd_models.py:docstring of tengri.components.stellar.sfh.psd_models.drw_variance:24: WARNING: Inline interpreted text or phrase reference start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/psd_models.py:docstring of tengri.components.stellar.sfh.psd_models.drw_variance:25: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/psd_models.py:docstring of tengri.components.stellar.sfh.psd_models.drw_variance:28: ERROR: Unexpected section title.
 
 Examples
 -------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.compute_sqrt_power_drw:8: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.compute_sqrt_power_drw:8: ERROR: Unexpected section title.
 
 Parameters
 ---------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.compute_sqrt_power_drw:21: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.compute_sqrt_power_drw:21: ERROR: Unexpected section title.
 
 Returns
 ------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.compute_sqrt_power_drw:27: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.compute_sqrt_power_drw:27: ERROR: Unexpected section title.
 
 Notes
 ----- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.compute_sqrt_power_drw:37: WARNING: Inline interpreted text or phrase reference start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.compute_sqrt_power_drw:38: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.compute_sqrt_power_drw:47: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.compute_sqrt_power_drw:37: WARNING: Inline interpreted text or phrase reference start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.compute_sqrt_power_drw:38: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.compute_sqrt_power_drw:47: ERROR: Unexpected section title.
 
 Examples
 -------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:6: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:6: ERROR: Unexpected section title.
 
 Parameters
 ---------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:10: WARNING: Inline interpreted text or phrase reference start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:11: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:13: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:17: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:10: WARNING: Inline interpreted text or phrase reference start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:11: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:13: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:17: ERROR: Unexpected section title.
 
 Returns
 ------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:22: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:22: ERROR: Unexpected section title.
 
 Notes
 ----- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:30: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:30: ERROR: Unexpected section title.
 
 See Also
 -------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:35: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:35: ERROR: Unexpected section title.
 
 Examples
 -------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:6: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:6: ERROR: Unexpected section title.
 
 Parameters
 ---------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:10: WARNING: Inline interpreted text or phrase reference start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:11: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:13: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:19: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:10: WARNING: Inline interpreted text or phrase reference start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:11: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:13: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:19: ERROR: Unexpected section title.
 
 Returns
 ------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:24: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:24: ERROR: Unexpected section title.
 
 Notes
 ----- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:32: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:32: ERROR: Unexpected section title.
 
 See Also
 -------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:36: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:36: ERROR: Unexpected section title.
 
 Examples
 -------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:8: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:8: ERROR: Unexpected section title.
 
 Parameters
 ---------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:12: WARNING: Inline interpreted text or phrase reference start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:13: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:15: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:19: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:12: WARNING: Inline interpreted text or phrase reference start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:13: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:15: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:19: ERROR: Unexpected section title.
 
 Returns
 ------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:24: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:24: ERROR: Unexpected section title.
 
 Notes
 ----- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:44: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:44: ERROR: Unexpected section title.
 
 References
 ---------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:45: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:50: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:45: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:50: ERROR: Unexpected section title.
 
 Examples
 -------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.two_component_dust:68: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.two_component_dust:72: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.calzetti:29: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.cardelli:24: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.conroy2010:31: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.d03_mwrv31:22: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.d03_mwrv31:24: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.dust_to_gas_scaling_remy_ruyer:27: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.hd23_mwrv31:22: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.hd23_mwrv31:25: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.kriek_conroy:32: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.leitherer02:28: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.narayanan_z:33: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.noll09:41: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.power_law:26: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.prevot_smc:39: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.prevot_smc:41: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.salim_sbl18:38: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.single_component_dust:49: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.tea:33: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.two_component_dust:68: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.two_component_dust:72: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.two_component_dust_separable:60: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.vw07_bc:24: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.vw07_diff:21: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.vw07_diff:26: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wd01_mwrv31:22: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wd01_mwrv31:25: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wd01_smcbar:26: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wd01_smcbar:29: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wg00_cloudy:52: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wg00_cloudy:55: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wg00_dusty:48: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wg00_dusty:51: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wg00_dusty:55: WARNING: Duplicate explicit target name: "3". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wg00_shell:34: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/emission.py:docstring of tengri.components.dust.emission.energy_balance_split:51: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/emission.py:docstring of tengri.components.dust.emission.energy_balance_split:55: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/emission.py:docstring of tengri.components.dust.emission.pah_drude:32: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/emission.py:docstring of tengri.components.dust.emission.schreiber2016:47: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/emission.py:docstring of tengri.components.dust.emission.schreiber2016:50: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.adaf_disc:147: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.adaf_disc:150: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.adaf_disc:153: WARNING: Duplicate explicit target name: "3". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.beloborodov_gamma_hot:34: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.beloborodov_gamma_hot:37: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.create_relagn_disc_from_grid:38: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.create_relagn_disc_from_grid:41: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.kubota_done_disc:157: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.kubota_done_disc:161: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.kubota_done_disc:164: WARNING: Duplicate explicit target name: "3". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.multicolor_disc:79: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.multicolor_disc:83: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.multicolor_disc:86: WARNING: Duplicate explicit target name: "3". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/blr.py:docstring of tengri.components.agn.blr.compute_blr_sed:45: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/blr.py:docstring of tengri.components.agn.blr.compute_blr_sed:47: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/blr.py:docstring of tengri.components.agn.blr.compute_blr_sed:49: WARNING: Duplicate explicit target name: "3". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/nlr.py:docstring of tengri.components.agn.nlr.compute_nlr_sed_richardson2014:42: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/nlr.py:docstring of tengri.components.agn.nlr.compute_nlr_sed_richardson2014:45: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified:12: ERROR: Unexpected indentation. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified:108: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified:111: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified:114: WARNING: Duplicate explicit target name: "3". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.make_cue_nlr_fn:54: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.register_agn_model:21: WARNING: Inline strong start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.relagn_agn:50: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.relagn_agn:53: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.resolve_agn_model:6: WARNING: Inline strong start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_agn:27: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_nlr_blr:198: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_nlr_blr:201: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_nlr_blr:204: WARNING: Duplicate explicit target name: "3". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/nebular/shock.py:docstring of tengri.components.nebular.shock.shock_line_ratios:39: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/nebular/shock.py:docstring of tengri.components.nebular.shock.shock_line_ratios:41: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/nebular/shock.py:docstring of tengri.components.nebular.shock.shock_line_ratios:44: WARNING: Duplicate explicit target name: "3". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/nebular/dig.py:docstring of tengri.components.nebular.dig.mix_dig_emission:81: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/nebular/dig.py:docstring of tengri.components.nebular.dig.mix_dig_emission:84: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/nebular/dig.py:docstring of tengri.components.nebular.dig.mix_dig_emission:87: WARNING: Duplicate explicit target name: "3". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/observation/calibration.py:docstring of tengri.observation.calibration:19: WARNING: Title underline too short.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.two_component_dust:68: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.two_component_dust:72: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.calzetti:29: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.cardelli:24: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.conroy2010:31: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.d03_mwrv31:22: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.d03_mwrv31:24: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.dust_to_gas_scaling_remy_ruyer:27: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.hd23_mwrv31:22: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.hd23_mwrv31:25: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.kriek_conroy:32: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.leitherer02:28: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.narayanan_z:33: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.noll09:41: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.power_law:26: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.prevot_smc:39: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.prevot_smc:41: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.salim_sbl18:38: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.single_component_dust:49: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.tea:33: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.two_component_dust:68: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.two_component_dust:72: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.two_component_dust_separable:60: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.vw07_bc:24: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.vw07_diff:21: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.vw07_diff:26: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wd01_mwrv31:22: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wd01_mwrv31:25: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wd01_smcbar:26: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wd01_smcbar:29: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wg00_cloudy:52: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wg00_cloudy:55: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wg00_dusty:48: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wg00_dusty:51: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wg00_dusty:55: WARNING: Duplicate explicit target name: "3". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wg00_shell:34: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/emission.py:docstring of tengri.components.dust.emission.energy_balance_split:51: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/emission.py:docstring of tengri.components.dust.emission.energy_balance_split:55: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/emission.py:docstring of tengri.components.dust.emission.pah_drude:32: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/emission.py:docstring of tengri.components.dust.emission.schreiber2016:47: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/emission.py:docstring of tengri.components.dust.emission.schreiber2016:50: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.adaf_disc:147: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.adaf_disc:150: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.adaf_disc:153: WARNING: Duplicate explicit target name: "3". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.beloborodov_gamma_hot:34: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.beloborodov_gamma_hot:37: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.create_relagn_disc_from_grid:38: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.create_relagn_disc_from_grid:41: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.kubota_done_disc:157: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.kubota_done_disc:161: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.kubota_done_disc:164: WARNING: Duplicate explicit target name: "3". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.multicolor_disc:79: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.multicolor_disc:83: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/disc.py:docstring of tengri.components.agn.disc.multicolor_disc:86: WARNING: Duplicate explicit target name: "3". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/blr.py:docstring of tengri.components.agn.blr.compute_blr_sed:45: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/blr.py:docstring of tengri.components.agn.blr.compute_blr_sed:47: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/blr.py:docstring of tengri.components.agn.blr.compute_blr_sed:49: WARNING: Duplicate explicit target name: "3". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/nlr.py:docstring of tengri.components.agn.nlr.compute_nlr_sed_richardson2014:42: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/nlr.py:docstring of tengri.components.agn.nlr.compute_nlr_sed_richardson2014:45: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified:12: ERROR: Unexpected indentation. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified:108: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified:111: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified:114: WARNING: Duplicate explicit target name: "3". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.make_cue_nlr_fn:54: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.register_agn_model:21: WARNING: Inline strong start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.relagn_agn:50: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.relagn_agn:53: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.resolve_agn_model:6: WARNING: Inline strong start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_agn:27: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_nlr_blr:198: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_nlr_blr:201: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_nlr_blr:204: WARNING: Duplicate explicit target name: "3". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/nebular/shock.py:docstring of tengri.components.nebular.shock.shock_line_ratios:39: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/nebular/shock.py:docstring of tengri.components.nebular.shock.shock_line_ratios:41: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/nebular/shock.py:docstring of tengri.components.nebular.shock.shock_line_ratios:44: WARNING: Duplicate explicit target name: "3". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/nebular/dig.py:docstring of tengri.components.nebular.dig.mix_dig_emission:81: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/nebular/dig.py:docstring of tengri.components.nebular.dig.mix_dig_emission:84: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/nebular/dig.py:docstring of tengri.components.nebular.dig.mix_dig_emission:87: WARNING: Duplicate explicit target name: "3". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/observation/calibration.py:docstring of tengri.observation.calibration:19: WARNING: Title underline too short.
 
 Parameters integration example
 ----------------------------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sps/dsps_wrapper.py:docstring of tengri.components.stellar.sps.dsps_wrapper.effective_metallicity:40: WARNING: Duplicate explicit target name: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sps/dsps_wrapper.py:docstring of tengri.components.stellar.sps.dsps_wrapper.effective_metallicity:41: WARNING: Duplicate explicit target name: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.two_component_dust:62: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.d03_mwrv31:16: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.d03_mwrv31:16: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.hd23_mwrv31:16: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.hd23_mwrv31:16: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.two_component_dust:62: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wd01_mwrv31:16: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wd01_mwrv31:16: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wd01_smcbar:20: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wd01_smcbar:20: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/nlr.py:docstring of tengri.components.agn.nlr.compute_nlr_sed_richardson2014:37: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.make_cue_nlr_fn:3: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_nlr_blr:3: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_nlr_blr:3: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_nlr_blr:3: ERROR: Duplicate target name, cannot be used as a unique reference: "3". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_nlr_blr:56: ERROR: Duplicate target name, cannot be used as a unique reference: "3". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_nlr_blr:: ERROR: Duplicate target name, cannot be used as a unique reference: "3". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sps/dsps_wrapper.py:docstring of tengri.components.stellar.sps.dsps_wrapper.effective_metallicity:24: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sps/dsps_wrapper.py:docstring of tengri.components.stellar.sps.dsps_wrapper.effective_metallicity:34: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/analysis/plotting/__init__.py:docstring of tengri.analysis.plotting.COLORS:3: ERROR: Unexpected indentation. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/analysis/plotting/__init__.py:docstring of tengri.analysis.plotting.COLORS:4: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/analysis/plotting/__init__.py:docstring of tengri.analysis.plotting.COLORS:7: ERROR: Unexpected indentation. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/analysis/plotting/__init__.py:docstring of tengri.analysis.plotting.COLORS:8: WARNING: Inline strong start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/analysis/plotting/__init__.py:docstring of tengri.analysis.plotting.SPECTRAL_FEATURES:3: ERROR: Unexpected indentation. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/analysis/plotting/__init__.py:docstring of tengri.analysis.plotting.SPECTRAL_FEATURES:4: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/analysis/plotting/__init__.py:docstring of tengri.analysis.plotting.SPECTRAL_FEATURES:7: ERROR: Unexpected indentation. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/analysis/plotting/__init__.py:docstring of tengri.analysis.plotting.SPECTRAL_FEATURES:8: WARNING: Inline strong start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sps/dsps_wrapper.py:docstring of tengri.components.stellar.sps.dsps_wrapper.effective_metallicity:40: WARNING: Duplicate explicit target name: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sps/dsps_wrapper.py:docstring of tengri.components.stellar.sps.dsps_wrapper.effective_metallicity:41: WARNING: Duplicate explicit target name: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.two_component_dust:62: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.d03_mwrv31:16: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.d03_mwrv31:16: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.hd23_mwrv31:16: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.hd23_mwrv31:16: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.two_component_dust:62: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wd01_mwrv31:16: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wd01_mwrv31:16: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wd01_smcbar:20: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/dust/attenuation.py:docstring of tengri.components.dust.attenuation.wd01_smcbar:20: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/nlr.py:docstring of tengri.components.agn.nlr.compute_nlr_sed_richardson2014:37: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.make_cue_nlr_fn:3: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_nlr_blr:3: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_nlr_blr:3: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_nlr_blr:3: ERROR: Duplicate target name, cannot be used as a unique reference: "3". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_nlr_blr:56: ERROR: Duplicate target name, cannot be used as a unique reference: "3". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/agn/unified.py:docstring of tengri.components.agn.unified.unified_nlr_blr:: ERROR: Duplicate target name, cannot be used as a unique reference: "3". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sps/dsps_wrapper.py:docstring of tengri.components.stellar.sps.dsps_wrapper.effective_metallicity:24: ERROR: Duplicate target name, cannot be used as a unique reference: "1". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sps/dsps_wrapper.py:docstring of tengri.components.stellar.sps.dsps_wrapper.effective_metallicity:34: ERROR: Duplicate target name, cannot be used as a unique reference: "2". [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/analysis/plotting/__init__.py:docstring of tengri.analysis.plotting.COLORS:3: ERROR: Unexpected indentation. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/analysis/plotting/__init__.py:docstring of tengri.analysis.plotting.COLORS:4: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/analysis/plotting/__init__.py:docstring of tengri.analysis.plotting.COLORS:7: ERROR: Unexpected indentation. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/analysis/plotting/__init__.py:docstring of tengri.analysis.plotting.COLORS:8: WARNING: Inline strong start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/analysis/plotting/__init__.py:docstring of tengri.analysis.plotting.SPECTRAL_FEATURES:3: ERROR: Unexpected indentation. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/analysis/plotting/__init__.py:docstring of tengri.analysis.plotting.SPECTRAL_FEATURES:4: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/analysis/plotting/__init__.py:docstring of tengri.analysis.plotting.SPECTRAL_FEATURES:7: ERROR: Unexpected indentation. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/analysis/plotting/__init__.py:docstring of tengri.analysis.plotting.SPECTRAL_FEATURES:8: WARNING: Inline strong start-string without end-string. [docutils]
 <unknown>:1: WARNING: duplicate object description of tengri.make_log_age_grid, other instance in api/models, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.compute_field_gp, other instance in api/models, use :no-index: for one of them
 <unknown>:1: WARNING: duplicate object description of tengri.generate_gp_fourier, other instance in api/models, use :no-index: for one of them
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:6: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:6: ERROR: Unexpected section title.
 
 Parameters
 ---------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:10: WARNING: Inline interpreted text or phrase reference start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:11: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:13: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:17: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:10: WARNING: Inline interpreted text or phrase reference start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:11: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:13: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:17: ERROR: Unexpected section title.
 
 Returns
 ------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:22: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:22: ERROR: Unexpected section title.
 
 Notes
 ----- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:30: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:30: ERROR: Unexpected section title.
 
 See Also
 -------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:35: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_fourier:35: ERROR: Unexpected section title.
 
 Examples
 -------- [docutils]
 <unknown>:1: WARNING: duplicate object description of tengri.generate_gp_batch, other instance in api/models, use :no-index: for one of them
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:6: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:6: ERROR: Unexpected section title.
 
 Parameters
 ---------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:10: WARNING: Inline interpreted text or phrase reference start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:11: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:13: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:19: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:10: WARNING: Inline interpreted text or phrase reference start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:11: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:13: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:19: ERROR: Unexpected section title.
 
 Returns
 ------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:24: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:24: ERROR: Unexpected section title.
 
 Notes
 ----- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:32: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:32: ERROR: Unexpected section title.
 
 See Also
 -------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:36: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.generate_gp_batch:36: ERROR: Unexpected section title.
 
 Examples
 -------- [docutils]
 <unknown>:1: WARNING: duplicate object description of tengri.gp_from_xi, other instance in api/models, use :no-index: for one of them
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:8: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:8: ERROR: Unexpected section title.
 
 Parameters
 ---------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:12: WARNING: Inline interpreted text or phrase reference start-string without end-string. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:13: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:15: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:19: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:12: WARNING: Inline interpreted text or phrase reference start-string without end-string. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:13: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:15: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:19: ERROR: Unexpected section title.
 
 Returns
 ------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:24: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:24: ERROR: Unexpected section title.
 
 Notes
 ----- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:44: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:44: ERROR: Unexpected section title.
 
 References
 ---------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:50: ERROR: Unexpected section title.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:50: ERROR: Unexpected section title.
 
 Examples
 -------- [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:45: WARNING: Footnote [1] is not referenced. [ref.footnote]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/agn/plot_agn_hierarchy.rst:22: WARNING: Title underline too short.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/components/stellar/sfh/gp_sfh.py:docstring of tengri.components.stellar.sfh.gp_sfh.gp_from_xi:45: WARNING: Footnote [1] is not referenced. [ref.footnote]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/agn/plot_agn_hierarchy.rst:22: WARNING: Title underline too short.
 
 AGN SEDModel Hierarchy
 =================== [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/dust_attenuation/plot_two_component.rst:22: WARNING: Title underline too short.
-
-Two-Component Dust SEDModel
-========================= [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/index.rst:16: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/sfh/plot_sfh_double_burst.rst:22: WARNING: Title underline too short.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/index.rst:16: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/sfh/plot_sfh_double_burst.rst:22: WARNING: Title underline too short.
 
 SFH with Double Bursts: Old and Recent Star Formation
 ==================================================== [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/sfh/plot_sfh_quenching_compare.rst:22: WARNING: Title underline too short.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/sfh/plot_sfh_quenching_compare.rst:22: WARNING: Title underline too short.
 
 SFH Quenching Scenarios: Constant, Exponential, Sharp, and Burst+Decay
 ===================================================================== [docutils]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/sfh/plot_wrong_model_trap.rst:22: WARNING: Title underline too short.
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/sfh/plot_wrong_model_trap.rst:22: WARNING: Title underline too short.
 
 The Wrong-SEDModel Trap: Parametric Bias in Derived Quantities
 ============================================================ [docutils]
 looking for now-outdated files... none found
 pickling environment... done
-checking consistency... /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/adr/0001-adopt-adrs.md: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/adr/0002-license-bsd3.md: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/adr/0003-ai-assisted-development.md: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/adr/README.md: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/advanced/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/agn/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/dust_attenuation/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/dust_emission/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/igm/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/inference/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/inference/plot_hierarchical_convergence.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/inference/plot_population_scaling.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/inference/plot_prior_posterior_compare.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/metallicity/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/multiwavelength/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/nebular/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/photometry/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/quickstart/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/radio/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/recipes/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/sfh/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/spectroscopy/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/sps/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/usecases/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/workflows/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/auto_examples/xray/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/recipes/jwst_nirspec_spectroscopy.md: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/recipes/sdss_photometry_oneliner.md: WARNING: document isn't included in any toctree [toc.not_included]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/user/performance-expectations.md: WARNING: document isn't included in any toctree [toc.not_included]
+checking consistency... /Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/adr/0001-adopt-adrs.md: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/adr/0002-license-bsd3.md: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/adr/0003-ai-assisted-development.md: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/adr/README.md: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/advanced/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/agn/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/dust_attenuation/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/dust_emission/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/igm/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/inference/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/inference/plot_hierarchical_convergence.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/inference/plot_population_scaling.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/inference/plot_prior_posterior_compare.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/metallicity/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/multiwavelength/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/nebular/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/photometry/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/quickstart/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/radio/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/recipes/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/sfh/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/spectroscopy/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/sps/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/usecases/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/workflows/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/auto_examples/xray/index.rst: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/recipes/jwst_nirspec_spectroscopy.md: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/recipes/sdss_photometry_oneliner.md: WARNING: document isn't included in any toctree [toc.not_included]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/user/performance-expectations.md: WARNING: document isn't included in any toctree [toc.not_included]
 done
 preparing documents... done
 copying assets... 
@@ -1419,10 +1414,10 @@ copying downloadable files... [100%] auto_examples/xray/plot_xray_sf.py
 copying downloadable files... [100%] auto_examples/xray/plot_xray_sf.zip
 
 copying static files... 
-Writing evaluated template result to /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/_build/html/_static/basic.css
-Writing evaluated template result to /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/_build/html/_static/language_data.js
-Writing evaluated template result to /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/_build/html/_static/documentation_options.js
-Writing evaluated template result to /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/_build/html/_static/copybutton.js
+Writing evaluated template result to /Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/_build/html/_static/basic.css
+Writing evaluated template result to /Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/_build/html/_static/language_data.js
+Writing evaluated template result to /Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/_build/html/_static/documentation_options.js
+Writing evaluated template result to /Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/_build/html/_static/copybutton.js
 copying static files: done
 copying extra files... 
 copying extra files: done
@@ -1645,14 +1640,14 @@ writing output... [ 99%] spine/09_parameter_sweeps
 writing output... [100%] units
 writing output... [100%] user/performance-expectations
 
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.fit:: WARNING: more than one target found for cross-reference 'noise': tengri.MockData.noise, tengri.Observation.noise, tengri.Fitter.noise [ref.python]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.fit:: WARNING: more than one target found for cross-reference 'noise': tengri.MockData.noise, tengri.Observation.noise, tengri.Fitter.noise [ref.python]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/inference/fitter.py:docstring of tengri.inference.fitter.Fitter.run:106: WARNING: unknown document: 'bench/reports/2026-04-17_native_vs_nifty.md' [ref.doc]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/examples.md:20: WARNING: local id not found in doc 'index': 'ssp-grids' [myst.xref_missing]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/performance/index.md:77: WARNING: Unknown source document 'inference/compilation_cache' [myst.xref_missing]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/performance/index.md:77: WARNING: Unknown source document 'inference/compilation_diagnostics' [myst.xref_missing]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/performance/index.md:138: WARNING: Unknown source document 'getting_started/index' [myst.xref_missing]
-/Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/docs/performance/memory.md:102: WARNING: Unknown source document 'inference/compilation_cache' [myst.xref_missing]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.fit:: WARNING: more than one target found for cross-reference 'noise': tengri.MockData.noise, tengri.Observation.noise, tengri.Fitter.noise [ref.python]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/forward/sed_model.py:docstring of tengri.forward.sed_model.SEDModel.fit:: WARNING: more than one target found for cross-reference 'noise': tengri.MockData.noise, tengri.Observation.noise, tengri.Fitter.noise [ref.python]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/inference/fitter.py:docstring of tengri.inference.fitter.Fitter.run:106: WARNING: unknown document: 'bench/reports/2026-04-17_native_vs_nifty.md' [ref.doc]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/examples.md:20: WARNING: local id not found in doc 'index': 'ssp-grids' [myst.xref_missing]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/performance/index.md:77: WARNING: Unknown source document 'inference/compilation_cache' [myst.xref_missing]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/performance/index.md:77: WARNING: Unknown source document 'inference/compilation_diagnostics' [myst.xref_missing]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/performance/index.md:138: WARNING: Unknown source document 'getting_started/index' [myst.xref_missing]
+/Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/docs/performance/memory.md:102: WARNING: Unknown source document 'inference/compilation_cache' [myst.xref_missing]
 generating indices... genindex done
 copying linked files... 
 copying notebooks ... [ 10%] spine/00_quickstart.ipynb
@@ -1989,9 +1984,9 @@ copying images... [100%] _build/html/.doctrees/nbsphinx/spine_06_fitting_spectro
 dumping search index in English (code: en)... done
 dumping object inventory... done
 
-Sphinx-Gallery successfully executed 29 out of 29 files subselected by:
+Sphinx-Gallery successfully executed 2 out of 2 files subselected by:
 
-    gallery_conf["filename_pattern"] = '^(?!.*(?:plot_E_cut_sweep|plot_agn_alpha_ox_lbol_2d|plot_agn_cos_inc_sweep|plot_agn_hierarchy|plot_agn_log_lbol_sweep|plot_agn_oa_sweep|plot_agn_polar_dust_temp_sweep|plot_agn_qsogen_ebv_sweep|plot_agn_qsogen_emline_sweep|plot_agn_skirtor_p_sweep|plot_agn_tau_skirtor_sweep|plot_agn_templates|plot_agn_type12|plot_alpha_fe_sweep|plot_alpha_ox_sweep|plot_alpha_sf_sweep|plot_bpt_cue_flexibility|plot_bpt_cue_grid|plot_bpt_diagnostics|plot_bursty_recovery|plot_chemical_evolution|plot_composable_block_toggles|plot_composable_recipes|plot_composable_three_modes|plot_convergence|plot_corner|plot_dexp_tau_sweep|plot_dig_frac_sweep|plot_dla_absorption|plot_dpl_alpha_beta_grid|plot_dpl_alpha_sweep|plot_dpl_beta_sweep|plot_fesc_sweep|plot_filter_curves|plot_filter_set_comparison|plot_fir_radio_correlation|plot_first_fit|plot_fisher_degeneracy|plot_gradient_sensitivity|plot_hierarchical|plot_hierarchical_convergence|plot_igm_model_comparison|plot_igm_redshift|plot_igm_z_evolution|plot_joint_fit|plot_line_sigma_sweep|plot_lnorm_peak_sweep|plot_logu_sweep|plot_logz_gas_sweep|plot_logzsol_panchromatic|plot_logzsol_sweep|plot_metallicity_age_grid|plot_method_comparison|plot_neb_age_dependence|plot_neb_backend_compare|plot_neb_bpt_logu_grid|plot_neb_density_sweep|plot_nebular_backends|plot_nlr_blr_lines|plot_orchestrator_demo|plot_panchromatic_agn|plot_panchromatic_agn_fraction|plot_panchromatic_dust_balance|plot_panchromatic_galaxy|plot_panchromatic_redshift_sweep|plot_parametric_sfh|plot_photometric_fit|plot_polar_dust|plot_population_scaling|plot_prior_posterior_compare|plot_psd_alternatives|plot_psd_burstiness|plot_psd_sigma_sweep|plot_psd_tau_sweep|plot_q_ir_sweep|plot_qsogen_spectrum|plot_radio_lir_relation|plot_radio_loudness_sweep|plot_radio_xray|plot_recipe_compare_priors|plot_recipe_custom_filter|plot_recipe_load_real_csv|plot_recipe_save_load_posterior|plot_recipe_specific_redshift|plot_redshift_filter_grid|plot_relagn_spin|plot_resolution_sweep|plot_sed_components|plot_sfh_double_burst|plot_sfh_quenching_compare|plot_shock_emission|plot_skirtor_variants|plot_snr_sweep|plot_spectral_features|plot_spectrum_fit|plot_ssp_age_sweep|plot_ssp_grid|plot_ssp_imf_compare|plot_ssp_metallicity_sweep|plot_stochastic_sfh|plot_torus_comparison|plot_usecase_age_dust_degeneracy|plot_usecase_emission_line_pcc|plot_usecase_jwst_color_color|plot_usecase_mass_completeness|plot_usecase_sfr_indicator_compare|plot_usecase_uvj_diagram|plot_velocity_dispersion_sweep|plot_workflow_bpt_classification|plot_workflow_dust_mc_resampling|plot_workflow_high_z_lbg|plot_workflow_method_comparison|plot_workflow_post_starburst|plot_wrong_model_trap|plot_xray_agn|plot_xray_gamma_sweep|plot_xray_sf|plot_zh_evolution_compare)).*plot_[^/]+\\.py$'
+    gallery_conf["filename_pattern"] = '^(?!.*(?:plot_E_cut_sweep|plot_agn_alpha_ox_lbol_2d|plot_agn_cos_inc_sweep|plot_agn_hierarchy|plot_agn_log_lbol_sweep|plot_agn_oa_sweep|plot_agn_polar_dust_temp_sweep|plot_agn_qsogen_ebv_sweep|plot_agn_qsogen_emline_sweep|plot_agn_skirtor_p_sweep|plot_agn_tau_skirtor_sweep|plot_agn_templates|plot_agn_type12|plot_alpha_fe_sweep|plot_alpha_ox_sweep|plot_alpha_sf_sweep|plot_astrodust_hd23_01_size_distribution|plot_astrodust_hd23_02_emission_vs_lgU|plot_astrodust_hd23_03_components_at_fiducial_U|plot_astrodust_hd23_04_sedmodel_dust_emission_swap|plot_astrodust_hd23_05_ionization_alignment|plot_astrodust_hd23_06_extinction_and_scattering|plot_astrodust_hd23_07_spinning_dust|plot_astrodust_hd23_08_polarized_emission|plot_astrodust_hd23_lgU_sweep|plot_attenuation_law_compare|plot_bosa_ltir_sweep|plot_bosa_ssfr_sweep|plot_bpt_cue_flexibility|plot_bpt_cue_grid|plot_bpt_diagnostics|plot_bursty_recovery|plot_chemical_evolution|plot_composable_block_toggles|plot_composable_recipes|plot_composable_three_modes|plot_convergence|plot_corner|plot_dexp_tau_sweep|plot_dig_frac_sweep|plot_dla_absorption|plot_dpl_alpha_beta_grid|plot_dpl_alpha_sweep|plot_dpl_beta_sweep|plot_dust_T_sweep|plot_dust_curves|plot_dust_emission_models|plot_dust_geometry_sweep|plot_dust_qpah_umin_grid|plot_dust_slope_sweep|plot_fesc_sweep|plot_filter_curves|plot_filter_set_comparison|plot_fir_radio_correlation|plot_first_fit|plot_fisher_degeneracy|plot_gradient_sensitivity|plot_hierarchical|plot_hierarchical_convergence|plot_igm_model_comparison|plot_igm_redshift|plot_igm_z_evolution|plot_joint_fit|plot_line_sigma_sweep|plot_lnorm_peak_sweep|plot_logu_sweep|plot_logz_gas_sweep|plot_logzsol_panchromatic|plot_logzsol_sweep|plot_metallicity_age_grid|plot_method_comparison|plot_neb_age_dependence|plot_neb_backend_compare|plot_neb_bpt_logu_grid|plot_neb_density_sweep|plot_nebular_backends|plot_nlr_blr_lines|plot_orchestrator_demo|plot_pahspec_lgU_sweep|plot_pahspec_starlight_sweep|plot_panchromatic_agn|plot_panchromatic_agn_fraction|plot_panchromatic_dust_balance|plot_panchromatic_galaxy|plot_panchromatic_redshift_sweep|plot_parametric_sfh|plot_photometric_fit|plot_polar_dust|plot_population_scaling|plot_prior_posterior_compare|plot_psd_alternatives|plot_psd_burstiness|plot_psd_sigma_sweep|plot_psd_tau_sweep|plot_q_ir_sweep|plot_qpah_sweep|plot_qsogen_spectrum|plot_radio_lir_relation|plot_radio_loudness_sweep|plot_radio_xray|plot_recipe_compare_priors|plot_recipe_custom_filter|plot_recipe_load_real_csv|plot_recipe_save_load_posterior|plot_recipe_specific_redshift|plot_redshift_filter_grid|plot_relagn_spin|plot_resolution_sweep|plot_sed_components|plot_sfh_double_burst|plot_sfh_quenching_compare|plot_shock_emission|plot_skirtor_variants|plot_snr_sweep|plot_spectral_features|plot_spectrum_fit|plot_ssp_age_sweep|plot_ssp_grid|plot_ssp_imf_compare|plot_ssp_metallicity_sweep|plot_stochastic_sfh|plot_themis_alpha_sweep|plot_themis_qhac_sweep|plot_themis_umin_sweep|plot_torus_comparison|plot_two_component|plot_umin_sweep|plot_usecase_age_dust_degeneracy|plot_usecase_emission_line_pcc|plot_usecase_jwst_color_color|plot_usecase_mass_completeness|plot_usecase_sfr_indicator_compare|plot_usecase_uvj_diagram|plot_uv_bump_sweep|plot_velocity_dispersion_sweep|plot_workflow_bpt_classification|plot_workflow_dust_mc_resampling|plot_workflow_high_z_lbg|plot_workflow_method_comparison|plot_workflow_post_starburst|plot_wrong_model_trap|plot_xray_agn|plot_xray_gamma_sweep|plot_xray_sf|plot_zh_evolution_compare)).*plot_[^/]+\\.py$'
     gallery_conf["ignore_pattern"]   = 'plot_(population_scaling|hierarchical_convergence|prior_posterior_compare)\\.py$'
 
 after excluding 0 files that had previously been run (based on MD5).
@@ -2185,6 +2180,6 @@ embedding documentation hyperlinks for auto_examples... [ 99%] plot_photometric_
 embedding documentation hyperlinks for auto_examples... [ 99%] plot_redshift_filter_grid.html
 embedding documentation hyperlinks for auto_examples... [100%] plot_filter_curves.html
 
-build succeeded, 381 warnings.
+build succeeded, 380 warnings.
 
 The HTML pages are in _build/html.
