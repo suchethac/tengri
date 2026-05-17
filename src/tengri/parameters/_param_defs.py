@@ -40,30 +40,18 @@ def _bucket_from_declarations(
 
 # ── Non-SFH parameter registry ─────────────────────────────────────────
 
+# ``_NON_SFH_PARAMS`` was historically a junk drawer covering metallicity,
+# dust attenuation, redshift, noise, and spectroscopy params. PR4 split
+# it: dust attenuation entries moved to
+# :mod:`tengri.components.dust._params` (``ATTENUATION_PARAMS``), and the
+# remainder (``met_logzsol``, ``redshift``, ``noise_*``, ``sigma_v_kms``)
+# stays here as the genuinely shared / non-component-owned set.
 _NON_SFH_PARAMS = {
     "met_logzsol": (
         "log10(Z/Zsun)",
         lambda lo, hi: True,
         "",
         Uniform(-2.0, 0.2),
-    ),
-    "dust_tau_bc": (
-        "Birth cloud optical depth",
-        lambda lo, hi: lo >= 0,
-        "must have lo >= 0",
-        Uniform(0.0, 4.0),
-    ),
-    "dust_tau_diff": (
-        "Diffuse ISM optical depth",
-        lambda lo, hi: lo >= 0,
-        "must have lo >= 0",
-        Uniform(0.0, 3.0),
-    ),
-    "dust_slope": (
-        "Dust power-law index",
-        lambda lo, hi: True,
-        "",
-        Fixed(-0.7),
     ),
     "redshift": (
         "Source redshift",
@@ -294,86 +282,6 @@ _CHEM_EVOL_PARAMS = {
     ),
 }
 
-_SINGLE_COMPONENT_DUST_PARAMS = {
-    "dust_tau_v": (
-        "V-band optical depth (uniform screen)",
-        lambda lo, hi: lo >= 0,
-        "must have lo >= 0",
-        Uniform(0.0, 4.0),
-    ),
-}
-
-_DUST_EXTRA_PARAMS = {
-    "dust_f_obscuration": (
-        "Fraction of unobscured sightlines (Lower 2022)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.0),
-    ),
-    "dust_bump_strength": (
-        "UV bump strength at 2175A (Kriek & Conroy 2013)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.0),
-    ),
-    "dust_delta": (
-        "Attenuation curve slope modification",
-        lambda lo, hi: True,
-        "",
-        Fixed(0.0),
-    ),
-    "dust_Rv": (
-        "Total-to-selective extinction R_V (Cardelli)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(3.1),
-    ),
-}
-
-# IGM patchy reionization params (only when igm_patchy=True)
-_IGM_PATCHY_PARAMS = {
-    "igm_x_HI": (
-        "Volume-averaged neutral hydrogen fraction for patchy IGM "
-        "(Miralda-Escude 1998; 0 = fully ionized, 1 = fully neutral)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.0),
-    ),
-    "igm_bubble_mpc": (
-        "Ionized bubble radius in proper Mpc for patchy IGM (Mason+2018; 0.1-100)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(10.0),
-    ),
-}
-
-# DLA (Damped Lyman-alpha) absorber params (only when dla=True)
-_DLA_PARAMS = {
-    "dla_log_n_hi": (
-        "log10(N_HI / cm^-2) for foreground DLA absorber (Voigt profile)",
-        lambda lo, hi: lo >= 15 and hi <= 24,
-        "must be in [15, 24]",
-        Uniform(19.0, 22.0),
-    ),
-    "dla_z": (
-        "Redshift of DLA absorber (defaults to source z if fixed at 0)",
-        lambda lo, hi: True,
-        "",
-        Fixed(0.0),
-    ),
-    "dla_temp": (
-        "Gas temperature of DLA absorber (K)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1e4),
-    ),
-    "dla_b_turb": (
-        "Turbulent broadening of DLA absorber (km/s)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.0),
-    ),
-}
 
 # Dust emission priors now live in :mod:`tengri.components.dust._params`
 # (PR3c). Resolved lazily via module ``__getattr__`` below.
@@ -572,21 +480,34 @@ def _build_param_registry(
         registry[pname] = (pdef.description, pdef.bound_check, pdef.bound_error)
         defaults[pname] = pdef.default
 
-    # Non-SFH params (always present)
-    _is_single = dust_model == "single_component"
-    _skip_dust_params = {"dust_tau_bc", "dust_tau_diff"} if _is_single else set()
+    # Non-SFH global params (redshift, noise, sigma_v_kms; met_logzsol
+    # is injected separately by the metallicity registry below).
     for pname, (desc, check, err, default) in _NON_SFH_PARAMS.items():
-        # met_logzsol is now injected by the metallicity registry (met_mode)
         if pname == "met_logzsol":
-            continue
-        # When single-component dust, skip birth-cloud / diffuse params
-        if pname in _skip_dust_params:
             continue
         registry[pname] = (desc, check, err)
         defaults[pname] = default
 
-    # Single-component dust params (replaces tau_bc + tau_diff)
-    if dust_model == "single_component":
+    # Dust attenuation params (PR4: moved to components/dust/_params.py).
+    # The two Charlot-Fall optical depths are skipped under
+    # ``dust_model="single_component"``; ``dust_tau_v`` from
+    # ``_SINGLE_COMPONENT_DUST_PARAMS`` takes their place there.
+    _is_single = dust_model == "single_component"
+    from tengri.components.dust._params import (
+        ATTENUATION_PARAMS,
+        ATTENUATION_TWO_COMPONENT_ONLY,
+    )
+
+    for decl in ATTENUATION_PARAMS:
+        if _is_single and decl.name in ATTENUATION_TWO_COMPONENT_ONLY:
+            continue
+        check = decl.bound_check if decl.bound_check is not None else (lambda lo, hi: True)
+        registry[decl.name] = (decl.description, check, decl.bound_error)
+        defaults[decl.name] = decl.prior
+
+    if _is_single:
+        from tengri.parameters._param_defs import _SINGLE_COMPONENT_DUST_PARAMS
+
         for pname, (desc, check, err, default) in _SINGLE_COMPONENT_DUST_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
@@ -626,10 +547,8 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Dust extra params (always available — they default to Fixed(0) = no-op)
-    for pname, (desc, check, err, default) in _DUST_EXTRA_PARAMS.items():
-        registry[pname] = (desc, check, err)
-        defaults[pname] = default
+    # (Dust attenuation extras now registered above with the rest of the
+    # ATTENUATION_PARAMS tuple from components/dust/_params.py.)
 
     # Dust emission params (only when dust emission is enabled). Bucket
     # resolved lazily via module ``__getattr__`` to avoid the circular
@@ -671,14 +590,17 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Patchy IGM params (only when igm_patchy=True)
+    # Patchy IGM + DLA buckets (PR4: now derived from components/igm).
     if igm_patchy:
+        from tengri.parameters._param_defs import _IGM_PATCHY_PARAMS
+
         for pname, (desc, check, err, default) in _IGM_PATCHY_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # DLA absorber params (only when dla=True)
     if dla:
+        from tengri.parameters._param_defs import _DLA_PARAMS
+
         for pname, (desc, check, err, default) in _DLA_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
@@ -706,16 +628,27 @@ def _build_param_registry(
 # :mod:`tengri.parameters._param_defs`. Resolving on first attribute
 # access defers the components import until this module has finished
 # initialising.
-_LAZY_DECL_SOURCES: dict[str, str] = {
-    "_RADIO_PARAMS": "tengri.components.radio._params",
-    "_XRAY_PARAMS": "tengri.components.xray._params",
-    "_AGN_PARAMS": "tengri.components.agn._params",
-    "_NEBULAR_PARAMS": "tengri.components.nebular._params",
-    "_DUST_EMISSION_PARAMS": "tengri.components.dust._params",
+#: Maps legacy bucket name → (component module, attribute name on that
+#: module). Default attribute is ``PARAMS``; entries that read a
+#: different tuple name use the 2-tuple form.
+_LAZY_DECL_SOURCES: dict[str, tuple[str, str]] = {
+    "_RADIO_PARAMS": ("tengri.components.radio._params", "PARAMS"),
+    "_XRAY_PARAMS": ("tengri.components.xray._params", "PARAMS"),
+    "_AGN_PARAMS": ("tengri.components.agn._params", "PARAMS"),
+    "_NEBULAR_PARAMS": ("tengri.components.nebular._params", "PARAMS"),
+    "_DUST_EMISSION_PARAMS": ("tengri.components.dust._params", "PARAMS"),
+    # PR4: dust attenuation + single-component dust + IGM patchy + DLA
+    "_DUST_EXTRA_PARAMS": ("tengri.components.dust._params", "ATTENUATION_PARAMS"),
+    "_SINGLE_COMPONENT_DUST_PARAMS": (
+        "tengri.components.dust._params",
+        "SINGLE_COMPONENT_PARAMS",
+    ),
+    "_IGM_PATCHY_PARAMS": ("tengri.components.igm._params", "PATCHY_PARAMS"),
+    "_DLA_PARAMS": ("tengri.components.igm._params", "DLA_PARAMS"),
 }
 
-# Extra entries merged into a lazily-resolved bucket after the
-# component-owned declarations are converted. Keyed by bucket name.
+#: Extra entries merged into a lazily-resolved bucket after the
+#: component-owned declarations are converted. Keyed by bucket name.
 _LAZY_DECL_EXTRAS: dict[str, dict] = {
     "_AGN_PARAMS": _AGN_EXTRAS,
 }
@@ -727,8 +660,9 @@ def __getattr__(name: str) -> dict:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     import importlib
 
-    mod = importlib.import_module(src)
-    bucket = _bucket_from_declarations(mod.PARAMS)
+    module_path, attr = src
+    mod = importlib.import_module(module_path)
+    bucket = _bucket_from_declarations(getattr(mod, attr))
     extras = _LAZY_DECL_EXTRAS.get(name)
     if extras:
         bucket = {**bucket, **extras}

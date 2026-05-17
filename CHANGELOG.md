@@ -41,6 +41,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `_DLA_PARAMS`, `_DUST_EXTRA_PARAMS`, and `_SINGLE_COMPONENT_DUST_PARAMS`
   buckets remain in `_param_defs.py` pending PR4's structural
   consolidation. No user-visible change.
+- Split `_NON_SFH_PARAMS` and migrated four more conditional buckets
+  (PR4/5). Dust attenuation entries (`dust_tau_bc`, `dust_tau_diff`,
+  `dust_slope` plus the existing `dust_f_obscuration`,
+  `dust_bump_strength`, `dust_delta`, `dust_Rv`) now live in
+  `tengri.components.dust._params.ATTENUATION_PARAMS`; the single-screen
+  alternative `dust_tau_v` is in `SINGLE_COMPONENT_PARAMS`. The
+  patchy-IGM (`igm_x_HI`, `igm_bubble_mpc`) and DLA absorber
+  (`dla_log_n_hi`, `dla_z`, `dla_temp`, `dla_b_turb`) buckets moved to
+  `tengri.components.igm._params.{PATCHY_PARAMS, DLA_PARAMS}`. The
+  legacy bucket names (`_DUST_EXTRA_PARAMS`, `_SINGLE_COMPONENT_DUST_PARAMS`,
+  `_IGM_PATCHY_PARAMS`, `_DLA_PARAMS`) remain available as derived
+  views via the lazy `__getattr__`. `_NON_SFH_PARAMS` shrinks to its
+  genuinely-shared residue: `met_logzsol`, `redshift`, `noise_*`,
+  `sigma_v_kms`. No user-visible change.
 
 ### Added (5 metallicity modes wired in the orchestrator, 2026-05-06)
 

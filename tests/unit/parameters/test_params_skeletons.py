@@ -104,6 +104,41 @@ def test_dust_emission_legacy_bucket_matches_canonical_tuple() -> None:
     _assert_bucket_matches_canonical(bucket, canonical)
 
 
+def test_dust_extra_legacy_bucket_matches_attenuation_tuple() -> None:
+    # PR4: ``_DUST_EXTRA_PARAMS`` now resolves to the full
+    # ATTENUATION_PARAMS tuple (dust_tau_bc/diff/slope plus the original
+    # f_obscuration/bump/delta/Rv entries).
+    from tengri.components.dust._params import ATTENUATION_PARAMS as canonical
+    from tengri.parameters._param_defs import _DUST_EXTRA_PARAMS as bucket
+
+    assert set(bucket) == {d.name for d in canonical}
+    _assert_bucket_matches_canonical(bucket, canonical)
+
+
+def test_single_component_dust_legacy_bucket_matches_canonical_tuple() -> None:
+    from tengri.components.dust._params import SINGLE_COMPONENT_PARAMS as canonical
+    from tengri.parameters._param_defs import _SINGLE_COMPONENT_DUST_PARAMS as bucket
+
+    assert set(bucket) == {d.name for d in canonical}
+    _assert_bucket_matches_canonical(bucket, canonical)
+
+
+def test_igm_patchy_legacy_bucket_matches_canonical_tuple() -> None:
+    from tengri.components.igm._params import PATCHY_PARAMS as canonical
+    from tengri.parameters._param_defs import _IGM_PATCHY_PARAMS as bucket
+
+    assert set(bucket) == {d.name for d in canonical}
+    _assert_bucket_matches_canonical(bucket, canonical)
+
+
+def test_dla_legacy_bucket_matches_canonical_tuple() -> None:
+    from tengri.components.igm._params import DLA_PARAMS as canonical
+    from tengri.parameters._param_defs import _DLA_PARAMS as bucket
+
+    assert set(bucket) == {d.name for d in canonical}
+    _assert_bucket_matches_canonical(bucket, canonical)
+
+
 def test_igm_canonical_tuple_unaffected_by_registry() -> None:
     # IGM is special: its declared params (igm_z_mid, igm_dz, igm_log_nhi)
     # are NOT in _param_defs.py and never have been. The canonical tuple
