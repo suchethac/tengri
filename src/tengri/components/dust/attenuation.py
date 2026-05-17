@@ -359,7 +359,7 @@ def power_law(
        Dust in Galaxies," ApJ, 539, 718 (2000).
        https://doi.org/10.1086/309250
     """
-    return (wavelength / 5500.0) ** n_slope
+    return (wavelength / V_BAND_ANGSTROM) ** n_slope
 
 
 @register_dust_law(
@@ -403,7 +403,7 @@ def vw07_bc(
        MNRAS, 381, 543 (2007).
        https://doi.org/10.1111/j.1365-2966.2007.12255.x
     """
-    return (wavelength / 5500.0) ** (-1.3)
+    return (wavelength / V_BAND_ANGSTROM) ** (-1.3)
 
 
 @register_dust_law(
@@ -448,7 +448,7 @@ def vw07_diff(
        Starlight by Dust in Galaxies," ApJ, 539, 718 (2000).
        https://doi.org/10.1086/309250
     """
-    return (wavelength / 5500.0) ** (-0.7)
+    return (wavelength / V_BAND_ANGSTROM) ** (-0.7)
 
 
 @register_dust_law(

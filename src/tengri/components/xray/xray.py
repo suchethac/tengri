@@ -27,6 +27,7 @@ import jax.numpy as jnp
 from tengri.utils.physics_constants import (
     C_AA as _C_AA,
     H_PLANCK as _H_PLANCK,
+    KEV_TO_ERG as _KEV_TO_ERG,
     KEV_TO_HZ as _KEV_TO_HZ,
 )
 
@@ -131,7 +132,7 @@ def xray_xrb(
        https://doi.org/10.3847/1538-4357/ac4971
     """
     nu = _C_AA / wavelength
-    E_keV = _H_PLANCK * nu / (1.6022e-9)  # convert to keV
+    E_keV = _H_PLANCK * nu / _KEV_TO_ERG  # convert to keV
 
     # Reference luminosities (erg/s in 2-10 keV)
     L_hmxb_ref = 2.6e39 * sfr * 10.0**log_L_hmxb_offset
