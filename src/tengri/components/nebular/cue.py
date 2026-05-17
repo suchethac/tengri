@@ -123,6 +123,9 @@ _LOG_C = jnp.log10(_C_CGS)
 # Maximum SSP age contributing to nebular emission
 _MAX_NEB_LOG_AGE = 8.0  # log10(100 Myr in yr)
 
+# Flag to track whether the ionspec defaults warning has been issued (once per process)
+_IONSPEC_DEFAULT_WARNED: bool = False
+
 
 # ── Data containers (immutable NamedTuples for JAX tracing) ───────
 
@@ -1118,6 +1121,39 @@ class CueBackend:
             )
         else:
             derived = {}
+
+        # Check if we're about to silently use the built-in young-starburst defaults
+        # This happens when: (1) no SSP data at construction time, (2) no SSP weights passed,
+        # and (3) no explicit ionspec overrides provided.
+        import sys
+
+        if (
+            self._ionspec_table is None
+            and ssp_weights is None
+            and ionspec_index1 is None
+            and ionspec_index2 is None
+            and ionspec_index3 is None
+            and ionspec_index4 is None
+            and ionspec_logLratio1 is None
+            and ionspec_logLratio2 is None
+            and ionspec_logLratio3 is None
+        ):
+            # Access the module-level flag via sys.modules to avoid closure issues
+            this_module = sys.modules[__name__]
+            if not getattr(this_module, "_IONSPEC_DEFAULT_WARNED", False):
+                msg = (
+                    "CueBackend: using built-in young-starburst ionizing spectrum defaults "
+                    "(index1=19.7, index2=5.3, index3=1.6, index4=0.6, "
+                    "logLratio1=3.9, logLratio2=0.01, logLratio3=0.2) because ssp_data was not "
+                    "provided and no ionspec_* override was passed. For an older / quiescent "
+                    "population this will overestimate emission lines. Either (a) pass ssp_data "
+                    "at CueBackend construction, or (b) override ionspec_index{1..4} and "
+                    "ionspec_logLratio{1..3} explicitly. To suppress: "
+                    "warnings.filterwarnings('ignore', category=UserWarning, "
+                    "module='tengri.components.nebular.cue')"
+                )
+                warnings.warn(msg, UserWarning, stacklevel=3)
+                this_module._IONSPEC_DEFAULT_WARNED = True
 
         def _pick(name, explicit, default):
             """Return explicit value, derived value, or default in priority order."""
