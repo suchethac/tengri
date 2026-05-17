@@ -27,6 +27,8 @@ Thumbs.db
 *.npz
 *.hdf5
 *.h5
+# Snapshot regression baselines are checked in (small, deterministic).
+!tests/_data/kernel_snapshots/*.npy
 
 # Jupyter
 .ipynb_checkpoints/
