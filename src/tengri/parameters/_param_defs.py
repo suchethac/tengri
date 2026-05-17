@@ -509,38 +509,8 @@ _DUST_EMISSION_PARAMS = {
 # ``tengri.components.radio._params`` triggers the components package
 # init, which transitively re-enters this module.
 
-_XRAY_PARAMS = {
-    "xray_gamma_agn": (
-        "AGN X-ray photon index Gamma (typical 1.4-2.4)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1.8),
-    ),
-    "xray_alpha_ox": (
-        "UV-to-X-ray slope alpha_ox (typical -2.0 to -1.0)",
-        lambda lo, hi: True,
-        "",
-        Fixed(-1.4),
-    ),
-    "xray_gamma_hmxb": (
-        "HMXB photon index (typical 2.0)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(2.0),
-    ),
-    "xray_gamma_lmxb": (
-        "LMXB photon index (typical 1.6)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1.6),
-    ),
-    "xray_E_cut": (
-        "Exponential cutoff energy [keV] for AGN X-ray spectrum (typical 100-500)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(300.0),
-    ),
-}
+# X-ray priors now live in :mod:`tengri.components.xray._params` (PR3).
+# Resolved lazily via module ``__getattr__`` below.
 
 _SHOCK_PARAMS = {
     "shock_frac": (
@@ -582,326 +552,24 @@ _SHOCK_PARAMS = {
     ),
 }
 
-_AGN_PARAMS = {
-    "agn_frac": (
-        "AGN luminosity fraction (L_AGN / L_stellar_bol)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.0),
-    ),
-    "agn_log_lbol": (
-        "AGN bolometric luminosity log10(L_bol / Lsun) — direct parametric mode",
-        lambda lo, hi: True,
-        "",
-        Fixed(10.0),
-    ),
-    "agn_alpha": (
-        "AGN disc power-law slope",
-        lambda lo, hi: True,
-        "",
-        Fixed(-1.0),
-    ),
-    "agn_T_torus": (
-        "AGN torus temperature (K)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1000.0),
-    ),
-    "agn_tau_torus": (
-        "AGN torus optical depth at 9.7 um",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(5.0),
-    ),
-    "agn_torus_frac": (
-        "AGN torus covering factor (fraction of L_bol re-emitted by torus)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.5),
-    ),
-    "agn_log_mbh": (
-        "AGN black hole mass log10(M_BH/Msun)",
-        lambda lo, hi: True,
-        "",
-        Fixed(7.0),
-    ),
-    "agn_log_ledd": (
-        "AGN Eddington ratio log10(L/L_Edd)",
-        lambda lo, hi: True,
-        "",
-        Fixed(-1.0),
-    ),
-    # SKIRTOR clumpy torus parameters (Stalevski et al. 2012, 2016)
-    "agn_tau_skirtor": (
-        "SKIRTOR 9.7 um optical depth (3-11)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(7.0),
-    ),
-    "agn_p_skirtor": (
-        "SKIRTOR radial density power-law gradient (0-1.5)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(1.0),
-    ),
-    "agn_q_skirtor": (
-        "SKIRTOR polar density power-law gradient (0-1.5)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(1.0),
-    ),
-    "agn_oa_skirtor": (
-        "SKIRTOR torus half-opening angle [degrees] (20-60)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(40.0),
-    ),
-    "agn_cos_inc": (
-        "Cosine of inclination (0=edge-on, 1=face-on)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.5),
-    ),
-    # BH spin + two-temperature torus (kubota_done_full, multicolor_agn)
-    "agn_a_spin": (
-        "BH spin parameter a* in [0, 0.998) — controls ISCO and radiative efficiency",
-        lambda lo, hi: lo >= 0 and hi < 1,
-        "must be in [0, 1)",
-        Fixed(0.0),
-    ),
-    "agn_T_hot": (
-        "Two-temperature torus: hot dust component temperature [K]",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1200.0),
-    ),
-    "agn_T_warm": (
-        "Two-temperature torus: warm dust component temperature [K]",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(300.0),
-    ),
-    "agn_frac_hot": (
-        "Two-temperature torus: hot-to-warm dust luminosity fraction [0, 1]",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.3),
-    ),
-    # Full Kubota & Done (2018) 3-zone disc parameters (kubota_done_full only)
-    "agn_f_hard": (
-        "Coronal luminosity fraction (fraction of disc power to hot corona)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.02),
-    ),
-    "agn_gamma_warm": (
-        "Warm Comptonization photon index (soft X-ray excess)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(2.5),
-    ),
-    "agn_kt_warm": (
-        "Warm Comptonization electron temperature [keV]",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(0.2),
-    ),
-    "agn_gamma_hard": (
-        "Hard X-ray photon index (hot corona power law)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1.8),
-    ),
-    "agn_kt_hot": (
-        "Hot corona electron temperature [keV]",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(100.0),
-    ),
-    "agn_r_warm_ratio": (
-        "Ratio R_warm / R_hot (warm Comptonization region size)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(2.0),
-    ),
-    # Polar dust reddening of AGN disc (Type 1 SMC-law screen)
-    "agn_polar_ebv": (
-        "Polar dust reddening E(B-V) applied to AGN disc (SMC law); 0 = disabled",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.0),
-    ),
-    "agn_polar_oa": (
-        "Polar dust half-opening angle [degrees] — sets covering fraction",
-        lambda lo, hi: lo > 0 and hi <= 90,
-        "must be in (0, 90]",
-        Fixed(45.0),
-    ),
-    # AGN-nebular emitters (BLR, NLR-Gaussian, Feltre). Reserved for an upcoming
-    # PR — declared here so collaborators can see the intended parameter shape;
-    # currently no consumer wires these into the forward model.
-    "agn_blr_cf": (
-        "BLR covering fraction — fraction of disc luminosity intercepted by BLR. "
-        "Physical bound [0, 1]; typical values 0.05-0.2.",
-        lambda lo, hi: lo >= 0 and hi <= 1.0,
-        "must be in [0, 1]",
-        Fixed(0.1),
-    ),
-    "agn_nlr_cf": (
-        "NLR Gaussian covering fraction — fraction of disc luminosity intercepted by NLR. "
-        "Physical bound [0, 1]; typical values 0.05-0.2.",
-        lambda lo, hi: lo >= 0 and hi <= 1.0,
-        "must be in [0, 1]",
-        Fixed(0.1),
-    ),
-    "agn_fe2_strength": (
-        "Fe II to H-beta flux ratio R_Fe = F(Fe II 4434-4684)/F(H-beta)",
-        lambda lo, hi: lo >= 0 and hi <= 2.0,
-        "must be in [0, 2.0]",
-        Fixed(0.0),
-    ),
-    "agn_feltre_cf": (
-        "Feltre NLR covering fraction — fraction of disc luminosity intercepted by NLR. "
-        "Physical bound [0, 1]; typical values 0.05-0.2.",
-        lambda lo, hi: lo >= 0 and hi <= 1.0,
-        "must be in [0, 1]",
-        Fixed(0.1),
-    ),
-    "agn_alpha_ion": (
-        "AGN EUV power-law slope (f_nu ~ nu^alpha) for Feltre NLR backend. "
-        "Range matches the Feltre+2016 CLOUDY grid (4 grid points: -2.0, -1.7, -1.4, -1.2).",
-        lambda lo, hi: lo >= -2.0 and hi <= -1.2,
-        "must be in [-2.0, -1.2] (grid values: -2.0, -1.7, -1.4, -1.2)",
-        Fixed(-1.7),
-    ),
+
+# AGN priors now live in :mod:`tengri.components.agn._params` (PR3).
+# The legacy ``_AGN_PARAMS`` bucket is resolved lazily via module
+# ``__getattr__`` below, which merges the canonical agn_* tuple with
+# the ``neb_xid`` orphan kept here. (``neb_xid`` is nebular-prefixed
+# but consumed by the Feltre NLR backend alongside ``agn_alpha_ion``,
+# so the legacy bucket has always carried it. Moving it into
+# ``components/agn/_params.py`` would break the agn_* prefix invariant
+# checked by ``tools/check_param_prefixes.py``.)
+_AGN_EXTRAS: dict = {
     "neb_xid": (
         "Dust-to-metal ratio (Feltre NLR backend) [0.1, 0.3, 0.5]",
         lambda lo, hi: lo >= 0.05 and hi <= 0.6,
         "must be in [0.05, 0.6] (grid values: 0.1, 0.3, 0.5)",
         Fixed(0.3),
     ),
-    # GRAHSP AGN model (Buchner+ 2024, arXiv:2405.19297). Activated by
-    # ``agn_model="grahsp"``. Parameters mirror the upstream ``activate*``
-    # CIGALE modules; see :mod:`tengri.components.agn.grahsp`.
-    "agn_grahsp_l5100": (
-        "GRAHSP lambda*L_lambda(5100Å) [erg/s] (paper L_AGN). "
-        "Sets the AGN normalisation; typical 1e42-1e47 for Sy1 to QSO.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1.0e44),
-    ),
-    "agn_grahsp_uvslope": (
-        "GRAHSP BBB UV power-law index alpha_1 (paper uvslope). "
-        "Typical 0; must satisfy uvslope > plslope.",
-        lambda lo, hi: True,
-        "",
-        Fixed(0.0),
-    ),
-    "agn_grahsp_plslope": (
-        "GRAHSP BBB optical power-law index alpha_2 (paper plslope). "
-        "Typical -2.7 to -1; must satisfy uvslope > plslope.",
-        lambda lo, hi: True,
-        "",
-        Fixed(-1.7),
-    ),
-    "agn_grahsp_plbendloc_nm": (
-        "GRAHSP BBB bend wavelength lambda_break [nm] (paper plbendloc). Typical 50-200 nm.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(100.0),
-    ),
-    "agn_grahsp_plbendwidth": (
-        "GRAHSP BBB bend width Lambda [dex] (paper plbendwidth). Typical 0.1-10.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1.0),
-    ),
-    "agn_grahsp_cutoff_nm": (
-        "GRAHSP BBB IR cutoff [nm]; -1 disables (paper cutoff). Default 1e4.",
-        lambda lo, hi: True,
-        "",
-        Fixed(10000.0),
-    ),
-    "agn_grahsp_a_lines": (
-        "GRAHSP line strength scale (paper Alines). Typical 0.3-20.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1.0),
-    ),
-    "agn_grahsp_a_feii": (
-        "GRAHSP FeII forest strength relative to broad H-beta (paper AFeII). Typical 2-10.",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(5.0),
-    ),
-    "agn_grahsp_linewidth_kms": (
-        "GRAHSP emission-line FWHM [km/s] (paper Wline). Typical 100-30000.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(5000.0),
-    ),
-    "agn_grahsp_fcov": (
-        "GRAHSP torus covering factor at 12 um (paper fcov). "
-        "Typical 0.05-0.95; relates to Stalevski+2016 geometric f_cov.",
-        lambda lo, hi: lo >= 0 and hi <= 1.0,
-        "must be in [0, 1]",
-        Fixed(0.4),
-    ),
-    "agn_grahsp_si": (
-        "GRAHSP Si feature strength (paper Si). Negative=absorption, "
-        "positive=emission. Typical -4 to +4.",
-        lambda lo, hi: True,
-        "",
-        Fixed(0.0),
-    ),
-    "agn_grahsp_cool_lam_um": (
-        "GRAHSP cool dust peak wavelength [um] (paper COOLlam). Typical 10-30 um.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(17.0),
-    ),
-    "agn_grahsp_cool_width": (
-        "GRAHSP cool dust log-width [dex] (paper COOLwidth). Typical 0.2-0.65.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(0.45),
-    ),
-    "agn_grahsp_hot_lam_um": (
-        "GRAHSP hot dust peak wavelength [um] (paper HOTlam). Typical 1-5.5 um.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(2.0),
-    ),
-    "agn_grahsp_hot_width": (
-        "GRAHSP hot dust log-width [dex] (paper HOTwidth). Typical 0.2-0.65.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(0.5),
-    ),
-    "agn_grahsp_hot_fcov": (
-        "GRAHSP hot/cool peak ratio in lambda*L_lambda (paper f_hot). Typical 0.04-10.",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(1.0),
-    ),
-    "agn_grahsp_ebv": (
-        "GRAHSP baseline E(B-V) [mag] applied to the AGN bi-attenuation "
-        "(paper E(B-V)). In the upstream CIGALE pipeline this is also the "
-        "galaxy E(B-V); in tengri it parameterises only the AGN-side "
-        "attenuation — galaxy attenuation is handled by the standard "
-        "tengri ``dust_*`` component (configure them consistently).",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.0),
-    ),
-    "agn_grahsp_ebv_agn": (
-        "GRAHSP additional AGN-only E(B-V) [mag] (paper E(B-V)-AGN). "
-        "Stacks with agn_grahsp_ebv to attenuate the AGN spectrum.",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.0),
-    ),
 }
+
 
 # (Legacy alias tables now managed in _aliases.py — imported at top)
 
@@ -1088,15 +756,16 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # AGN params (only when AGN model is enabled)
+    # AGN, radio, X-ray buckets are resolved lazily via the module-level
+    # ``__getattr__`` defined below — eager import would trigger a
+    # circular load through ``tengri.components``.
     if agn_model:
+        from tengri.parameters._param_defs import _AGN_PARAMS
+
         for pname, (desc, check, err, default) in _AGN_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Radio params (only when radio=True). Bucket is resolved via the
-    # module-level ``__getattr__`` defined below — eager import would
-    # trigger a circular load through ``tengri.components``.
     if radio:
         from tengri.parameters._param_defs import _RADIO_PARAMS
 
@@ -1104,8 +773,9 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # X-ray params (only when xray=True)
     if xray:
+        from tengri.parameters._param_defs import _XRAY_PARAMS
+
         for pname, (desc, check, err, default) in _XRAY_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
@@ -1153,6 +823,14 @@ def _build_param_registry(
 # initialising.
 _LAZY_DECL_SOURCES: dict[str, str] = {
     "_RADIO_PARAMS": "tengri.components.radio._params",
+    "_XRAY_PARAMS": "tengri.components.xray._params",
+    "_AGN_PARAMS": "tengri.components.agn._params",
+}
+
+# Extra entries merged into a lazily-resolved bucket after the
+# component-owned declarations are converted. Keyed by bucket name.
+_LAZY_DECL_EXTRAS: dict[str, dict] = {
+    "_AGN_PARAMS": _AGN_EXTRAS,
 }
 
 
@@ -1164,5 +842,8 @@ def __getattr__(name: str) -> dict:
 
     mod = importlib.import_module(src)
     bucket = _bucket_from_declarations(mod.PARAMS)
+    extras = _LAZY_DECL_EXTRAS.get(name)
+    if extras:
+        bucket = {**bucket, **extras}
     globals()[name] = bucket  # cache so __getattr__ runs only once per name
     return bucket

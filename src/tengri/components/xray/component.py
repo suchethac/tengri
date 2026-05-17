@@ -38,6 +38,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
+from tengri.components.xray._params import PARAMS as _XRAY_PARAMS
 from tengri.components.xray.xray import xray_total
 from tengri.core.component import (
     ParamDeclaration,
@@ -45,7 +46,6 @@ from tengri.core.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.parameters.priors import Fixed
 
 __all__ = ["XRaySEDComponent", "XRaySEDComponentConfig"]
 
@@ -98,37 +98,13 @@ class XRaySEDComponent:
     def declared_parameters(self) -> list[ParamDeclaration]:
         r"""Free parameters this component owns.
 
-        Mirrors the ``xray_*`` entries already in
-        :mod:`tengri.parameters._param_defs` so registration via this
-        list and via the legacy registry produce the same priors.
+        Returns the canonical :data:`PARAMS` tuple from
+        :mod:`tengri.components.xray._params`. The legacy ``_XRAY_PARAMS``
+        bucket in :mod:`tengri.parameters._param_defs` is a derived view
+        of the same tuple, so the two registration paths agree by
+        construction.
         """
-        return [
-            ParamDeclaration(
-                "xray_gamma_hmxb",
-                Fixed(2.0),
-                "HMXB photon index [dimensionless]",
-            ),
-            ParamDeclaration(
-                "xray_gamma_lmxb",
-                Fixed(1.6),
-                "LMXB photon index [dimensionless]",
-            ),
-            ParamDeclaration(
-                "xray_gamma_agn",
-                Fixed(1.8),
-                "AGN corona photon index [dimensionless]",
-            ),
-            ParamDeclaration(
-                "xray_E_cut",
-                Fixed(300.0),
-                "AGN corona high-energy cutoff [keV]",
-            ),
-            ParamDeclaration(
-                "xray_alpha_ox",
-                Fixed(-1.4),
-                "alpha_OX = log10(L_2keV / L_2500) for AGN corona [dimensionless]",
-            ),
-        ]
+        return list(_XRAY_PARAMS)
 
     def precompute(
         self,

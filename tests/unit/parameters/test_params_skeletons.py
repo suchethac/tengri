@@ -28,7 +28,13 @@ SKELETON_MODULES = (
 
 # Skeletons whose ``PARAMS`` have been populated by later PRs in the
 # consolidation. Excluded from the empty-sentinel assertion.
-POPULATED_MODULES = frozenset({"tengri.components.radio._params"})
+POPULATED_MODULES = frozenset(
+    {
+        "tengri.components.radio._params",
+        "tengri.components.xray._params",
+        "tengri.components.agn._params",
+    }
+)
 
 
 @pytest.mark.parametrize("module_name", SKELETON_MODULES)
@@ -60,19 +66,45 @@ def test_param_declaration_three_arg_construction() -> None:
     assert decl.bound_error == ""
 
 
+def _assert_bucket_matches_canonical(bucket: dict, canonical: tuple) -> None:
+    for decl in canonical:
+        assert decl.name in bucket, f"{decl.name} missing from legacy bucket"
+        desc, _check, err, default = bucket[decl.name]
+        assert desc == decl.description, f"description drift for {decl.name}"
+        assert err == decl.bound_error, f"bound_error drift for {decl.name}"
+        assert default is decl.prior, f"prior drift for {decl.name}"
+
+
 def test_radio_legacy_bucket_matches_canonical_tuple() -> None:
     # PR2 contract: the legacy 4-tuple bucket in _param_defs must be a
-    # pure derived view of the canonical RADIO PARAMS tuple. Names,
-    # priors, descriptions, and bound_error must agree byte-for-byte.
+    # pure derived view of the canonical RADIO PARAMS tuple.
     from tengri.components.radio._params import PARAMS as canonical
     from tengri.parameters._param_defs import _RADIO_PARAMS as bucket
 
     assert set(bucket) == {d.name for d in canonical}
-    for decl in canonical:
-        desc, _check, err, default = bucket[decl.name]
-        assert desc == decl.description
-        assert err == decl.bound_error
-        assert default is decl.prior
+    _assert_bucket_matches_canonical(bucket, canonical)
+
+
+def test_xray_legacy_bucket_matches_canonical_tuple() -> None:
+    from tengri.components.xray._params import PARAMS as canonical
+    from tengri.parameters._param_defs import _XRAY_PARAMS as bucket
+
+    assert set(bucket) == {d.name for d in canonical}
+    _assert_bucket_matches_canonical(bucket, canonical)
+
+
+def test_agn_legacy_bucket_matches_canonical_tuple_plus_extras() -> None:
+    # AGN bucket = canonical agn_* tuple PLUS the ``neb_xid`` orphan
+    # kept in _param_defs._AGN_EXTRAS for the Feltre NLR backend.
+    from tengri.components.agn._params import PARAMS as canonical
+    from tengri.parameters._param_defs import _AGN_PARAMS as bucket
+
+    canonical_names = {d.name for d in canonical}
+    assert canonical_names < set(bucket), "agn canonical must be a subset of bucket"
+    assert set(bucket) - canonical_names == {"neb_xid"}, (
+        "only neb_xid may live in the bucket outside the canonical tuple"
+    )
+    _assert_bucket_matches_canonical(bucket, canonical)
 
 
 def test_param_declaration_five_arg_construction() -> None:

@@ -1,14 +1,51 @@
 """Free-parameter declarations owned by the X-ray component.
 
-Skeleton introduced in PR1 of the parameter-registry consolidation.
-Empty until PR2 begins moving priors out of
-``tengri.parameters._param_defs``.
+Single source of truth for the ``xray_*`` priors.
+``tengri.parameters._param_defs`` derives its legacy ``_XRAY_PARAMS``
+bucket from this tuple, and :meth:`XRaySEDComponent.declared_parameters`
+returns it directly. Drift between the two paths is structurally
+impossible because they share the same in-memory list.
 """
 
 from __future__ import annotations
 
 from tengri.core.component import ParamDeclaration
+from tengri.parameters.priors import Fixed
 
-PARAMS: tuple[ParamDeclaration, ...] = ()
+PARAMS: tuple[ParamDeclaration, ...] = (
+    ParamDeclaration(
+        "xray_gamma_agn",
+        Fixed(1.8),
+        "AGN X-ray photon index Gamma (typical 1.4-2.4)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+    ),
+    ParamDeclaration(
+        "xray_alpha_ox",
+        Fixed(-1.4),
+        "UV-to-X-ray slope alpha_ox (typical -2.0 to -1.0)",
+    ),
+    ParamDeclaration(
+        "xray_gamma_hmxb",
+        Fixed(2.0),
+        "HMXB photon index (typical 2.0)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+    ),
+    ParamDeclaration(
+        "xray_gamma_lmxb",
+        Fixed(1.6),
+        "LMXB photon index (typical 1.6)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+    ),
+    ParamDeclaration(
+        "xray_E_cut",
+        Fixed(300.0),
+        "Exponential cutoff energy [keV] for AGN X-ray spectrum (typical 100-500)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+    ),
+)
 
 __all__ = ["PARAMS"]

@@ -19,6 +19,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `RadioSEDComponent.declared_parameters()` returns the same tuple —
   drift between the two paths is now structurally impossible. No
   user-visible change.
+- Moved AGN and X-ray priors into their component `_params.PARAMS`
+  tuples (PR3/5). `_AGN_PARAMS` and `_XRAY_PARAMS` are now derived
+  views; the AGN bucket additionally merges a small `_AGN_EXTRAS`
+  registry holding the `neb_xid` orphan (consumed by the Feltre NLR
+  backend alongside `agn_alpha_ion`). `AGNSEDComponent.declared_parameters()`
+  now returns the full ~45-entry tuple — previously a 17-entry subset
+  that drifted from the registry. No user-visible change.
 
 ### Added (5 metallicity modes wired in the orchestrator, 2026-05-06)
 
