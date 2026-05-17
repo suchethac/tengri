@@ -375,96 +375,8 @@ _DLA_PARAMS = {
     ),
 }
 
-_DUST_EMISSION_PARAMS = {
-    "dust_T": (
-        "Dust temperature (K) for greybody/Casey emission",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(35.0),
-    ),
-    "dust_beta_ir": (
-        "IR emissivity index for greybody/Casey emission",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1.6),
-    ),
-    "dust_alpha_mir": (
-        "Mid-IR power-law slope for Casey 2012 emission",
-        lambda lo, hi: True,
-        "",
-        Fixed(2.0),
-    ),
-    "dust_alpha_dale": (
-        "Dale et al. 2014 alpha parameter (0.0625-4.0)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(2.0),
-    ),
-    "dust_umin": (
-        "Draine & Li minimum radiation field (0.1-25 for DL07, 0.1-50 for DL14)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1.0),
-    ),
-    "dust_gamma_dl": (
-        "Draine & Li 2007 PDR fraction (0-1)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.01),
-    ),
-    "dust_qpah": (
-        "Draine & Li PAH mass fraction (%, 0.47-4.58 for DL07, 0.47-7.32 for DL14)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(2.5),
-    ),
-    "dust_alpha_dl14": (
-        "DL14 power-law slope of radiation field distribution (1.0-3.0)",
-        lambda lo, hi: lo >= 1.0 and hi <= 3.0,
-        "must be in [1.0, 3.0]",
-        Fixed(2.0),
-    ),
-    "dust_eta_balance": (
-        "Energy balance relaxation: L_IR = eta * L_absorbed. "
-        "eta=1.0 = strict energy balance; eta>1 = extra IR from obscured "
-        "sources (e.g. embedded AGN, Kokorev+2021/Stardust); eta<1 = "
-        "geometric mismatch where some absorbed UV escapes without "
-        "re-emission into the line of sight",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(1.0),
-    ),
-    "dust_T_warm": (
-        "Warm birth-cloud grain temperature (K) — used by two-temp emission model (30-60K)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(45.0),
-    ),
-    "dust_T_cold": (
-        "Cold ISM grain temperature (K) — used by the two-temperature emission model (15-25K)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(20.0),
-    ),
-    "dust_qhac": (
-        "THEMIS small hydrocarbon grain fraction (Jones+2017, 0-15%)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.17),
-    ),
-    "dust_log_ssfr": (
-        "log10(sSFR/yr^-1) for BOSA template selection (Boquien & Salim 2021)",
-        lambda lo, hi: True,
-        "",
-        Fixed(-10.0),
-    ),
-    "dust_lgU": (
-        "log10(U) starlight intensity in mMMP units for Draine+2021 PAHspec (0..7)",
-        lambda lo, hi: lo >= 0.0 and hi <= 7.0,
-        "must be in [0, 7]",
-        Fixed(0.0),
-    ),
-}
+# Dust emission priors now live in :mod:`tengri.components.dust._params`
+# (PR3c). Resolved lazily via module ``__getattr__`` below.
 
 # Radio priors now live in :mod:`tengri.components.radio._params`
 # (PR2 of the parameter-registry consolidation). The bucket below is a
@@ -719,8 +631,12 @@ def _build_param_registry(
         registry[pname] = (desc, check, err)
         defaults[pname] = default
 
-    # Dust emission params (only when dust emission is enabled)
+    # Dust emission params (only when dust emission is enabled). Bucket
+    # resolved lazily via module ``__getattr__`` to avoid the circular
+    # load through ``tengri.components``.
     if dust_emission:
+        from tengri.parameters._param_defs import _DUST_EMISSION_PARAMS
+
         for pname, (desc, check, err, default) in _DUST_EMISSION_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
@@ -795,6 +711,7 @@ _LAZY_DECL_SOURCES: dict[str, str] = {
     "_XRAY_PARAMS": "tengri.components.xray._params",
     "_AGN_PARAMS": "tengri.components.agn._params",
     "_NEBULAR_PARAMS": "tengri.components.nebular._params",
+    "_DUST_EMISSION_PARAMS": "tengri.components.dust._params",
 }
 
 # Extra entries merged into a lazily-resolved bucket after the

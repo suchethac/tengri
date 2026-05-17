@@ -33,6 +33,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   baked_in) with intentionally-different `Uniform` priors for the
   SEDComponent path. Unifying the two prior sets is deferred to a
   dedicated nebular PR. No user-visible change.
+- Moved IGM declared params and dust-emission priors into
+  `tengri.components.{igm,dust}._params.PARAMS` (PR3c/5).
+  `IGMSEDComponent.declared_parameters()` now returns the canonical
+  IGM tuple; `_DUST_EMISSION_PARAMS` is a derived view via the
+  module-level `__getattr__`. The conditional `_IGM_PATCHY_PARAMS`,
+  `_DLA_PARAMS`, `_DUST_EXTRA_PARAMS`, and `_SINGLE_COMPONENT_DUST_PARAMS`
+  buckets remain in `_param_defs.py` pending PR4's structural
+  consolidation. No user-visible change.
 
 ### Added (5 metallicity modes wired in the orchestrator, 2026-05-06)
 

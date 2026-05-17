@@ -34,6 +34,8 @@ POPULATED_MODULES = frozenset(
         "tengri.components.xray._params",
         "tengri.components.agn._params",
         "tengri.components.nebular._params",
+        "tengri.components.igm._params",
+        "tengri.components.dust._params",
     }
 )
 
@@ -92,6 +94,23 @@ def test_xray_legacy_bucket_matches_canonical_tuple() -> None:
 
     assert set(bucket) == {d.name for d in canonical}
     _assert_bucket_matches_canonical(bucket, canonical)
+
+
+def test_dust_emission_legacy_bucket_matches_canonical_tuple() -> None:
+    from tengri.components.dust._params import PARAMS as canonical
+    from tengri.parameters._param_defs import _DUST_EMISSION_PARAMS as bucket
+
+    assert set(bucket) == {d.name for d in canonical}
+    _assert_bucket_matches_canonical(bucket, canonical)
+
+
+def test_igm_canonical_tuple_unaffected_by_registry() -> None:
+    # IGM is special: its declared params (igm_z_mid, igm_dz, igm_log_nhi)
+    # are NOT in _param_defs.py and never have been. The canonical tuple
+    # is the only registry-side source.
+    from tengri.components.igm._params import PARAMS
+
+    assert {d.name for d in PARAMS} == {"igm_z_mid", "igm_dz", "igm_log_nhi"}
 
 
 def test_nebular_legacy_bucket_matches_canonical_tuple() -> None:
