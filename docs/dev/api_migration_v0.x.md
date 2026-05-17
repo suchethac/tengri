@@ -475,6 +475,76 @@ spec = Parameters.from_groups(
   parameters_to_groups() documentation.
 - `src/tengri/recipes/__init__.py` — curated recipe implementations.
 
+### Common stumbles
+
+A few sharp edges surfaced during real-data stress testing of the new API.
+Documenting them here so users hit the workaround, not the symptom.
+
+**1. ``CueWNESSPError`` when using a recipe with a wNE SSP.**
+
+The four recipes that include nebular emission (`star_forming_photometry`,
+`quiescent_z0`, `agn_panchromatic`, `stochastic_sfh_jwst`) use the Cue neural
+backend, which requires a **bare-stellar** SSP file
+(`fsps_prsc_miles_chabrier.h5`, `fsps_mist_c3k_a_chabrier.h5`, …). Pairing
+with a wNE (with-nebular-emission) SSP raises ``CueWNESSPError`` at model
+construction. Workarounds:
+
+```python
+# A. Use a bare-stellar SSP (preferred)
+ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+model = SEDModel.from_groups(ssp_data=ssp, **recipes.star_forming_photometry())
+
+# B. Swap the nebular backend post-edit
+r = recipes.star_forming_photometry()
+r["neb"] = {"type": "ssp"}  # baked-in nebular from the wNE file
+model = SEDModel.from_groups(ssp_data=wne_ssp, **r)
+```
+
+`mock_recovery_minimal` works with any SSP because it disables nebular.
+
+**2. ``Gaussian(μ, σ)`` for ``redshift`` fails bounds check.**
+
+The registry enforces ``redshift >= 0``. ``Gaussian`` defaults to unbounded
+``(-inf, +inf)`` which fails the check. Always pass an explicit lower bound:
+
+```python
+# Wrong: fails with "must have lo >= 0"
+SEDModel.from_groups(..., redshift=Gaussian(0.5, 0.05))
+
+# Right: bound at 0
+SEDModel.from_groups(..., redshift=Gaussian(0.5, 0.05, lo=0.0))
+```
+
+**3. ``predict_photometry({})`` errors on all-fixed models.**
+
+When every parameter is fixed via wildcards, ``spec.free_params`` is empty.
+``predict_photometry`` still needs values for the fixed parameters. Use
+``spec.sample(key)`` to get a complete param dict for free:
+
+```python
+# Wrong: empty truth dict
+flux = model.predict_photometry({})
+
+# Right: sample fills in all params (fixed values too)
+key = jax.random.PRNGKey(0)
+flux = model.predict_photometry(model.spec.sample(key))
+```
+
+**4. Bad wildcard sentinel values now raise instead of falling through.**
+
+As of fe2e69f, the `'*'` slot must be the ``FREE`` or ``FIXED`` sentinel —
+strings, ``None``, and bools all raise ``ValueError`` with a clear hint.
+Previously these silently fell through to "fixed at registry default" with
+no warning.
+
+```python
+# Wrong: silently misbehaved before fe2e69f; raises now
+parse_groups(sfh={"type": "dpl", "*": "free"})  # ValueError
+
+# Right
+parse_groups(sfh={"type": "dpl", "*": FREE})
+```
+
 ---
 
 ## How to update this document
