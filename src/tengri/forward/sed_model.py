@@ -40,6 +40,7 @@ from typing import ClassVar
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.components.dust.attenuation import precompute_dust_age_weights
 from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
@@ -2198,6 +2199,16 @@ class SEDModel:
         ssp_flux_shape = tuple(self.ssp_data.ssp_flux.shape)
         ssp_lgmet_shape = tuple(self.ssp_data.ssp_lgmet.shape)
 
+        # SSP metallicity grid VALUES (not just shape).
+        # Hybrid and compositional kernels close over actual ssp_lgmet values,
+        # so two models with same shape but different grids must have different signatures.
+        ssp_lgmet_array = np.asarray(self.ssp_data.ssp_lgmet)
+        ssp_lgmet_id = (
+            int(ssp_lgmet_array.tobytes().__hash__())
+            if hasattr(ssp_lgmet_array, "tobytes")
+            else hash(tuple(map(float, ssp_lgmet_array)))
+        )
+
         # Alpha-Fe enhancement presence
         has_alpha_fe = hasattr(self.ssp_data, "ssp_alpha_fe")
 
@@ -2205,6 +2216,14 @@ class SEDModel:
         n_filters = len(self.filter_waves) if self.filter_waves is not None else 0
         filter_wave_shape = tuple(self.filter_waves[0].shape) if self.filter_waves else ()
         filter_trans_dtype = str(self.filter_trans[0].dtype) if self.filter_trans else "none"
+
+        # Filter transmission VALUES (not just dtype).
+        # Hybrid kernels close over actual filter_trans curves, so two models with
+        # same dtype but different filter profiles must have different signatures.
+        if self.filter_trans is not None and self.filter_trans:
+            filter_trans_id = hash(tuple(np.asarray(t).tobytes() for t in self.filter_trans))
+        else:
+            filter_trans_id = "none"
 
         # Dust configuration
         dust_model = str(self._dust_model)
@@ -2283,10 +2302,12 @@ class SEDModel:
         return (
             ssp_flux_shape,
             ssp_lgmet_shape,
+            ssp_lgmet_id,
             has_alpha_fe,
             n_filters,
             filter_wave_shape,
             filter_trans_dtype,
+            filter_trans_id,
             dust_model,
             dust_scheme,
             dust_emission_model,
