@@ -18,6 +18,7 @@ Coefficient tables from eazy-py (Brammer et al.):
 import jax
 import jax.numpy as jnp
 
+from tengri.utils.cosmology import PLANCK18
 from tengri.utils.physics_constants import C_CGS
 
 # ── Lyman series wavelengths (Angstrom) for lines j=2 (Ly-alpha) to j=40
@@ -600,7 +601,9 @@ def _damping_wing_tau(
     # offset v_bubble = R_bubble * H(z), hence a wavelength offset
     # x_bubble = v_bubble / c.
     # H(z) = H_0 * sqrt(Omega_m * (1+z)^3) for matter-dominated era
-    h_z_kms_per_mpc = 100.0 * 0.7 * jnp.sqrt(0.3 * (1.0 + z) ** 3)
+    # Use canonical PLANCK18 cosmology: h = 0.674, Om0 = 0.315
+    # (replaces hardcoded h = 0.7, Om0 = 0.3 which caused ~1-2% drift)
+    h_z_kms_per_mpc = 100.0 * PLANCK18.h * jnp.sqrt(PLANCK18.Om0 * (1.0 + z) ** 3)
     v_bubble = R_bubble * h_z_kms_per_mpc  # km/s
     x_bubble = v_bubble / 2.998e5  # dimensionless
 
