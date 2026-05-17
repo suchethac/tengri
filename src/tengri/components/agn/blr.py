@@ -40,19 +40,20 @@ from tengri.utils.physics_constants import (
 # (Vanden Berk et al. 2001).
 _BLR_LINES = jnp.array(
     [
-        # Ly-alpha 1216 (strongest UV line)
+        # Ly-alpha 1216 (strongest UV line; Vanden Berk+2001 composite, ~100% strength)
         [1216.0, 1.00],
-        # NV 1240
+        # NV 1240 (Vanden Berk+2001 composite)
         [1240.0, 0.08],
-        # SiIV + OIV] 1400
+        # SiIV + OIV] 1400 (Vanden Berk+2001 composite)
         [1400.0, 0.09],
         # CIV 1549 (Vanden Berk+2001 EW ~24 A, ~0.26 relative to Lya)
         [1549.0, 0.26],
-        # CIII] 1909
+        # CIII] 1909 (Vanden Berk+2001 composite)
         [1909.0, 0.24],
-        # MgII 2800
+        # MgII 2800 (Internal calibration: tuned to maintain MgII/Hbeta ratio ~0.72,
+        # consistent with broad-only composite from Boroson & Green 1992 / Forster et al. 2001)
         [2800.0, 0.36],
-        # H-gamma 4340
+        # H-gamma 4340 (Vanden Berk+2001 composite)
         [4340.0, 0.15],
         # H-beta 4861 (Vanden Berk+2001 broad EW ~46 A)
         [4861.0, 0.50],
