@@ -129,7 +129,10 @@ def _clamp_interp_index(val: jnp.ndarray, grid: jnp.ndarray) -> tuple[jnp.ndarra
     i_lo = jnp.clip(i_hi - 1, 0, n - 2)
     i_hi_c = jnp.clip(i_hi, 1, n - 1)
     span = grid[i_hi_c] - grid[i_lo]
-    frac = jnp.where(span > 0, (val - grid[i_lo]) / span, 0.0)
+    # Safe gradient pattern: avoid division by near-zero in unselected branch
+    # by pre-masking the divisor (double-where idiom).
+    span_safe = jnp.where(span > 0, span, 1.0)
+    frac = jnp.where(span > 0, (val - grid[i_lo]) / span_safe, 0.0)
     return i_lo, jnp.clip(frac, 0.0, 1.0)
 
 
@@ -286,18 +289,20 @@ def _nthcomp_lnu_interp_bwd(residuals: tuple, g_out: jnp.ndarray) -> tuple:
 
     # Chain rule: compute sum of g_out * fd_grad_per_element
     # To avoid overflow: divide by max absolute gradient before accumulating,
-    # then rescale
+    # then rescale using the safe gradient pattern.
     max_grad = jnp.max(jnp.abs(fd_grad_per_element))
+    # Safe gradient pattern: pre-mask divisor to avoid NaN from unselected branch
     max_grad_safe = jnp.where(max_grad > 0, max_grad, 1.0)
 
     # Normalize to unit scale to avoid overflow in multiplication
+    # Use pre-masked max_grad_safe to ensure gradient flows safely
     fd_grad_normalized = fd_grad_per_element / max_grad_safe
     g_out_normalized = g_out / max_grad_safe
 
     # Compute normalized product and sum
     g_gamma_normalized = jnp.sum(g_out_normalized * fd_grad_normalized)
 
-    # Restore the scale
+    # Restore the scale using the safe value
     g_gamma = g_gamma_normalized * max_grad_safe * max_grad_safe
 
     # Ensure result is finite
