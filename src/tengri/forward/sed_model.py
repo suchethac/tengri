@@ -51,6 +51,7 @@ from tengri.components.stellar.sps.precompute import (
     precompute_spectroscopy,
 )
 from tengri.forward._kernels import (
+    DEFAULT as DEFAULT_KERNEL_STRATEGY,
     build_exact_sed,
     build_fused_rest_sed,
     build_fused_tier2_photometry,
@@ -298,7 +299,12 @@ class SEDModel:
         csp_integration="trapz",
         wave_chunk_size=None,
         agn_config=None,
+        strategy=None,
     ):
+        # ── Kernel-selection strategy ─────────────────────────────
+        # Stored before any kernel builds so ``_get_strategy`` returns the
+        # caller's choice (default :data:`tengri.DEFAULT_KERNEL_STRATEGY`).
+        self._strategy = strategy if strategy is not None else DEFAULT_KERNEL_STRATEGY
         self._agn_config = agn_config
         # ── Observation ────────────────────────────────────────────
         observation, spec = self._init_observation(spec, filters, observation)
@@ -756,6 +762,81 @@ class SEDModel:
         """Reset cached kernels so they're rebuilt on next access."""
         self._compositional_kernels = None
         self._hybrid_kernels = None
+        # Records why each kernel slot is filled / empty / failed. Populated
+        # by ``_try_build_kernel``; inspected via ``list_available_kernels``.
+        self._kernel_build_log: dict[str, str] = {}
+
+    def _try_build_kernel(self, name, builder):
+        """Run a kernel builder, recording success/failure in the build log.
+
+        Replaces the historical ``contextlib.suppress(Exception)`` blocks so
+        failures are no longer silent: the user gets a ``UserWarning`` and a
+        diagnostic entry visible via ``list_available_kernels``.
+
+        Parameters
+        ----------
+        name : str
+            Stable adapter name (e.g. ``"hybrid_photometry"``).
+        builder : callable
+            Zero-argument callable that performs the build and returns the
+            closure (or ``None``).
+
+        Returns
+        -------
+        object or None
+            The builder's return value, or ``None`` if it raised.
+        """
+        if getattr(self, "_kernel_build_log", None) is None:
+            self._kernel_build_log = {}
+        try:
+            result = builder()
+        except Exception as exc:
+            self._kernel_build_log[name] = (
+                f"build_failed: {type(exc).__name__}: {str(exc).splitlines()[0]}"
+            )
+            warnings.warn(
+                f"Kernel '{name}' build failed: {type(exc).__name__}: {exc}",
+                UserWarning,
+                stacklevel=3,
+            )
+            return None
+        if result is None:
+            self._kernel_build_log[name] = "build_returned_none"
+        else:
+            self._kernel_build_log[name] = "ok"
+        return result
+
+    def _get_strategy(self):
+        """Return the kernel-selection strategy for this model.
+
+        Defaults to :data:`tengri.forward._kernels.DEFAULT` (the historical
+        cascade order). PR3 will expose a ``strategy=`` kwarg on
+        :meth:`__init__` and :meth:`predict_photometry`; until then this
+        helper centralises the default.
+        """
+        strategy = getattr(self, "_strategy", None)
+        return strategy if strategy is not None else DEFAULT_KERNEL_STRATEGY
+
+    def list_available_kernels(self):
+        """Report the state of every kernel attempted during build.
+
+        Returns
+        -------
+        dict[str, str]
+            Mapping ``{kernel_name: status}`` where status is one of
+            ``"ok"``, ``"build_returned_none"``, ``"build_failed: <exc>"``,
+            or absent if the kernel was never attempted (e.g. preconditions
+            on state were not met).
+
+        Notes
+        -----
+        The strategy module (``tengri.forward._kernels.strategy``) lists
+        every adapter name; entries missing from this dict mean the
+        adapter's ``is_compatible`` predicate returned False before any
+        build attempt — usually a missing precompute or a free redshift
+        excluding the fixed-z hybrid kernels.
+        """
+        return dict(getattr(self, "_kernel_build_log", None) or {})
 
     def _precompute_dust_ir_photometry(self):
         """Precompute dust IR template photometry for fast hybrid kernel lookup.
@@ -1546,17 +1627,10 @@ class SEDModel:
 
     def _build_compositional_kernels(self):
         """Build Level 2: full-resolution JIT-compiled kernels."""
-        exact_sed = build_exact_sed(self._state)
-
-        rest_sed = None
-        try:
-            rest_sed = build_fused_rest_sed(self._state, self)
-        except Exception as e:
-            warnings.warn(
-                f"Compositional rest-SED kernel build failed: {e}",
-                UserWarning,
-                stacklevel=2,
-            )
+        exact_sed = self._try_build_kernel("exact_rest_sed", lambda: build_exact_sed(self._state))
+        rest_sed = self._try_build_kernel(
+            "compositional_rest_sed", lambda: build_fused_rest_sed(self._state, self)
+        )
 
         # Store partial result so build_fused_tier2_photometry can read
         # model._compositional.rest_sed during construction.
@@ -1570,22 +1644,26 @@ class SEDModel:
         fused_spec = None
         fused_spec_raw = None
         if rest_sed is not None and self.filter_waves is not None:
-            with contextlib.suppress(Exception):
-                fused_phot_raw = build_fused_tier2_photometry(self._state, self)
-                fused_phot = (
-                    logged_jit(fused_phot_raw, name="compositional_phot")
-                    if fused_phot_raw is not None
-                    else None
-                )
+            fused_phot_raw = self._try_build_kernel(
+                "compositional_photometry",
+                lambda: build_fused_tier2_photometry(self._state, self),
+            )
+            fused_phot = (
+                logged_jit(fused_phot_raw, name="compositional_phot")
+                if fused_phot_raw is not None
+                else None
+            )
 
         if rest_sed is not None:
-            with contextlib.suppress(Exception):
-                fused_spec_raw = build_fused_tier2_spectrum(self._state, self)
-                fused_spec = (
-                    logged_jit(fused_spec_raw, name="compositional_spec")
-                    if fused_spec_raw is not None
-                    else None
-                )
+            fused_spec_raw = self._try_build_kernel(
+                "compositional_spectrum",
+                lambda: build_fused_tier2_spectrum(self._state, self),
+            )
+            fused_spec = (
+                logged_jit(fused_spec_raw, name="compositional_spec")
+                if fused_spec_raw is not None
+                else None
+            )
 
         ck = CompositionalKernels(
             rest_sed=rest_sed,
@@ -1609,24 +1687,28 @@ class SEDModel:
         hybrid_phot = None
         hybrid_phot_raw = None
         if self._precomputed.photometry is not None and self._z_fixed is not None:
-            with contextlib.suppress(Exception):
-                hybrid_phot_raw = build_hybrid_photometry(self._state, self)
-                hybrid_phot = (
-                    logged_jit(hybrid_phot_raw, name="hybrid_phot")
-                    if hybrid_phot_raw is not None
-                    else None
-                )
+            hybrid_phot_raw = self._try_build_kernel(
+                "hybrid_photometry",
+                lambda: build_hybrid_photometry(self._state, self),
+            )
+            hybrid_phot = (
+                logged_jit(hybrid_phot_raw, name="hybrid_phot")
+                if hybrid_phot_raw is not None
+                else None
+            )
 
         hybrid_spec = None
         hybrid_spec_raw = None
         if self._precomputed.spectroscopy is not None and self._z_fixed is not None:
-            with contextlib.suppress(Exception):
-                hybrid_spec_raw = build_hybrid_spectrum(self._state, self)
-                hybrid_spec = (
-                    logged_jit(hybrid_spec_raw, name="hybrid_spec")
-                    if hybrid_spec_raw is not None
-                    else None
-                )
+            hybrid_spec_raw = self._try_build_kernel(
+                "hybrid_spectrum",
+                lambda: build_hybrid_spectrum(self._state, self),
+            )
+            hybrid_spec = (
+                logged_jit(hybrid_spec_raw, name="hybrid_spec")
+                if hybrid_spec_raw is not None
+                else None
+            )
 
         hk = HybridKernels(photometry=hybrid_phot, spectrum=hybrid_spec)
         hk._photometry_raw = hybrid_phot_raw
@@ -3694,29 +3776,28 @@ class SEDModel:
     # ── Private prediction dispatch ───────────────────────────────────
 
     def _predict_photometry_auto(self, params):
-        """Auto mode: pick fastest available (Compositional → Hybrid → Exact).
+        """Auto mode: consult ``self._strategy`` for the cascade order.
 
-        Compositional is preferred over hybrid because XLA fuses the
-        entire graph (SFH → SED → filter integration) into one optimized
-        kernel, which is faster than splitting into precomputed stellar
-        + Python-dispatched non-stellar filter integration.  Hybrid is
-        the fallback when compositional is unavailable.
+        The strategy yields adapter names in preference order; we dispatch
+        to the matching ``_predict_photometry_<flavour>`` method for the
+        first name whose built kernel slot is non-None and whose
+        param-level predicate (e.g. tabulated SFH excludes hybrid) passes.
 
-        Tabulated SFH and standard parametric SFH are both handled by the
-        compositional path: SFH is evaluated in Python before JIT entry, so
-        the JIT closure is SFH-type-independent.  Evolving-metallicity and
-        chem-evol models fall back inside ``_predict_photometry_compositional``.
+        Falls back to ``_predict_photometry_exact`` with a warning when no
+        strategy-preferred kernel is available — preserves the historical
+        guarantee that auto mode never raises.
         """
         import warnings
 
-        # Compositional: full-resolution JIT (bit-exact, default)
-        if self._compositional.photometry is not None:
-            return self._predict_photometry_compositional(params)
-
-        # Hybrid: precomputed SSP×filter (faster but ~0.2% approx, fallback)
-        # Tabulated SFH not supported in hybrid (variable-size arrays).
-        if self._hybrid.photometry is not None and "sfh_t_gyr" not in params:
-            return self._predict_photometry_hybrid(params)
+        strategy = self._get_strategy()
+        for adapter in strategy.select(self._state, self, product="photometry", params=params):
+            name = adapter.name
+            if name == "compositional_photometry" and self._compositional.photometry is not None:
+                return self._predict_photometry_compositional(params)
+            if name == "hybrid_photometry" and self._hybrid.photometry is not None:
+                return self._predict_photometry_hybrid(params)
+            if name == "hybrid_photometry_ztable" and self._hybrid.photometry is not None:
+                return self._predict_photometry_hybrid(params)
 
         warnings.warn(
             "mode='auto' requested but no fast path available, using exact path",
@@ -3869,22 +3950,40 @@ class SEDModel:
         )
 
     def _predict_spectrum_auto(self, params, wave_obs, wave_chunk_size=None):
-        """Auto mode: pick fastest available spectrum path.
+        """Auto mode: consult ``self._strategy`` for the spectrum cascade.
 
-        The compositional path handles all SFH types (including tabulated)
-        because SFH is evaluated outside the JIT.  Evolving-metallicity and
-        chem-evol models fall back inside ``_predict_spectrum_compositional``.
+        Mirrors :meth:`_predict_photometry_auto`. Falls back to the exact
+        path with a warning if no strategy-preferred spectrum kernel is
+        compatible.
 
-        Note: the inference path uses ``mode="_traceable"``, which already
-        prefers the hybrid (precomputed SSP-on-pixels) kernel directly via
-        ``_hybrid_kernels._spectrum_raw``.  This auto-mode is for direct
-        user calls (e.g., plotting), where ``compositional`` is bit-exact
-        and only marginally slower than ``hybrid``.
+        Note: inference uses ``mode="_traceable"`` (separate path) which
+        prefers the hybrid raw kernel directly via ``_hybrid_kernels._spectrum_raw``.
         """
         import warnings
 
-        # Compositional (full resolution)
-        if self._compositional.rest_sed is not None:
+        strategy = self._get_strategy()
+        for adapter in strategy.select(self._state, self, product="spectrum", params=params):
+            name = adapter.name
+            if name == "compositional_spectrum" and self._compositional.rest_sed is not None:
+                return self._predict_spectrum_compositional(params, wave_obs, wave_chunk_size)
+            if name == "hybrid_spectrum" and self._hybrid.spectrum is not None:
+                return self._predict_spectrum_compositional(params, wave_obs, wave_chunk_size)
+
+        # Historical fallback: ``_predict_spectrum_compositional`` works
+        # whenever ``_compositional.rest_sed`` is available even without
+        # the fused tier-2 spectrum kernel — it falls back internally to
+        # ``_compute_rest_sed_compositional`` + Python wavelength interp.
+        # The ``compositional_spectrum`` adapter requires a precomputed
+        # wave grid for its fused build, which is stricter than what the
+        # actual predict method needs.
+        if self._compositional.rest_sed is not None and any(
+            name in strategy.preferred
+            for name in (
+                "compositional_photometry",
+                "compositional_spectrum",
+                "compositional_rest_sed",
+            )
+        ):
             return self._predict_spectrum_compositional(params, wave_obs, wave_chunk_size)
 
         warnings.warn(
@@ -5079,15 +5178,23 @@ class SEDModel:
 
         # Rebuild compositional spectrum kernel (full-resolution end-to-end JIT)
         if self._compositional.rest_sed is not None:
-            with contextlib.suppress(Exception):
-                _raw = build_fused_tier2_spectrum(self._state, self)
-                self._compositional.spectrum = jax.jit(_raw) if _raw else None
+            _raw = self._try_build_kernel(
+                "compositional_spectrum",
+                lambda: build_fused_tier2_spectrum(self._state, self),
+            )
+            self._compositional.spectrum = jax.jit(_raw) if _raw else None
+            # Preserve the raw closure for ``mode="_traceable"`` (NIFTy VI),
+            # which reads ``_spectrum_raw`` directly from the kernel container.
+            self._compositional._spectrum_raw = _raw
 
         # Rebuild hybrid spectrum kernel (precomputed SSP + exact non-stellar)
         if self._compositional.rest_sed is not None:
-            with contextlib.suppress(Exception):
-                _raw = build_hybrid_spectrum(self._state, self)
-                self._hybrid.spectrum = jax.jit(_raw) if _raw else None
+            _raw = self._try_build_kernel(
+                "hybrid_spectrum",
+                lambda: build_hybrid_spectrum(self._state, self),
+            )
+            self._hybrid.spectrum = jax.jit(_raw) if _raw else None
+            self._hybrid._spectrum_raw = _raw
 
         return self
 
@@ -5200,9 +5307,11 @@ class SEDModel:
                 getattr(self, "_has_xray", False),
             )
         ):
-            with contextlib.suppress(Exception):
-                _raw = build_hybrid_photometry_ztable(self._state, self)
-                self._hybrid.photometry = jax.jit(_raw) if _raw else None
+            _raw = self._try_build_kernel(
+                "hybrid_photometry_ztable",
+                lambda: build_hybrid_photometry_ztable(self._state, self),
+            )
+            self._hybrid.photometry = jax.jit(_raw) if _raw else None
 
         return self
 
