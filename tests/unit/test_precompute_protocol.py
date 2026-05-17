@@ -110,6 +110,9 @@ class TestRegistryCompleteness:
             # the registry slot for "cloudy" already routes through that.
             # See ``components/nebular/cloudy_grid.py:CloudyGridBackend``.
             "tengri.components.nebular.cloudy_precompute",
+            # composable_precompute: recipe-builder helper, invoked directly by
+            # SEDModel.agn_model='composable', not a registered named component.
+            "tengri.components.agn.blocks.composable_precompute",
         }
     )
 
