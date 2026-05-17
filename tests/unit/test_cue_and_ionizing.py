@@ -437,7 +437,8 @@ class TestCueIonspecDefaultsWarning:
             )
         # Check that no UserWarning about defaults was raised
         user_warnings_with_defaults = [
-            w for w in warning_list
+            w
+            for w in warning_list
             if issubclass(w.category, UserWarning) and "young-starburst" in str(w.message)
         ]
         assert not user_warnings_with_defaults, (

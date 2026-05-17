@@ -11,8 +11,8 @@ import pytest
 
 from tengri.components.agn._nthcomp import (
     _clamp_interp_index,
-    nthcomp_lnu_interp,
     _is_table_available,
+    nthcomp_lnu_interp,
 )
 
 
@@ -30,7 +30,7 @@ class TestNthcompGradientStability:
         val = jnp.array(1.0, dtype=jnp.float32)
 
         def loss(v):
-            i_lo, frac = _clamp_interp_index(v, grid)
+            _, frac = _clamp_interp_index(v, grid)
             return jnp.sum(frac)
 
         # This should NOT produce NaN or Inf
@@ -42,7 +42,7 @@ class TestNthcompGradientStability:
         grid = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=jnp.float32)
 
         def loss(v):
-            i_lo, frac = _clamp_interp_index(v, grid)
+            _, frac = _clamp_interp_index(v, grid)
             return jnp.sum(frac)
 
         # Test at the boundary where clamping takes effect
@@ -52,9 +52,7 @@ class TestNthcompGradientStability:
 
         assert jnp.isfinite(grad_at_min), f"Gradient at min not finite: {grad_at_min}"
         assert jnp.isfinite(grad_at_max), f"Gradient at max not finite: {grad_at_max}"
-        assert jnp.isfinite(grad_in_middle), (
-            f"Gradient in middle not finite: {grad_in_middle}"
-        )
+        assert jnp.isfinite(grad_in_middle), f"Gradient in middle not finite: {grad_in_middle}"
 
     def test_nthcomp_lnu_interp_gradient_at_grid_edges(self):
         """Verify finite gradients when interpolating near grid boundaries."""
@@ -66,8 +64,7 @@ class TestNthcompGradientStability:
 
         def loss(gamma):
             lnu = nthcomp_lnu_interp(
-                nu, gamma, jnp.array(5.0, dtype=jnp.float32),
-                jnp.array(0.1, dtype=jnp.float32)
+                nu, gamma, jnp.array(5.0, dtype=jnp.float32), jnp.array(0.1, dtype=jnp.float32)
             )
             return jnp.sum(lnu)
 
@@ -75,9 +72,7 @@ class TestNthcompGradientStability:
         for gamma_val in [1.3, 1.5, 2.0, 2.5]:
             gamma = jnp.array(gamma_val, dtype=jnp.float32)
             grad = jax.grad(loss)(gamma)
-            assert jnp.isfinite(grad), (
-                f"Gradient not finite at gamma={gamma_val}: {grad}"
-            )
+            assert jnp.isfinite(grad), f"Gradient not finite at gamma={gamma_val}: {grad}"
 
     def test_nthcomp_lnu_interp_gradient_near_zero_kTbb(self):
         """Verify stable gradients with very small seed temperature."""
@@ -88,8 +83,10 @@ class TestNthcompGradientStability:
 
         def loss(kte):
             lnu = nthcomp_lnu_interp(
-                nu, jnp.array(1.8, dtype=jnp.float32), kte,
-                jnp.array(0.01, dtype=jnp.float32)  # Very small kTbb
+                nu,
+                jnp.array(1.8, dtype=jnp.float32),
+                kte,
+                jnp.array(0.01, dtype=jnp.float32),  # Very small kTbb
             )
             return jnp.sum(lnu)
 
@@ -97,9 +94,7 @@ class TestNthcompGradientStability:
         for kte_val in [1.0, 2.0, 5.0]:
             kte = jnp.array(kte_val, dtype=jnp.float32)
             grad = jax.grad(loss)(kte)
-            assert jnp.isfinite(grad), (
-                f"Gradient not finite at kTe={kte_val}: {grad}"
-            )
+            assert jnp.isfinite(grad), f"Gradient not finite at kTe={kte_val}: {grad}"
 
     def test_nthcomp_lnu_interp_loss_gradient_finite(self):
         """Integration test: gradient of a mock likelihood is finite."""
@@ -112,8 +107,7 @@ class TestNthcompGradientStability:
 
         def mock_likelihood(gamma):
             model_lnu = nthcomp_lnu_interp(
-                nu, gamma, jnp.array(5.0, dtype=jnp.float32),
-                jnp.array(0.1, dtype=jnp.float32)
+                nu, gamma, jnp.array(5.0, dtype=jnp.float32), jnp.array(0.1, dtype=jnp.float32)
             )
             chi2 = jnp.sum(((model_lnu - observed_lnu) / uncertainty) ** 2)
             return chi2
