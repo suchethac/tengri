@@ -3959,11 +3959,24 @@ class SEDModel:
             if name == "compositional_spectrum" and self._compositional.rest_sed is not None:
                 return self._predict_spectrum_compositional(params, wave_obs, wave_chunk_size)
             if name == "hybrid_spectrum" and self._hybrid.spectrum is not None:
-                # Hybrid spectrum path: not currently exposed as a dedicated
-                # _predict_spectrum_hybrid method, so route through
-                # compositional which transparently uses the precomputed
-                # stellar pixels when available.
                 return self._predict_spectrum_compositional(params, wave_obs, wave_chunk_size)
+
+        # Historical fallback: ``_predict_spectrum_compositional`` works
+        # whenever ``_compositional.rest_sed`` is available even without
+        # the fused tier-2 spectrum kernel — it falls back internally to
+        # ``_compute_rest_sed_compositional`` + Python wavelength interp.
+        # The ``compositional_spectrum`` adapter requires a precomputed
+        # wave grid for its fused build, which is stricter than what the
+        # actual predict method needs.
+        if self._compositional.rest_sed is not None and any(
+            name in strategy.preferred
+            for name in (
+                "compositional_photometry",
+                "compositional_spectrum",
+                "compositional_rest_sed",
+            )
+        ):
+            return self._predict_spectrum_compositional(params, wave_obs, wave_chunk_size)
 
         warnings.warn(
             "mode='auto' requested but no fast path available, using exact path",
@@ -5162,6 +5175,9 @@ class SEDModel:
                 lambda: build_fused_tier2_spectrum(self._state, self),
             )
             self._compositional.spectrum = jax.jit(_raw) if _raw else None
+            # Preserve the raw closure for ``mode="_traceable"`` (NIFTy VI),
+            # which reads ``_spectrum_raw`` directly from the kernel container.
+            self._compositional._spectrum_raw = _raw
 
         # Rebuild hybrid spectrum kernel (precomputed SSP + exact non-stellar)
         if self._compositional.rest_sed is not None:
@@ -5170,6 +5186,7 @@ class SEDModel:
                 lambda: build_hybrid_spectrum(self._state, self),
             )
             self._hybrid.spectrum = jax.jit(_raw) if _raw else None
+            self._hybrid._spectrum_raw = _raw
 
         return self
 
