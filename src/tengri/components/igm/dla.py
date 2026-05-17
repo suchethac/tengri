@@ -119,10 +119,13 @@ def _voigt_tepper_garcia(
     """
     x2 = x**2
     z = (x2 - 0.855) / (x2 + 3.42)
+    # Safe gradient: pre-compute x2 under where mask to avoid huge gradients
+    # through 1/(x2 + 1e-30) when x2 → 0 in the masked-off branch.
+    x2_safe = jnp.where(z > 0.0, x2 + 1e-30, 1.0)
     q = jnp.where(
         z > 0.0,
         z
-        * (1.0 + 21.0 / (x2 + 1e-30))
+        * (1.0 + 21.0 / x2_safe)
         * a
         / (jnp.pi * (x2 + 1.0))
         * (0.1117 + z * (4.421 + z * (5.674 * z - 9.207))),
