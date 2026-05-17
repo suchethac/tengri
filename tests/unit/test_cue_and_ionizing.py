@@ -315,3 +315,131 @@ class TestKennicutt1998Halpha:
             f"Hα luminosity {ha_lum:.3e} erg/s outside Kennicutt+1998 ±50% range "
             f"[6.3e40, 3.78e41] erg/s at SFR~1 Msun/yr"
         )
+
+
+# ── Ionspec defaults warning ──────────────────────────────────────
+
+
+class TestCueIonspecDefaultsWarning:
+    """Test the UserWarning when silent young-starburst defaults are used."""
+
+    @pytest.fixture(scope="class")
+    def backend_no_ssp(self):
+        import os
+
+        from tengri.components.nebular.cue import CueBackend
+
+        weights_path = "data/cue_weights.npz"
+        if not os.path.exists(weights_path):
+            pytest.skip("Cue weights not found (run convert_cue_weights.py)")
+        # Create a fresh backend with no ssp_data — this is the dangerous case
+        return CueBackend(weights_path, ssp_data=None)
+
+    def test_warning_fires_when_no_ssp_no_overrides(self, backend_no_ssp):
+        """Warning should fire when ssp_data=None AND no ionspec_* overrides."""
+        import tengri.components.nebular.cue as cue_module
+
+        # Reset the warning flag to allow re-testing
+        cue_module._IONSPEC_DEFAULT_WARNED = False
+
+        with pytest.warns(UserWarning, match="young-starburst ionizing spectrum defaults"):
+            backend_no_ssp.predict_nebular_line_luminosities(
+                gas_logu=-2.5,
+                gas_logn=2.0,
+                gas_logz=0.0,
+                gas_logqion=49.0,
+                # No ionspec_* overrides — triggers warning
+            )
+
+    def test_warning_fires_only_once(self, backend_no_ssp):
+        """Warning should fire only once per process (module-level flag)."""
+        import warnings
+
+        import tengri.components.nebular.cue as cue_module
+
+        # Reset the warning flag
+        cue_module._IONSPEC_DEFAULT_WARNED = False
+
+        with pytest.warns(UserWarning, match="young-starburst ionizing spectrum defaults"):
+            backend_no_ssp.predict_nebular_line_luminosities(
+                gas_logu=-2.5,
+                gas_logn=2.0,
+                gas_logz=0.0,
+                gas_logqion=49.0,
+            )
+
+        # Second call should NOT warn (flag is set)
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
+            backend_no_ssp.predict_nebular_line_luminosities(
+                gas_logu=-2.5,
+                gas_logn=2.0,
+                gas_logz=0.0,
+                gas_logqion=49.0,
+            )
+        # Check that no UserWarning about defaults was raised
+        assert not any(
+            issubclass(w.category, UserWarning) and "young-starburst" in str(w.message)
+            for w in warning_list
+        )
+
+    def test_no_warning_when_ionspec_override_provided(self, backend_no_ssp):
+        """Warning should NOT fire when any ionspec_* override is provided."""
+        import warnings
+
+        import tengri.components.nebular.cue as cue_module
+
+        # Reset the warning flag
+        cue_module._IONSPEC_DEFAULT_WARNED = False
+
+        # Providing even one ionspec_* override should suppress the warning
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
+            backend_no_ssp.predict_nebular_line_luminosities(
+                gas_logu=-2.5,
+                gas_logn=2.0,
+                gas_logz=0.0,
+                gas_logqion=49.0,
+                ionspec_index1=10.0,  # Override one param
+            )
+        # Check that no UserWarning about defaults was raised
+        assert not any(
+            issubclass(w.category, UserWarning) and "young-starburst" in str(w.message)
+            for w in warning_list
+        )
+
+    def test_no_warning_when_ssp_data_provided(self, ssp_data_fsps):
+        """Warning should NOT fire when ssp_data was provided at init."""
+        import os
+        import warnings
+
+        import tengri.components.nebular.cue as cue_module
+        from tengri.components.nebular.cue import CueBackend
+
+        weights_path = "data/cue_weights.npz"
+        if not os.path.exists(weights_path):
+            pytest.skip("Cue weights not found")
+
+        # Reset the warning flag
+        cue_module._IONSPEC_DEFAULT_WARNED = False
+
+        # Create backend WITH ssp_data — should never warn
+        backend_with_ssp = CueBackend(weights_path, ssp_data=ssp_data_fsps)
+
+        with warnings.catch_warnings(record=True) as warning_list:
+            warnings.simplefilter("always")
+            backend_with_ssp.predict_nebular_line_luminosities(
+                gas_logu=-2.5,
+                gas_logn=2.0,
+                gas_logz=0.0,
+                gas_logqion=49.0,
+                # No ionspec_* overrides, but ssp_data was provided
+            )
+        # Check that no UserWarning about defaults was raised
+        user_warnings_with_defaults = [
+            w for w in warning_list
+            if issubclass(w.category, UserWarning) and "young-starburst" in str(w.message)
+        ]
+        assert not user_warnings_with_defaults, (
+            f"Unexpected warning(s): {user_warnings_with_defaults}"
+        )
