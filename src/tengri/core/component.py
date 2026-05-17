@@ -76,11 +76,22 @@ class ParamDeclaration(NamedTuple):
     description : str
         One-line human-readable description, mirrored into the prior
         registry when a component's parameters are registered.
+    bound_check : Any, optional
+        Callable ``(lo, hi) -> bool`` invoked when a user narrows the
+        prior at construction time. Returns ``True`` for an admissible
+        bound. ``None`` (default) means no check. Typed loosely as
+        ``Any`` for the same import-cycle reason as :attr:`prior`.
+    bound_error : str
+        Human-readable message attached to a :class:`ValueError` when
+        :attr:`bound_check` rejects a bound. Empty string means the
+        default generic message is used.
     """
 
     name: str
     prior: Any
     description: str = ""
+    bound_check: Any = None
+    bound_error: str = ""
 
 
 # ─────────────────────────────────────────────────────────────────────

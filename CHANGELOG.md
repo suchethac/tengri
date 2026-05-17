@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Internal
+
+- Scaffolded per-component `_params.py` skeletons (PR1/5 of the
+  parameter-registry consolidation) and extended
+  `tengri.core.component.ParamDeclaration` with optional `bound_check`
+  and `bound_error` fields. No user-visible change; priors still live
+  in `tengri.parameters._param_defs`.
+
 ### Added (5 metallicity modes wired in the orchestrator, 2026-05-06)
 
 `Parameters(met_mode="two_step" | "psb_two_step" | "bins" |
