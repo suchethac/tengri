@@ -172,6 +172,14 @@ from tengri.config.exceptions import (
     TengriIOError,
 )
 from tengri.facade import Galaxy, doctor
+from tengri.forward._kernels import (
+    COMPOSITIONAL_ONLY as COMPOSITIONAL_ONLY_KERNEL_STRATEGY,
+    DEFAULT as DEFAULT_KERNEL_STRATEGY,
+    EXACT_ONLY as EXACT_ONLY_KERNEL_STRATEGY,
+    LOW_MEMORY as LOW_MEMORY_KERNEL_STRATEGY,
+    KernelStrategy,
+    NoCompatibleKernelError,
+)
 from tengri.forward.convenience import catalog_summary, fit_batch
 from tengri.forward.prediction import (
     DerivedQuantities,
