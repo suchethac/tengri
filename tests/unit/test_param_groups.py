@@ -11,6 +11,26 @@ from tengri.parameters.groups import parse_groups
 from tengri.parameters.parameters import Parameters
 
 
+class TestWildcardValidation:
+    """The '*' wildcard slot must be FREE or FIXED — strings/None/bools error."""
+
+    def test_string_free_raises(self):
+        with pytest.raises(ValueError, match="Wildcard"):
+            parse_groups(sfh={"type": "dpl", "*": "free"}, redshift=Fixed(0.1))
+
+    def test_string_fixed_raises(self):
+        with pytest.raises(ValueError, match="Wildcard"):
+            parse_groups(sfh={"type": "dpl", "*": "fixed"}, redshift=Fixed(0.1))
+
+    def test_none_raises(self):
+        with pytest.raises(ValueError, match="Wildcard"):
+            parse_groups(sfh={"type": "dpl", "*": None}, redshift=Fixed(0.1))
+
+    def test_bool_raises(self):
+        with pytest.raises(ValueError, match="Wildcard"):
+            parse_groups(sfh={"type": "dpl", "*": True}, redshift=Fixed(0.1))
+
+
 class TestWildcard:
     """Test wildcard ('*') semantics for per-group parameter selection."""
 

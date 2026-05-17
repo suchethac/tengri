@@ -197,7 +197,7 @@ class TestCalzettiReference:
         k_uv = 2.659 * (-2.156 + 1.509 * x - 0.198 * x**2 + 0.011 * x**3)
 
         k_prime = np.where(wave_um >= 0.63, k_ir, k_uv)
-        return np.clip((k_prime + rv) / rv, 0.0)
+        return np.clip((k_prime + rv) / rv, 0.0, None)
 
     @pytest.mark.parametrize(
         "wave_aa",

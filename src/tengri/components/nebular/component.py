@@ -482,15 +482,35 @@ class NebularSEDComponent:
                 # boundary so internal indexing stays upstream-faithful
                 # while user-facing labels honour tengri's vacuum contract.
                 #
-                # Idempotency: probe the Hβ neighbourhood and only convert
-                # if it looks air (4861.333 Å) vs vacuum (4862.683 Å).
-                # The 1.35 Å gap is unambiguous — no real line sits there.
+                # Idempotency: probe the Balmer series. Vacuum and air
+                # wavelengths differ by ~1.3-1.8 Å in the optical, so a
+                # multi-line consensus is robust to a single near-coincidence
+                # or floating-point noise around any one probe value.
+                # Hα 6564.61 v / 6562.80 a, Hβ 4862.68 v / 4861.33 a,
+                # Hγ 4341.68 v / 4340.47 a.
                 if self.config.backend in ("cue", "cloudy_grid"):
                     line_waves_np = np.asarray(line_waves)
-                    near_hbeta = line_waves_np[(line_waves_np > 4859.0) & (line_waves_np < 4865.0)]
-                    looks_air = near_hbeta.size > 0 and bool(
-                        np.any(np.abs(near_hbeta - 4861.333) < 0.1)
+                    _BALMER_AIR_VAC = (
+                        (6562.80, 6564.61),
+                        (4861.33, 4862.68),
+                        (4340.47, 4341.68),
                     )
+                    air_hits = 0
+                    vac_hits = 0
+                    for air_w, vac_w in _BALMER_AIR_VAC:
+                        in_band = line_waves_np[
+                            (line_waves_np > air_w - 1.0) & (line_waves_np < vac_w + 1.0)
+                        ]
+                        if in_band.size == 0:
+                            continue
+                        # Pick the closest line in the band and classify
+                        idx = int(np.argmin(np.abs(in_band - 0.5 * (air_w + vac_w))))
+                        probe = float(in_band[idx])
+                        if abs(probe - air_w) < abs(probe - vac_w):
+                            air_hits += 1
+                        else:
+                            vac_hits += 1
+                    looks_air = air_hits >= 2 and air_hits > vac_hits
                     if looks_air:
                         from tengri.utils.conversions import air_to_vacuum
 

@@ -17,9 +17,25 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
+
 jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
+
+
+def _baked_nebular_lnu(ssp_wne, ssp_nne, met_idx, age_idx):
+    """Difference of (wNE − no-NE) SSP grids, converted to erg/s/Hz.
+
+    The SSP grids store ``ssp_flux`` in [Lsun/Hz/Msun]; the Cue / CLOUDY
+    backend outputs are in [erg/s/Hz]. Multiply by ``LSUN_ERG_PER_S`` so
+    ratios are dimensionless.
+    """
+    return (
+        np.array(ssp_wne.ssp_flux[met_idx, age_idx] - ssp_nne.ssp_flux[met_idx, age_idx])
+        * LSUN_ERG_PER_S
+    )
+
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
@@ -134,10 +150,7 @@ class TestBakedInVsCloudy:
                 neb_logU=-3.0,
             )
         )
-        baked_neb = np.array(
-            ssp_wne.ssp_flux[solar_met_idx, young_burst_idx]
-            - ssp_data.ssp_flux[solar_met_idx, young_burst_idx]
-        )
+        baked_neb = _baked_nebular_lnu(ssp_wne, ssp_data, solar_met_idx, young_burst_idx)
 
         # Compare in line-free continuum windows.
         # Near spectral breaks (Paschen edge ~8200A) grid interpolation
@@ -194,10 +207,7 @@ class TestBakedInVsCloudy:
                 neb_logU=-3.0,
             )
         )
-        baked_neb = np.array(
-            ssp_wne.ssp_flux[solar_met_idx, young_burst_idx]
-            - ssp_data.ssp_flux[solar_met_idx, young_burst_idx]
-        )
+        baked_neb = _baked_nebular_lnu(ssp_wne, ssp_data, solar_met_idx, young_burst_idx)
 
         flux_cloudy = _integrated_line_flux(wave, neb_sed, line_wav)
         flux_baked = _integrated_line_flux(wave, baked_neb, line_wav)
@@ -227,10 +237,7 @@ class TestBakedInVsCloudy:
                 neb_logU=-3.0,
             )
         )
-        baked_neb = np.array(
-            ssp_wne.ssp_flux[solar_met_idx, young_burst_idx]
-            - ssp_data.ssp_flux[solar_met_idx, young_burst_idx]
-        )
+        baked_neb = _baked_nebular_lnu(ssp_wne, ssp_data, solar_met_idx, young_burst_idx)
 
         total_cloudy = np.sum(neb_sed[neb_sed > 0])
         total_baked = np.sum(baked_neb[baked_neb > 0])
@@ -258,9 +265,7 @@ class TestBakedInVsCloudy:
                 neb_logU=-3.0,
             )
         )
-        baked_neb = np.array(
-            ssp_wne.ssp_flux[solar_met_idx, age_idx] - ssp_data.ssp_flux[solar_met_idx, age_idx]
-        )
+        baked_neb = _baked_nebular_lnu(ssp_wne, ssp_data, solar_met_idx, age_idx)
 
         # Check H-alpha integrated flux
         flux_cloudy = _integrated_line_flux(wave, neb_sed, 6563)
@@ -323,10 +328,7 @@ class TestBakedInVsCue:
                 neb_logU=-3.0,
             )
         )
-        baked_neb = np.array(
-            ssp_wne.ssp_flux[solar_met_idx, young_burst_idx]
-            - ssp_data.ssp_flux[solar_met_idx, young_burst_idx]
-        )
+        baked_neb = _baked_nebular_lnu(ssp_wne, ssp_data, solar_met_idx, young_burst_idx)
 
         flux_cue = _integrated_line_flux(wave, cue_neb_sed, line_wav)
         flux_baked = _integrated_line_flux(wave, baked_neb, line_wav)
@@ -366,10 +368,7 @@ class TestBakedInVsCue:
                 neb_logU=-3.0,
             )
         )
-        baked_neb = np.array(
-            ssp_wne.ssp_flux[solar_met_idx, young_burst_idx]
-            - ssp_data.ssp_flux[solar_met_idx, young_burst_idx]
-        )
+        baked_neb = _baked_nebular_lnu(ssp_wne, ssp_data, solar_met_idx, young_burst_idx)
 
         # Continuum windows (avoid strong lines)
         windows = [(4200, 4300), (5100, 5200), (7000, 7100)]
