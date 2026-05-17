@@ -46,7 +46,7 @@ the UV-to-optical SED. Demonstrates wavelength-dependent attenuation.
     setup_style()
 
     # Wavelength grid: UV to optical
-    wavelength_rest = jnp.logspace(np.log10(500), np.log10(5000), 512)  # Angstrom
+    wavelength_obs = jnp.logspace(np.log10(500), np.log10(5000), 512)  # Angstrom
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
@@ -56,17 +56,17 @@ the UV-to-optical SED. Demonstrates wavelength-dependent attenuation.
     log_nh_col = 20.3  # DLA column density
     for z in [2.0, 2.5, 3.0, 4.0]:
         # Transmission in observed frame
-        tau_dla = dla_transmission_obs(wavelength_rest, z_dla=z, log_n_hi=log_nh_col)
+        tau_dla = dla_transmission_obs(wavelength_obs, z_dla=z, log_n_hi=log_nh_col)
         transmission = jnp.exp(-tau_dla)
 
         ax.plot(
-            np.array(wavelength_rest),
+            np.array(wavelength_obs),
             np.array(transmission),
             lw=1.5,
             label=f"z={z:.1f}, log(N_H)={log_nh_col:.1f}",
         )
 
-    ax.set_xlabel(r"Rest Wavelength [$\AA$]")
+    ax.set_xlabel(r"Observed Wavelength [$\AA$]")
     ax.set_ylabel(r"Transmission (1 - $\tau_{DLA}$)")
     ax.set_title("DLA Transmission: Redshift Evolution")
     ax.legend(fontsize=10, frameon=False)
@@ -79,17 +79,17 @@ the UV-to-optical SED. Demonstrates wavelength-dependent attenuation.
 
     z = 3.0
     for log_nh in [19.0, 19.5, 20.0, 20.3, 20.8]:
-        tau_dla = dla_transmission_obs(wavelength_rest, z_dla=z, log_n_hi=log_nh)
+        tau_dla = dla_transmission_obs(wavelength_obs, z_dla=z, log_n_hi=log_nh)
         transmission = jnp.exp(-tau_dla)
 
         ax.plot(
-            np.array(wavelength_rest),
+            np.array(wavelength_obs),
             np.array(transmission),
             lw=1.5,
             label=f"log(N_H)={log_nh:.1f}",
         )
 
-    ax.set_xlabel(r"Rest Wavelength [$\AA$]")
+    ax.set_xlabel(r"Observed Wavelength [$\AA$]")
     ax.set_ylabel(r"Transmission")
     ax.set_title(f"DLA Transmission: Column Density (z={z})")
     ax.legend(fontsize=10, frameon=False)
@@ -105,19 +105,19 @@ the UV-to-optical SED. Demonstrates wavelength-dependent attenuation.
 
     z = 2.5
     # Single DLA
-    tau_single = dla_transmission_obs(wavelength_rest, z_dla=z, log_n_hi=20.3)
+    tau_single = dla_transmission_obs(wavelength_obs, z_dla=z, log_n_hi=20.3)
     transmission_single = jnp.exp(-tau_single)
 
     # Approximate double DLA (stack two with slightly different optical depths)
     tau_double = 1.5 * tau_single  # Rough stacking approximation
     transmission_double = jnp.exp(-tau_double)
 
-    ax.plot(np.array(wavelength_rest), np.array(transmission_single), lw=2.0, label="Single")
-    ax.plot(np.array(wavelength_rest), np.array(transmission_double), lw=2.0, label="Double")
+    ax.plot(np.array(wavelength_obs), np.array(transmission_single), lw=2.0, label="Single")
+    ax.plot(np.array(wavelength_obs), np.array(transmission_double), lw=2.0, label="Double")
     trans_none = np.ones_like(transmission_single)
-    ax.plot(np.array(wavelength_rest), trans_none, "k--", lw=1.0, alpha=0.3)
+    ax.plot(np.array(wavelength_obs), trans_none, "k--", lw=1.0, alpha=0.3)
 
-    ax.set_xlabel(r"Rest Wavelength [$\AA$]")
+    ax.set_xlabel(r"Observed Wavelength [$\AA$]")
     ax.set_ylabel(r"Transmission")
     ax.set_title(f"DLA: Single vs Stacked Systems (z={z})")
     ax.legend(fontsize=10, frameon=False)
@@ -133,23 +133,23 @@ the UV-to-optical SED. Demonstrates wavelength-dependent attenuation.
     colors = plt.cm.Oranges(np.linspace(0.3, 0.9, len(log_nh_values)))
 
     # Mock galaxy SED (assume constant rest-frame SED)
-    galaxy_sed = np.ones_like(wavelength_rest)  # Flat SED in L_nu
+    galaxy_sed = np.ones_like(wavelength_obs)  # Flat SED in L_nu
 
     for log_nh, color in zip(log_nh_values, colors):
-        tau_dla = dla_transmission_obs(wavelength_rest, z_dla=z, log_n_hi=log_nh)
+        tau_dla = dla_transmission_obs(wavelength_obs, z_dla=z, log_n_hi=log_nh)
         transmission = jnp.exp(-tau_dla)
         attenuated_sed = galaxy_sed * np.array(transmission)
 
         ax.semilogy(
-            np.array(wavelength_rest),
+            np.array(wavelength_obs),
             attenuated_sed,
             lw=1.5,
             label=f"log(N_H)={log_nh:.1f}",
             color=color,
         )
 
-    ax.semilogy(np.array(wavelength_rest), galaxy_sed, "k--", lw=1.0, alpha=0.3, label="No DLA")
-    ax.set_xlabel(r"Rest Wavelength [$\AA$]")
+    ax.semilogy(np.array(wavelength_obs), galaxy_sed, "k--", lw=1.0, alpha=0.3, label="No DLA")
+    ax.set_xlabel(r"Observed Wavelength [$\AA$]")
     ax.set_ylabel(r"Observed Flux")
     ax.set_title(f"DLA Impact on Galaxy SED (z={z})")
     ax.legend(fontsize=10, frameon=False)

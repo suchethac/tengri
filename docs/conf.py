@@ -65,12 +65,22 @@ _skip_alt = "|".join(_DO_NOT_EXECUTE) or "__never_match_anything__"
 sphinx_gallery_conf = {
     "examples_dirs": ["../examples"],
     "gallery_dirs": ["auto_examples"],
-    # Run any plot_*.py whose basename is NOT in _DO_NOT_EXECUTE.
-    "filename_pattern": rf"^(?!.*({_skip_alt}))plot_.+\.py$",
-    # ignore_pattern HIDES files from the gallery entirely. Reserved for
-    # truly-broken WIP scripts; everything else stays visible via the
-    # precompute path above.
-    "ignore_pattern": r"^$",
+    # Run any plot_*.py whose basename is NOT in _DO_NOT_EXECUTE. Sphinx-
+    # gallery applies this with ``re.search`` against the *full source path*
+    # (e.g. ``/Users/.../examples/<group>/plot_foo.py``), so ``^plot_`` would
+    # never match. Anchor at start of string with ``^``, run the negative-
+    # lookahead against the whole path to exclude any basename already in
+    # ``_DO_NOT_EXECUTE``, then ``.*plot_<...>.py$`` to pin the filename.
+    "filename_pattern": rf"^(?!.*(?:{_skip_alt})).*plot_[^/]+\.py$",
+    # ignore_pattern HIDES files from the gallery entirely. Used for heavy
+    # NUTS/SVI scripts whose runtime + memory footprint OOMs the build (each
+    # NUTS warmup can peak at 20+ GB per CLAUDE.md gotcha). These scripts
+    # still run as standalone demos for advanced users.
+    "ignore_pattern": (
+        # Heavy NUTS/SVI scripts whose runtime + memory footprint OOMs the
+        # build (each NUTS warmup can peak at 20+ GB per CLAUDE.md gotcha).
+        r"plot_(population_scaling|hierarchical_convergence|prior_posterior_compare)\.py$"
+    ),
     "download_all_examples": False,
     # Locally we execute (default). On CI (e.g. GitHub Actions sets CI=true) we
     # use the pre-rendered docs/auto_examples/ that the developer committed so
@@ -95,8 +105,32 @@ sphinx_gallery_conf = {
 # gallery subsection ends up nested under X-ray in the sidebar.
 #
 # Fix: move the toctree to the *top* of the file (right after the ":orphan:"
-# directive) so it is not a child of any section.  We run this after
-# sphinx-gallery has generated its index.
+# directive) so it is not a child of any section, AND reorder entries
+# pedagogically (onboarding → physics building blocks → observation layer →
+# inference → applications) rather than alphabetical.
+_GALLERY_SECTION_ORDER = (
+    "quickstart",
+    "workflows",
+    "recipes",
+    "sps",
+    "sfh",
+    "metallicity",
+    "dust_attenuation",
+    "dust_emission",
+    "nebular",
+    "igm",
+    "agn",
+    "radio",
+    "xray",
+    "photometry",
+    "spectroscopy",
+    "multiwavelength",
+    "inference",
+    "usecases",
+    "advanced",
+)
+
+
 def _fix_gallery_index_toctree(app, *_args, **_kwargs):
     from pathlib import Path
 
@@ -117,6 +151,23 @@ def _fix_gallery_index_toctree(app, *_args, **_kwargs):
     tc_block = matches[-1].group(0).strip("\n")
     # Strip the original position.
     src_no_tc = src[: matches[-1].start()] + src[matches[-1].end() :]
+
+    # Reorder the toctree entries by pedagogical priority. Lines like
+    # "   /auto_examples/<section>/index.rst" get sorted using
+    # _GALLERY_SECTION_ORDER; unknown sections fall to the end alphabetically.
+    entry_re = re.compile(r"^(\s+)/auto_examples/([^/]+)/index\.rst\s*$")
+    head_lines = []
+    entry_lines = []
+    for line in tc_block.splitlines():
+        m = entry_re.match(line)
+        if m:
+            entry_lines.append((m.group(2), line))
+        else:
+            head_lines.append(line)
+    order = {name: i for i, name in enumerate(_GALLERY_SECTION_ORDER)}
+    entry_lines.sort(key=lambda kv: (order.get(kv[0], len(order)), kv[0]))
+    tc_block = "\n".join(head_lines + [line for _, line in entry_lines])
+
     # Insert after ``:orphan:`` or at the very top.
     if ":orphan:" in src_no_tc:
         new = src_no_tc.replace(
