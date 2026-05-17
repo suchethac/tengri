@@ -1,0 +1,49 @@
+
+:orphan:
+
+.. _sphx_glr_auto_examples_recipes_sg_execution_times:
+
+
+Computation times
+=================
+**03:09.891** total execution time for 5 files **from auto_examples/recipes**:
+
+.. container::
+
+  .. raw:: html
+
+    <style scoped>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+    </style>
+    <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script type="text/javascript" class="init">
+    $(document).ready( function () {
+        $('table.sg-datatable').DataTable({order: [[1, 'desc']]});
+    } );
+    </script>
+
+  .. list-table::
+   :header-rows: 1
+   :class: table table-striped sg-datatable
+
+   * - Example
+     - Time
+     - Mem (MB)
+   * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_compare_priors.py` (``plot_recipe_compare_priors.py``)
+     - 02:29.884
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_specific_redshift.py` (``plot_recipe_specific_redshift.py``)
+     - 00:15.858
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_load_real_csv.py` (``plot_recipe_load_real_csv.py``)
+     - 00:10.412
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_save_load_posterior.py` (``plot_recipe_save_load_posterior.py``)
+     - 00:09.491
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_custom_filter.py` (``plot_recipe_custom_filter.py``)
+     - 00:04.245
+     - 0.0
