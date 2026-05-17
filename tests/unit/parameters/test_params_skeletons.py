@@ -139,6 +139,73 @@ def test_dla_legacy_bucket_matches_canonical_tuple() -> None:
     _assert_bucket_matches_canonical(bucket, canonical)
 
 
+# PR5: nebular sub-buckets + shock + stellar alpha-Fe regressions
+
+
+def test_cb19_legacy_bucket_matches_canonical_tuple() -> None:
+    from tengri.components.nebular._params import CB19_PARAMS as canonical
+    from tengri.parameters._param_defs import _CB19_PARAMS as bucket
+
+    assert set(bucket) == {d.name for d in canonical}
+    _assert_bucket_matches_canonical(bucket, canonical)
+
+
+def test_eline_legacy_bucket_matches_canonical_tuple() -> None:
+    from tengri.components.nebular._params import ELINE_PARAMS as canonical
+    from tengri.parameters._param_defs import _ELINE_PARAMS as bucket
+
+    assert set(bucket) == {d.name for d in canonical}
+    _assert_bucket_matches_canonical(bucket, canonical)
+
+
+def test_eline_broad_legacy_bucket_matches_canonical_tuple() -> None:
+    from tengri.components.nebular._params import ELINE_BROAD_PARAMS as canonical
+    from tengri.parameters._param_defs import _ELINE_BROAD_PARAMS as bucket
+
+    assert set(bucket) == {d.name for d in canonical}
+    _assert_bucket_matches_canonical(bucket, canonical)
+
+
+def test_cue_ionspec_legacy_bucket_matches_canonical_tuple() -> None:
+    from tengri.components.nebular._params import CUE_IONSPEC_PARAMS as canonical
+    from tengri.parameters._param_defs import _CUE_IONSPEC_PARAMS as bucket
+
+    assert set(bucket) == {d.name for d in canonical}
+    _assert_bucket_matches_canonical(bucket, canonical)
+
+
+def test_cue_gas_extra_legacy_bucket_matches_canonical_tuple() -> None:
+    from tengri.components.nebular._params import CUE_GAS_EXTRA_PARAMS as canonical
+    from tengri.parameters._param_defs import _CUE_GAS_EXTRA_PARAMS as bucket
+
+    assert set(bucket) == {d.name for d in canonical}
+    _assert_bucket_matches_canonical(bucket, canonical)
+
+
+def test_shock_legacy_bucket_matches_canonical_tuple() -> None:
+    from tengri.components.nebular._params import SHOCK_PARAMS as canonical
+    from tengri.parameters._param_defs import _SHOCK_PARAMS as bucket
+
+    assert set(bucket) == {d.name for d in canonical}
+    _assert_bucket_matches_canonical(bucket, canonical)
+
+
+def test_alpha_fe_legacy_bucket_matches_canonical_tuple() -> None:
+    from tengri.components.stellar._params import ALPHA_FE_PARAMS as canonical
+    from tengri.parameters._param_defs import _ALPHA_FE_PARAMS as bucket
+
+    assert set(bucket) == {d.name for d in canonical}
+    _assert_bucket_matches_canonical(bucket, canonical)
+
+
+def test_evolving_alpha_legacy_bucket_matches_canonical_tuple() -> None:
+    from tengri.components.stellar._params import EVOLVING_ALPHA_PARAMS as canonical
+    from tengri.parameters._param_defs import _EVOLVING_ALPHA_PARAMS as bucket
+
+    assert set(bucket) == {d.name for d in canonical}
+    _assert_bucket_matches_canonical(bucket, canonical)
+
+
 def test_igm_canonical_tuple_unaffected_by_registry() -> None:
     # IGM is special: its declared params (igm_z_mid, igm_dz, igm_log_nhi)
     # are NOT in _param_defs.py and never have been. The canonical tuple

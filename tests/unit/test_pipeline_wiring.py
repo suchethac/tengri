@@ -346,9 +346,11 @@ class TestShockBOverSqrtN:
     """shock_b_over_sqrt_n must be in _param_map when shock is enabled."""
 
     def test_shock_b_over_sqrt_n_declared_in_params(self):
-        src = _params_src()
-        assert '"shock_b_over_sqrt_n"' in src, (
-            "shock_b_over_sqrt_n must be declared in _SHOCK_PARAMS in parameters.py"
+        from tengri.parameters._param_defs import _SHOCK_PARAMS
+
+        assert "shock_b_over_sqrt_n" in _SHOCK_PARAMS, (
+            "shock_b_over_sqrt_n must be declared in _SHOCK_PARAMS "
+            "(canonical source: tengri.components.nebular._params.SHOCK_PARAMS)"
         )
 
     def test_shock_b_over_sqrt_n_in_param_map(self):

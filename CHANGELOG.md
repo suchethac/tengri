@@ -55,6 +55,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   views via the lazy `__getattr__`. `_NON_SFH_PARAMS` shrinks to its
   genuinely-shared residue: `met_logzsol`, `redshift`, `noise_*`,
   `sigma_v_kms`. No user-visible change.
+- Migrated the remaining nebular sub-buckets and stellar α/Fe priors
+  (PR5/5). `_CB19_PARAMS`, `_ELINE_PARAMS`, `_ELINE_BROAD_PARAMS`,
+  `_CUE_IONSPEC_PARAMS`, `_CUE_GAS_EXTRA_PARAMS`, `_SHOCK_PARAMS` now
+  live in `tengri.components.nebular._params`; `_ALPHA_FE_PARAMS` and
+  `_EVOLVING_ALPHA_PARAMS` in `tengri.components.stellar._params`.
+  Dead `_EVOLVING_MET_PARAMS` and `_CHEM_EVOL_PARAMS` (defined but
+  never consumed — superseded by the live `met_registry`) deleted.
+  `tengri.parameters._param_defs` shrinks from 1189 lines (PR0
+  baseline) to 467 (−61%). No user-visible change.
 
 ### Added (5 metallicity modes wired in the orchestrator, 2026-05-06)
 

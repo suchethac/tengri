@@ -80,210 +80,20 @@ _NON_SFH_PARAMS = {
     ),
 }
 
-# Parameters that are only added when specific modules are enabled
-# Nebular priors now live in :mod:`tengri.components.nebular._params`
-# (PR3b). Resolved lazily via module ``__getattr__`` below — see notes
-# at the bottom of this file.
-
-# ── CB_19 extra parameters (nebular == "cb19") ────────────────────────
-# CB_19 extends the base CLOUDY grid with three additional continuous axes:
-# density, C/O ratio, and ΔN/O. These have no counterpart in the FSPS/Byler grid.
+# All conditional / component-owned buckets are resolved lazily via the
+# module-level ``__getattr__`` defined near the bottom of this file. The
+# canonical sources live under ``tengri.components.<name>._params``:
 #
-# Unit convention reminder: CB_19 stores L_line/L_Hβ (dimensionless ratios).
-# The CB19Backend converts to L_sun/Q_H using L_Hβ/Q_H = 4.78e-13 erg/photon
-# (Case B, T_e=10^4 K; Osterbrock & Ferland 2006, Table 4.4).
-_CB19_PARAMS = {
-    "neb_log_nH": (
-        "Log hydrogen density log10(n_H / cm⁻³) for CB_19 grid [grid range: 1–4]",
-        lambda lo, hi: lo >= 0 and hi <= 6,
-        "must be in [0, 6] (CB_19 grid: 1–4; extrapolated outside)",
-        Fixed(2.0),  # n_H = 100 cm⁻³, typical HII region
-    ),
-    "neb_co": (
-        "Log C/O abundance ratio log10(C/O) for CB_19 grid [grid range: −1 to 0.15]",
-        lambda lo, hi: lo >= -3 and hi <= 2,
-        "must be in [−3, 2]",
-        Fixed(-0.36),  # near-solar C/O (CLOUDY c17 default)
-    ),
-    "neb_dno": (
-        "ΔN/O offset (log10) from default N/O–O/H scaling [grid range: −0.25 to 0.25]",
-        lambda lo, hi: lo >= -1 and hi <= 1,
-        "must be in [−1, 1]",
-        Fixed(0.0),  # solar N/O scaling (Nicholls+2017)
-    ),
-    "neb_hbfrac": (
-        "HbFrac: L_Hβ(matter-bounded)/L_Hβ(radiation-bounded) for CB_19 [0–1]. "
-        "HbFrac=1 = fully radiation-bounded; escape fraction ≈ 1 − HbFrac",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(1.0),  # radiation-bounded (default)
-    ),
-}
-
-# ── Emission line velocity parameters ──────────────────────────────────
-_ELINE_PARAMS = {
-    "eline_sigma_kms": (
-        "Emission line velocity dispersion in km/s (added in quadrature to instrument resolution)",
-        lambda lo, hi: lo >= 0,
-        "must have lo >= 0",
-        Fixed(0.0),  # Default: instrument resolution only
-    ),
-    "eline_delta_v_kms": (
-        "Emission line velocity offset from systemic redshift in km/s",
-        lambda lo, hi: True,
-        "",
-        Fixed(0.0),  # Default: no velocity offset
-    ),
-}
-
-# ── Broad emission line parameters (AGN) ───────────────────────────────
-_ELINE_BROAD_PARAMS = {
-    "eline_broad_sigma_kms": (
-        "Broad emission line velocity dispersion in km/s",
-        lambda lo, hi: lo >= 200,
-        "must have lo >= 200 km/s (broad component)",
-        Uniform(500.0, 5000.0),
-    ),
-}
-
-# Cue-specific optional params — only registered if user provides them
-_CUE_IONSPEC_PARAMS = {
-    "ionspec_index1": (
-        "Cue ionizing spectrum slope segment 1 (HeII, 1-228A)",
-        lambda lo, hi: lo >= 0 and hi <= 50,
-        "must be in [0, 50]",
-        None,
-    ),
-    "ionspec_index2": (
-        "Cue ionizing spectrum slope segment 2 (OII, 228-353A)",
-        lambda lo, hi: lo >= -1 and hi <= 35,
-        "must be in [-1, 35]",
-        None,
-    ),
-    "ionspec_index3": (
-        "Cue ionizing spectrum slope segment 3 (HeI, 353-504A)",
-        lambda lo, hi: lo >= -2 and hi <= 20,
-        "must be in [-2, 20]",
-        None,
-    ),
-    "ionspec_index4": (
-        "Cue ionizing spectrum slope segment 4 (HI, 504-912A)",
-        lambda lo, hi: lo >= -2 and hi <= 10,
-        "must be in [-2, 10]",
-        None,
-    ),
-    "ionspec_logLratio1": (
-        "Cue log luminosity ratio seg2/seg1",
-        lambda lo, hi: lo >= -1 and hi <= 12,
-        "must be in [-1, 12]",
-        None,
-    ),
-    "ionspec_logLratio2": (
-        "Cue log luminosity ratio seg3/seg2",
-        lambda lo, hi: lo >= -1 and hi <= 3,
-        "must be in [-1, 3]",
-        None,
-    ),
-    "ionspec_logLratio3": (
-        "Cue log luminosity ratio seg4/seg3",
-        lambda lo, hi: lo >= -1 and hi <= 3,
-        "must be in [-1, 3]",
-        None,
-    ),
-}
-
-_CUE_GAS_EXTRA_PARAMS = {
-    "gas_logn": (
-        "Cue gas density log10(n_H/cm^-3)",
-        lambda lo, hi: lo >= 0 and hi <= 5,
-        "must be in [0, 5]",
-        None,
-    ),
-    "gas_logno": (
-        "Cue [N/O] abundance ratio (dex)",
-        lambda lo, hi: lo >= -2 and hi <= 2,
-        "must be in [-2, 2]",
-        None,
-    ),
-    "gas_logco": (
-        "Cue [C/O] abundance ratio (dex)",
-        lambda lo, hi: lo >= -2 and hi <= 2,
-        "must be in [-2, 2]",
-        None,
-    ),
-}
-
-_ALPHA_FE_PARAMS = {
-    "met_alpha_fe": (
-        "Alpha-element enhancement [alpha/Fe] (dex). "
-        "Applied uniformly to all ages unless alpha_fe_evolving=True.",
-        lambda lo, hi: lo >= -0.5 and hi <= 1.0,
-        "must be in [-0.5, 1.0]",
-        Fixed(0.0),
-    ),
-}
-
-_EVOLVING_ALPHA_PARAMS = {
-    "met_alpha_fe_old": (
-        "[alpha/Fe] of oldest stars (at t_lookback = t_universe). "
-        "Typically +0.3 to +0.5 for massive ellipticals.",
-        lambda lo, hi: lo >= -0.5 and hi <= 1.0,
-        "must be in [-0.5, 1.0]",
-        Uniform(0.0, 0.6),
-    ),
-    "met_alpha_fe_young": (
-        "[alpha/Fe] at present day (t_lookback ~ 0). Typically ~0.0 (solar) for disk galaxies.",
-        lambda lo, hi: lo >= -0.5 and hi <= 1.0,
-        "must be in [-0.5, 1.0]",
-        Fixed(0.0),
-    ),
-}
-
-_EVOLVING_MET_PARAMS = {
-    "met_logzsol_0": (
-        "Initial metallicity log10(Z/Zsun) (oldest stars)",
-        lambda lo, hi: True,
-        "",
-        Uniform(-2.0, 0.2),
-    ),
-    "met_logzsol_final": (
-        "Final metallicity log10(Z/Zsun) (present-day)",
-        lambda lo, hi: True,
-        "",
-        Uniform(-2.0, 0.2),
-    ),
-}
-
-_CHEM_EVOL_PARAMS = {
-    "chem_yield": (
-        "Nucleosynthetic yield (mass of metals per unit stellar mass locked). "
-        "Typical 0.02-0.04 for solar neighborhood with Chabrier IMF.",
-        lambda lo, hi: lo > 0 and hi <= 0.2,
-        "must be in (0, 0.2]",
-        Fixed(0.03),
-    ),
-    "chem_eta_outflow": (
-        "Mass loading factor (Mdot_out / SFR). 0 = closed box, >0 = leaky box with outflows.",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.0),
-    ),
-    "chem_f_gas_init": (
-        "Initial gas fraction at earliest cosmic time. Default 0.9 (galaxy starts gas-dominated).",
-        lambda lo, hi: lo > 0 and hi <= 1,
-        "must be in (0, 1]",
-        Fixed(0.9),
-    ),
-    "chem_return_frac": (
-        "Stellar mass return fraction (instantaneous recycling). Default 0.4 for Chabrier IMF.",
-        lambda lo, hi: lo >= 0 and hi < 1,
-        "must be in [0, 1)",
-        Fixed(0.4),
-    ),
-}
-
-
-# Dust emission priors now live in :mod:`tengri.components.dust._params`
+#   ``_NEBULAR_PARAMS``, ``_CB19_PARAMS``, ``_ELINE_PARAMS``,
+#   ``_ELINE_BROAD_PARAMS``, ``_CUE_IONSPEC_PARAMS``,
+#   ``_CUE_GAS_EXTRA_PARAMS``, ``_SHOCK_PARAMS`` → nebular._params
+#   ``_DUST_EMISSION_PARAMS``, ``_DUST_EXTRA_PARAMS``,
+#   ``_SINGLE_COMPONENT_DUST_PARAMS`` → dust._params
+#   ``_AGN_PARAMS`` → agn._params (+ ``neb_xid`` extras here)
+#   ``_RADIO_PARAMS`` → radio._params
+#   ``_XRAY_PARAMS`` → xray._params
+#   ``_IGM_PATCHY_PARAMS``, ``_DLA_PARAMS`` → igm._params
+#   ``_ALPHA_FE_PARAMS``, ``_EVOLVING_ALPHA_PARAMS`` → stellar._params
 # (PR3c). Resolved lazily via module ``__getattr__`` below.
 
 # Radio priors now live in :mod:`tengri.components.radio._params`
@@ -296,46 +106,6 @@ _CHEM_EVOL_PARAMS = {
 
 # X-ray priors now live in :mod:`tengri.components.xray._params` (PR3).
 # Resolved lazily via module ``__getattr__`` below.
-
-_SHOCK_PARAMS = {
-    "shock_frac": (
-        "Fraction of nebular Halpha replaced by shock emission [0, 1]",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.0),
-    ),
-    "shock_velocity": (
-        "Shock velocity in km/s (100-1000 for MAPPINGS III; 200-1000 for MAPPINGS V)",
-        lambda lo, hi: lo >= 100 and hi <= 1000,
-        "must be in [100, 1000]",
-        Fixed(300.0),
-    ),
-    "shock_log_density": (
-        "Log10 pre-shock density in cm^-3; snapped to nearest grid point",
-        lambda lo, hi: True,
-        "",
-        Fixed(0.0),
-    ),
-    "shock_b_over_sqrt_n": (
-        "B/sqrt(n) in uG cm^(3/2) (MAPPINGS III) or absolute B in uG (MAPPINGS V); "
-        "snapped to nearest grid point",
-        lambda lo, hi: True,
-        "",
-        Fixed(1.0),
-    ),
-    "shock_abundance": (
-        "Abundance set: solar | 2xsolar | dopita2005 | lmc | smc",
-        lambda lo, hi: True,
-        "",
-        Fixed("solar"),
-    ),
-    "shock_component": (
-        "Emission component: shock | precursor | combined",
-        lambda lo, hi: True,
-        "",
-        Fixed("combined"),
-    ),
-}
 
 
 # AGN priors now live in :mod:`tengri.components.agn._params` (PR3).
@@ -528,21 +298,24 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # CB_19-specific extra axes (density, C/O, ΔN/O, HbFrac)
+    # CB_19, alpha-Fe, shock, eline buckets are all resolved lazily via
+    # the module-level ``__getattr__``.
     if nebular == "cb19":
+        from tengri.parameters._param_defs import _CB19_PARAMS
+
         for pname, (desc, check, err, default) in _CB19_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Alpha-element enhancement
     if alpha_fe_evolving:
-        # Evolving [α/Fe]: old stars more α-enhanced than young.
-        # Replaces global met_alpha_fe with per-age ramp.
+        from tengri.parameters._param_defs import _EVOLVING_ALPHA_PARAMS
+
         for pname, (desc, check, err, default) in _EVOLVING_ALPHA_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
     else:
-        # Global [α/Fe] (same for all ages — defaults to Fixed(0) = no-op)
+        from tengri.parameters._param_defs import _ALPHA_FE_PARAMS
+
         for pname, (desc, check, err, default) in _ALPHA_FE_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
@@ -584,8 +357,9 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Shock emission params (only when shock=True)
     if shock:
+        from tengri.parameters._param_defs import _SHOCK_PARAMS
+
         for pname, (desc, check, err, default) in _SHOCK_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
@@ -605,14 +379,16 @@ def _build_param_registry(
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Emission line velocity parameters (registered when eline_mode is active)
     if eline_mode in ("marginalized", "fitted"):
+        from tengri.parameters._param_defs import _ELINE_PARAMS
+
         for pname, (desc, check, err, default) in _ELINE_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Broad emission line component (AGN)
     if eline_broad:
+        from tengri.parameters._param_defs import _ELINE_BROAD_PARAMS
+
         for pname, (desc, check, err, default) in _ELINE_BROAD_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
@@ -645,6 +421,27 @@ _LAZY_DECL_SOURCES: dict[str, tuple[str, str]] = {
     ),
     "_IGM_PATCHY_PARAMS": ("tengri.components.igm._params", "PATCHY_PARAMS"),
     "_DLA_PARAMS": ("tengri.components.igm._params", "DLA_PARAMS"),
+    # PR5: nebular sub-buckets + shock + stellar α/Fe
+    "_CB19_PARAMS": ("tengri.components.nebular._params", "CB19_PARAMS"),
+    "_ELINE_PARAMS": ("tengri.components.nebular._params", "ELINE_PARAMS"),
+    "_ELINE_BROAD_PARAMS": (
+        "tengri.components.nebular._params",
+        "ELINE_BROAD_PARAMS",
+    ),
+    "_CUE_IONSPEC_PARAMS": (
+        "tengri.components.nebular._params",
+        "CUE_IONSPEC_PARAMS",
+    ),
+    "_CUE_GAS_EXTRA_PARAMS": (
+        "tengri.components.nebular._params",
+        "CUE_GAS_EXTRA_PARAMS",
+    ),
+    "_SHOCK_PARAMS": ("tengri.components.nebular._params", "SHOCK_PARAMS"),
+    "_ALPHA_FE_PARAMS": ("tengri.components.stellar._params", "ALPHA_FE_PARAMS"),
+    "_EVOLVING_ALPHA_PARAMS": (
+        "tengri.components.stellar._params",
+        "EVOLVING_ALPHA_PARAMS",
+    ),
 }
 
 #: Extra entries merged into a lazily-resolved bucket after the
