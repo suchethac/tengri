@@ -180,7 +180,7 @@ SPECTRAL_FEATURES = {
     "[O III]": 5007.0,
     "Mg b": 5175.0,
     "Na D": 5893.0,
-    r"H$\alpha$": 6563.0,
+    r"H$\alpha$": 6564.61,
 }
 
 
