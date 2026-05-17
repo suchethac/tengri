@@ -33,6 +33,7 @@ POPULATED_MODULES = frozenset(
         "tengri.components.radio._params",
         "tengri.components.xray._params",
         "tengri.components.agn._params",
+        "tengri.components.nebular._params",
     }
 )
 
@@ -88,6 +89,14 @@ def test_radio_legacy_bucket_matches_canonical_tuple() -> None:
 def test_xray_legacy_bucket_matches_canonical_tuple() -> None:
     from tengri.components.xray._params import PARAMS as canonical
     from tengri.parameters._param_defs import _XRAY_PARAMS as bucket
+
+    assert set(bucket) == {d.name for d in canonical}
+    _assert_bucket_matches_canonical(bucket, canonical)
+
+
+def test_nebular_legacy_bucket_matches_canonical_tuple() -> None:
+    from tengri.components.nebular._params import PARAMS as canonical
+    from tengri.parameters._param_defs import _NEBULAR_PARAMS as bucket
 
     assert set(bucket) == {d.name for d in canonical}
     _assert_bucket_matches_canonical(bucket, canonical)

@@ -93,44 +93,9 @@ _NON_SFH_PARAMS = {
 }
 
 # Parameters that are only added when specific modules are enabled
-_NEBULAR_PARAMS = {
-    "neb_logU": (
-        "Ionization parameter log10(U)",
-        lambda lo, hi: lo >= -5 and hi <= 0,
-        "must be in [-5, 0]",
-        Fixed(-3.0),
-    ),
-    "neb_logZ_gas": (
-        "Gas-phase metallicity log10(Z_gas/Zsun)",
-        lambda lo, hi: True,
-        "",
-        Fixed(-0.3),  # will be overridden to match met_logzsol if not set
-    ),
-    "neb_fesc": (
-        "Ionizing photon escape fraction",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.0),
-    ),
-    "neb_fesc_lya": (
-        "Ly-alpha escape fraction (resonant scattering)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.0),
-    ),
-    "neb_dig_frac": (
-        "DIG fraction of nebular emission (Tacchella+2022)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.0),
-    ),
-    "neb_dig_delta_logU": (
-        "DIG ionization parameter offset (dex, negative)",
-        lambda lo, hi: lo >= -4 and hi <= 0,
-        "must be in [-4, 0]",
-        Fixed(-1.0),
-    ),
-}
+# Nebular priors now live in :mod:`tengri.components.nebular._params`
+# (PR3b). Resolved lazily via module ``__getattr__`` below — see notes
+# at the bottom of this file.
 
 # ── CB_19 extra parameters (nebular == "cb19") ────────────────────────
 # CB_19 extends the base CLOUDY grid with three additional continuous axes:
@@ -720,8 +685,12 @@ def _build_param_registry(
         registry[pname] = (pdef.description, pdef.bound_check, pdef.bound_error)
         defaults[pname] = pdef.default
 
-    # Nebular params (CLOUDY, Cue, or CB_19 — not BakedIn/ssp/off)
+    # Nebular params (CLOUDY, Cue, or CB_19 — not BakedIn/ssp/off).
+    # Bucket resolved lazily via module ``__getattr__`` (avoids circular
+    # import through ``tengri.components``).
     if nebular in ("cloudy", "cue", "cb19"):
+        from tengri.parameters._param_defs import _NEBULAR_PARAMS
+
         for pname, (desc, check, err, default) in _NEBULAR_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
@@ -825,6 +794,7 @@ _LAZY_DECL_SOURCES: dict[str, str] = {
     "_RADIO_PARAMS": "tengri.components.radio._params",
     "_XRAY_PARAMS": "tengri.components.xray._params",
     "_AGN_PARAMS": "tengri.components.agn._params",
+    "_NEBULAR_PARAMS": "tengri.components.nebular._params",
 }
 
 # Extra entries merged into a lazily-resolved bucket after the

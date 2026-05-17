@@ -26,6 +26,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   backend alongside `agn_alpha_ion`). `AGNSEDComponent.declared_parameters()`
   now returns the full ~45-entry tuple — previously a 17-entry subset
   that drifted from the registry. No user-visible change.
+- Moved nebular priors into `tengri.components.nebular._params.PARAMS`
+  (PR3b/5). `_NEBULAR_PARAMS` is now a derived view.
+  `NebularSEDComponent.declared_parameters()` was left unchanged
+  because it performs backend dispatch (cloudy_grid / cue / shock /
+  baked_in) with intentionally-different `Uniform` priors for the
+  SEDComponent path. Unifying the two prior sets is deferred to a
+  dedicated nebular PR. No user-visible change.
 
 ### Added (5 metallicity modes wired in the orchestrator, 2026-05-06)
 
