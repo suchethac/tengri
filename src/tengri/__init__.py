@@ -159,6 +159,7 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     effective_metallicity,
     has_alpha_grid,
     interpolate_met_alpha,
+    load_ssp,
     load_ssp_data,
     salaris_feh_from_mh,
     salaris_mh_from_feh,

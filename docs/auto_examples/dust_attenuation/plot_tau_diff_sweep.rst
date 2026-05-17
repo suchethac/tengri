@@ -19,11 +19,11 @@
 
 
 Diffuse ISM Optical Depth (τ_diff)
-===================================
+==================================
 
-The diffuse ISM attenuation affects all stellar light (not just young
-stars). Higher τ_diff reddens the optical continuum and weakens the
-4000 Å break, a signature of aging stellar populations.
+Diffuse ISM dust τ_diff attenuates all stellar light (young + old).
+Higher τ_diff reddens the optical continuum and weakens the 4000 Å break
+— a signature of aging stellar populations.
 
 .. sphx-glr-precomputed-img:
 
@@ -31,12 +31,12 @@ stars). Higher τ_diff reddens the optical continuum and weakens the
    :alt: plot_tau_diff_sweep
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-87
+.. GENERATED FROM PYTHON SOURCE LINES 16-45
 
 
 
 .. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_tau_diff_sweep_001.png
-   :alt: Diffuse ISM Dust: Impact on Galaxy Attenuation
+   :alt: Diffuse ISM Dust on Typical Galaxy SED
    :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_tau_diff_sweep_001.png
    :class: sphx-glr-single-img
 
@@ -45,7 +45,7 @@ stars). Higher τ_diff reddens the optical continuum and weakens the
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-audit-2026-05-17/src/tengri/forward/sed_model.py:637: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-attenuation-pilot/src/tengri/forward/sed_model.py:637: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
       self._nebular_backend = BakedInBackend()
 
 
@@ -58,74 +58,32 @@ stars). Higher τ_diff reddens the optical continuum and weakens the
 .. code-block:: Python
 
 
-
-    from pathlib import Path
-
-    import jax
     import matplotlib.pyplot as plt
 
-    jax.config.update("jax_enable_x64", True)
-
-    from tengri import Fixed, Parameters, SEDModel, load_ssp_data
+    from tengri import SEDModel, load_ssp, recipes
     from tengri.analysis.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
 
     setup_style()
 
+    model = SEDModel.from_groups(ssp_data=load_ssp(), **recipes.dust_demo())
 
-    def _find_ssp():
-        """Find SSP data file in standard locations."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
-
-
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
-
-    ssp = load_ssp_data(SSP_PATH)
-
-    # --- Build model: typical star-forming galaxy ---
-    spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-        sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),  # Peak ~2 Gyr ago
-        sfh_tsnorm_width_gyr=Fixed(1.5),
-        sfh_tsnorm_skew=Fixed(0.2),
-        sfh_tsnorm_trunc=Fixed(3.0),
-        met_logzsol=Fixed(-0.3),
-        dust_tau_bc=Fixed(0.5),  # Modest birth cloud dust
-        dust_tau_diff=Fixed(0.3),  # Will sweep this
-        dust_slope=Fixed(-0.7),  # Calzetti-like
-        redshift=Fixed(0.1),
-    )
-    model = SEDModel(spec, ssp)
-
-    # --- Sweep τ_diff ---
-    values = [0.0, 0.3, 0.7, 1.5, 3.0]
-
-    # # The sweep_parameter helper creates a single SEDModel instance and calls
-    # # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
-    # # automatically via tengri's persistent compilation cache (enabled at
-    # # import time), so repeated forward model calls reuse the compiled kernel.
-    fig, ax = sweep_parameter(
+    fig, ax = plt.subplots(figsize=(8, 5))
+    sweep_parameter(
         model,
         "dust_tau_diff",
-        values,
+        [0.0, 0.2, 0.5, 1.0, 2.0],
+        ax=ax,
         cmap=SWEEP_CMAPS["dust"],
-        label_fmt=r"$\tau_{{diff}}$ = {:.1f}",
+        label_fmt=r"$\tau_{{\rm diff}}$ = {:.1f}",
         wave_range=(1000, 10000),
     )
-    ax.set_ylim(0, 1.5e5)
-    ax.set_title("Diffuse ISM Dust: Impact on Galaxy Attenuation", fontsize=12)
-    ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)")
-    plt.tight_layout()
+    ax.set(
+        yscale="log",
+        ylim=(1e-1, 1e5),
+        title="Diffuse ISM Dust on Typical Galaxy SED",
+        ylabel=r"$\lambda F_\lambda$ (normalized at 5500 Å, log scale)",
+    )
+    fig.tight_layout()
     plt.savefig("plot_tau_diff_sweep.png", dpi=150, bbox_inches="tight")
     plt.show()
 

@@ -1,11 +1,14 @@
 """
-Two-Component Dust SEDModel
-=========================
+Two-Component Dust (Charlot & Fall 2000)
+========================================
 
-Visualize the Charlot & Fall (2000) two-component dust model: birth
-cloud attenuation affects only young stars (age < ~10 Myr), while
-diffuse ISM attenuation affects all stars. The smooth sigmoid
-transition between components is shown as a function of stellar age.
+Birth-cloud dust attenuates only young stars (age < ~10 Myr), the
+diffuse ISM dust attenuates all stars. Two views:
+
+- Panel A: V-band transmission vs stellar age, for three (τ_bc, τ_diff)
+  combinations — shows the sigmoid transition at 10 Myr.
+- Panel B: transmission spectrum for a young vs old star under the
+  same dust column — the young star sees both components.
 
 .. sphx-glr-precomputed-img:
 
@@ -24,70 +27,46 @@ from tengri.analysis.plotting import setup_style
 
 setup_style()
 
-# --- Setup ---
-wavelength = jnp.linspace(1000.0, 10000.0, 500)
+wave = jnp.linspace(1000.0, 10000.0, 500)
 log_ages = jnp.linspace(5.0, 10.2, 200)
-age_grid = 10.0**log_ages
+ages = 10.0**log_ages
+LAW_KW = dict(law_bc="power_law", law_diff="power_law", n_slope=-0.7)
 
-# --- Compute transmission for different dust parameters ---
+fig, (ax_age, ax_spec) = plt.subplots(1, 2, figsize=(12, 4.5))
+
+# Panel A — V-band transmission vs stellar age, three dust columns
+i_v = int(jnp.argmin(jnp.abs(wave - 5500.0)))
 configs = [
-    {"tau_v1": 1.5, "tau_v2": 0.3, "label": r"$\tau_{\rm bc}=1.5$, $\tau_{\rm diff}=0.3$"},
-    {"tau_v1": 0.5, "tau_v2": 0.5, "label": r"$\tau_{\rm bc}=0.5$, $\tau_{\rm diff}=0.5$"},
-    {"tau_v1": 0.0, "tau_v2": 0.8, "label": r"$\tau_{\rm bc}=0.0$, $\tau_{\rm diff}=0.8$"},
+    (1.5, 0.3, r"$\tau_{\rm bc}=1.5$, $\tau_{\rm diff}=0.3$"),
+    (0.5, 0.5, r"$\tau_{\rm bc}=0.5$, $\tau_{\rm diff}=0.5$"),
+    (0.0, 0.8, r"$\tau_{\rm bc}=0.0$, $\tau_{\rm diff}=0.8$"),
 ]
-
-fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
-
-# --- Panel A: Transmission at V-band (5500 A) vs stellar age ---
-ax = axes[0]
-colors = ["#1f77b4", "#ff7f0e", "#2ca02c"]
-for cfg, color in zip(configs, colors):
-    trans = two_component_dust(
-        wavelength,
-        age_grid,
-        cfg["tau_v1"],
-        cfg["tau_v2"],
-        law_bc="power_law",
-        law_diff="power_law",
-        n_slope=-0.7,
-    )
-    # Extract transmission at V-band (~5500 A)
-    i_v = int(jnp.argmin(jnp.abs(wavelength - 5500.0)))
-    trans_v = np.array(trans[:, i_v])
-    ax.plot(np.array(log_ages), trans_v, color=color, lw=1.5, label=cfg["label"])
-
-ax.axvline(7.0, ls=":", color="grey", lw=0.8, alpha=0.6)
-ax.annotate(
+for tau_bc, tau_diff, label in configs:
+    trans = two_component_dust(wave, ages, tau_bc, tau_diff, **LAW_KW)
+    ax_age.plot(np.array(log_ages), np.array(trans[:, i_v]), lw=1.5, label=label)
+ax_age.axvline(7.0, ls=":", color="grey", lw=0.8, alpha=0.6)
+ax_age.annotate(
     "10 Myr", xy=(7.05, 0.05), xycoords=("data", "axes fraction"), fontsize=10, color="grey"
 )
-ax.set_xlabel(r"log$_{10}$(stellar age / yr)")
-ax.set_ylabel("Transmission at V-band")
-ax.set_title("Age-Dependent Dust Transmission")
-ax.legend(fontsize=10, frameon=False)
-
-# --- Panel B: Transmission spectrum for young vs old stars ---
-ax = axes[1]
-trans = two_component_dust(
-    wavelength,
-    age_grid,
-    tau_v1=1.5,
-    tau_v2=0.3,
-    law_bc="power_law",
-    law_diff="power_law",
-    n_slope=-0.7,
+ax_age.set(
+    xlabel=r"log$_{10}$(stellar age / yr)",
+    ylabel="Transmission at V-band",
+    title="Age-Dependent Dust Transmission",
 )
-wave_um = np.array(wavelength) / 1e4
+ax_age.legend(fontsize=10, frameon=False)
 
-# Young star (1 Myr) and old star (1 Gyr)
-i_young = int(jnp.argmin(jnp.abs(log_ages - 6.0)))
-i_old = int(jnp.argmin(jnp.abs(log_ages - 9.0)))
-ax.plot(wave_um, np.array(trans[i_young, :]), color="#d62728", lw=1.5, label="Young star (1 Myr)")
-ax.plot(wave_um, np.array(trans[i_old, :]), color="#1f77b4", lw=1.5, label="Old star (1 Gyr)")
-
-ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel("Transmission")
-ax.set_title(r"Birth Cloud + Diffuse ISM ($\tau_{\rm bc}=1.5$, $\tau_{\rm diff}=0.3$)")
-ax.legend(fontsize=10, frameon=False)
+# Panel B — spectrum for young vs old star under canonical (τ_bc=1.5, τ_diff=0.3)
+trans = two_component_dust(wave, ages, tau_v1=1.5, tau_v2=0.3, **LAW_KW)
+i_young = int(jnp.argmin(jnp.abs(log_ages - 6.0)))  # 1 Myr
+i_old = int(jnp.argmin(jnp.abs(log_ages - 9.0)))  # 1 Gyr
+ax_spec.plot(wave / 1e4, np.array(trans[i_young]), lw=1.5, label="Young star (1 Myr)")
+ax_spec.plot(wave / 1e4, np.array(trans[i_old]), lw=1.5, label="Old star (1 Gyr)")
+ax_spec.set(
+    xlabel=r"Wavelength [$\mu$m]",
+    ylabel="Transmission",
+    title=r"Birth Cloud + Diffuse ISM ($\tau_{\rm bc}=1.5$, $\tau_{\rm diff}=0.3$)",
+)
+ax_spec.legend(fontsize=10, frameon=False)
 
 fig.tight_layout()
 plt.savefig("plot_two_component.png", dpi=150, bbox_inches="tight")
