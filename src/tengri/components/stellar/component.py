@@ -59,6 +59,7 @@ from tengri.components.stellar.sps.dsps_wrapper import (
 # ``_N_MET_BINS_DEFAULT``.
 _DEFAULT_MET_BIN_EDGES_LOG_YR = jnp.array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14])
 from tengri.core.component import (
+    DerivedKey,
     ParamDeclaration,
     PipelineState,
     SEDComponentConfig,
@@ -249,6 +250,27 @@ class StellarSEDComponent:
                     decls.append(ParamDeclaration(pname, pdef.default, pdef.description))
 
         return decls
+
+    def publishes(self) -> tuple[DerivedKey, ...]:
+        """Cross-component derived keys this stellar component publishes.
+
+        See :func:`tengri.forward.orchestrator.validate_pipeline`.
+        """
+        return (
+            DerivedKey("log_mstar", "dex", "log10(surviving stellar mass / Msun)"),
+            DerivedKey("log_mstar_formed", "dex", "log10(formed stellar mass / Msun)"),
+            DerivedKey("sfr", "Msun/yr", "SFR at lookback ~ 0"),
+            DerivedKey("sfr_10myr", "Msun/yr", "Time-weighted SFR over last 10 Myr"),
+            DerivedKey("sfr_100myr", "Msun/yr", "Time-weighted SFR over last 100 Myr"),
+            DerivedKey("L_age", "erg/s", "Bolometric L per SSP age bin"),
+            DerivedKey("lnu_age", "erg/s/Hz", "Per-age L_nu cube, shape (n_age, n_wave)"),
+            DerivedKey("ssp_ages_yr", "yr", "SSP age axis"),
+            DerivedKey("age_weights", "Msun", "CSP mass weights per SSP age bin"),
+            DerivedKey("nion", "photons/s", "Ionizing photon rate (lambda < 911.76 A)"),
+            DerivedKey("sfh_grid_lbt_yr", "yr", "SFH lookback-time grid"),
+            DerivedKey("sfr_history", "Msun/yr", "SFR on SFH grid"),
+            DerivedKey("log_metallicity_history", "dex", "log10(Z) per SFH time bin"),
+        )
 
     def precompute(
         self,

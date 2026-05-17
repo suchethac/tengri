@@ -40,6 +40,7 @@ import jax.numpy as jnp
 
 from tengri.components.xray.xray import xray_total
 from tengri.core.component import (
+    DerivedKey,
     ParamDeclaration,
     PipelineState,
     SEDComponentConfig,
@@ -129,6 +130,25 @@ class XRaySEDComponent:
                 "alpha_OX = log10(L_2keV / L_2500) for AGN corona [dimensionless]",
             ),
         ]
+
+    def publishes(self) -> tuple[DerivedKey, ...]:
+        """Cross-component derived keys this X-ray component publishes.
+
+        See :func:`tengri.forward.orchestrator.validate_pipeline`.
+
+        Notes
+        -----
+        X-ray reads ``sfr``, ``log_mstar``, and ``L_agn_bol`` opportunistically
+        with documented fallbacks. Those reads are NOT declared in
+        :meth:`requires` — only hard dependencies belong there.
+        """
+        return (
+            DerivedKey(
+                "sed_xray",
+                "erg/s/Hz",
+                "X-ray luminosity contribution on pipeline wave grid",
+            ),
+        )
 
     def precompute(
         self,

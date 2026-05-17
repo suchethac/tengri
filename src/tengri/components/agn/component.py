@@ -38,6 +38,7 @@ import jax.numpy as jnp
 
 from tengri.components.agn.unified import resolve_agn_model
 from tengri.core.component import (
+    DerivedKey,
     ParamDeclaration,
     PipelineState,
     SEDComponentConfig,
@@ -188,6 +189,16 @@ class AGNSEDComponent:
                 "Disc reddening E(B-V) [mag]",
             ),
         ]
+
+    def publishes(self) -> tuple[DerivedKey, ...]:
+        """Cross-component derived keys this AGN component publishes.
+
+        See :func:`tengri.forward.orchestrator.validate_pipeline`.
+        """
+        return (
+            DerivedKey("L_agn_bol", "erg/s", "AGN bolometric luminosity"),
+            DerivedKey("sed_agn", "erg/s/Hz", "AGN SED contribution on pipeline wave grid"),
+        )
 
     def precompute(
         self,

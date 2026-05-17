@@ -33,7 +33,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.components.agn._phys import (
-    LSUN_ERG as _LSUN_ERG,
+    L_SUN as _L_SUN,
     wavelength_to_nu as _wavelength_to_nu,
 )
 from tengri.utils.grid_interp import interp_nd_triweight
@@ -283,7 +283,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
         ndarray, shape (n_wave,)
             Specific luminosity L_ν. [erg s⁻¹ Hz⁻¹]
         """
-        l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
+        l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
         point = (
             agn_tau_skirtor,
             agn_p_skirtor,
@@ -402,7 +402,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
             Named tuple with ``disk``, ``dust``, ``total`` arrays,
             each shape (n_wave,) in [erg s⁻¹ Hz⁻¹].
         """
-        l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
+        l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
         point = (
             agn_tau_skirtor,
             agn_p_skirtor,

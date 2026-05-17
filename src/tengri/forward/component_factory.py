@@ -288,6 +288,15 @@ def build_components(
     if use_igm:
         components.append(IGMSEDComponent())
 
+    # Construction-time contract check: every required derived key has an
+    # earlier publisher with matching units, no duplicate publishers, units
+    # match the canonical-units table. Raises PipelineContractError on any
+    # violation, with a "Did you mean: ..." hint for likely typos. Zero
+    # runtime cost — runs once per model build, no JIT trace involved.
+    from tengri.forward.orchestrator import validate_pipeline
+
+    validate_pipeline(components)
+
     return components
 
 

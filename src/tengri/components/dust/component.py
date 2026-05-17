@@ -34,6 +34,7 @@ import jax.numpy as jnp
 
 from tengri.components.dust.attenuation import calzetti, resolve_dust_law
 from tengri.core.component import (
+    DerivedKey,
     ParamDeclaration,
     PipelineState,
     SEDComponentConfig,
@@ -122,6 +123,22 @@ class DustAttenuationSEDComponent:
                 "V-band optical depth at 5500 Å [dimensionless]",
             ),
         ]
+
+    def publishes(self) -> tuple[DerivedKey, ...]:
+        """Cross-component derived keys this dust component publishes.
+
+        See :func:`tengri.forward.orchestrator.validate_pipeline`.
+        """
+        return (
+            DerivedKey("L_ir", "erg/s", "Integrated dust-absorbed luminosity"),
+            DerivedKey("L_absorbed", "erg/s", "Alias for L_ir (energy balance)"),
+            DerivedKey(
+                "dust_attenuation_factor",
+                "",
+                "exp(-tau_v * k(lambda)) on pipeline wave grid",
+            ),
+            DerivedKey("sed_dust_attenuated", "erg/s/Hz", "Attenuated stellar SED"),
+        )
 
     def precompute(
         self,
