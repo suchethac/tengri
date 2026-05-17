@@ -70,6 +70,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.utils.physics_constants import V_BAND_ANGSTROM
+
 # ── Attenuation curve registry ────────────────────────────────────
 
 
@@ -557,9 +559,22 @@ def kriek_conroy(
     """
     wave_um = wavelength / 1e4
     k_calz = calzetti(wavelength)
-    slope_mod = (wavelength / 5500.0) ** dust_delta
+    slope_mod = (wavelength / V_BAND_ANGSTROM) ** dust_delta
     bump = dust_bump_strength * _drude_profile(wave_um)
-    return jnp.clip(k_calz * slope_mod + bump, 0.0)
+
+    # Compute unnormalized attenuation curve
+    k_unnorm = k_calz * slope_mod + bump
+
+    # Normalize to k(5500 Å) = 1: compute k_unnorm at V-band
+    v_band_um = V_BAND_ANGSTROM / 1e4
+    k_calz_v = calzetti(jnp.array([V_BAND_ANGSTROM]))[0]
+    slope_mod_v = (V_BAND_ANGSTROM / V_BAND_ANGSTROM) ** dust_delta  # = 1.0
+    bump_v = dust_bump_strength * _drude_profile(jnp.array([v_band_um]))[0]
+    k_at_v = k_calz_v * slope_mod_v + bump_v
+
+    # Divide by k_at_v to renormalize
+    k = k_unnorm / k_at_v
+    return jnp.clip(k, 0.0)
 
 
 def _pei92_curve(
@@ -1434,12 +1449,12 @@ def conroy2010(
     k_mw = cardelli(wavelength, dust_Rv=dust_Rv)
     k_pl = power_law(wavelength, n_slope=n_slope)
     # Smooth sigmoid blend: MW dominates UV, power-law dominates IR
-    x = jnp.log10(wavelength / 5500.0)
+    x = jnp.log10(wavelength / V_BAND_ANGSTROM)
     blend = jax.nn.sigmoid(x / 0.05)
     k_raw = (1.0 - blend) * k_mw + blend * k_pl
-    # Normalize to k(5500 A) = 1
-    lam_v = jnp.array(5500.0)
-    x_v = jnp.log10(lam_v / 5500.0)
+    # Normalize to k(V-band) = 1
+    lam_v = jnp.array(V_BAND_ANGSTROM)
+    x_v = jnp.log10(lam_v / V_BAND_ANGSTROM)
     blend_v = jax.nn.sigmoid(x_v / 0.05)
     k_v = (1.0 - blend_v) * cardelli(lam_v[None], dust_Rv=dust_Rv)[0] + blend_v * 1.0
     return jnp.clip(k_raw / k_v, 0.0)
@@ -2234,8 +2249,8 @@ def _precompute_grain_curve(model_cls: type, submodel: str) -> tuple[np.ndarray,
     k = data_axav[mask]
     order = np.argsort(wave_aa)
     wave_aa, k = wave_aa[order], k[order]
-    # Normalize to k(5500 Å) = 1 for consistency with other tengri dust laws
-    k_at_5500 = float(np.interp(5500.0, wave_aa, k))
+    # Normalize to k(V-band) = 1 for consistency with other tengri dust laws
+    k_at_5500 = float(np.interp(V_BAND_ANGSTROM, wave_aa, k))
     return wave_aa, k / k_at_5500
 
 
