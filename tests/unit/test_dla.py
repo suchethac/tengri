@@ -253,6 +253,42 @@ class TestJITAndGradients:
         g = jax.grad(loss)(10.0)
         assert jnp.isfinite(g)
 
+    def test_gradient_stability_at_z_boundary(self):
+        """Regression test for safe-where gradient fix.
+
+        Verify that gradients w.r.t. Voigt profile input are finite
+        and not astronomically larger at the z→0 boundary (where the
+        where-mask switches from True to False). This tests the fix for
+        the x2+1e-30 denominator pattern in _voigt_tepper_garcia.
+        """
+        from tengri.components.igm.dla import _voigt_tepper_garcia
+
+        # Test gradient magnitude at different x values (z depends on x²)
+        def voigt_sum(x_vals):
+            return jnp.sum(_voigt_tepper_garcia(x_vals, 0.01))
+
+        # Sample points including near x²=0.855 (where z→0)
+        # z = (x² - 0.855) / (x² + 3.42), so z ≈ 0 when x² ≈ 0.855
+        x_test = jnp.array([0.0, 0.1, 0.5, 0.925, 1.0, 2.0])
+
+        # Gradient w.r.t. x values
+        grad_fn = jax.grad(voigt_sum)
+        grad_x = grad_fn(x_test)
+
+        # Check finiteness
+        assert jnp.all(jnp.isfinite(grad_x)), (
+            "Gradient contains NaN or Inf at z-boundary; "
+            "double-where fix for x2+1e-30 may have failed"
+        )
+
+        # Sanity check: no individual gradient should be absurdly large
+        # For a Voigt profile, gradients should be O(1) to O(10) in typical range
+        max_grad = jnp.max(jnp.abs(grad_x))
+        assert max_grad < 1e6, (
+            f"Maximum gradient magnitude {max_grad:.2e} suggests "
+            f"unstable computation (huge gradient from 1/x2 denominator?)"
+        )
+
 
 # ── Cross-validation against Bagpipes ─────────────────────────────
 
