@@ -72,6 +72,7 @@ from tengri.components.agn.grahsp.templates import (
 )
 from tengri.components.agn.grahsp.torus import si_feature, torus_dust_continuum
 from tengri.core.component import (
+    DerivedKey,
     ParamDeclaration,
     PipelineState,
     SEDComponentConfig,
@@ -255,6 +256,25 @@ class GRAHSPSEDComponent:
                 "AGN-only additional E(B-V) [mag]",
             ),
         ]
+
+    def publishes(self) -> tuple[DerivedKey, ...]:
+        """Cross-component derived keys this GRAHSP AGN component publishes.
+
+        See :func:`tengri.forward.orchestrator.validate_pipeline`.
+
+        Notes
+        -----
+        Listed as an alternate publisher of ``L_agn_bol`` in
+        :data:`tengri.forward.orchestrator._ALTERNATE_PUBLISHERS` alongside
+        :class:`AGNSEDComponent`. The pipeline factory chooses one variant
+        by configuration; only one ever runs at a time.
+        """
+        return (
+            DerivedKey("L_agn_bol", "erg/s", "AGN bolometric luminosity (GRAHSP variant)"),
+            DerivedKey("L_agn_torus", "erg/s", "Torus thermal luminosity component"),
+            DerivedKey("L_agn_absorbed", "erg/s", "Energy absorbed by torus"),
+            DerivedKey("sed_grahsp", "erg/s/Hz", "Full GRAHSP AGN SED on pipeline wave grid"),
+        )
 
     def precompute(
         self,

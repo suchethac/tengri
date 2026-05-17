@@ -27,7 +27,7 @@ import warnings
 import jax.numpy as jnp
 
 from tengri.components.agn._phys import (
-    LSUN_ERG as _LSUN_ERG,
+    L_SUN as _L_SUN,
     planck_lnu as _planck_lnu,
     wavelength_to_nu as _wavelength_to_nu,
 )
@@ -105,7 +105,7 @@ def simple_torus(
             stacklevel=2,
         )
         _WARNED.add("simple_torus")
-    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
+    l_bol_erg = 10.0**agn_log_lbol * _L_SUN
     nu = _wavelength_to_nu(wavelength)
 
     # Blackbody emission
@@ -198,7 +198,7 @@ def two_temperature_torus(
             stacklevel=2,
         )
         _WARNED.add("two_temperature_torus")
-    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
+    l_bol_erg = 10.0**agn_log_lbol * _L_SUN
     nu = _wavelength_to_nu(wavelength)
 
     # Two blackbody components
@@ -347,5 +347,5 @@ def nenkova_torus(
     integral = jnp.trapezoid(fnu_jax[idx_sort], nu[idx_sort])
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
-    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
+    l_bol_erg = 10.0**agn_log_lbol * _L_SUN
     return l_bol_erg * agn_torus_frac * fnu_jax / integral_safe

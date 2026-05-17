@@ -33,12 +33,26 @@ import jax.numpy as jnp
 
 __all__ = [
     "BARE_NAME_ALLOWLIST",
+    "DerivedKey",
     "ParamDeclaration",
+    "PipelineContractError",
     "PipelineState",
     "SEDComponent",
     "SEDComponentConfig",
     "SEDComponentState",
 ]
+
+
+class PipelineContractError(ValueError):
+    """Raised by :func:`tengri.forward.orchestrator.validate_pipeline` when
+    publish/require constraints fail at component-list construction time.
+
+    The contract is checked once at :class:`tengri.SEDModel` construction,
+    before any JIT compile. A raised ``PipelineContractError`` always names
+    the offending component class and the offending derived key, plus a
+    "Did you mean: ..." suggestion when a missing-publisher likely indicates
+    a typo. See :func:`validate_pipeline` for the full list of checks.
+    """
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -80,6 +94,54 @@ class ParamDeclaration(NamedTuple):
 
     name: str
     prior: Any
+    description: str = ""
+
+
+class DerivedKey(NamedTuple):
+    """One cross-component datum published into :attr:`PipelineState.derived`.
+
+    Returned in a tuple from :meth:`SEDComponent.publishes` and
+    :meth:`SEDComponent.requires`. Consumed once at pipeline construction
+    by :func:`tengri.forward.orchestrator.validate_pipeline` to ensure
+    every required key has an upstream publisher with matching units, and
+    (when needed) to derive a topological ordering over components.
+
+    Mirrors :class:`ParamDeclaration` line-for-line so future readers see
+    the same shape on both sides of the cross-component contract.
+
+    Fields
+    ------
+    name : str
+        Stable key written to / read from :attr:`PipelineState.derived`.
+        Compared by string equality, so renames are caught at construction.
+    units : str
+        Free-form units tag, e.g. ``"erg/s"``, ``"Msun/yr"``, ``"dex"``,
+        ``"erg/s/Hz"``, ``"yr"``, ``"photons/s"``. The validator compares
+        publisher and consumer units strings for equality; the
+        ``_CANONICAL_UNITS`` table in
+        :mod:`tengri.forward.orchestrator` pins the expected string for
+        every well-known key. Use ``""`` for unitless quantities (e.g.
+        transmission factors, mass weights, attenuation factors).
+    description : str
+        One-line human-readable description shown in error messages and
+        by future introspection helpers. Optional.
+
+    Notes
+    -----
+    No numeric unit conversion is attempted by the validator: the
+    contract refuses to silently paper over a unit disagreement, but it
+    will not convert ``"Lsun"`` to ``"erg/s"`` for the consumer. Each
+    component is responsible for converting at its own boundary.
+
+    The strings are deliberately *not* :mod:`astropy.units` quantities —
+    that path is JIT-incompatible and would cost a 5–100× performance
+    hit on the hot pipeline. Stringly-typed-with-a-canonical-table is
+    enough to catch the realistic failure modes (`L_SUN` vs `L_SUN_CUE`
+    confusion, ``"Lsun"`` vs ``"erg/s"`` cross-talk).
+    """
+
+    name: str
+    units: str
     description: str = ""
 
 
@@ -302,6 +364,51 @@ class SEDComponent(Protocol):
         ``tools/check_param_prefixes.py`` enforces this.
         """
         ...
+
+    def publishes(self) -> tuple[DerivedKey, ...]:
+        """Derived keys this component writes into :attr:`PipelineState.derived`.
+
+        Returns
+        -------
+        tuple of :class:`DerivedKey`
+            One entry per cross-component datum this component is
+            responsible for producing. The default is the empty tuple,
+            which is correct for components that do not publish anything
+            for downstream consumers (most additive emitters, IGM, the
+            current generation of opportunistic-read components).
+
+        Notes
+        -----
+        Consumed at :class:`tengri.SEDModel` construction by
+        :func:`tengri.forward.orchestrator.validate_pipeline`. Has no
+        runtime cost — the contract is metadata, not a trace-time check.
+        """
+        return ()
+
+    def requires(self) -> tuple[DerivedKey, ...]:
+        """Derived keys this component reads from :attr:`PipelineState.derived`.
+
+        Returns
+        -------
+        tuple of :class:`DerivedKey`
+            One entry per upstream-published datum this component cannot
+            run without. The default is the empty tuple. Components that
+            read upstream data with a documented fallback (e.g. radio
+            reading ``L_ir`` with a ``0.0`` default when no dust component
+            is configured) should NOT declare those reads here — only
+            declare a key if the component genuinely cannot produce a
+            correct answer without it.
+
+        Notes
+        -----
+        Every required key must be published by some upstream component
+        in the pipeline, with a units string matching the consumer's
+        declaration. Otherwise
+        :func:`tengri.forward.orchestrator.validate_pipeline` raises
+        :class:`PipelineContractError` at construction time, before any
+        JIT trace.
+        """
+        return ()
 
     def precompute(
         self,

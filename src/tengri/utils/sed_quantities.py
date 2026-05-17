@@ -39,12 +39,12 @@ import jax
 import jax.numpy as jnp
 
 from tengri.utils.magnitudes import fnu_to_ab_mag, lnu_to_absolute_ab_mag
-from tengri.utils.physics_constants import C_AA, L_SUN as LSUN_ERG, PC_CM
+from tengri.utils.physics_constants import C_AA, L_SUN, PC_CM
 
 # Re-export for convenience
 __all__ = [
     "C_AA",
-    "LSUN_ERG",
+    "L_SUN",
     "PC_CM",
 ]
 
@@ -179,7 +179,7 @@ def compute_bolometric_luminosity(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.nd
     """
     nu = C_AA / wave
     l_bol_erg = -jnp.trapezoid(sed, nu)
-    return l_bol_erg / LSUN_ERG
+    return l_bol_erg / L_SUN
 
 
 def compute_l_tir(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
@@ -203,7 +203,7 @@ def compute_l_tir(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     mask = (wave >= 8.0e4) & (wave <= 1.0e7)  # 8-1000 μm in Angstrom
     sed_ir = jnp.where(mask, sed, 0.0)
     l_ir_erg = -jnp.trapezoid(sed_ir, nu)
-    return jnp.maximum(l_ir_erg, 0.0) / LSUN_ERG
+    return jnp.maximum(l_ir_erg, 0.0) / L_SUN
 
 
 def compute_l_dust_absorbed(
@@ -237,7 +237,7 @@ def compute_l_dust_absorbed(
     """
     nu = C_AA / wave
     l_abs_erg = -jnp.trapezoid(sed_intrinsic - sed_attenuated, nu)
-    return jnp.maximum(l_abs_erg, 0.0) / LSUN_ERG
+    return jnp.maximum(l_abs_erg, 0.0) / L_SUN
 
 
 def _mean_flux_in_band(sed, wave, lam_lo, lam_hi):
@@ -480,7 +480,7 @@ def compute_irx(l_tir_lsun: jnp.ndarray, l_uv_erg: jnp.ndarray) -> jnp.ndarray:
     float
         IRX (dimensionless log ratio).
     """
-    l_tir_erg = l_tir_lsun * LSUN_ERG
+    l_tir_erg = l_tir_lsun * L_SUN
     return jnp.log10(jnp.maximum(l_tir_erg, 1e-50) / jnp.maximum(l_uv_erg, 1e-50))
 
 
@@ -537,7 +537,7 @@ def compute_per_bin_luminosity(
 
     def _lbol_one_bin(w_i, flux_i):
         """Compute bolometric luminosity for a single SSP age bin."""
-        return -jnp.trapezoid(w_i * flux_i * LSUN_ERG, nu)
+        return -jnp.trapezoid(w_i * flux_i * L_SUN, nu)
 
     return jax.vmap(_lbol_one_bin)(weights, ssp_flux_at_z)
 
@@ -736,7 +736,7 @@ def compute_q_ir(l_tir_lsun: jnp.ndarray, l_1p4ghz: jnp.ndarray) -> jnp.ndarray:
     float
         q_TIR (dimensionless).
     """
-    l_tir_w = l_tir_lsun * LSUN_ERG * 1e-7  # erg/s → W
+    l_tir_w = l_tir_lsun * L_SUN * 1e-7  # erg/s → W
     l_radio_w = l_1p4ghz * 1e-7  # erg/s/Hz → W/Hz
     return jnp.log10(jnp.maximum(l_tir_w, 1e-50) / 3.75e12) - jnp.log10(
         jnp.maximum(l_radio_w, 1e-50)
@@ -797,7 +797,7 @@ def compute_l_x_agn(l_bol_agn_erg: jnp.ndarray) -> jnp.ndarray:
     float
         AGN 2–10 keV luminosity in erg/s.
     """
-    log_l_sol = jnp.log10(jnp.maximum(l_bol_agn_erg, 1e-50) / LSUN_ERG)
+    log_l_sol = jnp.log10(jnp.maximum(l_bol_agn_erg, 1e-50) / L_SUN)
     # Duras+2020 Eq. 6, Table 2 (2-10 keV)
     a, b, c = 15.33, 11.48, 16.20
     k_bol = a * (1.0 + (log_l_sol / b) ** c)
@@ -834,3 +834,15 @@ def compute_ionizing_efficiency(q_h: jnp.ndarray, l_uv_erg: jnp.ndarray) -> jnp.
         log10(ξ_ion) in Hz/erg.
     """
     return jnp.log10(jnp.maximum(q_h, 1e-50) / jnp.maximum(l_uv_erg, 1e-50))
+
+
+def __getattr__(name):
+    if name == "LSUN_ERG":
+        from tengri._deprecated import deprecated_attribute
+
+        return deprecated_attribute(
+            L_SUN,
+            old_name="tengri.utils.sed_quantities.LSUN_ERG",
+            new_name="tengri.utils.physics_constants.L_SUN",
+        )
+    raise AttributeError(f"module 'tengri.utils.sed_quantities' has no attribute {name!r}")

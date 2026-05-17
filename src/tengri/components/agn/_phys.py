@@ -17,8 +17,14 @@ from tengri.utils.physics_constants import (
     C_KM_S,
     H_PLANCK,
     K_BOLTZ,
-    L_SUN as LSUN_ERG,
+    L_SUN,
 )
+
+# Back-compat alias for the historical name used by AGN sub-modules.
+# Prefer ``L_SUN`` in new code; ``LSUN_ERG`` will be removed once internal
+# AGN consumers (disc, cat3d, silva04, skirtor_precompute, unified, …) are
+# migrated to import ``L_SUN`` directly from ``tengri.utils.physics_constants``.
+LSUN_ERG = L_SUN
 
 __all__ = [
     "ANGSTROM_CM",
@@ -26,6 +32,7 @@ __all__ = [
     "H_PLANCK",
     "K_BOLTZ",
     "LSUN_ERG",
+    "L_SUN",
     "compute_l_12um_from_lbol",
     "gaussian_line_profile",
     "lines_to_sed",
@@ -292,7 +299,7 @@ def compute_l_12um_from_lbol(
        survey," ApJS, 206, 4 (2013). arXiv:1301.1688.
        https://doi.org/10.1088/0067-0049/206/1/4
     """
-    l_bol_erg = 10.0**agn_log_lbol * LSUN_ERG
+    l_bol_erg = 10.0**agn_log_lbol * L_SUN
     # 12 μm = 1.2e5 Å; ν = c / λ [Hz]
     nu_12um = C_LIGHT / (1.2e5 * ANGSTROM_CM)
     l_12um_erg = f_12 * l_bol_erg
@@ -367,5 +374,5 @@ def lines_to_sed(
     l_lambda = profiles @ line_luminosities  # (n_wave,)
 
     # Convert L_lambda [Lsun/A] -> L_nu [erg/s/Hz] via c/lambda^2 factor
-    l_nu = l_lambda * LSUN_ERG * wave_obs**2 * ANGSTROM_CM / C_LIGHT
+    l_nu = l_lambda * L_SUN * wave_obs**2 * ANGSTROM_CM / C_LIGHT
     return l_nu
