@@ -1593,7 +1593,7 @@ def unified_nlr_blr(
     _blr_fn = blr_fn if blr_fn is not None else compute_blr_sed
     l_blr_raw = _blr_fn(
         wavelength,
-        l_disc_bol_erg=l_disc_bol_erg,
+        l_disc_bol_erg=l_bol_erg,  # Full intrinsic L_bol; BLR is interior to torus
         covering_fraction=agn_blr_cf,
         fwhm_kms=agn_blr_fwhm,
         **_kwargs,
