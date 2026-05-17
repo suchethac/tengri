@@ -2253,9 +2253,7 @@ class SEDModel:
         # a cached kernel and produce identical photometry (the kernel
         # built first wins). Float is rounded to a stable hash key.
         z_fixed = (
-            ("fixed", round(float(self._z_fixed), 8))
-            if self._z_fixed is not None
-            else ("free",)
+            ("fixed", round(float(self._z_fixed), 8)) if self._z_fixed is not None else ("free",)
         )
 
         # Instrument/spectroscopy
