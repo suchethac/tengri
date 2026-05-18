@@ -139,35 +139,12 @@ _ALTERNATE_PUBLISHERS: frozenset[frozenset[str]] = frozenset(
 )
 
 
-def _levenshtein(a: str, b: str) -> int:
-    """Plain Levenshtein distance — used only for "Did you mean: ..." hints."""
-    if a == b:
-        return 0
-    if not a:
-        return len(b)
-    if not b:
-        return len(a)
-    prev = list(range(len(b) + 1))
-    for i, ca in enumerate(a, 1):
-        curr = [i]
-        for j, cb in enumerate(b, 1):
-            curr.append(min(curr[-1] + 1, prev[j] + 1, prev[j - 1] + (0 if ca == cb else 1)))
-        prev = curr
-    return prev[-1]
-
-
 def _did_you_mean(missing: str, known: Iterable[str]) -> str:
     """Return ' (Did you mean: <closest>?)' when a known key is within edit distance 2."""
-    best_name = None
-    best_dist = 3  # strictly less than 3 to suggest
-    for k in known:
-        d = _levenshtein(missing, k)
-        if d < best_dist:
-            best_dist = d
-            best_name = k
-    if best_name is None:
-        return ""
-    return f" (Did you mean: {best_name!r}?)"
+    from tengri.utils.strings import closest
+
+    best_name = closest(missing, known, max_distance=2)
+    return f" (Did you mean: {best_name!r}?)" if best_name else ""
 
 
 def validate_pipeline(components: Iterable[SEDComponent]) -> None:

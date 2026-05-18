@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Introspection registry for tengri free parameters.
 
-Walks every per-component ``_params.py`` module under
-:mod:`tengri.components` and exposes a single, queryable view of every
-:class:`~tengri.core.component.ParamDeclaration` the codebase declares.
-The underlying data ownership is unchanged — each component still owns
-its own ``_params.py`` (the decentralisation that landed pre-ADR-0005).
-This module just gives users a single API to ask:
+Walks every per-component ``_params.py`` module under :mod:`tengri.components`,
+:mod:`tengri.observation`, and :mod:`tengri.parameters._shared`, then exposes
+a single, queryable view of every :class:`~tengri.core.component.ParamDeclaration`
+the codebase declares. The underlying data ownership is unchanged — each
+component/module still owns its own ``_params.py`` (the decentralisation that
+landed pre-ADR-0005). This module just gives users a single API to ask:
 
 - **What parameters exist?** ``tengri.list_parameters()``
 - **Where does this parameter live?** ``tengri.describe_parameter("dust_tau_v")``
@@ -18,7 +18,7 @@ not the two-component dust model is enabled in any specific
 :class:`tengri.SEDModel`. Per-model views are constructed from
 ``model.spec.free_params`` instead.
 
-See ADR-0005 for the full rationale.
+See ADR-0005 and Step E (Observation cleanup) for the full rationale.
 """
 
 from __future__ import annotations
@@ -40,64 +40,20 @@ __all__ = [
 
 
 class ParameterRecord(NamedTuple):
-    """One free parameter and the module that owns it.
-
-    Mirrors :class:`tengri.core.component.ParamDeclaration` (the
-    declaration shape) with an extra ``owner`` field naming the
-    ``_params.py`` module that exports it. Used by the registry to
-    answer "where does this parameter live?" queries.
-
-    Fields
-    ------
-    name : str
-        Parameter name (e.g. ``"dust_tau_v"``). Same convention as
-        :class:`ParamDeclaration.name`.
-    prior : object
-        Default prior (:class:`tengri.parameters.priors.Distribution`).
-        Identical to :class:`ParamDeclaration.prior`.
-    description : str
-        One-line human-readable description.
-    units : str
-        Free-form units string. Identical to :class:`ParamDeclaration.units`.
-    owner : str
-        Fully-qualified module path of the ``_params.py`` that exports
-        this parameter, e.g.
-        ``"tengri.components.dust._params"``.
-    group : str
-        The tuple attribute name within ``owner`` (e.g. ``"PARAMS"``,
-        ``"ATTENUATION_PARAMS"``, ``"SINGLE_COMPONENT_PARAMS"``).
-        Useful when a component splits its parameters across multiple
-        named tuples to indicate which configuration toggles them.
-    """
+    """Where a free parameter lives: name, prior, description, units, owner module, owner tuple."""
 
     name: str
     prior: object
     description: str
     units: str
-    owner: str
-    group: str
+    owner: str  # fully-qualified module path of the ``_params.py`` that exports it
+    group: str  # tuple attribute on ``owner``, e.g. "PARAMS" or "ATTENUATION_PARAMS"
 
 
 def _walk_param_modules() -> dict[str, ParameterRecord]:
-    """Walk every ``_params.py`` under ``tengri.components`` and
-    ``tengri.parameters._shared``, and collect every declared free parameter.
+    """Walk every ``_params.py`` under components, observation, and parameters._shared.
 
-    Build order is deterministic (``pkgutil.walk_packages`` returns
-    modules in package-traversal order). When the same parameter name
-    appears in more than one source, the *first* occurrence wins —
-    matching how the legacy aggregator at
-    :mod:`tengri.parameters._param_defs` resolves duplicates.
-
-    Parameters declared in component ``_params.py`` modules and
-    ``tengri.parameters._shared`` use the :class:`ParamDeclaration` shape
-    directly. The legacy ``_NON_SFH_PARAMS`` bucket in
-    :mod:`tengri.parameters._param_defs` is a 4-tuple
-    ``(description, bound_check, bound_error, default_prior)`` and is
-    kept for backwards compatibility; it is derived from
-    ``_shared.PARAMS``, so introspection should prefer the _shared
-    source when both are present.
-
-    Private. Re-evaluated lazily by :func:`registry` and cached.
+    First-wins on name collisions (deterministic via ``pkgutil.walk_packages`` order).
     """
     import tengri.components as components_pkg
 
@@ -136,7 +92,35 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
                     group=attr_name,
                 )
 
-    # Shared parameters: redshift, met_logzsol, noise_*, sigma_v_kms.
+    # Observation _params.py module (noise model parameters).
+    # As of Step E, noise parameters are owned by the observation module,
+    # not the shared parameters module.
+    try:
+        from tengri.observation import _params as obs_params_module
+    except Exception:
+        obs_params_module = None  # type: ignore[assignment]
+    if obs_params_module is not None:
+        for attr_name in dir(obs_params_module):
+            if attr_name.startswith("_"):
+                continue
+            attr = getattr(obs_params_module, attr_name)
+            if not isinstance(attr, tuple):
+                continue
+            if not all(isinstance(x, ParamDeclaration) for x in attr):
+                continue
+            for decl in attr:
+                if decl.name in out:
+                    continue  # first-wins; matches legacy aggregator
+                out[decl.name] = ParameterRecord(
+                    name=decl.name,
+                    prior=decl.prior,
+                    description=decl.description,
+                    units=decl.units,
+                    owner="tengri.observation._params",
+                    group=attr_name,
+                )
+
+    # Shared parameters: redshift, met_logzsol, sigma_v_kms.
     # These are declared cleanly in tengri.parameters._shared.PARAMS
     # as of ADR-0005 follow-up #1. Import and walk like a component.
     try:
@@ -164,9 +148,9 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
                     group=attr_name,
                 )
 
-    # Fallback: legacy shared bucket from _param_defs for any params
-    # that didn't get picked up above (defensive; all should now be in
-    # _shared.PARAMS).
+    # Legacy ``_NON_SFH_PARAMS`` bucket: provides ``noise_frac_cal`` and
+    # ``noise_dof`` which aren't yet declared via the ParamDeclaration
+    # path. 4-tuple shape ``(description, bound_check, bound_error, prior)``.
     try:
         from tengri.parameters import _param_defs as _legacy
     except Exception:
@@ -176,12 +160,12 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
         for name, payload in legacy_bucket.items():
             if name in out:
                 continue
-            # Legacy 4-tuple shape: (description, bound_check, bound_error, prior).
             description, _bcheck, _berr, prior = payload
             out[name] = ParameterRecord(
                 name=name,
                 prior=prior,
                 description=description,
+                units="",
                 owner="tengri.parameters._param_defs",
                 group="_NON_SFH_PARAMS",
             )
@@ -403,27 +387,6 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
 
 def _closest(target: str, options) -> str | None:
     """Closest option by Levenshtein distance (≤ 2). None if no match."""
+    from tengri.utils.strings import closest
 
-    def lev(a: str, b: str) -> int:
-        if a == b:
-            return 0
-        if not a:
-            return len(b)
-        if not b:
-            return len(a)
-        prev = list(range(len(b) + 1))
-        for i, ca in enumerate(a, 1):
-            curr = [i]
-            for j, cb in enumerate(b, 1):
-                curr.append(min(curr[-1] + 1, prev[j] + 1, prev[j - 1] + (0 if ca == cb else 1)))
-            prev = curr
-        return prev[-1]
-
-    best_name: str | None = None
-    best_dist = 3
-    for k in options:
-        d = lev(target, k)
-        if d < best_dist:
-            best_dist = d
-            best_name = k
-    return best_name
+    return closest(target, options, max_distance=2)

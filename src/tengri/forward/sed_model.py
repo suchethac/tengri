@@ -453,6 +453,62 @@ class SEDModel:
             f"n_filters={n_filt}, n_free={n_free})"
         )
 
+    def __setattr__(self, name: str, value) -> None:
+        """Warn on direct assignment to deprecated filter attributes.
+
+        The attributes ``filter_waves`` and ``filter_trans`` are now read-only
+        properties that delegate to ``self.observation.photometry``. Direct
+        assignment triggers a deprecation warning.
+        """
+        if name in ("filter_waves", "filter_trans"):
+            warnings.warn(
+                f"Direct assignment to SEDModel.{name} is deprecated. "
+                f"Access filters through self.observation.photometry instead. "
+                f"The attribute will become read-only in a future version.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            # Don't actually set the attribute — it's a property now
+            return
+        object.__setattr__(self, name, value)
+
+    # ── Deprecated filter/noise attributes → Observation delegation ──────
+    # Step E: Make Observation the sole owner of filters and noise config.
+    # These properties delegate to self.observation; direct assignment issues
+    # a deprecation warning (not yet removed for backwards compatibility).
+
+    @property
+    def filter_waves(self):
+        """Read-only view of photometric filter wavelengths.
+
+        Delegates to ``self.observation.photometry.filter_waves`` if available.
+        Returns None if no photometry is configured.
+
+        Notes
+        -----
+        **Deprecated**: Access filters through ``self.observation.photometry``
+        directly. Direct assignment is discouraged.
+        """
+        if self.observation is not None and self.observation.can_do_photometry:
+            return list(self.observation.photometry.filter_waves)
+        return None
+
+    @property
+    def filter_trans(self):
+        """Read-only view of photometric filter transmission curves.
+
+        Delegates to ``self.observation.photometry.filter_trans`` if available.
+        Returns None if no photometry is configured.
+
+        Notes
+        -----
+        **Deprecated**: Access filters through ``self.observation.photometry``
+        directly. Direct assignment is discouraged.
+        """
+        if self.observation is not None and self.observation.can_do_photometry:
+            return list(self.observation.photometry.filter_trans)
+        return None
+
     @staticmethod
     def _init_observation(spec, filters, observation):
         """Resolve observation/filters into a canonical Observation + spec."""
@@ -490,13 +546,6 @@ class SEDModel:
         # when redshift is a free parameter. See `interpolate_ztable_smooth`
         # in components/sps/precompute.py.
         self._z_interp = getattr(spec, "z_interp", "linear")
-
-        self.filter_waves = None
-        self.filter_trans = None
-        obs = self.observation
-        if obs is not None and obs.can_do_photometry:
-            self.filter_waves = list(obs.photometry.filter_waves)
-            self.filter_trans = list(obs.photometry.filter_trans)
 
         self.ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
         self.ssp_ages_yr = 10.0**self.ssp_log_ages_yr

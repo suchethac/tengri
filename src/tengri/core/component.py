@@ -242,30 +242,15 @@ class PipelineState:
     sed_attenuated: jnp.ndarray | None = None
     sed_observed: jnp.ndarray | None = None
     lines: Mapping[str, jnp.ndarray] | None = None
-    # ADR-0007 Phase 2 (2026-05-18): ``derived`` is now a typed
-    # :class:`DerivedBundle`, not a free-form dict. Existing code that
-    # produced dicts (``new_derived = dict(state.derived); new_derived[
-    # "L_ir"] = v; state.with_(derived=new_derived)``) keeps working
-    # because ``with_`` and ``__post_init__`` both coerce dict input to
-    # ``DerivedBundle.from_dict(...)``. Phase 3 will migrate write
-    # sites to ``state.derived.with_(L_ir=v)`` for static type safety.
+    # ``derived`` is a typed :class:`DerivedBundle`. Dict-shaped writes
+    # at construction or via ``with_(derived={...})`` are auto-coerced
+    # for backward compatibility (see ``__post_init__`` and ``with_``).
     derived: DerivedBundle = field(default_factory=lambda: DerivedBundle())
 
     def __post_init__(self) -> None:
-        """Coerce dict-shaped ``derived`` input to a :class:`DerivedBundle`.
-
-        Without this, callers that pass ``derived={"L_ir": ...}`` at
-        :class:`PipelineState` construction would leave a plain dict on
-        the field — breaking downstream code that relies on the
-        typed-bundle API (``state.derived.with_(...)``). Coercion is
-        cheap and idempotent (``DerivedBundle.from_dict`` on an
-        existing bundle returns the same shape via ``to_dict`` round-
-        trip if applied, but we short-circuit on the isinstance check).
-        """
+        """Coerce dict-shaped ``derived`` input to a :class:`DerivedBundle`."""
         if not isinstance(self.derived, DerivedBundle):
-            # dataclass is frozen, so use object.__setattr__ to bypass
-            # the frozen guard — standard pattern for __post_init__ on
-            # frozen dataclasses.
+            # Frozen dataclass — bypass the guard with object.__setattr__.
             object.__setattr__(self, "derived", DerivedBundle.from_dict(dict(self.derived)))
 
     def with_(self, **overrides: Any) -> PipelineState:
@@ -276,10 +261,9 @@ class PipelineState:
             new_state = state.with_(sed_attenuated=tau_corrected)
 
         Equivalent to ``dataclasses.replace`` but reads better at call
-        sites. As of ADR-0007 Phase 2, a dict-shaped ``derived=`` is
-        auto-coerced to :class:`DerivedBundle` so existing write
-        patterns (``new_derived = dict(state.derived); ...``) keep
-        working unchanged.
+        sites. A dict-shaped ``derived=`` is auto-coerced to
+        :class:`DerivedBundle` so existing dict-style write patterns
+        keep working unchanged.
         """
         from dataclasses import replace
 

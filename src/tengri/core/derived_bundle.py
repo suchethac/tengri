@@ -1,54 +1,25 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Typed bundle for cross-component derived data.
+"""Typed bundle for cross-component derived data on :attr:`PipelineState.derived`.
 
-Phase 1 of ADR-0007: introduce :class:`DerivedBundle` as a *drop-in*
-replacement for the free-form ``Mapping[str, Any]`` currently stored
-on :attr:`PipelineState.derived`. This module ships the type and the
-dict-compat semantics; it does **not** change ``PipelineState.derived``
-yet. That migration happens in a follow-up PR once every component's
-write site has been updated.
+``DerivedBundle`` is a frozen dataclass with one field per documented
+inter-component datum (``L_ir``, ``lnu_age``, …). Writers go through
+``bundle.with_(L_ir=...)``; a typo (``L_ie``) becomes a ``TypeError``
+at trace time instead of a silent missing key.
 
-Motivation
-----------
+Read sites keep using mapping syntax (``state.derived.get("L_ir", 0.0)``,
+``state.derived["lnu_age"]``, ``"L_ir" in state.derived``) — the bundle
+implements ``__getitem__``, ``.get()``, ``__contains__``, ``keys()``,
+``items()``, ``values()``, ``__iter__``, and ``__len__`` for that. A
+field whose value is ``None`` reads as "not present" so missing data
+behaves like a missing dict key.
 
-After ADR-0004 (the publish/require contract), the *names* of
-cross-component data are declared by ``publishes()`` and the *units*
-are pinned by ``_CANONICAL_UNITS``. But the runtime container is still
-``Mapping[str, Any]`` — so a publisher can typo its own write site
-(``new_derived["L_ie"] = ...`` instead of ``"L_ir"``) and the contract
-catches nothing. The validator agrees with the declaration; the
-declaration agrees with the table; only the *code* disagrees, and the
-consumer fails at runtime when reading the missing key.
+Unknown-key errors include a Levenshtein-2 ``Did you mean: ...`` hint.
 
-A typed bundle closes that loop: the writer says
-``bundle.with_(L_ir=value)``; a typo says ``bundle.with_(L_ie=...)``
-and Python raises ``TypeError`` at trace time. Plus the static type
-checker can flag the typo at edit time, no runtime needed.
-
-Migration ergonomics
---------------------
-
-Today's read sites use ``state.derived.get("L_ir", 0.0)`` and
-``state.derived["lnu_age"]``. The bundle implements ``__getitem__``,
-``.get()``, ``__contains__``, ``keys()``, ``items()``, ``values()``,
-``__iter__``, and ``__len__`` so existing code keeps working without
-edits. A field with value ``None`` is treated as "not present" — i.e.
-``"L_ir" in bundle`` is ``True`` only if some upstream component
-populated it. This matches the dict semantics where a missing key
-means "no value".
-
-The unknown-key error message includes a Levenshtein-2 ``Did you
-mean: ...`` hint, mirroring the validator's style.
-
-Adding a new derived key
-------------------------
-
-Add a field to :class:`DerivedBundle`, then add the same key to
-``_CANONICAL_UNITS`` in ``tengri.forward.orchestrator``. Both edits
-live in the same PR that introduces the publisher. The field set is
-hand-maintained on purpose — same friction model as the contract
-itself (ADR-0004), and a deliberate guard against ``derived`` becoming
-the junk drawer it was before this typing.
+Adding a new derived key: add a field here, then add the same key to
+``_CANONICAL_UNITS`` in :mod:`tengri.forward.orchestrator`. The field
+set is hand-maintained on purpose — same friction model as the
+publish/require contract (ADR-0004), and a deliberate guard against
+``derived`` becoming a junk drawer.
 """
 
 from __future__ import annotations
@@ -251,23 +222,15 @@ class DerivedBundle:
     ) -> DerivedBundle:
         """Build a bundle from a plain dict.
 
-        Keys matching typed fields populate those fields directly.
+        Strict by default: when ``allow_extras=False``, keys outside
+        the typed set raise :class:`TypeError` with a Levenshtein-2
+        "Did you mean: ..." hint. Production write paths
+        (:meth:`PipelineState.__post_init__`, :meth:`PipelineState.with_`)
+        rely on this strictness to catch typos at trace time.
 
-        **Phase 4 (ADR-0007) — strict by default.** As of 2026-05-18,
-        when ``allow_extras=False`` (the default), keys not in the
-        typed set raise :class:`TypeError` with a Levenshtein-2
-        ``Did you mean: ...`` hint. The migration shim that silently
-        spilled unknown keys into ``_extras`` was load-bearing during
-        Phase 3 component migration; now that every internal write
-        site is typed (PRs #45-#49), the spillover would only mask
-        bugs.
-
-        Pass ``allow_extras=True`` to opt into the legacy spillover
-        behaviour. Existing tests that exercise that path use this
-        kwarg; production code paths
-        (``PipelineState.__post_init__`` and ``PipelineState.with_``)
-        leave it ``False`` so any stale dict-style write with a
-        typo'd key fails loudly at trace time.
+        Pass ``allow_extras=True`` to spill unknown keys into
+        ``_extras`` (still readable via mapping syntax). Used by the
+        legacy-compat tests; not used by production code.
         """
         known = set(cls.field_names())
         typed = {k: v for k, v in d.items() if k in known}
@@ -304,30 +267,9 @@ class DerivedBundle:
 
 def _did_you_mean(target: str, options) -> str | None:
     """Levenshtein-2 nearest match, or None if no close match."""
+    from tengri.utils.strings import closest
 
-    def lev(a: str, b: str) -> int:
-        if a == b:
-            return 0
-        if not a:
-            return len(b)
-        if not b:
-            return len(a)
-        prev = list(range(len(b) + 1))
-        for i, ca in enumerate(a, 1):
-            curr = [i]
-            for j, cb in enumerate(b, 1):
-                curr.append(min(curr[-1] + 1, prev[j] + 1, prev[j - 1] + (0 if ca == cb else 1)))
-            prev = curr
-        return prev[-1]
-
-    best_name: str | None = None
-    best_dist = 3
-    for k in options:
-        d = lev(target, k)
-        if d < best_dist:
-            best_dist = d
-            best_name = k
-    return best_name
+    return closest(target, options, max_distance=2)
 
 
 # ── JAX pytree registration ──────────────────────────────────
