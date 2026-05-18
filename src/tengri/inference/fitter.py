@@ -362,6 +362,7 @@ class Fitter:
         auto_protocol_likelihood=True,
         use_orchestrator=False,
         compile_modes=None,
+        cache=None,
     ):
         # ── User-supplied Likelihood (Phase II-1 Protocol path) ─────
         # When non-None, replaces the built-in χ² dispatch. The user
@@ -381,6 +382,18 @@ class Fitter:
         # orchestrator bridge yet, so combining ``use_orchestrator=True``
         # with non-photometric data_type is rejected at construction.
         self.use_orchestrator = bool(use_orchestrator)
+
+        # ── Compile cache (ADR-deepen Step C, 2026-05) ──────────────
+        # Optional per-Fitter CompileCache instance. When None, fall back
+        # to the module-level singleton. Allows CatalogFitter to thread
+        # a single cache through multiple per-galaxy Fitter instances,
+        # preventing cross-galaxy evictions. Users can also isolate
+        # Fitters with separate caches to guarantee no shared state.
+        if cache is None:
+            from tengri.inference.jit_engine import _get_singleton_cache
+
+            cache = _get_singleton_cache()
+        self.cache = cache
 
         # ── Data validation ─────────────────────────────────────────
         self.model = model
