@@ -33,6 +33,7 @@ __all__ = [
     "ParameterRecord",
     "describe_parameter",
     "list_parameters",
+    "recipe_parameters",
     "registry",
 ]
 
@@ -255,6 +256,103 @@ def describe_parameter(name: str) -> ParameterRecord:
     hint = _closest(name, reg.keys())
     suffix = f" (Did you mean: {hint!r}?)" if hint is not None else ""
     raise KeyError(f"No parameter named {name!r} in the registry.{suffix}")
+
+
+def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[ParameterRecord]:
+    """Introspect a recipe dict and return the parameters it activates.
+
+    Takes a nested-dict recipe (output of e.g. :func:`tengri.recipes.star_forming_photometry()`)
+    and returns a sorted list of :class:`ParameterRecord` objects for each
+    parameter that the recipe would activate — WITHOUT requiring SSP data or
+    building an :class:`~tengri.SEDModel`.
+
+    Parameters
+    ----------
+    recipe_dict : dict
+        A recipe dictionary matching the format of :mod:`tengri.recipes`.
+        Example::
+
+            {
+                "sfh": {"type": "dpl", "*": FREE},
+                "dust": {"type": "two_component", "law_bc": "calzetti", "*": FREE},
+                "neb": {"type": "cue", "*": FIXED},
+                "redshift": Uniform(0.01, 6.0),
+            }
+
+    free_only : bool, optional
+        If True (default), return only the free parameters (entries with
+        non-fixed priors). If False, return all parameters the recipe
+        activates (including FIXED ones). Default is True.
+
+    Returns
+    -------
+    list of ParameterRecord
+        A sorted list of :class:`ParameterRecord` objects corresponding to
+        the parameters that the recipe activates. Sorted by parameter name.
+
+    Raises
+    ------
+    ValueError
+        If the recipe dict is invalid (e.g., unknown group, unknown type,
+        invalid parameter name).
+
+    Notes
+    -----
+    **Does not require SSP data.** Unlike :class:`~tengri.SEDModel.from_groups()`,
+    which needs SSP data to build the full model, this function only translates
+    the recipe structure to a :class:`~tengri.Parameters` object and introspects
+    its parameter names — the heaviest operation is a pure-Python dict traversal.
+
+    **Resolves sentinels.** FREE and FIXED sentinels are expanded to their
+    registry defaults; if ``free_only=True``, FIXED entries are filtered out.
+
+    Examples
+    --------
+    List all free parameters activated by a recipe::
+
+        >>> from tengri import recipes, recipe_parameters
+        >>> recipe = recipes.star_forming_photometry()
+        >>> params = recipe_parameters(recipe)
+        >>> len(params)
+        14
+        >>> params[0].name
+        'agn_a_spin'
+
+    Or include fixed parameters::
+
+        >>> all_params = recipe_parameters(recipe, free_only=False)
+        >>> len(all_params) > len(params)
+        True
+
+    See Also
+    --------
+    ~tengri.recipes : Curated recipe functions.
+    describe_parameter : Look up a single parameter by name.
+    """
+    from tengri.parameters.parameters import Parameters
+
+    # Translate recipe to Parameters (no SSP data needed)
+    params = Parameters.from_groups(**recipe_dict)
+
+    # Get the list of parameter names to introspect
+    if free_only:
+        param_names = params.free_params
+    else:
+        param_names = params.all_params
+
+    # Build ParameterRecord list by looking up each name in the registry
+    reg = registry()
+    records: list[ParameterRecord] = []
+
+    for name in param_names:
+        if name in reg:
+            records.append(reg[name])
+        # If name is not in registry, skip it (e.g., structural settings
+        # like mean_sfh_type, dust_model, etc.)
+
+    # Sort by parameter name for stable output
+    records.sort(key=lambda r: r.name)
+    return records
 
 
 def _closest(target: str, options) -> str | None:
