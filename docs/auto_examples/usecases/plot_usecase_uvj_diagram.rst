@@ -43,7 +43,7 @@ extend to red V-J.
    :alt: plot_usecase_uvj_diagram
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-176
+.. GENERATED FROM PYTHON SOURCE LINES 28-178
 
 .. code-block:: Python
 
@@ -53,6 +53,8 @@ extend to red V-J.
     import jax
     import matplotlib.pyplot as plt
     import numpy as np
+
+    jax.config.update("jax_enable_x64", True)
 
     from tengri import (
         Fixed,

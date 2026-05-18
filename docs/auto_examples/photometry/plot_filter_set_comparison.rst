@@ -33,12 +33,10 @@ underlying SED (blue).
    :alt: plot_filter_set_comparison
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-153
+.. GENERATED FROM PYTHON SOURCE LINES 18-122
 
 .. code-block:: Python
 
-
-    from pathlib import Path
 
     import matplotlib.pyplot as plt
     import numpy as np
@@ -49,47 +47,18 @@ underlying SED (blue).
         Parameters,
         Photometry,
         SEDModel,
+        data_path,
         load_filter_set,
-        load_ssp_data,
+        load_ssp,
     )
     from tengri.analysis.plotting import setup_style
 
     setup_style()
 
 
-    def _find_ssp():
-        """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
-
-
-    SSP_PATH = _find_ssp()
-    _FILTER_DIR = next(
-        (
-            str(d)
-            for d in [
-                Path("data/filters"),
-                Path("../data/filters"),
-                Path("../../data/filters"),
-                Path("../../../data/filters"),
-            ]
-            if d.exists()
-        ),
-        "data/filters",
-    )
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
+    ssp = load_ssp()
 
     # --- Setup ---
-    ssp_data = load_ssp_data(SSP_PATH)
 
     # Three filter sets — chosen so all bands fit on the same UV-NIR axis.
     filter_sets = {
@@ -133,16 +102,16 @@ underlying SED (blue).
 
     for ax, (survey_name, bands) in zip(axes, filter_sets.items()):
         obs = Observation(
-            photometry=Photometry.from_names(bands, cache_dir=_FILTER_DIR),
+            photometry=Photometry.from_names(bands, cache_dir=str(data_path("filters"))),
         )
-        model = SEDModel(spec, ssp_data, observation=obs)
+        model = SEDModel(spec, ssp, observation=obs)
 
         pred = model.predict_rest_sed({})
         wave = np.asarray(pred.wavelength)
         sed = np.asarray(pred.sed)
         sed_smooth = median_filter(sed, size=51)
 
-        waves, trans, curves = load_filter_set(bands, cache_dir=_FILTER_DIR)
+        waves, trans, curves = load_filter_set(bands, cache_dir=str(data_path("filters")))
 
         # SED line — smoothed continuum so emission lines don't dominate the eye.
         ax.semilogy(wave, sed_smooth, color="C0", lw=2.0, label="SED (rest frame)")

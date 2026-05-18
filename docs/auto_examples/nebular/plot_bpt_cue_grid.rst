@@ -50,15 +50,19 @@ to the recombination lines, pulling the grid to the right.
    :alt: plot_bpt_cue_grid
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-278
+.. GENERATED FROM PYTHON SOURCE LINES 35-282
 
 .. code-block:: Python
 
 
+
     from pathlib import Path
 
+    import jax
     import matplotlib.pyplot as plt
     import numpy as np
+
+    jax.config.update("jax_enable_x64", True)
 
     from tengri import Fixed, Parameters, SEDModel, load_ssp_data
     from tengri.analysis.plotting import setup_style

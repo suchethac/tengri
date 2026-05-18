@@ -31,7 +31,7 @@ Shows how each backend predicts emission lines in the optical window.
    :alt: plot_nebular_backends
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-134
+.. GENERATED FROM PYTHON SOURCE LINES 16-119
 
 .. code-block:: Python
 
@@ -41,32 +41,17 @@ Shows how each backend predicts emission lines in the optical window.
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri import Fixed, Parameters, SEDModel, load_ssp_data
+    from tengri import Fixed, Parameters, SEDModel, load_ssp
     from tengri.analysis.plotting import setup_style
 
     setup_style()
 
 
     # --- Check for SSP data ---
-    def _find_ssp():
-        """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
 
 
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
+    ssp = load_ssp()
 
-    ssp_data = load_ssp_data(SSP_PATH)
 
     # Shared galaxy parameters: young, star-forming, no dust
     shared_params = dict(
@@ -84,10 +69,10 @@ Shows how each backend predicts emission lines in the optical window.
 
     # --- Backend 1: BakedIn (nebular pre-computed in SSP) ---
     spec_baked = Parameters(**shared_params)
-    model_baked = SEDModel(spec_baked, ssp_data)
+    model_baked = SEDModel(spec_baked, ssp)
     params_baked = {k: float(v.value) for k, v in shared_params.items()}
     sed_baked = model_baked.predict_rest_sed(params_baked).sed
-    wave = ssp_data.ssp_wave
+    wave = ssp.ssp_wave
 
     # --- Backend 2: CloudyGrid (if available) ---
     cloudy_path = next(
@@ -103,7 +88,7 @@ Shows how each backend predicts emission lines in the optical window.
             neb_logU=Fixed(-3.0),
             neb_logZ_gas=Fixed(-0.3),
         )
-        model_cloudy = SEDModel(spec_cloudy, ssp_data)
+        model_cloudy = SEDModel(spec_cloudy, ssp)
         params_cloudy = {k: float(v.value) for k, v in shared_params.items()}
         params_cloudy.update({"neb_logU": -3.0, "neb_logZ_gas": -0.3})
         sed_cloudy = model_cloudy.predict_rest_sed(params_cloudy).sed
