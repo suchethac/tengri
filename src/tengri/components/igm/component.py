@@ -163,9 +163,7 @@ class IGMSEDComponent:
             cgm_log_nhi=jnp.asarray(params.get("igm_log_nhi", 20.0)),
         )
 
-        new_derived = dict(state.derived)
-        new_derived["igm_transmission"] = T
         return state.with_(
             sed_observed=state.sed_observed * T,
-            derived=new_derived,
+            derived=state.derived.with_(igm_transmission=T),
         )
