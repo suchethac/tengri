@@ -51,12 +51,11 @@ class ParameterRecord(NamedTuple):
 
 
 def _walk_param_modules() -> dict[str, ParameterRecord]:
-    """Walk every ``_params.py`` under ``tengri.components``, ``observation``, and ``parameters._shared``.
+    """Walk every ``_params.py`` under components, observation, and parameters._shared.
 
     First-wins on name collisions (deterministic via ``pkgutil.walk_packages`` order).
     """
     import tengri.components as components_pkg
-    import tengri.observation as observation_pkg
 
     out: dict[str, ParameterRecord] = {}
 

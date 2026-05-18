@@ -34,20 +34,6 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "",
     ),
     ParamDeclaration(
-        "noise_frac_cal",
-        Fixed(0.0),
-        "Fractional calibration noise floor (added in quadrature with obs noise)",
-        lambda lo, hi: lo >= 0,
-        "noise_frac_cal bounds must have lo >= 0",
-    ),
-    ParamDeclaration(
-        "noise_dof",
-        Fixed(0.0),
-        "Student-t degrees of freedom for outlier robustness (0=Gaussian)",
-        lambda lo, hi: lo >= 0,
-        "noise_dof bounds must have lo >= 0",
-    ),
-    ParamDeclaration(
         "sigma_v_kms",
         Fixed(0.0),
         "Stellar velocity dispersion sigma_v [km/s] — added in quadrature "
