@@ -191,13 +191,9 @@ class TestNebularRequiresStellar:
             NebularSEDComponentConfig,
         )
 
-        neb = NebularSEDComponent(
-            config=NebularSEDComponentConfig(backend="cloudy_grid")
-        )
+        neb = NebularSEDComponent(config=NebularSEDComponentConfig(backend="cloudy_grid"))
         # No publisher → missing-publisher error fires on the first
         # required key (lnu_age) before the validator reaches age_weights,
         # so we match on any of the three to be robust.
-        with pytest.raises(
-            PipelineContractError, match=r"lnu_age|ssp_ages_yr|age_weights"
-        ):
+        with pytest.raises(PipelineContractError, match=r"lnu_age|ssp_ages_yr|age_weights"):
             validate_pipeline([neb])

@@ -316,9 +316,7 @@ class NebularSEDComponent:
             DerivedKey("ssp_ages_yr", "yr", "SSP age axis"),
         ]
         if backend == "cloudy_grid":
-            deps.append(
-                DerivedKey("age_weights", "Msun", "CSP mass weights per SSP age bin")
-            )
+            deps.append(DerivedKey("age_weights", "Msun", "CSP mass weights per SSP age bin"))
         return tuple(deps)
 
     def precompute(
