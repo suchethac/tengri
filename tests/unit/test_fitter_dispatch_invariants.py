@@ -269,8 +269,12 @@ class TestAutoDispatchRouting:
         originals = {n: _BACKENDS[n] for n in calls}
         for n in originals:
             _BACKENDS[n] = BackendEntry(
-                name=n, runner=make_runner(n), tier="primary", short_doc="",
-                requires=(), legacy_fitter=False,
+                name=n,
+                runner=make_runner(n),
+                tier="primary",
+                short_doc="",
+                requires=(),
+                legacy_fitter=False,
             )
         try:
             fitter.run("auto", key=jax.random.PRNGKey(0))
