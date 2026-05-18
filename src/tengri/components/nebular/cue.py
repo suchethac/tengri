@@ -1287,9 +1287,9 @@ class CueBackend:
         from tengri.components.nebular.ionizing_spectrum import interpolate_ionizing_params
 
         # Vectorize over age axis: get (ionspec_7, logqion) for each age
-        def _get_params_at_age(log_age_yr):
-            """Get ionizing spectrum and Q_H at specified age via interpolation."""
-            return interpolate_ionizing_params(
+        # ionspec_all: (n_age, 7), logqion_all: (n_age,)
+        ionspec_all, logqion_all = jax.vmap(
+            lambda log_age_yr: interpolate_ionizing_params(
                 self._ionspec_table,
                 self._logqion_table,
                 self._ssp_lgmet,
@@ -1297,9 +1297,7 @@ class CueBackend:
                 log_z,
                 log_age_yr,
             )
-
-        # vmap over age bins → ionspec_all (n_age, 7), logqion_all (n_age,)
-        ionspec_all, logqion_all = jax.vmap(_get_params_at_age)(ssp_log_ages_yr)
+        )(ssp_log_ages_yr)
 
         # Q_H per bin, masked to young bins with positive weights
         qh_per_bin = 10.0**logqion_all  # (n_age,)

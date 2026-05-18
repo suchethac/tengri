@@ -418,14 +418,11 @@ def agn_nlr_cue(
     4. Scale line luminosities by the NLR covering fraction.
 
     """
-    # Step 1: ionizing spectrum parameters
     if ionspec_params is None:
         ionspec_params = agn_ionspec_from_alpha_pl(alpha_pl)
 
-    # Step 2: compute Q_H from L_acc and alpha_pl
     log_qh = _log_qh_from_lacc(l_acc_erg, alpha_pl)
 
-    # Step 3: call Cue low-level API
     line_wav, line_lum = cue_backend.predict_nebular_line_luminosities(
         gas_logu=neb_logU,
         gas_logn=gas_logn,
@@ -442,9 +439,8 @@ def agn_nlr_cue(
         ionspec_logLratio3=ionspec_params["ionspec_logLratio3"],
     )
 
-    # Step 4: scale by covering fraction
-    # Cue predicts total line luminosity for the given Q_H;
-    # the NLR only intercepts a fraction of the ionizing photons.
+    # Cue predicts the line luminosity for the full Q_H; the NLR
+    # intercepts only a fraction of those ionizing photons.
     line_lum = line_lum * covering_fraction
 
     return line_wav, line_lum
