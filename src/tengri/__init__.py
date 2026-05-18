@@ -207,6 +207,11 @@ from tengri.observation.noise import (
 )
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
+from tengri.parameters.registry import (
+    ParameterRecord,
+    describe_parameter,
+    list_parameters,
+)
 from tengri.parameters.sentinels import FIXED, FREE
 from tengri.utils import jit_logging
 
