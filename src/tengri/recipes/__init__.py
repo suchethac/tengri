@@ -378,8 +378,13 @@ def dust_demo() -> dict:
         from tengri.analysis.plotting import sweep_parameter, SWEEP_CMAPS
 
         model = SEDModel.from_groups(ssp_data=load_ssp(), **recipes.dust_demo())
-        sweep_parameter(model, "dust_tau_bc", [0.0, 0.5, 1.0, 2.0],
-                        cmap=SWEEP_CMAPS["dust"], wave_range=(1000, 10000))
+        sweep_parameter(
+            model,
+            "dust_tau_bc",
+            [0.0, 0.5, 1.0, 2.0],
+            cmap=SWEEP_CMAPS["dust"],
+            wave_range=(1000, 10000),
+        )
     """
     # Metallicity is not a from_groups key; its default Gaussian(-0.3, 0.2)
     # prior centres at the value we want, so we leave it FREE — sweep_parameter
