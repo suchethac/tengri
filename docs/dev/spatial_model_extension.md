@@ -56,12 +56,20 @@ class SpatialProfileSEDComponent:
         # Publish a unit-normalised 2D surface-brightness profile
         # (the *spatial* part of the SED — the spectral part is
         # already in state.sed_intrinsic / sed_attenuated).
-        new_derived = dict(state.derived)
-        new_derived["spatial_profile_2d"] = sersic_profile(
-            params["spatial_log_re_kpc"], params["spatial_n_sersic"], ...
+        # Typed bundle write (ADR-0007). When new fields like
+        # ``spatial_profile_2d`` are added, add a matching field on
+        # ``tengri.core.DerivedBundle`` and an entry in
+        # ``tengri.forward.orchestrator._CANONICAL_UNITS`` in the
+        # same PR — the canonical-units check enforces this on every
+        # ``build_components`` call.
+        return state.with_(
+            derived=state.derived.with_(
+                spatial_profile_2d=sersic_profile(
+                    params["spatial_log_re_kpc"], params["spatial_n_sersic"], ...
+                ),
+                spatial_grid_xy_kpc=(x_grid, y_grid),
+            ),
         )
-        new_derived["spatial_grid_xy_kpc"] = (x_grid, y_grid)
-        return state.with_(derived=new_derived)
 ```
 
 This component reads no other component and writes only to
