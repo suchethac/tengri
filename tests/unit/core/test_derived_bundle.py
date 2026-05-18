@@ -120,30 +120,54 @@ class TestDictCompat:
 
 
 class TestExtrasSpillover:
-    def test_unknown_key_via_from_dict_lands_in_extras(self):
-        b = DerivedBundle.from_dict({"L_ir": 1.0, "future_key": "anything"})
+    """Phase 4 (ADR-0007): the spillover-to-_extras path is opt-in only.
+
+    Default ``from_dict`` raises on unknown keys; the legacy shim is
+    available behind ``allow_extras=True`` for migration / debugging.
+    """
+
+    def test_unknown_key_via_from_dict_lands_in_extras_when_opted_in(self):
+        b = DerivedBundle.from_dict({"L_ir": 1.0, "future_key": "anything"}, allow_extras=True)
         assert b["L_ir"] == 1.0
         assert b["future_key"] == "anything"
         # The typed field gets the value; the unknown key lands in _extras.
         assert b.L_ir == 1.0
         assert b._extras == {"future_key": "anything"}
 
-    def test_extras_show_up_in_keys_items(self):
-        b = DerivedBundle.from_dict({"L_ir": 1.0, "x": 7})
+    def test_extras_show_up_in_keys_items_when_opted_in(self):
+        b = DerivedBundle.from_dict({"L_ir": 1.0, "x": 7}, allow_extras=True)
         assert "x" in list(b.keys())
         assert dict(b.items())["x"] == 7
 
     def test_from_dict_empty(self):
+        # Empty dict: no unknown keys to spill, strict mode is happy.
         b = DerivedBundle.from_dict({})
         assert b == DerivedBundle()
         assert b._extras == {}
 
-    def test_to_dict_roundtrip(self):
+    def test_to_dict_roundtrip_with_extras(self):
         d = {"L_ir": 1.0, "sfr": 2.0, "x": 99}
-        b = DerivedBundle.from_dict(d)
+        b = DerivedBundle.from_dict(d, allow_extras=True)
         back = b.to_dict()
         # to_dict orders typed fields first then extras; compare by content.
         assert back == d
+
+    def test_from_dict_strict_raises_on_unknown_key(self):
+        """Default ``allow_extras=False`` rejects unknown keys with a hint."""
+        with pytest.raises(TypeError, match="unknown key"):
+            DerivedBundle.from_dict({"L_ir": 1.0, "future_key": "anything"})
+
+    def test_from_dict_strict_hint_for_typo(self):
+        """Typo close to a known field is surfaced via Did-you-mean."""
+        with pytest.raises(TypeError, match=r"L_IR.*Did you mean.*L_ir"):
+            DerivedBundle.from_dict({"L_IR": 1.0})
+
+    def test_from_dict_strict_only_typed_keys_ok(self):
+        """Dict with only typed keys passes strict mode."""
+        b = DerivedBundle.from_dict({"L_ir": 1.0, "sfr": 2.0})
+        assert b.L_ir == 1.0
+        assert b.sfr == 2.0
+        assert b._extras == {}
 
 
 class TestPytreeRegistration:
@@ -233,15 +257,27 @@ class TestPhase2Flip:
         s2 = s.with_(derived=b)
         assert s2.derived is b
 
-    def test_unknown_key_in_dict_lands_in_extras(self):
-        # Shim path: a legacy write that uses a key not yet promoted to
-        # a typed field falls into _extras rather than erroring.
+    def test_unknown_key_in_dict_raises_after_phase4(self):
+        # Phase 4 (ADR-0007): the spillover-to-_extras path is closed
+        # for production code. PipelineState.__post_init__ now calls
+        # DerivedBundle.from_dict(..., allow_extras=False), so passing
+        # a stale dict-style write with an unknown key fails loudly.
+        from tengri.core import PipelineState
+
+        with pytest.raises(TypeError, match="unknown key"):
+            PipelineState(
+                wave=jnp.linspace(1000.0, 10000.0, 8),
+                derived={"L_ir": jnp.asarray(1.0), "future_key": "anything"},
+            )
+
+    def test_typed_dict_still_coerces_after_phase4(self):
+        """The happy dict-style path — all keys are typed — still works."""
         from tengri.core import PipelineState
 
         s = PipelineState(
             wave=jnp.linspace(1000.0, 10000.0, 8),
-            derived={"L_ir": jnp.asarray(1.0), "future_key": "anything"},
+            derived={"L_ir": jnp.asarray(1.0), "sfr": jnp.asarray(2.0)},
         )
         assert s.derived["L_ir"] == 1.0
-        assert s.derived["future_key"] == "anything"
-        assert "future_key" in s.derived._extras
+        assert s.derived["sfr"] == 2.0
+        assert s.derived._extras == {}

@@ -112,7 +112,16 @@ per physics block.
 Phase 4 — flip the validator to refuse non-empty `_extras` once all
 write sites have migrated. The bundle becomes a strict typed surface;
 unknown keys at write time are a `TypeError` instead of a graceful
-spillover.
+spillover. **Landed 2026-05-18.** Implementation chose to make
+`DerivedBundle.from_dict` strict by default, with the legacy
+spillover available as an opt-in via `allow_extras=True`. This
+tightens the production code path (`PipelineState.__post_init__` and
+`PipelineState.with_` both call `from_dict(..., allow_extras=False)`)
+while preserving the shim for debugging, tests that exercise the
+extras path, and any external user code in transition. Verified by
+running the full unit + forward + snapshot suite (129/4) with no
+production code regression — Phase 3 had truly eliminated every
+internal dict-style write.
 
 Each phase is independently revertible.
 
