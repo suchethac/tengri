@@ -225,7 +225,7 @@ class TestBug13NonparametricJit:
     def test_continuity_sfh_jit(self):
         """continuity must JIT-compile without ConcretizationTypeError."""
         try:
-            from tengri.components.sfh.nonparametric import continuity
+            from tengri.components.stellar.sfh.nonparametric import continuity
         except ImportError:
             pytest.skip("nonparametric module not available")
 
@@ -336,7 +336,7 @@ class TestBug29MstarSurvivingMass:
         For a 10 Gyr population with Kroupa IMF, f_surv ≈ 0.6 (B&C03).
         compute_surviving_mass(weights, f_surv * ones) < sum(weights).
         """
-        from tengri.components.sps.dsps_wrapper import compute_surviving_mass
+        from tengri.components.stellar.sps.dsps_wrapper import compute_surviving_mass
 
         weights = jnp.ones(50) * 1e9  # 50 age bins, 1e9 Msun each
         # Simulate old population: f_surv = 0.6 uniformly
@@ -352,7 +352,7 @@ class TestBug29MstarSurvivingMass:
 
     def test_interpolate_mass_remaining_shape(self):
         """interpolate_mass_remaining returns shape (n_age,) for a scalar log_z."""
-        from tengri.components.sps.dsps_wrapper import interpolate_mass_remaining
+        from tengri.components.stellar.sps.dsps_wrapper import interpolate_mass_remaining
 
         n_met, n_age = 4, 20
         # Synthetic mass-remaining grid: decreases with age (older → less survives)
@@ -931,7 +931,7 @@ class TestBugNSS02EvolvingMetFusedKernel:
         """Fused kernel with evolving_metallicity=True must return finite photometry."""
         from pathlib import Path
 
-        from tengri.components.sps.dsps_wrapper import load_ssp_data
+        from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.forward.sed_model import SEDModel
         from tengri.observation.filters import load_filter_set
         from tengri.parameters.parameters import Parameters
@@ -999,7 +999,7 @@ class TestBugNSS02EvolvingMetFusedKernel:
         """Exact path and compositional path must agree on SED for same params (rtol=1e-5)."""
         from pathlib import Path
 
-        from tengri.components.sps.dsps_wrapper import load_ssp_data
+        from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.forward.sed_model import SEDModel
         from tengri.observation.filters import load_filter_set
         from tengri.parameters.parameters import Parameters

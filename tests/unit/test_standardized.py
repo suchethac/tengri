@@ -476,7 +476,7 @@ class TestCustomPSDModel:
         def custom_psd(sigma, tau_yr, n_grid, log_ages):
             calls.append((float(sigma), float(tau_yr)))
             # Return a plausible sqrt_power array
-            from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw
+            from tengri.components.stellar.sfh.gp_sfh import compute_sqrt_power_drw
 
             return compute_sqrt_power_drw(sigma, tau_yr, n_grid, log_ages)
 

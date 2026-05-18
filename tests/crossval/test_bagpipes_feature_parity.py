@@ -39,7 +39,7 @@ class TestChemicalEnrichmentPhysics:
         Tengri two_step_metallicity: uses log10(Z) absolute and step_age in Gyr.
         Input ssp_lg_age_gyr is log10(age/Gyr).
         """
-        from tengri.components.sfh.metallicity_history import two_step_metallicity
+        from tengri.components.stellar.sfh.metallicity_history import two_step_metallicity
 
         ssp_lg_age_gyr = jnp.linspace(-3.0, 1.1, 200)
         log_z_old = -2.4  # log10(0.004)
@@ -64,7 +64,7 @@ class TestChemicalEnrichmentPhysics:
         Bagpipes psb_two_step: Z_old before burstage, Z_burst after.
         Tengri: uses log10(Z) absolute and burstage in Gyr.
         """
-        from tengri.components.sfh.metallicity_history import psb_two_step_metallicity
+        from tengri.components.stellar.sfh.metallicity_history import psb_two_step_metallicity
 
         ssp_lg_age_gyr = jnp.linspace(-3.0, 1.1, 200)
         log_z_old = -2.4  # log10(0.004)
@@ -88,7 +88,7 @@ class TestChemicalEnrichmentPhysics:
 
         Bagpipes metallicity_bins: different Z per bin, edges in Myr.
         """
-        from tengri.components.sfh.metallicity_history import metallicity_bins_on_ssp_grid
+        from tengri.components.stellar.sfh.metallicity_history import metallicity_bins_on_ssp_grid
 
         ssp_ages = jnp.geomspace(1e6, 13e9, 200)
         bin_edges = jnp.array([0.0, 1e9, 5e9, 13e9])
@@ -108,7 +108,7 @@ class TestChemicalEnrichmentPhysics:
         Bagpipes metallicity_bins_continuity: Z_i = Z_1 * 10^(sum dzmet_{1..i-1}).
         Tengri: bin_edges in log10(years), log_z_abs_base in log10(Z).
         """
-        from tengri.components.sfh.metallicity_history import (
+        from tengri.components.stellar.sfh.metallicity_history import (
             metallicity_bins_continuity_on_ssp_grid,
         )
 
@@ -227,7 +227,7 @@ class TestPSBSFHPhysics:
 
     def test_burst_fraction_controls_mass_ratio(self):
         """fburst should control the fraction of mass in the burst component."""
-        from tengri.components.sfh import psb_wild2020
+        from tengri.components.stellar.sfh import psb_wild2020
 
         t = jnp.linspace(0.0, 13e9, 2000)
         age = 10e9
@@ -252,7 +252,7 @@ class TestPSBSFHPhysics:
 
     def test_sfr_nonzero_at_burstage(self):
         """SFR should be non-zero at the burst age."""
-        from tengri.components.sfh import psb_wild2020
+        from tengri.components.stellar.sfh import psb_wild2020
 
         burstage = 500e6
         t = jnp.array([burstage])
@@ -270,7 +270,7 @@ class TestPSBSFHPhysics:
 
     def test_zero_beyond_age(self):
         """No star formation before the galaxy formed."""
-        from tengri.components.sfh import psb_wild2020
+        from tengri.components.stellar.sfh import psb_wild2020
 
         age = 5e9
         t = jnp.array([age + 1e9, age + 5e9])
@@ -288,7 +288,7 @@ class TestPSBSFHPhysics:
 
     def test_jit_and_grad(self):
         """PSB SFH is JIT-compilable and differentiable."""
-        from tengri.components.sfh import psb_wild2020
+        from tengri.components.stellar.sfh import psb_wild2020
 
         t = jnp.linspace(0.0, 13e9, 200)
 
@@ -757,7 +757,7 @@ class TestConstExpSFHPhysics:
 
     def test_has_constant_phase(self):
         """Some region should have constant SFR."""
-        from tengri.components.sfh import constant_then_exponential_sfh
+        from tengri.components.stellar.sfh import constant_then_exponential_sfh
 
         t = jnp.linspace(0.0, 13e9, 1000)
         sfr = constant_then_exponential_sfh(t, log_sfr=1.0, tau=1e9, quench_age=5e9, age=10e9)
@@ -770,7 +770,7 @@ class TestConstExpSFHPhysics:
 
     def test_has_exponential_phase(self):
         """Below quench_age, SFR declines exponentially."""
-        from tengri.components.sfh import constant_then_exponential_sfh
+        from tengri.components.stellar.sfh import constant_then_exponential_sfh
 
         t = jnp.linspace(100e6, 4.5e9, 200)
         sfr = constant_then_exponential_sfh(t, log_sfr=1.0, tau=1e9, quench_age=5e9, age=10e9)
@@ -783,7 +783,7 @@ class TestConstExpSFHPhysics:
 
     def test_continuous_at_quench(self):
         """SFR must be continuous at the quenching boundary."""
-        from tengri.components.sfh import constant_then_exponential_sfh
+        from tengri.components.stellar.sfh import constant_then_exponential_sfh
 
         quench = 5e9
         eps = 1.0
@@ -797,7 +797,7 @@ class TestConstExpSFHPhysics:
 
     def test_mass_integral_finite(self):
         """Total mass formed should be finite and positive."""
-        from tengri.components.sfh import constant_then_exponential_sfh
+        from tengri.components.stellar.sfh import constant_then_exponential_sfh
 
         t = jnp.linspace(0.0, 13e9, 2000)
         sfr = constant_then_exponential_sfh(t, log_sfr=1.0, tau=1e9, quench_age=5e9, age=10e9)

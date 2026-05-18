@@ -46,7 +46,7 @@ _PC_CM = 3.0857e18
 
 @pytest.fixture(scope="module")
 def ssp():
-    from tengri.components.sps.dsps_wrapper import load_ssp_data
+    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
     return load_ssp_data(str(_SSP_PATH))
 

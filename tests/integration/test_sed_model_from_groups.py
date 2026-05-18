@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from tengri import FIXED, FREE, Fixed, Parameters, SEDModel, Uniform
-from tengri.components.sps.dsps_wrapper import load_ssp_data
+from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
 # ── SSP fixture ───────────────────────────────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"

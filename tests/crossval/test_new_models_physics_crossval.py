@@ -319,7 +319,7 @@ class TestChemEvolAnalyticFormulas:
         (Bellstedt+2021, Eq. 2). Two different SFHs that consume the
         same total gas mass should give the same final metallicity.
         """
-        from tengri.components.sfh.chemical_evolution import closed_box_metallicity
+        from tengri.components.stellar.sfh.chemical_evolution import closed_box_metallicity
 
         age_grid = jnp.logspace(6, 10.14, 128)
 
@@ -347,7 +347,7 @@ class TestChemEvolAnalyticFormulas:
         Outflows expel metals, reducing the final metallicity.
         log(Z/Zsun) should be more negative (lower) with outflows.
         """
-        from tengri.components.sfh.chemical_evolution import closed_box_metallicity
+        from tengri.components.stellar.sfh.chemical_evolution import closed_box_metallicity
 
         age_grid = jnp.logspace(6, 10.14, 128)
         sfr = jnp.ones_like(age_grid) * 1.0
@@ -366,7 +366,7 @@ class TestChemEvolAnalyticFormulas:
 
     def test_yield_values_chabrier(self):
         """Chabrier IMF yield ~ 0.03 (Vincenzo+2016)."""
-        from tengri.components.sfh.chemical_evolution import closed_box_metallicity
+        from tengri.components.stellar.sfh.chemical_evolution import closed_box_metallicity
 
         age_grid = jnp.logspace(6, 10.14, 128)
         sfr = jnp.ones_like(age_grid) * 1.0
@@ -381,7 +381,7 @@ class TestChemEvolAnalyticFormulas:
 
     def test_higher_yield_higher_metallicity(self):
         """Higher nucleosynthetic yield → higher final metallicity."""
-        from tengri.components.sfh.chemical_evolution import closed_box_metallicity
+        from tengri.components.stellar.sfh.chemical_evolution import closed_box_metallicity
 
         age_grid = jnp.logspace(6, 10.14, 128)
         sfr = jnp.ones_like(age_grid) * 1.0

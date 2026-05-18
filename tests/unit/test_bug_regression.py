@@ -39,7 +39,7 @@ class TestSFRNotHardcoded:
 
     def test_sfr_varies_with_mass(self):
         """SFR used for X-ray scaling should depend on the SFH, not be 1.0."""
-        from tengri.components.sfh.mean_sfh import double_powerlaw
+        from tengri.components.stellar.sfh.mean_sfh import double_powerlaw
 
         # double_powerlaw(t_lookback, alpha, beta, tau, norm)
         # norm scales SFR amplitude, so SFR[-1] should scale with norm
@@ -61,7 +61,7 @@ class TestSFRTrapezoidNonNegative:
 
     def test_sfr_100myr_non_negative(self):
         """sfr_100myr must never be negative regardless of SFH shape."""
-        from tengri.components.sfh.mean_sfh import double_powerlaw
+        from tengri.components.stellar.sfh.mean_sfh import double_powerlaw
 
         age_yr = jnp.logspace(6, 10.1, 200)
         for norm in [0.01, 1.0, 100.0]:
@@ -74,7 +74,7 @@ class TestSFRTrapezoidNonNegative:
 
     def test_sfr_10myr_non_negative(self):
         """sfr_10myr must be non-negative."""
-        from tengri.components.sfh.mean_sfh import double_powerlaw
+        from tengri.components.stellar.sfh.mean_sfh import double_powerlaw
 
         age_yr = jnp.logspace(6, 10.1, 200)
         sfr = double_powerlaw(age_yr, alpha=0.3, beta=3.0, tau=5e8, norm=10.0)
@@ -397,7 +397,7 @@ class TestNonparametricJITSafe:
 
     def test_continuity_sfh_jit(self):
         """continuity should JIT-compile with JAX array bin_edges."""
-        from tengri.components.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR, continuity
+        from tengri.components.stellar.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR, continuity
 
         age_yr = jnp.linspace(1e7, 13e9, 100)
 
@@ -412,7 +412,7 @@ class TestNonparametricJITSafe:
 
     def test_dirichlet_sfh_jit(self):
         """dirichlet should JIT-compile with JAX array bin_edges."""
-        from tengri.components.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR, dirichlet
+        from tengri.components.stellar.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR, dirichlet
 
         age_yr = jnp.linspace(1e7, 13e9, 100)
 
@@ -426,7 +426,7 @@ class TestNonparametricJITSafe:
 
     def test_continuity_sfh_piecewise_constant(self):
         """continuity should return piecewise-constant SFR (step function per Leja+2019)."""
-        from tengri.components.sfh.nonparametric import continuity
+        from tengri.components.stellar.sfh.nonparametric import continuity
 
         edges = jnp.array([0.0, 1.0, 5.0, 13.7])  # 3 bins in Gyr
         # Age points within the same bin should have identical SFR
@@ -600,7 +600,7 @@ class TestContinuitySFHPiecewiseConstant:
 
     def test_sfr_constant_within_bin(self):
         """SFR must be exactly constant within each bin (step function)."""
-        from tengri.components.sfh.nonparametric import continuity
+        from tengri.components.stellar.sfh.nonparametric import continuity
 
         edges = jnp.array([0.0, 1.0, 5.0, 13.7])  # 3 bins in Gyr
         # All ages within the middle bin [1, 5] Gyr must have identical SFR

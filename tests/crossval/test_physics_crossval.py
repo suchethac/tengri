@@ -153,7 +153,7 @@ class TestPSDCrossval:
 
     def test_wiener_khinchin_drw(self):
         """Integral of DRW PSD should relate to variance."""
-        from tengri.components.sfh.psd_models import drw_variance, psd_drw
+        from tengri.components.stellar.sfh.psd_models import drw_variance, psd_drw
 
         psd_sigma, psd_tau_yr = 1.5, 50e6
         n_grid = 512
@@ -172,7 +172,7 @@ class TestPSDCrossval:
 
     def test_psd_drw_shape(self):
         """DRW PSD should be flat at low freq, drop at high freq."""
-        from tengri.components.sfh.psd_models import psd_drw
+        from tengri.components.stellar.sfh.psd_models import psd_drw
 
         freqs = jnp.logspace(-3, 1, 100)
         psd = np.asarray(psd_drw(freqs, psd_sigma=1.0, psd_tau_yr=1e7))
@@ -189,7 +189,7 @@ class TestMeanSFHCrossval:
 
     def test_dpl_peak_location(self):
         """Double power-law should peak near tau."""
-        from tengri.components.sfh.mean_sfh import double_powerlaw
+        from tengri.components.stellar.sfh.mean_sfh import double_powerlaw
 
         t = jnp.linspace(0.01, 13.8, 1000)
         sfr = np.asarray(double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=1.0))
@@ -198,7 +198,7 @@ class TestMeanSFHCrossval:
 
     def test_dpl_integral_positive(self):
         """DPL integral should be positive."""
-        from tengri.components.sfh.mean_sfh import double_powerlaw
+        from tengri.components.stellar.sfh.mean_sfh import double_powerlaw
 
         t = jnp.linspace(0.01, 13.8, 1000)
         sfr = double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=1.0)
@@ -206,7 +206,7 @@ class TestMeanSFHCrossval:
 
     def test_dpl_norm_scales_linearly(self):
         """Doubling norm should double the SFR."""
-        from tengri.components.sfh.mean_sfh import double_powerlaw
+        from tengri.components.stellar.sfh.mean_sfh import double_powerlaw
 
         t = jnp.linspace(0.01, 13.8, 1000)
         sfr1 = double_powerlaw(t, alpha=1.0, beta=1.5, tau=3.0, norm=1.0)

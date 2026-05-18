@@ -315,7 +315,7 @@ class TestSalarisRelation:
 
     def test_solar_composition(self):
         """At [Fe/H]=0, [alpha/Fe]=0: [M/H] = 0 exactly."""
-        from tengri.components.sps.dsps_wrapper import salaris_mh_from_feh
+        from tengri.components.stellar.sps.dsps_wrapper import salaris_mh_from_feh
 
         mh = salaris_mh_from_feh(0.0, 0.0)
         np.testing.assert_allclose(
@@ -330,7 +330,7 @@ class TestSalarisRelation:
 
         = 0.26462 + 0.03274 = 0.29736
         """
-        from tengri.components.sps.dsps_wrapper import salaris_mh_from_feh
+        from tengri.components.stellar.sps.dsps_wrapper import salaris_mh_from_feh
 
         alpha_fe = 0.4
         expected = 0.66154 * alpha_fe + 0.20465 * alpha_fe**2
@@ -344,7 +344,7 @@ class TestSalarisRelation:
 
     def test_round_trip_feh_mh(self):
         """salaris_feh_from_mh should invert salaris_mh_from_feh."""
-        from tengri.components.sps.dsps_wrapper import (
+        from tengri.components.stellar.sps.dsps_wrapper import (
             salaris_feh_from_mh,
             salaris_mh_from_feh,
         )
@@ -367,7 +367,7 @@ class TestSalarisRelation:
               = -1.0 + 0.19846 + 0.01842
               = -0.78312
         """
-        from tengri.components.sps.dsps_wrapper import salaris_mh_from_feh
+        from tengri.components.stellar.sps.dsps_wrapper import salaris_mh_from_feh
 
         expected = -1.0 + 0.66154 * 0.3 + 0.20465 * 0.3**2
         mh = salaris_mh_from_feh(-1.0, 0.3)

@@ -157,7 +157,7 @@ class TestDiffsedPhotometry:
             pytest.skip("SSP data not found")
 
         from tengri import Parameters, SEDModel, Uniform
-        from tengri.components.sps.dsps_wrapper import load_ssp_data
+        from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
         spec = Parameters(
             sfh_alpha=Uniform(0.5, 3.0),

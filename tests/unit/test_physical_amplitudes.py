@@ -280,7 +280,7 @@ class TestRadioContinuum:
 
 class TestChemicalEvolution:
     def test_closed_box_output_is_log10(self):
-        from tengri.components.sfh import closed_box_metallicity
+        from tengri.components.stellar.sfh import closed_box_metallicity
 
         t_yr = np.linspace(0, 13.8e9, 200)
         sfr = np.ones_like(t_yr)
@@ -288,7 +288,7 @@ class TestChemicalEvolution:
         assert np.all(log_z >= -4.0) and np.all(log_z <= 1.0)
 
     def test_outflow_lowers_metallicity(self):
-        from tengri.components.sfh import closed_box_metallicity
+        from tengri.components.stellar.sfh import closed_box_metallicity
 
         t_yr = np.linspace(0, 13.8e9, 200)
         sfr = np.ones_like(t_yr)
@@ -297,7 +297,7 @@ class TestChemicalEvolution:
         assert z_leaky[0] < z_closed[0]
 
     def test_higher_yield_raises_metallicity(self):
-        from tengri.components.sfh import closed_box_metallicity
+        from tengri.components.stellar.sfh import closed_box_metallicity
 
         t_yr = np.linspace(0, 13.8e9, 200)
         sfr = np.ones_like(t_yr)

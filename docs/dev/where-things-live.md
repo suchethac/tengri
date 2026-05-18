@@ -96,10 +96,6 @@ The thin re-export namespaces `tengri.cosmology`, `tengri.units`, `tengri.plot`,
 
 ## Known mild confusion (and why we tolerate it)
 
-- `components/sfh/` and `components/sps/` exist as deprecation shims for
-  `components/stellar/sfh/` and `components/stellar/sps/`. They emit
-  `DeprecationWarning` at import time and will be removed in v1.0. New code
-  should use the `stellar/` paths.
 - `core/` is named `core/` for legacy reasons; "protocols" or "interfaces"
   would be more accurate. Worth renaming if the cost of touching every import
   becomes worth it. (Today, ~12 internal import sites.)

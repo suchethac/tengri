@@ -43,7 +43,7 @@ def minimal_spec():
 @pytest.fixture(scope="module")
 def synthetic_ssp():
     """Minimal synthetic SSP for state tests."""
-    from tengri.components.sps.dsps_wrapper import SSPData
+    from tengri.components.stellar.sps.dsps_wrapper import SSPData
 
     n_met, n_age, n_wave = 3, 20, 100
     wave = jnp.linspace(3000.0, 10000.0, n_wave)

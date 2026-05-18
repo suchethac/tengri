@@ -21,7 +21,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-from tengri.components.sfh.nonparametric import (
+from tengri.components.stellar.sfh.nonparametric import (
     DEFAULT_BIN_EDGES_GYR,
     DEFAULT_N_BINS,
     _stick_breaking,
@@ -30,7 +30,7 @@ from tengri.components.sfh.nonparametric import (
     continuity_prior_logp,
     dirichlet,
 )
-from tengri.components.sfh.registry import SFH_REGISTRY, resolve_sfh
+from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
 
 # ── Helpers ───────────────────────────────────────────────────────
 
@@ -534,50 +534,50 @@ class TestMakeAgebinsFromZred:
     """Tests for Prospector-β redshift-aware age bin construction."""
 
     def test_edges_monotone(self):
-        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+        from tengri.components.stellar.sfh.nonparametric import make_agebins_from_zred
 
         edges = make_agebins_from_zred(1.0)
         assert np.all(np.diff(edges) >= 0.0), "bin edges must be monotonically non-decreasing"
 
     def test_starts_at_zero(self):
-        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+        from tengri.components.stellar.sfh.nonparametric import make_agebins_from_zred
 
         edges = make_agebins_from_zred(2.0)
         assert edges[0] == 0.0
 
     def test_capped_at_tuniv_z2(self):
-        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+        from tengri.components.stellar.sfh.nonparametric import make_agebins_from_zred
 
         edges = make_agebins_from_zred(2.0)
         # Age of universe at z=2 is ~3.3 Gyr; edges must not exceed it
         assert edges[-1] <= 3.5, f"edges exceed tuniv at z=2: {edges[-1]:.2f} Gyr"
 
     def test_capped_at_tuniv_z4(self):
-        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+        from tengri.components.stellar.sfh.nonparametric import make_agebins_from_zred
 
         edges = make_agebins_from_zred(4.0)
         assert edges[-1] <= 1.8, f"edges exceed tuniv at z=4: {edges[-1]:.2f} Gyr"
 
     def test_capped_at_tuniv_z6(self):
-        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+        from tengri.components.stellar.sfh.nonparametric import make_agebins_from_zred
 
         edges = make_agebins_from_zred(6.0)
         assert edges[-1] <= 1.0, f"edges exceed tuniv at z=6: {edges[-1]:.2f} Gyr"
 
     def test_returns_numpy_not_jax(self):
-        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+        from tengri.components.stellar.sfh.nonparametric import make_agebins_from_zred
 
         edges = make_agebins_from_zred(1.0)
         assert isinstance(edges, np.ndarray), "should return numpy array (setup-time utility)"
 
     def test_n_bins_argument(self):
-        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+        from tengri.components.stellar.sfh.nonparametric import make_agebins_from_zred
 
         edges = make_agebins_from_zred(1.0, n_bins=5)
         assert len(edges) == 6, f"n_bins=5 → 6 edges, got {len(edges)}"
 
     def test_low_zred_has_young_bins(self):
-        from tengri.components.sfh.nonparametric import make_agebins_from_zred
+        from tengri.components.stellar.sfh.nonparametric import make_agebins_from_zred
 
         edges = make_agebins_from_zred(0.5)
         # Should include ~30 Myr and ~100 Myr young edges
@@ -600,7 +600,7 @@ class TestPSBContinuitySFH:
         return jnp.array([0.1, 1.0, 3.0, 6.0, 13.7])
 
     def test_non_negative(self, age_yr, default_edges):
-        from tengri.components.sfh.nonparametric import psb_continuity
+        from tengri.components.stellar.sfh.nonparametric import psb_continuity
 
         sfr = psb_continuity(
             age_yr,
@@ -614,7 +614,7 @@ class TestPSBContinuitySFH:
         assert jnp.all(sfr >= 0.0)
 
     def test_finite(self, age_yr, default_edges):
-        from tengri.components.sfh.nonparametric import psb_continuity
+        from tengri.components.stellar.sfh.nonparametric import psb_continuity
 
         sfr = psb_continuity(
             age_yr,
@@ -628,7 +628,7 @@ class TestPSBContinuitySFH:
         assert jnp.all(jnp.isfinite(sfr))
 
     def test_mass_scales_with_log_total_mass(self, age_yr, default_edges):
-        from tengri.components.sfh.nonparametric import psb_continuity
+        from tengri.components.stellar.sfh.nonparametric import psb_continuity
 
         sfr10 = psb_continuity(
             age_yr,
@@ -654,7 +654,7 @@ class TestPSBContinuitySFH:
     def test_jit_compatible(self, age_yr, default_edges):
         import functools
 
-        from tengri.components.sfh.nonparametric import psb_continuity
+        from tengri.components.stellar.sfh.nonparametric import psb_continuity
 
         # bin_edges_gyr is a fixed structural arg — bake it in via partial before JIT
         fn = jax.jit(functools.partial(psb_continuity, bin_edges_gyr=default_edges))
@@ -662,7 +662,7 @@ class TestPSBContinuitySFH:
         assert jnp.all(jnp.isfinite(sfr))
 
     def test_grad_wrt_log_total_mass(self, age_yr, default_edges):
-        from tengri.components.sfh.nonparametric import psb_continuity
+        from tengri.components.stellar.sfh.nonparametric import psb_continuity
 
         g = jax.grad(
             lambda m: jnp.sum(
@@ -680,7 +680,7 @@ class TestPSBContinuitySFH:
         assert jnp.isfinite(g) and g > 0
 
     def test_grad_wrt_ratio_young(self, age_yr, default_edges):
-        from tengri.components.sfh.nonparametric import psb_continuity
+        from tengri.components.stellar.sfh.nonparametric import psb_continuity
 
         g = jax.grad(
             lambda r: jnp.sum(
@@ -705,8 +705,8 @@ class TestRegistryBinEdges:
     """Tests for resolve_sfh bin_edges_gyr argument."""
 
     def test_custom_edges_passed_through(self):
-        from tengri.components.sfh.nonparametric import make_agebins_from_zred
-        from tengri.components.sfh.registry import resolve_sfh
+        from tengri.components.stellar.sfh.nonparametric import make_agebins_from_zred
+        from tengri.components.stellar.sfh.registry import resolve_sfh
 
         edges = make_agebins_from_zred(2.0, n_bins=6)
         fn, params, _, _ = resolve_sfh("continuity", bin_edges_gyr=edges)
@@ -717,7 +717,7 @@ class TestRegistryBinEdges:
         assert jnp.any(sfr > 0)
 
     def test_none_uses_default_edges(self):
-        from tengri.components.sfh.registry import resolve_sfh
+        from tengri.components.stellar.sfh.registry import resolve_sfh
 
         fn, params, _, _ = resolve_sfh("continuity", bin_edges_gyr=None)
         age_yr = jnp.linspace(1e6, 13.7e9, 100)
@@ -726,8 +726,8 @@ class TestRegistryBinEdges:
         assert jnp.all(jnp.isfinite(sfr))
 
     def test_dirichlet_custom_edges(self):
-        from tengri.components.sfh.nonparametric import make_agebins_from_zred
-        from tengri.components.sfh.registry import resolve_sfh
+        from tengri.components.stellar.sfh.nonparametric import make_agebins_from_zred
+        from tengri.components.stellar.sfh.registry import resolve_sfh
 
         edges = make_agebins_from_zred(3.0, n_bins=6)
         fn, _, param_map, _ = resolve_sfh("dirichlet", bin_edges_gyr=edges)
@@ -748,7 +748,7 @@ class TestContinuityFlexSFH:
         return jnp.logspace(6.0, 10.14, 256)
 
     def test_shape(self):
-        from tengri.components.sfh.nonparametric import continuity_flex
+        from tengri.components.stellar.sfh.nonparametric import continuity_flex
 
         t = self._age_grid()
         sfr = continuity_flex(
@@ -763,7 +763,7 @@ class TestContinuityFlexSFH:
         assert sfr.shape == (256,)
 
     def test_non_negative(self):
-        from tengri.components.sfh.nonparametric import continuity_flex
+        from tengri.components.stellar.sfh.nonparametric import continuity_flex
 
         t = self._age_grid()
         sfr = continuity_flex(
@@ -778,7 +778,7 @@ class TestContinuityFlexSFH:
 
     def test_mass_conservation(self):
         """Integrated SFR * dt should equal 10^log_total_mass."""
-        from tengri.components.sfh.nonparametric import continuity_flex
+        from tengri.components.stellar.sfh.nonparametric import continuity_flex
 
         log_m = 10.5
         t = jnp.linspace(0.0, 13.7e9, 100_000)
@@ -797,7 +797,7 @@ class TestContinuityFlexSFH:
 
     def test_flat_sfh_from_zero_ratios(self):
         """All-zero ratios should give a flat SFH (constant SFR)."""
-        from tengri.components.sfh.nonparametric import continuity_flex
+        from tengri.components.stellar.sfh.nonparametric import continuity_flex
 
         t = jnp.array([1e8, 1e9, 3e9, 8e9])
         sfr = continuity_flex(
@@ -812,7 +812,7 @@ class TestContinuityFlexSFH:
 
     def test_zero_ratios_n_flex_0(self):
         """With no flex_* kwargs, n_flex_ratios=0 and we still get a valid SFH."""
-        from tengri.components.sfh.nonparametric import continuity_flex
+        from tengri.components.stellar.sfh.nonparametric import continuity_flex
 
         t = self._age_grid()
         sfr = continuity_flex(t, log_total_mass=10.0, ratio_young=0.0, ratio_old=0.0)
@@ -821,7 +821,7 @@ class TestContinuityFlexSFH:
 
     def test_custom_anchor_edges(self):
         """Custom bin_edges_gyr should be accepted and yield finite SFR."""
-        from tengri.components.sfh.nonparametric import continuity_flex
+        from tengri.components.stellar.sfh.nonparametric import continuity_flex
 
         anchors = jnp.array([0.05, 4.0, 12.0])
         t = self._age_grid()
@@ -837,7 +837,7 @@ class TestContinuityFlexSFH:
         assert jnp.any(sfr > 0)
 
     def test_jit_compatible(self):
-        from tengri.components.sfh.nonparametric import continuity_flex
+        from tengri.components.stellar.sfh.nonparametric import continuity_flex
 
         t = self._age_grid()
 
@@ -849,7 +849,7 @@ class TestContinuityFlexSFH:
 
     def test_gradient_through_ratio_young(self):
         """Gradient w.r.t. ratio_young should be finite."""
-        from tengri.components.sfh.nonparametric import continuity_flex
+        from tengri.components.stellar.sfh.nonparametric import continuity_flex
 
         t = self._age_grid()
 
@@ -863,7 +863,7 @@ class TestContinuityFlexSFH:
 
     def test_gradient_through_flex_ratio(self):
         """Gradient w.r.t. a flex bin ratio should be finite."""
-        from tengri.components.sfh.nonparametric import continuity_flex
+        from tengri.components.stellar.sfh.nonparametric import continuity_flex
 
         t = self._age_grid()
 
@@ -875,13 +875,13 @@ class TestContinuityFlexSFH:
 
     def test_registry_registered(self):
         """continuity_flex should be available in SFH_REGISTRY."""
-        from tengri.components.sfh.registry import SFH_REGISTRY
+        from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 
         assert "continuity_flex" in SFH_REGISTRY
 
     def test_registry_resolve(self):
         """resolve_sfh('continuity_flex') should produce a callable SFH."""
-        from tengri.components.sfh.registry import resolve_sfh
+        from tengri.components.stellar.sfh.registry import resolve_sfh
 
         fn, _params, param_map, _settings = resolve_sfh("continuity_flex")
         t = jnp.logspace(6.0, 10.14, 100)
@@ -892,21 +892,21 @@ class TestContinuityFlexSFH:
 
     def test_prior_logp_shape(self):
         """continuity_flex_prior_logp should return a scalar."""
-        from tengri.components.sfh.nonparametric import continuity_flex_prior_logp
+        from tengri.components.stellar.sfh.nonparametric import continuity_flex_prior_logp
 
         logp = continuity_flex_prior_logp(0.3, jnp.array([0.1, -0.2, 0.0]), -0.4)
         assert logp.shape == ()
 
     def test_prior_logp_zero_ratios(self):
         """All-zero ratios should give maximum log-probability."""
-        from tengri.components.sfh.nonparametric import continuity_flex_prior_logp
+        from tengri.components.stellar.sfh.nonparametric import continuity_flex_prior_logp
 
         logp_zero = continuity_flex_prior_logp(0.0, jnp.array([0.0, 0.0]), 0.0)
         logp_nonzero = continuity_flex_prior_logp(1.0, jnp.array([1.0, 1.0]), 1.0)
         assert float(logp_zero) > float(logp_nonzero)
 
     def test_prior_logp_gradient(self):
-        from tengri.components.sfh.nonparametric import continuity_flex_prior_logp
+        from tengri.components.stellar.sfh.nonparametric import continuity_flex_prior_logp
 
         g = jax.grad(lambda ry: continuity_flex_prior_logp(ry, jnp.array([0.1, 0.0]), -0.2))(0.5)
         assert jnp.isfinite(g)

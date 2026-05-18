@@ -20,8 +20,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.components.sps.dsps_wrapper import SSPData
-from tengri.components.sps.precompute import (
+from tengri.components.stellar.sps.dsps_wrapper import SSPData
+from tengri.components.stellar.sps.precompute import (
     interpolate_ztable,
     precompute_photometry,
     precompute_photometry_ztable,

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.components.sfh.psd_models import (
+from tengri.components.stellar.sfh.psd_models import (
     drw_acf,
     drw_variance,
     psd_drw,

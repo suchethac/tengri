@@ -7,8 +7,8 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.components.sfh.mean_sfh import constant_then_exponential
-from tengri.components.sfh.registry import SFH_REGISTRY, resolve_sfh
+from tengri.components.stellar.sfh.mean_sfh import constant_then_exponential
+from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
 
 pytestmark = pytest.mark.unit
 

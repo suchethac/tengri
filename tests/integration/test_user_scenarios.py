@@ -28,7 +28,7 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
 from tengri import Fitter, Observation, Parameters, Photometry, SEDModel
-from tengri.components.sps.dsps_wrapper import load_ssp_data
+from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation.filters import load_filter_set
 from tengri.parameters.priors import Fixed, Uniform
 
