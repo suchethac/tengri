@@ -203,6 +203,7 @@ class XRaySEDComponent:
         else:
             new_sed = state.sed_intrinsic + L_xray
 
-        new_derived = dict(state.derived)
-        new_derived["sed_xray"] = L_xray
-        return state.with_(sed_intrinsic=new_sed, derived=new_derived)
+        return state.with_(
+            sed_intrinsic=new_sed,
+            derived=state.derived.with_(sed_xray=L_xray),
+        )
