@@ -16,19 +16,14 @@ redshift estimation via dropout techniques.
 
 """
 
-# sphinx_gallery_thumbnail_number = 1
-
 from pathlib import Path
 
-import jax
 import jax.numpy as jnp
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.analysis.plotting import SWEEP_CMAPS, setup_style
 from tengri.igm import igm_transmission

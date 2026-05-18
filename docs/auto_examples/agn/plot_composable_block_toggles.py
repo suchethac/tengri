@@ -96,15 +96,30 @@ for ax, (title, _block, kw), color in zip(axes, STAGES, colors):
     full_kw = dict(FULL)
     # Override only the selectors that this panel turns on; everything else
     # is forced to "none" so the cumulative effect is visible left-to-right.
-    panel_kw = {**{k: "none" for k in (
-        "agn_disc_block", "agn_lines_block", "agn_feii_block",
-        "agn_torus_block", "agn_attenuation_block",
-    )}, **kw}
+    panel_kw = {
+        **{
+            k: "none"
+            for k in (
+                "agn_disc_block",
+                "agn_lines_block",
+                "agn_feii_block",
+                "agn_torus_block",
+                "agn_attenuation_block",
+            )
+        },
+        **kw,
+    }
     # Free params come from FULL but we strip the selector kwargs we just set.
     free_params = {
-        k: v for k, v in full_kw.items() if k not in (
-            "agn_disc_block", "agn_lines_block", "agn_feii_block",
-            "agn_torus_block", "agn_attenuation_block",
+        k: v
+        for k, v in full_kw.items()
+        if k
+        not in (
+            "agn_disc_block",
+            "agn_lines_block",
+            "agn_feii_block",
+            "agn_torus_block",
+            "agn_attenuation_block",
         )
     }
     panel_sed = nu_l_nu({**panel_kw, **free_params})

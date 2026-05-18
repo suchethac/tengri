@@ -36,25 +36,11 @@ from tengri import (
     SEDModel,
     Spectroscopy,
     load_filter_set,
-    load_ssp_data,
+    load_ssp,
     setup_style,
 )
 
 setup_style()
-
-
-def _find_ssp():
-    """Find SSP data file in standard locations."""
-    name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [
-        Path("data") / name,
-        Path("../data") / name,
-        Path("../../data") / name,
-        Path("../../../data") / name,
-    ]:
-        if p.exists():
-            return str(p)
-    return None
 
 
 def _find_filters():
@@ -70,13 +56,10 @@ def _find_filters():
     return "data/filters"
 
 
-ssp_path = _find_ssp()
-if ssp_path is None:
-    raise FileNotFoundError("SSP data not found — skipping example")
+ssp = load_ssp()
 
 filter_dir = _find_filters()
 
-ssp = load_ssp_data(ssp_path)
 
 # Generate a template star-forming galaxy SED (rest-frame)
 wave_rest = jnp.logspace(jnp.log10(1000.0), jnp.log10(3e5), 500)  # 0.1 µm – 30 µm [Å]

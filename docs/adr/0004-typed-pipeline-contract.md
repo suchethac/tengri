@@ -128,9 +128,44 @@ Land a single, typed cross-component contract:
   key is a single one-line PR edit, expected in the same PR that
   introduces the publisher.
 
+## Amendment — Phase B (2026-05-18, issue #21)
+
+The original ADR left an explicit gap: components that read upstream
+data *opportunistically* with a documented fallback (radio reading
+`L_ir` with `0.0`, X-ray reading `sfr` with `1.0`) had no way to
+register that read with the contract. A publisher rename would slip
+past the validator because the consumer's `requires()` was empty.
+Phase A (PR #23) closed the gap for *hard* dependencies; Phase B
+(this amendment) closes it for opportunistic ones.
+
+**Decision.** Components may declare a third method:
+
+```python
+def requires_optional(self) -> tuple[DerivedKey, ...]: ...
+```
+
+The validator runs the same checks as for `requires()` **except** that
+a missing publisher is silently OK — the consumer's documented
+fallback handles that case. If a publisher *is* present, units must
+match the consumer's declaration and the canonical table; the
+publisher must still come strictly before the consumer.
+
+`RadioSEDComponent.requires_optional()` declares `L_ir`, `L_agn_bol`,
+`log_mstar`. `XRaySEDComponent.requires_optional()` declares `sfr`,
+`log_mstar`, `L_agn_bol`. The previously-undeclared reads are now
+visible to introspection and protected against silent publisher
+renames, without forcing every photometry-only pipeline to instantiate
+dust + AGN.
+
+**Cost.** Same as the original contract — zero JIT cost; one additional
+loop in `validate_pipeline` at construction. The `requires_optional`
+method is, like `publishes` / `requires`, off the runtime-checkable
+Protocol surface and consulted via `getattr` so components without
+opportunistic reads continue to satisfy `isinstance(c, SEDComponent)`.
+
 ## Related work
 
-- **Layer 0 (this PR):** Constants consolidation — `LSUN_ERG` alias
+- **Layer 0 (PR #19):** Constants consolidation — `LSUN_ERG` alias
   removed from `sed_quantities.py`'s public surface.
 - **ADR-0005 (planned):** One parameter registry — promote
   `parameters/_param_defs.py` to *the* source of truth for parameter

@@ -31,17 +31,14 @@ torus blocks the accretion disc) depending purely on viewing angle.
    :alt: plot_agn_type12
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-78
+.. GENERATED FROM PYTHON SOURCE LINES 16-75
 
 .. code-block:: Python
 
 
-    import jax
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
-
-    jax.config.update("jax_enable_x64", True)
 
     from tengri import setup_style
     from tengri.agn import unified_nlr_blr

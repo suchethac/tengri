@@ -6,13 +6,11 @@ derives its legacy ``_RADIO_PARAMS`` bucket dict from this tuple, and
 Drift between the two paths is structurally impossible because they
 share the same in-memory list.
 
-Reserved declarations
----------------------
-``radio_alpha_inj`` and ``radio_log_nu_break`` are declared here with
-``Fixed`` defaults to support the eventual JP/KP/Tribble physical
-synchrotron-aging kernels (Harwood+2013). The kernels are not yet
-implemented — the parameters are no-ops until the physics lands. See
-:mod:`tengri.components.radio.component` for context.
+When the JP / KP / Tribble physical synchrotron-aging kernels land
+(Harwood+2013), their two free parameters (``radio_alpha_inj``,
+``radio_log_nu_break``) get added here alongside the model names in
+:data:`tengri.components.radio.component.AGN_RADIO_MODELS`. Until then,
+selecting those model names raises :class:`ValueError` at construction.
 """
 
 from __future__ import annotations
@@ -79,19 +77,6 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "radio_log_nu_cut",
         Fixed(13.0),
         "AGN-DPL log10(synchrotron aging exponential cutoff / Hz); typical 12-14",
-    ),
-    # Reserved for JP/KP/Tribble physical-aging kernels (Harwood+2013).
-    ParamDeclaration(
-        "radio_alpha_inj",
-        Fixed(0.6),
-        "JP/KP/Tribble injection spectral index (Harwood+2013 typical 0.5-0.8)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-    ),
-    ParamDeclaration(
-        "radio_log_nu_break",
-        Fixed(10.0),
-        "JP/KP/Tribble log10(spectral break frequency / Hz); typical 9-11",
     ),
 )
 

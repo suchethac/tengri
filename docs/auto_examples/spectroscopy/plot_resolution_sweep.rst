@@ -32,44 +32,25 @@ feature as resolution increases. High-res spectroscopy reveals kinematics.
    :alt: plot_resolution_sweep
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-141
+.. GENERATED FROM PYTHON SOURCE LINES 17-122
 
 .. code-block:: Python
 
-
-    from pathlib import Path
 
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
     from scipy.ndimage import gaussian_filter1d
 
-    from tengri import Fixed, Observation, Parameters, SEDModel, Spectroscopy, load_ssp_data
+    from tengri import Fixed, Observation, Parameters, SEDModel, Spectroscopy, load_ssp
     from tengri.analysis.plotting import setup_style
 
     setup_style()
 
 
-    def _find_ssp():
-        """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
-
-
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
+    ssp = load_ssp()
 
     # --- Setup ---
-    ssp_data = load_ssp_data(SSP_PATH)
     WAVE_OBS = jnp.linspace(6000.0, 7100.0, 400)
     REDSHIFT = 0.1
 
@@ -89,7 +70,7 @@ feature as resolution increases. High-res spectroscopy reveals kinematics.
         dust_slope=Fixed(-0.7),
         redshift=Fixed(REDSHIFT),
     )
-    model = SEDModel(spec, ssp_data, observation=obs)
+    model = SEDModel(spec, ssp, observation=obs)
 
     # --- Predict rest-frame spectrum ---
     pred = model.predict_rest_sed({})

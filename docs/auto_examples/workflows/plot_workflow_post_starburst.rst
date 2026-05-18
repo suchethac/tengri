@@ -34,12 +34,10 @@ interpreting star formation histories.
    :alt: plot_workflow_post_starburst
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-205
+.. GENERATED FROM PYTHON SOURCE LINES 19-174
 
 .. code-block:: Python
 
-
-    from pathlib import Path
 
     import jax
     import matplotlib.pyplot as plt
@@ -53,7 +51,8 @@ interpreting star formation histories.
         Photometry,
         SEDModel,
         Uniform,
-        load_ssp_data,
+        data_path,
+        load_ssp,
     )
     from tengri.analysis.plotting import setup_style
 
@@ -61,43 +60,13 @@ interpreting star formation histories.
 
 
     # --- SSP data ---
-    def _find_ssp():
-        """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
 
 
-    SSP_PATH = _find_ssp()
+    ssp = load_ssp()
 
-    # Locate filter cache
-    _FILTER_DIR = next(
-        (
-            str(d)
-            for d in [
-                Path("data/filters"),
-                Path("../data/filters"),
-                Path("../../data/filters"),
-                Path("../../../data/filters"),
-            ]
-            if d.exists()
-        ),
-        "data/filters",
-    )
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
-
-    ssp = load_ssp_data(SSP_PATH)
 
     bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-    obs = Observation(photometry=Photometry.from_names(bands, cache_dir=_FILTER_DIR))
+    obs = Observation(photometry=Photometry.from_names(bands, cache_dir=str(data_path("filters"))))
 
     # --- True model: burst + quench (E+A) ---
     # Recent starburst ~500 Myr ago, then sharp quench

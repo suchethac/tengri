@@ -18,13 +18,14 @@ The AGN radio component is selected via
   ``exp(-nu/nu_cut)`` aging cutoff (:func:`radio_total_dpl`,
   Martinez-Ramirez+2024 Eq. 9-10). Uses ``radio_alpha_thin``,
   ``radio_alpha_thick``, ``radio_log_nu_t``, ``radio_log_nu_cut``.
-- ``"JP"``, ``"KP"``, ``"tribble"`` — physical synchrotron-aging
-  kernels from Jaffe & Perola (1973), Kardashev/Pacholczyk, and Tribble
-  (1993). Validated against BRATS (Harwood et al. 2013, 2015).
-  **Currently stubs**: raise :class:`NotImplementedError`. Physics +
-  precomputed kernel tables land in a follow-up PR; the parameters
-  ``radio_alpha_inj`` and ``radio_log_nu_break`` are already declared in
-  :mod:`tengri.parameters._param_defs` per the reserved-params pattern.
+
+Physical synchrotron-aging kernels (Jaffe & Perola 1973;
+Kardashev/Pacholczyk; Tribble 1993) — ``"JP"``, ``"KP"``, ``"tribble"``
+— are not yet implemented. Selecting them raises :class:`ValueError` at
+construction. The physics + precomputed pitch-angle integrals (validated
+against BRATS, Harwood+2013) land together in a follow-up PR alongside
+the two free parameters they consume (``radio_alpha_inj``,
+``radio_log_nu_break``).
 
 Cross-component reads
 ---------------------
@@ -68,8 +69,13 @@ __all__ = ["RadioSEDComponent", "RadioSEDComponentConfig"]
 # Mode strings for the AGN radio sub-model. Kept as a module-level
 # constant so tests and downstream code can import it without
 # instantiating the dataclass.
-AGN_RADIO_MODELS: tuple[str, ...] = ("powerlaw", "dpl", "JP", "KP", "tribble")
-_AGING_KERNELS_NOT_YET_IMPLEMENTED = ("JP", "KP", "tribble")
+#
+# JP / KP / tribble (Jaffe & Perola 1973; Kardashev/Pacholczyk; Tribble
+# 1993) are NOT in this tuple — they require precomputed pitch-angle
+# integrals validated against BRATS (Harwood+2013). When that physics
+# lands, the kernel names and their two free parameters (radio_alpha_inj,
+# radio_log_nu_break) get added together in the same PR.
+AGN_RADIO_MODELS: tuple[str, ...] = ("powerlaw", "dpl")
 
 
 @dataclass(frozen=True)
@@ -88,10 +94,12 @@ class RadioSEDComponentConfig(SEDComponentConfig):
         Add Murphy+2011 thermal free-free component. Default ``True``
         (matches :func:`radio_total`'s default).
     agn_radio_model : str
-        AGN radio sub-model. One of ``{"powerlaw", "dpl", "JP", "KP",
-        "tribble"}``. Default ``"powerlaw"`` preserves current behaviour
-        bit-identically. ``"JP"``, ``"KP"``, ``"tribble"`` are reserved
-        and currently raise :class:`NotImplementedError` at apply time.
+        AGN radio sub-model. One of :data:`AGN_RADIO_MODELS` —
+        ``{"powerlaw", "dpl"}``. Default ``"powerlaw"`` preserves the
+        pre-aging-cutoff behaviour bit-identically. Physical-aging
+        kernels ``"JP"``, ``"KP"``, ``"tribble"`` are reserved names
+        rejected at construction with a :class:`ValueError`; the physics
+        lands in a follow-up PR.
     """
 
     name: str = "radio"
@@ -120,8 +128,7 @@ class RadioSEDComponent:
 
     Notes
     -----
-    **JIT-compatible**: yes for ``agn_radio_model in {"powerlaw", "dpl"}``.
-    JP/KP/Tribble are not yet implemented.
+    **JIT-compatible**: yes for every model in :data:`AGN_RADIO_MODELS`.
 
     **Additive**: writes ``sed_intrinsic = sed_intrinsic + L_radio(λ)``.
     Initialises ``sed_intrinsic`` from zeros if upstream did not.
@@ -143,8 +150,7 @@ class RadioSEDComponent:
         DPL parameters (``radio_alpha_thin``, ``radio_alpha_thick``,
         ``radio_log_nu_t``, ``radio_log_nu_cut``) are declared but
         ``Fixed`` by default, so the component is a no-op extension when
-        ``agn_radio_model="powerlaw"``. Likewise the JP/KP/Tribble
-        parameters (``radio_alpha_inj``, ``radio_log_nu_break``).
+        ``agn_radio_model="powerlaw"``.
         """
         return list(_RADIO_PARAMS)
 
@@ -153,12 +159,6 @@ class RadioSEDComponent:
 
         See :func:`tengri.forward.orchestrator.validate_pipeline`.
 
-        Notes
-        -----
-        Radio reads ``L_ir``, ``L_agn_bol``, and ``log_mstar`` opportunistically
-        with documented fallbacks (so the component can run standalone in
-        photometry-only pipelines). Those reads are NOT declared in
-        :meth:`requires` — only hard dependencies belong there.
         """
         return (
             DerivedKey(
@@ -166,6 +166,22 @@ class RadioSEDComponent:
                 "erg/s/Hz",
                 "Radio luminosity contribution on pipeline wave grid",
             ),
+        )
+
+    def requires_optional(self) -> tuple[DerivedKey, ...]:
+        """Cross-component derived keys radio reads *opportunistically*.
+
+        Read from ``state.derived`` with documented fallbacks so radio
+        remains usable in pipelines that omit the upstream publisher
+        (photometry-only fits without dust or AGN). The validator does
+        NOT require an upstream publisher for these, but it WILL check
+        that if one is present, its units match. Catches a future
+        publisher rename or unit drift. Phase B of #21 — see ADR-0004.
+        """
+        return (
+            DerivedKey("L_ir", "erg/s", "Read from dust if present; falls back to 0.0"),
+            DerivedKey("L_agn_bol", "erg/s", "Read from AGN if present; falls back to 0.0"),
+            DerivedKey("log_mstar", "dex", "Read from stellar if present; falls back to 10.0"),
         )
 
     def precompute(
@@ -186,9 +202,7 @@ class RadioSEDComponent:
 
         Dispatches to :func:`radio_total` (powerlaw) or
         :func:`radio_total_dpl` (dpl) based on
-        :attr:`RadioSEDComponentConfig.agn_radio_model`. JP/KP/Tribble
-        modes raise :class:`NotImplementedError` with a pointer to the
-        follow-up PR.
+        :attr:`RadioSEDComponentConfig.agn_radio_model`.
 
         Parameters
         ----------
@@ -206,17 +220,11 @@ class RadioSEDComponent:
         PipelineState
             New state with ``sed_intrinsic`` updated.
         """
+        # JP / KP / tribble were previously dispatched here with a runtime
+        # NotImplementedError. They now fail earlier — at construction —
+        # because they are no longer in AGN_RADIO_MODELS. That validation
+        # lives in RadioSEDComponentConfig.__post_init__.
         model = self.config.agn_radio_model
-        if model in _AGING_KERNELS_NOT_YET_IMPLEMENTED:
-            raise NotImplementedError(
-                f"agn_radio_model={model!r} is reserved but not yet implemented. "
-                "Physical synchrotron-aging kernels (Jaffe & Perola 1973; "
-                "Kardashev 1962 / Pacholczyk 1970; Tribble 1993) require "
-                "precomputed pitch-angle integrals validated against BRATS "
-                "(Harwood et al. 2013). Use 'powerlaw' or 'dpl' for now; "
-                "the parameters radio_alpha_inj and radio_log_nu_break are "
-                "already registered for the follow-up PR."
-            )
 
         wave = state.wave
 

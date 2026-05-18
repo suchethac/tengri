@@ -35,15 +35,6 @@
    "name": "Parameters"
   }
  ],
- "Path": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "Path"
-  }
- ],
  "Photometry.from_names": [
   {
    "is_class": false,
@@ -71,6 +62,15 @@
    "name": "Uniform"
   }
  ],
+ "data_path": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "data_path"
+  }
+ ],
  "jax.random.PRNGKey": [
   {
    "is_class": false,
@@ -80,13 +80,13 @@
    "name": "PRNGKey"
   }
  ],
- "load_ssp_data": [
+ "load_ssp": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "load_ssp_data"
+   "name": "load_ssp"
   }
  ],
  "np.array": [

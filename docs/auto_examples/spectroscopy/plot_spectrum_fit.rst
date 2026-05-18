@@ -30,12 +30,10 @@ Shows the observed and model spectra with a residual panel below.
    :alt: plot_spectrum_fit
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-128
+.. GENERATED FROM PYTHON SOURCE LINES 15-111
 
 .. code-block:: Python
 
-
-    from pathlib import Path
 
     import jax
     import jax.numpy as jnp
@@ -50,7 +48,7 @@ Shows the observed and model spectra with a residual panel below.
         SEDModel,
         Spectroscopy,
         Uniform,
-        load_ssp_data,
+        load_ssp,
     )
     from tengri.analysis.plotting import setup_style
 
@@ -58,29 +56,14 @@ Shows the observed and model spectra with a residual panel below.
 
 
     # --- Check for SSP data ---
-    def _find_ssp():
-        """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
 
 
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
+    ssp = load_ssp()
 
     # --- Setup ---
     REDSHIFT = 0.1
     WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 
-    ssp_data = load_ssp_data(SSP_PATH)
     obs = Observation(
         spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
     )
@@ -97,7 +80,7 @@ Shows the observed and model spectra with a residual panel below.
         dust_slope=Fixed(-0.7),
         redshift=Fixed(REDSHIFT),
     )
-    model = SEDModel(spec, ssp_data, observation=obs)
+    model = SEDModel(spec, ssp, observation=obs)
 
     # --- Generate mock spectrum ---
     true_params = spec.sample(jax.random.PRNGKey(42))
