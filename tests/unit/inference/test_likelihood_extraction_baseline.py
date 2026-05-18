@@ -16,6 +16,7 @@ import pytest
 
 class _IdentityDist:
     """Mock distribution: unstandardize is identity."""
+
     bounds = (-jnp.inf, jnp.inf)
 
     def unstandardize(self, x):
@@ -24,6 +25,7 @@ class _IdentityDist:
 
 class _MockSpec:
     """Tiny stand-in for Parameters."""
+
     stochastic = False
 
     def __init__(self, free_names):

@@ -16,6 +16,7 @@ import pytest
 
 class _IdentityDist:
     """Mock distribution: unstandardize is identity."""
+
     bounds = (-jnp.inf, jnp.inf)
 
     def unstandardize(self, x):
@@ -24,6 +25,7 @@ class _IdentityDist:
 
 class _MockSpec:
     """Tiny stand-in for Parameters."""
+
     stochastic = False
 
     def __init__(self, free_names):
@@ -143,17 +145,13 @@ class RobustPhotometryLikelihood:
         from scipy.special import loggamma
 
         nu = self.dof
-        z2 = residuals ** 2
+        z2 = residuals**2
 
         # Use scipy only for the Gamma function (constant at likelihood time)
         log_gamma_ratio = float(loggamma((nu + 1) / 2) - loggamma(nu / 2))
         log_norm = jnp.log(jnp.pi * nu) / 2.0
 
-        log_lik = (
-            log_gamma_ratio
-            - log_norm
-            - (nu + 1) / 2 * jnp.log(1 + z2 / nu)
-        )
+        log_lik = log_gamma_ratio - log_norm - (nu + 1) / 2 * jnp.log(1 + z2 / nu)
 
         return jnp.sum(log_lik)
 

@@ -514,7 +514,6 @@ class Fitter:
             return base
         return CompositeLikelihood(base, *extras)
 
-
     @staticmethod
     def _resolve_data_type(data_type: str | None, model: Any) -> str:
         """Infer data_type from Observation when not explicitly provided."""
