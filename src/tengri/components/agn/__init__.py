@@ -41,6 +41,7 @@ References
 # AGN_MODELS["composable"]. Must come after grahsp import so GRAHSP
 # blocks see the GRAHSP package fully initialised.
 from tengri.components.agn import blocks
+from tengri.components.agn._phys import planck_lnu
 from tengri.components.agn.blocks import (
     AGN_BLOCKS,
     BLOCK_CATEGORIES,
@@ -124,6 +125,7 @@ __all__ = [
     "kubota_done_full_agn",
     "multicolor_disc",
     "nenkova_torus",
+    "planck_lnu",
     "powerlaw_disc",
     "qsogen",
     "register_agn_block",

@@ -263,10 +263,18 @@ except Exception as e:
 
     fig.colorbar(im, ax=ax, label="Pearson correlation", shrink=0.8)
     ax.set_title(
-        "Emission Line Ratio Correlation Matrix\n(Synthetic data: log U, Z, age grid)",
-        fontsize=12,
+        "Emission Line Ratio Correlation Matrix\n"
+        "FALLBACK: hardcoded values, not computed — grid generation unavailable",
+        fontsize=11,
+        color="firebrick",
         fontweight="bold",
         pad=15,
+    )
+    # Watermark the figure so a reader can't mistake the fallback for real data.
+    fig.text(
+        0.5, 0.5, "SYNTHETIC FALLBACK",
+        ha="center", va="center", rotation=30,
+        fontsize=44, color="firebrick", alpha=0.18, zorder=10,
     )
 
     fig.tight_layout()

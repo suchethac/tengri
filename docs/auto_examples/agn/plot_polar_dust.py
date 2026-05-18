@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn import powerlaw_disc, simple_torus
+from tengri.components.agn import planck_lnu, powerlaw_disc, simple_torus
 
 setup_style()
 
@@ -56,21 +56,11 @@ ax = axes[1]
 # (Not a direct function call but representative)
 
 
-# Planck function for polar dust
-def _planck_l_nu(wave, temp_k):
-    """Planck function for dust thermal emission [erg/s/Hz]."""
-    h_cgs = 6.62607015e-27  # erg·s
-    c_cgs = 2.99792458e10  # cm/s
-    kb_cgs = 1.380649e-16  # erg/K
-    nu = c_cgs / (wave * 1e-8)  # convert to Hz
-    hnu = h_cgs * nu
-    kbt = kb_cgs * temp_k
-
-    # Avoid overflow: exp(x) → inf for x > ~100
-    exponent = hnu / kbt
-    exp_fac = jnp.exp(jnp.minimum(exponent, 100.0))
-
-    return (2.0 * h_cgs * nu**3 / c_cgs**2) / (exp_fac - 1.0)
+def _planck_l_nu(wave_aa, temp_k):
+    """Planck B_ν at wavelength, in [erg/s/cm²/Hz/sr] — thin wrapper around
+    :func:`tengri.components.agn.planck_lnu`, which takes frequency."""
+    nu = 2.99792458e10 / (wave_aa * 1e-8)  # cm/s ÷ wavelength[cm]
+    return planck_lnu(nu, temp_k)
 
 
 # Polar dust luminosity: shape like a Planck + scaling factor

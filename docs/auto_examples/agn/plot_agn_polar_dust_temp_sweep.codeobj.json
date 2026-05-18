@@ -1,13 +1,4 @@
 {
- "jnp.exp": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jax.numpy",
-   "module_short": "jax.numpy",
-   "name": "exp"
-  }
- ],
  "jnp.logspace": [
   {
    "is_class": false,
@@ -15,15 +6,6 @@
    "module": "jax.numpy",
    "module_short": "jax.numpy",
    "name": "logspace"
-  }
- ],
- "jnp.minimum": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jax.numpy",
-   "module_short": "jax.numpy",
-   "name": "minimum"
   }
  ],
  "np.array": [
@@ -51,6 +33,15 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "log10"
+  }
+ ],
+ "planck_lnu": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.agn",
+   "module_short": "tengri.components.agn",
+   "name": "planck_lnu"
   }
  ],
  "plt.cm.viridis": [
