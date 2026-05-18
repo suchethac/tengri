@@ -146,3 +146,59 @@ class TestRegistryConsistency:
             match = [d for d in group if isinstance(d, ParamDeclaration) and d.name == name]
             assert len(match) == 1, f"{name} not found in {rec.owner}.{rec.group}"
             assert match[0].description == rec.description
+
+
+class TestSharedParamsMigration:
+    """Verify that shared parameters (redshift, met_logzsol, noise_*, etc.)
+    are cleanly declared in tengri.parameters._shared.PARAMS and properly
+    registered.
+
+    Tests the ADR-0005 follow-up #1 migration: moving _NON_SFH_PARAMS from
+    a literal dict in _param_defs.py to a derived view sourced from
+    _shared.py.
+    """
+
+    def test_redshift_owner_is_shared(self):
+        """``redshift`` should be owned by tengri.parameters._shared."""
+        rec = describe_parameter("redshift")
+        assert rec.owner == "tengri.parameters._shared"
+        assert rec.group == "PARAMS"
+        assert rec.name == "redshift"
+
+    def test_met_logzsol_owner_is_shared(self):
+        """``met_logzsol`` should be owned by tengri.parameters._shared."""
+        rec = describe_parameter("met_logzsol")
+        assert rec.owner == "tengri.parameters._shared"
+        assert rec.group == "PARAMS"
+        assert rec.name == "met_logzsol"
+
+    def test_noise_frac_cal_owner_is_shared(self):
+        """``noise_frac_cal`` should be owned by tengri.parameters._shared."""
+        rec = describe_parameter("noise_frac_cal")
+        assert rec.owner == "tengri.parameters._shared"
+        assert rec.group == "PARAMS"
+        assert rec.name == "noise_frac_cal"
+
+    def test_all_shared_params_present(self):
+        """All five shared parameters are registered."""
+        shared_names = {"redshift", "met_logzsol", "noise_frac_cal", "noise_dof", "sigma_v_kms"}
+        registry_names = set(registry().keys())
+        assert shared_names.issubset(registry_names)
+
+    def test_shared_params_have_correct_descriptions(self):
+        """Descriptions match the declarations in _shared.PARAMS."""
+        expected = {
+            "redshift": "Source redshift",
+            "met_logzsol": "log10(Z/Zsun)",
+            "noise_frac_cal": (
+                "Fractional calibration noise floor (added in quadrature with obs noise)"
+            ),
+            "noise_dof": ("Student-t degrees of freedom for outlier robustness (0=Gaussian)"),
+            "sigma_v_kms": (
+                "Stellar velocity dispersion sigma_v [km/s] — added in quadrature "
+                "to the instrumental LSF when computing spectra"
+            ),
+        }
+        for name, desc in expected.items():
+            rec = describe_parameter(name)
+            assert rec.description == desc

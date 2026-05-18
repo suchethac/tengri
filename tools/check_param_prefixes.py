@@ -2,7 +2,9 @@
 """CI guard for free-parameter prefix compliance with NAMING_CONTRACT.md §3.2.
 
 This script walks all parameters from each preset configuration and verifies that
-every free-parameter name starts with one of the mandatory domain prefixes:
+every free-parameter name:
+1. Is registered in the parameter registry (via tengri.list_parameters())
+2. Follows the mandatory domain prefix rule (NAMING_CONTRACT §3.2):
 
     sfh_, met_, dust_, neb_, agn_, eline_, noise_, radio_, xray_, shock_,
     chem_, igm_, dla_, or is exactly 'redshift'.
@@ -17,7 +19,9 @@ Implementation
 --------------
 This script imports `tengri.presets` and builds Parameters objects from each
 preset (starforming, quiescent, high_z, photoz, jwst_spec, agn_host), then
-checks the free_params property against the NAMING_CONTRACT regex.
+checks the free_params property against:
+- Registry membership (added via ADR-0005)
+- NAMING_CONTRACT §3.2 prefix rule
 
 Violations can be:
 - Fixed with a rename + alias (preferred), or
@@ -42,23 +46,32 @@ ALLOWED_PREFIXES = re.compile(
 EXACT_MATCHES = {"redshift"}
 
 
-def is_valid_param_name(name: str) -> bool:
+def is_valid_param_name(name: str, registered_params: set[str] | None = None) -> bool:
     """Check if a parameter name complies with NAMING_CONTRACT §3.2.
 
     Parameters
     ----------
     name : str
         Parameter name to validate.
+    registered_params : set[str] | None, optional
+        Set of registered parameter names from the registry. If provided,
+        name must be in this set AND satisfy the prefix rule.
 
     Returns
     -------
     bool
-        True if name matches the contract; False otherwise.
+        True if name matches the contract and is registered; False otherwise.
     """
+    # Check registry membership if provided
+    if registered_params is not None and name not in registered_params:
+        return False
+    # Check prefix rule
     return name in EXACT_MATCHES or bool(ALLOWED_PREFIXES.match(name))
 
 
-def check_preset(preset_name: str, params, config) -> list[str]:
+def check_preset(
+    preset_name: str, params, config, registered_params: set[str]
+) -> list[tuple[str, str, str]]:
     """Check a single preset's free parameters.
 
     Parameters
@@ -69,16 +82,23 @@ def check_preset(preset_name: str, params, config) -> list[str]:
         Parameters object from the preset.
     config : SEDModelConfig
         Configuration object (unused but returned by presets).
+    registered_params : set[str]
+        Set of parameters registered in the parameter registry.
 
     Returns
     -------
-    list[str]
-        List of violations (param names that don't conform).
+    list[tuple[str, str, str]]
+        List of violations as (preset_name, param_name, violation_type).
+        violation_type is one of: 'not_registered', 'invalid_prefix'.
     """
     violations = []
     for name in params.free_params:
-        if not is_valid_param_name(name):
-            violations.append((preset_name, name))
+        # Check registry first
+        if name not in registered_params:
+            violations.append((preset_name, name, "not_registered"))
+        # Check prefix rule
+        elif not is_valid_param_name(name, registered_params):
+            violations.append((preset_name, name, "invalid_prefix"))
     return violations
 
 
@@ -91,6 +111,15 @@ def main() -> int:
         0 if all checks pass; 1 if violations found.
     """
     all_violations = []
+
+    # Load the parameter registry
+    try:
+        import tengri
+
+        registered_params = set(tengri.list_parameters())
+    except Exception as e:
+        print(f"ERROR loading parameter registry: {e}", file=sys.stderr)
+        return 1
 
     # Import presets module lazily after Parameters is imported
     try:
@@ -147,27 +176,36 @@ def main() -> int:
 
     # Check each preset
     for preset_name, params in presets_dict.items():
-        violations = check_preset(preset_name, params, None)
+        violations = check_preset(preset_name, params, None, registered_params)
         all_violations.extend(violations)
 
     # Report findings
     if all_violations:
-        print("Parameter prefix violations found:")
+        print("Parameter violations found:")
         print()
         by_preset = {}
-        for preset_name, param_name in all_violations:
+        for preset_name, param_name, violation_type in all_violations:
             if preset_name not in by_preset:
-                by_preset[preset_name] = []
-            by_preset[preset_name].append(param_name)
+                by_preset[preset_name] = {}
+            if violation_type not in by_preset[preset_name]:
+                by_preset[preset_name][violation_type] = []
+            by_preset[preset_name][violation_type].append(param_name)
 
         for preset_name in sorted(by_preset.keys()):
             print(f"  {preset_name}:")
-            for param_name in sorted(set(by_preset[preset_name])):
-                print(f"    - {param_name}")
+            for violation_type in sorted(by_preset[preset_name].keys()):
+                type_label = (
+                    "not registered in parameter registry"
+                    if violation_type == "not_registered"
+                    else "invalid prefix (not in NAMING_CONTRACT)"
+                )
+                print(f"    [{type_label}]")
+                for param_name in sorted(set(by_preset[preset_name][violation_type])):
+                    print(f"      - {param_name}")
         print()
         return 1
 
-    print("All parameter names comply with NAMING_CONTRACT §3.2. ✓")
+    print("All parameter names comply with NAMING_CONTRACT §3.2 and registry. ✓")
     return 0
 
 

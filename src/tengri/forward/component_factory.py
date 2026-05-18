@@ -288,13 +288,20 @@ def build_components(
     if use_igm:
         components.append(IGMSEDComponent())
 
-    # Construction-time contract check: every required derived key has an
-    # earlier publisher with matching units, no duplicate publishers, units
-    # match the canonical-units table. Raises PipelineContractError on any
-    # violation, with a "Did you mean: ..." hint for likely typos. Zero
-    # runtime cost — runs once per model build, no JIT trace involved.
-    from tengri.forward.orchestrator import validate_pipeline
+    from tengri.forward.orchestrator import topological_sort, validate_pipeline
 
+    # ADR-0006: derive the dependency-respecting order from declared
+    # publishes/requires. The sort is stable (preserves input order
+    # among components with no ordering constraint), so the canonical
+    # pipeline reproduces the previous hand-coded order byte-for-byte —
+    # verified by the contract-graph + SED-output snapshot tests in
+    # tests/integration/test_derived_contract_snapshots.py.
+    components = topological_sort(components)
+
+    # ADR-0004: construction-time contract check. After the sort,
+    # validate_pipeline's "out-of-order publisher" path becomes
+    # dead code (the sort guarantees publisher-before-consumer);
+    # the remaining checks are duplicate-publish and units mismatch.
     validate_pipeline(components)
 
     return components
