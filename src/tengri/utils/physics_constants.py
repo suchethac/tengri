@@ -334,4 +334,3 @@ Reference: Oke & Gunn 1983, ApJ, 266, 713.
 The zeropoint corresponds to f_ν = 3.631e-20 erg s⁻¹ cm⁻² Hz⁻¹ = 3631 Jy
 at all wavelengths.
 """
-
