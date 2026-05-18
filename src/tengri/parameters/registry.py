@@ -74,9 +74,8 @@ class ParameterRecord(NamedTuple):
 
 
 def _walk_param_modules() -> dict[str, ParameterRecord]:
-    """Walk every ``_params.py`` under ``tengri.components`` plus the
-    legacy ``_NON_SFH_PARAMS`` bucket in :mod:`tengri.parameters._param_defs`,
-    and collect every declared free parameter.
+    """Walk every ``_params.py`` under ``tengri.components`` and
+    ``tengri.parameters._shared``, and collect every declared free parameter.
 
     Build order is deterministic (``pkgutil.walk_packages`` returns
     modules in package-traversal order). When the same parameter name
@@ -84,19 +83,22 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
     matching how the legacy aggregator at
     :mod:`tengri.parameters._param_defs` resolves duplicates.
 
-    Parameters declared in component ``_params.py`` modules use the
-    :class:`ParamDeclaration` shape directly. Parameters in the legacy
-    ``_NON_SFH_PARAMS`` bucket use a 4-tuple
-    ``(description, bound_check, bound_error, default_prior)`` and are
-    adapted in-place; their ``owner`` field reads
-    ``"tengri.parameters._param_defs:_NON_SFH_PARAMS"`` so introspection
-    can distinguish them from cleanly-migrated component parameters.
+    Parameters declared in component ``_params.py`` modules and
+    ``tengri.parameters._shared`` use the :class:`ParamDeclaration` shape
+    directly. The legacy ``_NON_SFH_PARAMS`` bucket in
+    :mod:`tengri.parameters._param_defs` is a 4-tuple
+    ``(description, bound_check, bound_error, default_prior)`` and is
+    kept for backwards compatibility; it is derived from
+    ``_shared.PARAMS``, so introspection should prefer the _shared
+    source when both are present.
 
     Private. Re-evaluated lazily by :func:`registry` and cached.
     """
     import tengri.components as components_pkg
 
     out: dict[str, ParameterRecord] = {}
+
+    # Walk all component _params.py modules.
     for module_info in pkgutil.walk_packages(
         components_pkg.__path__, prefix=components_pkg.__name__ + "."
     ):
@@ -128,9 +130,36 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
                     group=attr_name,
                 )
 
-    # Legacy shared bucket: redshift, met_logzsol, noise_*, sigma_v_kms.
-    # These have not yet been migrated to a component-owned _params.py.
-    # See ADR-0005, "Known gaps" section.
+    # Shared parameters: redshift, met_logzsol, noise_*, sigma_v_kms.
+    # These are declared cleanly in tengri.parameters._shared.PARAMS
+    # as of ADR-0005 follow-up #1. Import and walk like a component.
+    try:
+        from tengri.parameters import _shared as shared_module
+    except Exception:
+        shared_module = None  # type: ignore[assignment]
+    if shared_module is not None:
+        for attr_name in dir(shared_module):
+            if attr_name.startswith("_"):
+                continue
+            attr = getattr(shared_module, attr_name)
+            if not isinstance(attr, tuple):
+                continue
+            if not all(isinstance(x, ParamDeclaration) for x in attr):
+                continue
+            for decl in attr:
+                if decl.name in out:
+                    continue  # first-wins; matches legacy aggregator
+                out[decl.name] = ParameterRecord(
+                    name=decl.name,
+                    prior=decl.prior,
+                    description=decl.description,
+                    owner="tengri.parameters._shared",
+                    group=attr_name,
+                )
+
+    # Fallback: legacy shared bucket from _param_defs for any params
+    # that didn't get picked up above (defensive; all should now be in
+    # _shared.PARAMS).
     try:
         from tengri.parameters import _param_defs as _legacy
     except Exception:

@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from tengri.core.component import ParamDeclaration
-from tengri.parameters.priors import Fixed, Uniform
+from tengri.parameters.priors import Fixed
 
 
 def _bucket_from_declarations(
@@ -46,39 +46,15 @@ def _bucket_from_declarations(
 # :mod:`tengri.components.dust._params` (``ATTENUATION_PARAMS``), and the
 # remainder (``met_logzsol``, ``redshift``, ``noise_*``, ``sigma_v_kms``)
 # stays here as the genuinely shared / non-component-owned set.
-_NON_SFH_PARAMS = {
-    "met_logzsol": (
-        "log10(Z/Zsun)",
-        lambda lo, hi: True,
-        "",
-        Uniform(-2.0, 0.2),
-    ),
-    "redshift": (
-        "Source redshift",
-        lambda lo, hi: lo >= 0,
-        "must have lo >= 0",
-        Fixed(0.1),
-    ),
-    "noise_frac_cal": (
-        "Fractional calibration noise floor (added in quadrature with obs noise)",
-        lambda lo, hi: lo >= 0,
-        "noise_frac_cal bounds must have lo >= 0",
-        Fixed(0.0),
-    ),
-    "noise_dof": (
-        "Student-t degrees of freedom for outlier robustness (0=Gaussian)",
-        lambda lo, hi: lo >= 0,
-        "noise_dof bounds must have lo >= 0",
-        Fixed(0.0),
-    ),
-    "sigma_v_kms": (
-        "Stellar velocity dispersion sigma_v [km/s] — added in quadrature "
-        "to the instrumental LSF when computing spectra",
-        lambda lo, hi: lo >= 0 and hi <= 2000,
-        "sigma_v_kms must be in [0, 2000]",
-        Fixed(0.0),
-    ),
-}
+#
+# As of ADR-0005 follow-up #1, these parameters are declared cleanly in
+# :mod:`tengri.parameters._shared.PARAMS`. This dict is derived from that
+# tuple to keep _param_defs.py's legacy 4-tuple contract intact for
+# downstream consumers. The canonical source is now _shared.PARAMS.
+
+from tengri.parameters import _shared as _shared_module
+
+_NON_SFH_PARAMS = _bucket_from_declarations(_shared_module.PARAMS)
 
 # All conditional / component-owned buckets are resolved lazily via the
 # module-level ``__getattr__`` defined near the bottom of this file. The
