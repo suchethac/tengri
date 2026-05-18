@@ -171,6 +171,8 @@ class CatalogFitter:
     _NATIVE_VMAPPABLE: frozenset = frozenset({"native_vi_linear", "native_vi_nonlinear"})
 
     def __init__(self, model, galaxies, data_type="photometry"):
+        from tengri.inference.jit_engine import CompileCache
+
         self.model = model
         self.galaxies = list(galaxies)
         self.n_galaxies = len(self.galaxies)
@@ -178,6 +180,10 @@ class CatalogFitter:
         self._dummy_fitter = None
         self._catalog_linear_engine = None
         self._catalog_nonlinear_engine = None
+        # Create a single CompileCache for all per-galaxy Fitter instances.
+        # This prevents cross-galaxy cache evictions: each galaxy's compile
+        # stays in the same bounded cache, not in competing global singletons.
+        self.cache = CompileCache()
 
     # ------------------------------------------------------------------
     # Public API
@@ -288,7 +294,7 @@ class CatalogFitter:
 
             g = self.galaxies[0]
             self._dummy_fitter = Fitter(
-                self.model, g["flux_obs"], g["noise"], data_type=self.data_type
+                self.model, g["flux_obs"], g["noise"], data_type=self.data_type, cache=self.cache
             )
         return self._dummy_fitter
 
@@ -505,7 +511,11 @@ class CatalogFitter:
             if verbose:
                 print(f"  Galaxy {i + 1}/{self.n_galaxies}...", end="\r", flush=True)
             fitter_i = Fitter(
-                self.model, galaxy["flux_obs"], galaxy["noise"], data_type=self.data_type
+                self.model,
+                galaxy["flux_obs"],
+                galaxy["noise"],
+                data_type=self.data_type,
+                cache=self.cache,
             )
             post_i = fitter_i.run(method, key=keys[i], verbose=False, **kwargs)
             posteriors.append(post_i)
