@@ -36,7 +36,9 @@ def data_path(filename: str) -> Path:
     --------
     >>> from tengri import data_path
     >>> templates = data_path("bosa_templates.h5")
-    >>> import h5py; h5py.File(templates).keys()
+    >>> import h5py
+    ...
+    ... h5py.File(templates).keys()
     """
     for parent in [Path.cwd(), *Path.cwd().parents]:
         candidate = parent / "data" / filename
@@ -46,6 +48,7 @@ def data_path(filename: str) -> Path:
         f"Data file 'data/{filename}' not found in any ancestor of {Path.cwd()}. "
         f"Place it under <project_root>/data/."
     )
+
 
 SSP_BASE_URL = "https://halos.as.arizona.edu/suchethacooray/ssp-spectra/"
 
