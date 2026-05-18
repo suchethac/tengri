@@ -211,6 +211,7 @@ from tengri.parameters.registry import (
     ParameterRecord,
     describe_parameter,
     list_parameters,
+    recipe_parameters,
 )
 from tengri.parameters.sentinels import FIXED, FREE
 from tengri.utils import jit_logging
@@ -340,6 +341,7 @@ __all__ = [
     "config",
     "cosmology",
     "describe",
+    "describe_parameter",
     "doctor",
     "download_ssp",
     "dust",
@@ -355,6 +357,7 @@ __all__ = [
     "is_cache_enabled",
     "lean",
     "list_agn_models",
+    "list_parameters",
     "list_all",
     "list_components",
     "list_dust_emission_models",
@@ -373,6 +376,7 @@ __all__ = [
     "preprocessing",
     "presets",
     "radio",
+    "recipe_parameters",
     "register_component",
     "results",
     "search",
