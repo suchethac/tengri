@@ -235,11 +235,6 @@ class DustAttenuationSEDComponent:
         order = jnp.argsort(nu)
         l_ir = jnp.trapezoid(absorbed_lnu[order], nu[order])  # erg/s
 
-        new_derived = dict(state.derived)
-        new_derived["dust_attenuation_factor"] = attenuation
-        new_derived["L_ir"] = l_ir
-        new_derived["L_absorbed"] = l_ir
-        new_derived["sed_dust_attenuated"] = attenuated
         # Phase II-3 contract: ``state.sed_intrinsic`` carries the
         # current cumulative SED for downstream consumers (radio /
         # xray fall-backs, ``predict_rest_sed`` return value, etc.).
@@ -249,5 +244,10 @@ class DustAttenuationSEDComponent:
         return state.with_(
             sed_intrinsic=attenuated,
             sed_attenuated=attenuated,
-            derived=new_derived,
+            derived=state.derived.with_(
+                dust_attenuation_factor=attenuation,
+                L_ir=l_ir,
+                L_absorbed=l_ir,
+                sed_dust_attenuated=attenuated,
+            ),
         )

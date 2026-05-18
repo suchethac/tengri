@@ -551,9 +551,10 @@ class DustEmissionSEDComponent:
         else:
             new_sed = state.sed_intrinsic + L_dust_lnu
 
-        new_derived = dict(state.derived)
-        new_derived["sed_dust_ir"] = L_dust_lnu
-        return state.with_(sed_intrinsic=new_sed, derived=new_derived)
+        return state.with_(
+            sed_intrinsic=new_sed,
+            derived=state.derived.with_(sed_dust_ir=L_dust_lnu),
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────
