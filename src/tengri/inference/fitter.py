@@ -500,11 +500,11 @@ class Fitter:
         (uses a different math primitive) and the e-line *fitted*
         amplitudes (line amplitudes are fit, not marginalised).
         """
+        from tengri.inference.composite_likelihood import CompositeLikelihood
         from tengri.inference.likelihood import (
             build_base_likelihood,
             build_likelihood_extras,
         )
-        from tengri.inference.composite_likelihood import CompositeLikelihood
 
         base = build_base_likelihood(self)
         if base is None:
