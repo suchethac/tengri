@@ -30,11 +30,13 @@ from tengri.core.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
+from tengri.core.derived_bundle import DerivedBundle
 from tengri.core.likelihood import Likelihood
 from tengri.core.observation import ObservationModel
 
 __all__ = [
     "BARE_NAME_ALLOWLIST",
+    "DerivedBundle",
     "Likelihood",
     "ObservationModel",
     "ParamDeclaration",
