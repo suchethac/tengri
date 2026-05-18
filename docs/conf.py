@@ -90,6 +90,11 @@ sphinx_gallery_conf = {
     "plot_gallery": "False" if os.environ.get("CI", "").lower() == "true" else "True",
     "remove_config_comments": True,
     "within_subsection_order": "FileNameSortKey",
+    # Order the SECTIONS pedagogically (mirrors _GALLERY_SECTION_ORDER /
+    # _fix_gallery_index_toctree below). Without this, sphinx-gallery sorts
+    # sections alphabetically by directory name — putting "Advanced Topics"
+    # first, which is the opposite of the newcomer-friendly flow we want.
+    # Populated below ``_GALLERY_SECTION_ORDER`` is defined.
     "thumbnail_size": (320, 224),
     "default_thumb_file": None,
     "matplotlib_animations": False,
@@ -134,6 +139,15 @@ _GALLERY_SECTION_ORDER = (
     "inference",
     "usecases",
     "advanced",
+)
+
+# Tell sphinx-gallery to emit gallery subsections in the same pedagogical
+# order on the gallery landing page body (otherwise it falls back to
+# alphabetical-by-directory and "Advanced Topics" lands first).
+from sphinx_gallery.sorting import ExplicitOrder  # noqa: E402
+
+sphinx_gallery_conf["subsection_order"] = ExplicitOrder(
+    [f"../examples/{s}" for s in _GALLERY_SECTION_ORDER]
 )
 
 
