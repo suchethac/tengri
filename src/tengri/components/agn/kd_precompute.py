@@ -34,7 +34,7 @@ from tengri.components.agn._phys import (
     K_BOLTZ as _K_BOLTZ,
     ring_area as _ring_area,
 )
-from tengri.utils.physics_constants import KEV_TO_ERG as _KEV_TO_ERG
+from tengri.utils.physics_constants import KEV_TO_ERG as _KEV_TO_ERG, L_SUN
 
 # numpy >= 2.0 uses trapezoid; older versions used trapz
 _np_trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
@@ -1111,7 +1111,7 @@ def kubota_done_disc_preintegrated(
     # This equals the spectral integral by energy conservation (same as the
     # full-wavelength code's trapezoid integral, to numerical precision).
     l_bol_unnorm = outer_bol + warm_bol + l_hot_erg
-    l_bol_requested = 10.0**agn_log_lbol * 3.828e33 * agn_frac  # LSUN_ERG
+    l_bol_requested = 10.0**agn_log_lbol * L_SUN * agn_frac
     scale = l_bol_requested / jnp.maximum(l_bol_unnorm, 1e-100)
 
     total_phot = outer_phot + warm_phot + hot_phot

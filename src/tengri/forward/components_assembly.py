@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.utils.physics_constants import C_AA, L_SUN
+
 # ── SSP component: metallicity interpolation + CSP weighted sum ───
 
 
@@ -415,15 +417,14 @@ def build_agn_component(model):
         """
         if is_parametric:
             frac_for_model = 1.0
-            bol_erg = 10.0**agn_log_lbol * 3.828e33  # Lsun → erg/s
+            bol_erg = 10.0**agn_log_lbol * L_SUN
         else:
             frac_for_model = agn_frac
-            _c_aa = 2.99792458e18
-            nu = _c_aa / wave
+            nu = C_AA / wave
             L_bol_stellar = -jnp.trapezoid(sed_so_far, nu)
             bol_erg = L_bol_stellar * agn_frac
-            # AGN model functions expect log10(L_bol / Lsun), convert from erg/s
-            agn_log_lbol = jnp.log10(jnp.maximum(bol_erg, 1e-50)) - jnp.log10(3.828e33)
+            # AGN model functions expect log10(L_bol / Lsun).
+            agn_log_lbol = jnp.log10(jnp.maximum(bol_erg, 1e-50)) - jnp.log10(L_SUN)
 
         agn_sed = agn_model_fn(
             wave,

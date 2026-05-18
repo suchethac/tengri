@@ -112,12 +112,9 @@ def compute_fisher_matrix(forward_model, params, noise, data_type="photometry", 
     # Current parameter values as flat array
     flat = jnp.array([float(params[n]) for n in param_names])
 
-    # Compute Jacobian: (n_data, n_params)
+    # FIM = J^T N^{-1} J with N^{-1} = diag(1/sigma^2).
     jac = jax.jacobian(predict_from_flat)(flat)
-
-    # FIM = J^T @ N^{-1} @ J where N^{-1} = diag(1/sigma^2)
     noise_inv = 1.0 / noise**2
-    # Weighted Jacobian: (n_data, n_params) * (n_data, 1) broadcast
     weighted_jac = jac * noise_inv[:, None]
     fim = jac.T @ weighted_jac
 
