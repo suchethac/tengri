@@ -2379,6 +2379,28 @@ class SEDModel:
         # Velocity dispersion
         has_sigma_v = bool(self._has_sigma_v)
 
+        # Fixed-parameter values from spec. The compositional/hybrid kernels
+        # capture self via closure at build time, so two models with identical
+        # *structural* signature but different Fixed defaults must NOT share
+        # a cached kernel — otherwise the first-built kernel's Fixed values
+        # leak into the second model's predict_photometry({}) call. See
+        # https://github.com/<repo>/issues/<n> for the starburst-vs-quenched
+        # color-leak symptom (the second-built model returned the first
+        # model's u-g colour at z=0.05).
+        def _fixed_value_id(name: str):
+            dist = self.spec.get_distribution(name)
+            val = dist.bounds[0] if dist.bounds is not None else getattr(dist, "value", None)
+            if val is None:
+                return ("none",)
+            if isinstance(val, str):
+                return ("str", val)
+            try:
+                return ("num", round(float(val), 12))
+            except (TypeError, ValueError):
+                return ("repr", repr(val))
+
+        spec_fixed_id = tuple((name, _fixed_value_id(name)) for name in self.spec.fixed_params)
+
         return (
             ssp_flux_shape,
             ssp_lgmet_shape,
@@ -2419,6 +2441,7 @@ class SEDModel:
             radio_include_freefree,
             radio_sfr_mode,
             has_sigma_v,
+            spec_fixed_id,
         )
 
     def predict_photometry(self, params, mode="auto", approx=None):
