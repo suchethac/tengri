@@ -173,7 +173,7 @@ def _draw_demarc(ax):
     ax.plot(nh_grid[m2], kauff03(nh_grid[m2]), "--", color="0.15", lw=1.2, alpha=0.8)
 
 
-for ax, (label, (key, vals, xy)) in zip(axes_flat, results.items()):
+for ax, (label, (_key, vals, xy)) in zip(axes_flat, results.items()):
     cmap = plt.cm.viridis
     n = len(vals)
     # Plot connecting line + colored markers per parameter value

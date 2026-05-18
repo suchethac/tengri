@@ -2756,7 +2756,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compares three inference methods on identical mock data: MAP (point estimate), geoVI/VI (variational approximation), and NUTS (gold-standard MCMC). Shows how each method differs in capturing posterior shape and uncertainty. MAP underestimates uncertainty; VI approximates the shape; NUTS is the reference. This workflow demonstrates method choice tradeoffs for practitioners.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Compares MAP (point estimate) against NUTS (gold-standard MCMC) on identical mock data. MAP underestimates posterior uncertainty by design; NUTS is the reference. VI is omitted from the demo for runtime — see examples/inference/plot_method_comparison.py for a 3-method version.">
 
 .. only:: html
 
