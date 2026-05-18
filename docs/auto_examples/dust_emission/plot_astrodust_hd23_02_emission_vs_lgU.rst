@@ -21,16 +21,17 @@
 Astrodust+PAH emission vs log U
 ================================
 
-Plots :math:`\lambda I_\lambda / N_{\rm H} / U` for several
-:math:`\log_{10} U` values from the Hensley & Draine 2023 grid.
-Dividing by :math:`U` makes the U-dependence of the PAH-vs-FIR
-ratio visible: low-U curves stack atop each other in the FIR while
-the MIR features rise steeply with :math:`U`.
+Emission per H per ionization parameter U across the Hensley & Draine 2023
+grid. Dividing by U reveals its effect: PAH-to-FIR ratio plateaus in FIR
+(U-independent) but rises steeply with U in MIR.
 
-Reproduces tutorial Figure 8 from
-``brandonshensley/Astrodust/notebooks/model_file_tutorial.ipynb``.
+.. sphx-glr-precomputed-img:
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-81
+.. image:: images/sphx_glr_plot_astrodust_hd23_02_emission_vs_lgU_001.png
+   :alt: plot_astrodust_hd23_02_emission_vs_lgU
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-61
 
 
 
@@ -46,37 +47,16 @@ Reproduces tutorial Figure 8 from
 .. code-block:: Python
 
 
-
-    from pathlib import Path
-
     import matplotlib.pyplot as plt
     import numpy as np
 
+    from tengri import data_path
     from tengri.analysis.plotting import setup_style
     from tengri.components.dust.astrodust_hd23 import load_astrodust_hd23_or_raise
 
     setup_style()
 
-
-    def _find_h5():
-        for p in (
-            Path("data/astrodust_templates.h5"),
-            Path("../data/astrodust_templates.h5"),
-            Path("../../data/astrodust_templates.h5"),
-        ):
-            if p.exists():
-                return str(p)
-        return None
-
-
-    _PATH = _find_h5()
-    if _PATH is None:
-        raise FileNotFoundError(
-            "Astrodust HDF5 not found. Build with "
-            "`python scripts/build_astrodust_hdf5.py --download`."
-        )
-
-    tpl = load_astrodust_hd23_or_raise(_PATH)
+    tpl = load_astrodust_hd23_or_raise(data_path("astrodust_templates.h5"))
     wave_um = np.asarray(tpl.wavelength_um)
     lgU = np.asarray(tpl.lgU)
     L_nu_total = np.asarray(tpl.L_nu_total)
@@ -85,17 +65,7 @@ Reproduces tutorial Figure 8 from
     lam_cm = wave_um * 1.0e-4
     lam_I_lam = L_nu_total * c_cgs / (4.0 * np.pi * lam_cm[None, :])
 
-    fig, ax = plt.subplots(figsize=(7.0, 5.0), constrained_layout=True)
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlabel(r"$\lambda\ [\mu\mathrm{m}]$", fontsize=12)
-    ax.set_ylabel(
-        r"$\lambda I_\lambda / (N_{\rm H}\,U)\ [\mathrm{erg\,s^{-1}\,sr^{-1}\,H^{-1}}]$",
-        fontsize=11,
-    )
-    ax.set_xlim(2.0, 1000.0)
-    ax.set_ylim(1.0e-28, 5.0e-25)
-
+    fig, ax = plt.subplots(figsize=(7.0, 5.0))
     cmap = plt.get_cmap("viridis")
     targets = np.arange(-3.0, 6.0, 1.15)
     for k, tg in enumerate(targets):
@@ -108,9 +78,18 @@ Reproduces tutorial Figure 8 from
             lw=1.4,
             label=rf"$\log_{{10}} U={lgU[i]:+.2f}$",
         )
+    ax.set(
+        xscale="log",
+        yscale="log",
+        xlabel=r"$\lambda\ [\mu\mathrm{m}]$",
+        ylabel=r"$\lambda I_\lambda / (N_{\rm H}\,U)\ [\mathrm{erg\,s^{-1}\,sr^{-1}\,H^{-1}}]$",
+        xlim=(2.0, 1000.0),
+        ylim=(1.0e-28, 5.0e-25),
+        title="Astrodust+PAH emission per H per U",
+    )
     ax.legend(loc="lower right", frameon=False, fontsize=8)
-    ax.set_title("Astrodust+PAH emission per H per U", fontsize=11)
-
+    fig.tight_layout()
+    plt.savefig("plot_astrodust_hd23_02_emission_vs_lgU.png", dpi=150, bbox_inches="tight")
     plt.show()
 
 

@@ -21,16 +21,16 @@
 Astrodust+PAH size distribution
 ================================
 
-Per-H grain volume distribution
-:math:`(4\pi/3)\,a^3\,dn/d\ln a / n_{\rm H}` versus grain radius
-for the Hensley & Draine 2023 fiducial size distribution
-(MW high-latitude :math:`R_V=3.1` sightline), reading from the
-HDU 1 metadata embedded in tengri's HDF5.
+Per-H grain volume distribution versus grain radius for the Hensley & Draine
+2023 fiducial size distribution (MW high-latitude :math:`R_V=3.1` sightline).
 
-Reproduces Figure 1 from
-``brandonshensley/Astrodust/notebooks/model_file_tutorial.ipynb``.
+.. sphx-glr-precomputed-img:
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-72
+.. image:: images/sphx_glr_plot_astrodust_hd23_01_size_distribution_001.png
+   :alt: plot_astrodust_hd23_01_size_distribution
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 15-55
 
 
 
@@ -46,36 +46,19 @@ Reproduces Figure 1 from
 .. code-block:: Python
 
 
-
-    from pathlib import Path
-
     import h5py
     import matplotlib.pyplot as plt
     import numpy as np
 
+    from tengri import data_path
+    from tengri.analysis.plotting import setup_style
 
-    def _find_h5():
-        for p in (
-            Path("data/astrodust_templates.h5"),
-            Path("../data/astrodust_templates.h5"),
-            Path("../../data/astrodust_templates.h5"),
-        ):
-            if p.exists():
-                return str(p)
-        return None
+    setup_style()
 
+    with h5py.File(data_path("astrodust_templates.h5"), "r") as f:
+        size_dist = np.asarray(f["size_distribution"])
 
-    _PATH = _find_h5()
-    if _PATH is None:
-        raise FileNotFoundError(
-            "Astrodust HDF5 not found. Build with "
-            "`python scripts/build_astrodust_hdf5.py --download`."
-        )
-
-    with h5py.File(_PATH, "r") as f:
-        size_dist = np.asarray(f["size_distribution"])  # (167, 5)
-
-    rad_um = size_dist[:, 0]  # μm
+    rad_um = size_dist[:, 0]
     dn_Ad_per_H = size_dist[:, 1]
     dn_PAH_per_H = size_dist[:, 2]
     rad_cm = rad_um * 1.0e-4
@@ -84,24 +67,23 @@ Reproduces Figure 1 from
     vol_Ad = (4.0 / 3.0) * np.pi * rad_cm**3 * dn_Ad_per_H / dlna
     vol_PAH = (4.0 / 3.0) * np.pi * rad_cm**3 * dn_PAH_per_H / dlna
 
-    fig, ax = plt.subplots(figsize=(7.0, 5.0), constrained_layout=True)
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlabel(r"$a\ [\mu\mathrm{m}]$", fontsize=14)
-    ax.set_ylabel(
-        r"$(4\pi/3)\,a^3\,dn/d\ln a / n_{\rm H}\ [\mathrm{cm}^3\,\mathrm{H}^{-1}]$",
-        fontsize=12,
-    )
-    ax.set_xlim(3.0e-4, 1.0)
-    ax.set_ylim(1.0e-30, 1.0e-26)
-
+    fig, ax = plt.subplots(figsize=(7.0, 5.0))
     mask = dn_Ad_per_H > 0
     ax.plot(rad_um[mask], vol_Ad[mask], lw=2, color="#e41a1c", label="Astrodust")
     mask = dn_PAH_per_H > 0
     ax.plot(rad_um[mask], vol_PAH[mask], lw=2, color="#0868ac", label="PAHs")
-    ax.legend(loc="upper left", frameon=False, fontsize=12)
-    ax.set_title("Hensley & Draine 2023 fiducial size distribution", fontsize=11)
-
+    ax.set(
+        xscale="log",
+        yscale="log",
+        xlabel=r"$a\ [\mu\mathrm{m}]$",
+        ylabel=r"$(4\pi/3)\,a^3\,dn/d\ln a / n_{\rm H}\ [\mathrm{cm}^3\,\mathrm{H}^{-1}]$",
+        xlim=(3.0e-4, 1.0),
+        ylim=(1.0e-30, 1.0e-26),
+        title="Hensley & Draine 2023 fiducial size distribution",
+    )
+    ax.legend(loc="upper left", frameon=False)
+    fig.tight_layout()
+    plt.savefig("plot_astrodust_hd23_01_size_distribution.png", dpi=150, bbox_inches="tight")
     plt.show()
 
 

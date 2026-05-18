@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:03.024** total execution time for 144 files **from all galleries**:
+**00:17.335** total execution time for 144 files **from all galleries**:
 
 .. container::
 
@@ -32,11 +32,68 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_tau_bc_sweep.py` (``../examples/dust_attenuation/plot_tau_bc_sweep.py``)
-     - 00:02.520
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_T_sweep.py` (``../examples/dust_emission/plot_dust_T_sweep.py``)
+     - 00:02.607
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_tau_diff_sweep.py` (``../examples/dust_attenuation/plot_tau_diff_sweep.py``)
-     - 00:00.504
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_04_sedmodel_dust_emission_swap.py` (``../examples/dust_emission/plot_astrodust_hd23_04_sedmodel_dust_emission_swap.py``)
+     - 00:02.068
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_qpah_umin_grid.py` (``../examples/dust_emission/plot_dust_qpah_umin_grid.py``)
+     - 00:01.880
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_emission_models.py` (``../examples/dust_emission/plot_dust_emission_models.py``)
+     - 00:01.545
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_pahspec_lgU_sweep.py` (``../examples/dust_emission/plot_pahspec_lgU_sweep.py``)
+     - 00:01.300
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_pahspec_starlight_sweep.py` (``../examples/dust_emission/plot_pahspec_starlight_sweep.py``)
+     - 00:00.864
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_06_extinction_and_scattering.py` (``../examples/dust_emission/plot_astrodust_hd23_06_extinction_and_scattering.py``)
+     - 00:00.618
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_themis_alpha_sweep.py` (``../examples/dust_emission/plot_themis_alpha_sweep.py``)
+     - 00:00.593
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_08_polarized_emission.py` (``../examples/dust_emission/plot_astrodust_hd23_08_polarized_emission.py``)
+     - 00:00.585
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_qpah_sweep.py` (``../examples/dust_emission/plot_qpah_sweep.py``)
+     - 00:00.546
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_bosa_ssfr_sweep.py` (``../examples/dust_emission/plot_bosa_ssfr_sweep.py``)
+     - 00:00.521
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_03_components_at_fiducial_U.py` (``../examples/dust_emission/plot_astrodust_hd23_03_components_at_fiducial_U.py``)
+     - 00:00.498
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_umin_sweep.py` (``../examples/dust_emission/plot_umin_sweep.py``)
+     - 00:00.496
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_bosa_ltir_sweep.py` (``../examples/dust_emission/plot_bosa_ltir_sweep.py``)
+     - 00:00.492
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_themis_umin_sweep.py` (``../examples/dust_emission/plot_themis_umin_sweep.py``)
+     - 00:00.484
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_themis_qhac_sweep.py` (``../examples/dust_emission/plot_themis_qhac_sweep.py``)
+     - 00:00.437
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_02_emission_vs_lgU.py` (``../examples/dust_emission/plot_astrodust_hd23_02_emission_vs_lgU.py``)
+     - 00:00.407
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_05_ionization_alignment.py` (``../examples/dust_emission/plot_astrodust_hd23_05_ionization_alignment.py``)
+     - 00:00.399
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_01_size_distribution.py` (``../examples/dust_emission/plot_astrodust_hd23_01_size_distribution.py``)
+     - 00:00.396
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_lgU_sweep.py` (``../examples/dust_emission/plot_astrodust_hd23_lgU_sweep.py``)
+     - 00:00.373
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_07_spinning_dust.py` (``../examples/dust_emission/plot_astrodust_hd23_07_spinning_dust.py``)
+     - 00:00.225
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
      - 00:00.000
@@ -131,73 +188,16 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_slope_sweep.py` (``../examples/dust_attenuation/plot_dust_slope_sweep.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_tau_bc_sweep.py` (``../examples/dust_attenuation/plot_tau_bc_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_tau_diff_sweep.py` (``../examples/dust_attenuation/plot_tau_diff_sweep.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_two_component.py` (``../examples/dust_attenuation/plot_two_component.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_uv_bump_sweep.py` (``../examples/dust_attenuation/plot_uv_bump_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_01_size_distribution.py` (``../examples/dust_emission/plot_astrodust_hd23_01_size_distribution.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_02_emission_vs_lgU.py` (``../examples/dust_emission/plot_astrodust_hd23_02_emission_vs_lgU.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_03_components_at_fiducial_U.py` (``../examples/dust_emission/plot_astrodust_hd23_03_components_at_fiducial_U.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_04_sedmodel_dust_emission_swap.py` (``../examples/dust_emission/plot_astrodust_hd23_04_sedmodel_dust_emission_swap.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_05_ionization_alignment.py` (``../examples/dust_emission/plot_astrodust_hd23_05_ionization_alignment.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_06_extinction_and_scattering.py` (``../examples/dust_emission/plot_astrodust_hd23_06_extinction_and_scattering.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_07_spinning_dust.py` (``../examples/dust_emission/plot_astrodust_hd23_07_spinning_dust.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_08_polarized_emission.py` (``../examples/dust_emission/plot_astrodust_hd23_08_polarized_emission.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_lgU_sweep.py` (``../examples/dust_emission/plot_astrodust_hd23_lgU_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_bosa_ltir_sweep.py` (``../examples/dust_emission/plot_bosa_ltir_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_bosa_ssfr_sweep.py` (``../examples/dust_emission/plot_bosa_ssfr_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_T_sweep.py` (``../examples/dust_emission/plot_dust_T_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_emission_models.py` (``../examples/dust_emission/plot_dust_emission_models.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_qpah_umin_grid.py` (``../examples/dust_emission/plot_dust_qpah_umin_grid.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_pahspec_lgU_sweep.py` (``../examples/dust_emission/plot_pahspec_lgU_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_pahspec_starlight_sweep.py` (``../examples/dust_emission/plot_pahspec_starlight_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_qpah_sweep.py` (``../examples/dust_emission/plot_qpah_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_themis_alpha_sweep.py` (``../examples/dust_emission/plot_themis_alpha_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_themis_qhac_sweep.py` (``../examples/dust_emission/plot_themis_qhac_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_themis_umin_sweep.py` (``../examples/dust_emission/plot_themis_umin_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_umin_sweep.py` (``../examples/dust_emission/plot_umin_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_dla_absorption.py` (``../examples/igm/plot_dla_absorption.py``)

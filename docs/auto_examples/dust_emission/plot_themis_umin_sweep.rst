@@ -19,19 +19,19 @@
 
 
 THEMIS: U_min sweep at fixed q_HAC
-====================================
+===================================
 
-Sweep ``U_min`` over the full published 37-point CIGALE grid
-(0.10 to 80.0) at the fiducial ``q_HAC = 0.17`` and ``alpha = 2``.
-Higher U warms the dust → FIR peak shifts blueward and the MIR
-small-grain emission grows relative to the FIR cold peak.
+Sweep minimum radiation field strength across the THEMIS grid at fixed
+hydrocarbon grain content. Higher U warms dust, shifting FIR peak
+blueward and strengthening mid-IR grain emission relative to far-IR.
 
-Reference
----------
-Jones, A.P., Köhler, M., Ysard, N., et al. 2017, A&A 602, A46
-(arXiv:1703.00775). Templates via CIGALE.
+.. sphx-glr-precomputed-img:
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-90
+.. image:: images/sphx_glr_plot_themis_umin_sweep_001.png
+   :alt: plot_themis_umin_sweep
+   :class: sphx-glr-single-img
+
+.. GENERATED FROM PYTHON SOURCE LINES 16-62
 
 
 
@@ -47,40 +47,16 @@ Jones, A.P., Köhler, M., Ysard, N., et al. 2017, A&A 602, A46
 .. code-block:: Python
 
 
-
-    from pathlib import Path
-
     import h5py
-    import jax
     import matplotlib.pyplot as plt
     import numpy as np
 
-    jax.config.update("jax_enable_x64", True)
-
+    from tengri import data_path
     from tengri.analysis.plotting import setup_style
 
     setup_style()
 
-
-    def _find_h5():
-        for p in (
-            Path("data/themis_templates.h5"),
-            Path("../data/themis_templates.h5"),
-            Path("../../data/themis_templates.h5"),
-        ):
-            if p.exists():
-                return str(p)
-        return None
-
-
-    _PATH = _find_h5()
-    if _PATH is None:
-        raise FileNotFoundError(
-            "THEMIS HDF5 not found. Build with "
-            "`python scripts/build_themis_hdf5.py --clone`."
-        )
-
-    with h5py.File(_PATH, "r") as f:
+    with h5py.File(data_path("themis_templates.h5"), "r") as f:
         wave_aa = np.asarray(f["wavelength_aa"][:])
         qhac_grid = np.asarray(f["qhac_grid"][:])
         umin_grid = np.asarray(f["umin_grid"][:])
@@ -91,35 +67,30 @@ Jones, A.P., Köhler, M., Ysard, N., et al. 2017, A&A 602, A46
     c_aa_per_s = 2.99792458e18
     nu = c_aa_per_s / wave_aa
 
-    fig, ax = plt.subplots(figsize=(8.0, 5.5), constrained_layout=True)
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlabel(r"$\lambda\ [\mu\mathrm{m}]$", fontsize=12)
-    ax.set_ylabel(
-        r"$\nu L_\nu\ [\mathrm{normalised}\ \int L_\nu d\nu = 1]$",
-        fontsize=11,
-    )
-    ax.set_xlim(2.0, 1.0e3)
-    ax.set_ylim(1.0e-26, 1.0e-22)
-
+    fig, ax = plt.subplots(figsize=(8.0, 5.5))
     cmap = plt.get_cmap("plasma")
-    # Subsample 12 representative points across the full 37-point grid.
     idx_show = np.linspace(0, len(umin_grid) - 1, 12).astype(int)
     for k, iu in enumerate(idx_show):
         L_nu = single_u[i_qhac, iu]
         ax.plot(
-            wave_um, nu * L_nu,
+            wave_um,
+            nu * L_nu,
             color=cmap(k / max(1, len(idx_show) - 1)),
             lw=1.3,
             label=rf"$U_{{\rm min}}={umin_grid[iu]:.2f}$",
         )
-
-    ax.legend(loc="upper left", frameon=False, fontsize=8, ncol=2)
-    ax.set_title(
-        rf"THEMIS (Jones+2017) at $q_{{\rm HAC}}={qhac_grid[i_qhac]:.2f}$, $\alpha=2$",
-        fontsize=11,
+    ax.set(
+        xscale="log",
+        yscale="log",
+        xlabel=r"$\lambda\ [\mu\mathrm{m}]$",
+        ylabel=r"$\nu L_\nu\ [\mathrm{normalised}\ \int L_\nu d\nu = 1]$",
+        xlim=(2.0, 1.0e3),
+        ylim=(1.0e-26, 1.0e-22),
+        title=rf"THEMIS (Jones+2017) at $q_{{\rm HAC}}={qhac_grid[i_qhac]:.2f}$, $\alpha=2$",
     )
-
+    ax.legend(loc="upper left", frameon=False, fontsize=8, ncol=2)
+    fig.tight_layout()
+    plt.savefig("plot_themis_umin_sweep.png", dpi=150, bbox_inches="tight")
     plt.show()
 
 
