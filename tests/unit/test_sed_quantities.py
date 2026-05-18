@@ -17,9 +17,9 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
+from tengri.utils.physics_constants import L_SUN as LSUN_ERG
 from tengri.utils.sed_quantities import (
     C_AA,
-    LSUN_ERG,
     PC_CM,
     compute_balmer_break,
     compute_bolometric_luminosity,
