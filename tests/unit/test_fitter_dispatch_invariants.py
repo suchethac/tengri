@@ -207,7 +207,7 @@ class TestAutoDispatchRouting:
         calls: dict[str, int] = {"mcmc_nuts": 0, "vi_nonlinear_fast": 0}
 
         def make_runner(name):
-            def runner(context, *, key, init_from=None, **kw):  # noqa: ARG001
+            def runner(context, *, key, init_from=None, **kw):
                 calls[name] += 1
                 return sentinel
 
@@ -260,7 +260,7 @@ class TestAutoDispatchRouting:
         calls: dict[str, int] = {"mcmc_nuts": 0, "vi_nonlinear_fast": 0}
 
         def make_runner(name):
-            def runner(context, *, key, init_from=None, **kw):  # noqa: ARG001
+            def runner(context, *, key, init_from=None, **kw):
                 calls[name] += 1
                 return MagicMock(name=f"{name}_posterior")
 
@@ -311,7 +311,7 @@ class TestMcmcDispatchRouting:
         calls: dict[str, int] = {"mcmc_nuts": 0, "mcmc_raytrace": 0}
 
         def make_runner(name):
-            def runner(context, *, key, init_from=None, **kw):  # noqa: ARG001
+            def runner(context, *, key, init_from=None, **kw):
                 calls[name] += 1
                 return MagicMock(name=f"{name}_posterior")
 
