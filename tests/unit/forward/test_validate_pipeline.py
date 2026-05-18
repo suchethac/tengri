@@ -63,9 +63,7 @@ class TestHappyPath:
         validate_pipeline([])
 
     def test_pipeline_with_only_publishers(self):
-        validate_pipeline(
-            [_mk("FakePublisher", publishes=(DerivedKey("L_ir", "erg/s"),))]
-        )
+        validate_pipeline([_mk("FakePublisher", publishes=(DerivedKey("L_ir", "erg/s"),))])
 
     def test_publisher_then_consumer(self):
         publisher = _mk("FakeDust", publishes=(DerivedKey("L_ir", "erg/s"),))
