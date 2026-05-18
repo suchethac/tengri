@@ -243,20 +243,50 @@ class DerivedBundle:
     # ── migration helpers ─────────────────────────────────────
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> DerivedBundle:
+    def from_dict(
+        cls,
+        d: dict[str, Any],
+        *,
+        allow_extras: bool = False,
+    ) -> DerivedBundle:
         """Build a bundle from a plain dict.
 
         Keys matching typed fields populate those fields directly.
-        Keys NOT in the typed set land in ``_extras`` rather than
-        raising — this is the migration shim's whole point: existing
-        write sites can spray dict keys, and the resulting bundle
-        still answers ``__getitem__`` for them. Once every write site
-        is migrated, the validator should additionally assert that
-        ``_extras`` is empty for production builds.
+
+        **Phase 4 (ADR-0007) — strict by default.** As of 2026-05-18,
+        when ``allow_extras=False`` (the default), keys not in the
+        typed set raise :class:`TypeError` with a Levenshtein-2
+        ``Did you mean: ...`` hint. The migration shim that silently
+        spilled unknown keys into ``_extras`` was load-bearing during
+        Phase 3 component migration; now that every internal write
+        site is typed (PRs #45-#49), the spillover would only mask
+        bugs.
+
+        Pass ``allow_extras=True`` to opt into the legacy spillover
+        behaviour. Existing tests that exercise that path use this
+        kwarg; production code paths
+        (``PipelineState.__post_init__`` and ``PipelineState.with_``)
+        leave it ``False`` so any stale dict-style write with a
+        typo'd key fails loudly at trace time.
         """
         known = set(cls.field_names())
         typed = {k: v for k, v in d.items() if k in known}
         extras = {k: v for k, v in d.items() if k not in known}
+        if extras and not allow_extras:
+            # Pick the first offender so the error message is short
+            # and stable. The hint pinpoints likely typos at distance
+            # ≤ 2 — same UX as ``with_(unknown=…)``.
+            offender = next(iter(extras))
+            hint = _did_you_mean(offender, known)
+            suffix = f" (Did you mean: {hint!r}?)" if hint else ""
+            raise TypeError(
+                f"DerivedBundle.from_dict received {len(extras)} unknown "
+                f"key(s): first is {offender!r}.{suffix} The dict-style "
+                f"write path is closed as of ADR-0007 Phase 4 — use "
+                f"``state.derived.with_(...)`` to set typed fields, or "
+                f"pass ``allow_extras=True`` to opt into the legacy "
+                f"spillover-to-_extras shim for migration / debugging."
+            )
         return cls(**typed, _extras=extras)
 
     def to_dict(self) -> dict[str, Any]:
