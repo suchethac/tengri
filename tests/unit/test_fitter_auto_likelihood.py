@@ -49,11 +49,9 @@ def _make_helper_only_fitter(
     """Build a thin proxy carrying every attribute the auto-build path
     reads.
 
-    Methods on :class:`Fitter` (``_build_base_likelihood``,
-    ``_build_likelihood_extras``, ``_n_phot_split``,
-    ``_make_eline_design_builder``) are invoked via the unbound form
-    so we don't need a real :class:`Fitter` instance (which spawns a
-    background compile thread we don't want for unit tests).
+    Likelihood builders (``build_base_likelihood``, ``build_likelihood_extras``)
+    are invoked via the likelihood module so we don't need a real :class:`Fitter`
+    instance (which spawns a background compile thread we don't want for unit tests).
     """
     spec = SimpleNamespace(all_params=[], free_params=[])
     obs = SimpleNamespace(n_data_phot=n_data_phot)
@@ -81,13 +79,12 @@ def _make_helper_only_fitter(
 
 def _make_proxy(**kw):
     """Make the proxy and self-reference it so bound lambdas work."""
+    from tengri.inference.likelihood import build_base_likelihood, build_likelihood_extras
+
     proxy = _make_helper_only_fitter(**kw)
-    # Re-bind helpers to the actual proxy (lambda closure captured the
-    # local '_proxy' name, which doesn't exist there — fix it now).
-    proxy._build_base_likelihood = lambda: Fitter._build_base_likelihood(proxy)
-    proxy._build_likelihood_extras = lambda: Fitter._build_likelihood_extras(proxy)
-    proxy._n_phot_split = lambda: Fitter._n_phot_split(proxy)
-    proxy._make_eline_design_builder = lambda: Fitter._make_eline_design_builder(proxy)
+    # Re-bind helpers to the actual proxy via the extracted likelihood module
+    proxy._build_base_likelihood = lambda: build_base_likelihood(proxy)
+    proxy._build_likelihood_extras = lambda: build_likelihood_extras(proxy)
     return proxy
 
 
@@ -336,7 +333,7 @@ def test_eline_fitted_auto_builds_fitted_likelihood():
 def test_joint_without_n_data_phot_raises_assertion():
     """Joint data requires model.observation.n_data_phot — used to be a
     silent None bail-out (so legacy χ² fall-through fired with the
-    wrong likelihood); now an explicit assertion flags the
+    wrong likelihood); now an explicit error flags the
     misconfiguration loudly. Phase II-2.3 cleanup."""
     fitter = _make_proxy(
         data=[1.0] * 6,
@@ -344,7 +341,7 @@ def test_joint_without_n_data_phot_raises_assertion():
         data_type="joint",
         n_data_phot=None,
     )
-    with pytest.raises(AssertionError, match="n_data_phot"):
+    with pytest.raises(ValueError, match="n_data_phot"):
         Fitter._maybe_build_default_likelihood(fitter)
 
 
