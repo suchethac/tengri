@@ -92,6 +92,11 @@ class ParamDeclaration(NamedTuple):
     description : str
         One-line human-readable description, mirrored into the prior
         registry when a component's parameters are registered.
+    units : str
+        Free-form units string (e.g. ``"Myr"``, ``"erg/s/Hz"``,
+        ``"Msun/yr"``, ``"dex"``). Used by translation and introspection
+        code to document parameter semantics and perform conversions.
+        Empty string means unitless or not-yet-documented.
     bound_check : Any, optional
         Callable ``(lo, hi) -> bool`` invoked when a user narrows the
         prior at construction time. Returns ``True`` for an admissible
@@ -106,6 +111,7 @@ class ParamDeclaration(NamedTuple):
     name: str
     prior: Any
     description: str = ""
+    units: str = ""
     bound_check: Any = None
     bound_error: str = ""
 

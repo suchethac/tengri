@@ -31,6 +31,7 @@ from tengri.core.component import ParamDeclaration
 
 __all__ = [
     "ParameterRecord",
+    "as_param_map",
     "describe_parameter",
     "list_parameters",
     "recipe_parameters",
@@ -56,6 +57,8 @@ class ParameterRecord(NamedTuple):
         Identical to :class:`ParamDeclaration.prior`.
     description : str
         One-line human-readable description.
+    units : str
+        Free-form units string. Identical to :class:`ParamDeclaration.units`.
     owner : str
         Fully-qualified module path of the ``_params.py`` that exports
         this parameter, e.g.
@@ -70,6 +73,7 @@ class ParameterRecord(NamedTuple):
     name: str
     prior: object
     description: str
+    units: str
     owner: str
     group: str
 
@@ -127,6 +131,7 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
                     name=decl.name,
                     prior=decl.prior,
                     description=decl.description,
+                    units=decl.units,
                     owner=module_info.name,
                     group=attr_name,
                 )
@@ -154,6 +159,7 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
                     name=decl.name,
                     prior=decl.prior,
                     description=decl.description,
+                    units=decl.units,
                     owner="tengri.parameters._shared",
                     group=attr_name,
                 )
@@ -203,6 +209,46 @@ def _clear_cache() -> None:
     """Drop the cached registry. Re-imports happen on the next call."""
     global _CACHE
     _CACHE = None
+
+
+def as_param_map() -> dict[str, tuple[str, float, float, str]]:
+    """Return parameter map as {public: (internal, scale, offset, units)}.
+
+    This is the canonical view for parameter translation. Each entry maps
+    a public parameter name to a 4-tuple of:
+    - internal name (used internally in computations)
+    - scale factor (multiplicative conversion)
+    - offset (additive conversion: internal = scale * public + offset)
+    - units string (e.g. "Myr", "erg/s/Hz", "Z/Zsun")
+
+    For parameters with identity translation (internal == public), the
+    scale is 1.0, offset is 0.0, and units still documents the parameter.
+
+    This function returns the base translation map without SFH-specific
+    logic (which is handled by :func:`tengri.parameters.translate._build_param_map`).
+
+    Returns
+    -------
+    dict[str, tuple[str, float, float, str]]
+        A mapping from public parameter name to (internal, scale, offset, units).
+        The map includes all declared parameters from the registry. The
+        ``tengri.parameters.translate`` module applies SFH resolution
+        and dust-model selection on top of this base.
+
+    Notes
+    -----
+    For most parameters, this returns identity mappings with units
+    inherited from the component declarations. Some parameters may need
+    unit conversion; those are defined explicitly elsewhere (e.g., in
+    ``tengri.parameters._shared.py``) with non-unit-scale entries.
+    """
+    reg = registry()
+    result: dict[str, tuple[str, float, float, str]] = {}
+    for name, record in reg.items():
+        # Default identity mapping: internal == public, scale=1.0, offset=0.0
+        # The translate module will override specific entries with unit conversions.
+        result[name] = (name, 1.0, 0.0, record.units)
+    return result
 
 
 def list_parameters(prefix: str | None = None) -> list[str]:
