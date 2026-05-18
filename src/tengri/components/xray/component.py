@@ -112,17 +112,35 @@ class XRaySEDComponent:
 
         See :func:`tengri.forward.orchestrator.validate_pipeline`.
 
-        Notes
-        -----
-        X-ray reads ``sfr``, ``log_mstar``, and ``L_agn_bol`` opportunistically
-        with documented fallbacks. Those reads are NOT declared in
-        :meth:`requires` — only hard dependencies belong there.
         """
         return (
             DerivedKey(
                 "sed_xray",
                 "erg/s/Hz",
                 "X-ray luminosity contribution on pipeline wave grid",
+            ),
+        )
+
+    def requires_optional(self) -> tuple[DerivedKey, ...]:
+        """Cross-component derived keys X-ray reads *opportunistically*.
+
+        Read from ``state.derived`` with documented fallbacks. The
+        validator does NOT require an upstream publisher, but it WILL
+        check that if one is present, its units match. Catches a future
+        publisher rename or unit drift without forcing every pipeline
+        to instantiate stellar + AGN. Phase B of #21 — see ADR-0004.
+        """
+        return (
+            DerivedKey("sfr", "Msun/yr", "Read from stellar if present; falls back to 1.0"),
+            DerivedKey(
+                "log_mstar",
+                "dex",
+                "Read from stellar if present; falls back to 10.0",
+            ),
+            DerivedKey(
+                "L_agn_bol",
+                "erg/s",
+                "Read from AGN if present; falls back to 0.0",
             ),
         )
 

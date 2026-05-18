@@ -159,12 +159,6 @@ class RadioSEDComponent:
 
         See :func:`tengri.forward.orchestrator.validate_pipeline`.
 
-        Notes
-        -----
-        Radio reads ``L_ir``, ``L_agn_bol``, and ``log_mstar`` opportunistically
-        with documented fallbacks (so the component can run standalone in
-        photometry-only pipelines). Those reads are NOT declared in
-        :meth:`requires` — only hard dependencies belong there.
         """
         return (
             DerivedKey(
@@ -172,6 +166,22 @@ class RadioSEDComponent:
                 "erg/s/Hz",
                 "Radio luminosity contribution on pipeline wave grid",
             ),
+        )
+
+    def requires_optional(self) -> tuple[DerivedKey, ...]:
+        """Cross-component derived keys radio reads *opportunistically*.
+
+        Read from ``state.derived`` with documented fallbacks so radio
+        remains usable in pipelines that omit the upstream publisher
+        (photometry-only fits without dust or AGN). The validator does
+        NOT require an upstream publisher for these, but it WILL check
+        that if one is present, its units match. Catches a future
+        publisher rename or unit drift. Phase B of #21 — see ADR-0004.
+        """
+        return (
+            DerivedKey("L_ir", "erg/s", "Read from dust if present; falls back to 0.0"),
+            DerivedKey("L_agn_bol", "erg/s", "Read from AGN if present; falls back to 0.0"),
+            DerivedKey("log_mstar", "dex", "Read from stellar if present; falls back to 10.0"),
         )
 
     def precompute(

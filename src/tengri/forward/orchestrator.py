@@ -202,6 +202,10 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
         fn = getattr(c, "requires", None)
         return tuple(fn()) if callable(fn) else ()
 
+    def _requires_optional(c: SEDComponent) -> tuple[DerivedKey, ...]:
+        fn = getattr(c, "requires_optional", None)
+        return tuple(fn()) if callable(fn) else ()
+
     # Stage 1: build the publish map (component-order indexed) and check
     # duplicate publish + canonical-units agreement on the publish side.
     publishers: dict[str, tuple[int, SEDComponent, DerivedKey]] = {}
@@ -269,6 +273,45 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
             if pub_key.units != needed.units:
                 raise PipelineContractError(
                     f"Component {type(component).__name__!r} requires "
+                    f"{needed.name!r} in {needed.units!r} but "
+                    f"{type(pub_comp).__name__!r} publishes it in "
+                    f"{pub_key.units!r}. The contract refuses to silently "
+                    f"convert; fix one of the units strings (the canonical "
+                    f"answer is in _CANONICAL_UNITS)."
+                )
+
+    # Stage 3: optional reads — Phase B of issue #21. Same checks as
+    # required reads EXCEPT that a missing publisher is OK (the
+    # consumer has a documented fallback). Catches a future publisher
+    # rename or unit drift without forcing every pipeline to instantiate
+    # the optional upstream component.
+    for idx, component in enumerate(component_list):
+        for needed in _requires_optional(component):
+            if not isinstance(needed, DerivedKey):
+                raise PipelineContractError(
+                    f"Component {type(component).__name__!r} requires_optional() "
+                    f"returned a non-DerivedKey entry of type {type(needed).__name__}"
+                )
+            canonical = _CANONICAL_UNITS.get(needed.name)
+            if canonical is not None and needed.units != canonical:
+                raise PipelineContractError(
+                    f"Component {type(component).__name__!r} optionally requires "
+                    f"{needed.name!r} in {needed.units!r} but the "
+                    f"canonical-units table pins it to {canonical!r}."
+                )
+            if needed.name not in publishers:
+                continue  # no upstream publisher → fallback applies; not an error
+            pub_idx, pub_comp, pub_key = publishers[needed.name]
+            if pub_idx >= idx:
+                raise PipelineContractError(
+                    f"Component {type(component).__name__!r} (position {idx}) "
+                    f"optionally requires {needed.name!r} but it is published by "
+                    f"{type(pub_comp).__name__!r} at position {pub_idx} — "
+                    f"the publisher must come strictly before the consumer."
+                )
+            if pub_key.units != needed.units:
+                raise PipelineContractError(
+                    f"Component {type(component).__name__!r} optionally requires "
                     f"{needed.name!r} in {needed.units!r} but "
                     f"{type(pub_comp).__name__!r} publishes it in "
                     f"{pub_key.units!r}. The contract refuses to silently "
