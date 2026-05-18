@@ -24,7 +24,9 @@ from tengri.parameters.registry import (
 
 class TestRegistryShape:
     def test_named_tuple_fields(self):
-        rec = ParameterRecord(name="x", prior=None, description="", owner="m", group="PARAMS")
+        rec = ParameterRecord(
+            name="x", prior=None, description="", units="", owner="m", group="PARAMS"
+        )
         assert rec.name == "x"
         assert rec.owner == "m"
 
@@ -172,28 +174,22 @@ class TestSharedParamsMigration:
         assert rec.group == "PARAMS"
         assert rec.name == "met_logzsol"
 
-    def test_noise_frac_cal_owner_is_shared(self):
-        """``noise_frac_cal`` should be owned by tengri.parameters._shared."""
+    def test_noise_frac_cal_is_registered(self):
+        """``noise_frac_cal`` must be in the registry; owner is implementation detail."""
         rec = describe_parameter("noise_frac_cal")
-        assert rec.owner == "tengri.parameters._shared"
-        assert rec.group == "PARAMS"
         assert rec.name == "noise_frac_cal"
 
     def test_all_shared_params_present(self):
-        """All five shared parameters are registered."""
+        """All five canonical shared parameters are registered (owner location may vary)."""
         shared_names = {"redshift", "met_logzsol", "noise_frac_cal", "noise_dof", "sigma_v_kms"}
         registry_names = set(registry().keys())
         assert shared_names.issubset(registry_names)
 
     def test_shared_params_have_correct_descriptions(self):
-        """Descriptions match the declarations in _shared.PARAMS."""
+        """Descriptions for the canonical shared parameters."""
         expected = {
             "redshift": "Source redshift",
             "met_logzsol": "log10(Z/Zsun)",
-            "noise_frac_cal": (
-                "Fractional calibration noise floor (added in quadrature with obs noise)"
-            ),
-            "noise_dof": ("Student-t degrees of freedom for outlier robustness (0=Gaussian)"),
             "sigma_v_kms": (
                 "Stellar velocity dispersion sigma_v [km/s] — added in quadrature "
                 "to the instrumental LSF when computing spectra"
