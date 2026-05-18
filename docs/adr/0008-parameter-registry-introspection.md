@@ -1,4 +1,11 @@
-# ADR-0005: Parameter registry — introspection over de-facto decentralisation
+# ADR-0008: Parameter registry — introspection over de-facto decentralisation
+
+> Originally numbered ADR-0005 when authored on 2026-05-18 in PR #34;
+> renumbered to 0008 by PR #40 (`docs(adr): renumber to restore
+> monotonic 0001–0008 sequence`). The decision itself and the
+> cross-references in source-code docstrings still read "ADR-0005" —
+> those are the conceptual decision numbers at authoring time, kept
+> stable so commit messages and code comments remain anchored.
 
 - **Status:** Accepted (2026-05-18)
 - **Stakeholders:** Suchetha; future contributors adding physics blocks
