@@ -7,6 +7,22 @@ Usage::
 
     from tengri.forward.precompute import PrecomputeModule, PreintegratedGrid
     from tengri.forward.precompute import preintegrate_grid, slice_fixed_axes
+
+Where precompute strategies live
+--------------------------------
+
+This package is the **protocol + registry** for precompute. The concrete
+strategy for each component lives next to that component's physics::
+
+    components/agn/{disc,cat3d,silva04,skirtor}_precompute.py
+    components/dust/{dust_analytic,dust_emission}_precompute.py
+    components/nebular/{cloudy,cue,mappings_photo,feltre}_precompute.py
+    components/stellar/sps/precompute.py
+
+Each implements :class:`PrecomputeModule` and registers via
+``@register_precompute_module(...)``. To add preintegration to a new
+component, copy the smallest existing implementation
+(``stellar/sps/precompute.py``) and adapt.
 """
 
 from tengri.forward.precompute.protocol import PrecomputeModule
