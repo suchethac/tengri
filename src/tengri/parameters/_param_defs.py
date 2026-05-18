@@ -11,34 +11,47 @@ rather than data tables.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
+from tengri.core.component import ParamDeclaration
 from tengri.parameters.priors import Fixed, Uniform
+
+
+def _bucket_from_declarations(
+    decls: Iterable[ParamDeclaration],
+) -> dict[str, tuple[str, object, str, object]]:
+    """Adapter: component-owned :class:`ParamDeclaration` tuple → legacy
+    4-tuple bucket dict consumed by :func:`_build_param_registry` and by
+    :mod:`tengri.parameters.translate`.
+
+    A ``bound_check`` of ``None`` is normalised to ``lambda lo, hi: True``
+    so the downstream code that always calls the check stays branch-free.
+    """
+    return {
+        d.name: (
+            d.description,
+            d.bound_check if d.bound_check is not None else (lambda lo, hi: True),
+            d.bound_error,
+            d.prior,
+        )
+        for d in decls
+    }
+
 
 # ── Non-SFH parameter registry ─────────────────────────────────────────
 
+# ``_NON_SFH_PARAMS`` was historically a junk drawer covering metallicity,
+# dust attenuation, redshift, noise, and spectroscopy params. PR4 split
+# it: dust attenuation entries moved to
+# :mod:`tengri.components.dust._params` (``ATTENUATION_PARAMS``), and the
+# remainder (``met_logzsol``, ``redshift``, ``noise_*``, ``sigma_v_kms``)
+# stays here as the genuinely shared / non-component-owned set.
 _NON_SFH_PARAMS = {
     "met_logzsol": (
         "log10(Z/Zsun)",
         lambda lo, hi: True,
         "",
         Uniform(-2.0, 0.2),
-    ),
-    "dust_tau_bc": (
-        "Birth cloud optical depth",
-        lambda lo, hi: lo >= 0,
-        "must have lo >= 0",
-        Uniform(0.0, 4.0),
-    ),
-    "dust_tau_diff": (
-        "Diffuse ISM optical depth",
-        lambda lo, hi: lo >= 0,
-        "must have lo >= 0",
-        Uniform(0.0, 3.0),
-    ),
-    "dust_slope": (
-        "Dust power-law index",
-        lambda lo, hi: True,
-        "",
-        Fixed(-0.7),
     ),
     "redshift": (
         "Source redshift",
@@ -67,891 +80,51 @@ _NON_SFH_PARAMS = {
     ),
 }
 
-# Parameters that are only added when specific modules are enabled
-_NEBULAR_PARAMS = {
-    "neb_logU": (
-        "Ionization parameter log10(U)",
-        lambda lo, hi: lo >= -5 and hi <= 0,
-        "must be in [-5, 0]",
-        Fixed(-3.0),
-    ),
-    "neb_logZ_gas": (
-        "Gas-phase metallicity log10(Z_gas/Zsun)",
-        lambda lo, hi: True,
-        "",
-        Fixed(-0.3),  # will be overridden to match met_logzsol if not set
-    ),
-    "neb_fesc": (
-        "Ionizing photon escape fraction",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.0),
-    ),
-    "neb_fesc_lya": (
-        "Ly-alpha escape fraction (resonant scattering)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.0),
-    ),
-    "neb_dig_frac": (
-        "DIG fraction of nebular emission (Tacchella+2022)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.0),
-    ),
-    "neb_dig_delta_logU": (
-        "DIG ionization parameter offset (dex, negative)",
-        lambda lo, hi: lo >= -4 and hi <= 0,
-        "must be in [-4, 0]",
-        Fixed(-1.0),
-    ),
-}
-
-# ── CB_19 extra parameters (nebular == "cb19") ────────────────────────
-# CB_19 extends the base CLOUDY grid with three additional continuous axes:
-# density, C/O ratio, and ΔN/O. These have no counterpart in the FSPS/Byler grid.
+# All conditional / component-owned buckets are resolved lazily via the
+# module-level ``__getattr__`` defined near the bottom of this file. The
+# canonical sources live under ``tengri.components.<name>._params``:
 #
-# Unit convention reminder: CB_19 stores L_line/L_Hβ (dimensionless ratios).
-# The CB19Backend converts to L_sun/Q_H using L_Hβ/Q_H = 4.78e-13 erg/photon
-# (Case B, T_e=10^4 K; Osterbrock & Ferland 2006, Table 4.4).
-_CB19_PARAMS = {
-    "neb_log_nH": (
-        "Log hydrogen density log10(n_H / cm⁻³) for CB_19 grid [grid range: 1–4]",
-        lambda lo, hi: lo >= 0 and hi <= 6,
-        "must be in [0, 6] (CB_19 grid: 1–4; extrapolated outside)",
-        Fixed(2.0),  # n_H = 100 cm⁻³, typical HII region
-    ),
-    "neb_co": (
-        "Log C/O abundance ratio log10(C/O) for CB_19 grid [grid range: −1 to 0.15]",
-        lambda lo, hi: lo >= -3 and hi <= 2,
-        "must be in [−3, 2]",
-        Fixed(-0.36),  # near-solar C/O (CLOUDY c17 default)
-    ),
-    "neb_dno": (
-        "ΔN/O offset (log10) from default N/O–O/H scaling [grid range: −0.25 to 0.25]",
-        lambda lo, hi: lo >= -1 and hi <= 1,
-        "must be in [−1, 1]",
-        Fixed(0.0),  # solar N/O scaling (Nicholls+2017)
-    ),
-    "neb_hbfrac": (
-        "HbFrac: L_Hβ(matter-bounded)/L_Hβ(radiation-bounded) for CB_19 [0–1]. "
-        "HbFrac=1 = fully radiation-bounded; escape fraction ≈ 1 − HbFrac",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(1.0),  # radiation-bounded (default)
-    ),
-}
+#   ``_NEBULAR_PARAMS``, ``_CB19_PARAMS``, ``_ELINE_PARAMS``,
+#   ``_ELINE_BROAD_PARAMS``, ``_CUE_IONSPEC_PARAMS``,
+#   ``_CUE_GAS_EXTRA_PARAMS``, ``_SHOCK_PARAMS`` → nebular._params
+#   ``_DUST_EMISSION_PARAMS``, ``_DUST_EXTRA_PARAMS``,
+#   ``_SINGLE_COMPONENT_DUST_PARAMS`` → dust._params
+#   ``_AGN_PARAMS`` → agn._params (+ ``neb_xid`` extras here)
+#   ``_RADIO_PARAMS`` → radio._params
+#   ``_XRAY_PARAMS`` → xray._params
+#   ``_IGM_PATCHY_PARAMS``, ``_DLA_PARAMS`` → igm._params
+#   ``_ALPHA_FE_PARAMS``, ``_EVOLVING_ALPHA_PARAMS`` → stellar._params
+# (PR3c). Resolved lazily via module ``__getattr__`` below.
 
-# ── Emission line velocity parameters ──────────────────────────────────
-_ELINE_PARAMS = {
-    "eline_sigma_kms": (
-        "Emission line velocity dispersion in km/s (added in quadrature to instrument resolution)",
-        lambda lo, hi: lo >= 0,
-        "must have lo >= 0",
-        Fixed(0.0),  # Default: instrument resolution only
-    ),
-    "eline_delta_v_kms": (
-        "Emission line velocity offset from systemic redshift in km/s",
-        lambda lo, hi: True,
-        "",
-        Fixed(0.0),  # Default: no velocity offset
-    ),
-}
+# Radio priors now live in :mod:`tengri.components.radio._params`
+# (PR2 of the parameter-registry consolidation). The bucket below is a
+# derived view kept for backwards compatibility with consumers that
+# still iterate the legacy 4-tuple shape. Resolution is deferred via
+# module ``__getattr__`` (see bottom of file) because eager import of
+# ``tengri.components.radio._params`` triggers the components package
+# init, which transitively re-enters this module.
 
-# ── Broad emission line parameters (AGN) ───────────────────────────────
-_ELINE_BROAD_PARAMS = {
-    "eline_broad_sigma_kms": (
-        "Broad emission line velocity dispersion in km/s",
-        lambda lo, hi: lo >= 200,
-        "must have lo >= 200 km/s (broad component)",
-        Uniform(500.0, 5000.0),
-    ),
-}
+# X-ray priors now live in :mod:`tengri.components.xray._params` (PR3).
+# Resolved lazily via module ``__getattr__`` below.
 
-# Cue-specific optional params — only registered if user provides them
-_CUE_IONSPEC_PARAMS = {
-    "ionspec_index1": (
-        "Cue ionizing spectrum slope segment 1 (HeII, 1-228A)",
-        lambda lo, hi: lo >= 0 and hi <= 50,
-        "must be in [0, 50]",
-        None,
-    ),
-    "ionspec_index2": (
-        "Cue ionizing spectrum slope segment 2 (OII, 228-353A)",
-        lambda lo, hi: lo >= -1 and hi <= 35,
-        "must be in [-1, 35]",
-        None,
-    ),
-    "ionspec_index3": (
-        "Cue ionizing spectrum slope segment 3 (HeI, 353-504A)",
-        lambda lo, hi: lo >= -2 and hi <= 20,
-        "must be in [-2, 20]",
-        None,
-    ),
-    "ionspec_index4": (
-        "Cue ionizing spectrum slope segment 4 (HI, 504-912A)",
-        lambda lo, hi: lo >= -2 and hi <= 10,
-        "must be in [-2, 10]",
-        None,
-    ),
-    "ionspec_logLratio1": (
-        "Cue log luminosity ratio seg2/seg1",
-        lambda lo, hi: lo >= -1 and hi <= 12,
-        "must be in [-1, 12]",
-        None,
-    ),
-    "ionspec_logLratio2": (
-        "Cue log luminosity ratio seg3/seg2",
-        lambda lo, hi: lo >= -1 and hi <= 3,
-        "must be in [-1, 3]",
-        None,
-    ),
-    "ionspec_logLratio3": (
-        "Cue log luminosity ratio seg4/seg3",
-        lambda lo, hi: lo >= -1 and hi <= 3,
-        "must be in [-1, 3]",
-        None,
-    ),
-}
 
-_CUE_GAS_EXTRA_PARAMS = {
-    "gas_logn": (
-        "Cue gas density log10(n_H/cm^-3)",
-        lambda lo, hi: lo >= 0 and hi <= 5,
-        "must be in [0, 5]",
-        None,
-    ),
-    "gas_logno": (
-        "Cue [N/O] abundance ratio (dex)",
-        lambda lo, hi: lo >= -2 and hi <= 2,
-        "must be in [-2, 2]",
-        None,
-    ),
-    "gas_logco": (
-        "Cue [C/O] abundance ratio (dex)",
-        lambda lo, hi: lo >= -2 and hi <= 2,
-        "must be in [-2, 2]",
-        None,
-    ),
-}
-
-_ALPHA_FE_PARAMS = {
-    "met_alpha_fe": (
-        "Alpha-element enhancement [alpha/Fe] (dex). "
-        "Applied uniformly to all ages unless alpha_fe_evolving=True.",
-        lambda lo, hi: lo >= -0.5 and hi <= 1.0,
-        "must be in [-0.5, 1.0]",
-        Fixed(0.0),
-    ),
-}
-
-_EVOLVING_ALPHA_PARAMS = {
-    "met_alpha_fe_old": (
-        "[alpha/Fe] of oldest stars (at t_lookback = t_universe). "
-        "Typically +0.3 to +0.5 for massive ellipticals.",
-        lambda lo, hi: lo >= -0.5 and hi <= 1.0,
-        "must be in [-0.5, 1.0]",
-        Uniform(0.0, 0.6),
-    ),
-    "met_alpha_fe_young": (
-        "[alpha/Fe] at present day (t_lookback ~ 0). Typically ~0.0 (solar) for disk galaxies.",
-        lambda lo, hi: lo >= -0.5 and hi <= 1.0,
-        "must be in [-0.5, 1.0]",
-        Fixed(0.0),
-    ),
-}
-
-_EVOLVING_MET_PARAMS = {
-    "met_logzsol_0": (
-        "Initial metallicity log10(Z/Zsun) (oldest stars)",
-        lambda lo, hi: True,
-        "",
-        Uniform(-2.0, 0.2),
-    ),
-    "met_logzsol_final": (
-        "Final metallicity log10(Z/Zsun) (present-day)",
-        lambda lo, hi: True,
-        "",
-        Uniform(-2.0, 0.2),
-    ),
-}
-
-_CHEM_EVOL_PARAMS = {
-    "chem_yield": (
-        "Nucleosynthetic yield (mass of metals per unit stellar mass locked). "
-        "Typical 0.02-0.04 for solar neighborhood with Chabrier IMF.",
-        lambda lo, hi: lo > 0 and hi <= 0.2,
-        "must be in (0, 0.2]",
-        Fixed(0.03),
-    ),
-    "chem_eta_outflow": (
-        "Mass loading factor (Mdot_out / SFR). 0 = closed box, >0 = leaky box with outflows.",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.0),
-    ),
-    "chem_f_gas_init": (
-        "Initial gas fraction at earliest cosmic time. Default 0.9 (galaxy starts gas-dominated).",
-        lambda lo, hi: lo > 0 and hi <= 1,
-        "must be in (0, 1]",
-        Fixed(0.9),
-    ),
-    "chem_return_frac": (
-        "Stellar mass return fraction (instantaneous recycling). Default 0.4 for Chabrier IMF.",
-        lambda lo, hi: lo >= 0 and hi < 1,
-        "must be in [0, 1)",
-        Fixed(0.4),
-    ),
-}
-
-_SINGLE_COMPONENT_DUST_PARAMS = {
-    "dust_tau_v": (
-        "V-band optical depth (uniform screen)",
-        lambda lo, hi: lo >= 0,
-        "must have lo >= 0",
-        Uniform(0.0, 4.0),
-    ),
-}
-
-_DUST_EXTRA_PARAMS = {
-    "dust_f_obscuration": (
-        "Fraction of unobscured sightlines (Lower 2022)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.0),
-    ),
-    "dust_bump_strength": (
-        "UV bump strength at 2175A (Kriek & Conroy 2013)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.0),
-    ),
-    "dust_delta": (
-        "Attenuation curve slope modification",
-        lambda lo, hi: True,
-        "",
-        Fixed(0.0),
-    ),
-    "dust_Rv": (
-        "Total-to-selective extinction R_V (Cardelli)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(3.1),
-    ),
-}
-
-# IGM patchy reionization params (only when igm_patchy=True)
-_IGM_PATCHY_PARAMS = {
-    "igm_x_HI": (
-        "Volume-averaged neutral hydrogen fraction for patchy IGM "
-        "(Miralda-Escude 1998; 0 = fully ionized, 1 = fully neutral)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.0),
-    ),
-    "igm_bubble_mpc": (
-        "Ionized bubble radius in proper Mpc for patchy IGM (Mason+2018; 0.1-100)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(10.0),
-    ),
-}
-
-# DLA (Damped Lyman-alpha) absorber params (only when dla=True)
-_DLA_PARAMS = {
-    "dla_log_n_hi": (
-        "log10(N_HI / cm^-2) for foreground DLA absorber (Voigt profile)",
-        lambda lo, hi: lo >= 15 and hi <= 24,
-        "must be in [15, 24]",
-        Uniform(19.0, 22.0),
-    ),
-    "dla_z": (
-        "Redshift of DLA absorber (defaults to source z if fixed at 0)",
-        lambda lo, hi: True,
-        "",
-        Fixed(0.0),
-    ),
-    "dla_temp": (
-        "Gas temperature of DLA absorber (K)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1e4),
-    ),
-    "dla_b_turb": (
-        "Turbulent broadening of DLA absorber (km/s)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.0),
-    ),
-}
-
-_DUST_EMISSION_PARAMS = {
-    "dust_T": (
-        "Dust temperature (K) for greybody/Casey emission",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(35.0),
-    ),
-    "dust_beta_ir": (
-        "IR emissivity index for greybody/Casey emission",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1.6),
-    ),
-    "dust_alpha_mir": (
-        "Mid-IR power-law slope for Casey 2012 emission",
-        lambda lo, hi: True,
-        "",
-        Fixed(2.0),
-    ),
-    "dust_alpha_dale": (
-        "Dale et al. 2014 alpha parameter (0.0625-4.0)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(2.0),
-    ),
-    "dust_umin": (
-        "Draine & Li minimum radiation field (0.1-25 for DL07, 0.1-50 for DL14)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1.0),
-    ),
-    "dust_gamma_dl": (
-        "Draine & Li 2007 PDR fraction (0-1)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.01),
-    ),
-    "dust_qpah": (
-        "Draine & Li PAH mass fraction (%, 0.47-4.58 for DL07, 0.47-7.32 for DL14)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(2.5),
-    ),
-    "dust_alpha_dl14": (
-        "DL14 power-law slope of radiation field distribution (1.0-3.0)",
-        lambda lo, hi: lo >= 1.0 and hi <= 3.0,
-        "must be in [1.0, 3.0]",
-        Fixed(2.0),
-    ),
-    "dust_eta_balance": (
-        "Energy balance relaxation: L_IR = eta * L_absorbed. "
-        "eta=1.0 = strict energy balance; eta>1 = extra IR from obscured "
-        "sources (e.g. embedded AGN, Kokorev+2021/Stardust); eta<1 = "
-        "geometric mismatch where some absorbed UV escapes without "
-        "re-emission into the line of sight",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(1.0),
-    ),
-    "dust_T_warm": (
-        "Warm birth-cloud grain temperature (K) — used by two-temp emission model (30-60K)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(45.0),
-    ),
-    "dust_T_cold": (
-        "Cold ISM grain temperature (K) — used by the two-temperature emission model (15-25K)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(20.0),
-    ),
-    "dust_qhac": (
-        "THEMIS small hydrocarbon grain fraction (Jones+2017, 0-15%)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.17),
-    ),
-    "dust_log_ssfr": (
-        "log10(sSFR/yr^-1) for BOSA template selection (Boquien & Salim 2021)",
-        lambda lo, hi: True,
-        "",
-        Fixed(-10.0),
-    ),
-    "dust_lgU": (
-        "log10(U) starlight intensity in mMMP units for Draine+2021 PAHspec (0..7)",
-        lambda lo, hi: lo >= 0.0 and hi <= 7.0,
-        "must be in [0, 7]",
-        Fixed(0.0),
-    ),
-}
-
-_RADIO_PARAMS = {
-    "radio_q_ir": (
-        "FIR-radio correlation q_IR (Bell 2003: 2.64, evolves with z)",
-        lambda lo, hi: True,
-        "",
-        Fixed(2.64),
-    ),
-    "radio_alpha_sf": (
-        "SF synchrotron spectral index (typical 0.7-0.8)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.8),
-    ),
-    "radio_loudness": (
-        "AGN radio-loudness log10(L_5GHz/L_B) (>1 = radio-loud)",
-        lambda lo, hi: True,
-        "",
-        Fixed(0.0),
-    ),
-    "radio_alpha_agn": (
-        "AGN radio spectral index (typical 0.7)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.7),
-    ),
-    "radio_T_e": (
-        "Electron temperature [K] for thermal free-free emission (typical 1e4)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1e4),
-    ),
-    "radio_alpha_ff": (
-        "Thermal free-free spectral index (typical -0.1)",
-        lambda lo, hi: True,
-        "",
-        Fixed(-0.1),
-    ),
-    # AGNfitter-rx double power-law AGN radio model parameters
-    # (Martinez-Ramirez+2024 Eq. 9-10). Activated by
-    # ``RadioSEDComponentConfig.agn_radio_model="dpl"``; ignored otherwise.
-    "radio_alpha_thin": (
-        "AGN-DPL optically-thin (steep) spectral slope (typical -0.75)",
-        lambda lo, hi: True,
-        "",
-        Fixed(-0.75),
-    ),
-    "radio_alpha_thick": (
-        "AGN-DPL optically-thick (flat/inverted) spectral slope (typical -0.1)",
-        lambda lo, hi: True,
-        "",
-        Fixed(-0.1),
-    ),
-    "radio_log_nu_t": (
-        "AGN-DPL log10(transition frequency / Hz); typical 9-11",
-        lambda lo, hi: True,
-        "",
-        Fixed(10.0),
-    ),
-    "radio_log_nu_cut": (
-        "AGN-DPL log10(synchrotron aging exponential cutoff / Hz); typical 12-14",
-        lambda lo, hi: True,
-        "",
-        Fixed(13.0),
-    ),
-    # Reserved for JP/KP/Tribble physical-aging kernels (Harwood+2013).
-    # Declared now per the reserved-params pattern so infrastructure
-    # (this PR) and physics (follow-up) can split cleanly. Both are
-    # ``Fixed`` defaults so the radio component is a no-op extension
-    # until the kernel tables land.
-    "radio_alpha_inj": (
-        "JP/KP/Tribble injection spectral index (Harwood+2013 typical 0.5-0.8)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.6),
-    ),
-    "radio_log_nu_break": (
-        "JP/KP/Tribble log10(spectral break frequency / Hz); typical 9-11",
-        lambda lo, hi: True,
-        "",
-        Fixed(10.0),
-    ),
-}
-
-_XRAY_PARAMS = {
-    "xray_gamma_agn": (
-        "AGN X-ray photon index Gamma (typical 1.4-2.4)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1.8),
-    ),
-    "xray_alpha_ox": (
-        "UV-to-X-ray slope alpha_ox (typical -2.0 to -1.0)",
-        lambda lo, hi: True,
-        "",
-        Fixed(-1.4),
-    ),
-    "xray_gamma_hmxb": (
-        "HMXB photon index (typical 2.0)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(2.0),
-    ),
-    "xray_gamma_lmxb": (
-        "LMXB photon index (typical 1.6)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1.6),
-    ),
-    "xray_E_cut": (
-        "Exponential cutoff energy [keV] for AGN X-ray spectrum (typical 100-500)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(300.0),
-    ),
-}
-
-_SHOCK_PARAMS = {
-    "shock_frac": (
-        "Fraction of nebular Halpha replaced by shock emission [0, 1]",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.0),
-    ),
-    "shock_velocity": (
-        "Shock velocity in km/s (100-1000 for MAPPINGS III; 200-1000 for MAPPINGS V)",
-        lambda lo, hi: lo >= 100 and hi <= 1000,
-        "must be in [100, 1000]",
-        Fixed(300.0),
-    ),
-    "shock_log_density": (
-        "Log10 pre-shock density in cm^-3; snapped to nearest grid point",
-        lambda lo, hi: True,
-        "",
-        Fixed(0.0),
-    ),
-    "shock_b_over_sqrt_n": (
-        "B/sqrt(n) in uG cm^(3/2) (MAPPINGS III) or absolute B in uG (MAPPINGS V); "
-        "snapped to nearest grid point",
-        lambda lo, hi: True,
-        "",
-        Fixed(1.0),
-    ),
-    "shock_abundance": (
-        "Abundance set: solar | 2xsolar | dopita2005 | lmc | smc",
-        lambda lo, hi: True,
-        "",
-        Fixed("solar"),
-    ),
-    "shock_component": (
-        "Emission component: shock | precursor | combined",
-        lambda lo, hi: True,
-        "",
-        Fixed("combined"),
-    ),
-}
-
-_AGN_PARAMS = {
-    "agn_frac": (
-        "AGN luminosity fraction (L_AGN / L_stellar_bol)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.0),
-    ),
-    "agn_log_lbol": (
-        "AGN bolometric luminosity log10(L_bol / Lsun) — direct parametric mode",
-        lambda lo, hi: True,
-        "",
-        Fixed(10.0),
-    ),
-    "agn_alpha": (
-        "AGN disc power-law slope",
-        lambda lo, hi: True,
-        "",
-        Fixed(-1.0),
-    ),
-    "agn_T_torus": (
-        "AGN torus temperature (K)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1000.0),
-    ),
-    "agn_tau_torus": (
-        "AGN torus optical depth at 9.7 um",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(5.0),
-    ),
-    "agn_torus_frac": (
-        "AGN torus covering factor (fraction of L_bol re-emitted by torus)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.5),
-    ),
-    "agn_log_mbh": (
-        "AGN black hole mass log10(M_BH/Msun)",
-        lambda lo, hi: True,
-        "",
-        Fixed(7.0),
-    ),
-    "agn_log_ledd": (
-        "AGN Eddington ratio log10(L/L_Edd)",
-        lambda lo, hi: True,
-        "",
-        Fixed(-1.0),
-    ),
-    # SKIRTOR clumpy torus parameters (Stalevski et al. 2012, 2016)
-    "agn_tau_skirtor": (
-        "SKIRTOR 9.7 um optical depth (3-11)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(7.0),
-    ),
-    "agn_p_skirtor": (
-        "SKIRTOR radial density power-law gradient (0-1.5)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(1.0),
-    ),
-    "agn_q_skirtor": (
-        "SKIRTOR polar density power-law gradient (0-1.5)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(1.0),
-    ),
-    "agn_oa_skirtor": (
-        "SKIRTOR torus half-opening angle [degrees] (20-60)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(40.0),
-    ),
-    "agn_cos_inc": (
-        "Cosine of inclination (0=edge-on, 1=face-on)",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.5),
-    ),
-    # BH spin + two-temperature torus (kubota_done_full, multicolor_agn)
-    "agn_a_spin": (
-        "BH spin parameter a* in [0, 0.998) — controls ISCO and radiative efficiency",
-        lambda lo, hi: lo >= 0 and hi < 1,
-        "must be in [0, 1)",
-        Fixed(0.0),
-    ),
-    "agn_T_hot": (
-        "Two-temperature torus: hot dust component temperature [K]",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1200.0),
-    ),
-    "agn_T_warm": (
-        "Two-temperature torus: warm dust component temperature [K]",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(300.0),
-    ),
-    "agn_frac_hot": (
-        "Two-temperature torus: hot-to-warm dust luminosity fraction [0, 1]",
-        lambda lo, hi: lo >= 0 and hi <= 1,
-        "must be in [0, 1]",
-        Fixed(0.3),
-    ),
-    # Full Kubota & Done (2018) 3-zone disc parameters (kubota_done_full only)
-    "agn_f_hard": (
-        "Coronal luminosity fraction (fraction of disc power to hot corona)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.02),
-    ),
-    "agn_gamma_warm": (
-        "Warm Comptonization photon index (soft X-ray excess)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(2.5),
-    ),
-    "agn_kt_warm": (
-        "Warm Comptonization electron temperature [keV]",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(0.2),
-    ),
-    "agn_gamma_hard": (
-        "Hard X-ray photon index (hot corona power law)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1.8),
-    ),
-    "agn_kt_hot": (
-        "Hot corona electron temperature [keV]",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(100.0),
-    ),
-    "agn_r_warm_ratio": (
-        "Ratio R_warm / R_hot (warm Comptonization region size)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(2.0),
-    ),
-    # Polar dust reddening of AGN disc (Type 1 SMC-law screen)
-    "agn_polar_ebv": (
-        "Polar dust reddening E(B-V) applied to AGN disc (SMC law); 0 = disabled",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.0),
-    ),
-    "agn_polar_oa": (
-        "Polar dust half-opening angle [degrees] — sets covering fraction",
-        lambda lo, hi: lo > 0 and hi <= 90,
-        "must be in (0, 90]",
-        Fixed(45.0),
-    ),
-    # AGN-nebular emitters (BLR, NLR-Gaussian, Feltre). Reserved for an upcoming
-    # PR — declared here so collaborators can see the intended parameter shape;
-    # currently no consumer wires these into the forward model.
-    "agn_blr_cf": (
-        "BLR covering fraction — fraction of disc luminosity intercepted by BLR. "
-        "Physical bound [0, 1]; typical values 0.05-0.2.",
-        lambda lo, hi: lo >= 0 and hi <= 1.0,
-        "must be in [0, 1]",
-        Fixed(0.1),
-    ),
-    "agn_nlr_cf": (
-        "NLR Gaussian covering fraction — fraction of disc luminosity intercepted by NLR. "
-        "Physical bound [0, 1]; typical values 0.05-0.2.",
-        lambda lo, hi: lo >= 0 and hi <= 1.0,
-        "must be in [0, 1]",
-        Fixed(0.1),
-    ),
-    "agn_fe2_strength": (
-        "Fe II to H-beta flux ratio R_Fe = F(Fe II 4434-4684)/F(H-beta)",
-        lambda lo, hi: lo >= 0 and hi <= 2.0,
-        "must be in [0, 2.0]",
-        Fixed(0.0),
-    ),
-    "agn_feltre_cf": (
-        "Feltre NLR covering fraction — fraction of disc luminosity intercepted by NLR. "
-        "Physical bound [0, 1]; typical values 0.05-0.2.",
-        lambda lo, hi: lo >= 0 and hi <= 1.0,
-        "must be in [0, 1]",
-        Fixed(0.1),
-    ),
-    "agn_alpha_ion": (
-        "AGN EUV power-law slope (f_nu ~ nu^alpha) for Feltre NLR backend. "
-        "Range matches the Feltre+2016 CLOUDY grid (4 grid points: -2.0, -1.7, -1.4, -1.2).",
-        lambda lo, hi: lo >= -2.0 and hi <= -1.2,
-        "must be in [-2.0, -1.2] (grid values: -2.0, -1.7, -1.4, -1.2)",
-        Fixed(-1.7),
-    ),
+# AGN priors now live in :mod:`tengri.components.agn._params` (PR3).
+# The legacy ``_AGN_PARAMS`` bucket is resolved lazily via module
+# ``__getattr__`` below, which merges the canonical agn_* tuple with
+# the ``neb_xid`` orphan kept here. (``neb_xid`` is nebular-prefixed
+# but consumed by the Feltre NLR backend alongside ``agn_alpha_ion``,
+# so the legacy bucket has always carried it. Moving it into
+# ``components/agn/_params.py`` would break the agn_* prefix invariant
+# checked by ``tools/check_param_prefixes.py``.)
+_AGN_EXTRAS: dict = {
     "neb_xid": (
         "Dust-to-metal ratio (Feltre NLR backend) [0.1, 0.3, 0.5]",
         lambda lo, hi: lo >= 0.05 and hi <= 0.6,
         "must be in [0.05, 0.6] (grid values: 0.1, 0.3, 0.5)",
         Fixed(0.3),
     ),
-    # GRAHSP AGN model (Buchner+ 2024, arXiv:2405.19297). Activated by
-    # ``agn_model="grahsp"``. Parameters mirror the upstream ``activate*``
-    # CIGALE modules; see :mod:`tengri.components.agn.grahsp`.
-    "agn_grahsp_l5100": (
-        "GRAHSP lambda*L_lambda(5100Å) [erg/s] (paper L_AGN). "
-        "Sets the AGN normalisation; typical 1e42-1e47 for Sy1 to QSO.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1.0e44),
-    ),
-    "agn_grahsp_uvslope": (
-        "GRAHSP BBB UV power-law index alpha_1 (paper uvslope). "
-        "Typical 0; must satisfy uvslope > plslope.",
-        lambda lo, hi: True,
-        "",
-        Fixed(0.0),
-    ),
-    "agn_grahsp_plslope": (
-        "GRAHSP BBB optical power-law index alpha_2 (paper plslope). "
-        "Typical -2.7 to -1; must satisfy uvslope > plslope.",
-        lambda lo, hi: True,
-        "",
-        Fixed(-1.7),
-    ),
-    "agn_grahsp_plbendloc_nm": (
-        "GRAHSP BBB bend wavelength lambda_break [nm] (paper plbendloc). Typical 50-200 nm.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(100.0),
-    ),
-    "agn_grahsp_plbendwidth": (
-        "GRAHSP BBB bend width Lambda [dex] (paper plbendwidth). Typical 0.1-10.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1.0),
-    ),
-    "agn_grahsp_cutoff_nm": (
-        "GRAHSP BBB IR cutoff [nm]; -1 disables (paper cutoff). Default 1e4.",
-        lambda lo, hi: True,
-        "",
-        Fixed(10000.0),
-    ),
-    "agn_grahsp_a_lines": (
-        "GRAHSP line strength scale (paper Alines). Typical 0.3-20.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(1.0),
-    ),
-    "agn_grahsp_a_feii": (
-        "GRAHSP FeII forest strength relative to broad H-beta (paper AFeII). Typical 2-10.",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(5.0),
-    ),
-    "agn_grahsp_linewidth_kms": (
-        "GRAHSP emission-line FWHM [km/s] (paper Wline). Typical 100-30000.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(5000.0),
-    ),
-    "agn_grahsp_fcov": (
-        "GRAHSP torus covering factor at 12 um (paper fcov). "
-        "Typical 0.05-0.95; relates to Stalevski+2016 geometric f_cov.",
-        lambda lo, hi: lo >= 0 and hi <= 1.0,
-        "must be in [0, 1]",
-        Fixed(0.4),
-    ),
-    "agn_grahsp_si": (
-        "GRAHSP Si feature strength (paper Si). Negative=absorption, "
-        "positive=emission. Typical -4 to +4.",
-        lambda lo, hi: True,
-        "",
-        Fixed(0.0),
-    ),
-    "agn_grahsp_cool_lam_um": (
-        "GRAHSP cool dust peak wavelength [um] (paper COOLlam). Typical 10-30 um.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(17.0),
-    ),
-    "agn_grahsp_cool_width": (
-        "GRAHSP cool dust log-width [dex] (paper COOLwidth). Typical 0.2-0.65.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(0.45),
-    ),
-    "agn_grahsp_hot_lam_um": (
-        "GRAHSP hot dust peak wavelength [um] (paper HOTlam). Typical 1-5.5 um.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(2.0),
-    ),
-    "agn_grahsp_hot_width": (
-        "GRAHSP hot dust log-width [dex] (paper HOTwidth). Typical 0.2-0.65.",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-        Fixed(0.5),
-    ),
-    "agn_grahsp_hot_fcov": (
-        "GRAHSP hot/cool peak ratio in lambda*L_lambda (paper f_hot). Typical 0.04-10.",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(1.0),
-    ),
-    "agn_grahsp_ebv": (
-        "GRAHSP baseline E(B-V) [mag] applied to the AGN bi-attenuation "
-        "(paper E(B-V)). In the upstream CIGALE pipeline this is also the "
-        "galaxy E(B-V); in tengri it parameterises only the AGN-side "
-        "attenuation — galaxy attenuation is handled by the standard "
-        "tengri ``dust_*`` component (configure them consistently).",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.0),
-    ),
-    "agn_grahsp_ebv_agn": (
-        "GRAHSP additional AGN-only E(B-V) [mag] (paper E(B-V)-AGN). "
-        "Stacks with agn_grahsp_ebv to attenuate the AGN spectrum.",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
-        Fixed(0.0),
-    ),
 }
+
 
 # (Legacy alias tables now managed in _aliases.py — imported at top)
 
@@ -1077,21 +250,34 @@ def _build_param_registry(
         registry[pname] = (pdef.description, pdef.bound_check, pdef.bound_error)
         defaults[pname] = pdef.default
 
-    # Non-SFH params (always present)
-    _is_single = dust_model == "single_component"
-    _skip_dust_params = {"dust_tau_bc", "dust_tau_diff"} if _is_single else set()
+    # Non-SFH global params (redshift, noise, sigma_v_kms; met_logzsol
+    # is injected separately by the metallicity registry below).
     for pname, (desc, check, err, default) in _NON_SFH_PARAMS.items():
-        # met_logzsol is now injected by the metallicity registry (met_mode)
         if pname == "met_logzsol":
-            continue
-        # When single-component dust, skip birth-cloud / diffuse params
-        if pname in _skip_dust_params:
             continue
         registry[pname] = (desc, check, err)
         defaults[pname] = default
 
-    # Single-component dust params (replaces tau_bc + tau_diff)
-    if dust_model == "single_component":
+    # Dust attenuation params (PR4: moved to components/dust/_params.py).
+    # The two Charlot-Fall optical depths are skipped under
+    # ``dust_model="single_component"``; ``dust_tau_v`` from
+    # ``_SINGLE_COMPONENT_DUST_PARAMS`` takes their place there.
+    _is_single = dust_model == "single_component"
+    from tengri.components.dust._params import (
+        ATTENUATION_PARAMS,
+        ATTENUATION_TWO_COMPONENT_ONLY,
+    )
+
+    for decl in ATTENUATION_PARAMS:
+        if _is_single and decl.name in ATTENUATION_TWO_COMPONENT_ONLY:
+            continue
+        check = decl.bound_check if decl.bound_check is not None else (lambda lo, hi: True)
+        registry[decl.name] = (decl.description, check, decl.bound_error)
+        defaults[decl.name] = decl.prior
+
+    if _is_single:
+        from tengri.parameters._param_defs import _SINGLE_COMPONENT_DUST_PARAMS
+
         for pname, (desc, check, err, default) in _SINGLE_COMPONENT_DUST_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
@@ -1102,88 +288,180 @@ def _build_param_registry(
         registry[pname] = (pdef.description, pdef.bound_check, pdef.bound_error)
         defaults[pname] = pdef.default
 
-    # Nebular params (CLOUDY, Cue, or CB_19 — not BakedIn/ssp/off)
+    # Nebular params (CLOUDY, Cue, or CB_19 — not BakedIn/ssp/off).
+    # Bucket resolved lazily via module ``__getattr__`` (avoids circular
+    # import through ``tengri.components``).
     if nebular in ("cloudy", "cue", "cb19"):
+        from tengri.parameters._param_defs import _NEBULAR_PARAMS
+
         for pname, (desc, check, err, default) in _NEBULAR_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # CB_19-specific extra axes (density, C/O, ΔN/O, HbFrac)
+    # CB_19, alpha-Fe, shock, eline buckets are all resolved lazily via
+    # the module-level ``__getattr__``.
     if nebular == "cb19":
+        from tengri.parameters._param_defs import _CB19_PARAMS
+
         for pname, (desc, check, err, default) in _CB19_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Alpha-element enhancement
     if alpha_fe_evolving:
-        # Evolving [α/Fe]: old stars more α-enhanced than young.
-        # Replaces global met_alpha_fe with per-age ramp.
+        from tengri.parameters._param_defs import _EVOLVING_ALPHA_PARAMS
+
         for pname, (desc, check, err, default) in _EVOLVING_ALPHA_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
     else:
-        # Global [α/Fe] (same for all ages — defaults to Fixed(0) = no-op)
+        from tengri.parameters._param_defs import _ALPHA_FE_PARAMS
+
         for pname, (desc, check, err, default) in _ALPHA_FE_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Dust extra params (always available — they default to Fixed(0) = no-op)
-    for pname, (desc, check, err, default) in _DUST_EXTRA_PARAMS.items():
-        registry[pname] = (desc, check, err)
-        defaults[pname] = default
+    # (Dust attenuation extras now registered above with the rest of the
+    # ATTENUATION_PARAMS tuple from components/dust/_params.py.)
 
-    # Dust emission params (only when dust emission is enabled)
+    # Dust emission params (only when dust emission is enabled). Bucket
+    # resolved lazily via module ``__getattr__`` to avoid the circular
+    # load through ``tengri.components``.
     if dust_emission:
+        from tengri.parameters._param_defs import _DUST_EMISSION_PARAMS
+
         for pname, (desc, check, err, default) in _DUST_EMISSION_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # AGN params (only when AGN model is enabled)
+    # AGN, radio, X-ray buckets are resolved lazily via the module-level
+    # ``__getattr__`` defined below — eager import would trigger a
+    # circular load through ``tengri.components``.
     if agn_model:
+        from tengri.parameters._param_defs import _AGN_PARAMS
+
         for pname, (desc, check, err, default) in _AGN_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Radio params (only when radio=True)
     if radio:
+        from tengri.parameters._param_defs import _RADIO_PARAMS
+
         for pname, (desc, check, err, default) in _RADIO_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # X-ray params (only when xray=True)
     if xray:
+        from tengri.parameters._param_defs import _XRAY_PARAMS
+
         for pname, (desc, check, err, default) in _XRAY_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Shock emission params (only when shock=True)
     if shock:
+        from tengri.parameters._param_defs import _SHOCK_PARAMS
+
         for pname, (desc, check, err, default) in _SHOCK_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Patchy IGM params (only when igm_patchy=True)
+    # Patchy IGM + DLA buckets (PR4: now derived from components/igm).
     if igm_patchy:
+        from tengri.parameters._param_defs import _IGM_PATCHY_PARAMS
+
         for pname, (desc, check, err, default) in _IGM_PATCHY_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # DLA absorber params (only when dla=True)
     if dla:
+        from tengri.parameters._param_defs import _DLA_PARAMS
+
         for pname, (desc, check, err, default) in _DLA_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Emission line velocity parameters (registered when eline_mode is active)
     if eline_mode in ("marginalized", "fitted"):
+        from tengri.parameters._param_defs import _ELINE_PARAMS
+
         for pname, (desc, check, err, default) in _ELINE_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
-    # Broad emission line component (AGN)
     if eline_broad:
+        from tengri.parameters._param_defs import _ELINE_BROAD_PARAMS
+
         for pname, (desc, check, err, default) in _ELINE_BROAD_PARAMS.items():
             registry[pname] = (desc, check, err)
             defaults[pname] = default
 
     return registry, defaults
+
+
+# ── Lazy bucket resolution (PR2+) ─────────────────────────────────────
+#
+# Component-owned ``PARAMS`` tuples are imported lazily here to avoid a
+# circular import: ``tengri.components/__init__.py`` eagerly loads every
+# component subpackage, and some of those transitively re-enter
+# :mod:`tengri.parameters._param_defs`. Resolving on first attribute
+# access defers the components import until this module has finished
+# initialising.
+#: Maps legacy bucket name → (component module, attribute name on that
+#: module). Default attribute is ``PARAMS``; entries that read a
+#: different tuple name use the 2-tuple form.
+_LAZY_DECL_SOURCES: dict[str, tuple[str, str]] = {
+    "_RADIO_PARAMS": ("tengri.components.radio._params", "PARAMS"),
+    "_XRAY_PARAMS": ("tengri.components.xray._params", "PARAMS"),
+    "_AGN_PARAMS": ("tengri.components.agn._params", "PARAMS"),
+    "_NEBULAR_PARAMS": ("tengri.components.nebular._params", "PARAMS"),
+    "_DUST_EMISSION_PARAMS": ("tengri.components.dust._params", "PARAMS"),
+    # PR4: dust attenuation + single-component dust + IGM patchy + DLA
+    "_DUST_EXTRA_PARAMS": ("tengri.components.dust._params", "ATTENUATION_PARAMS"),
+    "_SINGLE_COMPONENT_DUST_PARAMS": (
+        "tengri.components.dust._params",
+        "SINGLE_COMPONENT_PARAMS",
+    ),
+    "_IGM_PATCHY_PARAMS": ("tengri.components.igm._params", "PATCHY_PARAMS"),
+    "_DLA_PARAMS": ("tengri.components.igm._params", "DLA_PARAMS"),
+    # PR5: nebular sub-buckets + shock + stellar α/Fe
+    "_CB19_PARAMS": ("tengri.components.nebular._params", "CB19_PARAMS"),
+    "_ELINE_PARAMS": ("tengri.components.nebular._params", "ELINE_PARAMS"),
+    "_ELINE_BROAD_PARAMS": (
+        "tengri.components.nebular._params",
+        "ELINE_BROAD_PARAMS",
+    ),
+    "_CUE_IONSPEC_PARAMS": (
+        "tengri.components.nebular._params",
+        "CUE_IONSPEC_PARAMS",
+    ),
+    "_CUE_GAS_EXTRA_PARAMS": (
+        "tengri.components.nebular._params",
+        "CUE_GAS_EXTRA_PARAMS",
+    ),
+    "_SHOCK_PARAMS": ("tengri.components.nebular._params", "SHOCK_PARAMS"),
+    "_ALPHA_FE_PARAMS": ("tengri.components.stellar._params", "ALPHA_FE_PARAMS"),
+    "_EVOLVING_ALPHA_PARAMS": (
+        "tengri.components.stellar._params",
+        "EVOLVING_ALPHA_PARAMS",
+    ),
+}
+
+#: Extra entries merged into a lazily-resolved bucket after the
+#: component-owned declarations are converted. Keyed by bucket name.
+_LAZY_DECL_EXTRAS: dict[str, dict] = {
+    "_AGN_PARAMS": _AGN_EXTRAS,
+}
+
+
+def __getattr__(name: str) -> dict:
+    src = _LAZY_DECL_SOURCES.get(name)
+    if src is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    import importlib
+
+    module_path, attr = src
+    mod = importlib.import_module(module_path)
+    bucket = _bucket_from_declarations(getattr(mod, attr))
+    extras = _LAZY_DECL_EXTRAS.get(name)
+    if extras:
+        bucket = {**bucket, **extras}
+    globals()[name] = bucket  # cache so __getattr__ runs only once per name
+    return bucket

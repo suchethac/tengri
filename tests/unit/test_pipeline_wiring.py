@@ -106,8 +106,12 @@ class TestAGNSpinCosInc:
         )
 
     def test_agn_a_spin_declared_in_params(self):
-        src = _params_src()
-        assert '"agn_a_spin"' in src, "agn_a_spin must be declared in _AGN_PARAMS in parameters.py"
+        from tengri.parameters._param_defs import _AGN_PARAMS
+
+        assert "agn_a_spin" in _AGN_PARAMS, (
+            "agn_a_spin must be declared in _AGN_PARAMS "
+            "(canonical source: tengri.components.agn._params.PARAMS)"
+        )
 
     def test_agn_a_spin_in_param_map(self):
         from tengri.parameters.translate import _AGN_IDENTITY_PARAMS
@@ -186,8 +190,12 @@ class TestKDFullParams:
         ],
     )
     def test_kd_param_declared_in_params(self, param):
-        src = _params_src()
-        assert f'"{param}"' in src, f"{param} must be declared in _AGN_PARAMS in parameters.py"
+        from tengri.parameters._param_defs import _AGN_PARAMS
+
+        assert param in _AGN_PARAMS, (
+            f"{param} must be declared in _AGN_PARAMS "
+            "(canonical source: tengri.components.agn._params.PARAMS)"
+        )
 
 
 # ── Polar dust forwarding ─────────────────────────────────────────
@@ -195,12 +203,14 @@ class TestPolarDustForwarding:
     """Polar dust (agn_polar_ebv, agn_polar_oa) must gate and forward correctly."""
 
     def test_polar_ebv_declared_in_params(self):
-        src = _params_src()
-        assert '"agn_polar_ebv"' in src
+        from tengri.parameters._param_defs import _AGN_PARAMS
+
+        assert "agn_polar_ebv" in _AGN_PARAMS
 
     def test_polar_oa_declared_in_params(self):
-        src = _params_src()
-        assert '"agn_polar_oa"' in src
+        from tengri.parameters._param_defs import _AGN_PARAMS
+
+        assert "agn_polar_oa" in _AGN_PARAMS
 
     def test_polar_dust_guard_present(self):
         """Pipeline must guard polar dust application on agn_polar_ebv > 0.
@@ -260,8 +270,12 @@ class TestXrayExtraParams:
 
     @pytest.mark.parametrize("param", ["xray_gamma_hmxb", "xray_gamma_lmxb", "xray_E_cut"])
     def test_xray_param_declared(self, param):
-        src = _params_src()
-        assert f'"{param}"' in src, f"{param} must be declared in _XRAY_PARAMS in parameters.py"
+        from tengri.parameters._param_defs import _XRAY_PARAMS
+
+        assert param in _XRAY_PARAMS, (
+            f"{param} must be declared in _XRAY_PARAMS "
+            "(canonical source: tengri.components.xray._params.PARAMS)"
+        )
 
 
 # ── Radio free-free parameters ────────────────────────────────────
@@ -301,8 +315,12 @@ class TestRadioFreeFreeParams:
 
     @pytest.mark.parametrize("param", ["radio_T_e", "radio_alpha_ff"])
     def test_radio_param_declared(self, param):
-        src = _params_src()
-        assert f'"{param}"' in src, f"{param} must be declared in _RADIO_PARAMS in parameters.py"
+        from tengri.parameters._param_defs import _RADIO_PARAMS
+
+        assert param in _RADIO_PARAMS, (
+            f"{param} must be declared in _RADIO_PARAMS "
+            "(canonical source: tengri.components.radio._params.PARAMS)"
+        )
 
 
 # ── Dust emission alpha_dl14 ──────────────────────────────────────
@@ -328,9 +346,11 @@ class TestShockBOverSqrtN:
     """shock_b_over_sqrt_n must be in _param_map when shock is enabled."""
 
     def test_shock_b_over_sqrt_n_declared_in_params(self):
-        src = _params_src()
-        assert '"shock_b_over_sqrt_n"' in src, (
-            "shock_b_over_sqrt_n must be declared in _SHOCK_PARAMS in parameters.py"
+        from tengri.parameters._param_defs import _SHOCK_PARAMS
+
+        assert "shock_b_over_sqrt_n" in _SHOCK_PARAMS, (
+            "shock_b_over_sqrt_n must be declared in _SHOCK_PARAMS "
+            "(canonical source: tengri.components.nebular._params.SHOCK_PARAMS)"
         )
 
     def test_shock_b_over_sqrt_n_in_param_map(self):

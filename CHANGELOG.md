@@ -6,6 +6,65 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Internal
+
+- Scaffolded per-component `_params.py` skeletons (PR1/5 of the
+  parameter-registry consolidation) and extended
+  `tengri.core.component.ParamDeclaration` with optional `bound_check`
+  and `bound_error` fields. No user-visible change; priors still live
+  in `tengri.parameters._param_defs`.
+- Moved radio priors into `tengri.components.radio._params.PARAMS`
+  (PR2/5). `tengri.parameters._param_defs._RADIO_PARAMS` is now a
+  derived view via module-level `__getattr__`, and
+  `RadioSEDComponent.declared_parameters()` returns the same tuple —
+  drift between the two paths is now structurally impossible. No
+  user-visible change.
+- Moved AGN and X-ray priors into their component `_params.PARAMS`
+  tuples (PR3/5). `_AGN_PARAMS` and `_XRAY_PARAMS` are now derived
+  views; the AGN bucket additionally merges a small `_AGN_EXTRAS`
+  registry holding the `neb_xid` orphan (consumed by the Feltre NLR
+  backend alongside `agn_alpha_ion`). `AGNSEDComponent.declared_parameters()`
+  now returns the full ~45-entry tuple — previously a 17-entry subset
+  that drifted from the registry. No user-visible change.
+- Moved nebular priors into `tengri.components.nebular._params.PARAMS`
+  (PR3b/5). `_NEBULAR_PARAMS` is now a derived view.
+  `NebularSEDComponent.declared_parameters()` was left unchanged
+  because it performs backend dispatch (cloudy_grid / cue / shock /
+  baked_in) with intentionally-different `Uniform` priors for the
+  SEDComponent path. Unifying the two prior sets is deferred to a
+  dedicated nebular PR. No user-visible change.
+- Moved IGM declared params and dust-emission priors into
+  `tengri.components.{igm,dust}._params.PARAMS` (PR3c/5).
+  `IGMSEDComponent.declared_parameters()` now returns the canonical
+  IGM tuple; `_DUST_EMISSION_PARAMS` is a derived view via the
+  module-level `__getattr__`. The conditional `_IGM_PATCHY_PARAMS`,
+  `_DLA_PARAMS`, `_DUST_EXTRA_PARAMS`, and `_SINGLE_COMPONENT_DUST_PARAMS`
+  buckets remain in `_param_defs.py` pending PR4's structural
+  consolidation. No user-visible change.
+- Split `_NON_SFH_PARAMS` and migrated four more conditional buckets
+  (PR4/5). Dust attenuation entries (`dust_tau_bc`, `dust_tau_diff`,
+  `dust_slope` plus the existing `dust_f_obscuration`,
+  `dust_bump_strength`, `dust_delta`, `dust_Rv`) now live in
+  `tengri.components.dust._params.ATTENUATION_PARAMS`; the single-screen
+  alternative `dust_tau_v` is in `SINGLE_COMPONENT_PARAMS`. The
+  patchy-IGM (`igm_x_HI`, `igm_bubble_mpc`) and DLA absorber
+  (`dla_log_n_hi`, `dla_z`, `dla_temp`, `dla_b_turb`) buckets moved to
+  `tengri.components.igm._params.{PATCHY_PARAMS, DLA_PARAMS}`. The
+  legacy bucket names (`_DUST_EXTRA_PARAMS`, `_SINGLE_COMPONENT_DUST_PARAMS`,
+  `_IGM_PATCHY_PARAMS`, `_DLA_PARAMS`) remain available as derived
+  views via the lazy `__getattr__`. `_NON_SFH_PARAMS` shrinks to its
+  genuinely-shared residue: `met_logzsol`, `redshift`, `noise_*`,
+  `sigma_v_kms`. No user-visible change.
+- Migrated the remaining nebular sub-buckets and stellar α/Fe priors
+  (PR5/5). `_CB19_PARAMS`, `_ELINE_PARAMS`, `_ELINE_BROAD_PARAMS`,
+  `_CUE_IONSPEC_PARAMS`, `_CUE_GAS_EXTRA_PARAMS`, `_SHOCK_PARAMS` now
+  live in `tengri.components.nebular._params`; `_ALPHA_FE_PARAMS` and
+  `_EVOLVING_ALPHA_PARAMS` in `tengri.components.stellar._params`.
+  Dead `_EVOLVING_MET_PARAMS` and `_CHEM_EVOL_PARAMS` (defined but
+  never consumed — superseded by the live `met_registry`) deleted.
+  `tengri.parameters._param_defs` shrinks from 1189 lines (PR0
+  baseline) to 467 (−61%). No user-visible change.
+
 ### Added (5 metallicity modes wired in the orchestrator, 2026-05-06)
 
 `Parameters(met_mode="two_step" | "psb_two_step" | "bins" |

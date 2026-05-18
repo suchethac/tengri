@@ -286,6 +286,39 @@ class NebularSEDComponent:
             DerivedKey("line_lums", "erg/s", "Line luminosities"),
         )
 
+    def requires(self) -> tuple[DerivedKey, ...]:
+        """Cross-component derived keys this nebular component reads.
+
+        Backend-dependent:
+
+        - ``"baked_in"`` (Sanders+2024 grid) reads nothing from
+          ``state.derived`` — the backend operates on the SED in-place
+          and ignores stellar-age-resolved tensors. Returns ``()``.
+        - All other photoionisation backends (``"cue"``,
+          ``"cloudy_grid"``) and the MAPPINGS shock backend
+          (``"shock"``) require the age-resolved stellar outputs to
+          weight per-age ionizing rates. Returns ``lnu_age`` +
+          ``ssp_ages_yr`` (and ``age_weights`` for the CloudyGrid
+          path, which sums the per-bin grid lookups).
+
+        Promotes the previously-fatal KeyError at JIT trace time
+        (``state.derived["lnu_age"]`` → ``KeyError`` if Stellar is
+        absent) to a construction-time
+        :class:`tengri.core.component.PipelineContractError` with a
+        "Did you mean: ..." hint. Phase A of issue #21; see
+        ADR-0004 for the contract design.
+        """
+        backend = self.config.backend
+        if backend == "baked_in":
+            return ()
+        deps = [
+            DerivedKey("lnu_age", "erg/s/Hz", "Per-age L_nu cube (n_age, n_wave)"),
+            DerivedKey("ssp_ages_yr", "yr", "SSP age axis"),
+        ]
+        if backend == "cloudy_grid":
+            deps.append(DerivedKey("age_weights", "Msun", "CSP mass weights per SSP age bin"))
+        return tuple(deps)
+
     def precompute(
         self,
         ssp_data: Any | None = None,

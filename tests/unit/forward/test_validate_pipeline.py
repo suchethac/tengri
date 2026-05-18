@@ -63,9 +63,7 @@ class TestHappyPath:
         validate_pipeline([])
 
     def test_pipeline_with_only_publishers(self):
-        validate_pipeline(
-            [_mk("FakePublisher", publishes=(DerivedKey("L_ir", "erg/s"),))]
-        )
+        validate_pipeline([_mk("FakePublisher", publishes=(DerivedKey("L_ir", "erg/s"),))])
 
     def test_publisher_then_consumer(self):
         publisher = _mk("FakeDust", publishes=(DerivedKey("L_ir", "erg/s"),))
@@ -151,3 +149,51 @@ class TestUnitsMismatch:
         publisher = _mk("BadDust", publishes=(DerivedKey("L_ir", "Lsun"),))
         with pytest.raises(PipelineContractError, match="canonical"):
             validate_pipeline([publisher])
+
+
+class TestNebularRequiresStellar:
+    """Phase A of issue #21: Nebular's hard dependency on Stellar.
+
+    Before this contract, a pipeline with Nebular but no Stellar would
+    KeyError at JIT trace time on ``state.derived["lnu_age"]``. The hard
+    ``requires`` declaration on NebularSEDComponent promotes that
+    failure to construction time with a named-key error message.
+    """
+
+    def test_real_nebular_without_stellar_raises(self):
+        """Build a Cue-backend Nebular with no upstream Stellar publisher."""
+        from tengri.components.nebular.component import (
+            NebularSEDComponent,
+            NebularSEDComponentConfig,
+        )
+
+        neb = NebularSEDComponent(config=NebularSEDComponentConfig(backend="cue"))
+        with pytest.raises(PipelineContractError, match=r"lnu_age|ssp_ages_yr"):
+            validate_pipeline([neb])
+
+    def test_real_baked_in_nebular_alone_is_ok(self):
+        """The BakedIn backend reads nothing from ``state.derived``, so
+        it should be valid as a single-component pipeline — confirms
+        the backend-dependent ``requires()`` branch."""
+        from tengri.components.nebular.component import (
+            NebularSEDComponent,
+            NebularSEDComponentConfig,
+        )
+
+        neb = NebularSEDComponent(config=NebularSEDComponentConfig(backend="baked_in"))
+        validate_pipeline([neb])
+
+    def test_real_cloudy_grid_also_requires_age_weights(self):
+        """CloudyGrid path additionally reads ``age_weights`` to sum
+        per-bin grid lookups."""
+        from tengri.components.nebular.component import (
+            NebularSEDComponent,
+            NebularSEDComponentConfig,
+        )
+
+        neb = NebularSEDComponent(config=NebularSEDComponentConfig(backend="cloudy_grid"))
+        # No publisher → missing-publisher error fires on the first
+        # required key (lnu_age) before the validator reaches age_weights,
+        # so we match on any of the three to be robust.
+        with pytest.raises(PipelineContractError, match=r"lnu_age|ssp_ages_yr|age_weights"):
+            validate_pipeline([neb])
