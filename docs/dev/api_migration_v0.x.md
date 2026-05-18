@@ -547,6 +547,64 @@ parse_groups(sfh={"type": "dpl", "*": FREE})
 
 ---
 
+## Inference backend protocol — `InferenceContext` (2026-05-18, ADR-0009)
+
+`Fitter.run(method=...)` is **unchanged at the user surface** — every
+existing notebook, script, and benchmark keeps working with no edits.
+The migration is internal: how backends consume `Fitter` state.
+
+### What changed under the hood
+
+- New type `tengri.inference.InferenceContext` — a frozen dataclass
+  bundling the per-call state a backend needs (`loss_fn`, `grad_fn`,
+  `data_args`, `spec`, `model`, `memory_mode`, init-params helpers).
+  See ADR-0009 for the full Protocol contract.
+- `Fitter.run` builds an `InferenceContext` once per call and passes
+  it to the registered runner instead of passing `self`.
+- All 19 in-tree backends migrated to the
+  `def run_X(context, *, key, ...)` signature.
+- The 200-line `@register_backend(...)` block moved out of
+  `inference/fitter.py` into `inference/_registration.py` (side-effect
+  import from `inference/__init__.py`).
+- `tengri.list_inference_methods()` gains a `status` column
+  (`ok` / `missing_dep` / `incompatible`) so callers can tell at a
+  glance which backends are ready to run on their installation.
+
+### Out-of-tree backends
+
+`BackendEntry.legacy_fitter` defaults to `True`, so
+`@register_backend(...)` decorators wrapping the **old**
+`def run_X(fitter, *, key, ...)` signature still work without
+changes. Migration is opt-in:
+
+```python
+# Old style (still supported):
+@register_backend("my_sampler", tier="experimental")
+def my_sampler(fitter, *, key, n_steps=1000, **kw):
+    loss_fn = fitter._get_or_build_loss_fn()
+    ...
+
+# New style (recommended; canonical reference: backends/map_dispatch.py):
+@register_backend("my_sampler", tier="experimental", legacy_fitter=False)
+def my_sampler(context, *, key, n_steps=1000, **kw):
+    from tengri.inference.context import InferenceContext
+    context = InferenceContext.from_target(context)
+    loss_fn = context.loss_fn
+    ...
+```
+
+### Internal Fitter wrappers (`Fitter._run_*`)
+
+The `Fitter._run_map`, `_run_nuts`, `_run_vi`, etc. delegate methods
+still exist on `Fitter` for internal warm-start callsites
+(`_sample_utils.py`, `vi/native.py`). They are **not** the dispatch
+path any more — `Fitter.run(method="map")` goes through the registry
+to `run_map(context, ...)` directly. The internal wrappers will be
+removed once the remaining warm-start sites migrate; until then,
+treat them as private.
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in

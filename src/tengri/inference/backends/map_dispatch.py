@@ -1,6 +1,9 @@
 """MAP optimization, Laplace approximation, and Pathfinder.
 
-Extracted from fitter.py.
+Extracted from fitter.py. Migrated to the :class:`InferenceContext`
+Protocol — accepts either an ``InferenceContext`` or a ``Fitter`` (the
+latter is normalized internally during the multi-PR migration window).
+See ADR-0009.
 """
 
 from __future__ import annotations
@@ -13,6 +16,7 @@ import numpy as np
 from jax.flatten_util import ravel_pytree
 
 from tengri.inference._model_cache import get_model_cache
+from tengri.inference.context import InferenceContext
 
 _OPTAX_OPTIMIZERS = {"adam", "adamw", "sgd"}
 _SCIPY_OPTIMIZERS = {"lbfgs", "lbfgs_scipy"}
@@ -151,7 +155,7 @@ def _get_or_build_map_fns(model, loss_fn, optimizer, learning_rate):
 
 
 def _run_map_scipy(
-    fitter,
+    context: InferenceContext,
     *,
     init_params,
     grad_fn,
@@ -223,7 +227,7 @@ def _run_map_scipy(
     wall_time = time.time() - t0
 
     best_params = unravel_fn(jnp.asarray(result.x))
-    best_params_physical = fitter._to_physical(best_params)
+    best_params_physical = context.to_physical(best_params)
     final_loss = float(result.fun)
     converged = result.success
 
@@ -253,12 +257,12 @@ def _run_map_scipy(
             "grad_norm": grad_norm,
         },
         loss_history=loss_hist,
-        _model=fitter.model,
+        _model=context.model,
     )
 
 
 def run_map(
-    fitter,
+    context,
     *,
     key,
     init_from=None,
@@ -303,21 +307,20 @@ def run_map(
     """
     from tengri.inference.posterior import Posterior
 
-    loss_fn = fitter._get_or_build_loss_fn()
-    data_args = fitter._data_args
-
-    if init_from is not None:
-        init_params = fitter._unbounded_from_posterior(init_from)
-    else:
-        init_params = fitter._initialize_unbounded(key)
+    # Normalize: dispatcher passes an InferenceContext for migrated
+    # backends, but internal callsites (``Fitter._run_map``) may still
+    # pass a raw Fitter during the migration window — accept both.
+    context = InferenceContext.from_target(context)
+    loss_fn = context.loss_fn
+    data_args = context.data_args
+    init_params = context.initial_params(key, init_from=init_from)
 
     # ── scipy quasi-Newton path (optimizer="lbfgs_scipy") ──
     if isinstance(optimizer, str) and optimizer in _SCIPY_OPTIMIZERS:
-        grad_fn = fitter._get_or_build_grad_fn()
         return _run_map_scipy(
-            fitter,
+            context,
             init_params=init_params,
-            grad_fn=grad_fn,
+            grad_fn=context.grad_fn,
             loss_fn=loss_fn,
             data_args=data_args,
             optimizer=optimizer,
@@ -330,7 +333,7 @@ def run_map(
 
     # ── optax iterative path (adam / adamw / sgd / custom) ──
     scan_batch, single_step, opt, opt_name = _get_or_build_map_fns(
-        fitter.model,
+        context.model,
         loss_fn,
         optimizer,
         learning_rate,
@@ -399,7 +402,7 @@ def run_map(
     wall_time = time.time() - t0
     n_actual = len(losses)
     final_loss = losses[-1] if losses else float("nan")
-    best_params_physical = fitter._to_physical(best_params)
+    best_params_physical = context.to_physical(best_params)
 
     if verbose:
         es_msg = ""
@@ -421,7 +424,7 @@ def run_map(
             "optimizer": opt_name,
         },
         loss_history=jnp.asarray(losses),
-        _model=fitter.model,
+        _model=context.model,
     )
 
 
@@ -528,48 +531,49 @@ def build_vectorized_map_solver(
     return map_solve_one
 
 
-def run_laplace(fitter, *, key, init_from=None, n_map_steps=1000, **kwargs):
+def run_laplace(context, *, key, init_from=None, n_map_steps=1000, **kwargs):
     """Laplace approximation: Gaussian posterior from Hessian at MAP."""
     from tengri.inference.backends.laplace import run_laplace
 
-    loss_fn = fitter._get_or_build_loss_fn()
-    grad_fn = fitter._get_or_build_grad_fn()
-    data_args = fitter._data_args
+    context = InferenceContext.from_target(context)
 
     if init_from is not None:
-        map_params = fitter._unbounded_from_posterior(init_from)
+        map_params_posterior = init_from
     else:
-        map_result = fitter._run_map(
+        map_result = run_map(
+            context,
             key=key,
             n_steps=n_map_steps,
             verbose=kwargs.get("verbose", True),
         )
-        map_params = fitter._unbounded_from_posterior(map_result)
+        map_params_posterior = map_result
+
+    map_params = context.unbounded_from_posterior(map_params_posterior)
 
     return run_laplace(
         key=key,
-        loss_fn=loss_fn,
-        data_args=data_args,
+        loss_fn=context.loss_fn,
+        data_args=context.data_args,
         map_params_unbounded=map_params,
-        to_physical_fn=fitter._to_physical,
-        model=fitter.model,
-        grad_fn=grad_fn,
+        to_physical_fn=context.to_physical,
+        model=context.model,
+        grad_fn=context.grad_fn,
         **kwargs,
     )
 
 
-def run_pathfinder(fitter, *, key, init_from=None, **kwargs):
+def run_pathfinder(context, *, key, init_from=None, **kwargs):
     """Pathfinder: fast approximate posterior via L-BFGS path."""
     from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
     from tengri.inference.backends.pathfinder import run_pathfinder
 
-    if init_from is not None:
-        init_params = fitter._unbounded_from_posterior(init_from)
-    else:
-        init_params = fitter._initialize_unbounded(key)
+    context = InferenceContext.from_target(context)
+    init_params = context.initial_params(key, init_from=init_from)
 
+    # ``_get_flat_logdensity`` still takes a Fitter — reach through
+    # the context until ``mcmc/_shared.py`` migrates (PR4).
     log_posterior_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
-        fitter,
+        context.fitter,
         init_params,
     )
 
@@ -582,7 +586,7 @@ def run_pathfinder(fitter, *, key, init_from=None, **kwargs):
         log_posterior_flat=log_posterior_flat,
         init_flat=init_flat,
         unravel_fn=unravel_fn,
-        to_physical_fn=fitter._to_physical,
-        model=fitter.model,
+        to_physical_fn=context.to_physical,
+        model=context.model,
         **kwargs,
     )

@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_nuts(
-    fitter,
+    context,
     *,
     key,
     init_from=None,
@@ -134,12 +134,16 @@ def run_nuts(
 
     from tengri.inference.posterior import Posterior
 
+    # ``_shared.py`` helpers still take a Fitter; reach through the
+    # context until they migrate.
+    fitter = context.fitter
+
     # Warn about high dimensionality
-    if fitter.spec.stochastic:
-        n_total = fitter.spec.n_free + fitter.spec.n_grid
+    if context.spec.stochastic:
+        n_total = context.spec.n_free + context.spec.n_grid
         warnings.warn(
             f"Stochastic SFH with NUTS: sampling {n_total} dimensions "
-            f"({fitter.spec.n_grid} psd_xi + {fitter.spec.n_free} physical). "
+            f"({context.spec.n_grid} psd_xi + {context.spec.n_free} physical). "
             f"This is computationally expensive. "
             f"Recommended: method='vi' (10-100x faster).",
             stacklevel=3,
@@ -155,7 +159,7 @@ def run_nuts(
     if verbose:
         n_dim = len(init_flat)
         # Auto-adjust warnings based on dimensionality
-        if n_dim > 20 and not fitter.spec.stochastic:
+        if n_dim > 20 and not context.spec.stochastic:
             warnings.warn(
                 f"NUTS with {n_dim} dimensions may be slow. "
                 f"Consider method='vi' or method='mcmc_raytrace' for D>{20}.",
@@ -255,7 +259,7 @@ def run_nuts(
 
     wall_time = time.time() - t0
 
-    samples_phys = _vmap_samples_to_physical(positions, unravel_fn, fitter._to_physical)
+    samples_phys = _vmap_samples_to_physical(positions, unravel_fn, context.to_physical)
     best_params = _mean_params(samples_phys)
 
     if verbose:
@@ -277,5 +281,5 @@ def run_nuts(
             "warmup": "pathfinder" if pathfinder_warmstart else "window",
         },
         loss_history=None,
-        _model=fitter.model,
+        _model=context.model,
     )

@@ -1709,7 +1709,17 @@ class Fitter:
         # Friendly error if the backend's optional dependency is missing,
         # before we descend into a deep third-party traceback.
         check_requires(entry)
-        result = entry.runner(self, key=key, init_from=init_from, **kwargs)
+
+        # Build the Python-level InferenceContext once. Backends marked
+        # ``legacy_fitter=True`` continue to receive the full Fitter
+        # (their lambdas at the bottom of this file relay to ``_run_*``
+        # methods); migrated backends receive the context and access
+        # state through its explicit accessors. See ADR-0009 / context.py.
+        from tengri.inference.context import InferenceContext
+
+        context = InferenceContext(fitter=self)
+        target = self if entry.legacy_fitter else context
+        result = entry.runner(target, key=key, init_from=init_from, **kwargs)
 
         # Attach back-reference so Posterior.refine() works
         with contextlib.suppress(AttributeError):
@@ -2988,199 +2998,7 @@ class Fitter:
 
 
 # ── Backend Registry Initialization ──────────────────────────────────────────
-# Register all inference backends. Each decorator wraps a lambda that adapts
-# the backend runner to the (fitter, key, init_from, **kwargs) signature.
-
-from tengri.inference._backend_registry import register_backend
-
-# Primary backends
-register_backend(
-    "map",
-    tier="primary",
-    short_doc="Adam MAP optimization",
-    requires=("optax",),
-)(lambda fitter, *, key, init_from=None, **kw: fitter._run_map(key=key, init_from=init_from, **kw))
-
-register_backend(
-    "vi",
-    tier="primary",
-    short_doc="NIFTy geoVI variational inference",
-    aliases=("vi_nonlinear",),
-    requires=("nifty8",),
-)(lambda fitter, *, key, init_from=None, **kw: fitter._run_vi(key=key, init_from=init_from, **kw))
-
-register_backend(
-    "vi_nonlinear_fast",
-    tier="primary",
-    short_doc="NIFTy geoVI without Python logging",
-    requires=("nifty8",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_nifty_fast_vi(
-        key=key, init_from=init_from, **kw
-    )
-)
-
-register_backend(
-    "vi_linear",
-    tier="experimental",
-    short_doc="NIFTy MGVI standard with logging",
-    requires=("nifty8",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_vi_linear(
-        key=key, init_from=init_from, **kw
-    )
-)
-
-register_backend(
-    "vi_linear_fast",
-    tier="experimental",
-    short_doc="NIFTy MGVI without Python logging",
-    requires=("nifty8",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_nifty_fast_vi_linear(
-        key=key, init_from=init_from, **kw
-    )
-)
-
-register_backend(
-    "native_vi_nonlinear",
-    tier="experimental",
-    short_doc="Pure JAX geoVI variational inference",
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_vi_native(
-        key=key, init_from=init_from, **kw
-    )
-)
-
-register_backend(
-    "native_vi_linear",
-    tier="experimental",
-    short_doc="Pure JAX MGVI via lax.while_loop",
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_vi_native_linear(
-        key=key, init_from=init_from, **kw
-    )
-)
-
-register_backend(
-    "mcmc",
-    tier="primary",
-    short_doc="Auto MCMC: NUTS for low-D, raytrace for high-D",
-    requires=("blackjax",),  # NUTS branch needs it; raytrace branch is pure JAX
-)(
-    lambda fitter, *, key, init_from=None, **kw: (
-        fitter._run_nuts(key=key, init_from=init_from, **kw)
-        if fitter.spec.n_free <= _MCMC_AUTO_D_THRESHOLD
-        else fitter._run_raytrace(key=key, init_from=init_from, **kw)
-    )
-)
-
-register_backend(
-    "mcmc_nuts",
-    tier="primary",
-    short_doc="No-U-Turn Sampler",
-    requires=("blackjax",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_nuts(
-        key=key, init_from=init_from, **kw
-    )
-)
-
-register_backend(
-    "mcmc_raytrace",
-    tier="primary",
-    short_doc="Ray-tracing ensemble sampler (high-D)",
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_raytrace(
-        key=key, init_from=init_from, **kw
-    )
-)
-
-register_backend(
-    "mcmc_hmc",
-    tier="experimental",
-    short_doc="Hamiltonian Monte Carlo",
-    requires=("blackjax",),
-)(lambda fitter, *, key, init_from=None, **kw: fitter._run_hmc(key=key, init_from=init_from, **kw))
-
-register_backend(
-    "mcmc_dynamic_hmc",
-    tier="experimental",
-    short_doc="Dynamic HMC with adaptive step size",
-    requires=("blackjax",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_dynamic_hmc(
-        key=key, init_from=init_from, **kw
-    )
-)
-
-register_backend(
-    "mcmc_ghmc",
-    tier="experimental",
-    short_doc="Generalized HMC",
-    requires=("blackjax",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_ghmc(
-        key=key, init_from=init_from, **kw
-    )
-)
-
-register_backend(
-    "mcmc_mclmc",
-    tier="experimental",
-    short_doc="Microcanonical Langevin Monte Carlo",
-    requires=("blackjax",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_mclmc(
-        key=key, init_from=init_from, **kw
-    )
-)
-
-register_backend(
-    "mcmc_adjusted_mclmc",
-    tier="experimental",
-    short_doc="Adjusted microcanonical Langevin sampler",
-    requires=("blackjax",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_adjusted_mclmc(
-        key=key, init_from=init_from, **kw
-    )
-)
-
-register_backend(
-    "mcmc_ess",
-    tier="experimental",
-    short_doc="Elliptical slice sampling",
-    requires=("blackjax",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_elliptical_slice(
-        key=key, init_from=init_from, **kw
-    )
-)
-
-register_backend(
-    "nss",
-    tier="experimental",
-    short_doc="Nested sampling for model comparison",
-)(lambda fitter, *, key, init_from=None, **kw: fitter._run_nss(key=key, init_from=init_from, **kw))
-
-register_backend(
-    "laplace",
-    tier="experimental",
-    short_doc="Laplace approximation",
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_laplace(
-        key=key, init_from=init_from, **kw
-    )
-)
-
-register_backend(
-    "pathfinder",
-    tier="experimental",
-    short_doc="Pathfinder variational inference",
-    requires=("blackjax",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_pathfinder(
-        key=key, init_from=init_from, **kw
-    )
-)
+# All ``@register_backend(...)`` calls live in ``inference/_registration.py``.
+# That module is imported for its side effects by ``inference/__init__.py``,
+# which guarantees the registry is populated before any caller can dispatch
+# through ``Fitter.run``. See ADR-0009.

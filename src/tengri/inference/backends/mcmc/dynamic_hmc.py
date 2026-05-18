@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_dynamic_hmc(
-    fitter,
+    context,
     *,
     key,
     init_from=None,
@@ -61,7 +61,13 @@ def run_dynamic_hmc(
     except ImportError:
         raise ImportError("blackjax required: pip install blackjax") from None
 
+    from tengri.inference.context import InferenceContext
     from tengri.inference.posterior import Posterior
+
+    # ``_shared.py`` helpers still take a Fitter; reach through
+    # the context until they migrate.
+    context = InferenceContext.from_target(context)
+    fitter = context.fitter
 
     init_params, key = _maybe_map_init(fitter, key, init_from, verbose)
 
@@ -149,7 +155,7 @@ def run_dynamic_hmc(
 
     wall_time = time.time() - t0
 
-    samples_phys = _vmap_samples_to_physical(positions, unravel_fn, fitter._to_physical)
+    samples_phys = _vmap_samples_to_physical(positions, unravel_fn, context.to_physical)
     best_params = _mean_params(samples_phys)
 
     if verbose:
@@ -173,5 +179,5 @@ def run_dynamic_hmc(
             "step_size": float(parameters["step_size"]),
         },
         loss_history=None,
-        _model=fitter.model,
+        _model=context.model,
     )

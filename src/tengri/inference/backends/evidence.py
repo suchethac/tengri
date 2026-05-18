@@ -90,7 +90,7 @@ def _get_nss_fns(
 
 
 def run_nss(
-    fitter,
+    context,
     *,
     key,
     init_from=None,
@@ -158,15 +158,20 @@ def run_nss(
     """
     from tengri.inference.backends.nested.base import NSInfo as _NSInfo
     from tengri.inference.backends.nested.utils import ess as ns_ess, sample as ns_sample
+    from tengri.inference.context import InferenceContext
     from tengri.inference.posterior import Posterior
 
-    if fitter.spec.stochastic:
+    context = InferenceContext.from_target(context)
+    # ``_get_nss_fns`` and the spec/fixed-values dict still live on the Fitter.
+    fitter = context.fitter
+
+    if context.spec.stochastic:
         raise ValueError(
             "NSS not supported for stochastic SFH models (D~137). "
             "Use 'vi' or 'mcmc_raytrace' instead."
         )
 
-    D = len(fitter._free_names)
+    D = len(context.free_names)
     if num_inner_steps is None:
         num_inner_steps = D
 
@@ -183,11 +188,11 @@ def run_nss(
         max_shrinkage=max_shrinkage,
     )
 
-    data_args = fitter._data_args
+    data_args = context.data_args
 
     key, init_key = jax.random.split(key)
-    all_samples = fitter.spec.sample_batch(init_key, n_live)
-    particles = {name: all_samples[name] for name in fitter._free_names}
+    all_samples = context.spec.sample_batch(init_key, n_live)
+    particles = {name: all_samples[name] for name in context.free_names}
     live = init_jit(particles, data_args)
 
     # Collect only dead particles, not the full NSInfo (update_info is MCMC internals
@@ -234,7 +239,7 @@ def run_nss(
     key, ess_key = jax.random.split(key)
     ess_val = float(ns_ess(ess_key, ns_run))
 
-    samples_phys = {name: resampled.position[name] for name in fitter._free_names}
+    samples_phys = {name: resampled.position[name] for name in context.free_names}
     for name, val in fitter._fixed_values.items():
         samples_phys[name] = jnp.full(n_posterior_samples, val)
 
@@ -259,5 +264,5 @@ def run_nss(
             "ess": ess_val,
         },
         log_evidence=logZ,
-        _model=fitter.model,
+        _model=context.model,
     )

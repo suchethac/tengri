@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_mclmc(
-    fitter,
+    context,
     *,
     key,
     init_from=None,
@@ -56,7 +56,13 @@ def run_mclmc(
     except ImportError:
         raise ImportError("blackjax required: pip install blackjax") from None
 
+    from tengri.inference.context import InferenceContext
     from tengri.inference.posterior import Posterior
+
+    # ``_shared.py`` helpers still take a Fitter; reach through
+    # the context until they migrate.
+    context = InferenceContext.from_target(context)
+    fitter = context.fitter
 
     init_params, key = _maybe_map_init(fitter, key, init_from, verbose)
 
@@ -134,7 +140,7 @@ def run_mclmc(
 
     wall_time = time.time() - t0
 
-    samples_phys = _vmap_samples_to_physical(positions, unravel_fn, fitter._to_physical)
+    samples_phys = _vmap_samples_to_physical(positions, unravel_fn, context.to_physical)
     best_params = _mean_params(samples_phys)
 
     if verbose:
@@ -152,12 +158,12 @@ def run_mclmc(
             "step_size": float(params.step_size),
         },
         loss_history=None,
-        _model=fitter.model,
+        _model=context.model,
     )
 
 
 def run_adjusted_mclmc(
-    fitter,
+    context,
     *,
     key,
     init_from=None,
@@ -193,8 +199,11 @@ def run_adjusted_mclmc(
     except ImportError:
         raise ImportError("blackjax required: pip install blackjax") from None
 
+    from tengri.inference.context import InferenceContext
     from tengri.inference.posterior import Posterior
 
+    context = InferenceContext.from_target(context)
+    fitter = context.fitter
     init_params, key = _maybe_map_init(fitter, key, init_from, verbose)
 
     log_posterior_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
@@ -296,7 +305,7 @@ def run_adjusted_mclmc(
 
     wall_time = time.time() - t0
 
-    samples_phys = _vmap_samples_to_physical(positions, unravel_fn, fitter._to_physical)
+    samples_phys = _vmap_samples_to_physical(positions, unravel_fn, context.to_physical)
     best_params = _mean_params(samples_phys)
 
     if verbose:
@@ -321,7 +330,7 @@ def run_adjusted_mclmc(
             "n_integration_steps": int(n_integration_steps),
         },
         loss_history=None,
-        _model=fitter.model,
+        _model=context.model,
     )
 
 

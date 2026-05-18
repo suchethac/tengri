@@ -741,7 +741,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_raytrace(
-    fitter,
+    context,
     *,
     key,
     init_from=None,
@@ -779,12 +779,12 @@ def run_raytrace(
         Print progress.
     """
     from tengri.inference.backends.mcmc.raytrace import sample_raytrace
+    from tengri.inference.context import InferenceContext
     from tengri.inference.posterior import Posterior
 
-    if init_from is not None:
-        init_params = fitter._unbounded_from_posterior(init_from)
-    else:
-        init_params = fitter._initialize_unbounded(key)
+    context = InferenceContext.from_target(context)
+    fitter = context.fitter  # ``_get_flat_logdensity`` still wants a Fitter
+    init_params = context.initial_params(key, init_from=init_from)
 
     log_prob_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
         fitter,
@@ -844,7 +844,7 @@ def run_raytrace(
     mean_accept = float(jnp.mean(accept_prob))
     mean_accept_post = float(jnp.mean(accept_prob_post))
 
-    samples_phys = _vmap_samples_to_physical(chain, unravel_fn, fitter._to_physical)
+    samples_phys = _vmap_samples_to_physical(chain, unravel_fn, context.to_physical)
     best_params = _mean_params(samples_phys)
 
     if verbose:
@@ -873,5 +873,5 @@ def run_raytrace(
             "accept_rate_post_burnin": mean_accept_post,
         },
         loss_history=None,
-        _model=fitter.model,
+        _model=context.model,
     )
