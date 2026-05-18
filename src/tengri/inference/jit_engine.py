@@ -14,7 +14,10 @@ from __future__ import annotations
 
 import os
 import threading
+import warnings
 from collections import OrderedDict
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 import jax
 import jax.numpy as jnp
@@ -22,6 +25,7 @@ import jax.numpy as jnp
 from tengri.inference._model_cache import get_model_cache
 
 __all__ = [
+    "CompileCache",
     "build_jit_engine",
     "clear_shared_caches",
     "get_or_build_engine_cached",
@@ -31,6 +35,117 @@ __all__ = [
     "lean",
     "persistent",
 ]
+
+
+@dataclass
+class CompileCache:
+    """Explicit owner of JIT compilation cache state.
+
+    Manages a bounded LRU cache of compiled XLA executables, with tunable
+    max size and mode (normal/lean/persistent). Replaces module-level globals
+    for per-Fitter or per-CatalogFitter isolation.
+
+    Parameters
+    ----------
+    max_entries : int, optional
+        Maximum number of cache entries to hold before evicting oldest.
+        Default 2; tune via TENGRI_ENGINE_CACHE_MAXSIZE env var or per-instance.
+    mode : {'normal', 'lean', 'persistent'}, optional
+        Cache behavior mode. Default 'normal'.
+        - 'normal': keep all cached entries (existing behavior).
+        - 'lean': call clear_shared_caches(..., scope='inference_body')
+          before each inference to drop stale entries.
+        - 'persistent': never clear automatically; user calls clear() manually.
+    _store : OrderedDict
+        Internal LRU dict. Do not access directly; use get_or_compile().
+    _store_lock : threading.Lock
+        Thread safety for concurrent Fitter instances.
+
+    Attributes
+    ----------
+    max_entries : int
+    mode : str
+    """
+
+    max_entries: int = field(
+        default_factory=lambda: int(os.environ.get("TENGRI_ENGINE_CACHE_MAXSIZE", "2"))
+    )
+    mode: Literal["normal", "lean", "persistent"] = "normal"
+    _store: OrderedDict[Any, Any] = field(default_factory=OrderedDict)
+    _store_lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def get_or_compile(self, key: Any, build_fn):
+        """Get cached value or build and store it.
+
+        Parameters
+        ----------
+        key : hashable
+            Cache key (typically a tuple of compile parameters).
+        build_fn : callable
+            Function to call if key is not in cache. Must return the value to cache.
+
+        Returns
+        -------
+        Any
+            Either the cached value or the result of build_fn().
+        """
+        with self._store_lock:
+            if key in self._store:
+                self._store.move_to_end(key)
+                return self._store[key]
+            value = build_fn()
+            self._lru_insert(key, value)
+            return value
+
+    def _lru_insert(self, key: Any, value: Any) -> None:
+        """Insert into LRU dict; evict oldest entries past max_entries."""
+        self._store[key] = value
+        self._store.move_to_end(key)
+        while len(self._store) > self.max_entries:
+            self._store.popitem(last=False)
+
+    def clear(self) -> None:
+        """Clear all cached entries."""
+        with self._store_lock:
+            self._store.clear()
+
+    def set_mode(self, mode: Literal["normal", "lean", "persistent"]) -> None:
+        """Set cache mode.
+
+        Parameters
+        ----------
+        mode : {'normal', 'lean', 'persistent'}
+            New mode.
+        """
+        if mode not in ("normal", "lean", "persistent"):
+            raise ValueError(f"mode must be one of ('normal', 'lean', 'persistent'); got {mode!r}")
+        self.mode = mode
+
+    def memory_estimate_gb(self) -> float | None:
+        """Estimate memory used by cached entries.
+
+        Returns
+        -------
+        float or None
+            Estimated total memory in GB, or None if the platform doesn't
+            support XLA executable introspection (e.g., Metal on macOS).
+            Only an order-of-magnitude estimate; individual executable sizes
+            are platform-dependent.
+        """
+        try:
+            # XLA executable size introspection (JAX >= 0.3.5).
+            # This is a best-effort estimate and may not work on all platforms.
+            # Currently, JAX does not expose XLA executable sizes through
+            # public APIs on all platforms, so we return None as a placeholder.
+            # Future: integrate with JAX's memory profiling tools when available.
+            with self._store_lock:
+                # Entries are typically dicts of compiled functions.
+                # Direct size introspection not yet available on all platforms.
+                pass
+            return None
+        except (AttributeError, TypeError):
+            return None
+
 
 # ── Module-level shared caches for cross-galaxy engine reuse ────────────────
 # Each cached entry holds a compiled XLA executable that can be hundreds of MB.
@@ -68,6 +183,17 @@ _LEAN_MODE_LOCK = threading.Lock()
 _PERSISTENT_MODE: bool = os.environ.get("TENGRI_PERSISTENT", "") == "1"
 _PERSISTENT_MODE_LOCK = threading.Lock()
 
+# Module-level singleton CompileCache for backwards compatibility.
+_SINGLETON_CACHE: CompileCache | None = None
+
+
+def _get_singleton_cache() -> CompileCache:
+    """Get or create the module-level singleton CompileCache."""
+    global _SINGLETON_CACHE
+    if _SINGLETON_CACHE is None:
+        _SINGLETON_CACHE = CompileCache(max_entries=_ENGINE_CACHE_MAXSIZE, mode="normal")
+    return _SINGLETON_CACHE
+
 
 def is_lean_mode() -> bool:
     """Return True if explicit lean mode is currently active."""
@@ -81,6 +207,11 @@ def is_persistent_mode() -> bool:
 
 def persistent(enabled: bool = True):
     """Context manager: keep ALL cached compiled artefacts across ``Fitter.run()``.
+
+    .. deprecated:: 2026-05
+        Use ``CompileCache(mode='persistent')`` passed to ``Fitter(..., cache=...)``
+        instead. The module-level context manager is maintained for backwards
+        compatibility but will emit a DeprecationWarning.
 
     After smart lean (2026-05), this is rarely needed. Smart lean already
     keeps the entry that matches the upcoming run's
@@ -98,6 +229,13 @@ def persistent(enabled: bool = True):
     @contextlib.contextmanager
     def _ctx():
         global _PERSISTENT_MODE
+        warnings.warn(
+            "tengri.persistent() context manager is deprecated. "
+            "Use CompileCache(mode='persistent') passed to Fitter(..., cache=...) instead. "
+            "This deprecation shim will be removed in a future release.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
         with _PERSISTENT_MODE_LOCK:
             prev = _PERSISTENT_MODE
             _PERSISTENT_MODE = bool(enabled)
@@ -112,6 +250,11 @@ def persistent(enabled: bool = True):
 
 def lean(enabled: bool = True):
     """Context manager: clear inference-body caches before each ``Fitter.run()``.
+
+    .. deprecated:: 2026-05
+        Use ``CompileCache(mode='lean')`` passed to ``Fitter(..., cache=...)``
+        instead. The module-level context manager is maintained for backwards
+        compatibility but will emit a DeprecationWarning.
 
     Usage::
 
@@ -141,6 +284,13 @@ def lean(enabled: bool = True):
     @contextlib.contextmanager
     def _ctx():
         global _LEAN_MODE
+        warnings.warn(
+            "tengri.lean() context manager is deprecated. "
+            "Use CompileCache(mode='lean') passed to Fitter(..., cache=...) instead. "
+            "This deprecation shim will be removed in a future release.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
         with _LEAN_MODE_LOCK:
             prev = _LEAN_MODE
             _LEAN_MODE = bool(enabled)
