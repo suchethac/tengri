@@ -20,7 +20,22 @@ standard smooth parametric model.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import Any
+
+
+def _validate_enum(value: Any, valid: Iterable, where: str) -> None:
+    """Raise ``ValueError`` if ``value`` is outside ``valid``.
+
+    ``where`` is the human label used in the error message (e.g.
+    ``"AGNConfig.disc"``). ``None`` entries in ``valid`` are formatted
+    as the string ``"None"`` in the suggestion list.
+    """
+    valid = frozenset(valid)
+    if value not in valid:
+        choices = sorted(str(v) for v in valid)
+        raise ValueError(f"{where}={value!r} is not valid. Choose from: {choices}")
 
 
 @dataclass(frozen=True)
@@ -111,27 +126,16 @@ class AGNConfig:
     agn_nlr_backend: str | None = None
 
     def __post_init__(self) -> None:
-        valid_disc = frozenset({"powerlaw", "multicolor", "kubota_done", "adaf"})
-        valid_torus = frozenset({"simple", "two_temperature", "skirtor"})
-        valid_nlr = frozenset({"analytic", "cue"})
-        valid_nlr_backend = frozenset({None, "feltre"})
-        if self.disc not in valid_disc:
-            raise ValueError(
-                f"AGNConfig.disc={self.disc!r} is not valid. Choose from: {sorted(valid_disc)}"
-            )
-        if self.torus not in valid_torus:
-            raise ValueError(
-                f"AGNConfig.torus={self.torus!r} is not valid. Choose from: {sorted(valid_torus)}"
-            )
-        if self.nlr not in valid_nlr:
-            raise ValueError(
-                f"AGNConfig.nlr={self.nlr!r} is not valid. Choose from: {sorted(valid_nlr)}"
-            )
-        if self.agn_nlr_backend not in valid_nlr_backend:
-            raise ValueError(
-                f"AGNConfig.agn_nlr_backend={self.agn_nlr_backend!r} is not valid. "
-                f"Choose from: {sorted(str(x) for x in valid_nlr_backend)}"
-            )
+        _validate_enum(
+            self.disc, {"powerlaw", "multicolor", "kubota_done", "adaf"}, "AGNConfig.disc"
+        )
+        _validate_enum(
+            self.torus, {"simple", "two_temperature", "skirtor"}, "AGNConfig.torus"
+        )
+        _validate_enum(self.nlr, {"analytic", "cue"}, "AGNConfig.nlr")
+        _validate_enum(
+            self.agn_nlr_backend, {None, "feltre"}, "AGNConfig.agn_nlr_backend"
+        )
 
 
 @dataclass(frozen=True)
@@ -188,12 +192,7 @@ class SFHConfig:
     lgmet_scatter: float = 0.1
 
     def __post_init__(self) -> None:
-        valid_interp = frozenset({"smooth", "linear"})
-        if self.met_interp not in valid_interp:
-            raise ValueError(
-                f"SFHConfig.met_interp={self.met_interp!r} is not valid."
-                f" Choose from: {sorted(valid_interp)}"
-            )
+        _validate_enum(self.met_interp, {"smooth", "linear"}, "SFHConfig.met_interp")
 
 
 @dataclass(frozen=True)
@@ -245,43 +244,19 @@ class DustConfig:
     approx: bool = True
 
     def __post_init__(self) -> None:
-        valid_models = frozenset({"two_component", "single_component"})
-        valid_laws = frozenset(
-            {
-                "power_law",
-                "calzetti",
-                "kriek_conroy",
-                "smc",
-                "cardelli",
-                "salim",
-                "li08",
-                "vw07_bc",
-                "vw07_diff",
-            }
-        )
-        valid_emission = frozenset(
-            {None, "modified_blackbody", "casey2012", "dale2014", "draine_li2007", "draine_li2014"}
-        )
-        if self.model not in valid_models:
-            raise ValueError(
-                f"DustConfig.model={self.model!r} is not valid."
-                f" Choose from: {sorted(valid_models)}"
-            )
-        if self.law_bc not in valid_laws:
-            raise ValueError(
-                f"DustConfig.law_bc={self.law_bc!r} is not valid."
-                f" Choose from: {sorted(valid_laws)}"
-            )
-        if self.law_diff is not None and self.law_diff not in valid_laws:
-            raise ValueError(
-                f"DustConfig.law_diff={self.law_diff!r} is not valid."
-                f" Choose from: {sorted(valid_laws)}"
-            )
-        if self.emission not in valid_emission:
-            raise ValueError(
-                f"DustConfig.emission={self.emission!r} is not valid."
-                f" Choose from: {sorted(str(v) for v in valid_emission)}"
-            )
+        valid_laws = {
+            "power_law", "calzetti", "kriek_conroy", "smc",
+            "cardelli", "salim", "li08", "vw07_bc", "vw07_diff",
+        }
+        _validate_enum(self.model, {"two_component", "single_component"}, "DustConfig.model")
+        _validate_enum(self.law_bc, valid_laws, "DustConfig.law_bc")
+        if self.law_diff is not None:
+            _validate_enum(self.law_diff, valid_laws, "DustConfig.law_diff")
+        valid_emission = {
+            None, "modified_blackbody", "casey2012", "dale2014",
+            "draine_li2007", "draine_li2014",
+        }
+        _validate_enum(self.emission, valid_emission, "DustConfig.emission")
 
 
 @dataclass(frozen=True)
@@ -338,18 +313,12 @@ class NebularConfig:
     eline_broad: bool = False
 
     def __post_init__(self) -> None:
-        valid_backends = frozenset({"off", "baked_in", "cloudy", "cue"})
-        valid_eline_modes = frozenset({"off", "fixed", "marginalized"})
-        if self.backend not in valid_backends:
-            raise ValueError(
-                f"NebularConfig.backend={self.backend!r} is not valid."
-                f" Choose from: {sorted(valid_backends)}"
-            )
-        if self.eline_mode not in valid_eline_modes:
-            raise ValueError(
-                f"NebularConfig.eline_mode={self.eline_mode!r} is not valid."
-                f" Choose from: {sorted(valid_eline_modes)}"
-            )
+        _validate_enum(
+            self.backend, {"off", "baked_in", "cloudy", "cue"}, "NebularConfig.backend"
+        )
+        _validate_enum(
+            self.eline_mode, {"off", "fixed", "marginalized"}, "NebularConfig.eline_mode"
+        )
         if self.backend == "cloudy" and self.grid_path is None:
             raise ValueError("NebularConfig: grid_path is required when backend='cloudy'.")
 
