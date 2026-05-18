@@ -59,8 +59,6 @@ def _all_radio_params() -> dict:
         "radio_alpha_thick": -0.1,
         "radio_log_nu_t": 10.0,
         "radio_log_nu_cut": 13.0,
-        "radio_alpha_inj": 0.6,
-        "radio_log_nu_break": 10.0,
     }
 
 
@@ -75,8 +73,6 @@ class TestParameterRegistry:
             "radio_alpha_thick",
             "radio_log_nu_t",
             "radio_log_nu_cut",
-            "radio_alpha_inj",
-            "radio_log_nu_break",
         ],
     )
     def test_registered_in_param_defs(self, name):
@@ -89,13 +85,22 @@ class TestParameterRegistry:
             "radio_alpha_thick",
             "radio_log_nu_t",
             "radio_log_nu_cut",
-            "radio_alpha_inj",
-            "radio_log_nu_break",
         ],
     )
     def test_declared_by_component(self, name):
         decls = {d.name for d in RadioSEDComponent().declared_parameters()}
         assert name in decls
+
+    @pytest.mark.parametrize("name", ["radio_alpha_inj", "radio_log_nu_break"])
+    def test_aging_kernel_params_not_yet_registered(self, name):
+        # Reserved-params cleanup: until the JP/KP/Tribble physics lands
+        # the two free parameters they would own are absent from both the
+        # registry and the component declaration. This test pins that
+        # contract so a partial re-introduction (params without physics,
+        # or vice versa) is caught.
+        assert name not in _RADIO_PARAMS
+        decls = {d.name for d in RadioSEDComponent().declared_parameters()}
+        assert name not in decls
 
     def test_naming_follows_radio_prefix(self):
         for name in _RADIO_PARAMS:
@@ -194,13 +199,12 @@ class TestDplDispatch:
 
 
 @pytest.mark.unit
-class TestAgingKernelStubs:
-    """JP/KP/Tribble are reserved — apply must raise NotImplementedError."""
+class TestAgingKernelsRejectedAtConstruction:
+    """JP/KP/Tribble are not yet implemented — construction must fail
+    early with a clean ValueError, not silently succeed and then raise
+    NotImplementedError deep inside apply()."""
 
     @pytest.mark.parametrize("model", ["JP", "KP", "tribble"])
-    def test_aging_kernels_raise_not_implemented(self, state, model):
-        cfg = RadioSEDComponentConfig(agn_radio_model=model)
-        comp = RadioSEDComponent(config=cfg)
-        params = _all_radio_params()
-        with pytest.raises(NotImplementedError, match="reserved but not yet implemented"):
-            comp.apply(state, params)
+    def test_aging_kernels_raise_at_construction(self, model):
+        with pytest.raises(ValueError, match="Unknown agn_radio_model"):
+            RadioSEDComponentConfig(agn_radio_model=model)
