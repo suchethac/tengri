@@ -727,13 +727,10 @@ def predict_all_lines(
         arXiv:2405.04598. https://doi.org/10.3847/1538-4357/ad7fe3
 
     """
-    # --- Fully batched forward pass using precomputed weight arrays ---
-    # All stacking/padding was done once at load time in load_cue_weights()
-
-    # Step 1: Normalize inputs (16 different shifts/scales)
+    # Fully batched forward pass over the 16 sub-emulators using the
+    # stacked/padded weight arrays prepared in load_cue_weights().
     x = (nn_params[None, :] - weights.batched_param_shifts) / weights.batched_param_scales
 
-    # Step 2: Batched hidden layers (precomputed stacked weights)
     for W, b, alpha, beta in zip(
         weights.batched_W_hidden,
         weights.batched_b_hidden,
@@ -743,29 +740,24 @@ def predict_all_lines(
         x = jnp.einsum("ni,nio->no", x, W) + b
         x = x * (beta + (1.0 - beta) * jax.nn.sigmoid(alpha * x))
 
-    # Step 3: Batched output layer (precomputed padded weights)
     pca_coeffs = jnp.einsum("ni,nio->no", x, weights.batched_W_out) + weights.batched_b_out
     pca_coeffs = pca_coeffs * weights.batched_pca_scale + weights.batched_pca_shift
 
-    # Step 4: Batched PCA inverse (precomputed padded components)
     log_spec = (
         jnp.einsum("np,npl->nl", pca_coeffs, weights.batched_pca_comp) + weights.batched_pca_mean
     )
     log_spec = log_spec * weights.batched_spec_scale + weights.batched_spec_shift
 
-    # Extract actual (unpadded) lines and concatenate
     all_log_lum = []
     for i, n_lines_i in enumerate(weights.batched_n_lines):
         all_log_lum.append(log_spec[i, :n_lines_i])
     log_lum_concat = jnp.concatenate(all_log_lum, axis=-1)
 
-    # Sort by wavelength (precomputed index)
     log_lum_sorted = log_lum_concat[weights.batched_sort_idx]
     wav_sorted = weights.nn_line_wav[weights.batched_sort_idx]
 
-    # Convert from log10(Lsun/Q_H) to Lsun (gradient-safe)
-    # Internal computation stays in Lsun to avoid exponent overflow;
-    # converted to erg/s at predict_nebular_sed return.
+    # Stay in Lsun internally to avoid 10^x overflow; predict_nebular_sed
+    # converts to erg/s at the boundary.
     exponent = log_lum_sorted - gas_logq + gas_logqion - _LOG_LSUN
     exponent_safe = jnp.clip(exponent, -100.0, 100.0)
     luminosities = 10.0**exponent_safe
@@ -1295,9 +1287,9 @@ class CueBackend:
         from tengri.components.nebular.ionizing_spectrum import interpolate_ionizing_params
 
         # Vectorize over age axis: get (ionspec_7, logqion) for each age
-        def _get_params_at_age(log_age_yr):
-            """Get ionizing spectrum and Q_H at specified age via interpolation."""
-            return interpolate_ionizing_params(
+        # ionspec_all: (n_age, 7), logqion_all: (n_age,)
+        ionspec_all, logqion_all = jax.vmap(
+            lambda log_age_yr: interpolate_ionizing_params(
                 self._ionspec_table,
                 self._logqion_table,
                 self._ssp_lgmet,
@@ -1305,9 +1297,7 @@ class CueBackend:
                 log_z,
                 log_age_yr,
             )
-
-        # vmap over age bins → ionspec_all (n_age, 7), logqion_all (n_age,)
-        ionspec_all, logqion_all = jax.vmap(_get_params_at_age)(ssp_log_ages_yr)
+        )(ssp_log_ages_yr)
 
         # Q_H per bin, masked to young bins with positive weights
         qh_per_bin = 10.0**logqion_all  # (n_age,)

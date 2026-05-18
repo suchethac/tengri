@@ -17,7 +17,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._phys import C_LIGHT as _C_CGS, LSUN_ERG as _LSUN_ERG
+from tengri.components.agn._phys import C_LIGHT as _C_CGS
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_triweight,
@@ -25,6 +25,7 @@ from tengri.utils.grid_interp import (
     slice_fixed_axes,
 )
 from tengri.utils.interpolation import edges_for_grid
+from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 # Parameter names corresponding to the 5 SKIRTOR grid axes, in order.
 AXIS_PARAMS: tuple[str, ...] = (

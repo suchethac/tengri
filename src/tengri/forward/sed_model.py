@@ -63,8 +63,6 @@ from tengri.forward._kernels import (
     observe_spectrum_from_rest_sed,
 )
 from tengri.forward.pipeline import (
-    get_agn_kwargs,
-    get_dust_kwargs,
     interp_metallicity,
     interp_metallicity_evolving,
 )
@@ -1826,14 +1824,6 @@ class SEDModel:
             sfr_full = sfr_mean
 
         return sfr_mean, sfr_full
-
-    def _get_dust_kwargs(self, p):
-        """Extract dust law + emission kwargs from internal params dict."""
-        return get_dust_kwargs(self, p)
-
-    def _get_agn_kwargs(self, p):
-        """Extract AGN kwargs from internal params dict for fused kernel."""
-        return get_agn_kwargs(self, p)
 
     def _get_non_stellar_kwargs(self, p):
         """Extract non-stellar kwargs from internal params for hybrid kernel."""

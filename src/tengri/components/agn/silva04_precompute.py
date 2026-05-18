@@ -96,10 +96,8 @@ def precompute_silva04_photometry(
     integration constant equals L_sun / trapz(template, nu). This matches
     the runtime normalization in ``silva04.py``.
     """
-    from tengri.components.agn._phys import (
-        C_LIGHT as _C_CGS,
-        LSUN_ERG as _LSUN_ERG,
-    )
+    from tengri.components.agn._phys import C_LIGHT as _C_CGS
+    from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
     raw = _load_silva04_arrays(grid_path)
     grid = np.asarray(raw["template"], dtype=np.float64)  # (n_nh, n_wave)

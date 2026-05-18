@@ -787,16 +787,11 @@ def casey2012(
     x = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * T_eff), 0.0, 500.0)
     nu_ref = _C_CGS / (100.0e-4)  # 100 μm pivot in Hz
 
-    # Compute transition function between power law and MBB
     f_transition = _casey_transition_function(wavelength_cm, T_eff)
-
-    # Compute mid-IR power-law and modified blackbody components
     power_law = _casey_powerlaw_component(
         nu, nu_ref, f_transition, x, dust_alpha_mir, optically_thin
     )
     mbb = _casey_mbb_component(nu, nu_ref, f_transition, x, dust_beta_ir)
-
-    # Combined unnormalized shape
     shape = power_law + mbb
 
     # Normalize so integral over frequency = L_absorbed
@@ -913,15 +908,12 @@ def pah_drude(
     """
     from tengri.components.dust.drude_profiles import compute_pah_template
 
-    # Convert to microns for compute_pah_template
     wavelength_um = wavelength_aa / 1e4
-
-    # Compute PAH template in L_lambda (dimensionless relative units)
     pah_llam = compute_pah_template(wavelength_um, strengths=None)
 
-    # Convert L_lambda to L_nu: L_nu = L_lambda * lambda^2 / c
-    wave_cm = wavelength_aa * 1.0e-8  # Angstrom -> cm
-    c_cgs = 2.99792458e10  # cm/s
+    # L_nu = L_lambda * lambda^2 / c.
+    wave_cm = wavelength_aa * 1.0e-8
+    c_cgs = 2.99792458e10
     lnu = L_absorbed * pah_llam * (wave_cm**2) / c_cgs
 
     return lnu

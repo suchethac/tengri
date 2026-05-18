@@ -26,13 +26,13 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
-from tengri.components.agn._phys import LSUN_ERG
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.grahsp.attenuation import attenuation_factors
 from tengri.components.agn.grahsp.bbb import sbpl_bbb
 from tengri.components.agn.grahsp.lines import feii_forest, gaussian_lines
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
 from tengri.components.agn.grahsp.torus import si_feature, torus_dust_continuum
+from tengri.utils.physics_constants import L_SUN as LSUN_ERG
 
 __all__: list[str] = []  # blocks are registered via decorators; no public API
 
