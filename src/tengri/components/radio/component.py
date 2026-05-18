@@ -53,6 +53,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
+from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
 from tengri.components.radio.radio import radio_total, radio_total_dpl
 from tengri.core.component import (
     DerivedKey,
@@ -61,7 +62,6 @@ from tengri.core.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.parameters.priors import Fixed
 
 __all__ = ["RadioSEDComponent", "RadioSEDComponentConfig"]
 
@@ -134,9 +134,11 @@ class RadioSEDComponent:
     def declared_parameters(self) -> list[ParamDeclaration]:
         r"""Free parameters this component owns.
 
-        Mirrors the ``radio_*`` entries in
-        :mod:`tengri.parameters._param_defs` so registration via this
-        list and via the legacy registry produce the same priors.
+        Returns the canonical :data:`PARAMS` tuple from
+        :mod:`tengri.components.radio._params`. The legacy
+        ``_RADIO_PARAMS`` bucket in :mod:`tengri.parameters._param_defs`
+        is derived from the same tuple, so the two registration paths
+        are guaranteed to agree.
 
         DPL parameters (``radio_alpha_thin``, ``radio_alpha_thick``,
         ``radio_log_nu_t``, ``radio_log_nu_cut``) are declared but
@@ -144,68 +146,7 @@ class RadioSEDComponent:
         ``agn_radio_model="powerlaw"``. Likewise the JP/KP/Tribble
         parameters (``radio_alpha_inj``, ``radio_log_nu_break``).
         """
-        return [
-            ParamDeclaration(
-                "radio_q_ir",
-                Fixed(2.64),
-                "FIR-radio correlation parameter (bell2003 mode) [dimensionless]",
-            ),
-            ParamDeclaration(
-                "radio_alpha_sf",
-                Fixed(0.8),
-                "Star-forming synchrotron spectral index [dimensionless]",
-            ),
-            ParamDeclaration(
-                "radio_loudness",
-                Fixed(0.0),
-                "AGN radio loudness log10(L_5GHz / L_B) [dimensionless]",
-            ),
-            ParamDeclaration(
-                "radio_alpha_agn",
-                Fixed(0.7),
-                "AGN radio spectral index (powerlaw model) [dimensionless]",
-            ),
-            ParamDeclaration(
-                "radio_T_e",
-                Fixed(1e4),
-                "Free-free electron temperature [K]",
-            ),
-            ParamDeclaration(
-                "radio_alpha_ff",
-                Fixed(-0.1),
-                "Free-free spectral index L_nu ∝ nu^alpha [dimensionless]",
-            ),
-            ParamDeclaration(
-                "radio_alpha_thin",
-                Fixed(-0.75),
-                "AGN-DPL optically-thin (steep) spectral slope [dimensionless]",
-            ),
-            ParamDeclaration(
-                "radio_alpha_thick",
-                Fixed(-0.1),
-                "AGN-DPL optically-thick (flat/inverted) spectral slope [dimensionless]",
-            ),
-            ParamDeclaration(
-                "radio_log_nu_t",
-                Fixed(10.0),
-                "AGN-DPL log10(transition frequency / Hz)",
-            ),
-            ParamDeclaration(
-                "radio_log_nu_cut",
-                Fixed(13.0),
-                "AGN-DPL log10(aging cutoff frequency / Hz)",
-            ),
-            ParamDeclaration(
-                "radio_alpha_inj",
-                Fixed(0.6),
-                "JP/KP/Tribble injection spectral index (reserved) [dimensionless]",
-            ),
-            ParamDeclaration(
-                "radio_log_nu_break",
-                Fixed(10.0),
-                "JP/KP/Tribble log10(spectral break frequency / Hz) (reserved)",
-            ),
-        ]
+        return list(_RADIO_PARAMS)
 
     def publishes(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys this radio component publishes.

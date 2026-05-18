@@ -32,6 +32,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
+from tengri.components.igm._params import PARAMS as _IGM_PARAMS
 from tengri.components.igm.igm import igm_transmission
 from tengri.core.component import (
     DerivedKey,
@@ -40,7 +41,6 @@ from tengri.core.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.parameters.priors import Fixed
 
 __all__ = ["IGMSEDComponent", "IGMSEDComponentConfig"]
 
@@ -92,27 +92,13 @@ class IGMSEDComponent:
     def declared_parameters(self) -> list[ParamDeclaration]:
         r"""Free parameters this component owns.
 
-        IGM declares the CGM damping-wing knobs from
-        :func:`igm_transmission`. The bare ``redshift`` parameter is
-        read via :data:`BARE_NAME_ALLOWLIST` and not declared here.
+        Returns the canonical :data:`PARAMS` tuple from
+        :mod:`tengri.components.igm._params` — the CGM damping-wing
+        knobs read by :func:`igm_transmission`. The bare ``redshift``
+        parameter is read via :data:`BARE_NAME_ALLOWLIST` and not
+        declared here.
         """
-        return [
-            ParamDeclaration(
-                "igm_z_mid",
-                Fixed(7.0),
-                "CGM damping-wing sigmoid midpoint redshift [dimensionless]",
-            ),
-            ParamDeclaration(
-                "igm_dz",
-                Fixed(0.5),
-                "CGM damping-wing sigmoid width [dimensionless]",
-            ),
-            ParamDeclaration(
-                "igm_log_nhi",
-                Fixed(20.0),
-                "CGM plateau log10(N_HI / cm^-2) [dimensionless]",
-            ),
-        ]
+        return list(_IGM_PARAMS)
 
     def publishes(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys this IGM component publishes.

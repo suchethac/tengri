@@ -36,6 +36,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
+from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn.unified import resolve_agn_model
 from tengri.core.component import (
     DerivedKey,
@@ -44,7 +45,6 @@ from tengri.core.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.parameters.priors import Fixed, Uniform
 from tengri.utils.physics_constants import L_SUN
 
 __all__ = ["AGNSEDComponent", "AGNSEDComponentConfig"]
@@ -96,99 +96,19 @@ class AGNSEDComponent:
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free parameters this component owns.
 
+        Returns the canonical :data:`PARAMS` tuple from
+        :mod:`tengri.components.agn._params`. The legacy ``_AGN_PARAMS``
+        bucket in :mod:`tengri.parameters._param_defs` is a derived view
+        of the same tuple (plus the ``neb_xid`` orphan kept in the
+        registry for the Feltre NLR backend).
+
         The full ``agn_*`` parameter superset is declared so that any
         registered model can run without missing keys. Users freely
         ``Fixed`` whatever a particular model does not consume; the
         AGN registry functions accept ``**kwargs`` and ignore unused
         names.
         """
-        return [
-            # Luminosity & disc
-            ParamDeclaration(
-                "agn_log_lbol",
-                Uniform(8.0, 14.0),
-                "log10(L_bol / Lsun) of the AGN [dimensionless]",
-            ),
-            ParamDeclaration(
-                "agn_frac",
-                Fixed(1.0),
-                "Overall AGN scaling factor [dimensionless, in [0, 1] for fractional mode]",
-            ),
-            ParamDeclaration(
-                "agn_alpha",
-                Fixed(-1.0),
-                "Power-law disc slope [dimensionless]",
-            ),
-            ParamDeclaration(
-                "agn_log_mbh",
-                Fixed(8.0),
-                "log10(M_BH / Msun) [dimensionless]",
-            ),
-            ParamDeclaration(
-                "agn_log_ledd",
-                Fixed(-1.0),
-                "log10(L / L_Edd) [dimensionless]",
-            ),
-            ParamDeclaration(
-                "agn_a_spin",
-                Fixed(0.0),
-                "BH dimensionless spin parameter [dimensionless, in [0, 0.998]]",
-            ),
-            # Torus
-            ParamDeclaration(
-                "agn_torus_frac",
-                Fixed(0.5),
-                "Torus covering factor — INDEPENDENT of inclination "
-                "(do not derive from cos(theta_torus); CLAUDE.md gotcha) "
-                "[dimensionless, in [0, 1]]",
-            ),
-            ParamDeclaration(
-                "agn_T_torus",
-                Fixed(1000.0),
-                "Single-temperature torus dust temperature [K]",
-            ),
-            ParamDeclaration(
-                "agn_tau_torus",
-                Fixed(3.0),
-                "Torus optical depth [dimensionless]",
-            ),
-            ParamDeclaration(
-                "agn_T_hot",
-                Fixed(1500.0),
-                "Two-temperature torus hot dust temperature [K]",
-            ),
-            ParamDeclaration(
-                "agn_T_warm",
-                Fixed(300.0),
-                "Two-temperature torus warm dust temperature [K]",
-            ),
-            ParamDeclaration(
-                "agn_frac_hot",
-                Fixed(0.5),
-                "Hot-component fraction in two-temperature torus [dimensionless, in [0, 1]]",
-            ),
-            # Inclination & polar dust (gotcha-aware)
-            ParamDeclaration(
-                "agn_cos_inc",
-                Fixed(0.5),
-                "Cosine of inclination [dimensionless, in [0, 1]]",
-            ),
-            ParamDeclaration(
-                "agn_polar_ebv",
-                Fixed(0.0),
-                "Polar dust E(B-V) [mag]",
-            ),
-            ParamDeclaration(
-                "agn_polar_oa",
-                Fixed(40.0),
-                "Polar dust opening angle [degrees]",
-            ),
-            ParamDeclaration(
-                "agn_ebv_disc",
-                Fixed(0.0),
-                "Disc reddening E(B-V) [mag]",
-            ),
-        ]
+        return list(_AGN_PARAMS)
 
     def publishes(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys this AGN component publishes.
