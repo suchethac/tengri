@@ -329,9 +329,12 @@ class DustSEDComponent:
         else:
             non_stellar_pre_dust = state.sed_intrinsic - sed_intrinsic_stellar
         sed_total = non_stellar_pre_dust + sed_attenuated + sed_ir
-        new_derived = dict(state.derived)
-        new_derived["L_ir"] = L_ir
-        new_derived["L_absorbed"] = L_absorbed
-        new_derived["sed_dust_attenuated"] = sed_attenuated
-        new_derived["sed_dust_ir"] = sed_ir
-        return state.with_(sed_intrinsic=sed_total, derived=new_derived)
+        return state.with_(
+            sed_intrinsic=sed_total,
+            derived=state.derived.with_(
+                L_ir=L_ir,
+                L_absorbed=L_absorbed,
+                sed_dust_attenuated=sed_attenuated,
+                sed_dust_ir=sed_ir,
+            ),
+        )
