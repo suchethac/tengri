@@ -33,6 +33,17 @@ shape the history of metal enrichment in galaxies.
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-135
 
+
+
+.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_chemical_evolution_001.png
+   :alt: Chemical Evolution: Metallicity History Models, Closed-Box Chemical Evolution, Chemical Evolution: Varying SFR Timescales, Leaky-Box Model: Outflow Rate Dependence, Age-Metallicity Relation
+   :srcset: /auto_examples/sfh/images/sphx_glr_plot_chemical_evolution_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

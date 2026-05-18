@@ -21,15 +21,16 @@
 Astrodust+PAH ionization fraction and alignment
 ===============================================
 
-f_ion(a) and f_align(a) versus grain size — H&D 2023 fiducials.
+Ionization fraction and alignment efficiency versus grain size for the
+Hensley & Draine 2023 fiducial size distribution.
 
-Reproduces the two diagnostic panels from the model_file_tutorial.ipynb
-showing the ionization fraction and alignment efficiency that were
-adopted in the published fiducial size distribution.
+.. sphx-glr-precomputed-img:
 
-These functions live in HDU 1 columns 4 (f_ion) and 5 (f_align).
+.. image:: images/sphx_glr_plot_astrodust_hd23_05_ionization_alignment_001.png
+   :alt: plot_astrodust_hd23_05_ionization_alignment
+   :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-64
+.. GENERATED FROM PYTHON SOURCE LINES 15-51
 
 
 
@@ -45,35 +46,17 @@ These functions live in HDU 1 columns 4 (f_ion) and 5 (f_align).
 .. code-block:: Python
 
 
-
-
-    from pathlib import Path
-
     import h5py
     import matplotlib.pyplot as plt
     import numpy as np
 
+    from tengri import data_path
     from tengri.analysis.plotting import setup_style
 
     setup_style()
 
-
-    def _find(name):
-        """Locate HDF5 file from project root or docs/ (sphinx-gallery) cwd."""
-        for p in (
-            Path(f"data/{name}"),
-            Path(f"../data/{name}"),
-            Path(f"../../data/{name}"),
-        ):
-            if p.exists():
-                return str(p)
-        raise FileNotFoundError(f"{name} not found in data/ hierarchy")
-
-
-    HDF5 = _find("astrodust_templates.h5")
-
-    with h5py.File(HDF5, "r") as f:
-        size_dist = np.asarray(f["size_distribution"])  # (167, 5)
+    with h5py.File(data_path("astrodust_templates.h5"), "r") as f:
+        size_dist = np.asarray(f["size_distribution"])
 
     rad_um = size_dist[:, 0]
     f_ion = size_dist[:, 3]
@@ -84,17 +67,20 @@ These functions live in HDU 1 columns 4 (f_ion) and 5 (f_align).
         (ax1, f_ion, r"$f_{\rm ion}$"),
         (ax2, f_align, r"$f_{\rm align}$"),
     ):
-        ax.set_xscale("log")
-        ax.set_xlabel(r"$a\ [\mu\mathrm{m}]$", fontsize=12)
-        ax.set_ylabel(lab, fontsize=14)
-        ax.set_xlim(3.0e-4, 5.0)
-        ax.set_ylim(0.0, 1.05)
         ax.plot(rad_um, y, lw=2, color="#1f77b4")
+        ax.set(
+            xscale="log",
+            xlabel=r"$a\ [\mu\mathrm{m}]$",
+            ylabel=lab,
+            xlim=(3.0e-4, 5.0),
+            ylim=(0.0, 1.05),
+        )
 
     ax1.set_title("PAH ionization fraction (Eq. 20)", fontsize=10)
     ax2.set_title("Astrodust alignment efficiency", fontsize=10)
+    fig.tight_layout()
+    plt.savefig("plot_astrodust_hd23_05_ionization_alignment.png", dpi=150, bbox_inches="tight")
     plt.show()
-
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_05_ionization_alignment.py:

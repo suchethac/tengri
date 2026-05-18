@@ -746,7 +746,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Per-H grain volume distribution (4\pi/3)\,a^3\,dn/d\ln a / n_{\rm H} versus grain radius for the Hensley &amp; Draine 2023 fiducial size distribution (MW high-latitude R_V=3.1 sightline), reading from the HDU 1 metadata embedded in tengri&#x27;s HDF5.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Per-H grain volume distribution versus grain radius for the Hensley &amp; Draine 2023 fiducial size distribution (MW high-latitude R_V=3.1 sightline).">
 
 .. only:: html
 
@@ -763,7 +763,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Plots \lambda I_\lambda / N_{\rm H} / U for several \log_{10} U values from the Hensley &amp; Draine 2023 grid. Dividing by U makes the U-dependence of the PAH-vs-FIR ratio visible: low-U curves stack atop each other in the FIR while the MIR features rise steeply with U.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Emission per H per ionization parameter U across the Hensley &amp; Draine 2023 grid. Dividing by U reveals its effect: PAH-to-FIR ratio plateaus in FIR (U-independent) but rises steeply with U in MIR.">
 
 .. only:: html
 
@@ -780,7 +780,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Astrodust vs PAH components at the fiducial U=1.6 (lgU=0.2).">
+    <div class="sphx-glr-thumbcontainer" tooltip="Per-component breakdown (Astrodust continuum, PAHs, spinning dust) at the Hensley &amp; Draine 2023 fiducial ionization parameter \log_{10} U = 0.2.">
 
 .. only:: html
 
@@ -797,7 +797,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Switch between dust IR templates with one config-field change.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Compare dust emission templates at fixed infrared luminosity. Shows how spectral shape changes across modified-blackbody, Draine+2021 PAHspec, and Hensley &amp; Draine 2023 Astrodust while bolometric output remains conserved.">
 
 .. only:: html
 
@@ -814,7 +814,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="f_ion(a) and f_align(a) versus grain size — H&amp;D 2023 fiducials.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Ionization fraction and alignment efficiency versus grain size for the Hensley &amp; Draine 2023 fiducial size distribution.">
 
 .. only:: html
 
@@ -831,7 +831,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Extinction, polarized extinction, and albedo — H&amp;D 2023 fiducial.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Extinction opacity, polarized extinction, and single-scattering albedo for the Hensley &amp; Draine 2023 fiducial size distribution.">
 
 .. only:: html
 
@@ -848,7 +848,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Spinning dust microwave emission — H&amp;D 2023 fiducial.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Spinning dust microwave emission across 10–100 GHz, decomposed by grain (Astrodust/PAH) and phase (CNM/WNM), for the Hensley &amp; Draine 2023 fiducial.">
 
 .. only:: html
 
@@ -865,7 +865,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Polarized emission and polarization fraction — H&amp;D 2023.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Polarized emission and polarization fraction from Astrodust grains at the Hensley &amp; Draine 2023 fiducial ionization parameter.">
 
 .. only:: html
 
@@ -882,7 +882,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep log10 U over the published [-3, +6] range of the Hensley &amp; Draine 2023 Astrodust+PAH grid (91 lgU points, finer than Draine+2021 PAHspec&#x27;s 15-point grid).  Shows the FIR peak shifting blueward and the MIR PAH features rising as the radiation field intensifies.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep ionization parameter across the published [-3, +6] range of the Hensley &amp; Draine 2023 grid. Shows FIR peak shift toward shorter wavelengths and rising MIR PAH features as radiation field intensifies.">
 
 .. only:: html
 
@@ -899,7 +899,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep log10 L_TIR over the full published 41-point grid (8.5 to 12.5 dex in 0.1 dex steps) at fixed log10 sSFR = -9.6 (typical star-forming galaxy). Increasing L_TIR makes the dust hotter → FIR peak shifts blueward and PAH features become more prominent relative to the FIR continuum.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep infrared luminosity across the BOSA grid at fixed specific star formation rate. Increasing L_TIR heats dust, shifting FIR peak blueward and enhancing PAH relative to continuum.">
 
 .. only:: html
 
@@ -916,7 +916,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep log10(sSFR / yr^-1) across the canonical 14-point BOSA grid (Boquien &amp; Salim 2021) at fixed log10 L_TIR = 11 (typical LIRG luminosity).  Higher sSFR → harder mid-IR colour and stronger PAH features; quiescent (low-sSFR) galaxies have a colder FIR peak.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep specific star formation rate across the BOSA grid at fixed infrared luminosity. Higher sSFR produces harder mid-IR colors and stronger PAH features; quiescent galaxies exhibit colder FIR peaks.">
 
 .. only:: html
 
@@ -933,7 +933,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The characteristic temperature T of the modified blackbody dust emission controls the peak wavelength of far-infrared emission. Wien&#x27;s law: λ_peak ≈ 2900 μm·K / T. Hotter dust (higher T) peaks at shorter wavelengths (more mid-IR), cooler dust peaks further into the far-IR/submm.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Dust temperature T sets the far-infrared peak via Wien&#x27;s displacement law. Higher T shifts the peak blueward into the mid-IR; lower T shifts it redward toward the submillimeter.">
 
 .. only:: html
 
@@ -950,7 +950,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="All tengri dust emission models evaluated at L_absorbed = 1e10 L☉ and T = 35 K. Template-based models (DL07, DL14, Dale+2014) are shown only when data files are present; they are skipped gracefully otherwise.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Compares all dust emission models available in tengri at a fixed infrared luminosity and fiducial temperature. Template-based models gracefully skip if data files are unavailable.">
 
 .. only:: html
 
@@ -967,7 +967,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="2D grid of dust IR emission spectra showing how PAH mass fraction (q_PAH) and ISRF hardness (U_min) independently shape the mid- and far-infrared SED. Uses Draine &amp; Li 2007 templates. 3×3 panel grid covering q_PAH ∈ {0.5, 2.5, 4.5}% and U_min ∈ {0.5, 2, 10} (MW-like to very hard radiation field).">
+    <div class="sphx-glr-thumbcontainer" tooltip="2D grid of dust IR emission showing how PAH mass fraction and radiation-field hardness independently shape the mid- and far-infrared SED. Uses Draine &amp; Li 2007 templates across parameter space.">
 
 .. only:: html
 
@@ -984,7 +984,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep the starlight intensity log10 U over the published [0, 7] range of the Draine, Li, Hensley et al. 2021 PAHspec library at a fixed (mMMP starlight, standard ionization, standard size distribution) configuration.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep ionization parameter across the Draine+2021 PAHspec library at fixed starlight spectrum and size distribution. Low U: FIR-cooling regime; high U: mid-IR peak shift and PAH-feature strengthening.">
 
 .. only:: html
 
@@ -1001,7 +1001,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep the categorical starlight config across the 13 published PAHspec choices (mMMP, m31bulge, BC03 / BPASS at various ages and metallicities) at fixed log10 U = 1 and the standard (ionization, size_distribution) defaults.  This shows that PAH features scale strongly with starlight hardness — the headline result of the paper.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep across the 13 published PAHspec starlight spectra (mMMP, m31bulge, BC03/BPASS SSPs) at fixed ionization parameter. Demonstrates strong dependence of PAH features on starlight hardness.">
 
 .. only:: html
 
@@ -1018,7 +1018,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The PAH mass fraction q_PAH controls the strength of polycyclic aromatic hydrocarbon (PAH) mid-infrared emission features at 3.3, 6.2, 7.7, 8.6, and 11.3 μm. Higher q_PAH → stronger PAH features. Range: 0.47–4.58 % for DL07, 0.47–7.32 % for DL14.">
+    <div class="sphx-glr-thumbcontainer" tooltip="PAH mass fraction controls strength of polycyclic aromatic hydrocarbon mid-infrared emission features. Higher q_PAH produces stronger features at 3.3, 6.2, 7.7, 8.6, 11.3 μm. Range varies by dust model.">
 
 .. only:: html
 
@@ -1035,7 +1035,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep alpha (the power-law slope dU/dM \propto U^\alpha of the radiation-field distribution) over the full published 21-point CIGALE grid (1.0 to 3.0 in 0.1 dex steps) at the fiducial q_HAC = 0.17 and U_min = 1.0.  Lower \alpha puts more mass at high U → warmer SED with the FIR peak shifted blueward; higher \alpha collapses toward the single-U limit.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep radiation-field distribution slope across the THEMIS grid at fixed grain content and minimum intensity. Lower alpha shifts weight toward high U, warming dust and shifting FIR peak blueward; higher alpha approaches single-U.">
 
 .. only:: html
 
@@ -1052,7 +1052,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep q_HAC (mass fraction of small a-C(:H) hydrocarbon grains &lt; 1.5 nm) across the canonical CIGALE-distributed Jones+2017 THEMIS grid at fixed U_min = 1 and alpha = 2.  The PAH-like mid-IR features at 3.3, 6.2, 7.7, 8.6, 11.3 μm strengthen with q_HAC; the FIR continuum is essentially unchanged.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep hydrocarbon grain content across the THEMIS grid at fixed minimum radiation field strength. PAH-like mid-IR features strengthen with q_HAC while FIR continuum remains essentially unchanged.">
 
 .. only:: html
 
@@ -1069,7 +1069,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep U_min over the full published 37-point CIGALE grid (0.10 to 80.0) at the fiducial q_HAC = 0.17 and alpha = 2. Higher U warms the dust → FIR peak shifts blueward and the MIR small-grain emission grows relative to the FIR cold peak.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep minimum radiation field strength across the THEMIS grid at fixed hydrocarbon grain content. Higher U warms dust, shifting FIR peak blueward and strengthening mid-IR grain emission relative to far-IR.">
 
 .. only:: html
 
@@ -1086,7 +1086,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="U_min sets the intensity of the diffuse radiation field heating the dust. Higher U_min implies a hotter, more intense radiation field → hotter overall dust → shifted far-infrared peak to shorter wavelengths. Range: 0.1–25 for DL07, 0.1–50 for DL14.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Minimum radiation field intensity U_min controls diffuse dust heating. Higher U_min implies hotter dust and FIR peak shifted blueward toward shorter wavelengths.">
 
 .. only:: html
 
@@ -1279,7 +1279,7 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Alpha-element enhancement [\alpha/\rm Fe] records the chemical enrichment history: high [\alpha/\rm Fe] signals rapid enrichment by core-collapse supernovae before Type Ia SNe can dilute the alpha elements. In the SED, enhanced alpha suppresses iron absorption features and alters the optical mass-to-light ratio.">
+    <div class="sphx-glr-thumbcontainer" tooltip="[α/Fe] records the chemical enrichment history: high [α/Fe] signals rapid enrichment by core-collapse SNe before Type Ia SNe can dilute the alpha elements. In the SED, enhanced alpha suppresses iron absorption features in the optical.">
 
 .. only:: html
 
@@ -1296,7 +1296,7 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrate how stellar metallicity affects the full galaxy SED from ultraviolet through mid-infrared. Metallicity impacts stellar absorption features, dust opacity, and energy balance. Sweeps log(Z/Z_sun) ∈ {-1.5, -0.7, 0.0, 0.5} on a composite SED including dust emission.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep met_logzsol ∈ {−1.5, −0.7, 0, +0.5} on a composite SED from 912 Å (Lyman limit) to 30 μm (mid-IR), with modified-blackbody dust emission turned on so the metallicity-vs-energy-balance interaction is visible.">
 
 .. only:: html
 
@@ -1313,7 +1313,7 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Stellar metallicity sets the UV-optical SED shape: metal-poor stars are hotter and bluer (less line blanketing), while metal-rich stars have stronger absorption features and redder continua. This plot sweeps met_logzsol from -2 (0.01 Z_\odot) to 0.2 (1.6 Z_\odot) at fixed SFH and dust.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Stellar metallicity sets the UV-optical SED shape: metal-poor stars are hotter and bluer (less line blanketing), metal-rich are redder. Sweep met_logzsol from −2 (0.01 Z_⊙) to +0.2 (1.6 Z_⊙) at fixed SFH and dust.">
 
 .. only:: html
 
@@ -1330,7 +1330,7 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="2D grid showing how stellar continuum shape responds to metallicity at different ages. Demonstrates the age-metallicity degeneracy: a metal-rich young star can mimic a metal-poor old star in the optical continuum. Uses a 3×4 panel grid: log(Z/Z_sun) ∈ {-1.0, -0.3, 0.0, 0.3} × age ∈ {0.1, 1.0, 5.0} Gyr.">
+    <div class="sphx-glr-thumbcontainer" tooltip="3×4 panel grid showing how the stellar continuum responds to metallicity at three ages. Demonstrates the classic age-metallicity degeneracy: a metal-rich young population can mimic a metal-poor old population in the optical continuum.">
 
 .. only:: html
 
@@ -1868,7 +1868,7 @@ Getting started with tengri — first fit and SED visualization.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The simplest possible tengri workflow: define a parametric SFH model, generate mock SDSS photometry, fit it with MAP optimization, and plot the resulting SED fit.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The shortest tengri workflow: define a parametric SFH + Calzetti dust model, mock SDSS photometry, fit with MAP optimization, overplot. Start here.">
 
 .. only:: html
 
@@ -1885,7 +1885,7 @@ Getting started with tengri — first fit and SED visualization.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Predict a galaxy SED and visualize its components: the intrinsic stellar emission and the dust-attenuated total. Uses the lazy model.predict() API and direct SED computation to show the effect of dust attenuation on the spectrum.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Predict a galaxy SED at fixed parameters, then re-predict with dust optical depths set to zero. Overplot to see how much UV-optical light the dust absorbed.">
 
 .. only:: html
 
@@ -2494,7 +2494,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Five representative ages from the DSPS SSP grid at solar metallicity. A single stellar population transitions from UV-dominated (young, hot) to NIR-dominated (old, red); rest-frame λF_λ on log-log axes makes the temperature inversion visible.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Five representative ages from the DSPS SSP grid at solar metallicity. A single stellar population transitions from UV-dominated (young, hot) to NIR-dominated (old, red); peak-normalized λF_λ on log-log axes makes the temperature inversion visible.">
 
 .. only:: html
 
@@ -2511,7 +2511,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Visualize the DSPS simple stellar population (SSP) grid showing spectral properties as a function of age and metallicity. Demonstrates how stellar population age and chemical abundance affect the rest-frame UV, optical, and near-IR spectral shapes.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Four-panel tour of the DSPS SSP grid: age sequence at fixed Z, metallicity sequence at fixed age, broadband flux vs age, and a mock UV-optical vs optical-NIR color-color diagram across the full grid.">
 
 .. only:: html
 
@@ -2522,13 +2522,13 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">SSP Grid Visualization: Age and Metallicity</div>
+      <div class="sphx-glr-thumbnail-title">SSP Grid: Age and Metallicity Evolution</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Initial mass function (IMF) choice affects stellar population properties significantly. While SSP grids typically assume a single IMF (here, Chabrier), this script illustrates the relative differences in mass-to-light ratio across standard IMF prescriptions (Chabrier, Kroupa, Salpeter) using published literature values. The effect is dramatic in the near-IR where massive stars dominate the mass budget.">
+    <div class="sphx-glr-thumbcontainer" tooltip="SSP grids typically ship with one IMF (here, Chabrier). To illustrate the IMF effect on the spectrum shape we rescale the same Chabrier SSP by literature M/L ratios for Chabrier / Kroupa / Salpeter at 1 Gyr and solar Z. M/L ratios from Conroy 2012 — most diagnostic in the near-IR where massive stars dominate the mass budget.">
 
 .. only:: html
 
@@ -2545,7 +2545,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Five metallicity points spanning the SSP grid at fixed age (1 Gyr). Metallicity reddens the optical and shifts iron-peak features in the near-IR; we plot peak-normalised λF_λ to compare shape, not normalisation.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Five metallicity points spanning the SSP grid at fixed age 1 Gyr. Metallicity reddens the optical and shifts iron-peak features in the near-IR. Peak-normalized λF_λ shows shape changes without the absolute luminosity scale washing them out.">
 
 .. only:: html
 

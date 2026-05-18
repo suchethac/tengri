@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:01.844** total execution time for 1 file **from auto_examples/sps**:
+**00:04.233** total execution time for 4 files **from auto_examples/sps**:
 
 .. container::
 
@@ -33,5 +33,14 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_auto_examples_sps_plot_ssp_grid.py` (``plot_ssp_grid.py``)
-     - 00:01.844
+     - 00:02.486
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_ssp_imf_compare.py` (``plot_ssp_imf_compare.py``)
+     - 00:00.657
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_ssp_metallicity_sweep.py` (``plot_ssp_metallicity_sweep.py``)
+     - 00:00.547
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_ssp_age_sweep.py` (``plot_ssp_age_sweep.py``)
+     - 00:00.544
      - 0.0

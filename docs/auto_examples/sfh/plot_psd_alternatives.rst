@@ -46,6 +46,12 @@ extended regulator model. No SSP data required.
     setup_style()
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 27-28
 
 Frequency grid (angular frequency in rad/yr)
@@ -59,6 +65,12 @@ Frequency grid (angular frequency in rad/yr)
     # DRW parameters
     sigma = 0.3
     tau_yr = 200e6  # 200 Myr
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 35-36
@@ -131,6 +143,17 @@ DRW (Lorentzian) — the default model
 
     plt.savefig("plot_psd_alternatives.png", dpi=150, bbox_inches="tight")
     plt.show()
+
+
+
+.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_psd_alternatives_001.png
+   :alt: PSD Models ($\sigma=0.3$, $\tau=200$ Myr)
+   :srcset: /auto_examples/sfh/images/sphx_glr_plot_psd_alternatives_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_psd_alternatives.py:

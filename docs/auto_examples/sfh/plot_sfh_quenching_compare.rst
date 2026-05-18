@@ -30,45 +30,43 @@ exponential decline, sharp truncation, and a recent burst on top of quenching.
    :alt: plot_sfh_quenching_compare
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-166
+.. GENERATED FROM PYTHON SOURCE LINES 15-142
+
+
+
+.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_sfh_quenching_compare_001.png
+   :alt: SFH Quenching Scenarios: Impact on SED
+   :srcset: /auto_examples/sfh/images/sphx_glr_plot_sfh_quenching_compare_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-batch-2/src/tengri/forward/sed_model.py:643: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
+      self._nebular_backend = BakedInBackend()
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 
 
-
-    from pathlib import Path
-
-    import jax
     import matplotlib.pyplot as plt
     import numpy as np
 
-    jax.config.update("jax_enable_x64", True)
-
-    from tengri import Fixed, Parameters, SEDModel, load_ssp_data
+    from tengri import Fixed, Parameters, SEDModel, load_ssp
     from tengri.analysis.plotting import setup_style
 
     setup_style()
 
 
-    def _find_ssp():
-        """Find SSP data file in standard locations."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
-
-
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
-
-    ssp = load_ssp_data(SSP_PATH)
+    ssp = load_ssp()
 
     # Shared baseline
     shared = dict(

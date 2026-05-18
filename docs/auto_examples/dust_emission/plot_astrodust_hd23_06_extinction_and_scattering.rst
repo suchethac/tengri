@@ -21,23 +21,16 @@
 Astrodust+PAH extinction, scattering, and albedo
 ================================================
 
-Extinction, polarized extinction, and albedo — H&D 2023 fiducial.
+Extinction opacity, polarized extinction, and single-scattering albedo for
+the Hensley & Draine 2023 fiducial size distribution.
 
-Reproduces three panels from the model_file_tutorial.ipynb that
-characterise the wavelength dependence of dust opacity:
+.. sphx-glr-precomputed-img:
 
-* Total extinction :math:`\\tau_\\lambda / N_H` decomposed into
-  Astrodust and PAH contributions.
-* Polarized extinction :math:`(p_\\lambda/N_H)^{\\rm max}` from
-  Astrodust grains (PAHs are unaligned).
-* Albedo :math:`\\tau^{\\rm sca}_\\lambda / \\tau^{\\rm ext}_\\lambda`
-  for both compositions.
+.. image:: images/sphx_glr_plot_astrodust_hd23_06_extinction_and_scattering_001.png
+   :alt: plot_astrodust_hd23_06_extinction_and_scattering
+   :class: sphx-glr-single-img
 
-Reference
----------
-* Notebook: brandonshensley/Astrodust/notebooks/model_file_tutorial.ipynb
-
-.. GENERATED FROM PYTHON SOURCE LINES 21-110
+.. GENERATED FROM PYTHON SOURCE LINES 15-86
 
 
 
@@ -53,37 +46,19 @@ Reference
 .. code-block:: Python
 
 
-
-
-    from pathlib import Path
-
     import h5py
     import matplotlib.pyplot as plt
     import numpy as np
 
+    from tengri import data_path
     from tengri.analysis.plotting import setup_style
 
     setup_style()
 
-
-    def _find(name):
-        """Locate HDF5 file from project root or docs/ (sphinx-gallery) cwd."""
-        for p in (
-            Path(f"data/{name}"),
-            Path(f"../data/{name}"),
-            Path(f"../../data/{name}"),
-        ):
-            if p.exists():
-                return str(p)
-        raise FileNotFoundError(f"{name} not found in data/ hierarchy")
-
-
-    HDF5 = _find("astrodust_templates.h5")
-
-    with h5py.File(HDF5, "r") as f:
-        ext = np.asarray(f["extinction"])  # (1000, 4)
-        scatt = np.asarray(f["scattering"])  # (1000, 4)
-        extpol = np.asarray(f["polarized_extinction"])  # (1000, 2)
+    with h5py.File(data_path("astrodust_templates.h5"), "r") as f:
+        ext = np.asarray(f["extinction"])
+        scatt = np.asarray(f["scattering"])
+        extpol = np.asarray(f["polarized_extinction"])
 
     wave_um = ext[:, 0]
     tau_Ad = ext[:, 1]
@@ -95,39 +70,31 @@ Reference
 
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(13, 4))
 
-    # ── extinction ─────────────────────────────────────────────────
-    ax1.set_xscale("log")
-    ax1.set_yscale("log")
-    ax1.set_xlabel(r"$\lambda\ [\mu\mathrm{m}]$", fontsize=11)
-    ax1.set_ylabel(r"$\tau_\lambda/N_{\rm H}\ [\mathrm{cm}^2\,\mathrm{H}^{-1}]$", fontsize=11)
-    ax1.set_xlim(0.1, 40.0)
-    ax1.set_ylim(5.0e-25, 3.0e-21)
     ax1.plot(wave_um, tau_Ad, color="#e41a1c", ls="--", label="Astrodust")
     ax1.plot(wave_um, tau_PAH, color="#0868ac", ls="--", label="PAHs")
     ax1.plot(wave_um, tau_total, color="k", lw=1.5, label="Total", zorder=0)
-    ax1.legend(loc="upper right", frameon=False, fontsize=9)
-    ax1.set_title("Extinction (HDU 2)", fontsize=10)
-
-    # ── polarized extinction ───────────────────────────────────────
-    ax2.set_xscale("log")
-    ax2.set_yscale("log")
-    ax2.set_xlabel(r"$\lambda\ [\mu\mathrm{m}]$", fontsize=11)
-    ax2.set_ylabel(
-        r"$(p_\lambda/N_{\rm H})^{\rm max}\ [\mathrm{cm}^2\,\mathrm{H}^{-1}]$",
-        fontsize=11,
+    ax1.set(
+        xscale="log",
+        yscale="log",
+        xlabel=r"$\lambda\ [\mu\mathrm{m}]$",
+        ylabel=r"$\tau_\lambda/N_{\rm H}\ [\mathrm{cm}^2\,\mathrm{H}^{-1}]$",
+        xlim=(0.1, 40.0),
+        ylim=(5.0e-25, 3.0e-21),
+        title="Extinction (HDU 2)",
     )
-    ax2.set_xlim(0.1, 40.0)
-    ax2.set_ylim(5.0e-25, 3.0e-23)
-    ax2.plot(wave_um, pol_Ad_max, color="k", lw=1.5)
-    ax2.set_title("Polarized extinction (Astrodust, HDU 4)", fontsize=10)
+    ax1.legend(loc="upper right", frameon=False, fontsize=9)
 
-    # ── albedo (notebook fig 6 uses 1/lambda in 1/μm as x-axis) ────
-    ax3.set_xscale("linear")
-    ax3.set_yscale("linear")
-    ax3.set_xlabel(r"$\lambda^{-1}\ [\mu\mathrm{m}^{-1}]$", fontsize=11)
-    ax3.set_ylabel("Albedo  $\\omega$", fontsize=11)
-    ax3.set_xlim(0.0, 8.0)
-    ax3.set_ylim(0.0, 1.0)
+    ax2.plot(wave_um, pol_Ad_max, color="k", lw=1.5)
+    ax2.set(
+        xscale="log",
+        yscale="log",
+        xlabel=r"$\lambda\ [\mu\mathrm{m}]$",
+        ylabel=r"$(p_\lambda/N_{\rm H})^{\rm max}\ [\mathrm{cm}^2\,\mathrm{H}^{-1}]$",
+        xlim=(0.1, 40.0),
+        ylim=(5.0e-25, 3.0e-23),
+        title="Polarized extinction (Astrodust, HDU 4)",
+    )
+
     with np.errstate(invalid="ignore", divide="ignore"):
         albedo_Ad = np.where(tau_Ad > 0, sca_Ad / tau_Ad, np.nan)
         albedo_PAH = np.where(tau_PAH > 0, sca_PAH / tau_PAH, np.nan)
@@ -137,10 +104,18 @@ Reference
     ax3.plot(inv_lam, albedo_Ad, color="#e41a1c", lw=1.5, label="Astrodust")
     ax3.plot(inv_lam, albedo_PAH, color="#0868ac", lw=1.5, label="PAHs")
     ax3.plot(inv_lam, albedo_total, color="k", lw=1.2, label="Total", zorder=0)
+    ax3.set(
+        xlabel=r"$\lambda^{-1}\ [\mu\mathrm{m}^{-1}]$",
+        ylabel="Albedo  $\\omega$",
+        xlim=(0.0, 8.0),
+        ylim=(0.0, 1.0),
+        title="Albedo (HDU 3 / HDU 2)",
+    )
     ax3.legend(loc="upper left", frameon=False, fontsize=9)
-    ax3.set_title("Albedo (HDU 3 / HDU 2)", fontsize=10)
-    plt.show()
 
+    fig.tight_layout()
+    plt.savefig("plot_astrodust_hd23_06_extinction_and_scattering.png", dpi=150, bbox_inches="tight")
+    plt.show()
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_06_extinction_and_scattering.py:

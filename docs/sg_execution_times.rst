@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:03.024** total execution time for 144 files **from all galleries**:
+**00:00.670** total execution time for 144 files **from all galleries**:
 
 .. container::
 
@@ -32,11 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_tau_bc_sweep.py` (``../examples/dust_attenuation/plot_tau_bc_sweep.py``)
-     - 00:02.520
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_tau_diff_sweep.py` (``../examples/dust_attenuation/plot_tau_diff_sweep.py``)
-     - 00:00.504
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_parametric_sfh.py` (``../examples/sfh/plot_parametric_sfh.py``)
+     - 00:00.670
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
      - 00:00.000
@@ -129,6 +126,12 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_slope_sweep.py` (``../examples/dust_attenuation/plot_dust_slope_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_tau_bc_sweep.py` (``../examples/dust_attenuation/plot_tau_bc_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_tau_diff_sweep.py` (``../examples/dust_attenuation/plot_tau_diff_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_two_component.py` (``../examples/dust_attenuation/plot_two_component.py``)
@@ -363,9 +366,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_lnorm_peak_sweep.py` (``../examples/sfh/plot_lnorm_peak_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_parametric_sfh.py` (``../examples/sfh/plot_parametric_sfh.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_psd_alternatives.py` (``../examples/sfh/plot_psd_alternatives.py``)

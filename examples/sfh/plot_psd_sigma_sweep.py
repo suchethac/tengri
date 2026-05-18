@@ -13,39 +13,16 @@ Small σ ≈ smooth; large σ = dramatic bursts.
 
 """
 
-# sphinx_gallery_thumbnail_number = 1
-
-from pathlib import Path
-
 import jax
 import matplotlib.pyplot as plt
 
-jax.config.update("jax_enable_x64", True)
-
-from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp_data, setup_style
+from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp, setup_style
 from tengri.analysis.plotting import sfh_sed_comparison
 
 setup_style()
 
 
-def _find_ssp():
-    name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [
-        Path("data") / name,
-        Path("../data") / name,
-        Path("../../data") / name,
-        Path("../../../data") / name,
-    ]:
-        if p.exists():
-            return str(p)
-    return None
-
-
-SSP_PATH = _find_ssp()
-if SSP_PATH is None:
-    raise FileNotFoundError("SSP data not found — skipping example")
-
-ssp = load_ssp_data(SSP_PATH)
+ssp = load_ssp()
 
 # Build Parameters with tsnorm + GP field for stochastic SFH
 spec = Parameters(
@@ -70,10 +47,6 @@ model = SEDModel(spec, ssp)
 key = jax.random.PRNGKey(0)
 values = [0.1, 0.5, 1.0, 2.0, 3.5]
 
-# # The sweep_parameter helper creates a single SEDModel instance and calls
-# # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
-# # automatically via tengri's persistent compilation cache (enabled at
-# # import time), so repeated forward model calls reuse the compiled kernel.
 fig = sfh_sed_comparison(
     model, "sfh_field_psd_sigma", values, cmap="viridis", n_stochastic=5, key=key
 )

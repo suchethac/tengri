@@ -1,11 +1,11 @@
 """
 Stellar Metallicity Effects on SED
-===================================
+==================================
 
-Five metallicity points spanning the SSP grid at fixed age (1 Gyr).
+Five metallicity points spanning the SSP grid at fixed age 1 Gyr.
 Metallicity reddens the optical and shifts iron-peak features in the
-near-IR; we plot peak-normalised `λF_λ` to compare shape, not
-normalisation.
+near-IR. Peak-normalized λF_λ shows shape changes without the absolute
+luminosity scale washing them out.
 
 .. sphx-glr-precomputed-img:
 
@@ -15,89 +15,45 @@ normalisation.
 
 """
 
-# sphinx_gallery_thumbnail_number = 1
-
-from pathlib import Path
-
-import matplotlib
-
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import load_ssp_data
+from tengri import load_ssp
 from tengri.analysis.plotting import setup_style
 
 setup_style()
 
+ssp = load_ssp()
+age_gyr = 10 ** np.array(ssp.ssp_lg_age_gyr)
+log_z = np.array(ssp.ssp_lgmet)
+wave = np.array(ssp.ssp_wave)
+flux = np.array(ssp.ssp_flux)
 
-def _find_ssp():
-    """Find SSP data file in standard locations."""
-    name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [
-        Path("data") / name,
-        Path("../data") / name,
-        Path("../../data") / name,
-        Path("../../../data") / name,
-    ]:
-        if p.exists():
-            return str(p)
-    return None
+age_1gyr = np.argmin(np.abs(age_gyr - 1.0))
 
-
-ssp_path = _find_ssp()
-if ssp_path is None:
-    raise FileNotFoundError("SSP data not found — skipping example")
-
-ssp_data = load_ssp_data(ssp_path)
-
-# Extract grid
-age_gyr = 10 ** np.array(ssp_data.ssp_lg_age_gyr)
-log_z = np.array(ssp_data.ssp_lgmet)
-ssp_wave = np.array(ssp_data.ssp_wave)
-ssp_spec = np.array(ssp_data.ssp_flux)  # Shape: (n_z, n_age, n_wave)
-
-# Fixed age: 1 Gyr
-age_idx = np.argmin(np.abs(age_gyr - 1.0))
-
-# Select 5 metallicities spanning the grid. ssp_lgmet stores absolute
-# log10(Z); convert user-friendly log(Z/Zsun) targets via LOG10_ZSUN so
-# the requested values land on distinct grid points instead of all
-# clipping to the grid maximum.
+# ssp_lgmet stores ABSOLUTE log10(Z); convert user-facing log10(Z/Z☉)
+# targets via LOG10_ZSUN so the requested values land on distinct grid points.
 LOG10_ZSUN = -1.848
-log_zsol_targets = [-1.5, -1.0, -0.3, 0.0, 0.3]
-log_z_targets = [t + LOG10_ZSUN for t in log_zsol_targets]
-met_indices = [np.argmin(np.abs(log_z - t)) for t in log_z_targets]
-met_labels = [f"log Z/Z$_\\odot$ = {log_z[i] - LOG10_ZSUN:+.2f}" for i in met_indices]
-
-# Clamp viridis colormap to 0.0–0.85
-colors = plt.cm.viridis(np.linspace(0.0, 0.85, len(met_indices)))
+targets_zsol = [-1.5, -1.0, -0.3, 0.0, 0.3]
+met_idx = [np.argmin(np.abs(log_z - (t + LOG10_ZSUN))) for t in targets_zsol]
+colors = plt.cm.viridis(np.linspace(0.0, 0.85, len(met_idx)))
 
 fig, ax = plt.subplots(figsize=(10, 6))
+for i, c in zip(met_idx, colors):
+    lfl = wave * flux[i, age_1gyr]
+    safe = np.where(lfl > 0, lfl, np.nan)
+    label = rf"$\log Z/Z_\odot$ = {log_z[i] - LOG10_ZSUN:+.2f}"
+    ax.loglog(wave / 1e4, safe / np.nanmax(safe), lw=2.0, color=c, label=label)
 
-# Plot each metallicity — peak-normalize to focus on shape changes
-for met_idx, met_lbl, color in zip(met_indices, met_labels, colors):
-    spec = np.asarray(ssp_spec[met_idx, age_idx, :])
-    lambda_f_lambda = ssp_wave * spec
-    # Mask zero/negative entries before normalizing
-    safe = np.where(lambda_f_lambda > 0, lambda_f_lambda, np.nan)
-    norm = np.nanmax(safe)
-    ax.loglog(ssp_wave / 1e4, safe / norm, lw=2.0, color=color, label=met_lbl)
-
-ax.set_xlabel(r"Wavelength [$\mu$m]", fontsize=12)
-ax.set_ylabel(
-    r"$\lambda F_\lambda$ / $\lambda F_\lambda^{\rm max}$ (peak-normalized)",
-    fontsize=12,
+ax.set(
+    xlabel=r"Wavelength [$\mu$m]",
+    ylabel=r"$\lambda F_\lambda$ / $\lambda F_\lambda^{\rm max}$ (peak-normalized)",
+    title="Stellar Metallicity Effects (Age = 1 Gyr)",
+    xlim=(0.05, 5.0),
+    ylim=(1e-3, 2.0),
 )
-ax.set_title(r"Stellar Metallicity Effects (Age = 1 Gyr)", fontsize=14)
 ax.legend(fontsize=11, frameon=False, loc="lower right")
 ax.grid(True, alpha=0.3, which="both")
-# Zoom to UV-NIR where stellar features dominate
-ax.set_xlim(0.05, 5.0)
-ax.set_ylim(1e-3, 2.0)
-
 fig.tight_layout()
-# Save to script directory
-script_dir = Path(__file__).resolve().parent if "__file__" in dir() else Path(".")
-plt.savefig(str(script_dir / "plot_ssp_metallicity_sweep.png"), dpi=150, bbox_inches="tight")
-plt.close()
+plt.savefig("plot_ssp_metallicity_sweep.png", dpi=150, bbox_inches="tight")
+plt.show()

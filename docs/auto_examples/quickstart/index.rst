@@ -17,7 +17,7 @@ Getting started with tengri — first fit and SED visualization.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The simplest possible tengri workflow: define a parametric SFH model, generate mock SDSS photometry, fit it with MAP optimization, and plot the resulting SED fit.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The shortest tengri workflow: define a parametric SFH + Calzetti dust model, mock SDSS photometry, fit with MAP optimization, overplot. Start here.">
 
 .. only:: html
 
@@ -34,7 +34,7 @@ Getting started with tengri — first fit and SED visualization.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Predict a galaxy SED and visualize its components: the intrinsic stellar emission and the dust-attenuated total. Uses the lazy model.predict() API and direct SED computation to show the effect of dust attenuation on the spectrum.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Predict a galaxy SED at fixed parameters, then re-predict with dust optical depths set to zero. Overplot to see how much UV-optical light the dust absorbed.">
 
 .. only:: html
 

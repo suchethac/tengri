@@ -31,7 +31,37 @@ and analyzing the saved results.
    :alt: plot_recipe_save_load_posterior
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-143
+.. GENERATED FROM PYTHON SOURCE LINES 16-125
+
+
+
+.. image-sg:: /auto_examples/recipes/images/sphx_glr_plot_recipe_save_load_posterior_001.png
+   :alt: Original Posterior (in memory), Loaded Posterior (from HDF5)
+   :srcset: /auto_examples/recipes/images/sphx_glr_plot_recipe_save_load_posterior_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-batch-2/src/tengri/forward/sed_model.py:643: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
+      self._nebular_backend = BakedInBackend()
+    Saving posterior to: /var/folders/km/_d_w3tds0hs4c5pbvflcdt480000gn/T/tmp5nvxvneq/posterior.h5
+    Loading posterior from: /var/folders/km/_d_w3tds0hs4c5pbvflcdt480000gn/T/tmp5nvxvneq/posterior.h5
+
+    Loaded posterior method: NUTS (BlackJAX)
+    Number of samples: 100
+    Diagnostics: {'n_burnin': np.float64(100.0), 'n_divergent': np.float64(0.0), 'n_samples': np.float64(100.0), 'n_warmup': np.float64(50.0), 'step_size': np.float64(0.011525403246815783), 'warmup': 'window'}
+
+    Save/load test complete!
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -50,7 +80,7 @@ and analyzing the saved results.
         Photometry,
         SEDModel,
         Uniform,
-        load_ssp_data,
+        load_ssp,
     )
     from tengri.analysis.plotting import setup_style
     from tengri.inference.posterior import Posterior
@@ -58,25 +88,7 @@ and analyzing the saved results.
     setup_style()
 
 
-    def _find_ssp():
-        """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
-
-
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
-
-    ssp = load_ssp_data(SSP_PATH)
+    ssp = load_ssp()
 
     # --- Setup and fit ---
     bands = ["sdss_g", "sdss_r", "sdss_i", "sdss_z"]
@@ -162,6 +174,11 @@ and analyzing the saved results.
         plt.show()
 
     print("\nSave/load test complete!")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 14.579 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_save_load_posterior.py:

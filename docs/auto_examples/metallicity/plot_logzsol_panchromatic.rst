@@ -21,10 +21,10 @@
 Metallicity Sweep: Panchromatic SED
 ====================================
 
-Demonstrate how stellar metallicity affects the full galaxy SED from
-ultraviolet through mid-infrared. Metallicity impacts stellar absorption
-features, dust opacity, and energy balance. Sweeps log(Z/Z_sun) ∈
-{-1.5, -0.7, 0.0, 0.5} on a composite SED including dust emission.
+Sweep ``met_logzsol`` ∈ {−1.5, −0.7, 0, +0.5} on a composite SED from
+912 Å (Lyman limit) to 30 μm (mid-IR), with modified-blackbody dust
+emission turned on so the metallicity-vs-energy-balance interaction is
+visible.
 
 .. sphx-glr-precomputed-img:
 
@@ -32,84 +32,70 @@ features, dust opacity, and energy balance. Sweeps log(Z/Z_sun) ∈
    :alt: plot_logzsol_panchromatic
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-93
+.. GENERATED FROM PYTHON SOURCE LINES 17-57
+
+
+
+.. image-sg:: /auto_examples/metallicity/images/sphx_glr_plot_logzsol_panchromatic_001.png
+   :alt: Metallicity Impact on Panchromatic SED
+   :srcset: /auto_examples/metallicity/images/sphx_glr_plot_logzsol_panchromatic_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-batch-2/src/tengri/forward/sed_model.py:643: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
+      self._nebular_backend = BakedInBackend()
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 
 
-    from pathlib import Path
-
-    import jax
     import matplotlib.pyplot as plt
 
-    jax.config.update("jax_enable_x64", True)
-
-    from tengri import Fixed, Parameters, SEDModel, load_ssp_data
+    from tengri import FIXED, Fixed, SEDModel, load_ssp, recipes
     from tengri.analysis.plotting import setup_style, sweep_parameter
 
     setup_style()
 
+    # Star-forming galaxy with modified-blackbody dust emission at z=0.2.
+    recipe = recipes.dust_demo()
+    recipe["sfh"].update(peak_lbt_gyr=1.0, log_peak_sfr=1.0, width_gyr=0.8, trunc=3.0)
+    recipe["dust"].update(tau_bc=1.0, tau_diff=0.5)
+    recipe["dust"]["emission"] = {"type": "modified_blackbody", "*": FIXED, "T": 30.0, "beta_ir": 1.8}
+    recipe["redshift"] = Fixed(0.2)
+    model = SEDModel.from_groups(ssp_data=load_ssp(), **recipe)
 
-    def _find_ssp():
-        """Find SSP data file in standard locations."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
-
-
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
-
-    ssp = load_ssp_data(SSP_PATH)
-
-    # --- Build model: star-forming galaxy with dust emission ---
-    spec = Parameters(
-        dust_emission="modified_blackbody",
-        sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-        sfh_tsnorm_peak_lbt_gyr=Fixed(1.0),
-        sfh_tsnorm_width_gyr=Fixed(0.8),
-        sfh_tsnorm_skew=Fixed(0.2),
-        sfh_tsnorm_trunc=Fixed(3.0),
-        met_logzsol=Fixed(0.0),  # Will sweep this
-        dust_tau_bc=Fixed(1.0),
-        dust_tau_diff=Fixed(0.5),
-        dust_slope=Fixed(-0.7),
-        dust_T=Fixed(30.0),
-        dust_beta_ir=Fixed(1.8),
-        redshift=Fixed(0.2),
-    )
-    model = SEDModel(spec, ssp)
-
-    # --- Sweep stellar metallicity: panchromatic range (UV to MIR) ---
-    values = [-1.5, -0.7, 0.0, 0.5]
-    fig, ax = sweep_parameter(
+    fig, ax = plt.subplots(figsize=(8, 5))
+    sweep_parameter(
         model,
         "met_logzsol",
-        values,
+        [-1.5, -0.7, 0.0, 0.5],
+        ax=ax,
         cmap="viridis",
         label_fmt=r"$\log Z/Z_\odot$ = {:.1f}",
-        wave_range=(912, 3e5),  # 912 Å (Lyman limit) to ~30 μm (mid-IR)
+        wave_range=(912, 3e5),  # 912 Å (Lyman limit) → 30 μm (mid-IR)
+    )
+    ax.set(
+        xscale="log",
+        yscale="log",
+        title=r"Metallicity Impact on Panchromatic SED",
+        xlabel=r"Wavelength [$\AA$]",
+        ylabel=r"$\lambda F_\lambda$ (not normalized)",
     )
 
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_title(r"Metallicity Impact on Panchromatic SED (Z = -1.5 to 0.5)", fontsize=12)
-    ax.set_xlabel(r"Wavelength [$\AA$]")
-    ax.set_ylabel(r"$\lambda F_\lambda$ (not normalized)")
+    for wl in (1215, 5500, 1e4, 1e5):
+        ax.axvline(wl, color="grey", ls=":", lw=0.5, alpha=0.3)
 
-    # Mark key wavelengths
-    for wl_aa, _label in [(1215, "Ly-α"), (5500, "V-band"), (1e4, "NIR"), (1e5, "FIR")]:
-        ax.axvline(wl_aa, color="grey", ls=":", lw=0.5, alpha=0.3)
-
-    plt.tight_layout()
+    fig.tight_layout()
     plt.savefig("plot_logzsol_panchromatic.png", dpi=150, bbox_inches="tight")
     plt.show()
 

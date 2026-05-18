@@ -2,9 +2,9 @@
 First Photometric Fit
 =====================
 
-The simplest possible tengri workflow: define a parametric SFH model,
-generate mock SDSS photometry, fit it with MAP optimization, and plot
-the resulting SED fit.
+The shortest tengri workflow: define a parametric SFH + Calzetti dust
+model, mock SDSS photometry, fit with MAP optimization, overplot. Start
+here.
 
 .. sphx-glr-precomputed-img:
 
@@ -14,113 +14,71 @@ the resulting SED fit.
 
 """
 
-from pathlib import Path
-
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import (
+    FIXED,
+    FREE,
     Fitter,
     Fixed,
     Observation,
-    Parameters,
     Photometry,
     SEDModel,
     Uniform,
-    load_ssp_data,
+    data_path,
+    load_ssp,
 )
 from tengri.analysis.plotting import setup_style
 
 setup_style()
 
-
-# --- Load SSP data ---
-def _find_ssp():
-    """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
-    name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [
-        Path("data") / name,
-        Path("../data") / name,
-        Path("../../data") / name,
-        Path("../../../data") / name,
-    ]:
-        if p.exists():
-            return str(p)
-    return None
-
-
-SSP_PATH = _find_ssp()
-
-# Locate filter cache
-_FILTER_DIR = next(
-    (
-        str(d)
-        for d in [
-            Path("data/filters"),
-            Path("../data/filters"),
-            Path("../../data/filters"),
-            Path("../../../data/filters"),
-        ]
-        if d.exists()
-    ),
-    "data/filters",
-)
-if SSP_PATH is None:
-    raise FileNotFoundError("SSP data not found — skipping example")
-
-ssp = load_ssp_data(SSP_PATH)
-
-# --- Define model ---
-spec = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-3.0, 3.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
-    met_logzsol=Uniform(-2.0, 0.2),
-    dust_tau_diff=Uniform(0.0, 1.5),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.05),
-    mean_sfh_type="tsnorm",
-)
-
+# --- Build the model with the recommended nested-dict grammar ---
 bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-obs = Observation(photometry=Photometry.from_names(bands, cache_dir=_FILTER_DIR))
-model = SEDModel(spec, ssp, observation=obs)
+obs = Observation(
+    photometry=Photometry.from_names(bands, cache_dir=str(data_path("filters"))),
+)
+model = SEDModel.from_groups(
+    ssp_data=load_ssp(),
+    observation=obs,
+    sfh={"type": "tsnorm", "*": FREE},
+    dust={
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": FIXED,
+        "tau_diff": Uniform(0.0, 1.5),  # free; everything else fixed
+        "slope": -0.7,
+    },
+    redshift=Fixed(0.05),
+)
 
-# --- Generate mock photometry (star-forming galaxy) ---
+# --- Mock a star-forming galaxy at z=0.05 (SNR=20) ---
 key = jax.random.PRNGKey(42)
-true_params = spec.sample(key)
-true_params["sfh_tsnorm_peak_lbt_gyr"] = 3.0
-true_params["sfh_tsnorm_width_gyr"] = 2.0
-true_params["sfh_tsnorm_log_peak_sfr"] = 1.0
-true_params["sfh_tsnorm_skew"] = 0.3  # Positive skew = recent star formation
-mock = model.mock(true_params, snr=20.0, key=key)
+truth = model.spec.sample(key)
+truth.update(  # nudge the random draw toward a clear SF galaxy
+    sfh_tsnorm_peak_lbt_gyr=3.0,
+    sfh_tsnorm_width_gyr=2.0,
+    sfh_tsnorm_log_peak_sfr=1.0,
+    sfh_tsnorm_skew=0.3,
+)
+mock = model.mock(truth, snr=20.0, key=key)
 
-# --- Fit with MAP ---
+# --- Fit with MAP (Adam) ---
 fitter = Fitter(model, data=mock.flux_obs, noise=mock.noise)
 posterior = fitter.run("map", optimizer="adam", n_steps=300, verbose=False)
 
-# --- Plot ---
-fig, ax = plt.subplots(figsize=(7, 4))
-filter_names = obs.photometry.names
+# --- Plot: data, truth, MAP fit ---
 wave_eff = np.array([float(jnp.mean(w)) for w in obs.photometry.filter_waves])
-
+fig, ax = plt.subplots(figsize=(7, 4))
 ax.errorbar(
-    wave_eff,
-    np.array(mock.flux_obs),
-    yerr=np.array(mock.noise),
-    fmt="o",
-    color="k",
-    ms=5,
-    label="Observed (SNR=20)",
+    wave_eff, mock.flux_obs, yerr=mock.noise, fmt="o", color="k", ms=5, label="Observed (SNR=20)"
 )
-ax.plot(wave_eff, np.array(mock.flux_true), "s", color="C0", ms=7, mfc="none", label="Truth")
+ax.plot(wave_eff, mock.flux_true, "s", color="C0", ms=7, mfc="none", label="Truth")
 ax.plot(
     wave_eff,
-    np.array(model.predict_photometry(posterior.params)),
+    model.predict_photometry(posterior.params),
     "^",
     color="C3",
     ms=7,
@@ -128,11 +86,12 @@ ax.plot(
     label="MAP fit",
 )
 
-ax.set_xlabel("Wavelength [A]")
-ax.set_ylabel("Flux density [erg/s/cm$^2$/Hz]")
-ax.set_title("First Photometric Fit with tengri")
+ax.set(
+    xlabel="Wavelength [Å]",
+    ylabel=r"Flux density [erg/s/cm$^2$/Hz]",
+    title="First Photometric Fit with tengri",
+)
 ax.legend(fontsize=10, frameon=False)
-
 fig.tight_layout()
 plt.savefig("plot_first_fit.png", dpi=150, bbox_inches="tight")
 plt.show()

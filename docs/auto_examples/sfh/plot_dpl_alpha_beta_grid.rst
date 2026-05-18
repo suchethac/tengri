@@ -31,45 +31,43 @@ parameter space controls SFH morphology.
    :alt: plot_dpl_alpha_beta_grid
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-106
+.. GENERATED FROM PYTHON SOURCE LINES 16-82
+
+
+
+.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_dpl_alpha_beta_grid_001.png
+   :alt: DPL SFH Parameter Space: α (rising) × β (falling), $\alpha$ = 0.5, $\beta$ = 0.5, $\alpha$ = 1.5, $\beta$ = 0.5, $\alpha$ = 3.0, $\beta$ = 0.5, $\alpha$ = 0.5, $\beta$ = 1.5, $\alpha$ = 1.5, $\beta$ = 1.5, $\alpha$ = 3.0, $\beta$ = 1.5, $\alpha$ = 0.5, $\beta$ = 3.0, $\alpha$ = 1.5, $\beta$ = 3.0, $\alpha$ = 3.0, $\beta$ = 3.0
+   :srcset: /auto_examples/sfh/images/sphx_glr_plot_dpl_alpha_beta_grid_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-batch-2/src/tengri/forward/sed_model.py:643: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
+      self._nebular_backend = BakedInBackend()
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 
 
-
-    from pathlib import Path
-
-    import jax
     import matplotlib.pyplot as plt
     import numpy as np
 
-    jax.config.update("jax_enable_x64", True)
-
-    from tengri import Fixed, Parameters, SEDModel, load_ssp_data
+    from tengri import Fixed, Parameters, SEDModel, load_ssp
     from tengri.analysis.plotting import setup_style
 
     setup_style()
 
 
-    def _find_ssp():
-        """Find SSP data file in standard locations."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
-
-
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
-
-    ssp = load_ssp_data(SSP_PATH)
+    ssp = load_ssp()
 
     # Shared baseline
     shared = dict(
@@ -125,6 +123,11 @@ parameter space controls SFH morphology.
     fig.tight_layout()
     plt.savefig("plot_dpl_alpha_beta_grid.png", dpi=150, bbox_inches="tight")
     plt.show()
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.696 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_dpl_alpha_beta_grid.py:

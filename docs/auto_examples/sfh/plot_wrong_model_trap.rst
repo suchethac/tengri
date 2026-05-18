@@ -31,19 +31,39 @@ good residuals do not guarantee unbiased physical parameters.
    :alt: plot_wrong_model_trap
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-142
+.. GENERATED FROM PYTHON SOURCE LINES 16-121
+
+
+
+.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_wrong_model_trap_001.png
+   :alt: Wrong-SEDModel Trap: χ² ≈ 1 but SFH is wrong, SFH: True vs Smooth SEDModel Fit, Residuals: reduced χ² = nan (looks good!)
+   :srcset: /auto_examples/sfh/images/sphx_glr_plot_wrong_model_trap_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-batch-2/src/tengri/forward/sed_model.py:643: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
+      self._nebular_backend = BakedInBackend()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-batch-2/examples/sfh/plot_wrong_model_trap.py:106: RuntimeWarning: invalid value encountered in subtract
+      np.array(mock.flux_obs) - np.array(model_smooth.predict_spectrum(map_smooth.params))
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 
-
-    from pathlib import Path
 
     import jax
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
-
-    jax.config.update("jax_enable_x64", True)
 
     from tengri import (
         Fitter,
@@ -53,31 +73,14 @@ good residuals do not guarantee unbiased physical parameters.
         SEDModel,
         Spectroscopy,
         Uniform,
-        load_ssp_data,
+        load_ssp,
         setup_style,
     )
 
     setup_style()
 
 
-    def _find_ssp():
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
-
-
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
-
-    ssp = load_ssp_data(SSP_PATH)
+    ssp = load_ssp()
     wave_obs = jnp.linspace(3800.0, 9200.0, 200)
     obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs))
 
@@ -161,6 +164,11 @@ good residuals do not guarantee unbiased physical parameters.
     fig.tight_layout()
     plt.savefig("plot_wrong_model_trap.png", dpi=150, bbox_inches="tight")
     plt.show()
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 16.986 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_wrong_model_trap.py:
