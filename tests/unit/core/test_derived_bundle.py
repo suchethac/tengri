@@ -179,3 +179,69 @@ class TestPackageRootExport:
         import tengri.core as core
 
         assert core.DerivedBundle is DerivedBundle
+
+
+class TestPhase2Flip:
+    """PipelineState.derived is now DerivedBundle-typed (ADR-0007 Phase 2).
+
+    These tests verify the type flip + auto-coercion shim. They live
+    in the bundle test file (not pipeline_state's) because the bundle
+    is the type that matters; PipelineState is just its host.
+    """
+
+    def test_default_derived_is_a_bundle(self):
+        from tengri.core import PipelineState
+
+        s = PipelineState(wave=jnp.linspace(1000.0, 10000.0, 8))
+        assert isinstance(s.derived, DerivedBundle)
+        # All fields unset on a fresh state.
+        assert len(s.derived) == 0
+
+    def test_construct_with_dict_coerces_to_bundle(self):
+        # Legacy callers that pass derived={"L_ir": ...} at construction
+        # get a DerivedBundle automatically via __post_init__.
+        from tengri.core import PipelineState
+
+        s = PipelineState(
+            wave=jnp.linspace(1000.0, 10000.0, 8),
+            derived={"L_ir": jnp.asarray(3.0)},
+        )
+        assert isinstance(s.derived, DerivedBundle)
+        assert float(s.derived["L_ir"]) == 3.0
+
+    def test_with_dict_coerces_to_bundle(self):
+        # The legacy write pattern — dict(state.derived) → mutate →
+        # state.with_(derived=new_dict) — must still work.
+        from tengri.core import PipelineState
+
+        s = PipelineState(wave=jnp.linspace(1000.0, 10000.0, 8))
+        new_derived = dict(s.derived)
+        new_derived["L_ir"] = jnp.asarray(7.0)
+        s2 = s.with_(derived=new_derived)
+        assert isinstance(s2.derived, DerivedBundle)
+        assert float(s2.derived["L_ir"]) == 7.0
+        # Original unchanged (immutability invariant preserved).
+        assert "L_ir" not in s.derived
+
+    def test_with_bundle_passes_through(self):
+        # New-style write: pass a DerivedBundle directly. No coercion
+        # needed, identity preserved by ``replace``.
+        from tengri.core import PipelineState
+
+        s = PipelineState(wave=jnp.linspace(1000.0, 10000.0, 8))
+        b = DerivedBundle(L_ir=jnp.asarray(9.0))
+        s2 = s.with_(derived=b)
+        assert s2.derived is b
+
+    def test_unknown_key_in_dict_lands_in_extras(self):
+        # Shim path: a legacy write that uses a key not yet promoted to
+        # a typed field falls into _extras rather than erroring.
+        from tengri.core import PipelineState
+
+        s = PipelineState(
+            wave=jnp.linspace(1000.0, 10000.0, 8),
+            derived={"L_ir": jnp.asarray(1.0), "future_key": "anything"},
+        )
+        assert s.derived["L_ir"] == 1.0
+        assert s.derived["future_key"] == "anything"
+        assert "future_key" in s.derived._extras
