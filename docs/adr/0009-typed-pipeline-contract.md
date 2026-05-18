@@ -1,4 +1,13 @@
-# ADR-0004: Typed publish/require contract for cross-component data
+# ADR-0009: Typed publish/require contract for cross-component data
+
+> Originally numbered ADR-0004 when authored on 2026-05-17 in PR #19;
+> renumbered to 0007 by PR #40 (`docs(adr): renumber to restore
+> monotonic 0001–0008 sequence`); renumbered to 0009 here to resolve a
+> filename collision with the typed-derived-bundle ADR introduced
+> at 0007 by PR #42. The decision itself and the cross-references in
+> source-code docstrings still read "ADR-0004" — those are the
+> conceptual decision numbers at authoring time, kept stable so commit
+> messages and code comments remain anchored.
 
 - **Status:** Accepted (2026-05-17)
 - **Stakeholders:** Suchetha; future contributors adding physics blocks
