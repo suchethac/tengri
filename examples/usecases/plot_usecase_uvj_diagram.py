@@ -32,8 +32,6 @@ import jax
 import matplotlib.pyplot as plt
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri import (
     Fixed,
     Observation,

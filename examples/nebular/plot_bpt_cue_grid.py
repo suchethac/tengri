@@ -33,15 +33,10 @@ to the recombination lines, pulling the grid to the right.
 
 """
 
-# sphinx_gallery_thumbnail_number = 1
-
 from pathlib import Path
 
-import jax
 import matplotlib.pyplot as plt
 import numpy as np
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri import Fixed, Parameters, SEDModel, load_ssp_data
 from tengri.analysis.plotting import setup_style

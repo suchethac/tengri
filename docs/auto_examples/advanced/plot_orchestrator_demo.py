@@ -35,7 +35,6 @@ publishes ``L_agn_bol`` for X-ray, stellar publishes ``log_mstar``
 # ------------------
 
 import os
-from pathlib import Path
 
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
@@ -44,32 +43,14 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
 from tengri.analysis.plotting import setup_style
-from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+from tengri.components.stellar.sps.dsps_wrapper import load_ssp
 from tengri.core.component import PipelineState
 from tengri.forward import build_components, chain_summary, run_components
 
 setup_style()
 
 
-def _find_ssp():
-    """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
-    name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [
-        Path("data") / name,
-        Path("../data") / name,
-        Path("../../data") / name,
-        Path("../../../data") / name,
-    ]:
-        if p.exists():
-            return str(p)
-    return None
-
-
-SSP_PATH = _find_ssp()
-if SSP_PATH is None:
-    raise FileNotFoundError("SSP data not found — skipping example")
-
-ssp = load_ssp_data(SSP_PATH)
+ssp = load_ssp()
 
 components = build_components(
     ssp_data=ssp,

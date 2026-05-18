@@ -18,16 +18,10 @@ Requires SSP grid (``data/ssp_prsc_miles_*.h5``).
 
 """
 
-# sphinx_gallery_thumbnail_number = 1
-
-from pathlib import Path
-
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri import (
     Fixed,
@@ -35,7 +29,7 @@ from tengri import (
     Parameters,
     SEDModel,
     Spectroscopy,
-    load_ssp_data,
+    load_ssp,
     setup_style,
 )
 from tengri.radio import radio_star_forming
@@ -43,25 +37,7 @@ from tengri.radio import radio_star_forming
 setup_style()
 
 
-def _find_ssp():
-    """Find SSP data file in standard locations."""
-    name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [
-        Path("data") / name,
-        Path("../data") / name,
-        Path("../../data") / name,
-        Path("../../../data") / name,
-    ]:
-        if p.exists():
-            return str(p)
-    return None
-
-
-ssp_path = _find_ssp()
-if ssp_path is None:
-    raise FileNotFoundError("SSP data not found — skipping example")
-
-ssp = load_ssp_data(ssp_path)
+ssp = load_ssp()
 
 # Wavelength grid: UV through radio (in rest-frame Å)
 wave_sed = jnp.logspace(jnp.log10(1000.0), jnp.log10(1e7), 800)

@@ -33,10 +33,9 @@ SED morphology.
    :alt: plot_panchromatic_agn_fraction
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-142
+.. GENERATED FROM PYTHON SOURCE LINES 18-121
 
 .. code-block:: Python
-
 
 
     from pathlib import Path
@@ -49,15 +48,13 @@ SED morphology.
     import matplotlib.pyplot as plt
     import numpy as np
 
-    jax.config.update("jax_enable_x64", True)
-
     from tengri import (
         Fixed,
         Observation,
         Parameters,
         SEDModel,
         Spectroscopy,
-        load_ssp_data,
+        load_ssp,
         setup_style,
     )
     from tengri.components.agn import qsogen
@@ -65,25 +62,7 @@ SED morphology.
     setup_style()
 
 
-    def _find_ssp():
-        """Find SSP data file in standard locations."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
-
-
-    ssp_path = _find_ssp()
-    if ssp_path is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
-
-    ssp = load_ssp_data(ssp_path)
+    ssp = load_ssp()
 
     # Wavelength grid: UV through near-IR
     wave_sed = jnp.logspace(jnp.log10(1000.0), jnp.log10(1e6), 600)  # 0.1 µm – 100 µm [Å]

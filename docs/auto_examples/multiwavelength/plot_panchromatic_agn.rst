@@ -40,10 +40,9 @@ Components
    :alt: plot_panchromatic_agn
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-95
+.. GENERATED FROM PYTHON SOURCE LINES 25-94
 
 .. code-block:: Python
-
 
 
     import jax.numpy as jnp

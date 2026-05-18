@@ -1,13 +1,4 @@
 {
- "jax.config.update": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jax.config",
-   "module_short": "jax.config",
-   "name": "update"
-  }
- ],
  "jnp.logspace": [
   {
    "is_class": false,

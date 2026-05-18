@@ -28,15 +28,10 @@ panel for reference. Fiducial point shown as a black star.
 
 """
 
-# sphinx_gallery_thumbnail_number = 1
-
 from pathlib import Path
 
-import jax
 import matplotlib.pyplot as plt
 import numpy as np
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp_data
 from tengri.analysis.plotting import setup_style

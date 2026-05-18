@@ -32,7 +32,7 @@ metallicity. Adding NIR or MIR bands breaks the degeneracy by factors of
    :alt: plot_fisher_degeneracy
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-162
+.. GENERATED FROM PYTHON SOURCE LINES 17-143
 
 .. code-block:: Python
 
@@ -44,8 +44,6 @@ metallicity. Adding NIR or MIR bands breaks the degeneracy by factors of
     import matplotlib.pyplot as plt
     import numpy as np
 
-    jax.config.update("jax_enable_x64", True)
-
     from tengri import (
         Fixed,
         Observation,
@@ -53,7 +51,7 @@ metallicity. Adding NIR or MIR bands breaks the degeneracy by factors of
         Photometry,
         SEDModel,
         Uniform,
-        load_ssp_data,
+        load_ssp,
         setup_style,
     )
     from tengri.analysis.diagnostics.fisher import compute_fisher_matrix, fisher_parameter_errors
@@ -61,24 +59,7 @@ metallicity. Adding NIR or MIR bands breaks the degeneracy by factors of
     setup_style()
 
 
-    def _find_ssp():
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
-
-
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
-
-    ssp = load_ssp_data(SSP_PATH)
+    ssp = load_ssp()
 
     _FILTER_DIR = next(
         (

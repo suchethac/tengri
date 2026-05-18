@@ -33,18 +33,14 @@ magnitude to the jet radio luminosity at fixed bolometric AGN power.
    :alt: plot_radio_loudness_sweep
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-62
+.. GENERATED FROM PYTHON SOURCE LINES 18-58
 
 .. code-block:: Python
 
 
-
-    import jax
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
-
-    jax.config.update("jax_enable_x64", True)
 
     from tengri.analysis.plotting import setup_style
     from tengri.radio import radio_agn

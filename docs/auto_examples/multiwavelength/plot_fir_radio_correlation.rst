@@ -41,18 +41,14 @@ parameter shifts the normalization.
    :alt: plot_fir_radio_correlation
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-96
+.. GENERATED FROM PYTHON SOURCE LINES 26-92
 
 .. code-block:: Python
 
 
-
-    import jax
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
-
-    jax.config.update("jax_enable_x64", True)
 
     from tengri.analysis.plotting import setup_style
     from tengri.radio import radio_star_forming
