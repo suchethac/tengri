@@ -1201,7 +1201,7 @@ def compute_alpha_fe_evolving(
     return alpha_fe_young + (alpha_fe_old - alpha_fe_young) * t_frac
 
 
-LSUN_ERG_PER_S = 3.828e33  # erg/s (IAU 2015)
+from tengri.utils.physics_constants import L_SUN as LSUN_ERG_PER_S
 
 
 @jax.jit

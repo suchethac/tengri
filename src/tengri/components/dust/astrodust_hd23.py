@@ -46,10 +46,10 @@ ASTRODUST_HD23_PATH_ENV = "TENGRI_ASTRODUST_PATH"
 ASTRODUST_HD23_DEFAULT_PATH = "data/astrodust_templates.h5"
 
 
+from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
+
 # 1 micron = 10000 Angstrom.
 _UM_TO_AA = 1.0e4
-# Speed of light in Angstrom / s, for nu = c / lambda_aa.
-_C_AA_PER_S = 2.99792458e10 * 1.0e8
 
 
 @dataclass(frozen=True)

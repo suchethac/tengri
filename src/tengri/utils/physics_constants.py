@@ -335,13 +335,3 @@ The zeropoint corresponds to f_ν = 3.631e-20 erg s⁻¹ cm⁻² Hz⁻¹ = 3631 
 at all wavelengths.
 """
 
-# ── Observational reference wavelengths ──────────────────────────
-
-V_BAND_ANGSTROM: float = 5500.0
-"""Johnson V-band reference wavelength [Ångström].
-
-Standard normalization wavelength for dust attenuation curves and extinction
-laws. Used as the reference point for k(λ) definitions where k(V) = 1.
-
-Value: 5500 Å (Johnson V-band effective wavelength).
-"""

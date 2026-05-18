@@ -12,3 +12,11 @@ will read them (see `forward/_kernels/hybrid.py` line ~2252 for an example).
   the full-wavelength path. Re-enable once cross-validation against the
   full-wavelength integrators is in.
   (Was: comment at hybrid.py ~line 1548, lifted 2026-05-17.)
+
+## forward/component_factory.py
+
+- **Port legacy `compute_uv_slope_beta` etc.** into the new
+  `compute_sed_quantities` path. Currently UV-slope, Dn4000, Balmer-break,
+  M_UV, and luminosity-weighted quantities are returned as `NaN`. The
+  legacy machinery lives in older `sed_model.py` paths.
+  (Was: TODO in component_factory.py:416, lifted 2026-05-18.)

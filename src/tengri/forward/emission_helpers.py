@@ -16,11 +16,14 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-# ── Constants ────────────────────────────────────────────────────────────────
+from tengri.utils.physics_constants import C_AA, L_SUN
 
-_C_AA: float = 2.99792458e18  # speed of light in Å/s
-_LSUN: float = 3.828e33  # erg/s  (IAU 2015 nominal solar luminosity)
-_QH_PER_SFR: float = 4.2e53  # phot/s per Msun/yr  (Leitherer+1999, Chabrier IMF)
+# Q_H per SFR — Leitherer+1999, Chabrier IMF [phot/s per Msun/yr]
+_QH_PER_SFR: float = 4.2e53
+
+# Module-level aliases (kept for terse local use)
+_C_AA: float = C_AA
+_LSUN: float = L_SUN
 
 
 # ═══════════════════════════════════════════════════════════════════════════

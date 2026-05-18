@@ -913,8 +913,7 @@ def pah_drude(
 
     # L_nu = L_lambda * lambda^2 / c.
     wave_cm = wavelength_aa * 1.0e-8
-    c_cgs = 2.99792458e10
-    lnu = L_absorbed * pah_llam * (wave_cm**2) / c_cgs
+    lnu = L_absorbed * pah_llam * (wave_cm**2) / _C_CGS
 
     return lnu
 

@@ -27,7 +27,7 @@ this limit; radio-only modes skip optical/IR computation entirely.
 
 import jax.numpy as jnp
 
-from tengri.utils.physics_constants import C_AA as _C_AA
+from tengri.utils.physics_constants import C_AA as _C_AA, L_SUN as _L_SUN
 
 # Bell (2003) ApJ 586, 794 Eq. 3: characteristic luminosity L* at 1.4 GHz.
 # L* ≈ 3e28 erg/s/Hz corresponds to the M_V = -21 galaxy threshold.
@@ -44,7 +44,7 @@ _RADIO_WAVE_MIN_AA: float = 1.0e7
 _C_FF: float = 1.0 / 4.6e-28  # ≈ 2.174e27
 
 # Kennicutt+1998 IR-SFR calibration: L_IR [erg/s] → SFR [M☉/yr]
-_SFR_IR_KENNICUTT: float = 1.73e10 * 3.828e33  # ≈ 6.62e43 erg/s
+_SFR_IR_KENNICUTT: float = 1.73e10 * _L_SUN  # ≈ 6.62e43 erg/s
 
 
 def _synchrotron_suppression(L_ref: jnp.ndarray) -> jnp.ndarray:

@@ -413,8 +413,9 @@ def state_to_sed_quantities(state: Any):
     SEDQuantities
         ``l_bol``, ``l_tir``, ``l_dust_absorbed`` populated;
         UV-slope / Dn4000 / Balmer-break / M_UV / luminosity-weighted
-        quantities returned as ``NaN`` (TODO: port the legacy
-        :func:`compute_uv_slope_beta` etc. machinery).
+        quantities returned as ``NaN`` until the legacy
+        :func:`compute_uv_slope_beta` machinery is ported (see
+        ``docs/dev/TODO.md``).
 
     Notes
     -----
