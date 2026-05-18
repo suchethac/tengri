@@ -17,7 +17,7 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Alpha-element enhancement [\alpha/\rm Fe] records the chemical enrichment history: high [\alpha/\rm Fe] signals rapid enrichment by core-collapse supernovae before Type Ia SNe can dilute the alpha elements. In the SED, enhanced alpha suppresses iron absorption features and alters the optical mass-to-light ratio.">
+    <div class="sphx-glr-thumbcontainer" tooltip="[α/Fe] records the chemical enrichment history: high [α/Fe] signals rapid enrichment by core-collapse SNe before Type Ia SNe can dilute the alpha elements. In the SED, enhanced alpha suppresses iron absorption features in the optical.">
 
 .. only:: html
 
@@ -34,7 +34,7 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrate how stellar metallicity affects the full galaxy SED from ultraviolet through mid-infrared. Metallicity impacts stellar absorption features, dust opacity, and energy balance. Sweeps log(Z/Z_sun) ∈ {-1.5, -0.7, 0.0, 0.5} on a composite SED including dust emission.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep met_logzsol ∈ {−1.5, −0.7, 0, +0.5} on a composite SED from 912 Å (Lyman limit) to 30 μm (mid-IR), with modified-blackbody dust emission turned on so the metallicity-vs-energy-balance interaction is visible.">
 
 .. only:: html
 
@@ -51,7 +51,7 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Stellar metallicity sets the UV-optical SED shape: metal-poor stars are hotter and bluer (less line blanketing), while metal-rich stars have stronger absorption features and redder continua. This plot sweeps met_logzsol from -2 (0.01 Z_\odot) to 0.2 (1.6 Z_\odot) at fixed SFH and dust.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Stellar metallicity sets the UV-optical SED shape: metal-poor stars are hotter and bluer (less line blanketing), metal-rich are redder. Sweep met_logzsol from −2 (0.01 Z_⊙) to +0.2 (1.6 Z_⊙) at fixed SFH and dust.">
 
 .. only:: html
 
@@ -68,7 +68,7 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="2D grid showing how stellar continuum shape responds to metallicity at different ages. Demonstrates the age-metallicity degeneracy: a metal-rich young star can mimic a metal-poor old star in the optical continuum. Uses a 3×4 panel grid: log(Z/Z_sun) ∈ {-1.0, -0.3, 0.0, 0.3} × age ∈ {0.1, 1.0, 5.0} Gyr.">
+    <div class="sphx-glr-thumbcontainer" tooltip="3×4 panel grid showing how the stellar continuum responds to metallicity at three ages. Demonstrates the classic age-metallicity degeneracy: a metal-rich young population can mimic a metal-poor old population in the optical continuum.">
 
 .. only:: html
 

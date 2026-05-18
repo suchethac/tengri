@@ -1,11 +1,11 @@
 """
 Stellar Population Aging: SSP at Solar Metallicity
-===================================================
+==================================================
 
 Five representative ages from the DSPS SSP grid at solar metallicity.
 A single stellar population transitions from UV-dominated (young, hot)
-to NIR-dominated (old, red); rest-frame `λF_λ` on log-log axes makes
-the temperature inversion visible.
+to NIR-dominated (old, red); peak-normalized λF_λ on log-log axes
+makes the temperature inversion visible.
 
 .. sphx-glr-precomputed-img:
 
@@ -15,81 +15,43 @@ the temperature inversion visible.
 
 """
 
-# sphinx_gallery_thumbnail_number = 1
-
-from pathlib import Path
-
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import load_ssp_data
+from tengri import load_ssp
 from tengri.analysis.plotting import setup_style
 
 setup_style()
 
+ssp = load_ssp()
+age_gyr = 10 ** np.array(ssp.ssp_lg_age_gyr)
+log_z = np.array(ssp.ssp_lgmet)
+wave = np.array(ssp.ssp_wave)
+flux = np.array(ssp.ssp_flux)  # (n_z, n_age, n_wave)
 
-def _find_ssp():
-    """Find SSP data file in standard locations."""
-    name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [
-        Path("data") / name,
-        Path("../data") / name,
-        Path("../../data") / name,
-        Path("../../../data") / name,
-    ]:
-        if p.exists():
-            return str(p)
-    return None
-
-
-ssp_path = _find_ssp()
-if ssp_path is None:
-    raise FileNotFoundError("SSP data not found — skipping example")
-
-ssp_data = load_ssp_data(ssp_path)
-
-# Extract grid
-age_gyr = 10 ** np.array(ssp_data.ssp_lg_age_gyr)
-log_z = np.array(ssp_data.ssp_lgmet)
-ssp_wave = np.array(ssp_data.ssp_wave)
-ssp_spec = np.array(ssp_data.ssp_flux)  # Shape: (n_z, n_age, n_wave)
-
-# Select solar metallicity
-z_idx_solar = np.argmin(np.abs(log_z - 0.0))
-
-# Select 5 ages: 1 Myr, 10 Myr, 100 Myr, 1 Gyr, 10 Gyr
+# Solar metallicity slice, 5 representative ages
+z_solar = np.argmin(np.abs(log_z - 0.0))
 target_ages = [1e-3, 0.01, 0.1, 1.0, 10.0]  # Gyr
-age_indices = [np.argmin(np.abs(age_gyr - t)) for t in target_ages]
-age_labels = ["1 Myr", "10 Myr", "100 Myr", "1 Gyr", "10 Gyr"]
-
-# Clamp viridis colormap to 0.0–0.85
+age_idx = [np.argmin(np.abs(age_gyr - t)) for t in target_ages]
+labels = ["1 Myr", "10 Myr", "100 Myr", "1 Gyr", "10 Gyr"]
 colors = plt.cm.viridis(np.linspace(0.0, 0.85, len(target_ages)))
 
 fig, ax = plt.subplots(figsize=(10, 6))
+for i, label, color in zip(age_idx, labels, colors):
+    # Peak-normalize so SED *shape* is comparable across 30+ decades of flux.
+    lfl = wave * flux[z_solar, i, :]
+    safe = np.where(lfl > 0, lfl, np.nan)
+    ax.loglog(wave / 1e4, safe / np.nanmax(safe), lw=2.2, color=color, label=label)
 
-# Plot each age — peak-normalize so the *shape* (UV→IR aging) dominates the eye
-# rather than the absolute flux scale, which spans 30+ decades across ages.
-for age_idx, age_lbl, color in zip(age_indices, age_labels, colors):
-    spec = np.asarray(ssp_spec[z_idx_solar, age_idx, :])
-    lambda_f_lambda = ssp_wave * spec
-    # Mask zero/negative entries (log of 0 → -inf artifacts) before normalising
-    safe = np.where(lambda_f_lambda > 0, lambda_f_lambda, np.nan)
-    norm = np.nanmax(safe)
-    ax.loglog(ssp_wave / 1e4, safe / norm, lw=2.2, color=color, label=age_lbl)
-
-ax.set_xlabel(r"Wavelength [$\mu$m]", fontsize=12)
-ax.set_ylabel(
-    r"$\lambda F_\lambda$ / $\lambda F_\lambda^{\rm max}$ (peak-normalized)",
-    fontsize=12,
+ax.set(
+    xlabel=r"Wavelength [$\mu$m]",
+    ylabel=r"$\lambda F_\lambda$ / $\lambda F_\lambda^{\rm max}$ (peak-normalized)",
+    title="Stellar Population Aging at Solar Metallicity",
+    xlim=(0.05, 5.0),
+    ylim=(1e-3, 2.0),
 )
-ax.set_title("Stellar Population Aging at Solar Metallicity", fontsize=14)
 ax.legend(fontsize=11, frameon=False, loc="lower right")
 ax.grid(True, alpha=0.3, which="both")
-# Focus on the UV-NIR where stellar SEDs live; clip the empty far-IR / X-ray
-# tails the SSP grid extends into.
-ax.set_xlim(0.05, 5.0)
-ax.set_ylim(1e-3, 2.0)
-
 fig.tight_layout()
 plt.savefig("plot_ssp_age_sweep.png", dpi=150, bbox_inches="tight")
 plt.show()

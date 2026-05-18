@@ -34,6 +34,28 @@ alter metal abundance relative to a closed box (maximum enrichment).
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-132
 
+
+
+.. image-sg:: /auto_examples/metallicity/images/sphx_glr_plot_zh_evolution_compare_001.png
+   :alt: Chemical Evolution: Model Comparison, Closed-Box: SFR Timescale Dependence, Leaky-Box: Outflow Rate η Dependence (τ = 3 Gyr), Constant SFR: Closed vs Leaky Box, Age-Metallicity Relation Analogue
+   :srcset: /auto_examples/metallicity/images/sphx_glr_plot_zh_evolution_compare_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-batch-2/examples/metallicity/plot_zh_evolution_compare.py:22: DeprecationWarning: tengri.components.sfh has been relocated to tengri.components.stellar.sfh and will be removed in tengri v1.0.
+      from tengri.components.sfh import closed_box_metallicity
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 
@@ -151,6 +173,11 @@ alter metal abundance relative to a closed box (maximum enrichment).
     fig.tight_layout()
     plt.savefig("plot_zh_evolution_compare.png", dpi=150, bbox_inches="tight")
     plt.show()
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.916 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_zh_evolution_compare.py:

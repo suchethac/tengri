@@ -34,6 +34,17 @@ more rapid fluctuations.
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-74
 
+
+
+.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_stochastic_sfh_001.png
+   :alt: Stochastic SFHs from GP Correlated Fields, Mild burstiness ($\sigma=0.3$, $\tau=300$ Myr), Strong burstiness ($\sigma=1.0$, $\tau=100$ Myr)
+   :srcset: /auto_examples/sfh/images/sphx_glr_plot_stochastic_sfh_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

@@ -22,10 +22,8 @@ Stellar Metallicity (log Z/Z_⊙)
 ================================
 
 Stellar metallicity sets the UV-optical SED shape: metal-poor stars are
-hotter and bluer (less line blanketing), while metal-rich stars have
-stronger absorption features and redder continua. This plot sweeps
-``met_logzsol`` from :math:`-2` (0.01 :math:`Z_\odot`) to :math:`0.2`
-(1.6 :math:`Z_\odot`) at fixed SFH and dust.
+hotter and bluer (less line blanketing), metal-rich are redder. Sweep
+``met_logzsol`` from −2 (0.01 Z_⊙) to +0.2 (1.6 Z_⊙) at fixed SFH and dust.
 
 .. sphx-glr-precomputed-img:
 
@@ -33,79 +31,59 @@ stronger absorption features and redder continua. This plot sweeps
    :alt: plot_logzsol_sweep
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-89
+.. GENERATED FROM PYTHON SOURCE LINES 16-45
+
+
+
+.. image-sg:: /auto_examples/metallicity/images/sphx_glr_plot_logzsol_sweep_001.png
+   :alt: Stellar Metallicity: $\log Z/Z_\odot$ sweep
+   :srcset: /auto_examples/metallicity/images/sphx_glr_plot_logzsol_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-batch-2/src/tengri/forward/sed_model.py:643: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
+      self._nebular_backend = BakedInBackend()
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 
 
-
-    from pathlib import Path
-
-    import jax
     import matplotlib.pyplot as plt
 
-    jax.config.update("jax_enable_x64", True)
-
-    from tengri import Fixed, Parameters, SEDModel, load_ssp_data
+    from tengri import SEDModel, load_ssp, recipes
     from tengri.analysis.plotting import setup_style, sweep_parameter
 
     setup_style()
 
+    # Intermediate-age galaxy with modest dust (recipe defaults). Sweep met_logzsol.
+    model = SEDModel.from_groups(ssp_data=load_ssp(), **recipes.dust_demo())
 
-    def _find_ssp():
-        """Find SSP data file in standard locations."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
-
-
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
-
-    ssp = load_ssp_data(SSP_PATH)
-
-    # --- Build model: intermediate-age galaxy with modest dust ---
-    spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Fixed(0.5),
-        sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),
-        sfh_tsnorm_width_gyr=Fixed(1.0),
-        sfh_tsnorm_skew=Fixed(0.0),
-        sfh_tsnorm_trunc=Fixed(8.0),
-        met_logzsol=Fixed(-0.3),  # Will sweep this
-        dust_tau_bc=Fixed(0.3),
-        dust_tau_diff=Fixed(0.2),
-        dust_slope=Fixed(-0.7),
-        redshift=Fixed(0.1),
-    )
-    model = SEDModel(spec, ssp)
-
-    # --- Sweep stellar metallicity ---
-    values = [-2.0, -1.5, -1.0, -0.5, -0.3, 0.0, 0.2]
-
-    # # The sweep_parameter helper creates a single SEDModel instance and calls
-    # # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
-    # # automatically via tengri's persistent compilation cache (enabled at
-    # # import time), so repeated forward model calls reuse the compiled kernel.
-    fig, ax = sweep_parameter(
+    fig, ax = plt.subplots(figsize=(8, 5))
+    sweep_parameter(
         model,
         "met_logzsol",
-        values,
+        [-2.0, -1.5, -1.0, -0.5, -0.3, 0.0, 0.2],
+        ax=ax,
         cmap="viridis",
         label_fmt=r"$\log Z/Z_\odot$ = {:.1f}",
         wave_range=(1000, 12000),
     )
-    ax.set_title(r"Stellar Metallicity: $\log\,Z/Z_\odot$ sweep", fontsize=12)
-    ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)")
-    ax.set_ylim(0, 7.5e4)
-    plt.tight_layout()
+    ax.set(
+        title=r"Stellar Metallicity: $\log Z/Z_\odot$ sweep",
+        ylabel=r"$\lambda F_\lambda$ (normalized at 5500 Å)",
+        ylim=(0, 7.5e4),
+    )
+    fig.tight_layout()
     plt.savefig("plot_logzsol_sweep.png", dpi=150, bbox_inches="tight")
     plt.show()
 
