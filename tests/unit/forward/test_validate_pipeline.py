@@ -197,3 +197,78 @@ class TestNebularRequiresStellar:
         # so we match on any of the three to be robust.
         with pytest.raises(PipelineContractError, match=r"lnu_age|ssp_ages_yr|age_weights"):
             validate_pipeline([neb])
+
+
+class TestRequiresOptional:
+    """Phase B of issue #21: opportunistic reads with documented fallbacks.
+
+    The validator does NOT require an upstream publisher for an
+    ``requires_optional`` key (consumer falls back), but DOES check
+    units if a publisher is present. Catches a future publisher rename
+    or unit drift without forcing every pipeline to instantiate the
+    optional upstream component.
+    """
+
+    def test_missing_publisher_is_ok(self):
+        """No upstream publisher → consumer's fallback applies; no error."""
+        consumer = type(
+            "FakeRadioOptional",
+            (FakeComponent,),
+            {"requires_optional": lambda self: (DerivedKey("L_ir", "erg/s"),)},
+        )()
+        validate_pipeline([consumer])
+
+    def test_units_mismatch_with_publisher_raises(self):
+        """If a publisher IS present and its units disagree, the
+        validator must refuse to silently paper over the drift —
+        identical semantics to the hard-required path, just gated on
+        publisher presence."""
+        publisher = _mk("FakeDust", publishes=(DerivedKey("L_ir", "erg/s"),))
+        consumer = type(
+            "FakeRadioOptional",
+            (FakeComponent,),
+            # Same key, different units — only possible if a future
+            # contributor edits the consumer's requires_optional in
+            # isolation, or if a publisher's units string drifts away
+            # from the canonical table. Both are real failure modes.
+            {"requires_optional": lambda self: (DerivedKey("L_ir", "Lsun"),)},
+        )()
+        with pytest.raises(PipelineContractError, match=r"erg/s|Lsun|canonical"):
+            validate_pipeline([publisher, consumer])
+
+    def test_publisher_present_matching_units_passes(self):
+        """The happy path: publisher exists, units match → silent OK."""
+        publisher = _mk("FakeDust", publishes=(DerivedKey("L_ir", "erg/s"),))
+        consumer = type(
+            "FakeRadioOptional",
+            (FakeComponent,),
+            {"requires_optional": lambda self: (DerivedKey("L_ir", "erg/s"),)},
+        )()
+        validate_pipeline([publisher, consumer])
+
+    def test_out_of_order_optional_raises(self):
+        """Same strictly-before rule applies to optional reads."""
+        consumer = type(
+            "FakeRadioOptional",
+            (FakeComponent,),
+            {"requires_optional": lambda self: (DerivedKey("L_ir", "erg/s"),)},
+        )()
+        publisher = _mk("FakeDust", publishes=(DerivedKey("L_ir", "erg/s"),))
+        with pytest.raises(PipelineContractError, match=r"strictly before"):
+            validate_pipeline([consumer, publisher])
+
+    def test_real_radio_alone_validates(self):
+        """The real RadioSEDComponent declares L_ir, L_agn_bol, log_mstar
+        as optional reads. Constructing radio without upstream publishers
+        must still validate cleanly — that's the whole point of the
+        optional-read pattern."""
+        from tengri.components.radio.component import RadioSEDComponent
+
+        validate_pipeline([RadioSEDComponent()])
+
+    def test_real_xray_alone_validates(self):
+        """Same check for XRaySEDComponent (declares sfr, log_mstar,
+        L_agn_bol as optional reads)."""
+        from tengri.components.xray.component import XRaySEDComponent
+
+        validate_pipeline([XRaySEDComponent()])

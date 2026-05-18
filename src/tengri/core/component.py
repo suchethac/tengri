@@ -375,9 +375,15 @@ class SEDComponent(Protocol):
     #
     #     def publishes(self) -> tuple[DerivedKey, ...]: ...
     #     def requires(self) -> tuple[DerivedKey, ...]: ...
+    #     def requires_optional(self) -> tuple[DerivedKey, ...]: ...
     #
-    # See ``RadioSEDComponent`` (the canonical adapter) for the expected
-    # docstring shape, and ADR-0004 for the full rationale.
+    # ``requires`` declares HARD dependencies — a missing publisher is a
+    # construction error. ``requires_optional`` (Phase B of issue #21)
+    # declares opportunistic reads that have a documented fallback —
+    # the validator still checks units on the optional read if an
+    # upstream publishes the key, but a missing publisher is not an error.
+    # See ``RadioSEDComponent`` and ``XRaySEDComponent`` for the
+    # canonical optional-read pattern, and ADR-0004 for the full rationale.
 
     def precompute(
         self,
