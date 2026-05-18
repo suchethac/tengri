@@ -316,22 +316,14 @@ def marginalize_emission_lines(
     ``noise``, and ``design_matrix``.
 
     """
-    if prior_variance is None:
-        prior_variance = jnp.array(1e10)
     n_lines = design_matrix.shape[1]
-
-    # Inverse noise variance, shape (n_pix,)
     n_inv = 1.0 / noise**2
 
-    # G^T N^{-1} G  — (n_lines, n_lines)
-    g_weighted = design_matrix * n_inv[:, None]  # (n_pix, n_lines)
+    g_weighted = design_matrix * n_inv[:, None]
     gt_ninv_g = g_weighted.T @ design_matrix
-
-    # G^T N^{-1} r  — (n_lines,)
     gt_ninv_r = g_weighted.T @ residual
 
-    # Prior precision: Lambda^{-1}
-    # Default: flat prior (very large variance = effectively uninformative)
+    # Flat prior (~uninformative) when prior_variance is omitted.
     _pv = prior_variance if prior_variance is not None else jnp.full((n_lines,), 1e10)
     prior_variance = jnp.broadcast_to(jnp.atleast_1d(_pv), (n_lines,))
     lambda_inv = jnp.diag(1.0 / prior_variance)
@@ -342,22 +334,11 @@ def marginalize_emission_lines(
     # Posterior mean (optimal amplitudes)
     a_hat = a_cov @ gt_ninv_r
 
-    # --- Marginalized log-likelihood ---
-    # chi2 of residual alone (no lines)
     chi2_continuum = jnp.sum(residual**2 * n_inv)
-
-    # Improvement from fitting lines
     chi2_marg = chi2_continuum - a_hat @ gt_ninv_g @ a_hat
-
-    # Prior penalty
     prior_penalty = jnp.sum(a_hat**2 / prior_variance)
-
-    # Log-determinant correction:
-    # 0.5 * (ln|Sigma_a| - ln|Lambda|)
-    # = 0.5 * (slogdet(Sigma_a) - sum(ln(prior_variance)))
     _sign, logdet_sigma = jnp.linalg.slogdet(a_cov)
     log_det_correction = logdet_sigma - jnp.sum(jnp.log(prior_variance))
-
     ln_l_marg = -0.5 * chi2_marg - 0.5 * prior_penalty + 0.5 * log_det_correction
 
     return ln_l_marg, a_hat, a_cov

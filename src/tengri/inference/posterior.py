@@ -26,31 +26,6 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
-def _stack_or_nan(values: list, n: int) -> jnp.ndarray:
-    """Stack array values or return NaN-filled array if any value is None.
-
-    Handles the case where a derived quantity is unavailable (None) for all
-    samples, as occurs when predict_derived() returns None for a field
-    (e.g., stellar_mass_surviving when SSP mass-remaining table is absent).
-
-    Parameters
-    ----------
-    values : list
-        List of values (jnp.ndarray, scalar, or None).
-    n : int
-        Expected number of samples. Used to shape the NaN array if needed.
-
-    Returns
-    -------
-    ndarray, shape (n,)
-        If all values are not-None: stacked array with jnp.asarray defensiveness.
-        If any value is None: NaN-filled array of shape (n,).
-    """
-    if any(x is None for x in values):
-        return jnp.full(n, jnp.nan)
-    return jnp.stack([jnp.asarray(x) for x in values])
-
-
 @dataclass
 class Posterior:
     """Inference results with samples, diagnostics, and derived quantities.

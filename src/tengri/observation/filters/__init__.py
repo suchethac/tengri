@@ -768,10 +768,8 @@ def describe(name: str) -> str:
         wave_np = np.asarray(fc.wave)
         trans_np = np.asarray(fc.trans)
 
-        # Compute transmission-weighted effective wavelength
         lam_eff = compute_effective_wavelength(wave_np, trans_np)
 
-        # Compute range (wavelengths with nonzero transmission)
         nonzero = trans_np > 0
         if np.any(nonzero):
             wave_min = wave_np[nonzero].min()
@@ -779,7 +777,6 @@ def describe(name: str) -> str:
         else:
             wave_min, wave_max = wave_np.min(), wave_np.max()
 
-        # Format wavelengths
         def format_wave(w):
             if w >= 1e4:
                 return f"{w / 1e4:.2f}"

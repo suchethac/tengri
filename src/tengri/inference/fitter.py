@@ -566,9 +566,6 @@ class Fitter:
                 )
             if self.data_type == "joint":
                 n_phot = self._n_phot_split()
-                assert n_phot is not None, (
-                    "joint data requires model.observation.n_data_phot to be set"
-                )
                 return CompositeLikelihood(
                     StudentTLikelihood(
                         obs=self.data[:n_phot],
@@ -595,9 +592,6 @@ class Fitter:
                 )
             if self.data_type == "joint":
                 n_phot = self._n_phot_split()
-                assert n_phot is not None, (
-                    "joint data with spec_cov requires model.observation.n_data_phot"
-                )
                 return CompositeLikelihood(
                     PhotometryLikelihood(fnu_obs=self.data[:n_phot], fnu_err=self.noise[:n_phot]),
                     MultivariateGaussianLikelihood(
@@ -622,19 +616,18 @@ class Fitter:
             )
         if self._calibration_marginalize and self._eline_marginalize:
             wavelength = getattr(self.model, "_wave_obs", None)
-            assert wavelength is not None, "calibration marginalisation requires model._wave_obs"
+            if wavelength is None:
+                raise ValueError("Calibration marginalisation requires model._wave_obs.")
             builder = self._make_eline_design_builder()
-            assert builder is not None, (
-                "eline marginalisation requires _eline_wavelengths and "
-                "_eline_constraint_matrix to be set"
-            )
+            if builder is None:
+                raise ValueError(
+                    "Emission-line marginalisation requires _eline_wavelengths and "
+                    "_eline_constraint_matrix to be set on the fitter."
+                )
             if self.data_type == "spectroscopy":
                 spec_obs, spec_err = self.data, self.noise
             else:  # joint
                 n_phot = self._n_phot_split()
-                assert n_phot is not None, (
-                    "joint cal+eline marg requires model.observation.n_data_phot"
-                )
                 spec_obs = self.data[n_phot:]
                 spec_err = self.noise[n_phot:]
             cal_eline_lk = CalibrationELineMarginalisedLikelihood(
@@ -660,7 +653,8 @@ class Fitter:
         # ── Calibration polynomial only (no elines) ─────────────────
         if self._calibration_marginalize and self._has_spectroscopy:
             wavelength = getattr(self.model, "_wave_obs", None)
-            assert wavelength is not None, "calibration marginalisation requires model._wave_obs"
+            if wavelength is None:
+                raise ValueError("Calibration marginalisation requires model._wave_obs.")
             cal_lk = CalibrationMarginalisedLikelihood(
                 fnu_obs=self.data
                 if self.data_type == "spectroscopy"
@@ -675,9 +669,7 @@ class Fitter:
             )
             if self.data_type == "spectroscopy":
                 return cal_lk
-            # Joint: photometry + cal-marg spectroscopy
             n_phot = self._n_phot_split()
-            assert n_phot is not None, "joint cal-marg requires model.observation.n_data_phot"
             return CompositeLikelihood(
                 PhotometryLikelihood(fnu_obs=self.data[:n_phot], fnu_err=self.noise[:n_phot]),
                 cal_lk,
@@ -690,7 +682,6 @@ class Fitter:
                 spec_err = self.noise
             elif self.data_type == "joint":
                 n_phot = self._n_phot_split()
-                assert n_phot is not None, "joint eline requires model.observation.n_data_phot"
                 spec_obs = self.data[n_phot:]
                 spec_err = self.noise[n_phot:]
             else:
@@ -700,9 +691,11 @@ class Fitter:
                     "the eline flag or use spectroscopy."
                 )
             builder = self._make_eline_design_builder()
-            assert builder is not None, (
-                "eline path requires _eline_wavelengths and _eline_constraint_matrix to be set"
-            )
+            if builder is None:
+                raise ValueError(
+                    "Emission-line path requires _eline_wavelengths and "
+                    "_eline_constraint_matrix to be set on the fitter."
+                )
             # Pick the right adapter for the eline mode.
             if self._eline_fitted:
                 eline_lk = ELineFittedLikelihood(
@@ -745,9 +738,6 @@ class Fitter:
             return SpectroscopyLikelihood(fnu_obs=self.data, fnu_err=self.noise)
         if self.data_type == "joint":
             n_phot = self._n_phot_split()
-            assert n_phot is not None, (
-                "joint data requires model.observation.n_data_phot to be set"
-            )
             return CompositeLikelihood(
                 PhotometryLikelihood(fnu_obs=self.data[:n_phot], fnu_err=self.noise[:n_phot]),
                 SpectroscopyLikelihood(fnu_obs=self.data[n_phot:], fnu_err=self.noise[n_phot:]),
@@ -788,10 +778,19 @@ class Fitter:
             )
         return extras
 
-    def _n_phot_split(self):
-        """Return n_data_phot for joint data, or None if unavailable."""
+    def _n_phot_split(self) -> int:
+        """Number of photometric data points in joint (phot+spec) data.
+
+        Raises ``ValueError`` if ``model.observation.n_data_phot`` is missing —
+        joint data cannot be split without it.
+        """
         obs = getattr(self.model, "observation", None)
-        return getattr(obs, "n_data_phot", None)
+        n_phot = getattr(obs, "n_data_phot", None)
+        if n_phot is None:
+            raise ValueError(
+                "Joint (phot+spec) data requires model.observation.n_data_phot to be set."
+            )
+        return n_phot
 
     def _make_eline_design_builder(self):
         """Build a closure that rebuilds the e-line design matrix per call.
@@ -1519,13 +1518,13 @@ class Fitter:
             Forward model prediction mode. Default "_traceable" for backward
             compatibility. Pass "auto" for ~1.5x speedup with non-NIFTy methods.
         """
-        from tengri.inference.jit_engine import get_or_build_loss_fn_cached
+        from tengri.inference.jit_engine import get_or_build_cached
 
         cache_key = (self._engine_cache_key(), mode)
         per_model = get_model_cache(self.model).setdefault("loss_fn", {})
         if cache_key in per_model:
             return per_model[cache_key]
-        loss_fn = get_or_build_loss_fn_cached(self, mode, lambda: self._build_loss_fn(mode=mode))
+        loss_fn = get_or_build_cached(self, mode, "loss", lambda: self._build_loss_fn(mode=mode))
         per_model[cache_key] = loss_fn
         return loss_fn
 
@@ -1539,14 +1538,14 @@ class Fitter:
 
     def _get_or_build_loglikelihood_fn(self, mode: str = "_traceable") -> Callable:
         """Return the cached log-likelihood function, building if needed."""
-        from tengri.inference.jit_engine import get_or_build_loglik_fn_cached
+        from tengri.inference.jit_engine import get_or_build_cached
 
         cache_key = (self._engine_cache_key(), mode)
         per_model = get_model_cache(self.model).setdefault("loglik_fn", {})
         if cache_key in per_model:
             return per_model[cache_key]
-        loglik_fn = get_or_build_loglik_fn_cached(
-            self, mode, lambda: self._build_loglikelihood_fn(mode=mode)
+        loglik_fn = get_or_build_cached(
+            self, mode, "loglik", lambda: self._build_loglikelihood_fn(mode=mode)
         )
         per_model[cache_key] = loglik_fn
         return loglik_fn
@@ -1565,7 +1564,7 @@ class Fitter:
         explicit arguments so the compiled XLA program is reusable across
         galaxies with the same model structure.
         """
-        from tengri.inference.jit_engine import get_or_build_grad_fn_cached
+        from tengri.inference.jit_engine import get_or_build_cached
 
         cache_key = (self._engine_cache_key(), mode)
         per_model = get_model_cache(self.model).setdefault("grad_fn", {})
@@ -1582,7 +1581,7 @@ class Fitter:
 
             return val_and_grad
 
-        val_and_grad = get_or_build_grad_fn_cached(self, mode, _build)
+        val_and_grad = get_or_build_cached(self, mode, "grad", _build)
         per_model[cache_key] = val_and_grad
         return val_and_grad
 
@@ -1593,7 +1592,7 @@ class Fitter:
         should partial-apply ``data_args`` for blackjax compatibility.
         """
         cache_key = (self._engine_cache_key(), mode)
-        from tengri.inference.jit_engine import get_or_build_logdensity_fn_cached
+        from tengri.inference.jit_engine import get_or_build_cached
 
         per_model = get_model_cache(self.model).setdefault("logdensity_fn", {})
         if cache_key in per_model:
@@ -1609,7 +1608,7 @@ class Fitter:
 
             return logdensity
 
-        logdensity = get_or_build_logdensity_fn_cached(self, mode, _build)
+        logdensity = get_or_build_cached(self, mode, "logdensity", _build)
         per_model[cache_key] = logdensity
         return logdensity
 

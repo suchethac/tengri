@@ -126,18 +126,7 @@ _CUE_IONSPEC_IDENTITY_PARAMS = _identity_params_from_bucket(_CUE_IONSPEC_PARAMS)
 
 
 def identity_param_map(names: list[str]) -> dict[str, tuple[str, float, float]]:
-    """Build param_map entries for parameters that pass through without unit conversion.
-
-    Parameters
-    ----------
-    names : list of str
-        Parameter names to include.
-
-    Returns
-    -------
-    dict
-        Mapping of ``{name: (name, 1.0, 0.0)}`` for each name.
-    """
+    """Param-map entries `{name: (name, 1.0, 0.0)}` — no unit conversion."""
     return {p: (p, 1.0, 0.0) for p in names}
 
 
@@ -151,20 +140,15 @@ _NON_SFH_PARAM_MAP = {
     "dust_slope": ("dust_slope", 1.0, 0.0),
     "redshift": ("redshift", 1.0, 0.0),
     "noise_frac_cal": ("noise_frac_cal", 1.0, 0.0),
-    # Dust extra params (identity mapping — no unit conversion)
     "dust_f_obscuration": ("f_obscuration", 1.0, 0.0),
     "dust_bump_strength": ("dust_bump_strength", 1.0, 0.0),
     "dust_delta": ("dust_delta", 1.0, 0.0),
     "dust_Rv": ("dust_Rv", 1.0, 0.0),
-    # Noise model
     "noise_dof": ("noise_dof", 1.0, 0.0),
-    # Spectroscopy: stellar velocity dispersion (added in quadrature
-    # to the instrumental LSF in apply_lsf). See MISSING_FEATURES.md #8.
     "sigma_v_kms": ("sigma_v_kms", 1.0, 0.0),
-    # Nebular gas metallicity: declared in _param_defs as log10(Z_gas/Zsun)
-    # but consumed in cloudy_cb19.py / feltre_precompute.py /
-    # mappings_photo_precompute.py as ABSOLUTE log10(Z) — same convention as
-    # met_logzsol → log_z_abs. The LOG10_ZSUN offset bridges the two.
+    # neb_logZ_gas is declared as log10(Z_gas/Zsun) in _param_defs but
+    # consumed downstream as absolute log10(Z); LOG10_ZSUN bridges the two
+    # (same convention as met_logzsol → log_z_abs).
     "neb_logZ_gas": ("neb_logZ_gas", 1.0, LOG10_ZSUN),
 }
 
