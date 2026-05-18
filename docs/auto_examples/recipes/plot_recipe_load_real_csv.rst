@@ -31,12 +31,32 @@ building observations per galaxy, and running a MAP fit on each.
    :alt: plot_recipe_load_real_csv
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-138
+.. GENERATED FROM PYTHON SOURCE LINES 16-118
+
+
+
+.. image-sg:: /auto_examples/recipes/images/sphx_glr_plot_recipe_load_real_csv_001.png
+   :alt: galaxy_0, galaxy_1, galaxy_2
+   :srcset: /auto_examples/recipes/images/sphx_glr_plot_recipe_load_real_csv_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-batch-2/src/tengri/forward/sed_model.py:643: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
+      self._nebular_backend = BakedInBackend()
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 
-
-    from pathlib import Path
 
     import jax
     import jax.numpy as jnp
@@ -51,32 +71,14 @@ building observations per galaxy, and running a MAP fit on each.
         Photometry,
         SEDModel,
         Uniform,
-        load_ssp_data,
+        load_ssp,
     )
     from tengri.analysis.plotting import setup_style
 
     setup_style()
 
 
-    def _find_ssp():
-        """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
-
-
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
-
-    ssp = load_ssp_data(SSP_PATH)
+    ssp = load_ssp()
 
     # --- Generate mock CSV with 5 SDSS bands x 3 galaxies ---
     # In practice, load your own CSV via np.genfromtxt() or pd.read_csv()
@@ -157,6 +159,11 @@ building observations per galaxy, and running a MAP fit on each.
     fig.tight_layout()
     plt.savefig("plot_recipe_load_real_csv.png", dpi=150, bbox_inches="tight")
     plt.show()
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 13.638 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_load_real_csv.py:

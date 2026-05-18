@@ -33,6 +33,17 @@ A 3x3 grid of GP-modulated SFHs shows the effect of each parameter.
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-99
 
+
+
+.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_psd_burstiness_001.png
+   :alt: PSD Burstiness Grid: amplitude $\sigma$ (rows) vs damping $\tau$ (columns), $\tau = 30$ Myr, $\tau = 200$ Myr, $\tau = 1000$ Myr
+   :srcset: /auto_examples/sfh/images/sphx_glr_plot_psd_burstiness_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -118,6 +129,11 @@ A 3x3 grid of GP-modulated SFHs shows the effect of each parameter.
     fig.tight_layout(rect=[0, 0, 1, 0.96])
     plt.savefig("plot_psd_burstiness.png", dpi=150, bbox_inches="tight")
     plt.show()
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.381 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_psd_burstiness.py:

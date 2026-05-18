@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:01.961** total execution time for 1 file **from auto_examples/quickstart**:
+**00:14.970** total execution time for 2 files **from auto_examples/quickstart**:
 
 .. container::
 
@@ -32,6 +32,9 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
+   * - :ref:`sphx_glr_auto_examples_quickstart_plot_first_fit.py` (``plot_first_fit.py``)
+     - 00:10.390
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_quickstart_plot_sed_components.py` (``plot_sed_components.py``)
-     - 00:01.961
+     - 00:04.580
      - 0.0

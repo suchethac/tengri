@@ -31,12 +31,32 @@ compared to letting it vary.
    :alt: plot_recipe_specific_redshift
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-168
+.. GENERATED FROM PYTHON SOURCE LINES 16-150
+
+
+
+.. image-sg:: /auto_examples/recipes/images/sphx_glr_plot_recipe_specific_redshift_001.png
+   :alt: Impact of Redshift Prior: Fixed vs Free, Fixed redshift (spec known), Free redshift (photometry only)
+   :srcset: /auto_examples/recipes/images/sphx_glr_plot_recipe_specific_redshift_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-batch-2/src/tengri/forward/sed_model.py:643: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
+      self._nebular_backend = BakedInBackend()
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 
-
-    from pathlib import Path
 
     import jax
     import matplotlib.pyplot as plt
@@ -50,32 +70,14 @@ compared to letting it vary.
         Photometry,
         SEDModel,
         Uniform,
-        load_ssp_data,
+        load_ssp,
     )
     from tengri.analysis.plotting import setup_style
 
     setup_style()
 
 
-    def _find_ssp():
-        """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
-
-
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
-
-    ssp = load_ssp_data(SSP_PATH)
+    ssp = load_ssp()
 
     # Known spectroscopic redshift
     TRUE_REDSHIFT = 0.15
@@ -162,8 +164,7 @@ compared to letting it vary.
 
     # Fixed redshift plot
     ax_fixed.plot(
-        t_gyr[mask], np.array(sfh_fixed["sfr_mean"])[mask], "C0-", lw=2.5,
-        label="Fit with z fixed"
+        t_gyr[mask], np.array(sfh_fixed["sfr_mean"])[mask], "C0-", lw=2.5, label="Fit with z fixed"
     )
     ax_fixed.set_xlabel("Lookback time [Gyr]", fontsize=11)
     ax_fixed.set_ylabel("SFR [Msun/yr]", fontsize=11)
@@ -175,8 +176,11 @@ compared to letting it vary.
     t_gyr_free = np.array(sfh_free["t_gyr"])
     mask_free = t_gyr_free < 2.0
     ax_free.plot(
-        t_gyr_free[mask_free], np.array(sfh_free["sfr_mean"])[mask_free], "C3-", lw=2.5,
-        label="Fit with z free"
+        t_gyr_free[mask_free],
+        np.array(sfh_free["sfr_mean"])[mask_free],
+        "C3-",
+        lw=2.5,
+        label="Fit with z free",
     )
     ax_free.set_xlabel("Lookback time [Gyr]", fontsize=11)
     ax_free.set_ylabel("SFR [Msun/yr]", fontsize=11)
@@ -187,6 +191,11 @@ compared to letting it vary.
     fig.suptitle("Impact of Redshift Prior: Fixed vs Free", fontsize=12, y=1.02)
     plt.savefig("plot_recipe_specific_redshift.png", dpi=150, bbox_inches="tight")
     plt.show()
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 16.614 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_specific_redshift.py:

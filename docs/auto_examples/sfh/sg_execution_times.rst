@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:12.544** total execution time for 11 files **from auto_examples/sfh**:
+**00:00.670** total execution time for 16 files **from auto_examples/sfh**:
 
 .. container::
 
@@ -32,36 +32,51 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_wrong_model_trap.py` (``plot_wrong_model_trap.py``)
-     - 00:05.444
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_parametric_sfh.py` (``plot_parametric_sfh.py``)
+     - 00:00.670
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_psd_burstiness.py` (``plot_psd_burstiness.py``)
-     - 00:01.289
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_bursty_recovery.py` (``plot_bursty_recovery.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_chemical_evolution.py` (``plot_chemical_evolution.py``)
-     - 00:01.038
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_psd_sigma_sweep.py` (``plot_psd_sigma_sweep.py``)
-     - 00:00.908
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_dexp_tau_sweep.py` (``plot_dexp_tau_sweep.py``)
-     - 00:00.652
+     - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_parametric_sfh.py` (``plot_parametric_sfh.py``)
-     - 00:00.579
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_dpl_alpha_beta_grid.py` (``plot_dpl_alpha_beta_grid.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_dpl_alpha_sweep.py` (``plot_dpl_alpha_sweep.py``)
-     - 00:00.573
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_lnorm_peak_sweep.py` (``plot_lnorm_peak_sweep.py``)
-     - 00:00.557
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_psd_tau_sweep.py` (``plot_psd_tau_sweep.py``)
-     - 00:00.507
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_psd_alternatives.py` (``plot_psd_alternatives.py``)
-     - 00:00.503
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_dpl_beta_sweep.py` (``plot_dpl_beta_sweep.py``)
-     - 00:00.493
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_lnorm_peak_sweep.py` (``plot_lnorm_peak_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_psd_alternatives.py` (``plot_psd_alternatives.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_psd_burstiness.py` (``plot_psd_burstiness.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_psd_sigma_sweep.py` (``plot_psd_sigma_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_psd_tau_sweep.py` (``plot_psd_tau_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_double_burst.py` (``plot_sfh_double_burst.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_quenching_compare.py` (``plot_sfh_quenching_compare.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_stochastic_sfh.py` (``plot_stochastic_sfh.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_wrong_model_trap.py` (``plot_wrong_model_trap.py``)
+     - 00:00.000
      - 0.0

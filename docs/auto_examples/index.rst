@@ -1279,7 +1279,7 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Alpha-element enhancement [\alpha/\rm Fe] records the chemical enrichment history: high [\alpha/\rm Fe] signals rapid enrichment by core-collapse supernovae before Type Ia SNe can dilute the alpha elements. In the SED, enhanced alpha suppresses iron absorption features and alters the optical mass-to-light ratio.">
+    <div class="sphx-glr-thumbcontainer" tooltip="[α/Fe] records the chemical enrichment history: high [α/Fe] signals rapid enrichment by core-collapse SNe before Type Ia SNe can dilute the alpha elements. In the SED, enhanced alpha suppresses iron absorption features in the optical.">
 
 .. only:: html
 
@@ -1296,7 +1296,7 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrate how stellar metallicity affects the full galaxy SED from ultraviolet through mid-infrared. Metallicity impacts stellar absorption features, dust opacity, and energy balance. Sweeps log(Z/Z_sun) ∈ {-1.5, -0.7, 0.0, 0.5} on a composite SED including dust emission.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep met_logzsol ∈ {−1.5, −0.7, 0, +0.5} on a composite SED from 912 Å (Lyman limit) to 30 μm (mid-IR), with modified-blackbody dust emission turned on so the metallicity-vs-energy-balance interaction is visible.">
 
 .. only:: html
 
@@ -1313,7 +1313,7 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Stellar metallicity sets the UV-optical SED shape: metal-poor stars are hotter and bluer (less line blanketing), while metal-rich stars have stronger absorption features and redder continua. This plot sweeps met_logzsol from -2 (0.01 Z_\odot) to 0.2 (1.6 Z_\odot) at fixed SFH and dust.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Stellar metallicity sets the UV-optical SED shape: metal-poor stars are hotter and bluer (less line blanketing), metal-rich are redder. Sweep met_logzsol from −2 (0.01 Z_⊙) to +0.2 (1.6 Z_⊙) at fixed SFH and dust.">
 
 .. only:: html
 
@@ -1330,7 +1330,7 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="2D grid showing how stellar continuum shape responds to metallicity at different ages. Demonstrates the age-metallicity degeneracy: a metal-rich young star can mimic a metal-poor old star in the optical continuum. Uses a 3×4 panel grid: log(Z/Z_sun) ∈ {-1.0, -0.3, 0.0, 0.3} × age ∈ {0.1, 1.0, 5.0} Gyr.">
+    <div class="sphx-glr-thumbcontainer" tooltip="3×4 panel grid showing how the stellar continuum responds to metallicity at three ages. Demonstrates the classic age-metallicity degeneracy: a metal-rich young population can mimic a metal-poor old population in the optical continuum.">
 
 .. only:: html
 
@@ -1868,7 +1868,7 @@ Getting started with tengri — first fit and SED visualization.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The simplest possible tengri workflow: define a parametric SFH model, generate mock SDSS photometry, fit it with MAP optimization, and plot the resulting SED fit.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The shortest tengri workflow: define a parametric SFH + Calzetti dust model, mock SDSS photometry, fit with MAP optimization, overplot. Start here.">
 
 .. only:: html
 
@@ -1885,7 +1885,7 @@ Getting started with tengri — first fit and SED visualization.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Predict a galaxy SED and visualize its components: the intrinsic stellar emission and the dust-attenuated total. Uses the lazy model.predict() API and direct SED computation to show the effect of dust attenuation on the spectrum.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Predict a galaxy SED at fixed parameters, then re-predict with dust optical depths set to zero. Overplot to see how much UV-optical light the dust absorbed.">
 
 .. only:: html
 
@@ -2494,7 +2494,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Five representative ages from the DSPS SSP grid at solar metallicity. A single stellar population transitions from UV-dominated (young, hot) to NIR-dominated (old, red); rest-frame λF_λ on log-log axes makes the temperature inversion visible.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Five representative ages from the DSPS SSP grid at solar metallicity. A single stellar population transitions from UV-dominated (young, hot) to NIR-dominated (old, red); peak-normalized λF_λ on log-log axes makes the temperature inversion visible.">
 
 .. only:: html
 
@@ -2511,7 +2511,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Visualize the DSPS simple stellar population (SSP) grid showing spectral properties as a function of age and metallicity. Demonstrates how stellar population age and chemical abundance affect the rest-frame UV, optical, and near-IR spectral shapes.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Four-panel tour of the DSPS SSP grid: age sequence at fixed Z, metallicity sequence at fixed age, broadband flux vs age, and a mock UV-optical vs optical-NIR color-color diagram across the full grid.">
 
 .. only:: html
 
@@ -2522,13 +2522,13 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">SSP Grid Visualization: Age and Metallicity</div>
+      <div class="sphx-glr-thumbnail-title">SSP Grid: Age and Metallicity Evolution</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Initial mass function (IMF) choice affects stellar population properties significantly. While SSP grids typically assume a single IMF (here, Chabrier), this script illustrates the relative differences in mass-to-light ratio across standard IMF prescriptions (Chabrier, Kroupa, Salpeter) using published literature values. The effect is dramatic in the near-IR where massive stars dominate the mass budget.">
+    <div class="sphx-glr-thumbcontainer" tooltip="SSP grids typically ship with one IMF (here, Chabrier). To illustrate the IMF effect on the spectrum shape we rescale the same Chabrier SSP by literature M/L ratios for Chabrier / Kroupa / Salpeter at 1 Gyr and solar Z. M/L ratios from Conroy 2012 — most diagnostic in the near-IR where massive stars dominate the mass budget.">
 
 .. only:: html
 
@@ -2545,7 +2545,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Five metallicity points spanning the SSP grid at fixed age (1 Gyr). Metallicity reddens the optical and shifts iron-peak features in the near-IR; we plot peak-normalised λF_λ to compare shape, not normalisation.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Five metallicity points spanning the SSP grid at fixed age 1 Gyr. Metallicity reddens the optical and shifts iron-peak features in the near-IR. Peak-normalized λF_λ shows shape changes without the absolute luminosity scale washing them out.">
 
 .. only:: html
 

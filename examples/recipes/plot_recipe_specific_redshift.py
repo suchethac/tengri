@@ -14,8 +14,6 @@ compared to letting it vary.
 
 """
 
-from pathlib import Path
-
 import jax
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,32 +26,14 @@ from tengri import (
     Photometry,
     SEDModel,
     Uniform,
-    load_ssp_data,
+    load_ssp,
 )
 from tengri.analysis.plotting import setup_style
 
 setup_style()
 
 
-def _find_ssp():
-    """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
-    name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [
-        Path("data") / name,
-        Path("../data") / name,
-        Path("../../data") / name,
-        Path("../../../data") / name,
-    ]:
-        if p.exists():
-            return str(p)
-    return None
-
-
-SSP_PATH = _find_ssp()
-if SSP_PATH is None:
-    raise FileNotFoundError("SSP data not found — skipping example")
-
-ssp = load_ssp_data(SSP_PATH)
+ssp = load_ssp()
 
 # Known spectroscopic redshift
 TRUE_REDSHIFT = 0.15
@@ -140,8 +120,7 @@ mask = t_gyr < 2.0
 
 # Fixed redshift plot
 ax_fixed.plot(
-    t_gyr[mask], np.array(sfh_fixed["sfr_mean"])[mask], "C0-", lw=2.5,
-    label="Fit with z fixed"
+    t_gyr[mask], np.array(sfh_fixed["sfr_mean"])[mask], "C0-", lw=2.5, label="Fit with z fixed"
 )
 ax_fixed.set_xlabel("Lookback time [Gyr]", fontsize=11)
 ax_fixed.set_ylabel("SFR [Msun/yr]", fontsize=11)
@@ -153,8 +132,11 @@ ax_fixed.legend(frameon=False)
 t_gyr_free = np.array(sfh_free["t_gyr"])
 mask_free = t_gyr_free < 2.0
 ax_free.plot(
-    t_gyr_free[mask_free], np.array(sfh_free["sfr_mean"])[mask_free], "C3-", lw=2.5,
-    label="Fit with z free"
+    t_gyr_free[mask_free],
+    np.array(sfh_free["sfr_mean"])[mask_free],
+    "C3-",
+    lw=2.5,
+    label="Fit with z free",
 )
 ax_free.set_xlabel("Lookback time [Gyr]", fontsize=11)
 ax_free.set_ylabel("SFR [Msun/yr]", fontsize=11)
