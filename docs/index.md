@@ -161,7 +161,7 @@ use-cases and workflows.
 
 .. toctree::
    :caption: Examples gallery
-   :maxdepth: 2
+   :maxdepth: 1
 
    auto_examples/index
 

@@ -3,7 +3,6 @@ Examples gallery
 
 .. toctree::
    :hidden:
-   :includehidden:
 
    /auto_examples/quickstart/index.rst
    /auto_examples/workflows/index.rst
