@@ -126,8 +126,8 @@ class TestDispatchSwitch:
         fitter = _build_fitter()
         received = {}
 
-        def runner(target, *, key, init_from=None, **kw):
-            received["target"] = target
+        def runner(context, *, key, init_from=None, **kw):
+            received["target"] = context
             from tengri.inference.posterior import Posterior
 
             return Posterior(
@@ -152,8 +152,8 @@ class TestDispatchSwitch:
         fitter = _build_fitter()
         received = {}
 
-        def runner(target, *, key, init_from=None, **kw):
-            received["target"] = target
+        def runner(context, *, key, init_from=None, **kw):
+            received["target"] = context
             from tengri.inference.posterior import Posterior
 
             return Posterior(
@@ -180,7 +180,7 @@ class TestDispatchSwitch:
         """Existing @register_backend(...) call sites should not change behaviour."""
 
         @register_backend("_default_probe")
-        def runner(target, *, key, init_from=None, **kw):
+        def runner(target, *, key, init_from=None, **kw):  # noqa: ARG001 - probe
             from tengri.inference.posterior import Posterior
 
             return Posterior(

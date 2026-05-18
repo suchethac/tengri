@@ -18,19 +18,6 @@ from jax.flatten_util import ravel_pytree
 from tengri.inference._model_cache import get_model_cache
 from tengri.inference.context import InferenceContext
 
-
-def _as_context(target) -> InferenceContext:
-    """Normalize ``target`` (Fitter or InferenceContext) to an InferenceContext.
-
-    During the multi-PR migration window, ``Fitter.run`` may pass either
-    the raw Fitter or an already-built context. New backend code should
-    only read through the returned context.
-    """
-    if isinstance(target, InferenceContext):
-        return target
-    return InferenceContext(fitter=target)
-
-
 _OPTAX_OPTIMIZERS = {"adam", "adamw", "sgd"}
 _SCIPY_OPTIMIZERS = {"lbfgs", "lbfgs_scipy"}
 _ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _SCIPY_OPTIMIZERS
@@ -168,7 +155,7 @@ def _get_or_build_map_fns(model, loss_fn, optimizer, learning_rate):
 
 
 def _run_map_scipy(
-    context,
+    context: InferenceContext,
     *,
     init_params,
     grad_fn,
@@ -275,7 +262,7 @@ def _run_map_scipy(
 
 
 def run_map(
-    target,
+    context,
     *,
     key,
     init_from=None,
@@ -320,7 +307,10 @@ def run_map(
     """
     from tengri.inference.posterior import Posterior
 
-    context = _as_context(target)
+    # Normalize: dispatcher passes an InferenceContext for migrated
+    # backends, but internal callsites (``Fitter._run_map``) may still
+    # pass a raw Fitter during the migration window — accept both.
+    context = InferenceContext.from_target(context)
     loss_fn = context.loss_fn
     data_args = context.data_args
     init_params = context.initial_params(key, init_from=init_from)
@@ -541,11 +531,11 @@ def build_vectorized_map_solver(
     return map_solve_one
 
 
-def run_laplace(target, *, key, init_from=None, n_map_steps=1000, **kwargs):
+def run_laplace(context, *, key, init_from=None, n_map_steps=1000, **kwargs):
     """Laplace approximation: Gaussian posterior from Hessian at MAP."""
     from tengri.inference.backends.laplace import run_laplace
 
-    context = _as_context(target)
+    context = InferenceContext.from_target(context)
 
     if init_from is not None:
         map_params_posterior = init_from
@@ -558,7 +548,7 @@ def run_laplace(target, *, key, init_from=None, n_map_steps=1000, **kwargs):
         )
         map_params_posterior = map_result
 
-    map_params = context.fitter._unbounded_from_posterior(map_params_posterior)
+    map_params = context.unbounded_from_posterior(map_params_posterior)
 
     return run_laplace(
         key=key,
@@ -572,16 +562,16 @@ def run_laplace(target, *, key, init_from=None, n_map_steps=1000, **kwargs):
     )
 
 
-def run_pathfinder(target, *, key, init_from=None, **kwargs):
+def run_pathfinder(context, *, key, init_from=None, **kwargs):
     """Pathfinder: fast approximate posterior via L-BFGS path."""
     from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
     from tengri.inference.backends.pathfinder import run_pathfinder
 
-    context = _as_context(target)
+    context = InferenceContext.from_target(context)
     init_params = context.initial_params(key, init_from=init_from)
 
-    # _get_flat_logdensity still takes a Fitter; pass context.fitter
-    # (escape hatch) until the mcmc/_shared.py module is migrated.
+    # ``_get_flat_logdensity`` still takes a Fitter — reach through
+    # the context until ``mcmc/_shared.py`` migrates (PR4).
     log_posterior_flat_2arg, unravel_fn, init_flat, data_args = _get_flat_logdensity(
         context.fitter,
         init_params,

@@ -3306,10 +3306,23 @@ class Fitter:
 # the backend runner to the (fitter, key, init_from, **kwargs) signature.
 
 from tengri.inference._backend_registry import register_backend
+from tengri.inference.backends.evidence import run_nss as _ctx_run_nss
 from tengri.inference.backends.map_dispatch import (
     run_laplace as _ctx_run_laplace,
     run_map as _ctx_run_map,
     run_pathfinder as _ctx_run_pathfinder,
+)
+from tengri.inference.backends.mcmc import (
+    run_adjusted_mclmc as _ctx_run_adjusted_mclmc,
+    run_dynamic_hmc as _ctx_run_dynamic_hmc,
+    run_ghmc as _ctx_run_ghmc,
+    run_hmc as _ctx_run_hmc,
+    run_mclmc as _ctx_run_mclmc,
+    run_nuts as _ctx_run_nuts,
+    run_raytrace as _ctx_run_raytrace,
+)
+from tengri.inference.backends.mcmc.elliptical_slice import (
+    run_elliptical_slice_fitter as _ctx_run_elliptical_slice,
 )
 
 # Primary backends
@@ -3382,16 +3395,20 @@ register_backend(
     )
 )
 
+# ``mcmc`` is an auto-dispatcher (NUTS for low-D, raytrace for high-D).
+# It still receives a context via ``legacy_fitter=False`` and picks the
+# concrete runner based on ``context.spec.n_free``.
 register_backend(
     "mcmc",
     tier="primary",
     short_doc="Auto MCMC: NUTS for low-D, raytrace for high-D",
     requires=("blackjax",),  # NUTS branch needs it; raytrace branch is pure JAX
+    legacy_fitter=False,
 )(
-    lambda fitter, *, key, init_from=None, **kw: (
-        fitter._run_nuts(key=key, init_from=init_from, **kw)
-        if fitter.spec.n_free <= _MCMC_AUTO_D_THRESHOLD
-        else fitter._run_raytrace(key=key, init_from=init_from, **kw)
+    lambda context, *, key, init_from=None, **kw: (
+        _ctx_run_nuts(context, key=key, init_from=init_from, **kw)
+        if context.spec.n_free <= _MCMC_AUTO_D_THRESHOLD
+        else _ctx_run_raytrace(context, key=key, init_from=init_from, **kw)
     )
 )
 
@@ -3400,89 +3417,70 @@ register_backend(
     tier="primary",
     short_doc="No-U-Turn Sampler",
     requires=("blackjax",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_nuts(
-        key=key, init_from=init_from, **kw
-    )
-)
+    legacy_fitter=False,
+)(_ctx_run_nuts)
 
 register_backend(
     "mcmc_raytrace",
     tier="primary",
     short_doc="Ray-tracing ensemble sampler (high-D)",
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_raytrace(
-        key=key, init_from=init_from, **kw
-    )
-)
+    legacy_fitter=False,
+)(_ctx_run_raytrace)
 
 register_backend(
     "mcmc_hmc",
     tier="experimental",
     short_doc="Hamiltonian Monte Carlo",
     requires=("blackjax",),
-)(lambda fitter, *, key, init_from=None, **kw: fitter._run_hmc(key=key, init_from=init_from, **kw))
+    legacy_fitter=False,
+)(_ctx_run_hmc)
 
 register_backend(
     "mcmc_dynamic_hmc",
     tier="experimental",
     short_doc="Dynamic HMC with adaptive step size",
     requires=("blackjax",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_dynamic_hmc(
-        key=key, init_from=init_from, **kw
-    )
-)
+    legacy_fitter=False,
+)(_ctx_run_dynamic_hmc)
 
 register_backend(
     "mcmc_ghmc",
     tier="experimental",
     short_doc="Generalized HMC",
     requires=("blackjax",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_ghmc(
-        key=key, init_from=init_from, **kw
-    )
-)
+    legacy_fitter=False,
+)(_ctx_run_ghmc)
 
 register_backend(
     "mcmc_mclmc",
     tier="experimental",
     short_doc="Microcanonical Langevin Monte Carlo",
     requires=("blackjax",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_mclmc(
-        key=key, init_from=init_from, **kw
-    )
-)
+    legacy_fitter=False,
+)(_ctx_run_mclmc)
 
 register_backend(
     "mcmc_adjusted_mclmc",
     tier="experimental",
     short_doc="Adjusted microcanonical Langevin sampler",
     requires=("blackjax",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_adjusted_mclmc(
-        key=key, init_from=init_from, **kw
-    )
-)
+    legacy_fitter=False,
+)(_ctx_run_adjusted_mclmc)
 
 register_backend(
     "mcmc_ess",
     tier="experimental",
     short_doc="Elliptical slice sampling",
     requires=("blackjax",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_elliptical_slice(
-        key=key, init_from=init_from, **kw
-    )
-)
+    legacy_fitter=False,
+)(_ctx_run_elliptical_slice)
 
 register_backend(
     "nss",
     tier="experimental",
     short_doc="Nested sampling for model comparison",
-)(lambda fitter, *, key, init_from=None, **kw: fitter._run_nss(key=key, init_from=init_from, **kw))
+    legacy_fitter=False,
+)(_ctx_run_nss)
 
 register_backend(
     "laplace",

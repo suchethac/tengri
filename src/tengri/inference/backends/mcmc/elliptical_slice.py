@@ -158,13 +158,13 @@ def run_elliptical_slice(
     )
 
 
-def run_elliptical_slice_fitter(fitter, *, key, init_from=None, **kwargs):
-    """Elliptical Slice Sampling via fitter interface.
+def run_elliptical_slice_fitter(context, *, key, init_from=None, **kwargs):
+    """Elliptical Slice Sampling via the InferenceContext interface.
 
     Parameters
     ----------
-    fitter : Fitter
-        Fitter object containing model and data.
+    context : InferenceContext | Fitter
+        Inference context (or Fitter, normalized on entry).
     key : PRNGKey
         Random key.
     init_from : Posterior or None
@@ -177,20 +177,19 @@ def run_elliptical_slice_fitter(fitter, *, key, init_from=None, **kwargs):
     Posterior
         Posterior samples from elliptical slice sampling.
     """
-    loglik_unbounded_fn = fitter._build_loglikelihood_unbounded_fn()
-    data_args = fitter._data_args
+    from tengri.inference.context import InferenceContext
 
-    if init_from is not None:
-        init_params = fitter._unbounded_from_posterior(init_from)
-    else:
-        init_params = fitter._initialize_unbounded(key)
+    context = InferenceContext.from_target(context)
+    # ``_build_loglikelihood_unbounded_fn`` is a Fitter-internal helper.
+    loglik_unbounded_fn = context.fitter._build_loglikelihood_unbounded_fn()
+    init_params = context.initial_params(key, init_from=init_from)
 
     return run_elliptical_slice(
         key=key,
         loglikelihood_unbounded_fn=loglik_unbounded_fn,
-        data_args=data_args,
+        data_args=context.data_args,
         init_params=init_params,
-        to_physical_fn=fitter._to_physical,
-        model=fitter.model,
+        to_physical_fn=context.to_physical,
+        model=context.model,
         **kwargs,
     )

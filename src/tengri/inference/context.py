@@ -69,6 +69,21 @@ class InferenceContext:
 
     fitter: Fitter
 
+    # ── Constructors ─────────────────────────────────────────────────────
+    @classmethod
+    def from_target(cls, target) -> InferenceContext:
+        """Normalize ``target`` (Fitter or InferenceContext) to a context.
+
+        Backends use this at their entry point during the multi-PR
+        migration window — ``Fitter.run`` may pass either an
+        ``InferenceContext`` (migrated backends) or a raw ``Fitter``
+        (legacy path). Returns ``target`` unchanged if it is already
+        a context.
+        """
+        if isinstance(target, cls):
+            return target
+        return cls(fitter=target)
+
     # ── Forward-model state ──────────────────────────────────────────────
     @property
     def model(self):
@@ -125,6 +140,10 @@ class InferenceContext:
     def to_physical(self, params: dict) -> dict:
         """Map unbounded params back to physical (bounded) space."""
         return self.fitter._to_physical(params)
+
+    def unbounded_from_posterior(self, posterior: Posterior) -> dict:
+        """Extract a warm-start point in unbounded space from a posterior."""
+        return self.fitter._unbounded_from_posterior(posterior)
 
     # ── Free-name list (handy for diagnostics) ───────────────────────────
     @property
