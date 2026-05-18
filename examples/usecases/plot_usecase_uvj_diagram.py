@@ -129,15 +129,36 @@ fig, ax = plt.subplots(figsize=(8, 7))
 # Williams+2009 quiescent wedge (z<1):  (U-V)>1.3, (V-J)<1.6, (U-V)>0.88*(V-J)+0.49
 vj_grid = np.linspace(-0.5, 1.6, 100)
 uv_diag = 0.88 * vj_grid + 0.49
-ax.plot(vj_grid, np.maximum(uv_diag, 1.3), color="0.25", lw=1.6, ls="--",
-        label="Williams+2009 quiescent box")
+ax.plot(
+    vj_grid,
+    np.maximum(uv_diag, 1.3),
+    color="0.25",
+    lw=1.6,
+    ls="--",
+    label="Williams+2009 quiescent box",
+)
 ax.plot([1.6, 1.6], [0.88 * 1.6 + 0.49, 2.5], color="0.25", lw=1.6, ls="--")
 
-ax.scatter(sf_uvj[:, 1], sf_uvj[:, 0], s=42, alpha=0.65, edgecolor="none",
-           color="#1f77b4", label=f"Star-forming (n={(~np.isnan(sf_uvj[:, 0])).sum()})")
-ax.scatter(passive_uvj[:, 1], passive_uvj[:, 0], s=58, alpha=0.85, marker="s",
-           edgecolor="0.15", linewidth=0.6, color="#d62728",
-           label=f"Passive (n={(~np.isnan(passive_uvj[:, 0])).sum()})")
+ax.scatter(
+    sf_uvj[:, 1],
+    sf_uvj[:, 0],
+    s=42,
+    alpha=0.65,
+    edgecolor="none",
+    color="#1f77b4",
+    label=f"Star-forming (n={(~np.isnan(sf_uvj[:, 0])).sum()})",
+)
+ax.scatter(
+    passive_uvj[:, 1],
+    passive_uvj[:, 0],
+    s=58,
+    alpha=0.85,
+    marker="s",
+    edgecolor="0.15",
+    linewidth=0.6,
+    color="#d62728",
+    label=f"Passive (n={(~np.isnan(passive_uvj[:, 0])).sum()})",
+)
 
 ax.set_xlim(-0.5, 2.5)
 ax.set_ylim(-0.2, 3.0)

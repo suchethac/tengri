@@ -31,18 +31,7 @@ with representative parameters. No SSP data required.
    :alt: plot_parametric_sfh
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-71
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_parametric_sfh_001.png
-   :alt: Parametric SFH Models in tengri
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_parametric_sfh_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 16-69
 
 .. code-block:: Python
 
@@ -79,9 +68,7 @@ with representative parameters. No SSP data required.
         "lnorm (log-normal)": lnorm(t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=0.3),
         "dpl (double power law)": dpl(t_lookback, alpha=2.0, beta=1.0, tau=5e9, log_peak_sfr=1.0),
         "exponential": exponential(t_lookback, log_peak_sfr=1.0, tau=3e9, start=1e9),
-        "delayed exponential": delayed_exponential(
-            t_lookback, log_peak_sfr=1.0, tau=3e9, start=1e9
-        ),
+        "delayed exponential": delayed_exponential(t_lookback, log_peak_sfr=1.0, tau=3e9, start=1e9),
         "constant": constant(t_lookback, log_sfr=0.5, start=2e9, end=10e9),
     }
 

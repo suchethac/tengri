@@ -39,34 +39,7 @@ the exact spectrum by a few percent. Pick mode 3 when compile time and
 per-call latency dominate; pick modes 1/2 when triweight smoothing isn't
 acceptable.
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-218
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_composable_three_modes_001.png
-   :alt: Composable AGN: three evaluation modes for the same recipe, Spectra: exact vs JIT (overlay), Per-call cost (median of 20)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_composable_three_modes_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-
-    filter photometry (r-band toy filter, log L_bol/L_sun = 12, l5100 = 1e44):
-      exact:        2.348e+29
-      JIT:          2.348e+29
-      precompute:   1.501e+29  (triweight-smoothed)
-      rel-err exact→JIT:        1.50e-16
-      rel-err exact→precompute: 3.61e-01  (~few % typical)
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 23-215
 
 .. code-block:: Python
 
@@ -144,11 +117,10 @@ acceptable.
     fw, ft = _toy_filter()
     l5100_test = 1.0e44  # axis value to evaluate at
 
+
     # ── Mode 1: exact runtime ────────────────────────────────────────────
     def _eager():
-        return composable_agn_l_nu(
-            wave_aa, **RECIPE_KW, **FIXED_KW, agn_grahsp_l5100=l5100_test
-        )
+        return composable_agn_l_nu(wave_aa, **RECIPE_KW, **FIXED_KW, agn_grahsp_l5100=l5100_test)
 
 
     t_eager = _time_cached(lambda: _eager())
@@ -159,9 +131,7 @@ acceptable.
     # ── Mode 2: JIT-composable + JAX filter integration ─────────────────
     @jax.jit
     def _jitted(l5100):
-        l_nu = composable_agn_l_nu(
-            wave_aa, **RECIPE_KW, **FIXED_KW, agn_grahsp_l5100=l5100
-        )
+        l_nu = composable_agn_l_nu(wave_aa, **RECIPE_KW, **FIXED_KW, agn_grahsp_l5100=l5100)
         nu = C_AA_PER_S / wave_aa
         trans = jnp.interp(wave_aa, jnp.asarray(fw), jnp.asarray(ft), left=0.0, right=0.0)
         order = jnp.argsort(nu)
@@ -257,12 +227,12 @@ acceptable.
     print(f"  exact:        {phot_eager:.3e}")
     print(f"  JIT:          {float(phot_jit):.3e}")
     print(f"  precompute:   {phot_pre:.3e}  (triweight-smoothed)")
-    print(f"  rel-err exact→JIT:        {abs(phot_eager - float(phot_jit))/phot_eager:.2e}")
-    print(f"  rel-err exact→precompute: {abs(phot_eager - phot_pre)/phot_eager:.2e}  (~few % typical)")
-
-    fig.suptitle(
-        "Composable AGN: three evaluation modes for the same recipe", fontsize=11
+    print(f"  rel-err exact→JIT:        {abs(phot_eager - float(phot_jit)) / phot_eager:.2e}")
+    print(
+        f"  rel-err exact→precompute: {abs(phot_eager - phot_pre) / phot_eager:.2e}  (~few % typical)"
     )
+
+    fig.suptitle("Composable AGN: three evaluation modes for the same recipe", fontsize=11)
     fig.tight_layout()
     plt.show()
 

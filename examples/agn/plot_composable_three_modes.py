@@ -94,11 +94,10 @@ wave_aa_np = np.asarray(wave_aa)
 fw, ft = _toy_filter()
 l5100_test = 1.0e44  # axis value to evaluate at
 
+
 # ── Mode 1: exact runtime ────────────────────────────────────────────
 def _eager():
-    return composable_agn_l_nu(
-        wave_aa, **RECIPE_KW, **FIXED_KW, agn_grahsp_l5100=l5100_test
-    )
+    return composable_agn_l_nu(wave_aa, **RECIPE_KW, **FIXED_KW, agn_grahsp_l5100=l5100_test)
 
 
 t_eager = _time_cached(lambda: _eager())
@@ -109,9 +108,7 @@ phot_eager = _bandpass(sed_eager, wave_aa_np, fw, ft)
 # ── Mode 2: JIT-composable + JAX filter integration ─────────────────
 @jax.jit
 def _jitted(l5100):
-    l_nu = composable_agn_l_nu(
-        wave_aa, **RECIPE_KW, **FIXED_KW, agn_grahsp_l5100=l5100
-    )
+    l_nu = composable_agn_l_nu(wave_aa, **RECIPE_KW, **FIXED_KW, agn_grahsp_l5100=l5100)
     nu = C_AA_PER_S / wave_aa
     trans = jnp.interp(wave_aa, jnp.asarray(fw), jnp.asarray(ft), left=0.0, right=0.0)
     order = jnp.argsort(nu)
@@ -207,11 +204,11 @@ print("filter photometry (r-band toy filter, log L_bol/L_sun = 12, l5100 = 1e44)
 print(f"  exact:        {phot_eager:.3e}")
 print(f"  JIT:          {float(phot_jit):.3e}")
 print(f"  precompute:   {phot_pre:.3e}  (triweight-smoothed)")
-print(f"  rel-err exact→JIT:        {abs(phot_eager - float(phot_jit))/phot_eager:.2e}")
-print(f"  rel-err exact→precompute: {abs(phot_eager - phot_pre)/phot_eager:.2e}  (~few % typical)")
-
-fig.suptitle(
-    "Composable AGN: three evaluation modes for the same recipe", fontsize=11
+print(f"  rel-err exact→JIT:        {abs(phot_eager - float(phot_jit)) / phot_eager:.2e}")
+print(
+    f"  rel-err exact→precompute: {abs(phot_eager - phot_pre) / phot_eager:.2e}  (~few % typical)"
 )
+
+fig.suptitle("Composable AGN: three evaluation modes for the same recipe", fontsize=11)
 fig.tight_layout()
 plt.show()

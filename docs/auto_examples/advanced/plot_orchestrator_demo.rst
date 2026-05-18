@@ -179,13 +179,13 @@ Inspect the cross-component publications
     print(f"log_mstar              = {_logM:.3f}  ({10**_logM:.3g} Msun)")
     print(f"L_ir (dust)            = {float(state.derived['L_ir']):.3g} erg/s")
     print(f"L_agn_bol              = {float(state.derived['L_agn_bol']):.3g} erg/s")
-    if 'sed_radio' in state.derived:
+    if "sed_radio" in state.derived:
         print(f"L_radio peak           = {float(state.derived['sed_radio'].max()):.3g} erg/s/Hz")
-    if 'sed_xray' in state.derived:
+    if "sed_xray" in state.derived:
         print(f"L_xray peak            = {float(state.derived['sed_xray'].max()):.3g} erg/s/Hz")
-    if 'sfr_10myr' in state.derived:
+    if "sfr_10myr" in state.derived:
         print(f"sfr_10myr              = {float(state.derived['sfr_10myr']):.3f} Msun/yr")
-    if 'nion' in state.derived:
+    if "nion" in state.derived:
         print(f"nion                   = {float(state.derived['nion']):.3g} photons/s")
 
 
