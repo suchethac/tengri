@@ -45,19 +45,15 @@ panel for reference. Fiducial point shown as a black star.
    :alt: plot_bpt_cue_flexibility
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-223
+.. GENERATED FROM PYTHON SOURCE LINES 30-251
 
 .. code-block:: Python
 
 
-
     from pathlib import Path
 
-    import jax
     import matplotlib.pyplot as plt
     import numpy as np
-
-    jax.config.update("jax_enable_x64", True)
 
     from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp_data
     from tengri.analysis.plotting import setup_style
@@ -205,12 +201,29 @@ panel for reference. Fiducial point shown as a black star.
         # Plot connecting line + colored markers per parameter value
         ax.plot(xy[:, 0], xy[:, 1], "-", color="0.55", lw=1.2, alpha=0.6, zorder=2)
         sc = ax.scatter(
-            xy[:, 0], xy[:, 1], c=vals, cmap=cmap, s=70, edgecolor="0.15", lw=0.5,
-            zorder=4, vmin=vals.min(), vmax=vals.max(),
+            xy[:, 0],
+            xy[:, 1],
+            c=vals,
+            cmap=cmap,
+            s=70,
+            edgecolor="0.15",
+            lw=0.5,
+            zorder=4,
+            vmin=vals.min(),
+            vmax=vals.max(),
         )
         # Fiducial as black star for reference
-        ax.scatter([fid_xy[0]], [fid_xy[1]], marker="*", s=180, color="black",
-                   edgecolor="white", lw=1.0, zorder=5, label="fiducial")
+        ax.scatter(
+            [fid_xy[0]],
+            [fid_xy[1]],
+            marker="*",
+            s=180,
+            color="black",
+            edgecolor="white",
+            lw=1.0,
+            zorder=5,
+            label="fiducial",
+        )
         _draw_demarc(ax)
         ax.set_title(label, fontsize=11, pad=6)
         cbar = fig.colorbar(sc, ax=ax, fraction=0.045, pad=0.02)
@@ -227,17 +240,32 @@ panel for reference. Fiducial point shown as a black star.
 
     # Single global legend (just the fiducial marker + demarcations)
     import matplotlib.lines as mlines
-    fid_handle = mlines.Line2D([], [], marker="*", color="black", markersize=14,
-                                markeredgecolor="white", lw=0, label="fiducial point")
+
+    fid_handle = mlines.Line2D(
+        [],
+        [],
+        marker="*",
+        color="black",
+        markersize=14,
+        markeredgecolor="white",
+        lw=0,
+        label="fiducial point",
+    )
     kewley_handle = mlines.Line2D([], [], color="0.15", lw=1.4, label="Kewley+2001 (max starburst)")
     kauff_handle = mlines.Line2D([], [], color="0.15", lw=1.2, ls="--", label="Kauffmann+2003 (SF)")
-    fig.legend(handles=[fid_handle, kewley_handle, kauff_handle],
-               loc="lower center", ncol=3, frameon=False, fontsize=11,
-               bbox_to_anchor=(0.5, -0.005))
+    fig.legend(
+        handles=[fid_handle, kewley_handle, kauff_handle],
+        loc="lower center",
+        ncol=3,
+        frameon=False,
+        fontsize=11,
+        bbox_to_anchor=(0.5, -0.005),
+    )
 
     fig.suptitle(
         "Cue (Li+2025) on the BPT-N plane: 1D sweep of every emulator parameter",
-        fontsize=15, y=0.995,
+        fontsize=15,
+        y=0.995,
     )
     fig.tight_layout(rect=[0, 0.02, 1, 0.97])
     plt.savefig("plot_bpt_cue_flexibility.png", dpi=150, bbox_inches="tight")

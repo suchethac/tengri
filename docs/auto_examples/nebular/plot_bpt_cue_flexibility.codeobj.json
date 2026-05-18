@@ -44,15 +44,6 @@
    "name": "Uniform"
   }
  ],
- "jax.config.update": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jax.config",
-   "module_short": "jax.config",
-   "name": "update"
-  }
- ],
  "load_ssp_data": [
   {
    "is_class": false,

@@ -30,44 +30,20 @@ Compare young vs old populations to see how nebular line strength evolves.
    :alt: plot_neb_age_dependence
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-81
+.. GENERATED FROM PYTHON SOURCE LINES 15-57
 
 .. code-block:: Python
 
 
-
-    from pathlib import Path
-
-    import jax
     import matplotlib.pyplot as plt
 
-    jax.config.update("jax_enable_x64", True)
-
-    from tengri import Fixed, Parameters, SEDModel, load_ssp_data
+    from tengri import Fixed, Parameters, SEDModel, load_ssp
     from tengri.analysis.plotting import setup_style, sweep_parameter
 
     setup_style()
 
 
-    def _find_ssp():
-        """Find SSP data file in standard locations."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
-
-
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
-
-    ssp = load_ssp_data(SSP_PATH)
+    ssp = load_ssp()
 
     # --- Build model: parametric SFH with variable peak age ---
     spec = Parameters(

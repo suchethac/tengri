@@ -33,23 +33,19 @@ redshift estimation via dropout techniques.
    :alt: plot_igm_z_evolution
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-89
+.. GENERATED FROM PYTHON SOURCE LINES 18-85
 
 .. code-block:: Python
 
 
-
     from pathlib import Path
 
-    import jax
     import jax.numpy as jnp
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
-
-    jax.config.update("jax_enable_x64", True)
 
     from tengri.analysis.plotting import SWEEP_CMAPS, setup_style
     from tengri.igm import igm_transmission

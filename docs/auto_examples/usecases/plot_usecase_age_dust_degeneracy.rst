@@ -36,7 +36,7 @@ Synthetic data: SDSS+GALEX matched at z=0.1.
    :alt: plot_usecase_age_dust_degeneracy
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-254
+.. GENERATED FROM PYTHON SOURCE LINES 21-234
 
 .. code-block:: Python
 
@@ -47,8 +47,6 @@ Synthetic data: SDSS+GALEX matched at z=0.1.
     import matplotlib.pyplot as plt
     import numpy as np
 
-    jax.config.update("jax_enable_x64", True)
-
     from tengri import (
         Fixed,
         Observation,
@@ -56,32 +54,14 @@ Synthetic data: SDSS+GALEX matched at z=0.1.
         Photometry,
         SEDModel,
         Uniform,
-        load_ssp_data,
+        load_ssp,
         setup_style,
     )
 
     setup_style()
 
 
-    def _find_ssp():
-        """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
-
-
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
-
-    ssp = load_ssp_data(SSP_PATH)
+    ssp = load_ssp()
 
     _FILTER_DIR = next(
         (

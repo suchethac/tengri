@@ -31,44 +31,20 @@ and emission-line ratios through recombination rate changes.
    :alt: plot_neb_density_sweep
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-87
+.. GENERATED FROM PYTHON SOURCE LINES 16-59
 
 .. code-block:: Python
 
 
-
-    from pathlib import Path
-
-    import jax
     import matplotlib.pyplot as plt
 
-    jax.config.update("jax_enable_x64", True)
-
-    from tengri import Fixed, Parameters, SEDModel, load_ssp_data
+    from tengri import Fixed, Parameters, SEDModel, load_ssp
     from tengri.analysis.plotting import setup_style, sweep_parameter
 
     setup_style()
 
 
-    def _find_ssp():
-        """Find SSP data file in standard locations."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
-
-
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
-
-    ssp = load_ssp_data(SSP_PATH)
+    ssp = load_ssp()
 
     # --- Build model: young star-forming galaxy with variable metallicity ---
     spec = Parameters(
@@ -88,10 +64,6 @@ and emission-line ratios through recombination rate changes.
     # --- Sweep stellar metallicity (proxy for nebular Z) ---
     values = [-1.0, -0.7, -0.3, 0.0, 0.2]
 
-    # # The sweep_parameter helper creates a single SEDModel instance and calls
-    # # model.predict_rest_sed(...) in a loop. JAX JIT compilation is cached
-    # # automatically via tengri's persistent compilation cache (enabled at
-    # # import time), so repeated forward model calls reuse the compiled kernel.
     fig, ax = sweep_parameter(
         model,
         "met_logzsol",

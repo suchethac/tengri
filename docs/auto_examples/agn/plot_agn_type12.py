@@ -14,12 +14,9 @@ torus blocks the accretion disc) depending purely on viewing angle.
 
 """
 
-import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri import setup_style
 from tengri.agn import unified_nlr_blr

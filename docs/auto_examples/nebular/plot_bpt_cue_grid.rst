@@ -50,19 +50,15 @@ to the recombination lines, pulling the grid to the right.
    :alt: plot_bpt_cue_grid
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-245
+.. GENERATED FROM PYTHON SOURCE LINES 35-278
 
 .. code-block:: Python
 
 
-
     from pathlib import Path
 
-    import jax
     import matplotlib.pyplot as plt
     import numpy as np
-
-    jax.config.update("jax_enable_x64", True)
 
     from tengri import Fixed, Parameters, SEDModel, load_ssp_data
     from tengri.analysis.plotting import setup_style
@@ -101,7 +97,9 @@ to the recombination lines, pulling the grid to the right.
         "[S II]a": 6718.3,
         "[S II]b": 6732.7,
     }
-    TARGETS = np.array([LINES[k] for k in ["Hβ", "[O III]", "[O I]", "Hα", "[N II]", "[S II]a", "[S II]b"]])
+    TARGETS = np.array(
+        [LINES[k] for k in ["Hβ", "[O III]", "[O I]", "Hα", "[N II]", "[S II]a", "[S II]b"]]
+    )
 
 
     def _bpt_ratios(logu: float, logz: float) -> dict[str, float]:
@@ -124,7 +122,9 @@ to the recombination lines, pulling the grid to the right.
             cue_weights_path=str(CUE_PATH),
         )
         model = SEDModel(spec, ssp)
-        fluxes = np.asarray(model.predict_line_fluxes(spec.get_fixed_values(), target_wavelengths=TARGETS))
+        fluxes = np.asarray(
+            model.predict_line_fluxes(spec.get_fixed_values(), target_wavelengths=TARGETS)
+        )
         f_hb, f_o3, f_o1, f_ha, f_n2, f_s2a, f_s2b = fluxes
         return {
             "log_o3_hb": np.log10(f_o3 / f_hb) if f_hb > 0 else np.nan,
@@ -141,10 +141,18 @@ to the recombination lines, pulling the grid to the right.
             mesh[i, j] = _bpt_ratios(float(logu), float(logz))
 
     # Stack into 2D arrays for vectorised plotting
-    oh = np.array([[mesh[i, j]["log_o3_hb"] for j in range(len(LOGZ_GRID))] for i in range(len(LOGU_GRID))])
-    nh = np.array([[mesh[i, j]["log_n2_ha"] for j in range(len(LOGZ_GRID))] for i in range(len(LOGU_GRID))])
-    sh = np.array([[mesh[i, j]["log_s2_ha"] for j in range(len(LOGZ_GRID))] for i in range(len(LOGU_GRID))])
-    oih = np.array([[mesh[i, j]["log_o1_ha"] for j in range(len(LOGZ_GRID))] for i in range(len(LOGU_GRID))])
+    oh = np.array(
+        [[mesh[i, j]["log_o3_hb"] for j in range(len(LOGZ_GRID))] for i in range(len(LOGU_GRID))]
+    )
+    nh = np.array(
+        [[mesh[i, j]["log_n2_ha"] for j in range(len(LOGZ_GRID))] for i in range(len(LOGU_GRID))]
+    )
+    sh = np.array(
+        [[mesh[i, j]["log_s2_ha"] for j in range(len(LOGZ_GRID))] for i in range(len(LOGU_GRID))]
+    )
+    oih = np.array(
+        [[mesh[i, j]["log_o1_ha"] for j in range(len(LOGZ_GRID))] for i in range(len(LOGU_GRID))]
+    )
 
 
     # --- Demarcation lines ----------------------------------------------
@@ -182,8 +190,15 @@ to the recombination lines, pulling the grid to the right.
         # Lines of constant logU, varying logZ (rows)
         for i, logu in enumerate(LOGU_GRID):
             c = cmap(0.0 + 0.85 * i / max(len(LOGU_GRID) - 1, 1))
-            ax.plot(x_arr[i, :], y_arr[i, :], "-", lw=1.6, color=c, alpha=0.95,
-                    label=rf"$\log U = {logu:.1f}$")
+            ax.plot(
+                x_arr[i, :],
+                y_arr[i, :],
+                "-",
+                lw=1.6,
+                color=c,
+                alpha=0.95,
+                label=rf"$\log U = {logu:.1f}$",
+            )
         # Lines of constant logZ, varying logU (columns) — drawn thinner in grey
         for j in range(len(LOGZ_GRID)):
             ax.plot(x_arr[:, j], y_arr[:, j], "-", lw=0.8, color="0.45", alpha=0.7)
@@ -216,7 +231,12 @@ to the recombination lines, pulling the grid to the right.
     s2_grid = np.linspace(-1.5, 0.6, 200)
     demarc_s = [
         ("Kewley+2001 (SF max)", s2_grid[s2_grid < 0.32], kewley01_s2(s2_grid[s2_grid < 0.32]), "-"),
-        ("Kewley+2006 (Sy/LINER)", s2_grid[s2_grid > -0.3], kewley06_seyfert_s2(s2_grid[s2_grid > -0.3]), ":"),
+        (
+            "Kewley+2006 (Sy/LINER)",
+            s2_grid[s2_grid > -0.3],
+            kewley06_seyfert_s2(s2_grid[s2_grid > -0.3]),
+            ":",
+        ),
     ]
     regions_s = [
         ("SF", (-1.0, -0.6), "#1f77b4"),
@@ -231,7 +251,12 @@ to the recombination lines, pulling the grid to the right.
     o1_grid = np.linspace(-2.5, 0.0, 200)
     demarc_o = [
         ("Kewley+2001 (SF max)", o1_grid[o1_grid < -0.59], kewley01_o1(o1_grid[o1_grid < -0.59]), "-"),
-        ("Kewley+2006 (Sy/LINER)", o1_grid[o1_grid > -1.2], kewley06_seyfert_o1(o1_grid[o1_grid > -1.2]), ":"),
+        (
+            "Kewley+2006 (Sy/LINER)",
+            o1_grid[o1_grid > -1.2],
+            kewley06_seyfert_o1(o1_grid[o1_grid > -1.2]),
+            ":",
+        ),
     ]
     regions_o = [
         ("SF", (-2.1, -0.6), "#1f77b4"),
@@ -249,17 +274,25 @@ to the recombination lines, pulling the grid to the right.
     # Per-panel legends. Each panel gets its own demarcation legend (distinct
     # between BPT-N, BPT-S, BPT-O); the rightmost panel additionally lists the
     # logU curves and the constant-logZ helper line.
-    logu_handles = [plt.Line2D([0], [0], color=plt.cm.viridis(0.85 * i / max(len(LOGU_GRID) - 1, 1)),
-                                lw=2.0, label=rf"$\log U = {u:.1f}$") for i, u in enumerate(LOGU_GRID)]
+    logu_handles = [
+        plt.Line2D(
+            [0],
+            [0],
+            color=plt.cm.viridis(0.85 * i / max(len(LOGU_GRID) - 1, 1)),
+            lw=2.0,
+            label=rf"$\log U = {u:.1f}$",
+        )
+        for i, u in enumerate(LOGU_GRID)
+    ]
     logu_handles.append(plt.Line2D([0], [0], color="0.45", lw=1.0, label=r"const $\log Z_{\rm gas}$"))
     axes[0].legend(loc="lower left", fontsize=9, frameon=False, title="Demarcation")
     axes[1].legend(loc="lower left", fontsize=9, frameon=False, title="Demarcation")
-    axes[2].legend(handles=logu_handles, loc="lower left", fontsize=9, frameon=False,
-                   title="Cue grid")
+    axes[2].legend(handles=logu_handles, loc="lower left", fontsize=9, frameon=False, title="Cue grid")
 
     fig.suptitle(
         r"Cue (Li+2025) BPT grid: $\log U \times \log Z_{\rm gas}$",
-        fontsize=14, y=1.0,
+        fontsize=14,
+        y=1.0,
     )
     fig.tight_layout()
     plt.savefig("plot_bpt_cue_grid.png", dpi=150, bbox_inches="tight")

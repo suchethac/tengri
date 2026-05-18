@@ -33,18 +33,14 @@ spectra (:math:`\alpha > 1`) suggest ageing of the cosmic ray electron populatio
    :alt: plot_alpha_sf_sweep
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-61
+.. GENERATED FROM PYTHON SOURCE LINES 18-57
 
 .. code-block:: Python
 
 
-
-    import jax
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
-
-    jax.config.update("jax_enable_x64", True)
 
     from tengri.analysis.plotting import SWEEP_CMAPS, setup_style
     from tengri.radio import radio_star_forming

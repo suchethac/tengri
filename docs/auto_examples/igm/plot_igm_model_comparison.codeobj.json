@@ -17,15 +17,6 @@
    "name": "igm_transmission_madau"
   }
  ],
- "jax.config.update": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jax.config",
-   "module_short": "jax.config",
-   "name": "update"
-  }
- ],
  "jnp.linspace": [
   {
    "is_class": false,
