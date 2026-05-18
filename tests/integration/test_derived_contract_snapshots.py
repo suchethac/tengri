@@ -193,6 +193,23 @@ def test_sed_output_snapshot(config_name, ssp_data_wne):
 
     if final.sed_intrinsic is None:
         pytest.skip(f"Pipeline {config_name!r} did not produce sed_intrinsic")
+
+    # ADR-0007 Phase 4 invariant: every component now writes to
+    # state.derived via the typed bundle's with_(...) method. The
+    # _extras spillover dict on DerivedBundle is opt-in only (the
+    # default ``from_dict(d, allow_extras=False)`` raises on unknown
+    # keys). If a Phase-4 production forward pass leaves anything in
+    # _extras, some write site has regressed to the dict-style path
+    # and is sneaking past the strict from_dict guard — flag it loudly
+    # here rather than letting the silent untyped write live in main.
+    assert final.derived._extras == {}, (
+        f"Pipeline {config_name!r} left unexpected entries in "
+        f"DerivedBundle._extras: {list(final.derived._extras.keys())!r}. "
+        f"Some component's apply() must be writing through the dict-style "
+        f"shim. Migrate it to ``state.derived.with_(X=value)`` (ADR-0007 "
+        f"Phase 3 / Phase 4)."
+    )
+
     digest = _hash_array(final.sed_intrinsic)
 
     snapshot = _load_snapshot()
