@@ -571,11 +571,8 @@ def exp_squared_kernel(
     >>> K[0, 0]  # diagonal entry equals amplitude^2
     DeviceArray(1., dtype=float32)
     """
-    if x2 is None:
-        x2 = x
-    # Outer difference: shape (n, m)
+    x2 = x if x2 is None else x2
     diff = x[:, None] - x2[None, :]
-    # Squared exponential kernel
     return amplitude**2 * jnp.exp(-0.5 * (diff / length_scale) ** 2)
 
 
@@ -587,28 +584,26 @@ def matern32_kernel(
 ) -> jnp.ndarray:
     r"""Matérn 3/2 covariance kernel.
 
-    Computes the Matérn 3/2 kernel matrix for Gaussian process modeling
-    of correlated spectral noise. This kernel is once-differentiable in
-    the underlying random field, providing smoother realizations than
-    the exponential kernel while remaining computationally efficient.
+    Once-differentiable GP kernel — smoother than the exponential kernel,
+    rougher than squared-exponential. A good default for correlated spectral
+    noise where the autocorrelation length is finite but the residuals are
+    not infinitely smooth.
 
     Parameters
     ----------
     x : array, shape (n,)
-        Coordinate values [Angstrom] (or any real-valued coordinate).
+        Coordinate values [Angstrom] (or any real coordinate).
     amplitude : float or scalar array
-        Kernel amplitude :math:`\sigma`. Controls overall variance.
+        Kernel amplitude :math:`\sigma`.
     length_scale : float or scalar array
-        Kernel length scale :math:`\ell`. Controls correlation length.
+        Correlation length :math:`\ell`.
     x2 : array, shape (m,), optional
-        Second set of coordinates for cross-covariance. If None,
-        computes auto-covariance (x vs x).
+        Second set of coordinates for cross-covariance. Defaults to ``x``
+        (auto-covariance).
 
     Returns
     -------
     K : ndarray, shape (n, n) or (n, m)
-        Covariance matrix. If x2 is None, returns symmetric (n, n)
-        auto-covariance; otherwise returns (n, m) cross-covariance.
 
     Notes
     -----
@@ -617,29 +612,21 @@ def matern32_kernel(
         K(x, x') = \sigma^2 \left(1 + \frac{\sqrt{3}\,r}{\ell}\right)
         \exp\!\left(-\frac{\sqrt{3}\,r}{\ell}\right), \quad r = |x - x'|
 
-    where :math:`\sigma` is the amplitude and :math:`\ell` is the length scale.
-
-    JIT-compatible. The absolute value introduces a non-differentiable point at
-    :math:`r = 0`; in practice this is not reached when :math:`x \neq x'`.
+    JIT-compatible. :math:`r` is softened to :math:`\sqrt{r^2 + 10^{-20}}`
+    so the gradient is defined at the diagonal.
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> from tengri import matern32_kernel
     >>> x = jnp.linspace(4000.0, 8000.0, 20)
     >>> K = matern32_kernel(x, amplitude=1.0, length_scale=500.0)
     >>> K.shape
     (20, 20)
     """
-    if x2 is None:
-        x2 = x
-    # Outer difference: shape (n, m)
+    x2 = x if x2 is None else x2
     diff = x[:, None] - x2[None, :]
-    # Smooth absolute value — avoids zero-gradient kink at r=0 (diagonal)
+    # Soft |r| keeps the gradient defined at r=0 (the diagonal).
     r = jnp.sqrt(diff**2 + 1e-20)
-    # Matérn 3/2 kernel
-    sqrt3 = jnp.sqrt(3.0)
-    arg = sqrt3 * r / length_scale
+    arg = jnp.sqrt(3.0) * r / length_scale
     return amplitude**2 * (1.0 + arg) * jnp.exp(-arg)
 
 

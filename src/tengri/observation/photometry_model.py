@@ -131,12 +131,11 @@ class PhotometryObservationModel:
             ``{"phot_fnu": ndarray, shape (n_filters,)}`` in
             erg/s/cm²/Hz, observer frame.
         """
-        sed_rest = state.sed_attenuated
+        sed_rest = (
+            state.sed_attenuated if state.sed_attenuated is not None else state.sed_intrinsic
+        )
         if sed_rest is None:
-            sed_rest = state.sed_intrinsic
-        if sed_rest is None:
-            n = len(self.filters)
-            return {"phot_fnu": jnp.zeros(n)}
+            return {"phot_fnu": jnp.zeros(len(self.filters))}
 
         z = jnp.asarray(params["redshift"])
         dl_cm = luminosity_distance(z, cosmo=self.cosmo)

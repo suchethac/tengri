@@ -601,7 +601,6 @@ class Parameters:
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
 
-        # Handle string-style flags ("cue", "cb19") passed as nebular=
         self._nebular_cb19 = False
         if nebular == "cue":
             nebular_cue = True

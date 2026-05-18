@@ -430,36 +430,14 @@ def parse_groups(**kwargs) -> Parameters:
 
 
 def _translate_structural(groups: dict) -> dict:
-    """Translate group structure to Parameters constructor kwargs.
-
-    Pass 1 of the algorithm: extract type values and convert to structural
-    settings (mean_sfh_type, dust_model, dust_law_bc, agn_model, etc.).
-
-    Parameters
-    ----------
-    groups : dict
-        User input from parse_groups(...).
-
-    Returns
-    -------
-    dict
-        Structural kwargs ready to pass to Parameters(...).
-
-    Raises
-    ------
-    ValueError
-        If unknown group keys or type values.
-    """
+    """Resolve each group's `type` choice into the matching Parameters kwargs."""
     valid_groups = {"sfh", "dust", "neb", "igm", "radio", "xray", "agn"}
     result = {}
 
-    # Validate and process each group
     for group_name, group_dict in groups.items():
-        # Skip top-level settings (process them later)
         if group_name in _TOP_LEVEL_SETTINGS:
             continue
 
-        # Check for unknown groups
         if group_name not in valid_groups:
             suggestions = difflib.get_close_matches(group_name, valid_groups, n=2, cutoff=0.6)
             suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
@@ -468,11 +446,9 @@ def _translate_structural(groups: dict) -> dict:
                 f"Valid groups: {', '.join(sorted(valid_groups))}.{suggest_str}"
             )
 
-        # Skip absent/None groups
         if not isinstance(group_dict, dict):
             continue
 
-        # Translate group to structural kwargs
         if group_name == "sfh":
             _translate_sfh(group_dict, result)
         elif group_name == "dust":
@@ -488,12 +464,11 @@ def _translate_structural(groups: dict) -> dict:
         elif group_name == "agn":
             _translate_agn(group_dict, result)
 
-    # Apply top-level settings AFTER groups, so they override
-    # Skip sentinels; they'll be handled in parameter resolution
+    # Top-level settings win over group-derived ones; sentinels (FREE/FIXED)
+    # are resolved later in _resolve_value, not here.
     for key in list(groups.keys()):
         if key in _TOP_LEVEL_SETTINGS:
             val = groups[key]
-            # Skip sentinels here; they'll be resolved in _resolve_value
             if val is not FREE and val is not FIXED:
                 result[key] = val
 
@@ -501,17 +476,14 @@ def _translate_structural(groups: dict) -> dict:
 
 
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:
-    """Translate sfh group to mean_sfh_type (supporting single type or list composition)."""
+    """Resolve `sfh.type` (or a list composition) into `mean_sfh_type`."""
     sfh_type = sfh_dict.get("type")
 
     if sfh_type is None:
-        # Default: dpl + field
         result["mean_sfh_type"] = ["dpl", "field"]
         return
 
-    # Check for composition (list of types)
     if isinstance(sfh_type, list):
-        # Validate each type in the composition
         for type_name in sfh_type:
             if type_name not in _VALID_SFH_TYPES:
                 suggestions = difflib.get_close_matches(
@@ -522,7 +494,6 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
         result["mean_sfh_type"] = sfh_type
         return
 
-    # Validate single type
     if sfh_type not in _VALID_SFH_TYPES:
         suggestions = difflib.get_close_matches(sfh_type, _VALID_SFH_TYPES, n=3, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""

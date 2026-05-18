@@ -39,8 +39,8 @@ from tengri.components.nebular.mappings_photo import (
     _load_stellar_grid,
 )
 
-# Axis parameters for stellar MAPPINGS V grid.
-# Note: stellar_lib is discrete (sb99 or bpass) and selected at build time.
+# Continuous axes of the stellar MAPPINGS V grid. (The discrete
+# stellar_lib axis — sb99 or bpass — is selected at build time.)
 AXIS_PARAMS: tuple[str, ...] = (
     "neb_logZ_gas",
     "log_age",

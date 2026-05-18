@@ -8,6 +8,7 @@ The format is **numpydoc**, rendered by Sphinx + Napoleon. See also:
 - [numpydoc format guide](https://numpydoc.readthedocs.io/en/stable/format.html)
 - [LSST DM numpydoc guide](https://developer.lsst.io/python/numpydoc.html)
 - [contributing.md](../developer/contributing.md) — section on code style
+- [style-and-voice.md](style-and-voice.md) — voice rules (narration, defensive code, single-use helpers)
 
 ---
 

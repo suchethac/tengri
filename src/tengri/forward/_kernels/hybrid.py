@@ -1544,11 +1544,9 @@ def build_hybrid_photometry(state: SEDModelState, model=None):
             tau_v=tau_v,
         )
 
-        # === STEP 2: Non-stellar SED at full wavelength resolution ===
-        # TODO: preintegrated non-stellar paths (CLOUDY, DL07, SKIRTOR)
-        # are implemented in _nebular_phot_preintegrated() but need
-        # calibration verification before enabling. For now, all
-        # non-stellar components use the full-wavelength path.
+        # Non-stellar SED at full wavelength resolution.
+        # (Preintegrated non-stellar paths are gated behind calibration —
+        # see docs/dev/TODO.md.)
         _has_any_nonstell = (
             has_nebular or has_shock or has_dust_em_full or has_agn_full or has_radio or has_xray
         )

@@ -178,10 +178,23 @@ _SHARED_LOGLIK_FN_CACHE: OrderedDict = OrderedDict()
 _SHARED_LOGLIK_FN_CACHE_LOCK = threading.Lock()
 
 
-def _shared_get_or_build(cache: OrderedDict, lock: threading.Lock, key, builder):
-    """Common wrapper: cache lookup with LRU promote on hit; build + bound on miss."""
+_SHARED_CACHES: dict[str, tuple[OrderedDict, threading.Lock]] = {
+    "loss": (_SHARED_LOSS_FN_CACHE, _SHARED_LOSS_FN_CACHE_LOCK),
+    "grad": (_SHARED_GRAD_FN_CACHE, _SHARED_GRAD_FN_CACHE_LOCK),
+    "logdensity": (_SHARED_LOGDENSITY_FN_CACHE, _SHARED_LOGDENSITY_FN_CACHE_LOCK),
+    "loglik": (_SHARED_LOGLIK_FN_CACHE, _SHARED_LOGLIK_FN_CACHE_LOCK),
+}
+
+
+def get_or_build_cached(fitter, mode: str, kind: str, builder):
+    """Shared LRU cache for compiled `kind` functions.
+
+    ``kind`` is one of ``"loss"``, ``"grad"``, ``"logdensity"``, ``"loglik"``.
+    """
+    cache, lock = _SHARED_CACHES[kind]
     if _SHARED_CACHES_DISABLED:
         return builder()
+    key = (fitter.compile_signature(), mode)
     with lock:
         if key in cache:
             cache.move_to_end(key)
@@ -189,34 +202,6 @@ def _shared_get_or_build(cache: OrderedDict, lock: threading.Lock, key, builder)
         value = builder()
         _lru_set(cache, key, value, _ENGINE_CACHE_MAXSIZE)
         return value
-
-
-def get_or_build_loss_fn_cached(fitter, mode: str, builder):
-    """Module-level shared cache for loss functions."""
-    key = (fitter.compile_signature(), mode)
-    return _shared_get_or_build(_SHARED_LOSS_FN_CACHE, _SHARED_LOSS_FN_CACHE_LOCK, key, builder)
-
-
-def get_or_build_grad_fn_cached(fitter, mode: str, builder):
-    """Module-level shared cache for value_and_grad of the loss."""
-    key = (fitter.compile_signature(), mode)
-    return _shared_get_or_build(_SHARED_GRAD_FN_CACHE, _SHARED_GRAD_FN_CACHE_LOCK, key, builder)
-
-
-def get_or_build_logdensity_fn_cached(fitter, mode: str, builder):
-    """Module-level shared cache for log-density."""
-    key = (fitter.compile_signature(), mode)
-    return _shared_get_or_build(
-        _SHARED_LOGDENSITY_FN_CACHE, _SHARED_LOGDENSITY_FN_CACHE_LOCK, key, builder
-    )
-
-
-def get_or_build_loglik_fn_cached(fitter, mode: str, builder):
-    """Module-level shared cache for log-likelihood."""
-    key = (fitter.compile_signature(), mode)
-    return _shared_get_or_build(
-        _SHARED_LOGLIK_FN_CACHE, _SHARED_LOGLIK_FN_CACHE_LOCK, key, builder
-    )
 
 
 def _lru_set(cache: OrderedDict, key, value, maxsize: int) -> None:

@@ -68,6 +68,7 @@ Deprecated aliases (never use in new code): `Model`, `ParamSpec`, `SpectroscopyC
 - Units: **years** (time), **Angstrom** (wavelength), **Msun/yr** (SFR), **erg/s/Hz** (SED luminosity L_nu)
 - 64-bit precision: `jax.config.update("jax_enable_x64", True)`
 - Greek letters (sigma, xi, theta) allowed in docstrings/comments
+- **Voice rules** (defensive code, narration, single-use helpers): see [`docs/dev/style-and-voice.md`](docs/dev/style-and-voice.md)
 
 ## Documentation (MANDATORY)
 

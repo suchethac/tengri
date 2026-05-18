@@ -109,7 +109,7 @@ def calibration_polynomial(
     wave_min: float,
     wave_max: float,
 ) -> jnp.ndarray:
-    """Multiplicative calibration polynomial C(lambda).
+    r"""Multiplicative calibration polynomial C(lambda).
 
     C(lambda) = 1 + sum_{n=1}^{order} a_n * T_n(x)
 
@@ -133,32 +133,22 @@ def calibration_polynomial(
 
     Notes
     -----
-    JIT-compatible: yes. Gradient-safe: yes — differentiable w.r.t.
-    coefficients and wavelengths. Uses Clenshaw's backward recurrence
-    for numerically stable evaluation.
+    JIT-compatible and gradient-safe in both ``coeffs`` and ``wavelength``.
+
+    Evaluated by Clenshaw's backward recurrence on
+    :math:`S = c_0 + \sum_{n \ge 1} c_n T_n(x)` with implicit :math:`c_0 = 1`:
+    :math:`b_k = c_k + 2x\,b_{k+1} - b_{k+2}` scanned from :math:`k = N`
+    down to :math:`k = 1`, then :math:`S = 1 + x\,b_1 - b_2`.
 
     """
     x = 2.0 * (wavelength - wave_min) / (wave_max - wave_min) - 1.0
 
-    # Clenshaw recurrence for S = c_0 + sum_{n=1}^{N} c_n T_n(x)
-    # with c_0 = 1 (implicit), c_n = coeffs[n-1] for n >= 1.
-    #
-    # Iterate from k=N down to k=1:
-    #   b_k = c_k + 2*x*b_{k+1} - b_{k+2}
-    # Then S = c_0 + x*b_1 - b_2
-    # (The k=0 step uses x, not 2x, because T_0 = 1.)
-
     def _clenshaw_step(carry, c_k):
-        """Execute one step of Clenshaw's backward recurrence for Chebyshev evaluation."""
         b_kp1, b_kp2 = carry
-        b_k = c_k + 2.0 * x * b_kp1 - b_kp2
-        return (b_k, b_kp1), None
+        return (c_k + 2.0 * x * b_kp1 - b_kp2, b_kp1), None
 
     init = (jnp.zeros_like(x), jnp.zeros_like(x))
-    # Iterate over coeffs from highest order (c_N) down to c_1
     (b1, b2), _ = jax.lax.scan(_clenshaw_step, init, coeffs[::-1])
-
-    # Final step: S = c_0 + x*b_1 - b_2, with c_0 = 1
     return 1.0 + x * b1 - b2
 
 
