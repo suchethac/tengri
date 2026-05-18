@@ -214,6 +214,51 @@ introduces the publisher.
 
 **Do not pre-build** `Parameters.from_components(...)` — it is deferred until ≥5 components have landed.
 
+## Adding a new inference backend (InferenceContext shape — ADR-0009)
+
+Every inference backend (MAP, MCMC, VI, NSS, …) receives an
+`InferenceContext`, not a `Fitter`. Adding a new sampler is two files:
+
+1. **The runner** — copy `src/tengri/inference/backends/map_dispatch.py` as
+   the canonical reference. Signature:
+
+   ```python
+   def run_my_sampler(context, *, key, init_from=None, ...):
+       from tengri.inference.context import InferenceContext
+       from tengri.inference.posterior import Posterior
+
+       context = InferenceContext.from_target(context)
+       init_params = context.initial_params(key, init_from=init_from)
+       loss_fn = context.loss_fn        # JIT-cached
+       data_args = context.data_args
+       ...
+       return Posterior(..., _model=context.model)
+   ```
+
+2. **The registration** — one entry in `src/tengri/inference/_registration.py`:
+
+   ```python
+   register_backend(
+       "my_sampler",
+       tier="experimental",
+       short_doc="One-line description",
+       requires=("optional_dep",),  # if any
+       legacy_fitter=False,
+   )(run_my_sampler)
+   ```
+
+The parametrised conformance suite
+(`tests/unit/inference/test_backend_conformance.py`) picks up the new
+entry automatically — no test-file edits required.
+
+**JIT rule** (non-negotiable): `InferenceContext` must never be hashed
+into a JIT key or passed through `jax.jit` / `jax.vmap` / `jax.lax.scan`
+as a traced argument. Pull primitives (`loss_fn`, `data_args`) out of
+context *before* entering JAX transforms. The context's
+`__jax_array__` guard raises on accidental tracing.
+
+**Source of truth:** `docs/adr/0009-inference-backend-protocol.md`.
+
 ## Critical gotchas
 
 - `jax.random.fold_in(key, hash(string))` overflows uint32. Use `abs(hash(x)) % (2**31)`

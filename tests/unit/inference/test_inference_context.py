@@ -180,7 +180,7 @@ class TestDispatchSwitch:
         """Existing @register_backend(...) call sites should not change behaviour."""
 
         @register_backend("_default_probe")
-        def runner(target, *, key, init_from=None, **kw):  # noqa: ARG001 - probe
+        def runner(target, *, key, init_from=None, **kw):
             from tengri.inference.posterior import Posterior
 
             return Posterior(
