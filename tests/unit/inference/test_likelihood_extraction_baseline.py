@@ -107,7 +107,7 @@ class TestLikelihoodExtractionBaseline:
         Both must produce the same log_p value to verify the refactoring is
         a pure structural rearrangement with no physics changes.
         """
-        from tengri.inference.fitter import Fitter
+        from tengri.inference.likelihood import build_base_likelihood
 
         # Simple photometry case
         fnu_pred = jnp.array([1e-29, 2e-29, 3e-29])
@@ -116,8 +116,8 @@ class TestLikelihoodExtractionBaseline:
 
         fitter = _make_mock_fitter(fnu_pred, fnu_obs, fnu_err)
 
-        # Get the likelihood object via _build_base_likelihood
-        lk = Fitter._build_base_likelihood(fitter)
+        # Get the likelihood object via the extracted likelihood module
+        lk = build_base_likelihood(fitter)
         assert lk is not None, "Likelihood builder returned None"
 
         # Call log_prob with prediction dict and params
