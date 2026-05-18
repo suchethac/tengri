@@ -212,12 +212,12 @@ def resolve_dust_law(name: str) -> Callable:
 # canonical kwargs to evaluate the law at "nominal" tuning; callers pass
 # wavelengths positionally and get k(lambda) at tau_V=1.
 _HEADLINE_LAWS: dict[str, tuple[str, dict]] = {
-    "Calzetti+2000":             ("calzetti",     {}),
-    "Charlot & Fall (slope=-0.7)": ("power_law",  {"n_slope": -0.7}),
-    "Cardelli+1989 (MW, Rv=3.1)": ("cardelli",    {"dust_Rv": 3.1}),
-    "SMC (Gordon+2003)":         ("smc",          {}),
-    "Kriek & Conroy 2013":        ("kriek_conroy", {"dust_bump_strength": 1.0, "dust_delta": 0.0}),
-    "Salim+2018":                ("salim",        {}),
+    "Calzetti+2000": ("calzetti", {}),
+    "Charlot & Fall (slope=-0.7)": ("power_law", {"n_slope": -0.7}),
+    "Cardelli+1989 (MW, Rv=3.1)": ("cardelli", {"dust_Rv": 3.1}),
+    "SMC (Gordon+2003)": ("smc", {}),
+    "Kriek & Conroy 2013": ("kriek_conroy", {"dust_bump_strength": 1.0, "dust_delta": 0.0}),
+    "Salim+2018": ("salim", {}),
 }
 
 

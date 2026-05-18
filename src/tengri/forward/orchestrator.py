@@ -125,9 +125,7 @@ def _levenshtein(a: str, b: str) -> int:
     for i, ca in enumerate(a, 1):
         curr = [i]
         for j, cb in enumerate(b, 1):
-            curr.append(
-                min(curr[-1] + 1, prev[j] + 1, prev[j - 1] + (0 if ca == cb else 1))
-            )
+            curr.append(min(curr[-1] + 1, prev[j] + 1, prev[j - 1] + (0 if ca == cb else 1)))
         prev = curr
     return prev[-1]
 
@@ -225,9 +223,7 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
                 )
             if key.name in publishers:
                 prior_idx, prior_comp, _ = publishers[key.name]
-                pair = frozenset(
-                    {type(prior_comp).__name__, type(component).__name__}
-                )
+                pair = frozenset({type(prior_comp).__name__, type(component).__name__})
                 if pair not in _ALTERNATE_PUBLISHERS:
                     raise PipelineContractError(
                         f"Derived key {key.name!r} is published by both "

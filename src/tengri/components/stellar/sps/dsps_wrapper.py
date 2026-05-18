@@ -125,8 +125,8 @@ def load_ssp(name: str | None = None) -> "SSPData":
     Examples
     --------
     >>> from tengri import load_ssp
-    >>> ssp = load_ssp()                         # default wNE SSP
-    >>> ssp = load_ssp("prsc_miles_chabrier")    # bare-stellar (for Cue)
+    >>> ssp = load_ssp()  # default wNE SSP
+    >>> ssp = load_ssp("prsc_miles_chabrier")  # bare-stellar (for Cue)
     """
     from pathlib import Path
 
