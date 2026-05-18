@@ -184,32 +184,13 @@ def _isco_radius(a_spin: float) -> float:
 
 
 def _eddington_luminosity(log_mbh: float) -> float:
-    """Eddington luminosity [erg s^-1].
-
-    L_Edd = 4 * pi * G * M_BH * m_p * c / sigma_T
-
-    Parameters
-    ----------
-    log_mbh : float
-        log10(M_BH / Msun).
-
-    Returns
-    -------
-    float
-        L_Edd [erg s^-1].
-    """
+    r"""Eddington luminosity :math:`L_{\rm Edd} = 4\pi G M_{\rm BH} m_p c / \sigma_T` [erg/s]."""
     m_bh_g = 10.0**log_mbh * _MSUN_G
     return 4.0 * jnp.pi * _G_GRAV * m_bh_g * _M_PROTON * _C_LIGHT / _SIGMA_T
 
 
 def _gravitational_radius(log_mbh: float) -> float:
-    """Gravitational radius R_g = GM/c^2 [cm].
-
-    Parameters
-    ----------
-    log_mbh : float
-        log10(M_BH / Msun).
-    """
+    r"""Gravitational radius :math:`R_g = GM/c^2` [cm]."""
     return _G_GRAV * 10.0**log_mbh * _MSUN_G / _C_LIGHT**2
 
 
@@ -253,35 +234,15 @@ def _r_hot_bisect(
     l_hot_target: float,
     n_iter: int = 40,
 ) -> float:
-    """Bisection solve for R_hot from K&D 2018 Eq. 2 (JAX-compatible).
+    r"""Solve for R_hot from K&D 2018 Eq. 2 by bisection in log(x_hot).
 
-    Finds R_hot such that L_diss,hot(R_ISCO, R_hot) = l_hot_target by
-    bisection in log(x_hot) space, where x_hot = R_hot / R_ISCO.
+    The NT emissivity integral has closed form
+    :math:`L_{\rm diss}(x) = L_0\,[1/10 - 1/(2x^2) + 2/(5 x^{5/2})]`,
+    strictly monotone in :math:`x = R_{\rm hot}/R_{\rm ISCO}`. After
+    ``n_iter=40`` the bracket width is :math:`< 2^{-40} \approx 10^{-12}`
+    of its initial log-width — enough for machine precision.
 
-    The NT emissivity integral has an analytic closed form:
-
-        L_diss(x_hot) = L_0 * [1/10 - 1/(2x^2) + 2/(5 x^{5/2})]
-
-    This is strictly monotone in x_hot, so bisection is guaranteed to
-    converge. After n_iter=40 steps the bracket width is < 2^{-40} ≈ 1e-12
-    of its initial log-width (log x in [0, 9.2]), sufficient for machine
-    precision.
-
-    Parameters
-    ----------
-    r_isco_cm : float
-        ISCO radius [cm].
-    t_in : float
-        Inner disc temperature [K].
-    l_hot_target : float
-        Target L_diss,hot [erg s^-1]. Clipped to < L_max = L_0/10.
-    n_iter : int
-        Number of bisection iterations. Default 40.
-
-    Returns
-    -------
-    float
-        R_hot [cm].
+    ``l_hot_target`` is clipped below :math:`L_{\max} = L_0/10`.
     """
     # Maximum possible L_diss (entire disc, x→∞): h→0.1, so L_max = L0 * 0.1
     l0 = 4.0 * jnp.pi * r_isco_cm**2 * _SIGMA_SB * t_in**4
@@ -1296,12 +1257,11 @@ def kubota_done_disc(
     """
     nu = _wavelength_to_nu(wavelength)
 
-    # Compute black hole parameters (radius, ISCO, efficiency, accretion rate)
     r_g, r_isco_rg, r_isco_cm, _eta, l_edd, mdot = _compute_bh_params(
         agn_log_mbh, agn_log_ledd, agn_a_spin
     )
 
-    # Inner temperature (Novikov-Thorne)
+    # Novikov-Thorne inner-disc temperature.
     t_in = (
         3.0
         * _G_GRAV
@@ -1311,7 +1271,6 @@ def kubota_done_disc(
         / (8.0 * jnp.pi * _SIGMA_SB * r_isco_cm**3)
     ) ** 0.25
 
-    # Compute self-consistent zone radii (R_hot, R_warm, R_out)
     r_hot_cm, r_warm_cm, r_out_cm = _compute_zone_radii(
         r_g,
         r_isco_rg,
@@ -1324,10 +1283,8 @@ def kubota_done_disc(
         l_edd,
     )
 
-    # Compute requested bolometric luminosity
     l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_frac
 
-    # Compute spectral luminosity of all three zones and normalization scale
     l_nu_total, scale = _compute_zone_luminosities(
         nu,
         r_isco_cm,
