@@ -384,7 +384,7 @@ def run_geovi_nuts(
 
 
 def run_nifty_fast_vi(
-    fitter,
+    context,
     *,
     key,
     init_from=None,
@@ -423,14 +423,24 @@ def run_nifty_fast_vi(
     """
     import time
 
+    from tengri.inference.context import InferenceContext
     from tengri.inference.posterior import Posterior
     from tengri.inference.vi_config import VIConfig, evi_sample_mode
+
+    context = InferenceContext.from_target(context)
+    # VI backends still read most state directly off the Fitter
+    # (``_jit_sampler``, ``_native_vi_nonlinear_engine``, ``_draw_*``,
+    # ``data``, ``noise``, ``data_type``, ``_bounds``, ``_fixed_values``).
+    # Those caches must outlive any single ``run()`` call — keep them
+    # on the Fitter and reach through ``context.fitter`` until they
+    # migrate in a follow-up.
+    fitter = context.fitter
 
     try:
         import nifty8.re as jft
     except ImportError:
         return run_nifty_vi(
-            fitter,
+            context,
             key=key,
             init_from=init_from,
             n_iterations=n_iterations,
@@ -444,10 +454,7 @@ def run_nifty_fast_vi(
 
     cfg = vi_config or VIConfig()
 
-    if init_from is not None:
-        init_params = fitter._unbounded_from_posterior(init_from)
-    else:
-        init_params = fitter._initialize_unbounded(key)
+    init_params = context.initial_params(key, init_from=init_from)
 
     # Resolve sample mode.
     # For geoVI: use periodic resample + update schedule (prevents
@@ -709,7 +716,7 @@ def _get_or_build_nifty_likelihood(fitter):
 
 
 def run_nifty_vi(
-    fitter,
+    context,
     *,
     key,
     init_from=None,
@@ -756,8 +763,14 @@ def run_nifty_vi(
     except ImportError:
         raise ImportError("nifty8.re required for geoVI: pip install nifty8[re]") from None
 
+    from tengri.inference.context import InferenceContext
     from tengri.inference.posterior import Posterior
     from tengri.inference.vi_config import VIConfig, evi_sample_mode
+
+    context = InferenceContext.from_target(context)
+    # See ``run_nifty_fast_vi`` — the JIT sampler cache and friends
+    # live on the Fitter; we reach through ``context.fitter``.
+    fitter = context.fitter
 
     cfg = vi_config or VIConfig()
 
@@ -765,13 +778,9 @@ def run_nifty_vi(
 
     data = fitter.data
     free_names = fitter._free_names
-    spec = fitter.spec
+    spec = context.spec
 
-    # Initialize
-    if init_from is not None:
-        init_params = fitter._unbounded_from_posterior(init_from)
-    else:
-        init_params = fitter._initialize_unbounded(key)
+    init_params = context.initial_params(key, init_from=init_from)
 
     # Convert to jft.Vector
     init_pos = jft.Vector(init_params)

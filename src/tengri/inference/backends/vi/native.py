@@ -345,7 +345,7 @@ def _newton_cg_flat(
 
 
 def run_native_vi(
-    fitter,
+    context,
     *,
     key,
     init_from="auto",
@@ -404,7 +404,14 @@ def run_native_vi(
     """
     import warnings
 
+    from tengri.inference.context import InferenceContext
     from tengri.inference.posterior import Posterior
+
+    context = InferenceContext.from_target(context)
+    # Native VI carries the JIT sampler cache + native_vi engine on
+    # the Fitter (long-lived across ``run()`` calls). Reach through
+    # ``context.fitter`` — these caches must not be re-created.
+    fitter = context.fitter
 
     # --- Parameter validation ---
     if n_samples > 12:

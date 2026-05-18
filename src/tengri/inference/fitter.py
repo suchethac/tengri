@@ -3324,6 +3324,11 @@ from tengri.inference.backends.mcmc import (
 from tengri.inference.backends.mcmc.elliptical_slice import (
     run_elliptical_slice_fitter as _ctx_run_elliptical_slice,
 )
+from tengri.inference.backends.vi.native import run_native_vi as _ctx_run_native_vi
+from tengri.inference.backends.vi.nifty import (
+    run_nifty_fast_vi as _ctx_run_nifty_fast_vi,
+    run_nifty_vi as _ctx_run_nifty_vi,
+)
 
 # Primary backends
 register_backend(
@@ -3334,22 +3339,35 @@ register_backend(
     legacy_fitter=False,
 )(_ctx_run_map)
 
+# NIFTy geoVI/MGVI — sample_mode flags select geoVI vs MGVI.
 register_backend(
     "vi",
     tier="primary",
     short_doc="NIFTy geoVI variational inference",
     aliases=("vi_nonlinear",),
     requires=("nifty8",),
-)(lambda fitter, *, key, init_from=None, **kw: fitter._run_vi(key=key, init_from=init_from, **kw))
+    legacy_fitter=False,
+)(
+    lambda context, *, key, init_from=None, **kw: _ctx_run_nifty_vi(
+        context,
+        key=key,
+        init_from=init_from,
+        **{"sample_mode": "nonlinear_resample", **kw},
+    )
+)
 
 register_backend(
     "vi_nonlinear_fast",
     tier="primary",
     short_doc="NIFTy geoVI without Python logging",
     requires=("nifty8",),
+    legacy_fitter=False,
 )(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_nifty_fast_vi(
-        key=key, init_from=init_from, **kw
+    lambda context, *, key, init_from=None, **kw: _ctx_run_nifty_fast_vi(
+        context,
+        key=key,
+        init_from=init_from,
+        **{"sample_mode": "nonlinear_resample", **kw},
     )
 )
 
@@ -3358,9 +3376,13 @@ register_backend(
     tier="experimental",
     short_doc="NIFTy MGVI standard with logging",
     requires=("nifty8",),
+    legacy_fitter=False,
 )(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_vi_linear(
-        key=key, init_from=init_from, **kw
+    lambda context, *, key, init_from=None, **kw: _ctx_run_nifty_vi(
+        context,
+        key=key,
+        init_from=init_from,
+        **{"sample_mode": "linear_resample", **kw},
     )
 )
 
@@ -3369,9 +3391,13 @@ register_backend(
     tier="experimental",
     short_doc="NIFTy MGVI without Python logging",
     requires=("nifty8",),
+    legacy_fitter=False,
 )(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_nifty_fast_vi_linear(
-        key=key, init_from=init_from, **kw
+    lambda context, *, key, init_from=None, **kw: _ctx_run_nifty_fast_vi(
+        context,
+        key=key,
+        init_from=init_from,
+        **{"sample_mode": "linear_resample", **kw},
     )
 )
 
@@ -3379,9 +3405,13 @@ register_backend(
     "native_vi_nonlinear",
     tier="experimental",
     short_doc="Pure JAX geoVI variational inference",
+    legacy_fitter=False,
 )(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_vi_native(
-        key=key, init_from=init_from, **kw
+    lambda context, *, key, init_from=None, **kw: _ctx_run_native_vi(
+        context,
+        key=key,
+        init_from=init_from,
+        **{"sample_mode": "geovi", **kw},
     )
 )
 
@@ -3389,9 +3419,13 @@ register_backend(
     "native_vi_linear",
     tier="experimental",
     short_doc="Pure JAX MGVI via lax.while_loop",
+    legacy_fitter=False,
 )(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_vi_native_linear(
-        key=key, init_from=init_from, **kw
+    lambda context, *, key, init_from=None, **kw: _ctx_run_native_vi(
+        context,
+        key=key,
+        init_from=init_from,
+        **{"sample_mode": "linear", **kw},
     )
 )
 

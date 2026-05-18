@@ -14,7 +14,7 @@ Dispatch routing tests use a real Fitter with mocked _run_* methods.
 from __future__ import annotations
 
 import warnings
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import jax
 import jax.numpy as jnp
@@ -241,16 +241,12 @@ class TestAutoDispatchRouting:
         assert calls["vi_nonlinear_fast"] == 0
 
     def test_auto_high_d_routes_to_vi(self) -> None:
-        """auto with D > threshold should route to NIFTy fast geoVI.
+        """auto with D > threshold should dispatch the vi_nonlinear_fast backend.
 
         Pre-registry semantics (and the current registry-backed dispatch)
-        send high-D ``auto`` to the ``vi_nonlinear_fast`` backend, which
-        invokes ``_run_nifty_fast_vi`` rather than ``_run_vi``.
+        send high-D ``auto`` to the ``vi_nonlinear_fast`` backend.
         """
-        # Build a spec with more free params than threshold
-        extra = {f"sfh_dpl_xparam_{i}": Uniform(0.0, 1.0) for i in range(_AUTO_D_THRESHOLD + 5)}
-        # Use a MagicMock spec with n_free above threshold instead of a real Parameters
-        # (avoids parameter name validation in Parameters)
+        from tengri.inference._backend_registry import _BACKENDS, BackendEntry
         from tengri.inference.fitter import Fitter
 
         mock_spec = MagicMock()
@@ -261,15 +257,29 @@ class TestAutoDispatchRouting:
         data = jnp.ones(3) * 1e-18
         fitter = Fitter(mock_model, data, noise, data_type="photometry")
 
-        sentinel = object()
-        with (
-            patch.object(fitter, "_run_nuts", return_value=sentinel) as mock_nuts,
-            patch.object(fitter, "_run_nifty_fast_vi", return_value=sentinel) as mock_vi,
-        ):
-            fitter.run("auto", key=jax.random.PRNGKey(0))
+        calls: dict[str, int] = {"mcmc_nuts": 0, "vi_nonlinear_fast": 0}
 
-        mock_vi.assert_called_once()
-        mock_nuts.assert_not_called()
+        def make_runner(name):
+            def runner(context, *, key, init_from=None, **kw):  # noqa: ARG001
+                calls[name] += 1
+                return MagicMock(name=f"{name}_posterior")
+
+            return runner
+
+        originals = {n: _BACKENDS[n] for n in calls}
+        for n in originals:
+            _BACKENDS[n] = BackendEntry(
+                name=n, runner=make_runner(n), tier="primary", short_doc="",
+                requires=(), legacy_fitter=False,
+            )
+        try:
+            fitter.run("auto", key=jax.random.PRNGKey(0))
+        finally:
+            for n, e in originals.items():
+                _BACKENDS[n] = e
+
+        assert calls["vi_nonlinear_fast"] == 1
+        assert calls["mcmc_nuts"] == 0
 
 
 # ── "mcmc" dispatch routing — mock patching ───────────────────────
