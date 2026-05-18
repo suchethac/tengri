@@ -229,10 +229,12 @@ def _fix_gallery_index_toctree(app, *_args, **_kwargs):
         entries.keys(),
         key=lambda s: (order.get(s, len(order)), s),
     )
+    # ``:hidden:`` (no ``:includehidden:``) so the section list shows up
+    # on the gallery page body but does NOT propagate into the parent
+    # sidebar — the gallery is one dropdown, not 19 nested ones.
     toctree = [
         ".. toctree::",
         "   :hidden:",
-        "   :includehidden:",
         "",
     ] + [f"   /auto_examples/{s}/index.rst" for s in ordered_sections]
 

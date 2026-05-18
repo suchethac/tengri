@@ -138,3 +138,24 @@ code.literal {
         border: 1px solid #ccc;
     }
 }
+
+/* ── Examples gallery: single sidebar entry, no auto-expanded children ──
+ *
+ * The auto_examples/index page has a hidden toctree of 19 section
+ * pages (sphinx-gallery needs the relationship for prev/next nav).
+ * Furo otherwise walks that toctree into the sidebar and shows all 19
+ * sections under the "Examples gallery" entry — too noisy.
+ *
+ * Hide the nested toctree branches under the "Examples gallery" entry
+ * and remove the expand/collapse chevron since there's nothing to
+ * toggle. The gallery's section pages remain reachable via the
+ * thumbnail grid on the gallery landing page and via prev/next links
+ * within sphinx-gallery's per-script pages.
+ */
+.sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index"]) > ul {
+    display: none;
+}
+.sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index"]) > input.toctree-checkbox,
+.sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index"]) > label {
+    display: none;
+}
