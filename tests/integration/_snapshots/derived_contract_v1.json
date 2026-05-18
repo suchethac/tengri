@@ -3,7 +3,7 @@
     "regenerated_by": "TENGRI_REGENERATE_SNAPSHOTS=1"
   },
   "contract_graph::full_panchromatic": {
-    "digest": "01202a078dd62cf5804b03e0b655283e220542512029c0fce0d42bbcf7eaedca",
+    "digest": "6ed993ffbf96d6d487f8279ffd0216834d874eb96b6c14c26f0f86a17e92ab2a",
     "rows": [
       [
         "IGMSEDComponent",
@@ -40,6 +40,24 @@
         "publishes",
         "sed_radio",
         "erg/s/Hz"
+      ],
+      [
+        "RadioSEDComponent",
+        "requires_optional",
+        "L_agn_bol",
+        "erg/s"
+      ],
+      [
+        "RadioSEDComponent",
+        "requires_optional",
+        "L_ir",
+        "erg/s"
+      ],
+      [
+        "RadioSEDComponent",
+        "requires_optional",
+        "log_mstar",
+        "dex"
       ],
       [
         "StellarSEDComponent",
@@ -124,6 +142,24 @@
         "publishes",
         "sed_xray",
         "erg/s/Hz"
+      ],
+      [
+        "XRaySEDComponent",
+        "requires_optional",
+        "L_agn_bol",
+        "erg/s"
+      ],
+      [
+        "XRaySEDComponent",
+        "requires_optional",
+        "log_mstar",
+        "dex"
+      ],
+      [
+        "XRaySEDComponent",
+        "requires_optional",
+        "sfr",
+        "Msun/yr"
       ]
     ]
   },
@@ -235,7 +271,7 @@
     ]
   },
   "contract_graph::single_component_dust": {
-    "digest": "6560b33f0e7083daca385fc87b19603fd96a705e0a2a551d48e362b868fae5c8",
+    "digest": "e30a93fb0297d050369144d8bd79499695fc13f757b37c727fffc7c40e99fd18",
     "rows": [
       [
         "NebularSEDComponent",
@@ -266,6 +302,24 @@
         "publishes",
         "sed_radio",
         "erg/s/Hz"
+      ],
+      [
+        "RadioSEDComponent",
+        "requires_optional",
+        "L_agn_bol",
+        "erg/s"
+      ],
+      [
+        "RadioSEDComponent",
+        "requires_optional",
+        "L_ir",
+        "erg/s"
+      ],
+      [
+        "RadioSEDComponent",
+        "requires_optional",
+        "log_mstar",
+        "dex"
       ],
       [
         "StellarSEDComponent",
@@ -346,5 +400,14 @@
         "yr"
       ]
     ]
+  },
+  "sed_intrinsic::full_panchromatic": {
+    "digest": "5f6065f290f5542bc3ec5fc511ab452a5ee0549bc4e8ebe4432e4e8fe71e87c4"
+  },
+  "sed_intrinsic::minimal_phot": {
+    "digest": "d1183e5db0e25241740bee56725a7c4e723249c88db8cf258387d206e187c0bb"
+  },
+  "sed_intrinsic::single_component_dust": {
+    "digest": "6a2bac263c8c27e633ebac62b6ec18c45a8edbb4aa98ea4638511eb34f010a42"
   }
 }
