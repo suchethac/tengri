@@ -65,20 +65,21 @@ _EVOLVING_ALPHA_PARAM_MAP = {
     "met_alpha_fe_young": ("alpha_fe_young", 1.0, 0.0),  # [alpha/Fe] at present day
 }
 
-# ── Identity param lists ──────────────────────────────────────────
+# ── DEPRECATED: Identity param lists and unit-conversion filtering ──────
 #
-# Auto-derived from the bucket dicts in :mod:`tengri.parameters._param_defs`.
-# Adding a parameter to one of those dicts automatically exposes it through
-# identity translation here — eliminating the disconnect that previously
-# bit dust-emission, AGN-nebular, magphys, and shock paths (declared in
-# ``_param_defs.py``, consumed in ``components/``, but silently dropped at
-# Model predict time because the parallel hand-written identity list never
-# got the new entry).
+# Retired as of Step B (architecture deepening round 2). These lists were
+# historically hand-maintained to manually add identity-mapping param entries
+# to the legacy param_map. The registry walk in as_param_map() now handles
+# this automatically, eliminating the drift between introspection
+# (list_parameters) and translation (_build_param_map).
 #
-# Exception list: any name in ``_PARAMS_WITH_UNIT_CONVERSION`` is filtered
-# out of the auto-derived identity lists because it goes through a real
-# unit-converting entry in ``_NON_SFH_PARAM_MAP`` (or one of the other
-# explicit maps) and must NOT also receive a passthrough identity entry.
+# sed_model.py still imports and uses these as of this commit; removal is
+# deferred to Step A (param_map freeze), which addresses the mutation pattern
+# they enable. This commit leaves them as deprecated exports to preserve
+# backwards compatibility at the module level.
+#
+# Deprecated in: 2026-05-18 (Step B)
+# Removed in: TBD (Step A)
 _PARAMS_WITH_UNIT_CONVERSION: frozenset[str] = frozenset(
     {
         # ── Stellar/dust handled in _NON_SFH_PARAM_MAP ────────────
@@ -106,15 +107,18 @@ _PARAMS_WITH_UNIT_CONVERSION: frozenset[str] = frozenset(
 
 
 def _identity_params_from_bucket(bucket: dict) -> list[str]:
-    """Derive identity-mapping param list from a `_param_defs.py` bucket.
+    """(Deprecated) Derive identity-mapping param list from a `_param_defs.py` bucket.
 
-    Filters out any param that needs a unit conversion (`_PARAMS_WITH_UNIT_CONVERSION`)
-    because those go through `_NON_SFH_PARAM_MAP` instead. Sorted for stable
-    test output.
+    This function is retained for backwards compatibility with sed_model.py
+    imports pending Step A refactoring. New code should not use it.
+    See as_param_map() in the registry for the authoritative view.
     """
     return sorted(name for name in bucket if name not in _PARAMS_WITH_UNIT_CONVERSION)
 
 
+# DEPRECATED: Retained for backwards compatibility with sed_model.py.
+# as_param_map() in the registry now provides the authoritative view.
+# These will be removed in Step A.
 _DUST_EMISSION_IDENTITY_PARAMS = _identity_params_from_bucket(_DUST_EMISSION_PARAMS)
 _AGN_IDENTITY_PARAMS = _identity_params_from_bucket(_AGN_PARAMS)
 _RADIO_IDENTITY_PARAMS = _identity_params_from_bucket(_RADIO_PARAMS)
@@ -126,7 +130,11 @@ _CUE_IONSPEC_IDENTITY_PARAMS = _identity_params_from_bucket(_CUE_IONSPEC_PARAMS)
 
 
 def identity_param_map(names: list[str]) -> dict[str, tuple[str, float, float]]:
-    """Param-map entries `{name: (name, 1.0, 0.0)}` — no unit conversion."""
+    """(Deprecated) Param-map entries `{name: (name, 1.0, 0.0)}` — no unit conversion.
+
+    Retained for backwards compatibility with sed_model.py pending Step A refactoring.
+    New code should not use it.
+    """
     return {p: (p, 1.0, 0.0) for p in names}
 
 
@@ -287,7 +295,7 @@ _SINGLE_COMPONENT_DUST_PARAM_MAP = {
 
 
 def _build_param_map(mean_sfh_type, dust_model="two_component"):
-    """Build complete param map from SFH registry + non-SFH params + auto-derived components.
+    """Build complete param map from registry + SFH resolution + dust-model selection.
 
     Parameters
     ----------
@@ -303,72 +311,34 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
 
     Notes
     -----
-    As of Phase II-2, registered SEDComponent instances auto-declare parameters
-    via :meth:`declared_parameters`. This function auto-derives identity mappings
-    from those declarations (if not already in the map) to keep the param_map
-    synchronized without manual editing.
+    Delegates to :func:`tengri.parameters.registry.as_param_map` for the
+    authoritative registry-based view. This function applies spec-dependent
+    SFH resolution and dust-model selection on top of that base map.
 
-    Manual entries in the identity param lists (e.g. :data:`_AGN_IDENTITY_PARAMS`)
-    remain authoritative and are never overwritten.
+    Parameter ownership is now fully centralized in the registry: every
+    component declares its parameters via ``_params.py``, and the registry
+    walk constructs a single unified view. This eliminates the previous
+    disconnect between introspection (what ``list_parameters()`` reports)
+    and translation (what ``_build_param_map`` builds).
     """
     from tengri.components.stellar.sfh.registry import resolve_sfh
+    from tengri.parameters.registry import as_param_map
 
+    # Get the canonical base param map from the registry.
+    result = dict(as_param_map())
+
+    # SFH params are spec-dependent: only include params for the requested SFH type(s).
+    # This walk overrides any identity-mapped SFH entries from the registry with the
+    # correctly-scaled versions from resolve_sfh.
     _, _, sfh_param_map, _ = resolve_sfh(mean_sfh_type)
-    result = dict(sfh_param_map)
+    result.update(sfh_param_map)
+
+    # Dust model selection: two_component uses tau_bc/tau_diff, single_component uses tau_v.
     if dust_model == "single_component":
-        # Skip tau_bc/tau_diff, add tau_v
-        for k, v in _NON_SFH_PARAM_MAP.items():
-            if k not in ("dust_tau_bc", "dust_tau_diff"):
-                result[k] = v
+        # Remove the two-component entries and add single-component entry.
+        result.pop("dust_tau_bc", None)
+        result.pop("dust_tau_diff", None)
         result.update(_SINGLE_COMPONENT_DUST_PARAM_MAP)
-    else:
-        result.update(_NON_SFH_PARAM_MAP)
-
-    # Auto-derive identity entries from registered components (Phase II-2 onwards).
-    # Manual entries above always take precedence (are never overwritten).
-    try:
-        from tengri.components import _get_registered_components
-
-        # Components whose default-config declared_parameters don't fit
-        # the legacy SEDModel param schema: instantiating them with a
-        # default config would inject params that the spec / param-map
-        # doesn't support, breaking ``get_internal_params`` at the
-        # KeyError fallback (a free-or-fixed lookup that fails for any
-        # injected param the user never set in spec).
-        #
-        # - StellarSEDComponent: default is ``sfh_model="tsnorm"`` →
-        #   injects tsnorm SFH params for any spec, regardless of the
-        #   user's actual ``mean_sfh_type``. SFH/met params are wired
-        #   via ``resolve_sfh(mean_sfh_type)`` above.
-        # - DustAttenuationSEDComponent: default is single-component
-        #   (``dust_tau_v``); legacy SEDModel defaults to two-component
-        #   (``dust_tau_bc`` / ``dust_tau_diff``). The dust scheme is
-        #   selected by the ``dust_model`` argument and wired via
-        #   ``_NON_SFH_PARAM_MAP`` / ``_SINGLE_COMPONENT_DUST_PARAM_MAP``
-        #   above.
-        # - DustEmissionSEDComponent: same family — its declared params
-        #   may not match what the legacy emission paths expect.
-        _SKIP_AUTO_DERIVE = (
-            "StellarSEDComponent",
-            "DustAttenuationSEDComponent",
-            "DustEmissionSEDComponent",
-        )
-        for comp_cls in _get_registered_components():
-            if comp_cls.__name__ in _SKIP_AUTO_DERIVE:
-                continue
-            try:
-                # Instantiate with default config
-                comp = comp_cls()
-                for decl in comp.declared_parameters():
-                    # Only add if not already in result (manual entries take precedence)
-                    if decl.name not in result:
-                        result[decl.name] = (decl.name, 1.0, 0.0)  # identity mapping
-            except Exception:
-                # Best-effort: skip any component that fails to instantiate or declare
-                continue
-    except (ImportError, AttributeError):
-        # _get_registered_components not available (pre-Phase-II setup)
-        pass
 
     return result
 

@@ -26,6 +26,21 @@ class ParameterError(TengriError, ValueError):
     """
 
 
+class ParameterMapError(ParameterError):
+    """Parameter map validation failure during SEDModel construction.
+
+    Raised when:
+    - A free parameter in spec has no entry in the parameter map
+    - Multiple components claim conflicting (scale, offset) for the same parameter
+    - Other parameter map consistency violations
+
+    Parameters
+    ----------
+    message : str
+        Human-readable error description.
+    """
+
+
 class ConfigError(TengriError, ValueError):
     """Invalid Config construction or missing fields.
 

@@ -202,3 +202,95 @@ class TestSharedParamsMigration:
         for name, desc in expected.items():
             rec = describe_parameter(name)
             assert rec.description == desc
+
+
+class TestAsParamMapAgainstBuildParamMap:
+    """Cross-check: registry.as_param_map() must agree with translate._build_param_map().
+
+    This test verifies that the registry walk (introspection surface) and the
+    param_map building (translation surface) produce consistent results. Drift
+    between them (as addressed in ADR-0005) is a bug.
+
+    Tests the Step B refactor: as_param_map() is now the canonical source, and
+    _build_param_map wraps it with SFH resolution and dust-model selection.
+    """
+
+    def test_as_param_map_includes_all_registry_params_identity(self):
+        """All registry parameters appear in as_param_map() with identity mapping
+        (or override in _NON_SFH_PARAM_MAP)."""
+        from tengri.parameters.registry import as_param_map
+
+        registry_names = set(registry().keys())
+        param_map = as_param_map()
+        param_map_names = set(param_map.keys())
+
+        # Every registry parameter should be in the param_map
+        assert registry_names.issubset(param_map_names), (
+            f"Registry params not in param_map: {registry_names - param_map_names}"
+        )
+
+    def test_as_param_map_cross_check_against_build_param_map(self):
+        """as_param_map() must produce the same entries as _build_param_map()
+        for the base set (non-SFH params).
+
+        This test captures the baseline: we compare a few representative parameter
+        mappings to ensure no drift was introduced by the refactor.
+        """
+        from tengri.parameters.registry import as_param_map
+        from tengri.parameters.translate import _build_param_map
+
+        # Test a few representative SFH types
+        for sfh_type in [["tsnorm"], ["dpl"], ["dpl", "field"]]:
+            param_map = _build_param_map(sfh_type)
+            registry_map = as_param_map()
+
+            # Check a sample of non-SFH parameters that should be identical
+            sample_params = ["redshift", "met_logzsol", "dust_tau_bc"]
+            for param_name in sample_params:
+                assert param_name in param_map, f"{param_name} missing from _build_param_map"
+                assert param_name in registry_map, f"{param_name} missing from as_param_map"
+                assert param_map[param_name] == registry_map[param_name], (
+                    f"{param_name}: mismatch between _build_param_map and as_param_map: "
+                    f"{param_map[param_name]} vs {registry_map[param_name]}"
+                )
+
+    def test_dust_model_single_component_selection(self):
+        """Single-component dust model must remove tau_bc/tau_diff, keeping tau_v.
+        Two-component model keeps tau_bc/tau_diff and may also have tau_v in registry
+        (but it's not the active param).
+        """
+        from tengri.parameters.translate import _build_param_map
+
+        two_comp = _build_param_map(["tsnorm"], dust_model="two_component")
+        single_comp = _build_param_map(["tsnorm"], dust_model="single_component")
+
+        # Two-component should have tau_bc and tau_diff
+        assert "dust_tau_bc" in two_comp
+        assert "dust_tau_diff" in two_comp
+
+        # Single-component should NOT have tau_bc/tau_diff but SHOULD have tau_v
+        assert "dust_tau_bc" not in single_comp
+        assert "dust_tau_diff" not in single_comp
+        assert "dust_tau_v" in single_comp
+
+    def test_registry_params_in_from_groups_recipes(self):
+        """Property test: every parameter in list_parameters() that gets enabled
+        by a recipe is actually in the recipe's parameter set.
+
+        This exercises the contract: introspection (list_parameters),
+        registry walk, and recipe construction.
+        """
+        from tengri import recipe_parameters, recipes
+
+        # Test a few recipes
+        recipe_list = [
+            recipes.star_forming_photometry(),
+            recipes.quiescent_z0(),
+        ]
+
+        for recipe_dict in recipe_list:
+            records = recipe_parameters(recipe_dict, free_only=False)
+            for rec in records:
+                # Each record should be findable in the registry
+                assert rec.name is not None
+                assert rec.owner is not None

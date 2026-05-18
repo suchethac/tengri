@@ -5,6 +5,7 @@ from tengri.config.exceptions import (
     ConfigError,
     InferenceError,
     ParameterError,
+    ParameterMapError,
     TengriError,
     TengriIOError,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "MultiwavelengthConfig",
     "NebularConfig",
     "ParameterError",
+    "ParameterMapError",
     "SEDModelConfig",
     "SFHConfig",
     "TengriError",

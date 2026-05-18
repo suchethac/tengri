@@ -31,6 +31,7 @@ from tengri.core.component import ParamDeclaration
 
 __all__ = [
     "ParameterRecord",
+    "as_param_map",
     "describe_parameter",
     "list_parameters",
     "recipe_parameters",
@@ -203,6 +204,63 @@ def _clear_cache() -> None:
     """Drop the cached registry. Re-imports happen on the next call."""
     global _CACHE
     _CACHE = None
+
+
+def as_param_map() -> dict[str, tuple[str, float, float]]:
+    """Return all registry parameters as a translation map.
+
+    Derives a ``{public_name: (internal_name, scale, offset)}`` dictionary
+    from the parameter declarations in the registry. For parameters with no
+    declared unit conversion, defaults to identity mapping
+    ``(name, 1.0, 0.0)``.
+
+    This is the canonical source for parameter translation; ``translate._build_param_map``
+    wraps this function, applying SFH-resolution and dust-model selection on top.
+
+    Returns
+    -------
+    dict
+        ``{public_name: (internal_name, scale, offset)}`` for every parameter
+        in the registry. Non-SFH parameters use identity translation unless
+        overridden in the unit-conversion map (see Notes).
+
+    Notes
+    -----
+    Unit conversions for a fixed set of parameters are defined in
+    :mod:`tengri.parameters.translate`:
+
+    - ``met_logzsol``: ``log10(Z/Zsun)`` → ``log10(Z)`` with ``LOG10_ZSUN`` offset
+    - ``neb_logZ_gas``: ``log10(Z_gas/Zsun)`` → ``log10(Z)`` with ``LOG10_ZSUN`` offset
+    - ``dust_tau_bc``, ``dust_tau_diff``: internal rename only, no scale/offset change
+    - ``redshift``, ``noise_frac_cal``, ``noise_dof``, ``sigma_v_kms``: identity
+    - All other registered parameters: identity mapping ``(name, 1.0, 0.0)``
+
+    The offset ``LOG10_ZSUN = -1.8477116556169435`` (Asplund 2009) bridges
+    the convention mismatch between public-facing relative metallicity and
+    internal absolute metallicity.
+
+    See Also
+    --------
+    translate._build_param_map : Applies SFH resolution and dust-model selection.
+    """
+    # Import locally to avoid circular deps and keep translate.py free from
+    # transitive physics-module imports at module level.
+    from tengri.parameters import translate as translate_module
+
+    reg = registry()
+    result: dict[str, tuple[str, float, float]] = {}
+
+    # Start with the manually-defined unit conversions for shared/sentinel params
+    result.update(translate_module._NON_SFH_PARAM_MAP)
+
+    # Add identity mappings for all remaining parameters in the registry
+    # (parameters not in _NON_SFH_PARAM_MAP and not in _PARAMS_WITH_UNIT_CONVERSION).
+    for pub_name in reg:
+        if pub_name not in result:
+            # Identity mapping: no unit conversion
+            result[pub_name] = (pub_name, 1.0, 0.0)
+
+    return result
 
 
 def list_parameters(prefix: str | None = None) -> list[str]:
