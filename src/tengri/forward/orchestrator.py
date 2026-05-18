@@ -46,8 +46,34 @@ __all__ = [
     "run_components",
     "sample_params_dict",
     "slice_params_for_component",
+    "topological_sort",
     "validate_pipeline",
 ]
+
+
+# ── Internal accessors for the publish/require contract methods ────
+#
+# publishes / requires / requires_optional are intentionally NOT part
+# of the runtime-checkable SEDComponent Protocol surface (see ADR-0004,
+# specifically the "drop from runtime-checkable Protocol" amendment).
+# Components that have not been annotated contribute the safe empty-tuple
+# default. These three helpers live at module scope so both
+# validate_pipeline and topological_sort can reuse them.
+
+
+def _publishes(c: SEDComponent) -> tuple[DerivedKey, ...]:
+    fn = getattr(c, "publishes", None)
+    return tuple(fn()) if callable(fn) else ()
+
+
+def _requires(c: SEDComponent) -> tuple[DerivedKey, ...]:
+    fn = getattr(c, "requires", None)
+    return tuple(fn()) if callable(fn) else ()
+
+
+def _requires_optional(c: SEDComponent) -> tuple[DerivedKey, ...]:
+    fn = getattr(c, "requires_optional", None)
+    return tuple(fn()) if callable(fn) else ()
 
 
 # Canonical units for every well-known cross-component derived key. Both
@@ -190,22 +216,6 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
     """
     component_list = list(components)
 
-    # ``publishes`` / ``requires`` are optional on a SEDComponent (the
-    # runtime-checkable Protocol does not require them). Components that
-    # haven't been annotated yet contribute nothing — they neither produce
-    # nor consume declared cross-component data, which is the safe default.
-    def _publishes(c: SEDComponent) -> tuple[DerivedKey, ...]:
-        fn = getattr(c, "publishes", None)
-        return tuple(fn()) if callable(fn) else ()
-
-    def _requires(c: SEDComponent) -> tuple[DerivedKey, ...]:
-        fn = getattr(c, "requires", None)
-        return tuple(fn()) if callable(fn) else ()
-
-    def _requires_optional(c: SEDComponent) -> tuple[DerivedKey, ...]:
-        fn = getattr(c, "requires_optional", None)
-        return tuple(fn()) if callable(fn) else ()
-
     # Stage 1: build the publish map (component-order indexed) and check
     # duplicate publish + canonical-units agreement on the publish side.
     publishers: dict[str, tuple[int, SEDComponent, DerivedKey]] = {}
@@ -318,6 +328,113 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
                     f"convert; fix one of the units strings (the canonical "
                     f"answer is in _CANONICAL_UNITS)."
                 )
+
+
+def topological_sort(components: Iterable[SEDComponent]) -> list[SEDComponent]:
+    r"""Stable topological sort over the publish/require dependency graph.
+
+    Produces an ordering where every component appears strictly after
+    every other component whose :meth:`publishes` it consumes via
+    :meth:`requires` or :meth:`requires_optional`. Among components with
+    no ordering constraint, the input order is preserved (stable sort).
+
+    This is the inverse of :func:`validate_pipeline`'s "out-of-order
+    publisher" check — instead of refusing pipelines whose hand-coded
+    order violates declared dependencies, it *derives* the order from
+    the declarations. See ADR-0006.
+
+    Parameters
+    ----------
+    components : iterable of SEDComponent
+        The unordered (or arbitrarily-ordered) component list. Typically
+        passed straight from :func:`tengri.forward.build_components`
+        which appends in domain-grouped order; the sort tightens that
+        into the dependency-respecting order before downstream consumers
+        observe it.
+
+    Returns
+    -------
+    list of SEDComponent
+        Topologically ordered. For the canonical pipeline (stellar,
+        nebular, AGN, dust, radio, X-ray, IGM), this reproduces the
+        hand-coded order byte-for-byte — the snapshot test in
+        :mod:`tests.integration.test_derived_contract_snapshots` is the
+        regression guarantee.
+
+    Raises
+    ------
+    PipelineContractError
+        If the dependency graph contains a cycle. The error message
+        names every component still pending when the algorithm stalls
+        — typically the cycle's participants.
+
+    Notes
+    -----
+    **Algorithm.** Kahn's algorithm with stable tie-breaking: at each
+    step, the lowest-input-index component whose dependencies are all
+    already emitted is picked next. With deterministic-order producer
+    resolution (first publisher wins on duplicates — see
+    :data:`_ALTERNATE_PUBLISHERS`), the sort is fully deterministic.
+
+    **Why both ``requires`` and ``requires_optional``.** A hard
+    requirement establishes ordering by definition. An optional
+    requirement *also* establishes ordering when the publisher is
+    present: the consumer reads from ``state.derived`` with a fallback,
+    so it can only read meaningful data if the publisher has already
+    written. The validator enforces strict-before for both flavours
+    (ADR-0004 Phase B); the sort must too, else
+    :func:`validate_pipeline` would reject sort output.
+
+    **Zero JIT cost.** Runs once at :func:`build_components` time.
+    """
+    component_list = list(components)
+    n = len(component_list)
+
+    # Map each published derived-key name to the index of its publisher.
+    # First-publisher-wins matches the validator's
+    # ``_ALTERNATE_PUBLISHERS`` resolution: when two components publish
+    # the same key as alternate implementations of the same role, the
+    # first one in the input list takes precedence.
+    producer: dict[str, int] = {}
+    for i, c in enumerate(component_list):
+        for key in _publishes(c):
+            producer.setdefault(key.name, i)
+
+    # Build incoming edges per node. An edge i ← j means "i requires
+    # something j publishes, so j must come before i". Both hard and
+    # optional requires contribute.
+    deps: list[set[int]] = [set() for _ in range(n)]
+    for i, c in enumerate(component_list):
+        for needed in (*_requires(c), *_requires_optional(c)):
+            pub = producer.get(needed.name)
+            if pub is not None and pub != i:
+                deps[i].add(pub)
+
+    # Kahn's algorithm with stable tie-break.
+    emitted: list[int] = []
+    emitted_set: set[int] = set()
+    remaining = set(range(n))
+    while remaining:
+        # Lowest input-order index whose dependencies are all already
+        # emitted. Linear scan; n is tiny (typically 7) so this is fine.
+        picked: int | None = None
+        for i in range(n):
+            if i in remaining and deps[i].issubset(emitted_set):
+                picked = i
+                break
+        if picked is None:
+            pending_names = [type(component_list[i]).__name__ for i in sorted(remaining)]
+            raise PipelineContractError(
+                f"Topological sort failed: cycle in publish/require graph "
+                f"involving {pending_names!r}. Every requires() / "
+                f"requires_optional() declaration must be satisfiable in some "
+                f"linear order — check the offending components."
+            )
+        emitted.append(picked)
+        emitted_set.add(picked)
+        remaining.remove(picked)
+
+    return [component_list[i] for i in emitted]
 
 
 def slice_params_for_component(
