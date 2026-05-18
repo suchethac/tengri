@@ -51,6 +51,7 @@ from tengri.utils.grid_interp import (
     PreintegratedGrid,
     slice_fixed_axes,
 )
+from tengri.utils.physics_constants import C_CGS as _C_CGS
 
 # ── Axis definitions per model ──────────────────────────────────
 
@@ -251,11 +252,10 @@ def _build_grid_pah_drude(
     # Compute PAH template using Smith+2007 SINGS median strengths
     pah_llam = np.asarray(_compute_pah(jnp.asarray(wave_rest * 1e-4)))  # Å -> μm
 
-    # Convert L_lambda to L_nu: L_nu = L_lambda * lambda^2 / c
-    # PAH template is dimensionless (relative unit); scale to L_absorbed_ref
-    wave_cm = wave_rest * 1e-8  # Angstrom -> cm
-    c_cgs = 2.998e10  # cm/s
-    lnu = L_absorbed_ref * pah_llam * (wave_cm**2) / c_cgs
+    # L_nu = L_lambda * lambda^2 / c. PAH template is dimensionless (relative);
+    # scale to L_absorbed_ref.
+    wave_cm = wave_rest * 1e-8
+    lnu = L_absorbed_ref * pah_llam * (wave_cm**2) / _C_CGS
 
     # Wrap in shape (1, n_wave) for template compatibility
     templates = np.array([lnu], dtype=np.float64)

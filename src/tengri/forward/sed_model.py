@@ -2772,9 +2772,10 @@ class SEDModel:
         Divides rest-frame SED by :math:`L_{\\odot} = 3.828 \\times 10^{33}` erg/s
         (IAU 2015 definition).
         """
-        LSUN_CGS = 3.828e33  # erg/s (IAU 2015)
+        from tengri.utils.physics_constants import L_SUN
+
         sed_erg = self.predict_rest_sed(params).sed
-        return sed_erg / LSUN_CGS
+        return sed_erg / L_SUN
 
     def predict_line_fluxes(self, params, target_wavelengths=None, tolerance_aa=5.0):
         """Predict observed emission line fluxes.
