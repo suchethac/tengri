@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.components.sps.precompute import (
+from tengri.components.stellar.sps.precompute import (
     interpolate_ztable,
     interpolate_ztable_smooth,
     precompute_photometry,

@@ -14,7 +14,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri import Parameters, SEDModel, Uniform
-from tengri.components.sps.dsps_wrapper import load_ssp_data
+from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.parameters.priors import Fixed
 
 # ── Paths to real SSP data ────────────────────────────────────────

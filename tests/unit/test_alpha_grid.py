@@ -72,7 +72,7 @@ def alpha_ssp_grid():
 @pytest.fixture
 def ssp_data_4d(alpha_ssp_grid):
     """SSPData with 4D alpha-enhanced grid."""
-    from tengri.components.sps.dsps_wrapper import SSPData
+    from tengri.components.stellar.sps.dsps_wrapper import SSPData
 
     g = alpha_ssp_grid
     return SSPData(
@@ -87,7 +87,7 @@ def ssp_data_4d(alpha_ssp_grid):
 @pytest.fixture
 def ssp_data_3d():
     """SSPData with standard 3D grid (no alpha)."""
-    from tengri.components.sps.dsps_wrapper import SSPData
+    from tengri.components.stellar.sps.dsps_wrapper import SSPData
 
     n_met, n_age, n_wave = 3, 10, 20
     key = jax.random.PRNGKey(0)
@@ -106,17 +106,17 @@ class TestHasAlphaGrid:
     """Test alpha grid detection."""
 
     def test_4d_grid_detected(self, ssp_data_4d):
-        from tengri.components.sps.dsps_wrapper import has_alpha_grid
+        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
 
         assert has_alpha_grid(ssp_data_4d) is True
 
     def test_3d_grid_not_detected(self, ssp_data_3d):
-        from tengri.components.sps.dsps_wrapper import has_alpha_grid
+        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
 
         assert has_alpha_grid(ssp_data_3d) is False
 
     def test_none_alpha_not_detected(self, ssp_data_3d):
-        from tengri.components.sps.dsps_wrapper import has_alpha_grid
+        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
 
         assert has_alpha_grid(ssp_data_3d) is False
 
@@ -129,7 +129,7 @@ class TestInterpolateMetAlpha:
 
     def test_at_grid_point(self, alpha_ssp_grid):
         """Interpolation at exact grid point should return that grid point."""
-        from tengri.components.sps.dsps_wrapper import interpolate_met_alpha
+        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
         result = interpolate_met_alpha(
@@ -144,7 +144,7 @@ class TestInterpolateMetAlpha:
 
     def test_midpoint_interpolation(self, alpha_ssp_grid):
         """Midpoint between grid points should be the average of neighbors."""
-        from tengri.components.sps.dsps_wrapper import interpolate_met_alpha
+        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
         # Midpoint between lgmet[0]=-1.5 and lgmet[1]=-0.5 at alpha[1]=0.0
@@ -160,7 +160,7 @@ class TestInterpolateMetAlpha:
 
     def test_different_alpha_different_result(self, alpha_ssp_grid):
         """Different [α/Fe] values should give different SEDs."""
-        from tengri.components.sps.dsps_wrapper import interpolate_met_alpha
+        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
         sed_solar = interpolate_met_alpha(
@@ -181,7 +181,7 @@ class TestInterpolateMetAlpha:
 
     def test_output_shape(self, alpha_ssp_grid):
         """Output should be (n_age, n_wave)."""
-        from tengri.components.sps.dsps_wrapper import interpolate_met_alpha
+        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
         result = interpolate_met_alpha(
@@ -195,7 +195,7 @@ class TestInterpolateMetAlpha:
 
     def test_finite_output(self, alpha_ssp_grid):
         """All outputs should be finite."""
-        from tengri.components.sps.dsps_wrapper import interpolate_met_alpha
+        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
         for lz in [-1.5, -1.0, -0.5, 0.0]:
@@ -211,7 +211,7 @@ class TestInterpolateMetAlpha:
 
     def test_clamping_at_bounds(self, alpha_ssp_grid):
         """Values outside grid should clamp to boundary."""
-        from tengri.components.sps.dsps_wrapper import interpolate_met_alpha
+        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
         # Beyond low Z boundary
@@ -233,7 +233,7 @@ class TestInterpolateMetAlpha:
 
     def test_jit_compatible(self, alpha_ssp_grid):
         """Should work under jax.jit."""
-        from tengri.components.sps.dsps_wrapper import interpolate_met_alpha
+        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
         jit_fn = jax.jit(interpolate_met_alpha, static_argnames=[])
@@ -255,7 +255,7 @@ class TestInterpolateMetAlpha:
         crosses a cell boundary while autodiff stays within one cell → they
         legitimately differ.  Interior points avoid this and must agree exactly.
         """
-        from tengri.components.sps.dsps_wrapper import interpolate_met_alpha
+        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
 
@@ -284,7 +284,7 @@ class TestInterpolateMetAlpha:
         lands in different cells for (x+eps) vs (x-eps), causing FD/autodiff mismatch.
         Interior points must agree exactly.
         """
-        from tengri.components.sps.dsps_wrapper import interpolate_met_alpha
+        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
 
@@ -314,7 +314,7 @@ class TestInterpolateMetAlphaEvolving:
 
     def test_uniform_matches_global(self, alpha_ssp_grid):
         """Uniform Z and [α/Fe] across ages should match global interpolation."""
-        from tengri.components.sps.dsps_wrapper import (
+        from tengri.components.stellar.sps.dsps_wrapper import (
             interpolate_met_alpha,
             interpolate_met_alpha_evolving,
         )
@@ -345,7 +345,7 @@ class TestInterpolateMetAlphaEvolving:
 
     def test_varying_alpha_per_age(self, alpha_ssp_grid):
         """Different [α/Fe] per age should produce different spectra per age."""
-        from tengri.components.sps.dsps_wrapper import interpolate_met_alpha_evolving
+        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha_evolving
 
         g = alpha_ssp_grid
         n_age = len(g["ssp_lg_age_gyr"])
@@ -367,7 +367,7 @@ class TestInterpolateMetAlphaEvolving:
 
     def test_output_shape(self, alpha_ssp_grid):
         """Output should be (n_age, n_wave)."""
-        from tengri.components.sps.dsps_wrapper import interpolate_met_alpha_evolving
+        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha_evolving
 
         g = alpha_ssp_grid
         n_age = len(g["ssp_lg_age_gyr"])
@@ -383,7 +383,7 @@ class TestInterpolateMetAlphaEvolving:
 
     def test_jit_compatible(self, alpha_ssp_grid):
         """Should work under jax.jit."""
-        from tengri.components.sps.dsps_wrapper import interpolate_met_alpha_evolving
+        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha_evolving
 
         g = alpha_ssp_grid
         n_age = len(g["ssp_lg_age_gyr"])
@@ -407,7 +407,7 @@ class TestComputeAlphaFeEvolving:
 
     def test_young_gets_young_value(self):
         """Youngest age bin (t_lookback ≈ 0) should get alpha_fe_young."""
-        from tengri.components.sps.dsps_wrapper import compute_alpha_fe_evolving
+        from tengri.components.stellar.sps.dsps_wrapper import compute_alpha_fe_evolving
 
         lg_ages = jnp.array([-2.0, -1.0, 0.0, 1.0])  # log10(age/Gyr)
         result = compute_alpha_fe_evolving(lg_ages, 0.4, 0.0, 13.7)
@@ -417,7 +417,7 @@ class TestComputeAlphaFeEvolving:
 
     def test_old_gets_old_value(self):
         """Oldest age bin (t_lookback ≈ t_universe) should get alpha_fe_old."""
-        from tengri.components.sps.dsps_wrapper import compute_alpha_fe_evolving
+        from tengri.components.stellar.sps.dsps_wrapper import compute_alpha_fe_evolving
 
         lg_ages = jnp.array([-2.0, -1.0, 0.0, 1.14])  # 10^1.14 ≈ 13.8 Gyr
         result = compute_alpha_fe_evolving(lg_ages, 0.4, 0.0, 13.7)
@@ -427,7 +427,7 @@ class TestComputeAlphaFeEvolving:
 
     def test_monotonic_increase(self):
         """[α/Fe] should increase monotonically with lookback time."""
-        from tengri.components.sps.dsps_wrapper import compute_alpha_fe_evolving
+        from tengri.components.stellar.sps.dsps_wrapper import compute_alpha_fe_evolving
 
         lg_ages = jnp.linspace(-2.0, 1.1, 20)
         result = compute_alpha_fe_evolving(lg_ages, 0.4, 0.0, 13.7)
@@ -437,7 +437,7 @@ class TestComputeAlphaFeEvolving:
 
     def test_equal_old_young_gives_constant(self):
         """If alpha_old == alpha_young, result should be constant."""
-        from tengri.components.sps.dsps_wrapper import compute_alpha_fe_evolving
+        from tengri.components.stellar.sps.dsps_wrapper import compute_alpha_fe_evolving
 
         lg_ages = jnp.linspace(-2.0, 1.1, 20)
         result = compute_alpha_fe_evolving(lg_ages, 0.3, 0.3, 13.7)
@@ -446,7 +446,7 @@ class TestComputeAlphaFeEvolving:
 
     def test_differentiable(self):
         """Should be differentiable w.r.t. alpha_fe_old and match FD."""
-        from tengri.components.sps.dsps_wrapper import compute_alpha_fe_evolving
+        from tengri.components.stellar.sps.dsps_wrapper import compute_alpha_fe_evolving
 
         lg_ages = jnp.linspace(-2.0, 1.1, 20)
 
@@ -469,20 +469,20 @@ class TestEffectiveMetallicity:
 
     def test_solar_alpha_is_identity(self):
         """[α/Fe] = 0 should leave metallicity unchanged."""
-        from tengri.components.sps.dsps_wrapper import effective_metallicity
+        from tengri.components.stellar.sps.dsps_wrapper import effective_metallicity
 
         assert float(effective_metallicity(-0.5, 0.0)) == pytest.approx(-0.5)
 
     def test_positive_alpha_increases_z(self):
         """Positive [α/Fe] should increase effective Z."""
-        from tengri.components.sps.dsps_wrapper import effective_metallicity
+        from tengri.components.stellar.sps.dsps_wrapper import effective_metallicity
 
         z_eff = effective_metallicity(-0.5, 0.4)
         assert float(z_eff) > -0.5
 
     def test_coefficient_is_0_75(self):
         """The conversion coefficient should be 0.75."""
-        from tengri.components.sps.dsps_wrapper import effective_metallicity
+        from tengri.components.stellar.sps.dsps_wrapper import effective_metallicity
 
         z_eff = effective_metallicity(0.0, 1.0)
         assert float(z_eff) == pytest.approx(0.75, abs=0.01)
@@ -501,7 +501,10 @@ class TestSalarisConversion:
 
     def test_solar_alpha_identity(self):
         """At [α/Fe] = 0.0, [M/H] = [Fe/H] exactly."""
-        from tengri.components.sps.dsps_wrapper import salaris_feh_from_mh, salaris_mh_from_feh
+        from tengri.components.stellar.sps.dsps_wrapper import (
+            salaris_feh_from_mh,
+            salaris_mh_from_feh,
+        )
 
         for feh in [-2.0, -1.0, -0.5, 0.0, 0.3]:
             mh = salaris_mh_from_feh(feh, 0.0)
@@ -513,7 +516,10 @@ class TestSalarisConversion:
 
     def test_roundtrip(self):
         """feh → mh → feh should be identity."""
-        from tengri.components.sps.dsps_wrapper import salaris_feh_from_mh, salaris_mh_from_feh
+        from tengri.components.stellar.sps.dsps_wrapper import (
+            salaris_feh_from_mh,
+            salaris_mh_from_feh,
+        )
 
         for feh in [-2.0, -1.0, -0.5, 0.0, 0.3]:
             for afe in [-0.2, 0.0, 0.2, 0.4, 0.6]:
@@ -530,7 +536,7 @@ class TestSalarisConversion:
         Because α-elements add to total Z: more α → higher total metallicity
         at the same iron abundance.
         """
-        from tengri.components.sps.dsps_wrapper import salaris_mh_from_feh
+        from tengri.components.stellar.sps.dsps_wrapper import salaris_mh_from_feh
 
         feh = -0.5
         mh_solar = salaris_mh_from_feh(feh, 0.0)
@@ -542,7 +548,7 @@ class TestSalarisConversion:
 
     def test_negative_alpha_decreases_mh(self):
         """Negative [α/Fe] should make [M/H] < [Fe/H]."""
-        from tengri.components.sps.dsps_wrapper import salaris_mh_from_feh
+        from tengri.components.stellar.sps.dsps_wrapper import salaris_mh_from_feh
 
         feh = -0.5
         mh_solar = salaris_mh_from_feh(feh, 0.0)
@@ -554,7 +560,7 @@ class TestSalarisConversion:
 
         [M/H] = [Fe/H] + 0.66154×[α/Fe] + 0.20465×[α/Fe]²
         """
-        from tengri.components.sps.dsps_wrapper import salaris_mh_from_feh
+        from tengri.components.stellar.sps.dsps_wrapper import salaris_mh_from_feh
 
         # [Fe/H] = -0.5, [α/Fe] = +0.4:
         # offset = 0.66154 × 0.4 + 0.20465 × 0.16 = 0.26462 + 0.03274 = 0.29736
@@ -574,7 +580,7 @@ class TestSalarisConversion:
         This is a well-known result: α-enhanced populations have ~0.3 dex
         higher total Z than their [Fe/H] suggests.
         """
-        from tengri.components.sps.dsps_wrapper import salaris_mh_from_feh
+        from tengri.components.stellar.sps.dsps_wrapper import salaris_mh_from_feh
 
         offset = salaris_mh_from_feh(0.0, 0.4) - 0.0
         assert 0.25 < offset < 0.35, f"Offset at [α/Fe]=+0.4 should be ~0.3, got {offset:.3f}"
@@ -587,7 +593,7 @@ class TestSalarisConversion:
 
         At [α/Fe] = 0.4: linear=0.265, quadratic=0.033 → ratio ~8:1
         """
-        from tengri.components.sps.dsps_wrapper import _SALARIS_LINEAR, _SALARIS_QUADRATIC
+        from tengri.components.stellar.sps.dsps_wrapper import _SALARIS_LINEAR, _SALARIS_QUADRATIC
 
         afe = 0.4
         linear_term = _SALARIS_LINEAR * afe
@@ -605,7 +611,7 @@ class TestSalarisConversion:
         These differ because Thomas uses a different solar mixture and
         element selection. They should agree to within ~0.1 dex for typical values.
         """
-        from tengri.components.sps.dsps_wrapper import salaris_mh_from_feh
+        from tengri.components.stellar.sps.dsps_wrapper import salaris_mh_from_feh
 
         for afe in [0.0, 0.2, 0.4]:
             salaris = salaris_mh_from_feh(0.0, afe)
@@ -630,7 +636,7 @@ class TestSolarAlphaEquivalence:
 
     def test_4d_at_solar_matches_3d_slice(self, alpha_ssp_grid):
         """Interpolating 4D grid at [α/Fe]=0.0 = direct slice at α index 1."""
-        from tengri.components.sps.dsps_wrapper import interpolate_met_alpha
+        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
         # Direct slice: [α/Fe] = 0.0 is index 1 in the grid
@@ -652,7 +658,7 @@ class TestSolarAlphaEquivalence:
 
     def test_4d_solar_matches_interpolate_metallicity(self, alpha_ssp_grid):
         """4D at [α/Fe]=0.0 should match standard 3D interpolate_metallicity."""
-        from tengri.components.sps.dsps_wrapper import (
+        from tengri.components.stellar.sps.dsps_wrapper import (
             interpolate_met_alpha,
             interpolate_metallicity,
         )
@@ -680,7 +686,7 @@ class TestSolarAlphaEquivalence:
 
     def test_evolving_with_constant_solar_matches_global(self, alpha_ssp_grid):
         """Per-age interpolation with constant [α/Fe]=0.0 = global result."""
-        from tengri.components.sps.dsps_wrapper import (
+        from tengri.components.stellar.sps.dsps_wrapper import (
             interpolate_met_alpha,
             interpolate_met_alpha_evolving,
         )
@@ -708,7 +714,10 @@ class TestSolarAlphaEquivalence:
 
     def test_salaris_at_solar_is_identity(self):
         """Salaris conversion at [α/Fe]=0.0 is identity: [M/H] = [Fe/H]."""
-        from tengri.components.sps.dsps_wrapper import salaris_feh_from_mh, salaris_mh_from_feh
+        from tengri.components.stellar.sps.dsps_wrapper import (
+            salaris_feh_from_mh,
+            salaris_mh_from_feh,
+        )
 
         for z in [-2.0, -1.0, -0.5, 0.0, 0.3]:
             assert salaris_mh_from_feh(z, 0.0) == pytest.approx(z, abs=1e-12)
@@ -730,7 +739,7 @@ class TestConventionDifferences:
 
     def test_conventions_agree_at_solar_alpha(self):
         """All three conventions should agree at [α/Fe] = 0.0."""
-        from tengri.components.sps.dsps_wrapper import (
+        from tengri.components.stellar.sps.dsps_wrapper import (
             effective_metallicity,
             salaris_mh_from_feh,
         )
@@ -750,7 +759,7 @@ class TestConventionDifferences:
         This demonstrates why proper alpha grids matter: the approximation
         and the exact conversion give different effective metallicities.
         """
-        from tengri.components.sps.dsps_wrapper import (
+        from tengri.components.stellar.sps.dsps_wrapper import (
             effective_metallicity,
             salaris_mh_from_feh,
         )
@@ -779,7 +788,7 @@ class TestConventionDifferences:
 
         The difference grows with [α/Fe]².
         """
-        from tengri.components.sps.dsps_wrapper import (
+        from tengri.components.stellar.sps.dsps_wrapper import (
             effective_metallicity,
             salaris_mh_from_feh,
         )
@@ -802,7 +811,7 @@ class TestConventionDifferences:
         This is the key test: the whole point of 4D grids is that they
         capture spectral effects that effective_metallicity misses.
         """
-        from tengri.components.sps.dsps_wrapper import (
+        from tengri.components.stellar.sps.dsps_wrapper import (
             effective_metallicity,
             interpolate_met_alpha,
             interpolate_metallicity,

@@ -72,7 +72,7 @@ def tengri_model():
         redshift=0.1,
     )
 
-    from tengri.components.sps.dsps_wrapper import load_ssp_data
+    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
     ssp = load_ssp_data(str(_SSP_PATH))
     return SEDModel(spec, ssp)

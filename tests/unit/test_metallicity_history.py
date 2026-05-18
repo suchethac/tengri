@@ -14,8 +14,8 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.components.sfh.met_registry import MET_REGISTRY, resolve_met
-from tengri.components.sfh.metallicity_history import (
+from tengri.components.stellar.sfh.met_registry import MET_REGISTRY, resolve_met
+from tengri.components.stellar.sfh.metallicity_history import (
     metallicity_bins_continuity_on_ssp_grid,
     metallicity_bins_on_ssp_grid,
     psb_two_step_metallicity,

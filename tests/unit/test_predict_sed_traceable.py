@@ -13,7 +13,7 @@ import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.components.sps.dsps_wrapper import SSPData
+from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.forward.sed_model import SEDModel
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Uniform

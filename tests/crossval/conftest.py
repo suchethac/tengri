@@ -29,7 +29,7 @@ def ssp_data():
     """Load SSP data for tengri SEDModel (skip if files missing)."""
     if not SSP_EXISTS:
         pytest.skip("SSP data not found")
-    from tengri.components.sps.dsps_wrapper import load_ssp_data
+    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
     return load_ssp_data(str(_SSP_PATH))
 

@@ -428,7 +428,7 @@ class TestBellstedt2020:
 
     def test_snorm_skew_zero_is_gaussian(self):
         """Bellstedt+2020 Eq. 2: with skew=0, the kernel is a standard Gaussian."""
-        from tengri.components.sfh import norm, snorm
+        from tengri.components.stellar.sfh import norm, snorm
 
         t = jnp.geomspace(1e5, 14e9, 500)
         sfr_snorm = snorm(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0)
@@ -437,7 +437,7 @@ class TestBellstedt2020:
 
     def test_tsnorm_trunc_1_minimal_effect(self):
         """Bellstedt+2020: trunc controls CDF suppression. trunc=1 is minimal."""
-        from tengri.components.sfh import snorm, tsnorm
+        from tengri.components.stellar.sfh import snorm, tsnorm
 
         t = jnp.geomspace(1e5, 14e9, 500)
         sfr_snorm = snorm(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0)
@@ -456,21 +456,24 @@ class TestLeja2019:
 
     def test_7_bins_default(self):
         """Leja+2019: default is 7 lookback time bins (8 edges)."""
-        from tengri.components.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR, DEFAULT_N_BINS
+        from tengri.components.stellar.sfh.nonparametric import (
+            DEFAULT_BIN_EDGES_GYR,
+            DEFAULT_N_BINS,
+        )
 
         assert DEFAULT_N_BINS == 7
         assert len(DEFAULT_BIN_EDGES_GYR) == 8
 
     def test_default_bins_span_cosmic_time(self):
         """Leja+2019: bins span 0 to 13.7 Gyr."""
-        from tengri.components.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR
+        from tengri.components.stellar.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR
 
         assert float(DEFAULT_BIN_EDGES_GYR[0]) == pytest.approx(0.0)
         assert float(DEFAULT_BIN_EDGES_GYR[-1]) == pytest.approx(13.7, rel=0.01)
 
     def test_zero_ratios_flat_sfh(self):
         """Leja+2019: all log-ratios = 0 → equal SFR in all bins."""
-        from tengri.components.sfh import continuity_sfh
+        from tengri.components.stellar.sfh import continuity_sfh
 
         age = jnp.geomspace(1e8, 13e9, 500)
         sfr = continuity_sfh(
@@ -530,7 +533,7 @@ class TestSFHMassConservation:
 
         Iyer+2019, ApJ 879, 116 — dense basis SFH is mass-normalized.
         """
-        from tengri.components.sfh.dense_basis import dense_basis_sfh
+        from tengri.components.stellar.sfh.dense_basis import dense_basis_sfh
 
         sfr = dense_basis_sfh(
             self.AGE_GRID,
@@ -554,7 +557,7 @@ class TestSFHMassConservation:
 
         Leja+2019, ApJ 876, 3 — continuity SFH is mass-normalized.
         """
-        from tengri.components.sfh.nonparametric import continuity_sfh
+        from tengri.components.stellar.sfh.nonparametric import continuity_sfh
 
         sfr = continuity_sfh(
             self.AGE_GRID,
@@ -579,7 +582,7 @@ class TestSFHMassConservation:
 
         Leja+2019: total mass is set by log_total_mass independent of log-ratios.
         """
-        from tengri.components.sfh.nonparametric import continuity_sfh
+        from tengri.components.stellar.sfh.nonparametric import continuity_sfh
 
         sfr_bursty = continuity_sfh(
             self.AGE_GRID,
@@ -606,7 +609,7 @@ class TestSFHMassConservation:
         Setting d/dt = 0 gives t_peak = tau × (beta/alpha)^{1/(alpha+beta)}.
         When alpha == beta the formula reduces to t_peak = tau exactly.
         """
-        from tengri.components.sfh.mean_sfh import double_powerlaw
+        from tengri.components.stellar.sfh.mean_sfh import double_powerlaw
 
         tau = 3e9  # yr
         # alpha == beta → t_peak == tau exactly (no grid-resolution ambiguity)

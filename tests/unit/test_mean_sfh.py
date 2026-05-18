@@ -23,7 +23,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-from tengri.components.sfh.mean_sfh import (
+from tengri.components.stellar.sfh.mean_sfh import (
     AGEMAX_YR,
     _clamp_age,
     _skewed_gaussian_kernel,

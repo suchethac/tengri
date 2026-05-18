@@ -14,7 +14,7 @@ import pytest
 from numpy.testing import assert_allclose
 
 from tengri.components.igm import igm_transmission
-from tengri.components.sps.precompute import (
+from tengri.components.stellar.sps.precompute import (
     interpolate_igm_ztable,
     precompute_photometry_ztable,
 )

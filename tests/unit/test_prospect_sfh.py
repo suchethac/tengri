@@ -22,7 +22,7 @@ from numpy.testing import assert_allclose
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.components.sfh.mean_sfh import (
+from tengri.components.stellar.sfh.mean_sfh import (
     _pchip_slopes,
     snorm_burst,
     snorm_trunc_burst,

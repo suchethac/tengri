@@ -208,7 +208,7 @@ class TestPSDPhysics:
 
     def test_drw_low_freq_flat(self):
         """DRW PSD: flat at ω << 1/τ (white noise regime)."""
-        from tengri.components.sfh.psd_models import psd_drw
+        from tengri.components.stellar.sfh.psd_models import psd_drw
 
         tau_yr = 1e8  # 100 Myr
         omega = jnp.geomspace(1e-12, 1e-6, 200)
@@ -222,7 +222,7 @@ class TestPSDPhysics:
 
     def test_drw_high_freq_decline(self):
         """DRW PSD: declines as ω^{-2} at ω >> 1/τ (red noise)."""
-        from tengri.components.sfh.psd_models import psd_drw
+        from tengri.components.stellar.sfh.psd_models import psd_drw
 
         tau_yr = 1e8
         omega = jnp.geomspace(1e-5, 1e-3, 50)
@@ -233,7 +233,7 @@ class TestPSDPhysics:
 
     def test_matern_nu_half_equals_drw(self):
         """Matérn with ν=0.5 reduces to DRW (exponential ACF)."""
-        from tengri.components.sfh.psd_models import psd_drw, psd_matern
+        from tengri.components.stellar.sfh.psd_models import psd_drw, psd_matern
 
         omega = jnp.geomspace(1e-11, 1e-6, 200)
         sigma = 1.0
@@ -252,7 +252,7 @@ class TestPSDPhysics:
 
     def test_higher_matern_nu_smoother(self):
         """Higher Matérn ν → smoother (faster high-freq decline)."""
-        from tengri.components.sfh.psd_models import psd_matern
+        from tengri.components.stellar.sfh.psd_models import psd_matern
 
         omega = jnp.geomspace(1e-11, 1e-6, 200)
         psd_rough = psd_matern(omega, variance=1.0, length_scale=1e8, nu=0.5)
@@ -267,7 +267,7 @@ class TestPSDPhysics:
 
     def test_extended_regulator_positive(self):
         """Extended regulator PSD must be positive at all frequencies."""
-        from tengri.components.sfh.psd_models import psd_extended_regulator
+        from tengri.components.stellar.sfh.psd_models import psd_extended_regulator
 
         f = jnp.geomspace(1e-12, 1e-6, 200)
         psd = psd_extended_regulator(f, s_reg=1.0, tau_in=1e8, tau_eq=1e9, s_dyn=0.5, tau_dyn=1e7)
@@ -276,7 +276,7 @@ class TestPSDPhysics:
 
     def test_psd_sigma_scales_amplitude(self):
         """Higher psd_sigma → higher PSD amplitude."""
-        from tengri.components.sfh.psd_models import psd_drw
+        from tengri.components.stellar.sfh.psd_models import psd_drw
 
         omega = jnp.geomspace(1e-11, 1e-6, 100)
         psd_1 = psd_drw(omega, psd_sigma=1.0, psd_tau_yr=1e8)

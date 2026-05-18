@@ -246,7 +246,7 @@ class TestSFHParameterSensitivity:
 
     def test_dpl_all_params_matter(self):
         """DPL: alpha, beta, tau, log_peak_sfr all must matter."""
-        from tengri.components.sfh import dpl
+        from tengri.components.stellar.sfh import dpl
 
         sfr_default = dpl(self._T, alpha=2.0, beta=1.0, tau=5e9, log_peak_sfr=1.0)
 
@@ -260,7 +260,7 @@ class TestSFHParameterSensitivity:
 
     def test_tsnorm_all_params_matter(self):
         """tsnorm: all 5 params must affect the SFH."""
-        from tengri.components.sfh import tsnorm
+        from tengri.components.stellar.sfh import tsnorm
 
         defaults = {"log_peak_sfr": 1.0, "peak_lbt": 5e9, "width": 2e9, "skew": 0.5, "trunc": 2.0}
         sfr_default = tsnorm(self._T, **defaults)
@@ -281,7 +281,7 @@ class TestSFHParameterSensitivity:
 
     def test_continuity_ratios_not_ignored(self):
         """Continuity SFH: each ratio must change the SFH."""
-        from tengri.components.sfh import continuity_sfh
+        from tengri.components.stellar.sfh import continuity_sfh
 
         age = jnp.geomspace(1e6, 13.7e9, 500)
         defaults = {f"ratio_{i}": 0.0 for i in range(6)}
@@ -296,7 +296,7 @@ class TestSFHParameterSensitivity:
 
     def test_dirichlet_zfracs_not_ignored(self):
         """Dirichlet SFH: each z_frac must change the SFH."""
-        from tengri.components.sfh import dirichlet_sfh
+        from tengri.components.stellar.sfh import dirichlet_sfh
 
         age = jnp.geomspace(1e6, 13.7e9, 500)
         defaults = {f"z_frac_{i}": 0.5 for i in range(6)}
@@ -512,7 +512,7 @@ class TestNotReturningDummies:
 
     def test_sfh_not_all_zeros(self):
         """SFH models must produce non-zero SFR in some range."""
-        from tengri.components.sfh import dpl, lnorm, norm, snorm, tsnorm
+        from tengri.components.stellar.sfh import dpl, lnorm, norm, snorm, tsnorm
 
         t = jnp.geomspace(1e5, 14e9, 500)
         for name, fn, kwargs in [

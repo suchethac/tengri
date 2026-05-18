@@ -56,7 +56,7 @@ class TestMassRemainingCrossval:
 
     def test_internal_matches_fsps_within_10pct(self, sp):
         """Internal Chabrier IMF computation should be within 10% of FSPS."""
-        from tengri.components.sps.mass_remaining import compute_mass_remaining_fraction
+        from tengri.components.stellar.sps.mass_remaining import compute_mass_remaining_fraction
 
         ages_gyr = np.array([0.01, 0.1, 0.3, 1.0, 3.0, 5.0, 10.0])
         f_tengri = np.asarray(compute_mass_remaining_fraction(jnp.array(ages_gyr), imf="chabrier"))
@@ -77,7 +77,7 @@ class TestMassRemainingCrossval:
 
     def test_monotonically_decreasing(self, sp):
         """Mass-remaining should decrease with age (more stars die)."""
-        from tengri.components.sps.mass_remaining import compute_mass_remaining_fraction
+        from tengri.components.stellar.sps.mass_remaining import compute_mass_remaining_fraction
 
         ages = jnp.array([0.001, 0.01, 0.1, 1.0, 5.0, 13.0])
         f_surv = np.asarray(compute_mass_remaining_fraction(ages, imf="chabrier"))
@@ -85,7 +85,7 @@ class TestMassRemainingCrossval:
 
     def test_all_imfs_physical(self):
         """All IMFs should give f_surviving in (0.3, 1.0) at 10 Gyr."""
-        from tengri.components.sps.mass_remaining import compute_mass_remaining_fraction
+        from tengri.components.stellar.sps.mass_remaining import compute_mass_remaining_fraction
 
         ages = jnp.array([10.0])
         for imf in ["chabrier", "salpeter", "kroupa"]:
@@ -101,7 +101,7 @@ class TestMassRemainingCrossval:
         counter-intuitive but correct: the relevant quantity is the
         mass-weighted surviving fraction, not just the high-mass tail.
         """
-        from tengri.components.sps.mass_remaining import compute_mass_remaining_fraction
+        from tengri.components.stellar.sps.mass_remaining import compute_mass_remaining_fraction
 
         ages = jnp.array([1.0, 5.0, 10.0])
         f_chab = np.asarray(compute_mass_remaining_fraction(ages, imf="chabrier"))

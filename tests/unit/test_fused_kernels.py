@@ -14,8 +14,8 @@ import pytest
 from numpy.testing import assert_allclose
 
 from tengri.components.dust.attenuation import precompute_dust_age_weights, two_component_dust_fast
-from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S, compute_csp_weights
-from tengri.components.sps.precompute import (
+from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S, compute_csp_weights
+from tengri.components.stellar.sps.precompute import (
     fast_photometry,
     fast_spectrum,
     interpolate_ssp_phot_metallicity,
@@ -521,7 +521,7 @@ class TestCSPEndpointWeights:
 
     def test_uniform_grid_endpoints_are_half_interior(self):
         """On a uniform grid, endpoints dt should be half the interior dt."""
-        from tengri.components.sps.dsps_wrapper import csp_age_dt
+        from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 
         ages = jnp.linspace(1e6, 1e10, 100)
         dt = csp_age_dt(ages, method="trapz")
@@ -541,7 +541,7 @@ class TestCSPEndpointWeights:
 
     def test_log_grid_endpoints_are_half_interior(self):
         """On a log grid with log_trapz, same half-width rule holds."""
-        from tengri.components.sps.dsps_wrapper import csp_age_dt
+        from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 
         ages = jnp.logspace(6, 10, 100)
         dt = csp_age_dt(ages, method="log_trapz")
@@ -553,7 +553,7 @@ class TestCSPEndpointWeights:
 
     def test_constant_sfr_mass_integral_accurate(self):
         """With constant SFR=1 Msun/yr, total mass = age span in years."""
-        from tengri.components.sps.dsps_wrapper import compute_csp_weights
+        from tengri.components.stellar.sps.dsps_wrapper import compute_csp_weights
 
         ages = jnp.logspace(6, 10, 200)
         sfr = jnp.ones_like(ages)  # 1 Msun/yr

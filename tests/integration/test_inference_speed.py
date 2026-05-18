@@ -24,7 +24,7 @@ jax.config.update("jax_enable_x64", True)
 jax.config.update("jax_platforms", "cpu")
 
 from tengri import Fitter, Observation, Parameters, Photometry, SEDModel
-from tengri.components.sps.dsps_wrapper import load_ssp_data
+from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.inference.backends import run_map, run_nifty_vi, run_nuts
 from tengri.observation.filters import load_filter_set
 from tengri.parameters.priors import Fixed, Uniform

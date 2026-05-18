@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.components.sps.dsps_wrapper import (
+from tengri.components.stellar.sps.dsps_wrapper import (
     compute_log_z_evolving,
     interpolate_mass_remaining,
     interpolate_mass_remaining_evolving,

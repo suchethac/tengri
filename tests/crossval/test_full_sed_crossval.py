@@ -65,7 +65,7 @@ def ref() -> dict:
 
 @pytest.fixture(scope="module")
 def ssp_data():
-    from tengri.components.sps.dsps_wrapper import load_ssp_data
+    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
     return load_ssp_data(str(_SSP_PATH))
 
@@ -1883,7 +1883,7 @@ class TestTabularSFH:
         Uses the same SFR-per-bin values as TABSFH_CASES in the reference generator.
         """
         try:
-            from tengri.components.sfh.nonparametric import continuity_sfh
+            from tengri.components.stellar.sfh.nonparametric import continuity_sfh
         except ImportError:
             pytest.skip("continuity_sfh not importable")
 
@@ -1896,7 +1896,7 @@ class TestTabularSFH:
         def uv_over_v(sfr_bins):
             t_obs, sfr_t = continuity_sfh(bin_edges, sfr_bins, n_pts=200)
             # Compute CSP: approximate as sum of SSPs weighted by SFR dt
-            from tengri.components.sps.dsps_wrapper import compute_csp_weights
+            from tengri.components.stellar.sps.dsps_wrapper import compute_csp_weights
 
             weights = compute_csp_weights(t_obs, sfr_t)
             sed = jnp.einsum("t,tw->w", weights, ssp_data.ssp_flux[0])  # solar Z

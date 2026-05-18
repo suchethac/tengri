@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 from numpy.testing import assert_allclose
 
-from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw
+from tengri.components.stellar.sfh.gp_sfh import compute_sqrt_power_drw
 from tengri.utils.optimizations import (
     approximate_photometry,
     batched_forward,
@@ -100,7 +100,7 @@ class TestHartleyGP:
         n_real = 2000
 
         # rfft GP batch
-        from tengri.components.sfh.gp_sfh import generate_gp_batch
+        from tengri.components.stellar.sfh.gp_sfh import generate_gp_batch
 
         batch_rfft = generate_gp_batch(key, sqrt_power, N, n_real)
         var_rfft = float(jnp.var(batch_rfft))

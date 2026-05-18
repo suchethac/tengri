@@ -24,9 +24,9 @@ from numpy.testing import assert_allclose
 from tengri.components.agn.disc import multicolor_disc
 from tengri.components.dust.attenuation import two_component_dust
 from tengri.components.igm import igm_transmission
-from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
-from tengri.components.sfh.mean_sfh import double_powerlaw, dpl
-from tengri.components.sfh.psd_models import drw_variance
+from tengri.components.stellar.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
+from tengri.components.stellar.sfh.mean_sfh import double_powerlaw, dpl
+from tengri.components.stellar.sfh.psd_models import drw_variance
 from tengri.observation.eline_priors import marginalize_emission_lines_cloudy
 from tengri.utils.grid import grid_spacing, log_age_to_age_yr, make_log_age_grid
 

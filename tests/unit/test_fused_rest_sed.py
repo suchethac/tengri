@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from tengri.components.sps.dsps_wrapper import SSPData
+from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.forward._kernels import (
     observe_photometry_from_rest_sed,
     observe_spectrum_from_rest_sed,

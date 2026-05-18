@@ -10,7 +10,7 @@ import pytest
 from numpy.testing import assert_allclose
 
 from tengri.components.dust.attenuation import precompute_dust_age_weights
-from tengri.components.sps.dsps_wrapper import LSUN_ERG_PER_S
+from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
 
 jax.config.update("jax_enable_x64", True)
 

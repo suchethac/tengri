@@ -25,7 +25,7 @@ import numpy as np
 import pytest
 
 from tengri import Fixed, Parameters, SEDModel
-from tengri.components.sps.dsps_wrapper import SSPData
+from tengri.components.stellar.sps.dsps_wrapper import SSPData
 
 jax.config.update("jax_enable_x64", True)
 

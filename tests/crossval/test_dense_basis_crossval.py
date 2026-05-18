@@ -39,7 +39,7 @@ skip_no_db = pytest.mark.skipif(
     reason="dense_basis package not installed (pip install dense_basis)",
 )
 
-from tengri.components.sfh.dense_basis import dense_basis_sfh
+from tengri.components.stellar.sfh.dense_basis import dense_basis_sfh
 
 # ── Test data: 6 canonical tutorial shapes (Iyer+2019) ────────────
 # Format: [log_M*, log_SFR_inst, Nparam, tx0, tx1, tx2]
@@ -247,7 +247,7 @@ class TestDenseBasisKernelParity:
         import george
         from george import kernels
 
-        from tengri.components.sfh.dense_basis import matern32_kernel
+        from tengri.components.stellar.sfh.dense_basis import matern32_kernel
 
         x = np.array([0.1, 0.3, 0.5, 0.7, 0.9])
         variance = 0.1

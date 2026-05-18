@@ -11,7 +11,7 @@ from numpy.testing import assert_allclose
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.components.sfh.dense_basis import (
+from tengri.components.stellar.sfh.dense_basis import (
     _build_quantile_points_pure,
     dense_basis_pure,
     pchip_interpolate,

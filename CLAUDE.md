@@ -92,6 +92,8 @@ Deprecated aliases (never use in new code): `Model`, `ParamSpec`, `SpectroscopyC
 
 ## Package structure
 
+**For "where do I look to edit X?" — see [`docs/dev/where-things-live.md`](docs/dev/where-things-live.md).**
+
 Layout: `parameters/ -> components/ -> forward/ -> observation/ -> inference/ -> analysis/ -> config/ + utils/`. Public API re-exported at `src/tengri/__init__.py`.
 
 Key directories:

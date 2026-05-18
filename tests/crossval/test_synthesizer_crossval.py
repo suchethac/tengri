@@ -80,7 +80,7 @@ class TestSFHParametricVsSynthesizer:
         """
         from synthesizer.parametric.sf_hist import Gaussian
 
-        from tengri.components.sfh.mean_sfh import norm as gaussian_sfh_fn
+        from tengri.components.stellar.sfh.mean_sfh import norm as gaussian_sfh_fn
 
         t_yr = _sfh_age_grid()
         peak_age_yr = 5e9
@@ -147,7 +147,7 @@ class TestSFHParametricVsSynthesizer:
         """
         from synthesizer.parametric.sf_hist import DelayedExponential
 
-        from tengri.components.sfh.mean_sfh import delayed_tau
+        from tengri.components.stellar.sfh.mean_sfh import delayed_tau
 
         tau_yr = 3e9
         max_age_yr = 10e9
@@ -179,7 +179,7 @@ class TestSFHParametricVsSynthesizer:
         """
         from synthesizer.parametric.sf_hist import ContinuityFlex
 
-        from tengri.components.sfh.nonparametric import continuity_flex_sfh
+        from tengri.components.stellar.sfh.nonparametric import continuity_flex_sfh
 
         ratio_young = 0.4
         flex_ratios = np.array([0.15, -0.3, 0.1])
@@ -250,7 +250,7 @@ class TestNonparametricSFHVsSynthesizer:
         """Zero ratios → flat SFH: both tengri and synthesizer should agree."""
         from synthesizer.parametric.sf_hist import Continuity
 
-        from tengri.components.sfh.nonparametric import continuity_sfh
+        from tengri.components.stellar.sfh.nonparametric import continuity_sfh
 
         agebins_unyt = self._make_agebins_unyt()
         n_ratios = agebins_unyt.shape[0] - 1  # 5 ratios for 6 bins
@@ -279,7 +279,7 @@ class TestNonparametricSFHVsSynthesizer:
         """Non-zero ratios: tengri and synthesizer should agree to 1%."""
         from synthesizer.parametric.sf_hist import Continuity
 
-        from tengri.components.sfh.nonparametric import continuity_sfh
+        from tengri.components.stellar.sfh.nonparametric import continuity_sfh
 
         ratios = np.array([0.5, -0.3, 0.2, -0.1, 0.4])
         agebins_unyt = self._make_agebins_unyt()

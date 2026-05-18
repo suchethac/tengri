@@ -16,8 +16,8 @@ import pytest
 # the compilation machinery clear this env var themselves.
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
-from tengri.components.sfh.gp_sfh import compute_sqrt_power_drw
-from tengri.components.sps.dsps_wrapper import SSPData
+from tengri.components.stellar.sfh.gp_sfh import compute_sqrt_power_drw
+from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.utils.grid import grid_spacing, make_log_age_grid
 
 # Enable 64-bit for numerical precision in tests
@@ -40,7 +40,7 @@ def ssp_data_wne():
     """Load the wNE SSP data once per session.  Skip if file missing."""
     if not _SSP_FILE_WNE.is_file():
         pytest.skip(f"SSP data not found: {_SSP_FILE_WNE}")
-    from tengri.components.sps.dsps_wrapper import load_ssp_data
+    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
     return load_ssp_data(str(_SSP_FILE_WNE))
 
@@ -50,7 +50,7 @@ def ssp_data_fsps():
     """Load the FSPS SSP data once per session.  Skip if file missing."""
     if not _SSP_FILE_FSPS.is_file():
         pytest.skip(f"SSP data not found: {_SSP_FILE_FSPS}")
-    from tengri.components.sps.dsps_wrapper import load_ssp_data
+    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
     return load_ssp_data(str(_SSP_FILE_FSPS))
 
