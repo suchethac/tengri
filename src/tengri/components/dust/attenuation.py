@@ -70,6 +70,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.utils.physics_constants import V_BAND_ANGSTROM
+
 # ── Attenuation curve registry ────────────────────────────────────
 
 
@@ -204,6 +206,52 @@ def resolve_dust_law(name: str) -> Callable:
     if name not in DUST_LAWS:
         raise ValueError(f"Unknown dust law '{name}'. Available: {list(DUST_LAWS.keys())}")
     return DUST_LAWS[name]
+
+
+# Curated headline subset for gallery comparisons. Each entry's value is the
+# canonical kwargs to evaluate the law at "nominal" tuning; callers pass
+# wavelengths positionally and get k(lambda) at tau_V=1.
+_HEADLINE_LAWS: dict[str, tuple[str, dict]] = {
+    "Calzetti+2000":             ("calzetti",     {}),
+    "Charlot & Fall (slope=-0.7)": ("power_law",  {"n_slope": -0.7}),
+    "Cardelli+1989 (MW, Rv=3.1)": ("cardelli",    {"dust_Rv": 3.1}),
+    "SMC (Gordon+2003)":         ("smc",          {}),
+    "Kriek & Conroy 2013":        ("kriek_conroy", {"dust_bump_strength": 1.0, "dust_delta": 0.0}),
+    "Salim+2018":                ("salim",        {}),
+}
+
+
+def list_laws(headline: bool = True) -> dict[str, Callable[[jnp.ndarray], jnp.ndarray]]:
+    """Return attenuation laws as a dict of one-arg callables.
+
+    Each value is ``fn(wave_aa) -> k(wave)`` at the law's canonical
+    parameters with ``tau_V = 1``. Use for plotting k(lambda) comparisons
+    without restating each law's argument signature.
+
+    Parameters
+    ----------
+    headline : bool, optional
+        If True (default) return the 6 textbook laws keyed by display
+        label with citation. If False return every registered law keyed
+        by registry name with no kwargs baked in.
+
+    Returns
+    -------
+    dict
+        ``{label: fn(wave_aa) -> k(wave)}``.
+
+    Examples
+    --------
+    >>> from tengri.dust import list_laws
+    >>> for label, fn in list_laws().items():
+    ...     plt.plot(wave, fn(wave), label=label)
+    """
+    if headline:
+        return {
+            label: (lambda w, _n=name, _kw=kwargs: DUST_LAWS[_n](w, **_kw))
+            for label, (name, kwargs) in _HEADLINE_LAWS.items()
+        }
+    return {name: fn for name, fn in DUST_LAWS.items()}
 
 
 # ── Utility: Drude profile for the 2175 Angstrom UV bump ──────────
@@ -357,7 +405,7 @@ def power_law(
        Dust in Galaxies," ApJ, 539, 718 (2000).
        https://doi.org/10.1086/309250
     """
-    return (wavelength / 5500.0) ** n_slope
+    return (wavelength / V_BAND_ANGSTROM) ** n_slope
 
 
 @register_dust_law(
@@ -401,7 +449,7 @@ def vw07_bc(
        MNRAS, 381, 543 (2007).
        https://doi.org/10.1111/j.1365-2966.2007.12255.x
     """
-    return (wavelength / 5500.0) ** (-1.3)
+    return (wavelength / V_BAND_ANGSTROM) ** (-1.3)
 
 
 @register_dust_law(
@@ -446,7 +494,7 @@ def vw07_diff(
        Starlight by Dust in Galaxies," ApJ, 539, 718 (2000).
        https://doi.org/10.1086/309250
     """
-    return (wavelength / 5500.0) ** (-0.7)
+    return (wavelength / V_BAND_ANGSTROM) ** (-0.7)
 
 
 @register_dust_law(
@@ -557,9 +605,22 @@ def kriek_conroy(
     """
     wave_um = wavelength / 1e4
     k_calz = calzetti(wavelength)
-    slope_mod = (wavelength / 5500.0) ** dust_delta
+    slope_mod = (wavelength / V_BAND_ANGSTROM) ** dust_delta
     bump = dust_bump_strength * _drude_profile(wave_um)
-    return jnp.clip(k_calz * slope_mod + bump, 0.0)
+
+    # Compute unnormalized attenuation curve
+    k_unnorm = k_calz * slope_mod + bump
+
+    # Normalize to k(5500 Å) = 1: compute k_unnorm at V-band
+    v_band_um = V_BAND_ANGSTROM / 1e4
+    k_calz_v = calzetti(jnp.array([V_BAND_ANGSTROM]))[0]
+    slope_mod_v = (V_BAND_ANGSTROM / V_BAND_ANGSTROM) ** dust_delta  # = 1.0
+    bump_v = dust_bump_strength * _drude_profile(jnp.array([v_band_um]))[0]
+    k_at_v = k_calz_v * slope_mod_v + bump_v
+
+    # Divide by k_at_v to renormalize
+    k = k_unnorm / k_at_v
+    return jnp.clip(k, 0.0)
 
 
 def _pei92_curve(
@@ -1434,12 +1495,12 @@ def conroy2010(
     k_mw = cardelli(wavelength, dust_Rv=dust_Rv)
     k_pl = power_law(wavelength, n_slope=n_slope)
     # Smooth sigmoid blend: MW dominates UV, power-law dominates IR
-    x = jnp.log10(wavelength / 5500.0)
+    x = jnp.log10(wavelength / V_BAND_ANGSTROM)
     blend = jax.nn.sigmoid(x / 0.05)
     k_raw = (1.0 - blend) * k_mw + blend * k_pl
-    # Normalize to k(5500 A) = 1
-    lam_v = jnp.array(5500.0)
-    x_v = jnp.log10(lam_v / 5500.0)
+    # Normalize to k(V-band) = 1
+    lam_v = jnp.array(V_BAND_ANGSTROM)
+    x_v = jnp.log10(lam_v / V_BAND_ANGSTROM)
     blend_v = jax.nn.sigmoid(x_v / 0.05)
     k_v = (1.0 - blend_v) * cardelli(lam_v[None], dust_Rv=dust_Rv)[0] + blend_v * 1.0
     return jnp.clip(k_raw / k_v, 0.0)
@@ -2234,8 +2295,8 @@ def _precompute_grain_curve(model_cls: type, submodel: str) -> tuple[np.ndarray,
     k = data_axav[mask]
     order = np.argsort(wave_aa)
     wave_aa, k = wave_aa[order], k[order]
-    # Normalize to k(5500 Å) = 1 for consistency with other tengri dust laws
-    k_at_5500 = float(np.interp(5500.0, wave_aa, k))
+    # Normalize to k(V-band) = 1 for consistency with other tengri dust laws
+    k_at_5500 = float(np.interp(V_BAND_ANGSTROM, wave_aa, k))
     return wave_aa, k / k_at_5500
 
 

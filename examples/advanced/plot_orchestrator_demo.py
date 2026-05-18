@@ -43,9 +43,12 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
+from tengri.analysis.plotting import setup_style
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.core.component import PipelineState
 from tengri.forward import build_components, chain_summary, run_components
+
+setup_style()
 
 
 def _find_ssp():

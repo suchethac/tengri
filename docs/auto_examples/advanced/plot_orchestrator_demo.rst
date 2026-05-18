@@ -52,7 +52,7 @@ publishes ``L_agn_bol`` for X-ray, stellar publishes ``log_mstar``
 Build the pipeline
 ------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 36-85
+.. GENERATED FROM PYTHON SOURCE LINES 36-88
 
 .. code-block:: Python
 
@@ -66,9 +66,12 @@ Build the pipeline
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
 
+    from tengri.analysis.plotting import setup_style
     from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
     from tengri.core.component import PipelineState
     from tengri.forward import build_components, chain_summary, run_components
+
+    setup_style()
 
 
     def _find_ssp():
@@ -106,12 +109,12 @@ Build the pipeline
     print("chain:", chain_summary(components))
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 86-88
+.. GENERATED FROM PYTHON SOURCE LINES 89-91
 
 Run a forward pass
 ------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 88-131
+.. GENERATED FROM PYTHON SOURCE LINES 91-134
 
 .. code-block:: Python
 
@@ -159,12 +162,12 @@ Run a forward pass
     state = pipeline(params)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 132-134
+.. GENERATED FROM PYTHON SOURCE LINES 135-137
 
 Inspect the cross-component publications
 ----------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 134-151
+.. GENERATED FROM PYTHON SOURCE LINES 137-154
 
 .. code-block:: Python
 
@@ -186,12 +189,12 @@ Inspect the cross-component publications
         print(f"nion                   = {float(state.derived['nion']):.3g} photons/s")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 152-154
+.. GENERATED FROM PYTHON SOURCE LINES 155-157
 
 Plot the SED
 ------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 154-191
+.. GENERATED FROM PYTHON SOURCE LINES 157-194
 
 .. code-block:: Python
 
@@ -233,12 +236,12 @@ Plot the SED
     plt.show()
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 192-194
+.. GENERATED FROM PYTHON SOURCE LINES 195-197
 
 Swap the dust law and re-run — composability in action
 ------------------------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 194-211
+.. GENERATED FROM PYTHON SOURCE LINES 197-214
 
 .. code-block:: Python
 

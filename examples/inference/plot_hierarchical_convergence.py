@@ -142,6 +142,6 @@ for ax, samples, truth, label, unit in [
 
 fig.suptitle(f"Hierarchical PSD Recovery: N = {N_GAL} galaxies", fontsize=11, y=1.02)
 fig.tight_layout()
-out = Path(__file__).parent / "plot_hierarchical_convergence.png"
+out = "plot_hierarchical_convergence.png"
 plt.savefig(out, dpi=150, bbox_inches="tight")
 print(f"Saved: {out}")

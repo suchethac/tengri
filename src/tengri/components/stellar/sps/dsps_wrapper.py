@@ -86,6 +86,74 @@ class SSPData(NamedTuple):
     ssp_alpha_fe: jnp.ndarray | None = None
 
 
+_LOAD_SSP_PRESETS: dict[str, str] = {
+    # Short alias → full filename. Bare-stellar entries come from
+    # ``_KNOWN_SSPS`` (the auto-fetch catalogue); wNE entries are produced
+    # locally and recorded here so demo scripts can ``load_ssp("…wNE")``
+    # without spelling out the gas-grid suffix.
+    "prsc_miles_chabrier_wNE": "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5",
+    "mist_c3k_a_chabrier_wNE": "ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5",
+}
+
+
+def load_ssp(name: str | None = None) -> "SSPData":
+    """Load an SSP grid by short name, walking parent dirs for ``data/``.
+
+    Convenience wrapper around :func:`load_ssp_data` for tutorial and
+    gallery scripts. Resolves a short alias (``"prsc_miles_chabrier_wNE"``)
+    or a bare filename to a full path by walking ``Path.cwd()`` upward
+    until it finds a ``data/`` directory containing the file.
+
+    Parameters
+    ----------
+    name : str or None, optional
+        Short alias from ``_LOAD_SSP_PRESETS``, a key from
+        ``tengri.list_known_ssps()``, or a literal filename (with or
+        without ``.h5``). ``None`` (default) loads the wNE PRSC/MILES
+        Chabrier grid used by the dust/nebular demo scripts.
+
+    Returns
+    -------
+    SSPData
+        Loaded SSP container, same as :func:`load_ssp_data`.
+
+    Raises
+    ------
+    FileNotFoundError
+        If no ``data/<filename>.h5`` exists in any ancestor directory.
+
+    Examples
+    --------
+    >>> from tengri import load_ssp
+    >>> ssp = load_ssp()                         # default wNE SSP
+    >>> ssp = load_ssp("prsc_miles_chabrier")    # bare-stellar (for Cue)
+    """
+    from pathlib import Path
+
+    from tengri._data_setup import _KNOWN_SSPS
+
+    if name is None:
+        filename = _LOAD_SSP_PRESETS["prsc_miles_chabrier_wNE"]
+    elif name in _LOAD_SSP_PRESETS:
+        filename = _LOAD_SSP_PRESETS[name]
+    elif name in _KNOWN_SSPS:
+        filename = _KNOWN_SSPS[name]
+    elif name.endswith(".h5"):
+        filename = name
+    else:
+        filename = name + ".h5"
+
+    for parent in [Path.cwd(), *Path.cwd().parents]:
+        candidate = parent / "data" / filename
+        if candidate.exists():
+            return load_ssp_data(str(candidate))
+    raise FileNotFoundError(
+        f"SSP file 'data/{filename}' not found in any ancestor of {Path.cwd()}. "
+        f"Place the file under <project_root>/data/ or call "
+        f"tengri.download_ssp('<short_name>') to fetch a bundled SSP."
+    )
+
+
 def load_ssp_data(filepath: str) -> SSPData:
     """Load SSP templates from a DSPS-format HDF5 file.
 

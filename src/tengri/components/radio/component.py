@@ -56,6 +56,7 @@ import jax.numpy as jnp
 from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
 from tengri.components.radio.radio import radio_total, radio_total_dpl
 from tengri.core.component import (
+    DerivedKey,
     ParamDeclaration,
     PipelineState,
     SEDComponentConfig,
@@ -146,6 +147,26 @@ class RadioSEDComponent:
         parameters (``radio_alpha_inj``, ``radio_log_nu_break``).
         """
         return list(_RADIO_PARAMS)
+
+    def publishes(self) -> tuple[DerivedKey, ...]:
+        """Cross-component derived keys this radio component publishes.
+
+        See :func:`tengri.forward.orchestrator.validate_pipeline`.
+
+        Notes
+        -----
+        Radio reads ``L_ir``, ``L_agn_bol``, and ``log_mstar`` opportunistically
+        with documented fallbacks (so the component can run standalone in
+        photometry-only pipelines). Those reads are NOT declared in
+        :meth:`requires` — only hard dependencies belong there.
+        """
+        return (
+            DerivedKey(
+                "sed_radio",
+                "erg/s/Hz",
+                "Radio luminosity contribution on pipeline wave grid",
+            ),
+        )
 
     def precompute(
         self,

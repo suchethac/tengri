@@ -25,6 +25,7 @@ from tengri.components.dust.attenuation import (
     d03_mwrv31 as d03_mwrv31,
     hd23_mwrv31 as hd23_mwrv31,
     li08 as li08,
+    list_laws,
     lmc as lmc,
     precompute_dust_age_mask,
     precompute_dust_age_weights,
@@ -156,6 +157,7 @@ _CURATED_DIR = (
     "single_component_dust",
     "energy_balance_split",
     # Registration / resolver
+    "list_laws",
     "register_dust_law",
     "resolve_dust_law",
     "register_emission_model",

@@ -33,6 +33,7 @@ from tengri.parameters.sentinels import FIXED, FREE
 
 __all__ = [
     "agn_panchromatic",
+    "dust_demo",
     "mock_recovery_minimal",
     "quiescent_z0",
     "star_forming_photometry",
@@ -342,4 +343,64 @@ def mock_recovery_minimal() -> dict:
             "type": "none",
         },
         redshift=Fixed(0.05),
+    )
+
+
+def dust_demo() -> dict:
+    """Recipe for forward-only dust attenuation gallery sweeps.
+
+    Young star-forming galaxy at z = 0.1 with every parameter ``FIXED`` so
+    that :func:`~tengri.analysis.plotting.sweep_parameter` can override
+    one knob at a time without touching the rest.
+
+    **SSP requirement:** wNE (with-nebular-emission), e.g.
+    ``load_ssp()`` default. Uses the BakedIn nebular path bundled with
+    the SSP, so optical emission lines render in the SED plots.
+
+    **Configuration:**
+    - **SFH**: Truncated skew-normal peaked at ~0.5 Gyr (young SF)
+    - **Dust**: Two-component Calzetti attenuation, τ_BC = 1, τ_diff = 0.3, δ = -0.7
+    - **Dust IR emission**: Disabled (gallery wavelength range is UV-optical)
+    - **Nebular**: BakedIn (whatever the wNE SSP carries)
+    - **Redshift**: Fixed at z = 0.1
+    - **Metallicity**: Fixed at log(Z/Z_⊙) = -0.3
+
+    Returns
+    -------
+    dict
+        Nested-dict ready for ``SEDModel.from_groups(**recipes.dust_demo())``.
+
+    Examples
+    --------
+    Sweep birth-cloud optical depth on the canonical demo galaxy::
+
+        from tengri import SEDModel, load_ssp, recipes
+        from tengri.analysis.plotting import sweep_parameter, SWEEP_CMAPS
+
+        model = SEDModel.from_groups(ssp_data=load_ssp(), **recipes.dust_demo())
+        sweep_parameter(model, "dust_tau_bc", [0.0, 0.5, 1.0, 2.0],
+                        cmap=SWEEP_CMAPS["dust"], wave_range=(1000, 10000))
+    """
+    # Metallicity is not a from_groups key; its default Gaussian(-0.3, 0.2)
+    # prior centres at the value we want, so we leave it FREE — sweep_parameter
+    # uses the prior median (= -0.3) for every iteration anyway.
+    return dict(
+        sfh={
+            "type": "tsnorm",
+            "*": FIXED,
+            "log_peak_sfr": 1.0,
+            "peak_lbt_gyr": 2.0,
+            "width_gyr": 1.5,
+            "skew": 0.2,
+            "trunc": 3.0,
+        },
+        dust={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "*": FIXED,
+            "tau_bc": 0.5,
+            "tau_diff": 0.3,
+            "slope": -0.7,
+        },
+        redshift=Fixed(0.1),
     )

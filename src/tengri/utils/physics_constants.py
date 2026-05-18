@@ -274,6 +274,16 @@ Used for X-ray SED grids:
     nu_hz = energy_keV * KEV_TO_HZ
 """
 
+V_BAND_ANGSTROM: float = 5500.0
+"""V-band central wavelength [Å].
+
+Canonical wavelength for optical normalization, used in dust attenuation
+laws and SED spectral shape calculations. All attenuation curves k(λ)
+are normalized so that k(5500 Å) = 1.
+
+Used in dust attenuation normalization and optical flux calculations.
+"""
+
 # ── AB magnitude zeropoint ────────────────────────────────────────
 
 JY_CGS: float = 1e-23
@@ -323,4 +333,15 @@ Definition: m_AB = -2.5 log10(f_ν [erg s⁻¹ cm⁻² Hz⁻¹]) - 48.6
 Reference: Oke & Gunn 1983, ApJ, 266, 713.
 The zeropoint corresponds to f_ν = 3.631e-20 erg s⁻¹ cm⁻² Hz⁻¹ = 3631 Jy
 at all wavelengths.
+"""
+
+# ── Observational reference wavelengths ──────────────────────────
+
+V_BAND_ANGSTROM: float = 5500.0
+"""Johnson V-band reference wavelength [Ångström].
+
+Standard normalization wavelength for dust attenuation curves and extinction
+laws. Used as the reference point for k(λ) definitions where k(V) = 1.
+
+Value: 5500 Å (Johnson V-band effective wavelength).
 """

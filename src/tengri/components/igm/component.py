@@ -35,6 +35,7 @@ import jax.numpy as jnp
 from tengri.components.igm._params import PARAMS as _IGM_PARAMS
 from tengri.components.igm.igm import igm_transmission
 from tengri.core.component import (
+    DerivedKey,
     ParamDeclaration,
     PipelineState,
     SEDComponentConfig,
@@ -98,6 +99,19 @@ class IGMSEDComponent:
         declared here.
         """
         return list(_IGM_PARAMS)
+
+    def publishes(self) -> tuple[DerivedKey, ...]:
+        """Cross-component derived keys this IGM component publishes.
+
+        See :func:`tengri.forward.orchestrator.validate_pipeline`.
+        """
+        return (
+            DerivedKey(
+                "igm_transmission",
+                "",
+                "Inoue+2014 transmission T(lambda) on observed-frame grid",
+            ),
+        )
 
     def precompute(
         self,

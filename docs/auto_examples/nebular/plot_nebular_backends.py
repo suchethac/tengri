@@ -92,7 +92,7 @@ fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 # Panel 1: H-beta + [O III]
 regions = [
     (axes[0], 4700, 5100, "H-beta + [O III]", {"H-beta": 4861, "[O III]": 5007}),
-    (axes[1], 6400, 6750, "H-alpha Region", {"H-alpha": 6563}),
+    (axes[1], 6400, 6750, "H-alpha Region", {"H-alpha": 6564.61}),
 ]
 
 for ax, wmin, wmax, title, lines in regions:

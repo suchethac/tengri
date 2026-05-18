@@ -190,9 +190,20 @@ class MySEDComponent:
     parameter_prefix: str = "my_"     # CI-enforced via tools/check_param_prefixes.py
 
     def declared_parameters(self) -> list[ParamDeclaration]: ...
+    def publishes(self) -> tuple[DerivedKey, ...]: ...   # cross-component outputs
+    def requires(self) -> tuple[DerivedKey, ...]: ...    # default `()` for opportunistic readers
     def precompute(self, ssp_data=None, wave_grid=None) -> SEDComponentState: ...
     def apply(self, state: PipelineState, params) -> PipelineState: ...
 ```
+
+**Cross-component contract (`publishes` / `requires`).** Per ADR-0004 every
+component declares the derived keys it writes to / reads from
+`PipelineState.derived` via `DerivedKey(name, units, description)`.
+`validate_pipeline` in `forward/orchestrator.py` runs at
+`build_components` time and refuses renames, unit drift, and out-of-order
+publishers — with a "Did you mean: ..." hint for likely typos. New
+derived keys add one line to `_CANONICAL_UNITS` in the same PR that
+introduces the publisher.
 
 **Parameters.** `declared_parameters()` mirrors the entries already in `parameters/_param_defs.py` — do **not** duplicate priors. The `_param_defs.py` registry stays the single source of truth until the migration completes.
 

@@ -49,6 +49,7 @@ import numpy as np
 
 from tengri.components.nebular.baked_in import BakedInBackend
 from tengri.core.component import (
+    DerivedKey,
     ParamDeclaration,
     PipelineState,
     SEDComponentConfig,
@@ -271,6 +272,18 @@ class NebularSEDComponent:
         raise NotImplementedError(
             f"NebularSEDComponent unknown backend {self.config.backend!r}; "
             f"supported: 'baked_in', 'cloudy_grid', 'cue', 'shock'."
+        )
+
+    def publishes(self) -> tuple[DerivedKey, ...]:
+        """Cross-component derived keys this nebular component publishes.
+
+        See :func:`tengri.forward.orchestrator.validate_pipeline`.
+        """
+        return (
+            DerivedKey("sed_nebular", "erg/s/Hz", "Photoionized continuum + lines"),
+            DerivedKey("sed_shock", "erg/s/Hz", "MAPPINGS shock (zeros for photoion-only)"),
+            DerivedKey("line_waves", "Angstrom", "Line vacuum wavelengths"),
+            DerivedKey("line_lums", "erg/s", "Line luminosities"),
         )
 
     def precompute(

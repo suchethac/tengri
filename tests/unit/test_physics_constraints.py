@@ -260,7 +260,8 @@ class TestRadioFIRCorrelation:
         Construct L_TIR and L_radio that should give q_TIR = 2.64 by
         definition, then verify compute_q_ir reproduces it.
         """
-        from tengri.utils.sed_quantities import LSUN_ERG, compute_q_ir
+        from tengri.utils.physics_constants import L_SUN
+        from tengri.utils.sed_quantities import compute_q_ir
 
         # Bell 2003: q_TIR = log10(L_TIR / 3.75e12 W) - log10(L_1.4GHz / W/Hz)
         # Set L_1.4GHz = 1e22 W/Hz (typical LIRG) and solve for L_TIR at q=2.64
@@ -268,7 +269,7 @@ class TestRadioFIRCorrelation:
         l_radio_w_hz = 1e22  # W/Hz
         l_radio_erg = l_radio_w_hz * 1e7  # erg/s/Hz
         l_tir_w = 3.75e12 * 10**q_target * l_radio_w_hz
-        l_tir_lsun = l_tir_w / (LSUN_ERG * 1e-7)
+        l_tir_lsun = l_tir_w / (L_SUN * 1e-7)
 
         q = float(compute_q_ir(jnp.array(l_tir_lsun), jnp.array(l_radio_erg)))
         np.testing.assert_allclose(
