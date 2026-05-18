@@ -99,15 +99,21 @@ sphinx_gallery_conf = {
 
 
 # ── Gallery-index post-processor ────────────────────────────────────────────
-# sphinx-gallery writes `auto_examples/index.rst` with one ``.. toctree::`` at
-# the very bottom, *after* the last category heading ("X-ray Emission").  In
-# RST, content following a heading belongs to that heading, so every other
-# gallery subsection ends up nested under X-ray in the sidebar.
+# sphinx-gallery writes ``auto_examples/index.rst`` with ``:orphan:`` (so the
+# page is unreachable from any sidebar) and dumps its toctree at the very
+# bottom after the final category heading. This breaks the sidebar in two
+# ways:
 #
-# Fix: move the toctree to the *top* of the file (right after the ":orphan:"
-# directive) so it is not a child of any section, AND reorder entries
-# pedagogically (onboarding → physics building blocks → observation layer →
-# inference → applications) rather than alphabetical.
+# 1. ``:orphan:`` keeps the gallery out of the main toctree → no sidebar
+#    entry.
+# 2. Content following a heading is a child of that heading, so every
+#    gallery subsection ended up nested under "X-ray Emission".
+#
+# Fix: strip ``:orphan:`` so the gallery participates in the sidebar,
+# move the toctree to the top of the file (right after the page title)
+# so it's not a child of any heading, and reorder the entries
+# pedagogically (onboarding → physics building blocks → observation
+# layer → inference → applications) rather than alphabetical.
 _GALLERY_SECTION_ORDER = (
     "quickstart",
     "workflows",
@@ -132,52 +138,113 @@ _GALLERY_SECTION_ORDER = (
 
 
 def _fix_gallery_index_toctree(app, *_args, **_kwargs):
+    """Restructure ``auto_examples/index.rst`` for the main sidebar.
+
+    Sphinx-gallery emits a flat file with ``:orphan:`` at the top, prose
+    title further down, and one ``.. toctree::`` block at the very bottom
+    (after a category heading). We need: (1) no ``:orphan:`` so the page
+    appears in the sidebar; (2) a single toctree right after the page
+    title, with entries reordered per ``_GALLERY_SECTION_ORDER``.
+
+    Implemented line-by-line for robustness; regex was brittle against
+    sphinx-gallery's quirky whitespace.
+    """
+    import re
     from pathlib import Path
 
     path = Path(app.srcdir) / "auto_examples" / "index.rst"
     if not path.exists():
         return
-    src = path.read_text()
-    # Capture the toctree block appended at the bottom.
-    import re
 
-    tc_re = re.compile(
-        r"\n\.\. toctree::\s*\n(?:\s+:\w+:.*\n)*(?:\s+.*\n)*",
-        re.MULTILINE,
-    )
-    matches = list(tc_re.finditer(src))
-    if not matches:
-        return
-    tc_block = matches[-1].group(0).strip("\n")
-    # Strip the original position.
-    src_no_tc = src[: matches[-1].start()] + src[matches[-1].end() :]
+    lines = path.read_text().splitlines()
 
-    # Reorder the toctree entries by pedagogical priority. Lines like
-    # "   /auto_examples/<section>/index.rst" get sorted using
-    # _GALLERY_SECTION_ORDER; unknown sections fall to the end alphabetically.
-    entry_re = re.compile(r"^(\s+)/auto_examples/([^/]+)/index\.rst\s*$")
-    head_lines = []
-    entry_lines = []
-    for line in tc_block.splitlines():
+    # ── Step 1: find every "/auto_examples/<section>/index.rst" entry line
+    # anywhere in the file, capture them, and remove them. Sphinx-gallery
+    # writes these at the bottom; a previous broken post-processor run may
+    # have moved them somewhere else. Either way: collect all, dedup,
+    # remove from source.
+    entry_re = re.compile(r"^(\s*)/auto_examples/([^/]+)/index\.rst\s*$")
+    entries: dict[str, str] = {}  # section name → original line (indent preserved)
+    out_lines = []
+    for line in lines:
         m = entry_re.match(line)
         if m:
-            entry_lines.append((m.group(2), line))
+            entries.setdefault(m.group(2), line)
         else:
-            head_lines.append(line)
-    order = {name: i for i, name in enumerate(_GALLERY_SECTION_ORDER)}
-    entry_lines.sort(key=lambda kv: (order.get(kv[0], len(order)), kv[0]))
-    tc_block = "\n".join(head_lines + [line for _, line in entry_lines])
+            out_lines.append(line)
+    if not entries:
+        # Nothing to fix yet; sphinx-gallery hasn't run.
+        return
 
-    # Insert after ``:orphan:`` or at the very top.
-    if ":orphan:" in src_no_tc:
-        new = src_no_tc.replace(
-            ":orphan:",
-            ":orphan:\n\n" + tc_block,
-            1,
-        )
+    # ── Step 2: drop any stray ``.. toctree::`` blocks (header + options).
+    # A toctree block: line "``.. toctree::``" then 0+ indented option lines
+    # (``:hidden:``, ``:includehidden:`` …) then a blank line. Without
+    # entries (we already stripped those), the block is empty and should
+    # not survive.
+    cleaned = []
+    i = 0
+    while i < len(out_lines):
+        line = out_lines[i]
+        if line.strip() == ".. toctree::":
+            # Skip the directive line and any directly-following option /
+            # blank lines.
+            i += 1
+            while i < len(out_lines):
+                nxt = out_lines[i]
+                if not nxt.strip():
+                    i += 1
+                    continue
+                # ``:option:`` lines start with whitespace + ":"
+                if re.match(r"^\s+:[\w-]+:", nxt):
+                    i += 1
+                    continue
+                break
+            continue
+        cleaned.append(line)
+        i += 1
+
+    # ── Step 3: drop the ``:orphan:`` directive so the page is in TOCs.
+    cleaned = [ln for ln in cleaned if ln.strip() != ":orphan:"]
+    # Trim leading blank lines we may have introduced.
+    while cleaned and not cleaned[0].strip():
+        cleaned.pop(0)
+
+    # ── Step 4: build the new toctree with entries reordered.
+    order = {name: i for i, name in enumerate(_GALLERY_SECTION_ORDER)}
+    ordered_sections = sorted(
+        entries.keys(),
+        key=lambda s: (order.get(s, len(order)), s),
+    )
+    toctree = [
+        ".. toctree::",
+        "   :hidden:",
+        "   :includehidden:",
+        "",
+    ] + [f"   /auto_examples/{s}/index.rst" for s in ordered_sections]
+
+    # ── Step 5: re-emit. Splice the toctree in right after the page
+    # title (the first "===" underline). The toctree must come after at
+    # least one heading so sphinx parses it as page content, not
+    # document-level metadata.
+    title_under_idx = next(
+        (
+            j
+            for j in range(1, len(cleaned))
+            if cleaned[j].startswith("=") and cleaned[j].strip("=") == ""
+        ),
+        None,
+    )
+    if title_under_idx is None:
+        # No title heading found — prepend toctree at top.
+        new_lines = list(toctree) + [""] + cleaned
     else:
-        new = tc_block + "\n\n" + src_no_tc
-    path.write_text(new)
+        new_lines = (
+            cleaned[: title_under_idx + 1]
+            + ["", *toctree, ""]
+            + cleaned[title_under_idx + 1 :]
+        )
+
+    path.write_text("\n".join(new_lines) + "\n")
 
 
 def setup(app):
