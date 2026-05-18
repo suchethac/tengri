@@ -39,12 +39,10 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._phys import (
-    LSUN_ERG as _LSUN_ERG,
-    wavelength_to_nu as _wavelength_to_nu,
-)
+from tengri.components.agn._phys import wavelength_to_nu as _wavelength_to_nu
 from tengri.utils.grid_interp import interp_nd_triweight
 from tengri.utils.interpolation import edges_for_grid
+from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
     "create_silva04_from_grid",

@@ -107,7 +107,8 @@ def precompute_cat3d_photometry(
     to match, mirroring the upstream ``cat3d_wind.create_cat3d_wind_from_grid``
     logic.
     """
-    from tengri.components.agn._phys import C_LIGHT as _C_CGS, LSUN_ERG as _LSUN_ERG
+    from tengri.components.agn._phys import C_LIGHT as _C_CGS
+    from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
     raw = _load_cat3d_arrays(grid_path)
 

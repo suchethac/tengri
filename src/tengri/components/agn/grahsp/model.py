@@ -34,7 +34,6 @@ from typing import NamedTuple
 import jax.numpy as jnp
 from jax import Array
 
-from tengri.components.agn._phys import LSUN_ERG
 from tengri.components.agn.grahsp.attenuation import attenuation_factors
 from tengri.components.agn.grahsp.bbb import sbpl_bbb
 from tengri.components.agn.grahsp.bolometric import (
@@ -47,6 +46,7 @@ from tengri.components.agn.grahsp.templates import (
     load_grahsp_templates,
 )
 from tengri.components.agn.grahsp.torus import si_feature, torus_dust_continuum
+from tengri.utils.physics_constants import L_SUN as LSUN_ERG
 
 __all__ = [
     "GRAHSPSED",

@@ -20,18 +20,11 @@ from tengri.utils.physics_constants import (
     L_SUN,
 )
 
-# Back-compat alias for the historical name used by AGN sub-modules.
-# Prefer ``L_SUN`` in new code; ``LSUN_ERG`` will be removed once internal
-# AGN consumers (disc, cat3d, silva04, skirtor_precompute, unified, …) are
-# migrated to import ``L_SUN`` directly from ``tengri.utils.physics_constants``.
-LSUN_ERG = L_SUN
-
 __all__ = [
     "ANGSTROM_CM",
     "C_LIGHT",
     "H_PLANCK",
     "K_BOLTZ",
-    "LSUN_ERG",
     "L_SUN",
     "compute_l_12um_from_lbol",
     "gaussian_line_profile",

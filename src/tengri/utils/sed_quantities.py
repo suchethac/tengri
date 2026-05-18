@@ -834,15 +834,3 @@ def compute_ionizing_efficiency(q_h: jnp.ndarray, l_uv_erg: jnp.ndarray) -> jnp.
         log10(ξ_ion) in Hz/erg.
     """
     return jnp.log10(jnp.maximum(q_h, 1e-50) / jnp.maximum(l_uv_erg, 1e-50))
-
-
-def __getattr__(name):
-    if name == "LSUN_ERG":
-        from tengri._deprecated import deprecated_attribute
-
-        return deprecated_attribute(
-            L_SUN,
-            old_name="tengri.utils.sed_quantities.LSUN_ERG",
-            new_name="tengri.utils.physics_constants.L_SUN",
-        )
-    raise AttributeError(f"module 'tengri.utils.sed_quantities' has no attribute {name!r}")
