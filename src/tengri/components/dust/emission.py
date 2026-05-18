@@ -526,6 +526,13 @@ def modified_blackbody(
 
     **Gradient-safe**: yes — differentiable everywhere.
 
+    References
+    ----------
+    .. [1] B. T. Draine, "Physics of the Interstellar and Intergalactic Medium"
+       (Princeton University Press, 2011). Chapter 22: thermal continuum
+       emission from dust grains in the optically-thin limit.
+       https://ui.adsabs.harvard.edu/abs/2011piim.book.....D
+
     """
     # CMB correction: always applied. At z=0 this is a no-op since
     # T_cmb(z=0) terms cancel and B_nu(T_cmb)/B_nu(T_dust) ~ 0.
