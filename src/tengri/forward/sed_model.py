@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import types
 import warnings
 from typing import ClassVar
 
@@ -50,6 +51,7 @@ from tengri.components.stellar.sps.precompute import (
     precompute_photometry_ztable,
     precompute_spectroscopy,
 )
+from tengri.config.exceptions import ParameterMapError
 from tengri.forward._kernels import (
     DEFAULT as DEFAULT_KERNEL_STRATEGY,
     build_exact_sed,
@@ -323,32 +325,38 @@ class SEDModel:
         # ── Stellar populations ───────────────────────────────────
         self._init_ssp(spec, ssp_data, csp_integration)
 
+        # ── Collect parameter map deltas from each _init_* method ──
+        param_map_deltas = []
+
         # ── Star formation history ────────────────────────────────
-        self._init_sfh(spec)
+        param_map_deltas.append(self._init_sfh(spec))
 
         # ── Metallicity ───────────────────────────────────────────
-        self._init_metallicity(spec)
+        param_map_deltas.append(self._init_metallicity(spec))
 
         # ── Dust (attenuation + emission) ─────────────────────────
-        self._init_dust(spec)
+        param_map_deltas.append(self._init_dust(spec))
 
         # ── IGM + DLA ─────────────────────────────────────────────
         self._init_igm(spec)
 
         # ── Nebular emission ──────────────────────────────────────
-        self._init_nebular(spec, ssp_data)
+        param_map_deltas.append(self._init_nebular(spec, ssp_data))
 
         # ── AGN ───────────────────────────────────────────────────
-        self._init_agn(spec)
+        param_map_deltas.append(self._init_agn(spec))
 
         # ── Multiwavelength (radio, X-ray, shock) ─────────────────
-        self._init_multiwavelength(spec, ssp_data)
+        param_map_deltas.append(self._init_multiwavelength(spec, ssp_data))
 
         # ── Instrument (velocity dispersion, LSF) ─────────────────
         self._init_instrument(spec, observation)
 
         # ── Cosmology (luminosity distance) ───────────────────────
         self._init_cosmology(spec)
+
+        # ── Validate and freeze parameter map ─────────────────────
+        self._validate_and_freeze_param_map(param_map_deltas)
 
         # ── Kernel hierarchy ──────────────────────────────────────
         self._precomputed = self._build_precomputed_data(ssp_data, precompute)
@@ -526,37 +534,63 @@ class SEDModel:
         self._n_grid = n_grid
 
     def _init_sfh(self, spec):
-        """Resolve SFH from registry and build the base param_map."""
+        """Resolve SFH from registry and return the base param_map delta.
+
+        Returns
+        -------
+        dict[str, tuple[str, float, float]]
+            Parameter map entries for this component:
+            public_name -> (internal_name, scale, offset).
+        """
         sfh_fn, _sfh_params, sfh_param_map, sfh_settings = resolve_sfh(spec.mean_sfh_type)
         self._sfh_fn = sfh_fn
         self._sfh_internal_names = {v[0] for v in sfh_param_map.values()}
         self._sfh_settings = sfh_settings
-        self._param_map = _build_param_map(
-            spec.mean_sfh_type,
-            dust_model=getattr(spec, "dust_model", "two_component"),
-        )
         self._uses_stochastic_sfh = spec.stochastic
         self._gp_kernel = sfh_settings.get("sfh_field_model", "drw")
 
+        # Return the base param_map delta (built param_map + dust-model selection)
+        return _build_param_map(
+            spec.mean_sfh_type,
+            dust_model=getattr(spec, "dust_model", "two_component"),
+        )
+
     def _init_metallicity(self, spec):
-        """Configure metallicity mode and evolving alpha-enhancement."""
+        """Configure metallicity mode and evolving alpha-enhancement.
+
+        Returns
+        -------
+        dict[str, tuple[str, float, float]]
+            Parameter map deltas for metallicity handling.
+        """
         self._met_mode = getattr(spec, "met_mode", "delta")
         # _met_mode checked directly: "ramp" for evolving, "chem_evol" for chemical evolution
 
-        if self._met_mode != "delta":
-            self._param_map.pop("met_logzsol", None)
         from tengri.components.stellar.sfh.met_registry import resolve_met
 
         _, _, met_param_map, _ = resolve_met(self._met_mode)
-        self._param_map.update(met_param_map)
+        delta = {}
+
+        # If not delta mode, exclude met_logzsol and use met_param_map instead
+        if self._met_mode != "delta":
+            delta.update(met_param_map)
+        else:
+            delta.update(met_param_map)
 
         self._alpha_fe_evolving = getattr(spec, "alpha_fe_evolving", False)
         if self._alpha_fe_evolving:
-            self._param_map.pop("met_alpha_fe", None)
-            self._param_map.update(_EVOLVING_ALPHA_PARAM_MAP)
+            delta.update(_EVOLVING_ALPHA_PARAM_MAP)
+
+        return delta
 
     def _init_dust(self, spec):
-        """Configure dust attenuation laws, nebular dust, and dust emission."""
+        """Configure dust attenuation laws, nebular dust, and dust emission.
+
+        Returns
+        -------
+        dict[str, tuple[str, float, float]]
+            Parameter map deltas for dust components.
+        """
         self._dust_model = getattr(spec, "dust_model", "two_component")
         self._dust_scheme = getattr(spec, "dust_approx", "fast")
 
@@ -587,8 +621,11 @@ class SEDModel:
                 stacklevel=2,
             )
             self._dust_emission_model = "draine_li2007"
+
+        delta = {}
         if self._dust_emission_model:
-            self._param_map.update(identity_param_map(_DUST_EMISSION_IDENTITY_PARAMS))
+            delta.update(identity_param_map(_DUST_EMISSION_IDENTITY_PARAMS))
+        return delta
 
     def _init_igm(self, spec):
         """Configure IGM absorption and DLA."""
@@ -608,10 +645,18 @@ class SEDModel:
         self._igm_fn = _igm_fn
 
     def _init_nebular(self, spec, ssp_data):
-        """Configure nebular emission backend and register param_map entries."""
+        """Configure nebular emission backend and return param_map entries.
+
+        Returns
+        -------
+        dict[str, tuple[str, float, float]]
+            Parameter map deltas for nebular components.
+        """
+        delta = {}
+
         if spec.nebular_mode in ("cloudy", "cue"):
-            self._param_map.update(identity_param_map(_NEBULAR_IDENTITY_PARAMS))
-            self._param_map["neb_logZ_gas"] = ("neb_logZ_gas", 1.0, LOG10_ZSUN)
+            delta.update(identity_param_map(_NEBULAR_IDENTITY_PARAMS))
+            delta["neb_logZ_gas"] = ("neb_logZ_gas", 1.0, LOG10_ZSUN)
 
         self._nebular_backend = None
         if spec.nebular_mode == "cue":
@@ -626,10 +671,10 @@ class SEDModel:
             _user_params = getattr(spec, "_valid_param_names", frozenset())
             for name in _CUE_GAS_IDENTITY_PARAMS:
                 if name in _user_params:
-                    self._param_map[name] = (name, 1.0, 0.0)
+                    delta[name] = (name, 1.0, 0.0)
             for name in _CUE_IONSPEC_IDENTITY_PARAMS:
                 if name in _user_params:
-                    self._param_map[name] = (name, 1.0, 0.0)
+                    delta[name] = (name, 1.0, 0.0)
             self._nebular_backend = CueBackend(spec.cue_weights_path, ssp_data=ssp_data)
         elif spec.nebular_mode == "cloudy":
             from tengri.components.nebular import CloudyGridBackend
@@ -640,8 +685,16 @@ class SEDModel:
 
             self._nebular_backend = BakedInBackend()
 
+        return delta
+
     def _init_agn(self, spec):
-        """Configure AGN model and detect parametric vs. fraction mode."""
+        """Configure AGN model and detect parametric vs. fraction mode.
+
+        Returns
+        -------
+        dict[str, tuple[str, float, float]]
+            Parameter map deltas for AGN components.
+        """
         self._agn_model = getattr(spec, "agn_model", None)
         # Static block selectors for the "composable" AGN recipe; default to
         # "none" so non-composable models receive harmless no-op selectors.
@@ -651,6 +704,8 @@ class SEDModel:
         self._agn_torus_block = getattr(spec, "agn_torus_block", "none")
         self._agn_attenuation_block = getattr(spec, "agn_attenuation_block", "none")
         self._agn_luminosity_mode = False
+
+        delta = {}
         if self._agn_model:
             agn_dists = getattr(spec, "_distributions", {})
             agn_lbol_dist = agn_dists.get("agn_log_lbol")
@@ -658,7 +713,7 @@ class SEDModel:
             lbol_is_free = agn_lbol_dist is not None and not agn_lbol_dist.is_fixed
             frac_is_free = agn_frac_dist is not None and not agn_frac_dist.is_fixed
             self._agn_luminosity_mode = lbol_is_free and not frac_is_free
-            self._param_map.update(identity_param_map(_AGN_IDENTITY_PARAMS))
+            delta.update(identity_param_map(_AGN_IDENTITY_PARAMS))
             if self._agn_model == "skirtor":
                 # Pre-warm the SKIRTOR template cache outside any JIT context.
                 # Calling _load_skirtor_fn() lazily inside jit.trace causes a
@@ -671,17 +726,27 @@ class SEDModel:
                 except Exception:
                     pass
 
+        return delta
+
     def _init_multiwavelength(self, spec, ssp_data):
-        """Configure radio, X-ray, shock, and build wavelength grid."""
+        """Configure radio, X-ray, shock, and build wavelength grid.
+
+        Returns
+        -------
+        dict[str, tuple[str, float, float]]
+            Parameter map deltas for multiwavelength components.
+        """
         self._uses_radio = getattr(spec, "radio", False)
+        delta = {}
+
         if self._uses_radio:
-            self._param_map.update(identity_param_map(_RADIO_IDENTITY_PARAMS))
+            delta.update(identity_param_map(_RADIO_IDENTITY_PARAMS))
             self._radio_include_freefree = getattr(spec, "radio_include_freefree", True)
             self._radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
 
         self._uses_xray = getattr(spec, "xray", False)
         if self._uses_xray:
-            self._param_map.update(identity_param_map(_XRAY_IDENTITY_PARAMS))
+            delta.update(identity_param_map(_XRAY_IDENTITY_PARAMS))
 
         if self._uses_radio or self._uses_xray:
             from tengri.utils.wavelength import make_panchromatic_grid
@@ -696,7 +761,9 @@ class SEDModel:
 
         self._uses_shock = getattr(spec, "shock", False)
         if self._uses_shock:
-            self._param_map.update(identity_param_map(_SHOCK_IDENTITY_PARAMS))
+            delta.update(identity_param_map(_SHOCK_IDENTITY_PARAMS))
+
+        return delta
 
     def _init_instrument(self, spec, observation):
         """Configure velocity dispersion and LSF settings."""
@@ -727,6 +794,53 @@ class SEDModel:
         else:
             self._dl_cm_fixed = None
             self._z_fixed = None
+
+    def _validate_and_freeze_param_map(self, param_map_deltas):
+        """Merge param_map deltas, validate, and freeze the result.
+
+        Parameters
+        ----------
+        param_map_deltas : list[dict[str, tuple[str, float, float]]]
+            List of parameter map deltas from each _init_* method, in order.
+            Each delta is a mapping: public_name -> (internal_name, scale, offset).
+
+        Raises
+        ------
+        ParameterMapError
+            If validation fails: missing free params, conflicting (scale, offset), etc.
+        """
+        # Merge all deltas in order (later entries override earlier ones for same key)
+        merged = {}
+        for delta in param_map_deltas:
+            for public_name, (internal_name, scale, offset) in delta.items():
+                if public_name in merged:
+                    # Check for conflicting (scale, offset) claims
+                    old_internal, old_scale, old_offset = merged[public_name]
+                    if (old_internal, old_scale, old_offset) != (
+                        internal_name,
+                        scale,
+                        offset,
+                    ):
+                        raise ParameterMapError(
+                            f"Parameter '{public_name}' has conflicting mappings: "
+                            f"({old_internal}, {old_scale}, {old_offset}) vs "
+                            f"({internal_name}, {scale}, {offset})"
+                        )
+                merged[public_name] = (internal_name, scale, offset)
+
+        # Validate: every free param in spec has an entry in the map
+        free_params = self.spec.free_params
+        missing = set(free_params) - set(merged.keys())
+        if missing:
+            raise ParameterMapError(
+                f"The following free parameters in spec have no entry in the "
+                f"parameter map: {sorted(missing)}. This indicates a mismatch "
+                f"between what the spec declares as free and what the model "
+                f"components registered."
+            )
+
+        # Freeze the merged map using MappingProxyType
+        self._param_map = types.MappingProxyType(merged)
 
     # ── Kernel management ─────────────────────────────────────────────
 
