@@ -186,7 +186,7 @@ class AGNSEDComponent:
         else:
             new_sed = state.sed_intrinsic + L_agn
 
-        new_derived = dict(state.derived)
-        new_derived["L_agn_bol"] = L_agn_bol
-        new_derived["sed_agn"] = L_agn
-        return state.with_(sed_intrinsic=new_sed, derived=new_derived)
+        return state.with_(
+            sed_intrinsic=new_sed,
+            derived=state.derived.with_(L_agn_bol=L_agn_bol, sed_agn=L_agn),
+        )

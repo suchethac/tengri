@@ -434,9 +434,12 @@ class GRAHSPSEDComponent:
         # GRAHSP's torus already empirically captures dust re-radiation.
         L_agn_absorbed = jnp.trapezoid((bbb_intrinsic + torus_intrinsic) - L_lambda_total, wave_nm)
 
-        new_derived = dict(state.derived)
-        new_derived["sed_grahsp"] = L_nu
-        new_derived["L_agn_bol"] = L_bol_BBB
-        new_derived["L_agn_torus"] = L_bol_torus
-        new_derived["L_agn_absorbed"] = L_agn_absorbed
-        return state.with_(sed_intrinsic=new_sed, derived=new_derived)
+        return state.with_(
+            sed_intrinsic=new_sed,
+            derived=state.derived.with_(
+                sed_grahsp=L_nu,
+                L_agn_bol=L_bol_BBB,
+                L_agn_torus=L_bol_torus,
+                L_agn_absorbed=L_agn_absorbed,
+            ),
+        )
