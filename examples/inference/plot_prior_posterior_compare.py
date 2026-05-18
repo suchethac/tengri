@@ -26,9 +26,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Already has Path imported
-
-jax.config.update("jax_enable_x64", True)
-
 from tengri import (
     Fitter,
     Fixed,
@@ -37,33 +34,13 @@ from tengri import (
     Photometry,
     SEDModel,
     Uniform,
-    load_ssp_data,
+    load_ssp,
     setup_style,
 )
 
 setup_style()
 
-
-def _find_ssp():
-    """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
-    name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-    for p in [
-        Path("data") / name,
-        Path("../data") / name,
-        Path("../../data") / name,
-        Path("../../../data") / name,
-    ]:
-        if p.exists():
-            return str(p)
-    return None
-
-
-SSP_PATH = _find_ssp()
-
-if SSP_PATH is None:
-    raise FileNotFoundError("SSP data not found — skipping example")
-
-ssp = load_ssp_data(SSP_PATH)
+ssp = load_ssp()
 obs = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 )

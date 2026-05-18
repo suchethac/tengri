@@ -31,7 +31,7 @@ shows the combined constraint power. Requires SSP data.
    :alt: plot_joint_fit
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-42
+.. GENERATED FROM PYTHON SOURCE LINES 16-40
 
 .. code-block:: Python
 
@@ -43,8 +43,6 @@ shows the combined constraint power. Requires SSP data.
     import matplotlib.pyplot as plt
     import numpy as np
 
-    jax.config.update("jax_enable_x64", True)
-
     from tengri import (
         Fitter,
         Fixed,
@@ -54,7 +52,7 @@ shows the combined constraint power. Requires SSP data.
         SEDModel,
         Spectroscopy,
         Uniform,
-        load_ssp_data,
+        load_ssp,
         setup_style,
     )
 
@@ -62,44 +60,26 @@ shows the combined constraint power. Requires SSP data.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 43-45
+.. GENERATED FROM PYTHON SOURCE LINES 41-43
 
 Locate SSP data
 ----------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 45-67
+.. GENERATED FROM PYTHON SOURCE LINES 43-47
 
 .. code-block:: Python
 
 
 
-    def _find_ssp():
-        """Locate SSP data from project root or docs/ (sphinx-gallery) cwd."""
-        name = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        for p in [
-            Path("data") / name,
-            Path("../data") / name,
-            Path("../../data") / name,
-            Path("../../../data") / name,
-        ]:
-            if p.exists():
-                return str(p)
-        return None
+    ssp = load_ssp()
 
 
-    SSP_PATH = _find_ssp()
-    if SSP_PATH is None:
-        raise FileNotFoundError("SSP data not found — skipping example")
-
-    ssp = load_ssp_data(SSP_PATH)
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 68-70
+.. GENERATED FROM PYTHON SOURCE LINES 48-50
 
 Build Observation with joint photometry + spectroscopy
 -------------------------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 70-95
+.. GENERATED FROM PYTHON SOURCE LINES 50-75
 
 .. code-block:: Python
 
@@ -129,12 +109,12 @@ Build Observation with joint photometry + spectroscopy
     obs = Observation(photometry=phot, spectroscopy=spec_config)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 96-98
+.. GENERATED FROM PYTHON SOURCE LINES 76-78
 
 Create model and generate mock data
 -------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 98-140
+.. GENERATED FROM PYTHON SOURCE LINES 78-120
 
 .. code-block:: Python
 
@@ -181,12 +161,12 @@ Create model and generate mock data
     }
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 141-143
+.. GENERATED FROM PYTHON SOURCE LINES 121-123
 
 Fit with MAP
 -------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 143-147
+.. GENERATED FROM PYTHON SOURCE LINES 123-127
 
 .. code-block:: Python
 
@@ -195,12 +175,12 @@ Fit with MAP
     posterior = fitter.run("map", optimizer="adam")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 148-150
+.. GENERATED FROM PYTHON SOURCE LINES 128-130
 
 Plot: 2-panel figure (photometry + spectrum)
 ----------------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 150-186
+.. GENERATED FROM PYTHON SOURCE LINES 130-166
 
 .. code-block:: Python
 

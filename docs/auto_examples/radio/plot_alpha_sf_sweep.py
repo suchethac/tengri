@@ -16,14 +16,9 @@ spectra (:math:`\\alpha > 1`) suggest ageing of the cosmic ray electron populati
 
 """
 
-# sphinx_gallery_thumbnail_number = 1
-
-import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.analysis.plotting import SWEEP_CMAPS, setup_style
 from tengri.radio import radio_star_forming

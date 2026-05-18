@@ -53,15 +53,6 @@
    "name": "Spectroscopy"
   }
  ],
- "jax.config.update": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jax.config",
-   "module_short": "jax.config",
-   "name": "update"
-  }
- ],
  "jax.random.PRNGKey": [
   {
    "is_class": false,
@@ -89,13 +80,13 @@
    "name": "logspace"
   }
  ],
- "load_ssp_data": [
+ "load_ssp": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "load_ssp_data"
+   "name": "load_ssp"
   }
  ],
  "matplotlib.use": [

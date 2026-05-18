@@ -1,22 +1,4 @@
 {
- "Path": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "Path"
-  }
- ],
- "jax.config.update": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jax.config",
-   "module_short": "jax.config",
-   "name": "update"
-  }
- ],
  "jnp.any": [
   {
    "is_class": false,
@@ -53,13 +35,13 @@
    "name": "sum"
   }
  ],
- "load_ssp_data": [
+ "load_ssp": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "load_ssp_data"
+   "name": "load_ssp"
   }
  ],
  "np.array": [

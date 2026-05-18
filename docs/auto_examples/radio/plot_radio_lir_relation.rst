@@ -33,23 +33,19 @@ parameter, demonstrating how more luminous starbursts produce stronger radio.
    :alt: plot_radio_lir_relation
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-85
+.. GENERATED FROM PYTHON SOURCE LINES 18-81
 
 .. code-block:: Python
 
 
-
     from pathlib import Path
 
-    import jax
     import jax.numpy as jnp
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
-
-    jax.config.update("jax_enable_x64", True)
 
     from tengri.analysis.plotting import SWEEP_CMAPS, setup_style
     from tengri.radio import radio_star_forming

@@ -32,18 +32,14 @@ approximation. This script shows how they differ in the UV to optical regime.
    :alt: plot_igm_model_comparison
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-86
+.. GENERATED FROM PYTHON SOURCE LINES 17-82
 
 .. code-block:: Python
 
 
-
-    import jax
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
-
-    jax.config.update("jax_enable_x64", True)
 
     from tengri.analysis.plotting import setup_style
     from tengri.components.igm import (
