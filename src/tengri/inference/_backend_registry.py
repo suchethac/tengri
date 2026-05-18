@@ -4,17 +4,46 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(frozen=True)
 class BackendEntry:
-    """Registry entry for an inference backend."""
+    """Registry entry for an inference backend.
+
+    Parameters
+    ----------
+    name : str
+        Canonical method name (e.g., ``"map"``, ``"mcmc_nuts"``).
+    runner : Callable
+        Backend entry point. Signature depends on ``legacy_fitter``:
+        - ``legacy_fitter=True``  → ``runner(fitter, *, key, **kwargs)``
+        - ``legacy_fitter=False`` → ``runner(context, *, key, **kwargs)``
+        where ``context`` is an :class:`InferenceContext`.
+    tier : str
+        ``"primary"`` for promoted methods, ``"experimental"`` otherwise.
+    short_doc : str
+        Brief description.
+    requires : tuple[str, ...]
+        Optional dependency import names (e.g. ``("blackjax",)``).
+    legacy_fitter : bool
+        If ``True`` (default), ``Fitter.run`` passes the full Fitter to
+        the runner. Set to ``False`` for backends migrated to the
+        :class:`InferenceContext` Protocol. The flag is removed once all
+        backends migrate (see ADR-0009 / final PR of the inference-
+        backend refactor).
+    """
 
     name: str
     runner: Callable
     tier: str = "experimental"  # "primary" | "experimental"
     short_doc: str = ""
     requires: tuple[str, ...] = field(default_factory=tuple)  # optional dep names
+    legacy_fitter: bool = True
+    # Predicate called with whatever ``runner`` receives (Fitter or InferenceContext).
+    # Returns True if this backend can run for the given target's spec/dims/dtypes.
+    # Default ``None`` means "no compatibility constraint" (always usable).
+    is_compatible: Callable[[Any], bool] | None = None
 
 
 _BACKENDS: dict[str, BackendEntry] = {}
@@ -27,6 +56,8 @@ def register_backend(
     short_doc: str = "",
     requires: tuple[str, ...] = (),
     aliases: tuple[str, ...] = (),
+    legacy_fitter: bool = True,
+    is_compatible: Callable[[Any], bool] | None = None,
 ):
     """Decorator to register an inference backend.
 
@@ -46,7 +77,13 @@ def register_backend(
 
     def deco(fn):
         entry = BackendEntry(
-            name=name, runner=fn, tier=tier, short_doc=short_doc, requires=requires
+            name=name,
+            runner=fn,
+            tier=tier,
+            short_doc=short_doc,
+            requires=requires,
+            legacy_fitter=legacy_fitter,
+            is_compatible=is_compatible,
         )
         _BACKENDS[name] = entry
         for a in aliases:

@@ -999,7 +999,9 @@ def list_components() -> _RegistryTable:
     return _RegistryTable(out)
 
 
-def list_inference_methods(*, tier: str | None = None) -> _RegistryTable:
+def list_inference_methods(
+    *, tier: str | None = None, target: object | None = None
+) -> _RegistryTable:
     """List all registered inference methods.
 
     Parameters
@@ -1007,13 +1009,24 @@ def list_inference_methods(*, tier: str | None = None) -> _RegistryTable:
     tier : str, optional
         Filter by ``"primary"`` (recommended for new users) or
         ``"experimental"``.
+    target : Fitter | InferenceContext, optional
+        If supplied, each entry's ``status`` column reflects whether the
+        backend's ``is_compatible`` predicate (if any) accepts the
+        target. If ``None``, ``status`` reflects only whether the
+        backend's optional dependencies are importable.
+
+    Returns
+    -------
+    _RegistryTable
+        Rows: ``{name, kind, tier, short_doc, requires, status, use}``.
+        ``status`` is one of ``"ok"`` / ``"missing_dep"`` / ``"incompatible"``
+        (see :class:`tengri.inference._strategy.BackendStatus`).
     """
     from tengri.inference._backend_registry import all_backends
+    from tengri.inference._strategy import resolve_status
 
     out = []
     for entry in all_backends():
-        # Inference methods use ``tier`` (primary | experimental) instead of
-        # ``status``; status is omitted to avoid a redundant column.
         out.append(
             {
                 "name": entry.name,
@@ -1021,6 +1034,7 @@ def list_inference_methods(*, tier: str | None = None) -> _RegistryTable:
                 "tier": entry.tier,
                 "short_doc": entry.short_doc,
                 "requires": list(entry.requires),
+                "status": resolve_status(entry, target).value,
                 "use": _usage_hint(entry.name, "inference_method"),
             }
         )

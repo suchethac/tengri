@@ -2013,7 +2013,17 @@ class Fitter:
         # Friendly error if the backend's optional dependency is missing,
         # before we descend into a deep third-party traceback.
         check_requires(entry)
-        result = entry.runner(self, key=key, init_from=init_from, **kwargs)
+
+        # Build the Python-level InferenceContext once. Backends marked
+        # ``legacy_fitter=True`` continue to receive the full Fitter
+        # (their lambdas at the bottom of this file relay to ``_run_*``
+        # methods); migrated backends receive the context and access
+        # state through its explicit accessors. See ADR-0009 / context.py.
+        from tengri.inference.context import InferenceContext
+
+        context = InferenceContext(fitter=self)
+        target = self if entry.legacy_fitter else context
+        result = entry.runner(target, key=key, init_from=init_from, **kwargs)
 
         # Attach back-reference so Posterior.refine() works
         with contextlib.suppress(AttributeError):
@@ -3296,6 +3306,11 @@ class Fitter:
 # the backend runner to the (fitter, key, init_from, **kwargs) signature.
 
 from tengri.inference._backend_registry import register_backend
+from tengri.inference.backends.map_dispatch import (
+    run_laplace as _ctx_run_laplace,
+    run_map as _ctx_run_map,
+    run_pathfinder as _ctx_run_pathfinder,
+)
 
 # Primary backends
 register_backend(
@@ -3303,7 +3318,8 @@ register_backend(
     tier="primary",
     short_doc="Adam MAP optimization",
     requires=("optax",),
-)(lambda fitter, *, key, init_from=None, **kw: fitter._run_map(key=key, init_from=init_from, **kw))
+    legacy_fitter=False,
+)(_ctx_run_map)
 
 register_backend(
     "vi",
@@ -3472,19 +3488,13 @@ register_backend(
     "laplace",
     tier="experimental",
     short_doc="Laplace approximation",
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_laplace(
-        key=key, init_from=init_from, **kw
-    )
-)
+    legacy_fitter=False,
+)(_ctx_run_laplace)
 
 register_backend(
     "pathfinder",
     tier="experimental",
     short_doc="Pathfinder variational inference",
     requires=("blackjax",),
-)(
-    lambda fitter, *, key, init_from=None, **kw: fitter._run_pathfinder(
-        key=key, init_from=init_from, **kw
-    )
-)
+    legacy_fitter=False,
+)(_ctx_run_pathfinder)
