@@ -199,14 +199,17 @@ class MySEDComponent:
     def apply(self, state: PipelineState, params) -> PipelineState: ...
 ```
 
-**Cross-component contract (`publishes` / `requires`).** Per ADR-0004 every
-component declares the derived keys it writes to / reads from
-`PipelineState.derived` via `DerivedKey(name, units, description)`.
-`validate_pipeline` in `forward/orchestrator.py` runs at
-`build_components` time and refuses renames, unit drift, and out-of-order
-publishers — with a "Did you mean: ..." hint for likely typos. New
-derived keys add one line to `_CANONICAL_UNITS` in the same PR that
-introduces the publisher.
+**Cross-component contract (`publishes` / `requires`).** Per
+ADR-0009 (`docs/adr/0009-typed-pipeline-contract.md`, originally
+authored as ADR-0004 in PR #19) every component declares the derived
+keys it writes to / reads from `PipelineState.derived` via
+`DerivedKey(name, units, description)`. `validate_pipeline` in
+`forward/orchestrator.py` runs at `build_components` time and refuses
+renames, unit drift, and out-of-order publishers — with a
+"Did you mean: ..." hint for likely typos. New derived keys add one
+line to `_CANONICAL_UNITS` in the same PR that introduces the
+publisher, plus a matching field on `DerivedBundle`
+(`tengri.core.derived_bundle`) per ADR-0007.
 
 **Parameters.** `declared_parameters()` mirrors the entries already in `parameters/_param_defs.py` — do **not** duplicate priors. The `_param_defs.py` registry stays the single source of truth until the migration completes.
 

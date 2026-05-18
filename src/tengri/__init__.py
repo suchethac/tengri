@@ -320,6 +320,8 @@ from tengri.registry import (
 __all__ = [
     "BackendError",
     "ConfigError",
+    "DerivedBundle",
+    "DerivedKey",
     "Fixed",
     "Galaxy",
     "Gaussian",
@@ -327,7 +329,9 @@ __all__ = [
     "LogNormal",
     "LogUniform",
     "ParameterError",
+    "ParameterRecord",
     "Parameters",
+    "PipelineContractError",
     "SEDModel",
     "StudentT",
     "TengriError",

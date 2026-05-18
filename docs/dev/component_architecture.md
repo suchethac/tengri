@@ -86,9 +86,13 @@ class MyPhysicsSEDComponent:
         # Pure JAX. No file I/O, no numpy primitives, no float() casts on
         # traced arrays.
         new_sed = ...  # whatever your physics computes
-        new_derived = dict(state.derived)
-        new_derived["L_my"] = ...
-        return state.with_(sed_intrinsic=new_sed, derived=new_derived)
+        # Typed bundle write (ADR-0007 Phase 3+). The bundle's with_
+        # raises TypeError on unknown fields, so typos in derived keys
+        # fail at trace time rather than at the consumer's read site.
+        return state.with_(
+            sed_intrinsic=new_sed,
+            derived=state.derived.with_(L_my=...),
+        )
 ```
 
 ## Five rules
