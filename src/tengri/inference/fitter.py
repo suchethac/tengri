@@ -416,6 +416,39 @@ class Fitter:
         # ── Data arguments ─────────────────────────────────────────
         self._data_args = self._build_data_args(model)
 
+        # ── Build Likelihood (extract from Fitter internals) ─────────
+        # Build the Likelihood module from Fitter state. This holds all
+        # the compiled likelihood callables for photometry, spectroscopy,
+        # emission lines, and indices. Both the user-supplied and
+        # auto-built paths go through the Likelihood.build interface.
+        from tengri.inference.likelihood import Likelihood
+
+        self._likelihood = Likelihood.build(
+            model=model,
+            observation=getattr(model, "observation", None),
+            calibration_spec={
+                "marginalize": self._calibration_marginalize,
+                "n_poly": self._cal_n_poly,
+                "prior_sigma": self._cal_prior_sigma,
+                "eline_marginalize": self._eline_marginalize,
+                "eline_fitted": self._eline_fitted,
+                "eline_prior_type": self._eline_prior_type,
+                "eline_prior_sigma": self._eline_prior_sigma,
+                "eline_independent_wavelengths": self._eline_independent_wavelengths,
+                "eline_prior_width_dex": self._eline_prior_width_dex,
+                "_eline_wavelengths": self._eline_wavelengths,
+                "_eline_constraint_matrix": self._eline_constraint_matrix,
+                "_eline_amplitude_names": self._eline_amplitude_names,
+                "_fixed_values": self._fixed_values,
+                "data": self.data,
+                "noise": self.noise,
+                "data_mask": self.data_mask,
+                "data_type": self.data_type,
+                "spec": self.spec,
+                "data_args": self._data_args,
+            },
+        )
+
         # ── Auto-build Protocol likelihood (option β default) ──────
         # When the user didn't pass a custom likelihood AND none of the
         # legacy-only features (cal-marg, e-line marg, Student-t,
