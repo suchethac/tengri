@@ -371,7 +371,6 @@ class NebularSEDComponent:
         # to ``state.derived`` — strings are not JAX leaves and break
         # ``jax.jit`` traces. The backend identity is in
         # ``self.config.backend`` (eager-time inspection only).
-        new_derived = dict(state.derived)
 
         # Always publish both ``sed_nebular`` and ``sed_shock`` so
         # downstream consumers (e.g. ``Posterior.sed_components``) can
@@ -383,9 +382,7 @@ class NebularSEDComponent:
         zeros = jnp.zeros_like(state.wave)
 
         if self.config.backend == "baked_in":
-            new_derived["sed_nebular"] = zeros
-            new_derived["sed_shock"] = zeros
-            return state.with_(derived=new_derived)
+            return state.with_(derived=state.derived.with_(sed_nebular=zeros, sed_shock=zeros))
 
         # Stellar metallicity (absolute log10(Z)) for downstream backends.
         log_z_history = state.derived.get("log_metallicity_history")
@@ -417,9 +414,10 @@ class NebularSEDComponent:
             # from photoionised continuum. Publish under ``sed_shock``
             # and zero out ``sed_nebular`` so the legacy Posterior dict
             # decomposition matches: photoionised vs shock are distinct.
-            new_derived["sed_shock"] = nebular_sed
-            new_derived["sed_nebular"] = zeros
-            return state.with_(sed_intrinsic=new_sed, derived=new_derived)
+            return state.with_(
+                sed_intrinsic=new_sed,
+                derived=state.derived.with_(sed_shock=nebular_sed, sed_nebular=zeros),
+            )
 
         # ── Photoionisation backends (Cue + CloudyGrid) ───────────────
         # Cue / CloudyGrid both expect ``neb_logZ_gas`` in **absolute**
@@ -565,8 +563,9 @@ class NebularSEDComponent:
                         converted[in_optical] = air_to_vacuum(line_waves_np[in_optical])
                         line_waves = jnp.asarray(converted)
 
-                new_derived["line_waves"] = line_waves
-                new_derived["line_lums"] = line_lums
+                state = state.with_(
+                    derived=state.derived.with_(line_waves=line_waves, line_lums=line_lums)
+                )
             except Exception:
                 # Backend's line-luminosity path may fail (e.g. when
                 # ``cloudyfsps_only=True`` filters everything out).
@@ -584,6 +583,7 @@ class NebularSEDComponent:
 
         # Photoionised path: ``sed_nebular`` carries continuum + lines;
         # shock contribution is zero (this branch is not the shock backend).
-        new_derived["sed_nebular"] = nebular_sed
-        new_derived["sed_shock"] = zeros
-        return state.with_(sed_intrinsic=new_sed, derived=new_derived)
+        return state.with_(
+            sed_intrinsic=new_sed,
+            derived=state.derived.with_(sed_nebular=nebular_sed, sed_shock=zeros),
+        )
