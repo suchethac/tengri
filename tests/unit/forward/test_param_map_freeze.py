@@ -31,8 +31,16 @@ class TestParamMapFreeze:
             minimal_model._param_map["new_key"] = ("internal", 1.0, 0.0)
 
     def test_param_map_pop_raises_type_error(self, minimal_model):
-        """Attempting to pop from _param_map should raise TypeError."""
-        with pytest.raises(TypeError, match="does not support"):
+        """Attempting to pop from _param_map should raise.
+
+        ``types.MappingProxyType`` doesn't define ``pop`` at all, so the
+        attempted call raises :class:`AttributeError`. The earlier
+        :class:`TypeError`-only expectation matched dict-mutation methods
+        (``__setitem__`` / ``update``) but not ``pop``. Both error types
+        are acceptable — the test's purpose is that the mutation cannot
+        succeed.
+        """
+        with pytest.raises((TypeError, AttributeError)):
             minimal_model._param_map.pop("redshift")
 
     def test_param_map_update_raises_type_error(self, minimal_model):

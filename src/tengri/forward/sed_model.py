@@ -79,19 +79,12 @@ from tengri.forward.sed_model_types import (
 from tengri.observation.photometry import ab_mag_from_flux
 from tengri.observation.spectrum import apply_lsf, compute_spectrum
 from tengri.parameters.translate import (
-    _AGN_IDENTITY_PARAMS,
     _CUE_GAS_IDENTITY_PARAMS,
     _CUE_IONSPEC_IDENTITY_PARAMS,
-    _DUST_EMISSION_IDENTITY_PARAMS,
     _EVOLVING_ALPHA_PARAM_MAP,
-    _NEBULAR_IDENTITY_PARAMS,
-    _RADIO_IDENTITY_PARAMS,
-    _SHOCK_IDENTITY_PARAMS,
-    _XRAY_IDENTITY_PARAMS,
     LOG10_ZSUN,
     _build_param_map,
     get_internal_params,
-    identity_param_map,
 )
 from tengri.utils.cosmology import age_at_z, luminosity_distance
 from tengri.utils.grid import (
@@ -671,10 +664,13 @@ class SEDModel:
             )
             self._dust_emission_model = "draine_li2007"
 
-        delta = {}
-        if self._dust_emission_model:
-            delta.update(identity_param_map(_DUST_EMISSION_IDENTITY_PARAMS))
-        return delta
+        # Identity entries for dust-emission params now come from the
+        # registry-driven auto-derive in ``_build_param_map`` (Step B,
+        # ADR-deepening 2026-05-18). The conditional on the active
+        # emission model is retained at the apply/predict layer; the
+        # param-map can carry the entries unconditionally because
+        # ``get_internal_params`` silently skips names absent from spec.
+        return {}
 
     def _init_igm(self, spec):
         """Configure IGM absorption and DLA."""
@@ -704,7 +700,11 @@ class SEDModel:
         delta = {}
 
         if spec.nebular_mode in ("cloudy", "cue"):
-            delta.update(identity_param_map(_NEBULAR_IDENTITY_PARAMS))
+            # ``_NEBULAR_IDENTITY_PARAMS`` removed in Step B (ADR-deepening
+            # 2026-05-18); the registry-driven auto-derive in
+            # ``_build_param_map`` covers the identity entries. The
+            # unit-converting ``neb_logZ_gas`` MUST stay here because
+            # auto-derive only emits identity mappings.
             delta["neb_logZ_gas"] = ("neb_logZ_gas", 1.0, LOG10_ZSUN)
 
         self._nebular_backend = None
@@ -762,7 +762,8 @@ class SEDModel:
             lbol_is_free = agn_lbol_dist is not None and not agn_lbol_dist.is_fixed
             frac_is_free = agn_frac_dist is not None and not agn_frac_dist.is_fixed
             self._agn_luminosity_mode = lbol_is_free and not frac_is_free
-            delta.update(identity_param_map(_AGN_IDENTITY_PARAMS))
+            # Identity entries for agn_* now come from registry auto-derive
+            # in _build_param_map (Step B).
             if self._agn_model == "skirtor":
                 # Pre-warm the SKIRTOR template cache outside any JIT context.
                 # Calling _load_skirtor_fn() lazily inside jit.trace causes a
@@ -789,13 +790,12 @@ class SEDModel:
         delta = {}
 
         if self._uses_radio:
-            delta.update(identity_param_map(_RADIO_IDENTITY_PARAMS))
+            # Identity entries for radio_* now come from registry auto-derive
+            # in _build_param_map (Step B).
             self._radio_include_freefree = getattr(spec, "radio_include_freefree", True)
             self._radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
 
         self._uses_xray = getattr(spec, "xray", False)
-        if self._uses_xray:
-            delta.update(identity_param_map(_XRAY_IDENTITY_PARAMS))
 
         if self._uses_radio or self._uses_xray:
             from tengri.utils.wavelength import make_panchromatic_grid
@@ -808,9 +808,9 @@ class SEDModel:
         else:
             self._rest_wavelength = ssp_data.ssp_wave
 
+        # Identity entries for shock_* and xray_* now come from registry
+        # auto-derive in _build_param_map (Step B).
         self._uses_shock = getattr(spec, "shock", False)
-        if self._uses_shock:
-            delta.update(identity_param_map(_SHOCK_IDENTITY_PARAMS))
 
         return delta
 
@@ -3802,8 +3802,8 @@ class SEDModel:
         branch. Anything else (``burst``, etc.) is currently unmapped
         and will raise downstream.
         """
-        from tengri.protocols.component import PipelineState
         from tengri.forward import build_components, run_components
+        from tengri.protocols.component import PipelineState
 
         chain = self._build_component_chain()
         # Initialise the chain on the panchromatic-extended grid when
