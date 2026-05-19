@@ -37,7 +37,7 @@ PR; this file is currently only the flat-builder source of truth.
 
 from __future__ import annotations
 
-from tengri.core.component import ParamDeclaration
+from tengri.protocols.component import ParamDeclaration
 from tengri.parameters.priors import Fixed, Uniform
 
 PARAMS: tuple[ParamDeclaration, ...] = (

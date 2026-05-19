@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from tengri.core.component import ParamDeclaration
+from tengri.protocols.component import ParamDeclaration
 from tengri.parameters.priors import Fixed
 
 

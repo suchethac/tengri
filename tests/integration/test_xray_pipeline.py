@@ -18,7 +18,7 @@ import pytest
 
 from tengri.components.xray.component import XRaySEDComponent
 from tengri.components.xray.xray import xray_total
-from tengri.core import PipelineState
+from tengri.protocols import PipelineState
 from tengri.forward.orchestrator import run_components
 
 REL_TOL = 1e-10

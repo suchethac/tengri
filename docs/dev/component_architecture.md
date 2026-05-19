@@ -5,7 +5,7 @@
 > for design rationale see [`20260404-refactor.md`](20260404-refactor.md).
 
 A new physics block is one Python file that follows the
-:class:`tengri.core.component.SEDComponent` Protocol. Drop it in
+:class:`tengri.protocols.component.SEDComponent` Protocol. Drop it in
 ``src/tengri/components/<domain>/component.py`` (or a sibling file if
 you have multiple variants of the same domain) and it can be plugged
 into a chain via :func:`tengri.forward.build_components` or hand-built
@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from typing import Any
 import jax.numpy as jnp
 
-from tengri.core.component import (
+from tengri.protocols.component import (
     ParamDeclaration, PipelineState, SEDComponentConfig, SEDComponentState,
 )
 from tengri.parameters.priors import Fixed, Uniform
@@ -120,7 +120,7 @@ class MyPhysicsSEDComponent:
 
 ```python
 from tengri.forward import build_components, run_components
-from tengri.core.component import PipelineState
+from tengri.protocols.component import PipelineState
 
 components = build_components(
     ssp_data=ssp,

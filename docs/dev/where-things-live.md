@@ -83,9 +83,11 @@ The thin re-export namespaces `tengri.cosmology`, `tengri.units`, `tengri.plot`,
 
 ## Where things definitely are NOT
 
-- **Not in `core/`** — `core/` holds *protocols and contracts* (interface
-  definitions for `SEDComponent`, `DerivedBundle`, etc.), not business logic.
+- **Not in `protocols/`** — `protocols/` holds *interface definitions*
+  (`SEDComponent`, `DerivedBundle`, `PipelineState`, etc.), not business logic.
   The real forward-model orchestrator is `forward/sed_model.py`.
+  (This directory was called `core/` before May 2026 — the old path still
+  works via a one-shot DeprecationWarning shim.)
 - **Not in `bench/`, `profiling/`, `preprocessing/`** — these are auxiliary
   packages (benchmarks, profiling helpers, data hygiene). The actual physics
   and inference are in `components/`, `observation/`, `inference/`,
@@ -94,8 +96,3 @@ The thin re-export namespaces `tengri.cosmology`, `tengri.units`, `tengri.plot`,
   pairs for tests and demos, not the recipes you'd use day-to-day. For those,
   use `tengri.recipes`.
 
-## Known mild confusion (and why we tolerate it)
-
-- `core/` is named `core/` for legacy reasons; "protocols" or "interfaces"
-  would be more accurate. Worth renaming if the cost of touching every import
-  becomes worth it. (Today, ~12 internal import sites.)

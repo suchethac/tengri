@@ -19,7 +19,7 @@ Currently dispatched templates
 
 Casey/Dale/DL07/DL14/Astrodust/BOSA/THEMIS will be added as additional
 ``template`` cases as their precompute paths are migrated to the
-:class:`tengri.core.PipelineState` Protocol.
+:class:`tengri.protocols.PipelineState` Protocol.
 
 Cross-component reads
 ---------------------
@@ -64,7 +64,7 @@ from tengri.components.dust.draine2021_pah import (
     select_pahspec_starlight_auto,
 )
 from tengri.components.dust.emission import modified_blackbody
-from tengri.core.component import (
+from tengri.protocols.component import (
     ParamDeclaration,
     PipelineState,
     SEDComponentConfig,

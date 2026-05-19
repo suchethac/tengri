@@ -1,51 +1,36 @@
-"""Core protocols for the tengri SED forward-model pipeline (Part II-1).
+# SPDX-License-Identifier: BSD-3-Clause
+r"""Deprecation shim: ``tengri.core`` was renamed to ``tengri.protocols``.
 
-This subpackage defines the **contracts** that physics components,
-observation models, and likelihoods must implement so that future
-phases can migrate :class:`tengri.SEDModel` from a hardcoded tier
-dispatch (~2957 lines today) into a thin orchestrator over a list of
-:class:`SEDComponent` objects.
+The old name was misleading — the package holds *protocol* definitions
+(``SEDComponent``, ``DerivedBundle``, ``PipelineState``, etc.), not "core
+business logic". The forward-model orchestrator lives in
+``tengri.forward.sed_model``.
 
-This is intentionally a **scaffold**: nothing in `tengri` consumes
-these protocols yet. The classes live here so:
+This shim re-exports everything from ``tengri.protocols`` and emits a
+one-shot ``DeprecationWarning`` on first import. Will be removed in
+tengri v1.0.
 
-1. Future component implementations have a single, stable interface
-   to target (`StellarSEDComponent`, `DustSEDComponent`, …).
-2. The contract is reviewable on its own, before any migration touches
-   `forward/sed_model.py`.
-3. A unit test asserts the protocol shape so accidental breaking
-   changes during the migration are caught early.
-
-See ``~/.claude/plans/i-want-you-to-soft-torvalds.md`` Part II for the
-full re-architecture proposal and Phase II-2 onwards.
+Migration: ``s/tengri\.core/tengri.protocols/g`` across imports.
 """
 
 from __future__ import annotations
 
-from tengri.core.component import (
-    BARE_NAME_ALLOWLIST,
-    DerivedKey,
-    ParamDeclaration,
-    PipelineContractError,
-    PipelineState,
-    SEDComponent,
-    SEDComponentConfig,
-    SEDComponentState,
-)
-from tengri.core.derived_bundle import DerivedBundle
-from tengri.core.likelihood import Likelihood
-from tengri.core.observation import ObservationModel
+import importlib as _importlib
+import sys as _sys
+import warnings as _warnings
 
-__all__ = [
-    "BARE_NAME_ALLOWLIST",
-    "DerivedBundle",
-    "DerivedKey",
-    "Likelihood",
-    "ObservationModel",
-    "ParamDeclaration",
-    "PipelineContractError",
-    "PipelineState",
-    "SEDComponent",
-    "SEDComponentConfig",
-    "SEDComponentState",
-]
+_warnings.warn(
+    "tengri.core has been renamed to tengri.protocols and will be removed "
+    "in tengri v1.0. Update imports: `from tengri.core ...` → `from "
+    "tengri.protocols ...`.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+# Re-route every dotted submodule access (``tengri.core.component`` →
+# ``tengri.protocols.component``) by aliasing sys.modules entries.
+_canonical = _importlib.import_module("tengri.protocols")
+_sys.modules[__name__] = _canonical
+for _name in ("component", "derived_bundle", "likelihood", "observation"):
+    _sub = _importlib.import_module(f"tengri.protocols.{_name}")
+    _sys.modules[f"{__name__}.{_name}"] = _sub

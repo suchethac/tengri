@@ -22,7 +22,7 @@ from tengri.components.dust.component import (
     DustAttenuationSEDComponent,
     DustAttenuationSEDComponentConfig,
 )
-from tengri.core import PipelineState
+from tengri.protocols import PipelineState
 from tengri.forward.orchestrator import run_components
 
 REL_TOL = 1e-10

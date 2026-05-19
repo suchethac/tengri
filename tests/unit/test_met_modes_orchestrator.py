@@ -239,7 +239,7 @@ class TestTable:
             StellarSEDComponent,
             StellarSEDComponentConfig,
         )
-        from tengri.core.component import PipelineState
+        from tengri.protocols.component import PipelineState
         from tengri.forward.orchestrator import run_components
         from tengri.parameters.translate import LOG10_ZSUN
 
@@ -276,7 +276,7 @@ class TestTable:
             StellarSEDComponent,
             StellarSEDComponentConfig,
         )
-        from tengri.core.component import PipelineState
+        from tengri.protocols.component import PipelineState
         from tengri.forward.orchestrator import run_components
 
         stellar = StellarSEDComponent(

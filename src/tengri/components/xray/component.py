@@ -4,7 +4,7 @@
 Phase II-1 first-cohort exercise (sibling to
 :class:`tengri.components.radio.component.RadioSEDComponent`). The
 physics in :mod:`tengri.components.xray.xray` is unchanged; this is
-a thin wrapper that satisfies :class:`tengri.core.SEDComponent` so
+a thin wrapper that satisfies :class:`tengri.protocols.SEDComponent` so
 the orchestrator can run X-ray alongside the other Phase II adapters.
 
 Cross-component reads
@@ -40,7 +40,7 @@ import jax.numpy as jnp
 
 from tengri.components.xray._params import PARAMS as _XRAY_PARAMS
 from tengri.components.xray.xray import xray_total
-from tengri.core.component import (
+from tengri.protocols.component import (
     DerivedKey,
     ParamDeclaration,
     PipelineState,

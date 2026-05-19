@@ -48,7 +48,7 @@ class CompositeLikelihood:
 
     Parameters
     ----------
-    *likelihoods : :class:`tengri.core.Likelihood`
+    *likelihoods : :class:`tengri.protocols.Likelihood`
         Concrete Likelihood objects. Order doesn't matter — sums are
         commutative — but is preserved for diagnostic ``name``
         construction.

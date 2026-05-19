@@ -53,7 +53,7 @@ from tengri.components.igm.component import IGMSEDComponent
 from tengri.components.nebular.component import NebularSEDComponent
 from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.xray.component import XRaySEDComponent
-from tengri.core import (
+from tengri.protocols import (
     BARE_NAME_ALLOWLIST,
     Likelihood,
     ObservationModel,

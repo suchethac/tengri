@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from tengri.core.component import (
+from tengri.protocols.component import (
     DerivedKey,
     PipelineContractError,
     SEDComponentConfig,

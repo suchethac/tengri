@@ -412,7 +412,7 @@ Dale 2014 + tsnorm SFH + 14-band photometry, MIST SSP grid, fixed *z*:
 
 The right fix is to stop capturing `ssp_flux` and the IR template
 grids as closure-captured constants. Instead, thread them through the
-new `tengri.core.PipelineState` (Phase II-1 scaffold, May 2026) as
+new `tengri.protocols.PipelineState` (Phase II-1 scaffold, May 2026) as
 explicit JAX arrays. Then:
 
 - XLA sees them as runtime arguments, not constants → no

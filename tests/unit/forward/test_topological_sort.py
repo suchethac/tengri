@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from tengri.core.component import (
+from tengri.protocols.component import (
     DerivedKey,
     PipelineContractError,
     SEDComponentConfig,

@@ -19,7 +19,7 @@ Tuples exported here
 
 from __future__ import annotations
 
-from tengri.core.component import ParamDeclaration
+from tengri.protocols.component import ParamDeclaration
 from tengri.parameters.priors import Fixed, Uniform
 
 # Empty for now — kept as the canonical "stellar's own _params.py"

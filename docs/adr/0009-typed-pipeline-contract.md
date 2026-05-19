@@ -50,7 +50,7 @@ caught both failure modes at construction time, with zero JIT cost.
 
 Land a single, typed cross-component contract:
 
-1. **`DerivedKey(NamedTuple)`** in `tengri.core.component` with fields
+1. **`DerivedKey(NamedTuple)`** in `tengri.protocols.component` with fields
    `(name, units, description)` — mirrors the existing
    `ParamDeclaration` shape for symmetry.
 2. **Two new Protocol methods** on `SEDComponent`:

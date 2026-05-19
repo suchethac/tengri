@@ -206,7 +206,7 @@ _CUSTOM_LIKELIHOOD = _Tutorial(
         fitter = tengri.Fitter(model, data=fluxes, noise=student_t)
 
         # For genuinely non-standard likelihoods, implement the Likelihood
-        # Protocol from tengri.core (Phase II-1 scaffold).  Minimum surface:
+        # Protocol from tengri.protocols (Phase II-1 scaffold).  Minimum surface:
         #
         #     class MyLikelihood:
         #         def log_prob(self, params, predicted, data) -> float: ...
@@ -234,7 +234,7 @@ def _run_register_a_component() -> None:
     from dataclasses import dataclass, field
 
     import tengri
-    from tengri.core.component import ParamDeclaration, SEDComponentConfig
+    from tengri.protocols.component import ParamDeclaration, SEDComponentConfig
 
     @dataclass(frozen=True)
     class _DemoConfig(SEDComponentConfig):
@@ -284,7 +284,7 @@ _REGISTER_A_COMPONENT = _Tutorial(
     code=textwrap.dedent(
         """
         from dataclasses import dataclass, field
-        from tengri.core.component import ParamDeclaration, SEDComponentConfig
+        from tengri.protocols.component import ParamDeclaration, SEDComponentConfig
         import tengri
 
         @dataclass(frozen=True)

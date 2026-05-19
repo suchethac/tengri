@@ -58,7 +58,7 @@ from tengri.components.stellar.sps.dsps_wrapper import (
 # 7 edges → 6 bins, matching ``MET_REGISTRY``'s
 # ``_N_MET_BINS_DEFAULT``.
 _DEFAULT_MET_BIN_EDGES_LOG_YR = jnp.array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14])
-from tengri.core.component import (
+from tengri.protocols.component import (
     DerivedKey,
     ParamDeclaration,
     PipelineState,

@@ -172,7 +172,7 @@ from tengri.config.exceptions import (
     TengriError,
     TengriIOError,
 )
-from tengri.core import DerivedBundle, DerivedKey, PipelineContractError
+from tengri.protocols import DerivedBundle, DerivedKey, PipelineContractError
 from tengri.facade import Galaxy, doctor
 from tengri.forward._kernels import (
     COMPOSITIONAL_ONLY as COMPOSITIONAL_ONLY_KERNEL_STRATEGY,

@@ -24,7 +24,7 @@ from tengri.components.dust.emission_component import (
     DustEmissionSEDComponent,
     DustEmissionSEDComponentConfig,
 )
-from tengri.core.component import PipelineState
+from tengri.protocols.component import PipelineState
 
 setup_style()
 

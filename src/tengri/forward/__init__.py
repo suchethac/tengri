@@ -7,7 +7,7 @@ Phase II-2.6 also exposes the **component-orchestrator** path:
 - :func:`build_components` — assemble an ordered list of
   :class:`SEDComponent` adapters from a flat keyword-argument call.
 - :func:`run_components` — thread a
-  :class:`tengri.core.PipelineState` through the chain.
+  :class:`tengri.protocols.PipelineState` through the chain.
 
 Usage::
 

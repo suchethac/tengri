@@ -11,7 +11,7 @@ registry-driven path.
 
 from __future__ import annotations
 
-from tengri.core.component import ParamDeclaration
+from tengri.protocols.component import ParamDeclaration
 
 PARAMS: tuple[ParamDeclaration, ...] = ()
 

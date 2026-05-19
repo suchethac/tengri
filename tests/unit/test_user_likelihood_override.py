@@ -2,7 +2,7 @@
 """Tests for the user-supplied ``likelihood=`` override path on Fitter.
 
 Validates that ``Fitter(model, data, noise, likelihood=Custom)`` routes
-the χ² term through the user's :class:`tengri.core.Likelihood` object
+the χ² term through the user's :class:`tengri.protocols.Likelihood` object
 instead of the built-in dispatch in :mod:`tengri.inference.loss_functions`.
 
 These tests mock the Fitter interface so we don't need to spin up an

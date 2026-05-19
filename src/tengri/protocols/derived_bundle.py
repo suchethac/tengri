@@ -45,7 +45,7 @@ class DerivedBundle:
     name. ``None`` means "not populated by any upstream component".
 
     Mutation via :meth:`with_` (the same pattern
-    :class:`tengri.core.PipelineState` uses); never assign in place
+    :class:`tengri.protocols.PipelineState` uses); never assign in place
     because the dataclass is frozen.
 
     Dict compatibility
@@ -277,7 +277,7 @@ def _did_you_mean(target: str, options) -> str | None:
 # Each typed field is a data field. ``_extras`` is also a data field
 # (a dict; JAX's default-dict-pytree handler will recurse into it).
 # The frozen-dataclass + register_dataclass combo is identical to how
-# PipelineState is registered in tengri.core.component.
+# PipelineState is registered in tengri.protocols.component.
 
 from jax import tree_util as _tree_util
 

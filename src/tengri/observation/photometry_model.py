@@ -2,7 +2,7 @@
 """PhotometryObservationModel: first :class:`ObservationModel` adapter.
 
 Phase II-1, ninth pass. Validates the
-:class:`tengri.core.observation.ObservationModel` Protocol with a real
+:class:`tengri.protocols.observation.ObservationModel` Protocol with a real
 implementation: takes the rest-frame SED produced by the
 :class:`SEDComponent` chain, redshifts it, applies cosmological
 distance dimming, convolves through a filter set, and returns
@@ -37,7 +37,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from tengri.core.component import ParamDeclaration, PipelineState
+from tengri.protocols.component import ParamDeclaration, PipelineState
 from tengri.observation.photometry import (
     FilterCurve,
     compute_flux_density_batch,
@@ -123,7 +123,7 @@ class PhotometryObservationModel:
             ``state.sed_intrinsic``.
         params : mapping
             Must contain ``redshift``. The orchestrator threads it via
-            :data:`tengri.core.BARE_NAME_ALLOWLIST`.
+            :data:`tengri.protocols.BARE_NAME_ALLOWLIST`.
 
         Returns
         -------

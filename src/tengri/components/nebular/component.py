@@ -2,7 +2,7 @@
 """NebularSEDComponent: SEDComponent adapter wrapping a nebular backend.
 
 Phase II-1 fifth adapter. Validates the **zero-parameter edge case** of
-the :class:`tengri.core.SEDComponent` Protocol: an adapter that has no
+the :class:`tengri.protocols.SEDComponent` Protocol: an adapter that has no
 free parameters and (for the BakedIn backend) does not transform the
 SED — it is a marker that publishes ``state.derived["nebular_backend"]``
 so downstream observation models know whether emission lines are in
@@ -48,7 +48,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular.baked_in import BakedInBackend
-from tengri.core.component import (
+from tengri.protocols.component import (
     DerivedKey,
     ParamDeclaration,
     PipelineState,
@@ -304,7 +304,7 @@ class NebularSEDComponent:
         Promotes the previously-fatal KeyError at JIT trace time
         (``state.derived["lnu_age"]`` → ``KeyError`` if Stellar is
         absent) to a construction-time
-        :class:`tengri.core.component.PipelineContractError` with a
+        :class:`tengri.protocols.component.PipelineContractError` with a
         "Did you mean: ..." hint. Phase A of issue #21; see
         ADR-0004 for the contract design.
         """

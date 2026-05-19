@@ -3765,7 +3765,7 @@ class SEDModel:
         (``self.spec`` + ``self.ssp_data`` + dust / nebular / AGN / radio
         / X-ray / IGM flags) and threads ``params`` through
         :func:`tengri.forward.run_components`. Returns the final
-        :class:`tengri.core.PipelineState`, **not** a legacy
+        :class:`tengri.protocols.PipelineState`, **not** a legacy
         :class:`Prediction` — callers wanting the legacy shape should
         keep using :meth:`predict_photometry`/:meth:`predict_spectrum`
         until the full integration adapter ships.
@@ -3802,7 +3802,7 @@ class SEDModel:
         branch. Anything else (``burst``, etc.) is currently unmapped
         and will raise downstream.
         """
-        from tengri.core.component import PipelineState
+        from tengri.protocols.component import PipelineState
         from tengri.forward import build_components, run_components
 
         chain = self._build_component_chain()

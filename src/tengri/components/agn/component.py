@@ -38,7 +38,7 @@ import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn.unified import resolve_agn_model
-from tengri.core.component import (
+from tengri.protocols.component import (
     DerivedKey,
     ParamDeclaration,
     PipelineState,
