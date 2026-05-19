@@ -600,8 +600,46 @@ def run_components(
     -------
     PipelineState
         Final state after all components have applied.
+
+    Raises
+    ------
+    PipelineContractError
+        If, after every component has applied, the final
+        ``state.derived._extras`` is non-empty — i.e. some component's
+        ``apply()`` slipped data through the ``DerivedBundle``'s opt-in
+        spillover instead of using ``state.derived.with_(X=value)``
+        (ADR-0007 Phase 3). The snapshot test
+        (:mod:`tests.integration.test_derived_contract_snapshots`)
+        catches this for the 3 snapshotted recipes; the runtime check
+        here broadens the guard to every hand-rolled component list.
+
+        Bypass with the env var ``TENGRI_ALLOW_DERIVED_EXTRAS=1`` —
+        useful during in-flight migrations or when external user code
+        explicitly attaches non-canonical keys via
+        ``DerivedBundle.from_dict(..., allow_extras=True)``. Not for
+        production code.
     """
+    import os as _os
+
     for component in components:
         sliced = slice_params_for_component(component, params)
         state = component.apply(state, sliced)
+
+    # ADR-0007 Phase 4 invariant — strict typed-only writes (#64
+    # added the same check at the snapshot-test boundary; this one
+    # makes the guard apply to *every* run_components call regardless
+    # of whether the pipeline is snapshotted).
+    if _os.environ.get("TENGRI_ALLOW_DERIVED_EXTRAS") != "1":
+        extras = getattr(state.derived, "_extras", None)
+        if extras:
+            raise PipelineContractError(
+                f"run_components: state.derived._extras is non-empty after the "
+                f"forward pass: {list(extras.keys())!r}. Some component's "
+                f"apply() is writing through DerivedBundle's opt-in spillover "
+                f"instead of the typed ``state.derived.with_(X=value)`` API "
+                f"(ADR-0007 Phase 3). Migrate the offending write site to use "
+                f"``with_(...)``, add a matching field to DerivedBundle, or "
+                f"set TENGRI_ALLOW_DERIVED_EXTRAS=1 for debugging only."
+            )
+
     return state
