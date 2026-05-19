@@ -75,23 +75,26 @@ def test_stellar_phot_lnu_lut_within_tolerance(stellar_only_model):
     # Undo compute_flux_density's (1+z)/(4π·dl_cm²) factor to recover bare Lν.
     dl_cm = 1.0
     inv_cosmology = 4.0 * math.pi * dl_cm**2  # at z=0 this is just 4π·dl²
-    direct = jnp.asarray(
-        [
-            compute_flux_density(
-                state.sed_intrinsic,
-                state.wave,
-                fw,
-                ft,
-                redshift=0.0,
-                dl_cm=dl_cm,
-            )
-            for fw, ft in zip(
-                m.observation.photometry.filter_waves,
-                m.observation.photometry.filter_trans,
-                strict=False,
-            )
-        ]
-    ) * inv_cosmology
+    direct = (
+        jnp.asarray(
+            [
+                compute_flux_density(
+                    state.sed_intrinsic,
+                    state.wave,
+                    fw,
+                    ft,
+                    redshift=0.0,
+                    dl_cm=dl_cm,
+                )
+                for fw, ft in zip(
+                    m.observation.photometry.filter_waves,
+                    m.observation.photometry.filter_trans,
+                    strict=False,
+                )
+            ]
+        )
+        * inv_cosmology
+    )
     # Tolerance: 0.5% per the documented hybrid-kernel accuracy
     # (Zacharegkas+2025; see docs/dev/optimization-architecture.md).
     rel_err = jnp.abs(lut_path - direct) / jnp.abs(direct)

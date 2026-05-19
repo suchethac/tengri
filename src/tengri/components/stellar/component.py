@@ -828,9 +828,7 @@ class StellarSEDComponent:
             # Convert to erg/s/Hz to match sed_intrinsic units (LSUN_ERG_PER_S
             # is the same scale used at line 732 for lnu_age).
             stellar_phot_lnu_lut_rest = (
-                total_mass
-                * jnp.einsum("ma,maf->f", joint_weights, ssp_phot)
-                * LSUN_ERG_PER_S
+                total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot) * LSUN_ERG_PER_S
             )
             derived_overrides["stellar_phot_lnu_lut"] = stellar_phot_lnu_lut_rest
 
