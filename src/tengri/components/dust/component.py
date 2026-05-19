@@ -33,7 +33,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.dust.attenuation import calzetti, resolve_dust_law
-from tengri.core.component import (
+from tengri.protocols.component import (
     DerivedKey,
     ParamDeclaration,
     PipelineState,

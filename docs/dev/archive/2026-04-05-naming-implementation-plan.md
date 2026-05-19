@@ -195,7 +195,7 @@ Each sub-phase is independent. Run verification after each.
 - Update all internal imports to `from tengri.parameters.parameters import Parameters`.
 - Keep `ParamSpec` in `__all__` for backward compatibility.
 
-**Caution:** The file rename means every `from tengri.core.param_spec import ...` in the codebase must be updated in the same commit. Use grep:
+**Caution:** The file rename means every `from tengri.protocols.param_spec import ...` in the codebase must be updated in the same commit. Use grep:
 ```bash
 grep -rn "param_spec" src/ tests/
 ```

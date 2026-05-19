@@ -209,7 +209,7 @@ renames, unit drift, and out-of-order publishers — with a
 "Did you mean: ..." hint for likely typos. New derived keys add one
 line to `_CANONICAL_UNITS` in the same PR that introduces the
 publisher, plus a matching field on `DerivedBundle`
-(`tengri.core.derived_bundle`) per ADR-0007.
+(`tengri.protocols.derived_bundle`) per ADR-0007.
 
 **Parameters.** `declared_parameters()` mirrors the entries already in `parameters/_param_defs.py` — do **not** duplicate priors. The `_param_defs.py` registry stays the single source of truth until the migration completes.
 

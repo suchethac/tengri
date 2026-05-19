@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from tengri.core.component import (
+from tengri.protocols.component import (
     DerivedKey,
     PipelineContractError,
 )

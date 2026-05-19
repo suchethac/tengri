@@ -282,7 +282,7 @@ class Galaxy:
         Convenience wrapper around
         :meth:`tengri.SEDModel.predict_via_orchestrator` that lazy-builds
         the underlying ``SEDModel`` and threads the params dict through
-        the component chain. Returns a :class:`tengri.core.PipelineState`.
+        the component chain. Returns a :class:`tengri.protocols.PipelineState`.
 
         Use this when you want the orchestrator's published cross-component
         derived quantities (``L_ir``, ``L_agn_bol``, ``log_mstar``,
@@ -330,7 +330,7 @@ class Galaxy:
             wrapper from :meth:`SEDModel.predict`, exposing the
             ``.sfh`` / ``.sed`` / ``.lines`` / ``.radio`` / ``.xray`` /
             ``.ionizing`` property groups. ``"component"`` returns a
-            :class:`tengri.core.PipelineState` from the Phase II
+            :class:`tengri.protocols.PipelineState` from the Phase II
             SEDComponent orchestrator with all cross-component
             quantities published in ``state.derived``.
 
@@ -344,7 +344,7 @@ class Galaxy:
         -------
         Prediction or PipelineState
             ``Prediction`` for ``backend="legacy"``,
-            :class:`tengri.core.PipelineState` for ``backend="component"``.
+            :class:`tengri.protocols.PipelineState` for ``backend="component"``.
 
         Raises
         ------

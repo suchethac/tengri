@@ -20,7 +20,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import pytest
 
-from tengri.core import Likelihood
+from tengri.protocols import Likelihood
 from tengri.inference.composite_likelihood import CompositeLikelihood
 from tengri.inference.likelihoods.gaussian import (
     diag_gaussian_chi2,
@@ -161,7 +161,7 @@ def test_composite_rejects_duplicate_declared_parameters():
         name = "dup"
 
         def __init__(self):
-            from tengri.core import ParamDeclaration
+            from tengri.protocols import ParamDeclaration
 
             self._decls = [ParamDeclaration("noise_jitter", Uniform(0.0, 1.0), "")]
 
@@ -179,7 +179,7 @@ def test_composite_rejects_duplicate_declared_parameters():
 def test_composite_unions_declared_parameters():
     """Constituents' declared params are concatenated (no dedup needed when
     names differ)."""
-    from tengri.core import ParamDeclaration
+    from tengri.protocols import ParamDeclaration
     from tengri.parameters.priors import Uniform
 
     class _A:

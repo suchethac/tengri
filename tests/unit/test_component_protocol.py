@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Contract tests for :mod:`tengri.core.component`.
+"""Contract tests for :mod:`tengri.protocols.component`.
 
 These tests assert structural properties of the
-:class:`tengri.core.SEDComponent` Protocol against the first two real
+:class:`tengri.protocols.SEDComponent` Protocol against the first two real
 adapters (radio + IGM). They are deliberately *cheap* — no SSP grids,
 no inference, no fits — so they run on every PR and catch drift
 between the scaffold and live adapters.
@@ -22,7 +22,7 @@ from tengri.components.igm.component import IGMSEDComponent
 from tengri.components.nebular.component import NebularSEDComponent
 from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.xray.component import XRaySEDComponent
-from tengri.core import (
+from tengri.protocols import (
     BARE_NAME_ALLOWLIST,
     ParamDeclaration,
     PipelineState,

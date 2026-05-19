@@ -3,7 +3,7 @@
 
 Phase II-1 first-adapter exercise. The physics in
 :mod:`tengri.components.radio.radio` is unchanged; this is a thin
-wrapper that satisfies :class:`tengri.core.SEDComponent` so the
+wrapper that satisfies :class:`tengri.protocols.SEDComponent` so the
 orchestrator can run radio alongside other Phase-II adapters.
 
 AGN-radio model selection
@@ -41,7 +41,7 @@ Radio depends on quantities owned by other components:
 - ``redshift`` — bare parameter from :data:`BARE_NAME_ALLOWLIST`.
 
 This is the canonical pattern documented in
-:class:`tengri.core.PipelineState`'s "Cross-component reads" section:
+:class:`tengri.protocols.PipelineState`'s "Cross-component reads" section:
 **published derived quantity + documented fallback**, not a free
 parameter snooped from another component's namespace.
 """
@@ -56,7 +56,7 @@ import jax.numpy as jnp
 
 from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
 from tengri.components.radio.radio import radio_total, radio_total_dpl
-from tengri.core.component import (
+from tengri.protocols.component import (
     DerivedKey,
     ParamDeclaration,
     PipelineState,

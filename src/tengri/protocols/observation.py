@@ -19,7 +19,7 @@ from typing import Any, Protocol, runtime_checkable
 
 import jax.numpy as jnp
 
-from tengri.core.component import PipelineState
+from tengri.protocols.component import PipelineState
 
 __all__ = ["ObservationModel"]
 

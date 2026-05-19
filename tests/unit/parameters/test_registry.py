@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from tengri.core.component import ParamDeclaration
+from tengri.protocols.component import ParamDeclaration
 from tengri.parameters.registry import (
     ParameterRecord,
     _clear_cache,

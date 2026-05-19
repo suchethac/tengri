@@ -166,7 +166,7 @@ from tengri import (
 #                      redshift; `describe("sdss_r")` prints λ_eff
 #                      and FWHM. Useful when assembling new bandsets.
 #
-#   tengri.core        forward-looking *protocol* layer (Phase II-1
+#   tengri.protocols        forward-looking *protocol* layer (Phase II-1
 #                      scaffold, May 2026): `SEDComponent`,
 #                      `PipelineState`, `ObservationModel`, `Likelihood`.
 #                      Nothing in user-facing tengri *consumes* these
@@ -423,7 +423,7 @@ plt.show()
 # - **`tengri.filters`** — interactive filter discovery:
 #   `list_filters()`, `suggest(z, coverage=...)`, `describe(name)`.
 #
-# A fifth namespace, **`tengri.core`**, hosts forward-looking Protocol
+# A fifth namespace, **`tengri.protocols`**, hosts forward-looking Protocol
 # definitions (`SEDComponent`, `PipelineState`, `ObservationModel`,
 # `Likelihood`) used by an in-progress refactor. User code does not
 # need to interact with it today.

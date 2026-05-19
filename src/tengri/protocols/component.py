@@ -31,7 +31,7 @@ from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 import jax.numpy as jnp
 
-from tengri.core.derived_bundle import DerivedBundle
+from tengri.protocols.derived_bundle import DerivedBundle
 
 __all__ = [
     "BARE_NAME_ALLOWLIST",
@@ -87,7 +87,7 @@ class ParamDeclaration(NamedTuple):
     prior : Any
         A :class:`tengri.parameters.priors.Distribution` (Uniform,
         Gaussian, Fixed, …). Typed loosely as ``Any`` here to avoid an
-        import cycle between :mod:`tengri.core` and
+        import cycle between :mod:`tengri.protocols` and
         :mod:`tengri.parameters`.
     description : str
         One-line human-readable description, mirrored into the prior

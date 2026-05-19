@@ -48,7 +48,7 @@ import jax.numpy as jnp
 
 from tengri.components.dust.attenuation import two_component_dust
 from tengri.components.dust.emission import resolve_emission_model
-from tengri.core.component import (
+from tengri.protocols.component import (
     ParamDeclaration,
     PipelineState,
     SEDComponentConfig,

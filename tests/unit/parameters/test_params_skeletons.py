@@ -12,7 +12,7 @@ import importlib
 
 import pytest
 
-from tengri.core.component import ParamDeclaration
+from tengri.protocols.component import ParamDeclaration
 
 SKELETON_MODULES = (
     "tengri.components.radio._params",

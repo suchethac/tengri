@@ -78,7 +78,7 @@ def test_precompute_returns_state_with_grid(precomputed):
 
 
 def test_apply_adds_pah_emission(component, precomputed):
-    from tengri.core.component import PipelineState
+    from tengri.protocols.component import PipelineState
 
     state_pre, wave_aa = precomputed
     L_ir = 1.0e44  # erg/s
@@ -99,7 +99,7 @@ def test_apply_adds_pah_emission(component, precomputed):
 
 def test_energy_balance(component, precomputed):
     """The integrated L_nu over nu must equal L_ir within tolerance."""
-    from tengri.core.component import PipelineState
+    from tengri.protocols.component import PipelineState
 
     state_pre, wave_aa = precomputed
     L_ir = 3.0e44
@@ -120,7 +120,7 @@ def test_energy_balance(component, precomputed):
 
 
 def test_apply_jit_compiles(component, precomputed):
-    from tengri.core.component import PipelineState
+    from tengri.protocols.component import PipelineState
 
     state_pre, wave_aa = precomputed
 
@@ -143,7 +143,7 @@ def test_apply_jit_compiles(component, precomputed):
 
 
 def test_gradient_through_lgU(component, precomputed):
-    from tengri.core.component import PipelineState
+    from tengri.protocols.component import PipelineState
 
     state_pre, wave_aa = precomputed
 
@@ -189,7 +189,7 @@ def test_missing_template_raises_with_build_instructions(tmp_path):
 
 
 def test_zero_L_ir_zero_emission(component, precomputed):
-    from tengri.core.component import PipelineState
+    from tengri.protocols.component import PipelineState
 
     state_pre, wave_aa = precomputed
     pipeline = PipelineState(

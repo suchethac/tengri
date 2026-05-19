@@ -13,7 +13,7 @@ Per ``~/.claude/skills/improve-codebase-architecture/LANGUAGE.md``:
     *One adapter = hypothetical seam. Two adapters = real seam.*
 
 Until two real components run through this orchestrator, the
-:class:`tengri.core.SEDComponent` Protocol is hypothetical. This file
+:class:`tengri.protocols.SEDComponent` Protocol is hypothetical. This file
 makes the seam real.
 
 What this is **not**
@@ -32,7 +32,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from tengri.core.component import (
+from tengri.protocols.component import (
     BARE_NAME_ALLOWLIST,
     DerivedKey,
     ParamDeclaration,

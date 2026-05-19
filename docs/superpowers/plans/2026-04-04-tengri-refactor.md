@@ -174,7 +174,7 @@ ParamSpec = __init_deprecated_paramspec()
 In `src/tengri/__init__.py`, add `Parameters` to the export list:
 
 ```python
-from tengri.core.param_spec import Parameters, ParamSpec  # ParamSpec deprecated
+from tengri.protocols.param_spec import Parameters, ParamSpec  # ParamSpec deprecated
 ```
 
 - [ ] **Step 5: Run tests to verify A-1 passes**
@@ -550,7 +550,7 @@ git commit -m "refactor: split fitter.py into vi.py, mcmc.py, evidence.py, map_d
 ```python
 # tests/unit/test_model_split.py
 def test_convenience_module_importable():
-    from tengri.core.convenience import (
+    from tengri.protocols.convenience import (
         prior_predictive,
         fit_catalog,
         fit_population,
@@ -610,7 +610,7 @@ def fit_population(model: "Model", obs_list, **kwargs):
 
 ```python
 def prior_predictive(self, n: int = 500, seed: int = 42):
-    from tengri.core.convenience import prior_predictive as _pp
+    from tengri.protocols.convenience import prior_predictive as _pp
     return _pp(self, n=n, seed=seed)
 ```
 

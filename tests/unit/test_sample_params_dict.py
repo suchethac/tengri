@@ -81,7 +81,7 @@ def test_same_key_produces_identical_draws(chain):
 @pytest.mark.unit
 def test_end_to_end_drives_run_components(chain):
     """sample_params_dict output feeds run_components without massaging."""
-    from tengri.core import PipelineState
+    from tengri.protocols import PipelineState
 
     params = sample_params_dict(
         chain,

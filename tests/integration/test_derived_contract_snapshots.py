@@ -45,7 +45,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.core import PipelineState
+from tengri.protocols import PipelineState
 from tengri.forward.component_factory import build_components
 from tengri.forward.orchestrator import run_components, sample_params_dict
 

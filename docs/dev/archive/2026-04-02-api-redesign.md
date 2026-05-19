@@ -781,7 +781,7 @@ Add the following method to the `Model` class immediately before `fit()` (around
         ... )
         """
         from tengri.parameters.translate import resolve_short_names
-        from tengri.core.param_spec import ParamSpec
+        from tengri.protocols.param_spec import ParamSpec
         from tengri.distributions import Fixed, Uniform
         from tengri.observation.observation import Observation
         from tengri.observation.photometry_config import Photometry

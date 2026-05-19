@@ -319,7 +319,7 @@ def test_galaxy_predict_legacy_returns_prediction(stellar_only_galaxy):
 def test_galaxy_predict_component_returns_pipeline_state(stellar_only_galaxy):
     """Galaxy.predict(..., backend='component') returns a PipelineState
     with the expected stellar derived keys."""
-    from tengri.core.component import PipelineState
+    from tengri.protocols.component import PipelineState
 
     state = stellar_only_galaxy.predict(_STELLAR_PARAMS, backend="component")
     assert isinstance(state, PipelineState)
@@ -335,7 +335,7 @@ def test_galaxy_predict_unknown_backend_raises(stellar_only_galaxy):
 
 def test_galaxy_predict_default_is_legacy(stellar_only_galaxy):
     """Default backend remains 'legacy' until Phase B v1.0 cutover."""
-    from tengri.core.component import PipelineState
+    from tengri.protocols.component import PipelineState
     from tengri.forward.prediction import Prediction
 
     default_pred = stellar_only_galaxy.predict(_STELLAR_PARAMS)

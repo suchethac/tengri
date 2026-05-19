@@ -9,7 +9,7 @@ from tengri.components.agn.grahsp import (
     GRAHSPSEDComponent,
     GRAHSPSEDComponentConfig,
 )
-from tengri.core.component import PipelineState
+from tengri.protocols.component import PipelineState
 
 
 def _default_params():

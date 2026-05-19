@@ -7,7 +7,7 @@ Empty until PR2 begins moving priors out of
 
 from __future__ import annotations
 
-from tengri.core.component import ParamDeclaration
+from tengri.protocols.component import ParamDeclaration
 
 PARAMS: tuple[ParamDeclaration, ...] = ()
 

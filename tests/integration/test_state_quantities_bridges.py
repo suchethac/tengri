@@ -3,7 +3,7 @@
 
 The :func:`tengri.forward.state_to_*_quantities` helpers and their
 ``SEDModel.predict_*_via_orchestrator`` wrappers convert a
-:class:`tengri.core.PipelineState` into the legacy
+:class:`tengri.protocols.PipelineState` into the legacy
 :class:`SFHQuantities` / :class:`SEDQuantities` NamedTuples (and the
 new :class:`RadioQuantities` / :class:`XRayQuantities` /
 :class:`IonizingQuantities` mirrors).
@@ -26,7 +26,7 @@ from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.stellar import StellarSEDComponent
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.components.xray.component import XRaySEDComponent
-from tengri.core.component import PipelineState
+from tengri.protocols.component import PipelineState
 from tengri.forward import (
     IonizingQuantities,
     RadioQuantities,

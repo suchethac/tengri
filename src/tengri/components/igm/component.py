@@ -4,7 +4,7 @@
 Phase II-1 first-adapter exercise. The physics function
 :func:`tengri.components.igm.igm.igm_transmission` (Inoue et al. 2014)
 is unchanged — this module is a thin wrapper that satisfies the
-:class:`tengri.core.SEDComponent` Protocol so the orchestrator can run
+:class:`tengri.protocols.SEDComponent` Protocol so the orchestrator can run
 IGM transmission alongside other Phase-II adapters.
 
 Design choices made here (and mirrored in
@@ -13,7 +13,7 @@ Design choices made here (and mirrored in
 - ``parameter_prefix = "igm_"`` for the patchy-reionization extras
   (``igm_x_HI``, ``igm_bubble_mpc``, ``igm_z_mid``, ``igm_dz``,
   ``igm_log_nhi``). The bare ``redshift`` parameter is read via
-  :data:`tengri.core.component.BARE_NAME_ALLOWLIST` — IGM is the canonical
+  :data:`tengri.protocols.component.BARE_NAME_ALLOWLIST` — IGM is the canonical
   reason that allowlist exists.
 - IGM is *transmissive*: it multiplies :attr:`PipelineState.sed_observed`
   in place. If ``sed_observed`` is ``None`` the component is a no-op
@@ -34,7 +34,7 @@ import jax.numpy as jnp
 
 from tengri.components.igm._params import PARAMS as _IGM_PARAMS
 from tengri.components.igm.igm import igm_transmission
-from tengri.core.component import (
+from tengri.protocols.component import (
     DerivedKey,
     ParamDeclaration,
     PipelineState,

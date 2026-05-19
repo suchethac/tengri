@@ -4,7 +4,7 @@
 
 **Goal:** Reorganize the flat tengri package into `core/` (forward model) and expanded `inference/` (fitting) subpackages, reducing root clutter from 18 to 3 files.
 
-**Architecture:** Move files into subpackages, update all internal imports (strategy 1: clean break, no shims), keep public API unchanged via `__init__.py` re-exports. Subpackage `__init__.py` files also export key classes for convenience (`from tengri.core import Model`).
+**Architecture:** Move files into subpackages, update all internal imports (strategy 1: clean break, no shims), keep public API unchanged via `__init__.py` re-exports. Subpackage `__init__.py` files also export key classes for convenience (`from tengri.protocols import Model`).
 
 **Tech Stack:** Python, JAX, ruff, pytest
 
@@ -54,7 +54,7 @@ src/tengri/
 | Old path | New path |
 |----------|----------|
 | `tengri.model` | `tengri.forward.sed_model` |
-| `tengri.param_spec` | `tengri.core.param_spec` |
+| `tengri.param_spec` | `tengri.protocols.param_spec` |
 | `tengri._param_translate` | `tengri.parameters.translate` |
 | `tengri._fused_kernels` | `tengri.forward.kernels.assembly` |
 | `tengri._sed_pipeline` | `tengri.forward.pipeline` |
@@ -96,7 +96,7 @@ from tengri.observation.noise import (
     uses_student_t,
     variable_noise_hamiltonian,
 )
-from tengri.core.param_spec import ParamSpec
+from tengri.protocols.param_spec import ParamSpec
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.forward.prediction import (
     DerivedQuantities,
@@ -173,7 +173,7 @@ In `core/fused_kernels.py` and `core/sed_pipeline.py` — check imports from `mo
 - [ ] **Step 4: Run tests (expect failures from import paths not yet updated elsewhere)**
 
 ```bash
-source .venv/bin/activate && python -c "from tengri.core import Model, ParamSpec"
+source .venv/bin/activate && python -c "from tengri.protocols import Model, ParamSpec"
 ```
 
 - [ ] **Step 5: Commit**
@@ -251,7 +251,7 @@ from tengri.inference.raytrace import sample_raytrace
 In `inference/posterior.py`, update lazy imports:
 ```python
 # Old: from tengri.param_spec import ParamSpec
-# New: from tengri.core.param_spec import ParamSpec
+# New: from tengri.protocols.param_spec import ParamSpec
 ```
 
 In `inference/standardized.py`, update:
@@ -297,7 +297,7 @@ from tengri.observation.noise import (
     compute_effective_noise, compute_std_inv, has_noise_model,
     uses_student_t, variable_noise_hamiltonian,
 )
-from tengri.core.param_spec import ParamSpec
+from tengri.protocols.param_spec import ParamSpec
 from tengri.parameters.translate import LOG10_ZSUN  # if exported
 from tengri.forward.prediction import (
     DerivedQuantities, EmissionLines, Prediction, SEDQuantities, SFHQuantities,
@@ -332,7 +332,7 @@ print('Public API OK')
 
 ```bash
 source .venv/bin/activate && python -c "
-from tengri.core import Model, ParamSpec
+from tengri.protocols import Model, ParamSpec
 from tengri.inference import Fitter, Posterior
 print('Subpackage API OK')
 "
@@ -357,7 +357,7 @@ Apply these replacements across all test files:
 
 ```
 from tengri.model import          → from tengri.forward.sed_model import
-from tengri.param_spec import     → from tengri.core.param_spec import
+from tengri.param_spec import     → from tengri.protocols.param_spec import
 from tengri._param_translate import → from tengri.parameters.translate import
 from tengri._mock import          → from tengri.observation.mock import
 from tengri.prediction import     → from tengri.forward.prediction import
@@ -524,7 +524,7 @@ ruff check src/ tests/ && ruff format --check src/ tests/
 python -c "from tengri import Model, ParamSpec, Fitter, Posterior, Uniform"
 
 # Subpackage API (new convenience)
-python -c "from tengri.core import Model, ParamSpec"
+python -c "from tengri.protocols import Model, ParamSpec"
 python -c "from tengri.inference import Fitter, Posterior"
 
 # Verify old root files are gone

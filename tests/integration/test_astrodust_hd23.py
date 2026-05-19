@@ -116,7 +116,7 @@ def test_precompute_state_shape(precomputed):
 
 def test_apply_energy_balance(component, precomputed):
     """int L_nu d nu == L_ir within trapezoid discretisation tolerance."""
-    from tengri.core.component import PipelineState
+    from tengri.protocols.component import PipelineState
 
     state, wave_aa = precomputed
     L_ir = 5.0e44
@@ -130,7 +130,7 @@ def test_apply_energy_balance(component, precomputed):
 
 
 def test_apply_jit_and_grad(component, precomputed):
-    from tengri.core.component import PipelineState
+    from tengri.protocols.component import PipelineState
 
     state, wave_aa = precomputed
 
@@ -154,7 +154,7 @@ def test_pah_only_component(fixture_path):
         DustEmissionSEDComponent,
         DustEmissionSEDComponentConfig,
     )
-    from tengri.core.component import PipelineState
+    from tengri.protocols.component import PipelineState
 
     wave_aa = jnp.asarray(np.geomspace(1.0e4, 1.0e7, 800))
 
@@ -195,7 +195,7 @@ def test_spinning_dust_inclusion_changes_microwave(fixture_path):
         DustEmissionSEDComponent,
         DustEmissionSEDComponentConfig,
     )
-    from tengri.core.component import PipelineState
+    from tengri.protocols.component import PipelineState
 
     wave_aa = jnp.asarray(np.geomspace(1.0e3, 3.0e8, 1500))
     L_ir = 1.0e44

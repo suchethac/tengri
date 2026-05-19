@@ -58,7 +58,7 @@ class SpatialProfileSEDComponent:
         # already in state.sed_intrinsic / sed_attenuated).
         # Typed bundle write (ADR-0007). When new fields like
         # ``spatial_profile_2d`` are added, add a matching field on
-        # ``tengri.core.DerivedBundle`` and an entry in
+        # ``tengri.protocols.DerivedBundle`` and an entry in
         # ``tengri.forward.orchestrator._CANONICAL_UNITS`` in the
         # same PR — the canonical-units check enforces this on every
         # ``build_components`` call.

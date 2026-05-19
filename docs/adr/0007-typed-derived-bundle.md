@@ -30,8 +30,8 @@ dataclass whose fields match `_CANONICAL_UNITS` one-for-one.
 
 ## Decision
 
-Land `DerivedBundle` in `tengri.core.derived_bundle` (and re-export at
-`tengri.core`). The class is a frozen dataclass with one
+Land `DerivedBundle` in `tengri.protocols.derived_bundle` (and re-export at
+`tengri.protocols`). The class is a frozen dataclass with one
 `jnp.ndarray | None = None` field per canonical derived key (31 fields
 today). `None` means "no upstream component populated this value."
 Mutation goes through `bundle.with_(L_ir=value)` — same pattern

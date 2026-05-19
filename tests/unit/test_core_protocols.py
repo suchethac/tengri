@@ -19,7 +19,7 @@ from typing import Any
 import jax.numpy as jnp
 import pytest
 
-from tengri.core import (
+from tengri.protocols import (
     Likelihood,
     ObservationModel,
     PipelineState,

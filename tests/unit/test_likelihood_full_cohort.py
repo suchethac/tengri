@@ -15,7 +15,7 @@ Validates the channel-parameterised redesign:
 
 For each adapter:
 
-1. duck-types as :class:`tengri.core.Likelihood` Protocol.
+1. duck-types as :class:`tengri.protocols.Likelihood` Protocol.
 2. matches the legacy primitive bit-for-bit on identical inputs.
 3. composes through :class:`CompositeLikelihood` without collision.
 """
@@ -25,7 +25,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import pytest
 
-from tengri.core import Likelihood
+from tengri.protocols import Likelihood
 from tengri.inference.composite_likelihood import CompositeLikelihood
 from tengri.inference.likelihoods import (
     CalibrationMarginalisedLikelihood,

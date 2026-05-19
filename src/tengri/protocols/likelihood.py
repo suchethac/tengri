@@ -79,7 +79,7 @@ class Likelihood(Protocol):
         Parameters
         ----------
         prediction : mapping of str -> array
-            Output of :meth:`tengri.core.ObservationModel.predict`.
+            Output of :meth:`tengri.protocols.ObservationModel.predict`.
         params : mapping of str -> array
             Free parameters whose name starts with the likelihood's
             domain prefix (``noise_``).

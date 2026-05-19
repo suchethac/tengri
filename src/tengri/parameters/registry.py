@@ -3,7 +3,7 @@
 
 Walks every per-component ``_params.py`` module under :mod:`tengri.components`,
 :mod:`tengri.observation`, and :mod:`tengri.parameters._shared`, then exposes
-a single, queryable view of every :class:`~tengri.core.component.ParamDeclaration`
+a single, queryable view of every :class:`~tengri.protocols.component.ParamDeclaration`
 the codebase declares. The underlying data ownership is unchanged — each
 component/module still owns its own ``_params.py`` (the decentralisation that
 landed pre-ADR-0005). This module just gives users a single API to ask:
@@ -27,7 +27,7 @@ import importlib
 import pkgutil
 from typing import NamedTuple
 
-from tengri.core.component import ParamDeclaration
+from tengri.protocols.component import ParamDeclaration
 
 __all__ = [
     "ParameterRecord",

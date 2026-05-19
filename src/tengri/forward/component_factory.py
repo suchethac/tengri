@@ -7,7 +7,7 @@ constructing each :class:`SEDComponent` subclass by hand::
 
     from tengri.forward.component_factory import build_components
     from tengri.forward.orchestrator import run_components
-    from tengri.core.component import PipelineState
+    from tengri.protocols.component import PipelineState
 
     components = build_components(
         ssp_data=ssp,
@@ -53,7 +53,7 @@ from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.stellar import StellarSEDComponent
 from tengri.components.stellar.component import StellarSEDComponentConfig
 from tengri.components.xray.component import XRaySEDComponent
-from tengri.core.component import SEDComponent
+from tengri.protocols.component import SEDComponent
 
 __all__ = [
     "IonizingQuantities",
@@ -219,7 +219,7 @@ def build_components(
     Notes
     -----
     **JIT-compatible**: yes — the returned components flow through
-    ``jax.jit`` once :class:`tengri.core.PipelineState` is registered
+    ``jax.jit`` once :class:`tengri.protocols.PipelineState` is registered
     as a pytree (Phase II-2.2-followup).
 
     The ``StellarSEDComponent`` carries ``ssp_data`` on its instance

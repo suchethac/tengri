@@ -18,7 +18,7 @@ from tengri.components.nebular.component import (
     NebularSEDComponent,
     NebularSEDComponentConfig,
 )
-from tengri.core import PipelineState
+from tengri.protocols import PipelineState
 from tengri.forward.orchestrator import merge_declared_parameters, run_components
 
 
