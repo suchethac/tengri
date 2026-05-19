@@ -180,12 +180,6 @@ class AGNSEDComponent:
             agn_ebv_disc=jnp.asarray(params.get("agn_ebv_disc", 0.0)),
         )
 
-        if state.sed_intrinsic is None:
-            new_sed = L_agn
-        else:
-            new_sed = state.sed_intrinsic + L_agn
-
-        return state.with_(
-            sed_intrinsic=new_sed,
+        return state.add_intrinsic(L_agn).with_(
             derived=state.derived.with_(L_agn_bol=L_agn_bol, sed_agn=L_agn),
         )

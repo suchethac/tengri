@@ -545,13 +545,7 @@ class DustEmissionSEDComponent:
                 f"{self.config.template!r}; valid: {_SUPPORTED_TEMPLATES}"
             )
 
-        if state.sed_intrinsic is None:
-            new_sed = jnp.zeros_like(state.wave) + L_dust_lnu
-        else:
-            new_sed = state.sed_intrinsic + L_dust_lnu
-
-        return state.with_(
-            sed_intrinsic=new_sed,
+        return state.add_intrinsic(L_dust_lnu).with_(
             derived=state.derived.with_(sed_dust_ir=L_dust_lnu),
         )
 

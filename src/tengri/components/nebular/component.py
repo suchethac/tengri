@@ -384,15 +384,11 @@ class NebularSEDComponent:
                 shock_log_density=jnp.asarray(params.get("shock_log_density", 0.0)),
                 shock_b_over_sqrt_n=jnp.asarray(params.get("shock_b_over_sqrt_n", 1.0)),
             )
-            new_sed = (
-                nebular_sed if state.sed_intrinsic is None else state.sed_intrinsic + nebular_sed
-            )
             # Shock backend: shock contribution is logically separate
             # from photoionised continuum. Publish under ``sed_shock``
             # and zero out ``sed_nebular`` so the legacy Posterior dict
             # decomposition matches: photoionised vs shock are distinct.
-            return state.with_(
-                sed_intrinsic=new_sed,
+            return state.add_intrinsic(nebular_sed).with_(
                 derived=state.derived.with_(sed_shock=nebular_sed, sed_nebular=zeros),
             )
 
@@ -553,14 +549,9 @@ class NebularSEDComponent:
         # of the nebular emission is the dust component's responsibility
         # — its ``two_component_dust`` transmission applies to the full
         # sed_intrinsic when it runs after this component).
-        if state.sed_intrinsic is None:
-            new_sed = nebular_sed
-        else:
-            new_sed = state.sed_intrinsic + nebular_sed
 
         # Photoionised path: ``sed_nebular`` carries continuum + lines;
         # shock contribution is zero (this branch is not the shock backend).
-        return state.with_(
-            sed_intrinsic=new_sed,
+        return state.add_intrinsic(nebular_sed).with_(
             derived=state.derived.with_(sed_nebular=nebular_sed, sed_shock=zeros),
         )

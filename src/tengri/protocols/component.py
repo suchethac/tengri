@@ -277,6 +277,44 @@ class ForwardState:
             overrides["derived"] = DerivedBundle.from_dict(dict(overrides["derived"]))
         return replace(self, **overrides)
 
+    def add_intrinsic(self, L_component: jnp.ndarray) -> ForwardState:
+        """Accumulate a component's contribution to the intrinsic SED.
+
+        Factorizes the common pattern::
+
+            if state.sed_intrinsic is None:
+                new_sed = L_component
+            else:
+                new_sed = state.sed_intrinsic + L_component
+            state = state.with_(sed_intrinsic=new_sed)
+
+        into a single call, improving readability and reducing
+        copy-paste across components.
+
+        Parameters
+        ----------
+        L_component : ndarray
+            Component's contribution to the intrinsic SED in erg/s/Hz.
+            Broadcasts against ``self.wave`` via JAX's standard rules.
+
+        Returns
+        -------
+        ForwardState
+            New state with ``sed_intrinsic`` = ``L_component`` (if
+            ``self.sed_intrinsic is None``) or
+            ``self.sed_intrinsic + L_component``.
+
+        Notes
+        -----
+        JIT/grad/vmap-compatible: the branching on ``self.sed_intrinsic is None``
+        is resolved at compile time (frozen field).
+        """
+        if self.sed_intrinsic is None:
+            new_sed = L_component
+        else:
+            new_sed = self.sed_intrinsic + L_component
+        return self.with_(sed_intrinsic=new_sed)
+
 
 # ─────────────────────────────────────────────────────────────────────
 # JAX pytree registration

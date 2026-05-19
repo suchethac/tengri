@@ -197,12 +197,6 @@ class XRaySEDComponent:
             alpha_ox=jnp.asarray(params["xray_alpha_ox"]),
         )
 
-        if state.sed_intrinsic is None:
-            new_sed = L_xray
-        else:
-            new_sed = state.sed_intrinsic + L_xray
-
-        return state.with_(
-            sed_intrinsic=new_sed,
+        return state.add_intrinsic(L_xray).with_(
             derived=state.derived.with_(sed_xray=L_xray),
         )
