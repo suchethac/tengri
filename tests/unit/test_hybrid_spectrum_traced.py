@@ -1,9 +1,9 @@
-"""Tests for the hybrid spectrum _traceable path.
+"""Tests for the hybrid spectrum traced path.
 
 Verifies that:
 1. _build_hybrid_kernels now builds hk.spectrum and hk._spectrum_raw when
    spectroscopy is precomputed.
-2. predict_spectrum(params, mode='_traceable') routes to the hybrid spectrum
+2. predict_spectrum(params, mode='traced') routes to the hybrid spectrum
    kernel, not the full compositional rest-SED path.
 3. The hybrid spectrum result matches the compositional result within 1%
    (stellar dominated case — no energy balance errors).
@@ -77,8 +77,8 @@ def test_hybrid_spectrum_raw_built(model_with_spec):
     assert hk.spectrum is not None, "hk.spectrum (JIT'd) is None"
 
 
-def test_traceable_spectrum_uses_hybrid(model_with_spec):
-    """predict_spectrum(_traceable) should use hybrid path, not _predict_spectrum_auto."""
+def testtraced_spectrum_uses_hybrid(model_with_spec):
+    """predict_spectrum(traced) should use hybrid path, not _predict_spectrum_auto."""
     model, wave_obs = model_with_spec
     hk = model._hybrid_kernels
 
@@ -92,22 +92,22 @@ def test_traceable_spectrum_uses_hybrid(model_with_spec):
     hk._spectrum_raw = patched_raw
     try:
         params = model.spec.sample(jax.random.PRNGKey(0))
-        _ = model.predict_spectrum(params, wave_obs=wave_obs, mode="_traceable")
+        _ = model.predict_spectrum(params, wave_obs=wave_obs, mode="traced")
     finally:
         hk._spectrum_raw = original_raw
 
     assert call_log == ["hybrid"], (
-        f"_traceable mode did not route to hybrid spectrum raw; log={call_log}"
+        f"traced mode did not route to hybrid spectrum raw; log={call_log}"
     )
 
 
-def test_traceable_spectrum_agrees_with_compositional(model_with_spec):
+def testtraced_spectrum_agrees_with_compositional(model_with_spec):
     """Hybrid and compositional spectrum should agree to <1% (stellar dominated)."""
     model, wave_obs = model_with_spec
     key = jax.random.PRNGKey(7)
     params = model.spec.sample(key)
 
-    flux_traceable = model.predict_spectrum(params, wave_obs=wave_obs, mode="_traceable")
+    fluxtraced = model.predict_spectrum(params, wave_obs=wave_obs, mode="traced")
     flux_compositional = model.predict_spectrum(params, wave_obs=wave_obs, mode="compositional")
 
     # Normalize by median to get relative error
@@ -115,11 +115,11 @@ def test_traceable_spectrum_agrees_with_compositional(model_with_spec):
     if med == 0:
         pytest.skip("compositional flux is zero — degenerate test case")
 
-    rel_err = jnp.abs(flux_traceable - flux_compositional) / (med + 1e-30)
+    rel_err = jnp.abs(fluxtraced - flux_compositional) / (med + 1e-30)
     max_err = float(jnp.max(rel_err))
 
     assert max_err < 0.02, (
-        f"Hybrid _traceable vs compositional max relative error {max_err:.3%} exceeds 2%"
+        f"Hybrid traced vs compositional max relative error {max_err:.3%} exceeds 2%"
     )
 
 

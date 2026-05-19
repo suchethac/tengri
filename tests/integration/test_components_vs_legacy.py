@@ -65,7 +65,7 @@ def stellar_only_model(ssp):
 _STELLAR_PARAMS = {
     # Only free params — fixed values (met_logzsol, redshift,
     # dust_tau_*) are read from spec by both predict_rest_sed and
-    # predict_via_orchestrator (the latter injects via
+    # predict_state (the latter injects via
     # spec.get_fixed_values()). This is the realistic call site.
     "sfh_tsnorm_log_peak_sfr": 1.0,
     "sfh_tsnorm_peak_lbt_gyr": 2.0,
@@ -79,7 +79,7 @@ _STELLAR_PARAMS = {
 
 
 def test_orchestrator_injects_fixed_values_from_spec(stellar_only_model):
-    """Calling predict_via_orchestrator with only the FREE params must
+    """Calling predict_state with only the FREE params must
     succeed — fixed values (met_logzsol, redshift, dust_tau_*) come
     from spec.get_fixed_values()."""
     free_only = {
@@ -89,7 +89,7 @@ def test_orchestrator_injects_fixed_values_from_spec(stellar_only_model):
         "sfh_tsnorm_skew": 0.0,
         "sfh_tsnorm_trunc": 3.0,
     }
-    state = stellar_only_model.predict_via_orchestrator(free_only)
+    state = stellar_only_model.predict_state(free_only)
     # log_mstar published by stellar component → injection worked end-to-end.
     assert "log_mstar" in state.derived
     assert jnp.isfinite(state.derived["log_mstar"])
@@ -104,9 +104,9 @@ def test_orchestrator_explicit_param_overrides_spec_fixed(stellar_only_model):
         "sfh_tsnorm_skew": 0.0,
         "sfh_tsnorm_trunc": 3.0,
     }
-    state_default = stellar_only_model.predict_via_orchestrator(free_only)
+    state_default = stellar_only_model.predict_state(free_only)
     # Override met_logzsol with a different value than the spec fixed.
-    state_overridden = stellar_only_model.predict_via_orchestrator(
+    state_overridden = stellar_only_model.predict_state(
         {**free_only, "met_logzsol": 0.0}
     )
     # Stellar SED differs because metallicity strongly affects spectral shape.
@@ -127,7 +127,7 @@ def test_orchestrator_explicit_param_overrides_spec_fixed(stellar_only_model):
 
 def test_stellar_only_orchestrator_runs(stellar_only_model):
     """Orchestrator path produces finite SED of expected shape."""
-    state = stellar_only_model.predict_via_orchestrator(_STELLAR_PARAMS)
+    state = stellar_only_model.predict_state(_STELLAR_PARAMS)
     assert state.sed_intrinsic.shape[0] > 1000, (
         f"sed_intrinsic shape too small: {state.sed_intrinsic.shape}"
     )
@@ -149,7 +149,7 @@ def test_stellar_only_legacy_runs(stellar_only_model):
 def test_orchestrator_vs_legacy_mstar_physical_agreement(stellar_only_model):
     """log10(M*) from both paths agrees within 0.1 dex."""
     legacy_q = stellar_only_model.predict(_STELLAR_PARAMS)
-    state = stellar_only_model.predict_via_orchestrator(_STELLAR_PARAMS)
+    state = stellar_only_model.predict_state(_STELLAR_PARAMS)
 
     legacy_log_mstar = float(jnp.log10(legacy_q.stellar_mass))
     orch_log_mstar = float(state.derived["log_mstar"])
@@ -176,7 +176,7 @@ def test_orchestrator_rest_sed_close_to_legacy(stellar_only_model):
     ``docs/dev/20260504-csp-integral-canonicalization.md``.
     """
     legacy = stellar_only_model.predict_rest_sed(_STELLAR_PARAMS)
-    state = stellar_only_model.predict_via_orchestrator(_STELLAR_PARAMS)
+    state = stellar_only_model.predict_state(_STELLAR_PARAMS)
 
     assert legacy.sed.shape == state.sed_intrinsic.shape
 
@@ -203,7 +203,7 @@ def test_orchestrator_rest_sed_bit_exact_to_legacy(stellar_only_model):
     epsilon). See ``docs/dev/20260504-csp-integral-canonicalization.md``.
     """
     legacy = stellar_only_model.predict_rest_sed(_STELLAR_PARAMS)
-    state = stellar_only_model.predict_via_orchestrator(_STELLAR_PARAMS)
+    state = stellar_only_model.predict_state(_STELLAR_PARAMS)
 
     rel_diff = float(
         jnp.max(
@@ -268,7 +268,7 @@ _STELLAR_FIELD_PARAMS = _field_params()
 
 def test_field_orchestrator_runs(stellar_field_model):
     """Orchestrator handles field=True without raising and produces finite SFH."""
-    state = stellar_field_model.predict_via_orchestrator(_STELLAR_FIELD_PARAMS)
+    state = stellar_field_model.predict_state(_STELLAR_FIELD_PARAMS)
     sfr_history = state.derived["sfr_history"]
     assert jnp.all(jnp.isfinite(sfr_history)), "sfr_history contains NaN/Inf"
     assert jnp.any(sfr_history > 0.0), "sfr_history is all zero — field branch dead?"
@@ -351,7 +351,7 @@ def test_galaxy_predict_via_components_alias_unchanged(stellar_only_galaxy):
     Galaxy.predict(..., backend='component'))."""
     state_alias = stellar_only_galaxy.predict_via_components(_STELLAR_PARAMS)
     state_unified = stellar_only_galaxy.predict(_STELLAR_PARAMS, backend="component")
-    # Both call the same SEDModel.predict_via_orchestrator on the same params,
+    # Both call the same SEDModel.predict_state on the same params,
     # so the published quantities should be identical.
     assert jnp.allclose(state_alias.sed_intrinsic, state_unified.sed_intrinsic, rtol=1e-12)
 
@@ -395,7 +395,7 @@ _DIRICHLET_PARAMS = {
 
 def test_dirichlet_orchestrator_runs(stellar_dirichlet_model):
     """Orchestrator handles dirichlet SFH: finite sfr_history with positive bins."""
-    state = stellar_dirichlet_model.predict_via_orchestrator(_DIRICHLET_PARAMS)
+    state = stellar_dirichlet_model.predict_state(_DIRICHLET_PARAMS)
     sfr = state.derived["sfr_history"]
     assert jnp.all(jnp.isfinite(sfr)), "dirichlet sfr_history NaN/Inf"
     assert jnp.any(sfr > 0.0), "dirichlet sfr_history all zero"
@@ -425,7 +425,7 @@ def test_dirichlet_orchestrator_rest_sed_close_to_legacy(stellar_dirichlet_model
     onto DSPS canonical trapezoidal-in-cosmic-time.
     """
     legacy = stellar_dirichlet_model.predict_rest_sed(_DIRICHLET_PARAMS)
-    state = stellar_dirichlet_model.predict_via_orchestrator(_DIRICHLET_PARAMS)
+    state = stellar_dirichlet_model.predict_state(_DIRICHLET_PARAMS)
 
     assert legacy.sed.shape == state.sed_intrinsic.shape
 
@@ -474,7 +474,7 @@ _CONTINUITY_PARAMS = {
 def test_continuity_orchestrator_rest_sed_close_to_legacy(stellar_continuity_model):
     """Phase II-2.5 contract: continuity SFH parity at ``rtol=5e-2``."""
     legacy = stellar_continuity_model.predict_rest_sed(_CONTINUITY_PARAMS)
-    state = stellar_continuity_model.predict_via_orchestrator(_CONTINUITY_PARAMS)
+    state = stellar_continuity_model.predict_state(_CONTINUITY_PARAMS)
 
     assert legacy.sed.shape == state.sed_intrinsic.shape
     rel_diff = float(
@@ -518,7 +518,7 @@ _DENSE_BASIS_PARAMS = {
 def test_dense_basis_orchestrator_rest_sed_close_to_legacy(stellar_dense_basis_model):
     """Phase II-2.5 contract: dense_basis SFH parity at ``rtol=5e-2``."""
     legacy = stellar_dense_basis_model.predict_rest_sed(_DENSE_BASIS_PARAMS)
-    state = stellar_dense_basis_model.predict_via_orchestrator(_DENSE_BASIS_PARAMS)
+    state = stellar_dense_basis_model.predict_state(_DENSE_BASIS_PARAMS)
 
     assert legacy.sed.shape == state.sed_intrinsic.shape
     rel_diff = float(
@@ -567,7 +567,7 @@ def stellar_chem_evol_model(ssp):
 def test_chem_evol_orchestrator_runs(stellar_chem_evol_model):
     """Orchestrator handles metallicity_model='chem_evol' and publishes a
     finite, monotonically-enriching log_metallicity_history."""
-    state = stellar_chem_evol_model.predict_via_orchestrator(_STELLAR_PARAMS)
+    state = stellar_chem_evol_model.predict_state(_STELLAR_PARAMS)
     log_z_hist = state.derived["log_metallicity_history"]
     assert jnp.all(jnp.isfinite(log_z_hist)), "log_metallicity_history NaN/Inf"
     # Closed-box enrichment: metallicity at present (lookback≈0) should
@@ -599,7 +599,7 @@ def test_chem_evol_orchestrator_rest_sed_close_to_legacy(stellar_chem_evol_model
     bit-exact-equal SEDs.
     """
     legacy = stellar_chem_evol_model.predict_rest_sed(_STELLAR_PARAMS)
-    state = stellar_chem_evol_model.predict_via_orchestrator(_STELLAR_PARAMS)
+    state = stellar_chem_evol_model.predict_state(_STELLAR_PARAMS)
 
     assert legacy.sed.shape == state.sed_intrinsic.shape
 
@@ -647,7 +647,7 @@ _STELLAR_RAMP_PARAMS = {
 def test_ramp_orchestrator_rest_sed_close_to_legacy(stellar_ramp_model):
     """Phase II-2.4: ramp Z(t) orchestrator-vs-legacy at ``rtol=1e-2``."""
     legacy = stellar_ramp_model.predict_rest_sed(_STELLAR_RAMP_PARAMS)
-    state = stellar_ramp_model.predict_via_orchestrator(_STELLAR_RAMP_PARAMS)
+    state = stellar_ramp_model.predict_state(_STELLAR_RAMP_PARAMS)
     assert legacy.sed.shape == state.sed_intrinsic.shape
     rel_diff = float(
         jnp.max(
@@ -676,7 +676,7 @@ def test_field_orchestrator_rest_sed_close_to_legacy(stellar_field_model):
     ``docs/dev/20260504-csp-integral-canonicalization.md``.
     """
     legacy = stellar_field_model.predict_rest_sed(_STELLAR_FIELD_PARAMS)
-    state = stellar_field_model.predict_via_orchestrator(_STELLAR_FIELD_PARAMS)
+    state = stellar_field_model.predict_state(_STELLAR_FIELD_PARAMS)
 
     assert legacy.sed.shape == state.sed_intrinsic.shape
 
@@ -751,7 +751,7 @@ def _check_sfh_variant_equivalence(ssp, sfh_name: str, sfh_params: dict, rtol: f
         warnings.simplefilter("ignore")
         model = SEDModel(spec, ssp)
     legacy = model.predict_rest_sed(sfh_params)
-    state = model.predict_via_orchestrator(sfh_params)
+    state = model.predict_state(sfh_params)
     assert legacy.sed.shape == state.sed_intrinsic.shape
     rel_diff = float(
         jnp.max(
@@ -902,7 +902,7 @@ def _check_with_priors(ssp, sfh_name, priors, sfh_params, rtol=2e-2):
         warnings.simplefilter("ignore")
         model = SEDModel(spec, ssp)
     legacy = model.predict_rest_sed(sfh_params)
-    state = model.predict_via_orchestrator(sfh_params)
+    state = model.predict_state(sfh_params)
     assert legacy.sed.shape == state.sed_intrinsic.shape
     rel_diff = float(
         jnp.max(

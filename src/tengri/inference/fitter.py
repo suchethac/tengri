@@ -268,7 +268,7 @@ class Fitter:
         eline_prior_type=None,
         likelihood=None,
         auto_protocol_likelihood=True,
-        use_orchestrator=False,
+        use_components=False,
         compile_modes=None,
         cache=None,
     ):
@@ -283,13 +283,13 @@ class Fitter:
 
         # ── Orchestrator opt-in (Phase II step-1, 2026-05) ──────────
         # When True, route forward predictions through
-        # :meth:`SEDModel.predict_via_orchestrator` (the SEDComponent
+        # :meth:`SEDModel.predict_state` (the SEDComponent
         # chain) instead of the legacy fused ``predict_photometry`` /
         # ``predict_spectrum`` kernels. Default ``False`` preserves
         # existing inference behaviour bit-for-bit. Spectroscopy has no
-        # orchestrator bridge yet, so combining ``use_orchestrator=True``
+        # orchestrator bridge yet, so combining ``use_components=True``
         # with non-photometric data_type is rejected at construction.
-        self.use_orchestrator = bool(use_orchestrator)
+        self.use_components = bool(use_components)
 
         # ── Compile cache (ADR-deepen Step C, 2026-05) ──────────────
         # Optional per-Fitter CompileCache instance. When None, fall back
@@ -311,9 +311,9 @@ class Fitter:
         self.data_type = self._resolve_data_type(data_type, model)
         self.spec = model.spec
 
-        if self.use_orchestrator and self.data_type not in ("photometry", "spectroscopy", "joint"):
+        if self.use_components and self.data_type not in ("photometry", "spectroscopy", "joint"):
             raise NotImplementedError(
-                "Fitter(use_orchestrator=True) currently supports "
+                "Fitter(use_components=True) currently supports "
                 f"data_type in (photometry, spectroscopy, joint); got {self.data_type!r}."
             )
 
@@ -1096,7 +1096,7 @@ class Fitter:
 
     # ── Loss and likelihood builders ──────────────────────────────────
 
-    def _build_loss_fn(self, mode: str = "_traceable") -> Callable:
+    def _build_loss_fn(self, mode: str = "traced") -> Callable:
         """Build a differentiable loss function.
 
         See ``tengri.inference.loss_functions.build_loss_fn`` for full docs.
@@ -1105,13 +1105,13 @@ class Fitter:
         Parameters
         ----------
         mode : str, optional
-            Forward model prediction mode. Default "_traceable" is for
+            Forward model prediction mode. Default "traced" is for
             internal tracing mode (NIFTy VI path). Use "auto" for ~1.5x speedup with
             non-NIFTy methods.
         """
         return build_loss_fn(self, mode=mode)
 
-    def _get_or_build_loss_fn(self, mode: str = "_traceable") -> Callable:
+    def _get_or_build_loss_fn(self, mode: str = "traced") -> Callable:
         """Return the cached loss function, building it if needed.
 
         The loss function is cached on the Model object keyed by
@@ -1121,7 +1121,7 @@ class Fitter:
         Parameters
         ----------
         mode : str, optional
-            Forward model prediction mode. Default "_traceable" for backward
+            Forward model prediction mode. Default "traced" for backward
             compatibility. Pass "auto" for ~1.5x speedup with non-NIFTy methods.
         """
         from tengri.inference.jit_engine import get_or_build_cached
@@ -1138,11 +1138,11 @@ class Fitter:
         """Build a log-prior function. See ``loss_functions.build_logprior_fn``."""
         return build_logprior_fn(self)
 
-    def _build_loglikelihood_fn(self, mode: str = "_traceable") -> Callable:
+    def _build_loglikelihood_fn(self, mode: str = "traced") -> Callable:
         """Build log-likelihood function. See ``loss_functions.build_loglikelihood_fn``."""
         return build_loglikelihood_fn(self, mode=mode)
 
-    def _get_or_build_loglikelihood_fn(self, mode: str = "_traceable") -> Callable:
+    def _get_or_build_loglikelihood_fn(self, mode: str = "traced") -> Callable:
         """Return the cached log-likelihood function, building if needed."""
         from tengri.inference.jit_engine import get_or_build_cached
 
@@ -1156,14 +1156,14 @@ class Fitter:
         per_model[cache_key] = loglik_fn
         return loglik_fn
 
-    def _build_loglikelihood_unbounded_fn(self, mode: str = "_traceable") -> Callable:
+    def _build_loglikelihood_unbounded_fn(self, mode: str = "traced") -> Callable:
         """Build unbounded-space log-likelihood.
 
         See ``loss_functions.build_loglikelihood_unbounded_fn``.
         """
         return build_loglikelihood_unbounded_fn(self, mode=mode)
 
-    def _get_or_build_grad_fn(self, mode: str = "_traceable") -> Callable:
+    def _get_or_build_grad_fn(self, mode: str = "traced") -> Callable:
         """Return cached JIT-compiled value_and_grad of the loss function.
 
         The gradient function takes ``(params_unbounded, data_args)`` as
@@ -1191,7 +1191,7 @@ class Fitter:
         per_model[cache_key] = val_and_grad
         return val_and_grad
 
-    def _get_or_build_logdensity_fn(self, mode: str = "_traceable") -> Callable:
+    def _get_or_build_logdensity_fn(self, mode: str = "traced") -> Callable:
         """Return cached JIT-compiled log-density for MCMC/Pathfinder.
 
         Returns ``logdensity(params_u, data_args) -> scalar``.  Callers
@@ -1696,10 +1696,10 @@ class Fitter:
     def _get_mode_for_method(self, method: str) -> str:
         """Determine forward model prediction mode based on inference method.
 
-        PERFORMANCE NOTE (2026-04-18): Profiling shows mode="_traceable" is
+        PERFORMANCE NOTE (2026-04-18): Profiling shows mode="traced" is
         12.64x FASTER than mode="auto" (5.9ms vs 74.4ms) with stable timing.
         mode="auto" has pathological variance (std=504ms, 6.8x the mean) causing
-        occasional 500ms+ outliers. Always use mode="_traceable" for inference.
+        occasional 500ms+ outliers. Always use mode="traced" for inference.
 
         Parameters
         ----------
@@ -1709,16 +1709,16 @@ class Fitter:
         Returns
         -------
         str
-            Always returns "_traceable" for optimal performance across all
+            Always returns "traced" for optimal performance across all
             inference methods. Previous "auto" mode had severe variance issues.
 
         See Also
         --------
         docs/dev/jit-optimization-report-2026-04-18.md : Full profiling analysis
         """
-        # ALL methods now use _traceable for 12.64x speedup + stable timing
+        # ALL methods now use traced for 12.64x speedup + stable timing
         # (mode="auto" variance pathology fixed 2026-04-18)
-        return "_traceable"
+        return "traced"
 
     # ── Private method runners ────────────────────────────────────────
 

@@ -280,7 +280,7 @@ class Galaxy:
         """Forward pass via the Phase II SEDComponent orchestrator.
 
         Convenience wrapper around
-        :meth:`tengri.SEDModel.predict_via_orchestrator` that lazy-builds
+        :meth:`tengri.SEDModel.predict_state` that lazy-builds
         the underlying ``SEDModel`` and threads the params dict through
         the component chain. Returns a :class:`tengri.protocols.ForwardState`.
 
@@ -297,7 +297,7 @@ class Galaxy:
         Returns
         -------
         ForwardState
-            See :meth:`SEDModel.predict_via_orchestrator`.
+            See :meth:`SEDModel.predict_state`.
 
         See Also
         --------
@@ -311,7 +311,7 @@ class Galaxy:
         >>> state = g.predict_via_components(params)  # doctest: +SKIP
         >>> state.derived["log_mstar"]  # doctest: +SKIP
         """
-        return self.build_model().predict_via_orchestrator(params)
+        return self.build_model().predict_state(params)
 
     def predict(self, params, backend: str = "legacy"):
         """Compute a forward-model prediction for ``params``.

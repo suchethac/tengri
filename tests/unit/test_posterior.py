@@ -862,7 +862,7 @@ class _FakeSpec:
 
 
 class _FakeComponentModel:
-    """Stand-in for SEDModel with a ``predict_via_orchestrator`` method.
+    """Stand-in for SEDModel with a ``predict_state`` method.
 
     Returns a fake ``ForwardState`` whose ``derived`` dict carries the
     same per-component keys the real orchestrator publishes. Component
@@ -874,7 +874,7 @@ class _FakeComponentModel:
         self._wave = jnp.asarray(wave)
         self.spec = _FakeSpec()
 
-    def predict_via_orchestrator(self, params):
+    def predict_state(self, params):
         wave = self._wave
         f = float(params.get("frac", 0.0))
         host_attenuated = (1.0 - f) * jnp.ones_like(wave)  # stellar post-attenuation

@@ -2153,7 +2153,7 @@ class SEDModel:
         Notes
         -----
         **JIT-compatible**: no — computes SED components via the
-        orchestrator path (:meth:`predict_via_orchestrator`) which is not
+        orchestrator path (:meth:`predict_state`) which is not
         JIT'd. For JIT-compatible SED access, use
         :meth:`predict_sed_quantities` instead.
 
@@ -2193,7 +2193,7 @@ class SEDModel:
         """
         from tengri.forward.result import SEDResult
 
-        state = self.predict_via_orchestrator(params)
+        state = self.predict_state(params)
         if wave is None:
             # Use ``state.wave`` (the orchestrator's runtime wavelength
             # grid, which may differ from ``self._rest_wavelength`` —
@@ -2696,9 +2696,9 @@ class SEDModel:
         if approx is not None:
             mode = "auto" if approx else "exact"
 
-        # _traceable: un-JIT'd path for NIFTy/VI tracing (not user-facing)
-        if mode == "_traceable":
-            return self._predict_photometry_traceable(params)
+        # traced: un-JIT'd path for NIFTy/VI tracing (not user-facing)
+        if mode == "traced":
+            return self._predict_photometry_traced(params)
 
         if mode not in self._PREDICTION_MODES:
             raise ValueError(
@@ -2707,7 +2707,7 @@ class SEDModel:
 
         if mode == "auto":
             return self._predict_photometry_auto(params)
-        if mode == "_traceable":
+        if mode == "traced":
             # Raw un-JIT'd path for use inside inference JIT scopes.
             # Picks hybrid (precomputed, tiny graph) if available,
             # otherwise falls back to auto.
@@ -2840,8 +2840,8 @@ class SEDModel:
         if wave_chunk_size is None:
             wave_chunk_size = self._wave_chunk_size
 
-        if mode == "_traceable":
-            return self._predict_spectrum_traceable(params, wave_obs, wave_chunk_size)
+        if mode == "traced":
+            return self._predict_spectrum_traced(params, wave_obs, wave_chunk_size)
 
         if mode not in self._PREDICTION_MODES:
             raise ValueError(
@@ -2996,7 +2996,7 @@ class SEDModel:
         # ``predict_nebular_line_luminosities`` with SSP-derived
         # ``ssp_weights`` + ``ssp_log_ages_yr`` and the canonical
         # neb_logZ_gas → absolute-log10(Z) translation.
-        state = self.predict_via_orchestrator(params)
+        state = self.predict_state(params)
         if "line_waves" not in state.derived or "line_lums" not in state.derived:
             raise ValueError(
                 "Configured nebular backend did not publish a discrete "
@@ -3046,7 +3046,7 @@ class SEDModel:
         flux = selected_lums * L_SUN / (4.0 * jnp.pi * dl_cm**2)
         return flux
 
-    def predict_spectral_indices(self, params, index_defs, mode="_traceable"):
+    def predict_spectral_indices(self, params, index_defs, mode="traced"):
         """Predict spectral index values from the model SED.
 
         Generates a rest-frame spectrum covering the index wavelength
@@ -3068,7 +3068,7 @@ class SEDModel:
 
         Notes
         -----
-        **JIT-compatible**: depends on ``mode`` (``"_traceable"`` by default).
+        **JIT-compatible**: depends on ``mode`` (``"traced"`` by default).
 
         Measures spectral indices (equivalent width or break ratio) from a
         rest-frame spectrum covering all wavelength ranges in ``index_defs``.
@@ -3351,12 +3351,12 @@ class SEDModel:
             # Closure-A consistency: route through the orchestrator so
             # ``predict_sfh_quantities`` returns the same stellar_mass /
             # weights as ``predict_derived`` (which uses
-            # ``predict_via_orchestrator`` internally via
+            # ``predict_state`` internally via
             # ``Prediction._ensure_sfh``). Was 4.1% apart with the
             # legacy rectangle rule (``sfr_on_ssp * _csp_age_dt``).
             # See ``tests/integration/test_derived_quantities.py::
             # test_mstar_consistent_between_methods``.
-            state_orch = self.predict_via_orchestrator(params)
+            state_orch = self.predict_state(params)
             weights = jnp.asarray(state_orch.derived["age_weights"])
         mass_formed = jnp.sum(weights)
 
@@ -3534,11 +3534,11 @@ class SEDModel:
         # reconstruction has a hidden DSPS-joint-weight discrepancy
         # under trapz. The orchestrator value is the physically correct
         # one (energy-conserving by construction).
-        return self.predict_sed_quantities_via_orchestrator(params)
+        return self._predict_sed_quantities_components(params)
 
     # ── Component orchestrator path (Phase II-2.6 opt-in) ─────────────
 
-    def predict_sfh_quantities_via_orchestrator(self, params):
+    def _predict_sfh_quantities_components(self, params):
         """Drop-in replacement for :meth:`predict_sfh_quantities`.
 
         Routes through the orchestrator and converts the resulting
@@ -3554,9 +3554,9 @@ class SEDModel:
         """
         from tengri.forward import state_to_sfh_quantities
 
-        return state_to_sfh_quantities(self.predict_via_orchestrator(params))
+        return state_to_sfh_quantities(self.predict_state(params))
 
-    def predict_sed_quantities_via_orchestrator(self, params):
+    def _predict_sed_quantities_components(self, params):
         """Drop-in replacement for :meth:`predict_sed_quantities`.
 
         Returns
@@ -3566,9 +3566,9 @@ class SEDModel:
         """
         from tengri.forward import state_to_sed_quantities
 
-        return state_to_sed_quantities(self.predict_via_orchestrator(params))
+        return state_to_sed_quantities(self.predict_state(params))
 
-    def predict_radio_quantities_via_orchestrator(self, params):
+    def predict_radio_quantities(self, params):
         """Phase II-2.6 orchestrator-path radio quantities.
 
         Returns
@@ -3580,9 +3580,9 @@ class SEDModel:
         """
         from tengri.forward import state_to_radio_quantities
 
-        return state_to_radio_quantities(self.predict_via_orchestrator(params))
+        return state_to_radio_quantities(self.predict_state(params))
 
-    def predict_xray_quantities_via_orchestrator(self, params):
+    def predict_xray_quantities(self, params):
         """Phase II-2.6 orchestrator-path X-ray quantities.
 
         Returns
@@ -3592,9 +3592,9 @@ class SEDModel:
         """
         from tengri.forward import state_to_xray_quantities
 
-        return state_to_xray_quantities(self.predict_via_orchestrator(params))
+        return state_to_xray_quantities(self.predict_state(params))
 
-    def predict_ionizing_quantities_via_orchestrator(self, params):
+    def predict_ionizing_quantities(self, params):
         """Phase II-2.6 orchestrator-path ionizing-photon quantities.
 
         Returns
@@ -3604,9 +3604,9 @@ class SEDModel:
         """
         from tengri.forward import state_to_ionizing_quantities
 
-        return state_to_ionizing_quantities(self.predict_via_orchestrator(params))
+        return state_to_ionizing_quantities(self.predict_state(params))
 
-    def predict_photometry_via_orchestrator(self, params):
+    def _predict_photometry_components(self, params):
         """Photometry through the orchestrator path.
 
         Runs the SEDComponent chain on the model's configuration,
@@ -3618,7 +3618,7 @@ class SEDModel:
         ----------
         params : Mapping
             Free-parameter dict (same shape as
-            :meth:`predict_via_orchestrator`).
+            :meth:`predict_state`).
 
         Returns
         -------
@@ -3646,7 +3646,7 @@ class SEDModel:
         """
         if not self.observation.can_do_photometry:
             raise ValueError(
-                "predict_photometry_via_orchestrator requires photometric "
+                "_predict_photometry_components requires photometric "
                 "filters configured on the observation. Construct the "
                 "model with ``filters=`` or pass an Observation that "
                 "carries a Photometry instance."
@@ -3654,7 +3654,7 @@ class SEDModel:
         from tengri.observation.photometry import compute_flux_density
         from tengri.utils.cosmology import luminosity_distance
 
-        state = self.predict_via_orchestrator(params)
+        state = self.predict_state(params)
         z = jnp.asarray(params.get("redshift", 0.0))
         # ``luminosity_distance`` returns cm directly (per its docstring).
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
@@ -3673,7 +3673,7 @@ class SEDModel:
         )
         return photometry
 
-    def predict_spectrum_via_orchestrator(self, params, wave_obs=None):
+    def _predict_spectrum_components(self, params, wave_obs=None):
         """Spectrum through the orchestrator path.
 
         Runs the SEDComponent chain, applies the cosmological redshift +
@@ -3687,7 +3687,7 @@ class SEDModel:
         ----------
         params : Mapping
             Free-parameter dict (same shape as
-            :meth:`predict_via_orchestrator`).
+            :meth:`predict_state`).
         wave_obs : array_like, shape (n_pix,), optional
             Observed-frame wavelength grid [Angstrom]. If ``None``,
             falls back to the precomputed grid (`self._wave_obs` or
@@ -3721,11 +3721,11 @@ class SEDModel:
             wave_obs = self._wave_obs
         elif wave_obs is None:
             raise ValueError(
-                "predict_spectrum_via_orchestrator requires a wave_obs grid "
+                "_predict_spectrum_components requires a wave_obs grid "
                 "(pass it explicitly or call precompute_spectroscopy()."
             )
 
-        state = self.predict_via_orchestrator(params)
+        state = self.predict_state(params)
         z = jnp.asarray(params.get("redshift", 0.0))
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
 
@@ -3743,7 +3743,7 @@ class SEDModel:
             )
         return flux
 
-    def predict_emission_lines_via_orchestrator(self, params):
+    def predict_emission_lines(self, params):
         """Phase II-2.6 orchestrator-path emission-line luminosities.
 
         Returns
@@ -3756,9 +3756,9 @@ class SEDModel:
         """
         from tengri.forward import state_to_emission_lines
 
-        return state_to_emission_lines(self.predict_via_orchestrator(params))
+        return state_to_emission_lines(self.predict_state(params))
 
-    def predict_via_orchestrator(self, params):
+    def predict_state(self, params):
         """Forward pass via the Phase II SEDComponent orchestrator.
 
         Builds a component chain from this model's structural settings
@@ -3822,7 +3822,7 @@ class SEDModel:
         # Inject Fixed values from spec for parameters absent from
         # ``params``. Matches the legacy ``get_internal_params``
         # convention so callers using ``predict_rest_sed`` and
-        # ``predict_via_orchestrator`` can pass the same params dict.
+        # ``predict_state`` can pass the same params dict.
         full_params = {**self.spec.get_fixed_values(), **params}
         return run_components(chain, state0, full_params)
 
@@ -4028,7 +4028,7 @@ class SEDModel:
 
         return self._hybrid.photometry(self._jit_safe_params(params))
 
-    def _predict_photometry_traceable(self, params):
+    def _predict_photometry_traced(self, params):
         """Un-JIT'd photometry for use inside JAX tracing (NIFTy VI).
 
         Returns the same result as hybrid/compositional but without
@@ -4133,7 +4133,7 @@ class SEDModel:
         path with a warning if no strategy-preferred spectrum kernel is
         compatible.
 
-        Note: inference uses ``mode="_traceable"`` (separate path) which
+        Note: inference uses ``mode="traced"`` (separate path) which
         prefers the hybrid raw kernel directly via ``_hybrid_kernels._spectrum_raw``.
         """
         import warnings
@@ -4240,10 +4240,10 @@ class SEDModel:
 
         return flux
 
-    def _predict_spectrum_traceable(self, params, wave_obs=None, wave_chunk_size=None):
+    def _predict_spectrum_traced(self, params, wave_obs=None, wave_chunk_size=None):
         """Un-JIT'd spectrum for use inside JAX tracing (NIFTy VI).
 
-        Mirrors _predict_photometry_traceable: uses the hybrid spectrum kernel
+        Mirrors _predict_photometry_traced: uses the hybrid spectrum kernel
         (precomputed SSPs on pixel grid, ~200 pts) rather than the full
         compositional rest-SED path (~10k wavelengths).  This reduces the
         XLA graph size during VI by ~50×.
@@ -5383,7 +5383,7 @@ class SEDModel:
                 lambda: build_fused_tier2_spectrum(self._state, self),
             )
             self._compositional.spectrum = jax.jit(_raw) if _raw else None
-            # Preserve the raw closure for ``mode="_traceable"`` (NIFTy VI),
+            # Preserve the raw closure for ``mode="traced"`` (NIFTy VI),
             # which reads ``_spectrum_raw`` directly from the kernel container.
             self._compositional._spectrum_raw = _raw
 

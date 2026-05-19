@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Robustness tests for mode parameter across dimensionalities and methods.
 
-Tests the mode="_traceable" vs mode="auto" implementation across:
+Tests the mode="traced" vs mode="auto" implementation across:
 - Different dimensionalities (D=7, D=15, D=30)
 - Different inference methods (MAP, NUTS, NSS)
 - Different component combinations (stellar, +nebular, +dust emission)
@@ -131,7 +131,7 @@ def test_mode_speedup_low_d(ssp_data, mock_observation, mock_flux):
     assert 7 <= D <= 10, f"Expected D~7-10, got {D}"
 
     # Benchmark both modes
-    times_traceable = benchmark_loss_fn(fitter, mode="_traceable", n_measure=15)
+    times_traceable = benchmark_loss_fn(fitter, mode="traced", n_measure=15)
     times_auto = benchmark_loss_fn(fitter, mode="auto", n_measure=15)
 
     mean_traceable = float(jnp.mean(times_traceable)) * 1000  # ms
@@ -151,7 +151,7 @@ def test_mode_speedup_low_d(ssp_data, mock_observation, mock_flux):
     # Just verify both modes work without error
 
     # Verify cache keys differ
-    cache_key_traceable = (fitter._engine_cache_key(), "_traceable")
+    cache_key_traceable = (fitter._engine_cache_key(), "traced")
     cache_key_auto = (fitter._engine_cache_key(), "auto")
     assert cache_key_traceable != cache_key_auto, "Cache keys should differ by mode"
 
@@ -189,7 +189,7 @@ def test_mode_speedup_mid_d(ssp_data, mock_observation, mock_flux):
     assert 10 <= D <= 16, f"Expected D~10-16, got {D}"
 
     # Benchmark both modes
-    times_traceable = benchmark_loss_fn(fitter, mode="_traceable", n_measure=10)
+    times_traceable = benchmark_loss_fn(fitter, mode="traced", n_measure=10)
     times_auto = benchmark_loss_fn(fitter, mode="auto", n_measure=10)
 
     mean_traceable = float(jnp.mean(times_traceable)) * 1000
@@ -237,7 +237,7 @@ def test_mode_speedup_high_d(ssp_data, mock_observation, mock_flux):
     assert 8 <= D <= 16, f"Expected D~8-16, got {D}"
 
     # Benchmark both modes
-    times_traceable = benchmark_loss_fn(fitter, mode="_traceable", n_measure=8)
+    times_traceable = benchmark_loss_fn(fitter, mode="traced", n_measure=8)
     times_auto = benchmark_loss_fn(fitter, mode="auto", n_measure=8)
 
     mean_traceable = float(jnp.mean(times_traceable)) * 1000
@@ -355,14 +355,14 @@ def test_cache_key_isolation(ssp_data, mock_observation, mock_flux):
     fitter = Fitter(model, flux_cgs, flux_unc_cgs)
 
     # Build loss functions with different modes
-    loss_traceable = fitter._get_or_build_loss_fn(mode="_traceable")
+    loss_traceable = fitter._get_or_build_loss_fn(mode="traced")
     loss_auto = fitter._get_or_build_loss_fn(mode="auto")
 
     # Verify they are distinct functions (different cache entries)
     assert loss_traceable is not loss_auto, "Loss functions should be distinct objects"
 
     # Verify cache has both entries
-    cache_key_traceable = (fitter._engine_cache_key(), "_traceable")
+    cache_key_traceable = (fitter._engine_cache_key(), "traced")
     cache_key_auto = (fitter._engine_cache_key(), "auto")
 
     model_cache = get_model_cache(model)
@@ -373,7 +373,7 @@ def test_cache_key_isolation(ssp_data, mock_observation, mock_flux):
 
     # Verify cache keys are tuples with mode as second element
     assert isinstance(cache_key_traceable, tuple), "Cache key should be tuple"
-    assert cache_key_traceable[1] == "_traceable", "Mode not in cache key"
+    assert cache_key_traceable[1] == "traced", "Mode not in cache key"
     assert cache_key_auto[1] == "auto", "Mode not in cache key"
 
 
@@ -403,7 +403,7 @@ def test_mode_correctness(ssp_data, mock_observation, mock_flux):
     fitter = Fitter(model, flux_cgs, flux_unc_cgs)
 
     # Build loss functions
-    loss_traceable = fitter._get_or_build_loss_fn(mode="_traceable")
+    loss_traceable = fitter._get_or_build_loss_fn(mode="traced")
     loss_auto = fitter._get_or_build_loss_fn(mode="auto")
     data_args = fitter._data_args
 

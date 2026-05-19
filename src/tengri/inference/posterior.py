@@ -581,7 +581,7 @@ class Posterior:
 
         def _one(p: dict) -> dict:
             full_p = {**self._model.spec.get_fixed_values(), **p}
-            state = self._model.predict_via_orchestrator(full_p)
+            state = self._model.predict_state(full_p)
             derived = state.derived
             wave = jnp.asarray(state.wave)
             n_wave = wave.shape[0]
