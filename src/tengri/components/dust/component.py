@@ -33,14 +33,14 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.dust.attenuation import calzetti, resolve_dust_law
+from tengri.parameters.priors import Fixed
 from tengri.protocols.component import (
     DerivedKey,
+    ForwardState,
     ParamDeclaration,
-    PipelineState,
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.parameters.priors import Fixed
 
 __all__ = ["DustAttenuationSEDComponent", "DustAttenuationSEDComponentConfig"]
 
@@ -124,7 +124,7 @@ class DustAttenuationSEDComponent:
             ),
         ]
 
-    def publishes(self) -> tuple[DerivedKey, ...]:
+    def outputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys this dust component publishes.
 
         See :func:`tengri.forward.orchestrator.validate_pipeline`.
@@ -176,14 +176,14 @@ class DustAttenuationSEDComponent:
 
     def apply(
         self,
-        state: PipelineState,
+        state: ForwardState,
         params: Mapping[str, jnp.ndarray],
-    ) -> PipelineState:
+    ) -> ForwardState:
         r"""Apply screen attenuation to ``state.sed_intrinsic``.
 
         Parameters
         ----------
-        state : PipelineState
+        state : ForwardState
             Must carry rest-frame ``wave``. If ``sed_intrinsic`` is
             ``None`` this method is a no-op (returns the input
             unchanged).
@@ -192,7 +192,7 @@ class DustAttenuationSEDComponent:
 
         Returns
         -------
-        PipelineState
+        ForwardState
             New state with ``sed_attenuated`` populated.
 
         Notes

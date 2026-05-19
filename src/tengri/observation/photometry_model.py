@@ -37,12 +37,12 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from tengri.protocols.component import ParamDeclaration, PipelineState
 from tengri.observation.photometry import (
     FilterCurve,
     compute_flux_density_batch,
     pad_filters,
 )
+from tengri.protocols.component import ForwardState, ParamDeclaration
 from tengri.utils.cosmology import CosmoParams, luminosity_distance
 
 __all__ = ["PhotometryObservationModel"]
@@ -110,14 +110,14 @@ class PhotometryObservationModel:
 
     def predict(
         self,
-        state: PipelineState,
+        state: ForwardState,
         params: Mapping[str, Any],
     ) -> Mapping[str, jnp.ndarray]:
         r"""Convolve the chain's rest-frame L_nu through the filters.
 
         Parameters
         ----------
-        state : :class:`PipelineState`
+        state : :class:`ForwardState`
             Must carry rest-frame ``wave`` (Å). Reads
             ``state.sed_attenuated`` if not ``None`` else
             ``state.sed_intrinsic``.

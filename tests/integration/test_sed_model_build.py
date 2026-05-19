@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Integration tests for SEDModel.from_groups().
+"""Integration tests for SEDModel.build().
 
 Verifies that the nested-dict form produces predictions identical to the
 equivalent flat-kwarg Parameters(...) form. Requires the FSPS Chabrier
@@ -34,11 +34,11 @@ def ssp():
 
 
 class TestFromGroupsConstruction:
-    """Verify SEDModel.from_groups returns a usable SEDModel."""
+    """Verify SEDModel.build returns a usable SEDModel."""
 
     def test_minimal_model_builds(self, ssp):
         """Smallest possible config builds without error."""
-        model = SEDModel.from_groups(
+        model = SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "dpl", "*": FIXED},
             redshift=Fixed(0.1),
@@ -53,7 +53,7 @@ class TestFromGroupsConstruction:
             dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
             redshift=Fixed(0.05),
         )
-        model = SEDModel.from_groups(ssp_data=ssp, **groups)
+        model = SEDModel.build(ssp_data=ssp, **groups)
         spec_via_from_groups = Parameters.from_groups(**groups)
 
         assert model.spec.free_params == spec_via_from_groups.free_params
@@ -61,7 +61,7 @@ class TestFromGroupsConstruction:
 
     def test_none_groups_are_dropped(self, ssp):
         """Passing None for an optional group is a no-op."""
-        model = SEDModel.from_groups(
+        model = SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "dpl", "*": FIXED},
             dust=None,
@@ -75,12 +75,12 @@ class TestFromGroupsConstruction:
 
 
 class TestFlatEquivalence:
-    """SEDModel.from_groups must produce predictions identical to the flat form."""
+    """SEDModel.build must produce predictions identical to the flat form."""
 
     @pytest.fixture
     def equivalent_models(self, ssp):
         """A pair (grouped, flat) of SEDModels with identical physics."""
-        grouped = SEDModel.from_groups(
+        grouped = SEDModel.build(
             ssp_data=ssp,
             sfh={
                 "type": "dpl",
@@ -171,11 +171,11 @@ class TestFlatEquivalence:
 
 
 class TestValidation:
-    """Errors from the parser must propagate out of SEDModel.from_groups."""
+    """Errors from the parser must propagate out of SEDModel.build."""
 
     def test_agn_group_builds_composable_model(self, ssp):
         """AGN group activates composable AGN model (was deferred until PR4)."""
-        model = SEDModel.from_groups(
+        model = SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "dpl", "*": FIXED},
             agn={"disc": {"type": "powerlaw", "*": FIXED}},
@@ -186,7 +186,7 @@ class TestValidation:
 
     def test_unknown_type_raises_value_error(self, ssp):
         with pytest.raises(ValueError):
-            SEDModel.from_groups(
+            SEDModel.build(
                 ssp_data=ssp,
                 sfh={"type": "banana", "*": FIXED},
                 redshift=Fixed(0.1),

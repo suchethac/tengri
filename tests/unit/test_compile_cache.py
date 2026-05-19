@@ -205,7 +205,7 @@ class TestCompileCacheWithFitter:
 
         try:
             obs = {"photometry": {"filters": ["u_sdss", "g_sdss"]}}
-            model = SEDModel.from_groups(
+            model = SEDModel.build(
                 ssp_data=ssp_data, observation=obs, **recipes.star_forming_photometry()
             )
         except Exception as e:
@@ -273,7 +273,7 @@ class TestCatalogFitterCache:
 
         try:
             obs = {"photometry": {"filters": ["u_sdss", "g_sdss"]}}
-            model = SEDModel.from_groups(
+            model = SEDModel.build(
                 ssp_data=ssp_data, observation=obs, **recipes.star_forming_photometry()
             )
         except Exception as e:

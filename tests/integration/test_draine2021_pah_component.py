@@ -78,11 +78,11 @@ def test_precompute_returns_state_with_grid(precomputed):
 
 
 def test_apply_adds_pah_emission(component, precomputed):
-    from tengri.protocols.component import PipelineState
+    from tengri.protocols.component import ForwardState
 
     state_pre, wave_aa = precomputed
     L_ir = 1.0e44  # erg/s
-    pipeline = PipelineState(
+    pipeline = ForwardState(
         wave=wave_aa,
         sed_intrinsic=None,
         derived={"L_ir": L_ir},
@@ -99,11 +99,11 @@ def test_apply_adds_pah_emission(component, precomputed):
 
 def test_energy_balance(component, precomputed):
     """The integrated L_nu over nu must equal L_ir within tolerance."""
-    from tengri.protocols.component import PipelineState
+    from tengri.protocols.component import ForwardState
 
     state_pre, wave_aa = precomputed
     L_ir = 3.0e44
-    pipeline = PipelineState(
+    pipeline = ForwardState(
         wave=wave_aa,
         sed_intrinsic=None,
         derived={"L_ir": L_ir},
@@ -120,13 +120,13 @@ def test_energy_balance(component, precomputed):
 
 
 def test_apply_jit_compiles(component, precomputed):
-    from tengri.protocols.component import PipelineState
+    from tengri.protocols.component import ForwardState
 
     state_pre, wave_aa = precomputed
 
     @jax.jit
     def _run(L_ir, lgU):
-        pipeline = PipelineState(
+        pipeline = ForwardState(
             wave=wave_aa,
             sed_intrinsic=None,
             derived={"L_ir": L_ir},
@@ -143,12 +143,12 @@ def test_apply_jit_compiles(component, precomputed):
 
 
 def test_gradient_through_lgU(component, precomputed):
-    from tengri.protocols.component import PipelineState
+    from tengri.protocols.component import ForwardState
 
     state_pre, wave_aa = precomputed
 
     def _loss(lgU):
-        pipeline = PipelineState(
+        pipeline = ForwardState(
             wave=wave_aa,
             sed_intrinsic=None,
             derived={"L_ir": jnp.asarray(1.0e44)},
@@ -189,10 +189,10 @@ def test_missing_template_raises_with_build_instructions(tmp_path):
 
 
 def test_zero_L_ir_zero_emission(component, precomputed):
-    from tengri.protocols.component import PipelineState
+    from tengri.protocols.component import ForwardState
 
     state_pre, wave_aa = precomputed
-    pipeline = PipelineState(
+    pipeline = ForwardState(
         wave=wave_aa,
         sed_intrinsic=None,
         derived={"L_ir": 0.0},

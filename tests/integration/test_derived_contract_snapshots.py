@@ -45,9 +45,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.protocols import PipelineState
 from tengri.forward.component_factory import build_components
 from tengri.forward.orchestrator import run_components, sample_params_dict
+from tengri.protocols import ForwardState
 
 _SNAPSHOT_FILE = Path(__file__).parent / "_snapshots" / "derived_contract_v1.json"
 _REGENERATE = os.environ.get("TENGRI_REGENERATE_SNAPSHOTS") == "1"
@@ -188,7 +188,7 @@ def test_sed_output_snapshot(config_name, ssp_data_wne):
     params = sample_params_dict(components, key=key, overrides={"redshift": 0.05})
 
     wave = jnp.asarray(ssp_data_wne.ssp_wave)
-    initial = PipelineState(wave=wave)
+    initial = ForwardState(wave=wave)
     final = run_components(components, initial, params)
 
     if final.sed_intrinsic is None:

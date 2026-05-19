@@ -13,12 +13,12 @@ from dataclasses import dataclass, field
 
 import pytest
 
+from tengri.forward.orchestrator import topological_sort
 from tengri.protocols.component import (
     DerivedKey,
     PipelineContractError,
     SEDComponentConfig,
 )
-from tengri.forward.orchestrator import topological_sort
 
 
 @dataclass(frozen=True)
@@ -35,13 +35,13 @@ class FakeComponent:
     def declared_parameters(self):
         return []
 
-    def publishes(self):
+    def outputs(self):
         return self._publishes
 
-    def requires(self):
+    def inputs(self):
         return self._requires
 
-    def requires_optional(self):
+    def optional_inputs(self):
         return self._requires_optional
 
 

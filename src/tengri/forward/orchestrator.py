@@ -35,9 +35,9 @@ import jax.numpy as jnp
 from tengri.protocols.component import (
     BARE_NAME_ALLOWLIST,
     DerivedKey,
+    ForwardState,
     ParamDeclaration,
     PipelineContractError,
-    PipelineState,
     SEDComponent,
 )
 
@@ -51,29 +51,50 @@ __all__ = [
 ]
 
 
-# ── Internal accessors for the publish/require contract methods ────
+# ── Internal accessors for the output/input contract methods ───────
 #
-# publishes / requires / requires_optional are intentionally NOT part
-# of the runtime-checkable SEDComponent Protocol surface (see ADR-0004,
+# outputs / inputs / optional_inputs are intentionally NOT part of the
+# runtime-checkable SEDComponent Protocol surface (see ADR-0009,
 # specifically the "drop from runtime-checkable Protocol" amendment).
 # Components that have not been annotated contribute the safe empty-tuple
 # default. These three helpers live at module scope so both
 # validate_pipeline and topological_sort can reuse them.
+#
+# Renamed from ``outputs`` / ``inputs`` / ``optional_inputs`` in
+# Phase II-3.2 (2026-05-18). For one minor version the accessors fall
+# back to the old names with a ``DeprecationWarning``, so components
+# can be migrated incrementally. Old names are removed in v1.0.
 
 
-def _publishes(c: SEDComponent) -> tuple[DerivedKey, ...]:
-    fn = getattr(c, "publishes", None)
-    return tuple(fn()) if callable(fn) else ()
+def _contract_method(c: SEDComponent, new: str, old: str) -> tuple[DerivedKey, ...]:
+    fn = getattr(c, new, None)
+    if callable(fn):
+        return tuple(fn())
+    legacy = getattr(c, old, None)
+    if callable(legacy):
+        import warnings
+
+        warnings.warn(
+            f"Component {type(c).__name__!r} declares `{old}()`; this is "
+            f"deprecated and will be removed in tengri v1.0. Rename the "
+            f"method to `{new}()`.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return tuple(legacy())
+    return ()
 
 
-def _requires(c: SEDComponent) -> tuple[DerivedKey, ...]:
-    fn = getattr(c, "requires", None)
-    return tuple(fn()) if callable(fn) else ()
+def _outputs(c: SEDComponent) -> tuple[DerivedKey, ...]:
+    return _contract_method(c, "outputs", "publishes")
 
 
-def _requires_optional(c: SEDComponent) -> tuple[DerivedKey, ...]:
-    fn = getattr(c, "requires_optional", None)
-    return tuple(fn()) if callable(fn) else ()
+def _inputs(c: SEDComponent) -> tuple[DerivedKey, ...]:
+    return _contract_method(c, "inputs", "requires")
+
+
+def _optional_inputs(c: SEDComponent) -> tuple[DerivedKey, ...]:
+    return _contract_method(c, "optional_inputs", "requires_optional")
 
 
 # Canonical units for every well-known cross-component derived key. Both
@@ -88,7 +109,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "sfr": "Msun/yr",
     "sfr_10myr": "Msun/yr",
     "sfr_100myr": "Msun/yr",
-    # Stellar — age-resolved tensors (hard requires for nebular / dust2c)
+    # Stellar — age-resolved tensors (hard needs for nebular / dust2c)
     "L_age": "erg/s",
     "lnu_age": "erg/s/Hz",
     "ssp_ages_yr": "yr",
@@ -148,25 +169,25 @@ def _did_you_mean(missing: str, known: Iterable[str]) -> str:
 
 
 def validate_pipeline(components: Iterable[SEDComponent]) -> None:
-    r"""Check the publish / require contract over an ordered component list.
+    r"""Check the output / input contract over an ordered component list.
 
     Runs at :class:`tengri.SEDModel` construction time, once per model.
     Zero hot-path / JIT cost — all checks are pure-Python over the
-    metadata returned by :meth:`SEDComponent.publishes` and
-    :meth:`SEDComponent.requires`.
+    metadata returned by :meth:`SEDComponent.outputs` and
+    :meth:`SEDComponent.inputs`.
 
     The five checks
     ---------------
-    1. **Duplicate publish.** Two components publish the same key — unless
+    1. **Duplicate output.** Two components publish the same key — unless
        they are listed in :data:`_ALTERNATE_PUBLISHERS` as alternate
        implementations of the same role (e.g. one-component vs two-component
        dust).
-    2. **Missing publisher.** A key declared in :meth:`requires` has no
-       upstream :meth:`publishes`. The error message includes a
+    2. **Missing producer.** A key declared in :meth:`inputs` has no
+       upstream :meth:`outputs`. The error message includes a
        ``Did you mean: ...`` suggestion when a published key is within edit
        distance 2 — this is what catches the silent-rename hazard
        (``L_ir`` → ``L_dust_total`` produces a suggestion).
-    3. **Out-of-order publisher.** A required key is published by a
+    3. **Out-of-order producer.** A required key is published by a
        component that appears *after* the consumer in the pipeline list.
     4. **Unit mismatch (publisher vs consumer).** Consumer's
        ``DerivedKey.units`` differs from publisher's. The validator
@@ -194,19 +215,19 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
     component_list = list(components)
 
     # Stage 1: build the publish map (component-order indexed) and check
-    # duplicate publish + canonical-units agreement on the publish side.
+    # duplicate output + canonical-units agreement on the publish side.
     publishers: dict[str, tuple[int, SEDComponent, DerivedKey]] = {}
     for idx, component in enumerate(component_list):
-        for key in _publishes(component):
+        for key in _outputs(component):
             if not isinstance(key, DerivedKey):
                 raise PipelineContractError(
-                    f"Component {type(component).__name__!r} publishes() returned "
+                    f"Component {type(component).__name__!r} outputs() returned "
                     f"a non-DerivedKey entry of type {type(key).__name__}"
                 )
             canonical = _CANONICAL_UNITS.get(key.name)
             if canonical is not None and key.units != canonical:
                 raise PipelineContractError(
-                    f"Component {type(component).__name__!r} publishes "
+                    f"Component {type(component).__name__!r} outputs "
                     f"{key.name!r} in {key.units!r} but the canonical-units "
                     f"table pins it to {canonical!r}. Either fix the units "
                     f"string or update _CANONICAL_UNITS in "
@@ -229,39 +250,39 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
     # Stage 2: walk consumers in order; check each required key is
     # published by an *earlier* component with matching units.
     for idx, component in enumerate(component_list):
-        for needed in _requires(component):
+        for needed in _inputs(component):
             if not isinstance(needed, DerivedKey):
                 raise PipelineContractError(
-                    f"Component {type(component).__name__!r} requires() returned "
+                    f"Component {type(component).__name__!r} inputs() returned "
                     f"a non-DerivedKey entry of type {type(needed).__name__}"
                 )
             canonical = _CANONICAL_UNITS.get(needed.name)
             if canonical is not None and needed.units != canonical:
                 raise PipelineContractError(
-                    f"Component {type(component).__name__!r} requires "
+                    f"Component {type(component).__name__!r} needs "
                     f"{needed.name!r} in {needed.units!r} but the "
                     f"canonical-units table pins it to {canonical!r}."
                 )
             if needed.name not in publishers:
                 hint = _did_you_mean(needed.name, publishers.keys())
                 raise PipelineContractError(
-                    f"Component {type(component).__name__!r} requires derived "
+                    f"Component {type(component).__name__!r} needs derived "
                     f"key {needed.name!r} (in {needed.units!r}) but no "
-                    f"upstream component publishes it.{hint}"
+                    f"upstream component outputs it.{hint}"
                 )
             pub_idx, pub_comp, pub_key = publishers[needed.name]
             if pub_idx >= idx:
                 raise PipelineContractError(
                     f"Component {type(component).__name__!r} (position {idx}) "
-                    f"requires {needed.name!r} but it is published by "
+                    f"needs {needed.name!r} but it is published by "
                     f"{type(pub_comp).__name__!r} at position {pub_idx} — "
-                    f"the publisher must come strictly before the consumer."
+                    f"the producer must come strictly before the consumer."
                 )
             if pub_key.units != needed.units:
                 raise PipelineContractError(
-                    f"Component {type(component).__name__!r} requires "
+                    f"Component {type(component).__name__!r} needs "
                     f"{needed.name!r} in {needed.units!r} but "
-                    f"{type(pub_comp).__name__!r} publishes it in "
+                    f"{type(pub_comp).__name__!r} outputs it in "
                     f"{pub_key.units!r}. The contract refuses to silently "
                     f"convert; fix one of the units strings (the canonical "
                     f"answer is in _CANONICAL_UNITS)."
@@ -273,16 +294,16 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
     # rename or unit drift without forcing every pipeline to instantiate
     # the optional upstream component.
     for idx, component in enumerate(component_list):
-        for needed in _requires_optional(component):
+        for needed in _optional_inputs(component):
             if not isinstance(needed, DerivedKey):
                 raise PipelineContractError(
-                    f"Component {type(component).__name__!r} requires_optional() "
+                    f"Component {type(component).__name__!r} optional_inputs() "
                     f"returned a non-DerivedKey entry of type {type(needed).__name__}"
                 )
             canonical = _CANONICAL_UNITS.get(needed.name)
             if canonical is not None and needed.units != canonical:
                 raise PipelineContractError(
-                    f"Component {type(component).__name__!r} optionally requires "
+                    f"Component {type(component).__name__!r} optionally needs "
                     f"{needed.name!r} in {needed.units!r} but the "
                     f"canonical-units table pins it to {canonical!r}."
                 )
@@ -292,15 +313,15 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
             if pub_idx >= idx:
                 raise PipelineContractError(
                     f"Component {type(component).__name__!r} (position {idx}) "
-                    f"optionally requires {needed.name!r} but it is published by "
+                    f"optionally needs {needed.name!r} but it is published by "
                     f"{type(pub_comp).__name__!r} at position {pub_idx} — "
-                    f"the publisher must come strictly before the consumer."
+                    f"the producer must come strictly before the consumer."
                 )
             if pub_key.units != needed.units:
                 raise PipelineContractError(
-                    f"Component {type(component).__name__!r} optionally requires "
+                    f"Component {type(component).__name__!r} optionally needs "
                     f"{needed.name!r} in {needed.units!r} but "
-                    f"{type(pub_comp).__name__!r} publishes it in "
+                    f"{type(pub_comp).__name__!r} outputs it in "
                     f"{pub_key.units!r}. The contract refuses to silently "
                     f"convert; fix one of the units strings (the canonical "
                     f"answer is in _CANONICAL_UNITS)."
@@ -308,11 +329,11 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
 
 
 def topological_sort(components: Iterable[SEDComponent]) -> list[SEDComponent]:
-    r"""Stable topological sort over the publish/require dependency graph.
+    r"""Stable topological sort over the output/input dependency graph.
 
     Produces an ordering where every component appears strictly after
-    every other component whose :meth:`publishes` it consumes via
-    :meth:`requires` or :meth:`requires_optional`. Among components with
+    every other component whose :meth:`outputs` it consumes via
+    :meth:`inputs` or :meth:`optional_inputs`. Among components with
     no ordering constraint, the input order is preserved (stable sort).
 
     This is the inverse of :func:`validate_pipeline`'s "out-of-order
@@ -353,7 +374,7 @@ def topological_sort(components: Iterable[SEDComponent]) -> list[SEDComponent]:
     resolution (first publisher wins on duplicates — see
     :data:`_ALTERNATE_PUBLISHERS`), the sort is fully deterministic.
 
-    **Why both ``requires`` and ``requires_optional``.** A hard
+    **Why both ``inputs`` and ``optional_inputs``.** A hard
     requirement establishes ordering by definition. An optional
     requirement *also* establishes ordering when the publisher is
     present: the consumer reads from ``state.derived`` with a fallback,
@@ -374,15 +395,15 @@ def topological_sort(components: Iterable[SEDComponent]) -> list[SEDComponent]:
     # first one in the input list takes precedence.
     producer: dict[str, int] = {}
     for i, c in enumerate(component_list):
-        for key in _publishes(c):
+        for key in _outputs(c):
             producer.setdefault(key.name, i)
 
-    # Build incoming edges per node. An edge i ← j means "i requires
-    # something j publishes, so j must come before i". Both hard and
-    # optional requires contribute.
+    # Build incoming edges per node. An edge i ← j means "i needs
+    # something j outputs, so j must come before i". Both hard and
+    # optional needs contribute.
     deps: list[set[int]] = [set() for _ in range(n)]
     for i, c in enumerate(component_list):
-        for needed in (*_requires(c), *_requires_optional(c)):
+        for needed in (*_inputs(c), *_optional_inputs(c)):
             pub = producer.get(needed.name)
             if pub is not None and pub != i:
                 deps[i].add(pub)
@@ -402,9 +423,9 @@ def topological_sort(components: Iterable[SEDComponent]) -> list[SEDComponent]:
         if picked is None:
             pending_names = [type(component_list[i]).__name__ for i in sorted(remaining)]
             raise PipelineContractError(
-                f"Topological sort failed: cycle in publish/require graph "
-                f"involving {pending_names!r}. Every requires() / "
-                f"requires_optional() declaration must be satisfiable in some "
+                f"Topological sort failed: cycle in output/input graph "
+                f"involving {pending_names!r}. Every inputs() / "
+                f"optional_inputs() declaration must be satisfiable in some "
                 f"linear order — check the offending components."
             )
         emitted.append(picked)
@@ -579,17 +600,17 @@ def sample_params_dict(
 
 def run_components(
     components: Iterable[SEDComponent],
-    state: PipelineState,
+    state: ForwardState,
     params: Mapping[str, jnp.ndarray],
-) -> PipelineState:
+) -> ForwardState:
     r"""Thread ``state`` through ``components`` in order.
 
     Parameters
     ----------
     components : iterable of SEDComponent
         Ordered list. Each component reads what it needs from
-        ``state`` and returns a *new* :class:`PipelineState`.
-    state : PipelineState
+        ``state`` and returns a *new* :class:`ForwardState`.
+    state : ForwardState
         Initial pipeline state. Typically carries just ``wave`` and
         any seed values (e.g. ``sed_observed`` already populated).
     params : mapping
@@ -598,7 +619,7 @@ def run_components(
 
     Returns
     -------
-    PipelineState
+    ForwardState
         Final state after all components have applied.
     """
     for component in components:

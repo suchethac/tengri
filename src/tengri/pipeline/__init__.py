@@ -2,7 +2,7 @@
 """Phase II-1 component pipeline — public entry point.
 
 This namespace gathers the :class:`SEDComponent` Protocol, the
-:class:`PipelineState` it threads through, the orchestrator helpers
+:class:`ForwardState` it threads through, the orchestrator helpers
 (:func:`run_components`, :func:`merge_declared_parameters`), and every
 adapter that ships in Phase II-1.
 
@@ -14,13 +14,13 @@ Example
 -------
 >>> import jax.numpy as jnp
 >>> from tengri.pipeline import (
-...     PipelineState,
+...     ForwardState,
 ...     RadioSEDComponent,
 ...     IGMSEDComponent,
 ...     run_components,
 ... )
 >>> wave = jnp.logspace(2, 8, 1024)
->>> state = PipelineState(wave=wave, sed_intrinsic=jnp.zeros_like(wave))
+>>> state = ForwardState(wave=wave, sed_intrinsic=jnp.zeros_like(wave))
 >>> chain = [RadioSEDComponent(), IGMSEDComponent()]
 >>> params = {
 ...     "redshift": 0.5,
@@ -53,16 +53,6 @@ from tengri.components.igm.component import IGMSEDComponent
 from tengri.components.nebular.component import NebularSEDComponent
 from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.xray.component import XRaySEDComponent
-from tengri.protocols import (
-    BARE_NAME_ALLOWLIST,
-    Likelihood,
-    ObservationModel,
-    ParamDeclaration,
-    PipelineState,
-    SEDComponent,
-    SEDComponentConfig,
-    SEDComponentState,
-)
 from tengri.forward.orchestrator import (
     merge_declared_parameters,
     run_components,
@@ -86,6 +76,16 @@ from tengri.inference.likelihoods.protocol import (
 from tengri.inference.photometry_likelihood import PhotometryLikelihood
 from tengri.inference.spectroscopy_likelihood import SpectroscopyLikelihood
 from tengri.observation.photometry_model import PhotometryObservationModel
+from tengri.protocols import (
+    BARE_NAME_ALLOWLIST,
+    ForwardState,
+    Likelihood,
+    ObservationModel,
+    ParamDeclaration,
+    SEDComponent,
+    SEDComponentConfig,
+    SEDComponentState,
+)
 
 __all__ = [
     "BARE_NAME_ALLOWLIST",
@@ -98,6 +98,7 @@ __all__ = [
     "DustEmissionSEDComponent",
     "ELineFittedLikelihood",
     "ELineMarginalisedLikelihood",
+    "ForwardState",
     "GaussianLikelihood",
     "IGMSEDComponent",
     "Likelihood",
@@ -107,7 +108,6 @@ __all__ = [
     "ParamDeclaration",
     "PhotometryLikelihood",
     "PhotometryObservationModel",
-    "PipelineState",
     "RadioSEDComponent",
     "SEDComponent",
     "SEDComponentConfig",

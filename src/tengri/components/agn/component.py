@@ -40,8 +40,8 @@ from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn.unified import resolve_agn_model
 from tengri.protocols.component import (
     DerivedKey,
+    ForwardState,
     ParamDeclaration,
-    PipelineState,
     SEDComponentConfig,
     SEDComponentState,
 )
@@ -110,7 +110,7 @@ class AGNSEDComponent:
         """
         return list(_AGN_PARAMS)
 
-    def publishes(self) -> tuple[DerivedKey, ...]:
+    def outputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys this AGN component publishes.
 
         See :func:`tengri.forward.orchestrator.validate_pipeline`.
@@ -131,14 +131,14 @@ class AGNSEDComponent:
 
     def apply(
         self,
-        state: PipelineState,
+        state: ForwardState,
         params: Mapping[str, jnp.ndarray],
-    ) -> PipelineState:
+    ) -> ForwardState:
         """Add AGN emission to ``state.sed_intrinsic`` and publish ``L_agn_bol``.
 
         Parameters
         ----------
-        state : PipelineState
+        state : ForwardState
             Must carry rest-frame ``wave`` (Å). If ``sed_intrinsic`` is
             ``None`` it is initialised to zeros of the same shape.
         params : mapping
@@ -146,7 +146,7 @@ class AGNSEDComponent:
 
         Returns
         -------
-        PipelineState
+        ForwardState
             New state with ``sed_intrinsic`` updated and ``L_agn_bol``
             published to ``derived``.
         """

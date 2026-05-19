@@ -25,14 +25,14 @@ from tengri.components.dust.component import DustAttenuationSEDComponent
 from tengri.components.igm.component import IGMSEDComponent
 from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.xray.component import XRaySEDComponent
+from tengri.forward.orchestrator import merge_declared_parameters
+from tengri.parameters.priors import Fixed
 from tengri.protocols import (
+    ForwardState,
     ParamDeclaration,
-    PipelineState,
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.forward.orchestrator import merge_declared_parameters
-from tengri.parameters.priors import Fixed
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,7 @@ class _BadPrefixComponent:
     def precompute(self, ssp_data=None, wave_grid=None) -> SEDComponentState:
         return SEDComponentState()
 
-    def apply(self, state: PipelineState, params) -> PipelineState:
+    def apply(self, state: ForwardState, params) -> ForwardState:
         return state
 
 
@@ -67,7 +67,7 @@ class _DuplicateRadio:
     def precompute(self, ssp_data=None, wave_grid=None) -> SEDComponentState:
         return SEDComponentState()
 
-    def apply(self, state: PipelineState, params) -> PipelineState:
+    def apply(self, state: ForwardState, params) -> ForwardState:
         return state
 
 
@@ -85,7 +85,7 @@ class _NonParamDeclEntry:
     def precompute(self, ssp_data=None, wave_grid=None) -> SEDComponentState:
         return SEDComponentState()
 
-    def apply(self, state: PipelineState, params) -> PipelineState:
+    def apply(self, state: ForwardState, params) -> ForwardState:
         return state
 
 

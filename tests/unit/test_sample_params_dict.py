@@ -81,7 +81,7 @@ def test_same_key_produces_identical_draws(chain):
 @pytest.mark.unit
 def test_end_to_end_drives_run_components(chain):
     """sample_params_dict output feeds run_components without massaging."""
-    from tengri.protocols import PipelineState
+    from tengri.protocols import ForwardState
 
     params = sample_params_dict(
         chain,
@@ -89,7 +89,7 @@ def test_end_to_end_drives_run_components(chain):
         overrides={"redshift": 0.5},
     )
     wave = jnp.logspace(2, 8, 256)
-    state = PipelineState(
+    state = ForwardState(
         wave=wave,
         sed_intrinsic=jnp.ones_like(wave) * 1e30,
         sed_observed=jnp.ones_like(wave),

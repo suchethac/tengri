@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """End-to-end regression guards for the Phase II orchestrator JIT path.
 
-After Phase II-2.2-followup (PipelineState registered as a JAX pytree),
+After Phase II-2.2-followup (ForwardState registered as a JAX pytree),
 the full ``Stellar + Radio + XRay + IGM`` adapter chain is supposed to
 flow through ``jax.jit`` end-to-end with bit-exact match to the eager
 path. This module guards that invariant — if a future change breaks
@@ -26,8 +26,8 @@ from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.stellar import StellarSEDComponent
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.components.xray.component import XRaySEDComponent
-from tengri.protocols.component import PipelineState
 from tengri.forward.orchestrator import run_components
+from tengri.protocols.component import ForwardState
 
 _SSP_PATH = pathlib.Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5").resolve()
 
@@ -77,7 +77,7 @@ def test_orchestrator_chain_eager(ssp, base_params):
         XRaySEDComponent(),
         IGMSEDComponent(),
     ]
-    state0 = PipelineState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
+    state0 = ForwardState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
     s = run_components(components, state0, base_params)
 
     assert s.sed_intrinsic is not None
@@ -99,7 +99,7 @@ def test_orchestrator_chain_jit_matches_eager(ssp, base_params):
         XRaySEDComponent(),
         IGMSEDComponent(),
     ]
-    state0 = PipelineState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
+    state0 = ForwardState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
 
     s_eager = run_components(components, state0, base_params)
     pipeline_jit = jax.jit(lambda p: run_components(components, state0, p))
@@ -118,7 +118,7 @@ def test_orchestrator_chain_jit_matches_eager(ssp, base_params):
 def test_stellar_grad_finite(ssp, base_params):
     """Gradients flow through the JIT-compiled apply()."""
     stellar = StellarSEDComponent(ssp_data=ssp)
-    state0 = PipelineState(wave=ssp.ssp_wave)
+    state0 = ForwardState(wave=ssp.ssp_wave)
 
     def loss(p):
         return jnp.sum(stellar.apply(state0, p).sed_intrinsic)
@@ -182,7 +182,7 @@ def test_full_chain_composability(ssp, full_chain_params, agn_model, dust_law, e
         XRaySEDComponent(),
         IGMSEDComponent(),
     ]
-    state0 = PipelineState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
+    state0 = ForwardState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
 
     s_eager = run_components(chain, state0, full_chain_params)
     s_jit = jax.jit(lambda p: run_components(chain, state0, p))(full_chain_params)

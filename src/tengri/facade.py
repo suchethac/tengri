@@ -282,7 +282,7 @@ class Galaxy:
         Convenience wrapper around
         :meth:`tengri.SEDModel.predict_via_orchestrator` that lazy-builds
         the underlying ``SEDModel`` and threads the params dict through
-        the component chain. Returns a :class:`tengri.protocols.PipelineState`.
+        the component chain. Returns a :class:`tengri.protocols.ForwardState`.
 
         Use this when you want the orchestrator's published cross-component
         derived quantities (``L_ir``, ``L_agn_bol``, ``log_mstar``,
@@ -296,14 +296,14 @@ class Galaxy:
 
         Returns
         -------
-        PipelineState
+        ForwardState
             See :meth:`SEDModel.predict_via_orchestrator`.
 
         See Also
         --------
         :meth:`Galaxy.predict` : Unified entry point with a ``backend``
             switch between the legacy ``Prediction`` lazy view and the
-            orchestrator's ``PipelineState`` (this method).
+            orchestrator's ``ForwardState`` (this method).
 
         Examples
         --------
@@ -319,7 +319,7 @@ class Galaxy:
         Phase II-2.6 unified entry point. The ``backend`` argument selects
         between the legacy tier-dispatch path (returns a
         :class:`Prediction` lazy view) and the orchestrator path (returns
-        a :class:`PipelineState`).
+        a :class:`ForwardState`).
 
         Parameters
         ----------
@@ -330,7 +330,7 @@ class Galaxy:
             wrapper from :meth:`SEDModel.predict`, exposing the
             ``.sfh`` / ``.sed`` / ``.lines`` / ``.radio`` / ``.xray`` /
             ``.ionizing`` property groups. ``"component"`` returns a
-            :class:`tengri.protocols.PipelineState` from the Phase II
+            :class:`tengri.protocols.ForwardState` from the Phase II
             SEDComponent orchestrator with all cross-component
             quantities published in ``state.derived``.
 
@@ -342,9 +342,9 @@ class Galaxy:
 
         Returns
         -------
-        Prediction or PipelineState
+        Prediction or ForwardState
             ``Prediction`` for ``backend="legacy"``,
-            :class:`tengri.protocols.PipelineState` for ``backend="component"``.
+            :class:`tengri.protocols.ForwardState` for ``backend="component"``.
 
         Raises
         ------

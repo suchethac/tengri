@@ -20,7 +20,7 @@ import tengri.pipeline as pipeline
 def test_namespace_exports_protocol_and_orchestrator():
     """The pipeline namespace re-exports the contract + orchestrator helpers."""
     assert pipeline.SEDComponent is not None
-    assert pipeline.PipelineState is not None
+    assert pipeline.ForwardState is not None
     assert pipeline.run_components is not None
     assert pipeline.merge_declared_parameters is not None
     assert pipeline.slice_params_for_component is not None
@@ -91,7 +91,7 @@ def test_full_six_adapter_chain_via_public_api():
     }
 
     wave = jnp.logspace(2, 8, 1024)
-    state = pipeline.PipelineState(
+    state = pipeline.ForwardState(
         wave=wave,
         sed_intrinsic=jnp.ones_like(wave) * 1e30,
         sed_observed=jnp.ones_like(wave),

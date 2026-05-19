@@ -7,7 +7,7 @@ constructing each :class:`SEDComponent` subclass by hand::
 
     from tengri.forward.component_factory import build_components
     from tengri.forward.orchestrator import run_components
-    from tengri.protocols.component import PipelineState
+    from tengri.protocols.component import ForwardState
 
     components = build_components(
         ssp_data=ssp,
@@ -20,7 +20,7 @@ constructing each :class:`SEDComponent` subclass by hand::
         use_xray=True,
         use_igm=True,
     )
-    state = run_components(components, PipelineState(wave=ssp.ssp_wave), params)
+    state = run_components(components, ForwardState(wave=ssp.ssp_wave), params)
 
 This is the **public-facing** orchestrator entry point — independent
 of :class:`tengri.SEDModel` (which keeps its legacy tier-dispatch
@@ -219,7 +219,7 @@ def build_components(
     Notes
     -----
     **JIT-compatible**: yes — the returned components flow through
-    ``jax.jit`` once :class:`tengri.protocols.PipelineState` is registered
+    ``jax.jit`` once :class:`tengri.protocols.ForwardState` is registered
     as a pytree (Phase II-2.2-followup).
 
     The ``StellarSEDComponent`` carries ``ssp_data`` on its instance
@@ -318,18 +318,18 @@ def chain_summary(components: Sequence[SEDComponent]) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# PipelineState → legacy Quantities bridges
+# ForwardState → legacy Quantities bridges
 # ─────────────────────────────────────────────────────────────────────
 #
 # Build out the legacy ``SFHQuantities`` / ``SEDQuantities`` NamedTuples
-# from a fresh :class:`PipelineState`. Lets users with code that
+# from a fresh :class:`ForwardState`. Lets users with code that
 # expects the legacy types swap in the orchestrator path without
 # rewriting downstream call sites. Full :class:`Prediction` parity
 # (lines, radio, X-ray, ionising-photon properties) is follow-up.
 
 
 def state_to_sfh_quantities(state: Any):
-    """Convert orchestrator :class:`PipelineState` → :class:`SFHQuantities`.
+    """Convert orchestrator :class:`ForwardState` → :class:`SFHQuantities`.
 
     Pulls the per-galaxy SFH derived quantities published by
     :class:`StellarSEDComponent` (``log_mstar``, ``log_mstar_formed``,
@@ -341,7 +341,7 @@ def state_to_sfh_quantities(state: Any):
 
     Parameters
     ----------
-    state : PipelineState
+    state : ForwardState
         Output of :func:`run_components` on a chain that includes
         :class:`StellarSEDComponent`.
 
@@ -398,7 +398,7 @@ def state_to_sfh_quantities(state: Any):
 
 
 def state_to_sed_quantities(state: Any):
-    """Convert orchestrator :class:`PipelineState` → :class:`SEDQuantities`.
+    """Convert orchestrator :class:`ForwardState` → :class:`SEDQuantities`.
 
     Maps the directly-available SED quantities and computes the
     UV/break diagnostics from ``state.sed_intrinsic`` and
@@ -410,7 +410,7 @@ def state_to_sed_quantities(state: Any):
 
     Parameters
     ----------
-    state : PipelineState
+    state : ForwardState
         Output of :func:`run_components` on a chain that includes
         :class:`StellarSEDComponent` (and ideally
         :class:`DustSEDComponent` for ``l_tir`` / ``l_dust_absorbed``).
@@ -532,7 +532,7 @@ def state_to_sed_quantities(state: Any):
 
 
 def state_to_radio_quantities(state: Any) -> RadioQuantities:
-    """Convert :class:`PipelineState` → :class:`RadioQuantities`.
+    """Convert :class:`ForwardState` → :class:`RadioQuantities`.
 
     Reads ``state.derived["sed_radio"]`` (the radio-component-published
     SED in erg/s/Hz on the rest-frame wave grid) and interpolates at
@@ -585,7 +585,7 @@ def state_to_radio_quantities(state: Any) -> RadioQuantities:
 
 
 def state_to_xray_quantities(state: Any) -> XRayQuantities:
-    """Convert :class:`PipelineState` → :class:`XRayQuantities`.
+    """Convert :class:`ForwardState` → :class:`XRayQuantities`.
 
     Uses the SFH-derived SFR and stellar mass to compute the XRB
     luminosity (Lehmer+10/16) and the published ``L_agn_bol`` to
@@ -617,7 +617,7 @@ def state_to_xray_quantities(state: Any) -> XRayQuantities:
 
 
 def state_to_ionizing_quantities(state: Any) -> IonizingQuantities:
-    """Convert :class:`PipelineState` → :class:`IonizingQuantities`.
+    """Convert :class:`ForwardState` → :class:`IonizingQuantities`.
 
     Reads ``state.derived["nion"]`` (ionising photon rate, photons/s)
     and computes ``xi_ion`` = q_h / νLν(1500 Å).
@@ -647,7 +647,7 @@ def state_to_ionizing_quantities(state: Any) -> IonizingQuantities:
 
 
 def state_to_emission_lines(state: Any):
-    """Convert :class:`PipelineState` → :class:`EmissionLines`.
+    """Convert :class:`ForwardState` → :class:`EmissionLines`.
 
     Reads the discrete line catalogue
     ``state.derived["line_waves"]`` / ``state.derived["line_lums"]``

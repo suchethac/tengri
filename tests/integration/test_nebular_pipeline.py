@@ -18,8 +18,8 @@ from tengri.components.nebular.component import (
     NebularSEDComponent,
     NebularSEDComponentConfig,
 )
-from tengri.protocols import PipelineState
 from tengri.forward.orchestrator import merge_declared_parameters, run_components
+from tengri.protocols import ForwardState
 
 
 @pytest.mark.unit
@@ -34,7 +34,7 @@ def test_nebular_does_not_modify_sed_intrinsic():
     """BakedIn nebular is a no-op on the SED — emission is in the SSP grid."""
     wave = jnp.linspace(1000.0, 10000.0, 64)
     intrinsic = jnp.ones_like(wave) * 1e30
-    state = PipelineState(wave=wave, sed_intrinsic=intrinsic)
+    state = ForwardState(wave=wave, sed_intrinsic=intrinsic)
 
     out = NebularSEDComponent().apply(state, {"redshift": 0.0})
 
@@ -49,7 +49,7 @@ def test_nebular_does_not_modify_sed_intrinsic():
 def test_nebular_publishes_sed_keys_for_baked_in():
     """``sed_nebular`` and ``sed_shock`` are always published (zeros for BakedIn)."""
     wave = jnp.linspace(1000.0, 10000.0, 32)
-    state = PipelineState(wave=wave)
+    state = ForwardState(wave=wave)
     out = NebularSEDComponent().apply(state, {"redshift": 0.0})
     assert "sed_nebular" in out.derived
     assert "sed_shock" in out.derived
@@ -64,7 +64,7 @@ def test_nebular_in_orchestrator_chain():
     from tengri.components.radio.component import RadioSEDComponent
 
     wave = jnp.linspace(1000.0, 100000.0, 128)
-    state = PipelineState(
+    state = ForwardState(
         wave=wave,
         sed_intrinsic=jnp.ones_like(wave) * 1e30,
         derived={"L_ir": 1e44, "L_agn_bol": 0.0, "log_mstar": 10.0},

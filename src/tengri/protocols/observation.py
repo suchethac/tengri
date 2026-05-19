@@ -1,6 +1,6 @@
 """ObservationModel protocol: how a forward-model SED meets data.
 
-An :class:`ObservationModel` takes a :class:`PipelineState` (rest-frame
+An :class:`ObservationModel` takes a :class:`ForwardState` (rest-frame
 SED + observer-frame F_nu produced by the chain of
 :class:`SEDComponent`s) and produces *predicted observables* in the
 data's native format — broadband photometric points, spectroscopic flux
@@ -19,7 +19,7 @@ from typing import Any, Protocol, runtime_checkable
 
 import jax.numpy as jnp
 
-from tengri.protocols.component import PipelineState
+from tengri.protocols.component import ForwardState
 
 __all__ = ["ObservationModel"]
 
@@ -72,7 +72,7 @@ class ObservationModel(Protocol):
 
     def predict(
         self,
-        state: PipelineState,
+        state: ForwardState,
         params: Mapping[str, jnp.ndarray],
     ) -> Mapping[str, jnp.ndarray]:
         """Predicted observables.

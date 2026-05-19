@@ -375,14 +375,14 @@ parameter freedom.
 from tengri import SEDModel, FREE, FIXED, Uniform, recipes, Parameters
 
 # Path 1: Recipe (curated template)
-model = SEDModel.from_groups(
+model = SEDModel.build(
     ssp_data=ssp,
     filters=['sdss_u', 'sdss_g'],
     **recipes.star_forming_photometry(),
 )
 
 # Path 2: From-groups direct (hand-built nested dict)
-model = SEDModel.from_groups(
+model = SEDModel.build(
     ssp_data=ssp,
     filters=['sdss_u', 'sdss_g'],
     sfh={'type': 'dpl', '*': FREE},
@@ -400,7 +400,7 @@ model = SEDModel.from_groups(
 # Path 3: Round-trip (extract → edit → rebuild)
 groups = model.spec.to_groups()
 groups['dust']['tau_bc'] = Fixed(0.8)  # Tweak in-place
-model2 = SEDModel.from_groups(ssp_data=ssp, filters=['sdss_u'], **groups)
+model2 = SEDModel.build(ssp_data=ssp, filters=['sdss_u'], **groups)
 ```
 
 ### Parameter provenance via summary()
@@ -464,7 +464,7 @@ Each returns a nested dict ready to splice into `from_groups()`:
 from tengri import recipes
 
 recipe_dict = recipes.star_forming_photometry()
-model = SEDModel.from_groups(ssp_data=ssp, filters=filters, **recipe_dict)
+model = SEDModel.build(ssp_data=ssp, filters=filters, **recipe_dict)
 ```
 
 ### Migration from flat Parameters
@@ -515,12 +515,12 @@ construction. Workarounds:
 ```python
 # A. Use a bare-stellar SSP (preferred)
 ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
-model = SEDModel.from_groups(ssp_data=ssp, **recipes.star_forming_photometry())
+model = SEDModel.build(ssp_data=ssp, **recipes.star_forming_photometry())
 
 # B. Swap the nebular backend post-edit
 r = recipes.star_forming_photometry()
 r["neb"] = {"type": "ssp"}  # baked-in nebular from the wNE file
-model = SEDModel.from_groups(ssp_data=wne_ssp, **r)
+model = SEDModel.build(ssp_data=wne_ssp, **r)
 ```
 
 `mock_recovery_minimal` works with any SSP because it disables nebular.
@@ -532,10 +532,10 @@ The registry enforces ``redshift >= 0``. ``Gaussian`` defaults to unbounded
 
 ```python
 # Wrong: fails with "must have lo >= 0"
-SEDModel.from_groups(..., redshift=Gaussian(0.5, 0.05))
+SEDModel.build(..., redshift=Gaussian(0.5, 0.05))
 
 # Right: bound at 0
-SEDModel.from_groups(..., redshift=Gaussian(0.5, 0.05, lo=0.0))
+SEDModel.build(..., redshift=Gaussian(0.5, 0.05, lo=0.0))
 ```
 
 **3. ``predict_photometry({})`` errors on all-fixed models.**
@@ -625,6 +625,34 @@ path any more — `Fitter.run(method="map")` goes through the registry
 to `run_map(context, ...)` directly. The internal wrappers will be
 removed once the remaining warm-start sites migrate; until then,
 treat them as private.
+
+---
+
+## Phase II-3.2 — Astronomer-friendly user-facing names (2026-05-18)
+
+Three user-facing names that read as software jargon are renamed to
+match how astronomers describe the same concepts in SED-fitting
+papers (Bagpipes / Prospector / CIGALE). Old names keep working with
+a `DeprecationWarning`; they are removed in v1.0.
+
+| Old                                     | New                                              | Status (v0.x)        |
+| --------------------------------------- | ------------------------------------------------ | -------------------- |
+| `SEDModel.from_groups(...)`             | `SEDModel.build(...)`                            | Both work; old warns |
+| `SEDComponent.publishes()`              | `SEDComponent.outputs()`                         | Both work; old warns |
+| `SEDComponent.requires()`               | `SEDComponent.inputs()`                          | Both work; old warns |
+| `SEDComponent.requires_optional()`      | `SEDComponent.optional_inputs()`                 | Both work; old warns |
+| `tengri.protocols.PipelineState`        | `tengri.protocols.ForwardState`                  | Both work (soft alias) |
+| `InferenceContext.loss_fn`              | `InferenceContext.neg_log_posterior_fn`          | Both work; old warns |
+
+Rationale and out-of-scope items are documented in the plan at
+`~/.claude/plans/i-want-to-undertsnad-cuddly-hearth.md`. The `from_*`
+namespace on `SEDModel` is reserved for future deserialization entry
+points (`from_file`, `from_yaml`, `from_dict`) — this is the reason
+for picking the verb `build` rather than another `from_*` variant.
+
+`Parameters.from_groups` is **not** renamed in this phase; only the
+`SEDModel`-level entry point. The `_groups` suffix on `Parameters` is
+historically accurate to the grammar it parses.
 
 ---
 

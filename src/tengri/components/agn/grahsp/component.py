@@ -71,14 +71,14 @@ from tengri.components.agn.grahsp.templates import (
     load_grahsp_templates,
 )
 from tengri.components.agn.grahsp.torus import si_feature, torus_dust_continuum
+from tengri.parameters.priors import Fixed, LogUniform, Uniform
 from tengri.protocols.component import (
     DerivedKey,
+    ForwardState,
     ParamDeclaration,
-    PipelineState,
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.parameters.priors import Fixed, LogUniform, Uniform
 
 __all__ = [
     "GRAHSPSEDComponent",
@@ -257,7 +257,7 @@ class GRAHSPSEDComponent:
             ),
         ]
 
-    def publishes(self) -> tuple[DerivedKey, ...]:
+    def outputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys this GRAHSP AGN component publishes.
 
         See :func:`tengri.forward.orchestrator.validate_pipeline`.
@@ -305,15 +305,15 @@ class GRAHSPSEDComponent:
 
     def apply(
         self,
-        state: PipelineState,
+        state: ForwardState,
         params: Mapping[str, Array],
         templates_state: GRAHSPSEDComponentState | None = None,
-    ) -> PipelineState:
+    ) -> ForwardState:
         r"""Add GRAHSP AGN emission to ``state.sed_intrinsic``.
 
         Parameters
         ----------
-        state : PipelineState
+        state : ForwardState
             ``state.wave`` is rest-frame Å.
         params : mapping
             ``agn_grahsp_*`` keys.
@@ -323,7 +323,7 @@ class GRAHSPSEDComponent:
 
         Returns
         -------
-        PipelineState
+        ForwardState
             Updated with ``sed_intrinsic`` augmented and ``derived``
             keys ``sed_grahsp``, ``L_agn_bol``, ``L_agn_torus``.
         """

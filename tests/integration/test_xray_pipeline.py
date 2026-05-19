@@ -18,8 +18,8 @@ import pytest
 
 from tengri.components.xray.component import XRaySEDComponent
 from tengri.components.xray.xray import xray_total
-from tengri.protocols import PipelineState
 from tengri.forward.orchestrator import run_components
+from tengri.protocols import ForwardState
 
 REL_TOL = 1e-10
 
@@ -38,7 +38,7 @@ def test_orchestrator_matches_direct_call(z, sfr, stellar_mass, L_agn_bol):
     """Pipeline output equals direct xray_total call."""
     wave = jnp.linspace(1e0, 1e3, 1024)  # X-ray range: 1 to 1000 Å
 
-    initial_state = PipelineState(
+    initial_state = ForwardState(
         wave=wave,
         sed_intrinsic=jnp.zeros_like(wave),
         derived={"sfr": sfr, "log_mstar": jnp.log10(stellar_mass), "L_agn_bol": L_agn_bol},
@@ -76,7 +76,7 @@ def test_orchestrator_matches_direct_call(z, sfr, stellar_mass, L_agn_bol):
 def test_xray_no_agn_upstream_falls_back_to_zero():
     """Without AGN upstream, X-ray uses its documented fallback (L_agn_bol=0)."""
     wave = jnp.linspace(1e0, 1e3, 64)
-    state = PipelineState(wave=wave, sed_intrinsic=jnp.zeros_like(wave))
+    state = ForwardState(wave=wave, sed_intrinsic=jnp.zeros_like(wave))
     xray = XRaySEDComponent()
 
     params = {
@@ -104,9 +104,9 @@ def test_xray_no_agn_upstream_falls_back_to_zero():
 
 
 def test_xray_pipeline_preserves_input_state_immutability():
-    """The orchestrator must not mutate the input PipelineState."""
+    """The orchestrator must not mutate the input ForwardState."""
     wave = jnp.linspace(1e0, 1e3, 64)
-    initial = PipelineState(
+    initial = ForwardState(
         wave=wave,
         sed_intrinsic=jnp.zeros_like(wave),
         derived={"sfr": 1.0, "log_mstar": 10.0, "L_agn_bol": 1e44},
@@ -145,7 +145,7 @@ def test_three_adapter_chain_runs_end_to_end():
 
     # Log-spaced grid so UV/Lyα-region points exist (where IGM attenuates).
     wave = jnp.logspace(0, 9, 256)
-    state = PipelineState(
+    state = ForwardState(
         wave=wave,
         sed_intrinsic=jnp.zeros_like(wave),
         sed_observed=jnp.ones_like(wave) * 1e30,

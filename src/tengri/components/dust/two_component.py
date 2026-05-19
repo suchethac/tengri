@@ -48,13 +48,13 @@ import jax.numpy as jnp
 
 from tengri.components.dust.attenuation import two_component_dust
 from tengri.components.dust.emission import resolve_emission_model
+from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
+    ForwardState,
     ParamDeclaration,
-    PipelineState,
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.parameters.priors import Fixed, Uniform
 from tengri.utils.physics_constants import C_AA
 
 __all__ = [
@@ -229,14 +229,14 @@ class DustSEDComponent:
 
     def apply(
         self,
-        state: PipelineState,
+        state: ForwardState,
         params: Mapping[str, jnp.ndarray],
-    ) -> PipelineState:
+    ) -> ForwardState:
         """Apply two-component attenuation + IR re-emission.
 
         Parameters
         ----------
-        state : PipelineState
+        state : ForwardState
             Must carry ``wave`` and have stellar published
             ``lnu_age`` (n_age, n_wave) and ``ssp_ages_yr`` (n_age,)
             in its ``derived`` dict.
@@ -245,7 +245,7 @@ class DustSEDComponent:
 
         Returns
         -------
-        PipelineState
+        ForwardState
             New state with ``sed_intrinsic`` set to the attenuated
             stellar SED plus IR re-emission, and ``L_ir`` published
             to ``derived``.

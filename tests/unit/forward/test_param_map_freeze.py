@@ -109,7 +109,7 @@ class TestRecipeParamMapConsistency:
         from tengri import recipes
 
         # Build a model using the recipe
-        model = SEDModel.from_groups(
+        model = SEDModel.build(
             ssp_data=ssp_data_fsps,
             **recipes.star_forming_photometry(),
         )

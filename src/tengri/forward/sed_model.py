@@ -3542,7 +3542,7 @@ class SEDModel:
         """Drop-in replacement for :meth:`predict_sfh_quantities`.
 
         Routes through the orchestrator and converts the resulting
-        :class:`PipelineState` to a legacy :class:`SFHQuantities`
+        :class:`ForwardState` to a legacy :class:`SFHQuantities`
         NamedTuple via :func:`tengri.forward.state_to_sfh_quantities`.
         Same return shape as the legacy method, computed via the
         Phase II SEDComponent path.
@@ -3765,7 +3765,7 @@ class SEDModel:
         (``self.spec`` + ``self.ssp_data`` + dust / nebular / AGN / radio
         / X-ray / IGM flags) and threads ``params`` through
         :func:`tengri.forward.run_components`. Returns the final
-        :class:`tengri.protocols.PipelineState`, **not** a legacy
+        :class:`tengri.protocols.ForwardState`, **not** a legacy
         :class:`Prediction` — callers wanting the legacy shape should
         keep using :meth:`predict_photometry`/:meth:`predict_spectrum`
         until the full integration adapter ships.
@@ -3784,7 +3784,7 @@ class SEDModel:
 
         Returns
         -------
-        PipelineState
+        ForwardState
             Threaded state after the chain runs. ``sed_intrinsic`` is
             the rest-frame total SED in erg/s/Hz; ``sed_observed`` is
             populated when an IGM component is present; ``derived``
@@ -3802,8 +3802,8 @@ class SEDModel:
         branch. Anything else (``burst``, etc.) is currently unmapped
         and will raise downstream.
         """
-        from tengri.protocols.component import PipelineState
         from tengri.forward import build_components, run_components
+        from tengri.protocols.component import ForwardState
 
         chain = self._build_component_chain()
         # Initialise the chain on the panchromatic-extended grid when
@@ -3816,7 +3816,7 @@ class SEDModel:
         # chain runs on the SSP grid only (typically 91–100000 Å) and
         # the multiwavelength contributions are confined to that range.
         wave = self._rest_wavelength
-        state0 = PipelineState(wave=wave, sed_observed=jnp.ones_like(wave))
+        state0 = ForwardState(wave=wave, sed_observed=jnp.ones_like(wave))
         del build_components  # silence unused-import warning; used in helper
 
         # Inject Fixed values from spec for parameters absent from
@@ -4739,7 +4739,7 @@ class SEDModel:
         )
 
     @classmethod
-    def from_groups(
+    def build(
         cls,
         ssp_data,
         *,
@@ -4762,6 +4762,10 @@ class SEDModel:
         block) into a ``Parameters`` via
         :meth:`tengri.Parameters.from_groups`, then constructs the
         ``SEDModel``. Anything left unspecified auto-fills from the registry.
+
+        The ``from_*`` namespace is reserved for future deserialization
+        entry points (``from_file``, ``from_yaml``, ``from_dict``); use
+        ``build`` to construct a model from in-memory physics-component dicts.
 
         Parameters
         ----------
@@ -4797,7 +4801,7 @@ class SEDModel:
         Examples
         --------
         >>> from tengri import SEDModel, FREE, FIXED, Uniform, Fixed
-        >>> model = SEDModel.from_groups(
+        >>> model = SEDModel.build(
         ...     ssp_data=ssp,
         ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
         ...     dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
@@ -4831,6 +4835,25 @@ class SEDModel:
             observation=observation,
             **model_kwargs,
         )
+
+    @classmethod
+    def from_groups(cls, *args, **kwargs) -> SEDModel:
+        """Deprecated alias for :meth:`SEDModel.build`.
+
+        .. deprecated:: 0.x
+            Use :meth:`SEDModel.build` instead. ``from_groups`` will be
+            removed in tengri v1.0. The ``from_*`` namespace is reserved
+            for future deserialization entry points.
+        """
+        import warnings
+
+        warnings.warn(
+            "`SEDModel.from_groups` is deprecated and will be removed in "
+            "tengri v1.0; use `SEDModel.build` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return cls.build(*args, **kwargs)
 
     def prior_predictive(self, n: int = 500, seed: int = 42) -> PriorPredictive:
         """Sample from the prior and evaluate forward model on each draw.

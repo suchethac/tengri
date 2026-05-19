@@ -6,7 +6,7 @@ Phase 1 of ADR-0007. Covers field shape, dict-compat semantics, the
 the ``_extras`` spillover path, and JAX pytree registration.
 
 These tests assume :class:`DerivedBundle` is a *drop-in* replacement
-for the current ``Mapping[str, Any]`` shape on ``PipelineState.derived``
+for the current ``Mapping[str, Any]`` shape on ``ForwardState.derived``
 — every existing dict-style read should keep working.
 """
 
@@ -206,17 +206,17 @@ class TestPackageRootExport:
 
 
 class TestPhase2Flip:
-    """PipelineState.derived is now DerivedBundle-typed (ADR-0007 Phase 2).
+    """ForwardState.derived is now DerivedBundle-typed (ADR-0007 Phase 2).
 
     These tests verify the type flip + auto-coercion shim. They live
     in the bundle test file (not pipeline_state's) because the bundle
-    is the type that matters; PipelineState is just its host.
+    is the type that matters; ForwardState is just its host.
     """
 
     def test_default_derived_is_a_bundle(self):
-        from tengri.protocols import PipelineState
+        from tengri.protocols import ForwardState
 
-        s = PipelineState(wave=jnp.linspace(1000.0, 10000.0, 8))
+        s = ForwardState(wave=jnp.linspace(1000.0, 10000.0, 8))
         assert isinstance(s.derived, DerivedBundle)
         # All fields unset on a fresh state.
         assert len(s.derived) == 0
@@ -224,9 +224,9 @@ class TestPhase2Flip:
     def test_construct_with_dict_coerces_to_bundle(self):
         # Legacy callers that pass derived={"L_ir": ...} at construction
         # get a DerivedBundle automatically via __post_init__.
-        from tengri.protocols import PipelineState
+        from tengri.protocols import ForwardState
 
-        s = PipelineState(
+        s = ForwardState(
             wave=jnp.linspace(1000.0, 10000.0, 8),
             derived={"L_ir": jnp.asarray(3.0)},
         )
@@ -236,9 +236,9 @@ class TestPhase2Flip:
     def test_with_dict_coerces_to_bundle(self):
         # The legacy write pattern — dict(state.derived) → mutate →
         # state.with_(derived=new_dict) — must still work.
-        from tengri.protocols import PipelineState
+        from tengri.protocols import ForwardState
 
-        s = PipelineState(wave=jnp.linspace(1000.0, 10000.0, 8))
+        s = ForwardState(wave=jnp.linspace(1000.0, 10000.0, 8))
         new_derived = dict(s.derived)
         new_derived["L_ir"] = jnp.asarray(7.0)
         s2 = s.with_(derived=new_derived)
@@ -250,31 +250,31 @@ class TestPhase2Flip:
     def test_with_bundle_passes_through(self):
         # New-style write: pass a DerivedBundle directly. No coercion
         # needed, identity preserved by ``replace``.
-        from tengri.protocols import PipelineState
+        from tengri.protocols import ForwardState
 
-        s = PipelineState(wave=jnp.linspace(1000.0, 10000.0, 8))
+        s = ForwardState(wave=jnp.linspace(1000.0, 10000.0, 8))
         b = DerivedBundle(L_ir=jnp.asarray(9.0))
         s2 = s.with_(derived=b)
         assert s2.derived is b
 
     def test_unknown_key_in_dict_raises_after_phase4(self):
         # Phase 4 (ADR-0007): the spillover-to-_extras path is closed
-        # for production code. PipelineState.__post_init__ now calls
+        # for production code. ForwardState.__post_init__ now calls
         # DerivedBundle.from_dict(..., allow_extras=False), so passing
         # a stale dict-style write with an unknown key fails loudly.
-        from tengri.protocols import PipelineState
+        from tengri.protocols import ForwardState
 
         with pytest.raises(TypeError, match="unknown key"):
-            PipelineState(
+            ForwardState(
                 wave=jnp.linspace(1000.0, 10000.0, 8),
                 derived={"L_ir": jnp.asarray(1.0), "future_key": "anything"},
             )
 
     def test_typed_dict_still_coerces_after_phase4(self):
         """The happy dict-style path — all keys are typed — still works."""
-        from tengri.protocols import PipelineState
+        from tengri.protocols import ForwardState
 
-        s = PipelineState(
+        s = ForwardState(
             wave=jnp.linspace(1000.0, 10000.0, 8),
             derived={"L_ir": jnp.asarray(1.0), "sfr": jnp.asarray(2.0)},
         )

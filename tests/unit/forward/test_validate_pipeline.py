@@ -15,12 +15,12 @@ from typing import Any
 
 import pytest
 
+from tengri.forward.orchestrator import validate_pipeline
 from tengri.protocols.component import (
     DerivedKey,
     PipelineContractError,
     SEDComponentConfig,
 )
-from tengri.forward.orchestrator import validate_pipeline
 
 
 @dataclass(frozen=True)
@@ -41,10 +41,10 @@ class FakeComponent:
     def declared_parameters(self) -> list[Any]:
         return []
 
-    def publishes(self) -> tuple[DerivedKey, ...]:
+    def outputs(self) -> tuple[DerivedKey, ...]:
         return self._publishes
 
-    def requires(self) -> tuple[DerivedKey, ...]:
+    def inputs(self) -> tuple[DerivedKey, ...]:
         return self._requires
 
 

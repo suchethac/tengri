@@ -1691,7 +1691,7 @@ class Prediction:
     def _ensure_sfh(self):
         """Populate SFH cache (SFR history, age weights, internal params).
 
-        Reads the orchestrator's :class:`PipelineState` to keep SFH-only
+        Reads the orchestrator's :class:`ForwardState` to keep SFH-only
         consumers (``stellar_mass``, ``sfr_*``, ``mass_weighted_age``)
         and SED-consuming consumers
         (``luminosity_weighted_age``, ``dn4000``) on the same numerics.
@@ -1727,7 +1727,7 @@ class Prediction:
         )
 
     def _ensure_sed(self):
-        """Populate SED cache from the orchestrator's PipelineState.
+        """Populate SED cache from the orchestrator's ForwardState.
 
         Re-uses the state computed in :meth:`_ensure_sfh` (cached on
         ``self._cache["_state"]``). Reconstructs the legacy cache

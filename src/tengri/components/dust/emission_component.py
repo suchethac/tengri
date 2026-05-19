@@ -19,7 +19,7 @@ Currently dispatched templates
 
 Casey/Dale/DL07/DL14/Astrodust/BOSA/THEMIS will be added as additional
 ``template`` cases as their precompute paths are migrated to the
-:class:`tengri.protocols.PipelineState` Protocol.
+:class:`tengri.protocols.ForwardState` Protocol.
 
 Cross-component reads
 ---------------------
@@ -64,13 +64,13 @@ from tengri.components.dust.draine2021_pah import (
     select_pahspec_starlight_auto,
 )
 from tengri.components.dust.emission import modified_blackbody
+from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
+    ForwardState,
     ParamDeclaration,
-    PipelineState,
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.parameters.priors import Fixed, Uniform
 
 __all__ = [
     "DustEmissionSEDComponent",
@@ -473,15 +473,15 @@ class DustEmissionSEDComponent:
 
     def apply(
         self,
-        state: PipelineState,
+        state: ForwardState,
         params: Mapping[str, jnp.ndarray],
         precomputed: DustEmissionSEDComponentState | None = None,
-    ) -> PipelineState:
+    ) -> ForwardState:
         r"""Add IR re-emission to ``state.sed_intrinsic``.
 
         Parameters
         ----------
-        state : PipelineState
+        state : ForwardState
             Carries rest-frame ``wave`` [Å].  Reads
             ``state.derived["L_ir"]`` [erg/s], the energy-balance
             absorbed luminosity; falls back to 0 if absent (no-op).
@@ -495,7 +495,7 @@ class DustEmissionSEDComponent:
 
         Returns
         -------
-        PipelineState
+        ForwardState
             New state with ``sed_intrinsic`` updated additively and
             ``derived["sed_dust_ir"]`` published (the IR component
             :math:`L_\nu` profile, useful for diagnostics and
