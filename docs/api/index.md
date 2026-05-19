@@ -11,6 +11,7 @@ Auto-generated from docstrings. The public API is importable directly from
 :maxdepth: 1
 
 core
+contract
 inference
 distributions
 models
