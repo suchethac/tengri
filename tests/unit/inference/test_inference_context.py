@@ -84,6 +84,42 @@ class TestContextAccessors:
         ctx = InferenceContext(fitter=fitter)
         assert ctx.free_names == list(fitter._free_names)
 
+    def test_likelihood_config_properties_delegate_to_fitter(self):
+        """Step-D-prime properties surface Fitter's likelihood config so the
+        ``Likelihood`` module (``inference/likelihood.py``) can read context
+        instead of reaching into ``fitter._*`` private state.
+
+        Verifies each new property reads the same value as the underlying
+        Fitter attribute. If a future refactor moves storage off the Fitter,
+        the property's getter changes but this test stays meaningful (the
+        property still has to surface the same value).
+        """
+        fitter = _build_fitter()
+        ctx = InferenceContext(fitter=fitter)
+        # Data + noise + masks
+        assert ctx.data is fitter.data
+        assert ctx.noise is fitter.noise
+        assert ctx.data_mask is fitter.data_mask
+        assert ctx.data_type == fitter.data_type
+        assert ctx.has_spectroscopy == fitter._has_spectroscopy
+        assert ctx.fixed_values is fitter._fixed_values
+        # Calibration marginalisation config
+        assert ctx.calibration_marginalize == fitter._calibration_marginalize
+        assert ctx.cal_n_poly == fitter._cal_n_poly
+        assert ctx.cal_prior_sigma == fitter._cal_prior_sigma
+        # E-line config
+        assert ctx.eline_marginalize == fitter._eline_marginalize
+        assert ctx.eline_fitted == fitter._eline_fitted
+        assert ctx.eline_prior_type == fitter._eline_prior_type
+        assert ctx.eline_prior_sigma == fitter._eline_prior_sigma
+        assert ctx.eline_prior_width_dex == fitter._eline_prior_width_dex
+        assert ctx.eline_independent_wavelengths is fitter._eline_independent_wavelengths
+        assert ctx.eline_amplitude_names == fitter._eline_amplitude_names
+        assert ctx.eline_wavelengths is fitter._eline_wavelengths
+        assert ctx.eline_constraint_matrix is fitter._eline_constraint_matrix
+        # CompileCache discoverability
+        assert ctx.cache is fitter.cache
+
 
 class TestContextFrozenness:
     def test_cannot_replace_fitter(self):

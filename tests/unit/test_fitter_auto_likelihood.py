@@ -78,13 +78,22 @@ def _make_helper_only_fitter(
 
 
 def _make_proxy(**kw):
-    """Make the proxy and self-reference it so bound lambdas work."""
+    """Make the proxy and self-reference it so bound lambdas work.
+
+    Wraps the proxy in an :class:`InferenceContext` before handing it to
+    the likelihood builders — the Step-D-prime refactor (ADR-0009)
+    changed the builder signatures from ``(fitter)`` to
+    ``(context: InferenceContext)``. The context's properties delegate
+    to the proxy's underscore-prefixed attributes transparently.
+    """
+    from tengri.inference.context import InferenceContext
     from tengri.inference.likelihood import build_base_likelihood, build_likelihood_extras
 
     proxy = _make_helper_only_fitter(**kw)
+    context = InferenceContext.from_target(proxy)
     # Re-bind helpers to the actual proxy via the extracted likelihood module
-    proxy._build_base_likelihood = lambda: build_base_likelihood(proxy)
-    proxy._build_likelihood_extras = lambda: build_likelihood_extras(proxy)
+    proxy._build_base_likelihood = lambda: build_base_likelihood(context)
+    proxy._build_likelihood_extras = lambda: build_likelihood_extras(context)
     return proxy
 
 

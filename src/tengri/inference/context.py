@@ -126,6 +126,122 @@ class InferenceContext:
         """Chunk size for posterior sampling, or ``None`` for unchunked."""
         return getattr(self.fitter, "_posterior_chunk_size", None)
 
+    @property
+    def cache(self):
+        """The :class:`~tengri.inference.jit_engine.CompileCache` this fit uses.
+
+        ADR-0009-Step-C exposes the cache as a per-fit object owned by the
+        Fitter; this property surfaces it on the context so backends and
+        the Likelihood module don't have to know to reach across
+        ``context.fitter`` for it.
+        """
+        return self.fitter.cache
+
+    # ── Observed data and likelihood-construction config ─────────────────
+    #
+    # These properties surface the data + noise + likelihood-shape
+    # configuration that today lives on the Fitter as init kwargs. The
+    # ``Likelihood`` module (``inference/likelihood.py``) reads through
+    # this context rather than reaching into ``fitter.*`` private state,
+    # so a backend that wants to build a likelihood without a full Fitter
+    # only needs an ``InferenceContext`` and the data + noise arrays.
+    #
+    # Properties intentionally mirror the Fitter's attribute names without
+    # the leading underscore — they are read-only from the backend's
+    # perspective, but the storage stays on the Fitter (single source of
+    # truth) until a separate refactor lifts the config into its own type.
+
+    @property
+    def data(self):
+        """Observed flux array (photometry, spectroscopy, or joint)."""
+        return self.fitter.data
+
+    @property
+    def noise(self):
+        """1-σ noise array matching :attr:`data`."""
+        return self.fitter.noise
+
+    @property
+    def data_mask(self):
+        """Optional boolean / float mask over :attr:`data` (None when absent)."""
+        return self.fitter.data_mask
+
+    @property
+    def data_type(self) -> str:
+        """One of ``"photometry"``, ``"spectroscopy"``, ``"joint"``."""
+        return self.fitter.data_type
+
+    @property
+    def has_spectroscopy(self) -> bool:
+        """True iff :attr:`data_type` includes a spectroscopy channel."""
+        return self.fitter._has_spectroscopy
+
+    @property
+    def fixed_values(self) -> dict:
+        """Fixed-parameter values from the spec (frozen at Fitter init)."""
+        return self.fitter._fixed_values
+
+    # ── Likelihood-shape configuration ───────────────────────────────────
+    @property
+    def calibration_marginalize(self) -> bool:
+        """Whether to marginalise an additive calibration polynomial."""
+        return self.fitter._calibration_marginalize
+
+    @property
+    def cal_n_poly(self) -> int:
+        """Polynomial order of the calibration model."""
+        return self.fitter._cal_n_poly
+
+    @property
+    def cal_prior_sigma(self) -> float:
+        """Prior width on calibration-polynomial coefficients."""
+        return self.fitter._cal_prior_sigma
+
+    @property
+    def eline_marginalize(self) -> bool:
+        """Whether to analytically marginalise emission-line amplitudes."""
+        return self.fitter._eline_marginalize
+
+    @property
+    def eline_fitted(self) -> bool:
+        """Whether to fit emission-line amplitudes as free parameters."""
+        return self.fitter._eline_fitted
+
+    @property
+    def eline_prior_type(self) -> str | None:
+        """``"flat"`` or ``"cloudy"`` (None when eline path inactive)."""
+        return self.fitter._eline_prior_type
+
+    @property
+    def eline_prior_sigma(self) -> float | None:
+        """Prior width on emission-line amplitudes (flat prior)."""
+        return self.fitter._eline_prior_sigma
+
+    @property
+    def eline_prior_width_dex(self):
+        """Prior width in dex for log-amplitude priors (Cloudy prior)."""
+        return self.fitter._eline_prior_width_dex
+
+    @property
+    def eline_independent_wavelengths(self):
+        """Wavelengths of independent (non-tied) emission lines."""
+        return self.fitter._eline_independent_wavelengths
+
+    @property
+    def eline_amplitude_names(self) -> list[str]:
+        """Names of the fitted emission-line amplitude parameters."""
+        return self.fitter._eline_amplitude_names
+
+    @property
+    def eline_wavelengths(self):
+        """All emission-line wavelengths (independent + tied)."""
+        return self.fitter._eline_wavelengths
+
+    @property
+    def eline_constraint_matrix(self):
+        """Matrix tying tied line amplitudes to independent ones."""
+        return self.fitter._eline_constraint_matrix
+
     # ── Initialization helpers ───────────────────────────────────────────
     def initial_params(self, key, init_from: Posterior | None = None) -> dict:
         """Build a starting point in unbounded parameter space.

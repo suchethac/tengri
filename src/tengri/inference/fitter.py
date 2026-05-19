@@ -501,15 +501,17 @@ class Fitter:
         amplitudes (line amplitudes are fit, not marginalised).
         """
         from tengri.inference.composite_likelihood import CompositeLikelihood
+        from tengri.inference.context import InferenceContext
         from tengri.inference.likelihood import (
             build_base_likelihood,
             build_likelihood_extras,
         )
 
-        base = build_base_likelihood(self)
+        context = InferenceContext.from_target(self)
+        base = build_base_likelihood(context)
         if base is None:
             return None
-        extras = build_likelihood_extras(self)
+        extras = build_likelihood_extras(context)
         if not extras:
             return base
         return CompositeLikelihood(base, *extras)
