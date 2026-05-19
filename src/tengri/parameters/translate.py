@@ -56,62 +56,26 @@ _EVOLVING_ALPHA_PARAM_MAP = {
     "met_alpha_fe_young": ("alpha_fe_young", 1.0, 0.0),  # [alpha/Fe] at present day
 }
 
-# ── Identity param lists ──────────────────────────────────────────
+# ── Cue identity param lists ──────────────────────────────────────
 #
 # After Step B (ADR-deepening 2026-05-18) ``_build_param_map`` reads
 # identity entries directly from the parameter registry (ADR-0008), so
 # the six per-domain ``_*_IDENTITY_PARAMS`` lists previously published
-# here (``_DUST_EMISSION_IDENTITY_PARAMS`` etc.) are gone. The two Cue
-# lists below stay because :class:`SEDModel._init_nebular` consults
-# them at construction time to register only the Cue free params the
-# user actually opted into via the spec — that's a deliberate filter
-# the auto-derive can't express.
+# here are gone. The two Cue lists below stay because
+# :class:`SEDModel._init_nebular` consults them at construction time
+# to register only the Cue free params the user actually opted into
+# via the spec — that's a deliberate filter the auto-derive can't
+# express.
 #
-# Exception list: any name in ``_PARAMS_WITH_UNIT_CONVERSION`` is filtered
-# out of the identity lists because it goes through a real unit-converting
-# entry in ``_NON_SFH_PARAM_MAP`` (or one of the other explicit maps) and
-# must NOT also receive a passthrough identity entry.
-_PARAMS_WITH_UNIT_CONVERSION: frozenset[str] = frozenset(
-    {
-        # ── Stellar/dust handled in _NON_SFH_PARAM_MAP ────────────
-        "met_logzsol",  # Z/Zsun → log(Z), LOG10_ZSUN offset
-        "met_alpha_fe",
-        "dust_tau_bc",  # rename to internal `tau_bc`
-        "dust_tau_diff",  # rename to internal `tau_diff`
-        "dust_slope",
-        "redshift",
-        "noise_frac_cal",
-        "dust_f_obscuration",  # rename to internal `f_obscuration`
-        "dust_bump_strength",
-        "dust_delta",
-        "dust_Rv",
-        "noise_dof",
-        "sigma_v_kms",
-        # ── Nebular gas metallicity ───────────────────────────────
-        # Declared in _param_defs as log10(Z_gas/Zsun); consumed in
-        # ``components/nebular/{cloudy_cb19,feltre_precompute,
-        # mappings_photo_precompute}.py`` as absolute log10(Z).
-        # Conversion lives in _NON_SFH_PARAM_MAP below.
-        "neb_logZ_gas",
-    }
-)
-
-
-def _identity_params_from_bucket(bucket: dict) -> list[str]:
-    """Derive identity-mapping param list from a `_param_defs.py` bucket.
-
-    Retained only for the two Cue conditional lists below — every other
-    caller went away in Step B (ADR-deepening 2026-05-18).
-    """
-    return sorted(name for name in bucket if name not in _PARAMS_WITH_UNIT_CONVERSION)
-
-
-_CUE_GAS_IDENTITY_PARAMS = _identity_params_from_bucket(
-    _resolve_lazy_bucket("_CUE_GAS_EXTRA_PARAMS")
-)
-_CUE_IONSPEC_IDENTITY_PARAMS = _identity_params_from_bucket(
-    _resolve_lazy_bucket("_CUE_IONSPEC_PARAMS")
-)
+# No unit-conversion filter is needed: every Cue parameter name is
+# ``gas_*`` or ``ionspec_*`` and maps identity. The legacy
+# ``_PARAMS_WITH_UNIT_CONVERSION`` frozenset (``met_*``, ``dust_*``,
+# ``redshift``, ``noise_*``, ``sigma_v_kms``, ``neb_logZ_gas``) had
+# zero overlap with these two Cue buckets — the filter never fired.
+# Verified empty by name-set intersection on 2026-05-19; retired in
+# the same pass.
+_CUE_GAS_IDENTITY_PARAMS: list[str] = sorted(_resolve_lazy_bucket("_CUE_GAS_EXTRA_PARAMS"))
+_CUE_IONSPEC_IDENTITY_PARAMS: list[str] = sorted(_resolve_lazy_bucket("_CUE_IONSPEC_PARAMS"))
 
 
 # ── Non-SFH param map (includes real unit conversions) ───────────────
