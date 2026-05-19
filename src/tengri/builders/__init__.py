@@ -37,8 +37,11 @@ Scope
   variant-string selectors and component-wide parameter sets.
 - :mod:`tengri.builders.neb` — Phase 3. Nebular emission backends
   (none/ssp/cue/cloudy/cb19).
+- :mod:`tengri.builders.dust` (+ nested
+  :mod:`~tengri.builders.dust.emission`) — Phase 4. Attenuation
+  top-level + IR emission sub-block.
 
-Dust and AGN factories are tracked in #82 and #83.
+AGN factories are tracked in #83.
 
 See also
 --------
@@ -49,6 +52,6 @@ tengri.recipes
 
 from __future__ import annotations
 
-from tengri.builders import igm, neb, radio, sfh, xray
+from tengri.builders import dust, igm, neb, radio, sfh, xray
 
-__all__ = ["igm", "neb", "radio", "sfh", "xray"]
+__all__ = ["dust", "igm", "neb", "radio", "sfh", "xray"]
