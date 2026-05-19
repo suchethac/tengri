@@ -2057,6 +2057,11 @@ class SEDModel:
         component (``sfr_mean``) and the full SFH including GP-field
         modulation (``sfr_full``, if stochastic SFH enabled).
 
+        **Raw forward-pass output** intended for plotting. For SFH-derived
+        scalars (stellar mass, recent SFR, age), see
+        ``model.predict(params).sfh.*`` or :meth:`predict_sfh_quantities`
+        for the JIT-compatible form.
+
         Parameters
         ----------
         params : dict
@@ -2131,6 +2136,11 @@ class SEDModel:
         multi-wavelength (radio, X-ray) components in rest-frame coordinates.
         Returns the total SED integrated across the age distribution set by
         the SFH and stellar mass parameters.
+
+        **Raw forward-pass output.** Returns ``(wavelength, sed)``.
+        For interactive exploration with cached derived quantities (stellar
+        mass, SFR, indices, line ratios), use :meth:`predict` and access
+        ``pred.sed`` properties.
 
         Parameters
         ----------
@@ -2217,6 +2227,10 @@ class SEDModel:
         Evaluates the rest-frame SED, redshifts to observed frame
         (wavelength × (1+z)), and applies IGM and DLA absorption where
         configured. At z=0, identical to :meth:`predict_rest_sed`.
+
+        **Raw forward-pass output.** Returns ``(wavelength, sed)`` in the
+        observed frame. For interactive use with derived quantities, see
+        :meth:`predict`.
 
         Parameters
         ----------
@@ -2616,6 +2630,11 @@ class SEDModel:
         tradeoff: compositional (exact, XLA-fused), hybrid (precomputed
         stellar + exact non-stellar), and exact (full pipeline, slowest).
 
+        **Raw forward-pass output.** For interactive use with cached
+        derived quantities, see ``model.predict(params).photometry``.
+        For batched photometry over posterior chains, use
+        :meth:`predict_photometry_batch`.
+
         Parameters
         ----------
         params : dict
@@ -2739,6 +2758,10 @@ class SEDModel:
         applies velocity dispersion broadening (if ``sigma_v`` in spec),
         convolves with instrument line-spread function, and optionally
         applies multiplicative Chebyshev calibration polynomial.
+
+        **Raw forward-pass output.** For interactive use, see
+        ``model.predict(params).spectrum``. For batched spectra, use
+        :meth:`predict_spectrum_batch`.
 
         Parameters
         ----------
@@ -2866,6 +2889,9 @@ class SEDModel:
     def predict_magnitudes(self, params):
         """Compute observed AB magnitudes through all filters.
 
+        **Raw forward-pass output.** For interactive use, see
+        ``model.predict(params).magnitudes``.
+
         Parameters
         ----------
         params : dict
@@ -2918,6 +2944,9 @@ class SEDModel:
     def predict_luminosity(self, params):
         """Compute rest-frame luminosity SED in solar units.
 
+        **Raw forward-pass output.** For interactive use with derived
+        scalars (L_bol, L_uv, L_ir), see ``model.predict(params).sed.*``.
+
         Parameters
         ----------
         params : dict
@@ -2946,6 +2975,10 @@ class SEDModel:
         Calls the nebular backend to compute line luminosities,
         selects target lines by wavelength matching, and converts
         from luminosity (Lsun) to observed flux (erg/s/cm^2).
+
+        **Raw forward-pass output.** For interactive access to individual
+        named lines (with luminosities, ratios, and BPT diagnostics), see
+        ``model.predict(params).lines.halpha`` etc.
 
         Parameters
         ----------
@@ -3052,6 +3085,10 @@ class SEDModel:
         Generates a rest-frame spectrum covering the index wavelength
         ranges and measures each index (EW or break ratio).
 
+        **Use this method for** JIT/batch loops (with ``mode='_traceable'``).
+        **For interactive use**, access individual indices via
+        ``model.predict(params).sed.dn4000`` etc.
+
         Parameters
         ----------
         params : dict
@@ -3100,6 +3137,10 @@ class SEDModel:
         Required by ``marginalize_emission_lines_cloudy()`` as the ``l_hbeta``
         argument, which scales CLOUDY's ratio-relative-to-Hβ priors to physical
         units.
+
+        **Raw forward-pass output** (single scalar). For interactive access
+        to Balmer lines and ratios, see ``model.predict(params).lines.hbeta``
+        / ``.lines.balmer_decrement``.
 
         Hβ luminosity is computed via the Case B recombination approximation
         (Leitherer et al. 1999):
@@ -3217,6 +3258,11 @@ class SEDModel:
         and mass-weighted age/metallicity. Returns a :class:`SFHQuantities`
         NamedTuple that is fully JIT-compatible and vmap-ready for batch
         inference over posterior chains or mock catalogs.
+
+        **Use this method for** JIT/batch loops (``jax.vmap``, ``jit``,
+        ``grad``). **For interactive single-galaxy exploration**, use
+        :meth:`predict` and access ``pred.sfh.stellar_mass`` etc. — same
+        quantities, with Python-side caching.
 
         Parameters
         ----------
@@ -3425,6 +3471,11 @@ class SEDModel:
         attenuation, and luminosity-weighted age/metallicity. Returns
         a :class:`SEDQuantities` NamedTuple that is fully JIT-compatible
         and vmap-ready for batch inference.
+
+        **Use this method for** JIT/batch loops (``jax.vmap``, ``jit``,
+        ``grad``). **For interactive single-galaxy exploration**, use
+        :meth:`predict` and access ``pred.sed.dn4000``, ``pred.sed.uv_slope``
+        etc. — same quantities, with Python-side caching.
 
         Parameters
         ----------
@@ -3889,6 +3940,10 @@ class SEDModel:
     def predict_photometry_batch(self, params_batch):
         """Compute photometry for a batch of parameter sets via jax.vmap.
 
+        **Use this method for** posterior chains / mock catalogs (batched
+        forward pass). **For interactive single-galaxy use**, access
+        ``model.predict(params).photometry``.
+
         Parameters
         ----------
         params_batch : dict of arrays
@@ -3920,6 +3975,10 @@ class SEDModel:
 
     def predict_spectrum_batch(self, params_batch):
         """Compute spectra for a batch of parameter sets via jax.vmap.
+
+        **Use this method for** batched spectra over posterior chains.
+        **For interactive single-galaxy use**, access
+        ``model.predict(params).spectrum``.
 
         Parameters
         ----------
