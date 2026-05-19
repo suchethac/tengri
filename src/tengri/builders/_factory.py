@@ -70,7 +70,7 @@ def make_factory(
         wildcard = _pop_wildcard(variant, kwargs)
         if wildcard not in (FREE, FIXED):
             raise ValueError(
-                f"{variant}(wildcard=...): expected FREE or FIXED, got "
+                f"{variant}(defaults=...): expected FREE or FIXED, got "
                 f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
             )
         flag_values: dict[str, bool] = {f: bool(kwargs.pop(f, False)) for f in bool_flags}
@@ -80,7 +80,7 @@ def make_factory(
             raise TypeError(
                 f"{variant}() got unexpected keyword arguments: {unknown}. "
                 f"Valid: {valid_kwargs}. "
-                f"(Pass ``wildcard=FREE`` or ``wildcard=FIXED`` to set the policy.)"
+                f"(Pass ``defaults=FREE`` or ``defaults=FIXED`` to set the policy.)"
             )
 
         # Auto-enable flag when a flag-conditional param was given.
@@ -99,7 +99,7 @@ def make_factory(
 
     sig_params = [
         inspect.Parameter(
-            "wildcard",
+            "defaults",
             inspect.Parameter.KEYWORD_ONLY,
             default=FIXED,
             annotation=Any,
@@ -136,7 +136,7 @@ def make_factory(
         lines.append("")
     lines.append("Parameters")
     lines.append("----------")
-    lines.append("wildcard : sentinel, optional")
+    lines.append("defaults : sentinel, optional")
     lines.append(
         "    Wildcard policy for parameters not explicitly named. ``FREE`` "
         "makes them fit; ``FIXED`` (default) pins them to their registry "
@@ -167,31 +167,31 @@ def make_factory(
 
 
 def _pop_wildcard(variant: str, kwargs: dict[str, Any]) -> Any:
-    """Pop the wildcard kwarg, supporting both ``wildcard=`` and legacy ``_=``.
+    """Pop the wildcard kwarg, supporting both ``defaults=`` and legacy ``_=``.
 
     The original builder grammar exposed the wildcard via ``_=FREE``. That
     name is ungreppable, conflicts with the throwaway-identifier convention,
-    and confuses IDE autocomplete. The new canonical name is ``wildcard=``.
+    and confuses IDE autocomplete. The new canonical name is ``defaults=``.
     ``_=`` still works for one minor-version cycle and emits a
     :class:`DeprecationWarning`.
 
     Raises ``TypeError`` if both are passed in the same call.
     """
-    has_new = "wildcard" in kwargs
+    has_new = "defaults" in kwargs
     has_old = "_" in kwargs
     if has_new and has_old:
         raise TypeError(
-            f"{variant}(): pass `wildcard=` (preferred) or `_=` (deprecated), not both."
+            f"{variant}(): pass `defaults=` (preferred) or `_=` (deprecated), not both."
         )
     if has_old:
         warnings.warn(
-            f"{variant}(_=...) is deprecated; use `wildcard=` instead. "
+            f"{variant}(_=...) is deprecated; use `defaults=` instead. "
             "The `_=` alias will be removed in a future release.",
             DeprecationWarning,
             stacklevel=3,
         )
         return kwargs.pop("_")
-    return kwargs.pop("wildcard", FIXED)
+    return kwargs.pop("defaults", FIXED)
 
 
 def short_form(full_name: str, *, prefixes: tuple[str, ...]) -> str:

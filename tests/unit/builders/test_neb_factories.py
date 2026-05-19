@@ -19,7 +19,7 @@ def test_none_and_ssp_expose_only_wildcard() -> None:
     """Backends that contribute no free params expose just ``wildcard``."""
     for variant in ("none", "ssp"):
         sig = inspect.signature(getattr(builders.neb, variant))
-        assert list(sig.parameters) == ["wildcard"], variant
+        assert list(sig.parameters) == ["defaults"], variant
 
 
 def test_cue_signature_lists_canonical_short_params() -> None:

@@ -1,6 +1,6 @@
-"""Tests for the ``wildcard=`` / legacy ``_=`` kwarg behaviour.
+"""Tests for the ``defaults=`` / legacy ``_=`` kwarg behaviour.
 
-The canonical wildcard kwarg is ``wildcard=`` (greppable, autocomplete-friendly,
+The canonical wildcard kwarg is ``defaults=`` (greppable, autocomplete-friendly,
 self-describing). The historical ``_=`` alias continues to work for one
 deprecation cycle, emits a :class:`DeprecationWarning`, and raises if both
 are passed in the same call.
@@ -31,15 +31,15 @@ _FACTORIES = {
 }
 
 
-# ── New canonical name: wildcard= ────────────────────────────────────
+# ── New canonical name: defaults= ────────────────────────────────────
 
 
 @pytest.mark.parametrize(("label", "factory"), _FACTORIES.items())
 def test_wildcard_kwarg_works(label, factory):
-    """``wildcard=FREE`` sets the wildcard policy without warning."""
+    """``defaults=FREE`` sets the wildcard policy without warning."""
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
-        result = factory(wildcard=FREE)
+        result = factory(defaults=FREE)
     assert result["*"] is FREE, label
 
 
@@ -55,18 +55,18 @@ def test_wildcard_default_is_fixed(label, factory):
 
 @pytest.mark.parametrize(("label", "factory"), _FACTORIES.items())
 def test_legacy_underscore_alias_still_works(label, factory):
-    """``_=FREE`` is accepted and produces the same dict as ``wildcard=FREE``."""
+    """``_=FREE`` is accepted and produces the same dict as ``defaults=FREE``."""
     with pytest.warns(DeprecationWarning, match=r"deprecated"):
         legacy = factory(_=FREE)
-    canonical = factory(wildcard=FREE)
+    canonical = factory(defaults=FREE)
     assert legacy == canonical, label
 
 
 @pytest.mark.parametrize(("label", "factory"), _FACTORIES.items())
 def test_passing_both_raises(label, factory):
-    """Passing both ``wildcard=`` and ``_=`` is an error, not an override."""
-    with pytest.raises(TypeError, match=r"`wildcard=`.*`_=`.*not both"):
-        factory(wildcard=FREE, _=FIXED)
+    """Passing both ``defaults=`` and ``_=`` is an error, not an override."""
+    with pytest.raises(TypeError, match=r"`defaults=`.*`_=`.*not both"):
+        factory(defaults=FREE, _=FIXED)
 
 
 # ── Signature surface: ``wildcard`` shows in inspect.signature, ``_`` doesn't
@@ -77,7 +77,7 @@ def test_signature_advertises_wildcard_not_underscore(label, factory):
     import inspect
 
     sig = inspect.signature(factory)
-    assert "wildcard" in sig.parameters, f"{label}: missing wildcard kwarg"
+    assert "defaults" in sig.parameters, f"{label}: missing wildcard kwarg"
     assert "_" not in sig.parameters, (
         f"{label}: legacy underscore should NOT appear in the public signature"
     )

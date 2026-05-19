@@ -30,13 +30,13 @@ Examples
 >>> # Equivalent to {'type': 'dpl', '*': FIXED, 'beta': Uniform(1, 3)}
 >>> sfh_config = builders.sfh.dpl(beta=Uniform(1, 3))
 >>> # All params free unless overridden:
->>> sfh_config = builders.sfh.dpl(wildcard=FREE)
+>>> sfh_config = builders.sfh.dpl(defaults=FREE)
 >>> # Mix wildcard policy with explicit overrides:
->>> sfh_config = builders.sfh.dpl(wildcard=FREE, log_peak_sfr=Fixed(1.0))
+>>> sfh_config = builders.sfh.dpl(defaults=FREE, log_peak_sfr=Fixed(1.0))
 
 The output is interchangeable with the dict form:
 
->>> model = SEDModel.build(ssp_data=ssp, sfh=builders.sfh.dpl(wildcard=FREE))
+>>> model = SEDModel.build(ssp_data=ssp, sfh=builders.sfh.dpl(defaults=FREE))
 """
 
 from __future__ import annotations
@@ -86,7 +86,7 @@ def _build_docstring(variant: str, spec, param_records: list[tuple[str, Any]]) -
         lines.append("")
     lines.append("Parameters")
     lines.append("----------")
-    lines.append("wildcard : sentinel, optional")
+    lines.append("defaults : sentinel, optional")
     lines.append(
         "    Wildcard policy for parameters not explicitly named in this call. "
         "``FREE`` makes them fit; ``FIXED`` (default) pins them to their "
@@ -133,7 +133,7 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
         wildcard = _pop_wildcard(variant, kwargs)
         if wildcard not in (FREE, FIXED):
             raise ValueError(
-                f"{variant}(wildcard=...): expected FREE or FIXED, got "
+                f"{variant}(defaults=...): expected FREE or FIXED, got "
                 f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
             )
         out: dict[str, Any] = {"type": variant, "*": wildcard}
@@ -142,7 +142,7 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
             raise TypeError(
                 f"{variant}() got unexpected keyword arguments: {unknown}. "
                 f"Valid parameter names for {variant!r}: {short_names}. "
-                f"(Pass ``wildcard=FREE`` or ``wildcard=FIXED`` to set the policy.)"
+                f"(Pass ``defaults=FREE`` or ``defaults=FIXED`` to set the policy.)"
             )
         for short in short_names:
             if short in kwargs and kwargs[short] is not _UNSET:
@@ -152,7 +152,7 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
     # Real signature so IDEs see per-parameter kwargs.
     sig_params = [
         inspect.Parameter(
-            "wildcard",
+            "defaults",
             inspect.Parameter.KEYWORD_ONLY,
             default=FIXED,
             annotation=Any,

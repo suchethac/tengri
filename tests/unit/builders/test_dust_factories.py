@@ -28,7 +28,7 @@ def test_emission_variants_match_parser_enum() -> None:
 def test_two_component_signature_carries_settings_and_params() -> None:
     sig = inspect.signature(builders.dust.two_component)
     params = list(sig.parameters)
-    assert "wildcard" in params
+    assert "defaults" in params
     assert "law_bc" in params
     assert "law_diff" in params
     assert "tau_bc" in params  # short-form param

@@ -24,9 +24,9 @@ The factory mirror:
 >>> dust = builders.dust.two_component(
 ...     law_bc="calzetti",
 ...     law_diff="calzetti",
-...     wildcard=FREE,
+...     defaults=FREE,
 ...     tau_bc=Uniform(0, 4),
-...     emission=builders.dust.emission.dale2014(wildcard=FIXED),
+...     emission=builders.dust.emission.dale2014(defaults=FIXED),
 ... )
 
 The ``law_bc`` / ``law_diff`` kwargs accept any key registered in
@@ -112,7 +112,7 @@ def _make_dust_factory(
         wildcard = _pop_wildcard(f"dust.{dust_model}", kwargs)
         if wildcard not in (FREE, FIXED):
             raise ValueError(
-                f"dust.{dust_model}(wildcard=...): expected FREE or FIXED, got "
+                f"dust.{dust_model}(defaults=...): expected FREE or FIXED, got "
                 f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
             )
         # String settings (e.g. law_bc, law_diff).
@@ -129,7 +129,7 @@ def _make_dust_factory(
             else:
                 settings[s] = setting_defaults[s]
         emission_block = kwargs.pop("emission", None)
-        valid_kwargs = ["wildcard", *setting_names, "emission", *short_params]
+        valid_kwargs = ["defaults", *setting_names, "emission", *short_params]
         unknown = [k for k in kwargs if k not in short_params]
         if unknown:
             raise TypeError(
@@ -153,7 +153,7 @@ def _make_dust_factory(
 
     sig_params = [
         inspect.Parameter(
-            "wildcard", inspect.Parameter.KEYWORD_ONLY, default=FIXED, annotation=Any
+            "defaults", inspect.Parameter.KEYWORD_ONLY, default=FIXED, annotation=Any
         ),
     ]
     for s in setting_names:
@@ -194,7 +194,7 @@ def _make_dust_factory(
     doc_lines.append("")
     doc_lines.append("Parameters")
     doc_lines.append("----------")
-    doc_lines.append("wildcard : sentinel, optional")
+    doc_lines.append("defaults : sentinel, optional")
     doc_lines.append(
         "    Wildcard policy. ``FREE`` makes unspecified attenuation params "
         "fit; ``FIXED`` (default) pins them to registry defaults."
