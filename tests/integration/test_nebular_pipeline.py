@@ -18,8 +18,8 @@ from tengri.components.nebular.component import (
     NebularSEDComponent,
     NebularSEDComponentConfig,
 )
-from tengri.protocols import PipelineState
 from tengri.forward.orchestrator import merge_declared_parameters, run_components
+from tengri.protocols import PipelineState
 
 
 @pytest.mark.unit

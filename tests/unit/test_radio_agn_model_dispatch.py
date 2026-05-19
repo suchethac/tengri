@@ -26,8 +26,8 @@ from tengri.components.radio.component import (
     RadioSEDComponentConfig,
 )
 from tengri.components.radio.radio import radio_total, radio_total_dpl
-from tengri.protocols import PipelineState
 from tengri.parameters._param_defs import _RADIO_PARAMS
+from tengri.protocols import PipelineState
 
 
 @pytest.fixture

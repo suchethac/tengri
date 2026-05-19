@@ -15,8 +15,8 @@ selecting those model names raises :class:`ValueError` at construction.
 
 from __future__ import annotations
 
-from tengri.protocols.component import ParamDeclaration
 from tengri.parameters.priors import Fixed
+from tengri.protocols.component import ParamDeclaration
 
 PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(

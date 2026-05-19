@@ -48,13 +48,13 @@ import jax.numpy as jnp
 
 from tengri.components.dust.attenuation import two_component_dust
 from tengri.components.dust.emission import resolve_emission_model
+from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
     ParamDeclaration,
     PipelineState,
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.parameters.priors import Fixed, Uniform
 from tengri.utils.physics_constants import C_AA
 
 __all__ = [

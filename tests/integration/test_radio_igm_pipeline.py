@@ -18,8 +18,8 @@ from tengri.components.igm.component import IGMSEDComponent
 from tengri.components.igm.igm import igm_transmission
 from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.radio.radio import radio_total
-from tengri.protocols import PipelineState
 from tengri.forward.orchestrator import run_components
+from tengri.protocols import PipelineState
 
 REL_TOL = 1e-10
 

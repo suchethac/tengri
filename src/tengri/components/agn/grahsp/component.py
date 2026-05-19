@@ -71,6 +71,7 @@ from tengri.components.agn.grahsp.templates import (
     load_grahsp_templates,
 )
 from tengri.components.agn.grahsp.torus import si_feature, torus_dust_continuum
+from tengri.parameters.priors import Fixed, LogUniform, Uniform
 from tengri.protocols.component import (
     DerivedKey,
     ParamDeclaration,
@@ -78,7 +79,6 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.parameters.priors import Fixed, LogUniform, Uniform
 
 __all__ = [
     "GRAHSPSEDComponent",

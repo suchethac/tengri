@@ -37,12 +37,12 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from tengri.protocols.component import ParamDeclaration, PipelineState
 from tengri.observation.photometry import (
     FilterCurve,
     compute_flux_density_batch,
     pad_filters,
 )
+from tengri.protocols.component import ParamDeclaration, PipelineState
 from tengri.utils.cosmology import CosmoParams, luminosity_distance
 
 __all__ = ["PhotometryObservationModel"]

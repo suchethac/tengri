@@ -22,6 +22,8 @@ from tengri.components.igm.component import IGMSEDComponent
 from tengri.components.nebular.component import NebularSEDComponent
 from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.xray.component import XRaySEDComponent
+from tengri.forward.orchestrator import slice_params_for_component
+from tengri.parameters.priors import Distribution
 from tengri.protocols import (
     BARE_NAME_ALLOWLIST,
     ParamDeclaration,
@@ -29,8 +31,6 @@ from tengri.protocols import (
     SEDComponent,
     SEDComponentState,
 )
-from tengri.forward.orchestrator import slice_params_for_component
-from tengri.parameters.priors import Distribution
 
 ADAPTERS: list[SEDComponent] = [
     RadioSEDComponent(),

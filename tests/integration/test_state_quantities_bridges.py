@@ -26,7 +26,6 @@ from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.stellar import StellarSEDComponent
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.components.xray.component import XRaySEDComponent
-from tengri.protocols.component import PipelineState
 from tengri.forward import (
     IonizingQuantities,
     RadioQuantities,
@@ -38,6 +37,7 @@ from tengri.forward import (
     state_to_sfh_quantities,
     state_to_xray_quantities,
 )
+from tengri.protocols.component import PipelineState
 
 # Bare-stellar SSP — required by Cue (wNE SSPs now raise CueWNESSPError).
 _SSP_PATH = pathlib.Path("data/fsps_prsc_miles_chabrier.h5").resolve()

@@ -22,8 +22,8 @@ import pytest
 from tengri.components.dust.component import DustAttenuationSEDComponent
 from tengri.components.dust.emission import modified_blackbody
 from tengri.components.dust.emission_component import DustEmissionSEDComponent
-from tengri.protocols import PipelineState
 from tengri.forward.orchestrator import merge_declared_parameters, run_components
+from tengri.protocols import PipelineState
 from tengri.utils.physics_constants import C_AA
 
 REL_TOL = 1e-10

@@ -53,16 +53,6 @@ from tengri.components.igm.component import IGMSEDComponent
 from tengri.components.nebular.component import NebularSEDComponent
 from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.xray.component import XRaySEDComponent
-from tengri.protocols import (
-    BARE_NAME_ALLOWLIST,
-    Likelihood,
-    ObservationModel,
-    ParamDeclaration,
-    PipelineState,
-    SEDComponent,
-    SEDComponentConfig,
-    SEDComponentState,
-)
 from tengri.forward.orchestrator import (
     merge_declared_parameters,
     run_components,
@@ -86,6 +76,16 @@ from tengri.inference.likelihoods.protocol import (
 from tengri.inference.photometry_likelihood import PhotometryLikelihood
 from tengri.inference.spectroscopy_likelihood import SpectroscopyLikelihood
 from tengri.observation.photometry_model import PhotometryObservationModel
+from tengri.protocols import (
+    BARE_NAME_ALLOWLIST,
+    Likelihood,
+    ObservationModel,
+    ParamDeclaration,
+    PipelineState,
+    SEDComponent,
+    SEDComponentConfig,
+    SEDComponentState,
+)
 
 __all__ = [
     "BARE_NAME_ALLOWLIST",

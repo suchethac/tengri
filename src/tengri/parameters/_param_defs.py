@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from tengri.protocols.component import ParamDeclaration
 from tengri.parameters.priors import Fixed
+from tengri.protocols.component import ParamDeclaration
 
 
 def _bucket_from_declarations(

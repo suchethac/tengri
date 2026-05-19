@@ -19,8 +19,8 @@ Tuples exported here
 
 from __future__ import annotations
 
-from tengri.protocols.component import ParamDeclaration
 from tengri.parameters.priors import Fixed, Uniform
+from tengri.protocols.component import ParamDeclaration
 
 # Empty for now — kept as the canonical "stellar's own _params.py"
 # placeholder. Future stellar params unify into this tuple.

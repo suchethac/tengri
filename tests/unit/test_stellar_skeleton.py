@@ -21,11 +21,11 @@ from tengri.components.stellar import (
     StellarSEDComponent,
     StellarSEDComponentConfig,
 )
-from tengri.protocols import BARE_NAME_ALLOWLIST, PipelineState, SEDComponent
 from tengri.forward.orchestrator import (
     merge_declared_parameters,
     slice_params_for_component,
 )
+from tengri.protocols import BARE_NAME_ALLOWLIST, PipelineState, SEDComponent
 
 
 @pytest.mark.unit

@@ -26,8 +26,8 @@ from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.stellar import StellarSEDComponent
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.components.xray.component import XRaySEDComponent
-from tengri.protocols.component import PipelineState
 from tengri.forward.orchestrator import run_components
+from tengri.protocols.component import PipelineState
 
 _SSP_PATH = pathlib.Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5").resolve()
 

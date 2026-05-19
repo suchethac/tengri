@@ -33,6 +33,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.dust.attenuation import calzetti, resolve_dust_law
+from tengri.parameters.priors import Fixed
 from tengri.protocols.component import (
     DerivedKey,
     ParamDeclaration,
@@ -40,7 +41,6 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.parameters.priors import Fixed
 
 __all__ = ["DustAttenuationSEDComponent", "DustAttenuationSEDComponentConfig"]
 

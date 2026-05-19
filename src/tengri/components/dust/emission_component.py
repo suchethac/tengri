@@ -64,13 +64,13 @@ from tengri.components.dust.draine2021_pah import (
     select_pahspec_starlight_auto,
 )
 from tengri.components.dust.emission import modified_blackbody
+from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
     ParamDeclaration,
     PipelineState,
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.parameters.priors import Fixed, Uniform
 
 __all__ = [
     "DustEmissionSEDComponent",
