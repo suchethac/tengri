@@ -1707,7 +1707,7 @@ class Prediction:
         p = self._model._get_internal_params(self._params)
         state = self._model.predict_via_orchestrator(self._params)
         derived = state.derived
-        # The orchestrator's stellar adapter integrates the SFH on
+        # The stellar block integrates the SFH on
         # ``spec.n_grid`` (default 64) regardless of whether the model
         # is stochastic. Legacy ``SEDModel`` uses ``n_grid=256`` for
         # non-stochastic configs, so cache consumers index ``sfr``

@@ -72,7 +72,7 @@ import numpy as np
 
 from tengri.utils.physics_constants import V_BAND_ANGSTROM
 
-# ── Attenuation curve registry ────────────────────────────────────
+# ── Attenuation law catalogue ─────────────────────────────────────
 
 
 @dataclass(frozen=True)

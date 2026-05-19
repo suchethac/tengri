@@ -82,7 +82,7 @@ def _find_data_file(filename: str) -> str | None:
     return None
 
 
-# ── Emission model registry ───────────────────────────────────────
+# ── Dust emission model catalogue ──────────────────────────────────
 
 DUST_EMISSION_MODELS: dict[str, Callable] = {}
 

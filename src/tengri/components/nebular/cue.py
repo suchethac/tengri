@@ -886,7 +886,7 @@ _WNE_LOGQH_THRESHOLD: float = 44.0
 _YOUNG_LOG_AGE_MAX: float = 7.0  # 10 Myr
 
 
-# ── Backend class (matches CloudyGridBackend interface) ───────────
+# ── Cue backend: NN emulator of CLOUDY's nebular emission ─────────
 
 
 class CueBackend:
@@ -1057,7 +1057,7 @@ class CueBackend:
             log_age_yr,
         )
 
-    # ── High-level interface (matches CloudyGridBackend) ──────────
+    # ── High-level entry points — same signatures as CloudyGridBackend ────
 
     # Default ionizing spectrum shape (young starburst)
     _IONSPEC_DEFAULTS: ClassVar[dict] = dict(
