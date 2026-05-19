@@ -4,7 +4,7 @@
 The contract these tests pin down:
 
 1. Every canonical SFH variant in :data:`SFH_REGISTRY` has a matching
-   factory (and aliases like ``truncated_skewnormal_sfh`` don't get a
+   factory (and short-name aliases like ``tsnorm`` for ``truncated_skewnormal`` don't get a
    duplicate one).
 2. Each factory's :func:`inspect.signature` exposes ``_`` (wildcard) plus
    one keyword-only parameter per short-form name — i.e. real
@@ -48,10 +48,10 @@ def test_every_canonical_variant_has_a_factory() -> None:
 
 
 def test_aliases_do_not_get_their_own_factory() -> None:
-    # 'truncated_skewnormal_sfh' is an alias for 'tsnorm' — only tsnorm
-    # should surface.
+    # Factories are keyed by each spec's canonical short ``name``
+    # (e.g. ``tsnorm`` rather than the longer ``truncated_skewnormal``).
     assert "tsnorm" in builders.sfh.available()
-    assert "truncated_skewnormal_sfh" not in builders.sfh.available()
+    assert "truncated_skewnormal" not in builders.sfh.available()
 
 
 # ── Signature contract: real keyword-only params ──────────────────

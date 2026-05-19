@@ -1,10 +1,9 @@
 """Invariant tests for Fitter method dispatch.
 
 Covers:
-1. resolve_method() — deprecated alias detection, warnings, unknown-method errors.
-2. Canonical methods — no warnings emitted.
-3. "auto" and "mcmc" dimensionality-based routing — mocked _run_* dispatch.
-4. _engine_cache_key() — stability and sensitivity to spec changes.
+1. resolve_method() — canonical-method validation and unknown-method errors.
+2. "auto" and "mcmc" dimensionality-based routing — mocked _run_* dispatch.
+3. _engine_cache_key() — stability and sensitivity to spec changes.
 
 No SSP data required. resolve_method() is tested as a pure function.
 Cache-key tests use a MagicMock model with a real Parameters spec.
@@ -26,7 +25,6 @@ from tengri.config.exceptions import ParameterError
 from tengri.inference.fitter import (
     _AUTO_D_THRESHOLD,
     _CANONICAL_METHODS,
-    _DEPRECATED_METHOD_ALIASES,
     _MCMC_AUTO_D_THRESHOLD,
     resolve_method,
 )
@@ -73,53 +71,14 @@ def high_d_spec():
     )
 
 
-# ── resolve_method — deprecated aliases ───────────────────────────
-
-
-class TestResolveMethodDeprecatedAliases:
-    """Every deprecated alias must emit DeprecationWarning and return its canonical target."""
-
-    @pytest.mark.parametrize("alias,expected", list(_DEPRECATED_METHOD_ALIASES.items()))
-    def test_deprecated_alias_emits_warning(self, alias: str, expected: str) -> None:
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            result = resolve_method(alias, emit_warning=True)
-
-        assert result == expected, f"resolve_method({alias!r}) → {result!r}, expected {expected!r}"
-        assert any(issubclass(w.category, DeprecationWarning) for w in caught), (
-            f"resolve_method({alias!r}) did not emit DeprecationWarning"
-        )
-
-    @pytest.mark.parametrize("alias,expected", list(_DEPRECATED_METHOD_ALIASES.items()))
-    def test_deprecated_alias_warning_mentions_canonical(self, alias: str, expected: str) -> None:
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            resolve_method(alias, emit_warning=True)
-
-        dep_warnings = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-        assert dep_warnings, f"No DeprecationWarning for alias {alias!r}"
-        msg = str(dep_warnings[0].message)
-        assert expected in msg, (
-            f"Warning for alias {alias!r} does not mention canonical name {expected!r}: {msg}"
-        )
-
-    @pytest.mark.parametrize("alias", list(_DEPRECATED_METHOD_ALIASES.keys()))
-    def test_deprecated_alias_no_warning_when_suppressed(self, alias: str) -> None:
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            resolve_method(alias, emit_warning=False)
-
-        dep_warnings = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-        assert not dep_warnings, (
-            f"resolve_method({alias!r}, emit_warning=False) still emitted DeprecationWarning"
-        )
-
-
 # ── resolve_method — unknown methods ──────────────────────────────
 
 
 class TestResolveMethodUnknownMethod:
-    @pytest.mark.parametrize("bad_method", ["xyzzy", "mcmc_bayes", "VI", "NUTS", "", "nuts_fast"])
+    @pytest.mark.parametrize(
+        "bad_method",
+        ["xyzzy", "mcmc_bayes", "VI", "NUTS", "", "nuts_fast", "geovi", "mgvi", "raytrace"],
+    )
     def test_unknown_method_raises_parameter_error(self, bad_method: str) -> None:
         with pytest.raises(ParameterError):
             resolve_method(bad_method)

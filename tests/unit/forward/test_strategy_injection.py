@@ -55,13 +55,15 @@ def test_custom_strategy_round_trip():
 
 
 def test_public_reexports_from_tengri():
-    """KernelStrategy and the built-in policies are reachable from
-    ``import tengri``."""
+    """``KernelStrategy`` is the only kernel-policy surface exposed at the
+    top level — built-in policies are reached via the physics classmethods
+    ``KernelStrategy.fast() / .bit_exact() / .low_memory() / .reference_only()``.
+    """
     assert tengri.KernelStrategy is KernelStrategy
-    assert tengri.DEFAULT_KERNEL_STRATEGY is DEFAULT
-    assert tengri.LOW_MEMORY_KERNEL_STRATEGY is LOW_MEMORY
-    assert tengri.EXACT_ONLY_KERNEL_STRATEGY is EXACT_ONLY
-    assert tengri.COMPOSITIONAL_ONLY_KERNEL_STRATEGY is COMPOSITIONAL_ONLY
+    assert KernelStrategy.fast() is DEFAULT
+    assert KernelStrategy.low_memory() is LOW_MEMORY
+    assert KernelStrategy.reference_only() is EXACT_ONLY
+    assert KernelStrategy.bit_exact() is COMPOSITIONAL_ONLY
     assert isinstance(tengri.NoCompatibleKernelError, type)
     assert issubclass(tengri.NoCompatibleKernelError, RuntimeError)
 

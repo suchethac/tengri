@@ -177,8 +177,8 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
 def _populate_factories() -> dict[str, Callable[..., dict]]:
     """Walk SFH_REGISTRY and emit one factory per canonical variant name.
 
-    Aliases (e.g. ``truncated_skewnormal_sfh`` → ``tsnorm``) are skipped:
-    we emit one factory per spec, keyed by the spec's canonical ``name``.
+    Short-name aliases (e.g. ``tsnorm`` for ``truncated_skewnormal``) are
+    skipped: we emit one factory per spec, keyed by the spec's canonical name.
     Same convention as the dict grammar's primary keys.
     """
     factories: dict[str, Callable[..., dict]] = {}

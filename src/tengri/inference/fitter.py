@@ -19,7 +19,6 @@ import contextlib
 import logging
 import threading
 import time
-import warnings
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -45,44 +44,7 @@ from tengri.inference.loss_functions import (
 )
 from tengri.parameters.priors import Gaussian, Uniform
 
-# ── Method name unification ────────────────────────────────────────────
-
-# Maps deprecated/old method strings → new canonical names.
-_DEPRECATED_METHOD_ALIASES: dict[str, str] = {
-    # Old nifty-qualified names → clean canonical
-    "vi_nifty": "vi_nonlinear",
-    "vi_nifty_linear": "vi_linear",
-    # Old fast nifty names → canonical fast names
-    "vi_nifty_fast": "vi_nonlinear_fast",
-    "vi_nifty_fast_linear": "vi_linear_fast",
-    # Old geoVI names → vi_nonlinear
-    "geovi": "vi_nonlinear",
-    "fast_geovi": "vi_nonlinear_fast",
-    "nifty_geovi": "vi_nonlinear",
-    "geovi_nuts": "vi_nonlinear",
-    # Old MGVI / linear names → vi_linear
-    "mgvi": "vi_linear",
-    "fast_mgvi": "vi_linear_fast",
-    "nifty_mgvi": "vi_linear",
-    "evi": "vi_linear",
-    # Old native names → canonical native variants
-    "native_geovi": "native_vi_nonlinear",
-    "vi_native": "native_vi_nonlinear",
-    "vi_native_linear": "native_vi_linear",
-    "native_mgvi": "native_vi_linear",
-    "native_evi": "native_vi_linear",
-    # MCMC
-    "raytrace": "mcmc_raytrace",
-    "nuts": "mcmc_nuts",
-    "hmc": "mcmc_hmc",
-    "dynamic_hmc": "mcmc_dynamic_hmc",
-    "ghmc": "mcmc_ghmc",
-    "mclmc": "mcmc_mclmc",
-    "adjusted_mclmc": "mcmc_adjusted_mclmc",
-    "elliptical_slice": "mcmc_ess",
-    # Evidence
-    "evidence": "nss",
-}
+# ── Method name validation ────────────────────────────────────────────
 
 # D threshold for "auto": D <= this → mcmc_nuts, D > this → vi
 _AUTO_D_THRESHOLD = 20
@@ -119,96 +81,42 @@ _CANONICAL_METHODS = {
 
 
 def resolve_method(method: str, emit_warning: bool = True) -> str:
-    """Resolve method string to canonical name with deprecation warning.
-
-    Maps deprecated method aliases to their canonical equivalents, emitting
-    a DeprecationWarning for deprecated usage. Validates that the final
-    method name is either canonical (in _CANONICAL_METHODS) or ``"auto"``.
+    """Validate that ``method`` is a canonical inference method name.
 
     Parameters
     ----------
     method : str
-        Method name: canonical (e.g., ``"vi"``, ``"mcmc_nuts"``),
-        deprecated alias (e.g., ``"geovi"``, ``"nifty_geovi"``),
-        ``"auto"``, or invalid.
-
+        Method name: canonical (e.g. ``"vi"``, ``"mcmc_nuts"``), ``"auto"``,
+        or invalid.
     emit_warning : bool, optional
-        If ``True`` (default), emit DeprecationWarning when an alias is used.
-        Set to ``False`` to silence warnings (useful in test harnesses).
+        Unused; retained for signature compatibility.
 
     Returns
     -------
     str
-        Canonical method name. May be ``"auto"`` if that was the input.
+        The method name unchanged (canonical or ``"auto"``).
 
     Raises
     ------
     ParameterError
-        If method is not canonical, not a recognized deprecated alias,
-        and not ``"auto"``. Exception message lists all valid canonical
-        names and known aliases.
-
-    Notes
-    -----
-    Deprecated aliases are managed by ``_DEPRECATED_METHOD_ALIASES`` dict at
-    module level. This function is called automatically by ``Fitter.run()``
-    and does not need to be invoked directly by users.
-
-    See Also
-    --------
-    Fitter.run : User-facing method that calls this internally.
-
-    Examples
-    --------
-    Canonical name (no warning):
-
-    >>> resolve_method("vi")
-    'vi'
-
-    Deprecated alias (emits DeprecationWarning):
-
-    >>> resolve_method("geovi")  # doctest: +SKIP
-    'vi'  # Emits: DeprecationWarning: Method 'geovi' is deprecated...
-
-    Suppress warnings for tests:
-
-    >>> resolve_method("nifty_mgvi", emit_warning=False)
-    'vi_linear'
-
-    Invalid method:
-
-    >>> resolve_method("invalid_method")  # doctest: +SKIP
-    ParameterError: Unknown method: 'invalid_method'. Valid canonical names: ...
+        If the method is not in :data:`_CANONICAL_METHODS` and not
+        ``"auto"``. The error message lists every valid canonical name
+        so the user can pick the intended one.
     """
+    del emit_warning  # signature kept for backward source compatibility
     if method is None:
         raise ParameterError(
             "method=None is not allowed. Pass an explicit method string "
-            "(e.g. 'vi_nifty', 'mcmc_nuts', 'auto') or omit the argument to use "
+            "(e.g. 'vi', 'mcmc_nuts', 'auto') or omit the argument to use "
             "the default from defaults.toml."
         )
 
-    # If already canonical or "auto", return as-is
     if method in _CANONICAL_METHODS:
         return method
 
-    # Check if deprecated alias
-    if method in _DEPRECATED_METHOD_ALIASES:
-        canonical = _DEPRECATED_METHOD_ALIASES[method]
-        if emit_warning:
-            warnings.warn(
-                f"Method '{method}' is deprecated. Use '{canonical}' instead. "
-                f"Old names will be removed in tengri v1.0.",
-                DeprecationWarning,
-                stacklevel=3,  # Caller's caller (skip resolve_method frame)
-            )
-        return canonical
-
-    # Invalid method
     canonical_list = ", ".join(sorted(_CANONICAL_METHODS))
     raise ParameterError(
-        f"Unknown method: '{method}'. "
-        f"Valid canonical names: {canonical_list}. "
-        f"Deprecated aliases: {', '.join(sorted(_DEPRECATED_METHOD_ALIASES.keys()))}. "
+        f"Unknown method: '{method}'. Valid names: {canonical_list}. "
         f"See Fitter.run() docstring for details."
     )
 
@@ -1376,11 +1284,12 @@ class Fitter:
             **Variational Inference (VI)**
 
             - ``"vi"`` — geoVI via NIFTy (nonlinear, default for D>20)
+            - ``"vi_nonlinear"`` — geoVI via NIFTy (alias of ``vi``)
             - ``"vi_linear"`` — MGVI via NIFTy (linearized Gaussian)
-            - ``"vi_nifty_fast"`` — geoVI fast path (~35% faster, no logging)
-            - ``"vi_nifty_fast_linear"`` — MGVI fast path (~35% faster, no logging)
-            - ``"vi_native"`` — Native JAX geoVI (experimental; ~19× faster than NIFTy)
-            - ``"vi_native_linear"`` — Native JAX MGVI (experimental)
+            - ``"vi_nonlinear_fast"`` — geoVI fast path (~35% faster, no logging)
+            - ``"vi_linear_fast"`` — MGVI fast path (~35% faster, no logging)
+            - ``"native_vi_nonlinear"`` — Native JAX geoVI (experimental; ~19× faster than NIFTy)
+            - ``"native_vi_linear"`` — Native JAX MGVI (experimental)
 
             **MCMC Sampling**
 
@@ -1407,17 +1316,6 @@ class Fitter:
             **Automatic Selection**
 
             - ``"auto"`` — NUTS (D≤20) or geoVI (D>20) based on dimensionality
-
-            **Deprecated Aliases** (still work, emit DeprecationWarning):
-
-            - ``"vi_nifty"``, ``"geovi"``, ``"fast_geovi"``, ``"nifty_geovi"``
-              → ``"vi"``
-            - ``"vi_nifty_linear"``, ``"mgvi"``, ``"fast_mgvi"``, ``"nifty_mgvi"``
-              → ``"vi_linear"``
-            - ``"native_geovi"`` → ``"vi_native"``
-            - ``"native_mgvi"``, ``"native_evi"`` → ``"vi_native_linear"``
-            - ``"raytrace"``, ``"nuts"``, ``"hmc"``, etc. (all MCMC methods)
-            - ``"evidence"`` → ``"nss"``
 
         init_from : Posterior, optional
             Previous inference result to use as warm-start initialization.
@@ -1786,7 +1684,7 @@ class Fitter:
         # Available methods
         lines.append("")
         lines.append(
-            "  Methods:     vi, vi_linear, vi_nifty_fast, vi_nifty_fast_linear, "
+            "  Methods:     vi, vi_linear, vi_nonlinear_fast, vi_linear_fast, "
             "vi_native, vi_native_linear, mcmc, mcmc_raytrace, mcmc_nuts, "
             "mcmc_hmc, mcmc_dynamic_hmc, mcmc_ghmc, mcmc_mclmc, "
             "mcmc_adjusted_mclmc, mcmc_ess, map, laplace, pathfinder, nss, auto"

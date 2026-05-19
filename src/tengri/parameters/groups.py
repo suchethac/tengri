@@ -125,10 +125,6 @@ _VALID_SFH_TYPES = {
     "burst",
     "field",
     # Aliases
-    "truncated_skewnormal_sfh",
-    "skewnormal_sfh",
-    "gaussian_sfh",
-    "lognormal_sfh",
     "constant_then_exponential",
     "psb_wild2020",
     "db",
