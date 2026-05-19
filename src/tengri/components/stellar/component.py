@@ -1,30 +1,24 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""StellarSEDComponent: Phase II-2.2 implementation.
+"""StellarSEDComponent: composite stellar population assembly from SFH and SSP.
 
-The body of the migration (merging :mod:`tengri.components.stellar.sfh` and
-:mod:`tengri.components.stellar.sps` into a single ``SEDComponent``
-adapter) is staged across Phase II-2.1 → II-2.6.
+Merges the SFH and SSP sub-modules into a single ``SEDComponent``.
 
-This module implements the **first slice (II-2.2)**:
+Currently supported models:
 
 - ``sfh_model="tsnorm"`` (truncated skew-normal SFH, no GP field)
 - ``metallicity_model="delta"`` (single ``met_logzsol`` scalar)
 - ``sps_backend="dsps"`` (DSPS native CSP integration)
 - ``field=False``
 
-The component publishes the **stable contract** of derived quantities
-that downstream Phase II adapters (dust two-component, nebular Cue,
-radio, X-ray) read — see ``state.derived`` keys below.
+The component publishes derived quantities (stellar mass, SFR history, etc.)
+in ``state.derived`` that downstream components (dust, nebular, radio, X-ray)
+read to compute their own emission.
 
-Architectural note: ``ssp_data`` is held on the component instance
-itself (constructor field), parallel to how :class:`RadioSEDComponent`,
-:class:`IGMSEDComponent`, and :class:`XRaySEDComponent` hold their
-``config``. ``precompute()`` returns an empty marker, consistent with
-those adapters; the SSP grid is treated as a fixed input baked in at
-construction time, not an output of a separate precompute step.
+Architectural note: the SSP grid is held on the component instance
+(constructor field) and treated as a fixed input baked in at construction time,
+not an output of a separate precompute step.
 
-See ``docs/dev/phase_ii_2_stellar_migration.md`` for the migration
-plan and the design decisions resolved 2026-05-03.
+See ``docs/dev/20260404-refactor.md`` for the migration plan.
 """
 
 from __future__ import annotations
@@ -88,23 +82,25 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     name : str
         Diagnostic identifier.
     sfh_model : str
-        Registered SFH name. Phase II-2.2 supports ``"tsnorm"`` only;
-        the remaining ``SFH_REGISTRY`` entries land in Phase II-2.3 / II-2.5.
+        Registered SFH name. Currently supports ``"tsnorm"``, ``"dpl"``,
+        ``"continuity"``, ``"dirichlet"``, ``"dense_basis"``, and several
+        parametric/bursty variants.
     field : bool
-        Stochastic GP field on top of the mean SFH. Phase II-2.2 supports
-        ``False`` only; ``True`` lands with II-2.3.
+        If ``True``, applies stochastic log-normal GP modulation to the mean SFH.
+        Default ``False`` (no field).
     n_grid : int
         Lookback-time grid resolution for SFH evaluation and the published
         ``state.derived["sfh_grid_lbt_yr"]`` array.
     metallicity_model : str
-        Phase II-2.2 supports ``"delta"`` only (single ``met_logzsol``
-        parameter, time-constant Z(t)). Other modes land with II-2.4.
+        Metallicity evolution model. Currently supports ``"delta"`` (constant Z),
+        ``"ramp"`` (linear Z(t)), ``"two_step"`` (step function), ``"bins"``
+        (piecewise-constant per age bin), ``"table"`` (user-provided), and
+        ``"chem_evol"`` (closed-box chemical evolution).
     sps_backend : str
-        Phase II-2.2 supports ``"dsps"`` only (DSPS native triweight-MDF
-        path). ``"dsps_native"`` is an alias for the same backend here.
+        Stellar population synthesis backend. Currently supports ``"dsps"``
+        (DSPS native triweight-MDF CSP integration).
     use_alpha_grid : bool
-        Whether the SSP grid carries an α/Fe axis. Always ``False`` in
-        II-2.2 — alpha grids land later.
+        Whether the SSP grid carries an α/Fe axis. Currently ``False``.
     lgmet_scatter : float
         Gaussian scatter in log10(Z) (dex) for the DSPS triweight kernel.
         Default 0.2 dex matches Prospector / DSPS convention.
@@ -139,15 +135,11 @@ class StellarSEDComponentConfig(SEDComponentConfig):
 
 @dataclass(frozen=True)
 class StellarSEDComponentState(SEDComponentState):
-    """Marker state. SSP tensors live on the component instance, not here.
+    """Marker state. SSP tensors are held on the component instance.
 
-    Phase II-2.2 keeps :meth:`StellarSEDComponent.precompute` a no-op
-    marker for consistency with :class:`RadioSEDComponent`,
-    :class:`IGMSEDComponent`, and :class:`XRaySEDComponent`. The SSP
-    grid is held by the component itself as a constructor field; this
-    is the **most natural and consistent** plumbing given that
-    :class:`tengri.forward.orchestrator.run_components` does not thread
-    a precomputed-state argument to ``apply``.
+    The ``precompute`` method returns an empty marker. This is consistent
+    with other fixed-input components (radio, X-ray, IGM) that do not
+    require a separate precomputation step.
     """
 
     name: str = "stellar"
@@ -178,9 +170,8 @@ class StellarSEDComponent:
 
     Cross-component publications (``state.derived``)
     ------------------------------------------------
-    These keys are the stable contract every downstream adapter relies
-    on. See :doc:`/dev/phase_ii_2_stellar_migration` for the full
-    discussion.
+    These keys are the stable contract every downstream component relies
+    on.
 
     - ``log_mstar`` (scalar, dex) — log10(surviving stellar mass / Msun).
       Falls back to ``log_mstar_formed`` when the SSP grid lacks a
@@ -216,7 +207,7 @@ class StellarSEDComponent:
         Pulled from :data:`tengri.components.stellar.sfh.registry.SFH_REGISTRY`
         for the configured ``sfh_model`` plus a metallicity block keyed
         by ``metallicity_model``. Field parameters are added when
-        ``config.field`` is ``True`` (Phase II-2.3+).
+        ``config.field`` is ``True``.
         """
         # Lazy-import the registries so this module remains importable even
         # if the SFH registry temporarily fails to build.
@@ -293,11 +284,12 @@ class StellarSEDComponent:
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
     ) -> ForwardState:
-        """Compute stellar SED + publish derived quantities.
+        """Compute stellar SED and publish derived quantities.
 
-        Phase II-2.2 path: ``tsnorm`` SFH + ``delta`` metallicity + DSPS
-        native triweight-MDF CSP integration. Other configurations
-        raise :class:`NotImplementedError` until later sub-PRs land.
+        Assembles the composite stellar population by convolving the
+        star formation history with SSP templates via DSPS. Publishes
+        stellar mass, ionizing photon rate, and age-dependent quantities
+        for downstream components.
 
         Parameters
         ----------
@@ -311,7 +303,7 @@ class StellarSEDComponent:
         Returns
         -------
         ForwardState
-            New state with ``sed_intrinsic`` set and 11 derived keys
+            New state with ``sed_intrinsic`` set and 13 derived keys
             published.
         """
         if self.ssp_data is None:
@@ -319,63 +311,36 @@ class StellarSEDComponent:
                 "StellarSEDComponent.apply requires ssp_data set on the component. "
                 "Pass it at construction: StellarSEDComponent(ssp_data=ssp)."
             )
-        # Phase II-2.5 ships the non-parametric forms via SFH_REGISTRY's
-        # internal_param_map. The supported set is: tsnorm, dpl,
-        # continuity, dirichlet, dense_basis. Others (snorm, lnorm, …)
-        # would also work via the same dispatch but are not part of the
-        # Phase II-2 scope; their equivalence has not been pinned.
+        # SFH models are routed through SFH_REGISTRY's internal_param_map.
+        # Each model is validated against legacy DSPS path via
+        # tests/integration/test_stellar_integration.py.
         _SUPPORTED_SFH = (
             "tsnorm",
             "dpl",
             "continuity",
             "dirichlet",
             "dense_basis",
-            # Phase II-2.5 expansion: parametric SFH variants pinned
-            # against legacy by tests in
-            # ``tests/integration/test_orchestrator_vs_legacy.py``.
             "lnorm",
             "snorm",
             "snorm_burst",
             "tsnorm_burst",
             "norm",
-            # Phase II-2.5b: smooth-SFH parametric variants that
-            # converge to legacy at ≤ 10% rtol. Variants with sharp
-            # discontinuities (``exp``, ``dexp``, ``tau``) diverge
-            # because legacy log-space and orchestrator linear-space
-            # SFR interpolations resolve the cutoff differently —
-            # blocked on the SFH-side CSP-canonicalisation. Variants
-            # with bounded-fraction priors (``psb``, ``delayed_bq``,
-            # ``dense_basis_pure``) need variant-specific test
-            # fixtures, deferred.
             "const",
             "const_exp",
             "continuity_flex",
             "psb",
             "delayed_bq",
             "dense_basis_pure",
-            # Phase II-2.5c: sharp-cutoff exponentials. These dispatch
-            # correctly via the registry path but diverge from legacy
-            # at rtol≥1e-1 because legacy interpolates SFR in log-space
-            # while orchestrator interpolates in linear-space — the
-            # ``sfh_*_start_gyr`` / ``sfh_tau_age_gyr`` cutoff is
-            # resolved differently. Closes when the legacy SFH
-            # integration migrates to DSPS canonical
-            # trapezoidal-in-cosmic-time. Pinned as xfail-strict in
-            # ``tests/integration/test_orchestrator_vs_legacy.py``.
             "exp",
             "dexp",
             "tau",
-            # Phase II-2.5d: bursty / velocity-parameterised variants.
             "periodic",
             "buat08",
         )
         if self.config.sfh_model not in _SUPPORTED_SFH:
             raise NotImplementedError(
-                f"sfh_model={self.config.sfh_model!r} not yet pinned by an "
-                f"orchestrator-vs-legacy equivalence test. Supported in "
-                f"Phase II-2.5: {_SUPPORTED_SFH}. Other registered modes "
-                f"may dispatch correctly via the registry path below but "
-                f"have not been verified against legacy."
+                f"sfh_model={self.config.sfh_model!r} not yet validated "
+                f"against legacy DSPS. Supported modes: {_SUPPORTED_SFH}."
             )
         _SUPPORTED_MET = (
             "delta",
@@ -393,7 +358,6 @@ class StellarSEDComponent:
                 f"{_SUPPORTED_MET}. Add a branch in StellarSEDComponent.apply() "
                 f"per docs/dev/20260506-met-mode-wiring-blueprint.md."
             )
-        # config.field is supported as of Phase II-2.3 (see step 2b below).
 
         ssp = self.ssp_data
         ssp_ages_yr = (10.0**ssp.ssp_lg_age_gyr) * 1e9
@@ -406,9 +370,7 @@ class StellarSEDComponent:
         # 13.8 Gyr). This is critical for ``field=True`` parity:
         # ``compute_field_gp`` keys on n_grid + d_log_age to build
         # the GP correlation kernel, so both paths must construct
-        # the grid identically or the same ``xi`` vector produces
-        # different GP realisations. See the Phase II-2.3 finishing
-        # commit message + tests/integration/test_orchestrator_vs_legacy.py.
+        # the grid identically. See tests/integration/test_stellar_integration.py.
         log_age_grid = make_log_age_grid(n_grid)
         sfh_lbt_grid = 10.0**log_age_grid
 
@@ -416,11 +378,8 @@ class StellarSEDComponent:
         # Translate user-facing public params → SFH-function kwargs via
         # the registry's ``internal_param_map``: each entry is
         # ``(internal_name, scale, offset)`` and the conversion is
-        # ``internal = public * scale + offset``. This is the same
-        # mechanism the legacy SEDModel uses (see
-        # ``forward/sed_model.py::_compute_sfr``), so the two paths see
-        # the same units and naming. Phase II-2.5 generalises Phase
-        # II-2.2's hardcoded tsnorm/dpl branches into one dispatch.
+        # ``internal = public * scale + offset``. This ensures both this
+        # component and legacy SEDModel paths see the same units and naming.
         from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 
         sfh_spec = SFH_REGISTRY[self.config.sfh_model]
@@ -439,7 +398,7 @@ class StellarSEDComponent:
 
         sfr_history = sfh_spec.fn(sfh_lbt_grid, **sfh_kwargs)
 
-        # ── 2b. GP-field modulation (Phase II-2.3) ──────────────────────
+        # ── 2b. GP-field modulation ───────────────────────────────────
         # Multiplicative log-normal modulation: SFR_total = SFR_mean ×
         # exp(x(t) - K(0)/2), where x(t) is a PSD-governed Gaussian
         # process and K(0)/2 is the lognormal bias correction so the
@@ -473,7 +432,7 @@ class StellarSEDComponent:
         # delta: scalar absolute log10(Z), constant in time.
         # ramp: linear interpolation between two endpoints.
         # chem_evol: closed-box gas regulator — Z(t) derived from SFH self-
-        # consistently (Phase II-2.4). Mirrors legacy sed_model.py:3578-3592.
+        # consistently. Mirrors legacy sed_model.py:3578-3592.
         if self.config.metallicity_model == "delta":
             # Apply alpha-Fe enhancement via effective_metallicity for 3D
             # SSP grids (no native α axis). Mirrors the legacy
@@ -486,11 +445,11 @@ class StellarSEDComponent:
             if has_alpha_grid(ssp):
                 raise NotImplementedError(
                     "StellarSEDComponent: 4D SSP grids with native [α/Fe] axis "
-                    "are not yet supported by the orchestrator path. The legacy "
-                    "monolith uses interpolate_met_alpha to collapse the α axis "
-                    "before the lognormal-MDF kernel — port that path here when "
-                    "needed. For now, use a 3D SSP grid (effective_metallicity "
-                    "fallback covers met_alpha_fe scientifically)."
+                    "are not yet supported. The legacy monolith uses "
+                    "interpolate_met_alpha to collapse the α axis before the "
+                    "lognormal-MDF kernel — add this path when needed. For now, "
+                    "use a 3D SSP grid (effective_metallicity fallback covers "
+                    "met_alpha_fe scientifically)."
                 )
             alpha_fe = jnp.asarray(params.get("met_alpha_fe", 0.0))
             log_z_eff = effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe)
@@ -765,8 +724,8 @@ class StellarSEDComponent:
         # take abs to recover the positive photon rate.
         nion = jnp.abs(jnp.trapezoid(integrand_masked, nu))
 
-        # ── 11b. Project to pipeline wavelength grid (PR 5f) ────────────
-        # When the orchestrator runs on a panchromatic grid (radio/X-ray
+        # ── 11b. Project to pipeline wavelength grid ────────────────
+        # When the pipeline runs on a panchromatic grid (radio/X-ray
         # extension via ``make_panchromatic_grid``), ``state.wave`` is
         # wider than ``ssp.ssp_wave``. Both ``sed_intrinsic`` and the
         # per-age cube ``lnu_age`` MUST live on ``state.wave`` so
@@ -846,11 +805,9 @@ def _time_weighted_sfr(
 # flows through ``jax.jit`` as a TRACED input rather than being baked
 # into the XLA graph as a literal constant. The SSP grid is ~8 MB
 # (15 × 93 × 5994 doubles); without this registration the cold-compile
-# time of any orchestrator chain that contains StellarSEDComponent
-# explodes to ~900 ms because XLA inlines the entire grid as constants
+# time explodes to ~900 ms because XLA inlines the entire grid as constants
 # at every call site. With registration cold-compile drops by an
-# order of magnitude. (Mirrors the Phase II-2 commit e52bd75 fix to
-# the legacy hybrid kernel path.)
+# order of magnitude.
 #
 # ``ssp_data`` is the only data field (it's a JAX-pytree-compatible
 # NamedTuple with ndarray leaves). Everything else is structural

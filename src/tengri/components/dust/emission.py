@@ -82,7 +82,7 @@ def _find_data_file(filename: str) -> str | None:
     return None
 
 
-# ── Emission model registry ───────────────────────────────────────
+# ── Dust emission model catalogue ──────────────────────────────────
 
 DUST_EMISSION_MODELS: dict[str, Callable] = {}
 
@@ -525,6 +525,13 @@ def modified_blackbody(
     **JIT-compatible**: yes — all operations are ``jnp`` primitives.
 
     **Gradient-safe**: yes — differentiable everywhere.
+
+    References
+    ----------
+    .. [1] B. T. Draine, "Physics of the Interstellar and Intergalactic Medium"
+       (Princeton University Press, 2011). Chapter 22: thermal continuum
+       emission from dust grains in the optically-thin limit.
+       https://ui.adsabs.harvard.edu/abs/2011piim.book.....D
 
     """
     # CMB correction: always applied. At z=0 this is a no-op since

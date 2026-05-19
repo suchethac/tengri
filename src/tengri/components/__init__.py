@@ -1,9 +1,9 @@
 """Forward model components: stellar, dust, nebular, AGN, IGM, radio, X-ray.
 
-The ``sfh`` and ``sps`` subpackages were folded into ``stellar`` in
-Phase II-2.1. The old dotted names remain importable as deprecation
-shims (firing :class:`DeprecationWarning` on first use); they are not
-preloaded here so that ``import tengri.components`` is warning-clean.
+Physics blocks for the SEDModel pipeline. Each block owns its parameter
+definitions and a SEDComponent implementation that receives upstream
+derived quantities (redshift, stellar mass, SFR, AGN luminosity) and
+computes rest-frame specific luminosity L_nu over its spectral domain.
 """
 
 # Import canonical submodules eagerly so users can write

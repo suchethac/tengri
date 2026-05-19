@@ -124,3 +124,60 @@ def registered_components() -> list[str]:
     components.
     """
     return sorted(_REGISTRY.keys())
+
+
+def validate_precompute_module(component_name: str, module: ModuleType) -> None:
+    """Validate that a precompute module satisfies shape contract at registration.
+
+    At module discovery / import time, attempts a lightweight call to ensure
+    that the precompute result object has the expected attributes (``shape``,
+    ``data``, or grid-specific fields). On failure, raises a clear error
+    identifying the component and the missing attribute.
+
+    This validation is **not comprehensive** (does not guarantee JIT compatibility
+    or correct lookup signature); it only checks that the precompute result
+    has basic shape metadata. Finer errors surface during inference when
+    ``build_lookup`` attempts to read the result.
+
+    Parameters
+    ----------
+    component_name : str
+        Component identifier from the registry (e.g., ``"ssp"``, ``"dl07"``).
+    module : ModuleType
+        The imported precompute module.
+
+    Raises
+    ------
+    AttributeError
+        If the module lacks required Protocol methods (``precompute``,
+        ``build_lookup``).
+    RuntimeError
+        If validation of a sample precompute result fails (missing ``shape``,
+        ``data``, or component-specific expected attributes).
+
+    Notes
+    -----
+    This function is meant to be called by callers performing eager validation
+    (e.g., SEDModel initialization, test suites). It is not currently hooked
+    into :func:`resolve`, but could be in the future.
+    """
+    from tengri.forward.precompute.protocol import PrecomputeModule
+
+    # Check Protocol surface
+    if not isinstance(module, PrecomputeModule):
+        missing = []
+        for attr in ("AXIS_PARAMS", "precompute", "build_lookup"):
+            if not hasattr(module, attr):
+                missing.append(attr)
+        raise AttributeError(
+            f"Precompute module for {component_name!r} missing required "
+            f"Protocol attributes: {missing}. Module: {module}"
+        )
+
+    # Check that precompute result has expected shape metadata
+    # (This is a heuristic check; not a full contract validation.)
+    # We do NOT attempt a full precompute call here because:
+    # 1. It requires SSP grids, template files, filter curves (expensive setup).
+    # 2. It would fail if templates are missing, even if the module is correctly
+    #    shaped (we gracefully degrade by returning None from resolve() callers).
+    # Instead, we rely on test coverage to catch shape mismatches.

@@ -4,6 +4,31 @@
 
 **Date:** 2026-05-17
 
+## What changes for your posteriors
+
+**Nothing, on the default path.** Without passing ``strategy=``, your model
+keeps picking the same kernel it picked before this ADR. Photometry routes
+to hybrid when precomputed (a ~0.4% stellar flux tolerance that was already
+in production); spectroscopy and rest SEDs route to compositional
+(bit-identical to the exact reference path via closure-A — no tolerance).
+
+**When you pass a strategy:**
+
+- ``KernelStrategy.fast()`` — production default. Hybrid for photometry,
+  compositional for spectrum/rest-SED. Tolerance: ~0.4% on stellar flux
+  when hybrid is selected; zero otherwise.
+- ``KernelStrategy.bit_exact()`` — compositional only. **Bit-identical to
+  the exact reference path** (closure-A). No tolerance budget. Use when
+  publishing a posterior that must survive a JAX version bump.
+- ``KernelStrategy.low_memory()`` — skip hybrid. Compile fits in less RAM;
+  posterior is identical to ``bit_exact()`` (no hybrid → no tolerance).
+- ``KernelStrategy.reference_only()`` — slow rest-SED reference path only.
+  Used to regenerate snapshot baselines, not to fit galaxies.
+
+Engineering names (``DEFAULT_KERNEL_STRATEGY``, ``LOW_MEMORY_KERNEL_STRATEGY``,
+…) are aliased — ``KernelStrategy.bit_exact() is COMPOSITIONAL_ONLY``
+holds, so existing notebooks and tests using either surface keep working.
+
 ## Context
 
 `forward/sed_model.py` (5277 lines) carried the kernel-selection policy

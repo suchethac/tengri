@@ -92,8 +92,8 @@ from tengri.components.dust.emission import (
     themis,
 )
 
-# SEDComponent adapter (Phase II Protocol shape) — dispatches IR
-# templates via ``DustEmissionSEDComponentConfig.template``.
+# Dust block in the SEDComponent pipeline — combines UV–optical attenuation
+# with IR re-emission via ``DustEmissionSEDComponentConfig.template``.
 from tengri.components.dust.emission_component import (
     DustEmissionSEDComponent,
     DustEmissionSEDComponentConfig,

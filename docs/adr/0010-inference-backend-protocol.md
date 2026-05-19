@@ -1,8 +1,15 @@
-# ADR 0009: Inference backend protocol via `InferenceContext`
+# ADR 0010: Inference backend protocol via `InferenceContext`
 
 **Status:** Accepted
 
 **Date:** 2026-05-18
+
+> Originally filed as ADR-0009 on 2026-05-18; renumbered to 0010 to
+> resolve a filename collision with `0009-typed-pipeline-contract.md`
+> (itself the survivor of two prior renumbers). Cross-references in
+> code and docs have been updated to `ADR-0010`; commit `24bfb335`
+> ("docs(inference): ADR-0009 + conformance suite") is the original
+> authoring commit.
 
 ## Context
 
