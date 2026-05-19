@@ -1,32 +1,26 @@
 """Observation models: photometry, spectroscopy, calibration, and configuration.
 
-Sub-namespaces (additive, browseable groupings of the same objects re-exported here):
+Sub-namespaces (additive, browseable groupings of the same objects):
 
 - :mod:`tengri.observation.containers` — user-facing data classes
   (Photometry, Spectroscopy, LineFluxData, LineList, NoiseModel,
-  Observation, SpectralIndexData, SpectralIndexDef).
+  Observation, SpectralIndexData, SpectralIndexDef, Instrument).
 - :mod:`tengri.observation.physics` — transformation primitives
-  (apply_calibration, apply_lsf, build_eline_design_matrix, …).
+  (apply_aperture_correction, apply_lsf, build_eline_design_matrix,
+  apply_wavelength_mask, …).
 - :mod:`tengri.observation.constants` — catalogs and status flags
   (DETECTED / UPPER_LIMIT / LOWER_LIMIT, DEFAULT_LINE_*, STANDARD_INDICES,
   SSP_LIBRARY_RESOLUTIONS).
 
-Sub-namespace bindings are *identical* to the flat-namespace bindings;
-they're additive groupings, not copies. The flat surface
-(``tengri.observation.X``) remains the source of truth and continues to
-work without deprecation warnings.
+Root-level exports include user-facing containers and constants. Calibration
+math primitives live in :mod:`tengri.observation.calibration`,
+:mod:`tengri.observation.eline_marginalization`, and related sub-modules,
+accessible via direct imports (e.g.,
+:func:`tengri.observation.calibration.marginalize_calibration`).
 """
 
 from tengri.observation import constants, containers, physics
 from tengri.observation.aperture import apply_aperture_correction
-from tengri.observation.calibration import (
-    apply_calibration,
-    apply_double_calibration,
-    calibration_polynomial,
-    chebyshev_basis,
-    double_calibration_polynomial,
-    marginalize_calibration,
-)
 from tengri.observation.eline_catalog import (
     CLOUDY_LINE_NAMES,
     CLOUDY_LINE_WAVELENGTHS,
@@ -35,8 +29,6 @@ from tengri.observation.eline_marginalization import (
     DEFAULT_LINE_NAMES,
     DEFAULT_LINE_WAVELENGTHS,
     build_eline_design_matrix,
-    marginalize_emission_lines,
-    predict_with_marginalized_lines,
 )
 from tengri.observation.eline_priors import (
     cloudy_line_priors,
@@ -88,27 +80,19 @@ __all__ = [
     "SpectralIndexDef",
     "Spectroscopy",
     "apply_aperture_correction",
-    "apply_calibration",
-    "apply_double_calibration",
     "apply_lsf",
     "apply_wavelength_mask",
     "apply_zp_floor",
     "blend_emission_lines",
     "build_eline_design_matrix",
     "build_line_mask",
-    "calibration_polynomial",
-    "chebyshev_basis",
     "cloudy_line_priors",
     "constants",
     "containers",
-    "double_calibration_polynomial",
     "list_instruments",
-    "marginalize_calibration",
-    "marginalize_emission_lines",
     "marginalize_emission_lines_cloudy",
     "measure_index_jax",
     "nirspec_g140m_resolution",
     "nirspec_prism_resolution",
     "physics",
-    "predict_with_marginalized_lines",
 ]
