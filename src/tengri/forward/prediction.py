@@ -990,6 +990,13 @@ class SEDProperties(_CachedBase):
 
 # ── Emission line properties (lazy) ───────────────────────────────
 
+# Floor used in BPT and other line-ratio diagnostics to avoid log10(0)
+# when a line is undetected at this S/N. Set well below any realistic
+# flux (typical detection limits ≈ 1e-18 erg/s/cm²) so the floor never
+# affects detected lines but yields a finite, sortable −∞-equivalent
+# value for missing lines.
+_LINE_RATIO_FLOOR = 1e-50
+
 
 class LineProperties(_CachedBase):
     """Lazy property accessor for emission line luminosities and diagnostic ratios.
@@ -1255,7 +1262,10 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return jnp.log10(jnp.maximum(self.nii_6584, 1e-50) / jnp.maximum(self.halpha, 1e-50))
+        return jnp.log10(
+            jnp.maximum(self.nii_6584, _LINE_RATIO_FLOOR)
+            / jnp.maximum(self.halpha, _LINE_RATIO_FLOOR)
+        )
 
     @property
     def bpt_sii(self):
@@ -1272,7 +1282,9 @@ class LineProperties(_CachedBase):
         not inside :func:`jax.jit`.
         """
         sii_total = self.sii_6717 + self.sii_6731
-        return jnp.log10(jnp.maximum(sii_total, 1e-50) / jnp.maximum(self.halpha, 1e-50))
+        return jnp.log10(
+            jnp.maximum(sii_total, _LINE_RATIO_FLOOR) / jnp.maximum(self.halpha, _LINE_RATIO_FLOOR)
+        )
 
     @property
     def o3hb(self):
@@ -1288,7 +1300,10 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return jnp.log10(jnp.maximum(self.oiii_5007, 1e-50) / jnp.maximum(self.hbeta, 1e-50))
+        return jnp.log10(
+            jnp.maximum(self.oiii_5007, _LINE_RATIO_FLOOR)
+            / jnp.maximum(self.hbeta, _LINE_RATIO_FLOOR)
+        )
 
     @property
     def r23(self):
@@ -1305,7 +1320,9 @@ class LineProperties(_CachedBase):
         not inside :func:`jax.jit`.
         """
         numerator = self.oii + self.oiii_4959 + self.oiii_5007
-        return jnp.log10(jnp.maximum(numerator, 1e-50) / jnp.maximum(self.hbeta, 1e-50))
+        return jnp.log10(
+            jnp.maximum(numerator, _LINE_RATIO_FLOOR) / jnp.maximum(self.hbeta, _LINE_RATIO_FLOOR)
+        )
 
     @property
     def o32(self):
@@ -1321,7 +1338,10 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return jnp.log10(jnp.maximum(self.oiii_5007, 1e-50) / jnp.maximum(self.oii, 1e-50))
+        return jnp.log10(
+            jnp.maximum(self.oiii_5007, _LINE_RATIO_FLOOR)
+            / jnp.maximum(self.oii, _LINE_RATIO_FLOOR)
+        )
 
     @property
     def balmer_decrement(self):
@@ -1337,7 +1357,7 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return self.halpha / jnp.maximum(self.hbeta, 1e-50)
+        return self.halpha / jnp.maximum(self.hbeta, _LINE_RATIO_FLOOR)
 
 
 # ── Radio properties (lazy) ───────────────────────────────────────
@@ -1707,7 +1727,7 @@ class Prediction:
         p = self._model._get_internal_params(self._params)
         state = self._model.predict_via_orchestrator(self._params)
         derived = state.derived
-        # The orchestrator's stellar adapter integrates the SFH on
+        # The stellar block integrates the SFH on
         # ``spec.n_grid`` (default 64) regardless of whether the model
         # is stochastic. Legacy ``SEDModel`` uses ``n_grid=256`` for
         # non-stochastic configs, so cache consumers index ``sfr``

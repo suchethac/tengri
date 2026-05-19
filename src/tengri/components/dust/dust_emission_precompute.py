@@ -1255,7 +1255,7 @@ def precompute_for_model(
     return None
 
 
-# ── Component registry entries (Phase II-6) ────────────────────────────────
+# ── Component registry entries ─────────────────────────────────────────────
 # Each dust-emission model is registered so that sed_model.py and _kernels/hybrid.py
 # can use a registry-driven dispatch instead of hard-coded if/elif chains.
 

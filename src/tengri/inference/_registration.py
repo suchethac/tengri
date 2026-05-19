@@ -21,7 +21,7 @@ Adding a new backend
    parametrised suite in ``test_backend_conformance.py`` will pick it
    up automatically).
 
-See ADR-0009 for the full Protocol contract.
+See ADR-0010 for the full Protocol contract.
 """
 
 from __future__ import annotations

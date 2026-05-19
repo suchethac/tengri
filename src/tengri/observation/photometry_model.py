@@ -1,12 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""PhotometryObservationModel: first :class:`ObservationModel` adapter.
+"""PhotometryObservationModel: broadband filter photometry observation model.
 
-Phase II-1, ninth pass. Validates the
-:class:`tengri.protocols.observation.ObservationModel` Protocol with a real
-implementation: takes the rest-frame SED produced by the
-:class:`SEDComponent` chain, redshifts it, applies cosmological
-distance dimming, convolves through a filter set, and returns
-broadband fluxes.
+Takes the rest-frame SED produced by the SEDComponent chain, redshifts
+to the observed frame, applies cosmological distance dimming, and
+convolves through a user-supplied filter set to return broadband
+apparent AB magnitudes or f_nu fluxes.
 
 Scope
 -----

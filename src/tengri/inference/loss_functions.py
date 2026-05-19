@@ -27,28 +27,6 @@ __all__ = [
 # ── Shared helpers (called inside traced closures) ───────────────────────
 
 
-def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constraint_matrix):
-    """Build emission line design matrix with doublet constraints applied."""
-    from tengri.observation.eline_marginalization import (
-        apply_doublet_constraints,
-        build_eline_design_matrix,
-    )
-
-    z = params.get("redshift", fixed_values.get("redshift", 0.0))
-    sigma_kms = params.get("eline_sigma_kms", 0.0)
-    delta_v = params.get("eline_delta_v_kms", 0.0)
-    resolution = getattr(model, "_spectral_resolution", None) or 2000.0
-    G = build_eline_design_matrix(
-        model._wave_obs,
-        eline_wavelengths,
-        resolution,
-        z,
-        eline_sigma_kms=sigma_kms,
-        eline_delta_v_kms=delta_v,
-    )
-    return apply_doublet_constraints(G, constraint_matrix)
-
-
 def _unstandardize_parameters(params_unbounded, spec, free_names, fixed_values, stochastic):
     """Convert unbounded ξ → physical params, merge fixed values, attach psd_xi, resolve mirrors.
 

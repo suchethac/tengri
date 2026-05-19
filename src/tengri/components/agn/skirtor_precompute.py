@@ -421,7 +421,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     return skirtor_phot_collapsed
 
 
-# ── Component registry entry (Phase II-6) ────────────────────────────────
+# ── Component registry entry ─────────────────────────────────────────────
 # SKIRTOR is registered so that sed_model.py and _kernels/hybrid.py can use
 # a registry-driven dispatch instead of hard-coded if/elif chains.
 
