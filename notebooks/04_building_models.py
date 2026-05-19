@@ -53,6 +53,7 @@ from tengri import (
     Photometry,
     SEDModel,
     Uniform,
+    builders,
     load_ssp_data,
     recipes,
 )
@@ -93,13 +94,14 @@ print(
 )
 
 # %% [markdown]
-# ## Three construction paths (all equivalent)
+# ## Four construction paths (all equivalent)
 #
-# The nested-dict API offers three ways to build a model:
+# The nested-dict API offers four ways to build a model:
 #
 # 1. **Recipe** — curated template for a common scenario
-# 2. **from_groups direct** — hand-built nested dict
-# 3. **Round-trip** — extract from existing model, tweak, rebuild
+# 2. **Direct nested dict** — hand-built mapping, JSON-friendly
+# 3. **Builder factories** — `tengri.builders.sfh.dpl(...)` etc., autocomplete-friendly
+# 4. **Round-trip** — extract from existing model, tweak, rebuild
 
 # %%
 # Path 1: Recipe (curated template)
@@ -131,8 +133,35 @@ print(
 )
 print()
 
-# Path 3: Round-trip (extract → edit → rebuild)
-print("PATH 3: Round-trip")
+# Path 3: Builder factories (IDE-friendly, return dicts under the hood)
+#
+# `tengri.builders.sfh.dpl(...)` carries a real signature listing the
+# variant's parameters by short name, so hovering or autocompleting in an
+# IDE surfaces `alpha`, `beta`, `tau_gyr`, `log_peak_sfr` directly. A typo
+# (`beat=...`) is rejected immediately with the list of valid names —
+# you don't have to wait until SEDModel.build() runs.
+print("PATH 3: Builder factories")
+factory_groups = {
+    "sfh": builders.sfh.dpl(_=FREE, log_peak_sfr=Uniform(-1.0, 3.0)),
+    "dust": {
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": FREE,
+        "emission": {"type": "dale2014", "*": FIXED, "logzsol": Fixed(-0.1)},
+    },
+    "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+    "redshift": Uniform(0.01, 6.0),
+    "apply_igm": True,
+}
+model_factory = SEDModel.build(ssp_data=ssp, observation=observation, **factory_groups)
+print(f"  Model: {model_factory.spec.n_free} free params from factory + dict mix")
+print(f"  builders.sfh.dpl(_=FREE) → {builders.sfh.dpl(_=FREE)}")
+print(f"  Available SFH variants ({len(builders.sfh.available())} total):")
+print(f"    {', '.join(builders.sfh.available()[:8])}, ...")
+print()
+
+# Path 4: Round-trip (extract → edit → rebuild)
+print("PATH 4: Round-trip")
 groups_from_model = model1.spec.to_groups()
 # Tweak: change metallicity to free (lives inside the sfh group as 'logzsol')
 groups_from_model.setdefault("sfh", {})["logzsol"] = FREE

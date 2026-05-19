@@ -656,6 +656,39 @@ historically accurate to the grammar it parses.
 
 ---
 
+## Phase II-3.3 — Builder factories for discoverable construction (2026-05-18)
+
+A new `tengri.builders` subpackage exposes one callable per registered
+SFH variant. Each factory returns the same dict shape the existing
+nested-dict grammar accepts, but with a real `inspect.Signature` listing
+the variant's short-form parameter names — IDEs and notebooks can
+introspect what's settable instead of forcing users to read the
+registry.
+
+| New surface                              | What it does                                                   |
+| ---------------------------------------- | -------------------------------------------------------------- |
+| `tengri.builders` (subpackage)           | Namespace for config-dict factories.                           |
+| `tengri.builders.sfh.<variant>(...)`     | One factory per canonical `SFH_REGISTRY` entry.                |
+| `tengri.builders.sfh.available()`        | List of variant names exposed.                                 |
+
+The factories are **additive** — every existing `SEDModel.build(sfh={...})`
+call keeps working. Recipes are unchanged.
+
+Why an additional namespace instead of `tengri.sfh.dpl(...)`: the
+existing `tengri.sfh` namespace re-exports the *physics functions* (the
+JAX-traceable SFH math). Adding factories under the same name would
+collide. The `tengri.builders.*` namespace cleanly separates "build a
+config dict for the grammar" from "evaluate the SFH math at a time
+grid."
+
+Out of scope for this phase: dust, nebular, AGN, IGM, radio, X-ray
+factories. The SFH registry has the cleanest "variant has named params
+with default priors" shape and was the right place to prove the
+pattern. Other registries need a metadata audit before codegen can
+drive them. Tracked by issue #74.
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in

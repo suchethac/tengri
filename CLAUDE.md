@@ -138,6 +138,15 @@ model = SEDModel.build(
 )
 model.spec.summary()    # provenance-tagged: [user] / [* FREE] / [* FIXED] / [default]
 groups = model.spec.to_groups()    # round-trip for inspection/editing
+
+# Or with builder factories (autocomplete-friendly; SFH only as of Phase II-3.3)
+from tengri import builders
+model = SEDModel.build(
+    ssp_data=ssp, observation=obs,
+    sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1, 3)),  # ← IDE sees alpha, beta, tau_gyr, log_peak_sfr
+    dust={'type': 'two_component', 'law_bc': 'calzetti', '*': FIXED},
+    neb={'type': 'cue', '*': FIXED},
+)
 ```
 
 - Grammar: each group dict accepts `'type'` (structural choice), `'*'`
