@@ -155,21 +155,16 @@ def test_composite_diagnostic_name_lists_constituents(phot_data, spec_data):
 @pytest.mark.unit
 def test_composite_rejects_duplicate_declared_parameters():
     """Two likelihoods that own the same parameter name must raise."""
-    from tengri.parameters.priors import Uniform
 
     class _DuplicateLk:
         name = "dup"
-
-        def __init__(self):
-            from tengri.protocols import ParamDeclaration
-
-            self._decls = [ParamDeclaration("noise_jitter", Uniform(0.0, 1.0), "")]
 
         def log_prob(self, prediction, params):
             return jnp.asarray(0.0)
 
         def declared_parameters(self):
-            return self._decls
+            # Likelihood Protocol requires list[str] parameter names
+            return ["noise_jitter"]
 
     with pytest.raises(ValueError, match="declared by both"):
         CompositeLikelihood(_DuplicateLk(), _DuplicateLk())
@@ -179,8 +174,6 @@ def test_composite_rejects_duplicate_declared_parameters():
 def test_composite_unions_declared_parameters():
     """Constituents' declared params are concatenated (no dedup needed when
     names differ)."""
-    from tengri.parameters.priors import Uniform
-    from tengri.protocols import ParamDeclaration
 
     class _A:
         name = "a"
@@ -189,7 +182,8 @@ def test_composite_unions_declared_parameters():
             return jnp.asarray(0.0)
 
         def declared_parameters(self):
-            return [ParamDeclaration("noise_a", Uniform(0.0, 1.0), "a")]
+            # Likelihood Protocol requires list[str] parameter names
+            return ["noise_a"]
 
     class _B:
         name = "b"
@@ -198,12 +192,12 @@ def test_composite_unions_declared_parameters():
             return jnp.asarray(0.0)
 
         def declared_parameters(self):
-            return [ParamDeclaration("noise_b", Uniform(0.0, 1.0), "b")]
+            # Likelihood Protocol requires list[str] parameter names
+            return ["noise_b"]
 
     composite = CompositeLikelihood(_A(), _B())
     decls = composite.declared_parameters()
-    names = [d.name for d in decls]
-    assert names == ["noise_a", "noise_b"]
+    assert decls == ["noise_a", "noise_b"]
 
 
 @pytest.mark.unit

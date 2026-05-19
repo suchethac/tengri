@@ -35,7 +35,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
 
 import jax.numpy as jnp
 
@@ -64,10 +63,10 @@ class CompositeLikelihood:
     raise at construction.
     """
 
-    likelihoods: tuple[Any, ...] = field(default_factory=tuple)
+    likelihoods: tuple = field(default_factory=tuple)
     name: str = "composite"
 
-    def __init__(self, *likelihoods: Any, name: str | None = None) -> None:
+    def __init__(self, *likelihoods, name: str | None = None) -> None:
         # Variadic constructor for the natural call site
         # ``CompositeLikelihood(a, b, c)``. dataclass-generated init
         # would force a list/tuple — this matches the
@@ -82,11 +81,17 @@ class CompositeLikelihood:
         self._validate_no_duplicate_params()
 
     def _validate_no_duplicate_params(self) -> None:
+        """Ensure no parameter names are declared by multiple likelihoods.
+
+        All likelihoods must implement the Likelihood Protocol, which
+        requires :meth:`declared_parameters` to return a list of parameter
+        name strings (or an empty list). We validate that no name appears
+        more than once across all constituents.
+        """
         seen: dict[str, str] = {}
         for lk in self.likelihoods:
-            decls = getattr(lk, "declared_parameters", lambda: [])()
-            for decl in decls:
-                pname = getattr(decl, "name", None) or decl[0]
+            decls = lk.declared_parameters()
+            for pname in decls:
                 if pname in seen:
                     raise ValueError(
                         f"CompositeLikelihood: parameter {pname!r} declared "
@@ -111,10 +116,16 @@ class CompositeLikelihood:
             total = total + lk.log_prob(prediction, params)
         return total
 
-    def declared_parameters(self) -> list[Any]:
-        """Union of constituents' declared nuisance parameters."""
-        out: list[Any] = []
+    def declared_parameters(self) -> list[str]:
+        """Union of constituents' declared parameter names.
+
+        Returns
+        -------
+        list[str]
+            Concatenation of each constituent's :meth:`declared_parameters`
+            list. Empty if all constituents are parameter-free.
+        """
+        out: list[str] = []
         for lk in self.likelihoods:
-            decls = getattr(lk, "declared_parameters", lambda: [])()
-            out.extend(decls)
+            out.extend(lk.declared_parameters())
         return out
