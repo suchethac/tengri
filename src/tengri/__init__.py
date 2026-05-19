@@ -98,7 +98,7 @@ __version__ = "0.1.0"
 # Or:    from tengri.agn import unified_nlr_blr
 import sys
 
-from tengri import components as _components, preprocessing, presets, recipes
+from tengri import builders, components as _components, preprocessing, presets, recipes
 from tengri._data_setup import data_path, download_ssp, list_known_ssps
 from tengri._logo import LOGO, LOGO_BANNER, print_logo
 from tengri.citations import (
@@ -339,6 +339,7 @@ __all__ = [
     "TengriIOError",
     "Uniform",
     "agn",
+    "builders",
     "cache_size_bytes",
     "citations",
     "cite_components",
