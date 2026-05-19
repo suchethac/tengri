@@ -1,14 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Stellar SEDComponent — skeleton for Phase II-2 migration.
+"""Stellar SEDComponent: star formation history and population synthesis.
 
-The body of the migration (merging :mod:`tengri.components.stellar.sfh` and
-:mod:`tengri.components.stellar.sps` into a unified ``StellarSEDComponent``)
-is deferred. This package currently exports only the configured
-**skeleton** so downstream adapters can be designed against a stable
-contract.
-
-See ``docs/dev/phase_ii_2_stellar_migration.md`` for the migration plan
-and design decisions (resolved 2026-05-03).
+Converts star formation history parameters (age, metallicity, mass,
+dust extinction) into rest-frame optical and UV specific luminosity L_nu
+using DSPS stellar population synthesis grids. Publishes derived
+quantities (current SFR, stellar mass) to downstream components.
 """
 
 from __future__ import annotations

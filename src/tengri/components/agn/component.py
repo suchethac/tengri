@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""AGNSEDComponent: Phase II-5 unified AGN adapter.
+"""AGNSEDComponent: unified AGN emission (disc + torus + lines + jets/corona).
 
-Wraps :func:`tengri.components.agn.unified.resolve_agn_model` so any
-registered AGN model (``"simple"``, ``"standard"``, ``"kubota_done_full"``,
-``"adaf"``, ``"unified_nlr_blr"``, etc.) can be plugged into the
-orchestrator without changes to the Protocol.
+Dispatches to any registered AGN model (``"simple"``, ``"standard"``,
+``"kubota_done_full"``, ``"adaf"``, ``"unified_nlr_blr"``, etc.) via
+:func:`tengri.components.agn.unified.resolve_agn_model`.
 
 Cross-component reads
 ---------------------
@@ -125,7 +124,7 @@ class AGNSEDComponent:
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
     ) -> AGNSEDComponentState:
-        """No-op marker — consistent with other Phase II adapters."""
+        """No-op marker — all AGN templates are evaluated at runtime."""
         del ssp_data, wave_grid
         return AGNSEDComponentState(name=self.name)
 

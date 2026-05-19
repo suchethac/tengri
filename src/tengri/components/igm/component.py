@@ -1,27 +1,23 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""IGMSEDComponent: SEDComponent adapter around :func:`igm_transmission`.
+"""IGMSEDComponent: intergalactic-medium transmission as a SEDComponent.
 
-Phase II-1 first-adapter exercise. The physics function
-:func:`tengri.components.igm.igm.igm_transmission` (Inoue et al. 2014)
-is unchanged — this module is a thin wrapper that satisfies the
-:class:`tengri.protocols.SEDComponent` Protocol so the orchestrator can run
-IGM transmission alongside other Phase-II adapters.
+A thin wrapper around :func:`tengri.components.igm.igm.igm_transmission`
+(Inoue et al. 2014) that satisfies the
+:class:`tengri.protocols.SEDComponent` contract.
 
-Design choices made here (and mirrored in
-:mod:`tengri.components.radio.component`):
+Design choices (mirrored in :mod:`tengri.components.radio.component`):
 
 - ``parameter_prefix = "igm_"`` for the patchy-reionization extras
   (``igm_x_HI``, ``igm_bubble_mpc``, ``igm_z_mid``, ``igm_dz``,
-  ``igm_log_nhi``). The bare ``redshift`` parameter is read via
-  :data:`tengri.protocols.component.BARE_NAME_ALLOWLIST` — IGM is the canonical
-  reason that allowlist exists.
+  ``igm_log_nhi``). The bare ``redshift`` is read via
+  :data:`tengri.protocols.component.BARE_NAME_ALLOWLIST` — IGM is the
+  canonical reason that allowlist exists.
 - IGM is *transmissive*: it multiplies :attr:`PipelineState.sed_observed`
   in place. If ``sed_observed`` is ``None`` the component is a no-op
-  (useful when the orchestrator is being driven through unit tests
-  before any rest→observed redshifting has happened).
+  (useful in unit tests run before the rest→observed redshifting step).
 - :meth:`precompute` is a no-op (Inoue's piecewise-power-law fit is
-  evaluated lazily inside :func:`igm_transmission`; there is no
-  redshift-dependent grid to precompute).
+  evaluated lazily inside :func:`igm_transmission`; no redshift-dependent
+  grid needs caching).
 """
 
 from __future__ import annotations

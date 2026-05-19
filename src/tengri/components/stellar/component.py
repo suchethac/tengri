@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """StellarSEDComponent: composite stellar population assembly from SFH and SSP.
 
-Merges the SFH and SSP sub-modules into a single ``SEDComponent`` adapter.
+Merges the SFH and SSP sub-modules into a single ``SEDComponent``.
 
 Currently supported models:
 
@@ -18,7 +18,7 @@ Architectural note: the SSP grid is held on the component instance
 (constructor field) and treated as a fixed input baked in at construction time,
 not an output of a separate precompute step.
 
-See ``docs/dev/phase_ii_2_stellar_migration.md`` for the technical design.
+See ``docs/dev/20260404-refactor.md`` for the migration plan.
 """
 
 from __future__ import annotations
@@ -170,9 +170,8 @@ class StellarSEDComponent:
 
     Cross-component publications (``state.derived``)
     ------------------------------------------------
-    These keys are the stable contract every downstream adapter relies
-    on. See :doc:`/dev/phase_ii_2_stellar_migration` for the full
-    discussion.
+    These keys are the stable contract every downstream component relies
+    on.
 
     - ``log_mstar`` (scalar, dex) — log10(surviving stellar mass / Msun).
       Falls back to ``log_mstar_formed`` when the SSP grid lacks a
@@ -244,10 +243,7 @@ class StellarSEDComponent:
         return decls
 
     def publishes(self) -> tuple[DerivedKey, ...]:
-        """Cross-component derived keys this stellar component publishes.
-
-        See :func:`tengri.forward.orchestrator.validate_pipeline`.
-        """
+        """Cross-component derived keys this stellar component publishes."""
         return (
             DerivedKey("log_mstar", "dex", "log10(surviving stellar mass / Msun)"),
             DerivedKey("log_mstar_formed", "dex", "log10(formed stellar mass / Msun)"),
@@ -312,9 +308,9 @@ class StellarSEDComponent:
                 "StellarSEDComponent.apply requires ssp_data set on the component. "
                 "Pass it at construction: StellarSEDComponent(ssp_data=ssp)."
             )
-        # SFH models dispatch through SFH_REGISTRY's internal_param_map.
+        # SFH models are routed through SFH_REGISTRY's internal_param_map.
         # Each model is validated against legacy DSPS path via
-        # tests/integration/test_orchestrator_vs_legacy.py.
+        # tests/integration/test_stellar_integration.py.
         _SUPPORTED_SFH = (
             "tsnorm",
             "dpl",
@@ -371,7 +367,7 @@ class StellarSEDComponent:
         # 13.8 Gyr). This is critical for ``field=True`` parity:
         # ``compute_field_gp`` keys on n_grid + d_log_age to build
         # the GP correlation kernel, so both paths must construct
-        # the grid identically. See tests/integration/test_orchestrator_vs_legacy.py.
+        # the grid identically. See tests/integration/test_stellar_integration.py.
         log_age_grid = make_log_age_grid(n_grid)
         sfh_lbt_grid = 10.0**log_age_grid
 
@@ -379,8 +375,8 @@ class StellarSEDComponent:
         # Translate user-facing public params → SFH-function kwargs via
         # the registry's ``internal_param_map``: each entry is
         # ``(internal_name, scale, offset)`` and the conversion is
-        # ``internal = public * scale + offset``. This ensures both the
-        # orchestrator and legacy SEDModel paths see the same units and naming.
+        # ``internal = public * scale + offset``. This ensures both this
+        # component and legacy SEDModel paths see the same units and naming.
         from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 
         sfh_spec = SFH_REGISTRY[self.config.sfh_model]
@@ -446,11 +442,11 @@ class StellarSEDComponent:
             if has_alpha_grid(ssp):
                 raise NotImplementedError(
                     "StellarSEDComponent: 4D SSP grids with native [α/Fe] axis "
-                    "are not yet supported by the orchestrator path. The legacy "
-                    "monolith uses interpolate_met_alpha to collapse the α axis "
-                    "before the lognormal-MDF kernel — port that path here when "
-                    "needed. For now, use a 3D SSP grid (effective_metallicity "
-                    "fallback covers met_alpha_fe scientifically)."
+                    "are not yet supported. The legacy monolith uses "
+                    "interpolate_met_alpha to collapse the α axis before the "
+                    "lognormal-MDF kernel — add this path when needed. For now, "
+                    "use a 3D SSP grid (effective_metallicity fallback covers "
+                    "met_alpha_fe scientifically)."
                 )
             alpha_fe = jnp.asarray(params.get("met_alpha_fe", 0.0))
             log_z_eff = effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe)
@@ -725,8 +721,8 @@ class StellarSEDComponent:
         # take abs to recover the positive photon rate.
         nion = jnp.abs(jnp.trapezoid(integrand_masked, nu))
 
-        # ── 11b. Project to pipeline wavelength grid (PR 5f) ────────────
-        # When the orchestrator runs on a panchromatic grid (radio/X-ray
+        # ── 11b. Project to pipeline wavelength grid ────────────────
+        # When the pipeline runs on a panchromatic grid (radio/X-ray
         # extension via ``make_panchromatic_grid``), ``state.wave`` is
         # wider than ``ssp.ssp_wave``. Both ``sed_intrinsic`` and the
         # per-age cube ``lnu_age`` MUST live on ``state.wave`` so
@@ -806,8 +802,7 @@ def _time_weighted_sfr(
 # flows through ``jax.jit`` as a TRACED input rather than being baked
 # into the XLA graph as a literal constant. The SSP grid is ~8 MB
 # (15 × 93 × 5994 doubles); without this registration the cold-compile
-# time of any orchestrator chain that contains StellarSEDComponent
-# explodes to ~900 ms because XLA inlines the entire grid as constants
+# time explodes to ~900 ms because XLA inlines the entire grid as constants
 # at every call site. With registration cold-compile drops by an
 # order of magnitude.
 #

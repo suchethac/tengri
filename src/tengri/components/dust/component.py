@@ -1,22 +1,17 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""DustAttenuationSEDComponent: SEDComponent adapter for screen-style attenuation.
+"""DustAttenuationSEDComponent: screen-style dust attenuation as a SEDComponent.
 
-Phase II-1 fourth adapter (sibling to RadioSEDComponent / IGMSEDComponent /
-XRaySEDComponent). The first adapter that **transforms** the SED rather than
+The first SED component in the pipeline that **transforms** the SED rather than
 adding to it: reads ``sed_intrinsic``, writes ``sed_attenuated``.
 
 Scope (intentionally small)
 ---------------------------
-This adapter wraps a *single-component screen* attenuation law — picked at
-construction time from the registry in
-:mod:`tengri.components.dust.attenuation` (default: Calzetti+2000). It does
-**not** implement two-component (birth-cloud + diffuse ISM) attenuation
-because that needs the per-age stellar luminosity grid produced by the
-stellar component, which has not yet been migrated.
-
-Once a ``StellarSEDComponent`` exists and publishes ``state.derived["L_age"]``,
-a richer ``DustTwoComponentSEDComponent`` can be added alongside this one
-without changing the protocol.
+Wraps a *single-component screen* attenuation law — picked at construction
+time from the catalogue in :mod:`tengri.components.dust.attenuation`
+(default: Calzetti+2000). For two-component (birth-cloud + diffuse ISM)
+attenuation that needs the per-age stellar luminosity grid, see the
+sibling :class:`DustSEDComponent` in
+:mod:`tengri.components.dust.two_component`.
 
 Cross-component reads
 ---------------------
@@ -235,9 +230,9 @@ class DustAttenuationSEDComponent:
         order = jnp.argsort(nu)
         l_ir = jnp.trapezoid(absorbed_lnu[order], nu[order])  # erg/s
 
-        # Phase II-3 contract: ``state.sed_intrinsic`` carries the
-        # current cumulative SED for downstream consumers (radio /
-        # xray fall-backs, ``predict_rest_sed`` return value, etc.).
+        # ``state.sed_intrinsic`` carries the current cumulative SED for
+        # downstream consumers (radio / xray fall-backs,
+        # ``predict_rest_sed`` return value, etc.).
         # Overwrite with the post-attenuation value so this component
         # matches the two-component ``DustSEDComponent`` behaviour and
         # the chain stays composable.
