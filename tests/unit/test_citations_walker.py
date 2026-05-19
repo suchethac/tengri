@@ -5,12 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-import pytest
-
 from tengri.citations import collect_citations
 from tengri.citations.collect import _citations_from_components
-from tengri.protocols.component import ParamDeclaration, SEDComponent, SEDComponentConfig, SEDComponentState
-
+from tengri.protocols.component import (
+    ParamDeclaration,
+    SEDComponentConfig,
+    SEDComponentState,
+)
 
 # ────────────────────────────────────────────────────────────────────────
 # Stub components for testing
@@ -43,7 +44,9 @@ class StubComponentWithCitations:
         """Return empty parameter list."""
         return []
 
-    def precompute(self, ssp_data: Any | None = None, wave_grid: Any | None = None) -> StubComponentState:
+    def precompute(
+        self, ssp_data: Any | None = None, wave_grid: Any | None = None
+    ) -> StubComponentState:
         """Return minimal state."""
         return StubComponentState(name=self.name)
 
@@ -68,7 +71,9 @@ class StubComponentWithoutCitations:
         """Return empty parameter list."""
         return []
 
-    def precompute(self, ssp_data: Any | None = None, wave_grid: Any | None = None) -> StubComponentState:
+    def precompute(
+        self, ssp_data: Any | None = None, wave_grid: Any | None = None
+    ) -> StubComponentState:
         """Return minimal state."""
         return StubComponentState(name=self.name)
 
@@ -89,7 +94,9 @@ class StubComponentMultipleCitations:
         """Return empty parameter list."""
         return []
 
-    def precompute(self, ssp_data: Any | None = None, wave_grid: Any | None = None) -> StubComponentState:
+    def precompute(
+        self, ssp_data: Any | None = None, wave_grid: Any | None = None
+    ) -> StubComponentState:
         """Return minimal state."""
         return StubComponentState(name=self.name)
 
