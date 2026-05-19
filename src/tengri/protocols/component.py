@@ -480,6 +480,7 @@ class SEDComponent(Protocol):
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
     ) -> SEDComponentState:
         """Cache static tensors. Run once before any JIT compile.
 
@@ -488,6 +489,12 @@ class SEDComponent(Protocol):
         builds its transmission curve on the observed-frame grid at
         :meth:`apply` time). Components that *do* need them will fail
         their own validation if either is ``None``.
+
+        ``approx`` is the build-time approximation dict (the resolved
+        ``SEDModel._approx``). Each component reads the flags it owns
+        (e.g. :class:`StellarSEDComponent` reads
+        ``approx.get("wave_precomp")``) and ignores the rest. ``None``
+        is equivalent to no approximations — all exact paths.
         """
         ...
 

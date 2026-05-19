@@ -337,6 +337,7 @@ class DustEmissionSEDComponent:
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
     ) -> DustEmissionSEDComponentState:
         r"""Build cached tensors per template.
 

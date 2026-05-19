@@ -267,6 +267,7 @@ class StellarSEDComponent:
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
     ) -> StellarSEDComponentState:
         """No-op marker. SSP grid is held on the component instance.
 

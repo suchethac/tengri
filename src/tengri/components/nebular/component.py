@@ -300,6 +300,7 @@ class NebularSEDComponent:
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
     ) -> NebularSEDComponentState:
         r"""Construct the backend handle (no JAX work)."""
         del ssp_data, wave_grid
