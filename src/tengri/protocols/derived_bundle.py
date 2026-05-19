@@ -94,6 +94,12 @@ class DerivedBundle:
     sfr_history: jnp.ndarray | None = None
     log_metallicity_history: jnp.ndarray | None = None
 
+    # Stellar — photometry LUT (Phase 3b, published only when
+    # ``approx={'wave_precomp': True}`` is set on SEDModel).
+    # Rest-frame F_nu through the configured filters, in erg/s/Hz at
+    # the source (no redshift / luminosity distance applied).
+    stellar_phot_lnu_lut: jnp.ndarray | None = None
+
     # Dust attenuation / emission
     L_ir: jnp.ndarray | None = None
     L_absorbed: jnp.ndarray | None = None

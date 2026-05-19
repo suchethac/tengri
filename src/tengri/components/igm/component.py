@@ -114,9 +114,10 @@ class IGMSEDComponent:
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
         approx: Mapping[str, bool] | None = None,
+        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> IGMSEDComponentState:
         r"""No-op precompute. IGM transmission is evaluated at apply time."""
-        del ssp_data, wave_grid
+        del ssp_data, wave_grid, filters
         return IGMSEDComponentState(name=self.name)
 
     def apply(

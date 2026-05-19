@@ -137,12 +137,12 @@ class StellarSEDComponentConfig(SEDComponentConfig):
 class StellarSEDComponentState(SEDComponentState):
     """Marker state. SSP tensors are held on the component instance.
 
-    The ``precompute`` method returns an empty marker. This is consistent
-    with other fixed-input components (radio, X-ray, IGM) that do not
-    require a separate precomputation step.
+    The ``precompute`` method returns an empty marker or (when wave_precomp
+    is enabled) a state carrying the pre-computed SSP×filter LUT.
     """
 
     name: str = "stellar"
+    ssp_phot_lut: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -194,12 +194,16 @@ class StellarSEDComponent:
       the SFH grid.
     - ``log_metallicity_history`` (ndarray, shape ``(n_grid,)``, dex) —
       per-time-bin metallicity (constant for ``metallicity_model="delta"``).
+    - ``stellar_phot_lnu_lut`` (ndarray, shape ``(n_filter,)``, erg/s/Hz) —
+      stellar contribution to photometry from the LUT. Published only when
+      ``approx={'wave_precomp': True}`` is set at model construction.
     """
 
     config: StellarSEDComponentConfig = field(default_factory=StellarSEDComponentConfig)
     ssp_data: SSPData | None = None
     name: str = "stellar"
     parameter_prefix: tuple[str, ...] = ("sfh_", "met_", "chem_")
+    _state: StellarSEDComponentState | None = None
 
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free parameters this component owns.
@@ -261,6 +265,11 @@ class StellarSEDComponent:
             DerivedKey("sfh_grid_lbt_yr", "yr", "SFH lookback-time grid"),
             DerivedKey("sfr_history", "Msun/yr", "SFR on SFH grid"),
             DerivedKey("log_metallicity_history", "dex", "log10(Z) per SFH time bin"),
+            DerivedKey(
+                "stellar_phot_lnu_lut",
+                "erg/s/Hz",
+                "stellar contribution to photometry from LUT (approx.wave_precomp only)",
+            ),
         )
 
     def precompute(
@@ -268,17 +277,49 @@ class StellarSEDComponent:
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
         approx: Mapping[str, bool] | None = None,
+        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> StellarSEDComponentState:
-        """No-op marker. SSP grid is held on the component instance.
+        """Build SSP×filter LUT when approx={'wave_precomp': True} is set.
 
-        Consistent with :class:`RadioSEDComponent`,
-        :class:`IGMSEDComponent`, :class:`XRaySEDComponent`, which all
-        return empty markers. The legacy ``forward/precompute/`` Protocol
-        (filter-preintegrated photometry tables) is unrelated to this
-        method and runs separately at ``SEDModel.__init__``.
+        Reads the wave_precomp flag from approx. When True AND filters are
+        provided AND the component has an SSP grid, calls precompute_photometry()
+        to build the SSP×filter LUT and stores it on the returned state.
+        Otherwise returns an empty state marker (Phase 3a behaviour).
+
+        Parameters
+        ----------
+        approx : Mapping[str, bool] | None
+            Approximation flags. Reads "wave_precomp".
+        filters : tuple of (filter_wave_obs, filter_trans) pairs, optional
+            Required when wave_precomp=True. Tuple shape:
+            ((fw_0, ft_0), (fw_1, ft_1), ...) where each pair is a pair of
+            1-D arrays. The filter_wave is observed-frame.
         """
-        del ssp_data, wave_grid
-        return StellarSEDComponentState(name=self.name)
+        del wave_grid
+        approx = approx or {}
+        if not approx.get("wave_precomp"):
+            return StellarSEDComponentState(name=self.name)
+
+        # Phase 3b: simplest case only — requires filters at construction.
+        if filters is None or self.ssp_data is None:
+            # Can't build LUT without filters or SSP grid. Fall back to no-op.
+            return StellarSEDComponentState(name=self.name)
+
+        # Build the SSP×filter LUT at z=0 (rest-frame). The redshifting and
+        # cosmology happen at apply() time when the user's params arrive.
+        from tengri.components.stellar.sps.precompute import precompute_photometry
+
+        filter_waves, filter_trans = zip(*filters, strict=False)
+        lut = precompute_photometry(
+            ssp_data=self.ssp_data,
+            filter_waves=list(filter_waves),
+            filter_trans=list(filter_trans),
+            redshift=0.0,  # rest-frame; apply() handles cosmology
+            dl_cm=1.0,  # placeholder; apply() scales by actual dl_cm
+            taylor_correction=False,  # Phase 3c adds this
+        )
+
+        return StellarSEDComponentState(name=self.name, ssp_phot_lut=lut)
 
     def apply(
         self,
@@ -752,32 +793,51 @@ class StellarSEDComponent:
             sed_intrinsic = sed_intrinsic_proj
             lnu_age = lnu_age_proj
 
+        # ── 12b. Stellar photometry LUT (Phase 3b) ─────────────────────
+        # When eager precomputation is enabled and the LUT is available,
+        # compute stellar_phot_lnu_lut and publish it to derived.
+        derived_overrides = dict(
+            log_mstar=log_mstar,
+            log_mstar_formed=log_mstar_formed,
+            sfr=sfr_now,
+            sfr_10myr=sfr_10myr,
+            sfr_100myr=sfr_100myr,
+            L_age=L_age,
+            lnu_age=lnu_age,
+            # CSP mass weights (Msun per SSP age bin), summed
+            # over the metallicity axis. Published so downstream
+            # nebular backends (Cue, CloudyGrid) can call their
+            # high-level ``predict_nebular_*(ssp_weights=...)``
+            # entry points and derive Q_H + ionising spectrum
+            # from the SSP, matching legacy parity.
+            age_weights=age_weights,
+            nion=nion,
+            sfh_grid_lbt_yr=sfh_lbt_grid,
+            sfr_history=sfr_history,
+            log_metallicity_history=log_metallicity_history,
+            # Published for downstream (dust two-component attenuation
+            # needs the SSP age axis to apply the BC/diffuse split).
+            ssp_ages_yr=ssp_ages_yr,
+        )
+
+        if self._state is not None and self._state.ssp_phot_lut is not None:
+            ssp_phot = self._state.ssp_phot_lut.ssp_phot
+            # (n_met, n_age, n_filt) in Lsun/Hz/Msun; sum over metallicity and
+            # age axes weighted by joint distribution × total mass.
+            # Result: (n_filt,) in Lsun/Hz (rest-frame, no redshift/distance).
+            # Convert to erg/s/Hz to match sed_intrinsic units (LSUN_ERG_PER_S
+            # is the same scale used at line 732 for lnu_age).
+            stellar_phot_lnu_lut_rest = (
+                total_mass
+                * jnp.einsum("ma,maf->f", joint_weights, ssp_phot)
+                * LSUN_ERG_PER_S
+            )
+            derived_overrides["stellar_phot_lnu_lut"] = stellar_phot_lnu_lut_rest
+
         # ── 12. Assemble new state ──────────────────────────────────────
         return state.with_(
             sed_intrinsic=sed_intrinsic,
-            derived=state.derived.with_(
-                log_mstar=log_mstar,
-                log_mstar_formed=log_mstar_formed,
-                sfr=sfr_now,
-                sfr_10myr=sfr_10myr,
-                sfr_100myr=sfr_100myr,
-                L_age=L_age,
-                lnu_age=lnu_age,
-                # CSP mass weights (Msun per SSP age bin), summed
-                # over the metallicity axis. Published so downstream
-                # nebular backends (Cue, CloudyGrid) can call their
-                # high-level ``predict_nebular_*(ssp_weights=...)``
-                # entry points and derive Q_H + ionising spectrum
-                # from the SSP, matching legacy parity.
-                age_weights=age_weights,
-                nion=nion,
-                sfh_grid_lbt_yr=sfh_lbt_grid,
-                sfr_history=sfr_history,
-                log_metallicity_history=log_metallicity_history,
-                # Published for downstream (dust two-component attenuation
-                # needs the SSP age axis to apply the BC/diffuse split).
-                ssp_ages_yr=ssp_ages_yr,
-            ),
+            derived=state.derived.with_(**derived_overrides),
         )
 
 
@@ -819,7 +879,7 @@ from jax import tree_util as _tree_util
 _tree_util.register_dataclass(
     StellarSEDComponent,
     data_fields=("ssp_data",),
-    meta_fields=("config", "name", "parameter_prefix"),
+    meta_fields=("config", "name", "parameter_prefix", "_state"),
 )
 
 del _tree_util

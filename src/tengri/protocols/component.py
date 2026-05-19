@@ -481,6 +481,7 @@ class SEDComponent(Protocol):
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
         approx: Mapping[str, bool] | None = None,
+        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> SEDComponentState:
         """Cache static tensors. Run once before any JIT compile.
 
@@ -495,6 +496,11 @@ class SEDComponent(Protocol):
         (e.g. :class:`StellarSEDComponent` reads
         ``approx.get("wave_precomp")``) and ignores the rest. ``None``
         is equivalent to no approximations — all exact paths.
+
+        ``filters`` is a tuple of (filter_wave_obs, filter_trans) pairs,
+        where each pair contains 1-D arrays. Used only by components that
+        build photometric lookup tables. ``None`` means no photometric
+        precomputation is available.
         """
         ...
 

@@ -338,6 +338,7 @@ class DustEmissionSEDComponent:
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
         approx: Mapping[str, bool] | None = None,
+        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> DustEmissionSEDComponentState:
         r"""Build cached tensors per template.
 
@@ -370,6 +371,7 @@ class DustEmissionSEDComponent:
         time, then the cached tensors enter the JIT graph as static
         constants.
         """
+        del ssp_data, filters
         if self.config.template == "modified_blackbody":
             return DustEmissionSEDComponentState(name=self.name)
 
