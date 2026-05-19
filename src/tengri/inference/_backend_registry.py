@@ -30,7 +30,7 @@ class BackendEntry:
         If ``True`` (default), ``Fitter.run`` passes the full Fitter to
         the runner. Set to ``False`` for backends migrated to the
         :class:`InferenceContext` Protocol. The flag is removed once all
-        backends migrate (see ADR-0009 / final PR of the inference-
+        backends migrate (see ADR-0010 / final PR of the inference-
         backend refactor).
     """
 

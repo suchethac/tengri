@@ -38,14 +38,8 @@ from tengri.parameters._aliases import (
     find_short_param,
 )
 from tengri.parameters._param_defs import (
-    _AGN_PARAMS,
     _CUE_GAS_EXTRA_PARAMS,
     _CUE_IONSPEC_PARAMS,
-    _DUST_EMISSION_PARAMS,
-    _NEBULAR_PARAMS,
-    _RADIO_PARAMS,
-    _SHOCK_PARAMS,
-    _XRAY_PARAMS,
 )
 
 # ── Constants ─────────────────────────────────────────────────────
@@ -67,18 +61,19 @@ _EVOLVING_ALPHA_PARAM_MAP = {
 
 # ── Identity param lists ──────────────────────────────────────────
 #
-# Auto-derived from the bucket dicts in :mod:`tengri.parameters._param_defs`.
-# Adding a parameter to one of those dicts automatically exposes it through
-# identity translation here — eliminating the disconnect that previously
-# bit dust-emission, AGN-nebular, magphys, and shock paths (declared in
-# ``_param_defs.py``, consumed in ``components/``, but silently dropped at
-# Model predict time because the parallel hand-written identity list never
-# got the new entry).
+# After Step B (ADR-deepening 2026-05-18) ``_build_param_map`` reads
+# identity entries directly from the parameter registry (ADR-0008), so
+# the six per-domain ``_*_IDENTITY_PARAMS`` lists previously published
+# here (``_DUST_EMISSION_IDENTITY_PARAMS`` etc.) are gone. The two Cue
+# lists below stay because :class:`SEDModel._init_nebular` consults
+# them at construction time to register only the Cue free params the
+# user actually opted into via the spec — that's a deliberate filter
+# the auto-derive can't express.
 #
 # Exception list: any name in ``_PARAMS_WITH_UNIT_CONVERSION`` is filtered
-# out of the auto-derived identity lists because it goes through a real
-# unit-converting entry in ``_NON_SFH_PARAM_MAP`` (or one of the other
-# explicit maps) and must NOT also receive a passthrough identity entry.
+# out of the identity lists because it goes through a real unit-converting
+# entry in ``_NON_SFH_PARAM_MAP`` (or one of the other explicit maps) and
+# must NOT also receive a passthrough identity entry.
 _PARAMS_WITH_UNIT_CONVERSION: frozenset[str] = frozenset(
     {
         # ── Stellar/dust handled in _NON_SFH_PARAM_MAP ────────────
@@ -108,26 +103,14 @@ _PARAMS_WITH_UNIT_CONVERSION: frozenset[str] = frozenset(
 def _identity_params_from_bucket(bucket: dict) -> list[str]:
     """Derive identity-mapping param list from a `_param_defs.py` bucket.
 
-    Filters out any param that needs a unit conversion (`_PARAMS_WITH_UNIT_CONVERSION`)
-    because those go through `_NON_SFH_PARAM_MAP` instead. Sorted for stable
-    test output.
+    Retained only for the two Cue conditional lists below — every other
+    caller went away in Step B (ADR-deepening 2026-05-18).
     """
     return sorted(name for name in bucket if name not in _PARAMS_WITH_UNIT_CONVERSION)
 
 
-_DUST_EMISSION_IDENTITY_PARAMS = _identity_params_from_bucket(_DUST_EMISSION_PARAMS)
-_AGN_IDENTITY_PARAMS = _identity_params_from_bucket(_AGN_PARAMS)
-_RADIO_IDENTITY_PARAMS = _identity_params_from_bucket(_RADIO_PARAMS)
-_XRAY_IDENTITY_PARAMS = _identity_params_from_bucket(_XRAY_PARAMS)
-_SHOCK_IDENTITY_PARAMS = _identity_params_from_bucket(_SHOCK_PARAMS)
-_NEBULAR_IDENTITY_PARAMS = _identity_params_from_bucket(_NEBULAR_PARAMS)
 _CUE_GAS_IDENTITY_PARAMS = _identity_params_from_bucket(_CUE_GAS_EXTRA_PARAMS)
 _CUE_IONSPEC_IDENTITY_PARAMS = _identity_params_from_bucket(_CUE_IONSPEC_PARAMS)
-
-
-def identity_param_map(names: list[str]) -> dict[str, tuple[str, float, float]]:
-    """Param-map entries `{name: (name, 1.0, 0.0)}` — no unit conversion."""
-    return {p: (p, 1.0, 0.0) for p in names}
 
 
 # ── Non-SFH param map (includes real unit conversions) ───────────────
@@ -308,8 +291,11 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
     from those declarations (if not already in the map) to keep the param_map
     synchronized without manual editing.
 
-    Manual entries in the identity param lists (e.g. :data:`_AGN_IDENTITY_PARAMS`)
-    remain authoritative and are never overwritten.
+    Identity entries come from ``tengri.parameters.registry.as_param_map``
+    (ADR-0008) — walks every ``components/*/_params.py`` directly. Manual
+    entries above (``resolve_sfh``, ``_NON_SFH_PARAM_MAP``, etc.) always
+    take precedence because they carry unit conversions that identity
+    mapping would otherwise silently break.
     """
     from tengri.components.stellar.sfh.registry import resolve_sfh
 
@@ -324,50 +310,28 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
     else:
         result.update(_NON_SFH_PARAM_MAP)
 
-    # Auto-derive identity entries from registered components (Phase II-2 onwards).
-    # Manual entries above always take precedence (are never overwritten).
+    # Auto-derive identity entries from the parameter registry (ADR-0008).
+    # The registry walks every ``components/*/_params.py`` directly and reads
+    # the static ``ParamDeclaration`` tuples — it does not instantiate
+    # components with default configs, so we get the full declared-parameter
+    # universe regardless of which variant a default ``comp_cls()`` would
+    # have picked. This means the registry is strictly safer than the older
+    # ``_get_registered_components()``-based auto-derive that needed a
+    # ``_SKIP_AUTO_DERIVE`` list (Stellar/DustAttenuation/DustEmission)
+    # because their default-config ``declared_parameters()`` would have
+    # injected parameters from the wrong variant.
+    #
+    # Manual entries above (``resolve_sfh``, ``_NON_SFH_PARAM_MAP``, etc.)
+    # always take precedence — they carry unit conversions that identity
+    # mapping would otherwise silently break.
     try:
-        from tengri.components import _get_registered_components
+        from tengri.parameters.registry import as_param_map as _registry_as_param_map
 
-        # Components whose default-config declared_parameters don't fit
-        # the legacy SEDModel param schema: instantiating them with a
-        # default config would inject params that the spec / param-map
-        # doesn't support, breaking ``get_internal_params`` at the
-        # KeyError fallback (a free-or-fixed lookup that fails for any
-        # injected param the user never set in spec).
-        #
-        # - StellarSEDComponent: default is ``sfh_model="tsnorm"`` →
-        #   injects tsnorm SFH params for any spec, regardless of the
-        #   user's actual ``mean_sfh_type``. SFH/met params are wired
-        #   via ``resolve_sfh(mean_sfh_type)`` above.
-        # - DustAttenuationSEDComponent: default is single-component
-        #   (``dust_tau_v``); legacy SEDModel defaults to two-component
-        #   (``dust_tau_bc`` / ``dust_tau_diff``). The dust scheme is
-        #   selected by the ``dust_model`` argument and wired via
-        #   ``_NON_SFH_PARAM_MAP`` / ``_SINGLE_COMPONENT_DUST_PARAM_MAP``
-        #   above.
-        # - DustEmissionSEDComponent: same family — its declared params
-        #   may not match what the legacy emission paths expect.
-        _SKIP_AUTO_DERIVE = (
-            "StellarSEDComponent",
-            "DustAttenuationSEDComponent",
-            "DustEmissionSEDComponent",
-        )
-        for comp_cls in _get_registered_components():
-            if comp_cls.__name__ in _SKIP_AUTO_DERIVE:
-                continue
-            try:
-                # Instantiate with default config
-                comp = comp_cls()
-                for decl in comp.declared_parameters():
-                    # Only add if not already in result (manual entries take precedence)
-                    if decl.name not in result:
-                        result[decl.name] = (decl.name, 1.0, 0.0)  # identity mapping
-            except Exception:
-                # Best-effort: skip any component that fails to instantiate or declare
-                continue
-    except (ImportError, AttributeError):
-        # _get_registered_components not available (pre-Phase-II setup)
+        for pub_name, (internal, scale, offset, _units) in _registry_as_param_map().items():
+            if pub_name not in result:
+                result[pub_name] = (internal, scale, offset)
+    except ImportError:
+        # registry module unavailable (very early bootstrap)
         pass
 
     return result

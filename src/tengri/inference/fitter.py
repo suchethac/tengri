@@ -1716,7 +1716,7 @@ class Fitter:
         # ``legacy_fitter=True`` continue to receive the full Fitter
         # (their lambdas at the bottom of this file relay to ``_run_*``
         # methods); migrated backends receive the context and access
-        # state through its explicit accessors. See ADR-0009 / context.py.
+        # state through its explicit accessors. See ADR-0010 / context.py.
         from tengri.inference.context import InferenceContext
 
         context = InferenceContext(fitter=self)
@@ -3003,4 +3003,4 @@ class Fitter:
 # All ``@register_backend(...)`` calls live in ``inference/_registration.py``.
 # That module is imported for its side effects by ``inference/__init__.py``,
 # which guarantees the registry is populated before any caller can dispatch
-# through ``Fitter.run``. See ADR-0009.
+# through ``Fitter.run``. See ADR-0010.
