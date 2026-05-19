@@ -3,7 +3,7 @@
 Extracted from fitter.py. Migrated to the :class:`InferenceContext`
 Protocol — accepts either an ``InferenceContext`` or a ``Fitter`` (the
 latter is normalized internally during the multi-PR migration window).
-See ADR-0009.
+See ADR-0010.
 """
 
 from __future__ import annotations
