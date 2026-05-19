@@ -3651,27 +3651,8 @@ class SEDModel:
                 "model with ``filters=`` or pass an Observation that "
                 "carries a Photometry instance."
             )
-        from tengri.observation.photometry import compute_flux_density
-        from tengri.utils.cosmology import luminosity_distance
-
         state = self.predict_via_orchestrator(params)
-        z = jnp.asarray(params.get("redshift", 0.0))
-        # ``luminosity_distance`` returns cm directly (per its docstring).
-        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-
-        sed_rest = state.sed_intrinsic
-        wave_rest = state.wave
-        photometry = jnp.asarray(
-            [
-                compute_flux_density(sed_rest, wave_rest, fw, ft, redshift=z, dl_cm=dl_cm)
-                for fw, ft in zip(
-                    self.observation.photometry.filter_waves,
-                    self.observation.photometry.filter_trans,
-                    strict=False,
-                )
-            ]
-        )
-        return photometry
+        return self.observation.predict(state, params)["phot_fnu"]
 
     def predict_spectrum_via_orchestrator(self, params, wave_obs=None):
         """Spectrum through the orchestrator path.
@@ -3711,10 +3692,6 @@ class SEDModel:
         is applied; callers that need calibration should compose it on
         top via the user-likelihood Protocol path.
         """
-        from tengri.forward._kernels.compositional import observe_spectrum_from_rest_sed
-        from tengri.observation.spectrum import apply_lsf
-        from tengri.utils.cosmology import luminosity_distance
-
         if wave_obs is None and self._precomputed.spectroscopy is not None:
             wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
         elif wave_obs is None and hasattr(self, "_wave_obs"):
@@ -3726,22 +3703,15 @@ class SEDModel:
             )
 
         state = self.predict_via_orchestrator(params)
-        z = jnp.asarray(params.get("redshift", 0.0))
-        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-
-        flux = observe_spectrum_from_rest_sed(state.sed_intrinsic, state.wave, wave_obs, z, dl_cm)
-
-        resolution = self._lsf_resolution
-        if resolution is not None:
-            flux = apply_lsf(
-                flux,
-                wave_obs,
-                resolution,
-                sigma_lib_kms=self._sigma_lib_kms,
-                n_bins=self._lsf_n_bins,
-                sigma_v_kms=self._get_sigma_v_kms(params),
-            )
-        return flux
+        return self.observation.predict(
+            state,
+            params,
+            wave_obs=wave_obs,
+            sigma_v_kms=self._get_sigma_v_kms(params),
+            lsf_resolution=self._lsf_resolution,
+            lsf_sigma_lib_kms=self._sigma_lib_kms,
+            lsf_n_bins=self._lsf_n_bins,
+        )["spec_fnu"]
 
     def predict_emission_lines_via_orchestrator(self, params):
         """Phase II-2.6 orchestrator-path emission-line luminosities.
