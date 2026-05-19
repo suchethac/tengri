@@ -25,8 +25,15 @@ component, copy the smallest existing implementation
 (``stellar/sps/precompute.py``) and adapt.
 """
 
-from tengri.forward.precompute.protocol import PrecomputeModule
-from tengri.forward.precompute.registry import registered_components, resolve
+from tengri.forward.precompute.protocol import (
+    PrecomputeModule,
+    PreintegratedResult,
+)
+from tengri.forward.precompute.registry import (
+    registered_components,
+    resolve,
+    validate_precompute_module,
+)
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
     precompute_template_photometry,
@@ -44,6 +51,7 @@ __all__ = [
     "PrecomputeModule",
     "PreintegratedGrid",
     "PreintegratedLines",
+    "PreintegratedResult",
     "build_template_photometry_lookup",
     "interp_nd_triweight",
     "precompute_template_photometry",
@@ -52,4 +60,5 @@ __all__ = [
     "registered_components",
     "resolve",
     "slice_fixed_axes",
+    "validate_precompute_module",
 ]

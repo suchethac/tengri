@@ -1,7 +1,7 @@
 """Conformance suite for every registered inference backend.
 
 Iterates ``_BACKENDS`` and verifies each entry satisfies the
-``BackendEntry`` contract described in ADR-0009:
+``BackendEntry`` contract described in ADR-0010:
 
 - ``name`` matches its registry key.
 - ``tier`` is one of ``"primary"`` / ``"experimental"``.
@@ -85,7 +85,7 @@ def test_in_tree_backends_use_context(entry: BackendEntry) -> None:
     """
     assert entry.legacy_fitter is False, (
         f"{entry.name}: legacy_fitter is True; in-tree backends must "
-        f"migrate to the InferenceContext protocol (ADR-0009)."
+        f"migrate to the InferenceContext protocol (ADR-0010)."
     )
 
 
