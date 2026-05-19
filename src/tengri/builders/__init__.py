@@ -35,8 +35,10 @@ Scope
 - :mod:`tengri.builders.igm` / :mod:`~tengri.builders.radio` /
   :mod:`~tengri.builders.xray` — Phase 2. Simple components with
   variant-string selectors and component-wide parameter sets.
+- :mod:`tengri.builders.neb` — Phase 3. Nebular emission backends
+  (none/ssp/cue/cloudy/cb19).
 
-Dust, nebular, and AGN factories are tracked in #82, #81, and #83.
+Dust and AGN factories are tracked in #82 and #83.
 
 See also
 --------
@@ -47,6 +49,6 @@ tengri.recipes
 
 from __future__ import annotations
 
-from tengri.builders import igm, radio, sfh, xray
+from tengri.builders import igm, neb, radio, sfh, xray
 
-__all__ = ["igm", "radio", "sfh", "xray"]
+__all__ = ["igm", "neb", "radio", "sfh", "xray"]
