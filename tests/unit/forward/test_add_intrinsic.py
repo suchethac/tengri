@@ -98,7 +98,8 @@ class TestAddIntrinsic:
         L_initial = jnp.ones(100) * 1e38
         L_component = jnp.ones(100) * 2e38
 
-        bundle = DerivedBundle(sed_stellar=L_initial)
+        # Create a bundle with one field set
+        bundle = DerivedBundle(log_mstar=jnp.array(10.0))
         state = PipelineState(
             wave=wave,
             sed_intrinsic=L_initial,
