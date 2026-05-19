@@ -30,12 +30,16 @@ from tengri.parameters.priors import Fixed, Uniform
 # ── Skip guards ───────────────────────────────────────────────────
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
-_SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+_SSP_FILE = _DATA_DIR / "bc03_pdva_stelib_chabrier.h5"
 _SSP_EXISTS = _SSP_FILE.is_file()
 
 pytestmark = pytest.mark.skipif(
     not _SSP_EXISTS,
-    reason="SSP data file not found — integration test requires data/ssp_*.h5",
+    reason=(
+        "BC03 bare-stellar SSP not found — required for Cue diagnostics "
+        "(wNE SSPs raise CueWNESSPError). "
+        "Run `tengri.download_ssp('bc03_pdva_stelib_chabrier')`."
+    ),
 )
 
 _FILTER_NAMES = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
@@ -45,8 +49,9 @@ _FILTER_NAMES = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 
 
 @pytest.fixture(scope="module")
-def ssp_data(ssp_data_wne):
-    return ssp_data_wne
+def ssp_data(ssp_data_bc03):
+    """Cue needs bare-stellar SSPs (see ``ssp_data_bc03`` in conftest)."""
+    return ssp_data_bc03
 
 
 @pytest.fixture(scope="module")
