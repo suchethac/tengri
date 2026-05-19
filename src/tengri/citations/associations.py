@@ -46,11 +46,13 @@ DUST_LAW_CITATIONS: dict[str, list[str]] = {
 
 # Dust emission templates (DustConfig.emission).
 DUST_EMISSION_CITATIONS: dict[str, list[str]] = {
-    "modified_blackbody": ["casey2012"],
+    # Canonical modified-blackbody (Hildebrand 1983); da Cunha 2013 supplies
+    # the CMB-heating correction applied automatically at redshift > 0.
+    "modified_blackbody": ["hildebrand1983", "dacunha2013"],
     "casey2012": ["casey2012"],
     "dale2014": ["dale2014"],
-    "draine_li2007": ["draine_li2007"],  # ADS-verified 2026-04-23
-    "draine_li2014": ["draine2014"],  # Draine+2014 Andromeda's Dust (ADS-verified)
+    "draine_li2007": ["draine_li2007"],
+    "draine_li2014": ["draine2014"],
     None: [],
 }
 
