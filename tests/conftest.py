@@ -28,6 +28,7 @@ jax.config.update("jax_enable_x64", True)
 _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 _SSP_FILE_WNE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 _SSP_FILE_FSPS = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
+_SSP_FILE_BC03 = _DATA_DIR / "bc03_pdva_stelib_chabrier.h5"
 
 
 # ── Session-scoped real SSP fixtures ─────────────────────────────
@@ -53,6 +54,29 @@ def ssp_data_fsps():
     from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
     return load_ssp_data(str(_SSP_FILE_FSPS))
+
+
+@pytest.fixture(scope="session")
+def ssp_data_bc03():
+    """Bare-stellar BC03 SSP for Cue / CloudyGrid backends.
+
+    Cue's NN ionising-spectrum fit requires *bare-stellar* SSPs: it predicts
+    line luminosities by reading max log10(Q_H) ≳ 45 for ages < 10 Myr from
+    the template. wNE (post-nebular) SSPs have log10(Q_H) ≲ 43 because the
+    ionising photons were already absorbed during the original Cloudy run.
+    Feeding wNE to Cue under-predicts line fluxes by 4-7 dex.
+
+    BC03 PARSEC + STELIB Chabrier is the canonical bare-stellar SSP shipped
+    by ``tengri.download_ssp("bc03_pdva_stelib_chabrier")``.
+    """
+    if not _SSP_FILE_BC03.is_file():
+        pytest.skip(
+            f"BC03 SSP not found: {_SSP_FILE_BC03} — run "
+            f"`tengri.download_ssp('bc03_pdva_stelib_chabrier')` to fetch it."
+        )
+    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+
+    return load_ssp_data(str(_SSP_FILE_BC03))
 
 
 @pytest.fixture(scope="session")
