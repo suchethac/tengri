@@ -935,7 +935,7 @@ def _check_grad(fn, x0, eps=_EPS, tol=_REL_TOL):
 
 def test_sfh_transform_gradient():
     """SFH parametric transforms must have correct gradients."""
-    from tengri.components.sfh.mean_sfh import tsnorm_sfh
+    from tengri.components.stellar.sfh.mean_sfh import tsnorm_sfh
 
     ages_gyr = jnp.linspace(0.01, 13.7, 200)
 

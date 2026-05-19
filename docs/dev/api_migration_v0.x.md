@@ -296,23 +296,46 @@ same commit.
 
 `tengri.components.sfh` and `tengri.components.sps` were folded into a
 unified `tengri.components.stellar` package as part of the SEDComponent
-migration. The old dotted paths remain importable as deprecation shims
-(via `sys.modules` aliasing in
-`src/tengri/components/{sfh,sps}/__init__.py`); they fire one
-`DeprecationWarning` on first import and forward all attribute and
-submodule access to the new locations. Top-level convenience aliases
-(`tengri.sfh`, `tengri.sps`, the new `tengri.stellar`) resolve to the
-canonical location without firing a deprecation warning.
+migration. The deprecation shims that previously forwarded the old
+paths were **removed in May 2026** — all imports must now use the
+canonical `tengri.components.stellar.{sfh,sps}` paths. Top-level
+convenience aliases (`tengri.sfh`, `tengri.sps`, `tengri.stellar`)
+remain and resolve to the canonical location without warning.
 
-| Old path                                          | New path                                                | Status (v0.x)        |
-| ------------------------------------------------- | ------------------------------------------------------- | -------------------- |
-| `tengri.components.sfh`                           | `tengri.components.stellar.sfh`                          | Both work; old warns |
-| `tengri.components.sfh.<submodule>`               | `tengri.components.stellar.sfh.<submodule>`              | Both work; old warns |
-| `tengri.components.sps`                           | `tengri.components.stellar.sps`                          | Both work; old warns |
-| `tengri.components.sps.<submodule>`               | `tengri.components.stellar.sps.<submodule>`              | Both work; old warns |
-| `tengri.sfh`, `tengri.sps`                        | `tengri.stellar.sfh`, `tengri.stellar.sps`               | Both work, no warn   |
+| Old path (REMOVED)                                | New path                                                |
+| ------------------------------------------------- | ------------------------------------------------------- |
+| `tengri.components.sfh`                           | `tengri.components.stellar.sfh`                          |
+| `tengri.components.sfh.<submodule>`               | `tengri.components.stellar.sfh.<submodule>`              |
+| `tengri.components.sps`                           | `tengri.components.stellar.sps`                          |
+| `tengri.components.sps.<submodule>`               | `tengri.components.stellar.sps.<submodule>`              |
+| `tengri.sfh`, `tengri.sps`                        | `tengri.stellar.sfh`, `tengri.stellar.sps` (unchanged, no warn) |
 
-The shims will be removed in v1.0.
+---
+
+## Phase II-3.1 — `tengri.core` renamed to `tengri.protocols` (2026-05-18)
+
+The `tengri.core` package was renamed to `tengri.protocols` because its
+contents are protocol/interface definitions (`SEDComponent`,
+`DerivedBundle`, `PipelineState`, `ParamDeclaration`, …), not core
+business logic. The misleading name was the last remaining
+"navigability rough edge" identified in `docs/dev/where-things-live.md`.
+
+A deprecation shim at `src/tengri/core/__init__.py` re-routes
+`tengri.core.<submodule>` accesses to `tengri.protocols.<submodule>`
+via `sys.modules` aliasing and fires one `DeprecationWarning` per
+process. Existing external code (notebooks not in this repo, scripts)
+keeps working unchanged.
+
+| Old path                          | New path                                |
+| --------------------------------- | --------------------------------------- |
+| `tengri.core`                     | `tengri.protocols`                      |
+| `tengri.core.component`           | `tengri.protocols.component`            |
+| `tengri.core.derived_bundle`      | `tengri.protocols.derived_bundle`       |
+| `tengri.core.likelihood`          | `tengri.protocols.likelihood`           |
+| `tengri.core.observation`         | `tengri.protocols.observation`          |
+
+Migration: `s/tengri\.core/tengri.protocols/g` across imports. The shim
+will be removed in v1.0 alongside the remaining deprecation shims.
 
 ---
 

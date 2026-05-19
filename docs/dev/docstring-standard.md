@@ -113,7 +113,7 @@ def my_function(param: jnp.ndarray, tau_yr: float, *, flag: bool = True) -> jnp.
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri.components.sfh.psd_models import my_function
+    >>> from tengri.components.stellar.sfh.psd_models import my_function
     >>> omega = jnp.linspace(0, 1, 100)
     >>> result = my_function(omega, tau_yr=1e8)
     >>> result.shape

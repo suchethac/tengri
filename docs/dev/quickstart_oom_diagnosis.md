@@ -119,7 +119,7 @@ data) rather than a Python-side constant baked into the trace, so XLA
 doesn't try to constant-fold transposes of it. This is a tengri
 internals change, tracked separately. See:
 
-- `src/tengri/components/sps/dsps_wrapper.py::interpolate_met_alpha`
+- `src/tengri/components/stellar/sps/dsps_wrapper.py::interpolate_met_alpha`
 - `src/tengri/forward/_kernels/compositional.py:344` (where the
   warnings' "Unrecognized parameter names" come from)
 
@@ -141,7 +141,7 @@ compounding factors:
 
 ### 1. The SSP grid is captured by closure as a 114 MB constant
 
-`tengri.components.sps.dsps_wrapper.interpolate_metallicity_smooth(
+`tengri.components.stellar.sps.dsps_wrapper.interpolate_metallicity_smooth(
 ssp_flux, ssp_lgmet, log_z, lgmet_scatter)` does an einsum
 `m,maw->aw` against `ssp_flux` of shape **`(12, 107, 11149)`** —
 specifically:
