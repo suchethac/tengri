@@ -234,25 +234,38 @@ Four phases, each independently shippable. Phase 1 is **done** (PR #112).
 
 ### Phase 1 — `Observation.predict()` is the projection seam ✅ shipped
 
-**Status:** Merged in PR #112 (cs/cmpoutation-path-clean).
+**Status:** PR #112 (cs/cmpoutation-path-clean) open for review.
 
 - `Observation.predict(state, params, *, wave_obs, sigma_v_kms, lsf_*) -> dict` added.
 - `predict_photometry_via_orchestrator` and `predict_spectrum_via_orchestrator` reduced to two-line shims that route through the seam.
 - Latent bug fixed: `_via_orchestrator` paths now merge `spec.get_fixed_values()` into the projection params dict (previously `params.get("redshift", 0.0)` returned 0.0 when redshift was `Fixed`, producing `dl_cm = inf`).
 - Additive: `predict_observables(params)` and `predict_observables_jit(params)` introduced as a preview of the new surface. Currently dict-returning; **Phase 2 swaps to `Observables` NamedTuple.**
 
-### Phase 2 — `Observables` NamedTuple + `compile=` knob
+### Phase 2 — `Observables` NamedTuple + `compile=` knob ✅ shipped
 
-**Goal:** Make `predict_observables` return the `Observables` NamedTuple instead of a dict, and split the JIT-wrapping choice off into `compile=` at build time.
+**Status:** PR #114 (cs/phase2-observables-tuple) open for review, stacked on #112.
 
-- Synthesise `Observables` NamedTuple in `SEDModel.__init__` from `observation` contents. Add `mag_apparent` / `mag_absolute` `@property`s — apparent from `phot_fnu`, absolute from `phot_rest_fnu` (re-projection at z=0).
-- Add `compile=` build-time kwarg with values `"per_component"` (default) / `"fused"` / `"auto"` (stub). Removes the `mode=` kwarg from `predict_photometry` and `predict_spectrum` — those become one-line aliases that read fields off `Observables`.
-- Wire `compile="fused"` through `ModelCacheOwner.get_structural_kernel` — the cached function is shared across SEDModel instances with identical `compile_signature()`.
-- Snapshot test: assert `compile="fused"` and `compile="per_component"` give bit-equivalent outputs (within 1e-10).
-- Joint inference automatically fuses: a single `compile="fused"` trace yields both `phot_fnu` and `spec_fnu` from one forward pass.
-- Add tolerance test for `predict_observables(params).mag_absolute` vs an independent reference computation.
-- **Behaviour change risk:** medium — channel-method aliases must remain bit-exact. The `mode=` kwarg becomes a deprecation warning that routes to the new path.
-- **Effort:** 1 PR, ~2–3 days.
+What landed:
+
+- `Observables` NamedTuple synthesised in `SEDModel.__init__` from `observation` contents (`src/tengri/observation/observables.py:build_observables_class`). Fields exist iff the observation carries the corresponding sub-block — `AttributeError` on missing channels, not silent zeros. `mag_apparent` / `mag_absolute` `@property`s compute AB mags from `phot_fnu` and `phot_rest_fnu`. Pytree-registered.
+- `Observation.predict(state, params, *, observables_type=None)` — returns `Observables` instance when type provided; falls back to the Phase 1 dict otherwise (backward compat for callers that haven't migrated).
+- `phot_rest_fnu` computed by re-projection at `z=0, d_L=10 pc` through the same filters (no K-correction debate).
+- `compile=` build-time kwarg with values `"per_component"` (default) / `"fused"` / `"auto"` (stub, resolves to `per_component`).
+- `approx=` validation + auto-resolution per the dependency table.
+- `compile_signature()` includes resolved `compile=` and `approx=` so cache slots stay distinct.
+- `SEDModel.Observables` property exposes the synthesised type for advanced users.
+
+What is **NOT** in Phase 2:
+
+- Channel methods (`predict_photometry`, `predict_spectrum`) still have their existing implementations. Routing them through `Observables` and adding the `mode=` `DeprecationWarning` is **Phase 3** alongside the per-component approx implementations.
+- `approx={"wave_precomp": True}` is accepted by validation but raises `NotImplementedError` at the per-component apply path — the stellar component's wave-precompute branch lands in Phase 3.
+- `compile="auto"` is a stub that resolves to `"per_component"` with a TODO comment.
+
+Bit-exactness verified:
+
+- `predict_observables(p).phot_fnu` vs `predict_photometry_via_orchestrator(p)`: **max diff = 0.0**.
+- `predict_observables(p)` vs `predict_observables_jit(p)`: **max diff = 1.15e-41**.
+- 394 broad-slice unit tests pass with zero new failures vs Phase 1.
 
 ### Phase 3 — `approx={"wave_precomp": True}` — per-component precompute
 
@@ -277,14 +290,25 @@ Four phases, each independently shippable. Phase 1 is **done** (PR #112).
 - Validation: `approx={"wave_precomp"}` with free z requires `approx={"ztable": True}` too; raise with a diagnostic at build time if a user disables both.
 - **Effort:** 1 PR, ~half a day after Phase 3 ships.
 
-### Names that fall out
+### Surface after all phases land
 
-- `predict_photometry_via_orchestrator`, `predict_spectrum_via_orchestrator`, and the other `_via_orchestrator` siblings: thin shims after Phase 1; **deleted in Phase 2**.
-- The 5 `predict_*` public methods become one-line aliases off `Observables`: `predict_photometry(params) -> predict_observables(params).phot_fnu`.
-- `mode=` kwarg: deprecated in Phase 2, deleted in Phase 3.
-- 7 kernel adapter classes: **all deleted in Phase 3.** Their math moves into the components they approximate.
-- `forward/_kernels/_adapters.py`: empty by end of Phase 3; file deleted.
-- `predict_observables_jit`: name dies. The choice of JIT wrapping is `compile=` at build time, not a method-name suffix.
+Three concentric methods survive on `SEDModel`. Everything else collapses upward.
+
+| Method | Returns | Purpose | Status |
+|---|---|---|---|
+| `model.predict_via_orchestrator(params)` | `ForwardState` (raw chain output) | Advanced/debug — custom projections, derived-key inspection, writing your own loss function | **survives** all phases. Rename to `model.forward(params)` is a separate bikeshed; the surface stays. |
+| `model.predict_observables(params)` | `Observables` NamedTuple | Hot path — likelihood-facing, JIT'd via `compile="fused"` | new in Phase 2 |
+| `model.predict(params)` | `Prediction` lazy wrapper | Interactive — `.sfh.stellar_mass`, `.lines.halpha`, etc. | unchanged across all phases |
+
+Everything that dies:
+
+- `predict_photometry_via_orchestrator`, `predict_spectrum_via_orchestrator`, `predict_line_fluxes_via_orchestrator`, `predict_emission_lines_via_orchestrator` — thin shims after Phase 1; **deleted in Phase 3.** The `_via_orchestrator` suffix has no meaning once there's only one path.
+- The 5 `predict_*` public methods (`predict_photometry`, `predict_spectrum`, `predict_line_fluxes`, `predict_magnitudes`, `predict_luminosity`) become one-line aliases off `Observables` in Phase 3: `predict_photometry(params) -> predict_observables(params).phot_fnu`. The aliases can be deprecated later if the migration is smooth.
+- `mode=` kwarg: deprecation warning in Phase 3, deleted in a subsequent release.
+- 7 kernel adapter classes: **all deleted in Phase 3.** Their math moves into the components they approximate. `forward/_kernels/_adapters.py` ends Phase 3 empty; the file is deleted.
+- `predict_observables_jit`: name dies. The choice of JIT wrapping is `compile=` at build time, not a method-name suffix. (Phase 2 still exposes it as a transitional convenience; deletion is Phase 3.)
+
+**Three methods, three purposes.** That's the steady state.
 
 ## What this means for the in-flight PRs
 
