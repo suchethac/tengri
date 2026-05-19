@@ -133,7 +133,7 @@ def test_igm_dla_param_round_trips_to_free() -> None:
 def test_igm_none_has_no_flags_in_signature() -> None:
     """``igm.none`` is a no-op; no flags or params to expose."""
     sig = inspect.signature(builders.igm.none)
-    assert list(sig.parameters) == ["_"]
+    assert list(sig.parameters) == ["wildcard"]
 
 
 # ── Module-level wiring ───────────────────────────────────────────

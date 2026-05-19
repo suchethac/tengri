@@ -21,7 +21,7 @@ the physics.
 Examples
 --------
 >>> from tengri import builders, FIXED, Fixed
->>> builders.dust.emission.dale2014(_=FIXED, alpha_dale=Fixed(2.0))  # doctest: +SKIP
+>>> builders.dust.emission.dale2014(wildcard=FIXED, alpha_dale=Fixed(2.0))  # doctest: +SKIP
 {'type': 'dale2014', '*': FIXED, 'alpha_dale': Fixed(2.0)}
 """
 
