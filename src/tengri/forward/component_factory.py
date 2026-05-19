@@ -69,6 +69,14 @@ __all__ = [
     "state_to_xray_quantities",
 ]
 
+# Tiny floor used as a zero-guard when computing ratios, sSFR, and
+# weighted averages where the denominator can legitimately be exactly
+# zero (no stellar mass, no AGN contribution, no UV luminosity, …).
+# 1e-30 sits far below any physical magnitude in M⊙, erg/s, or
+# photons/s encountered in SED fitting, well above the float64
+# underflow boundary, and well below double-precision rounding noise.
+_TINY = 1e-30
+
 
 class RadioQuantities(NamedTuple):
     """Orchestrator-path mirror of the legacy
@@ -377,14 +385,14 @@ def state_to_sfh_quantities(state: Any):
     # mass-weighted age and metallicity.
     bin_widths = jnp.gradient(sfh_lbt)
     bin_mass = jnp.maximum(sfr_history * bin_widths, 0.0)
-    bin_mass_total = jnp.maximum(jnp.sum(bin_mass), 1e-30)
+    bin_mass_total = jnp.maximum(jnp.sum(bin_mass), _TINY)
     mw_age_yr = jnp.sum(sfh_lbt * bin_mass) / bin_mass_total
     mw_age_gyr = mw_age_yr / 1e9
     mw_z = jnp.sum(log_z_history * bin_mass) / bin_mass_total
 
     sfr_100myr = jnp.asarray(derived["sfr_100myr"])
     sfr_10myr = jnp.asarray(derived["sfr_10myr"])
-    ssfr = sfr_100myr / jnp.maximum(stellar_mass_surviving, 1e-30)
+    ssfr = sfr_100myr / jnp.maximum(stellar_mass_surviving, _TINY)
 
     return SFHQuantities(
         stellar_mass=stellar_mass,
@@ -496,7 +504,7 @@ def state_to_sed_quantities(state: Any):
     if "L_age" in derived and "ssp_ages_yr" in derived:
         L_age = jnp.asarray(derived["L_age"])
         ssp_ages_yr = jnp.asarray(derived["ssp_ages_yr"])
-        L_total = jnp.maximum(jnp.sum(L_age), 1e-30)
+        L_total = jnp.maximum(jnp.sum(L_age), _TINY)
         lw_age_yr = jnp.sum(ssp_ages_yr * L_age) / L_total
         lw_age_gyr = lw_age_yr / 1e9
         if "log_metallicity_history" in derived and "sfh_grid_lbt_yr" in derived:
@@ -607,7 +615,7 @@ def state_to_xray_quantities(state: Any) -> XRayQuantities:
     L_agn_bol = jnp.asarray(derived.get("L_agn_bol", 0.0))
     # ``compute_l_x_agn`` uses log10 internally — protect against the
     # zero-AGN case where the conversion would produce -inf/NaN.
-    l_x_agn = jnp.where(L_agn_bol > 0.0, compute_l_x_agn(jnp.maximum(L_agn_bol, 1e-30)), 0.0)
+    l_x_agn = jnp.where(L_agn_bol > 0.0, compute_l_x_agn(jnp.maximum(L_agn_bol, _TINY)), 0.0)
 
     return XRayQuantities(
         l_x_xrb=l_x_xrb,
@@ -641,7 +649,7 @@ def state_to_ionizing_quantities(state: Any) -> IonizingQuantities:
         fuv = compute_fuv_flux(sed, state.wave)  # mean L_ν in 1000-1700 Å
         nu_uv = C_AA / 1500.0  # Hz
         nu_l_uv = fuv * nu_uv  # erg/s
-        xi_ion = q_h / jnp.maximum(nu_l_uv, 1e-30)
+        xi_ion = q_h / jnp.maximum(nu_l_uv, _TINY)
 
     return IonizingQuantities(q_h=q_h, xi_ion=xi_ion)
 
