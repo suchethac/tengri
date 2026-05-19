@@ -656,9 +656,7 @@ class Parameters:
             _neb_params = _resolve_lazy_bucket("_NEBULAR_PARAMS")
             _cue_ionspec = _resolve_lazy_bucket("_CUE_IONSPEC_PARAMS")
             _cue_gas_extra = _resolve_lazy_bucket("_CUE_GAS_EXTRA_PARAMS")
-            _NEB_PARAM_NAMES = (
-                set(_neb_params) | set(_cue_ionspec) | set(_cue_gas_extra)
-            )
+            _NEB_PARAM_NAMES = set(_neb_params) | set(_cue_ionspec) | set(_cue_gas_extra)
             for name in list(kwargs):
                 if name in _NEB_PARAM_NAMES:
                     import warnings

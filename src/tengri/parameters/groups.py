@@ -92,9 +92,7 @@ __all__ = ["parameters_to_groups", "parse_groups"]
 
 
 #: Dust emission parameter names that belong to the 'dust.emission' subgroup.
-_DUST_EMISSION_PARAM_NAMES = frozenset(
-    _resolve_lazy_bucket("_DUST_EMISSION_PARAMS").keys()
-)
+_DUST_EMISSION_PARAM_NAMES = frozenset(_resolve_lazy_bucket("_DUST_EMISSION_PARAMS").keys())
 
 #: Valid SFH model types (from the registry).
 _VALID_SFH_TYPES = {

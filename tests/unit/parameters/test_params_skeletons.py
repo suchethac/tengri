@@ -83,6 +83,7 @@ def test_radio_legacy_bucket_matches_canonical_tuple() -> None:
     # pure derived view of the canonical RADIO PARAMS tuple.
     from tengri.components.radio._params import PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_RADIO_PARAMS")
 
     assert set(bucket) == {d.name for d in canonical}
@@ -92,6 +93,7 @@ def test_radio_legacy_bucket_matches_canonical_tuple() -> None:
 def test_xray_legacy_bucket_matches_canonical_tuple() -> None:
     from tengri.components.xray._params import PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_XRAY_PARAMS")
 
     assert set(bucket) == {d.name for d in canonical}
@@ -101,6 +103,7 @@ def test_xray_legacy_bucket_matches_canonical_tuple() -> None:
 def test_dust_emission_legacy_bucket_matches_canonical_tuple() -> None:
     from tengri.components.dust._params import PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_DUST_EMISSION_PARAMS")
 
     assert set(bucket) == {d.name for d in canonical}
@@ -113,6 +116,7 @@ def test_dust_extra_legacy_bucket_matches_attenuation_tuple() -> None:
     # f_obscuration/bump/delta/Rv entries).
     from tengri.components.dust._params import ATTENUATION_PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_DUST_EXTRA_PARAMS")
 
     assert set(bucket) == {d.name for d in canonical}
@@ -122,6 +126,7 @@ def test_dust_extra_legacy_bucket_matches_attenuation_tuple() -> None:
 def test_single_component_dust_legacy_bucket_matches_canonical_tuple() -> None:
     from tengri.components.dust._params import SINGLE_COMPONENT_PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_SINGLE_COMPONENT_DUST_PARAMS")
 
     assert set(bucket) == {d.name for d in canonical}
@@ -131,6 +136,7 @@ def test_single_component_dust_legacy_bucket_matches_canonical_tuple() -> None:
 def test_igm_patchy_legacy_bucket_matches_canonical_tuple() -> None:
     from tengri.components.igm._params import PATCHY_PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_IGM_PATCHY_PARAMS")
 
     assert set(bucket) == {d.name for d in canonical}
@@ -140,6 +146,7 @@ def test_igm_patchy_legacy_bucket_matches_canonical_tuple() -> None:
 def test_dla_legacy_bucket_matches_canonical_tuple() -> None:
     from tengri.components.igm._params import DLA_PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_DLA_PARAMS")
 
     assert set(bucket) == {d.name for d in canonical}
@@ -152,6 +159,7 @@ def test_dla_legacy_bucket_matches_canonical_tuple() -> None:
 def test_cb19_legacy_bucket_matches_canonical_tuple() -> None:
     from tengri.components.nebular._params import CB19_PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_CB19_PARAMS")
 
     assert set(bucket) == {d.name for d in canonical}
@@ -161,6 +169,7 @@ def test_cb19_legacy_bucket_matches_canonical_tuple() -> None:
 def test_eline_legacy_bucket_matches_canonical_tuple() -> None:
     from tengri.components.nebular._params import ELINE_PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_ELINE_PARAMS")
 
     assert set(bucket) == {d.name for d in canonical}
@@ -170,6 +179,7 @@ def test_eline_legacy_bucket_matches_canonical_tuple() -> None:
 def test_eline_broad_legacy_bucket_matches_canonical_tuple() -> None:
     from tengri.components.nebular._params import ELINE_BROAD_PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_ELINE_BROAD_PARAMS")
 
     assert set(bucket) == {d.name for d in canonical}
@@ -179,6 +189,7 @@ def test_eline_broad_legacy_bucket_matches_canonical_tuple() -> None:
 def test_cue_ionspec_legacy_bucket_matches_canonical_tuple() -> None:
     from tengri.components.nebular._params import CUE_IONSPEC_PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_CUE_IONSPEC_PARAMS")
 
     assert set(bucket) == {d.name for d in canonical}
@@ -188,6 +199,7 @@ def test_cue_ionspec_legacy_bucket_matches_canonical_tuple() -> None:
 def test_cue_gas_extra_legacy_bucket_matches_canonical_tuple() -> None:
     from tengri.components.nebular._params import CUE_GAS_EXTRA_PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_CUE_GAS_EXTRA_PARAMS")
 
     assert set(bucket) == {d.name for d in canonical}
@@ -197,6 +209,7 @@ def test_cue_gas_extra_legacy_bucket_matches_canonical_tuple() -> None:
 def test_shock_legacy_bucket_matches_canonical_tuple() -> None:
     from tengri.components.nebular._params import SHOCK_PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_SHOCK_PARAMS")
 
     assert set(bucket) == {d.name for d in canonical}
@@ -206,6 +219,7 @@ def test_shock_legacy_bucket_matches_canonical_tuple() -> None:
 def test_alpha_fe_legacy_bucket_matches_canonical_tuple() -> None:
     from tengri.components.stellar._params import ALPHA_FE_PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_ALPHA_FE_PARAMS")
 
     assert set(bucket) == {d.name for d in canonical}
@@ -215,6 +229,7 @@ def test_alpha_fe_legacy_bucket_matches_canonical_tuple() -> None:
 def test_evolving_alpha_legacy_bucket_matches_canonical_tuple() -> None:
     from tengri.components.stellar._params import EVOLVING_ALPHA_PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_EVOLVING_ALPHA_PARAMS")
 
     assert set(bucket) == {d.name for d in canonical}
@@ -233,6 +248,7 @@ def test_igm_canonical_tuple_unaffected_by_registry() -> None:
 def test_nebular_legacy_bucket_matches_canonical_tuple() -> None:
     from tengri.components.nebular._params import PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_NEBULAR_PARAMS")
 
     assert set(bucket) == {d.name for d in canonical}
@@ -244,6 +260,7 @@ def test_agn_legacy_bucket_matches_canonical_tuple_plus_extras() -> None:
     # kept in _builders._AGN_EXTRAS for the Feltre NLR backend.
     from tengri.components.agn._params import PARAMS as canonical
     from tengri.parameters._builders import _resolve_lazy_bucket
+
     bucket = _resolve_lazy_bucket("_AGN_PARAMS")
 
     canonical_names = {d.name for d in canonical}
