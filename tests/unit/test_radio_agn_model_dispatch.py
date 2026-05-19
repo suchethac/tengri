@@ -26,7 +26,7 @@ from tengri.components.radio.component import (
     RadioSEDComponentConfig,
 )
 from tengri.components.radio.radio import radio_total, radio_total_dpl
-from tengri.parameters._param_defs import _RADIO_PARAMS
+from tengri.parameters._builders import _resolve_lazy_bucket
 from tengri.protocols import ForwardState
 
 
@@ -76,7 +76,8 @@ class TestParameterRegistry:
         ],
     )
     def test_registered_in_param_defs(self, name):
-        assert name in _RADIO_PARAMS, f"{name!r} missing from _RADIO_PARAMS"
+        radio_params = _resolve_lazy_bucket("_RADIO_PARAMS")
+        assert name in radio_params, f"{name!r} missing from _RADIO_PARAMS"
 
     @pytest.mark.parametrize(
         "name",
@@ -98,12 +99,14 @@ class TestParameterRegistry:
         # registry and the component declaration. This test pins that
         # contract so a partial re-introduction (params without physics,
         # or vice versa) is caught.
-        assert name not in _RADIO_PARAMS
+        radio_params = _resolve_lazy_bucket("_RADIO_PARAMS")
+        assert name not in radio_params
         decls = {d.name for d in RadioSEDComponent().declared_parameters()}
         assert name not in decls
 
     def test_naming_follows_radio_prefix(self):
-        for name in _RADIO_PARAMS:
+        radio_params = _resolve_lazy_bucket("_RADIO_PARAMS")
+        for name in radio_params:
             assert name.startswith("radio_"), f"{name!r} violates radio_ prefix rule"
 
 

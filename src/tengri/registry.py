@@ -335,10 +335,11 @@ def _extract_param_details(entry: Any, kind: str) -> list[dict]:
             return out
         agn_names = [p.name for p in sig.parameters.values() if p.name.startswith("agn_")]
         try:
-            from tengri.parameters._param_defs import _AGN_PARAMS
+            from tengri.parameters._builders import _resolve_lazy_bucket
 
+            agn_params = _resolve_lazy_bucket("_AGN_PARAMS")
             for n in agn_names:
-                meta = _AGN_PARAMS.get(n)
+                meta = agn_params.get(n)
                 if meta is None:
                     continue
                 description, _check, _err, default = meta
@@ -1155,7 +1156,7 @@ def suggest_parameters(
     >>> # Stochastic SFH with the IFT field
     >>> tengri.suggest_parameters(mean_sfh_type=["dpl", "field"])
     """
-    from tengri.parameters._param_defs import _build_param_registry
+    from tengri.parameters._builders import _build_param_registry
 
     nebular_flag = nebular_backend is not None
     if dust_law and not dust_law_diff:

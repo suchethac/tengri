@@ -183,7 +183,7 @@ variant swapping, and round-trip editing. Design plan:
 
 ## Adding a new physics block (Phase II-2 component shape)
 
-The forward model is mid-migration to a `SEDComponent`-based pipeline (`src/tengri/core/component.py`). New physics blocks **must** follow the Protocol shape rather than adding branches to `forward/sed_model.py` or `forward/pipeline.py`.
+The forward model is mid-migration to a `SEDComponent`-based pipeline (`src/tengri/protocols/component.py`; `tengri.core` is a deprecation shim as of 2026-05-18, see `docs/dev/api_migration_v0.x.md` §Phase II-3.1). New physics blocks **must** follow the Protocol shape rather than adding branches to `forward/sed_model.py` or `forward/pipeline.py`.
 
 **Canonical adapter to copy:** `src/tengri/components/radio/component.py`. Mirror its layout exactly.
 
@@ -228,7 +228,7 @@ publisher, plus a matching field on `DerivedBundle`
 
 **Do not pre-build** `Parameters.from_components(...)` — it is deferred until ≥5 components have landed.
 
-## Adding a new inference backend (InferenceContext shape — ADR-0009)
+## Adding a new inference backend (InferenceContext shape — ADR-0010)
 
 Every inference backend (MAP, MCMC, VI, NSS, …) receives an
 `InferenceContext`, not a `Fitter`. Adding a new sampler is two files:
@@ -271,7 +271,7 @@ as a traced argument. Pull primitives (`neg_log_posterior_fn`, `data_args`) out 
 context *before* entering JAX transforms. The context's
 `__jax_array__` guard raises on accidental tracing.
 
-**Source of truth:** `docs/adr/0009-inference-backend-protocol.md`.
+**Source of truth:** `docs/adr/0010-inference-backend-protocol.md`.
 
 ## Critical gotchas
 

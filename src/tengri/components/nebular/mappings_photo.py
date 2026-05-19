@@ -486,7 +486,8 @@ class MappingsPhotoStellarBackend:
         ssp_wave = ssp_data.ssp_wave
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
         qh_raw = _compute_qh_grid(ssp_wave, ssp_flux)
-        # Sanitize: replace Inf/NaN with 0 (same fix as cloudy_grid.py commit 3996aba)
+        # Replace Inf/NaN with 0 — old SSP files with empty far-UV bins
+        # produce non-finite Q_H values that would poison the interpolator.
         self._qh_table = jnp.where(jnp.isfinite(qh_raw), qh_raw, 0.0)
         self._qh_log_met = ssp_data.ssp_lgmet
         self._qh_log_age = ssp_data.ssp_lg_age_gyr + 9.0  # log(age/yr)

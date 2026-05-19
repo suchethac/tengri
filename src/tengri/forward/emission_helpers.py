@@ -272,6 +272,11 @@ def shock_emission(
 
     nu = _C_AA / wave
     l_bol = -jnp.trapezoid(sed_so_far, nu)
+    # Order-of-magnitude approximation: L(Hα) ~ 1e-3 × L_bol for a star-
+    # forming galaxy. Used only to set the *normalisation* of the shock
+    # template — the resulting shock SED is then scaled by ``shock_frac``
+    # at the call site. Magnitude not validity-ranged against a paper;
+    # flagged for replacement with the case-B prediction from the SFH.
     l_halpha_approx = jnp.maximum(l_bol * 1e-3, 1e-30)
     l_shock_halpha = shock_frac * l_halpha_approx
 
