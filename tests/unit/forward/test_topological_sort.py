@@ -13,12 +13,12 @@ from dataclasses import dataclass, field
 
 import pytest
 
+from tengri.forward.orchestrator import topological_sort
 from tengri.protocols.component import (
     DerivedKey,
     PipelineContractError,
     SEDComponentConfig,
 )
-from tengri.forward.orchestrator import topological_sort
 
 
 @dataclass(frozen=True)

@@ -15,12 +15,12 @@ from typing import Any
 
 import pytest
 
+from tengri.forward.orchestrator import validate_pipeline
 from tengri.protocols.component import (
     DerivedKey,
     PipelineContractError,
     SEDComponentConfig,
 )
-from tengri.forward.orchestrator import validate_pipeline
 
 
 @dataclass(frozen=True)

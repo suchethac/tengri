@@ -48,6 +48,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular.baked_in import BakedInBackend
+from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
     DerivedKey,
     ParamDeclaration,
@@ -55,7 +56,6 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.parameters.priors import Fixed, Uniform
 
 __all__ = ["NebularSEDComponent", "NebularSEDComponentConfig"]
 

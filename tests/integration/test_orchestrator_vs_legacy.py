@@ -335,8 +335,8 @@ def test_galaxy_predict_unknown_backend_raises(stellar_only_galaxy):
 
 def test_galaxy_predict_default_is_legacy(stellar_only_galaxy):
     """Default backend remains 'legacy' until Phase B v1.0 cutover."""
-    from tengri.protocols.component import PipelineState
     from tengri.forward.prediction import Prediction
+    from tengri.protocols.component import PipelineState
 
     default_pred = stellar_only_galaxy.predict(_STELLAR_PARAMS)
     explicit_legacy = stellar_only_galaxy.predict(_STELLAR_PARAMS, backend="legacy")

@@ -45,9 +45,9 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri.protocols import PipelineState
 from tengri.forward.component_factory import build_components
 from tengri.forward.orchestrator import run_components, sample_params_dict
+from tengri.protocols import PipelineState
 
 _SNAPSHOT_FILE = Path(__file__).parent / "_snapshots" / "derived_contract_v1.json"
 _REGENERATE = os.environ.get("TENGRI_REGENERATE_SNAPSHOTS") == "1"

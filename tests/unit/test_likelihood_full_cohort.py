@@ -25,7 +25,6 @@ from __future__ import annotations
 import jax.numpy as jnp
 import pytest
 
-from tengri.protocols import Likelihood
 from tengri.inference.composite_likelihood import CompositeLikelihood
 from tengri.inference.likelihoods import (
     CalibrationMarginalisedLikelihood,
@@ -42,6 +41,7 @@ from tengri.observation.noise import (
     censored_neg_log_likelihood,
     variable_noise_hamiltonian,
 )
+from tengri.protocols import Likelihood
 
 # ─────────────────────────────────────────────────────────────────────
 # Channel-parameterised GaussianLikelihood

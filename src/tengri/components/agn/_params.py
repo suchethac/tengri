@@ -17,8 +17,8 @@ enforced by ``tools/check_param_prefixes.py``.
 
 from __future__ import annotations
 
-from tengri.protocols.component import ParamDeclaration
 from tengri.parameters.priors import Fixed
+from tengri.protocols.component import ParamDeclaration
 
 PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(

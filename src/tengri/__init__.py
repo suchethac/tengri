@@ -172,7 +172,6 @@ from tengri.config.exceptions import (
     TengriError,
     TengriIOError,
 )
-from tengri.protocols import DerivedBundle, DerivedKey, PipelineContractError
 from tengri.facade import Galaxy, doctor
 from tengri.forward._kernels import (
     COMPOSITIONAL_ONLY as COMPOSITIONAL_ONLY_KERNEL_STRATEGY,
@@ -215,6 +214,7 @@ from tengri.parameters.registry import (
     recipe_parameters,
 )
 from tengri.parameters.sentinels import FIXED, FREE
+from tengri.protocols import DerivedBundle, DerivedKey, PipelineContractError
 from tengri.utils import jit_logging
 
 agn = _components.agn

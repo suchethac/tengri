@@ -20,7 +20,6 @@ from __future__ import annotations
 import jax.numpy as jnp
 import pytest
 
-from tengri.protocols import Likelihood
 from tengri.inference.composite_likelihood import CompositeLikelihood
 from tengri.inference.likelihoods.gaussian import (
     diag_gaussian_chi2,
@@ -28,6 +27,7 @@ from tengri.inference.likelihoods.gaussian import (
 )
 from tengri.inference.photometry_likelihood import PhotometryLikelihood
 from tengri.inference.spectroscopy_likelihood import SpectroscopyLikelihood
+from tengri.protocols import Likelihood
 
 # ──────────────────────────────────────────────────────────────────────
 # Shared helpers
@@ -179,8 +179,8 @@ def test_composite_rejects_duplicate_declared_parameters():
 def test_composite_unions_declared_parameters():
     """Constituents' declared params are concatenated (no dedup needed when
     names differ)."""
-    from tengri.protocols import ParamDeclaration
     from tengri.parameters.priors import Uniform
+    from tengri.protocols import ParamDeclaration
 
     class _A:
         name = "a"
