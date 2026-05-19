@@ -107,6 +107,7 @@ class TestAGNSpinCosInc:
 
     def test_agn_a_spin_declared_in_params(self):
         from tengri.parameters._builders import _resolve_lazy_bucket
+
         _AGN_PARAMS = _resolve_lazy_bucket("_AGN_PARAMS")
 
         assert "agn_a_spin" in _AGN_PARAMS, (
@@ -118,9 +119,7 @@ class TestAGNSpinCosInc:
         from tengri.parameters.registry import registry
 
         agn_a_spin_record = registry().get("agn_a_spin")
-        assert agn_a_spin_record is not None, (
-            "agn_a_spin must be in the parameter registry"
-        )
+        assert agn_a_spin_record is not None, "agn_a_spin must be in the parameter registry"
 
 
 # ── SKIRTOR parameter forwarding ──────────────────────────────────
@@ -155,9 +154,7 @@ class TestSKIRTORParams:
         from tengri.parameters.registry import registry
 
         param_record = registry().get(param)
-        assert param_record is not None, (
-            f"{param} must be in the parameter registry"
-        )
+        assert param_record is not None, f"{param} must be in the parameter registry"
 
 
 # ── K&D full 3-zone disc parameters ───────────────────────────────
@@ -194,6 +191,7 @@ class TestKDFullParams:
     )
     def test_kd_param_declared_in_params(self, param):
         from tengri.parameters._builders import _resolve_lazy_bucket
+
         _AGN_PARAMS = _resolve_lazy_bucket("_AGN_PARAMS")
 
         assert param in _AGN_PARAMS, (
@@ -208,12 +206,14 @@ class TestPolarDustForwarding:
 
     def test_polar_ebv_declared_in_params(self):
         from tengri.parameters._builders import _resolve_lazy_bucket
+
         _AGN_PARAMS = _resolve_lazy_bucket("_AGN_PARAMS")
 
         assert "agn_polar_ebv" in _AGN_PARAMS
 
     def test_polar_oa_declared_in_params(self):
         from tengri.parameters._builders import _resolve_lazy_bucket
+
         _AGN_PARAMS = _resolve_lazy_bucket("_AGN_PARAMS")
 
         assert "agn_polar_oa" in _AGN_PARAMS
@@ -277,6 +277,7 @@ class TestXrayExtraParams:
     @pytest.mark.parametrize("param", ["xray_gamma_hmxb", "xray_gamma_lmxb", "xray_E_cut"])
     def test_xray_param_declared(self, param):
         from tengri.parameters._builders import _resolve_lazy_bucket
+
         _XRAY_PARAMS = _resolve_lazy_bucket("_XRAY_PARAMS")
 
         assert param in _XRAY_PARAMS, (
@@ -323,6 +324,7 @@ class TestRadioFreeFreeParams:
     @pytest.mark.parametrize("param", ["radio_T_e", "radio_alpha_ff"])
     def test_radio_param_declared(self, param):
         from tengri.parameters._builders import _resolve_lazy_bucket
+
         _RADIO_PARAMS = _resolve_lazy_bucket("_RADIO_PARAMS")
 
         assert param in _RADIO_PARAMS, (
@@ -345,9 +347,7 @@ class TestDustAlphaDL14:
         from tengri.parameters.registry import registry
 
         param_record = registry().get("dust_alpha_dl14")
-        assert param_record is not None, (
-            "dust_alpha_dl14 must be in the parameter registry"
-        )
+        assert param_record is not None, "dust_alpha_dl14 must be in the parameter registry"
 
 
 # ── Shock b_over_sqrt_n registration ──────────────────────────────
@@ -356,6 +356,7 @@ class TestShockBOverSqrtN:
 
     def test_shock_b_over_sqrt_n_declared_in_params(self):
         from tengri.parameters._builders import _resolve_lazy_bucket
+
         _SHOCK_PARAMS = _resolve_lazy_bucket("_SHOCK_PARAMS")
 
         assert "shock_b_over_sqrt_n" in _SHOCK_PARAMS, (
@@ -367,6 +368,4 @@ class TestShockBOverSqrtN:
         from tengri.parameters.registry import registry
 
         param_record = registry().get("shock_b_over_sqrt_n")
-        assert param_record is not None, (
-            "shock_b_over_sqrt_n must be in the parameter registry"
-        )
+        assert param_record is not None, "shock_b_over_sqrt_n must be in the parameter registry"
