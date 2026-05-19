@@ -39,7 +39,48 @@ Auto-collapse is a first-class feature, not an afterthought. A user who fixes
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Protocol, runtime_checkable
+
+
+@runtime_checkable
+class PreintegratedResult(Protocol):
+    """Explicit contract for precompute result shape.
+
+    Every :meth:`PrecomputeModule.precompute` must return an object satisfying
+    this Protocol. Implementations may be:
+
+    - A :class:`~tengri.utils.grid_interp.PreintegratedGrid` (most common).
+    - A custom frozen dataclass such as
+      :class:`~tengri.components.agn.kd_precompute.KDPreintegratedData` (K&D disc).
+    - A dict-like object with documented keys (legacy paths, being phased out).
+
+    Attributes
+    ----------
+    This is a **structural Protocol** — the caller is guaranteed only that:
+
+    1. The object is hashable (frozen dataclass or immutable wrapper).
+    2. It has a ``.data`` attribute or is itself array-like with a ``.shape``
+       attribute (for shape introspection in registration validation).
+    3. It is compatible with downstream :meth:`PrecomputeModule.build_lookup`
+       calls that read model-specific attributes (e.g., ``.phot``, ``.axes``).
+
+    Implementations SHOULD document any grid-indexing metadata (axis names,
+    units, whether axes are sorted, etc.) that runtime lookup code expects.
+
+    Notes
+    -----
+    This Protocol is **runtime-checkable** and is used by the registry validator
+    to detect shape mismatches at registration time, rather than deep inside
+    JIT compilation. On registration failure, the validator reports which
+    attributes were accessed but missing, with module and attribute names.
+
+    **Not enforced in all __init__ paths** (only where validators are called);
+    implementations should still satisfy this contract for safe interchange.
+    """
+
+    # Intentionally sparse: we check existence of critical attributes
+    # (shape, data) at runtime via hasattr, not via Protocol enforcement.
 
 
 @runtime_checkable
@@ -72,7 +113,7 @@ class PrecomputeModule(Protocol):
         redshift: float,
         parameters: Any,
         **kwargs: Any,
-    ) -> Any:
+    ) -> PreintegratedResult:
         """Build preintegrated grid through filters with auto-collapse of fixed axes.
 
         Parameters
@@ -90,8 +131,11 @@ class PrecomputeModule(Protocol):
 
         Returns
         -------
-        Any
-            Preintegrated result (PreintegratedGrid or component-specific dataclass).
+        PreintegratedResult
+            Preintegrated result satisfying the result shape contract.
+            Typically :class:`~tengri.utils.grid_interp.PreintegratedGrid`
+            or a component-specific frozen dataclass like
+            :class:`~tengri.components.agn.kd_precompute.KDPreintegratedData`.
 
         Notes
         -----
@@ -102,22 +146,26 @@ class PrecomputeModule(Protocol):
         """
         ...
 
-    def build_lookup(self, preint: Any, **kwargs: Any) -> Any:
+    def build_lookup(self, preint: PreintegratedResult, **kwargs: Any) -> Callable:
         """Build JIT-compiled lookup function from preintegrated grid.
 
         Parameters
         ----------
-        preint : Any
+        preint : PreintegratedResult
             Output of :meth:`precompute`.
         **kwargs : Any
             Component-specific options.
 
         Returns
         -------
-        callable
+        Callable
             JIT-compiled function: ``(scale, *free_params) -> photometry_array``,
             where ``photometry_array`` has shape matching the filter set passed
             to precompute. [erg/s/cm^2/Hz]
+
+            The callable signature is component-specific (e.g., K&D takes
+            different arguments than dust models), but all return filter photometry
+            broadband fluxes with units matching the precomputed grid.
 
         Notes
         -----
