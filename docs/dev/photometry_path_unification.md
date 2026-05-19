@@ -1,36 +1,26 @@
-# Unify forward-projection paths under `state → observation.predict()` + three modes
+# Unify forward-projection paths under `state → observation.predict() → Observables`
 
-**Status:** Draft for review
-**Date:** 2026-05-19
-**Supersedes:** `docs/dev/predict_consolidation_design.md` (delete before review).
+**Status:** Draft for review — revision 2 (2026-05-19)
+**Supersedes:** `docs/dev/predict_consolidation_design.md` (delete before review) and revision 1 of this file.
 **Builds on:**
 - [`three_evaluation_modes.md`](three_evaluation_modes.md) — the three-mode contract (one physics, three execution modes), today realised at the **component layer**.
 - [`optimization-architecture.md`](optimization-architecture.md) — today's per-observable benchmark numbers.
 - ADR-0004 (kernel-strategy-module) — the strategy/adapter pattern.
+- ADR-0009 (typed-pipeline-contract) — `publishes` / `requires` and `validate_pipeline`.
 
 ## TL;DR
 
-Today tengri has **five public predict methods**
-(`predict_photometry`, `predict_spectrum`, `predict_line_fluxes`,
-`predict_magnitudes`, `predict_luminosity`) and **seven kernel adapters**
-(three pairs for photometry × spectrum across three tiers, plus
-exact-rest-SED). Each observable has been wired separately. Joint
-photometry+spectrum is **two independent forward passes whose
-log-likelihoods are summed at the end** — no fused joint forward pass
-exists today.
+Today tengri has **five public predict methods** (`predict_photometry`, `predict_spectrum`, `predict_line_fluxes`, `predict_magnitudes`, `predict_luminosity`), **seven kernel adapters**, and a `mode=` kwarg that smashes physics-approximation choice + JIT-wrapping choice + path selection into one overloaded string. There is no fused joint forward pass; joint inference pays two `@jit` traces.
 
-The `ObservationModel` Protocol scaffold (`protocols/observation.py`)
-already defines the right abstraction: `state → observation.predict(state, params) → dict of observables`. **Nothing consumes it.** The active
-`observation.Observation` class is a unified container that holds
-optional Photometry / Spectroscopy / LineFluxData / SpectralIndexData
-sub-blocks and exposes `observe_photometry()` / `observe_spectrum()` —
-but the fast kernels bypass it.
+**The redesign:**
 
-This doc proposes closing the gap once: **one physics path
-(orchestrator chain), one projection method on `Observation` that
-returns whatever observables the observation contains, and three
-execution modes that wrap that pair**. The result handles photometry,
-spectrum, lines, magnitudes, luminosity, **and joint** uniformly.
+1. **`Observation.predict(state, params) → Observables`** is the single projection seam. `Observables` is a **NamedTuple synthesised per model** at construction time, with attribute access (no dicts).
+2. **Two orthogonal build-time knobs** replace the `mode=` kwarg:
+   - `compile=` controls **JIT wrapping** (`per_component` / `fused`).
+   - `approx=` controls **which approximate component variants enter the chain** (a dict — `{"wave_precomp": True, "ztable": True, …}` — extensible to future approximations).
+3. **Per-component JIT by default.** Cold-start drops from one 30–75 s fused compile to many ~0.5 s component compiles; the persistent disk cache picks each up independently. `compile="fused"` is opt-in for hot inference loops.
+4. **Approximations live with the physics.** Each `SEDComponent.precompute()` returns the regular `SEDComponentState` plus, when its approximation flag is set, the lookup tables its own `apply()` uses on the fast path. **No `*Precomputed` sibling classes, no duplicate code.**
+5. **Channel methods** (`predict_photometry`, `predict_spectrum`, …) survive as one-line aliases that pull a field off the `Observables` NamedTuple. `Observation` ↔ `Observables` is a direct mirror.
 
 ## Today's surface — full anatomy
 
@@ -38,14 +28,14 @@ spectrum, lines, magnitudes, luminosity, **and joint** uniformly.
 
 | Method | Inputs | Output | Notes |
 |---|---|---|---|
-| `predict(params)` | params | `Prediction` lazy object | Calls predict_* under the hood |
+| `predict(params)` | params | `Prediction` lazy object | Interactive introspection — `sfh`, `sed`, `lines`, … |
 | `predict_photometry(params, mode="auto", ...)` | params, mode | `(n_filt,)` | 5-mode dispatcher |
 | `predict_spectrum(params, wave_obs=..., mode="auto", ...)` | params, mode, wave_obs | `(n_pix,)` | 5-mode dispatcher (mirror of photometry) |
 | `predict_line_fluxes(params, ...)` | params, target λs | dict {line → flux} | Single path; runs orchestrator + extracts derived line data |
 | `predict_magnitudes(params)` | params | `(n_filt,)` AB | Delegates to `predict_photometry` |
 | `predict_luminosity(params)` | params | `(n_wave,)` L_ν | Delegates to `predict_rest_sed` |
 
-Plus the `_via_orchestrator` siblings (`predict_photometry_via_orchestrator`, `predict_spectrum_via_orchestrator`, `predict_line_fluxes_via_orchestrator`, etc.) — used by `inference/loss_functions.py` and `inference/jit_engine.py`.
+Plus the `_via_orchestrator` siblings (now thin shims after Phase 1).
 
 ### Kernel adapters (`forward/_kernels/_adapters.py`)
 
@@ -59,8 +49,6 @@ Plus the `_via_orchestrator` siblings (`predict_photometry_via_orchestrator`, `p
 | `HybridPhotometryZTableKernel` | `photometry` | precomputed.photometry_ztable (free z) |
 | `HybridSpectrumKernel` | `spectrum` | precomputed.spectroscopy + z_fixed |
 
-**Photometry and spectrum kernels are independent.** Lines / magnitudes / luminosity bypass kernels entirely.
-
 ### Distinct physics implementations per observable
 
 | Observable | Physics paths today |
@@ -71,7 +59,7 @@ Plus the `_via_orchestrator` siblings (`predict_photometry_via_orchestrator`, `p
 | Magnitudes | 1 (delegates to photometry) |
 | Luminosity | 1 (delegates to rest SED) |
 
-When a component changes (new physics block, new derived key, new param), the compositional and hybrid kernels for photometry **and** for spectrum all need to be updated independently. Drift between them is not caught by `validate_pipeline` — that only checks the orchestrator path. Drift is detected only by snapshot regression tests.
+When a component changes (new physics block, new derived key, new param), the compositional and hybrid kernels for photometry **and** for spectrum all need to be updated independently. Drift between them is not caught by `validate_pipeline` — that only checks the orchestrator path.
 
 ### Joint photometry+spectrum today
 
@@ -82,23 +70,55 @@ When a component changes (new physics block, new derived key, new param), the co
 
 There is no fused joint kernel. Joint inference today pays two forward-pass costs and two `@jit` traces.
 
-### `ObservationModel` Protocol — the scaffold
+## The new architecture
 
-`src/tengri/protocols/observation.py` defines:
+### The container — `Observables` NamedTuple, synthesised per model
+
+`Observables` is the dual of `Observation`. Built once at `SEDModel.__init__`:
 
 ```python
-class ObservationModel(Protocol):
-    name: str
-    def declared_parameters(self) -> list[ParamSpec]: ...
-    def predict(self, state: ForwardState, params: Mapping) -> Mapping[str, Array]:
-        """Returns {"phot_fnu": ..., "spec_fnu": ..., "lines_flux": ..., "indices": ...}"""
+# Inside SEDModel.__init__:
+fields: list[tuple[str, type]] = []
+if observation.can_do_photometry:
+    fields += [
+        ("phot_fnu",      jnp.ndarray),   # observed F_nu [erg/s/cm²/Hz]
+        ("phot_rest_fnu", jnp.ndarray),   # rest-frame F_nu at d_L=10pc, same filters
+    ]
+if observation.can_do_spectroscopy:
+    fields += [("spec_fnu", jnp.ndarray)]
+if observation.has_line_fluxes:
+    fields += [("lines_flux", jnp.ndarray)]
+if observation.has_spectral_indices:
+    fields += [("indices", jnp.ndarray)]
+self._Observables = NamedTuple("Observables", fields)
 ```
 
-The protocol docstring is explicit: *"Nothing in tengri consumes this protocol yet."* A concrete `PhotometryObservationModel` exists at `observation/photometry_model.py:50` as scaffold. No `JointObservationModel`. No consumption from SEDModel or from inference.
+User-facing:
+```python
+o = model.predict_observables(params)
+o.phot_fnu               # array, shape (n_filt,)
+o.spec_fnu               # array, shape (n_pix,)
+o.mag_apparent           # @property → AB mag from o.phot_fnu
+o.mag_absolute           # @property → AB mag from o.phot_rest_fnu
+o.lines_flux             # array, shape (n_lines,)
+```
 
-## The general abstraction
+Direct mirror:
 
-Once observation is the projection seam, **the same shape works for every observable, including joint**:
+| Observation contains | Observables field(s) exist |
+|---|---|
+| `Photometry` | `.phot_fnu` `.phot_rest_fnu` (+ `.mag_apparent` / `.mag_absolute` properties) |
+| `Spectroscopy` | `.spec_fnu` |
+| `LineFluxData` | `.lines_flux` |
+| `SpectralIndexData` | `.indices` |
+
+If a sub-block is absent the corresponding field **does not exist** on the NamedTuple — `AttributeError` on access, not silent zero. Pytree registration is automatic.
+
+Absolute magnitudes are computed by re-projecting `state.sed_intrinsic` through the same filters at `z=0, d_L=10pc` — physically correct independent of K-correction debates. Cost: doubles the filter integrals (small fraction of the forward pass).
+
+### The general projection
+
+Once observation is the projection seam, the same shape works for every observable, including joint:
 
 ```python
 # ONE physics, always:
@@ -106,95 +126,177 @@ state = run_components(chain, params)                  # orchestrator
 
 # ONE projection, dispatched by observation contents:
 observables = observation.predict(state, params)
-# → {"phot_fnu": (n_filt,), "spec_fnu": (n_pix,), "lines": {...}, "magnitudes": ...}
-# Joint = observation contains both photometry and spectroscopy sub-blocks,
-# so the dict has both keys. No special case.
+# → Observables(phot_fnu=..., phot_rest_fnu=..., spec_fnu=..., lines_flux=...)
+# Joint = observation has both sub-blocks, so both fields populated. No special case.
 ```
 
-Three execution modes wrap that pair:
+### Two orthogonal build-time axes — `compile=` × `approx=`
 
-```
-eager     — call the pair directly, no @jit
-jit       — @jit(the pair)
-precomp   — @jit(the pair) with one or more components in `chain` swapped
-            for precomputed-lookup variants (same Protocol shape, faster apply)
+```python
+model = SEDModel.build(
+    ssp_data=ssp,
+    observation=obs,
+    compile="per_component",         # | "fused" | "auto"
+    approx={                         # component-scoped flags; extensible
+        "ztable":      True,           # stellar/phot — free-z SSP×filter LUT (shipped)
+        "wave_precomp": False,         # stellar/phot — fixed-z SSP×filter LUT (Phase 3)
+        # other components add their own flag names as approximations land
+    },
+    **recipes.star_forming_photometry(),
+)
+o = model.predict_observables(params)         # always returns Observables NamedTuple
 ```
 
-`KernelStrategy` (ADR-0004) selects the mode. Every observable inherits all three modes for free because the observation knows how to project the same orchestrator state into whatever data products it carries.
+#### `compile=` — controls only JIT wrapping
+
+| Value | Effect | Cold | Warm | When |
+|---|---|---|---|---|
+| `per_component` (default) | Each `SEDComponent.apply` is `@jit`'d independently. `predict_observables` itself is NOT outer-JIT'd; the chain dispatcher runs at Python level. | ~5 s (many ~0.5 s pieces) | ~0.5–0.7 ms | Notebook iteration, schema changes |
+| `fused` | One outer `@jit` over `observation.predict ∘ run_components`. Same path as this PR's `predict_observables_jit`. | ~10–30 s | ~0.15–0.3 ms | Inference loops, population fits |
+| `auto` | Heuristic: per_component on first call, switches to fused after N evaluations. Stub initially. | varies | varies | Default for users who don't care |
+
+**Per-component JIT only helps when there's no outer `@jit` re-inlining everything** — that's the whole point. Compile cost goes from one 30 s graph to many independent ones, the persistent disk cache picks up each on its own structural fingerprint, and unchanged components survive model edits.
+
+#### `approx=` — controls which approximate component variants enter the chain
+
+Each approximation is a **flag in the dict**, owned by the components it touches. No `*Precomputed` sibling classes. Approximations live with the physics they approximate.
+
+```python
+# In components/stellar/component.py — single class, two paths:
+@dataclass(frozen=True)
+class StellarSEDComponent:
+    config: StellarSEDComponentConfig
+
+    def precompute(self, ssp_data, wave_grid, *, approx=None):
+        approx = approx or {}
+        state = StellarSEDComponentState(
+            ssp_grid=ssp_data.ssp_flux,          # always
+            wave_rest=wave_grid,
+        )
+        if approx.get("wave_precomp"):
+            state = dataclasses.replace(
+                state,
+                ssp_filter_lut=_build_ssp_filter_lut(ssp_data, self.config.filters),
+            )
+        return state
+
+    def apply(self, pipeline_state, params):
+        if self._state.ssp_filter_lut is not None:
+            return self._apply_via_lut(pipeline_state, params)
+        return self._apply_exact(pipeline_state, params)
+```
+
+**Each component owns its own approx-flag names.** No global umbrella — flags are component-scoped so their meaning stays sharp and adding a new approximation never collides with an old one:
+
+| Flag | Owner component | What it precomputes |
+|---|---|---|
+| `wave_precomp` | **stellar (photometry)** | SSP × filter inner products on a wave grid — the historical "hybrid photometry" math |
+| `ztable` | **stellar (photometry)** | Same SSP × filter integrals but indexed on a redshift grid — for free-z fits. Already shipped. |
+| _(future)_ `dust_precomp` | dust | Attenuation curve LUT for a fixed wave grid |
+| _(future)_ `cue_interp` | nebular | Cue training-grid interpolation tables |
+| _(future)_ `dust_taylor` | dust | Perturbation expansion in τ |
+
+Flags compose — `approx={"wave_precomp": True, "ztable": True}` runs both. Each component decides what to do with the flags it owns; unknown flags raise at build time.
+
+#### The matrix
+
+|  | `approx={}` | `approx={"wave_precomp": True}` | `approx={"wave_precomp": True, "ztable": True}` |
+|---|---|---|---|
+| `compile="per_component"` | bit-exact, ~5 s cold, ~0.7 ms warm | approx-exact, ~5 s cold, ~0.5 ms warm | approx-exact, ~5 s cold, ~0.4 ms warm |
+| `compile="fused"` | bit-exact, ~30 s cold, ~0.3 ms warm | approx-exact, ~30 s cold, ~0.18 ms warm | **approx-exact, ~30 s cold, ~0.15 ms warm — fastest** |
+
+The two axes compose freely. Adding a new approx method later is **one entry in the dict + one branch in the relevant component's `precompute` / `apply`** — no surface change, no new method, no new kernel class.
 
 ### What this collapses
 
 | Today | After |
 |---|---|
-| 5 public `predict_*` methods | 1 `model.predict_observables(params, mode="auto")` returning a dict, plus `Prediction` umbrella unchanged |
-| 7 kernel adapters | 3 (one per mode, observable-agnostic — they wrap the same physics + projection pair) |
+| 5 public `predict_*` methods + dict-typed plan | 1 `model.predict_observables(params) -> Observables` NamedTuple + `Prediction` umbrella unchanged + channel methods as one-line aliases |
+| 7 kernel adapters | 0 — adapters die. Each component owns its own approximation under the same `SEDComponent` Protocol. |
 | 3 photometry physics × 3 spectrum physics = 6 hand-written kernels | 1 physics + 1 projection per observation type |
 | Joint = two forward passes + concat | Joint = one forward pass; observation projects to both channels |
-| Lines / magnitudes / luminosity bypass kernels | Lines / magnitudes / luminosity inherit the same modes because they're entries in `observation.predict()` output |
+| Lines / magnitudes / luminosity bypass kernels | All observables flow through `observation.predict()` |
 | `_via_orchestrator` suffix on 8 methods | Suffix dies — there is only the orchestrator path |
+| `mode=` kwarg with 5 overloaded values | `mode=` dies; replaced by build-time `compile=` × `approx=` |
 
 ## What needs to land
 
-Three phases, each independently shippable. Sequenced for risk minimisation — the riskiest physics work is last.
+Four phases, each independently shippable. Phase 1 is **done** (PR #112).
 
-### Phase 1 — Make `Observation.predict()` the projection seam
+### Phase 1 — `Observation.predict()` is the projection seam ✅ shipped
 
-**Goal:** Active code starts consuming the `ObservationModel` Protocol. No behaviour change.
+**Status:** Merged in PR #112 (cs/cmpoutation-path-clean).
 
-- Add `Observation.predict(state, params) → dict` on the existing unified `Observation` class. Internally calls `observe_photometry()` / `observe_spectrum()` / line extraction / magnitude conversion as needed based on which sub-blocks are configured.
-- Wire `_predict_photometry_exact` and `predict_photometry_via_orchestrator` (Group A and Group D from the old framing) to both route through `Observation.predict()` and extract the `phot_fnu` key. Same for spectrum.
-- The `_via_orchestrator` siblings become thin shims around the unified path.
-- **Behaviour:** unchanged. Same arrays out.
-- **Effort:** 1 PR, ~half a day.
+- `Observation.predict(state, params, *, wave_obs, sigma_v_kms, lsf_*) -> dict` added.
+- `predict_photometry_via_orchestrator` and `predict_spectrum_via_orchestrator` reduced to two-line shims that route through the seam.
+- Latent bug fixed: `_via_orchestrator` paths now merge `spec.get_fixed_values()` into the projection params dict (previously `params.get("redshift", 0.0)` returned 0.0 when redshift was `Fixed`, producing `dl_cm = inf`).
+- Additive: `predict_observables(params)` and `predict_observables_jit(params)` introduced as a preview of the new surface. Currently dict-returning; **Phase 2 swaps to `Observables` NamedTuple.**
 
-### Phase 2 — Collapse `compositional` to `@jit(physics + projection)`
+### Phase 2 — `Observables` NamedTuple + `compile=` knob
 
-**Goal:** The "compositional" kernel becomes `@jit` applied to the same orchestrator + `Observation.predict()` pair. One physics for compositional photometry, compositional spectrum, **and joint**.
+**Goal:** Make `predict_observables` return the `Observables` NamedTuple instead of a dict, and split the JIT-wrapping choice off into `compile=` at build time.
 
-- Build `make_jit_observables(model)` → `@jit(lambda params: observation.predict(run_components(...), params))`.
-- Snapshot test: assert bit-equivalence with today's `_compositional.photometry` and `_compositional.spectrum` outputs. **If they differ**, decide which is correct (see Q3 below); my default is **orchestrator wins** because `validate_pipeline` enforces its contract.
-- Delete `CompositionalPhotometryKernel`, `CompositionalSpectrumKernel`, `CompositionalRestSEDKernel` (or reduce them to one strategy entry).
-- Joint inference automatically benefits: the single `@jit` trace yields both `phot_fnu` and `spec_fnu` from one forward pass.
-- **Behaviour change risk:** medium — snapshot tests must regress. Inference numerics must remain bit-equivalent within tolerance.
-- **Effort:** 1 PR, ~1 day for photometry+spectrum together (no reason to separate them — the unified projection means they collapse simultaneously).
+- Synthesise `Observables` NamedTuple in `SEDModel.__init__` from `observation` contents. Add `mag_apparent` / `mag_absolute` `@property`s — apparent from `phot_fnu`, absolute from `phot_rest_fnu` (re-projection at z=0).
+- Add `compile=` build-time kwarg with values `"per_component"` (default) / `"fused"` / `"auto"` (stub). Removes the `mode=` kwarg from `predict_photometry` and `predict_spectrum` — those become one-line aliases that read fields off `Observables`.
+- Wire `compile="fused"` through `ModelCacheOwner.get_structural_kernel` — the cached function is shared across SEDModel instances with identical `compile_signature()`.
+- Snapshot test: assert `compile="fused"` and `compile="per_component"` give bit-equivalent outputs (within 1e-10).
+- Joint inference automatically fuses: a single `compile="fused"` trace yields both `phot_fnu` and `spec_fnu` from one forward pass.
+- Add tolerance test for `predict_observables(params).mag_absolute` vs an independent reference computation.
+- **Behaviour change risk:** medium — channel-method aliases must remain bit-exact. The `mode=` kwarg becomes a deprecation warning that routes to the new path.
+- **Effort:** 1 PR, ~2–3 days.
 
-### Phase 3 — Re-express `hybrid` as "swap one component for a precomputed variant"
+### Phase 3 — `approx={"wave_precomp": True}` — per-component precompute
 
-**Goal:** The "hybrid" mode becomes the same `@jit(physics + projection)` chain but with the stellar component swapped for `StellarPrecomputedSEDComponent` (a precompute-lookup variant). Same chain semantics, same publishes/requires, different `apply`.
+**Goal:** Each `SEDComponent` that has a precomputable wave-grid lookup grows a single optional branch in `precompute()` / `apply()`, gated by a flag in the `approx` dict. **No new component classes.**
 
-- Build `StellarPrecomputedSEDComponent` implementing `SEDComponent` with `publishes(lnu_age, sfr, log_mstar, …)` matching `StellarSEDComponent`. `apply()` performs the precompute lookup instead of the full CSP einsum.
-- Build a model-construction switch (`SEDModel.build(..., mode="precomputed")` or a `KernelStrategy` policy) that selects the precomputed variant when the model is built.
-- All seven downstream observables (photometry, spectrum, lines, magnitudes, luminosity, joint) inherit the precompute speedup for free, because they all flow through `state.derived["lnu_age"]` etc.
-- Delete `HybridPhotometryKernel`, `HybridSpectrumKernel`, `HybridPhotometryZTableKernel`.
-- **Behaviour change risk:** highest — historical hybrid path had 0.02–0.33% error vs exact. Equivalent error tolerance must hold. Tests + benchmarks regress against today's hybrid numbers.
-- **Effort:** 1–2 PRs, ~1 week.
+- Extend `SEDComponentState` (in `protocols/component.py`) with optional `precomputed_lut: dict | None` field.
+- `StellarSEDComponent.precompute(..., approx={"wave_precomp": True})` builds the SSP×filter LUT and stores it on the returned state; `apply()` reads `self._state.precomputed_lut` and switches paths.
+- Same surgical change in **dust** (attenuation curve LUT), **nebular** (Cue grid interp tables when applicable), and **igm** (already has `ztable`).
+- `validate_pipeline` learns about the new state field and ensures all consumers see the same publishes/requires regardless of approx setting.
+- Delete `HybridPhotometryKernel`, `HybridSpectrumKernel`, `HybridPhotometryZTableKernel`, and the `CompositionalPhotometryKernel` / `CompositionalSpectrumKernel`. They were placeholders for what becomes per-component machinery.
+- Move the historical hybrid math **into the components** — no separate kernel files. The `forward/_kernels/_adapters.py` directory shrinks to zero content (the file can be deleted).
+- Compile-signature audit: `approx` resolved values get hashed into the signature so two models with different approx settings get different cache slots.
+- **Behaviour change risk:** highest — historical hybrid path had 0.02–0.33 % error vs exact. Equivalent error tolerance must hold per component.
+- **Effort:** 2–3 PRs (one per component family), ~1–2 weeks.
+
+### Phase 4 — `compile_signature()` drops per-galaxy state
+
+**Goal:** Cross-galaxy compile reuse works regardless of per-galaxy `Fixed` values. Audit deliverable from PR #112's companion finding.
+
+- Drop `z_fixed` and `spec_fixed_id` from `compile_signature()` once the unified path stops closing over fixed values at build time (Phase 2/3 dependency).
+- Add `tests/unit/test_compile_signature_cross_galaxy.py` asserting two models with identical physics but different per-galaxy `Fixed(redshift)` share a signature.
+- Validation: `approx={"wave_precomp"}` with free z requires `approx={"ztable": True}` too; raise with a diagnostic at build time if a user disables both.
+- **Effort:** 1 PR, ~half a day after Phase 3 ships.
 
 ### Names that fall out
 
-- `predict_photometry_via_orchestrator`, `predict_spectrum_via_orchestrator`, and the other `_via_orchestrator` siblings disappear (Phase 1).
-- The 5 `predict_*` public methods collapse to `model.predict_observables(params, mode="auto")` returning the dict + `model.predict(params)` returning `Prediction` (unchanged).
-- The 7 kernel adapter classes collapse to 3 (one per mode), and they become observable-agnostic.
-- `KernelStrategy.select(...)` returns a mode (`eager` / `jit` / `precomp`), not a `(mode, observable)` pair.
+- `predict_photometry_via_orchestrator`, `predict_spectrum_via_orchestrator`, and the other `_via_orchestrator` siblings: thin shims after Phase 1; **deleted in Phase 2**.
+- The 5 `predict_*` public methods become one-line aliases off `Observables`: `predict_photometry(params) -> predict_observables(params).phot_fnu`.
+- `mode=` kwarg: deprecated in Phase 2, deleted in Phase 3.
+- 7 kernel adapter classes: **all deleted in Phase 3.** Their math moves into the components they approximate.
+- `forward/_kernels/_adapters.py`: empty by end of Phase 3; file deleted.
+- `predict_observables_jit`: name dies. The choice of JIT wrapping is `compile=` at build time, not a method-name suffix.
 
 ## What this means for the in-flight PRs
 
-- **PR #106 (rename `_=` → `defaults=`).** Independent of this work. Proceed with `defaults=` once Q1 confirmed.
+- **PR #112 (Phase 1).** Merged. Phase 2 amends `predict_observables` to return `Observables` NamedTuple.
+- **PR #106 (rename `_=` → `defaults=`).** Independent of this work.
 - **PR #109 (predict_* docstring sign-posting).** Land as-is — sign-posting is useful in the interim.
-- **PR β as originally scoped** (deprecate `_via_orchestrator` only). **Stop.** Re-scope as Phase 1 of this plan.
-- **`predict_consolidation_design.md`** — supersedes by this file. Delete before review.
+- **`predict_consolidation_design.md`** — superseded by this file. Delete before review.
 
 ## Open questions
 
-1. **`defaults` or `default` for PR #106?** I'd been going with `defaults` (plural) — what you said. `default` (singular) matches `dict.get`. **Confirm before PR #106 proceeds.**
-2. **Phase 1 surviving name** for the merged `_predict_photometry_exact` + `predict_photometry_via_orchestrator`? My default: keep `predict_photometry(mode="exact")` as public; route through `Observation.predict()` internally.
-3. **Phase 2 tie-breaker — if compositional ≠ orchestrator (bit-level)?** My default: **orchestrator wins** (it's the path `validate_pipeline` enforces). Any compositional-specific optimisations get re-introduced as graph transformations on the unified chain.
-4. **Joint forward-pass guarantee.** Phase 2 fuses joint photometry+spectrum into one forward pass. Inference benchmarks need to confirm this doesn't regress vs today's two-pass approach (today: 2 traces, 2 JITs; after Phase 2: 1 trace, 1 JIT, but a larger graph). Snapshot performance test before/after.
-5. **Effort vs Paper II priorities.** This is ~2 weeks of refactor work with no new physics. Is now the right time, or does it wait until after Paper I notebook series stabilises?
+1. **Phase 2 tie-breaker — if `compile="fused"` ≠ `compile="per_component"` (bit-level)?** Default: **`per_component` wins** (it's the canonical orchestrator path that `validate_pipeline` enforces). Any per-component-specific optimisations get re-introduced as graph transformations on the unified chain.
+2. **Joint forward-pass guarantee.** Phase 2 fuses joint photometry+spectrum into one trace. Inference benchmarks need to confirm this doesn't regress vs today's two-pass approach. Snapshot performance test before/after.
+3. **`approx` validation policy.** When the user supplies `approx={"wave_precomp": True}` but the model has free redshift (and `ztable=False`), should we error, warn-and-auto-enable `ztable`, or silently disable `wave_precomp`? Today's `_maybe_auto_precompute_ztable` silently swallows failures (line 5406 of `sed_model.py`) — I'd flip to **explicit raise** with a diagnostic.
+4. **`mag_absolute` rest-frame filter choice.** Re-projection at z=0 uses the same filter curves as the apparent mag. For high-z sources this means the "absolute mag" is in the rest-frame equivalent of the observed-frame filter — astrophysically meaningful only when the user understands which rest-frame band that corresponds to. Should we ship a parallel set of `rest_filters=` at build time for explicit rest-frame band choice?
+5. **Effort vs Paper II priorities.** Phase 2 + 3 + 4 is ~3 weeks of refactor work with no new physics. Is now the right time, or does it wait until after Paper I notebook series stabilises?
 
 ## Decision needed before any code
 
-- [ ] Approve the three-phase plan as scoped?
-- [ ] Pick Q1 (`defaults` vs `default`)?
-- [ ] Pre-decide Q3 (orchestrator wins if compositional diverges)?
-- [ ] Confirm joint forward-pass goal for Phase 2 (single fused trace)?
-- [ ] Confirm sequencing: photometry+spectrum collapse together (not staggered)?
+- [x] Approve the four-phase plan as scoped? — Phase 1 already shipped.
+- [x] `compile=` and `approx=` as the two build-time knobs. Confirmed 2026-05-19.
+- [x] `wave_precomp` = photometry SSP × filter LUT, owned by stellar component. `ztable` = redshift-grid variant of the same. Other components add their own flag names as approximations land. Confirmed 2026-05-19.
+- [ ] Pre-decide Q1 (per_component wins if fused diverges)?
+- [ ] Pick Q3 (raise vs auto-enable on conflicting approx settings)?
+- [ ] Confirm absolute-mag mechanism (re-projection vs separate `rest_filters=`)?
