@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """XRaySEDComponent: SEDComponent adapter around :func:`xray_total`.
 
-Phase II-1 first-cohort exercise (sibling to
-:class:`tengri.components.radio.component.RadioSEDComponent`). The
-physics in :mod:`tengri.components.xray.xray` is unchanged; this is
-a thin wrapper that satisfies :class:`tengri.protocols.SEDComponent` so
-the orchestrator can run X-ray alongside the other Phase II adapters.
+X-ray coronal and AGN emission. Implements the SEDComponent protocol
+over the X-ray bands (0.1 keV to 100 keV). Reads AGN bolometric
+luminosity, stellar mass, and SFR from upstream components to compute
+accretion-driven and star-formation-driven X-ray fluxes.
 
 Cross-component reads
 ---------------------

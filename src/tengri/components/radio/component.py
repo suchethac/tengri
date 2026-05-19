@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """RadioSEDComponent: SEDComponent adapter around radio physics.
 
-Phase II-1 first-adapter exercise. The physics in
-:mod:`tengri.components.radio.radio` is unchanged; this is a thin
-wrapper that satisfies :class:`tengri.protocols.SEDComponent` so the
-orchestrator can run radio alongside other Phase-II adapters.
+Radio synchrotron and free-free emission from AGN and star formation.
+Implements the SEDComponent protocol over the radio bands (3 mm to 30 cm).
+Supports multiple AGN radio models (power-law and double power-law with
+aging cutoff) and star-formation-driven thermal emission.
 
 AGN-radio model selection
 -------------------------

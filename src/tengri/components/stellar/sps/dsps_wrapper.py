@@ -579,8 +579,7 @@ def compute_dsps_native_weights(
     # of the marginals (lgmet_weights ⊗ age_weights) gives the right
     # marginals but the wrong per-bin product when convolved with
     # ``ssp_flux``, over-scaling the CSP SED by orders of magnitude.
-    # Use the joint directly. (Discovered in 2026-05-04 stellar
-    # component debugging; see commit 221e4e8.)
+    # Use the joint directly.
     total_mass = jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9)
 
     joint = result.weights  # (n_met, n_age) sum=1

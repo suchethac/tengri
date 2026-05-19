@@ -21,12 +21,12 @@ from typing import Any
 import jax.numpy as jnp
 import pytest
 
-from tengri.core import DerivedBundle, PipelineState
-from tengri.core.component import (
+from tengri.forward.orchestrator import run_components
+from tengri.protocols import DerivedBundle, ForwardState
+from tengri.protocols.component import (
     PipelineContractError,
     SEDComponentConfig,
 )
-from tengri.forward.orchestrator import run_components
 
 
 @dataclass(frozen=True)
@@ -40,7 +40,7 @@ class _NoopComponent:
     def declared_parameters(self) -> list[Any]:
         return []
 
-    def apply(self, state: PipelineState, params: Any) -> PipelineState:
+    def apply(self, state: ForwardState, params: Any) -> ForwardState:
         return state
 
 
@@ -56,7 +56,7 @@ class _LeakyComponent:
     def declared_parameters(self) -> list[Any]:
         return []
 
-    def apply(self, state: PipelineState, params: Any) -> PipelineState:
+    def apply(self, state: ForwardState, params: Any) -> ForwardState:
         # Force a dict round-trip through the *opt-in* spillover path.
         # In production code this is not how components should write —
         # but we use it here to manufacture the failure mode.
@@ -67,8 +67,8 @@ class _LeakyComponent:
         return state.with_(derived=leaked)
 
 
-def _state() -> PipelineState:
-    return PipelineState(wave=jnp.linspace(1000.0, 10000.0, 8))
+def _state() -> ForwardState:
+    return ForwardState(wave=jnp.linspace(1000.0, 10000.0, 8))
 
 
 class TestHappyPath:

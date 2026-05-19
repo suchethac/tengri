@@ -112,7 +112,7 @@ def test_apply_unsupported_sfh_model_raises():
         ssp_data=fake_ssp,
     )
     state = ForwardState(wave=fake_ssp.ssp_wave)
-    with pytest.raises(NotImplementedError, match="not yet pinned"):
+    with pytest.raises(NotImplementedError, match="not yet validated"):
         comp.apply(state, {})
 
 
