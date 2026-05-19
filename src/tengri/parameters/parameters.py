@@ -61,13 +61,10 @@ from tengri.parameters._aliases import (
     resolve_param_name,
     resolve_sfh_type,
 )
-from tengri.parameters._param_defs import (
-    _CUE_GAS_EXTRA_PARAMS,
-    _CUE_IONSPEC_PARAMS,
-    _DUST_EMISSION_PARAMS,
-    _NEBULAR_PARAMS,
+from tengri.parameters._builders import (
     SETTINGS_KEYS,
     _build_param_registry,
+    _resolve_lazy_bucket,
 )
 from tengri.parameters.priors import (
     Distribution,
@@ -75,7 +72,7 @@ from tengri.parameters.priors import (
     resolve_shorthand,
 )
 
-__all__ = ["SETTINGS_KEYS", "_DUST_EMISSION_PARAMS", "Parameters"]
+__all__ = ["SETTINGS_KEYS", "Parameters"]
 
 
 # ── Parameters class ───────────────────────────────────────────────────
@@ -522,7 +519,9 @@ class Parameters:
             eline_broad=self.eline_broad,
         )
         # --- Cue optional params (ionspec / gas extras) ---
-        _ALL_CUE_OPTIONAL = {**_CUE_IONSPEC_PARAMS, **_CUE_GAS_EXTRA_PARAMS}
+        _cue_ionspec = _resolve_lazy_bucket("_CUE_IONSPEC_PARAMS")
+        _cue_gas_extra = _resolve_lazy_bucket("_CUE_GAS_EXTRA_PARAMS")
+        _ALL_CUE_OPTIONAL = {**_cue_ionspec, **_cue_gas_extra}
         if self.nebular_mode == "cue":
             # Register any optional Cue params the user explicitly provided
             for pname, (desc, check, err, default) in _ALL_CUE_OPTIONAL.items():
@@ -531,7 +530,7 @@ class Parameters:
                     self._defaults[pname] = default
         else:
             # Raise if user tried to set ionspec params in non-Cue mode
-            ionspec_in_kwargs = [p for p in _CUE_IONSPEC_PARAMS if p in resolved_kwargs]
+            ionspec_in_kwargs = [p for p in _cue_ionspec if p in resolved_kwargs]
             if ionspec_in_kwargs:
                 raise ValueError(
                     f"ionspec params {ionspec_in_kwargs} require nebular_cue=True "
@@ -654,8 +653,11 @@ class Parameters:
 
         # Warn if nebular_ssp user sets nebular params
         if self.nebular_mode == "ssp":
+            _neb_params = _resolve_lazy_bucket("_NEBULAR_PARAMS")
+            _cue_ionspec = _resolve_lazy_bucket("_CUE_IONSPEC_PARAMS")
+            _cue_gas_extra = _resolve_lazy_bucket("_CUE_GAS_EXTRA_PARAMS")
             _NEB_PARAM_NAMES = (
-                set(_NEBULAR_PARAMS) | set(_CUE_IONSPEC_PARAMS) | set(_CUE_GAS_EXTRA_PARAMS)
+                set(_neb_params) | set(_cue_ionspec) | set(_cue_gas_extra)
             )
             for name in list(kwargs):
                 if name in _NEB_PARAM_NAMES:
