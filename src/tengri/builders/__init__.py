@@ -28,13 +28,15 @@ Examples
 ...     redshift=Fixed(0.05),
 ... )
 
-Scope (initial release)
------------------------
-This release ships SFH factories only — the SFH registry has the
-cleanest "variant has named params with default priors" shape and was
-the right place to prove the pattern. Dust, nebular, AGN, IGM, radio,
-and X-ray factories will follow in subsequent PRs; their registries
-need the same metadata audit before codegen can drive them.
+Scope
+-----
+- :mod:`tengri.builders.sfh` — Phase 1 (PR #79). One factory per
+  canonical SFH variant in :data:`SFH_REGISTRY`.
+- :mod:`tengri.builders.igm` / :mod:`~tengri.builders.radio` /
+  :mod:`~tengri.builders.xray` — Phase 2. Simple components with
+  variant-string selectors and component-wide parameter sets.
+
+Dust, nebular, and AGN factories are tracked in #82, #81, and #83.
 
 See also
 --------
@@ -45,6 +47,6 @@ tengri.recipes
 
 from __future__ import annotations
 
-from tengri.builders import sfh
+from tengri.builders import igm, radio, sfh, xray
 
-__all__ = ["sfh"]
+__all__ = ["igm", "radio", "sfh", "xray"]
