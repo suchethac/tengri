@@ -240,10 +240,80 @@ def summary(model: SEDModel) -> str:
     if components:
         lines.append(f"  Components:  {', '.join(components)}")
 
+    # Pipeline chain (the SEDComponent contract: order, publishes, requires).
+    # Skipped quietly on any failure so summary() never blocks a debug session.
+    try:
+        chain = model._build_component_chain()
+    except Exception as exc:
+        lines.append(f"  Pipeline:    <unable to build chain: {type(exc).__name__}>")
+        chain = []
+
+    if chain:
+        lines.append("")
+        lines.append(f"  Pipeline ({len(chain)} components):")
+        for i, c in enumerate(chain, 1):
+            cfg = _component_config_summary(c)
+            head = f"    {i}. {getattr(c, 'name', type(c).__name__):14s}"
+            lines.append(f"{head} {cfg}".rstrip())
+            reqs = [k.name for k in _safe_call(c, "requires")]
+            opts = [k.name for k in _safe_call(c, "requires_optional")]
+            pubs = [k.name for k in _safe_call(c, "publishes")]
+            if reqs:
+                lines.append(f"       reads:     {', '.join(reqs)}")
+            if opts:
+                lines.append(f"       reads*:    {', '.join(opts)}  (optional, with fallback)")
+            if pubs:
+                lines.append(f"       publishes: {', '.join(pubs)}")
+
     # Dimensionality
     n_free = model.spec.n_free
     n_grid = model._n_grid if model._uses_stochastic_sfh else 0
+    lines.append("")
     lines.append(f"  Parameters:  {n_free} free" + (f" + {n_grid} latent (ξ)" if n_grid else ""))
 
     lines.append(sep)
     return "\n".join(lines)
+
+
+def _safe_call(component, attr: str) -> tuple:
+    """Call ``component.<attr>()`` if it exists; return ``()`` otherwise.
+
+    Used by :func:`summary` to render publishes / requires / requires_optional
+    without crashing on partial components that don't declare all three.
+    """
+    fn = getattr(component, attr, None)
+    if fn is None:
+        return ()
+    try:
+        return tuple(fn())
+    except Exception:
+        return ()
+
+
+def _component_config_summary(c) -> str:
+    """Render a short ``[k=v, k=v]`` config snippet for one chain component.
+
+    Picks a small whitelist of well-known config keys. Returns an empty
+    string if the component has no config or none of the keys are set.
+    """
+    cfg = getattr(c, "config", None)
+    if cfg is None:
+        return ""
+    candidate_keys = (
+        "sfh_model",
+        "metallicity_model",
+        "n_grid",
+        "backend",
+        "model",
+        "law_bc",
+        "law_diff",
+        "emission_model",
+    )
+    parts = []
+    for k in candidate_keys:
+        v = getattr(cfg, k, None)
+        if v is not None:
+            parts.append(f"{k}={v}")
+    if not parts:
+        return ""
+    return f"[{', '.join(parts[:3])}]"
