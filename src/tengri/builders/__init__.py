@@ -40,8 +40,9 @@ Scope
 - :mod:`tengri.builders.dust` (+ nested
   :mod:`~tengri.builders.dust.emission`) — Phase 4. Attenuation
   top-level + IR emission sub-block.
-
-AGN factories are tracked in #83.
+- :mod:`tengri.builders.agn` — Phase 5. Top-level ``composable``
+  orchestrator + five sub-block submodules (``disc``, ``torus``,
+  ``lines``, ``feii``, ``atten``).
 
 See also
 --------
@@ -52,6 +53,6 @@ tengri.recipes
 
 from __future__ import annotations
 
-from tengri.builders import dust, igm, neb, radio, sfh, xray
+from tengri.builders import agn, dust, igm, neb, radio, sfh, xray
 
-__all__ = ["dust", "igm", "neb", "radio", "sfh", "xray"]
+__all__ = ["agn", "dust", "igm", "neb", "radio", "sfh", "xray"]
