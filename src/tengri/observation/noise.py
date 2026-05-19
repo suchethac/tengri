@@ -356,7 +356,7 @@ def censored_neg_log_likelihood(
     z_lower = (predicted - data) / sigma_eff
     e_lower = -jax.scipy.stats.norm.logcdf(z_lower)
 
-    # Per-band dispatch
+    # Apply the noise model band by band
     e_per_band = jnp.where(
         mask == UPPER_LIMIT,
         e_upper,

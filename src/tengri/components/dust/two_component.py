@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""DustSEDComponent: Phase II-3 two-component attenuation + IR re-emission.
+"""DustSEDComponent: two-component attenuation + energy-balanced IR re-emission.
 
 The Charlot & Fall (2000) two-component attenuation model with
 energy-balanced IR re-emission. Reads the per-age stellar L_ν cube
@@ -8,10 +8,7 @@ applies an age-dependent extinction (birth cloud + diffuse ISM), and
 produces a full attenuated + IR-re-emitted SED.
 
 Sibling to :class:`tengri.components.dust.DustAttenuationSEDComponent`
-(single-screen, ships in Phase II-1). The two-component variant lives
-in this separate module because it requires upstream stellar
-publications (``lnu_age``, ``ssp_ages_yr``) that did not exist before
-Phase II-2.
+(single-screen, no per-age stellar input required).
 
 Cross-component reads
 ---------------------
@@ -223,7 +220,7 @@ class DustSEDComponent:
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
     ) -> DustSEDComponentState:
-        """No-op marker — consistent with all other Phase II adapters."""
+        """No-op marker — all dust templates are baked in at construction."""
         del ssp_data, wave_grid
         return DustSEDComponentState(name=self.name)
 

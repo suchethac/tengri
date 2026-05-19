@@ -1,14 +1,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""DustEmissionSEDComponent: SEDComponent adapter for IR re-emission.
+r"""DustEmissionSEDComponent: IR re-emission of dust-absorbed starlight.
 
-Phase II-1 sixth adapter and the **first cross-component closed-loop**:
-:class:`DustAttenuationSEDComponent` publishes ``state.derived["L_ir"]``
-(the integral of absorbed UV/optical/NIR luminosity); this adapter
-re-emits it as one of several IR templates, closing the dust energy
-balance inside the orchestrator pipeline.
+Closes the dust energy balance: :class:`DustAttenuationSEDComponent`
+publishes ``state.derived["L_ir"]`` (the integral of absorbed
+UV/optical/NIR luminosity) and this component re-emits it as one of
+several IR templates.
 
-Currently dispatched templates
-------------------------------
+Currently supported templates
+-----------------------------
 - ``"modified_blackbody"`` — closed-form analytic 2-parameter MBB
   (``dust_T``, ``dust_beta_ir``) with optional CMB-heating / CMB-
   contrast correction (da Cunha et al. 2013).
@@ -103,7 +102,7 @@ class DustEmissionSEDComponentConfig(SEDComponentConfig):
         IR template name.  One of :data:`_SUPPORTED_TEMPLATES`.
         Currently ``"modified_blackbody"`` (analytic) and
         ``"draine2021_pah"`` (Draine+2021 PAHspec).  Casey/Dale/DL07/
-        DL14/Astrodust/BOSA/THEMIS will be added in Phase II-3.
+        DL14/Astrodust/BOSA/THEMIS may be added in future work.
     pahspec_starlight : str
         (``"draine2021_pah"`` only.) Starlight spectrum selector.
         One of the 13 PAHspec choices (e.g. ``"mMMP"``,
