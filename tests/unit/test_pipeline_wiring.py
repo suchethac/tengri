@@ -78,9 +78,9 @@ def _emission_helpers_src() -> str:
 
 
 def _params_src() -> str:
-    from tengri.parameters import _param_defs
+    from tengri.parameters import _builders
 
-    return inspect.getsource(_param_defs)
+    return inspect.getsource(_builders)
 
 
 def _translate_src() -> str:
@@ -106,7 +106,8 @@ class TestAGNSpinCosInc:
         )
 
     def test_agn_a_spin_declared_in_params(self):
-        from tengri.parameters._param_defs import _AGN_PARAMS
+        from tengri.parameters._builders import _resolve_lazy_bucket
+        _AGN_PARAMS = _resolve_lazy_bucket("_AGN_PARAMS")
 
         assert "agn_a_spin" in _AGN_PARAMS, (
             "agn_a_spin must be declared in _AGN_PARAMS "
@@ -114,10 +115,11 @@ class TestAGNSpinCosInc:
         )
 
     def test_agn_a_spin_in_param_map(self):
-        from tengri.parameters.translate import _AGN_IDENTITY_PARAMS
+        from tengri.parameters.registry import registry
 
-        assert "agn_a_spin" in _AGN_IDENTITY_PARAMS, (
-            "agn_a_spin must be in _AGN_IDENTITY_PARAMS in translate.py"
+        agn_a_spin_record = registry().get("agn_a_spin")
+        assert agn_a_spin_record is not None, (
+            "agn_a_spin must be in the parameter registry"
         )
 
 
@@ -150,10 +152,11 @@ class TestSKIRTORParams:
         ],
     )
     def test_skirtor_param_in_param_map(self, param):
-        from tengri.parameters.translate import _AGN_IDENTITY_PARAMS
+        from tengri.parameters.registry import registry
 
-        assert param in _AGN_IDENTITY_PARAMS, (
-            f"{param} must be in _AGN_IDENTITY_PARAMS in translate.py"
+        param_record = registry().get(param)
+        assert param_record is not None, (
+            f"{param} must be in the parameter registry"
         )
 
 
@@ -190,7 +193,8 @@ class TestKDFullParams:
         ],
     )
     def test_kd_param_declared_in_params(self, param):
-        from tengri.parameters._param_defs import _AGN_PARAMS
+        from tengri.parameters._builders import _resolve_lazy_bucket
+        _AGN_PARAMS = _resolve_lazy_bucket("_AGN_PARAMS")
 
         assert param in _AGN_PARAMS, (
             f"{param} must be declared in _AGN_PARAMS "
@@ -203,12 +207,14 @@ class TestPolarDustForwarding:
     """Polar dust (agn_polar_ebv, agn_polar_oa) must gate and forward correctly."""
 
     def test_polar_ebv_declared_in_params(self):
-        from tengri.parameters._param_defs import _AGN_PARAMS
+        from tengri.parameters._builders import _resolve_lazy_bucket
+        _AGN_PARAMS = _resolve_lazy_bucket("_AGN_PARAMS")
 
         assert "agn_polar_ebv" in _AGN_PARAMS
 
     def test_polar_oa_declared_in_params(self):
-        from tengri.parameters._param_defs import _AGN_PARAMS
+        from tengri.parameters._builders import _resolve_lazy_bucket
+        _AGN_PARAMS = _resolve_lazy_bucket("_AGN_PARAMS")
 
         assert "agn_polar_oa" in _AGN_PARAMS
 
@@ -270,7 +276,8 @@ class TestXrayExtraParams:
 
     @pytest.mark.parametrize("param", ["xray_gamma_hmxb", "xray_gamma_lmxb", "xray_E_cut"])
     def test_xray_param_declared(self, param):
-        from tengri.parameters._param_defs import _XRAY_PARAMS
+        from tengri.parameters._builders import _resolve_lazy_bucket
+        _XRAY_PARAMS = _resolve_lazy_bucket("_XRAY_PARAMS")
 
         assert param in _XRAY_PARAMS, (
             f"{param} must be declared in _XRAY_PARAMS "
@@ -315,7 +322,8 @@ class TestRadioFreeFreeParams:
 
     @pytest.mark.parametrize("param", ["radio_T_e", "radio_alpha_ff"])
     def test_radio_param_declared(self, param):
-        from tengri.parameters._param_defs import _RADIO_PARAMS
+        from tengri.parameters._builders import _resolve_lazy_bucket
+        _RADIO_PARAMS = _resolve_lazy_bucket("_RADIO_PARAMS")
 
         assert param in _RADIO_PARAMS, (
             f"{param} must be declared in _RADIO_PARAMS "
@@ -334,10 +342,11 @@ class TestDustAlphaDL14:
         )
 
     def test_dust_alpha_dl14_in_param_map(self):
-        from tengri.parameters.translate import _DUST_EMISSION_IDENTITY_PARAMS
+        from tengri.parameters.registry import registry
 
-        assert "dust_alpha_dl14" in _DUST_EMISSION_IDENTITY_PARAMS, (
-            "dust_alpha_dl14 must be in _DUST_EMISSION_IDENTITY_PARAMS in translate.py"
+        param_record = registry().get("dust_alpha_dl14")
+        assert param_record is not None, (
+            "dust_alpha_dl14 must be in the parameter registry"
         )
 
 
@@ -346,7 +355,8 @@ class TestShockBOverSqrtN:
     """shock_b_over_sqrt_n must be in _param_map when shock is enabled."""
 
     def test_shock_b_over_sqrt_n_declared_in_params(self):
-        from tengri.parameters._param_defs import _SHOCK_PARAMS
+        from tengri.parameters._builders import _resolve_lazy_bucket
+        _SHOCK_PARAMS = _resolve_lazy_bucket("_SHOCK_PARAMS")
 
         assert "shock_b_over_sqrt_n" in _SHOCK_PARAMS, (
             "shock_b_over_sqrt_n must be declared in _SHOCK_PARAMS "
@@ -354,8 +364,9 @@ class TestShockBOverSqrtN:
         )
 
     def test_shock_b_over_sqrt_n_in_param_map(self):
-        from tengri.parameters.translate import _SHOCK_IDENTITY_PARAMS
+        from tengri.parameters.registry import registry
 
-        assert "shock_b_over_sqrt_n" in _SHOCK_IDENTITY_PARAMS, (
-            "shock_b_over_sqrt_n must be in _SHOCK_IDENTITY_PARAMS in translate.py"
+        param_record = registry().get("shock_b_over_sqrt_n")
+        assert param_record is not None, (
+            "shock_b_over_sqrt_n must be in the parameter registry"
         )

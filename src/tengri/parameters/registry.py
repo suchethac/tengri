@@ -152,11 +152,11 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
     # ``noise_dof`` which aren't yet declared via the ParamDeclaration
     # path. 4-tuple shape ``(description, bound_check, bound_error, prior)``.
     try:
-        from tengri.parameters import _param_defs as _legacy
+        from tengri.parameters._builders import _NON_SFH_PARAMS
     except Exception:
-        _legacy = None  # type: ignore[assignment]
-    if _legacy is not None:
-        legacy_bucket = getattr(_legacy, "_NON_SFH_PARAMS", {}) or {}
+        _NON_SFH_PARAMS = {}  # type: ignore[assignment]
+    if _NON_SFH_PARAMS:
+        legacy_bucket = _NON_SFH_PARAMS or {}
         for name, payload in legacy_bucket.items():
             if name in out:
                 continue
@@ -166,8 +166,29 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
                 prior=prior,
                 description=description,
                 units="",
-                owner="tengri.parameters._param_defs",
+                owner="tengri.parameters._builders",
                 group="_NON_SFH_PARAMS",
+            )
+
+    # ``neb_xid`` orphan from AGN module: kept in _builders._AGN_EXTRAS
+    # for the Feltre NLR backend. Not part of any component's _params.py
+    # but must be registered for the parameter system to function.
+    try:
+        from tengri.parameters._builders import _AGN_EXTRAS
+    except Exception:
+        _AGN_EXTRAS = {}  # type: ignore[assignment]
+    if _AGN_EXTRAS:
+        for name, payload in _AGN_EXTRAS.items():
+            if name in out:
+                continue
+            description, _bcheck, _berr, prior = payload
+            out[name] = ParameterRecord(
+                name=name,
+                prior=prior,
+                description=description,
+                units="",
+                owner="tengri.parameters._builders",
+                group="_AGN_EXTRAS",
             )
     return out
 

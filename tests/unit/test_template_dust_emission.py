@@ -550,6 +550,7 @@ class TestDL14ExtendedRange:
 
     def test_dl14_param_spec_registered(self):
         """dust_alpha_dl14 should be in the parameter spec."""
-        from tengri.parameters.parameters import _DUST_EMISSION_PARAMS
+        from tengri.parameters._builders import _resolve_lazy_bucket
 
-        assert "dust_alpha_dl14" in _DUST_EMISSION_PARAMS
+        dust_emission = _resolve_lazy_bucket("_DUST_EMISSION_PARAMS")
+        assert "dust_alpha_dl14" in dust_emission

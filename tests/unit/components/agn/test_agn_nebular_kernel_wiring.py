@@ -44,7 +44,8 @@ class TestAGNNebularConfigFlags:
 
     def test_free_params_exist(self):
         """Test that new free parameters are registered."""
-        from tengri.parameters._param_defs import _AGN_PARAMS
+        from tengri.parameters._builders import _resolve_lazy_bucket
+        _AGN_PARAMS = _resolve_lazy_bucket("_AGN_PARAMS")
 
         # Check that the new params are in the registry
         assert "agn_blr_cf" in _AGN_PARAMS
