@@ -115,7 +115,7 @@ class TestLineFluxData:
 
 class TestTopLevelExport:
     def test_line_flux_data_importable(self):
-        from tengri import LineFluxData as LFD
+        from tengri.observation import LineFluxData as LFD
 
         assert LFD is LineFluxData
 

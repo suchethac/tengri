@@ -240,7 +240,7 @@ class TestFitterRaytraceMethod:
         fitter, _model, _mock, _true_params = fitter_setup
 
         result = fitter.run(
-            "raytrace",
+            "mcmc_raytrace",
             n_steps=60,
             n_leapfrog_steps=5,
             n_burnin=10,
@@ -303,7 +303,7 @@ class TestFitterRaytraceInitFromMap:
 
         # Chain into Ray Tracing
         rt_result = fitter.run(
-            "raytrace",
+            "mcmc_raytrace",
             init_from=map_result,
             n_steps=60,
             n_leapfrog_steps=5,

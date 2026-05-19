@@ -71,7 +71,7 @@ class TestEllipticalSlice:
     def test_returns_posterior(self, fitter_and_mock):
         fitter, _ = fitter_and_mock
         result = fitter.run(
-            "elliptical_slice",
+            "mcmc_ess",
             n_samples=100,
             n_burnin=50,
             verbose=False,
@@ -85,7 +85,7 @@ class TestEllipticalSlice:
         fitter, _ = fitter_and_mock
         n = 200
         result = fitter.run(
-            "elliptical_slice",
+            "mcmc_ess",
             n_samples=n,
             n_burnin=50,
             verbose=False,
@@ -97,7 +97,7 @@ class TestEllipticalSlice:
         fitter, _ = fitter_and_mock
         map_result = fitter.run("map", n_steps=100, verbose=False)
         result = fitter.run(
-            "elliptical_slice",
+            "mcmc_ess",
             init_from=map_result,
             n_samples=100,
             n_burnin=50,
@@ -108,7 +108,7 @@ class TestEllipticalSlice:
     def test_diagnostics(self, fitter_and_mock):
         fitter, _ = fitter_and_mock
         result = fitter.run(
-            "elliptical_slice",
+            "mcmc_ess",
             n_samples=50,
             n_burnin=20,
             verbose=False,

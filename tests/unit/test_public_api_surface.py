@@ -32,6 +32,11 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "Galaxy",
         "Parameters",
         "SEDModel",
+        # ── SEDComponent extension surface (Phase II protocols) ─────
+        "DerivedBundle",
+        "DerivedKey",
+        "ForwardState",
+        "PipelineContractError",
         # ── Priors (parameters/) ─────────────────────────────────────
         "Fixed",
         "Gaussian",
@@ -65,6 +70,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "list_known_ssps",
         # ── Registry introspection ──────────────────────────────────
         "describe",
+        "describe_parameter",
         "examples",
         "explain",
         "help",
@@ -76,12 +82,16 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "list_filters",
         "list_inference_methods",
         "list_nebular_backends",
+        "list_parameters",
         "list_plots",
         "list_sfh_models",
+        "ParameterRecord",
+        "recipe_parameters",
         "summary",
         "tutorial",
         # ── Subpackage namespaces (canonical import paths) ──────────
         "agn",
+        "builders",
         "citations",
         "config",
         "cosmology",
@@ -167,9 +177,9 @@ DEMOTED_BUT_IMPORTABLE: frozenset[str] = frozenset(
         "NoiseModel",
         "Observation",
         "LineList",
-        "LineFluxData",
-        "SpectralIndexDef",
-        "SpectralIndexData",
+        # LineFluxData / SpectralIndex{Def,Data} no longer resolvable at
+        # the top level — import from `tengri.observation` directly. The
+        # back-compat shim was removed in the alias cleanup pass.
     }
 )
 
