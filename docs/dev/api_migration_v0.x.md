@@ -570,7 +570,7 @@ parse_groups(sfh={"type": "dpl", "*": FREE})
 
 ---
 
-## Inference backend protocol — `InferenceContext` (2026-05-18, ADR-0009)
+## Inference backend protocol — `InferenceContext` (2026-05-18, ADR-0010)
 
 `Fitter.run(method=...)` is **unchanged at the user surface** — every
 existing notebook, script, and benchmark keeps working with no edits.
@@ -581,7 +581,7 @@ The migration is internal: how backends consume `Fitter` state.
 - New type `tengri.inference.InferenceContext` — a frozen dataclass
   bundling the per-call state a backend needs (`loss_fn`, `grad_fn`,
   `data_args`, `spec`, `model`, `memory_mode`, init-params helpers).
-  See ADR-0009 for the full Protocol contract.
+  See ADR-0010 for the full Protocol contract.
 - `Fitter.run` builds an `InferenceContext` once per call and passes
   it to the registered runner instead of passing `self`.
 - All 19 in-tree backends migrated to the
