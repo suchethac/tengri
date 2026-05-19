@@ -37,10 +37,7 @@ from tengri.parameters._aliases import (
     _REVERSE_ALIASES,
     find_short_param,
 )
-from tengri.parameters._param_defs import (
-    _CUE_GAS_EXTRA_PARAMS,
-    _CUE_IONSPEC_PARAMS,
-)
+from tengri.parameters._builders import _resolve_lazy_bucket
 
 # ── Constants ─────────────────────────────────────────────────────
 
@@ -109,8 +106,12 @@ def _identity_params_from_bucket(bucket: dict) -> list[str]:
     return sorted(name for name in bucket if name not in _PARAMS_WITH_UNIT_CONVERSION)
 
 
-_CUE_GAS_IDENTITY_PARAMS = _identity_params_from_bucket(_CUE_GAS_EXTRA_PARAMS)
-_CUE_IONSPEC_IDENTITY_PARAMS = _identity_params_from_bucket(_CUE_IONSPEC_PARAMS)
+_CUE_GAS_IDENTITY_PARAMS = _identity_params_from_bucket(
+    _resolve_lazy_bucket("_CUE_GAS_EXTRA_PARAMS")
+)
+_CUE_IONSPEC_IDENTITY_PARAMS = _identity_params_from_bucket(
+    _resolve_lazy_bucket("_CUE_IONSPEC_PARAMS")
+)
 
 
 # ── Non-SFH param map (includes real unit conversions) ───────────────
