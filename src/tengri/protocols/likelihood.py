@@ -13,7 +13,7 @@ helpers. Phase II-5 will rewire them to a Likelihood implementation.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import jax.numpy as jnp
 
@@ -50,8 +50,8 @@ class Likelihood(Protocol):
         higher number means a better fit. Inference backends typically
         minimise the negative.
 
-    declared_parameters() -> list[ParamSpec]
-        Any nuisance parameters the likelihood owns (noise floors,
+    declared_parameters() -> list[str]
+        Parameter name strings the likelihood owns (noise floors,
         Student-t degrees of freedom, GP kernel hyperparameters).
         Domain prefix: ``noise_``.
 
@@ -65,8 +65,16 @@ class Likelihood(Protocol):
 
     name: str
 
-    def declared_parameters(self) -> list[Any]:
-        """Nuisance parameters the likelihood owns."""
+    def declared_parameters(self) -> list[str]:
+        """Parameter name strings the likelihood owns.
+
+        Returns
+        -------
+        list[str]
+            List of parameter names (empty for most likelihoods;
+            non-empty only for adapters that fit nuisance parameters,
+            e.g., :class:`ELineFittedLikelihood`).
+        """
         ...
 
     def log_prob(
