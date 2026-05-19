@@ -12,36 +12,21 @@ import warnings
 
 import pytest
 
-from tengri.parameters.translate import (
-    _CUE_GAS_IDENTITY_PARAMS,
-    _CUE_IONSPEC_IDENTITY_PARAMS,
-    get_internal_params,
-    identity_param_map,
-)
+from tengri.parameters.translate import get_internal_params
 
 pytestmark = pytest.mark.unit
 
 
-_GAS_NAMES = ("gas_logn", "gas_logno", "gas_logco")
-_IONSPEC_NAMES = (
-    "ionspec_index1",
-    "ionspec_index2",
-    "ionspec_index3",
-    "ionspec_index4",
-    "ionspec_logLratio1",
-    "ionspec_logLratio2",
-    "ionspec_logLratio3",
-)
+def _identity_pm(names):
+    """Build a minimal identity param_map dict — `{n: (n, 1.0, 0.0)}`.
 
-
-class TestCueIdentityParamLists:
-    def test_gas_extras_listed(self):
-        for name in _GAS_NAMES:
-            assert name in _CUE_GAS_IDENTITY_PARAMS, f"{name} missing"
-
-    def test_ionspec_listed(self):
-        for name in _IONSPEC_NAMES:
-            assert name in _CUE_IONSPEC_IDENTITY_PARAMS, f"{name} missing"
+    Inline replacement for the removed `identity_param_map` helper
+    (deleted in `77661f8f`, ADR-deepening Step B). The full registry
+    coverage of Cue identity params is tested by
+    `TestSEDModelCueParamMap` below; these tests only need a tiny
+    param_map to exercise `get_internal_params` pass-through.
+    """
+    return {n: (n, 1.0, 0.0) for n in names}
 
 
 class TestIdentityMapPropagation:
@@ -58,7 +43,7 @@ class TestIdentityMapPropagation:
         return _Stub()
 
     def test_gas_logno_passes_through(self):
-        pm = identity_param_map(["gas_logno"])
+        pm = _identity_pm(["gas_logno"])
         params = {"gas_logno": 0.7}
         with warnings.catch_warnings():
             warnings.simplefilter("error")  # unrecognised-name warning would fail here
@@ -66,7 +51,7 @@ class TestIdentityMapPropagation:
         assert internal["gas_logno"] == pytest.approx(0.7)
 
     def test_gas_logco_passes_through(self):
-        pm = identity_param_map(["gas_logco"])
+        pm = _identity_pm(["gas_logco"])
         params = {"gas_logco": -0.36}
         with warnings.catch_warnings():
             warnings.simplefilter("error")
@@ -74,7 +59,7 @@ class TestIdentityMapPropagation:
         assert internal["gas_logco"] == pytest.approx(-0.36)
 
     def test_ionspec_index1_passes_through(self):
-        pm = identity_param_map(["ionspec_index1"])
+        pm = _identity_pm(["ionspec_index1"])
         params = {"ionspec_index1": 12.5}
         with warnings.catch_warnings():
             warnings.simplefilter("error")
@@ -83,14 +68,14 @@ class TestIdentityMapPropagation:
 
     def test_unknown_param_raises_by_default(self):
         """A truly bogus key raises ValueError under the default strict mode."""
-        pm = identity_param_map(["gas_logno"])
+        pm = _identity_pm(["gas_logno"])
         params = {"gas_logno": 0.0, "definitely_not_a_param": 1.0}
         with pytest.raises(ValueError, match="Unrecognized parameter"):
             get_internal_params(params, pm, self._make_spec_stub(), has_field=False)
 
     def test_unknown_param_warns_when_strict_false(self):
         """Legacy soft mode: passing ``strict_unknown_params=False`` downgrades to a warning."""
-        pm = identity_param_map(["gas_logno"])
+        pm = _identity_pm(["gas_logno"])
         params = {"gas_logno": 0.0, "definitely_not_a_param": 1.0}
         with pytest.warns(UserWarning, match="Unrecognized parameter"):
             get_internal_params(

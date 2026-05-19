@@ -13,6 +13,15 @@ will read them (see `forward/_kernels/hybrid.py` line ~2252 for an example).
   full-wavelength integrators is in.
   (Was: comment at hybrid.py ~line 1548, lifted 2026-05-17.)
 
+## components/agn/disc.py
+
+- **ADAF disc model rewrite**: The current implementation contains documented
+  physics discrepancies vs Mahadevan (1997) ApJ 477 585. Steps: (1) rewrite
+  equations to match paper exactly, (2) add regression test vs original paper,
+  (3) wire precompute adapter via `components/agn/adaf_precompute.py`,
+  (4) register in `forward/precompute/registry.py`.
+  (Was: comment block at disc.py ~line 1549, lifted 2026-05-19.)
+
 ## forward/component_factory.py
 
 - **Port legacy `compute_uv_slope_beta` etc.** into the new

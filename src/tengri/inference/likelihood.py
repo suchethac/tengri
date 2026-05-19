@@ -365,6 +365,28 @@ def _n_phot_split(context: InferenceContext) -> int:
     return n_phot
 
 
+def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constraint_matrix):
+    """Build emission line design matrix with doublet constraints applied."""
+    from tengri.observation.eline_marginalization import (
+        apply_doublet_constraints,
+        build_eline_design_matrix,
+    )
+
+    z = params.get("redshift", fixed_values.get("redshift", 0.0))
+    sigma_kms = params.get("eline_sigma_kms", 0.0)
+    delta_v = params.get("eline_delta_v_kms", 0.0)
+    resolution = getattr(model, "_spectral_resolution", None) or 2000.0
+    G = build_eline_design_matrix(
+        model._wave_obs,
+        eline_wavelengths,
+        resolution,
+        z,
+        eline_sigma_kms=sigma_kms,
+        eline_delta_v_kms=delta_v,
+    )
+    return apply_doublet_constraints(G, constraint_matrix)
+
+
 def _make_eline_design_builder(context: InferenceContext):
     """Build a closure that rebuilds the e-line design matrix per call.
 
@@ -376,8 +398,6 @@ def _make_eline_design_builder(context: InferenceContext):
 
     Returns ``None`` when the underlying e-line state is absent.
     """
-    from tengri.inference.loss_functions import _build_eline_G_eff
-
     if context.eline_wavelengths is None or context.eline_constraint_matrix is None:
         return None
 

@@ -1,41 +1,18 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""NebularSEDComponent: SEDComponent adapter wrapping a nebular backend.
+"""NebularSEDComponent: nebular emission as a SEDComponent.
 
-Phase II-1 fifth adapter. Validates the **zero-parameter edge case** of
-the :class:`tengri.protocols.SEDComponent` Protocol: an adapter that has no
-free parameters and (for the BakedIn backend) does not transform the
-SED — it is a marker that publishes ``state.derived["nebular_backend"]``
-so downstream observation models know whether emission lines are in
-the SSP grid or need to be added separately.
+A thin SEDComponent that dispatches to a chosen backend (BakedIn,
+CloudyGrid, or Cue). For ``BakedInBackend`` the nebular emission is
+already folded into the SSP grid at fixed ``logU`` and escape fraction
+— the component is then a no-op on the SED, and only publishes
+``state.derived["nebular_backend"]`` so downstream observation models
+know whether emission lines need adding separately or are already
+present in the stellar templates.
 
-Scope (intentionally small)
----------------------------
-This adapter wraps the :class:`BakedInBackend` only — the simplest case,
-where nebular emission is already folded into the SSP grid at fixed
-``logU`` and escape fraction. CueBackend / CloudyGridBackend / shock
-backends will land as separate adapters in Phase II-3 once
-:class:`StellarSEDComponent` publishes ``state.derived["nion"]`` (the
-ionising photon production rate they need as input).
-
-Why land this now
------------------
-The contract test matrix should cover three structural variants:
-
-1. **Additive emitter** — Radio, X-ray. Adds to ``sed_intrinsic``.
-2. **Transforming attenuator** — Dust. Reads ``sed_intrinsic`` →
-   writes ``sed_attenuated``.
-3. **No-op marker** — this. Publishes a ``state.derived`` flag, no
-   parameters, no SED change.
-
-The seam is more confidently real with all three patterns exercised by
-real adapters than with only the first two.
-
-Cross-component reads
----------------------
-None. BakedIn nebular has no inputs because the emission is already
-in the SSP grid; this adapter exists purely so the orchestrator's
-component list reads naturally as
-``[Stellar, Nebular, Dust, AGN, IGM, Radio, XRay]`` once stellar lands.
+CueBackend and CloudyGridBackend become free-parameter components: they
+read ``state.derived["nion"]`` (the ionising photon production rate
+from the stellar block) and add the resulting line + continuum SED to
+``sed_intrinsic``.
 """
 
 from __future__ import annotations
@@ -122,7 +99,7 @@ class NebularSEDComponent:
     name: str = "nebular"
     # Tuple prefix so the MAPPINGS shock backend (``shock_*``) and the
     # photoionisation backends (``neb_*``, ``ionspec_*``, ``gas_*``) all
-    # flow through the orchestrator's prefix-slicer. Backends silently
+    # flow through the standard prefix-stripping path. Backends silently
     # ignore keys they don't consume — passing ``shock_*`` to Cue is
     # harmless, and vice versa.
     parameter_prefix: tuple[str, ...] = ("neb_", "shock_", "ionspec_", "gas_")

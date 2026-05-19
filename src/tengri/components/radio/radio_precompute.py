@@ -60,7 +60,7 @@ from tengri.utils.grid_interp import (
     slice_fixed_axes,
 )
 
-# Per-model axis declarations (each adapter is 1D).
+# Each radio sub-model precomputes along one parameter axis.
 AXIS_PARAMS_SYNCHROTRON = ("radio_alpha_sf",)
 AXIS_PARAMS_FREEFREE = ("radio_alpha_ff",)
 AXIS_PARAMS_AGN_JET = ("radio_alpha_agn",)
