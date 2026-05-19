@@ -164,10 +164,29 @@ def _resolve_mode_shortcut(mode: str, product: Product) -> tuple[str, ...]:
 
 
 # ── built-in policies ───────────────────────────────────────────────
+#
+# Two surfaces on purpose:
+#
+# 1. Engineering names (DEFAULT / LOW_MEMORY / EXACT_ONLY / COMPOSITIONAL_ONLY)
+#    map onto the underlying adapter registry. Used by sed_model.py and any
+#    code that wants to read the cascade order directly.
+# 2. Scientist-facing classmethods (``KernelStrategy.fast()`` /
+#    ``.bit_exact()`` / ``.low_memory()`` / ``.reference_only()``) name the
+#    *physics decision* the user is making — speed vs. tolerance vs. memory.
+#    A user fitting JWST photometry should never need to know about adapter
+#    names; they need to know what changes for their posteriors.
+#
+# The two surfaces are aliased: each classmethod returns the matching
+# module-level singleton, so ``KernelStrategy.bit_exact() is COMPOSITIONAL_ONLY``
+# holds. ``is`` comparisons in tests and production code keep working
+# whichever surface the caller used.
 
 
 DEFAULT: KernelStrategy = KernelStrategy()
-"""Current production behaviour: compositional first, hybrid second, exact last."""
+"""Production default. Compositional first (bit-identical to exact), hybrid
+second (~0.4% stellar flux tolerance, ~30× faster on photometry), exact last
+(slow reference). For photometry this routes to hybrid when precomputed; for
+spectroscopy and rest-SED it routes to compositional."""
 
 LOW_MEMORY: KernelStrategy = KernelStrategy(
     preferred=(
@@ -177,10 +196,15 @@ LOW_MEMORY: KernelStrategy = KernelStrategy(
         "exact_rest_sed",
     )
 )
-"""Skip hybrid (largest closure / biggest XLA HLO). Prefer compositional + exact."""
+"""Skip hybrid. Hybrid carries the biggest XLA HLO (compiled-graph constants);
+on a tight machine the compile blows past the 2 GB protobuf limit.
+Compositional is bit-identical to exact, so the only thing you give up is
+hybrid's ~30× photometry speedup."""
 
 EXACT_ONLY: KernelStrategy = KernelStrategy(preferred=("exact_rest_sed",))
-"""Force the slow path. Useful for regression testing and debugging."""
+"""Reference path only. Only produces rest-frame SEDs (no photometry / spectrum
+kernel). Used to regenerate snapshot baselines and to debug a suspected
+disagreement between compositional and hybrid — not a path to fit a galaxy on."""
 
 COMPOSITIONAL_ONLY: KernelStrategy = KernelStrategy(
     preferred=(
@@ -189,7 +213,65 @@ COMPOSITIONAL_ONLY: KernelStrategy = KernelStrategy(
         "compositional_rest_sed",
     )
 )
-"""Force the Tier 2 compositional path."""
+"""Tier 2 compositional only. Bit-identical to the exact reference path via
+closure-A — no tolerance budget consumed. Use when you need to publish a
+posterior that's stable under a JAX version bump."""
+
+
+def _add_classmethods(cls: type) -> None:
+    """Wire scientist-facing classmethods onto KernelStrategy.
+
+    Defined after the module-level singletons exist so each classmethod
+    returns the *same instance* as the engineering-facing name. Identity
+    is preserved: ``KernelStrategy.bit_exact() is COMPOSITIONAL_ONLY``.
+    """
+
+    def fast(cls):
+        """Speed-prioritised, ~0.4% stellar flux tolerance on photometry.
+
+        Routes photometry to the hybrid kernel (precomputed SSP×filter
+        einsum) when available; falls back to compositional (bit-identical
+        to exact) when hybrid cannot be built. Recommended for inference
+        loops where wall-time matters and a sub-percent stellar tolerance
+        is acceptable. ``is DEFAULT``.
+        """
+        return DEFAULT
+
+    def bit_exact(cls):
+        """No tolerance budget; compositional path only.
+
+        Compositional ≡ exact via closure-A — outputs are bit-identical to
+        the slow reference path. Use when publishing a posterior that must
+        be stable under JAX version bumps or when debugging a suspected
+        hybrid mismatch. ``is COMPOSITIONAL_ONLY``.
+        """
+        return COMPOSITIONAL_ONLY
+
+    def low_memory(cls):
+        """Skip the hybrid kernel (biggest XLA HLO).
+
+        Use when the hybrid compile is OOM'ing or hitting the 2 GB protobuf
+        limit. Cost: no hybrid speedup on photometry; everything else
+        (compositional, exact) still works. ``is LOW_MEMORY``.
+        """
+        return LOW_MEMORY
+
+    def reference_only(cls):
+        """Slow reference path; rest-SED kernel only, no photometry/spectrum.
+
+        Used to regenerate snapshot baselines and to bisect a suspected
+        compositional-vs-hybrid disagreement. Not a path you fit galaxies
+        on. ``is EXACT_ONLY``.
+        """
+        return EXACT_ONLY
+
+    cls.fast = classmethod(fast)
+    cls.bit_exact = classmethod(bit_exact)
+    cls.low_memory = classmethod(low_memory)
+    cls.reference_only = classmethod(reference_only)
+
+
+_add_classmethods(KernelStrategy)
 
 
 # Sanity check: every adapter referenced by a built-in policy is registered.
