@@ -188,15 +188,24 @@ class StellarSEDComponent:
 
 **Each component owns its own approx-flag names.** No global umbrella — flags are component-scoped so their meaning stays sharp and adding a new approximation never collides with an old one:
 
-| Flag | Owner component | What it precomputes |
-|---|---|---|
-| `wave_precomp` | **stellar (photometry)** | SSP × filter inner products on a wave grid — the historical "hybrid photometry" math |
-| `ztable` | **stellar (photometry)** | Same SSP × filter integrals but indexed on a redshift grid — for free-z fits. Already shipped. |
-| _(future)_ `dust_precomp` | dust | Attenuation curve LUT for a fixed wave grid |
-| _(future)_ `cue_interp` | nebular | Cue training-grid interpolation tables |
-| _(future)_ `dust_taylor` | dust | Perturbation expansion in τ |
+**Each component owns its own approx-flag names.** No global umbrella — flags are component-scoped so their meaning stays sharp and adding a new approximation never collides with an old one:
 
-Flags compose — `approx={"wave_precomp": True, "ztable": True}` runs both. Each component decides what to do with the flags it owns; unknown flags raise at build time.
+| Flag | Owner | Depends on | What it precomputes |
+|---|---|---|---|
+| `wave_precomp` | stellar (photometry) | — | SSP × filter inner products on a wave grid (the historical "hybrid photometry" math). Valid only when redshift is `Fixed` unless paired with `ztable`. |
+| `ztable` | stellar (photometry) | **requires `wave_precomp=True`** | Indexes the SSP × filter integrals on a redshift grid — makes the precompute valid for free redshift. **Auto-enabled when `wave_precomp=True` AND redshift is free.** |
+| _(future)_ `dust_precomp` | dust | — | Attenuation curve LUT for a fixed wave grid |
+| _(future)_ `cue_interp` | nebular | — | Cue training-grid interpolation tables |
+| _(future)_ `dust_taylor` | dust | — | Perturbation expansion in τ |
+
+**Dependency / auto-resolution rules** (run at build time, surfaced via explicit error or log line):
+
+- `ztable=True` with `wave_precomp=False` → **raise** with diagnostic. `ztable` is the free-z variant of `wave_precomp`; it has nothing to index without it.
+- `wave_precomp=True` with **free redshift** and `ztable=False` (or unspecified) → **auto-enable `ztable=True`** and log a single line. Without `ztable` the LUT is keyed on a fixed z and would silently give wrong fluxes; safer to upgrade than to raise.
+- `wave_precomp=True` with **fixed redshift** → `ztable` is irrelevant; default-off, raise if user explicitly sets `True` with a hint to drop it.
+- Unknown flag names → **raise** at build time with the list of legal flags.
+
+Flags otherwise compose — adding `dust_precomp` later is independent of `wave_precomp`/`ztable`. Each component decides what to do with the flags it owns.
 
 #### The matrix
 
@@ -288,7 +297,7 @@ Four phases, each independently shippable. Phase 1 is **done** (PR #112).
 
 1. **Phase 2 tie-breaker — if `compile="fused"` ≠ `compile="per_component"` (bit-level)?** Default: **`per_component` wins** (it's the canonical orchestrator path that `validate_pipeline` enforces). Any per-component-specific optimisations get re-introduced as graph transformations on the unified chain.
 2. **Joint forward-pass guarantee.** Phase 2 fuses joint photometry+spectrum into one trace. Inference benchmarks need to confirm this doesn't regress vs today's two-pass approach. Snapshot performance test before/after.
-3. **`approx` validation policy.** When the user supplies `approx={"wave_precomp": True}` but the model has free redshift (and `ztable=False`), should we error, warn-and-auto-enable `ztable`, or silently disable `wave_precomp`? Today's `_maybe_auto_precompute_ztable` silently swallows failures (line 5406 of `sed_model.py`) — I'd flip to **explicit raise** with a diagnostic.
+3. **`approx` validation policy.** Resolved 2026-05-19. `ztable` requires `wave_precomp`; raise if violated. `wave_precomp` with free redshift auto-enables `ztable` with a log line; raise on unknown flag names. See the dependency table above.
 4. **`mag_absolute` rest-frame filter choice.** Re-projection at z=0 uses the same filter curves as the apparent mag. For high-z sources this means the "absolute mag" is in the rest-frame equivalent of the observed-frame filter — astrophysically meaningful only when the user understands which rest-frame band that corresponds to. Should we ship a parallel set of `rest_filters=` at build time for explicit rest-frame band choice?
 5. **Effort vs Paper II priorities.** Phase 2 + 3 + 4 is ~3 weeks of refactor work with no new physics. Is now the right time, or does it wait until after Paper I notebook series stabilises?
 
@@ -298,5 +307,5 @@ Four phases, each independently shippable. Phase 1 is **done** (PR #112).
 - [x] `compile=` and `approx=` as the two build-time knobs. Confirmed 2026-05-19.
 - [x] `wave_precomp` = photometry SSP × filter LUT, owned by stellar component. `ztable` = redshift-grid variant of the same. Other components add their own flag names as approximations land. Confirmed 2026-05-19.
 - [ ] Pre-decide Q1 (per_component wins if fused diverges)?
-- [ ] Pick Q3 (raise vs auto-enable on conflicting approx settings)?
+- [x] approx validation policy: `ztable` requires `wave_precomp`; free-z auto-enables `ztable`; unknown flags raise. Confirmed 2026-05-19.
 - [ ] Confirm absolute-mag mechanism (re-projection vs separate `rest_filters=`)?
