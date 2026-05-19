@@ -33,6 +33,57 @@ def _dedup(keys: list[str]) -> list[str]:
     return out
 
 
+def _citations_from_components(obj: Any) -> list[str]:
+    """Walk obj's components and union their declared citations.
+
+    Inspects whether ``obj`` exposes ``.components`` (a sequence of
+    SEDComponent instances) and calls ``citations()`` on each, collecting
+    bib keys. Returns a flat list; deduplication is handled upstream in
+    ``_collect_keys``.
+
+    Parameters
+    ----------
+    obj : Any
+        Object that may expose a ``.components`` attribute (e.g.
+        SEDModel, SEDModelConfig, or any container of SEDComponent
+        instances). Components without a ``citations()`` method are
+        skipped.
+
+    Returns
+    -------
+    list of str
+        Zero or more citation registry keys, in the order encountered.
+        Not deduplicated — that happens in ``_collect_keys``.
+
+    Notes
+    -----
+    This function is additive: it only reads from the component graph
+    and does not modify any state. Designed for use inside
+    :func:`_collect_keys` alongside the static association tables.
+    """
+    out: list[str] = []
+    components = getattr(obj, "components", None)
+    if components is None:
+        return out
+    # Iterate over the sequence (may be a list, tuple, or other iterable).
+    try:
+        for component in components:
+            # Call citations() on each component if it exists.
+            citations_fn = getattr(component, "citations", None)
+            if citations_fn is not None and callable(citations_fn):
+                try:
+                    keys = citations_fn()
+                    if keys:
+                        out.extend(keys)
+                except Exception:
+                    # Silently skip components with broken citations() methods.
+                    continue
+    except TypeError:
+        # components is not iterable; silently skip.
+        return out
+    return out
+
+
 def _find_model_config(obj: Any) -> Any:
     """Return a ModelConfig-like object from ``obj``, or ``None``."""
     mc = getattr(obj, "model_config", None)
@@ -130,6 +181,11 @@ def _collect_keys(obj: Any, *, include_backend: bool = True) -> list[str]:
     # alternatives) with whatever is in the registry RIGHT NOW so that
     # contributor models also appear in ``print_citations(model)``.
     keys.extend(_keys_from_live_registry(obj))
+
+    # Component-graph walk: collect citations declared by each SEDComponent
+    # in the object's component chain. Additive — the static tables and
+    # function annotations are still the primary source.
+    keys.extend(_citations_from_components(obj))
 
     return _dedup(keys)
 
