@@ -41,8 +41,8 @@ from tengri.components.xray._params import PARAMS as _XRAY_PARAMS
 from tengri.components.xray.xray import xray_total
 from tengri.protocols.component import (
     DerivedKey,
+    ForwardState,
     ParamDeclaration,
-    PipelineState,
     SEDComponentConfig,
     SEDComponentState,
 )
@@ -106,7 +106,7 @@ class XRaySEDComponent:
         """
         return list(_XRAY_PARAMS)
 
-    def publishes(self) -> tuple[DerivedKey, ...]:
+    def outputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys this X-ray component publishes.
 
         See :func:`tengri.forward.orchestrator.validate_pipeline`.
@@ -120,7 +120,7 @@ class XRaySEDComponent:
             ),
         )
 
-    def requires_optional(self) -> tuple[DerivedKey, ...]:
+    def optional_inputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys X-ray reads *opportunistically*.
 
         Read from ``state.derived`` with documented fallbacks. The
@@ -154,14 +154,14 @@ class XRaySEDComponent:
 
     def apply(
         self,
-        state: PipelineState,
+        state: ForwardState,
         params: Mapping[str, jnp.ndarray],
-    ) -> PipelineState:
+    ) -> ForwardState:
         r"""Add X-ray emission to ``state.sed_intrinsic``.
 
         Parameters
         ----------
-        state : PipelineState
+        state : ForwardState
             Must carry rest-frame ``wave`` (Å). If ``sed_intrinsic`` is
             ``None`` it is initialised to zeros of the same shape.
         params : mapping
@@ -172,7 +172,7 @@ class XRaySEDComponent:
 
         Returns
         -------
-        PipelineState
+        ForwardState
             New state with ``sed_intrinsic`` updated and
             ``derived["sed_xray"]`` published for downstream readers.
         """

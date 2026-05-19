@@ -25,9 +25,10 @@ from __future__ import annotations
 from tengri.protocols.component import (
     BARE_NAME_ALLOWLIST,
     DerivedKey,
+    ForwardState,
     ParamDeclaration,
     PipelineContractError,
-    PipelineState,
+    PipelineState,  # soft alias of ForwardState; removed in v1.0
     SEDComponent,
     SEDComponentConfig,
     SEDComponentState,
@@ -40,6 +41,7 @@ __all__ = [
     "BARE_NAME_ALLOWLIST",
     "DerivedBundle",
     "DerivedKey",
+    "ForwardState",
     "Likelihood",
     "ObservationModel",
     "ParamDeclaration",

@@ -27,7 +27,7 @@ from tengri.components.radio.component import (
 )
 from tengri.components.radio.radio import radio_total, radio_total_dpl
 from tengri.parameters._builders import _resolve_lazy_bucket
-from tengri.protocols import PipelineState
+from tengri.protocols import ForwardState
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ def wave():
 
 @pytest.fixture
 def state(wave):
-    return PipelineState(
+    return ForwardState(
         wave=wave,
         sed_intrinsic=jnp.zeros_like(wave),
         sed_observed=jnp.ones_like(wave),

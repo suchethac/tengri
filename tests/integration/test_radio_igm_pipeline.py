@@ -19,7 +19,7 @@ from tengri.components.igm.igm import igm_transmission
 from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.radio.radio import radio_total
 from tengri.forward.orchestrator import run_components
-from tengri.protocols import PipelineState
+from tengri.protocols import ForwardState
 
 REL_TOL = 1e-10
 
@@ -39,7 +39,7 @@ def test_orchestrator_matches_direct_calls(z, L_ir, L_agn_bol, log_mstar):
     wave = jnp.linspace(1e3, 1e9, 1024)
     seed_observed = jnp.ones_like(wave) * 1e30  # placeholder F_nu
 
-    initial_state = PipelineState(
+    initial_state = ForwardState(
         wave=wave,
         sed_intrinsic=jnp.zeros_like(wave),
         sed_observed=seed_observed,
@@ -88,9 +88,9 @@ def test_orchestrator_matches_direct_calls(z, L_ir, L_agn_bol, log_mstar):
 
 
 def test_pipeline_preserves_input_state_immutability():
-    """The orchestrator must not mutate the input PipelineState."""
+    """The orchestrator must not mutate the input ForwardState."""
     wave = jnp.linspace(1e3, 1e9, 64)
-    initial = PipelineState(
+    initial = ForwardState(
         wave=wave,
         sed_intrinsic=jnp.zeros_like(wave),
         sed_observed=jnp.ones_like(wave),
@@ -123,7 +123,7 @@ def test_pipeline_preserves_input_state_immutability():
 def test_radio_no_dust_upstream_falls_back_to_zero():
     """When state.derived has no L_ir, radio uses its documented fallback (0)."""
     wave = jnp.linspace(1e3, 1e9, 64)
-    state = PipelineState(
+    state = ForwardState(
         wave=wave,
         sed_intrinsic=jnp.zeros_like(wave),
         sed_observed=jnp.ones_like(wave),
@@ -161,7 +161,7 @@ def test_radio_no_dust_upstream_falls_back_to_zero():
 def test_igm_noop_when_sed_observed_is_none():
     """IGM is a no-op if no upstream produced sed_observed."""
     wave = jnp.linspace(1e3, 1e9, 64)
-    state = PipelineState(wave=wave)
+    state = ForwardState(wave=wave)
     igm = IGMSEDComponent()
     out = igm.apply(state, {"redshift": 1.0, "igm_z_mid": 7.0, "igm_dz": 0.5, "igm_log_nhi": 20.0})
     assert out.sed_observed is None

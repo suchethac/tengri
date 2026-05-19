@@ -9,7 +9,7 @@ from tengri.components.agn.grahsp import (
     GRAHSPSEDComponent,
     GRAHSPSEDComponentConfig,
 )
-from tengri.protocols.component import PipelineState
+from tengri.protocols.component import ForwardState
 
 
 def _default_params():
@@ -37,7 +37,7 @@ def _default_params():
 
 def test_apply_runs_end_to_end():
     component = GRAHSPSEDComponent()
-    state = PipelineState(wave=jnp.logspace(3, 6, 200))  # 1000 Å to 1e6 Å
+    state = ForwardState(wave=jnp.logspace(3, 6, 200))  # 1000 Å to 1e6 Å
     out = component.apply(state, _default_params())
     assert out.sed_intrinsic.shape == state.wave.shape
     assert jnp.all(jnp.isfinite(out.sed_intrinsic))
@@ -51,7 +51,7 @@ def test_compose_disable_torus():
     """Disabling torus should reduce mid-IR SED to zero."""
     cfg = GRAHSPSEDComponentConfig(include_torus=False, include_si=False)
     component = GRAHSPSEDComponent(config=cfg)
-    state = PipelineState(wave=jnp.logspace(4, 6, 200))  # 10000 Å to 1e6 Å (1-100 um)
+    state = ForwardState(wave=jnp.logspace(4, 6, 200))  # 10000 Å to 1e6 Å (1-100 um)
     out = component.apply(state, _default_params())
     # In the mid-IR (~10 um) BBB+lines should be tiny; torus is the dominant
     # contributor when on. Without torus, sed_intrinsic must be much smaller.
@@ -65,7 +65,7 @@ def test_compose_disable_torus():
 def test_compose_disable_attenuation():
     cfg_no_atten = GRAHSPSEDComponentConfig(apply_attenuation=False)
     cfg_atten = GRAHSPSEDComponentConfig(apply_attenuation=True)
-    state = PipelineState(wave=jnp.logspace(3, 5, 200))
+    state = ForwardState(wave=jnp.logspace(3, 5, 200))
     out_no = GRAHSPSEDComponent(config=cfg_no_atten).apply(state, _default_params())
     out_atten = GRAHSPSEDComponent(config=cfg_atten).apply(state, _default_params())
     # With attenuation, the SED in the UV must be lower.
@@ -83,7 +83,7 @@ def test_compose_only_bbb():
         include_si=False,
         apply_attenuation=False,
     )
-    state = PipelineState(wave=jnp.logspace(3, 6, 200))
+    state = ForwardState(wave=jnp.logspace(3, 6, 200))
     out = GRAHSPSEDComponent(config=cfg).apply(state, _default_params())
     # Mid-IR contribution should be that of the BBB alone, not the torus.
     # At 12 um (120000 Å) the BBB is many orders of magnitude below the
@@ -97,7 +97,7 @@ def test_additive_to_existing_sed():
     component = GRAHSPSEDComponent()
     wave = jnp.logspace(3, 5, 200)
     base = jnp.full_like(wave, 1.0e30)
-    state = PipelineState(wave=wave, sed_intrinsic=base)
+    state = ForwardState(wave=wave, sed_intrinsic=base)
     out = component.apply(state, _default_params())
     # Component is purely additive.
     assert jnp.all(out.sed_intrinsic >= base - 1e10)
@@ -115,7 +115,7 @@ def test_publishes_l_agn_absorbed():
     component_no_atten = GRAHSPSEDComponent(
         config=GRAHSPSEDComponentConfig(apply_attenuation=False)
     )
-    state = PipelineState(wave=jnp.logspace(3, 6, 200))
+    state = ForwardState(wave=jnp.logspace(3, 6, 200))
     out_atten = component_atten.apply(state, _default_params())
     out_no_atten = component_no_atten.apply(state, _default_params())
     # Attenuated: positive absorption; unattenuated: exactly zero.
@@ -128,7 +128,7 @@ def test_jit_apply():
     import jax
 
     component = GRAHSPSEDComponent()
-    state = PipelineState(wave=jnp.logspace(3, 5, 100))
+    state = ForwardState(wave=jnp.logspace(3, 5, 100))
     templates_state = component.precompute()
 
     # agn_type / toggles are static via the closure; params are dynamic.

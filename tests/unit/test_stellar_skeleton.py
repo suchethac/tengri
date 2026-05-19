@@ -25,7 +25,7 @@ from tengri.forward.orchestrator import (
     merge_declared_parameters,
     slice_params_for_component,
 )
-from tengri.protocols import BARE_NAME_ALLOWLIST, PipelineState, SEDComponent
+from tengri.protocols import BARE_NAME_ALLOWLIST, ForwardState, SEDComponent
 
 
 @pytest.mark.unit
@@ -84,7 +84,7 @@ def test_apply_without_ssp_data_raises():
     import jax.numpy as jnp
 
     comp = StellarSEDComponent()  # ssp_data defaults to None
-    state = PipelineState(wave=jnp.linspace(1e3, 1e8, 64))
+    state = ForwardState(wave=jnp.linspace(1e3, 1e8, 64))
     with pytest.raises(ValueError, match="requires ssp_data"):
         comp.apply(state, {})
 
@@ -111,7 +111,7 @@ def test_apply_unsupported_sfh_model_raises():
         config=StellarSEDComponentConfig(sfh_model="table"),
         ssp_data=fake_ssp,
     )
-    state = PipelineState(wave=fake_ssp.ssp_wave)
+    state = ForwardState(wave=fake_ssp.ssp_wave)
     with pytest.raises(NotImplementedError, match="not yet validated"):
         comp.apply(state, {})
 

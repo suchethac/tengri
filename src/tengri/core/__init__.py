@@ -2,7 +2,7 @@
 r"""Deprecation shim: ``tengri.core`` was renamed to ``tengri.protocols``.
 
 The old name was misleading — the package holds *protocol* definitions
-(``SEDComponent``, ``DerivedBundle``, ``PipelineState``, etc.), not "core
+(``SEDComponent``, ``DerivedBundle``, ``ForwardState``, etc.), not "core
 business logic". The forward-model orchestrator lives in
 ``tengri.forward.sed_model``.
 

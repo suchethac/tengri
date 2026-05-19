@@ -317,12 +317,12 @@ def test_galaxy_predict_legacy_returns_prediction(stellar_only_galaxy):
 
 
 def test_galaxy_predict_component_returns_pipeline_state(stellar_only_galaxy):
-    """Galaxy.predict(..., backend='component') returns a PipelineState
+    """Galaxy.predict(..., backend='component') returns a ForwardState
     with the expected stellar derived keys."""
-    from tengri.protocols.component import PipelineState
+    from tengri.protocols.component import ForwardState
 
     state = stellar_only_galaxy.predict(_STELLAR_PARAMS, backend="component")
-    assert isinstance(state, PipelineState)
+    assert isinstance(state, ForwardState)
     assert "log_mstar" in state.derived
     assert "sfr_history" in state.derived
 
@@ -336,14 +336,14 @@ def test_galaxy_predict_unknown_backend_raises(stellar_only_galaxy):
 def test_galaxy_predict_default_is_legacy(stellar_only_galaxy):
     """Default backend remains 'legacy' until Phase B v1.0 cutover."""
     from tengri.forward.prediction import Prediction
-    from tengri.protocols.component import PipelineState
+    from tengri.protocols.component import ForwardState
 
     default_pred = stellar_only_galaxy.predict(_STELLAR_PARAMS)
     explicit_legacy = stellar_only_galaxy.predict(_STELLAR_PARAMS, backend="legacy")
     assert isinstance(default_pred, Prediction)
     assert isinstance(explicit_legacy, Prediction)
-    # And not a PipelineState
-    assert not isinstance(default_pred, PipelineState)
+    # And not a ForwardState
+    assert not isinstance(default_pred, ForwardState)
 
 
 def test_galaxy_predict_via_components_alias_unchanged(stellar_only_galaxy):

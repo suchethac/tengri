@@ -846,7 +846,7 @@ class TestBalmerAv:
 
 
 class _FakeOrchestratorState:
-    """Minimal PipelineState stand-in for tests."""
+    """Minimal ForwardState stand-in for tests."""
 
     def __init__(self, wave, sed_intrinsic, derived):
         self.wave = wave
@@ -864,7 +864,7 @@ class _FakeSpec:
 class _FakeComponentModel:
     """Stand-in for SEDModel with a ``predict_via_orchestrator`` method.
 
-    Returns a fake ``PipelineState`` whose ``derived`` dict carries the
+    Returns a fake ``ForwardState`` whose ``derived`` dict carries the
     same per-component keys the real orchestrator publishes. Component
     amplitudes are driven by a single param ``frac`` so tests can verify
     that sample-to-sample variation propagates correctly.

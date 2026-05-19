@@ -6,7 +6,7 @@
 Provides ready-to-use model configurations for typical galaxy fitting workflows.
 Each recipe returns a nested-dict suitable for splat ting into
 :func:`~tengri.parameters.Parameters.from_groups()` or
-:func:`~tengri.forward.SEDModel.from_groups()`.
+:func:`~tengri.forward.SEDModel.build()`.
 
 Examples
 --------
@@ -15,15 +15,13 @@ Fit a star-forming galaxy at low-intermediate redshift with photometry::
     from tengri import SEDModel, recipes
     import sps_data
 
-    model = SEDModel.from_groups(
+    model = SEDModel.build(
         ssp_data=sps_data, filters=my_filter_list, **recipes.star_forming_photometry()
     )
 
 Fit a quiescent galaxy at z~0.05::
 
-    model = SEDModel.from_groups(
-        ssp_data=sps_data, filters=my_filter_list, **recipes.quiescent_z0()
-    )
+    model = SEDModel.build(ssp_data=sps_data, filters=my_filter_list, **recipes.quiescent_z0())
 """
 
 from __future__ import annotations
@@ -64,7 +62,7 @@ def star_forming_photometry() -> dict:
     Returns
     -------
     dict
-        Nested-dict ready for Parameters.from_groups() or SEDModel.from_groups().
+        Nested-dict ready for Parameters.from_groups() or SEDModel.build().
 
     Notes
     -----
@@ -75,7 +73,7 @@ def star_forming_photometry() -> dict:
     Examples
     --------
     >>> from tengri import SEDModel, recipes
-    >>> model = SEDModel.from_groups(ssp_data=ssp, **recipes.star_forming_photometry())
+    >>> model = SEDModel.build(ssp_data=ssp, **recipes.star_forming_photometry())
     >>> assert "sfh_dpl_alpha" in model.spec.free_params
     >>> assert "redshift" in model.spec.free_params
     """
@@ -122,7 +120,7 @@ def quiescent_z0() -> dict:
     Returns
     -------
     dict
-        Nested-dict ready for Parameters.from_groups() or SEDModel.from_groups().
+        Nested-dict ready for Parameters.from_groups() or SEDModel.build().
 
     Notes
     -----
@@ -182,7 +180,7 @@ def agn_panchromatic() -> dict:
     Returns
     -------
     dict
-        Nested-dict ready for Parameters.from_groups() or SEDModel.from_groups().
+        Nested-dict ready for Parameters.from_groups() or SEDModel.build().
 
     Notes
     -----
@@ -255,7 +253,7 @@ def stochastic_sfh_jwst() -> dict:
     Returns
     -------
     dict
-        Nested-dict ready for Parameters.from_groups() or SEDModel.from_groups().
+        Nested-dict ready for Parameters.from_groups() or SEDModel.build().
 
     Notes
     -----
@@ -312,7 +310,7 @@ def mock_recovery_minimal() -> dict:
     Returns
     -------
     dict
-        Nested-dict ready for Parameters.from_groups() or SEDModel.from_groups().
+        Nested-dict ready for Parameters.from_groups() or SEDModel.build().
 
     Notes
     -----
@@ -368,7 +366,7 @@ def dust_demo() -> dict:
     Returns
     -------
     dict
-        Nested-dict ready for ``SEDModel.from_groups(**recipes.dust_demo())``.
+        Nested-dict ready for ``SEDModel.build(**recipes.dust_demo())``.
 
     Examples
     --------
@@ -377,7 +375,7 @@ def dust_demo() -> dict:
         from tengri import SEDModel, load_ssp, recipes
         from tengri.analysis.plotting import sweep_parameter, SWEEP_CMAPS
 
-        model = SEDModel.from_groups(ssp_data=load_ssp(), **recipes.dust_demo())
+        model = SEDModel.build(ssp_data=load_ssp(), **recipes.dust_demo())
         sweep_parameter(
             model,
             "dust_tau_bc",

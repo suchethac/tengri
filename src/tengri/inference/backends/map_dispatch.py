@@ -311,7 +311,7 @@ def run_map(
     # backends, but internal callsites (``Fitter._run_map``) may still
     # pass a raw Fitter during the migration window — accept both.
     context = InferenceContext.from_target(context)
-    loss_fn = context.loss_fn
+    loss_fn = context.neg_log_posterior_fn
     data_args = context.data_args
     init_params = context.initial_params(key, init_from=init_from)
 
@@ -552,7 +552,7 @@ def run_laplace(context, *, key, init_from=None, n_map_steps=1000, **kwargs):
 
     return run_laplace(
         key=key,
-        loss_fn=context.loss_fn,
+        loss_fn=context.neg_log_posterior_fn,
         data_args=context.data_args,
         map_params_unbounded=map_params,
         to_physical_fn=context.to_physical,

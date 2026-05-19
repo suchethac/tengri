@@ -214,7 +214,7 @@ from tengri.parameters.registry import (
     recipe_parameters,
 )
 from tengri.parameters.sentinels import FIXED, FREE
-from tengri.protocols import DerivedBundle, DerivedKey, PipelineContractError
+from tengri.protocols import DerivedBundle, DerivedKey, ForwardState, PipelineContractError
 from tengri.utils import jit_logging
 
 agn = _components.agn
@@ -323,6 +323,7 @@ __all__ = [
     "DerivedBundle",
     "DerivedKey",
     "Fixed",
+    "ForwardState",
     "Galaxy",
     "Gaussian",
     "InferenceError",

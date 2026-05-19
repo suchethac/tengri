@@ -11,8 +11,8 @@ Design rules — these are non-negotiable:
 1. **Python-level only.** ``InferenceContext`` must never be hashed into a
    JIT key, passed through ``jax.jit`` / ``jax.vmap`` / ``jax.lax.scan`` as a
    traced argument, or stored inside a pytree leaf seen by JAX. Pull
-   primitives (``loss_fn``, ``data_args``) out of context *before* entering
-   any JAX transform.
+   primitives (``neg_log_posterior_fn``, ``data_args``) out of context
+   *before* entering any JAX transform.
 2. **The dataclass is frozen, the engine handle is not.** ``frozen=True``
    protects the *wiring* of the context (which fitter, which engine), not
    the contents of mutable objects it references. The in-process sampler
@@ -95,19 +95,66 @@ class InferenceContext:
         """The Parameters spec (free + fixed parameters)."""
         return self.fitter.spec
 
-    # ── Loss and gradient (JIT-cached on the Fitter) ─────────────────────
+    # ── Objective and gradient (JIT-cached on the Fitter) ────────────────
     @property
-    def loss_fn(self) -> Callable:
+    def neg_log_posterior_fn(self) -> Callable:
         """JIT-compiled negative-log-posterior callable.
 
-        Cached on the Fitter; safe to call repeatedly. The compiled
-        callable closes over ``data_args`` and the parameter spec.
+        This is the quantity samplers / optimisers minimise: it is the
+        negative of the (unnormalised) Bayesian posterior
+
+        .. math::
+
+            -\\log p(\\theta \\mid d) =
+                -\\log p(d \\mid \\theta) - \\log p(\\theta) + \\text{const.}
+
+        i.e. the sum of the negative log-likelihood and the negative log-prior.
+        Astronomers familiar with χ²-minimisation can think of this as a
+        prior-regularised χ² (up to a constant). Cached on the Fitter; safe
+        to call repeatedly. The compiled callable takes parameters in
+        **unbounded** space and closes over ``data_args`` and the
+        parameter spec.
+
+        See Also
+        --------
+        tengri.inference.loss_functions.build_loglikelihood_fn
+            Builds the **pure** log-likelihood ``log p(d | params)`` with
+            no prior contribution, in **physical** parameter space.
+            Suitable when you want to inspect data fit quality without
+            the prior penalty.
+
+        Notes
+        -----
+        Renamed from ``loss_fn`` in Phase II-3.2 (2026-05-18) for
+        astronomer-friendly naming. ``loss_fn`` remains as a deprecated
+        property; both return the same callable. ``loss_fn`` is removed
+        in tengri v1.0.
         """
         return self.fitter._get_or_build_loss_fn()
 
     @property
+    def loss_fn(self) -> Callable:
+        """Deprecated alias for :attr:`neg_log_posterior_fn`.
+
+        .. deprecated:: 0.x
+            ``loss_fn`` is ML-jargon for the negative log posterior;
+            use :attr:`neg_log_posterior_fn` instead. The old name is
+            removed in tengri v1.0.
+        """
+        import warnings
+
+        warnings.warn(
+            "`InferenceContext.loss_fn` is deprecated and will be removed "
+            "in tengri v1.0; use `InferenceContext.neg_log_posterior_fn` "
+            "instead (same callable, astronomer-friendly name).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.fitter._get_or_build_loss_fn()
+
+    @property
     def grad_fn(self) -> Callable:
-        """JIT-compiled gradient of the loss function."""
+        """JIT-compiled gradient of :attr:`neg_log_posterior_fn`."""
         return self.fitter._get_or_build_grad_fn()
 
     # ── Data and run-time controls ───────────────────────────────────────
@@ -279,6 +326,6 @@ class InferenceContext:
         raise TypeError(
             "InferenceContext is a Python-level orchestration object and "
             "must not be traced by JAX. Pull primitives "
-            "(context.loss_fn, context.data_args, ...) out of the context "
-            "before entering jax.jit / jax.vmap / jax.lax.scan."
+            "(context.neg_log_posterior_fn, context.data_args, ...) out of "
+            "the context before entering jax.jit / jax.vmap / jax.lax.scan."
         )

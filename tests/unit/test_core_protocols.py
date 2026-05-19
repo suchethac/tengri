@@ -4,7 +4,7 @@ Likelihood protocols.
 These tests validate the *shape* of the contract: a minimal
 implementation satisfies :func:`isinstance` against each protocol, and
 a small chain of components produces a meaningful
-:class:`PipelineState`. They do **not** test any real physics.
+:class:`ForwardState`. They do **not** test any real physics.
 
 When Phase II-2+ migrates a real component (e.g. ``StellarSEDComponent``)
 onto these protocols, the corresponding integration test goes in its
@@ -20,9 +20,9 @@ import jax.numpy as jnp
 import pytest
 
 from tengri.protocols import (
+    ForwardState,
     Likelihood,
     ObservationModel,
-    PipelineState,
     SEDComponent,
     SEDComponentConfig,
     SEDComponentState,
@@ -63,9 +63,9 @@ class _FakeDustComponent:
 
     def apply(
         self,
-        state: PipelineState,
+        state: ForwardState,
         params: dict[str, jnp.ndarray],
-    ) -> PipelineState:
+    ) -> ForwardState:
         tau = params["dust_tau_v"]
         if state.sed_intrinsic is None:
             raise ValueError("fake_dust requires upstream sed_intrinsic")
@@ -81,7 +81,7 @@ class _FakeObservation:
 
     def predict(
         self,
-        state: PipelineState,
+        state: ForwardState,
         params: dict[str, jnp.ndarray],
     ) -> dict[str, jnp.ndarray]:
         sed = state.sed_attenuated if state.sed_attenuated is not None else state.sed_intrinsic
@@ -141,7 +141,7 @@ def test_pipeline_state_is_immutable_via_with() -> None:
     """``state.with_(...)`` returns a copy, leaving the original alone."""
     wave = jnp.linspace(1000.0, 10000.0, 50)
     sed = jnp.ones_like(wave)
-    s0 = PipelineState(wave=wave, sed_intrinsic=sed)
+    s0 = ForwardState(wave=wave, sed_intrinsic=sed)
 
     s1 = s0.with_(sed_attenuated=sed * 0.5)
 
@@ -155,7 +155,7 @@ def test_minimal_chain_runs_end_to_end() -> None:
     """component -> observation -> likelihood roundtrip on toy data."""
     wave = jnp.linspace(1000.0, 10000.0, 50)
     intrinsic = jnp.ones_like(wave) * 2.0
-    state = PipelineState(wave=wave, sed_intrinsic=intrinsic)
+    state = ForwardState(wave=wave, sed_intrinsic=intrinsic)
 
     dust = _FakeDustComponent()
     dust.precompute(ssp_data=None, wave_grid=wave)
@@ -179,7 +179,7 @@ def test_minimal_chain_runs_end_to_end() -> None:
 def test_apply_does_not_mutate_input_state() -> None:
     wave = jnp.linspace(1000.0, 10000.0, 10)
     intrinsic = jnp.ones_like(wave)
-    state_before = PipelineState(wave=wave, sed_intrinsic=intrinsic)
+    state_before = ForwardState(wave=wave, sed_intrinsic=intrinsic)
 
     dust = _FakeDustComponent()
     dust.precompute(ssp_data=None, wave_grid=wave)

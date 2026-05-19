@@ -23,7 +23,7 @@ from tengri.components.dust.component import (
     DustAttenuationSEDComponentConfig,
 )
 from tengri.forward.orchestrator import run_components
-from tengri.protocols import PipelineState
+from tengri.protocols import ForwardState
 
 REL_TOL = 1e-10
 
@@ -34,7 +34,7 @@ def test_orchestrator_matches_direct_attenuation(tau_v):
     wave = jnp.linspace(1000.0, 22000.0, 256)  # Calzetti valid range 0.12-2.2 μm
     intrinsic = jnp.ones_like(wave) * 1e30  # placeholder L_nu
 
-    initial_state = PipelineState(
+    initial_state = ForwardState(
         wave=wave,
         sed_intrinsic=intrinsic,
     )
@@ -60,7 +60,7 @@ def test_orchestrator_matches_direct_attenuation(tau_v):
 def test_dust_is_noop_when_sed_intrinsic_is_none():
     """No upstream emitter → dust has nothing to attenuate."""
     wave = jnp.linspace(1000.0, 22000.0, 64)
-    state = PipelineState(wave=wave)
+    state = ForwardState(wave=wave)
     out = DustAttenuationSEDComponent().apply(state, {"dust_tau_v": 0.5, "redshift": 0.0})
     assert out.sed_attenuated is None
     assert out.sed_intrinsic is None
@@ -70,7 +70,7 @@ def test_tau_zero_is_identity():
     """tau_v = 0 must leave sed_intrinsic unchanged in sed_attenuated."""
     wave = jnp.linspace(1000.0, 22000.0, 64)
     intrinsic = jnp.ones_like(wave) * 5.0
-    state = PipelineState(wave=wave, sed_intrinsic=intrinsic)
+    state = ForwardState(wave=wave, sed_intrinsic=intrinsic)
     out = DustAttenuationSEDComponent().apply(state, {"dust_tau_v": 0.0, "redshift": 0.0})
     assert jnp.allclose(out.sed_attenuated, intrinsic, rtol=REL_TOL, atol=0.0)
 
@@ -79,7 +79,7 @@ def test_smc_law_via_config():
     """Choosing a non-default law via config still works."""
     wave = jnp.linspace(1000.0, 22000.0, 64)
     intrinsic = jnp.ones_like(wave) * 1e30
-    state = PipelineState(wave=wave, sed_intrinsic=intrinsic)
+    state = ForwardState(wave=wave, sed_intrinsic=intrinsic)
 
     smc_dust = DustAttenuationSEDComponent(
         config=DustAttenuationSEDComponentConfig(name="dust", law="smc")
@@ -113,7 +113,7 @@ def test_four_adapter_chain_runs_end_to_end():
 
     # Log-spaced grid so the UV/Lyα region has points (where IGM bites).
     wave = jnp.logspace(0, 9, 256)
-    state = PipelineState(
+    state = ForwardState(
         wave=wave,
         sed_intrinsic=jnp.ones_like(wave) * 1e30,
         sed_observed=jnp.ones_like(wave) * 1e30,

@@ -55,8 +55,8 @@ _DEFAULT_MET_BIN_EDGES_LOG_YR = jnp.array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14])
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols.component import (
     DerivedKey,
+    ForwardState,
     ParamDeclaration,
-    PipelineState,
     SEDComponentConfig,
     SEDComponentState,
 )
@@ -242,8 +242,11 @@ class StellarSEDComponent:
 
         return decls
 
-    def publishes(self) -> tuple[DerivedKey, ...]:
-        """Cross-component derived keys this stellar component publishes."""
+    def outputs(self) -> tuple[DerivedKey, ...]:
+        """Cross-component derived keys this stellar component publishes.
+
+        See :func:`tengri.forward.orchestrator.validate_pipeline`.
+        """
         return (
             DerivedKey("log_mstar", "dex", "log10(surviving stellar mass / Msun)"),
             DerivedKey("log_mstar_formed", "dex", "log10(formed stellar mass / Msun)"),
@@ -278,9 +281,9 @@ class StellarSEDComponent:
 
     def apply(
         self,
-        state: PipelineState,
+        state: ForwardState,
         params: Mapping[str, jnp.ndarray],
-    ) -> PipelineState:
+    ) -> ForwardState:
         """Compute stellar SED and publish derived quantities.
 
         Assembles the composite stellar population by convolving the
@@ -290,7 +293,7 @@ class StellarSEDComponent:
 
         Parameters
         ----------
-        state : PipelineState
+        state : ForwardState
             Initial pipeline state. Carries ``wave`` (rest-frame Å); the
             component reads ``redshift`` from ``params`` (allowlist).
         params : mapping
@@ -299,7 +302,7 @@ class StellarSEDComponent:
 
         Returns
         -------
-        PipelineState
+        ForwardState
             New state with ``sed_intrinsic`` set and 13 derived keys
             published.
         """

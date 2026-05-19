@@ -12,7 +12,7 @@ Design choices (mirrored in :mod:`tengri.components.radio.component`):
   ``igm_log_nhi``). The bare ``redshift`` is read via
   :data:`tengri.protocols.component.BARE_NAME_ALLOWLIST` — IGM is the
   canonical reason that allowlist exists.
-- IGM is *transmissive*: it multiplies :attr:`PipelineState.sed_observed`
+- IGM is *transmissive*: it multiplies :attr:`ForwardState.sed_observed`
   in place. If ``sed_observed`` is ``None`` the component is a no-op
   (useful in unit tests run before the rest→observed redshifting step).
 - :meth:`precompute` is a no-op (Inoue's piecewise-power-law fit is
@@ -32,8 +32,8 @@ from tengri.components.igm._params import PARAMS as _IGM_PARAMS
 from tengri.components.igm.igm import igm_transmission
 from tengri.protocols.component import (
     DerivedKey,
+    ForwardState,
     ParamDeclaration,
-    PipelineState,
     SEDComponentConfig,
     SEDComponentState,
 )
@@ -96,7 +96,7 @@ class IGMSEDComponent:
         """
         return list(_IGM_PARAMS)
 
-    def publishes(self) -> tuple[DerivedKey, ...]:
+    def outputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys this IGM component publishes.
 
         See :func:`tengri.forward.orchestrator.validate_pipeline`.
@@ -120,14 +120,14 @@ class IGMSEDComponent:
 
     def apply(
         self,
-        state: PipelineState,
+        state: ForwardState,
         params: Mapping[str, jnp.ndarray],
-    ) -> PipelineState:
+    ) -> ForwardState:
         r"""Multiply ``state.sed_observed`` by the Inoue+2014 transmission.
 
         Parameters
         ----------
-        state : PipelineState
+        state : ForwardState
             Must carry rest-frame ``wave`` (Å). If ``sed_observed`` is
             ``None`` this returns ``state`` unchanged.
         params : mapping
@@ -136,7 +136,7 @@ class IGMSEDComponent:
 
         Returns
         -------
-        PipelineState
+        ForwardState
             New state with ``sed_observed *= T_IGM(λ_obs, z)``.
 
         Notes

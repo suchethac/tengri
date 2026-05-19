@@ -41,7 +41,7 @@ Radio depends on quantities owned by other components:
 - ``redshift`` — bare parameter from :data:`BARE_NAME_ALLOWLIST`.
 
 This is the canonical pattern documented in
-:class:`tengri.protocols.PipelineState`'s "Cross-component reads" section:
+:class:`tengri.protocols.ForwardState`'s "Cross-component reads" section:
 **published derived quantity + documented fallback**, not a free
 parameter snooped from another component's namespace.
 """
@@ -58,8 +58,8 @@ from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
 from tengri.components.radio.radio import radio_total, radio_total_dpl
 from tengri.protocols.component import (
     DerivedKey,
+    ForwardState,
     ParamDeclaration,
-    PipelineState,
     SEDComponentConfig,
     SEDComponentState,
 )
@@ -154,7 +154,7 @@ class RadioSEDComponent:
         """
         return list(_RADIO_PARAMS)
 
-    def publishes(self) -> tuple[DerivedKey, ...]:
+    def outputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys this radio component publishes.
 
         See :func:`tengri.forward.orchestrator.validate_pipeline`.
@@ -168,7 +168,7 @@ class RadioSEDComponent:
             ),
         )
 
-    def requires_optional(self) -> tuple[DerivedKey, ...]:
+    def optional_inputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys radio reads *opportunistically*.
 
         Read from ``state.derived`` with documented fallbacks so radio
@@ -195,9 +195,9 @@ class RadioSEDComponent:
 
     def apply(
         self,
-        state: PipelineState,
+        state: ForwardState,
         params: Mapping[str, jnp.ndarray],
-    ) -> PipelineState:
+    ) -> ForwardState:
         r"""Add radio emission to ``state.sed_intrinsic``.
 
         Dispatches to :func:`radio_total` (powerlaw) or
@@ -206,7 +206,7 @@ class RadioSEDComponent:
 
         Parameters
         ----------
-        state : PipelineState
+        state : ForwardState
             Must carry rest-frame ``wave`` (Å). If ``sed_intrinsic`` is
             ``None`` it is initialised to zeros of the same shape.
         params : mapping
@@ -217,7 +217,7 @@ class RadioSEDComponent:
 
         Returns
         -------
-        PipelineState
+        ForwardState
             New state with ``sed_intrinsic`` updated.
         """
         # JP / KP / tribble were previously dispatched here with a runtime

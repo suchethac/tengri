@@ -116,11 +116,11 @@ def test_precompute_state_shape(precomputed):
 
 def test_apply_energy_balance(component, precomputed):
     """int L_nu d nu == L_ir within trapezoid discretisation tolerance."""
-    from tengri.protocols.component import PipelineState
+    from tengri.protocols.component import ForwardState
 
     state, wave_aa = precomputed
     L_ir = 5.0e44
-    pipeline = PipelineState(wave=wave_aa, sed_intrinsic=None, derived={"L_ir": L_ir})
+    pipeline = ForwardState(wave=wave_aa, sed_intrinsic=None, derived={"L_ir": L_ir})
     out = component.apply(pipeline, {"dust_lgU": 0.2, "redshift": 0.0}, precomputed=state)
     L_nu = np.asarray(out.derived["sed_dust_ir"])
     nu = 2.99792458e18 / np.asarray(wave_aa)
@@ -130,13 +130,13 @@ def test_apply_energy_balance(component, precomputed):
 
 
 def test_apply_jit_and_grad(component, precomputed):
-    from tengri.protocols.component import PipelineState
+    from tengri.protocols.component import ForwardState
 
     state, wave_aa = precomputed
 
     @jax.jit
     def _run(L_ir, lgU):
-        pipeline = PipelineState(wave=wave_aa, sed_intrinsic=None, derived={"L_ir": L_ir})
+        pipeline = ForwardState(wave=wave_aa, sed_intrinsic=None, derived={"L_ir": L_ir})
         out = component.apply(pipeline, {"dust_lgU": lgU, "redshift": 0.0}, precomputed=state)
         return jnp.sum(out.sed_intrinsic)
 
@@ -154,7 +154,7 @@ def test_pah_only_component(fixture_path):
         DustEmissionSEDComponent,
         DustEmissionSEDComponentConfig,
     )
-    from tengri.protocols.component import PipelineState
+    from tengri.protocols.component import ForwardState
 
     wave_aa = jnp.asarray(np.geomspace(1.0e4, 1.0e7, 800))
 
@@ -169,7 +169,7 @@ def test_pah_only_component(fixture_path):
         astrodust_template_path=fixture_path,
     )
     L_ir = 1.0e44
-    pipeline = PipelineState(wave=wave_aa, sed_intrinsic=None, derived={"L_ir": L_ir})
+    pipeline = ForwardState(wave=wave_aa, sed_intrinsic=None, derived={"L_ir": L_ir})
 
     a = DustEmissionSEDComponent(config=cfg_total)
     b = DustEmissionSEDComponent(config=cfg_pah)
@@ -195,11 +195,11 @@ def test_spinning_dust_inclusion_changes_microwave(fixture_path):
         DustEmissionSEDComponent,
         DustEmissionSEDComponentConfig,
     )
-    from tengri.protocols.component import PipelineState
+    from tengri.protocols.component import ForwardState
 
     wave_aa = jnp.asarray(np.geomspace(1.0e3, 3.0e8, 1500))
     L_ir = 1.0e44
-    pipeline = PipelineState(wave=wave_aa, sed_intrinsic=None, derived={"L_ir": L_ir})
+    pipeline = ForwardState(wave=wave_aa, sed_intrinsic=None, derived={"L_ir": L_ir})
 
     no_spd = DustEmissionSEDComponent(
         config=DustEmissionSEDComponentConfig(

@@ -124,11 +124,11 @@ the nested-dict builder shipped in 2026-05 (`parameters/groups.py`):
 from tengri import SEDModel, FREE, FIXED, Fixed, Uniform, recipes
 
 # Preferred: from a recipe
-model = SEDModel.from_groups(ssp_data=ssp, observation=obs,
+model = SEDModel.build(ssp_data=ssp, observation=obs,
                               **recipes.star_forming_photometry())
 
 # Or hand-rolled with the nested-dict grammar
-model = SEDModel.from_groups(
+model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     sfh={'type': 'dpl', '*': FREE, 'beta': Uniform(1, 3)},
     dust={'type': 'two_component', 'law_bc': 'calzetti', '*': FIXED,
@@ -234,7 +234,7 @@ Every inference backend (MAP, MCMC, VI, NSS, …) receives an
 
        context = InferenceContext.from_target(context)
        init_params = context.initial_params(key, init_from=init_from)
-       loss_fn = context.loss_fn        # JIT-cached
+       nlp_fn = context.neg_log_posterior_fn   # JIT-cached, minimisation objective
        data_args = context.data_args
        ...
        return Posterior(..., _model=context.model)
@@ -258,7 +258,7 @@ entry automatically — no test-file edits required.
 
 **JIT rule** (non-negotiable): `InferenceContext` must never be hashed
 into a JIT key or passed through `jax.jit` / `jax.vmap` / `jax.lax.scan`
-as a traced argument. Pull primitives (`loss_fn`, `data_args`) out of
+as a traced argument. Pull primitives (`neg_log_posterior_fn`, `data_args`) out of
 context *before* entering JAX transforms. The context's
 `__jax_array__` guard raises on accidental tracing.
 

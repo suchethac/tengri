@@ -4,7 +4,7 @@ A component owns one block of the forward model — stellar emission,
 dust attenuation+emission, nebular lines, AGN, IGM, radio, X-ray —
 plus the parameters and precomputed tensors that go with it. The
 :class:`tengri.SEDModel` orchestrator runs components in order, threading
-a :class:`PipelineState` through them.
+a :class:`ForwardState` through them.
 
 This module is part of the Part II-1 scaffold. Nothing in `tengri`
 consumes these classes yet; they exist so future phases (II-2 onwards)
@@ -16,7 +16,7 @@ Notes
 can be JIT/grad/vmap-compiled by the orchestrator. :meth:`precompute`
 runs *before* tracing and may use eager numpy/file I/O.
 
-**Immutability:** :class:`PipelineState` and :class:`SEDComponentState`
+**Immutability:** :class:`ForwardState` and :class:`SEDComponentState`
 are frozen dataclasses. Components return *new* states rather than
 mutating their inputs. This matches the global coding rule
 (`~/.claude/rules/common/coding-style.md`) and is what makes
@@ -36,9 +36,9 @@ from tengri.protocols.derived_bundle import DerivedBundle
 __all__ = [
     "BARE_NAME_ALLOWLIST",
     "DerivedKey",
+    "ForwardState",
     "ParamDeclaration",
     "PipelineContractError",
-    "PipelineState",
     "SEDComponent",
     "SEDComponentConfig",
     "SEDComponentState",
@@ -47,12 +47,12 @@ __all__ = [
 
 class PipelineContractError(ValueError):
     """Raised by :func:`tengri.forward.orchestrator.validate_pipeline` when
-    publish/require constraints fail at component-list construction time.
+    the output/input contract is violated at component-list construction time.
 
     The contract is checked once at :class:`tengri.SEDModel` construction,
     before any JIT compile. A raised ``PipelineContractError`` always names
     the offending component class and the offending derived key, plus a
-    "Did you mean: ..." suggestion when a missing-publisher likely indicates
+    "Did you mean: ..." suggestion when a missing-producer likely indicates
     a typo. See :func:`validate_pipeline` for the full list of checks.
     """
 
@@ -119,12 +119,12 @@ class ParamDeclaration(NamedTuple):
 
 
 class DerivedKey(NamedTuple):
-    """One cross-component datum published into :attr:`PipelineState.derived`.
+    """One cross-component datum published into :attr:`ForwardState.derived`.
 
-    Returned in a tuple from :meth:`SEDComponent.publishes` and
-    :meth:`SEDComponent.requires`. Consumed once at pipeline construction
+    Returned in a tuple from :meth:`SEDComponent.outputs` and
+    :meth:`SEDComponent.inputs`. Consumed once at pipeline construction
     by :func:`tengri.forward.orchestrator.validate_pipeline` to ensure
-    every required key has an upstream publisher with matching units, and
+    every required key has an upstream producer with matching units, and
     (when needed) to derive a topological ordering over components.
 
     Mirrors :class:`ParamDeclaration` line-for-line so future readers see
@@ -133,7 +133,7 @@ class DerivedKey(NamedTuple):
     Fields
     ------
     name : str
-        Stable key written to / read from :attr:`PipelineState.derived`.
+        Stable key written to / read from :attr:`ForwardState.derived`.
         Compared by string equality, so renames are caught at construction.
     units : str
         Free-form units tag, e.g. ``"erg/s"``, ``"Msun/yr"``, ``"dex"``,
@@ -207,10 +207,16 @@ class SEDComponentState:
 
 
 @dataclass(frozen=True)
-class PipelineState:
+class ForwardState:
     """Threaded state passed through a chain of :class:`SEDComponent`s.
 
-    Each component reads what it needs and returns a new ``PipelineState``
+    The carrier object for the forward model: holds the SED-in-progress
+    plus a typed bag of derived quantities that downstream components
+    read from upstream components. Renamed from ``ForwardState`` in
+    Phase II-3.2 (2026-05-18) for astronomer-friendly user-facing names;
+    ``ForwardState`` remains as a soft alias for one minor version.
+
+    Each component reads what it needs and returns a new ``ForwardState``
     (immutable). Field semantics match :mod:`tengri.forward.prediction`:
 
     - ``wave``               : rest-frame wavelength grid in Å
@@ -253,7 +259,7 @@ class PipelineState:
             # Frozen dataclass — bypass the guard with object.__setattr__.
             object.__setattr__(self, "derived", DerivedBundle.from_dict(dict(self.derived)))
 
-    def with_(self, **overrides: Any) -> PipelineState:
+    def with_(self, **overrides: Any) -> ForwardState:
         """Return a copy of this state with selected fields replaced.
 
         Convenience for components::
@@ -276,7 +282,7 @@ class PipelineState:
 # JAX pytree registration
 # ─────────────────────────────────────────────────────────────────────
 #
-# ``PipelineState`` and ``SEDComponentState`` are threaded through
+# ``ForwardState`` and ``SEDComponentState`` are threaded through
 # JIT-compiled component pipelines, so they must be JAX pytrees. All
 # fields are dynamic (data, not static metadata) — even the ``Mapping``
 # fields ``lines`` and ``derived`` are dicts of arrays that JAX's
@@ -284,12 +290,12 @@ class PipelineState:
 #
 # Registration uses :func:`jax.tree_util.register_dataclass` (JAX ≥ 0.4),
 # which preserves the frozen-dataclass nature and integrates with
-# :func:`dataclasses.replace`-based mutation in :meth:`PipelineState.with_`.
+# :func:`dataclasses.replace`-based mutation in :meth:`ForwardState.with_`.
 
 from jax import tree_util as _tree_util
 
 _tree_util.register_dataclass(
-    PipelineState,
+    ForwardState,
     data_fields=("wave", "sed_intrinsic", "sed_attenuated", "sed_observed", "lines", "derived"),
     meta_fields=(),
 )
@@ -305,6 +311,13 @@ _tree_util.register_dataclass(
 )
 
 del _tree_util
+
+
+# Soft alias for backwards compatibility. ``ForwardState`` is the canonical
+# name as of Phase II-3.2 (2026-05-18); ``PipelineState`` will be removed in
+# tengri v1.0. Aliasing the class object (rather than wrapping it) preserves
+# isinstance checks and type-annotation equivalence in downstream code.
+PipelineState = ForwardState
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -357,11 +370,11 @@ class SEDComponent(Protocol):
         Both arguments are optional — components that do not need an
         SSP grid (radio, IGM, X-ray) leave them defaulted.
 
-    apply(state, params) -> PipelineState
+    apply(state, params) -> ForwardState
         Pure JAX. Reads only parameters whose name starts with
         :attr:`parameter_prefix`, plus any cached tensors held by
         ``self`` (typically a frozen :class:`SEDComponentState`).
-        Returns a *new* ``PipelineState`` (do not mutate the input).
+        Returns a *new* ``ForwardState`` (do not mutate the input).
 
     Notes
     -----
@@ -399,25 +412,31 @@ class SEDComponent(Protocol):
         """
         ...
 
-    # ``publishes()`` and ``requires()`` are intentionally NOT part of the
+    # ``outputs()`` and ``inputs()`` are intentionally NOT part of the
     # runtime-checkable Protocol surface. The validator at
     # :func:`tengri.forward.orchestrator.validate_pipeline` consults them
-    # via ``getattr(c, "publishes", lambda: ())()`` so components that
+    # via ``getattr(c, "outputs", lambda: ())()`` so components that
     # have not yet been annotated still satisfy ``isinstance(c, SEDComponent)``.
     # Concrete components that DO declare cross-component data should add
     # methods with the signature::
     #
-    #     def publishes(self) -> tuple[DerivedKey, ...]: ...
-    #     def requires(self) -> tuple[DerivedKey, ...]: ...
-    #     def requires_optional(self) -> tuple[DerivedKey, ...]: ...
+    #     def outputs(self) -> tuple[DerivedKey, ...]: ...
+    #     def inputs(self) -> tuple[DerivedKey, ...]: ...
+    #     def optional_inputs(self) -> tuple[DerivedKey, ...]: ...
     #
-    # ``requires`` declares HARD dependencies — a missing publisher is a
-    # construction error. ``requires_optional`` (Phase B of issue #21)
+    # ``inputs`` declares HARD dependencies — a missing producer is a
+    # construction error. ``optional_inputs`` (Phase B of issue #21)
     # declares opportunistic reads that have a documented fallback —
     # the validator still checks units on the optional read if an
-    # upstream publishes the key, but a missing publisher is not an error.
-    # See ``RadioSEDComponent`` and ``XRaySEDComponent`` for the
-    # canonical optional-read pattern, and ADR-0004 for the full rationale.
+    # upstream component outputs the key, but a missing producer is not
+    # an error. See ``RadioSEDComponent`` and ``XRaySEDComponent`` for
+    # the canonical optional-read pattern, and ADR-0009 for the full
+    # rationale.
+    #
+    # Renamed from ``publishes`` / ``requires`` / ``requires_optional`` in
+    # Phase II-3.2 (2026-05-18). The old method names are still accepted by
+    # the orchestrator as a backwards-compatible fallback for one minor
+    # version; they emit a ``DeprecationWarning`` at validate_pipeline time.
 
     def precompute(
         self,
@@ -436,19 +455,19 @@ class SEDComponent(Protocol):
 
     def apply(
         self,
-        state: PipelineState,
+        state: ForwardState,
         params: Mapping[str, jnp.ndarray],
-    ) -> PipelineState:
+    ) -> ForwardState:
         """Pure JAX step.
 
         Reads ``params`` (already sliced to this component's prefix by
         the orchestrator) plus any frozen tensors held by ``self``,
-        then returns a *new* :class:`PipelineState` with this
+        then returns a *new* :class:`ForwardState` with this
         component's contribution applied.
 
         Parameters
         ----------
-        state : PipelineState
+        state : ForwardState
             Current state from upstream components (e.g. stellar emits
             ``sed_intrinsic``; dust then reads it and writes
             ``sed_attenuated``).
@@ -459,7 +478,7 @@ class SEDComponent(Protocol):
 
         Returns
         -------
-        PipelineState
+        ForwardState
             New state. MUST NOT mutate the input.
         """
         ...

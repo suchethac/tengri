@@ -28,8 +28,8 @@ from tengri.components.nebular.baked_in import BakedInBackend
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
     DerivedKey,
+    ForwardState,
     ParamDeclaration,
-    PipelineState,
     SEDComponentConfig,
     SEDComponentState,
 )
@@ -251,7 +251,7 @@ class NebularSEDComponent:
             f"supported: 'baked_in', 'cloudy_grid', 'cue', 'shock'."
         )
 
-    def publishes(self) -> tuple[DerivedKey, ...]:
+    def outputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys this nebular component publishes.
 
         See :func:`tengri.forward.orchestrator.validate_pipeline`.
@@ -263,7 +263,7 @@ class NebularSEDComponent:
             DerivedKey("line_lums", "erg/s", "Line luminosities"),
         )
 
-    def requires(self) -> tuple[DerivedKey, ...]:
+    def inputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys this nebular component reads.
 
         Backend-dependent:
@@ -321,9 +321,9 @@ class NebularSEDComponent:
 
     def apply(
         self,
-        state: PipelineState,
+        state: ForwardState,
         params: Mapping[str, jnp.ndarray],
-    ) -> PipelineState:
+    ) -> ForwardState:
         r"""Compute nebular SED via the configured backend; add to ``sed_intrinsic``.
 
         For ``backend="baked_in"`` the SED is unchanged (emission is
@@ -338,7 +338,7 @@ class NebularSEDComponent:
 
         Returns
         -------
-        PipelineState
+        ForwardState
             New state with ``derived["sed_nebular"]`` and
             ``derived["sed_shock"]`` always populated (zeros for the
             non-active branch), and (for non-BakedIn backends)

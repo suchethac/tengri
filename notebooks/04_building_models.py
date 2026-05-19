@@ -105,7 +105,7 @@ print(
 # Path 1: Recipe (curated template)
 print("PATH 1: Recipe")
 recipe_dict = recipes.star_forming_photometry()
-model1 = SEDModel.from_groups(ssp_data=ssp, observation=observation, **recipe_dict)
+model1 = SEDModel.build(ssp_data=ssp, observation=observation, **recipe_dict)
 print(f"  Model: {model1.spec.n_free} free params from recipe")
 print(f"  SFH family: {recipe_dict['sfh']['type']}")
 print()
@@ -124,7 +124,7 @@ groups_dict = {
     "redshift": Uniform(0.01, 6.0),
     "apply_igm": True,
 }
-model2 = SEDModel.from_groups(ssp_data=ssp, observation=observation, **groups_dict)
+model2 = SEDModel.build(ssp_data=ssp, observation=observation, **groups_dict)
 print(f"  Model: {model2.spec.n_free} free params from direct dict")
 print(
     f"  Free params match recipe: {set(model1.spec.free_params) == set(model2.spec.free_params)}"
@@ -136,7 +136,7 @@ print("PATH 3: Round-trip")
 groups_from_model = model1.spec.to_groups()
 # Tweak: change metallicity to free (lives inside the sfh group as 'logzsol')
 groups_from_model.setdefault("sfh", {})["logzsol"] = FREE
-model3 = SEDModel.from_groups(ssp_data=ssp, observation=observation, **groups_from_model)
+model3 = SEDModel.build(ssp_data=ssp, observation=observation, **groups_from_model)
 print(f"  Model: {model3.spec.n_free} free params from round-trip + edit")
 print(f"  Added metallicity freedom: {'met_logzsol' in model3.spec.free_params}")
 
@@ -873,7 +873,7 @@ print("loops for sensitivity studies, or vmap() for full batch vectorization.")
 #
 # Key affordances:
 # - `recipes.*()` curated templates for common scenarios
-# - `SEDModel.from_groups(..., filters=...)` one-liner to build and evaluate
+# - `SEDModel.build(..., filters=...)` one-liner to build and evaluate
 # - `model.spec.to_groups()` extract structure for inspection/round-trip edits
 # - `model.spec.summary_str()` provenance-tagged parameter listing
 #

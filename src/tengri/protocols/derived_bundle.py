@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Typed bundle for cross-component derived data on :attr:`PipelineState.derived`.
+"""Typed bundle for cross-component derived data on :attr:`ForwardState.derived`.
 
 ``DerivedBundle`` is a frozen dataclass with one field per documented
 inter-component datum (``L_ir``, ``lnu_age``, …). Writers go through
@@ -45,7 +45,7 @@ class DerivedBundle:
     name. ``None`` means "not populated by any upstream component".
 
     Mutation via :meth:`with_` (the same pattern
-    :class:`tengri.protocols.PipelineState` uses); never assign in place
+    :class:`tengri.protocols.ForwardState` uses); never assign in place
     because the dataclass is frozen.
 
     Dict compatibility
@@ -68,7 +68,7 @@ class DerivedBundle:
 
     Registered with :func:`jax.tree_util.register_dataclass` so the
     bundle can ride through ``jax.lax.scan`` / ``jax.tree_map`` along
-    with the rest of :class:`PipelineState`. Every field is a *data*
+    with the rest of :class:`ForwardState`. Every field is a *data*
     field — JAX traces each one. ``None`` defaults are static at trace
     time; switching which fields are populated invalidates the JIT
     cache, which is acceptable because a given :class:`tengri.SEDModel`
@@ -225,7 +225,7 @@ class DerivedBundle:
         Strict by default: when ``allow_extras=False``, keys outside
         the typed set raise :class:`TypeError` with a Levenshtein-2
         "Did you mean: ..." hint. Production write paths
-        (:meth:`PipelineState.__post_init__`, :meth:`PipelineState.with_`)
+        (:meth:`ForwardState.__post_init__`, :meth:`ForwardState.with_`)
         rely on this strictness to catch typos at trace time.
 
         Pass ``allow_extras=True`` to spill unknown keys into
@@ -277,7 +277,7 @@ def _did_you_mean(target: str, options) -> str | None:
 # Each typed field is a data field. ``_extras`` is also a data field
 # (a dict; JAX's default-dict-pytree handler will recurse into it).
 # The frozen-dataclass + register_dataclass combo is identical to how
-# PipelineState is registered in tengri.protocols.component.
+# ForwardState is registered in tengri.protocols.component.
 
 from jax import tree_util as _tree_util
 

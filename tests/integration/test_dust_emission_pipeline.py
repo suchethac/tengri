@@ -23,7 +23,7 @@ from tengri.components.dust.component import DustAttenuationSEDComponent
 from tengri.components.dust.emission import modified_blackbody
 from tengri.components.dust.emission_component import DustEmissionSEDComponent
 from tengri.forward.orchestrator import merge_declared_parameters, run_components
-from tengri.protocols import PipelineState
+from tengri.protocols import ForwardState
 from tengri.utils.physics_constants import C_AA
 
 REL_TOL = 1e-10
@@ -41,7 +41,7 @@ REL_TOL = 1e-10
 def test_emission_matches_modified_blackbody(dust_T, dust_beta_ir, L_ir):
     """Pipeline output equals direct modified_blackbody call."""
     wave = jnp.logspace(2, 8, 1024)  # 100 Å to 100 mm — covers UV through mm
-    state = PipelineState(
+    state = ForwardState(
         wave=wave,
         sed_intrinsic=jnp.zeros_like(wave),
         derived={"L_ir": L_ir},
@@ -70,7 +70,7 @@ def test_emission_matches_modified_blackbody(dust_T, dust_beta_ir, L_ir):
 def test_emission_is_noop_when_l_ir_is_zero():
     """No upstream attenuator → L_ir = 0 → adapter contributes nothing."""
     wave = jnp.logspace(2, 8, 64)
-    state = PipelineState(wave=wave, sed_intrinsic=jnp.zeros_like(wave))
+    state = ForwardState(wave=wave, sed_intrinsic=jnp.zeros_like(wave))
 
     out = DustEmissionSEDComponent().apply(
         state, {"redshift": 0.0, "dust_T": 30.0, "dust_beta_ir": 1.8}
@@ -86,7 +86,7 @@ def test_attenuation_publishes_l_ir_for_emission_to_consume():
     wave = jnp.logspace(2, 8, 1024)
     intrinsic = jnp.ones_like(wave) * 1e30  # uniform L_nu in cgs
 
-    state = PipelineState(wave=wave, sed_intrinsic=intrinsic)
+    state = ForwardState(wave=wave, sed_intrinsic=intrinsic)
 
     after_attenuation = DustAttenuationSEDComponent().apply(
         state, {"redshift": 0.0, "dust_tau_v": 0.5}
@@ -105,7 +105,7 @@ def test_attenuation_l_ir_zero_when_no_attenuation():
     wave = jnp.logspace(2, 8, 256)
     intrinsic = jnp.ones_like(wave) * 1e30
 
-    state = PipelineState(wave=wave, sed_intrinsic=intrinsic)
+    state = ForwardState(wave=wave, sed_intrinsic=intrinsic)
     after = DustAttenuationSEDComponent().apply(state, {"redshift": 0.0, "dust_tau_v": 0.0})
 
     assert float(after.derived["L_ir"]) == pytest.approx(0.0, abs=1e-10)
@@ -117,7 +117,7 @@ def test_closed_loop_chain_runs():
     wave = jnp.logspace(2, 8, 1024)
     intrinsic = jnp.ones_like(wave) * 1e30
 
-    state = PipelineState(wave=wave, sed_intrinsic=intrinsic)
+    state = ForwardState(wave=wave, sed_intrinsic=intrinsic)
     final = run_components(
         [DustAttenuationSEDComponent(), DustEmissionSEDComponent()],
         state,
@@ -144,7 +144,7 @@ def test_emitted_luminosity_integral_matches_l_ir():
     wave = jnp.logspace(2, 8, 4096)  # finer grid for the integral
     intrinsic = jnp.ones_like(wave) * 1e30
 
-    state = PipelineState(wave=wave, sed_intrinsic=intrinsic)
+    state = ForwardState(wave=wave, sed_intrinsic=intrinsic)
     final = run_components(
         [DustAttenuationSEDComponent(), DustEmissionSEDComponent()],
         state,

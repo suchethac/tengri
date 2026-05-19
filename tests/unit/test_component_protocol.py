@@ -26,8 +26,8 @@ from tengri.forward.orchestrator import slice_params_for_component
 from tengri.parameters.priors import Distribution
 from tengri.protocols import (
     BARE_NAME_ALLOWLIST,
+    ForwardState,
     ParamDeclaration,
-    PipelineState,
     SEDComponent,
     SEDComponentState,
 )
@@ -49,7 +49,7 @@ def wave():
 
 @pytest.fixture
 def state(wave):
-    return PipelineState(
+    return ForwardState(
         wave=wave,
         sed_intrinsic=jnp.zeros_like(wave),
         sed_observed=jnp.ones_like(wave),
@@ -129,10 +129,10 @@ def test_precompute_returns_typed_marker(adapter):
 
 @pytest.mark.parametrize("adapter", ADAPTERS, ids=lambda a: a.name)
 def test_apply_returns_new_state(adapter, state):
-    """apply() returns a new PipelineState — never mutates the input."""
+    """apply() returns a new ForwardState — never mutates the input."""
     sliced = slice_params_for_component(adapter, _full_params())
     new_state = adapter.apply(state, sliced)
-    assert isinstance(new_state, PipelineState)
+    assert isinstance(new_state, ForwardState)
     assert new_state is not state
 
 
@@ -144,12 +144,12 @@ def test_two_adapters_exist():
 
 
 def test_two_adapters_touch_distinct_pipeline_state_slots(wave):
-    """The two adapters must exercise different PipelineState slots.
+    """The two adapters must exercise different ForwardState slots.
 
     Radio writes :attr:`sed_intrinsic`; IGM writes :attr:`sed_observed`.
     If both wrote the same slot the seam would be under-tested.
     """
-    state = PipelineState(
+    state = ForwardState(
         wave=wave,
         sed_intrinsic=jnp.zeros_like(wave),
         sed_observed=jnp.ones_like(wave),

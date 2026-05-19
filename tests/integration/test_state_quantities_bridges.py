@@ -3,7 +3,7 @@
 
 The :func:`tengri.forward.state_to_*_quantities` helpers and their
 ``SEDModel.predict_*_via_orchestrator`` wrappers convert a
-:class:`tengri.protocols.PipelineState` into the legacy
+:class:`tengri.protocols.ForwardState` into the legacy
 :class:`SFHQuantities` / :class:`SEDQuantities` NamedTuples (and the
 new :class:`RadioQuantities` / :class:`XRayQuantities` /
 :class:`IonizingQuantities` mirrors).
@@ -37,7 +37,7 @@ from tengri.forward import (
     state_to_sfh_quantities,
     state_to_xray_quantities,
 )
-from tengri.protocols.component import PipelineState
+from tengri.protocols.component import ForwardState
 
 # Bare-stellar SSP — required by Cue (wNE SSPs now raise CueWNESSPError).
 _SSP_PATH = pathlib.Path("data/fsps_prsc_miles_chabrier.h5").resolve()
@@ -58,7 +58,7 @@ def state(ssp):
         RadioSEDComponent(),
         XRaySEDComponent(),
     ]
-    state0 = PipelineState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
+    state0 = ForwardState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
     params = {
         # tsnorm SFH
         "sfh_tsnorm_log_peak_sfr": jnp.asarray(1.0),
@@ -209,7 +209,7 @@ def state_with_cue(ssp):
         StellarSEDComponent(ssp_data=ssp),
         NebularSEDComponent(config=NebularSEDComponentConfig(backend="cue"), backend=cue),
     ]
-    state0 = PipelineState(wave=ssp.ssp_wave)
+    state0 = ForwardState(wave=ssp.ssp_wave)
     params = {
         "sfh_tsnorm_log_peak_sfr": jnp.asarray(1.0),
         "sfh_tsnorm_peak_lbt_gyr": jnp.asarray(2.0),

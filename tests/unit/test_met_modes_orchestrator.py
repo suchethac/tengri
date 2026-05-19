@@ -241,7 +241,7 @@ class TestTable:
         )
         from tengri.forward.orchestrator import run_components
         from tengri.parameters.translate import LOG10_ZSUN
-        from tengri.protocols.component import PipelineState
+        from tengri.protocols.component import ForwardState
 
         Z_solar = -0.3
         Z_abs = Z_solar + LOG10_ZSUN
@@ -258,7 +258,7 @@ class TestTable:
             ssp_data=synthetic_ssp,
         )
         wave = synthetic_ssp.ssp_wave
-        state0 = PipelineState(wave=wave, sed_observed=jnp.ones_like(wave))
+        state0 = ForwardState(wave=wave, sed_observed=jnp.ones_like(wave))
         params = {
             "sfh_dpl_alpha": 1.5,
             "sfh_dpl_beta": 1.0,
@@ -277,7 +277,7 @@ class TestTable:
             StellarSEDComponentConfig,
         )
         from tengri.forward.orchestrator import run_components
-        from tengri.protocols.component import PipelineState
+        from tengri.protocols.component import ForwardState
 
         stellar = StellarSEDComponent(
             config=StellarSEDComponentConfig(
@@ -288,7 +288,7 @@ class TestTable:
             ssp_data=synthetic_ssp,
         )
         wave = synthetic_ssp.ssp_wave
-        state0 = PipelineState(wave=wave, sed_observed=jnp.ones_like(wave))
+        state0 = ForwardState(wave=wave, sed_observed=jnp.ones_like(wave))
         params = {
             "sfh_dpl_alpha": 1.5,
             "sfh_dpl_beta": 1.0,
