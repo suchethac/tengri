@@ -170,6 +170,139 @@ print(f"  Model: {model3.spec.n_free} free params from round-trip + edit")
 print(f"  Added metallicity freedom: {'met_logzsol' in model3.spec.free_params}")
 
 # %% [markdown]
+# ## Builder factories: a tour of the full surface
+#
+# The `tengri.builders` namespace provides callable factories for every variant
+# and backend in the system. Each factory returns a dict suitable for nesting
+# into the groups structure. IDE autocomplete on parameter names removes typos;
+# one-line swaps handle structural changes (SFH family, dust law, etc.).
+
+# %% [markdown]
+# ### SFH variants — 26+ parametrizations
+
+# %%
+print("SFH Variants Tour")
+print("─" * 70)
+print(f"Available SFH families: {len(builders.sfh.available())}")
+print(f"  Sampling: {builders.sfh.available()[:5]} ... {builders.sfh.available()[-3:]}")
+print()
+
+# Build a model with tsnorm (instead of dpl from PATH 3)
+groups_sfh_tour = {
+    "sfh": builders.sfh.tsnorm(_=FREE, skew=Uniform(-1.0, 1.0)),
+    "dust": {
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": FIXED,
+    },
+    "neb": {"type": "cue", "*": FIXED},
+    "redshift": Fixed(0.05),
+}
+spec_sfh_tour = Parameters.from_groups(**groups_sfh_tour)
+print(
+    f"tsnorm variant free params: {[p for p in spec_sfh_tour.free_params if p.startswith('sfh_')]}"
+)
+print("TIP: Swapping SFH families is now one-line: builders.sfh.<variant>(...)")
+print()
+
+# %% [markdown]
+# ### Dust: two-component attenuation + nested emission
+
+# %%
+print("Dust Model Tour")
+print("─" * 70)
+
+# two_component with nested emission using a factory
+groups_dust_tour = {
+    "sfh": {"type": "tsnorm", "*": FIXED},
+    "dust": builders.dust.two_component(
+        law_bc="calzetti",
+        _=FREE,
+        tau_bc=Uniform(0.0, 2.0),
+        emission=builders.dust.emission.dale2014(_=FIXED),
+    ),
+    "neb": {"type": "cue", "*": FIXED},
+    "redshift": Fixed(0.05),
+}
+spec_dust_tour = Parameters.from_groups(**groups_dust_tour)
+print(
+    f"two_component + dale2014: {[p for p in spec_dust_tour.free_params if 'dust' in p][:5]} ..."
+)
+print(f"Summary:\n{spec_dust_tour.summary_str()}")
+print()
+
+# %% [markdown]
+# ### Nebular backends — cue, cloudy, cb19, ssp, none
+
+# %%
+print("Nebular Backend Tour")
+print("─" * 70)
+print(f"Available nebular backends: {builders.neb.available()}")
+print()
+
+# Try cb19 (adds log_nH parameter)
+try:
+    groups_neb_tour = {
+        "sfh": {"type": "tsnorm", "*": FIXED},
+        "dust": {"type": "two_component", "*": FIXED},
+        "neb": builders.neb.cb19(_=FREE, log_nH=Uniform(1.0, 4.0)),
+        "redshift": Fixed(0.05),
+    }
+    spec_neb_tour = Parameters.from_groups(**groups_neb_tour)
+    neb_params = [p for p in spec_neb_tour.free_params if "neb" in p]
+    print(f"cb19 backend free params: {neb_params}")
+except Exception as e:
+    # Fallback: bare-stellar SSP may not support non-Cue backends
+    print(f"cb19 skipped (bare-stellar SSP limitation): {str(e)[:50]}...")
+    groups_neb_tour = {
+        "sfh": {"type": "tsnorm", "*": FIXED},
+        "dust": {"type": "two_component", "*": FIXED},
+        "neb": builders.neb.cue(_=FIXED),
+        "redshift": Fixed(0.05),
+    }
+    spec_neb_tour = Parameters.from_groups(**groups_neb_tour)
+    neb_params = [p for p in spec_neb_tour.free_params if "neb" in p]
+    print(f"Fallback: Cue backend (always available): {neb_params}")
+print()
+
+# %% [markdown]
+# ### IGM absorption with optional DLA
+
+# %%
+print("IGM Models Tour")
+print("─" * 70)
+
+# inoue14 with DLA column density as optional parameter
+igm_dict = builders.igm.inoue14(log_n_hi=Uniform(20.0, 22.0))
+print(f"builders.igm.inoue14(log_n_hi=...): {igm_dict}")
+print("Note: Supplying log_n_hi auto-sets dla=True (Damped Lyman Alpha)")
+print()
+
+# %% [markdown]
+# ### Composable AGN — disc, torus, lines, feii, attenuation
+
+# %%
+print("Composable AGN Tour")
+print("─" * 70)
+
+# Build AGN dict using composable factories (do NOT build full SEDModel here)
+agn_dict = builders.agn.composable(
+    _=FREE,
+    log_lbol=Uniform(43.0, 47.0),
+    disc=builders.agn.disc.multicolor(_=FREE),
+    torus=builders.agn.torus.skirtor(_=FIXED),
+    lines=builders.agn.lines.nlr(),
+    feii=builders.agn.feii.none(),
+    atten=builders.agn.atten.smc_prevot(_=FIXED),
+)
+print(f"Composable AGN dict keys: {list(agn_dict.keys())}")
+print(f"  agn_dict['type'] = '{agn_dict['type']}'")
+print(f"  agn_dict['disc']['type'] = '{agn_dict['disc']['type']}'")
+print(f"  agn_dict['torus']['type'] = '{agn_dict['torus']['type']}'")
+print("Tip: Swap any sub-block (disc, torus, lines) to explore AGN physics.")
+print()
+
+# %% [markdown]
 # ## Parameter provenance and summary
 #
 # Use `model.spec.summary_str()` to inspect how each parameter got its value.

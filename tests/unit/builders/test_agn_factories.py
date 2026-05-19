@@ -175,3 +175,105 @@ def test_available_axes_returns_dict_of_lists() -> None:
         assert isinstance(variants, list)
         assert variants == sorted(variants)
         assert len(variants) >= 2
+
+
+# ── Top-level AGN model factories ─────────────────────────────────
+
+
+def test_all_13_top_level_models_have_factories() -> None:
+    """All 13 non-composable AGN models must be callable factories."""
+    top_level_models = [
+        "adaf",
+        "cat3d_wind",
+        "grahsp",
+        "kubota_done",
+        "kubota_done_full",
+        "multicolor_agn",
+        "qsogen",
+        "relagn",
+        "silva04",
+        "simple",
+        "skirtor",
+        "standard",
+        "unified_nlr_blr",
+    ]
+    for model_name in top_level_models:
+        factory = getattr(builders.agn, model_name, None)
+        assert factory is not None, f"builders.agn.{model_name} not found"
+        assert callable(factory), f"builders.agn.{model_name} is not callable"
+
+
+def test_available_lists_all_14_top_level_models() -> None:
+    """The available() function must list 14 total factories."""
+    factories = builders.agn.available()
+    assert len(factories) == 14
+    assert factories == sorted(factories)
+    assert "composable" in factories
+    # Check all 13 non-composable models are listed
+    non_composable = [
+        "adaf",
+        "cat3d_wind",
+        "grahsp",
+        "kubota_done",
+        "kubota_done_full",
+        "multicolor_agn",
+        "qsogen",
+        "relagn",
+        "silva04",
+        "simple",
+        "skirtor",
+        "standard",
+        "unified_nlr_blr",
+    ]
+    for model_name in non_composable:
+        assert model_name in factories, f"{model_name} not in available()"
+
+
+def test_skirtor_signature_includes_canonical_params() -> None:
+    """skirtor (and all top-level models) must expose canonical AGN params."""
+    sig = inspect.signature(builders.agn.skirtor)
+    params = set(sig.parameters)
+    assert "log_lbol" in params
+    assert "log_mbh" in params
+    assert "tau_skirtor" in params  # torus param
+
+
+def test_skirtor_default_call_shape() -> None:
+    """All top-level models return a dict with type and wildcard."""
+    out = builders.agn.skirtor()
+    assert out["type"] == "skirtor"
+    assert out["*"] is FIXED
+
+
+def test_top_level_models_share_signature() -> None:
+    """All 13 top-level models must have identical keyword signatures."""
+    top_level_models = [
+        "adaf",
+        "cat3d_wind",
+        "grahsp",
+        "kubota_done",
+        "kubota_done_full",
+        "multicolor_agn",
+        "qsogen",
+        "relagn",
+        "silva04",
+        "simple",
+        "skirtor",
+        "standard",
+        "unified_nlr_blr",
+    ]
+    sigs = {
+        m: list(inspect.signature(getattr(builders.agn, m)).parameters) for m in top_level_models
+    }
+    reference = sigs["simple"]
+    for model_name, params in sigs.items():
+        assert params == reference, f"builders.agn.{model_name} signature drifted from simple"
+
+
+def test_top_level_round_trip_makes_log_lbol_free() -> None:
+    """Round-trip through parser must recognize top-level factory params."""
+    spec = Parameters.from_groups(
+        sfh={"type": "dpl"},
+        agn=builders.agn.simple(log_lbol=Uniform(43, 47)),
+    )
+    assert "agn_log_lbol" in spec.free_params
