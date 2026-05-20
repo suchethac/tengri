@@ -880,12 +880,12 @@ class StellarSEDComponent:
             z_lo = z_grid[i_lo]
             z_hi = z_grid[i_hi]
             frac = (z - z_lo) / jnp.maximum(z_hi - z_lo, 1e-12)
-            ssp_phot_at_z = (1.0 - frac) * ztable.ssp_phot_table[i_lo] + frac * ztable.ssp_phot_table[i_hi]
+            ssp_phot_at_z = (1.0 - frac) * ztable.ssp_phot_table[
+                i_lo
+            ] + frac * ztable.ssp_phot_table[i_hi]
             # Apply the same einsum as the fixed-z path.
             stellar_phot_lnu_lut_rest = (
-                total_mass
-                * jnp.einsum("ma,maf->f", joint_weights, ssp_phot_at_z)
-                * LSUN_ERG_PER_S
+                total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot_at_z) * LSUN_ERG_PER_S
             )
             derived_overrides["stellar_phot_lnu_lut"] = stellar_phot_lnu_lut_rest
 
