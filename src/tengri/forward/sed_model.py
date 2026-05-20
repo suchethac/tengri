@@ -104,7 +104,42 @@ __all__ = [
     "PriorPredictive",
     "SEDModel",
     "SEDModelState",
+    "WavePrecomp",
 ]
+
+
+@dataclasses.dataclass(frozen=True)
+class WavePrecomp:
+    """Configuration for the ``wave_precomp`` approximation method.
+
+    Pass this to :class:`SEDModel` via ``approx=`` to override the default
+    redshift grid used when the model has a free ``redshift`` parameter. The
+    SSP × filter integral is precomputed on the wavelength grid; for free
+    redshift the result is interpolated through a ``(n_z,)`` table built on
+    the same LUT.
+
+    Parameters
+    ----------
+    n_z : int, default 100
+        Number of grid points in the ztable. Higher → finer redshift
+        interpolation, slower precompute.
+    z_min : float or None, default None
+        Lower bound of the ztable grid. ``None`` → pull from the redshift
+        prior with 1 % padding. Ignored when redshift is ``Fixed``.
+    z_max : float or None, default None
+        Upper bound of the ztable grid. ``None`` → pull from the redshift
+        prior with 1 % padding. Ignored when redshift is ``Fixed``.
+
+    Examples
+    --------
+    >>> SEDModel(..., approx=WavePrecomp())  # default ztable sampling
+    >>> SEDModel(..., approx=WavePrecomp(n_z=200))  # finer ztable
+    >>> SEDModel(..., approx=WavePrecomp(z_min=0.01, z_max=3.0, n_z=200))
+    """
+
+    n_z: int = 100
+    z_min: float | None = None
+    z_max: float | None = None
 
 
 class SEDModel:
@@ -333,60 +368,41 @@ class SEDModel:
             raise ValueError(f"compile={compile!r} is illegal. Legal values: {legal}.")
         self._compile_mode = compile
 
-        # Resolve and validate approximation settings
-        if approx is None or approx is True:
+        # Resolve and validate approximation kwarg.
+        # Contract (Phase 3d, 2026-05-20):
+        #   * ``approx=None`` (default)        — exact wave-grid integration.
+        #   * ``approx=WavePrecomp(...)``      — opt into the precomputed
+        #     SSP × filter LUT path. ``WavePrecomp()`` gives the default
+        #     ztable sampling; ``WavePrecomp(n_z=200, z_min=0.0, z_max=3.0)``
+        #     for custom grids.
+        # Dict / bool / string forms (the pre-3d surface) are rejected.
+        if approx is None:
             self._approx = dict(self._DEFAULT_APPROX)
-        elif approx is False:
-            self._approx = {k: False for k in self._DEFAULT_APPROX}
+            self._approx["wave_precomp"] = False
+            self._approx["ztable"] = False
+            self._approx_config: WavePrecomp | None = None
+        elif isinstance(approx, WavePrecomp):
+            self._approx = dict(self._DEFAULT_APPROX)
+            self._approx["wave_precomp"] = True
+            self._approx_config = approx
         else:
-            self._approx = {**self._DEFAULT_APPROX, **approx}
-
-        # Validate approx flag names
-        legal_flags = {"ztable", "wave_precomp", "igm"}
-        unknown = set(self._approx.keys()) - legal_flags
-        if unknown:
-            raise ValueError(
-                f"Unknown approximation flag(s): {sorted(unknown)}. "
-                f"Legal flags: {sorted(legal_flags)}."
+            raise TypeError(
+                f"approx={approx!r} is not a legal value. Legal forms: "
+                "None (default — exact wave-grid), or "
+                "WavePrecomp() / WavePrecomp(n_z=..., z_min=..., z_max=...) "
+                "for the precomputed SSP × filter LUT path. The pre-3d dict / "
+                "bool / string forms (e.g. approx={'wave_precomp': True}, "
+                "approx=True, approx='wave_precomp') were removed."
             )
 
-        # Resolve approx dependencies. Distinguish explicit-False from
-        # unspecified so we can raise on the contradictory case
-        # (wave_precomp=True with ztable=False explicit + free z) while
-        # silently upgrading the unspecified case.
-        wave_precomp = self._approx.get("wave_precomp", False)
-        ztable = self._approx.get("ztable", False)
-        ztable_explicit = isinstance(approx, dict) and "ztable" in approx
-        redshift_dist = spec.get_distribution("redshift")
-        is_z_free = not redshift_dist.is_fixed
-
-        if wave_precomp and not ztable and is_z_free and ztable_explicit:
-            # Explicit ztable=False is a contradiction with wave_precomp + free z.
-            raise ValueError(
-                "wave_precomp=True with free redshift requires ztable=True. "
-                "Either enable ztable or fix redshift."
-            )
-        elif wave_precomp and not ztable and is_z_free:
-            # ztable unspecified — auto-enable with a log line.
-            warnings.warn(
-                "wave_precomp with free redshift requires ztable; auto-enabling.",
-                UserWarning,
-                stacklevel=2,
-            )
-            self._approx["ztable"] = True
-        elif ztable and not wave_precomp:
-            # ztable requires wave_precomp
-            raise ValueError(
-                "ztable=True requires wave_precomp=True. ztable is the free-z "
-                "variant of wave_precomp; it has nothing to index without it."
-            )
-        elif wave_precomp and ztable and not is_z_free and "ztable" in (approx or {}):
-            # Warn if user explicitly set ztable=True with fixed z
-            warnings.warn(
-                "ztable is irrelevant when redshift is Fixed; consider removing it.",
-                UserWarning,
-                stacklevel=2,
-            )
+        # Free-redshift ztable auto-extension. ``ztable`` is an internal
+        # extension of ``wave_precomp`` (free-z interpolation on the same LUT),
+        # not a user flag — it switches on transparently when the method is
+        # ``wave_precomp`` and redshift is free.
+        if self._approx["wave_precomp"]:
+            redshift_dist = spec.get_distribution("redshift")
+            if not redshift_dist.is_fixed:
+                self._approx["ztable"] = True
 
         # ── Stellar populations ───────────────────────────────────
         self._init_ssp(spec, ssp_data, csp_integration)
@@ -4226,14 +4242,17 @@ class SEDModel:
                     # Phase 3b: fixed-z LUT
                     redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
                 else:
-                    # Phase 3c-1: free-z ztable with padding
+                    # Phase 3c-1: free-z ztable. User can override n_z / z_min /
+                    # z_max via ``approx=WavePrecomp(...)``; otherwise pull from
+                    # the redshift prior with 1 % padding and use n_z=100.
                     z_lo, z_hi = float(z_bounds[0]), float(z_bounds[1])
                     pad = 0.01 * (z_hi - z_lo)
+                    cfg = self._approx_config or WavePrecomp()
                     redshift_spec = {
                         "mode": "free",
-                        "z_min": max(0.001, z_lo - pad),
-                        "z_max": z_hi + pad,
-                        "n_z": 100,
+                        "z_min": (cfg.z_min if cfg.z_min is not None else max(0.001, z_lo - pad)),
+                        "z_max": cfg.z_max if cfg.z_max is not None else z_hi + pad,
+                        "n_z": cfg.n_z,
                     }
 
                 # Call precompute to build the LUT or ztable.

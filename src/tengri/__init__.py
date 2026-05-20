@@ -183,7 +183,7 @@ from tengri.forward.prediction import (
     SFHQuantities,
 )
 from tengri.forward.result import SEDResult
-from tengri.forward.sed_model import PriorPredictive, SEDModel
+from tengri.forward.sed_model import PriorPredictive, SEDModel, WavePrecomp
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
 from tengri.observation.filters import load_filter_set
 from tengri.observation.noise import (
@@ -331,6 +331,7 @@ __all__ = [
     "TengriError",
     "TengriIOError",
     "Uniform",
+    "WavePrecomp",
     "agn",
     "builders",
     "cache_size_bytes",
@@ -477,6 +478,7 @@ _CURATED_DIR = (
     # 2.  Build a fit
     "Parameters",
     "SEDModel",
+    "WavePrecomp",
     "Fitter",
     "Observation",
     "Photometry",

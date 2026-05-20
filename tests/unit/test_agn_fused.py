@@ -15,7 +15,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import Fixed, Parameters, SEDModel, Uniform
+from tengri import Fixed, Parameters, SEDModel, Uniform, WavePrecomp
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SKIRTOR_CANDIDATES = [
@@ -228,8 +228,10 @@ class TestAGNFusedVsExact:
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model_fused = SEDModel(spec, synthetic_ssp, filters=simple_filters, approx=True)
-            model_exact = SEDModel(spec, synthetic_ssp, filters=simple_filters, approx=False)
+            model_fused = SEDModel(
+                spec, synthetic_ssp, filters=simple_filters, approx=WavePrecomp()
+            )
+            model_exact = SEDModel(spec, synthetic_ssp, filters=simple_filters)
 
         key = jax.random.PRNGKey(99)
         params = spec.sample(key)
@@ -288,8 +290,10 @@ class TestAGNFusedVsExact:
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            model_fused = SEDModel(spec, synthetic_ssp, filters=simple_filters, approx=True)
-            model_exact = SEDModel(spec, synthetic_ssp, filters=simple_filters, approx=False)
+            model_fused = SEDModel(
+                spec, synthetic_ssp, filters=simple_filters, approx=WavePrecomp()
+            )
+            model_exact = SEDModel(spec, synthetic_ssp, filters=simple_filters)
 
         assert model_fused._agn_luminosity_mode is True, (
             "Expected _agn_luminosity_mode=True with free agn_log_lbol"
@@ -457,9 +461,7 @@ class TestSKIRTORPreintegration:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model_hybrid = SEDModel(skirtor_spec, synthetic_ssp, filters=simple_filters)
-            model_exact = SEDModel(
-                skirtor_spec, synthetic_ssp, filters=simple_filters, approx=False
-            )
+            model_exact = SEDModel(skirtor_spec, synthetic_ssp, filters=simple_filters)
 
         key = jax.random.PRNGKey(7)
         params = skirtor_spec.sample(key)
