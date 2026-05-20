@@ -444,8 +444,8 @@ class TestPredict:
         with pytest.raises(ValueError, match="Unknown data_type"):
             smodel.predict(xi, data_type="hyperspectral")
 
-    def test_predict_uses_traceable_mode(self):
-        """predict() must call predict_photometry with mode='_traceable'."""
+    def test_predict_usestraced_mode(self):
+        """predict() must call predict_photometry with mode='traced'."""
         from tengri.inference.standardized import StandardizedForwardModel
 
         spec = _make_spec()
@@ -456,8 +456,8 @@ class TestPredict:
         smodel.predict(xi, data_type="photometry")
 
         call_kwargs = model.predict_photometry.call_args
-        assert call_kwargs.kwargs.get("mode") == "_traceable" or (
-            len(call_kwargs.args) >= 2 and call_kwargs.args[1] == "_traceable"
+        assert call_kwargs.kwargs.get("mode") == "traced" or (
+            len(call_kwargs.args) >= 2 and call_kwargs.args[1] == "traced"
         )
 
 

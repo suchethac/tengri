@@ -19,7 +19,6 @@ import contextlib
 import logging
 import threading
 import time
-import warnings
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -45,44 +44,7 @@ from tengri.inference.loss_functions import (
 )
 from tengri.parameters.priors import Gaussian, Uniform
 
-# ── Method name unification ────────────────────────────────────────────
-
-# Maps deprecated/old method strings → new canonical names.
-_DEPRECATED_METHOD_ALIASES: dict[str, str] = {
-    # Old nifty-qualified names → clean canonical
-    "vi_nifty": "vi_nonlinear",
-    "vi_nifty_linear": "vi_linear",
-    # Old fast nifty names → canonical fast names
-    "vi_nifty_fast": "vi_nonlinear_fast",
-    "vi_nifty_fast_linear": "vi_linear_fast",
-    # Old geoVI names → vi_nonlinear
-    "geovi": "vi_nonlinear",
-    "fast_geovi": "vi_nonlinear_fast",
-    "nifty_geovi": "vi_nonlinear",
-    "geovi_nuts": "vi_nonlinear",
-    # Old MGVI / linear names → vi_linear
-    "mgvi": "vi_linear",
-    "fast_mgvi": "vi_linear_fast",
-    "nifty_mgvi": "vi_linear",
-    "evi": "vi_linear",
-    # Old native names → canonical native variants
-    "native_geovi": "native_vi_nonlinear",
-    "vi_native": "native_vi_nonlinear",
-    "vi_native_linear": "native_vi_linear",
-    "native_mgvi": "native_vi_linear",
-    "native_evi": "native_vi_linear",
-    # MCMC
-    "raytrace": "mcmc_raytrace",
-    "nuts": "mcmc_nuts",
-    "hmc": "mcmc_hmc",
-    "dynamic_hmc": "mcmc_dynamic_hmc",
-    "ghmc": "mcmc_ghmc",
-    "mclmc": "mcmc_mclmc",
-    "adjusted_mclmc": "mcmc_adjusted_mclmc",
-    "elliptical_slice": "mcmc_ess",
-    # Evidence
-    "evidence": "nss",
-}
+# ── Method name validation ────────────────────────────────────────────
 
 # D threshold for "auto": D <= this → mcmc_nuts, D > this → vi
 _AUTO_D_THRESHOLD = 20
@@ -119,96 +81,42 @@ _CANONICAL_METHODS = {
 
 
 def resolve_method(method: str, emit_warning: bool = True) -> str:
-    """Resolve method string to canonical name with deprecation warning.
-
-    Maps deprecated method aliases to their canonical equivalents, emitting
-    a DeprecationWarning for deprecated usage. Validates that the final
-    method name is either canonical (in _CANONICAL_METHODS) or ``"auto"``.
+    """Validate that ``method`` is a canonical inference method name.
 
     Parameters
     ----------
     method : str
-        Method name: canonical (e.g., ``"vi"``, ``"mcmc_nuts"``),
-        deprecated alias (e.g., ``"geovi"``, ``"nifty_geovi"``),
-        ``"auto"``, or invalid.
-
+        Method name: canonical (e.g. ``"vi"``, ``"mcmc_nuts"``), ``"auto"``,
+        or invalid.
     emit_warning : bool, optional
-        If ``True`` (default), emit DeprecationWarning when an alias is used.
-        Set to ``False`` to silence warnings (useful in test harnesses).
+        Unused; retained for signature compatibility.
 
     Returns
     -------
     str
-        Canonical method name. May be ``"auto"`` if that was the input.
+        The method name unchanged (canonical or ``"auto"``).
 
     Raises
     ------
     ParameterError
-        If method is not canonical, not a recognized deprecated alias,
-        and not ``"auto"``. Exception message lists all valid canonical
-        names and known aliases.
-
-    Notes
-    -----
-    Deprecated aliases are managed by ``_DEPRECATED_METHOD_ALIASES`` dict at
-    module level. This function is called automatically by ``Fitter.run()``
-    and does not need to be invoked directly by users.
-
-    See Also
-    --------
-    Fitter.run : User-facing method that calls this internally.
-
-    Examples
-    --------
-    Canonical name (no warning):
-
-    >>> resolve_method("vi")
-    'vi'
-
-    Deprecated alias (emits DeprecationWarning):
-
-    >>> resolve_method("geovi")  # doctest: +SKIP
-    'vi'  # Emits: DeprecationWarning: Method 'geovi' is deprecated...
-
-    Suppress warnings for tests:
-
-    >>> resolve_method("nifty_mgvi", emit_warning=False)
-    'vi_linear'
-
-    Invalid method:
-
-    >>> resolve_method("invalid_method")  # doctest: +SKIP
-    ParameterError: Unknown method: 'invalid_method'. Valid canonical names: ...
+        If the method is not in :data:`_CANONICAL_METHODS` and not
+        ``"auto"``. The error message lists every valid canonical name
+        so the user can pick the intended one.
     """
+    del emit_warning  # signature kept for backward source compatibility
     if method is None:
         raise ParameterError(
             "method=None is not allowed. Pass an explicit method string "
-            "(e.g. 'vi_nifty', 'mcmc_nuts', 'auto') or omit the argument to use "
+            "(e.g. 'vi', 'mcmc_nuts', 'auto') or omit the argument to use "
             "the default from defaults.toml."
         )
 
-    # If already canonical or "auto", return as-is
     if method in _CANONICAL_METHODS:
         return method
 
-    # Check if deprecated alias
-    if method in _DEPRECATED_METHOD_ALIASES:
-        canonical = _DEPRECATED_METHOD_ALIASES[method]
-        if emit_warning:
-            warnings.warn(
-                f"Method '{method}' is deprecated. Use '{canonical}' instead. "
-                f"Old names will be removed in tengri v1.0.",
-                DeprecationWarning,
-                stacklevel=3,  # Caller's caller (skip resolve_method frame)
-            )
-        return canonical
-
-    # Invalid method
     canonical_list = ", ".join(sorted(_CANONICAL_METHODS))
     raise ParameterError(
-        f"Unknown method: '{method}'. "
-        f"Valid canonical names: {canonical_list}. "
-        f"Deprecated aliases: {', '.join(sorted(_DEPRECATED_METHOD_ALIASES.keys()))}. "
+        f"Unknown method: '{method}'. Valid names: {canonical_list}. "
         f"See Fitter.run() docstring for details."
     )
 
@@ -360,7 +268,7 @@ class Fitter:
         eline_prior_type=None,
         likelihood=None,
         auto_protocol_likelihood=True,
-        use_orchestrator=False,
+        use_components=False,
         compile_modes=None,
         cache=None,
     ):
@@ -375,13 +283,13 @@ class Fitter:
 
         # ── Orchestrator opt-in (Phase II step-1, 2026-05) ──────────
         # When True, route forward predictions through
-        # :meth:`SEDModel.predict_via_orchestrator` (the SEDComponent
+        # :meth:`SEDModel.predict_state` (the SEDComponent
         # chain) instead of the legacy fused ``predict_photometry`` /
         # ``predict_spectrum`` kernels. Default ``False`` preserves
         # existing inference behaviour bit-for-bit. Spectroscopy has no
-        # orchestrator bridge yet, so combining ``use_orchestrator=True``
+        # orchestrator bridge yet, so combining ``use_components=True``
         # with non-photometric data_type is rejected at construction.
-        self.use_orchestrator = bool(use_orchestrator)
+        self.use_components = bool(use_components)
 
         # ── Compile cache (ADR-deepen Step C, 2026-05) ──────────────
         # Optional per-Fitter CompileCache instance. When None, fall back
@@ -403,9 +311,9 @@ class Fitter:
         self.data_type = self._resolve_data_type(data_type, model)
         self.spec = model.spec
 
-        if self.use_orchestrator and self.data_type not in ("photometry", "spectroscopy", "joint"):
+        if self.use_components and self.data_type not in ("photometry", "spectroscopy", "joint"):
             raise NotImplementedError(
-                "Fitter(use_orchestrator=True) currently supports "
+                "Fitter(use_components=True) currently supports "
                 f"data_type in (photometry, spectroscopy, joint); got {self.data_type!r}."
             )
 
@@ -1188,7 +1096,7 @@ class Fitter:
 
     # ── Loss and likelihood builders ──────────────────────────────────
 
-    def _build_loss_fn(self, mode: str = "_traceable") -> Callable:
+    def _build_loss_fn(self, mode: str = "traced") -> Callable:
         """Build a differentiable loss function.
 
         See ``tengri.inference.loss_functions.build_loss_fn`` for full docs.
@@ -1197,13 +1105,13 @@ class Fitter:
         Parameters
         ----------
         mode : str, optional
-            Forward model prediction mode. Default "_traceable" is for
+            Forward model prediction mode. Default "traced" is for
             internal tracing mode (NIFTy VI path). Use "auto" for ~1.5x speedup with
             non-NIFTy methods.
         """
         return build_loss_fn(self, mode=mode)
 
-    def _get_or_build_loss_fn(self, mode: str = "_traceable") -> Callable:
+    def _get_or_build_loss_fn(self, mode: str = "traced") -> Callable:
         """Return the cached loss function, building it if needed.
 
         The loss function is cached on the Model object keyed by
@@ -1213,7 +1121,7 @@ class Fitter:
         Parameters
         ----------
         mode : str, optional
-            Forward model prediction mode. Default "_traceable" for backward
+            Forward model prediction mode. Default "traced" for backward
             compatibility. Pass "auto" for ~1.5x speedup with non-NIFTy methods.
         """
         from tengri.inference.jit_engine import get_or_build_cached
@@ -1230,11 +1138,11 @@ class Fitter:
         """Build a log-prior function. See ``loss_functions.build_logprior_fn``."""
         return build_logprior_fn(self)
 
-    def _build_loglikelihood_fn(self, mode: str = "_traceable") -> Callable:
+    def _build_loglikelihood_fn(self, mode: str = "traced") -> Callable:
         """Build log-likelihood function. See ``loss_functions.build_loglikelihood_fn``."""
         return build_loglikelihood_fn(self, mode=mode)
 
-    def _get_or_build_loglikelihood_fn(self, mode: str = "_traceable") -> Callable:
+    def _get_or_build_loglikelihood_fn(self, mode: str = "traced") -> Callable:
         """Return the cached log-likelihood function, building if needed."""
         from tengri.inference.jit_engine import get_or_build_cached
 
@@ -1248,14 +1156,14 @@ class Fitter:
         per_model[cache_key] = loglik_fn
         return loglik_fn
 
-    def _build_loglikelihood_unbounded_fn(self, mode: str = "_traceable") -> Callable:
+    def _build_loglikelihood_unbounded_fn(self, mode: str = "traced") -> Callable:
         """Build unbounded-space log-likelihood.
 
         See ``loss_functions.build_loglikelihood_unbounded_fn``.
         """
         return build_loglikelihood_unbounded_fn(self, mode=mode)
 
-    def _get_or_build_grad_fn(self, mode: str = "_traceable") -> Callable:
+    def _get_or_build_grad_fn(self, mode: str = "traced") -> Callable:
         """Return cached JIT-compiled value_and_grad of the loss function.
 
         The gradient function takes ``(params_unbounded, data_args)`` as
@@ -1283,7 +1191,7 @@ class Fitter:
         per_model[cache_key] = val_and_grad
         return val_and_grad
 
-    def _get_or_build_logdensity_fn(self, mode: str = "_traceable") -> Callable:
+    def _get_or_build_logdensity_fn(self, mode: str = "traced") -> Callable:
         """Return cached JIT-compiled log-density for MCMC/Pathfinder.
 
         Returns ``logdensity(params_u, data_args) -> scalar``.  Callers
@@ -1376,11 +1284,12 @@ class Fitter:
             **Variational Inference (VI)**
 
             - ``"vi"`` — geoVI via NIFTy (nonlinear, default for D>20)
+            - ``"vi_nonlinear"`` — geoVI via NIFTy (alias of ``vi``)
             - ``"vi_linear"`` — MGVI via NIFTy (linearized Gaussian)
-            - ``"vi_nifty_fast"`` — geoVI fast path (~35% faster, no logging)
-            - ``"vi_nifty_fast_linear"`` — MGVI fast path (~35% faster, no logging)
-            - ``"vi_native"`` — Native JAX geoVI (experimental; ~19× faster than NIFTy)
-            - ``"vi_native_linear"`` — Native JAX MGVI (experimental)
+            - ``"vi_nonlinear_fast"`` — geoVI fast path (~35% faster, no logging)
+            - ``"vi_linear_fast"`` — MGVI fast path (~35% faster, no logging)
+            - ``"native_vi_nonlinear"`` — Native JAX geoVI (experimental; ~19× faster than NIFTy)
+            - ``"native_vi_linear"`` — Native JAX MGVI (experimental)
 
             **MCMC Sampling**
 
@@ -1407,17 +1316,6 @@ class Fitter:
             **Automatic Selection**
 
             - ``"auto"`` — NUTS (D≤20) or geoVI (D>20) based on dimensionality
-
-            **Deprecated Aliases** (still work, emit DeprecationWarning):
-
-            - ``"vi_nifty"``, ``"geovi"``, ``"fast_geovi"``, ``"nifty_geovi"``
-              → ``"vi"``
-            - ``"vi_nifty_linear"``, ``"mgvi"``, ``"fast_mgvi"``, ``"nifty_mgvi"``
-              → ``"vi_linear"``
-            - ``"native_geovi"`` → ``"vi_native"``
-            - ``"native_mgvi"``, ``"native_evi"`` → ``"vi_native_linear"``
-            - ``"raytrace"``, ``"nuts"``, ``"hmc"``, etc. (all MCMC methods)
-            - ``"evidence"`` → ``"nss"``
 
         init_from : Posterior, optional
             Previous inference result to use as warm-start initialization.
@@ -1786,7 +1684,7 @@ class Fitter:
         # Available methods
         lines.append("")
         lines.append(
-            "  Methods:     vi, vi_linear, vi_nifty_fast, vi_nifty_fast_linear, "
+            "  Methods:     vi, vi_linear, vi_nonlinear_fast, vi_linear_fast, "
             "vi_native, vi_native_linear, mcmc, mcmc_raytrace, mcmc_nuts, "
             "mcmc_hmc, mcmc_dynamic_hmc, mcmc_ghmc, mcmc_mclmc, "
             "mcmc_adjusted_mclmc, mcmc_ess, map, laplace, pathfinder, nss, auto"
@@ -1798,10 +1696,10 @@ class Fitter:
     def _get_mode_for_method(self, method: str) -> str:
         """Determine forward model prediction mode based on inference method.
 
-        PERFORMANCE NOTE (2026-04-18): Profiling shows mode="_traceable" is
+        PERFORMANCE NOTE (2026-04-18): Profiling shows mode="traced" is
         12.64x FASTER than mode="auto" (5.9ms vs 74.4ms) with stable timing.
         mode="auto" has pathological variance (std=504ms, 6.8x the mean) causing
-        occasional 500ms+ outliers. Always use mode="_traceable" for inference.
+        occasional 500ms+ outliers. Always use mode="traced" for inference.
 
         Parameters
         ----------
@@ -1811,16 +1709,16 @@ class Fitter:
         Returns
         -------
         str
-            Always returns "_traceable" for optimal performance across all
+            Always returns "traced" for optimal performance across all
             inference methods. Previous "auto" mode had severe variance issues.
 
         See Also
         --------
         docs/dev/jit-optimization-report-2026-04-18.md : Full profiling analysis
         """
-        # ALL methods now use _traceable for 12.64x speedup + stable timing
+        # ALL methods now use traced for 12.64x speedup + stable timing
         # (mode="auto" variance pathology fixed 2026-04-18)
-        return "_traceable"
+        return "traced"
 
     # ── Private method runners ────────────────────────────────────────
 

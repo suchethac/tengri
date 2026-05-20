@@ -255,7 +255,7 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
     # `docs/dev/quickstart_oom_diagnosis.md`.
 
     # Closure-captured fallbacks for SSP arrays (used when callers don't pass
-    # traced inputs — e.g. legacy callsites and the non-_traceable predict_*
+    # traced inputs — e.g. legacy callsites and the non-traced predict_*
     # methods that go through the lazily-built logged_jit wrapper).
     _ssp_flux_closure = state.ssp_data.ssp_flux
     _ssp_lgmet_closure = state.ssp_data.ssp_lgmet

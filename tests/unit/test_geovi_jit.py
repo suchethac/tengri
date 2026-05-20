@@ -158,7 +158,7 @@ class TestGeoVIRuns:
         """geoVI runs on smooth model without errors."""
         fitter, _, _ = fitter_and_mock
         result = fitter.run(
-            "vi_native",
+            "native_vi_nonlinear",
             n_iterations=3,
             n_samples=2,
             n_seeds=1,
@@ -173,7 +173,7 @@ class TestGeoVIRuns:
         """geoVI posterior samples are all finite."""
         fitter, _, _ = fitter_and_mock
         result = fitter.run(
-            "vi_native",
+            "native_vi_nonlinear",
             n_iterations=3,
             n_samples=2,
             n_seeds=1,
@@ -199,7 +199,7 @@ class TestGeoVIRuns:
         key = jax.random.PRNGKey(12)
 
         result_mgvi = fitter.run(
-            "vi_native_linear",
+            "native_vi_linear",
             n_iterations=3,
             n_samples=2,
             n_seeds=1,
@@ -208,7 +208,7 @@ class TestGeoVIRuns:
             key=key,
         )
         result_geovi = fitter.run(
-            "vi_native",
+            "native_vi_nonlinear",
             n_iterations=3,
             n_samples=2,
             n_seeds=1,
@@ -239,7 +239,7 @@ class TestGeoVIRuns:
         """
         fitter, mock, _ = fitter_and_mock
         result = fitter.run(
-            "vi_native",
+            "native_vi_nonlinear",
             n_iterations=3,
             n_samples=2,
             n_seeds=1,

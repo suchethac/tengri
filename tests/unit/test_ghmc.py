@@ -34,7 +34,7 @@ class TestGHMCSignatures:
         from tengri.inference.backends.mcmc.ghmc import run_ghmc
 
         sig = inspect.signature(run_ghmc)
-        assert "fitter" in sig.parameters
+        assert "context" in sig.parameters
         assert "key" in sig.parameters
         assert "n_warmup" in sig.parameters
         assert "n_burnin" in sig.parameters

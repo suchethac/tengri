@@ -173,14 +173,7 @@ from tengri.config.exceptions import (
     TengriIOError,
 )
 from tengri.facade import Galaxy, doctor
-from tengri.forward._kernels import (
-    COMPOSITIONAL_ONLY as COMPOSITIONAL_ONLY_KERNEL_STRATEGY,
-    DEFAULT as DEFAULT_KERNEL_STRATEGY,
-    EXACT_ONLY as EXACT_ONLY_KERNEL_STRATEGY,
-    LOW_MEMORY as LOW_MEMORY_KERNEL_STRATEGY,
-    KernelStrategy,
-    NoCompatibleKernelError,
-)
+from tengri.forward._kernels import KernelStrategy, NoCompatibleKernelError
 from tengri.forward.convenience import catalog_summary, fit_batch
 from tengri.forward.prediction import (
     DerivedQuantities,
@@ -407,6 +400,22 @@ __all__ = [
 # (``tengri.inference.Fitter``, ``tengri.results.Posterior``, …) remain
 # valid; this is just an additional re-export, not a relocation.
 # ──────────────────────────────────────────────────────────────────
+# Plotting utilities
+# Import observation module for namespace alias (already in imports above, adding as alias)
+from tengri import observation
+from tengri.analysis.plotting import (
+    COLORS,
+    SDSS_WAVE_EFF,
+    SPECTRAL_FEATURES,
+    diagnostics_table,
+    plot_corner_comparison,
+    plot_sed_fit,
+    plot_sfh,
+    plot_sfh_comparison,
+    plot_spectrum_fit,
+    safe_corner,
+    setup_style,
+)
 from tengri.config.settings import (
     AGNConfig,
     DustConfig,
@@ -433,60 +442,6 @@ from tengri.results import (
     Provenance,
     generate_mock,
     posteriors_to_dataframe,
-)
-
-# Internal-only relocation shim — names that genuinely moved and still
-# warn when accessed via the old path. The user-facing API above is
-# *not* in this dict, so accessing those is silent and supported.
-_RELOCATED: dict[str, tuple[str, str]] = {
-    "LineFluxData": ("tengri.observation", "LineFluxData"),
-    "SpectralIndexDef": ("tengri.observation", "SpectralIndexDef"),
-    "SpectralIndexData": ("tengri.observation", "SpectralIndexData"),
-}
-
-
-def __getattr__(name: str):
-    """Resolve relocated symbols with a DeprecationWarning (PEP 562)."""
-    if name in _RELOCATED:
-        import importlib
-
-        from tengri._deprecated import deprecated_attribute
-
-        module_path, attr = _RELOCATED[name]
-        value = getattr(importlib.import_module(module_path), attr)
-        return deprecated_attribute(
-            value,
-            old_name=f"tengri.{name}",
-            new_name=f"{module_path}.{attr}",
-        )
-    # Set ``name`` and ``obj`` so Python's built-in "Did you mean: …"
-    # suggestion (PEP 657, fired when formatting the traceback) kicks in
-    # against the curated ``__dir__``. Without these attributes a custom
-    # __getattr__ swallows the suggestion mechanism.
-    import sys as _sys
-
-    raise AttributeError(
-        f"module 'tengri' has no attribute {name!r}",
-        name=name,
-        obj=_sys.modules[__name__],
-    )
-
-
-# Plotting utilities
-# Import observation module for namespace alias (already in imports above, adding as alias)
-from tengri import observation
-from tengri.analysis.plotting import (
-    COLORS,
-    SDSS_WAVE_EFF,
-    SPECTRAL_FEATURES,
-    diagnostics_table,
-    plot_corner_comparison,
-    plot_sed_fit,
-    plot_sfh,
-    plot_sfh_comparison,
-    plot_spectrum_fit,
-    safe_corner,
-    setup_style,
 )
 
 # ──────────────────────────────────────────────────────────────────

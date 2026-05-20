@@ -96,7 +96,10 @@ def test_dust_law_mapping(law: str, expected: str):
     "emission,expected",
     [
         ("casey2012", "casey2012"),
-        ("modified_blackbody", "casey2012"),
+        # modified_blackbody = Hildebrand 1983 (with da Cunha 2013 CMB-heating
+        # correction applied automatically at z > 0); see the registry entry
+        # in tengri/citations/associations.py.
+        ("modified_blackbody", "hildebrand1983"),
         ("dale2014", "dale2014"),
         ("draine_li2007", "draine_li2007"),
         ("draine_li2014", "draine2014"),

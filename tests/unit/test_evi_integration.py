@@ -57,7 +57,7 @@ class TestEVIRuns:
         fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
         result = fitter.run(
-            "vi_native_linear",
+            "native_vi_linear",
             n_iterations=3,
             n_samples=2,
             n_seeds=1,
@@ -91,7 +91,7 @@ class TestEVIRuns:
         fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
         result = fitter.run(
-            "vi_native_linear",
+            "native_vi_linear",
             n_iterations=3,
             n_samples=2,
             n_seeds=1,
@@ -109,7 +109,7 @@ class TestEVIRuns:
         fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
         result = fitter.run(
-            "vi_native_linear",
+            "native_vi_linear",
             n_iterations=3,
             n_samples=2,
             n_seeds=1,
@@ -127,7 +127,7 @@ class TestEVIRuns:
         fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
 
         result = fitter.run(
-            "vi_native_linear",
+            "native_vi_linear",
             n_iterations=3,
             n_samples=2,
             n_seeds=3,
@@ -139,79 +139,7 @@ class TestEVIRuns:
         assert result is not None
 
 
-class TestGeoVIMGVIRouting:
-    """native_geovi and native_mgvi deprecated aliases route through JIT engine."""
-
-    def test_native_geovi_runs(self, model_and_mock):
-        """Deprecated 'native_geovi' alias routes to vi_native; emits DeprecationWarning."""
-        import warnings
-
-        model, mock, _ = model_and_mock
-        fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            result = fitter.run(
-                "native_geovi",
-                n_iterations=3,
-                n_samples=2,
-                n_seeds=1,
-                n_posterior_samples=10,
-                verbose=False,
-                key=jax.random.PRNGKey(10),
-            )
-
-        # Must have routed correctly: finite samples for all params
-        assert result is not None
-        for name, vals in result.samples.items():
-            assert bool(jnp.all(jnp.isfinite(vals))), (
-                f"native_geovi routing: non-finite samples for {name}"
-            )
-
-        # Deprecated alias must emit a warning that mentions the alias name
-        alias_warnings = [
-            x
-            for x in w
-            if issubclass(x.category, DeprecationWarning)
-            and "native_geovi" in str(x.message).lower()
-        ]
-        assert len(alias_warnings) > 0, (
-            "Expected DeprecationWarning mentioning 'native_geovi' — none raised. "
-            f"All captured: {[str(x.message) for x in w]}"
-        )
-
-    def test_native_mgvi_runs(self, model_and_mock):
-        """Deprecated 'native_mgvi' alias routes to vi_native_linear; emits DeprecationWarning."""
-        import warnings
-
-        model, mock, _ = model_and_mock
-        fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            result = fitter.run(
-                "native_mgvi",
-                n_iterations=3,
-                n_samples=2,
-                n_seeds=1,
-                n_posterior_samples=10,
-                verbose=False,
-                key=jax.random.PRNGKey(11),
-            )
-
-        assert result is not None
-        for name, vals in result.samples.items():
-            assert bool(jnp.all(jnp.isfinite(vals))), (
-                f"native_mgvi routing: non-finite samples for {name}"
-            )
-
-        alias_warnings = [
-            x
-            for x in w
-            if issubclass(x.category, DeprecationWarning)
-            and "native_mgvi" in str(x.message).lower()
-        ]
-        assert len(alias_warnings) > 0, (
-            "Expected DeprecationWarning mentioning 'native_mgvi' — none raised. "
-            f"All captured: {[str(x.message) for x in w]}"
-        )
+# TestGeoVIMGVIRouting removed: tested the `native_geovi`/`native_mgvi`
+# deprecated aliases, which were hard-deleted pre-v1.0. Coverage of the
+# canonical names lives in TestEVIRuns above (``native_vi_linear``) and
+# in tests/unit/test_geovi_jit.py (``native_vi_nonlinear``).

@@ -67,7 +67,7 @@ def test_stellar_phot_lnu_precomp_within_tolerance(stellar_only_model):
     import math
 
     m = stellar_only_model
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     lut_lnu = state.derived["stellar_phot_lnu_precomp"]  # rest-frame Lν, source's z
     from tengri.observation.photometry import compute_flux_density
 
@@ -119,7 +119,7 @@ def test_lut_only_published_when_wave_precomp_on(ssp):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs)  # wave_precomp default False
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     assert "stellar_phot_lnu_precomp" not in state.derived
 
 
@@ -132,11 +132,11 @@ def test_observation_predict_bit_exact_with_wave_precomp_on(stellar_only_model):
     """
     m = stellar_only_model
     # Phase 3b invariant: phot_fnu from predict_observables must equal the
-    # legacy predict_photometry_via_orchestrator output bit-for-bit, even
+    # legacy predict_photometry_components output bit-for-bit, even
     # though state.derived["stellar_phot_lnu_precomp"] is now populated. The
     # LUT is internal; observation.predict still integrates sed_intrinsic.
     o = m.predict_observables(_PARAMS)
-    legacy = m.predict_photometry_via_orchestrator(_PARAMS)
+    legacy = m.predict_photometry_components(_PARAMS)
     diff = float(jnp.max(jnp.abs(o.phot_fnu - legacy)))
     assert diff < 1e-10, f"predict_observables drifted when wave_precomp=True: max diff = {diff}"
 
@@ -193,7 +193,7 @@ def test_free_z_stellar_lut_runs_for_multiple_z(stellar_only_free_z_model, z_tes
     """
     m = stellar_only_free_z_model
     params = {**_PARAMS, "redshift": z_test}
-    state = m.predict_via_orchestrator(params)
+    state = m.predict_state(params)
     lut_path = state.derived["stellar_phot_lnu_precomp"]
     assert jnp.all(jnp.isfinite(lut_path)), f"non-finite values at z={z_test}: {lut_path}"
     assert jnp.all(lut_path > 0), f"non-positive values at z={z_test}: {lut_path}"
@@ -214,7 +214,7 @@ def test_free_z_ztable_interpolation_matches_grid_points(stellar_only_free_z_mod
     i_mid = ztable.z_grid.shape[0] // 2
     z_grid_point = float(ztable.z_grid[i_mid])
     params = {**_PARAMS, "redshift": z_grid_point}
-    state = m.predict_via_orchestrator(params)
+    state = m.predict_state(params)
     lut_path = state.derived["stellar_phot_lnu_precomp"]
 
     # Independently project ztable.ssp_phot_table[i_mid] through the same einsum
@@ -306,7 +306,7 @@ def test_lut_publishes_for_metallicity_mode(ssp, metallicity_model, met_params):
     test pins that each supported mode produces a usable LUT.
     """
     m = _build_metallicity_model(ssp, metallicity_model=metallicity_model, met_params=met_params)
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     assert "stellar_phot_lnu_precomp" in state.derived, (
         f"stellar_phot_lnu_precomp missing for metallicity_model={metallicity_model}"
     )
@@ -324,7 +324,7 @@ def test_per_age_lut_sums_to_marginalised_lut(stellar_only_model):
     aggregate LUT to within JAX precision.
     """
     m = stellar_only_model
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     per_age = state.derived["stellar_phot_lnu_per_age_precomp"]
     marginalised = state.derived["stellar_phot_lnu_precomp"]
     assert per_age.ndim == 2, f"per_age should be 2D (n_age, n_filter): {per_age.shape}"
@@ -341,7 +341,7 @@ def test_per_age_lut_sums_to_marginalised_lut(stellar_only_model):
 def test_per_age_moment_lut_sums_to_marginalised_moment(stellar_only_model):
     """Same invariant for the Taylor moment Ψ."""
     m = stellar_only_model
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     per_age = state.derived["stellar_phot_moment_per_age_precomp"]
     marginalised = state.derived["stellar_phot_moment_precomp"]
     reconstructed = jnp.sum(per_age, axis=0)
@@ -362,7 +362,7 @@ def test_taylor_moment_published_in_fixed_z(stellar_only_model):
     that it's finite and the magnitude is in a plausible range.
     """
     m = stellar_only_model
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     assert "stellar_phot_moment_precomp" in state.derived, (
         "Taylor moment should be published when wave_precomp=True (fixed-z mode)"
     )
@@ -403,7 +403,7 @@ def test_taylor_moment_published_in_free_z(ssp):
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
     params = {**_PARAMS, "redshift": 0.5}
-    state = m.predict_via_orchestrator(params)
+    state = m.predict_state(params)
     for k in (
         "stellar_phot_lnu_precomp",
         "stellar_phot_moment_precomp",
@@ -451,7 +451,7 @@ def test_dust_attenuation_precomps_published(stellar_dust_model):
     is in state.derived (i.e. wave_precomp is on).
     """
     m = stellar_dust_model
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     assert "filter_eff_waves" in state.derived, (
         "Stellar should publish filter_eff_waves when wave_precomp=True"
     )
@@ -476,7 +476,7 @@ def test_dust_attenuation_precomps_published(stellar_dust_model):
 def test_dust_attenuation_precomp_consistent_with_pipeline(stellar_dust_model):
     """LUT A matches exp(-tau_v * k(λ_eff)) computed independently to 1e-10."""
     m = stellar_dust_model
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     a = state.derived["dust_attenuation_precomp"]
     filter_eff = state.derived["filter_eff_waves"]
     tau_v = 0.3
@@ -500,7 +500,7 @@ def test_predict_via_precomp_with_dust_matches_predict(stellar_dust_model):
     factorization tolerance for SDSS bands on a stellar+Calzetti model.
     """
     m = stellar_dust_model
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     full = {**m.spec.get_fixed_values(), **_PARAMS}
     default = m.observation.predict(state, full, observables_type=m.Observables)
     precomp = m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
@@ -533,14 +533,14 @@ def test_predict_via_precomp_dust_attenuates_phot_fnu(stellar_dust_model, ssp):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m_no_dust = SEDModel(spec_no_dust, ssp, observation=obs, approx={"wave_precomp": True})
-    state_no_dust = m_no_dust.predict_via_orchestrator(_PARAMS)
+    state_no_dust = m_no_dust.predict_state(_PARAMS)
     full_no_dust = {**m_no_dust.spec.get_fixed_values(), **_PARAMS}
     fnu_no_dust = m_no_dust.observation.predict_via_precomp(
         state_no_dust, full_no_dust, observables_type=m_no_dust.Observables
     ).phot_fnu
 
     m = stellar_dust_model
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     full = {**m.spec.get_fixed_values(), **_PARAMS}
     fnu_dust = m.observation.predict_via_precomp(
         state, full, observables_type=m.Observables
@@ -579,7 +579,7 @@ def test_two_component_dust_publishes_bc_diff_precomp(ssp):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
 
     assert "dust_bc_attenuation_precomp" in state.derived
     assert "dust_bc_attenuation_slope_precomp" in state.derived
@@ -633,7 +633,7 @@ def test_predict_via_precomp_two_component_dust_matches_predict(ssp):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     full = {**m.spec.get_fixed_values(), **_PARAMS}
     default = m.observation.predict(state, full, observables_type=m.Observables)
     precomp = m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
@@ -677,7 +677,7 @@ def test_predict_via_precomp_free_z_with_dust_matches_predict(ssp, z_test):
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
     params = {**_PARAMS, "redshift": z_test}
-    state = m.predict_via_orchestrator(params)
+    state = m.predict_state(params)
     full = {**m.spec.get_fixed_values(), **params}
     default = m.observation.predict(state, full, observables_type=m.Observables)
     precomp = m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
@@ -700,7 +700,7 @@ def test_predict_via_precomp_handles_bakedin_only_no_neb_precomp(stellar_only_mo
     includes BakedIn nebular).
     """
     m = stellar_only_model
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     assert state.derived.get("nebular_phot_lnu_precomp") is None
     full = {**m.spec.get_fixed_values(), **_PARAMS}
     # Should not raise — BakedIn nebular is handled by stellar LUT.
@@ -736,7 +736,7 @@ def test_predict_via_precomp_agn_matches_predict(ssp):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     full = {**m.spec.get_fixed_values(), **_PARAMS}
     default = m.observation.predict(state, full, observables_type=m.Observables)
     precomp = m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
@@ -770,7 +770,7 @@ def test_agn_phot_lnu_precomp_published(ssp):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     assert "agn_phot_lnu_precomp" in state.derived
     assert jnp.all(jnp.isfinite(state.derived["agn_phot_lnu_precomp"]))
 
@@ -795,7 +795,7 @@ def test_dust_luts_absent_without_wave_precomp(ssp):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs)  # no wave_precomp
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     assert state.derived.get("filter_eff_waves") is None
     assert state.derived.get("dust_attenuation_precomp") is None
     assert state.derived.get("dust_attenuation_slope_precomp") is None
@@ -813,7 +813,7 @@ def test_predict_via_precomp_handles_bakedin_nebular(stellar_only_model):
     in later sub-PRs; this test pins the BakedIn invariant.
     """
     m = stellar_only_model
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     # BakedIn nebular doesn't publish a separate LUT.
     assert state.derived.get("nebular_phot_lnu_precomp") is None, (
         "BakedIn nebular should not publish nebular_phot_lnu_precomp — already in stellar LUT."
@@ -837,7 +837,7 @@ def test_predict_via_precomp_matches_default_predict_observables(stellar_only_mo
     (approximate path). The two should agree to the LUT's documented accuracy.
     """
     m = stellar_only_model
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     full = {**m.spec.get_fixed_values(), **_PARAMS}
     default = m.observation.predict(state, full, observables_type=m.Observables)
     lut = m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
@@ -873,7 +873,7 @@ def test_predict_via_precomp_raises_without_wave_precomp(ssp):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs)  # NO approx={"wave_precomp": True}
-    state = m.predict_via_orchestrator(_PARAMS)
+    state = m.predict_state(_PARAMS)
     full = {**m.spec.get_fixed_values(), **_PARAMS}
     try:
         m.observation.predict_via_precomp(state, full)
@@ -890,8 +890,8 @@ def test_lut_metallicity_changes_with_logzsol(ssp):
     m_hi = _build_metallicity_model(
         ssp, metallicity_model="delta", met_params={"met_logzsol": Fixed(0.0)}
     )
-    lut_lo = m_lo.predict_via_orchestrator(_PARAMS).derived["stellar_phot_lnu_precomp"]
-    lut_hi = m_hi.predict_via_orchestrator(_PARAMS).derived["stellar_phot_lnu_precomp"]
+    lut_lo = m_lo.predict_state(_PARAMS).derived["stellar_phot_lnu_precomp"]
+    lut_hi = m_hi.predict_state(_PARAMS).derived["stellar_phot_lnu_precomp"]
     # At fixed SFH+mass, metallicity changes the stellar continuum shape;
     # we expect a measurable difference between metal-poor and solar.
     rel_diff = jnp.abs(lut_lo - lut_hi) / jnp.maximum(lut_lo, lut_hi)
@@ -905,7 +905,7 @@ def test_free_z_lut_published_for_multiple_z(stellar_only_free_z_model):
     m = stellar_only_free_z_model
     for z in [0.1, 0.5, 1.0, 1.8]:
         params = {**_PARAMS, "redshift": z}
-        state = m.predict_via_orchestrator(params)
+        state = m.predict_state(params)
         assert "stellar_phot_lnu_precomp" in state.derived
         lut = state.derived["stellar_phot_lnu_precomp"]
         assert lut is not None

@@ -13,9 +13,31 @@ import pytest
 
 import tengri
 from tengri.inference._model_cache import (
+    _default_owner,
     clear_structural_kernel_cache,
     get_structural_kernel_cache,
 )
+
+# Reach the real structural cache via the singleton ``ModelCacheOwner``;
+# the module-level ``_STRUCTURAL_KERNEL_CACHE`` global is a stale legacy
+# alias that no longer reflects current state after the cache-owner
+# refactor.
+_STRUCTURAL_KERNEL_CACHE = _default_owner._kernel_cache
+_STRUCTURAL_KERNEL_MAXSIZE = _default_owner.max_kernel_entries
+
+
+@pytest.fixture(autouse=True)
+def _isolate_structural_cache():
+    """Reset the structural cache around each test.
+
+    The cache is a process-wide singleton. Other tests in the suite leave
+    real SEDModel signatures behind which can collide with the synthetic
+    ``test_sig_*`` keys used here under LRU eviction, making the assertion
+    "my most recent entry is in the cache" order-dependent.
+    """
+    _STRUCTURAL_KERNEL_CACHE.clear()
+    yield
+    _STRUCTURAL_KERNEL_CACHE.clear()
 
 
 @pytest.mark.unit
@@ -121,12 +143,8 @@ def test_structural_kernel_cache_miss_different_config():
 @pytest.mark.unit
 def test_structural_kernel_cache_lru_eviction():
     """LRU eviction works when cache exceeds maxsize."""
-    from tengri.inference._model_cache import (
-        _STRUCTURAL_KERNEL_CACHE,
-        _STRUCTURAL_KERNEL_MAXSIZE,
-    )
-
-    # Clear cache first
+    # _STRUCTURAL_KERNEL_CACHE / _MAXSIZE are bound at module import to
+    # the real ModelCacheOwner singleton — see the module-level setup.
     _STRUCTURAL_KERNEL_CACHE.clear()
 
     # Create signatures up to max size

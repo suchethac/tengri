@@ -63,7 +63,7 @@ def _delta_sed(synthetic_ssp, log_z_solar):
         redshift=Fixed(0.0),
     )
     m = SEDModel(spec, synthetic_ssp)
-    return m.predict_via_orchestrator({}).sed_intrinsic
+    return m.predict_state({}).sed_intrinsic
 
 
 # ── two_step ──────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ class TestTwoStep:
             redshift=Fixed(0.0),
         )
         m = SEDModel(spec, synthetic_ssp)
-        sed_two = m.predict_via_orchestrator({}).sed_intrinsic
+        sed_two = m.predict_state({}).sed_intrinsic
         sed_delta = _delta_sed(synthetic_ssp, Z)
         np.testing.assert_allclose(sed_two, sed_delta, rtol=1e-3)
 
@@ -114,7 +114,7 @@ class TestTwoStep:
             redshift=Fixed(0.0),
         )
         m = SEDModel(spec_pos, synthetic_ssp)
-        sed = m.predict_via_orchestrator({}).sed_intrinsic
+        sed = m.predict_state({}).sed_intrinsic
         sed_delta = _delta_sed(synthetic_ssp, 1.1)  # midpoint
         assert jnp.all(jnp.isfinite(sed))
         assert float(jnp.max(jnp.abs(sed - sed_delta) / jnp.maximum(sed_delta, 1e-30))) > 1e-3
@@ -140,7 +140,7 @@ class TestPsbTwoStep:
             redshift=Fixed(0.0),
         )
         m = SEDModel(spec, synthetic_ssp)
-        sed = m.predict_via_orchestrator({}).sed_intrinsic
+        sed = m.predict_state({}).sed_intrinsic
         sed_delta = _delta_sed(synthetic_ssp, Z)
         np.testing.assert_allclose(sed, sed_delta, rtol=1e-3)
 
@@ -164,7 +164,7 @@ class TestBins:
             redshift=Fixed(0.0),
         )
         m = SEDModel(spec, synthetic_ssp)
-        sed = m.predict_via_orchestrator({}).sed_intrinsic
+        sed = m.predict_state({}).sed_intrinsic
         sed_delta = _delta_sed(synthetic_ssp, Z)
         np.testing.assert_allclose(sed, sed_delta, rtol=1e-3)
 
@@ -198,8 +198,8 @@ class TestBins:
         )
         m_lo = SEDModel(spec_lo, synthetic_ssp)
         m_hi = SEDModel(spec_hi, synthetic_ssp)
-        sed_lo = m_lo.predict_via_orchestrator({}).sed_intrinsic
-        sed_hi = m_hi.predict_via_orchestrator({}).sed_intrinsic
+        sed_lo = m_lo.predict_state({}).sed_intrinsic
+        sed_hi = m_hi.predict_state({}).sed_intrinsic
         assert float(jnp.max(jnp.abs(sed_lo - sed_hi) / jnp.maximum(sed_lo, 1e-30))) > 0.05
 
 
@@ -224,7 +224,7 @@ class TestBinsContinuity:
             redshift=Fixed(0.0),
         )
         m = SEDModel(spec, synthetic_ssp)
-        sed = m.predict_via_orchestrator({}).sed_intrinsic
+        sed = m.predict_state({}).sed_intrinsic
         sed_delta = _delta_sed(synthetic_ssp, Z)
         np.testing.assert_allclose(sed, sed_delta, rtol=1e-3)
 

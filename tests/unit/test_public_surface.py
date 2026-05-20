@@ -16,7 +16,14 @@ import warnings
 import pytest
 
 import tengri
-from tengri import _RELOCATED  # private — referenced for shim coverage assertions
+
+# Canonical locations of names that used to live at the top level. Each
+# entry pins that the new path still resolves cleanly (no DeprecationWarning).
+_RELOCATED: dict[str, tuple[str, str]] = {
+    "LineFluxData": ("tengri.observation", "LineFluxData"),
+    "SpectralIndexDef": ("tengri.observation", "SpectralIndexDef"),
+    "SpectralIndexData": ("tengri.observation", "SpectralIndexData"),
+}
 
 # Frozen target list. Adding to or removing from this list is a deliberate
 # public-API change and should be reviewed.
@@ -26,8 +33,14 @@ EXPECTED_ALL = frozenset(
         "Galaxy",
         "Parameters",
         "SEDModel",
+        # Component / pipeline contract (astronomer-facing extension surface)
+        "DerivedBundle",
+        "DerivedKey",
+        "ForwardState",
+        "PipelineContractError",
         # Physics modules
         "agn",
+        "builders",
         "dust",
         "igm",
         "nebular",
@@ -52,6 +65,7 @@ EXPECTED_ALL = frozenset(
         "units",
         # Registry verbs
         "describe",
+        "describe_parameter",
         "examples",
         "explain",
         "help",
@@ -63,8 +77,11 @@ EXPECTED_ALL = frozenset(
         "list_filters",
         "list_inference_methods",
         "list_nebular_backends",
+        "list_parameters",
         "list_plots",
         "list_sfh_models",
+        "ParameterRecord",
+        "recipe_parameters",
         "search",
         "summary",
         "tutorial",
@@ -115,7 +132,6 @@ def test_all_entries_resolve_without_warning() -> None:
         warnings.simplefilter("always")
         for name in tengri.__all__:
             getattr(tengri, name)
-        # Allow unrelated module-import warnings (e.g. `tengri.filters` legacy).
         deprecations = [
             w
             for w in caught
@@ -129,18 +145,10 @@ def test_all_entries_resolve_without_warning() -> None:
 
 
 @pytest.mark.parametrize("old_name", sorted(_RELOCATED))
-def test_relocated_symbols_emit_deprecation_warning(old_name: str) -> None:
-    """Each relocated symbol must still resolve at top level *and* warn."""
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        value = getattr(tengri, old_name)
-    assert value is not None
-    deprecations = [
-        w
-        for w in caught
-        if issubclass(w.category, DeprecationWarning) and old_name in str(w.message)
-    ]
-    assert deprecations, f"tengri.{old_name} resolved but did not emit a DeprecationWarning"
+def test_relocated_symbols_no_longer_at_top_level(old_name: str) -> None:
+    """Names moved into sub-namespaces must no longer resolve at ``tengri.<name>``."""
+    with pytest.raises(AttributeError):
+        getattr(tengri, old_name)
 
 
 @pytest.mark.parametrize(

@@ -85,41 +85,10 @@ class TestResolveShortNames:
         assert set(r1.keys()) == set(r2.keys())
 
 
-# ── Task 2: Method unification — deprecation warnings ─────────────
+# ── Task 2: Method-name validation ────────────────────────────────
 
 
 class TestDeprecationWarnings:
-    def test_deprecated_alias_dict_exists(self):
-        import tengri.inference.fitter as fitter_module
-
-        assert hasattr(fitter_module, "_DEPRECATED_METHOD_ALIASES")
-        assert isinstance(fitter_module._DEPRECATED_METHOD_ALIASES, dict)
-
-    @pytest.mark.parametrize(
-        "old_name,canonical",
-        [
-            ("vi_nifty", "vi_nonlinear"),
-            ("vi_nifty_linear", "vi_linear"),
-            ("vi_nifty_fast", "vi_nonlinear_fast"),
-            ("vi_nifty_fast_linear", "vi_linear_fast"),
-            ("geovi", "vi_nonlinear"),
-            ("native_geovi", "native_vi_nonlinear"),
-            ("vi_native", "native_vi_nonlinear"),
-            ("vi_native_linear", "native_vi_linear"),
-            ("native_evi", "native_vi_linear"),
-            ("mgvi", "vi_linear"),
-            ("raytrace", "mcmc_raytrace"),
-            ("nuts", "mcmc_nuts"),
-            ("elliptical_slice", "mcmc_ess"),
-            ("evidence", "nss"),
-        ],
-    )
-    def test_alias_maps_to_canonical(self, old_name, canonical):
-        from tengri.inference.fitter import _DEPRECATED_METHOD_ALIASES
-
-        assert old_name in _DEPRECATED_METHOD_ALIASES
-        assert _DEPRECATED_METHOD_ALIASES[old_name] == canonical
-
     def test_canonical_names_in_docstring(self):
         from tengri.inference.fitter import Fitter
 
@@ -127,7 +96,7 @@ class TestDeprecationWarnings:
         for name in (
             "vi",
             "vi_linear",
-            "vi_nifty_fast",
+            "vi_nonlinear_fast",
             "mcmc_raytrace",
             "mcmc_nuts",
             "nss",
