@@ -188,6 +188,7 @@ class RadioSEDComponent:
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
     ) -> RadioSEDComponentState:
         r"""No-op precompute. Radio is a closed-form function of (λ, params)."""
         del ssp_data, wave_grid

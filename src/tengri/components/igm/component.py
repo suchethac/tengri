@@ -113,6 +113,7 @@ class IGMSEDComponent:
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
     ) -> IGMSEDComponentState:
         r"""No-op precompute. IGM transmission is evaluated at apply time."""
         del ssp_data, wave_grid

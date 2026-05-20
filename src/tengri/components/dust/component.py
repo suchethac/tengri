@@ -139,6 +139,7 @@ class DustAttenuationSEDComponent:
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
     ) -> DustAttenuationSEDComponentState:
         r"""Evaluate the attenuation curve k(λ) on the pipeline wave grid.
 

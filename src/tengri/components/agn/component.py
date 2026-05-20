@@ -123,6 +123,7 @@ class AGNSEDComponent:
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
     ) -> AGNSEDComponentState:
         """No-op marker — all AGN templates are evaluated at runtime."""
         del ssp_data, wave_grid
