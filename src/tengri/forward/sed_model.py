@@ -4130,7 +4130,7 @@ class SEDModel:
                 neb_backend_name = "baked_in"  # fallback
             neb_backend_instance = neb_inst
 
-        return build_components(
+        chain = build_components(
             ssp_data=self.ssp_data,
             sfh_model=mean_model,
             field=field_on,
@@ -4149,6 +4149,41 @@ class SEDModel:
             use_xray=bool(getattr(self, "_uses_xray", False)),
             use_igm=bool(getattr(self, "_uses_igm", False)),
         )
+
+        # Phase 3b: Eager precompute stellar photometry LUT when wave_precomp is enabled.
+        if (
+            self._approx.get("wave_precomp")
+            and self.observation is not None
+            and hasattr(self.observation, "photometry")
+            and self.observation.photometry is not None
+            and len(chain) > 0
+            and chain[0].name == "stellar"
+        ):
+            from dataclasses import replace
+
+            from tengri.components.stellar.component import StellarSEDComponent
+
+            stellar = chain[0]
+            if isinstance(stellar, StellarSEDComponent):
+                # Build filter tuple from observation photometry.
+                filters = tuple(
+                    zip(
+                        self.observation.photometry.filter_waves,
+                        self.observation.photometry.filter_trans,
+                        strict=False,
+                    )
+                )
+                # Call precompute to build the LUT.
+                state = stellar.precompute(
+                    ssp_data=stellar.ssp_data,
+                    wave_grid=None,
+                    approx=self._approx,
+                    filters=filters,
+                )
+                # Replace the stellar component with one carrying the precomputed state.
+                chain[0] = replace(stellar, _state=state)
+
+        return chain
 
     # ── Batch operations ──────────────────────────────────────────────
 

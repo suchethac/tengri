@@ -301,9 +301,10 @@ class NebularSEDComponent:
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
         approx: Mapping[str, bool] | None = None,
+        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> NebularSEDComponentState:
         r"""Construct the backend handle (no JAX work)."""
-        del ssp_data, wave_grid
+        del ssp_data, wave_grid, filters
         if self.config.backend == "baked_in":
             warning_mode = "suppress" if self.config.suppress_baked_in_warning else "warn"
             BakedInBackend(ionizing_source_warning=warning_mode)
