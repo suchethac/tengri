@@ -256,6 +256,88 @@ def test_free_z_ztable_interpolation_matches_grid_points(stellar_only_free_z_mod
     )
 
 
+# ── Phase 3c-2: metallicity-mode validation ───────────────────────────
+#
+# The LUT path's einsum (joint_weights × ssp_phot) is metallicity-mode
+# agnostic — joint_weights is always (n_met, n_age). These tests pin that
+# the LUT publishes finite, positive values for every supported
+# metallicity model. Strict bit-tolerance vs direct integration is the
+# Phase 3d invariant (when the kernel adapter becomes the canonical
+# reference); here we validate that the mode-dispatch doesn't blow up.
+
+
+def _build_metallicity_model(ssp, *, metallicity_model: str, met_params: dict):
+    """Construct a stellar-only photometry model with the given metallicity mode."""
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+        met_mode=metallicity_model,
+        **met_params,
+    )
+    phot = Photometry.from_names(["sdss_g", "sdss_r"])
+    obs = Observation(photometry=phot)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+
+
+@pytest.mark.parametrize(
+    ("metallicity_model", "met_params"),
+    [
+        ("delta", {"met_logzsol": Fixed(-0.5)}),
+        ("ramp", {"met_logzsol_0": Fixed(-1.0), "met_logzsol_final": Fixed(-0.5)}),
+        (
+            "two_step",
+            {
+                "met_logzsol_old": Fixed(-1.0),
+                "met_logzsol_young": Fixed(-0.5),
+                "met_step_age_gyr": Fixed(1.0),
+            },
+        ),
+    ],
+)
+def test_lut_publishes_for_metallicity_mode(ssp, metallicity_model, met_params):
+    """LUT publishes finite, positive values across non-delta metallicity modes.
+
+    The joint_weights × ssp_phot einsum is metallicity-mode-agnostic; this
+    test pins that each supported mode produces a usable LUT.
+    """
+    m = _build_metallicity_model(ssp, metallicity_model=metallicity_model, met_params=met_params)
+    state = m.predict_via_orchestrator(_PARAMS)
+    assert "stellar_phot_lnu_lut" in state.derived, (
+        f"stellar_phot_lnu_lut missing for metallicity_model={metallicity_model}"
+    )
+    lut = state.derived["stellar_phot_lnu_lut"]
+    assert jnp.all(jnp.isfinite(lut)), f"non-finite LUT for {metallicity_model}: {lut}"
+    assert jnp.all(lut > 0), f"non-positive LUT for {metallicity_model}: {lut}"
+
+
+def test_lut_metallicity_changes_with_logzsol(ssp):
+    """Higher metallicity changes the LUT-projected stellar photometry."""
+    m_lo = _build_metallicity_model(
+        ssp, metallicity_model="delta", met_params={"met_logzsol": Fixed(-1.5)}
+    )
+    m_hi = _build_metallicity_model(
+        ssp, metallicity_model="delta", met_params={"met_logzsol": Fixed(0.0)}
+    )
+    lut_lo = m_lo.predict_via_orchestrator(_PARAMS).derived["stellar_phot_lnu_lut"]
+    lut_hi = m_hi.predict_via_orchestrator(_PARAMS).derived["stellar_phot_lnu_lut"]
+    # At fixed SFH+mass, metallicity changes the stellar continuum shape;
+    # we expect a measurable difference between metal-poor and solar.
+    rel_diff = jnp.abs(lut_lo - lut_hi) / jnp.maximum(lut_lo, lut_hi)
+    assert float(jnp.max(rel_diff)) > 1e-2, (
+        f"LUT failed to respond to metallicity change: max rel diff = {float(jnp.max(rel_diff))}"
+    )
+
+
 def test_free_z_lut_published_for_multiple_z(stellar_only_free_z_model):
     """stellar_phot_lnu_lut is published for multiple z values within free range."""
     m = stellar_only_free_z_model
