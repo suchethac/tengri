@@ -445,6 +445,70 @@ def test_dust_attenuation_precomp_consistent_with_pipeline(stellar_dust_model):
     )
 
 
+def test_predict_via_precomp_with_dust_matches_predict(stellar_dust_model):
+    """Phase 3c-3c-iii: under dust attenuation, predict_via_precomp matches
+    predict within the documented hybrid-kernel accuracy (~0.5%).
+
+    The LUT path applies the Taylor expansion ``A·Φ + A'·Ψ`` to the stellar
+    contribution; the default path integrates the attenuated SED through
+    filters directly. The two should agree within Zacharegkas+2025's ~0.5%
+    factorization tolerance for SDSS bands on a stellar+Calzetti model.
+    """
+    m = stellar_dust_model
+    state = m.predict_via_orchestrator(_PARAMS)
+    full = {**m.spec.get_fixed_values(), **_PARAMS}
+    default = m.observation.predict(state, full, observables_type=m.Observables)
+    precomp = m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
+    rel_err = jnp.abs(precomp.phot_fnu - default.phot_fnu) / jnp.abs(default.phot_fnu)
+    print(f"dust predict_via_precomp vs predict max rel_err = {float(jnp.max(rel_err)):.4%}")
+    assert float(jnp.max(rel_err)) < 5e-3, (
+        f"predict_via_precomp under dust diverges: max rel err = {float(jnp.max(rel_err)):.4%}"
+    )
+
+
+def test_predict_via_precomp_dust_attenuates_phot_fnu(stellar_dust_model, ssp):
+    """The dust precompute path produces lower phot_fnu than the no-dust path
+    (stellar-only) — confirms the Taylor expansion actually applies attenuation.
+    """
+    spec_no_dust = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+    )
+    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    obs = Observation(photometry=phot)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m_no_dust = SEDModel(spec_no_dust, ssp, observation=obs, approx={"wave_precomp": True})
+    state_no_dust = m_no_dust.predict_via_orchestrator(_PARAMS)
+    full_no_dust = {**m_no_dust.spec.get_fixed_values(), **_PARAMS}
+    fnu_no_dust = m_no_dust.observation.predict_via_precomp(
+        state_no_dust, full_no_dust, observables_type=m_no_dust.Observables
+    ).phot_fnu
+
+    m = stellar_dust_model
+    state = m.predict_via_orchestrator(_PARAMS)
+    full = {**m.spec.get_fixed_values(), **_PARAMS}
+    fnu_dust = m.observation.predict_via_precomp(
+        state, full, observables_type=m.Observables
+    ).phot_fnu
+
+    ratio = fnu_dust / fnu_no_dust
+    assert jnp.all(ratio < 1.0), f"dust did not attenuate phot_fnu: ratio = {ratio}"
+    # u-band attenuates more than z-band (Calzetti rises into UV).
+    assert float(ratio[0]) < float(ratio[-1]), (
+        f"u-band should attenuate more than z-band: ratio={list(map(float, ratio))}"
+    )
+
+
 def test_dust_luts_absent_without_wave_precomp(ssp):
     """No filter_eff_waves publish when wave_precomp=False."""
     spec = Parameters(
