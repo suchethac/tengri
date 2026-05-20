@@ -866,6 +866,14 @@ class StellarSEDComponent:
                 total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot) * LSUN_ERG_PER_S
             )
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
+            # Phase 3c-3c-iv-a: age-resolved per-filter LUT for two-component
+            # dust attenuation. Marginalise over metallicity only; preserve
+            # the age axis. Shape (n_age, n_filter). Sum over age == the
+            # marginalised stellar_phot_lnu_precomp above.
+            stellar_phot_lnu_per_age = (
+                total_mass * jnp.einsum("ma,maf->af", joint_weights, ssp_phot) * LSUN_ERG_PER_S
+            )
+            derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
             # Phase 3c-3c: Taylor moment Ψ — same einsum, units erg/s/Hz × Å.
             ssp_phot_moment = self._state.ssp_phot_lut.ssp_phot_moment
             if ssp_phot_moment is not None:
@@ -875,6 +883,14 @@ class StellarSEDComponent:
                     * LSUN_ERG_PER_S
                 )
                 derived_overrides["stellar_phot_moment_precomp"] = stellar_phot_moment_precomp
+                stellar_phot_moment_per_age = (
+                    total_mass
+                    * jnp.einsum("ma,maf->af", joint_weights, ssp_phot_moment)
+                    * LSUN_ERG_PER_S
+                )
+                derived_overrides["stellar_phot_moment_per_age_precomp"] = (
+                    stellar_phot_moment_per_age
+                )
             # Phase 3c-3c-ii: publish filter pivot wavelengths so the dust LUT
             # (and future per-filter consumers like AGN and IGM) can use them.
             derived_overrides["filter_eff_waves"] = jnp.asarray(

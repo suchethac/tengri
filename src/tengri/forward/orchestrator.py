@@ -125,6 +125,10 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Stellar — Taylor moment (Phase 3c-3c). Same conditions as
     # stellar_phot_lnu_precomp. Used by Phase 3c-3c-ii dust integration.
     "stellar_phot_moment_precomp": "erg*Angstrom/s/Hz",
+    # Stellar — age-resolved per-filter LUT (Phase 3c-3c-iv-a; shape
+    # (n_age, n_filter)). Sum over age axis equals stellar_phot_lnu_precomp.
+    "stellar_phot_lnu_per_age_precomp": "erg/s/Hz",
+    "stellar_phot_moment_per_age_precomp": "erg*Angstrom/s/Hz",
     # Filter pivot wavelengths (published by stellar when wave_precomp
     # is on; used by dust LUT, AGN LUT, IGM LUT downstream).
     "filter_eff_waves": "Angstrom",
