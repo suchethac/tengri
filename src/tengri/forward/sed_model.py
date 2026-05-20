@@ -3702,27 +3702,9 @@ class SEDModel:
                 "model with ``filters=`` or pass an Observation that "
                 "carries a Photometry instance."
             )
-        from tengri.observation.photometry import compute_flux_density
-        from tengri.utils.cosmology import luminosity_distance
-
         state = self.predict_via_orchestrator(params)
-        z = jnp.asarray(params.get("redshift", 0.0))
-        # ``luminosity_distance`` returns cm directly (per its docstring).
-        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-
-        sed_rest = state.sed_intrinsic
-        wave_rest = state.wave
-        photometry = jnp.asarray(
-            [
-                compute_flux_density(sed_rest, wave_rest, fw, ft, redshift=z, dl_cm=dl_cm)
-                for fw, ft in zip(
-                    self.observation.photometry.filter_waves,
-                    self.observation.photometry.filter_trans,
-                    strict=False,
-                )
-            ]
-        )
-        return photometry
+        full = {**self.spec.get_fixed_values(), **params}
+        return self.observation.predict(state, full)["phot_fnu"]
 
     def predict_spectrum_via_orchestrator(self, params, wave_obs=None):
         """Spectrum through the orchestrator path.
@@ -3762,10 +3744,6 @@ class SEDModel:
         is applied; callers that need calibration should compose it on
         top via the user-likelihood Protocol path.
         """
-        from tengri.forward._kernels.compositional import observe_spectrum_from_rest_sed
-        from tengri.observation.spectrum import apply_lsf
-        from tengri.utils.cosmology import luminosity_distance
-
         if wave_obs is None and self._precomputed.spectroscopy is not None:
             wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
         elif wave_obs is None and hasattr(self, "_wave_obs"):
@@ -3777,22 +3755,16 @@ class SEDModel:
             )
 
         state = self.predict_via_orchestrator(params)
-        z = jnp.asarray(params.get("redshift", 0.0))
-        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-
-        flux = observe_spectrum_from_rest_sed(state.sed_intrinsic, state.wave, wave_obs, z, dl_cm)
-
-        resolution = self._lsf_resolution
-        if resolution is not None:
-            flux = apply_lsf(
-                flux,
-                wave_obs,
-                resolution,
-                sigma_lib_kms=self._sigma_lib_kms,
-                n_bins=self._lsf_n_bins,
-                sigma_v_kms=self._get_sigma_v_kms(params),
-            )
-        return flux
+        full = {**self.spec.get_fixed_values(), **params}
+        return self.observation.predict(
+            state,
+            full,
+            wave_obs=wave_obs,
+            sigma_v_kms=self._get_sigma_v_kms(params),
+            lsf_resolution=self._lsf_resolution,
+            lsf_sigma_lib_kms=self._sigma_lib_kms,
+            lsf_n_bins=self._lsf_n_bins,
+        )["spec_fnu"]
 
     def predict_emission_lines_via_orchestrator(self, params):
         """Phase II-2.6 orchestrator-path emission-line luminosities.
@@ -3876,6 +3848,135 @@ class SEDModel:
         # ``predict_via_orchestrator`` can pass the same params dict.
         full_params = {**self.spec.get_fixed_values(), **params}
         return run_components(chain, state0, full_params)
+
+    def predict_observables(self, params):
+        """Project the orchestrator state into every configured observable.
+
+        Single bit-exact entry point: runs the SEDComponent chain and
+        delegates to :meth:`Observation.predict` for projection. Returns
+        a dict of channels keyed by which sub-blocks the observation
+        carries (``phot_fnu`` and/or ``spec_fnu``).
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict.
+
+        Returns
+        -------
+        dict[str, jnp.ndarray]
+            Channels: ``"phot_fnu"`` shape ``(n_filters,)``,
+            ``"spec_fnu"`` shape ``(n_pixels,)``.
+
+        Notes
+        -----
+        **JIT-compatible**: yes. Not self-JIT'd — wrap with
+        :func:`jax.jit` for hot loops, or call
+        :meth:`predict_observables_jit` for the pre-cached version.
+        """
+        if self.observation is None:
+            raise ValueError(
+                "predict_observables requires an Observation. Build the "
+                "model with ``observation=`` set."
+            )
+        state = self.predict_via_orchestrator(params)
+        full = {**self.spec.get_fixed_values(), **params}
+        kwargs = {}
+        if self.observation.can_do_spectroscopy:
+            kwargs.update(
+                wave_obs=self._wave_obs
+                if hasattr(self, "_wave_obs")
+                else self.observation.spectroscopy.wave_obs,
+                sigma_v_kms=self._get_sigma_v_kms(params),
+                lsf_resolution=self._lsf_resolution,
+                lsf_sigma_lib_kms=self._sigma_lib_kms,
+                lsf_n_bins=self._lsf_n_bins,
+            )
+        return self.observation.predict(state, full, **kwargs)
+
+    def predict_observables_jit(self, params):
+        """Self-JIT'd, structurally-cached version of :meth:`predict_observables`.
+
+        Bit-exact with :meth:`predict_observables` (same orchestrator
+        chain, same :meth:`Observation.predict` projection). The compiled
+        function is cached on :meth:`compile_signature`, so two SEDModel
+        instances with identical structure (same physics, same filter
+        set, same observation shape) share one compile across galaxies.
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict.
+
+        Returns
+        -------
+        dict[str, jnp.ndarray]
+            Same channels as :meth:`predict_observables`.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — this method IS the JIT entry point.
+
+        The compiled closure captures ``self.spec.get_fixed_values()``
+        and the LSF settings. When any fixed value changes per galaxy
+        (per-galaxy redshift, per-galaxy calibration coefficient, …)
+        the :meth:`compile_signature` changes and a new compile fires.
+        Build with free priors and pass per-galaxy values via ``params``
+        to share one compile across a catalogue.
+
+        See Also
+        --------
+        predict_observables : un-JIT'd version (debug / one-shot).
+        compile_signature : structural fingerprint controlling cache reuse.
+        """
+        return self._get_or_build_predict_observables_jit()(params)
+
+    def _get_or_build_predict_observables_jit(self):
+        """Return (and cache) the JIT'd predict_observables closure."""
+        from tengri.inference._model_cache import _default_owner
+
+        cache = _default_owner.get_structural_kernel(self.compile_signature())
+        fn = cache.get("predict_observables_jit")
+        if fn is not None:
+            return fn
+
+        import jax
+
+        # Capture the model's per-instance LSF + wave_obs into the closure.
+        # These are part of compile_signature when spectroscopy is configured,
+        # so caching is safe across instances with identical structure.
+        observation = self.observation
+        fixed_values = self.spec.get_fixed_values()
+        sigma_v_getter = self._get_sigma_v_kms
+        lsf_resolution = self._lsf_resolution
+        sigma_lib_kms = self._sigma_lib_kms
+        lsf_n_bins = self._lsf_n_bins
+        wave_obs = (
+            getattr(self, "_wave_obs", None)
+            if observation is None or not observation.can_do_spectroscopy
+            else (
+                self._wave_obs if hasattr(self, "_wave_obs") else observation.spectroscopy.wave_obs
+            )
+        )
+
+        def _impl(params):
+            state = self.predict_via_orchestrator(params)
+            full = {**fixed_values, **params}
+            if observation.can_do_spectroscopy:
+                return observation.predict(
+                    state,
+                    full,
+                    wave_obs=wave_obs,
+                    sigma_v_kms=sigma_v_getter(full),
+                    lsf_resolution=lsf_resolution,
+                    lsf_sigma_lib_kms=sigma_lib_kms,
+                    lsf_n_bins=lsf_n_bins,
+                )
+            return observation.predict(state, full)
+
+        jit_fn = jax.jit(_impl)
+        cache["predict_observables_jit"] = jit_fn
+        return jit_fn
 
     def _build_component_chain(self):
         """Construct the orchestrator chain from ``self``'s settings.
