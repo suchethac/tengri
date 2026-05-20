@@ -690,7 +690,7 @@ class Observation:
 
         return out
 
-    def predict_via_lut(
+    def predict_via_precomp(
         self,
         state,
         params,
@@ -706,10 +706,10 @@ class Observation:
 
         Components that publish a LUT entry as of this PR:
 
-        - ``stellar_phot_lnu_lut`` — :class:`StellarSEDComponent` (Phase 3b/3c-1).
+        - ``stellar_phot_lnu_precomp`` — :class:`StellarSEDComponent` (Phase 3b/3c-1).
           For ``BakedIn`` nebular backends this already contains the nebular
           contribution, since the SSP grid carries baked-in nebular emission.
-        - ``nebular_phot_lnu_lut`` — :class:`NebularSEDComponent` (Phase 3c-3b
+        - ``nebular_phot_lnu_precomp`` — :class:`NebularSEDComponent` (Phase 3c-3b
           and later, when the backend supports filter-level precomputation;
           non-BakedIn backends only).
 
@@ -721,7 +721,7 @@ class Observation:
         Parameters
         ----------
         state : ForwardState
-            Orchestrator state with at least ``stellar_phot_lnu_lut``.
+            Orchestrator state with at least ``stellar_phot_lnu_precomp``.
         params : Mapping[str, jnp.ndarray]
             Param dict; reads ``redshift``.
         observables_type : type, optional
@@ -755,27 +755,27 @@ class Observation:
         """
         from tengri.utils.cosmology import luminosity_distance
 
-        # Sum all *_phot_lnu_lut contributions from components that published one.
-        # New components add their LUT field to DerivedBundle and apply() — no
-        # change to predict_via_lut required.
-        lut_keys = [k for k in state.derived.field_names() if k.endswith("_phot_lnu_lut")]
-        lut_contribs = [state.derived[k] for k in lut_keys if k in state.derived]
-        if not lut_contribs:
+        # Sum all *_phot_lnu_precomp contributions from components that published
+        # one. New components add their precompute field to DerivedBundle and
+        # apply() — no change to predict_via_precomp required.
+        precomp_keys = [k for k in state.derived.field_names() if k.endswith("_phot_lnu_precomp")]
+        precomp_contribs = [state.derived[k] for k in precomp_keys if k in state.derived]
+        if not precomp_contribs:
             raise ValueError(
-                "predict_via_lut requires at least one *_phot_lnu_lut in state.derived. "
+                "predict_via_precomp requires at least one *_phot_lnu_precomp in state.derived. "
                 "Build the model with approx={'wave_precomp': True}."
             )
         if self.can_do_spectroscopy or self.has_line_fluxes or self.has_spectral_indices:
             raise NotImplementedError(
-                "predict_via_lut (Phase 3c-3) handles photometry only. "
+                "predict_via_precomp (Phase 3c-3) handles photometry only. "
                 "Spectroscopy / lines / indices land in Phase 3c-3 final scope."
             )
         if not self.can_do_photometry:
-            raise ValueError("predict_via_lut requires photometry to be configured.")
+            raise ValueError("predict_via_precomp requires photometry to be configured.")
 
-        # Sum all LUT contributions — rest-frame Lν at the source's z.
-        total_lnu = lut_contribs[0]
-        for c in lut_contribs[1:]:
+        # Sum all precompute contributions — rest-frame Lν at the source's z.
+        total_lnu = precomp_contribs[0]
+        for c in precomp_contribs[1:]:
             total_lnu = total_lnu + c
 
         z = jnp.asarray(params.get("redshift", 0.0))

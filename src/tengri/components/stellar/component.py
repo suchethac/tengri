@@ -196,7 +196,7 @@ class StellarSEDComponent:
       the SFH grid.
     - ``log_metallicity_history`` (ndarray, shape ``(n_grid,)``, dex) —
       per-time-bin metallicity (constant for ``metallicity_model="delta"``).
-    - ``stellar_phot_lnu_lut`` (ndarray, shape ``(n_filter,)``, erg/s/Hz) —
+    - ``stellar_phot_lnu_precomp`` (ndarray, shape ``(n_filter,)``, erg/s/Hz) —
       stellar contribution to photometry from the LUT. Published only when
       ``approx={'wave_precomp': True}`` is set at model construction.
     """
@@ -268,7 +268,7 @@ class StellarSEDComponent:
             DerivedKey("sfr_history", "Msun/yr", "SFR on SFH grid"),
             DerivedKey("log_metallicity_history", "dex", "log10(Z) per SFH time bin"),
             DerivedKey(
-                "stellar_phot_lnu_lut",
+                "stellar_phot_lnu_precomp",
                 "erg/s/Hz",
                 "stellar contribution to photometry from LUT (approx.wave_precomp only)",
             ),
@@ -326,7 +326,7 @@ class StellarSEDComponent:
             # filter passband is correctly redshifted into the rest frame.
             # This aligns fixed-mode with free-mode semantics — both LUTs
             # carry the filter integral at the source's z. Cosmology
-            # ``(1+z)/(4π·dl²)`` is applied in :meth:`Observation.predict_via_lut`.
+            # ``(1+z)/(4π·dl²)`` is applied in :meth:`Observation.predict_via_precomp`.
             from tengri.components.stellar.sps.precompute import precompute_photometry
 
             z_source = redshift_spec.get("value", 0.0) if redshift_spec else 0.0
@@ -831,7 +831,7 @@ class StellarSEDComponent:
 
         # ── 12b. Stellar photometry LUT (Phase 3b) ─────────────────────
         # When eager precomputation is enabled and the LUT is available,
-        # compute stellar_phot_lnu_lut and publish it to derived.
+        # compute stellar_phot_lnu_precomp and publish it to derived.
         derived_overrides = dict(
             log_mstar=log_mstar,
             log_mstar_formed=log_mstar_formed,
@@ -862,19 +862,24 @@ class StellarSEDComponent:
             # (n_met, n_age, n_filt) in Lsun/Hz/Msun; sum over metallicity and
             # age axes weighted by joint distribution × total mass.
             # Convert to erg/s/Hz to match sed_intrinsic units.
-            stellar_phot_lnu_lut_rest = (
+            stellar_phot_lnu_precomp_rest = (
                 total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot) * LSUN_ERG_PER_S
             )
-            derived_overrides["stellar_phot_lnu_lut"] = stellar_phot_lnu_lut_rest
+            derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
             # Phase 3c-3c: Taylor moment Ψ — same einsum, units erg/s/Hz × Å.
             ssp_phot_moment = self._state.ssp_phot_lut.ssp_phot_moment
             if ssp_phot_moment is not None:
-                stellar_phot_moment_lut = (
+                stellar_phot_moment_precomp = (
                     total_mass
                     * jnp.einsum("ma,maf->f", joint_weights, ssp_phot_moment)
                     * LSUN_ERG_PER_S
                 )
-                derived_overrides["stellar_phot_moment_lut"] = stellar_phot_moment_lut
+                derived_overrides["stellar_phot_moment_precomp"] = stellar_phot_moment_precomp
+            # Phase 3c-3c-ii: publish filter pivot wavelengths so the dust LUT
+            # (and future per-filter consumers like AGN and IGM) can use them.
+            derived_overrides["filter_eff_waves"] = jnp.asarray(
+                self._state.ssp_phot_lut.effective_wavelengths_rest
+            )
 
         elif self._state is not None and self._state.ssp_phot_ztable is not None:
             # Free-z path (Phase 3c-1) — linear interp of the ztable at runtime z.
@@ -892,14 +897,14 @@ class StellarSEDComponent:
                 i_lo
             ] + frac * ztable.ssp_phot_table[i_hi]
             # Apply the same einsum as the fixed-z path.
-            stellar_phot_lnu_lut_rest = (
+            stellar_phot_lnu_precomp_rest = (
                 total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot_at_z) * LSUN_ERG_PER_S
             )
-            derived_overrides["stellar_phot_lnu_lut"] = stellar_phot_lnu_lut_rest
+            derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
             # Phase 3c-3c: free-z ztable does NOT carry the Taylor moment
             # (precompute_photometry_ztable does not yet expose taylor_correction).
             # Phase 3c-3c-ii will extend the ztable builder; until then,
-            # stellar_phot_moment_lut is None in free-z mode.
+            # stellar_phot_moment_precomp is None in free-z mode.
 
         # ── 12. Assemble new state ──────────────────────────────────────
         return state.with_(
