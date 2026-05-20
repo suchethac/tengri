@@ -4242,6 +4242,22 @@ class SEDModel:
                 # Replace the stellar component with one carrying the precomputed state.
                 chain[0] = replace(stellar, _state=state)
 
+                # Phase 3c-3d-agn: AGN component also needs filter passbands
+                # so its apply() can publish ``agn_phot_lnu_precomp``. Find the
+                # AGN component in the chain and re-precompute it with filters.
+                from tengri.components.agn.component import AGNSEDComponent
+
+                for idx, comp in enumerate(chain):
+                    if isinstance(comp, AGNSEDComponent):
+                        agn_state = comp.precompute(
+                            ssp_data=None,
+                            wave_grid=None,
+                            approx=self._approx,
+                            filters=filters,
+                        )
+                        chain[idx] = replace(comp, _state=agn_state)
+                        break
+
         return chain
 
     # ── Batch operations ──────────────────────────────────────────────

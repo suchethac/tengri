@@ -160,6 +160,12 @@ class DerivedBundle:
     L_agn_absorbed: jnp.ndarray | None = None
     sed_agn: jnp.ndarray | None = None
     sed_grahsp: jnp.ndarray | None = None
+    # AGN — filter-integrated LUT (Phase 3c-3d-agn). Rest-frame Lν of
+    # the AGN contribution per filter, shape ``(n_filters,)``. Published
+    # only when ``approx={'wave_precomp': True}`` is set and AGN is
+    # configured. Consumed by ``predict_via_precomp`` via the multi-
+    # component sum of ``*_phot_lnu_precomp`` keys.
+    agn_phot_lnu_precomp: jnp.ndarray | None = None
 
     # Nebular
     sed_nebular: jnp.ndarray | None = None
