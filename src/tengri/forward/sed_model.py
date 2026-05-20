@@ -4258,6 +4258,21 @@ class SEDModel:
                         chain[idx] = replace(comp, _state=agn_state)
                         break
 
+                # Phase 3c-3d-neb: non-BakedIn nebular component caches
+                # filters too, for its filter-integrated precompute publish.
+                from tengri.components.nebular.component import NebularSEDComponent
+
+                for idx, comp in enumerate(chain):
+                    if isinstance(comp, NebularSEDComponent):
+                        neb_state = comp.precompute(
+                            ssp_data=None,
+                            wave_grid=None,
+                            approx=self._approx,
+                            filters=filters,
+                        )
+                        chain[idx] = replace(comp, _state=neb_state)
+                        break
+
         return chain
 
     # ── Batch operations ──────────────────────────────────────────────
