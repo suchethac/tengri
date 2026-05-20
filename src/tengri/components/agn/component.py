@@ -123,9 +123,11 @@ class AGNSEDComponent:
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
+        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> AGNSEDComponentState:
         """No-op marker — all AGN templates are evaluated at runtime."""
-        del ssp_data, wave_grid
+        del ssp_data, wave_grid, filters
         return AGNSEDComponentState(name=self.name)
 
     def apply(
@@ -180,12 +182,6 @@ class AGNSEDComponent:
             agn_ebv_disc=jnp.asarray(params.get("agn_ebv_disc", 0.0)),
         )
 
-        if state.sed_intrinsic is None:
-            new_sed = L_agn
-        else:
-            new_sed = state.sed_intrinsic + L_agn
-
-        return state.with_(
-            sed_intrinsic=new_sed,
+        return state.add_intrinsic(L_agn).with_(
             derived=state.derived.with_(L_agn_bol=L_agn_bol, sed_agn=L_agn),
         )

@@ -119,6 +119,9 @@ _CANONICAL_UNITS: dict[str, str] = {
     "sfh_grid_lbt_yr": "yr",
     "sfr_history": "Msun/yr",
     "log_metallicity_history": "dex",
+    # Stellar — photometry LUT (Phase 3b; only published when
+    # ``approx={'wave_precomp': True}`` is set on SEDModel).
+    "stellar_phot_lnu_lut": "erg/s/Hz",
     # Dust attenuation / emission outputs
     "L_ir": "erg/s",
     "L_absorbed": "erg/s",

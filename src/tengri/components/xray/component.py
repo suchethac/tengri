@@ -147,9 +147,11 @@ class XRaySEDComponent:
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
+        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> XRaySEDComponentState:
         r"""No-op precompute. X-ray is a closed-form function of (λ, params)."""
-        del ssp_data, wave_grid
+        del ssp_data, wave_grid, filters
         return XRaySEDComponentState(name=self.name)
 
     def apply(
@@ -197,12 +199,6 @@ class XRaySEDComponent:
             alpha_ox=jnp.asarray(params["xray_alpha_ox"]),
         )
 
-        if state.sed_intrinsic is None:
-            new_sed = L_xray
-        else:
-            new_sed = state.sed_intrinsic + L_xray
-
-        return state.with_(
-            sed_intrinsic=new_sed,
+        return state.add_intrinsic(L_xray).with_(
             derived=state.derived.with_(sed_xray=L_xray),
         )

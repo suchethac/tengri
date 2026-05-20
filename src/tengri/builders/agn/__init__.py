@@ -22,13 +22,13 @@ The factory mirror:
 
 >>> from tengri import builders, FREE, FIXED, Uniform
 >>> agn = builders.agn.composable(
-...     _=FREE,
+...     defaults=FREE,
 ...     log_lbol=Uniform(43, 47),
-...     disc=builders.agn.disc.multicolor(_=FREE),
-...     torus=builders.agn.torus.skirtor(_=FIXED),
+...     disc=builders.agn.disc.multicolor(defaults=FREE),
+...     torus=builders.agn.torus.skirtor(defaults=FIXED),
 ...     lines=builders.agn.lines.nlr(),
 ...     feii=builders.agn.feii.none(),
-...     atten=builders.agn.atten.smc_prevot(_=FIXED),
+...     atten=builders.agn.atten.smc_prevot(defaults=FIXED),
 ... )
 
 All 14 top-level AGN models are exposed as factories:
@@ -51,7 +51,7 @@ All 14 top-level AGN models are exposed as factories:
 Examples
 --------
 >>> from tengri import builders, FREE, Uniform
->>> agn = builders.agn.skirtor(_=FREE, log_lbol=Uniform(43, 47))
+>>> agn = builders.agn.skirtor(defaults=FREE, log_lbol=Uniform(43, 47))
 >>> agn = builders.agn.simple(log_mbh=Uniform(6, 9))
 """
 
@@ -61,7 +61,7 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
-from tengri.builders._factory import UNSET, make_factory, short_form
+from tengri.builders._factory import UNSET, _pop_wildcard, make_factory, short_form
 from tengri.builders.agn import atten, disc, feii, lines, torus
 from tengri.parameters.groups import _AGN_PARTITION
 from tengri.parameters.registry import recipe_parameters
@@ -110,11 +110,11 @@ _SHARED_SHORT_PARAMS = _discover_shared_params()
 
 def composable(**kwargs: Any) -> dict:
     """Build a ``composable`` AGN config dict with five sub-block selectors."""
-    wildcard = kwargs.pop("_", FIXED)
+    wildcard = _pop_wildcard("agn.composable", kwargs)
     if wildcard not in (FREE, FIXED):
         raise ValueError(
-            f"agn.composable(_=...): expected FREE or FIXED, got {wildcard!r}. "
-            "Use tengri.FREE or tengri.FIXED."
+            f"agn.composable(defaults=...): expected FREE or FIXED, got "
+            f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
         )
     sub_blocks = {axis: kwargs.pop(axis, None) for axis in _AXIS_MODULES}
     for axis, value in sub_blocks.items():
@@ -145,7 +145,7 @@ def composable(**kwargs: Any) -> dict:
 
 # Attach a real signature so IDEs see the sub-block + shared-param kwargs.
 _sig_params = [
-    inspect.Parameter("_", inspect.Parameter.KEYWORD_ONLY, default=FIXED, annotation=Any),
+    inspect.Parameter("defaults", inspect.Parameter.KEYWORD_ONLY, default=FIXED, annotation=Any),
 ]
 for axis in _AXIS_MODULES:
     _sig_params.append(

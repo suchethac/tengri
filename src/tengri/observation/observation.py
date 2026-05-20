@@ -521,6 +521,175 @@ class Observation:
             )
         return flux
 
+    # ── Unified projection (ObservationModel Protocol) ────────────
+
+    def predict(
+        self,
+        state,
+        params,
+        *,
+        dl_cm=None,
+        wave_obs=None,
+        sigma_v_kms: float = 0.0,
+        lsf_resolution=None,
+        lsf_sigma_lib_kms: float | None = None,
+        lsf_n_bins: int | None = None,
+        observables_type=None,
+    ) -> dict[str, jnp.ndarray]:
+        """Project an orchestrator :class:`ForwardState` into observable channels.
+
+        Unified projection seam matching the :class:`ObservationModel`
+        Protocol in :mod:`tengri.protocols.observation`. Phase 1 of the
+        forward-projection unification (``docs/dev/photometry_path_unification.md``).
+
+        Parameters
+        ----------
+        state : ForwardState
+            Orchestrator output. Reads ``state.sed_intrinsic`` (rest-frame
+            L_nu in erg/s/Hz) and ``state.wave`` (rest-frame Angstrom).
+        params : Mapping[str, jnp.ndarray]
+            Parameter dict. Reads ``redshift`` for the cosmology calculation.
+        dl_cm : float or jnp.ndarray, optional
+            Luminosity distance [cm]. If ``None``, derived from
+            ``params["redshift"]`` via :func:`tengri.utils.cosmology.luminosity_distance`.
+        wave_obs : jnp.ndarray, optional
+            Observed-frame wavelength grid for the spectrum. Defaults to
+            ``self.spectroscopy.wave_obs``.
+        sigma_v_kms : float, default 0.0
+            Velocity dispersion [km/s] for LSF convolution.
+        lsf_resolution : float, ndarray, or None
+            Override LSF resolution. ``None`` reuses
+            ``self.spectroscopy.resolution``.
+        lsf_sigma_lib_kms : float, optional
+            Override SSP library sigma [km/s]. ``None`` reuses
+            ``self.spectroscopy.sigma_lib_kms``.
+        lsf_n_bins : int, optional
+            Override piecewise-constant LSF bin count. ``None`` reuses
+            ``self.spectroscopy.lsf_n_bins``.
+        observables_type : type or None
+            If provided, a :class:`typing.NamedTuple` class produced by
+            :func:`build_observables_class`. When ``None``, returns a dict
+            (backward-compat). When provided, populates and returns an instance
+            of this class.
+
+        Returns
+        -------
+        dict[str, jnp.ndarray] or Observables
+            When ``observables_type`` is ``None``: Observable channels as dict,
+            keyed by which sub-blocks are configured:
+
+            - ``"phot_fnu"`` if :attr:`can_do_photometry` — shape ``(n_filters,)``,
+              F_nu [erg/s/cm^2/Hz].
+            - ``"spec_fnu"`` if :attr:`can_do_spectroscopy` — shape ``(n_pix,)``,
+              F_nu [erg/s/cm^2/Hz].
+
+            When ``observables_type`` is provided: an instance of the passed
+            NamedTuple class with fields populated in order: ``phot_fnu``,
+            ``phot_rest_fnu``, ``spec_fnu``, ``lines_flux``, ``indices``.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — same kernels as
+        :meth:`observe_photometry` and :meth:`observe_spectrum`.
+
+        Joint observations (``is_joint``) return both keys from a single
+        forward pass — Phase 2 of the unification plan will collapse
+        ``loss_functions._build_prediction``'s two-call joint branch
+        onto this single call.
+
+        When ``observables_type`` is provided and the observation has
+        ``line_fluxes`` or ``spectral_indices`` configured, raises
+        ``NotImplementedError`` — Phase 3+ territory.
+        """
+        from tengri.observation.photometry import compute_flux_density
+        from tengri.observation.spectrum import apply_lsf, compute_spectrum
+        from tengri.utils.cosmology import luminosity_distance
+
+        z = jnp.asarray(params.get("redshift", 0.0))
+        if dl_cm is None:
+            dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+        else:
+            dl_cm = jnp.asarray(dl_cm)
+
+        sed_rest = state.sed_intrinsic
+        wave_rest = state.wave
+
+        out: dict[str, jnp.ndarray] = {}
+
+        if self.can_do_photometry:
+            phot = jnp.asarray(
+                [
+                    compute_flux_density(sed_rest, wave_rest, fw, ft, z, dl_cm)
+                    for fw, ft in zip(
+                        self.photometry.filter_waves,
+                        self.photometry.filter_trans,
+                        strict=False,
+                    )
+                ]
+            )
+            out["phot_fnu"] = phot
+
+        if self.can_do_spectroscopy:
+            wo = wave_obs if wave_obs is not None else self.spectroscopy.wave_obs
+            flux = compute_spectrum(sed_rest, wave_rest, wo, z, dl_cm)
+            resolution = (
+                lsf_resolution if lsf_resolution is not None else self.spectroscopy.resolution
+            )
+            if resolution is not None:
+                sigma_lib = (
+                    lsf_sigma_lib_kms
+                    if lsf_sigma_lib_kms is not None
+                    else self.spectroscopy.sigma_lib_kms
+                )
+                n_bins = lsf_n_bins if lsf_n_bins is not None else self.spectroscopy.lsf_n_bins
+                flux = apply_lsf(
+                    flux,
+                    wo,
+                    resolution,
+                    sigma_lib_kms=sigma_lib,
+                    n_bins=n_bins,
+                    sigma_v_kms=sigma_v_kms,
+                )
+            out["spec_fnu"] = flux
+
+        # Phase 2: if observables_type is provided, populate and return NamedTuple
+        if observables_type is not None:
+            if self.has_line_fluxes or self.has_spectral_indices:
+                raise NotImplementedError(
+                    "observables_type (Phase 2) does not yet support line_fluxes or "
+                    "spectral_indices. This is Phase 3+ territory. Use the dict-returning "
+                    "path (observables_type=None) for now."
+                )
+
+            # Compute phot_rest_fnu: rest-frame photometry at z=0, d_L=10pc
+            phot_rest = None
+            if self.can_do_photometry:
+                from tengri.utils.physics_constants import TEN_PC_CM
+
+                dl_rest = TEN_PC_CM  # 10 pc in cm
+                phot_rest = jnp.asarray(
+                    [
+                        compute_flux_density(sed_rest, wave_rest, fw, ft, 0.0, dl_rest)
+                        for fw, ft in zip(
+                            self.photometry.filter_waves,
+                            self.photometry.filter_trans,
+                            strict=False,
+                        )
+                    ]
+                )
+
+            # Build positional arguments in order: phot_fnu, phot_rest_fnu, spec_fnu
+            args = []
+            if self.can_do_photometry:
+                args.append(out["phot_fnu"])
+                args.append(phot_rest)
+            if self.can_do_spectroscopy:
+                args.append(out["spec_fnu"])
+
+            return observables_type(*args)
+
+        return out
+
     # ── Display ───────────────────────────────────────────────────
 
     def summary(self) -> str:
