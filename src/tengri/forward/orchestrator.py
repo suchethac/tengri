@@ -122,6 +122,9 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Stellar — photometry LUT (Phase 3b; only published when
     # ``approx={'wave_precomp': True}`` is set on SEDModel).
     "stellar_phot_lnu_lut": "erg/s/Hz",
+    # Stellar — Taylor moment (Phase 3c-3c). Same conditions as
+    # stellar_phot_lnu_lut. Used by Phase 3c-3c-ii dust integration.
+    "stellar_phot_moment_lut": "erg*Angstrom/s/Hz",
     # Dust attenuation / emission outputs
     "L_ir": "erg/s",
     "L_absorbed": "erg/s",
