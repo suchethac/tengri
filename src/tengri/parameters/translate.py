@@ -251,7 +251,7 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
 
     Notes
     -----
-    As of Phase II-2, registered SEDComponent instances auto-declare parameters
+    Registered SEDComponent instances auto-declare parameters
     via :meth:`declared_parameters`. This function auto-derives identity mappings
     from those declarations (if not already in the map) to keep the param_map
     synchronized without manual editing.
@@ -374,8 +374,8 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
                 # Fall back to fixed value from spec, or skip if absent.
                 #
                 # ``param_map`` is built from a registry that may include
-                # auto-derived entries from Phase II SEDComponents (AGN,
-                # Radio, IGM, X-ray) regardless of whether the active
+                # auto-derived entries from SEDComponents (AGN, Radio,
+                # IGM, X-ray) regardless of whether the active
                 # spec actually uses them. When a spec doesn't use a
                 # given component, its parameters are absent from both
                 # ``params`` and ``spec`` — silently skipping the entry

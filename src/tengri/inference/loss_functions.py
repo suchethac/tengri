@@ -3,7 +3,7 @@
 Three public builders — :func:`build_loss_fn`, :func:`build_loglikelihood_fn`,
 and :func:`build_loglikelihood_unbounded_fn` — are thin wrappers over a
 single private core, :func:`_build_data_neg_log_likelihood_fn`. The core
-routes through ``fitter._user_likelihood`` (the Phase II-1 adapter cohort
+routes through ``fitter._user_likelihood`` (the likelihood-adapter cohort
 auto-built by :meth:`Fitter._maybe_build_default_likelihood`) and falls
 through to one tiny legacy χ² branch only for the case the cohort cannot
 yet express (``data_mask + non-photometry``).
@@ -170,8 +170,8 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="traced"):
         if user_likelihood is not None:
             return -user_likelihood.log_prob(prediction, params)
 
-        # Legacy χ² fall-through. Exactly one case reaches this code path
-        # post Phase II-2.3: data_mask + spec/joint (censoring across the
+        # Legacy χ² fall-through. Exactly one case reaches this code path:
+        # data_mask + spec/joint (censoring across the
         # concatenated data array, not addressable via a single-channel
         # adapter). All other configurations are covered by auto-build
         # in Fitter._maybe_build_default_likelihood. If you find yourself

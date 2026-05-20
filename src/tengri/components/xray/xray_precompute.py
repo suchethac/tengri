@@ -17,13 +17,12 @@ Fixed axes via ``slice_fixed_axes``.
 
 .. note::
 
-   The current X-ray models are closed-form power-law-with-cutoff spectra;
-   the runtime path is already cheap.  The precompute layer here is
-   *forward-looking scaffolding* meant to absorb future X-ray models that
-   are tabulated grids (e.g. Comptonization tables, reflection grids, ionised
-   absorber transmission cubes).  Treat the current adapters as placeholders
-   that establish the ``(scale, *axes) -> photometry`` contract; benchmark
-   before assuming a speedup over the analytic runtime path.  See
+   The current X-ray models are closed-form power-law-with-cutoff spectra,
+   so the runtime path is already cheap. These precompute adapters exist to
+   establish the ``(scale, *axes) -> photometry`` contract that tabulated
+   future models (e.g. Comptonization tables, reflection grids, ionised
+   absorber transmission cubes) will need; benchmark before assuming a
+   speedup over the analytic runtime path.  See
    ``scripts/benchmark_precompute_analytic.py``.
 
 References

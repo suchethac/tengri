@@ -1792,9 +1792,7 @@ class Prediction:
         :class:`~tengri.components.nebular.component.NebularSEDComponent`
         (``state.derived["line_waves"]`` / ``["line_lums"]``). Matches
         legacy-path luminosities within numerical tolerance for both
-        Cue and CloudyGrid backends after the Phase II-3 PR 5b'
-        orchestrator fixes (``age_weights`` plumbing +
-        ``neb_logZ_gas`` translation; commit b7dff1b).
+        Cue and CloudyGrid backends.
         """
         if "line_waves" in self._cache:
             return
