@@ -152,12 +152,12 @@ def measure_speedup(model, params, n_warmup=1, n_timed=10):
 
     # Warm-up (trigger XLA compile if not cached)
     for _ in range(n_warmup):
-        _ = model.predict_photometry(params, mode="compositional")
+        _ = model.predict_photometry(params)
 
     # Time subsequent calls (pure JIT execution)
     for _ in range(n_timed):
         t0 = time.perf_counter()
-        _ = model.predict_photometry(params, mode="compositional")
+        _ = model.predict_photometry(params)
         times.append((time.perf_counter() - t0) * 1e3)  # ms
 
     return times
@@ -210,7 +210,7 @@ plt.show()
 # evaluated *once* outside the likelihood — earlier versions of this
 # notebook recomputed sed_obs from sed_pred at every call, which collapses
 # χ² to a constant and zeroes the gradient (the figure was numerical noise).
-_sed_obs_fixed = model.predict_photometry(params, mode="compositional")
+_sed_obs_fixed = model.predict_photometry(params)
 _noise_fixed = _sed_obs_fixed * 0.1     # 10% fractional uncertainty
 
 def log_likelihood_chi2(params_dict, model):
@@ -221,13 +221,13 @@ def log_likelihood_chi2(params_dict, model):
 
     Returns: log p(data | params) = -0.5 * χ²
     """
-    sed_pred = model.predict_photometry(params_dict, mode="compositional")
+    sed_pred = model.predict_photometry(params_dict)
     chi2 = jnp.sum(((sed_pred - _sed_obs_fixed) / _noise_fixed) ** 2)
     return -0.5 * chi2
 
 # Compile forward pass
 print("\nCompiling forward model for gradient computation...")
-sed = model.predict_photometry(params, mode="compositional")
+sed = model.predict_photometry(params)
 print(f"  Model output: shape {sed.shape}, range [{sed.min():.2e}, {sed.max():.2e}] erg/s/Hz")
 
 # Define and JIT the gradient function. We close over `model` so JAX doesn't
@@ -251,7 +251,7 @@ grad_time = (time.perf_counter() - t0) / n_evals * 1e3
 
 t0 = time.perf_counter()
 for _ in range(n_evals):
-    _ = model.predict_photometry(params, mode="compositional")
+    _ = model.predict_photometry(params)
     _ = _.block_until_ready()
 fwd_time = (time.perf_counter() - t0) / n_evals * 1e3
 
@@ -420,7 +420,7 @@ def batch_forward(params_batch):
     axis 0 of each entry produces a stacked photometry array (n_galaxies, n_bands).
     """
     def single_galaxy(param_dict):
-        return model.predict_photometry(param_dict, mode="compositional")
+        return model.predict_photometry(param_dict)
 
     return jax.vmap(single_galaxy)(params_batch)
 
@@ -476,7 +476,7 @@ for n in batch_sizes:
         t0 = time.perf_counter()
         for i in range(n):
             p_i = {k: v[i] for k, v in params_batch_test.items()}
-            _ = model.predict_photometry(p_i, mode="compositional")
+            _ = model.predict_photometry(p_i)
         times.append((time.perf_counter() - t0) * 1e3)
     times_python.append(np.mean(times) / n)  # Per-galaxy time
 
@@ -564,7 +564,7 @@ from tengri import Fitter
 
 # Tiny mock dataset for the timing demo. 7 free params is enough to make
 # NUTS non-trivial; we just want clean compile-vs-warm timings.
-mock = model.predict_photometry(params, mode="compositional")
+mock = model.predict_photometry(params)
 noise = mock * 0.05  # 5% Gaussian uncertainty per band
 
 fitter_demo = Fitter(model, mock, noise)
