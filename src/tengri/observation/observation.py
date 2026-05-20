@@ -778,6 +778,34 @@ class Observation:
         for c in precomp_contribs[1:]:
             total_phi = total_phi + c
 
+        # Phase 3c-3c-iv guard: silent-correctness check. If the dust
+        # component ran on the wave grid (``dust_attenuation_factor`` is
+        # published) but did NOT publish a per-filter precompute, then
+        # ``Σ Φ_i`` is the UNATTENUATED stellar photometry and using it
+        # would silently give wrong numbers. This currently happens for:
+        #
+        # - Two-component (Charlot & Fall) dust — age-dependent
+        #   attenuation, not factorisable into a single per-filter A.
+        #   Phase 3c-3c-iv lands the age-resolved LUT.
+        # - Free-z + dust — the ztable builder does not yet carry the
+        #   Taylor moment. Phase 3c-3c-v.
+        # - Any future attenuation component that doesn't publish a
+        #   ``dust_attenuation_precomp`` field.
+        # Detect ACTIVE dust attenuation by L_ir > 0. Zero-tau models still
+        # have the dust component in the chain (publishing L_ir = 0); only
+        # actual attenuation should trigger the guard.
+        l_ir = state.derived.get("L_ir")
+        dust_active = l_ir is not None and float(l_ir) > 0.0
+        if dust_active and state.derived.get("dust_attenuation_precomp") is None:
+            raise NotImplementedError(
+                "predict_via_precomp: dust attenuation ran on the wave grid "
+                "but no dust_attenuation_precomp was published. This happens "
+                "for two-component (Charlot & Fall) dust [Phase 3c-3c-iv] "
+                "and for free-z + dust [Phase 3c-3c-v]. Use predict() instead, "
+                "or build the model with dust_model='single_component' and "
+                "fixed redshift to use the LUT path."
+            )
+
         # Phase 3c-3c-iii: apply dust attenuation via the Taylor expansion
         # f_b = A(λ_eff)·Φ_b + A'(λ_eff)·Ψ_b (Zacharegkas+2025).
         # When dust precompute is present, the Taylor moment Ψ MUST also be

@@ -509,6 +509,73 @@ def test_predict_via_precomp_dust_attenuates_phot_fnu(stellar_dust_model, ssp):
     )
 
 
+def test_predict_via_precomp_raises_for_two_component_dust(ssp):
+    """Phase 3c-3c-iv guard: two-component dust runs on the wave grid but does
+    NOT publish a per-filter precompute. predict_via_precomp must detect this
+    and raise with a clear diagnostic rather than silently return unattenuated
+    photometry.
+    """
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.1),
+        dust_tau_diff=Fixed(0.3),
+        apply_igm=False,
+    )
+    phot = Photometry.from_names(["sdss_r"])
+    obs = Observation(photometry=phot)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        # Default dust_model='two_component'; wave_precomp on for stellar LUT.
+        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+    state = m.predict_via_orchestrator(_PARAMS)
+    full = {**m.spec.get_fixed_values(), **_PARAMS}
+    try:
+        m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
+        raise AssertionError("predict_via_precomp should raise for two-component dust")
+    except NotImplementedError as e:
+        assert "two-component" in str(e).lower() or "Phase 3c-3c-iv" in str(e)
+
+
+def test_predict_via_precomp_raises_for_free_z_with_dust(ssp):
+    """Phase 3c-3c-v guard: free-z + dust is unsupported until the ztable
+    builder carries the Taylor moment.
+    """
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol=Fixed(-0.5),
+        redshift=Uniform(0.0, 2.0),  # free
+        dust_tau_v=Fixed(0.3),
+        dust_model="single_component",
+        dust_law_bc="calzetti",
+        apply_igm=False,
+    )
+    phot = Photometry.from_names(["sdss_r"])
+    obs = Observation(photometry=phot)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+    params = {**_PARAMS, "redshift": 0.5}
+    state = m.predict_via_orchestrator(params)
+    full = {**m.spec.get_fixed_values(), **params}
+    try:
+        m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
+        raise AssertionError("predict_via_precomp should raise for free-z + dust")
+    except NotImplementedError as e:
+        assert "free-z" in str(e).lower() or "Phase 3c-3c-v" in str(e)
+
+
 def test_dust_luts_absent_without_wave_precomp(ssp):
     """No filter_eff_waves publish when wave_precomp=False."""
     spec = Parameters(
