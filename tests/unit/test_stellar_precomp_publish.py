@@ -636,9 +636,7 @@ def test_predict_via_precomp_two_component_dust_matches_predict(ssp):
     state = m.predict_via_orchestrator(_PARAMS)
     full = {**m.spec.get_fixed_values(), **_PARAMS}
     default = m.observation.predict(state, full, observables_type=m.Observables)
-    precomp = m.observation.predict_via_precomp(
-        state, full, observables_type=m.Observables
-    )
+    precomp = m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
     rel_err = jnp.abs(precomp.phot_fnu - default.phot_fnu) / jnp.abs(default.phot_fnu)
     print(
         f"two-component dust predict_via_precomp vs predict max rel_err = "
@@ -682,9 +680,7 @@ def test_predict_via_precomp_free_z_with_dust_matches_predict(ssp, z_test):
     state = m.predict_via_orchestrator(params)
     full = {**m.spec.get_fixed_values(), **params}
     default = m.observation.predict(state, full, observables_type=m.Observables)
-    precomp = m.observation.predict_via_precomp(
-        state, full, observables_type=m.Observables
-    )
+    precomp = m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
     rel_err = jnp.abs(precomp.phot_fnu - default.phot_fnu) / jnp.abs(default.phot_fnu)
     print(f"z={z_test}: free-z + dust max rel_err = {float(jnp.max(rel_err)):.4%}")
     # Tolerance: 3% — combines ztable linear interpolation accuracy
