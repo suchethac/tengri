@@ -132,6 +132,22 @@ class DerivedBundle:
     # ``approx={'wave_precomp': True}`` is set.
     dust_attenuation_precomp: jnp.ndarray | None = None
     dust_attenuation_slope_precomp: jnp.ndarray | None = None
+    # Two-component dust (Phase 3c-3c-iv-b). Birth-cloud and diffuse
+    # attenuation factors per filter pivot, plus their wavelength
+    # slopes. Two-component dust factorises as
+    # ``T(a, λ) = T_diff(λ) × T_bc(λ)^y(a)`` — the per-age dependence
+    # comes from the young indicator ``y(a)`` below. Used by
+    # Phase 3c-3c-iv-c to apply per-age expansion in predict_via_precomp.
+    dust_bc_attenuation_precomp: jnp.ndarray | None = None
+    dust_bc_attenuation_slope_precomp: jnp.ndarray | None = None
+    dust_diff_attenuation_precomp: jnp.ndarray | None = None
+    dust_diff_attenuation_slope_precomp: jnp.ndarray | None = None
+    # Young-star indicator on the SSP age grid (Phase 3c-3c-iv-b),
+    # shape ``(n_age,)``. Smooth sigmoid transition around
+    # ``DustSEDComponent.config.t_birth_yr``. ``y(a)`` = 1 for fully
+    # young, 0 for fully old, with a logistic transition controlled by
+    # ``transition_width_dex``.
+    dust_young_indicator: jnp.ndarray | None = None
     # Filter pivot wavelengths in the rest frame (published by stellar
     # when wave_precomp is on; shared by downstream filter-level
     # consumers like the dust attenuation LUT). Shape ``(n_filters,)``,

@@ -135,6 +135,12 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Dust attenuation per filter (Phase 3c-3c-ii). A(λ_eff) and A'(λ_eff).
     "dust_attenuation_precomp": "",
     "dust_attenuation_slope_precomp": "1/Angstrom",
+    # Two-component dust (Phase 3c-3c-iv-b). BC + diffuse layer precompute.
+    "dust_bc_attenuation_precomp": "",
+    "dust_bc_attenuation_slope_precomp": "1/Angstrom",
+    "dust_diff_attenuation_precomp": "",
+    "dust_diff_attenuation_slope_precomp": "1/Angstrom",
+    "dust_young_indicator": "",
     # Dust attenuation / emission outputs
     "L_ir": "erg/s",
     "L_absorbed": "erg/s",

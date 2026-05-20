@@ -545,6 +545,57 @@ def test_predict_via_precomp_dust_attenuates_phot_fnu(stellar_dust_model, ssp):
     )
 
 
+def test_two_component_dust_publishes_bc_diff_precomp(ssp):
+    """Phase 3c-3c-iv-b: two-component dust publishes A_bc, A_diff and slopes
+    when filter_eff_waves is available (i.e. wave_precomp is on).
+
+    Phase 3c-3c-iv-c will consume these to apply the per-age Charlot-Fall
+    expansion. For now we only validate the publish.
+    """
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.5),
+        dust_tau_diff=Fixed(0.3),
+        apply_igm=False,
+    )
+    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r"])
+    obs = Observation(photometry=phot)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+    state = m.predict_via_orchestrator(_PARAMS)
+
+    assert "dust_bc_attenuation_precomp" in state.derived
+    assert "dust_bc_attenuation_slope_precomp" in state.derived
+    assert "dust_diff_attenuation_precomp" in state.derived
+    assert "dust_diff_attenuation_slope_precomp" in state.derived
+    assert "dust_young_indicator" in state.derived
+
+    a_bc = state.derived["dust_bc_attenuation_precomp"]
+    a_diff = state.derived["dust_diff_attenuation_precomp"]
+    y = state.derived["dust_young_indicator"]
+
+    # A_bc and A_diff must be physical (0 < A ≤ 1).
+    assert jnp.all((a_bc > 0) & (a_bc <= 1.0)), f"A_bc out of range: {a_bc}"
+    assert jnp.all((a_diff > 0) & (a_diff <= 1.0)), f"A_diff out of range: {a_diff}"
+    # tau_bc > tau_diff in this test → BC attenuates more → A_bc < A_diff per filter.
+    assert jnp.all(a_bc < a_diff), (
+        f"A_bc should be < A_diff with tau_bc > tau_diff: {a_bc} vs {a_diff}"
+    )
+    # Young indicator on (0, 1), smooth.
+    assert jnp.all((y >= 0) & (y <= 1)), f"y(a) out of [0, 1]: {y}"
+    # First few SSP ages should be young (y close to 1), last few old (y close to 0).
+    assert float(y[0]) > 0.9, f"youngest SSP not young: y[0]={float(y[0])}"
+    assert float(y[-1]) < 0.1, f"oldest SSP not old: y[-1]={float(y[-1])}"
+
+
 def test_predict_via_precomp_raises_for_two_component_dust(ssp):
     """Phase 3c-3c-iv guard: two-component dust runs on the wave grid but does
     NOT publish a per-filter precompute. predict_via_precomp must detect this
