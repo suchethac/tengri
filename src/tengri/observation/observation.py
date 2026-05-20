@@ -774,9 +774,38 @@ class Observation:
             raise ValueError("predict_via_precomp requires photometry to be configured.")
 
         # Sum all precompute contributions — rest-frame Lν at the source's z.
-        total_lnu = precomp_contribs[0]
+        total_phi = precomp_contribs[0]
         for c in precomp_contribs[1:]:
-            total_lnu = total_lnu + c
+            total_phi = total_phi + c
+
+        # Phase 3c-3c-iii: apply dust attenuation via the Taylor expansion
+        # f_b = A(λ_eff)·Φ_b + A'(λ_eff)·Ψ_b (Zacharegkas+2025).
+        # When dust precompute is present, the Taylor moment Ψ MUST also be
+        # present (the dust expansion is only valid with the second term).
+        # When dust precompute is absent, the model has no dust attenuation
+        # for the LUT path and we use Φ alone.
+        a_lut = state.derived.get("dust_attenuation_precomp")
+        a_slope_lut = state.derived.get("dust_attenuation_slope_precomp")
+        if a_lut is not None and a_slope_lut is not None:
+            # Sum all *_phot_moment_precomp contributions for the Taylor term.
+            # Currently only stellar publishes a moment; nebular / AGN would
+            # add their own ``<name>_phot_moment_precomp`` in later sub-PRs.
+            moment_keys = [
+                k for k in state.derived.field_names() if k.endswith("_phot_moment_precomp")
+            ]
+            moment_contribs = [state.derived[k] for k in moment_keys if k in state.derived]
+            if not moment_contribs:
+                raise ValueError(
+                    "predict_via_precomp: dust precompute is present but no "
+                    "*_phot_moment_precomp Taylor moment was published. "
+                    "Stellar must publish stellar_phot_moment_precomp (Phase 3c-3c-i)."
+                )
+            total_psi = moment_contribs[0]
+            for c in moment_contribs[1:]:
+                total_psi = total_psi + c
+            total_lnu = a_lut * total_phi + a_slope_lut * total_psi
+        else:
+            total_lnu = total_phi
 
         z = jnp.asarray(params.get("redshift", 0.0))
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
