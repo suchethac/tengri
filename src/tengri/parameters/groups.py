@@ -1075,7 +1075,11 @@ def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | 
     elif group_name == "dust.emission":
         return spec.dust_emission
     elif group_name == "neb":
-        return spec.nebular_mode
+        # ``Parameters`` stores ``nebular_mode == "off"`` to mean "no nebular
+        # contribution"; the dict grammar's canonical name for that state is
+        # ``"none"``. Map at the boundary so to_groups() / from_groups()
+        # round-trip cleanly.
+        return "none" if spec.nebular_mode == "off" else spec.nebular_mode
     elif group_name == "igm":
         return spec.igm_model if hasattr(spec, "igm_model") else None
     elif group_name == "radio":

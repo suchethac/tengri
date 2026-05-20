@@ -208,13 +208,19 @@ class TestBackwardCompatibility:
 
     def test_photometry_path_works(self, synthetic_ssp, simple_spec, simple_params):
         """_predict_photometry_compositional calls traced path."""
-        model = SEDModel(simple_spec, synthetic_ssp)
+        from tengri.observation.observation import Observation
+        from tengri.observation.photometry import FilterCurve
+        from tengri.observation.photometry_config import Photometry
 
-        # Add simple filters
         wave_u = jnp.linspace(3000.0, 4000.0, 50)
         trans_u = jnp.ones_like(wave_u)
-        model.filter_waves = [wave_u]
-        model.filter_trans = [trans_u]
+        photometry = Photometry(
+            filters=(FilterCurve(wave=wave_u, trans=trans_u, name="u"),),
+            names=("u",),
+        )
+        model = SEDModel(
+            simple_spec, synthetic_ssp, observation=Observation(photometry=photometry)
+        )
 
         # This internally calls _compute_rest_sed_compositional
         phot = model._predict_photometry_compositional(simple_params)
