@@ -315,6 +315,42 @@ def test_lut_publishes_for_metallicity_mode(ssp, metallicity_model, met_params):
     assert jnp.all(lut > 0), f"non-positive LUT for {metallicity_model}: {lut}"
 
 
+def test_per_age_lut_sums_to_marginalised_lut(stellar_only_model):
+    """Phase 3c-3c-iv-a: age-resolved per-filter LUT sums (over age axis) to the
+    existing marginalised stellar_phot_lnu_precomp.
+
+    The age-resolved LUT is the input to two-component dust attenuation
+    (Phase 3c-3c-iv-c); summing it over the age axis must recover the
+    aggregate LUT to within JAX precision.
+    """
+    m = stellar_only_model
+    state = m.predict_via_orchestrator(_PARAMS)
+    per_age = state.derived["stellar_phot_lnu_per_age_precomp"]
+    marginalised = state.derived["stellar_phot_lnu_precomp"]
+    assert per_age.ndim == 2, f"per_age should be 2D (n_age, n_filter): {per_age.shape}"
+    assert per_age.shape[1] == marginalised.shape[0], (
+        f"filter axes mismatch: per_age={per_age.shape}, marginalised={marginalised.shape}"
+    )
+    reconstructed = jnp.sum(per_age, axis=0)
+    rel_err = jnp.abs(reconstructed - marginalised) / jnp.abs(marginalised)
+    assert float(jnp.max(rel_err)) < 1e-10, (
+        f"per_age sum diverges from marginalised LUT: max rel err = {float(jnp.max(rel_err)):.2e}"
+    )
+
+
+def test_per_age_moment_lut_sums_to_marginalised_moment(stellar_only_model):
+    """Same invariant for the Taylor moment Ψ."""
+    m = stellar_only_model
+    state = m.predict_via_orchestrator(_PARAMS)
+    per_age = state.derived["stellar_phot_moment_per_age_precomp"]
+    marginalised = state.derived["stellar_phot_moment_precomp"]
+    reconstructed = jnp.sum(per_age, axis=0)
+    rel_err = jnp.abs(reconstructed - marginalised) / jnp.maximum(jnp.abs(marginalised), 1e-30)
+    assert float(jnp.max(rel_err)) < 1e-10, (
+        f"per_age moment sum diverges: max rel err = {float(jnp.max(rel_err)):.2e}"
+    )
+
+
 def test_taylor_moment_published_in_fixed_z(stellar_only_model):
     """Phase 3c-3c: stellar_phot_moment_precomp Ψ is published alongside the LUT
     in fixed-z mode.

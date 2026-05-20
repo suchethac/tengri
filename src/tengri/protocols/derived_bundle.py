@@ -107,6 +107,15 @@ class DerivedBundle:
     # f_b ≈ A(λ_eff)·Φ_b + A'(λ_eff)·Ψ_b (Zacharegkas+2025).
     # Units: erg/s/Hz × Å.
     stellar_phot_moment_precomp: jnp.ndarray | None = None
+    # Stellar — age-resolved per-filter LUT (Phase 3c-3c-iv-a). Shape
+    # ``(n_age, n_filter)``, units erg/s/Hz. The age axis is NOT
+    # marginalised. Sum over the age axis equals
+    # ``stellar_phot_lnu_precomp``. Published only when
+    # ``approx={'wave_precomp': True}`` is set. Consumed by the two-
+    # component dust LUT path (Phase 3c-3c-iv-c) to apply per-age
+    # attenuation ``T(a, λ) = T_diff(λ) × T_bc(λ)^y(a)``.
+    stellar_phot_lnu_per_age_precomp: jnp.ndarray | None = None
+    stellar_phot_moment_per_age_precomp: jnp.ndarray | None = None
 
     # Dust attenuation / emission
     L_ir: jnp.ndarray | None = None
