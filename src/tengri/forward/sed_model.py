@@ -273,9 +273,14 @@ class SEDModel:
     # "wave_precomp" = SSP × filter LUT on fixed wavelength grid (stellar component)
     # "ztable" = SSP × filter LUT indexed on redshift grid, requires wave_precomp
     # ztable is auto-enabled when wave_precomp=True and redshift is free.
+    # "igm" = pre-compute IGM transmission at filter effective wavelengths for
+    # the hybrid kernel at fixed z. Default True matches the historic behavior
+    # before the Phase 3 ``approx=`` flag was introduced (``_build_precomputed_data``
+    # always computed ``igm_eff`` when ``_uses_igm`` and ``_z_fixed`` were set).
     _DEFAULT_APPROX: ClassVar[dict] = {
         "wave_precomp": False,
         "ztable": False,
+        "igm": True,
     }
 
     _PREDICTION_MODES: ClassVar[frozenset] = frozenset(
@@ -337,7 +342,7 @@ class SEDModel:
             self._approx = {**self._DEFAULT_APPROX, **approx}
 
         # Validate approx flag names
-        legal_flags = {"ztable", "wave_precomp"}
+        legal_flags = {"ztable", "wave_precomp", "igm"}
         unknown = set(self._approx.keys()) - legal_flags
         if unknown:
             raise ValueError(
@@ -3691,11 +3696,11 @@ class SEDModel:
         # reconstruction has a hidden DSPS-joint-weight discrepancy
         # under trapz. The orchestrator value is the physically correct
         # one (energy-conserving by construction).
-        return self._predict_sed_quantities_components(params)
+        return self.predict_sed_quantities_components(params)
 
     # ── Component orchestrator path (Phase II-2.6 opt-in) ─────────────
 
-    def _predict_sfh_quantities_components(self, params):
+    def predict_sfh_quantities_components(self, params):
         """Drop-in replacement for :meth:`predict_sfh_quantities`.
 
         Routes through the orchestrator and converts the resulting
@@ -3713,7 +3718,7 @@ class SEDModel:
 
         return state_to_sfh_quantities(self.predict_state(params))
 
-    def _predict_sed_quantities_components(self, params):
+    def predict_sed_quantities_components(self, params):
         """Drop-in replacement for :meth:`predict_sed_quantities`.
 
         Returns
@@ -3763,7 +3768,7 @@ class SEDModel:
 
         return state_to_ionizing_quantities(self.predict_state(params))
 
-    def _predict_photometry_components(self, params):
+    def predict_photometry_components(self, params):
         """Photometry through the orchestrator path.
 
         Runs the SEDComponent chain on the model's configuration,
@@ -3803,7 +3808,7 @@ class SEDModel:
         """
         if not self.observation.can_do_photometry:
             raise ValueError(
-                "_predict_photometry_components requires photometric "
+                "predict_photometry_components requires photometric "
                 "filters configured on the observation. Construct the "
                 "model with ``filters=`` or pass an Observation that "
                 "carries a Photometry instance."
@@ -3812,7 +3817,7 @@ class SEDModel:
         full = {**self.spec.get_fixed_values(), **params}
         return self.observation.predict(state, full)["phot_fnu"]
 
-    def _predict_spectrum_components(self, params, wave_obs=None):
+    def predict_spectrum_components(self, params, wave_obs=None):
         """Spectrum through the orchestrator path.
 
         Runs the SEDComponent chain, applies the cosmological redshift +
@@ -3856,7 +3861,7 @@ class SEDModel:
             wave_obs = self._wave_obs
         elif wave_obs is None:
             raise ValueError(
-                "_predict_spectrum_components requires a wave_obs grid "
+                "predict_spectrum_components requires a wave_obs grid "
                 "(pass it explicitly or call precompute_spectroscopy()."
             )
 

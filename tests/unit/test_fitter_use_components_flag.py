@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Phase II opt-in: Fitter(use_components=True) routes prediction through
-:meth:`SEDModel._predict_photometry_components` instead of the legacy
+:meth:`SEDModel.predict_photometry_components` instead of the legacy
 fused kernel.
 
 Smoke-tests only — full numerical-equivalence sweep is part of the eventual
@@ -66,7 +66,7 @@ class _DualPathModel:
         self.legacy_calls += 1
         return jnp.array([1.0, 2.0, 3.0])
 
-    def _predict_photometry_components(self, params):
+    def predict_photometry_components(self, params):
         self.orchestrator_calls += 1
         return jnp.array([10.0, 20.0, 30.0])
 
@@ -74,7 +74,7 @@ class _DualPathModel:
         self.legacy_calls += 1
         return jnp.array([1.0, 2.0, 3.0])
 
-    def _predict_spectrum_components(self, params, wave_obs):
+    def predict_spectrum_components(self, params, wave_obs):
         self.orchestrator_calls += 1
         return jnp.array([10.0, 20.0, 30.0])
 

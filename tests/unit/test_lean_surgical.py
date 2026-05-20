@@ -12,9 +12,15 @@ import pytest
 
 import tengri
 from tengri.inference._model_cache import (
-    _STRUCTURAL_KERNEL_CACHE,
+    _default_owner,
     get_structural_kernel_cache,
 )
+
+# Reach the real structural cache via the singleton ``ModelCacheOwner``;
+# the module-level ``_STRUCTURAL_KERNEL_CACHE`` global is a stale legacy
+# alias that no longer reflects current state after the cache-owner
+# refactor.
+_STRUCTURAL_KERNEL_CACHE = _default_owner._kernel_cache
 from tengri.inference.jit_engine import (
     _SHARED_ENGINE_CACHE,
     _SHARED_GRAD_FN_CACHE,

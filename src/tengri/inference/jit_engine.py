@@ -576,16 +576,16 @@ def _build_signal_response(fitter):
         params = _primals_to_params(primals)
         if data_type == "photometry":
             if use_components:
-                return model._predict_photometry_components(params)
+                return model.predict_photometry_components(params)
             return model.predict_photometry(params, mode="traced")
         elif data_type == "spectroscopy":
             if use_components:
-                return model._predict_spectrum_components(params, model._wave_obs)
+                return model.predict_spectrum_components(params, model._wave_obs)
             return model.predict_spectrum(params, model._wave_obs, mode="traced")
         elif data_type == "joint":
             if use_components:
-                p = model._predict_photometry_components(params)
-                s = model._predict_spectrum_components(params, model._wave_obs)
+                p = model.predict_photometry_components(params)
+                s = model.predict_spectrum_components(params, model._wave_obs)
             else:
                 p = model.predict_photometry(params, mode="traced")
                 s = model.predict_spectrum(params, model._wave_obs, mode="traced")
@@ -729,18 +729,18 @@ def build_jit_engine(fitter, pos_dict):
             params = _primals_to_params(primals)
             if data_type == "photometry":
                 if use_components:
-                    predicted = model._predict_photometry_components(params)
+                    predicted = model.predict_photometry_components(params)
                 else:
                     predicted = model.predict_photometry(params, mode="traced")
             elif data_type == "spectroscopy":
                 if use_components:
-                    predicted = model._predict_spectrum_components(params, model._wave_obs)
+                    predicted = model.predict_spectrum_components(params, model._wave_obs)
                 else:
                     predicted = model.predict_spectrum(params, model._wave_obs, mode="traced")
             elif data_type == "joint":
                 if use_components:
-                    p = model._predict_photometry_components(params)
-                    s = model._predict_spectrum_components(params, model._wave_obs)
+                    p = model.predict_photometry_components(params)
+                    s = model.predict_spectrum_components(params, model._wave_obs)
                 else:
                     p = model.predict_photometry(params, mode="traced")
                     s = model.predict_spectrum(params, model._wave_obs, mode="traced")

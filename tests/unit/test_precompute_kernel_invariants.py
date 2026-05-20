@@ -82,7 +82,9 @@ class TestCacheInvalidation:
     @_needs_ssp
     def test_precompute_spectroscopy_clears_model_cache(self):
         """get_model_cache(model) is empty after precompute_spectroscopy."""
-        from tengri.inference._model_cache import _caches, get_model_cache
+        from tengri.inference._model_cache import _default_owner, get_model_cache
+
+        _caches = _default_owner._model_caches
 
         model, wave_obs = _make_spec_model()
         cache = get_model_cache(model)
@@ -101,7 +103,9 @@ class TestCacheInvalidation:
     @_needs_ssp
     def test_precompute_ztable_clears_model_cache(self):
         """get_model_cache(model) is empty after precompute_ztable."""
-        from tengri.inference._model_cache import _caches, get_model_cache
+        from tengri.inference._model_cache import _default_owner, get_model_cache
+
+        _caches = _default_owner._model_caches
 
         model = _make_phot_model()
         cache = get_model_cache(model)
@@ -120,7 +124,9 @@ class TestCacheInvalidation:
     @_needs_ssp
     def test_no_error_when_caches_absent(self):
         """precompute_* must not raise if no cache entry exists for the model."""
-        from tengri.inference._model_cache import _caches
+        from tengri.inference._model_cache import _default_owner
+
+        _caches = _default_owner._model_caches
 
         model, wave_obs = _make_spec_model()
         _caches.pop(model, None)
