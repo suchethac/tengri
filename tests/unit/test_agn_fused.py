@@ -175,16 +175,13 @@ class TestAGNFusedPhotometry:
         key = jax.random.PRNGKey(42)
         params = parametric_agn_spec.sample(key)
 
-        # Use approx=True to test the fused kernel AGN path specifically.
-        # The exact path evaluates AGN on the full SSP grid where simple_agn
-        # contribution is negligible at optical wavelengths for a synthetic SSP.
         # Low AGN luminosity
         params_low = {**params, "agn_log_lbol": 8.0}
-        phot_low = model.predict_photometry(params_low, approx=True)
+        phot_low = model.predict_photometry(params_low)
 
         # High AGN luminosity
         params_high = {**params, "agn_log_lbol": 12.0}
-        phot_high = model.predict_photometry(params_high, approx=True)
+        phot_high = model.predict_photometry(params_high)
 
         # Higher L_bol should produce brighter photometry
         assert jnp.all(phot_high > phot_low), (

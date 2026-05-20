@@ -104,22 +104,24 @@ class TestPrecomputeSpeedup:
 
     def test_gradient_speedup(self, ssp_data, sdss_filters, smooth_spec):
         """Gradient evaluation is >5x faster with precomputation."""
-        model_fast = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
+        from tengri import WavePrecomp
+
+        model_fast = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, approx=WavePrecomp())
         model_exact = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=False)
 
         params = smooth_spec.sample(jax.random.PRNGKey(42))
         data = model_exact.predict_photometry(params)
         noise = data / 20.0
 
-        def make_loss(model, approx=False):
+        def make_loss(model):
             def loss(p):
-                pred = model.predict_photometry(p, approx=approx)
+                pred = model.predict_photometry(p)
                 return jnp.sum(((data - pred) / noise) ** 2)
 
             return jax.jit(jax.value_and_grad(loss))
 
-        grad_fast = make_loss(model_fast, approx=True)
-        grad_exact = make_loss(model_exact, approx=False)
+        grad_fast = make_loss(model_fast)
+        grad_exact = make_loss(model_exact)
 
         # JIT warmup
         _ = grad_fast(params)

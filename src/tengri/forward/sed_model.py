@@ -2748,7 +2748,7 @@ class SEDModel:
             spec_fixed_id,
         )
 
-    def predict_photometry(self, params, mode="auto", approx=None):
+    def predict_photometry(self, params, mode="auto"):
         """Compute observed photometric flux densities through all filters.
 
         Convolves the SED (redshifted and IGM-absorbed) through filter
@@ -2781,10 +2781,6 @@ class SEDModel:
               variable-redshift, evolving metallicity, tabulated SFH).
             - ``"exact"`` — raw forward pipeline, no kernel JIT, no precomputation.
               Reference accuracy, slowest (~5–10× slower than compositional).
-        approx : bool, optional
-            Maps ``True`` → ``mode="auto"`` and ``False`` → ``mode="exact"``.
-            Prefer passing ``mode=`` directly.
-
         Returns
         -------
         flux_density : array, shape (n_filters,)
@@ -2828,7 +2824,7 @@ class SEDModel:
         --------
         >>> flux = model.predict_photometry(params)
         >>> mags = model.predict_magnitudes(params)
-        >>> flux_exact = model.predict_photometry(params, mode="exact")
+        >>> # For the fast LUT path, build with ``approx=WavePrecomp()``.
 
         References
         ----------
@@ -2837,10 +2833,6 @@ class SEDModel:
         """
         if self.filter_waves is None:
             raise ValueError("No filters set. Pass filters or observation= to SEDModel().")
-
-        # approx=bool is shorthand for mode= (for scripts that pre-date mode=)
-        if approx is not None:
-            mode = "auto" if approx else "exact"
 
         # traced: un-JIT'd path for NIFTy/VI tracing (not user-facing)
         if mode == "traced":
@@ -2893,7 +2885,6 @@ class SEDModel:
         params,
         wave_obs=None,
         mode="auto",
-        approx=None,
         wave_chunk_size=None,
     ):
         """Compute observed spectrum at given wavelengths with LSF convolution.
@@ -2921,9 +2912,6 @@ class SEDModel:
         mode : str, optional
             Prediction mode (same as :meth:`predict_photometry`).
             Default ``"auto"`` cascades through available kernels.
-        approx : bool, optional
-            Maps ``True`` → ``mode="auto"`` and ``False`` → ``mode="exact"``.
-            Prefer passing ``mode=`` directly.
         wave_chunk_size : int, optional
             If specified, split observed-frame wavelength axis into chunks of
             this size and evaluate via ``jax.lax.map`` to reduce per-chunk HLO
@@ -2999,9 +2987,6 @@ class SEDModel:
             wave_obs = self._wave_obs
         elif wave_obs is None:
             raise ValueError("No wavelength grid. Pass wave_obs or call precompute_spectroscopy()")
-
-        if approx is not None:
-            mode = "auto" if approx else "exact"
 
         # Use instance default if not overridden
         if wave_chunk_size is None:
