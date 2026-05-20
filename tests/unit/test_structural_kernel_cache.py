@@ -13,9 +13,24 @@ import pytest
 
 import tengri
 from tengri.inference._model_cache import (
+    _STRUCTURAL_KERNEL_CACHE,
     clear_structural_kernel_cache,
     get_structural_kernel_cache,
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_structural_cache():
+    """Reset ``_STRUCTURAL_KERNEL_CACHE`` around each test.
+
+    The cache is a process-wide singleton. Other tests in the suite leave
+    real SEDModel signatures behind which can collide with the synthetic
+    ``test_sig_*`` keys used here under LRU eviction, making the assertion
+    "my most recent entry is in the cache" order-dependent.
+    """
+    _STRUCTURAL_KERNEL_CACHE.clear()
+    yield
+    _STRUCTURAL_KERNEL_CACHE.clear()
 
 
 @pytest.mark.unit

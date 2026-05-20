@@ -25,6 +25,22 @@ from tengri.inference.jit_engine import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _isolate_shared_caches():
+    """Reset the process-wide JIT caches around each test in this module.
+
+    These tests poke ``_SHARED_*_CACHE`` and ``_STRUCTURAL_KERNEL_CACHE``
+    directly. Other tests in the suite leave real (model-keyed) entries
+    behind, which makes order-dependent assertions like "the entry I just
+    added is the only one in the cache" flake under CI ordering.
+    """
+    clear_shared_caches(scope="all", drop_xla=False)
+    _STRUCTURAL_KERNEL_CACHE.clear()
+    yield
+    clear_shared_caches(scope="all", drop_xla=False)
+    _STRUCTURAL_KERNEL_CACHE.clear()
+
+
 @pytest.mark.unit
 def test_clear_shared_caches_inference_body_scope():
     """scope='inference_body' drops only engine and per-model caches."""

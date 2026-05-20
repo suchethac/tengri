@@ -794,5 +794,3 @@ def continuity_flex_prior_logp(
         ]
     )
     return jnp.sum(student_t.logpdf(all_ratios, df, loc=0.0, scale=scale))
-
-

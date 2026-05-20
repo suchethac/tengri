@@ -106,9 +106,7 @@ def test_orchestrator_explicit_param_overrides_spec_fixed(stellar_only_model):
     }
     state_default = stellar_only_model.predict_state(free_only)
     # Override met_logzsol with a different value than the spec fixed.
-    state_overridden = stellar_only_model.predict_state(
-        {**free_only, "met_logzsol": 0.0}
-    )
+    state_overridden = stellar_only_model.predict_state({**free_only, "met_logzsol": 0.0})
     # Stellar SED differs because metallicity strongly affects spectral shape.
     rel_diff = float(
         jnp.max(

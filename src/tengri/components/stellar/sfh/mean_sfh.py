@@ -1670,5 +1670,3 @@ def gaussian_burst(
     dt = t_lookback - t_peak
     exponent = -0.5 * (dt / sigma) ** 2
     return amplitude * jnp.exp(exponent)
-
-

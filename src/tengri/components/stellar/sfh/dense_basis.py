@@ -694,5 +694,3 @@ def dense_basis_pure(
 
     result = jnp.interp(age_yr, t_lookback_yr, sfr)
     return jnp.maximum(result, 0.0)
-
-
