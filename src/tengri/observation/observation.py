@@ -534,6 +534,7 @@ class Observation:
         lsf_resolution=None,
         lsf_sigma_lib_kms: float | None = None,
         lsf_n_bins: int | None = None,
+        observables_type=None,
     ) -> dict[str, jnp.ndarray]:
         """Project an orchestrator :class:`ForwardState` into observable channels.
 
@@ -565,16 +566,26 @@ class Observation:
         lsf_n_bins : int, optional
             Override piecewise-constant LSF bin count. ``None`` reuses
             ``self.spectroscopy.lsf_n_bins``.
+        observables_type : type or None
+            If provided, a :class:`typing.NamedTuple` class produced by
+            :func:`build_observables_class`. When ``None``, returns a dict
+            (backward-compat). When provided, populates and returns an instance
+            of this class.
 
         Returns
         -------
-        dict[str, jnp.ndarray]
-            Observable channels, keyed by which sub-blocks are configured:
+        dict[str, jnp.ndarray] or Observables
+            When ``observables_type`` is ``None``: Observable channels as dict,
+            keyed by which sub-blocks are configured:
 
             - ``"phot_fnu"`` if :attr:`can_do_photometry` — shape ``(n_filters,)``,
               F_nu [erg/s/cm^2/Hz].
             - ``"spec_fnu"`` if :attr:`can_do_spectroscopy` — shape ``(n_pix,)``,
               F_nu [erg/s/cm^2/Hz].
+
+            When ``observables_type`` is provided: an instance of the passed
+            NamedTuple class with fields populated in order: ``phot_fnu``,
+            ``phot_rest_fnu``, ``spec_fnu``, ``lines_flux``, ``indices``.
 
         Notes
         -----
@@ -585,6 +596,10 @@ class Observation:
         forward pass — Phase 2 of the unification plan will collapse
         ``loss_functions._build_prediction``'s two-call joint branch
         onto this single call.
+
+        When ``observables_type`` is provided and the observation has
+        ``line_fluxes`` or ``spectral_indices`` configured, raises
+        ``NotImplementedError`` — Phase 3+ territory.
         """
         from tengri.observation.photometry import compute_flux_density
         from tengri.observation.spectrum import apply_lsf, compute_spectrum
@@ -636,6 +651,42 @@ class Observation:
                     sigma_v_kms=sigma_v_kms,
                 )
             out["spec_fnu"] = flux
+
+        # Phase 2: if observables_type is provided, populate and return NamedTuple
+        if observables_type is not None:
+            if self.has_line_fluxes or self.has_spectral_indices:
+                raise NotImplementedError(
+                    "observables_type (Phase 2) does not yet support line_fluxes or "
+                    "spectral_indices. This is Phase 3+ territory. Use the dict-returning "
+                    "path (observables_type=None) for now."
+                )
+
+            # Compute phot_rest_fnu: rest-frame photometry at z=0, d_L=10pc
+            phot_rest = None
+            if self.can_do_photometry:
+                from tengri.utils.physics_constants import TEN_PC_CM
+
+                dl_rest = TEN_PC_CM  # 10 pc in cm
+                phot_rest = jnp.asarray(
+                    [
+                        compute_flux_density(sed_rest, wave_rest, fw, ft, 0.0, dl_rest)
+                        for fw, ft in zip(
+                            self.photometry.filter_waves,
+                            self.photometry.filter_trans,
+                            strict=False,
+                        )
+                    ]
+                )
+
+            # Build positional arguments in order: phot_fnu, phot_rest_fnu, spec_fnu
+            args = []
+            if self.can_do_photometry:
+                args.append(out["phot_fnu"])
+                args.append(phot_rest)
+            if self.can_do_spectroscopy:
+                args.append(out["spec_fnu"])
+
+            return observables_type(*args)
 
         return out
 
