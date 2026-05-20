@@ -322,22 +322,21 @@ class StellarSEDComponent:
 
         # Dispatch: fixed-z (Phase 3b) or free-z (Phase 3c-1)
         if redshift_spec is None or redshift_spec.get("mode") == "fixed":
-            # Phase 3b path: build fixed-z LUT at z=0 (rest-frame).
-            # NOTE: although the source's redshift may be Fixed at a non-zero
-            # value, we build the LUT at z=0 to maintain Phase 3b's published
-            # convention: ``stellar_phot_lnu_lut`` is the rest-frame Lν of the
-            # CSP integrated through the filter at z=0. Cosmological corrections
-            # are applied by observation.predict (Phase 3c-3). This keeps the
-            # fixed-z and free-z paths semantically aligned at z→0.
+            # Phase 3c-3a: build the fixed-z LUT at the source's z so the
+            # filter passband is correctly redshifted into the rest frame.
+            # This aligns fixed-mode with free-mode semantics — both LUTs
+            # carry the filter integral at the source's z. Cosmology
+            # ``(1+z)/(4π·dl²)`` is applied in :meth:`Observation.predict_via_lut`.
             from tengri.components.stellar.sps.precompute import precompute_photometry
 
+            z_source = redshift_spec.get("value", 0.0) if redshift_spec else 0.0
             lut = precompute_photometry(
                 ssp_data=self.ssp_data,
                 filter_waves=filter_list,
                 filter_trans=filter_trans_list,
-                redshift=0.0,
-                dl_cm=1.0,  # placeholder; cosmology applied downstream
-                taylor_correction=False,  # Phase 3c-2 adds this
+                redshift=z_source,
+                dl_cm=1.0,  # placeholder; cosmology applied at projection time
+                taylor_correction=False,  # Phase 3c-3c adds this
             )
             return StellarSEDComponentState(name=self.name, ssp_phot_lut=lut)
 
