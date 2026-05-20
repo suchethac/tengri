@@ -693,6 +693,20 @@ def test_predict_via_precomp_free_z_with_dust_matches_predict(ssp, z_test):
     )
 
 
+def test_predict_via_precomp_handles_bakedin_only_no_neb_precomp(stellar_only_model):
+    """BakedIn nebular models do NOT publish nebular_phot_lnu_precomp because
+    the emission is already in the stellar SSP grid. ``predict_via_precomp``
+    must not raise — the multi-component sum reduces to stellar (which
+    includes BakedIn nebular).
+    """
+    m = stellar_only_model
+    state = m.predict_via_orchestrator(_PARAMS)
+    assert state.derived.get("nebular_phot_lnu_precomp") is None
+    full = {**m.spec.get_fixed_values(), **_PARAMS}
+    # Should not raise — BakedIn nebular is handled by stellar LUT.
+    m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
+
+
 def test_predict_via_precomp_agn_matches_predict(ssp):
     """Phase 3c-3d-agn: AGN-bearing model goes through the LUT path and matches
     the default ``predict`` within 0.5%.

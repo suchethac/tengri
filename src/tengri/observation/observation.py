@@ -822,20 +822,25 @@ class Observation:
         )
         if nebular_additive_active and state.derived.get("nebular_phot_lnu_precomp") is None:
             raise NotImplementedError(
-                "predict_via_precomp: non-BakedIn nebular (Cue / CloudyGrid / "
-                "Shock) is configured but no nebular_phot_lnu_precomp was "
-                "published. Non-BakedIn nebular LUT is Phase 3c-3d follow-up. "
-                "Use predict() for these models, or switch to a BakedIn "
-                "nebular backend whose emission is already in the SSP grid."
+                "predict_via_precomp: non-BakedIn nebular published sed_nebular "
+                "but no nebular_phot_lnu_precomp. The active backend may not be "
+                "Cue / CloudyGrid (Shock is not yet LUT-accelerated). Use "
+                "predict() for shock backends."
             )
 
-        # Dust attenuation applies to STELLAR (incl. BakedIn nebular) only —
-        # AGN has its own attenuation parameters. Compute the attenuated
-        # stellar contribution first; the unattenuated AGN / other
-        # contributions are added afterwards.
+        # Dust attenuation applies to STELLAR + nebular (both arise from the
+        # photosphere + birth cloud / diffuse ISM). AGN has its own attenuation
+        # parameters (``agn_ebv_*``) and is not attenuated by the stellar dust
+        # component. Compute the dust-attenuable bucket first; the rest is
+        # added unattenuated afterwards.
         stellar_phi = state.derived.get("stellar_phot_lnu_precomp")
         stellar_phi = stellar_phi if stellar_phi is not None else jnp.zeros_like(total_phi)
-        unattenuated_phi = total_phi - stellar_phi
+        nebular_phi_for_dust = state.derived.get("nebular_phot_lnu_precomp")
+        nebular_phi_for_dust = (
+            nebular_phi_for_dust if nebular_phi_for_dust is not None else jnp.zeros_like(total_phi)
+        )
+        dust_attenuable_phi = stellar_phi + nebular_phi_for_dust
+        unattenuated_phi = total_phi - dust_attenuable_phi
 
         # Phase 3c-3c-iv-c: two-component (Charlot & Fall) dust LUT.
         # Factorisation: T(a, λ) = T_diff(λ) × T_bc(λ)^y(a).
@@ -851,10 +856,15 @@ class Observation:
             a_diff_lut = state.derived["dust_diff_attenuation_precomp"]
             y_age = state.derived["dust_young_indicator"]
             atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]
-            stellar_attenuated = (
-                jnp.sum(per_age * atten_bc_per_age, axis=0) * a_diff_lut
-            )
-            total_lnu = stellar_attenuated + unattenuated_phi
+            stellar_attenuated = jnp.sum(per_age * atten_bc_per_age, axis=0) * a_diff_lut
+            # Nebular emission (Cue / CloudyGrid) is not age-resolved, so the
+            # per-age expansion doesn't apply. Approximate the nebular dust
+            # treatment as the diffuse-layer-only expansion ``A_diff·Φ_neb`` —
+            # consistent with Charlot & Fall, where nebular continuum + lines
+            # arise predominantly from young (BC) sites but the simpler
+            # diffuse-only approximation is used here for tractability.
+            nebular_attenuated = a_diff_lut * nebular_phi_for_dust
+            total_lnu = stellar_attenuated + nebular_attenuated + unattenuated_phi
 
         # Phase 3c-3c-iii: single-component dust via the Taylor expansion
         # f_b = A(λ_eff)·Φ_b + A'(λ_eff)·Ψ_b (Zacharegkas+2025).
@@ -867,7 +877,8 @@ class Observation:
                     "predict_via_precomp: dust_attenuation_precomp present but "
                     "dust_attenuation_slope_precomp missing (Phase 3c-3c-ii bug)."
                 )
-            # Stellar Taylor moment Ψ. Dust attenuates stellar only.
+            # Sum dust-attenuable Taylor moments. Only stellar publishes a
+            # moment today; nebular is treated as Φ-only (no Ψ correction).
             stellar_psi = state.derived.get("stellar_phot_moment_precomp")
             if stellar_psi is None:
                 raise ValueError(
@@ -875,8 +886,8 @@ class Observation:
                     "stellar_phot_moment_precomp Taylor moment was published. "
                     "Stellar must publish it when wave_precomp=True (Phase 3c-3c-i)."
                 )
-            stellar_attenuated = a_lut * stellar_phi + a_slope_lut * stellar_psi
-            total_lnu = stellar_attenuated + unattenuated_phi
+            dust_attenuated = a_lut * dust_attenuable_phi + a_slope_lut * stellar_psi
+            total_lnu = dust_attenuated + unattenuated_phi
         else:
             total_lnu = total_phi
 
