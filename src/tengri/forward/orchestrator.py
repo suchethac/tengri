@@ -141,6 +141,9 @@ _CANONICAL_UNITS: dict[str, str] = {
     "sed_shock": "erg/s/Hz",
     "line_waves": "Angstrom",
     "line_lums": "erg/s",
+    # Nebular — photometry LUT (Phase 3c-3b; only non-BakedIn backends
+    # publish, when ``approx={'wave_precomp': True}`` is set).
+    "nebular_phot_lnu_lut": "erg/s/Hz",
     # Radio / X-ray / IGM
     "sed_radio": "erg/s/Hz",
     "sed_xray": "erg/s/Hz",
