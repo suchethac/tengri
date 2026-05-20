@@ -693,12 +693,48 @@ def test_predict_via_precomp_free_z_with_dust_matches_predict(ssp, z_test):
     )
 
 
-def test_predict_via_precomp_raises_with_agn_active(ssp):
-    """Phase 3c-3d guard: AGN configured but no agn_phot_lnu_precomp ⇒ raises.
+def test_predict_via_precomp_agn_matches_predict(ssp):
+    """Phase 3c-3d-agn: AGN-bearing model goes through the LUT path and matches
+    the default ``predict`` within 0.5%.
 
-    AGN adds an additive SED contribution that the multi-component LUT sum
-    would silently miss. Raising prevents wrong photometry.
+    AGN.apply now filter-integrates its analytic SED contribution and
+    publishes ``agn_phot_lnu_precomp``. predict_via_precomp's multi-component
+    sum picks it up automatically alongside stellar contributions.
     """
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+        agn_model="qsogen",
+        agn_log_lbol=Fixed(45.0),
+        agn_frac=Fixed(0.5),
+    )
+    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    obs = Observation(photometry=phot)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+    state = m.predict_via_orchestrator(_PARAMS)
+    full = {**m.spec.get_fixed_values(), **_PARAMS}
+    default = m.observation.predict(state, full, observables_type=m.Observables)
+    precomp = m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
+    rel_err = jnp.abs(precomp.phot_fnu - default.phot_fnu) / jnp.abs(default.phot_fnu)
+    print(f"AGN model predict_via_precomp vs predict max rel_err = {float(jnp.max(rel_err)):.4%}")
+    assert float(jnp.max(rel_err)) < 5e-3, (
+        f"AGN model precomp diverges: max rel err = {float(jnp.max(rel_err)):.4%}"
+    )
+
+
+def test_agn_phot_lnu_precomp_published(ssp):
+    """AGN component publishes agn_phot_lnu_precomp when wave_precomp is on."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
@@ -721,12 +757,8 @@ def test_predict_via_precomp_raises_with_agn_active(ssp):
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
     state = m.predict_via_orchestrator(_PARAMS)
-    full = {**m.spec.get_fixed_values(), **_PARAMS}
-    try:
-        m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
-        raise AssertionError("predict_via_precomp should raise on active AGN")
-    except NotImplementedError as e:
-        assert "agn" in str(e).lower() or "Phase 3c-3d" in str(e)
+    assert "agn_phot_lnu_precomp" in state.derived
+    assert jnp.all(jnp.isfinite(state.derived["agn_phot_lnu_precomp"]))
 
 
 def test_dust_luts_absent_without_wave_precomp(ssp):

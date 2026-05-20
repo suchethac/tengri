@@ -70,9 +70,17 @@ class AGNSEDComponentConfig(SEDComponentConfig):
 
 @dataclass(frozen=True)
 class AGNSEDComponentState(SEDComponentState):
-    """Marker state — AGN models are analytic; no precomputed tensors."""
+    """State for AGN component.
+
+    Holds optional filter passbands when ``approx={'wave_precomp': True}``
+    is set on the parent SEDModel. The component uses them at
+    :meth:`AGNSEDComponent.apply` time to filter-integrate the
+    analytically computed AGN SED and publish ``agn_phot_lnu_precomp``.
+    """
 
     name: str = "agn"
+    filter_waves: Any | None = None
+    filter_trans: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -91,6 +99,7 @@ class AGNSEDComponent:
     config: AGNSEDComponentConfig = field(default_factory=AGNSEDComponentConfig)
     name: str = "agn"
     parameter_prefix: str = "agn_"
+    _state: AGNSEDComponentState | None = None
 
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free parameters this component owns.
@@ -126,8 +135,24 @@ class AGNSEDComponent:
         approx: Mapping[str, bool] | None = None,
         filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> AGNSEDComponentState:
-        """No-op marker — all AGN templates are evaluated at runtime."""
-        del ssp_data, wave_grid, filters
+        """Cache filter passbands when ``approx={'wave_precomp': True}``.
+
+        AGN models are analytic — there's no template grid to integrate
+        at startup time. But when ``wave_precomp`` is on, we store the
+        filter passbands so :meth:`apply` can publish a filter-integrated
+        precompute key (``agn_phot_lnu_precomp``) on top of the existing
+        full-wavelength ``sed_agn``.
+        """
+        del ssp_data, wave_grid
+        approx = approx or {}
+        if approx.get("wave_precomp") and filters is not None:
+            filter_waves = tuple(jnp.asarray(fw) for fw, _ in filters)
+            filter_trans = tuple(jnp.asarray(ft) for _, ft in filters)
+            return AGNSEDComponentState(
+                name=self.name,
+                filter_waves=filter_waves,
+                filter_trans=filter_trans,
+            )
         return AGNSEDComponentState(name=self.name)
 
     def apply(
@@ -182,6 +207,45 @@ class AGNSEDComponent:
             agn_ebv_disc=jnp.asarray(params.get("agn_ebv_disc", 0.0)),
         )
 
+        # Phase 3c-3d-agn: filter-integrate L_agn through the cached filter
+        # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp
+        # can include the AGN contribution in the LUT sum.
+        derived_overrides = dict(L_agn_bol=L_agn_bol, sed_agn=L_agn)
+        if (
+            self._state is not None
+            and self._state.filter_waves is not None
+            and self._state.filter_trans is not None
+        ):
+            from tengri.observation.photometry import compute_flux_density
+
+            z = jnp.asarray(params.get("redshift", 0.0))
+            # Filter-integrate L_agn at the source's z, dl_cm=1.
+            # compute_flux_density returns F_nu = (1+z)/(4π·dl²) · Lν_filter,
+            # so undo the cosmology factor to recover the bare rest-frame Lν
+            # — matches the convention of stellar_phot_lnu_precomp.
+            inv_cosmology = 4.0 * jnp.pi * 1.0**2 / (1.0 + z)
+            agn_phot_lnu_precomp = (
+                jnp.asarray(
+                    [
+                        compute_flux_density(
+                            L_agn,
+                            state.wave,
+                            fw,
+                            ft,
+                            redshift=z,
+                            dl_cm=jnp.asarray(1.0),
+                        )
+                        for fw, ft in zip(
+                            self._state.filter_waves,
+                            self._state.filter_trans,
+                            strict=False,
+                        )
+                    ]
+                )
+                * inv_cosmology
+            )
+            derived_overrides["agn_phot_lnu_precomp"] = agn_phot_lnu_precomp
+
         return state.add_intrinsic(L_agn).with_(
-            derived=state.derived.with_(L_agn_bol=L_agn_bol, sed_agn=L_agn),
+            derived=state.derived.with_(**derived_overrides),
         )

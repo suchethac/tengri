@@ -153,6 +153,8 @@ _CANONICAL_UNITS: dict[str, str] = {
     "L_agn_absorbed": "erg/s",
     "sed_agn": "erg/s/Hz",
     "sed_grahsp": "erg/s/Hz",
+    # AGN — filter LUT (Phase 3c-3d-agn).
+    "agn_phot_lnu_precomp": "erg/s/Hz",
     # Nebular outputs (continuous SED in erg/s/Hz per 2026-04-08 standard;
     # discrete line/continuum primitives are Lsun per the 2026-05-17
     # convention — see project_nebular_unit_conventions memory entry).

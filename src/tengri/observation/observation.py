@@ -807,19 +807,10 @@ class Observation:
                 "model and the dust law is supported."
             )
 
-        # Phase 3c-3d guards: detect AGN or non-BakedIn nebular contributions
-        # that would silently be missing from the LUT sum.
-        # ``state.derived["L_agn_bol"] > 0`` signals an active AGN component;
-        # if it has no per-filter precompute the LUT sum returns
-        # stellar-only photometry, which is silently wrong.
-        l_agn = state.derived.get("L_agn_bol")
-        agn_active = l_agn is not None and float(jnp.max(jnp.abs(jnp.asarray(l_agn)))) > 0.0
-        if agn_active and state.derived.get("agn_phot_lnu_precomp") is None:
-            raise NotImplementedError(
-                "predict_via_precomp: AGN is configured but no "
-                "agn_phot_lnu_precomp was published. AGN filter-level LUT is "
-                "Phase 3c-3d follow-up. Use predict() for AGN-bearing models."
-            )
+        # Phase 3c-3d guards: detect non-BakedIn nebular contributions that
+        # would silently be missing from the LUT sum. AGN is covered as of
+        # Phase 3c-3d-agn — AGN.apply publishes ``agn_phot_lnu_precomp`` and
+        # the multi-component sum picks it up automatically.
 
         # ``sed_nebular`` non-trivial signals a non-BakedIn nebular backend
         # (Cue / CloudyGrid / Shock) adding emission on top of the bare-stellar
@@ -838,12 +829,20 @@ class Observation:
                 "nebular backend whose emission is already in the SSP grid."
             )
 
+        # Dust attenuation applies to STELLAR (incl. BakedIn nebular) only —
+        # AGN has its own attenuation parameters. Compute the attenuated
+        # stellar contribution first; the unattenuated AGN / other
+        # contributions are added afterwards.
+        stellar_phi = state.derived.get("stellar_phot_lnu_precomp")
+        stellar_phi = stellar_phi if stellar_phi is not None else jnp.zeros_like(total_phi)
+        unattenuated_phi = total_phi - stellar_phi
+
         # Phase 3c-3c-iv-c: two-component (Charlot & Fall) dust LUT.
         # Factorisation: T(a, λ) = T_diff(λ) × T_bc(λ)^y(a).
         # At the filter level, with per-age stellar LUT
         # ``stellar_phot_lnu_per_age_precomp[a, b]``:
         #
-        #     flux_b = Σ_a per_age[a, b] × A_diff(b) × A_bc(b)^y(a)
+        #     stellar_attenuated_b = Σ_a per_age[a, b] × A_diff(b) × A_bc(b)^y(a)
         #
         # ``A_bc(b)^y(a)`` interpolates between BC-attenuated (y=1) and
         # bare (y=0) stars. Smooth y(a) handles the transition.
@@ -851,10 +850,11 @@ class Observation:
         if a_bc_lut is not None and per_age is not None:
             a_diff_lut = state.derived["dust_diff_attenuation_precomp"]
             y_age = state.derived["dust_young_indicator"]
-            # A_bc(b)^y(a): broadcast over (age, filter). a_bc has shape
-            # (n_filter,); y_age has shape (n_age,). Result (n_age, n_filter).
             atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]
-            total_lnu = jnp.sum(per_age * atten_bc_per_age, axis=0) * a_diff_lut
+            stellar_attenuated = (
+                jnp.sum(per_age * atten_bc_per_age, axis=0) * a_diff_lut
+            )
+            total_lnu = stellar_attenuated + unattenuated_phi
 
         # Phase 3c-3c-iii: single-component dust via the Taylor expansion
         # f_b = A(λ_eff)·Φ_b + A'(λ_eff)·Ψ_b (Zacharegkas+2025).
@@ -867,21 +867,16 @@ class Observation:
                     "predict_via_precomp: dust_attenuation_precomp present but "
                     "dust_attenuation_slope_precomp missing (Phase 3c-3c-ii bug)."
                 )
-            # Sum all *_phot_moment_precomp contributions for the Taylor term.
-            moment_keys = [
-                k for k in state.derived.field_names() if k.endswith("_phot_moment_precomp")
-            ]
-            moment_contribs = [state.derived[k] for k in moment_keys if k in state.derived]
-            if not moment_contribs:
+            # Stellar Taylor moment Ψ. Dust attenuates stellar only.
+            stellar_psi = state.derived.get("stellar_phot_moment_precomp")
+            if stellar_psi is None:
                 raise ValueError(
                     "predict_via_precomp: dust precompute is present but no "
-                    "*_phot_moment_precomp Taylor moment was published. "
-                    "Stellar must publish stellar_phot_moment_precomp (Phase 3c-3c-i)."
+                    "stellar_phot_moment_precomp Taylor moment was published. "
+                    "Stellar must publish it when wave_precomp=True (Phase 3c-3c-i)."
                 )
-            total_psi = moment_contribs[0]
-            for c in moment_contribs[1:]:
-                total_psi = total_psi + c
-            total_lnu = a_lut * total_phi + a_slope_lut * total_psi
+            stellar_attenuated = a_lut * stellar_phi + a_slope_lut * stellar_psi
+            total_lnu = stellar_attenuated + unattenuated_phi
         else:
             total_lnu = total_phi
 
