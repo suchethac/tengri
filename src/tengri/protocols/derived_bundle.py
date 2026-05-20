@@ -98,7 +98,24 @@ class DerivedBundle:
     # ``approx={'wave_precomp': True}`` is set on SEDModel).
     # Rest-frame F_nu through the configured filters, in erg/s/Hz at
     # the source (no redshift / luminosity distance applied).
-    stellar_phot_lnu_lut: jnp.ndarray | None = None
+    stellar_phot_lnu_precomp: jnp.ndarray | None = None
+    # Stellar — Taylor moment for filter-level dust attenuation
+    # (Phase 3c-3c, published alongside stellar_phot_lnu_precomp). First
+    # spectral moment of the CSP within each filter:
+    # Ψ_b = ∫ L_ν(λ) (λ - λ_eff_b) T_b(λ) λ dλ / ∫ T_b(λ) λ dλ.
+    # Used by Phase 3c-3c-ii dust integration via the expansion
+    # f_b ≈ A(λ_eff)·Φ_b + A'(λ_eff)·Ψ_b (Zacharegkas+2025).
+    # Units: erg/s/Hz × Å.
+    stellar_phot_moment_precomp: jnp.ndarray | None = None
+    # Stellar — age-resolved per-filter LUT (Phase 3c-3c-iv-a). Shape
+    # ``(n_age, n_filter)``, units erg/s/Hz. The age axis is NOT
+    # marginalised. Sum over the age axis equals
+    # ``stellar_phot_lnu_precomp``. Published only when
+    # ``approx={'wave_precomp': True}`` is set. Consumed by the two-
+    # component dust LUT path (Phase 3c-3c-iv-c) to apply per-age
+    # attenuation ``T(a, λ) = T_diff(λ) × T_bc(λ)^y(a)``.
+    stellar_phot_lnu_per_age_precomp: jnp.ndarray | None = None
+    stellar_phot_moment_per_age_precomp: jnp.ndarray | None = None
 
     # Dust attenuation / emission
     L_ir: jnp.ndarray | None = None
@@ -106,6 +123,36 @@ class DerivedBundle:
     dust_attenuation_factor: jnp.ndarray | None = None
     sed_dust_attenuated: jnp.ndarray | None = None
     sed_dust_ir: jnp.ndarray | None = None
+    # Dust attenuation per filter (Phase 3c-3c-ii). A(λ_eff) and its
+    # wavelength derivative A'(λ_eff) at each filter pivot, used by
+    # Phase 3c-3c-iii to apply Taylor expansion attenuation in
+    # ``Observation.predict_via_precomp``:
+    # f_b ≈ A(λ_eff)·Φ_b + A'(λ_eff)·Ψ_b
+    # Shape ``(n_filters,)``. Published only when
+    # ``approx={'wave_precomp': True}`` is set.
+    dust_attenuation_precomp: jnp.ndarray | None = None
+    dust_attenuation_slope_precomp: jnp.ndarray | None = None
+    # Two-component dust (Phase 3c-3c-iv-b). Birth-cloud and diffuse
+    # attenuation factors per filter pivot, plus their wavelength
+    # slopes. Two-component dust factorises as
+    # ``T(a, λ) = T_diff(λ) × T_bc(λ)^y(a)`` — the per-age dependence
+    # comes from the young indicator ``y(a)`` below. Used by
+    # Phase 3c-3c-iv-c to apply per-age expansion in predict_via_precomp.
+    dust_bc_attenuation_precomp: jnp.ndarray | None = None
+    dust_bc_attenuation_slope_precomp: jnp.ndarray | None = None
+    dust_diff_attenuation_precomp: jnp.ndarray | None = None
+    dust_diff_attenuation_slope_precomp: jnp.ndarray | None = None
+    # Young-star indicator on the SSP age grid (Phase 3c-3c-iv-b),
+    # shape ``(n_age,)``. Smooth sigmoid transition around
+    # ``DustSEDComponent.config.t_birth_yr``. ``y(a)`` = 1 for fully
+    # young, 0 for fully old, with a logistic transition controlled by
+    # ``transition_width_dex``.
+    dust_young_indicator: jnp.ndarray | None = None
+    # Filter pivot wavelengths in the rest frame (published by stellar
+    # when wave_precomp is on; shared by downstream filter-level
+    # consumers like the dust attenuation LUT). Shape ``(n_filters,)``,
+    # units Å.
+    filter_eff_waves: jnp.ndarray | None = None
 
     # AGN (incl. GRAHSP alternates)
     L_agn_bol: jnp.ndarray | None = None
@@ -113,12 +160,24 @@ class DerivedBundle:
     L_agn_absorbed: jnp.ndarray | None = None
     sed_agn: jnp.ndarray | None = None
     sed_grahsp: jnp.ndarray | None = None
+    # AGN — filter-integrated LUT (Phase 3c-3d-agn). Rest-frame Lν of
+    # the AGN contribution per filter, shape ``(n_filters,)``. Published
+    # only when ``approx={'wave_precomp': True}`` is set and AGN is
+    # configured. Consumed by ``predict_via_precomp`` via the multi-
+    # component sum of ``*_phot_lnu_precomp`` keys.
+    agn_phot_lnu_precomp: jnp.ndarray | None = None
 
     # Nebular
     sed_nebular: jnp.ndarray | None = None
     sed_shock: jnp.ndarray | None = None
     line_waves: jnp.ndarray | None = None
     line_lums: jnp.ndarray | None = None
+    # Nebular — photometry LUT (Phase 3c-3b, published only when
+    # ``approx={'wave_precomp': True}`` is set on SEDModel and the nebular
+    # backend supports filter-level precomputation (Cue / CloudyGrid).
+    # For BakedIn nebular this is None — the nebular emission is already
+    # baked into the SSP grid and therefore included in stellar_phot_lnu_precomp.
+    nebular_phot_lnu_precomp: jnp.ndarray | None = None
 
     # Radio / X-ray / IGM / shock
     sed_radio: jnp.ndarray | None = None

@@ -121,7 +121,26 @@ _CANONICAL_UNITS: dict[str, str] = {
     "log_metallicity_history": "dex",
     # Stellar — photometry LUT (Phase 3b; only published when
     # ``approx={'wave_precomp': True}`` is set on SEDModel).
-    "stellar_phot_lnu_lut": "erg/s/Hz",
+    "stellar_phot_lnu_precomp": "erg/s/Hz",
+    # Stellar — Taylor moment (Phase 3c-3c). Same conditions as
+    # stellar_phot_lnu_precomp. Used by Phase 3c-3c-ii dust integration.
+    "stellar_phot_moment_precomp": "erg*Angstrom/s/Hz",
+    # Stellar — age-resolved per-filter LUT (Phase 3c-3c-iv-a; shape
+    # (n_age, n_filter)). Sum over age axis equals stellar_phot_lnu_precomp.
+    "stellar_phot_lnu_per_age_precomp": "erg/s/Hz",
+    "stellar_phot_moment_per_age_precomp": "erg*Angstrom/s/Hz",
+    # Filter pivot wavelengths (published by stellar when wave_precomp
+    # is on; used by dust LUT, AGN LUT, IGM LUT downstream).
+    "filter_eff_waves": "Angstrom",
+    # Dust attenuation per filter (Phase 3c-3c-ii). A(λ_eff) and A'(λ_eff).
+    "dust_attenuation_precomp": "",
+    "dust_attenuation_slope_precomp": "1/Angstrom",
+    # Two-component dust (Phase 3c-3c-iv-b). BC + diffuse layer precompute.
+    "dust_bc_attenuation_precomp": "",
+    "dust_bc_attenuation_slope_precomp": "1/Angstrom",
+    "dust_diff_attenuation_precomp": "",
+    "dust_diff_attenuation_slope_precomp": "1/Angstrom",
+    "dust_young_indicator": "",
     # Dust attenuation / emission outputs
     "L_ir": "erg/s",
     "L_absorbed": "erg/s",
@@ -134,6 +153,8 @@ _CANONICAL_UNITS: dict[str, str] = {
     "L_agn_absorbed": "erg/s",
     "sed_agn": "erg/s/Hz",
     "sed_grahsp": "erg/s/Hz",
+    # AGN — filter LUT (Phase 3c-3d-agn).
+    "agn_phot_lnu_precomp": "erg/s/Hz",
     # Nebular outputs (continuous SED in erg/s/Hz per 2026-04-08 standard;
     # discrete line/continuum primitives are Lsun per the 2026-05-17
     # convention — see project_nebular_unit_conventions memory entry).
@@ -141,6 +162,9 @@ _CANONICAL_UNITS: dict[str, str] = {
     "sed_shock": "erg/s/Hz",
     "line_waves": "Angstrom",
     "line_lums": "erg/s",
+    # Nebular — photometry LUT (Phase 3c-3b; only non-BakedIn backends
+    # publish, when ``approx={'wave_precomp': True}`` is set).
+    "nebular_phot_lnu_precomp": "erg/s/Hz",
     # Radio / X-ray / IGM
     "sed_radio": "erg/s/Hz",
     "sed_xray": "erg/s/Hz",

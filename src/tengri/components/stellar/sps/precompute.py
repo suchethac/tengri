@@ -349,6 +349,12 @@ class PhotometricZTable(NamedTuple):
     z_grid: jnp.ndarray
     n_filters: int
     igm_trans_table: jnp.ndarray
+    # Phase 3c-3c-v: Taylor moment Ψ on the z grid, shape
+    # ``(n_z, n_met, n_age, n_filters)``. ``None`` when
+    # ``taylor_correction=False`` was passed to
+    # :func:`precompute_photometry_ztable`. Used by the free-z dust LUT
+    # path to apply ``A·Φ + A'·Ψ`` at the source's redshift.
+    ssp_phot_moment_table: jnp.ndarray | None = None
 
 
 def precompute_photometry_ztable(
@@ -360,6 +366,7 @@ def precompute_photometry_ztable(
     z_max=3.0,
     n_z=100,
     apply_igm=False,
+    taylor_correction: bool = False,
 ) -> PhotometricZTable:
     """Pre-compute SSP broadband fluxes on a redshift grid.
 
@@ -419,6 +426,10 @@ def precompute_photometry_ztable(
     eff_waves_rest_all = np.zeros((n_z_pts, n_filters))
     flux_scale_all = np.zeros(n_z_pts)
     igm_trans_all = np.ones((n_z_pts, n_filters))
+    # Phase 3c-3c-v: Taylor moment Ψ on the z grid (only if requested).
+    ssp_phot_moment_all = (
+        np.zeros((n_z_pts, n_met, n_age, n_filters)) if taylor_correction else None
+    )
 
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
@@ -458,6 +469,21 @@ def precompute_photometry_ztable(
             num = _np_trapezoid(integrand, fw_np, axis=-1)
             ssp_phot_all[zi, :, :, f_idx] = num / max(denom, 1e-30)
 
+            # Phase 3c-3c-v: Taylor moment Ψ at this z and filter.
+            # Ψ_{ijb} = ∫ SSP(λ) (λ - λ_eff_rest) T_b(λ_obs) λ_obs dλ_obs / ∫ T_b λ_obs dλ_obs
+            # Note: λ_eff_rest is the rest-frame effective wavelength of this filter at this z.
+            if taylor_correction:
+                lambda_rest_per_obs = fw_np / (1.0 + z_val)
+                lambda_minus_eff = lambda_rest_per_obs - eff_waves_rest_all[zi, f_idx]
+                moment_integrand = (
+                    ssp_on_filt
+                    * ft_np[None, None, :]
+                    * fw_np[None, None, :]
+                    * lambda_minus_eff[None, None, :]
+                )
+                moment_num = _np_trapezoid(moment_integrand, fw_np, axis=-1)
+                ssp_phot_moment_all[zi, :, :, f_idx] = moment_num / max(denom, 1e-30)
+
         # Geometric flux scale
         dl_cm = float(luminosity_distance(z_val))
         flux_scale_all[zi] = (1.0 + z_val) / (4.0 * np.pi * dl_cm**2)
@@ -469,6 +495,9 @@ def precompute_photometry_ztable(
         z_grid=z_grid,
         n_filters=n_filters,
         igm_trans_table=jnp.array(igm_trans_all),
+        ssp_phot_moment_table=(
+            jnp.array(ssp_phot_moment_all) if ssp_phot_moment_all is not None else None
+        ),
     )
 
 
