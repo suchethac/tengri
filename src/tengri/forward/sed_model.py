@@ -4150,7 +4150,9 @@ class SEDModel:
             use_igm=bool(getattr(self, "_uses_igm", False)),
         )
 
-        # Phase 3b: Eager precompute stellar photometry LUT when wave_precomp is enabled.
+        # Phase 3b/3c: Eager precompute stellar photometry LUT when wave_precomp is enabled.
+        # Phase 3b: fixed-z LUT when redshift is Fixed.
+        # Phase 3c-1: free-z ztable when redshift is Free (Uniform prior).
         if (
             self._approx.get("wave_precomp")
             and self.observation is not None
@@ -4173,12 +4175,38 @@ class SEDModel:
                         strict=False,
                     )
                 )
-                # Call precompute to build the LUT.
+
+                # Determine redshift spec: fixed or free. Phase 3c-1 dispatch.
+                try:
+                    redshift_dist = self.spec.get_distribution("redshift")
+                    is_fixed = redshift_dist.is_fixed
+                    z_bounds = redshift_dist.bounds
+                except (AttributeError, KeyError):
+                    # Fallback: assume fixed at 0.0 if redshift not in spec
+                    is_fixed = True
+                    z_bounds = (0.0,)
+
+                if is_fixed:
+                    # Phase 3b: fixed-z LUT
+                    redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
+                else:
+                    # Phase 3c-1: free-z ztable with padding
+                    z_lo, z_hi = float(z_bounds[0]), float(z_bounds[1])
+                    pad = 0.01 * (z_hi - z_lo)
+                    redshift_spec = {
+                        "mode": "free",
+                        "z_min": max(0.001, z_lo - pad),
+                        "z_max": z_hi + pad,
+                        "n_z": 100,
+                    }
+
+                # Call precompute to build the LUT or ztable.
                 state = stellar.precompute(
                     ssp_data=stellar.ssp_data,
                     wave_grid=None,
                     approx=self._approx,
                     filters=filters,
+                    redshift_spec=redshift_spec,
                 )
                 # Replace the stellar component with one carrying the precomputed state.
                 chain[0] = replace(stellar, _state=state)
