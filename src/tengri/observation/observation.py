@@ -802,9 +802,40 @@ class Observation:
             raise NotImplementedError(
                 "predict_via_precomp: dust attenuation ran on the wave grid "
                 "but no dust precompute was published (neither single-component "
-                "dust_attenuation_precomp nor two-component dust_bc_*). This "
-                "happens for free-z + dust (Phase 3c-3c-v). Use predict() "
-                "instead, or build the model with fixed redshift."
+                "dust_attenuation_precomp nor two-component dust_bc_*). Use "
+                "predict() instead, or confirm wave_precomp=True is set on the "
+                "model and the dust law is supported."
+            )
+
+        # Phase 3c-3d guards: detect AGN or non-BakedIn nebular contributions
+        # that would silently be missing from the LUT sum.
+        # ``state.derived["L_agn_bol"] > 0`` signals an active AGN component;
+        # if it has no per-filter precompute the LUT sum returns
+        # stellar-only photometry, which is silently wrong.
+        l_agn = state.derived.get("L_agn_bol")
+        agn_active = l_agn is not None and float(jnp.max(jnp.abs(jnp.asarray(l_agn)))) > 0.0
+        if agn_active and state.derived.get("agn_phot_lnu_precomp") is None:
+            raise NotImplementedError(
+                "predict_via_precomp: AGN is configured but no "
+                "agn_phot_lnu_precomp was published. AGN filter-level LUT is "
+                "Phase 3c-3d follow-up. Use predict() for AGN-bearing models."
+            )
+
+        # ``sed_nebular`` non-trivial signals a non-BakedIn nebular backend
+        # (Cue / CloudyGrid / Shock) adding emission on top of the bare-stellar
+        # SSP. BakedIn nebular doesn't publish sed_nebular (it's already in
+        # the SSP grid) — so this triggers only for the standalone backends.
+        sed_nebular = state.derived.get("sed_nebular")
+        nebular_additive_active = (
+            sed_nebular is not None and float(jnp.max(jnp.abs(jnp.asarray(sed_nebular)))) > 0.0
+        )
+        if nebular_additive_active and state.derived.get("nebular_phot_lnu_precomp") is None:
+            raise NotImplementedError(
+                "predict_via_precomp: non-BakedIn nebular (Cue / CloudyGrid / "
+                "Shock) is configured but no nebular_phot_lnu_precomp was "
+                "published. Non-BakedIn nebular LUT is Phase 3c-3d follow-up. "
+                "Use predict() for these models, or switch to a BakedIn "
+                "nebular backend whose emission is already in the SSP grid."
             )
 
         # Phase 3c-3c-iv-c: two-component (Charlot & Fall) dust LUT.
