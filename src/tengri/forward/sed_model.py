@@ -1362,7 +1362,7 @@ class SEDModel:
         # Dust IR emission template preintegration (for hybrid kernel, fixed z)
         # For template-based dust models (DL07, Dale2014, etc.), pre-integrate
         # templates through filters at init time for fast runtime triweight lookup.
-        # Also extract grid arrays for threading as JIT-traced inputs (Phase II-3).
+        # Also extract grid arrays for threading as JIT-traced inputs.
         dust_ir_lookup = None
         dust_ir_grid_arrays = None
         if (
@@ -1848,9 +1848,9 @@ class SEDModel:
                     stacklevel=2,
                 )
 
-        # Build component_grid_arrays dict from registry for Phase II-6 extension.
-        # This dict holds JIT-traceable arrays that can be threaded as kwargs
-        # to component lookups, avoiding closure capture of large constants.
+        # Build component_grid_arrays dict from registry. This dict holds
+        # JIT-traceable arrays that can be threaded as kwargs to component
+        # lookups, avoiding closure capture of large constants.
         component_grid_arrays_dict: dict[str, tuple] = {}
         if dust_ir_grid_arrays is not None:
             component_grid_arrays_dict["dust_ir"] = dust_ir_grid_arrays
@@ -3729,7 +3729,7 @@ class SEDModel:
         # one (energy-conserving by construction).
         return self.predict_sed_quantities_components(params)
 
-    # ── Component orchestrator path (Phase II-2.6 opt-in) ─────────────
+    # ── Component orchestrator path (opt-in) ──────────────────────────
 
     def predict_sfh_quantities_components(self, params):
         """Drop-in replacement for :meth:`predict_sfh_quantities`.
@@ -3738,7 +3738,7 @@ class SEDModel:
         :class:`ForwardState` to a legacy :class:`SFHQuantities`
         NamedTuple via :func:`tengri.forward.state_to_sfh_quantities`.
         Same return shape as the legacy method, computed via the
-        Phase II SEDComponent path.
+        SEDComponent path.
 
         Returns
         -------
@@ -3762,7 +3762,7 @@ class SEDModel:
         return state_to_sed_quantities(self.predict_state(params))
 
     def predict_radio_quantities(self, params):
-        """Phase II-2.6 orchestrator-path radio quantities.
+        """Orchestrator-path radio quantities.
 
         Returns
         -------
@@ -3776,7 +3776,7 @@ class SEDModel:
         return state_to_radio_quantities(self.predict_state(params))
 
     def predict_xray_quantities(self, params):
-        """Phase II-2.6 orchestrator-path X-ray quantities.
+        """Orchestrator-path X-ray quantities.
 
         Returns
         -------
@@ -3788,7 +3788,7 @@ class SEDModel:
         return state_to_xray_quantities(self.predict_state(params))
 
     def predict_ionizing_quantities(self, params):
-        """Phase II-2.6 orchestrator-path ionizing-photon quantities.
+        """Orchestrator-path ionizing-photon quantities.
 
         Returns
         -------
@@ -3909,7 +3909,7 @@ class SEDModel:
         )["spec_fnu"]
 
     def predict_emission_lines(self, params):
-        """Phase II-2.6 orchestrator-path emission-line luminosities.
+        """Orchestrator-path emission-line luminosities.
 
         Returns
         -------
@@ -3924,7 +3924,7 @@ class SEDModel:
         return state_to_emission_lines(self.predict_state(params))
 
     def predict_state(self, params):
-        """Forward pass via the Phase II SEDComponent orchestrator.
+        """Forward pass via the SEDComponent orchestrator.
 
         Builds a component chain from this model's structural settings
         (``self.spec`` + ``self.ssp_data`` + dust / nebular / AGN / radio
@@ -4448,12 +4448,12 @@ class SEDModel:
             if raw is not None:
                 return raw(params)
         # Fall back to compositional raw.
-        # Phase II-2 (focused): thread the SSP arrays as JIT-traced kwargs so
-        # XLA treats them as runtime inputs rather than baking them into the
-        # compiled HLO as constants (a 114 MB constant on the MIST grid).
-        # The compositional kernel falls back to closure-captured copies if
-        # these kwargs are absent — keeps the logged-jit wrapper and
-        # external callers working unchanged.
+        # Thread the SSP arrays as JIT-traced kwargs so XLA treats them as
+        # runtime inputs rather than baking them into the compiled HLO as
+        # constants (a 114 MB constant on the MIST grid). The compositional
+        # kernel falls back to closure-captured copies if these kwargs are
+        # absent — keeps the logged-jit wrapper and external callers working
+        # unchanged.
         if self._compositional_kernels is not None:
             raw = getattr(self._compositional_kernels, "_photometry_raw", None)
             if raw is not None:
@@ -4655,9 +4655,9 @@ class SEDModel:
         Requires spectroscopy precomputation.  Falls back to the compositional
         auto path if no precomputed spectrum kernel is available.
         """
-        # Prefer hybrid spectrum raw (precomputed SSP on pixel grid)
-        # Phase II-2: thread SSP arrays as JIT-traced kwargs so XLA does not
-        # bake the full SSP grid into the compiled HLO as constants.
+        # Prefer hybrid spectrum raw (precomputed SSP on pixel grid).
+        # Thread SSP arrays as JIT-traced kwargs so XLA does not bake the
+        # full SSP grid into the compiled HLO as constants.
         if self._hybrid_kernels is not None:
             raw = getattr(self._hybrid_kernels, "_spectrum_raw", None)
             if raw is not None:
@@ -4704,8 +4704,8 @@ class SEDModel:
             p = self._get_internal_params(params)
             sfr = self._compute_sfr(p)
             sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-            # Phase II-2: pass SSP arrays as JIT-traced kwargs to keep the
-            # 100+ MB SSP flux grid out of the compiled HLO as constants.
+            # Pass SSP arrays as JIT-traced kwargs to keep the 100+ MB SSP
+            # flux grid out of the compiled HLO as constants.
             flux = self._compositional.spectrum(
                 sfr_on_ssp,
                 params,
@@ -4761,8 +4761,9 @@ class SEDModel:
         ssp_flux_traced : ndarray, optional
             Traced override for ``model.ssp_data.ssp_flux``. When provided
             with ``ssp_lgmet_traced``, the SSP arrays enter the JIT graph as
-            runtime tensors instead of closure-captured constants
-            (Phase III trace path; see ``docs/dev/quickstart_oom_diagnosis.md``).
+            runtime tensors instead of closure-captured constants — the
+            memory-efficient path; see
+            ``docs/dev/quickstart_oom_diagnosis.md``.
         ssp_lgmet_traced : ndarray, optional
             Traced override for ``model.ssp_data.ssp_lgmet``.
         ssp_alpha_fe_traced : ndarray, optional
@@ -5065,7 +5066,7 @@ class SEDModel:
     ) -> SEDModel:
         """Build a SEDModel from a grouped configuration dict.
 
-        Reduces boilerplate for the common case: instead of constructing
+        For the common case: instead of constructing
         ``Parameters``, ``SSPData``, ``Observation``, and ``SEDModel`` separately,
         provide a single grouped config and receive a fully configured ``SEDModel``.
 

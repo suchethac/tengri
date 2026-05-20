@@ -5,8 +5,8 @@
 
 Each ``tengri.builders.<component>`` module uses :func:`make_factory` to
 synthesise one callable per variant. The helpers here keep the per-module
-files focused on *what* varies (variant list, prefix, short-name rule)
-rather than the boilerplate of attaching signatures and docstrings.
+files focused on *what* varies (variant list, prefix, short-name rule);
+signature and docstring attachment lives here.
 
 The SFH module (:mod:`tengri.builders.sfh`) was the first consumer and
 predates this helper; it carries its own equivalent inline. Future

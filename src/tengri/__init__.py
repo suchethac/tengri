@@ -213,8 +213,8 @@ from tengri.utils import jit_logging
 agn = _components.agn
 dust = _components.dust
 nebular = _components.nebular
-# sfh/sps were folded into stellar in Phase II-2.1; the top-level
-# convenience aliases continue to resolve to the canonical location.
+# sfh/sps were folded into stellar; the top-level convenience aliases
+# continue to resolve to the canonical location.
 sfh = _components.stellar.sfh
 sps = _components.stellar.sps
 stellar = _components.stellar

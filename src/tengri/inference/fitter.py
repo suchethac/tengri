@@ -272,7 +272,7 @@ class Fitter:
         compile_modes=None,
         cache=None,
     ):
-        # ── User-supplied Likelihood (Phase II-1 Protocol path) ─────
+        # ── User-supplied Likelihood (Protocol path) ────────────────
         # When non-None, replaces the built-in χ² dispatch. The user
         # owns the entire data-term math and is responsible for
         # tracking their own observed arrays. Calibration / e-line
@@ -281,7 +281,7 @@ class Fitter:
         self._user_likelihood = likelihood
         self._auto_protocol_likelihood = auto_protocol_likelihood
 
-        # ── Orchestrator opt-in (Phase II step-1, 2026-05) ──────────
+        # ── Orchestrator opt-in (2026-05) ───────────────────────────
         # When True, route forward predictions through
         # :meth:`SEDModel.predict_state` (the SEDComponent
         # chain) instead of the legacy fused ``predict_photometry`` /
@@ -389,7 +389,7 @@ class Fitter:
     def _maybe_build_default_likelihood(self):
         """Build the default Protocol likelihood for this Fitter's data.
 
-        Now handles every case in the Phase II-1 cohort:
+        Now handles every case in the likelihood-Protocol cohort:
 
         - simple diagonal Gaussian → ``PhotometryLikelihood`` /
           ``SpectroscopyLikelihood``

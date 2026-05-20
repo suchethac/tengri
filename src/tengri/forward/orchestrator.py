@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Minimal pipeline runner over a list of :class:`SEDComponent` adapters.
 
-This is the smallest possible consumer of the Phase II-1 ``core/``
-Protocol scaffold. It exists to drive the contract tests for the first
-two adapters (RadioSEDComponent, IGMSEDComponent) — **not** to replace
-:class:`tengri.SEDModel`'s tier-dispatch path.
+This is the smallest possible consumer of the
+:class:`tengri.protocols.SEDComponent` Protocol. It exists to drive the
+contract tests for the first two adapters (RadioSEDComponent,
+IGMSEDComponent) — **not** to replace :class:`tengri.SEDModel`'s
+tier-dispatch path.
 
 The two-adapter rule
 --------------------
@@ -20,8 +21,7 @@ What this is **not**
 --------------------
 - Not the migration of :class:`tengri.SEDModel`. The legacy code path
   is untouched.
-- Not a public API. Lives in ``forward/`` as an internal Phase II-1
-  artefact; will be promoted (or replaced) when Phase II-2 starts.
+- Not a public API. Lives in ``forward/`` as an internal seam-driver.
 - Not a registry. Components are passed in as a plain ordered list.
 """
 
@@ -60,10 +60,10 @@ __all__ = [
 # default. These three helpers live at module scope so both
 # validate_pipeline and topological_sort can reuse them.
 #
-# Renamed from ``outputs`` / ``inputs`` / ``optional_inputs`` in
-# Phase II-3.2 (2026-05-18). For one minor version the accessors fall
-# back to the old names with a ``DeprecationWarning``, so components
-# can be migrated incrementally. Old names are removed in v1.0.
+# Renamed from ``outputs`` / ``inputs`` / ``optional_inputs``. For one
+# minor version the accessors fall back to the old names with a
+# ``DeprecationWarning`` so components can be migrated incrementally;
+# the old names are removed in v1.0.
 
 
 def _contract_method(c: SEDComponent, new: str, old: str) -> tuple[DerivedKey, ...]:
@@ -481,9 +481,9 @@ def slice_params_for_component(
     rely on the allowlist for shared scalars.
     """
     prefix = component.parameter_prefix
-    # Phase II-2: prefix may be a single str OR a tuple of strings (e.g.
+    # ``parameter_prefix`` may be a single str or a tuple of strings (e.g.
     # StellarSEDComponent owns ("sfh_", "met_", "chem_")). Normalise to
-    # tuple here so downstream logic handles one shape only.
+    # tuple so downstream logic handles one shape only.
     prefixes = (prefix,) if isinstance(prefix, str) else tuple(prefix)
     if "" in prefixes or len(prefixes) == 0:
         raise ValueError(
@@ -514,9 +514,8 @@ def merge_declared_parameters(
        would make the orchestrator's prefix-slicing ambiguous).
 
     The output maps each parameter name to its prior — suitable for
-    spreading into :class:`tengri.Parameters` once the migration of
-    :mod:`tengri.parameters.parameters` to a component-driven builder
-    lands (Phase II-6 of the plan).
+    spreading into :class:`tengri.Parameters` once the component-driven
+    builder in :mod:`tengri.parameters.parameters` lands.
 
     Parameters
     ----------
