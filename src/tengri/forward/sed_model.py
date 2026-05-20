@@ -2830,6 +2830,23 @@ class SEDModel:
                 f"Unknown mode {mode!r}. Choose from: {sorted(self._PREDICTION_MODES)}"
             )
 
+        # Phase 3e: deprecate explicit mode= in favour of predict_observables
+        # (which auto-selects the precomputed LUT path when available — see
+        # docs/dev/photometry_path_unification.md). The mode= kwarg will be
+        # removed once predict_via_precomp covers two-component dust and
+        # free-z+dust (Phase 3c-3c-iv/v follow-ups).
+        if mode != "auto":
+            warnings.warn(
+                "predict_photometry(mode=...) is deprecated. Use "
+                "model.predict_observables(params).phot_fnu for new code — it "
+                "auto-selects the precomputed LUT path when available and falls "
+                "back to the orchestrator integration otherwise. The mode= kwarg "
+                "will be removed once Phase 3c-3c follow-ups land "
+                "(two-component dust + free-z+dust LUTs).",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         if mode == "auto":
             return self._predict_photometry_auto(params)
         if mode == "_traceable":
@@ -2975,6 +2992,20 @@ class SEDModel:
         if mode not in self._PREDICTION_MODES:
             raise ValueError(
                 f"Unknown mode {mode!r}. Choose from: {sorted(self._PREDICTION_MODES)}"
+            )
+
+        # Phase 3e: deprecate explicit mode= (see predict_photometry for the
+        # full rationale). predict_observables(params).spec_fnu is the new
+        # canonical path; the mode= kwarg will be removed once Phase 3c-3
+        # spectroscopy follow-ups land.
+        if mode != "auto":
+            warnings.warn(
+                "predict_spectrum(mode=...) is deprecated. Use "
+                "model.predict_observables(params).spec_fnu for new code. The "
+                "mode= kwarg will be removed once predict_via_precomp covers "
+                "spectroscopy.",
+                DeprecationWarning,
+                stacklevel=2,
             )
 
         if mode == "auto":
