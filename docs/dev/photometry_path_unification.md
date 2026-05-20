@@ -269,26 +269,51 @@ Bit-exactness verified:
 
 ### Phase 3 — `approx={"wave_precomp": True}` — per-component precompute
 
-**Goal:** Each `SEDComponent` that has a precomputable wave-grid lookup grows a single optional branch in `precompute()` / `apply()`, gated by a flag in the `approx` dict. **No new component classes.**
+**Status:** Shipped in 11 sub-PRs (#115 → #124). Final cleanup (3d, 3e) in progress.
 
-- Extend `SEDComponentState` (in `protocols/component.py`) with optional `precomputed_lut: dict | None` field.
-- `StellarSEDComponent.precompute(..., approx={"wave_precomp": True})` builds the SSP×filter LUT and stores it on the returned state; `apply()` reads `self._state.precomputed_lut` and switches paths.
-- Same surgical change in **dust** (attenuation curve LUT), **nebular** (Cue grid interp tables when applicable), and **igm** (already has `ztable`).
-- `validate_pipeline` learns about the new state field and ensures all consumers see the same publishes/requires regardless of approx setting.
-- Delete `HybridPhotometryKernel`, `HybridSpectrumKernel`, `HybridPhotometryZTableKernel`, and the `CompositionalPhotometryKernel` / `CompositionalSpectrumKernel`. They were placeholders for what becomes per-component machinery.
-- Move the historical hybrid math **into the components** — no separate kernel files. The `forward/_kernels/_adapters.py` directory shrinks to zero content (the file can be deleted).
-- Compile-signature audit: `approx` resolved values get hashed into the signature so two models with different approx settings get different cache slots.
-- **Behaviour change risk:** highest — historical hybrid path had 0.02–0.33 % error vs exact. Equivalent error tolerance must hold per component.
-- **Effort:** 2–3 PRs (one per component family), ~1–2 weeks.
+The sub-phasing that actually landed (~3× longer than originally estimated because the hybrid kernel is 3400 lines of carefully-tuned physics):
+
+| Sub-PR | What | PR | Status |
+|---|---|---|---|
+| 3a | `approx=` plumbing on `SEDComponent.precompute` Protocol | #115 | ✅ MERGED |
+| 3b | Fixed-z stellar LUT publish (`stellar_phot_lnu_precomp`) | #116 | ✅ MERGED |
+| 3c-1 | Free-z stellar LUT via ztable interpolation | #117 | ✅ MERGED |
+| 3c-2 | Metallicity-mode validation (delta/ramp/two_step) | #118 | ✅ MERGED |
+| 3c-3a | `Observation.predict_via_precomp` opt-in entry; consistent LUT semantics | #119 | ✅ MERGED |
+| 3c-3b | Multi-component LUT sum scaffold + BakedIn nebular validation | #120 | ✅ MERGED |
+| 3c-3c-i | Stellar Taylor moment Ψ published | #121 | ✅ MERGED |
+| 3c-3c-ii | Single-component dust `A`/`A'` LUTs + `_lut → _precomp` rename | #122 | ✅ MERGED |
+| 3c-3c-iii | `predict_via_precomp` applies `A·Φ + A'·Ψ` Taylor expansion | #123 | ✅ MERGED |
+| 3c-3c-iv | Guard rails: NotImplementedError on two-component dust / free-z+dust | #124 | ✅ MERGED |
+| 3e | `mode=` kwarg DeprecationWarning → `predict_observables` | #125 | 🟡 in CI |
+
+### Phase 3 follow-ups (deferred — keep the legacy kernel adapters in place)
+
+These need to land before Phase 3d can remove `forward/_kernels/_adapters.py`:
+
+- **3c-3c-iv-full** — Two-component (Charlot & Fall) dust LUT. Age-dependent attenuation requires per-age `dust` tensor; the simple per-filter `A(λ_eff)` factorisation doesn't capture young vs. old stellar populations seeing different attenuation. Hybrid kernel handles this with `einsum("i,if,if->f", weights, dust, ssp_at_z)`.
+- **3c-3c-v-full** — Free-z ztable carries Taylor moment + IGM transmission. Requires extending `precompute_photometry_ztable` to compute `ssp_phot_moment_table: (n_z, n_met, n_age, n_filters)` and `dust_atten_ztable: (n_z, n_filters)`.
+- **3c-3d** — AGN LUT contribution. AGN SED depends on parameters that vary per evaluation; the LUT pattern works if AGN publishes its filter-projected contribution at apply time. Conceptually simpler than dust because AGN is additive.
+- **3c-3e** — Default `observation.predict` flips to `predict_via_precomp` when `wave_precomp=True` and a model configuration is supported. Currently `predict_via_precomp` is opt-in.
+
+### Phase 3d — Delete kernel adapters + execute test consolidation
+
+**Status:** **BLOCKED** on Phase 3c-3c follow-ups above.
+
+Scope when the blocker clears:
+
+- Delete `src/tengri/forward/_kernels/_adapters.py` (~600 lines of adapter shells), `src/tengri/forward/_kernels/hybrid.py` (~3400 lines of hybrid kernel math), and `src/tengri/forward/_kernels/compositional.py` (~700 lines of compositional kernel math). The physics has moved into the components.
+- Execute the consolidation plan in `docs/dev/precompute_test_consolidation.md` — keep public-LUT-math tests (~27 tests), adapt kernel-vs-exact invariant tests (~21 tests) to consume the new component path, delete kernel-adapter-internal tests (~35 tests).
+- Remove `mode="compositional" | "hybrid" | "exact"` branches from `predict_photometry` / `predict_spectrum`; the methods become one-line aliases for `predict_observables(...).phot_fnu` / `.spec_fnu`.
 
 ### Phase 4 — `compile_signature()` drops per-galaxy state
 
 **Goal:** Cross-galaxy compile reuse works regardless of per-galaxy `Fixed` values. Audit deliverable from PR #112's companion finding.
 
-- Drop `z_fixed` and `spec_fixed_id` from `compile_signature()` once the unified path stops closing over fixed values at build time (Phase 2/3 dependency).
+- Drop `z_fixed` and `spec_fixed_id` from `compile_signature()` once the unified path stops closing over fixed values at build time (Phase 3d dependency).
 - Add `tests/unit/test_compile_signature_cross_galaxy.py` asserting two models with identical physics but different per-galaxy `Fixed(redshift)` share a signature.
 - Validation: `approx={"wave_precomp"}` with free z requires `approx={"ztable": True}` too; raise with a diagnostic at build time if a user disables both.
-- **Effort:** 1 PR, ~half a day after Phase 3 ships.
+- **Effort:** 1 PR, ~half a day after Phase 3d ships.
 
 ### Surface after all phases land
 
