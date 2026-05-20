@@ -596,11 +596,15 @@ def test_two_component_dust_publishes_bc_diff_precomp(ssp):
     assert float(y[-1]) < 0.1, f"oldest SSP not old: y[-1]={float(y[-1])}"
 
 
-def test_predict_via_precomp_raises_for_two_component_dust(ssp):
-    """Phase 3c-3c-iv guard: two-component dust runs on the wave grid but does
-    NOT publish a per-filter precompute. predict_via_precomp must detect this
-    and raise with a clear diagnostic rather than silently return unattenuated
-    photometry.
+def test_predict_via_precomp_two_component_dust_matches_predict(ssp):
+    """Phase 3c-3c-iv-c: two-component dust through the LUT path matches
+    ``predict`` within the documented hybrid-kernel accuracy (~0.5%).
+
+    The expansion is ``flux_b = Σ_a per_age[a, b] × A_diff(b) × A_bc(b)^y(a)``,
+    where ``y(a)`` is the smooth young indicator. Compared against the
+    default ``predict`` which integrates the attenuated SED through filters
+    directly. The two should agree within Zacharegkas+2025's factorisation
+    tolerance on a stellar+Charlot-Fall model.
     """
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
@@ -611,23 +615,29 @@ def test_predict_via_precomp_raises_for_two_component_dust(ssp):
         sfh_tsnorm_trunc=Uniform(1, 10),
         met_logzsol=Fixed(-0.5),
         redshift=Fixed(0.05),
-        dust_tau_bc=Fixed(0.1),
+        dust_tau_bc=Fixed(0.3),
         dust_tau_diff=Fixed(0.3),
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_r"])
+    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        # Default dust_model='two_component'; wave_precomp on for stellar LUT.
         m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
     state = m.predict_via_orchestrator(_PARAMS)
     full = {**m.spec.get_fixed_values(), **_PARAMS}
-    try:
-        m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
-        raise AssertionError("predict_via_precomp should raise for two-component dust")
-    except NotImplementedError as e:
-        assert "two-component" in str(e).lower() or "Phase 3c-3c-iv" in str(e)
+    default = m.observation.predict(state, full, observables_type=m.Observables)
+    precomp = m.observation.predict_via_precomp(
+        state, full, observables_type=m.Observables
+    )
+    rel_err = jnp.abs(precomp.phot_fnu - default.phot_fnu) / jnp.abs(default.phot_fnu)
+    print(
+        f"two-component dust predict_via_precomp vs predict max rel_err = "
+        f"{float(jnp.max(rel_err)):.4%}"
+    )
+    assert float(jnp.max(rel_err)) < 5e-3, (
+        f"two-component dust precomp diverges: max rel err = {float(jnp.max(rel_err)):.4%}"
+    )
 
 
 def test_predict_via_precomp_raises_for_free_z_with_dust(ssp):
