@@ -154,3 +154,49 @@ def test_wave_precomp_z_bounds_override_flows_to_state(ssp, obs):
     assert float(z_grid.min()) == pytest.approx(0.5)
     assert float(z_grid.max()) == pytest.approx(1.5)
     assert z_grid.shape[0] == 50
+
+
+# ── build-time approx drives runtime path (Phase 3d-2) ───────────────────────
+
+
+def test_predict_photometry_routes_through_lut_when_wave_precomp(ssp, obs):
+    """Building with approx=WavePrecomp() makes predict_photometry use the
+    LUT path: predict_photometry == observation.predict_via_precomp().phot_fnu.
+    """
+    import jax
+
+    spec = _make_spec(free_z=False)
+    model = _build(spec, ssp, obs, approx=WavePrecomp())
+    params = spec.sample(jax.random.PRNGKey(0))
+
+    via_method = model.predict_photometry(params)
+
+    state = model.predict_state(params)
+    full = {**model.spec.get_fixed_values(), **params}
+    via_obs = model.observation.predict_via_precomp(state, full)["phot_fnu"]
+
+    import jax.numpy as jnp
+
+    assert jnp.allclose(via_method, via_obs, rtol=0, atol=0), (
+        f"predict_photometry must equal observation.predict_via_precomp().phot_fnu "
+        f"when built with approx=WavePrecomp(). Got {via_method} vs {via_obs}."
+    )
+
+
+def test_predict_photometry_does_not_use_lut_when_approx_none(ssp, obs):
+    """Building without approx leaves predict_photometry on the strategy/
+    kernel path, NOT the LUT (which isn't built when wave_precomp=False).
+    """
+    import jax
+
+    spec = _make_spec(free_z=False)
+    model = _build(spec, ssp, obs, approx=None)
+    params = spec.sample(jax.random.PRNGKey(1))
+    # Just check it runs without going through predict_via_precomp.
+    out = model.predict_photometry(params)
+    assert out.shape[0] == 5  # five SDSS filters
+    # The LUT wasn't published, so predict_via_precomp would fail.
+    with pytest.raises((AttributeError, KeyError, AssertionError, ValueError, TypeError)):
+        state = model.predict_state(params)
+        full = {**model.spec.get_fixed_values(), **params}
+        model.observation.predict_via_precomp(state, full)

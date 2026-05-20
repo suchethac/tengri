@@ -4378,6 +4378,12 @@ class SEDModel:
     def _predict_photometry_auto(self, params):
         """Auto mode: consult ``self._strategy`` for the cascade order.
 
+        Phase 3d-2 (2026-05-20): when the model was built with
+        ``approx=WavePrecomp(...)``, route through
+        :meth:`Observation.predict_via_precomp` directly so the build-time
+        choice actually takes effect at predict time. Otherwise consult the
+        strategy as before.
+
         The strategy yields adapter names in preference order; we dispatch
         to the matching ``_predict_photometry_<flavour>`` method for the
         first name whose built kernel slot is non-None and whose
@@ -4388,6 +4394,12 @@ class SEDModel:
         guarantee that auto mode never raises.
         """
         import warnings
+
+        # Phase 3d-2: wave_precomp opt-in routes through the LUT projection.
+        if self._approx["wave_precomp"] and self.observation is not None:
+            state = self.predict_state(params)
+            full = {**self.spec.get_fixed_values(), **params}
+            return self.observation.predict_via_precomp(state, full)["phot_fnu"]
 
         strategy = self._get_strategy()
         for adapter in strategy.select(self._state, self, product="photometry", params=params):
