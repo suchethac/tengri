@@ -315,6 +315,61 @@ def test_lut_publishes_for_metallicity_mode(ssp, metallicity_model, met_params):
     assert jnp.all(lut > 0), f"non-positive LUT for {metallicity_model}: {lut}"
 
 
+def test_taylor_moment_published_in_fixed_z(stellar_only_model):
+    """Phase 3c-3c: stellar_phot_moment_lut Ψ is published alongside the LUT
+    in fixed-z mode.
+
+    Ψ is the first spectral moment of the filter-integrated CSP — units
+    erg/s/Hz × Å. The expected magnitude is roughly ``stellar_phot_lnu_lut``
+    × filter width (~1000 Å for SDSS); the moment can be positive or
+    negative depending on filter shape and SED slope, so we only check
+    that it's finite and the magnitude is in a plausible range.
+    """
+    m = stellar_only_model
+    state = m.predict_via_orchestrator(_PARAMS)
+    assert "stellar_phot_moment_lut" in state.derived, (
+        "Taylor moment should be published when wave_precomp=True (fixed-z mode)"
+    )
+    moment = state.derived["stellar_phot_moment_lut"]
+    lnu = state.derived["stellar_phot_lnu_lut"]
+    assert jnp.all(jnp.isfinite(moment))
+    # Order-of-magnitude check: |Ψ| should be at most a few filter widths × |Φ|.
+    # SDSS filter widths are ~500–1500 Å; allow up to 1e5 Å as a sanity bound.
+    ratio = jnp.abs(moment) / jnp.abs(lnu)
+    assert jnp.all(ratio < 1e5), (
+        f"Taylor moment magnitude implausible: max |Ψ|/|Φ| = {float(jnp.max(ratio)):.2e} Å"
+    )
+
+
+def test_taylor_moment_absent_in_free_z(ssp):
+    """Phase 3c-3c: free-z mode does not publish the moment yet (Phase 3c-3c-ii
+    extends the ztable builder to carry the Taylor moment tensor).
+    """
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol=Fixed(-0.5),
+        redshift=Uniform(0.0, 2.0),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+    )
+    phot = Photometry.from_names(["sdss_r"])
+    obs = Observation(photometry=phot)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+    params = {**_PARAMS, "redshift": 0.5}
+    state = m.predict_via_orchestrator(params)
+    assert state.derived.get("stellar_phot_moment_lut") is None, (
+        "Taylor moment is not yet plumbed through ztable (Phase 3c-3c-ii)"
+    )
+
+
 def test_predict_via_lut_handles_bakedin_nebular(stellar_only_model):
     """Phase 3c-3b: BakedIn nebular flows through the LUT path transparently.
 

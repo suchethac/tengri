@@ -336,7 +336,7 @@ class StellarSEDComponent:
                 filter_trans=filter_trans_list,
                 redshift=z_source,
                 dl_cm=1.0,  # placeholder; cosmology applied at projection time
-                taylor_correction=False,  # Phase 3c-3c adds this
+                taylor_correction=True,  # Phase 3c-3c: enables Ψ moment for dust LUT
             )
             return StellarSEDComponentState(name=self.name, ssp_phot_lut=lut)
 
@@ -857,7 +857,7 @@ class StellarSEDComponent:
         )
 
         if self._state is not None and self._state.ssp_phot_lut is not None:
-            # Fixed-z path (Phase 3b) — LUT built at z=0 in precompute()
+            # Fixed-z path (Phase 3b) — LUT built at source's z in precompute()
             ssp_phot = self._state.ssp_phot_lut.ssp_phot
             # (n_met, n_age, n_filt) in Lsun/Hz/Msun; sum over metallicity and
             # age axes weighted by joint distribution × total mass.
@@ -866,6 +866,15 @@ class StellarSEDComponent:
                 total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot) * LSUN_ERG_PER_S
             )
             derived_overrides["stellar_phot_lnu_lut"] = stellar_phot_lnu_lut_rest
+            # Phase 3c-3c: Taylor moment Ψ — same einsum, units erg/s/Hz × Å.
+            ssp_phot_moment = self._state.ssp_phot_lut.ssp_phot_moment
+            if ssp_phot_moment is not None:
+                stellar_phot_moment_lut = (
+                    total_mass
+                    * jnp.einsum("ma,maf->f", joint_weights, ssp_phot_moment)
+                    * LSUN_ERG_PER_S
+                )
+                derived_overrides["stellar_phot_moment_lut"] = stellar_phot_moment_lut
 
         elif self._state is not None and self._state.ssp_phot_ztable is not None:
             # Free-z path (Phase 3c-1) — linear interp of the ztable at runtime z.
@@ -887,6 +896,10 @@ class StellarSEDComponent:
                 total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot_at_z) * LSUN_ERG_PER_S
             )
             derived_overrides["stellar_phot_lnu_lut"] = stellar_phot_lnu_lut_rest
+            # Phase 3c-3c: free-z ztable does NOT carry the Taylor moment
+            # (precompute_photometry_ztable does not yet expose taylor_correction).
+            # Phase 3c-3c-ii will extend the ztable builder; until then,
+            # stellar_phot_moment_lut is None in free-z mode.
 
         # ── 12. Assemble new state ──────────────────────────────────────
         return state.with_(

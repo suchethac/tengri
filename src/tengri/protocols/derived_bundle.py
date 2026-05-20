@@ -99,6 +99,14 @@ class DerivedBundle:
     # Rest-frame F_nu through the configured filters, in erg/s/Hz at
     # the source (no redshift / luminosity distance applied).
     stellar_phot_lnu_lut: jnp.ndarray | None = None
+    # Stellar — Taylor moment for filter-level dust attenuation
+    # (Phase 3c-3c, published alongside stellar_phot_lnu_lut). First
+    # spectral moment of the CSP within each filter:
+    # Ψ_b = ∫ L_ν(λ) (λ - λ_eff_b) T_b(λ) λ dλ / ∫ T_b(λ) λ dλ.
+    # Used by Phase 3c-3c-ii dust integration via the expansion
+    # f_b ≈ A(λ_eff)·Φ_b + A'(λ_eff)·Ψ_b (Zacharegkas+2025).
+    # Units: erg/s/Hz × Å.
+    stellar_phot_moment_lut: jnp.ndarray | None = None
 
     # Dust attenuation / emission
     L_ir: jnp.ndarray | None = None
