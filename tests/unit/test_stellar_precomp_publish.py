@@ -636,9 +636,7 @@ def test_predict_via_precomp_two_component_dust_matches_predict(ssp):
     state = m.predict_via_orchestrator(_PARAMS)
     full = {**m.spec.get_fixed_values(), **_PARAMS}
     default = m.observation.predict(state, full, observables_type=m.Observables)
-    precomp = m.observation.predict_via_precomp(
-        state, full, observables_type=m.Observables
-    )
+    precomp = m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
     rel_err = jnp.abs(precomp.phot_fnu - default.phot_fnu) / jnp.abs(default.phot_fnu)
     print(
         f"two-component dust predict_via_precomp vs predict max rel_err = "
@@ -682,9 +680,7 @@ def test_predict_via_precomp_free_z_with_dust_matches_predict(ssp, z_test):
     state = m.predict_via_orchestrator(params)
     full = {**m.spec.get_fixed_values(), **params}
     default = m.observation.predict(state, full, observables_type=m.Observables)
-    precomp = m.observation.predict_via_precomp(
-        state, full, observables_type=m.Observables
-    )
+    precomp = m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
     rel_err = jnp.abs(precomp.phot_fnu - default.phot_fnu) / jnp.abs(default.phot_fnu)
     print(f"z={z_test}: free-z + dust max rel_err = {float(jnp.max(rel_err)):.4%}")
     # Tolerance: 3% — combines ztable linear interpolation accuracy
@@ -695,6 +691,42 @@ def test_predict_via_precomp_free_z_with_dust_matches_predict(ssp, z_test):
         f"at z={z_test}: free-z + dust precomp diverges: max rel err = "
         f"{float(jnp.max(rel_err)):.4%}"
     )
+
+
+def test_predict_via_precomp_raises_with_agn_active(ssp):
+    """Phase 3c-3d guard: AGN configured but no agn_phot_lnu_precomp ⇒ raises.
+
+    AGN adds an additive SED contribution that the multi-component LUT sum
+    would silently miss. Raising prevents wrong photometry.
+    """
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+        agn_model="qsogen",
+        agn_log_lbol=Fixed(45.0),
+        agn_frac=Fixed(0.5),
+    )
+    phot = Photometry.from_names(["sdss_r"])
+    obs = Observation(photometry=phot)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+    state = m.predict_via_orchestrator(_PARAMS)
+    full = {**m.spec.get_fixed_values(), **_PARAMS}
+    try:
+        m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
+        raise AssertionError("predict_via_precomp should raise on active AGN")
+    except NotImplementedError as e:
+        assert "agn" in str(e).lower() or "Phase 3c-3d" in str(e)
 
 
 def test_dust_luts_absent_without_wave_precomp(ssp):
