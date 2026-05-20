@@ -59,45 +59,40 @@ _PARAMS = {
 def test_stellar_phot_lnu_lut_within_tolerance(stellar_only_model):
     """stellar_phot_lnu_lut from LUT path matches direct integration to <0.5%.
 
-    Comparison: both quantities are rest-frame Lν of the stellar component
-    in erg/s/Hz, integrated through the same filters. The LUT path uses
-    the precomputed SSP × filter table; the direct path uses the full
-    state.sed_intrinsic. compute_flux_density applies a (1+z)/(4π·dl²)
-    cosmology factor so we undo it with ``× 4π × dl_cm²`` to recover Lν.
+    Phase 3c-3a: the LUT is built at the source's z (was z=0 in Phase 3b);
+    direct comparison uses the same z. Both sides are converted to F_ν
+    by the cosmology factor ``(1+z)/(4π·dl²)``, which is what
+    :meth:`Observation.predict_via_lut` applies at projection time.
     """
     import math
 
     m = stellar_only_model
     state = m.predict_via_orchestrator(_PARAMS)
-    lut_path = state.derived["stellar_phot_lnu_lut"]  # erg/s/Hz, rest-frame Lν
+    lut_lnu = state.derived["stellar_phot_lnu_lut"]  # rest-frame Lν, source's z
     from tengri.observation.photometry import compute_flux_density
 
-    # Undo compute_flux_density's (1+z)/(4π·dl_cm²) factor to recover bare Lν.
+    z = 0.05  # matches stellar_only_model's Fixed(0.05)
     dl_cm = 1.0
-    inv_cosmology = 4.0 * math.pi * dl_cm**2  # at z=0 this is just 4π·dl²
-    direct = (
-        jnp.asarray(
-            [
-                compute_flux_density(
-                    state.sed_intrinsic,
-                    state.wave,
-                    fw,
-                    ft,
-                    redshift=0.0,
-                    dl_cm=dl_cm,
-                )
-                for fw, ft in zip(
-                    m.observation.photometry.filter_waves,
-                    m.observation.photometry.filter_trans,
-                    strict=False,
-                )
-            ]
-        )
-        * inv_cosmology
+    cosmology = (1.0 + z) / (4.0 * math.pi * dl_cm**2)
+    lut_fnu = lut_lnu * cosmology
+    direct_fnu = jnp.asarray(
+        [
+            compute_flux_density(
+                state.sed_intrinsic,
+                state.wave,
+                fw,
+                ft,
+                redshift=z,
+                dl_cm=dl_cm,
+            )
+            for fw, ft in zip(
+                m.observation.photometry.filter_waves,
+                m.observation.photometry.filter_trans,
+                strict=False,
+            )
+        ]
     )
-    # Tolerance: 0.5% per the documented hybrid-kernel accuracy
-    # (Zacharegkas+2025; see docs/dev/optimization-architecture.md).
-    rel_err = jnp.abs(lut_path - direct) / jnp.abs(direct)
+    rel_err = jnp.abs(lut_fnu - direct_fnu) / jnp.abs(direct_fnu)
     print(f"max rel_err = {float(jnp.max(rel_err)):.4%}")
     assert float(jnp.max(rel_err)) < 5e-3, (
         f"LUT diverges from direct: max rel err = {float(jnp.max(rel_err)):.4%}"
@@ -318,6 +313,60 @@ def test_lut_publishes_for_metallicity_mode(ssp, metallicity_model, met_params):
     lut = state.derived["stellar_phot_lnu_lut"]
     assert jnp.all(jnp.isfinite(lut)), f"non-finite LUT for {metallicity_model}: {lut}"
     assert jnp.all(lut > 0), f"non-positive LUT for {metallicity_model}: {lut}"
+
+
+def test_predict_via_lut_matches_default_predict_observables(stellar_only_model):
+    """Phase 3c-3a opt-in path: predict_via_lut output matches predict_observables
+    within the documented hybrid-kernel accuracy (~0.5%) for a stellar-only model.
+
+    predict_observables integrates state.sed_intrinsic through filters (exact path);
+    predict_via_lut projects the precomputed SSP × filter LUT and applies cosmology
+    (approximate path). The two should agree to the LUT's documented accuracy.
+    """
+    m = stellar_only_model
+    state = m.predict_via_orchestrator(_PARAMS)
+    full = {**m.spec.get_fixed_values(), **_PARAMS}
+    default = m.observation.predict(state, full, observables_type=m.Observables)
+    lut = m.observation.predict_via_lut(state, full, observables_type=m.Observables)
+    rel_err = jnp.abs(lut.phot_fnu - default.phot_fnu) / jnp.abs(default.phot_fnu)
+    print(f"predict_via_lut vs predict max rel_err = {float(jnp.max(rel_err)):.4%}")
+    assert float(jnp.max(rel_err)) < 5e-3, (
+        f"predict_via_lut diverges from predict: max rel err = {float(jnp.max(rel_err)):.4%}"
+    )
+    # Also check magnitudes
+    rel_mag = jnp.abs(lut.mag_apparent - default.mag_apparent)
+    assert float(jnp.max(rel_mag)) < 5e-3, (
+        f"mag_apparent drifts: max abs diff = {float(jnp.max(rel_mag))}"
+    )
+
+
+def test_predict_via_lut_raises_without_wave_precomp(ssp):
+    """predict_via_lut requires the LUT — raises clearly when missing."""
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+    )
+    phot = Photometry.from_names(["sdss_r"])
+    obs = Observation(photometry=phot)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = SEDModel(spec, ssp, observation=obs)  # NO approx={"wave_precomp": True}
+    state = m.predict_via_orchestrator(_PARAMS)
+    full = {**m.spec.get_fixed_values(), **_PARAMS}
+    try:
+        m.observation.predict_via_lut(state, full)
+        raise AssertionError("predict_via_lut should have raised without LUT")
+    except ValueError as e:
+        assert "wave_precomp" in str(e)
 
 
 def test_lut_metallicity_changes_with_logzsol(ssp):

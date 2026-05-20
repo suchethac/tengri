@@ -690,6 +690,95 @@ class Observation:
 
         return out
 
+    def predict_via_lut(
+        self,
+        state,
+        params,
+        *,
+        observables_type=None,
+    ):
+        """Project observables via the photometric LUT instead of integrating ``sed_intrinsic``.
+
+        Phase 3c-3a opt-in fast path. Consumes
+        ``state.derived["stellar_phot_lnu_lut"]`` (the rest-frame Lν at the
+        source's z, produced by :class:`StellarSEDComponent` when
+        ``approx={"wave_precomp": True}`` is set) and applies the cosmology
+        factor ``(1+z)/(4π·dl²)`` to convert to observed F_ν.
+
+        Phase 3c-3a only handles **stellar-only** photometry — nebular,
+        AGN, dust attenuation, and IGM contributions are added in
+        Phase 3c-3b/c/d. Spectroscopy is not yet handled.
+
+        Parameters
+        ----------
+        state : ForwardState
+            Orchestrator state with ``stellar_phot_lnu_lut`` in ``derived``.
+        params : Mapping[str, jnp.ndarray]
+            Param dict; reads ``redshift``.
+        observables_type : type, optional
+            Per-model :class:`Observables` NamedTuple class (from
+            :meth:`SEDModel.Observables`). When provided, returns an
+            instance; when ``None``, returns the legacy dict format.
+
+        Returns
+        -------
+        Observables or dict
+            Same shape as :meth:`predict`.
+
+        Raises
+        ------
+        ValueError
+            If ``stellar_phot_lnu_lut`` is missing from ``state.derived``
+            (the model was not built with ``approx={"wave_precomp": True}``).
+        NotImplementedError
+            If the observation has spectroscopy, line_fluxes, or
+            spectral_indices (Phase 3c-3b+).
+
+        Notes
+        -----
+        **JIT-compatible**: yes — pure JAX arithmetic on the LUT.
+
+        See Also
+        --------
+        predict : The default observation-projection path that integrates
+            ``sed_intrinsic`` through filters. Stays the canonical
+            reference until Phase 3c-3e flips the default.
+        """
+        from tengri.utils.cosmology import luminosity_distance
+
+        if "stellar_phot_lnu_lut" not in state.derived:
+            raise ValueError(
+                "predict_via_lut requires stellar_phot_lnu_lut in state.derived. "
+                "Build the model with approx={'wave_precomp': True}."
+            )
+        if self.can_do_spectroscopy or self.has_line_fluxes or self.has_spectral_indices:
+            raise NotImplementedError(
+                "predict_via_lut (Phase 3c-3a) handles photometry only. "
+                "Spectroscopy / lines / indices land in Phase 3c-3b+."
+            )
+        if not self.can_do_photometry:
+            raise ValueError("predict_via_lut requires photometry to be configured.")
+
+        z = jnp.asarray(params.get("redshift", 0.0))
+        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+        cosmology = (1.0 + z) / (4.0 * jnp.pi * dl_cm**2)
+
+        # Phase 3c-3a: stellar-only — multi-component sum lands in 3c-3b+.
+        stellar_lnu = state.derived["stellar_phot_lnu_lut"]
+        phot_fnu = stellar_lnu * cosmology
+
+        # phot_rest_fnu: project the same LUT at z=0, d_L=10pc for absolute mag.
+        from tengri.utils.physics_constants import TEN_PC_CM
+
+        cosmology_rest = 1.0 / (4.0 * jnp.pi * TEN_PC_CM**2)
+        phot_rest_fnu = stellar_lnu * cosmology_rest
+
+        out = {"phot_fnu": phot_fnu, "phot_rest_fnu": phot_rest_fnu}
+
+        if observables_type is not None:
+            return observables_type(phot_fnu, phot_rest_fnu)
+        return out
+
     # ── Display ───────────────────────────────────────────────────
 
     def summary(self) -> str:
