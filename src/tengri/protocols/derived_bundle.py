@@ -119,6 +119,12 @@ class DerivedBundle:
     sed_shock: jnp.ndarray | None = None
     line_waves: jnp.ndarray | None = None
     line_lums: jnp.ndarray | None = None
+    # Nebular — photometry LUT (Phase 3c-3b, published only when
+    # ``approx={'wave_precomp': True}`` is set on SEDModel and the nebular
+    # backend supports filter-level precomputation (Cue / CloudyGrid).
+    # For BakedIn nebular this is None — the nebular emission is already
+    # baked into the SSP grid and therefore included in stellar_phot_lnu_lut.
+    nebular_phot_lnu_lut: jnp.ndarray | None = None
 
     # Radio / X-ray / IGM / shock
     sed_radio: jnp.ndarray | None = None

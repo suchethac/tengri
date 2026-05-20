@@ -315,6 +315,33 @@ def test_lut_publishes_for_metallicity_mode(ssp, metallicity_model, met_params):
     assert jnp.all(lut > 0), f"non-positive LUT for {metallicity_model}: {lut}"
 
 
+def test_predict_via_lut_handles_bakedin_nebular(stellar_only_model):
+    """Phase 3c-3b: BakedIn nebular flows through the LUT path transparently.
+
+    The default ``_wNE`` MILES SSPs carry baked-in nebular emission. That
+    means ``stellar_phot_lnu_lut`` already contains nebular continuum and
+    lines — no separate ``nebular_phot_lnu_lut`` should be published, and
+    the multi-component sum reduces to the stellar contribution alone.
+
+    Cue / CloudyGrid nebular backends will publish their own LUT entry
+    in later sub-PRs; this test pins the BakedIn invariant.
+    """
+    m = stellar_only_model
+    state = m.predict_via_orchestrator(_PARAMS)
+    # BakedIn nebular doesn't publish a separate LUT.
+    assert state.derived.get("nebular_phot_lnu_lut") is None, (
+        "BakedIn nebular should not publish nebular_phot_lnu_lut — already in stellar LUT."
+    )
+    # The LUT path still works — predict_via_lut sums whatever LUTs exist.
+    full = {**m.spec.get_fixed_values(), **_PARAMS}
+    lut = m.observation.predict_via_lut(state, full, observables_type=m.Observables)
+    default = m.observation.predict(state, full, observables_type=m.Observables)
+    rel_err = jnp.abs(lut.phot_fnu - default.phot_fnu) / jnp.abs(default.phot_fnu)
+    assert float(jnp.max(rel_err)) < 5e-3, (
+        f"BakedIn LUT path drifts: max rel err = {float(jnp.max(rel_err)):.4%}"
+    )
+
+
 def test_predict_via_lut_matches_default_predict_observables(stellar_only_model):
     """Phase 3c-3a opt-in path: predict_via_lut output matches predict_observables
     within the documented hybrid-kernel accuracy (~0.5%) for a stellar-only model.
