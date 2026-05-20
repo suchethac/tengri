@@ -121,10 +121,16 @@ _CANONICAL_UNITS: dict[str, str] = {
     "log_metallicity_history": "dex",
     # Stellar — photometry LUT (Phase 3b; only published when
     # ``approx={'wave_precomp': True}`` is set on SEDModel).
-    "stellar_phot_lnu_lut": "erg/s/Hz",
+    "stellar_phot_lnu_precomp": "erg/s/Hz",
     # Stellar — Taylor moment (Phase 3c-3c). Same conditions as
-    # stellar_phot_lnu_lut. Used by Phase 3c-3c-ii dust integration.
-    "stellar_phot_moment_lut": "erg*Angstrom/s/Hz",
+    # stellar_phot_lnu_precomp. Used by Phase 3c-3c-ii dust integration.
+    "stellar_phot_moment_precomp": "erg*Angstrom/s/Hz",
+    # Filter pivot wavelengths (published by stellar when wave_precomp
+    # is on; used by dust LUT, AGN LUT, IGM LUT downstream).
+    "filter_eff_waves": "Angstrom",
+    # Dust attenuation per filter (Phase 3c-3c-ii). A(λ_eff) and A'(λ_eff).
+    "dust_attenuation_precomp": "",
+    "dust_attenuation_slope_precomp": "1/Angstrom",
     # Dust attenuation / emission outputs
     "L_ir": "erg/s",
     "L_absorbed": "erg/s",
@@ -146,7 +152,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "line_lums": "erg/s",
     # Nebular — photometry LUT (Phase 3c-3b; only non-BakedIn backends
     # publish, when ``approx={'wave_precomp': True}`` is set).
-    "nebular_phot_lnu_lut": "erg/s/Hz",
+    "nebular_phot_lnu_precomp": "erg/s/Hz",
     # Radio / X-ray / IGM
     "sed_radio": "erg/s/Hz",
     "sed_xray": "erg/s/Hz",
