@@ -796,28 +796,47 @@ class Observation:
         # actual attenuation should trigger the guard.
         l_ir = state.derived.get("L_ir")
         dust_active = l_ir is not None and float(l_ir) > 0.0
-        if dust_active and state.derived.get("dust_attenuation_precomp") is None:
+        a_lut = state.derived.get("dust_attenuation_precomp")
+        a_bc_lut = state.derived.get("dust_bc_attenuation_precomp")
+        if dust_active and a_lut is None and a_bc_lut is None:
             raise NotImplementedError(
                 "predict_via_precomp: dust attenuation ran on the wave grid "
-                "but no dust_attenuation_precomp was published. This happens "
-                "for two-component (Charlot & Fall) dust [Phase 3c-3c-iv] "
-                "and for free-z + dust [Phase 3c-3c-v]. Use predict() instead, "
-                "or build the model with dust_model='single_component' and "
-                "fixed redshift to use the LUT path."
+                "but no dust precompute was published (neither single-component "
+                "dust_attenuation_precomp nor two-component dust_bc_*). This "
+                "happens for free-z + dust (Phase 3c-3c-v). Use predict() "
+                "instead, or build the model with fixed redshift."
             )
 
-        # Phase 3c-3c-iii: apply dust attenuation via the Taylor expansion
+        # Phase 3c-3c-iv-c: two-component (Charlot & Fall) dust LUT.
+        # Factorisation: T(a, λ) = T_diff(λ) × T_bc(λ)^y(a).
+        # At the filter level, with per-age stellar LUT
+        # ``stellar_phot_lnu_per_age_precomp[a, b]``:
+        #
+        #     flux_b = Σ_a per_age[a, b] × A_diff(b) × A_bc(b)^y(a)
+        #
+        # ``A_bc(b)^y(a)`` interpolates between BC-attenuated (y=1) and
+        # bare (y=0) stars. Smooth y(a) handles the transition.
+        per_age = state.derived.get("stellar_phot_lnu_per_age_precomp")
+        if a_bc_lut is not None and per_age is not None:
+            a_diff_lut = state.derived["dust_diff_attenuation_precomp"]
+            y_age = state.derived["dust_young_indicator"]
+            # A_bc(b)^y(a): broadcast over (age, filter). a_bc has shape
+            # (n_filter,); y_age has shape (n_age,). Result (n_age, n_filter).
+            atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]
+            total_lnu = jnp.sum(per_age * atten_bc_per_age, axis=0) * a_diff_lut
+
+        # Phase 3c-3c-iii: single-component dust via the Taylor expansion
         # f_b = A(λ_eff)·Φ_b + A'(λ_eff)·Ψ_b (Zacharegkas+2025).
         # When dust precompute is present, the Taylor moment Ψ MUST also be
         # present (the dust expansion is only valid with the second term).
-        # When dust precompute is absent, the model has no dust attenuation
-        # for the LUT path and we use Φ alone.
-        a_lut = state.derived.get("dust_attenuation_precomp")
-        a_slope_lut = state.derived.get("dust_attenuation_slope_precomp")
-        if a_lut is not None and a_slope_lut is not None:
+        elif a_lut is not None:
+            a_slope_lut = state.derived.get("dust_attenuation_slope_precomp")
+            if a_slope_lut is None:
+                raise ValueError(
+                    "predict_via_precomp: dust_attenuation_precomp present but "
+                    "dust_attenuation_slope_precomp missing (Phase 3c-3c-ii bug)."
+                )
             # Sum all *_phot_moment_precomp contributions for the Taylor term.
-            # Currently only stellar publishes a moment; nebular / AGN would
-            # add their own ``<name>_phot_moment_precomp`` in later sub-PRs.
             moment_keys = [
                 k for k in state.derived.field_names() if k.endswith("_phot_moment_precomp")
             ]
