@@ -802,9 +802,9 @@ class Observation:
             raise NotImplementedError(
                 "predict_via_precomp: dust attenuation ran on the wave grid "
                 "but no dust precompute was published (neither single-component "
-                "dust_attenuation_precomp nor two-component dust_bc_*). This "
-                "happens for free-z + dust (Phase 3c-3c-v). Use predict() "
-                "instead, or build the model with fixed redshift."
+                "dust_attenuation_precomp nor two-component dust_bc_*). Use "
+                "predict() instead, or confirm wave_precomp=True is set on the "
+                "model and the dust law is supported."
             )
 
         # Phase 3c-3c-iv-c: two-component (Charlot & Fall) dust LUT.
