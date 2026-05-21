@@ -1,445 +1,648 @@
-# Forward model architecture
+# Forward Model Architecture
 
-The tengri forward model is a chain of physics modules that build up a
-rest-frame SED component-by-component. This document is the single
-read for understanding the whole story end-to-end: the existing
-`SEDComponent` Protocol, the new `SEDModelComponent` base class
-introduced in 2026-05, the cross-component contract, the wavelength
-precomputation shortcut, and how parameters flow from a model class
-to the sampler.
+> Status: **design doc, pre-implementation.** Captured 2026-05-21 from a
+> design conversation. Section 2 depends on the in-flight
+> `SEDModelComponent` refactor; reconcile before treating this doc as
+> canonical. Multi-population namespace decision is captured separately in
+> [ADR-0012](../adr/0012-forward-model-population.md).
 
-For the step-by-step "how do I write a new model" guide, see
-[`sed-model-components.md`](./sed-model-components.md). This document
-gives the architectural context.
+This document describes the target architecture of the `tengri` forward
+model — the thin shell around the physics modules that inference talks
+to. It is the reference picture for the next several refactors.
 
----
+## TL;DR — what changes, in one paragraph
 
-## Overview: the forward-model pipeline
+`SEDModel` today is *both* the outer shell and the SED-physics chain.
+This document splits those two roles. The outer shell becomes a new
+class `ForwardModel`, whose only job is to compose physics sub-models
+(SED, spatial, joint spatial-SED, and eventually stellar atmospheres in
+a forked repo) with an `Observation` model, and to expose a single
+`.predict(params)` method to inference. The SED-physics chain stays
+inside an `SEDModel` sub-model, unchanged at the component level. A
+mirror-symmetric `SpatialModel` is added so that joint
+spectrophotometric fits can model the aperture mismatch between
+spectroscopy (one fiber-sized region of the galaxy) and photometry
+(the whole galaxy) *physically*, not by flat-slab scaling. From the
+start, `ForwardModel` holds **multiple populations** (e.g. AGN
+point source + Sérsic bulge + exponential disc), each with its own
+SED and spatial model.
 
-Components run in a fixed, dependency-respecting order:
+## 1. The big picture
+
+The forward model is layered. Each layer has exactly one
+responsibility and one Protocol-shaped contract with the layer below.
 
 ```
-stellar emission → nebular emission → AGN
-       ↓
-dust attenuation → dust IR re-emission → radio → X-ray
-       ↓
-IGM transmission → observation (filter integration + cosmology)
+┌──────────────────────────────────────────────────────────────┐
+│  Inference          (VI, MCMC, MAP, NSS, …)                  │
+│    ↳ asks ForwardModel for log p(data | params)              │
+└──────────────────────────────────────────────────────────────┘
+            │  knows nothing about physics
+            ▼
+┌──────────────────────────────────────────────────────────────┐
+│  Likelihood         (Gaussian / StudentT / GP / Composite)   │
+│    ↳ scores Observation.predict(params) against data         │
+└──────────────────────────────────────────────────────────────┘
+            ▲
+            │  reads dict of predictions
+┌──────────────────────────────────────────────────────────────┐
+│  ForwardModel       (the outer shell — talks to Observation, │
+│                      owns Parameters, holds populations)     │
+│    populations: tuple[Population, ...]                       │
+│      each Population:                                        │
+│        ├── sed     : SEDModel         (chain of SEDModelComponents)
+│        └── spatial : SpatialModel     (chain of SpatialModelComponents,
+│                                        or None for SED-only populations)
+│                                                              │
+│    .predict(params) → dict ───────────────────► Observation  │
+└──────────────────────────────────────────────────────────────┘
+            ▲
+            │  threads ForwardState through components
+┌──────────────────────────────────────────────────────────────┐
+│  Components         (the atomic physics units)               │
+│    SEDComponent      — Protocol (substrate, exists today)    │
+│      ↳ SEDModelComponent — astronomer-facing base            │
+│    SpatialComponent  — Protocol (substrate, new)             │
+│      ↳ SpatialModelComponent — astronomer-facing base        │
+│      each owns its parameters, precompute, apply(state)      │
+└──────────────────────────────────────────────────────────────┘
+
+  ┌─ Observation (sibling of ForwardModel, owned by it) ───────┐
+  │   Photometry / Spectroscopy / Joint / Imaging / FiberSpec  │
+  │   reads ForwardState, returns prediction dict              │
+  └────────────────────────────────────────────────────────────┘
 ```
 
-Each component owns a slice of the parameter vector (e.g. parameters
-starting with `dust_`), reads some quantities published by upstream
-components, runs its physics, and writes its contribution back into a
-shared state that the next component sees. A component never inspects
-another component's parameters — it reads only **published derived
-quantities** with documented fallbacks.
+**The crisp rule that the whole architecture follows:** *physics lives
+in components; instruments live in observation.* A fiber aperture
+correction belongs in `FiberSpectroscopyObservation`, not in any
+`SpatialComponent`. A per-age spatial profile (when it lands) belongs
+in `SpatialComponent`, not in `ImagingObservation`.
 
-The carrier is a frozen dataclass `ForwardState`
-(`src/tengri/protocols/component.py`):
+## 2. Why this matters (the "physically correct joint spec-phot" story)
 
-| Field             | What it carries                                            |
-|-------------------|------------------------------------------------------------|
-| `wave`            | Rest-frame wavelength grid (Å)                             |
-| `sed_intrinsic`   | Pre-attenuation L_ν built up by upstream emitters (erg/s/Hz) |
-| `sed_attenuated`  | Post-attenuation rest-frame L_ν                            |
-| `sed_observed`    | Observer-frame F_ν (after IGM + cosmology)                 |
-| `lines`           | Optional emission-line dict                                |
-| `derived`         | Typed bag of cross-component quantities (`L_ir`, `L_absorbed`, `log_mstar`, …) |
+The single most common SED-fitting setup is photometry + a fiber
+spectrum (SDSS, DESI, MOONS, MaNGA single-fiber extractions). The
+spectrum samples *part* of the galaxy through the fiber footprint;
+the photometry integrates the *whole* galaxy. Almost every public
+SED-fitting code reconciles this by scaling the spectrum by a single
+multiplicative factor — equivalent to assuming the galaxy is a uniform
+slab. This is the flat-slab approximation.
 
-The state is immutable. Each component returns a new state.
+A real galaxy has a spatial profile. The fiber sees the inner Sérsic
+core; the broadband photometry sees core + envelope. The right answer
+to the aperture mismatch is to model the spatial profile, integrate it
+through the fiber footprint analytically (or numerically), and only
+*then* compare to data. The architecture in this document makes that
+joint fit a one-liner at the `ForwardModel` level rather than a hack
+inside an SED component.
 
----
+This is the primary scientific motivation for promoting spatial to a
+first-class concept now rather than deferring it indefinitely. The
+fact that the same machinery also unlocks IFU fitting later
+(`docs/dev/spatial_model_extension.md`) is a bonus, not the reason.
 
-## The two component contracts
+## 3. Component contracts (the atomic units)
 
-### The bare Protocol — `SEDComponent`
+Two parallel Protocols sit at the bottom of the stack — one for
+spectral physics, one for spatial physics. The Protocol is the
+substrate; astronomers normally write subclasses of the convenience
+base classes one level up.
 
-Lives in `src/tengri/protocols/component.py`. Six methods, three of
-them optional (the cross-component contract):
+> **Section 3.1 depends on the in-flight `SEDModelComponent` refactor.**
+> The exact signature shown here may shift before that PR lands. The
+> Protocol layer (`SEDComponent`) is stable.
 
-```python
-class SEDComponent(Protocol):
-    name: str                           # "stellar", "dust", "nebular", ...
-    parameter_prefix: str               # "sfh_", "dust_", "neb_", ...
-    config: SEDComponentConfig
-
-    def declared_parameters(self) -> list[ParamDeclaration]: ...
-    def precompute(self, ssp_data=None, wave_grid=None) -> SEDComponentState: ...
-    def apply(self, state, params, ssp_data=None, template_data=None) -> ForwardState: ...
-
-    # Optional — attached when participating in the cross-component contract:
-    def inputs(self)          -> tuple[DerivedKey, ...]: ...
-    def optional_inputs(self) -> tuple[DerivedKey, ...]: ...
-    def outputs(self)         -> tuple[DerivedKey, ...]: ...
-```
-
-Components that implement this Protocol directly (stellar, dust
-attenuation, dust IR, nebular, AGN, IGM, radio, X-ray today) carry
-their physics in `apply()` and use any internal layout they want. The
-radio adapter at `src/tengri/components/radio/component.py` is the
-canonical reference.
-
-### The single-file authoring base — `SEDModelComponent`
-
-Most new models don't need the full freedom of the Protocol. They
-have free parameters, a wavelength-dependent emission or
-transformation function, and (optionally) a pre-computed library or
-trained neural-net emulator. For these, subclass `SEDModelComponent`.
-Write one `predict()`. The base class fills in the rest:
+### 3.1 `SEDModelComponent` — astronomer-facing SED base
 
 ```python
 class ModifiedBlackbody(SEDModelComponent):
     name = "dust_ir"
     parameter_prefix = "dust_"
 
-    # Free parameters with units (auto-discovered as priors)
+    # Free params — Distribution-typed class attrs, auto-discovered
     T    = Uniform(20.0, 80.0, "dust temperature",      units="K")
     beta = Uniform( 1.0,  3.0, "dust emissivity index", units="")
 
-    # What this model reads from upstream
-    inputs  = {"L_absorbed": "erg/s"}
+    # Cross-component contract
+    reads     = {"L_absorbed": "erg/s"}
+    publishes = {"L_ir": "erg/s"}
 
-    # What this model publishes for downstream
-    outputs = {"L_ir": "erg/s"}
+    def load(self, wave):                                # optional precompute
+        return None
 
-    # Optional: load static data once at compile time
-    def load(self, wave):
-        return None              # closed-form models leave this default
-
-    # The physics — pure JAX
-    def predict(self, p, sed_in, wave, *, L_absorbed):
+    def predict(self, p, sed_in, wave, *, L_absorbed):   # pure JAX
         addition = modified_blackbody_lnu(wave, L_absorbed, p["T"], p["beta"])
         L_ir = trapz_freq(addition, wave)
         return sed_in + addition, {"L_ir": L_ir}
 ```
 
-The canonical signature is `predict(p, sed_in, wave, **inputs) →
-(sed_out, published)`. Same signature for closed-form models,
-template libraries, and NN emulators. See
-[`sed-model-components.md`](./sed-model-components.md) for the full
-contract and three worked examples (analytic, library, NN emulator).
+- `p` is the parameter dict with prefix stripped.
+- `sed_in` is the running rest-frame L_ν built up by upstream
+  components (erg/s/Hz); zeros if this component runs first.
+- `wave` is the rest-frame wavelength grid (Å). Under
+  `approx=WavePrecomp()`, the framework calls `predict` a second
+  time with filter effective wavelengths; the same function works
+  for both paths.
+- `**reads` kwargs are auto-supplied from `state.derived`.
+- Return: `(sed_out, published)` — new rest-frame L_ν plus the dict
+  of keys this component publishes.
 
-`SEDComponent` (the Protocol) is **unchanged** by this refactor.
-`SEDModelComponent` is a concrete class that satisfies the Protocol
-on behalf of its subclasses. Both styles coexist; the orchestrator
-can't tell them apart.
+### 3.2 `SpatialModelComponent` — astronomer-facing spatial base
 
-What the base class does automatically:
-
-- Auto-discovers class-level `Distribution`-typed attributes as free
-  parameters → fills `declared_parameters()`.
-- Auto-registers `(cls.name, cls)` via `__init_subclass__` →
-  `SEDModel.build(dust={'type': 'modified_blackbody'})` finds it. No
-  factory edits.
-- Auto-fills `inputs()`/`outputs()` from the class-level `inputs` and
-  `outputs` dicts.
-- Implements `precompute()` by calling subclass `load(wave_grid)` and
-  caching the return on `self.data`.
-- Implements `apply()` by slicing `params` to `parameter_prefix`,
-  looking up each `inputs` key in `state.derived`, calling subclass
-  `predict()`, and merging the return into state.
-
----
-
-## The cross-component contract
-
-Components publish and consume derived quantities via a typed
-registry. The contract is checked at component-list construction
-time, before any JIT compile, by `validate_pipeline()` in
-`src/tengri/forward/orchestrator.py`. The check refuses renames, unit
-drift, and out-of-order publishers, with a "Did you mean: …" hint
-for likely typos. ADR-0009 has the rationale.
-
-### `DerivedKey`
-
-Each published or required quantity is declared as a `DerivedKey`:
+Mirror-symmetric. Same Protocol shape, different state keys.
 
 ```python
-DerivedKey(name="L_ir", units="erg/s", description="Total IR luminosity")
+class Sersic(SpatialModelComponent):
+    name = "sersic"
+    parameter_prefix = "spatial_"
+
+    log_re_kpc  = Uniform(-1.0, 2.0, "log effective radius", units="dex(kpc)")
+    n           = Uniform( 0.5, 6.0, "Sérsic index",         units="")
+    axis_ratio  = Uniform( 0.1, 1.0, "axis ratio b/a",       units="")
+    pa_deg      = Uniform(-90., 90., "position angle",       units="deg")
+
+    reads     = {}
+    publishes = {"spatial_profile_2d": ""}
+
+    def load(self, grid_kpc):
+        return None
+
+    def predict(self, p, profile_in, grid_kpc):
+        profile = sersic_profile_2d(grid_kpc, p["log_re_kpc"], p["n"], …)
+        return profile, {"spatial_profile_2d": profile}
 ```
 
-The `name` is a stable string. The `units` tag is compared for exact
-string match (no numeric conversion), so unit drift fails at
-construction.
+Concrete adapters shipped in v1: `Sersic`, `Exponential`,
+`FlatSlab`, `BulgeDisk` (Sérsic + exponential, additive). Each is one
+file under `components/spatial/`. Adding a new spatial profile is
+exactly the same workflow as adding a new dust law — Protocol +
+registry, no factory edits.
 
-### `DerivedBundle`
+A `GPSpatialField` component (correlated-field prior over the spatial
+plane) is the same Protocol with many free parameters declared via a
+`CorrelatedField` prior, the same way stochastic SFH already works on
+the spectral side. No special-casing required.
 
-`ForwardState.derived` is a frozen dataclass `DerivedBundle` with one
-typed field per canonical cross-component datum (`L_ir`,
-`L_absorbed`, `lnu_age`, …). Writers use `state.derived.with_(L_ir=…)`
-— typos raise `TypeError`. Readers use mapping syntax:
-`state.derived.get("L_ir", 0.0)`. Adding a new key adds one field to
-`DerivedBundle` and one row to `_CANONICAL_UNITS` in the orchestrator.
+### 3.3 The B-seam — what spatial publishes today, what it can grow to
 
-For `SEDModelComponent` subclasses, the `inputs`/`outputs` class
-dicts are converted to `tuple[DerivedKey, ...]` by `__init_subclass__`
-and exposed through the Protocol's optional `inputs()`/`outputs()`
-methods. Subclasses participate in the contract automatically.
+Today (A path): `SpatialComponent`s publish `spatial_profile_2d` only.
+The profile is wavelength- and age-independent. A single Sérsic +
+fiber aperture is enough to correctly handle the joint spec-phot
+aperture mismatch.
 
----
+Reserved (B path): `spatial_profile_per_age` (shape `(n_age, ny, nx)`)
+and `spatial_profile_per_wave` (shape `(ny, nx, n_wave)`). These keys
+are *named now* in the contract so that:
 
-## Wavelength precomputation: the Zacharegkas+2025 path
+- A future `PerAgeSersic` component declares
+  `reads = {"lnu_age": "erg/s/Hz"}` and the existing publish/require
+  validator catches a missing producer at build time.
+- Observation models can opt into the richer profile if available
+  (`ImagingObservation` prefers per-age if present, falls back to
+  uniform-colour 2D if not).
 
-The forward model's most expensive step is the wavelength-grid
-integration to compute broadband photometry. The Zacharegkas+2025
-effective-wavelength approximation (arXiv:2506.19919, §3 + Appendix
-A) pulls the parameter-dependent factor out of the wave-integral and
-evaluates it at each filter's effective wavelength λ_eff:
+This is purely a contract-shape decision today. No code is written
+against the B keys until colour gradients are needed.
 
-$$ c_{\rm band}(\theta) \;\approx\; F(\lambda_{\rm eff}, \theta) \cdot \sum_{i,j} P_{\rm SSP}(\tau_i, Z_j, \theta) \cdot c_{\rm SSP}(\tau_i, Z_j) $$
+## 4. Sub-model layer
 
-`c_SSP` (the SSP grid through each filter) is pre-computed once;
-`F(λ, θ)` becomes a per-filter scalar evaluation. Accuracy: ~0.5% on
-photometric magnitudes, ~0.03 mag on LSST bands. Opt in with
-`approx=WavePrecomp()` when building the model.
-
-For `SEDModelComponent` subclasses, the framework calls the same
-`predict()` two ways:
-
-| Path           | `wave` argument                          | Cost                |
-|----------------|-------------------------------------------|---------------------|
-| Exact          | Full rest-frame grid (n_wave)             | predict on n_wave   |
-| WavePrecomp    | Per-filter effective wavelengths (n_filter) | predict on n_filter |
-
-Same function, two `wave` arrays. The astronomer's `predict()` is
-unchanged. Under `WavePrecomp`, the framework lifts the per-filter
-result into `<name>_phot_lnu_precomp` and `observation.predict_via_precomp`
-sums these LUTs and applies cosmology.
-
-**Optional Taylor refinement** (`approx=WavePrecomp(order=1)`)
-absorbs the first-order term using the per-filter wavelength moment
-Ψ the stellar component already publishes:
-
-$$ c_{\rm band}(\theta) \;\approx\; F(\lambda_{\rm eff})\,\Phi \;+\; F'(\lambda_{\rm eff})\,\Psi $$
-
-`F'(λ_eff)` comes from `jax.grad(predict, argnums=2)` — JAX gives the
-wavelength derivative for free. The astronomer doesn't write it.
-
-The exact-vs-WavePrecomp agreement is pinned by tests at the
-Zacharegkas-documented tolerance.
-
----
-
-## How `SEDModel.build()` resolves components
-
-The user-facing model construction uses a nested-dict grammar
-(shipped 2026-05; see [`api_migration_v0.x.md`](./api_migration_v0.x.md)):
+Each sub-model is a thin composer over a list of components. They
+all satisfy one 2-method Protocol:
 
 ```python
-from tengri import SEDModel, recipes
+class SubModel(Protocol):
+    name: str                                            # "sed", "spatial", "spatial_sed"
 
-# From a recipe
-model = SEDModel.build(ssp_data=ssp, observation=obs,
-                       **recipes.star_forming_photometry())
+    def declared_parameters() -> list[ParamDeclaration]: ...    # aggregated
+    def run(state, params) -> ForwardState: ...                 # pure JAX
+```
 
-# Hand-rolled
-model = SEDModel.build(
-    ssp_data=ssp, observation=obs,
-    sfh={'type': 'dpl', '*': FREE, 'beta': Uniform(1, 3)},
-    dust={'type': 'two_component', 'law_bc': 'calzetti', '*': FIXED,
-          'tau_bc': 0.5, 'emission': {'type': 'modified_blackbody', '*': FIXED}},
-    neb={'type': 'cue', '*': FIXED},
-    redshift=Fixed(0.05),
+`ForwardModel` doesn't care which sub-model class it's holding — only
+that it satisfies `SubModel`. This is what makes the forked
+stellar-atmospheres repo straightforward (see §7).
+
+### 4.1 `SEDModel` — the spectral mode
+
+```python
+sed = SEDModel(components=[
+    Stellar(...), DustAttenuation(...), NebularCue(...), IGM(...),
+])
+```
+
+- Validates the `reads`/`publishes` graph via the existing
+  `validate_pipeline` machinery (ADR-0009, ADR-0007 typed bundle).
+- Aggregates `declared_parameters()` across components, enforces
+  prefix discipline (`tools/check_param_prefixes.py`).
+- `run(state, params)` threads `ForwardState` through components in
+  topologically-valid order. Publishes `state.sed_intrinsic`,
+  `state.sed_attenuated`, `state.sed_observed`, line dicts, derived
+  diagnostics.
+
+This is today's `SEDModel`, with the outer-shell responsibilities
+factored out into `ForwardModel`.
+
+### 4.2 `SpatialModel` — the spatial mode
+
+```python
+spatial = SpatialModel(components=[Sersic(...)])
+```
+
+Same validation + aggregation as `SEDModel`, on spatial components.
+After `run`, `state.derived["spatial_profile_2d"]` is populated.
+
+Spatial-only fits (morphology benchmarks, imaging-only Sérsic
+fitting) work by handing `ForwardModel` a `SpatialModel` and an
+`ImagingObservation` with no SED at all.
+
+### 4.3 `SpatialSEDModel` — the joint mode (scientific main path)
+
+```python
+spatial_sed = SpatialSEDModel(
+    sed     = SEDModel(components=[Stellar(...), Dust(...), Nebular(...)]),
+    spatial = SpatialModel(components=[Sersic(...)]),
 )
 ```
 
-Each `'type'` string is resolved against a registry. Today the
-registries live in `parameters/groups.py` and the per-domain
-`components/<domain>/*.py` resolver functions. After this refactor,
-`SEDModelComponent` subclasses register themselves via
-`__init_subclass__`; the resolver consults the unified registry
-first; the per-domain resolvers stay as a fallback for bare-Protocol
-components.
+- Composes — does **no physics of its own** (~30 lines).
+- `declared_parameters()` is the union, no shared params.
+- `run(state, params)` calls `sed.run(...)` first, then
+  `spatial.run(...)`.
 
-A new model defined as `class BOSADust(SEDModelComponent): name =
-"bosa"` is therefore reachable as `dust={'type': 'bosa', …}` with no
-factory edits.
+**Order policy.** SED → Spatial. This permits `SpatialComponent`s to
+read `state.derived` keys produced by SED components (mass-size
+relation, per-age profiles). The reverse direction (SED components
+reading spatial state — needed for spatially-varying attenuation or
+spaxel-by-spaxel SFH fitting) is a known extension point reserved for
+a future `ResolvedSEDModel` mode and is not supported in v1.
 
----
+## 5. `ForwardModel` — the outer shell
 
-## Parameter flow
+The class inference talks to. Composes everything. Multi-population
+from Day 1.
+
+```python
+@dataclass(frozen=True)
+class ForwardModel:
+    populations: tuple[Population, ...]
+    observation: ObservationModel
+    spec:        Parameters                # aggregated + namespaced
+
+    @classmethod
+    def build(cls, *, populations=None, sed=None, spatial=None,
+              observation, **param_overrides) -> "ForwardModel":
+        # populations=     → multi-population, explicit
+        # sed=, spatial=   → single-population sugar; auto-wraps into one Population
+        ...
+
+    def predict(self, params) -> Mapping[str, jnp.ndarray]:
+        # Run each population's sub-model into a per-population ForwardState,
+        # collect into a populations-dict on the outer state,
+        # then delegate to observation.predict, which sums in linear flux.
+        ...
+```
+
+`ForwardModel.predict(params)` is the **only** API inference uses.
+Whether the sub-model inside is `SEDModel`, `SpatialModel`, or
+`SpatialSEDModel`, and whether there is one population or three, is
+invisible at the inference layer. This is the JAX-purity story: the
+Python object holds all structural state; `predict` is a pure function
+of the traced `params` dict.
+
+## 6. Multi-population — namespacing and summing
+
+Three populations (AGN point source + Sérsic bulge + exponential
+disc) is a realistic Day 1 case. The architecture has to support it
+from the start because the parameter-naming decision is irreversible
+once users have notebooks and saved fits.
+
+### 6.1 Parameter names
+
+Population name is the outer namespace; component prefix is the inner
+namespace. Separator: `.`.
 
 ```
-class BOSADust(SEDModelComponent):                  ┐
-    T    = Uniform(20, 80, units="K")               │  class-level
-    beta = Uniform(1, 3,  units="")                 │  (defaults, overridable)
-                                                     ┘
-        ↓ auto-discovered by __init_subclass__
-declared_parameters() → list[ParamDeclaration]       ↓
-        ↓
-Parameters builder substitutes per-fit overrides     ↓
-e.g. dust={'type': 'bosa', 'T': Fixed(35)}           ↓
-        ↓
-flat dict {'dust_T': 35.0, 'dust_beta': 1.8, …}      ↓
-        ↓
-sampler (MAP / NUTS / VI / NSS)                      ↓
-        ↓
-posterior.summary() lists every param with units     ┘
+disc.sfh_dpl_alpha
+bulge.sfh_dpl_alpha
+agn.disc_log_lbol
 ```
 
-Class-level priors are *defaults*. They never mutate. Per-fit
-overrides flow through the `Parameters` builder, which is unchanged
-by this refactor. The same flow applies to bare-Protocol components;
-the difference is that `SEDModelComponent` does the bookkeeping
-automatically.
+The prefix CI guard (`tools/check_param_prefixes.py`) runs after
+stripping the population namespace. Components remain unchanged.
 
----
+### 6.2 State keys
 
-## PR scope
+Same convention for cross-population state:
 
-### What lands
+```
+disc.L_ir              published by disc dust
+bulge.lnu_age          published by bulge stellar
+agn.L_disc             published by agn disc — read by torus
+```
 
-1. New base class `src/tengri/components/sed_model_component.py` with
-   `__init_subclass__` registry and auto-implementation of
-   `declared_parameters()`, `precompute()`, `apply()`, `inputs()`,
-   `outputs()` from class-level attributes.
-2. WavePrecomp integration: framework dispatches `predict()` with
-   `filter_eff_waves` under `approx=WavePrecomp()`, lifts the result
-   into `<name>_phot_lnu_precomp` LUTs that
-   `observation.predict_via_precomp` sums.
-3. First-order Taylor opt-in (`WavePrecomp(order=1)`) using
-   `jax.grad(predict, argnums=2)`.
-4. Two concrete demonstrations:
-   - one analytic model (`ModifiedBlackbody`, dust IR)
-   - one library model (port one existing dust IR template — DL07 or similar)
-5. A 10-line BOSA-flavoured example test file showing the "adding a
-   new model" workflow.
-6. The walked-through notebook `notebooks/05_adding_a_model.py`.
-7. ADR-0011 documenting the design decision.
-8. CLAUDE.md update pointing to this architecture doc + the how-to.
+The `publishes`/`requires` validator stays population-local by
+default (a component cannot accidentally read another population's
+state). Cross-population reads require explicit opt-in via a
+fully-namespaced key in `reads`. This is a rare, advanced case (e.g.
+AGN dust heating of the host disc) and should stay deliberate.
 
-### What's deferred
+### 6.3 Summing
 
-- Porting existing stellar, radio, nebular, dust, AGN, X-ray
-  components. They keep working through the bare Protocol. Future
-  PRs port them one at a time as scope allows.
-- The IGM observer-frame transformation — the new contract assumes
-  rest-frame; IGM stays bare.
-- Stellar (richer state machine: SFH + SSP + nine derived publishes).
-  Stays bare.
+`Observation.predict` sums per-population contributions in **linear
+flux**, not magnitudes, before returning the prediction dict. For
+photometry: per-filter flux sum. For fiber spectroscopy: per-population
+spatial integral inside the fiber × per-population SED, then sum.
+Single-population fits skip the sum (degenerate one-element case).
 
----
+### 6.4 The convenience kwargs
 
-## File-by-file changes
+The common single-population case stays trivial:
 
-| Path                                                  | Change                                                |
-|-------------------------------------------------------|-------------------------------------------------------|
-| `src/tengri/components/sed_model_component.py`        | NEW — base class + registry                           |
-| `src/tengri/forward/orchestrator.py`                  | Minor edit — registry hook in resolver                |
-| `src/tengri/forward/component_factory.py`             | Edit — check registry before hard-coded branches      |
-| `src/tengri/observation/predict_via_precomp.py`       | Edit — consume per-component LUTs from new base       |
-| `src/tengri/components/dust/modified_blackbody.py`    | NEW — port of analytic dust IR backend                |
-| `src/tengri/components/dust/dl07.py`                  | NEW — port of one library backend                     |
-| `tests/components/dust/test_modified_blackbody.py`    | NEW                                                   |
-| `tests/components/dust/test_dl07.py`                  | NEW                                                   |
-| `tests/components/test_sed_model_component_contract.py` | NEW — registry + isinstance + WavePrecomp parity    |
-| `notebooks/05_adding_a_model.py`                      | NEW — jupytext walked example                         |
-| `docs/dev/forward-model-architecture.md`              | NEW — this doc                                        |
-| `docs/dev/sed-model-components.md`                    | NEW — how-to reference                                |
-| `docs/adr/0011-sed-model-component-base.md`           | NEW — decision record                                 |
-| `docs/dev/three_evaluation_modes.md`                  | EDIT — mark stale, point to this doc                  |
-| `docs/dev/photometry_path_unification.md`             | EDIT — mark superseded                                |
-| `CLAUDE.md` "Adding a new physics block"              | EDIT — promote `SEDModelComponent` to default         |
-| `docs/dev/where-things-live.md`                       | EDIT — entry for the new base                         |
-| `docs/dev/api_migration_v0.x.md`                      | EDIT — entry for the new authoring path               |
+```python
+forward = ForwardModel.build(
+    sed=SEDModel(components=[Stellar, Dust, Neb]),
+    spatial=SpatialModel(components=[Sersic]),
+    observation=...,
+)
+```
 
-### Files unchanged
+`build` wraps this into `populations=(Population("default", sed, spatial),)`
+under the hood. Multi-population fits use the explicit form:
 
-- `src/tengri/protocols/component.py` — the Protocol stays exactly as-is
-- `src/tengri/protocols/derived_bundle.py` — no changes
-- `src/tengri/components/radio/component.py` and other bare-Protocol
-  adapters — unchanged; remain the canonical references
+```python
+forward = ForwardModel.build(
+    populations=[
+        Population("agn",   sed=SEDModel(...), spatial=SpatialModel([PointSource])),
+        Population("bulge", sed=SEDModel(...), spatial=SpatialModel([Sersic(n=4)])),
+        Population("disc",  sed=SEDModel(...), spatial=SpatialModel([Exponential()])),
+    ],
+    observation=...,
+)
+```
 
----
+See [ADR-0012](../adr/0012-forward-model-population.md) for the full
+namespace-collision rationale.
 
-## Test strategy — physics tolerances, not engineering checks
+## 7. The forked stellar-atmospheres repo seam
 
-- **Parameter discovery**: class-level `Distribution` attributes are
-  auto-discovered as `ParamDeclaration`; tests verify the resolved
-  prior dict matches what the class declares.
-- **Registry**: `SEDModel.build(dust={'type': 'modified_blackbody'})`
-  picks up the new class without any factory edit; collision on the
-  same `name` raises a clear error at `__init_subclass__` time.
-- **`isinstance` checks**: bare-Protocol components and
-  `SEDModelComponent` subclasses both satisfy
-  `isinstance(c, SEDComponent)`.
-- **Exact vs WavePrecomp**: max relative error ≤ 0.5% on photometric
-  magnitudes across a representative model (modified BB + Calzetti +
-  stellar) at all redshifts.
-- **Gradients**: `jax.grad` through the new components is finite on a
-  representative parameter set; finite-difference vs autodiff agree
-  to 1% rel for analytic models.
-- **Cross-component contract**: `validate_pipeline()` accepts the
-  auto-built `inputs()`/`outputs()` from the new base; unit drift on
-  any declared key fails at construction with a clear error.
-- **Posterior parity**: MAP fit on a mock galaxy under both
-  `approx=None` and `approx=WavePrecomp()` recovers truth within
-  prior-width / 5, with the two posteriors agreeing to ~0.5%.
-- **No perf regression**: phase in `bench/scripts/benchmark_forward_model.py`;
-  warm-start cost unchanged vs current main.
+Long-term, individual-star atmosphere fitting (Teff, log g, [Fe/H],
+v sin i, v_rad, high-R spectroscopy) is planned as a separate
+repository that forks `tengri`'s core. The architecture above makes
+this a small lift:
 
----
+The forked repo adds one new class —
 
-## Doc consolidation order
+```python
+class StellarAtmosphereModel:                 # satisfies SubModel
+    name = "atmosphere"
 
-1. [`sed-model-components.md`](./sed-model-components.md) — the
-   how-to reference (DONE).
-2. This doc — the architecture-level reference.
-3. ADR-0011 — the decision record.
-4. `notebooks/05_adding_a_model.py` — the worked example.
-5. Update `CLAUDE.md` "Adding a new physics block" to point at this
-   doc as the default; flag the bare Protocol as the advanced
-   fallback.
-6. Mark stale: `docs/dev/three_evaluation_modes.md`,
-   `docs/dev/photometry_path_unification.md` — one-line pointers to
-   this doc; retain content for history.
-7. Update `docs/dev/where-things-live.md` — entry for the new base
-   and for this doc.
-8. Update `docs/dev/api_migration_v0.x.md` — entry for the new
-   authoring path.
+    def declared_parameters(self) -> list[ParamDeclaration]:
+        return [Teff, log_g, FeH, vsini, vrad, ...]
 
----
+    def run(self, state, params) -> ForwardState:
+        # spectrum at high R from a stellar-atmosphere grid (Korg, FERRE,
+        # The Cannon, or an NN emulator); write to state.sed_observed.
+        ...
+```
 
-## Open questions
+— and reuses `ForwardModel`, `Observation`, `Likelihood`, and all of
+`inference/` unchanged. No core changes in `tengri` are required for
+the fork to work. This is the cleanest expression of
+"tengri-as-a-platform" in the architecture.
 
-* **Registry collision behaviour.** If two subclasses declare
-  `name = "dust_ir"`, which wins? Recommendation: raise at
-  `__init_subclass__` time with a clear error pointing to both
-  modules.
-* **Filter `λ_eff` source.** The Phase 3d wave-precomp work added
-  filter effective wavelengths into the precomputed table. Confirm
-  the orchestrator can hand them to `SEDModelComponent.predict()`
-  via the same conduit, or whether a new pass-through is needed.
-* **First-order Taylor — opt-in granularity.** Proposal:
-  `approx=WavePrecomp(order=1)` as a single global flag. Alternative:
-  per-component flag (`taylor_order = 1` on the class) so some
-  components stay zeroth-order. The global flag is simpler; the
-  per-component flag is more flexible. Recommendation: ship global
-  flag; add per-component later if needed.
-* **`inputs = {}` ergonomics.** The empty-dict case is common (most
-  pure-emission models read no upstream quantities). Worth defaulting
-  `inputs = {}` and `outputs = {}` on the base class so subclasses
-  can omit them entirely when empty.
-* **`predict()` signature when there are no inputs.** Today's
-  contract says `def predict(self, p, sed_in, wave)` when
-  `inputs = {}`. If the base class signature is
-  `(self, p, sed_in, wave, **inputs)`, Python lets the subclass omit
-  the `**inputs` portion. Confirm under JIT (should work — JIT
-  traces the body, not the signature).
+## 8. JAX purity — what's static, what's traced
 
----
+A JAX-pure function isn't a function without associated data. It's a
+function whose output depends only on its **traced inputs**.
+
+| Kind | Lives where | When set | JAX-visible? |
+|---|---|---|---|
+| **Structural / static** | Python attribute on the object | Once, at `build` time | No — held as Python state |
+| **Traced values** | Function argument to `predict` | Every call | Yes — flows through `jit`/`grad`/`vmap` |
+
+The `ForwardModel` Python object can hold all the static structure
+it wants — the populations, components, observation config, parameter
+spec, filter curves, SSP grids. JAX never sees these because they are
+not arguments to the traced function. The pure thing is
+`predict(params) → dict`, where `params` is the JAX-traced dict.
+
+In code:
+
+```python
+# Build time — eager Python. Components declare; ForwardModel collects.
+forward = ForwardModel.build(...)
+# forward.spec.free_params → [...]
+
+# Inference time — pure JAX. Only `params` is traced.
+@jax.jit
+def loss(params):
+    prediction = forward.predict(params)
+    return -likelihood.log_prob(prediction)
+```
+
+The `forward` object is a Python closure variable. JIT compiles
+against it the first time, then reuses. This is exactly how
+`SEDModel` works today; nothing in the architecture changes the JAX
+story.
+
+## 9. Compilation discipline (graph size + closure)
+
+Two operational rules govern how `ForwardModel` is *structured* for
+JAX. Both exist to keep JIT compilation **bounded**. Compile-time
+blowup on multi-component fits has been the single largest pain point
+in past tengri work (see `docs/dev/notebook_orchestration_oom.md`);
+this section codifies the avoidance strategy.
+
+Neither rule restricts the user. End-to-end `jax.jit` of
+`loss(params)` remains supported and is in fact the *recommended* mode
+for tight inference loops. The rules govern how `ForwardModel`
+*exposes* its internal structure so the user can pick the JIT boundary
+that fits the workload.
+
+### 9.1 Per-population orchestration — populations are separate functions, JIT boundary is the caller's choice
+
+`ForwardModel.predict(params)` runs each population's sub-model
+through an independently-callable sub-function. Populations are
+summed at the observation layer in linear flux, with Python-level
+orchestration over the per-population calls — **not** via `vmap` or
+`lax.scan` over a fused, padded population axis.
+
+```python
+class ForwardModel:
+    def predict(self, params):
+        per_pop = {
+            pop.name: self._predict_population(pop, params)   # callable per pop
+            for pop in self.populations
+        }
+        return self.observation.predict_summed(per_pop, params)
+```
+
+This structure supports three usage modes naturally — the JIT
+boundary is set by the caller, not baked into the architecture:
+
+| Mode | Where `@jit` lives | When to use |
+|---|---|---|
+| **End-to-end JIT** (default for inference) | the outer `loss(params)` function | tight inference loops — HMC inner step, VI gradient eval. JAX traces *through* the per-population calls and fuses them into one graph. Compile cost amortized over many evaluations. |
+| **Per-population JIT, no outer fusion** | inside `_predict_population` | interactive use, exploratory `model.predict(params)` in a notebook. Each population is its own cache entry; tweaking one population only retraces that population. |
+| **No JIT at all** | nowhere | debugging — eager execution, full Python stack traces. |
+
+The key design property is that the per-population structure is the
+**default callable shape** even when end-to-end JIT fuses through it.
+A future inference backend that wants to control compile granularity
+(say, MCMC with per-population block-Gibbs steps) gets per-population
+sub-functions for free; it doesn't need a separate API.
+
+What we explicitly do **not** do:
+
+- **`vmap` over populations.** Populations have different component
+  lists (AGN: torus + corona; bulge: stellar + dust; disc: stellar +
+  dust + nebular). Their pipelines have different shapes. `vmap`
+  would require padding to a union schema, defeating the point of
+  structurally distinct populations.
+- **`lax.scan` over populations** for the same reason.
+- **Pretend there's only one population structurally.** The
+  per-population code path exists even for single-population fits
+  (it's a one-element loop). The convenience kwargs
+  (`sed=...`, `spatial=...`) build a one-population tuple
+  internally; the loop is still the loop.
+
+### 9.2 Minimize closure — data files are arguments, not free variables
+
+A pure JAX function should take its inputs as **explicit arguments**.
+Data files (SSP grids, filter convolution matrices, dust IR
+templates, emission-line tables, K-correction tables) MUST NOT be
+captured into a `@jit`'d function via free-variable closure. They
+live in:
+
+1. **Component-owned frozen state** — produced by
+   `precompute(...)`, returned as a `SEDComponentState` pytree, held
+   on the component as a registered-dataclass field.
+2. **The traced `params` dict** — for anything that varies per
+   evaluation.
+
+The pattern *to avoid*:
+
+```python
+# DO NOT do this — bakes ssp_data into the closure.
+ssp_data = load_h5("ssp.h5")
+
+@jax.jit
+def predict(params):
+    return run_chain(params, ssp_data)   # ssp_data is a captured free variable
+```
+
+The pattern *to follow*:
+
+```python
+@dataclass(frozen=True)
+class StellarSEDComponent:
+    state: StellarSEDComponentState   # carries SSP grids as a pytree
+
+    def apply(self, state, params):
+        return run_chain(params, self.state)   # explicit, no free vars
+```
+
+Why this matters:
+
+- **JIT cache stability.** A function with a captured global is
+  invalidated when *any* Python module reloads. An
+  explicit-argument function with a static-pytree input is stable
+  across reloads.
+- **Memory.** Closed-over arrays pin themselves into the JIT cache
+  indefinitely; explicit arguments respect normal Python lifetimes.
+- **Persistent JIT cache** (`docs/dev/jax_compilation_cache.md`)
+  works correctly. The persistent cache hashes the traced function;
+  if the function captures a global numpy array, the hash includes
+  Python identity rather than array content, leading to spurious
+  cache misses on reload.
+- **Readability.** A function signature that names what it depends
+  on is the difference between an astronomer reading the
+  architecture and an astronomer reverse-engineering a closure
+  graph.
+
+The rule scales: **functions in `tengri.forward.*` should have short
+closures**. If a helper function captures more than ~2 free
+variables, lift them to explicit arguments. Free-variable count is a
+useful proxy for "how much hidden state is this function carrying?".
+
+### 9.3 Implications for the implementation plan
+
+These two rules constrain the implementation, not just the
+abstractions:
+
+- `ForwardModel.predict` composes Python-level over populations,
+  exposing each as an independently-callable function. Multi-population
+  fusion (when the caller end-to-end-JITs) happens *through* this
+  structure, not by collapsing it.
+- Every component-owned data file flows through `precompute(...)`
+  → `SEDComponentState`. No module-level globals consumed inside a
+  `@jit`'d function.
+- The implementation plan includes two smoke tests:
+  - **JIT cache count.** After 3-population per-population-JIT use,
+    cache entries = `N_populations`. After end-to-end JIT on the same
+    model, cache entries = 1.
+  - **Closure size.** A static-analysis check on `tengri.forward.*`
+    that flags functions with > 2 free variables consumed inside a
+    JAX transform.
+
+## 10. Spatial model extension path (forward-looking)
+
+Spatial in this architecture is what unlocks **joint spec-phot done
+physically**, the simplest case being a Sérsic plus a fiber aperture
+(§2). IFU is the natural generalisation, not the primary use case.
+
+When the resolved / IFU case lands (post-v1), the new pieces are:
+
+- `ResolvedSEDModel` — a new sub-model class that runs SED *after*
+  Spatial, so SED components can read spatial keys. Different from
+  `SpatialSEDModel`.
+- `SpaxelImagingObservation` / `IFUSpectroscopyObservation` — new
+  ObservationModel adapters that consume the per-age / per-wave
+  spatial cubes.
+- No core change to `ForwardModel`, `Population`, `SubModel`
+  Protocol, or the component bases.
+
+## 11. What changes vs the current codebase
+
+Not a rewrite — a relayering. The bottom three layers (components,
+observation, likelihood) already exist as Protocols. The work is at
+the top:
+
+| Layer | Today | Target |
+|---|---|---|
+| Outer shell | `SEDModel` (~2957 lines, mixes shell + chain) | `ForwardModel` (composer) + `SEDModel` (sub-model, slimmer) |
+| Sub-model Protocol | Implicit | Explicit `SubModel` Protocol |
+| Spatial | Sketch in `spatial_model_extension.md` | Implemented as a peer of `SEDModel` |
+| Multi-population | Single | `populations: tuple[Population, ...]` |
+| Parameter namespace | Flat `<prefix>_<param>` | `<population>.<prefix>_<param>` |
+| Inference entry point | `SEDModel.predict` (today) → `Fitter` helpers | `ForwardModel.predict` (only) |
+
+Implementation order, breaking changes, and migration story are out
+of scope for this design doc — they will be captured in an
+implementation plan after this design is approved.
+
+## 12. Open dependencies
+
+Before this document is treated as the canonical architecture:
+
+- **`SEDModelComponent` refactor lands** (in-flight, separate PR by a
+  parallel agent). Section 3.1 may need to be reconciled with the
+  final signature. The Protocol layer (`SEDComponent`) is stable
+  either way.
+- **ADR-0012 ratified** — the multi-population namespace decision.
+- **Naming sanity check** — `Population` is a generic word; verify
+  it doesn't collide with existing astrophysics jargon in the
+  codebase (e.g. stellar populations as a synonym for SSPs).
+  `Population` vs `Component` vs `Region` vs `Source` is worth a
+  5-minute check before code lands.
 
 ## References
 
-* Zacharegkas et al. 2025 — *Differentiable SPS for differentiable
-  cosmology* ([arXiv:2506.19919](https://arxiv.org/abs/2506.19919)).
-  The effective-wavelength photometry approximation is in §3 +
-  Appendix A.
-* `src/tengri/protocols/component.py` — the Protocol and frozen-state types
-* `src/tengri/components/radio/component.py` — canonical bare-Protocol
-  reference
-* `src/tengri/components/sed_model_component.py` — new base class
-  (landing in this PR)
-* `src/tengri/forward/orchestrator.py` — `validate_pipeline` + pipeline execution
-* `docs/dev/sed-model-components.md` — how-to authoring guide
-* `docs/adr/0009-typed-pipeline-contract.md` — cross-component contract rationale
-* `docs/dev/api_migration_v0.x.md` — nested-dict grammar and recipe system
+- [ADR-0009](../adr/0009-typed-pipeline-contract.md) — Typed
+  publish/require contract for cross-component data.
+- [ADR-0010](../adr/0010-inference-backend-protocol.md) — Inference
+  backend Protocol.
+- [ADR-0012](../adr/0012-forward-model-population.md) —
+  Forward-model populations and parameter namespacing.
+- `docs/dev/NAMING_CONTRACT.md` — Free-parameter prefix discipline.
+- `docs/dev/where-things-live.md` — Directory map.
