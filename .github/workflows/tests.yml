@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+  schedule:
+    # Nightly slow-tier run at 04:00 UTC (mid-afternoon Tokyo).
+    - cron: "0 4 * * *"
+  workflow_dispatch:
 
 # Cancel older runs of this workflow on the same ref when a new push lands.
 # Saves compute when commits land back-to-back.
@@ -63,7 +68,7 @@ jobs:
       # them — they were never run on CI before because old CI was
       # scoped to tests/unit/ only. Follow-up issues track each.
       - run: |
-          pytest tests/components tests/contract tests/physics tests/regression tests/unit -q \
+          pytest tests/components tests/contract tests/physics tests/regression -q \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
@@ -72,3 +77,25 @@ jobs:
             --deselect tests/components/sps/test_dsps_native_csp.py::test_grad_wrt_lgmet \
             --deselect tests/regression/paper/test_dust_attenuation_laws.py::TestLeitherer02::test_reference_values
         timeout-minutes: 15
+
+  # Sampler-heavy inference tests (NUTS, Pathfinder, VI, MCLMC, etc.).
+  # Run on:
+  #   - nightly schedule
+  #   - manual workflow_dispatch
+  #   - PRs labeled `run-slow-tests`
+  # Skip on regular push/PR to keep fast feedback under 15 min.
+  slow:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-slow-tests'))
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pytest tests/inference tests/integration -q --ignore=tests/crossval
+        timeout-minutes: 40

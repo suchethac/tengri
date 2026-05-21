@@ -1,1 +1,0 @@
-"""X-ray component tests."""
