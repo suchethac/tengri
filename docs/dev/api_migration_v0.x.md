@@ -145,27 +145,31 @@ internally, so registry-driven fits do **not** emit warnings — only
 direct user calls under the deprecated name do. Pinned by
 `tests/unit/test_sfh_deprecations.py`.
 
-## Phase 4 — AGN / dust sub-namespaces
+## Phase 4 — AGN / dust sub-namespaces (REMOVED)
 
-Additive re-export modules grouping the public surface by physics. The
-parent `__init__.py` files are unchanged so existing imports keep
-working. The new modules are the recommended canonical paths going
-forward.
+These seven additive re-export modules were introduced as
+physics-grouped canonical paths but never adopted by internal callers.
+Grep showed zero production references; only this doc cited them. They
+were removed in the file-structure cleanup pass to reduce the public
+surface area without losing any symbol — every name they re-exported is
+still available from the parent `tengri.components.agn` or
+`tengri.components.dust` namespace.
 
-| New module | Re-exported symbols |
-|---|---|
-| `tengri.components.agn.disc_api` | `powerlaw_disc`, `multicolor_disc`, `kubota_done_disc`, `adaf_disc`, `compute_l2500`, `beloborodov_gamma_hot`, `qsogen`, `compute_qsogen_sed` |
-| `tengri.components.agn.torus_api` | `simple_torus`, `two_temperature_torus`, `nenkova_torus`, `skirtor_analytic`, `create_skirtor_from_grid`, `cat3d_wind_analytic`, `create_cat3d_wind_from_grid`, `silva04_analytic`, `create_silva04_from_grid` |
-| `tengri.components.agn.lines` | `compute_nlr_sed`, `compute_nlr_sed_richardson2014`, `compute_blr_sed` |
-| `tengri.components.agn.compose` | `unified_agn`, `unified_nlr_blr`, `adaf_agn`, `kubota_done_full_agn` |
-| `tengri.components.dust.attenuation_models` | All attenuation laws (`calzetti`, `cardelli`, MW/LMC/SMC variants, `prevot_smc`, `li08`, `vw07_*`, `wg00_*`), composite models (`two_component_dust`, `single_component_dust`, fast variants), `register_dust_law`, `resolve_dust_law` |
-| `tengri.components.dust.emission_models` | `modified_blackbody`, `casey2012`, `dale2014`, `draine_li2007`, `draine_li2014`, `astrodust`, `bosa`, `themis`, all `load_*_templates` / `register_*_tabulated` / `create_*_from_grid` variants, `energy_balance_split`, `compute_absorbed_luminosity`, `compute_absorbed_luminosity_from_tau` |
-| `tengri.components.dust.pah` | `drude_profile`, `decompose_pah`, `compute_pah_template`, `N_PAH_FEATURES`, `SMITH2007_PAH_FEATURES` |
+Removed modules:
+`tengri.components.agn.{disc_api, torus_api, lines, compose}`,
+`tengri.components.dust.{attenuation_models, emission_models, pah}`.
 
-The `_api` suffix on `disc_api`/`torus_api` and the `_models` suffix on
-`attenuation_models`/`emission_models` is because the un-suffixed names
-already exist as private implementation modules. We chose the suffix
-over a directory rearrangement to keep the diff additive.
+Use the parent package instead:
+
+```python
+# old (removed)
+from tengri.components.agn.disc_api import powerlaw_disc
+from tengri.components.dust.pah import drude_profile
+
+# new (canonical)
+from tengri.components.agn import powerlaw_disc
+from tengri.components.dust import drude_profile
+```
 
 ## Phase 5 — Free-parameter prefix guard
 

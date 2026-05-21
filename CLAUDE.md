@@ -294,10 +294,15 @@ context *before* entering JAX transforms. The context's
 
 ## Testing
 
-Every code change MUST include tests. Test organization:
-- `tests/unit/` — fast, no SSP data needed
+**Read `tests/TESTING.md` before writing any test.** It defines the physics-first taxonomy (conservation / bounds / limit / regression_paper / regression_bug / gradient / crossval / contract) and the anti-patterns reviewers reject.
+
+CI guard: `python tools/check_test_markers.py` — every test under `tests/physics/`, `tests/regression/`, `tests/components/`, `tests/contract/` must declare a taxonomy marker.
+
+Test organization:
+- `tests/unit/` — fast, no SSP data needed (legacy tree; rehoming in progress)
 - `tests/integration/` — needs `data/ssp_*.h5`, skips if missing
 - `tests/crossval/` — against bagpipes/FSPS, excluded from default runs
+- `tests/physics/`, `tests/regression/`, `tests/contract/` — new structured trees, marker-enforced
 
 Bug fix rule: every fix MUST cite the original paper equation and include a regression test.
 

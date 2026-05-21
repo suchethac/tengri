@@ -236,10 +236,9 @@ sys.modules["tengri.xray"] = xray
 # Observation layer shortcut (already exists in imports above)
 # observation module is imported separately below
 
-# Filter discovery helpers
-from tengri import filters as _filters_module
+# Filter discovery helpers (canonical path: tengri.observation.filters)
+from tengri.observation import filters
 
-filters = _filters_module
 sys.modules["tengri.filters"] = filters
 
 # I/O layer

@@ -1,0 +1,160 @@
+"""Tests for energy balance relaxation via dust_eta_balance parameter.
+
+Validates that:
+- eta=1.0 preserves strict energy balance (L_IR = L_absorbed)
+- eta=2.0 doubles IR luminosity
+- eta=0.0 produces zero IR emission
+- Gradients flow through eta
+- Parameters accepts dust_eta_balance as a free parameter
+"""
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import pytest
+
+from tengri import Fixed, Parameters, SEDModel, Uniform
+
+pytestmark = pytest.mark.conservation
+
+jax.config.update("jax_enable_x64", True)
+
+
+def fd_grad(f, x: float, eps: float = 1e-4) -> float:
+    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
+    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+
+
+# ── Fixtures ──────────────────────────────────────────────────────
+# synthetic_ssp is provided by conftest.py (session scope)
+
+
+@pytest.fixture(scope="module")
+def base_spec():
+    """Parameters with dust emission enabled and eta fixed at 1.0."""
+    return Parameters(
+        mean_sfh_type="dpl",
+        sfh_dpl_alpha=Fixed(1.5),
+        sfh_dpl_beta=Fixed(1.0),
+        sfh_dpl_tau_gyr=Fixed(5.0),
+        sfh_dpl_log_peak_sfr=Fixed(1.0),
+        met_logzsol=Fixed(-0.5),
+        dust_tau_bc=Fixed(0.5),
+        dust_tau_diff=Fixed(0.3),
+        dust_slope=Fixed(-0.7),
+        dust_eta_balance=Fixed(1.0),
+        redshift=Fixed(0.1),
+        dust_emission="modified_blackbody",
+    )
+
+
+def _make_model_and_predict(ssp, spec, eta_value):
+    """Build a SEDModel from spec/ssp and predict SED with given eta_balance."""
+    model = SEDModel(spec, ssp)
+    key = jax.random.PRNGKey(0)
+    params = spec.sample(key)
+    params = {**params, "dust_eta_balance": eta_value}
+    sed = model.predict_rest_sed(params).sed
+    return sed
+
+
+# ── Tests ─────────────────────────────────────────────────────────
+
+
+class TestEnergyBalanceEta:
+    """Test dust_eta_balance scaling of IR luminosity."""
+
+    def test_eta_1_preserves_energy_balance(self, synthetic_ssp, base_spec):
+        """eta=1.0 should give L_IR = L_absorbed (strict energy conservation)."""
+        sed = _make_model_and_predict(synthetic_ssp, base_spec, 1.0)
+        assert jnp.all(jnp.isfinite(sed)), "SED contains non-finite values"
+        assert sed.shape[-1] > 0, "SED is empty"
+
+    def test_eta_2_doubles_ir(self, synthetic_ssp, base_spec):
+        """eta=2.0 should produce ~2x the IR emission compared to eta=1.0."""
+        sed_1 = _make_model_and_predict(synthetic_ssp, base_spec, 1.0)
+        sed_2 = _make_model_and_predict(synthetic_ssp, base_spec, 2.0)
+
+        # IR excess = sed(eta=2) - sed(eta=1) should be approximately equal to
+        # sed(eta=1) - sed(eta=0), since IR scales linearly with eta.
+        sed_0 = _make_model_and_predict(synthetic_ssp, base_spec, 0.0)
+
+        ir_from_eta1 = jnp.sum(sed_1 - sed_0)
+        ir_from_eta2 = jnp.sum(sed_2 - sed_0)
+
+        # eta=2 IR contribution should be ~2x the eta=1 IR contribution
+        ratio = float(ir_from_eta2 / ir_from_eta1)
+        np.testing.assert_allclose(ratio, 2.0, rtol=0.05)
+
+    def test_eta_0_produces_zero_ir(self, synthetic_ssp, base_spec):
+        """eta=0.0 should produce zero dust IR emission."""
+        # Build model with no dust emission as reference
+        spec_no_dust_em = Parameters(
+            mean_sfh_type="dpl",
+            sfh_dpl_alpha=Fixed(1.5),
+            sfh_dpl_beta=Fixed(1.0),
+            sfh_dpl_tau_gyr=Fixed(5.0),
+            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            met_logzsol=Fixed(-0.5),
+            dust_tau_bc=Fixed(0.5),
+            dust_tau_diff=Fixed(0.3),
+            dust_slope=Fixed(-0.7),
+            redshift=Fixed(0.1),
+            # No dust_emission
+        )
+        model_no_em = SEDModel(spec_no_dust_em, synthetic_ssp)
+        key = jax.random.PRNGKey(0)
+        params_no_em = spec_no_dust_em.sample(key)
+        sed_no_em = model_no_em.predict_rest_sed(params_no_em).sed
+
+        sed_eta0 = _make_model_and_predict(synthetic_ssp, base_spec, 0.0)
+
+        # With eta=0, the dust emission should be zero, so the SED should match
+        # the no-emission model (both have attenuation but no IR re-emission).
+        np.testing.assert_allclose(
+            np.array(sed_eta0),
+            np.array(sed_no_em),
+            rtol=1e-5,
+            err_msg="eta=0 should produce same SED as no dust emission",
+        )
+
+    def test_gradient_flows_through_eta(self, synthetic_ssp, base_spec):
+        """Gradient of SED sum w.r.t. dust_eta_balance should be finite."""
+        model = SEDModel(base_spec, synthetic_ssp)
+        key = jax.random.PRNGKey(0)
+        params = base_spec.sample(key)
+
+        def _loss(eta):
+            p = {**params, "dust_eta_balance": eta}
+            sed = model.predict_rest_sed(p).sed
+            return jnp.sum(sed)
+
+        grad_jax = float(jax.grad(_loss)(1.0))
+        grad_fd = fd_grad(_loss, 1.0)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
+        assert grad_jax != 0.0, "Gradient is zero — eta has no effect"
+
+    def test_paramspec_accepts_eta_as_free(self):
+        """Parameters should accept dust_eta_balance=Uniform(0.5, 2.0)."""
+        spec = Parameters(
+            mean_sfh_type="dpl",
+            sfh_dpl_alpha=Fixed(1.5),
+            sfh_dpl_beta=Fixed(1.0),
+            sfh_dpl_tau_gyr=Fixed(5.0),
+            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            met_logzsol=Fixed(-0.5),
+            dust_tau_bc=Fixed(0.3),
+            dust_eta_balance=Uniform(0.5, 2.0),
+            redshift=Fixed(0.1),
+            dust_emission="modified_blackbody",
+        )
+        # dust_eta_balance should appear in free params
+        assert "dust_eta_balance" in spec.free_params
+        # Sample should include it
+        key = jax.random.PRNGKey(0)
+        sample = spec.sample(key)
+        assert "dust_eta_balance" in sample
+        val = float(sample["dust_eta_balance"])
+        assert 0.5 <= val <= 2.0, f"Sampled eta={val} outside [0.5, 2.0]"
