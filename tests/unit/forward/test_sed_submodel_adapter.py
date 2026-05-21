@@ -19,7 +19,7 @@ def sed_model_minimal(synthetic_ssp, simple_observation):
         observation=simple_observation,
         sfh={"type": "dpl", "*": FIXED},
         dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
-        neb={"type": "off"},
+        neb={"type": "none"},
     )
 
 
