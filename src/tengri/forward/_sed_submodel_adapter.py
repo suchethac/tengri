@@ -45,7 +45,7 @@ class _LegacySEDSubModel:
     introspect free parameters uniformly across populations.
     """
 
-    sed_model: "SEDModel"
+    sed_model: SEDModel
     name: str = "sed"
 
     def declared_parameters(self) -> list[ParamDeclaration]:
