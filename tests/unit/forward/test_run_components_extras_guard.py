@@ -43,6 +43,7 @@ class _NoopComponent:
     def apply(
         self, state: ForwardState, params: Any, ssp_data: Any = None, template_data: Any = None
     ) -> ForwardState:
+        del ssp_data, template_data
         return state
 
 
@@ -61,6 +62,7 @@ class _LeakyComponent:
     def apply(
         self, state: ForwardState, params: Any, ssp_data: Any = None, template_data: Any = None
     ) -> ForwardState:
+        del ssp_data, template_data
         # Force a dict round-trip through the *opt-in* spillover path.
         # In production code this is not how components should write —
         # but we use it here to manufacture the failure mode.

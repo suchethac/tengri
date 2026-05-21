@@ -212,6 +212,11 @@ class AGNSEDComponent:
             ``None`` it is initialised to zeros of the same shape.
         params : mapping
             Receives ``agn_*`` keys plus the bare ``redshift``.
+        template_data : dict | None
+            Nested dict with component namespaces ("nebular", "agn", etc)
+            carrying template grids/weights for JIT threading. When present,
+            SKIRTOR templates are read from ``template_data["agn"]["skirtor"]``
+            as a JIT runtime input instead of module-level lazy-loaded cache.
 
         Returns
         -------
@@ -228,27 +233,38 @@ class AGNSEDComponent:
 
         # Resolve the AGN model from the registry. resolve_agn_model is
         # a factory-time lookup but the returned callable is pure JAX
-        # so it folds into a JIT trace cleanly.
+        # so it folds into a JIT trace cleanly. If template_data is
+        # provided, extract AGN SKIRTOR template and thread it.
         agn_fn = resolve_agn_model(self.config.model)
-        L_agn = agn_fn(
-            wave,
-            agn_log_lbol=agn_log_lbol,
-            agn_frac=jnp.asarray(params.get("agn_frac", 1.0)),
-            agn_alpha=jnp.asarray(params.get("agn_alpha", -1.0)),
-            agn_log_mbh=jnp.asarray(params.get("agn_log_mbh", 8.0)),
-            agn_log_ledd=jnp.asarray(params.get("agn_log_ledd", -1.0)),
-            agn_a_spin=jnp.asarray(params.get("agn_a_spin", 0.0)),
-            agn_torus_frac=jnp.asarray(params.get("agn_torus_frac", 0.5)),
-            agn_T_torus=jnp.asarray(params.get("agn_T_torus", 1000.0)),
-            agn_tau_torus=jnp.asarray(params.get("agn_tau_torus", 3.0)),
-            agn_T_hot=jnp.asarray(params.get("agn_T_hot", 1500.0)),
-            agn_T_warm=jnp.asarray(params.get("agn_T_warm", 300.0)),
-            agn_frac_hot=jnp.asarray(params.get("agn_frac_hot", 0.5)),
-            agn_cos_inc=jnp.asarray(params.get("agn_cos_inc", 0.5)),
-            agn_polar_ebv=jnp.asarray(params.get("agn_polar_ebv", 0.0)),
-            agn_polar_oa=jnp.asarray(params.get("agn_polar_oa", 40.0)),
-            agn_ebv_disc=jnp.asarray(params.get("agn_ebv_disc", 0.0)),
-        )
+
+        # Phase 4-D: thread SKIRTOR template as JIT runtime input
+        skirtor_template = None
+        if template_data is not None and isinstance(template_data, dict):
+            agn_data = template_data.get("agn")
+            if agn_data is not None and isinstance(agn_data, dict):
+                skirtor_template = agn_data.get("skirtor")
+        # Build kwargs, adding _template for SKIRTOR threading if available
+        agn_kwargs = {
+            "agn_frac": jnp.asarray(params.get("agn_frac", 1.0)),
+            "agn_alpha": jnp.asarray(params.get("agn_alpha", -1.0)),
+            "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", 8.0)),
+            "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", -1.0)),
+            "agn_a_spin": jnp.asarray(params.get("agn_a_spin", 0.0)),
+            "agn_torus_frac": jnp.asarray(params.get("agn_torus_frac", 0.5)),
+            "agn_T_torus": jnp.asarray(params.get("agn_T_torus", 1000.0)),
+            "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", 3.0)),
+            "agn_T_hot": jnp.asarray(params.get("agn_T_hot", 1500.0)),
+            "agn_T_warm": jnp.asarray(params.get("agn_T_warm", 300.0)),
+            "agn_frac_hot": jnp.asarray(params.get("agn_frac_hot", 0.5)),
+            "agn_cos_inc": jnp.asarray(params.get("agn_cos_inc", 0.5)),
+            "agn_polar_ebv": jnp.asarray(params.get("agn_polar_ebv", 0.0)),
+            "agn_polar_oa": jnp.asarray(params.get("agn_polar_oa", 40.0)),
+            "agn_ebv_disc": jnp.asarray(params.get("agn_ebv_disc", 0.0)),
+        }
+        if skirtor_template is not None:
+            agn_kwargs["_template"] = skirtor_template
+
+        L_agn = agn_fn(wave, agn_log_lbol=agn_log_lbol, **agn_kwargs)
 
         # Phase 3c-3d-agn: filter-integrate L_agn through the cached filter
         # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp

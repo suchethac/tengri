@@ -3963,7 +3963,7 @@ class SEDModel:
         return jit_fn
 
     def _template_data_for_jit(self):
-        """Collect template grids/weights for JIT threading (nebular + dust IR).
+        """Collect template grids/weights for JIT threading (nebular + dust IR + AGN).
 
         Walks the cached component chain (built by predict_state warmup)
         to collect template arrays that should be threaded as JIT runtime
@@ -3977,17 +3977,21 @@ class SEDModel:
         DustEmissionSEDComponent's cached state (PAHspec, Astrodust, etc.),
         indexed by template type.
 
+        **AGN templates** (Phase 4-D-C): extracted from the
+        AGNSEDComponent's cached state (SKIRTOR templates).
+
         Returns
         -------
         dict[str, Any] | None
-            Dict with ``"nebular"`` and/or ``"dust_ir"`` keys, each
-            carrying the threaded template data for that subsystem.
-            Returns ``None`` if no components need threading.
+            Nested dict with namespace keys (``"nebular"``, ``"dust_ir"``,
+            ``"agn"``) carrying the threaded template data for that
+            subsystem. Returns ``None`` if no components need threading.
         """
         cached = getattr(self, "_cached_component_chain", None)
         if cached is None:
             return None
 
+        from tengri.components.agn.component import AGNSEDComponent
         from tengri.components.dust.emission_component import DustEmissionSEDComponent
         from tengri.components.nebular.component import NebularSEDComponent
 
@@ -4049,6 +4053,17 @@ class SEDModel:
                         "astrodust_norm_per_lgU": dust_state.astrodust_norm_per_lgU,
                         "astrodust_lnu_spinning": dust_state.astrodust_lnu_spinning,
                     }
+            break
+
+        # ── AGN template threading (Phase 4-D-C) ──
+        for component in cached:
+            if not isinstance(component, AGNSEDComponent):
+                continue
+            agn_templates = {}
+            if component._state is not None and component._state.skirtor_templates is not None:
+                agn_templates["skirtor"] = component._state.skirtor_templates
+            if agn_templates:
+                result["agn"] = agn_templates
             break
 
         return result if result else None
