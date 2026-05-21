@@ -167,12 +167,8 @@ def test_wave_precomp_n_z_changes_free_z_interpolation(free_z_spec, ssp, obs):
     ignored both would be bit-identical — pinning that ``n_z`` actually
     flows through to the interpolation grid.
     """
-    coarse = _silent_build(
-        free_z_spec, ssp, obs, approx=WavePrecomp(n_z=10, z_min=0.5, z_max=1.5)
-    )
-    fine = _silent_build(
-        free_z_spec, ssp, obs, approx=WavePrecomp(n_z=200, z_min=0.5, z_max=1.5)
-    )
+    coarse = _silent_build(free_z_spec, ssp, obs, approx=WavePrecomp(n_z=10, z_min=0.5, z_max=1.5))
+    fine = _silent_build(free_z_spec, ssp, obs, approx=WavePrecomp(n_z=200, z_min=0.5, z_max=1.5))
 
     # Off-grid redshift — coarse ztable resolves it through wider interpolation.
     params = {"redshift": jnp.asarray(0.73)}
@@ -196,12 +192,8 @@ def test_wave_precomp_z_bounds_clip_the_grid(free_z_spec, ssp, obs):
     into the z_grid array — we just confirm the model evaluates finitely
     inside and outside, and that bounds change the output.
     """
-    narrow = _silent_build(
-        free_z_spec, ssp, obs, approx=WavePrecomp(n_z=20, z_min=0.8, z_max=1.2)
-    )
-    wide = _silent_build(
-        free_z_spec, ssp, obs, approx=WavePrecomp(n_z=20, z_min=0.5, z_max=1.5)
-    )
+    narrow = _silent_build(free_z_spec, ssp, obs, approx=WavePrecomp(n_z=20, z_min=0.8, z_max=1.2))
+    wide = _silent_build(free_z_spec, ssp, obs, approx=WavePrecomp(n_z=20, z_min=0.5, z_max=1.5))
 
     # Inside both grids — outputs are close.
     params_inside = {"redshift": jnp.asarray(1.0)}
