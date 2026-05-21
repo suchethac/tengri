@@ -548,3 +548,28 @@ class SEDComponent(Protocol):
             New state. MUST NOT mutate the input.
         """
         ...
+
+    # ``citations`` is OPTIONAL — not part of the runtime_checkable
+    # surface.
+    # :func:`tengri.citations.collect._citations_from_components` reads
+    # it via ``getattr(c, "citations", None)``, so components that
+    # haven't been annotated still satisfy
+    # ``isinstance(c, SEDComponent)``. Concrete components that DO want
+    # to declare citations add a method with the signature::
+    #
+    #     def citations(self) -> tuple[str, ...]:
+    #         return ("calzetti2000", "draine_li2007")
+    #
+    # Returns the bibliography keys (strings from
+    # :data:`tengri.citations.registry.REGISTRY`) for all papers this
+    # component implements, solves for, or ports from. Components without
+    # the method contribute no per-component citations; the static
+    # association tables in :mod:`tengri.citations.associations` still
+    # apply.
+    #
+    # Required-method form was tried in 6598355e but ``@runtime_checkable``
+    # does NOT honour method bodies as defaults for non-inheriting
+    # classes — the orchestrator's structural ``isinstance`` check would
+    # then reject every concrete component that didn't override
+    # ``citations()``. Mirroring the ``outputs``/``inputs`` pattern
+    # (above) keeps the contract optional and structural.
