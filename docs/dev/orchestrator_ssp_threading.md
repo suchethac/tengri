@@ -190,6 +190,59 @@ and can be ``jax.jit``'d.
 Until then, catalog inference doesn't see the LUT speedup. Direct callers
 of ``predict_photometry`` and ``predict_observables`` do.
 
+## Phase 4-C landed (2026-05-21): nebular backend threading
+
+Extended Phase 4-B's SSP-threading pattern to the nebular backends that
+close over large arrays at ``apply()`` time:
+
+- ``CueBackend.weights`` (~10–20 MB of NN layer weights)
+- ``CloudyGridBackend.grid`` (~5–30 MB interpolation tables)
+
+These were the two currently selectable via ``NebularConfig.backend``.
+``SEDModel._template_data_for_jit()`` duck-types ``.weights`` / ``.grid``
+on the nebular backend object, so future-wired backends with the same
+attribute name participate automatically.
+
+## When does a closure need threading? The rule
+
+A `self.X` array bakes into HLO as a Constant op **only if it's read
+inside `apply()` under JIT**. Threading is the workaround. The rule:
+
+| Data lives on | Read at `apply()` time? | Threading needed? |
+|---|---|---|
+| Backend ``self.weights`` / ``self.grid`` (closure) | yes | **yes** |
+| Pre-resolved into ``state.derived`` at ``precompute()`` time | no (only small derived) | no |
+| Stored as component ``_state`` pytree leaf (frozen dataclass) | yes, but state IS a pytree input | no |
+| Small (< 1 MB) | n/a — HLO Constant cost negligible | no |
+
+This explains why **dust IR templates (DL07/DL14/Casey/etc.) and AGN
+SKIRTOR/GRAHSP templates DON'T need threading**: they're preintegrated
+at ``precompute()`` time into small (n_filters,)-shaped or
+(n_qpah × n_umin × n_filters)-shaped arrays that live on
+``state.derived`` or component ``_state``. The raw 50–300 MB template
+HDF5 grids never enter the forward pass — they're "baked once at build
+time" into the smaller per-filter products that DO get threaded
+through `state`.
+
+## Known unwired backends (future work — tracked in [#138](https://github.com/suchethac/tengri/issues/138))
+
+The following backend files exist but aren't currently dispatched by
+``NebularSEDComponent.apply()`` — they're standalone modules, fallback
+wrappers, or AGN-NLR backends without a forward-path consumer:
+
+- ``components/nebular/cloudy_cb19.py:CB19Backend`` — wrapped by
+  ``NebularContinuumFallback``; user-facing via wrapper, not a
+  ``config.backend`` value.
+- ``components/nebular/mappings_photo.py:MappingsPhotoBackend`` and
+  ``MappingsAGNBackend`` — exported but no forward consumer.
+- ``components/nebular/agn_nebular.py:SynthesizerNLRBackend`` and
+  ``FeltreNLRBackend`` — exported but no forward consumer.
+
+When these are wired into ``NebularSEDComponent.apply()`` dispatch (or
+into an analogous AGN-nebular component), the ``_template_data_for_jit``
+duck-typing already covers them — no further code change required here.
+File the wiring work as a follow-up issue.
+
 ## What this blocks
 
 Until the orchestrator threads SSP as a traced kwarg:
