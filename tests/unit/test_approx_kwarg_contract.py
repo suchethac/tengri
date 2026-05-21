@@ -152,9 +152,13 @@ def test_wave_precomp_routes_predict_photometry_through_lut(fixed_z_spec, ssp, o
     full = {**model.spec.get_fixed_values(), **params}
     via_obs = model.observation.predict_via_precomp(state, full)["phot_fnu"]
 
-    assert jnp.array_equal(via_method, via_obs), (
-        "predict_photometry must equal observation.predict_via_precomp().phot_fnu "
-        "when built with approx=WavePrecomp() — bit-identical, not just close."
+    # predict_photometry now goes through predict_observables_jit (which JITs
+    # the projection); JIT op-reordering can introduce sub-machine-epsilon
+    # differences from the non-JIT predict_via_precomp call. Floating-point
+    # close is the correct guarantee.
+    assert jnp.allclose(via_method, via_obs, rtol=1e-12, atol=0), (
+        "predict_photometry must agree with observation.predict_via_precomp().phot_fnu "
+        "when built with approx=WavePrecomp()."
     )
 
 
