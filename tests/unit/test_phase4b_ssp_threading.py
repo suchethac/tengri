@@ -95,7 +95,8 @@ def test_ssp_threaded_as_jit_parameter(model_stellar_only):
     dummy_params = {}
     dummy_fixed = model_stellar_only.spec.get_fixed_values()
     dummy_ssp = model_stellar_only.ssp_data
-    jaxpr = jax.make_jaxpr(fn_jit)(dummy_params, dummy_fixed, dummy_ssp)
+    dummy_template = model_stellar_only._template_data_for_jit()
+    jaxpr = jax.make_jaxpr(fn_jit)(dummy_params, dummy_fixed, dummy_ssp, dummy_template)
 
     # SSP grid shapes that we expect among the traced inputs. If the SSP
     # arrays were closure-baked, they'd appear as Constant ops with no
