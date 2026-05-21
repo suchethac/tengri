@@ -1,5 +1,13 @@
 # tengri Development Handoff
 
+> **⚠ Stale.** This handoff snapshot is from 2026-04-08; test counts,
+> phase status, and roadmap items below predate the Phase II-3 closure,
+> the nested-dict builder, the kernel-strategy refactor, and the
+> `ForwardModel` architecture design (2026-05-21). For current state
+> see `CHANGELOG.md`; for forward-looking architecture see
+> [`docs/dev/forward-model-architecture.md`](docs/dev/forward-model-architecture.md).
+> Kept as a historical record of the project state at that point.
+
 **Last updated:** 2026-04-08 (session 5)
 **Repo:** `~/Projects/tengri/`
 **Paper draft:** *(private paper draft)*

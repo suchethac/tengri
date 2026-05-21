@@ -1,6 +1,15 @@
 # Adding a new physics block (`SEDComponent`)
 
-> One-page contributor guide. For the migration history see
+> **One-page contributor guide for the bare-`SEDComponent` Protocol —
+> the advanced / fallback path.** For the recommended astronomer-facing
+> authoring style (class-level Distribution attributes, `reads` /
+> `publishes` dicts, single `predict` signature), see the
+> `SEDModelComponent` documentation (in flight). For the big-picture
+> architecture this fits into — `ForwardModel`, sub-models, populations,
+> spatial — see
+> [`forward-model-architecture.md`](forward-model-architecture.md).
+>
+> For the migration history see
 > [`phase_ii_2_stellar_migration.md`](phase_ii_2_stellar_migration.md);
 > for design rationale see [`20260404-refactor.md`](20260404-refactor.md).
 
