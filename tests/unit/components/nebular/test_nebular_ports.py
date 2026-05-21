@@ -6,12 +6,11 @@ protocol and registry expectations.
 """
 
 import pytest
-import jax.numpy as jnp
 
-from tengri.components.nebular.cloudy_grid_model import CloudyGridSEDComponent
 from tengri.components.nebular.cb19_model import CB19SEDComponent
+from tengri.components.nebular.cloudy_grid_model import CloudyGridSEDComponent
 from tengri.components.nebular.mappings_model import MAPPINGSSEDComponent
-from tengri.protocols.component import ParamDeclaration, DerivedKey, SEDComponent
+from tengri.protocols.component import DerivedKey, ParamDeclaration
 
 
 class TestCloudyGridPort:

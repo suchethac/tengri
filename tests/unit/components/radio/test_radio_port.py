@@ -5,11 +5,10 @@ Verify that RadioPowerLawSEDComponent satisfies the SEDComponent protocol
 and registry expectations.
 """
 
-import pytest
 import jax.numpy as jnp
 
 from tengri.components.radio.radio_model import RadioPowerLawSEDComponent
-from tengri.protocols.component import ParamDeclaration, DerivedKey
+from tengri.protocols.component import DerivedKey, ParamDeclaration
 
 
 class TestRadioPowerLawPort:

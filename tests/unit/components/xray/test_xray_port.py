@@ -5,11 +5,10 @@ Verify that XRayAirdSEDComponent satisfies the SEDComponent protocol
 and registry expectations.
 """
 
-import pytest
 import jax.numpy as jnp
 
 from tengri.components.xray.xray_model import XRayAirdSEDComponent
-from tengri.protocols.component import ParamDeclaration, DerivedKey
+from tengri.protocols.component import DerivedKey, ParamDeclaration
 
 
 class TestXRayAirdPort:

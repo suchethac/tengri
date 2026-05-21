@@ -46,8 +46,8 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components.xray.xray import xray_total
 from tengri.components.sed_model_component import SEDModelComponent
+from tengri.components.xray.xray import xray_total
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
     ParamDeclaration,

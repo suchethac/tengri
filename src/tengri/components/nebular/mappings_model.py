@@ -35,6 +35,7 @@ References
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Mapping
 from typing import Any, ClassVar
 
@@ -192,15 +193,13 @@ class MAPPINGSSEDComponent(SEDModelComponent):
             line_waves = jnp.array([], dtype=wave.dtype)
             line_lums = jnp.array([], dtype=sed_in.dtype)
             if hasattr(backend, "predict_nebular_line_luminosities"):
-                try:
+                with contextlib.suppress(Exception):
                     line_waves, line_lums = backend.predict_nebular_line_luminosities(
                         shock_velocity=jnp.asarray(p["velocity"]),
                         l_shock_halpha=10.0 ** jnp.asarray(p["log_lhalpha"]),
                         shock_log_density=jnp.asarray(p.get("log_density", 0.0)),
                         shock_b_over_sqrt_n=jnp.asarray(p.get("b_over_sqrt_n", 1.0)),
                     )
-                except Exception:  # noqa: S110
-                    pass
 
             return sed_in + shock_sed, {
                 "sed_shock": shock_sed,
