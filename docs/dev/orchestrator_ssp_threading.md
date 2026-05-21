@@ -205,24 +205,36 @@ attribute name participate automatically.
 
 ## When does a closure need threading? The rule
 
-A `self.X` array bakes into HLO as a Constant op **only if it's read
-inside `apply()` under JIT**. Threading is the workaround. The rule:
+A large array bakes into HLO as a `Constant` op **whenever it's read
+inside `apply()` under JIT through any path that JAX treats as
+closure-captured** — instance attributes (`self.X`), module-level
+lazy-loaded caches, or factory-returned closures that hold the array
+in their captured scope all qualify. Threading is the workaround:
+pass the array as an explicit runtime input so JAX makes it a
+`Parameter` op instead.
 
-| Data lives on | Read at `apply()` time? | Threading needed? |
+The accurate rule is:
+
+| Pattern | Examples | Threading needed? |
 |---|---|---|
-| Backend ``self.weights`` / ``self.grid`` (closure) | yes | **yes** |
-| Pre-resolved into ``state.derived`` at ``precompute()`` time | no (only small derived) | no |
-| Stored as component ``_state`` pytree leaf (frozen dataclass) | yes, but state IS a pytree input | no |
-| Small (< 1 MB) | n/a — HLO Constant cost negligible | no |
+| Backend `self.weights` / `self.grid` read directly | Cue, CloudyGrid | **yes** |
+| Module-level `@functools.cache` returning a closure that holds the grid as a `jnp.array` (via `ensure_compile_time_eval`) | SKIRTOR, DL07, DL14, Dale 2014, Astrodust, BOSA, Draine 2021 PAH | **yes** — same HLO impact, just a different path |
+| Per-component pytree `_state` (frozen dataclass with `jnp.ndarray` fields, the state IS a JIT input) | GRAHSP via `GRAHSPSEDComponentState` | no |
+| Small (< 1 MB) | IGM Inoue 2014 tables | no — negligible Constant cost |
 
-This explains why **dust IR templates (DL07/DL14/Casey/etc.) and AGN
-SKIRTOR/GRAHSP templates DON'T need threading**: they're preintegrated
-at ``precompute()`` time into small (n_filters,)-shaped or
-(n_qpah × n_umin × n_filters)-shaped arrays that live on
-``state.derived`` or component ``_state``. The raw 50–300 MB template
-HDF5 grids never enter the forward pass — they're "baked once at build
-time" into the smaller per-filter products that DO get threaded
-through `state`.
+**Correction (2026-05-21):** an earlier version of this doc claimed
+"dust IR and AGN templates DON'T need threading because they're
+preintegrated at precompute() time." That's wrong for most of them.
+The legacy `dust_emission_precompute.py` and `skirtor_precompute.py`
+paths were used by the deleted kernel adapter family (Phase 6); the
+**current** ``DustSEDComponent`` and ``AGNSEDComponent.apply()``
+paths reach templates via the module-level lazy-loaded registry, so
+the templates **do** close over the JIT trace today. Only GRAHSP is
+genuinely safe (its templates live on a per-component pytree state).
+
+That correction means the threading work is **not finished** for
+dust IR and AGN SKIRTOR. Both are tracked in
+[#138](https://github.com/suchethac/tengri/issues/138).
 
 ## Known unwired backends (future work — tracked in [#138](https://github.com/suchethac/tengri/issues/138))
 
