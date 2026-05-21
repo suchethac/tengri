@@ -1,6 +1,13 @@
 # AI Agent Guide for tengri
 
 > This document helps AI agents (Claude, GPT, Copilot, Cursor, etc.) understand and work with the `tengri` codebase effectively. If you are an AI assistant helping a user with this package, read this first.
+>
+> **Forward-looking architecture (the `ForwardModel` outer shell,
+> `SEDModel` / `SpatialModel` / `SpatialSEDModel` sub-models,
+> multi-population, the joint spec-phot motivation) lives in
+> [`docs/dev/forward-model-architecture.md`](docs/dev/forward-model-architecture.md).**
+> The architecture overview directly below this banner is the *current*
+> shape of the codebase, which is mid-migration toward that target.
 
 ## What this package does
 
