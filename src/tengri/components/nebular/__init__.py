@@ -71,6 +71,7 @@ from tengri.components.nebular.agn_nebular import (
     SynthesizerNLRBackend,
 )
 from tengri.components.nebular.baked_in import BakedInBackend, BakedInNebularWarning
+from tengri.components.nebular.cb19_model import CB19SEDComponent, CB19SEDComponentConfig
 from tengri.components.nebular.cloudy23_inputs import (
     Cloudy23Deck,
     build_cloudy23_deck,
@@ -85,10 +86,18 @@ from tengri.components.nebular.cloudy_grid import (
     CloudyGridIonizingSpectrumWarning,
     CloudyGridWNESSPWarning,
 )
+from tengri.components.nebular.cloudy_grid_model import (
+    CloudyGridSEDComponent,
+    CloudyGridSEDComponentConfig,
+)
 from tengri.components.nebular.cue import CueBackend
 from tengri.components.nebular.cue_model import (
     CueNebularSEDComponent,
     CueNebularSEDComponentConfig,
+)
+from tengri.components.nebular.mappings_model import (
+    MAPPINGSSEDComponent,
+    MAPPINGSSEDComponentConfig,
 )
 from tengri.components.nebular.dig import mix_dig_emission
 from tengri.components.nebular.mappings_photo import (
@@ -112,10 +121,14 @@ __all__ = [
     "CB19Backend",
     "CB19IonizingSpectrumWarning",
     "CB19NoContinuumWarning",
+    "CB19SEDComponent",
+    "CB19SEDComponentConfig",
     "Cloudy23Deck",
     "CloudyGridBackend",
     "CloudyGridIonizingSpectrumWarning",
     "CloudyGridWNESSPWarning",
+    "CloudyGridSEDComponent",
+    "CloudyGridSEDComponentConfig",
     "CueBackend",
     "CueNebularSEDComponent",
     "CueNebularSEDComponentConfig",
@@ -123,6 +136,8 @@ __all__ = [
     "FeltreNLRBackend",
     "IonizingSpectrumInconsistencyError",
     "IonizingSpectrumInconsistencyWarning",
+    "MAPPINGSSEDComponent",
+    "MAPPINGSSEDComponentConfig",
     "MappingsPhotoAGNBackend",
     "MappingsPhotoStellarBackend",
     "NebularBackend",
