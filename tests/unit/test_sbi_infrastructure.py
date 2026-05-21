@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -135,7 +136,7 @@ class TestGenerateTrainingData:
             mock_spec,
             n_samples=50,
         )
-        assert jnp.all(jnp.isfinite(data["theta"]))
+        chex.assert_tree_all_finite(data["theta"])
 
     def test_x_finite(self, mock_model, mock_spec):
         from tengri.inference.backends.sbi import generate_sbi_training_data
@@ -145,7 +146,7 @@ class TestGenerateTrainingData:
             mock_spec,
             n_samples=50,
         )
-        assert jnp.all(jnp.isfinite(data["x"]))
+        chex.assert_tree_all_finite(data["x"])
 
     def test_theta_within_prior_bounds(self, mock_model, mock_spec):
         from tengri.inference.backends.sbi import generate_sbi_training_data

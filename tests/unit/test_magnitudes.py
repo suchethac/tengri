@@ -10,6 +10,7 @@ Validates:
 - JIT compilation and type stability
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 
@@ -81,14 +82,14 @@ class TestABMagnitudes:
         """Functions work with arrays of arbitrary shape."""
         fnu_array = jnp.array([1.0e-19, 2.0e-19, 3.0e-19])
         mag_array = fnu_to_ab_mag(fnu_array)
-        assert mag_array.shape == (3,)
-        assert jnp.all(jnp.isfinite(mag_array))
+        chex.assert_shape(mag_array, (3,))
+        chex.assert_tree_all_finite(mag_array)
 
     def test_ab_mag_to_fnu_broadcast(self):
         """ab_mag_to_fnu works with arrays."""
         mag_array = jnp.array([18.0, 19.0, 20.0, 21.0])
         fnu_array = ab_mag_to_fnu(mag_array)
-        assert fnu_array.shape == (4,)
+        chex.assert_shape(fnu_array, (4,))
         assert jnp.all(fnu_array > 0.0)
 
 
@@ -116,7 +117,7 @@ class TestAbsoluteMagnitudes:
         """Absolute magnitudes are finite for reasonable luminosities."""
         lnu_array = jnp.logspace(30, 50, 10)
         mag_array = lnu_to_absolute_ab_mag(lnu_array)
-        assert jnp.all(jnp.isfinite(mag_array))
+        chex.assert_tree_all_finite(mag_array)
 
     def test_absolute_magnitude_scale(self):
         """10x brighter luminosity → 2.5 mag brighter (absolute)."""
@@ -172,8 +173,8 @@ class TestDistanceModulus:
         """Works with arrays of Mpc distances."""
         dl_mpc = jnp.array([0.1, 1.0, 10.0, 100.0])
         mu = distance_modulus_from_dl_mpc(dl_mpc)
-        assert mu.shape == (4,)
-        assert jnp.all(jnp.isfinite(mu))
+        chex.assert_shape(mu, (4,))
+        chex.assert_tree_all_finite(mu)
         # Verify ordering: further distances → larger μ
         assert jnp.all(jnp.diff(mu) > 0.0)
 
@@ -219,14 +220,14 @@ class TestApparentAbsolute:
         m_app = jnp.array([20.0, 21.0, 22.0])
         mu = jnp.array(35.0)
         mag_abs = apparent_to_absolute(m_app, mu)
-        assert mag_abs.shape == (3,)
+        chex.assert_shape(mag_abs, (3,))
 
     def test_broadcast_absolute_to_apparent(self):
         """Functions broadcast arrays correctly."""
         mag_abs = jnp.array([-20.0, -21.0, -22.0])
         mu = jnp.array([35.0, 36.0, 37.0])
         m_app = absolute_to_apparent(mag_abs, mu)
-        assert m_app.shape == (3,)
+        chex.assert_shape(m_app, (3,))
 
 
 # ── Test Vega Magnitude System ────────────────────────────────────
@@ -278,8 +279,8 @@ class TestVegaMagnitudes:
         mag_ab_array = jnp.array([15.0, 16.0, 17.0, 18.0])
         offset = AB_VEGA_OFFSETS["g"]
         mag_vega = ab_to_vega(mag_ab_array, offset)
-        assert mag_vega.shape == (4,)
-        assert jnp.all(jnp.isfinite(mag_vega))
+        chex.assert_shape(mag_vega, (4,))
+        chex.assert_tree_all_finite(mag_vega)
 
 
 # ── Test Surface Brightness ───────────────────────────────────────
@@ -333,8 +334,8 @@ class TestSurfaceBrightness:
         mag_array = jnp.array([18.0, 19.0, 20.0])
         area_array = jnp.array([5.0, 10.0, 25.0])
         mu = mag_to_surface_brightness(mag_array, area_array)
-        assert mu.shape == (3,)
-        assert jnp.all(jnp.isfinite(mu))
+        chex.assert_shape(mu, (3,))
+        chex.assert_tree_all_finite(mu)
 
 
 # ── Test Cosmological Dimming ─────────────────────────────────────
@@ -363,8 +364,8 @@ class TestCosmologicalDimming:
         mu = jnp.array(35.0)
         z_array = jnp.array([0.0, 0.5, 1.0, 2.0])
         mu_eff = cosmological_dimming(mu, z_array)
-        assert mu_eff.shape == (4,)
-        assert jnp.all(jnp.isfinite(mu_eff))
+        chex.assert_shape(mu_eff, (4,))
+        chex.assert_tree_all_finite(mu_eff)
         # Verify monotonic increase: higher z → greater dimming
         assert jnp.all(jnp.diff(mu_eff) < 0.0)
 
@@ -373,7 +374,7 @@ class TestCosmologicalDimming:
         mu_array = jnp.array([30.0, 35.0, 40.0])
         z = jnp.array(0.5)
         mu_eff = cosmological_dimming(mu_array, z)
-        assert mu_eff.shape == (3,)
+        chex.assert_shape(mu_eff, (3,))
 
 
 # ── Test JIT Compilation ──────────────────────────────────────────

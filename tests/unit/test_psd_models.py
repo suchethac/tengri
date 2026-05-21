@@ -1,5 +1,6 @@
 """Tests for PSD models (T1: PSD integral, analytic properties)."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -29,7 +30,7 @@ class TestPSDDRW:
         """PSD output shape matches input frequency shape."""
         omega = jnp.linspace(0, 10, 100)
         p = psd_drw(omega, psd_sigma=1.0, psd_tau_yr=1e8)
-        assert p.shape == omega.shape
+        chex.assert_equal_shape([p, omega])
 
     def test_psd_drw_at_zero_frequency(self):
         """P(0) = sigma_PS^2 * tau_PS."""
@@ -81,7 +82,7 @@ class TestPSDDRW:
         fn = jax.jit(psd_drw)
         omega = jnp.linspace(0, 10, 50)
         p = fn(omega, 1.0, 1e8)
-        assert p.shape == (50,)
+        chex.assert_shape(p, (50,))
 
     def test_psd_drw_has_gradients(self):
         """PSD gradients match central FD w.r.t. sigma and tau."""

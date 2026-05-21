@@ -9,6 +9,7 @@ Verifies:
 6. Edge cases (very high/low N_HI, zero turbulence)
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -72,7 +73,7 @@ class TestVoigtProfile:
         """No NaN or Inf for wide range of x."""
         x = jnp.linspace(-100.0, 100.0, 1000)
         h = _voigt_tepper_garcia(x, a=0.001)
-        assert jnp.all(jnp.isfinite(h))
+        chex.assert_tree_all_finite(h)
 
     def test_non_negative(self):
         """H(a,x) >= 0 for all x."""
@@ -162,7 +163,7 @@ class TestDLATransmission:
 
     def test_all_finite(self, wave_rest):
         trans = dla_transmission(wave_rest, log_n_hi=20.5)
-        assert jnp.all(jnp.isfinite(trans))
+        chex.assert_tree_all_finite(trans)
 
     def test_monotonic_with_column_density(self, wave_rest):
         """Higher N_HI → wider absorption trough (both saturated at core)."""
@@ -221,13 +222,13 @@ class TestJITAndGradients:
     def test_jit_rest_frame(self, wave_rest):
         jit_fn = jax.jit(dla_transmission)
         trans = jit_fn(wave_rest, 20.5)
-        assert jnp.all(jnp.isfinite(trans))
+        chex.assert_tree_all_finite(trans)
 
     def test_jit_obs_frame(self):
         wave_obs = jnp.linspace(3000.0, 4500.0, 500)
         jit_fn = jax.jit(dla_transmission_obs)
         trans = jit_fn(wave_obs, 2.0, 21.0)
-        assert jnp.all(jnp.isfinite(trans))
+        chex.assert_tree_all_finite(trans)
 
     def test_gradient_wrt_log_n_hi(self, wave_rest):
         """Gradient should flow through log_n_hi."""
@@ -276,9 +277,12 @@ class TestJITAndGradients:
         grad_x = grad_fn(x_test)
 
         # Check finiteness
-        assert jnp.all(jnp.isfinite(grad_x)), (
-            "Gradient contains NaN or Inf at z-boundary; "
-            "double-where fix for x2+1e-30 may have failed"
+        (
+            chex.assert_tree_all_finite(grad_x),
+            (
+                "Gradient contains NaN or Inf at z-boundary; "
+                "double-where fix for x2+1e-30 may have failed"
+            ),
         )
 
         # Sanity check: no individual gradient should be absurdly large
@@ -356,9 +360,9 @@ class TestEdgeCases:
     def test_very_cold_gas(self, wave_rest):
         """T = 100 K should produce narrow Doppler core."""
         trans = dla_transmission(wave_rest, log_n_hi=20.0, temp=100.0)
-        assert jnp.all(jnp.isfinite(trans))
+        chex.assert_tree_all_finite(trans)
 
     def test_very_hot_gas(self, wave_rest):
         """T = 10^6 K should produce very broad Doppler core."""
         trans = dla_transmission(wave_rest, log_n_hi=20.0, temp=1e6)
-        assert jnp.all(jnp.isfinite(trans))
+        chex.assert_tree_all_finite(trans)

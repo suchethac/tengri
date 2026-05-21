@@ -1,5 +1,6 @@
 """Tests for two-component dust attenuation model."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -42,7 +43,7 @@ class TestCharlotFall:
     def test_output_shape(self, wavelength, age_grid):
         """Output has shape (n_ages, n_wave)."""
         atten = two_component_dust(wavelength, age_grid, 0.5, 0.3, **_CF_KWARGS)
-        assert atten.shape == (50, 100)
+        chex.assert_shape(atten, (50, 100))
 
     def test_values_between_0_and_1(self, wavelength, age_grid):
         """Attenuation factor is in [0, 1]."""
@@ -93,7 +94,7 @@ class TestCharlotFall:
         """two_component_dust is JIT-compatible."""
         fn = jax.jit(lambda w, a, tv1, tv2: two_component_dust(w, a, tv1, tv2, **_CF_KWARGS))
         atten = fn(wavelength, age_grid, 0.5, 0.3)
-        assert atten.shape == (50, 100)
+        chex.assert_shape(atten, (50, 100))
 
     def test_has_gradients(self, wavelength, age_grid):
         """Gradients of two_component_dust match central FD w.r.t. tau_v1 and tau_v2."""

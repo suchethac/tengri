@@ -7,6 +7,7 @@ Problem: `shape * scalar` from nthcomp produces NaN gradient w.r.t. gamma.
 Goal: Identify the exact source and propose a fix.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -332,8 +333,9 @@ class TestNthcompGradientDiagnosis:
             return jnp.sum(jax.vmap(per_gamma)(g_arr))
 
         grads = jax.grad(f)(gamma_array)
-        assert jnp.all(jnp.isfinite(grads)), (
-            f"Non-finite gradient through vmapped nthcomp: {grads}"
+        (
+            chex.assert_tree_all_finite(grads),
+            (f"Non-finite gradient through vmapped nthcomp: {grads}"),
         )
         # FD check on first component
         g0 = float(gamma_array[0])

@@ -16,6 +16,7 @@ Physical properties tested:
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -179,8 +180,8 @@ class TestCasey2012Differentiability:
             lambda T, b, a: casey2012(ir_wave, 1e10, dust_T=T, dust_beta_ir=b, dust_alpha_mir=a)
         )
         sed = fn(35.0, 1.8, 2.0)
-        assert sed.shape == ir_wave.shape
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_equal_shape([sed, ir_wave])
+        chex.assert_tree_all_finite(sed)
 
     def test_gradient_dust_T(self, ir_wave):
         def loss(T):
@@ -307,5 +308,5 @@ class TestCasey2012OpticallyThin:
         """JIT-compatible with optically_thin flag."""
         fn = jax.jit(lambda T: casey2012(ir_wave, 1e10, dust_T=T, optically_thin=True))
         sed = fn(35.0)
-        assert sed.shape == ir_wave.shape
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_equal_shape([sed, ir_wave])
+        chex.assert_tree_all_finite(sed)

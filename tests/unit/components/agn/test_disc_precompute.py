@@ -13,6 +13,7 @@ in the broader integration tests; this file only verifies the adapter contract:
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -46,7 +47,7 @@ class TestPowerlawDiscAdapter:
         )
         phot = np.asarray(result["grid_phot"])
         assert phot.shape[-1] == len(waves)
-        assert np.all(np.isfinite(phot))
+        chex.assert_tree_all_finite(phot)
 
     def test_lookup_jit(self, filter_set):
         from tengri.components.agn import disc_precompute
@@ -58,7 +59,7 @@ class TestPowerlawDiscAdapter:
         lookup = disc_precompute.build_lookup(result, model="powerlaw_disc")
         jit_lookup = jax.jit(lookup)
         out = jit_lookup(jnp.float64(1.0), jnp.float64(-1.5))
-        assert np.all(np.isfinite(np.asarray(out)))
+        chex.assert_tree_all_finite(np.asarray(out))
 
 
 class TestSSDiscAdapter:
@@ -71,7 +72,7 @@ class TestSSDiscAdapter:
         )
         phot = np.asarray(result["grid_phot"])
         assert phot.shape[-1] == len(waves)
-        assert np.all(np.isfinite(phot))
+        chex.assert_tree_all_finite(phot)
 
     def test_lookup_jit(self, filter_set):
         from tengri.components.agn import disc_precompute
@@ -83,7 +84,7 @@ class TestSSDiscAdapter:
         lookup = disc_precompute.build_lookup(result, model="ss_disc")
         jit_lookup = jax.jit(lookup)
         out = jit_lookup(jnp.float64(1.0), jnp.float64(8.0), jnp.float64(-1.5))
-        assert np.all(np.isfinite(np.asarray(out)))
+        chex.assert_tree_all_finite(np.asarray(out))
 
 
 class TestCigaleDiscAdapter:
@@ -96,7 +97,7 @@ class TestCigaleDiscAdapter:
         )
         phot = np.asarray(result["grid_phot"])
         assert phot.shape[-1] == len(waves)
-        assert np.all(np.isfinite(phot))
+        chex.assert_tree_all_finite(phot)
         assert result["axes"] == ()
 
     def test_lookup_callable(self, filter_set):
@@ -108,7 +109,7 @@ class TestCigaleDiscAdapter:
         )
         lookup = disc_precompute.build_lookup(result, model="cigale_disc")
         out = jax.jit(lookup)(jnp.float64(1.0))
-        assert np.all(np.isfinite(np.asarray(out)))
+        chex.assert_tree_all_finite(np.asarray(out))
 
 
 class TestRegistryEntries:

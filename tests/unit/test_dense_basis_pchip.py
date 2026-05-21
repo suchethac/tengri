@@ -4,6 +4,7 @@ Covers the uncovered branches: pchip_interpolate (lines 173-214),
 _build_quantile_points_pure (481-506), and dense_basis_pure (547-582).
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -34,7 +35,7 @@ class TestPchipInterpolate:
         y_train = x_train**2
         x_eval = jnp.linspace(0.1, 0.9, 20)
         out = pchip_interpolate(x_train, y_train, x_eval)
-        assert out.shape == (20,)
+        chex.assert_shape(out, (20,))
 
     def test_monotone_on_monotone_input(self):
         """PCHIP preserves monotonicity on a strictly increasing dataset."""
@@ -62,7 +63,7 @@ class TestPchipInterpolate:
         x_eval = jnp.array([-0.5, 1.5])
         out = pchip_interpolate(x, y, x_eval)
         # Should not raise and should return finite values
-        assert jnp.all(jnp.isfinite(out))
+        chex.assert_tree_all_finite(out)
 
     def test_finite_output(self):
         """All output values are finite for well-conditioned inputs."""
@@ -70,7 +71,7 @@ class TestPchipInterpolate:
         y = jnp.sin(jnp.pi * x)
         x_eval = jnp.linspace(0.0, 1.0, 100)
         out = pchip_interpolate(x, y, x_eval)
-        assert jnp.all(jnp.isfinite(out))
+        chex.assert_tree_all_finite(out)
 
     def test_constant_data(self):
         """Constant training data → constant output."""
@@ -89,7 +90,7 @@ class TestPchipInterpolate:
             return jnp.sum(pchip_interpolate(x_train, y_train, x_eval) ** 2)
 
         g = jax.grad(loss)(jnp.linspace(0.0, 1.0, 5))
-        assert jnp.all(jnp.isfinite(g))
+        chex.assert_tree_all_finite(g)
 
 
 # ── _build_quantile_points_pure ───────────────────────────────────
@@ -102,8 +103,8 @@ class TestBuildQuantilePointsPure:
         tx_fracs = jnp.array([0.3, 0.5, 0.7])
         time_q, mass_q = _build_quantile_points_pure(tx_fracs, n_param)
         # (0, big_bang, tx_0, tx_1, tx_2, 1) = n_param + 3
-        assert time_q.shape == (n_param + 3,)
-        assert mass_q.shape == (n_param + 3,)
+        chex.assert_shape(time_q, (n_param + 3,))
+        chex.assert_shape(mass_q, (n_param + 3,))
 
     def test_first_point_is_zero(self):
         """First point is (0, 0)."""
@@ -140,8 +141,8 @@ class TestBuildQuantilePointsPure:
         """Works with n_param=1."""
         tx_fracs = jnp.array([0.5])
         time_q, mass_q = _build_quantile_points_pure(tx_fracs, 1)
-        assert time_q.shape == (4,)
-        assert mass_q.shape == (4,)
+        chex.assert_shape(time_q, (4,))
+        chex.assert_shape(mass_q, (4,))
 
 
 # ── dense_basis_pure ──────────────────────────────────────────
@@ -156,7 +157,7 @@ class TestDenseBasisPureSfh:
         """Output SFR has same length as age grid."""
         age_yr = self._default_age_grid()
         sfr = dense_basis_pure(age_yr, log_total_mass=10.0, tx_frac_0=0.3, tx_frac_1=0.6)
-        assert sfr.shape == age_yr.shape
+        chex.assert_equal_shape([sfr, age_yr])
 
     def test_non_negative(self):
         """SFR is non-negative everywhere."""
@@ -168,7 +169,7 @@ class TestDenseBasisPureSfh:
         """SFR values are all finite."""
         age_yr = self._default_age_grid()
         sfr = dense_basis_pure(age_yr, log_total_mass=10.0, tx_frac_0=0.3, tx_frac_1=0.6)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_total_mass_scaling(self):
         """Doubling log_total_mass by 1 dex increases integrated mass ~10x."""
@@ -196,7 +197,7 @@ class TestDenseBasisPureSfh:
         sfr = dense_basis_pure(
             age_yr, log_total_mass=10.0, tx_frac_0=0.2, tx_frac_1=0.5, tx_frac_2=0.8
         )
-        assert sfr.shape == age_yr.shape
+        chex.assert_equal_shape([sfr, age_yr])
         assert jnp.all(sfr >= 0.0)
 
     def test_age_universe_yr_custom(self):
@@ -218,5 +219,5 @@ class TestDenseBasisPureSfh:
             return dense_basis_pure(age_yr, log_total_mass=log_m, tx_frac_0=t0)
 
         sfr = run(10.0, 0.5)
-        assert sfr.shape == age_yr.shape
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_equal_shape([sfr, age_yr])
+        chex.assert_tree_all_finite(sfr)

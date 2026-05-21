@@ -8,6 +8,7 @@ Verifies:
 5. Parameters correctly adds/removes parameters based on setting
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -110,7 +111,7 @@ class TestInterpolateMetallicityEvolving:
         n_age = ssp_flux.shape[1]
         log_z_per_age = jnp.zeros(n_age)
         result = interpolate_metallicity_evolving(ssp_flux, ssp_lgmet, log_z_per_age)
-        assert result.shape == (ssp_flux.shape[1], ssp_flux.shape[2])
+        chex.assert_shape(result, (ssp_flux.shape[1], ssp_flux.shape[2]))
 
     def test_clamping_at_bounds(self, ssp_flux, ssp_lgmet):
         """Values outside grid should clamp to boundary."""
@@ -164,7 +165,7 @@ class TestInterpolateMassRemainingEvolving:
         n_age = ssp_mass_remaining.shape[1]
         log_z_per_age = jnp.zeros(n_age)
         result = interpolate_mass_remaining_evolving(ssp_mass_remaining, ssp_lgmet, log_z_per_age)
-        assert result.shape == (n_age,)
+        chex.assert_shape(result, (n_age,))
 
 
 # ── Tests: compute_log_z_evolving ─────────────────────────────────
@@ -240,7 +241,7 @@ class TestEvolvingMetallicityGradients:
             return jnp.sum(flux**2)
 
         grad = jax.grad(loss)(log_z_per_age)
-        assert jnp.all(jnp.isfinite(grad)), "Gradients must be finite"
+        chex.assert_tree_all_finite(grad), "Gradients must be finite"
         assert jnp.any(grad != 0.0), "Gradients must be non-zero"
 
     def test_grad_wrt_ramp_params(self, ssp_flux, ssp_lgmet, ssp_lg_age_gyr):

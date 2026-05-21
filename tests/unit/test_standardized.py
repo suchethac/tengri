@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -163,7 +164,7 @@ class TestRoundtrip:
 
         for name, val in params.items():
             arr = jnp.asarray(val)
-            assert jnp.all(jnp.isfinite(arr)), f"Non-finite value for param '{name}': {val}"
+            chex.assert_tree_all_finite(arr), f"Non-finite value for param '{name}': {val}"
 
     def test_params_to_xi_roundtrip(self):
         """params_to_xi(xi_to_params(ξ)) ≈ ξ for all free scalar params."""
@@ -245,7 +246,7 @@ class TestBuildStandardizedLoss:
         smodel, loss_fn, _ = self._make_smodel_and_loss()
         xi_flat = jnp.zeros(smodel.n_latent)
         val = loss_fn(xi_flat)
-        assert val.shape == ()
+        chex.assert_shape(val, ())
 
     def test_loss_is_finite_at_zero(self):
         smodel, loss_fn, _ = self._make_smodel_and_loss()
@@ -287,13 +288,13 @@ class TestBuildStandardizedLoss:
         smodel, loss_fn, _ = self._make_smodel_and_loss()
         xi_flat = jnp.zeros(smodel.n_latent)
         grad = jax.grad(loss_fn)(xi_flat)
-        assert jnp.all(jnp.isfinite(grad))
+        chex.assert_tree_all_finite(grad)
 
     def test_gradient_shape_matches_latent(self):
         smodel, loss_fn, _ = self._make_smodel_and_loss()
         xi_flat = jnp.zeros(smodel.n_latent)
         grad = jax.grad(loss_fn)(xi_flat)
-        assert grad.shape == (smodel.n_latent,)
+        chex.assert_shape(grad, (smodel.n_latent,))
 
     def test_unravel_fn_recovers_domain_keys(self):
         smodel, _, unravel_fn = self._make_smodel_and_loss()
@@ -358,7 +359,7 @@ class TestBuildHierarchicalLoss:
         n_total = smodel.n_latent * 3  # per-galaxy × n_gal (no shared in DPL)
         xi_flat = jnp.zeros(n_total)
         val = loss_fn(xi_flat)
-        assert val.shape == ()
+        chex.assert_shape(val, ())
         assert jnp.isfinite(val)
 
     def test_hierarchical_loss_gradient_finite(self):
@@ -374,7 +375,7 @@ class TestBuildHierarchicalLoss:
         xi_flat = jnp.zeros(n_total)
 
         grad = jax.grad(loss_fn)(xi_flat)
-        assert jnp.all(jnp.isfinite(grad))
+        chex.assert_tree_all_finite(grad)
 
     def test_hierarchical_shared_params_default_to_psd(self):
         """For stochastic SFH, shared_names defaults to PSD hyperparams."""
@@ -418,7 +419,7 @@ class TestPredict:
         result = smodel.predict(xi, data_type="photometry")
 
         model.predict_photometry.assert_called_once()
-        assert result.shape == (5,)
+        chex.assert_shape(result, (5,))
 
     def test_call_shortcut_equals_predict_photometry(self):
         from tengri.inference.standardized import StandardizedForwardModel

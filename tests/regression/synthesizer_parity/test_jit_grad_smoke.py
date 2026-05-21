@@ -24,6 +24,7 @@ Reference papers:
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -66,9 +67,12 @@ def test_igm_transmission_finite_at_high_redshift(high_z_wavelength_grid):
     z = 10.0
     tau_igm = igm_transmission(high_z_wavelength_grid, z)
 
-    assert bool(jnp.all(jnp.isfinite(tau_igm))), (
-        "P-24 BUG: IGM transmission has NaN/inf at z=10. "
-        "Numerical underflow/overflow in exponential or integral."
+    (
+        chex.assert_tree_all_finite(tau_igm),
+        (
+            "P-24 BUG: IGM transmission has NaN/inf at z=10. "
+            "Numerical underflow/overflow in exponential or integral."
+        ),
     )
 
     # All values must be in physical range [0, 1] (attenuation)
@@ -121,7 +125,7 @@ def test_igm_transmission_jit_compatible(high_z_wavelength_grid):
     z = 5.0
     try:
         tau = compute_igm_tau(high_z_wavelength_grid, z)
-        assert bool(jnp.all(jnp.isfinite(tau))), "JIT result has NaN/inf"
+        chex.assert_tree_all_finite(tau), "JIT result has NaN/inf"
     except Exception as e:
         pytest.fail(f"P-24 BUG: IGM transmission is not JIT-compatible: {e}")
 

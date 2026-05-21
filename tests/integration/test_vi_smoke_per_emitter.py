@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -201,9 +202,12 @@ def test_vi_smoke_fit(
     # 1. Loss history (optional for some methods, e.g., VI with geoVI doesn't track it)
     if posterior.loss_history is not None:
         loss_hist = posterior.loss_history
-        assert jnp.all(jnp.isfinite(loss_hist)), (
-            f"{emitter_name}: loss_history contains NaN/inf. "
-            f"Has {jnp.sum(~jnp.isfinite(loss_hist))} non-finite values."
+        (
+            chex.assert_tree_all_finite(loss_hist),
+            (
+                f"{emitter_name}: loss_history contains NaN/inf. "
+                f"Has {jnp.sum(~jnp.isfinite(loss_hist))} non-finite values."
+            ),
         )
 
     # 2. Posterior samples are finite
@@ -216,10 +220,13 @@ def test_vi_smoke_fit(
     # Check finiteness of all sample arrays
     for param_name, param_samples in samples_dict.items():
         param_array = jnp.asarray(param_samples)
-        assert jnp.all(jnp.isfinite(param_array)), (
-            f"{emitter_name}: samples['{param_name}'] contain NaN/inf. "
-            f"Shape={param_array.shape}, "
-            f"non-finite={jnp.sum(~jnp.isfinite(param_array))}"
+        (
+            chex.assert_tree_all_finite(param_array),
+            (
+                f"{emitter_name}: samples['{param_name}'] contain NaN/inf. "
+                f"Shape={param_array.shape}, "
+                f"non-finite={jnp.sum(~jnp.isfinite(param_array))}"
+            ),
         )
 
 

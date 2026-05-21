@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import time
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -127,7 +128,7 @@ def test_precompute_returns_documented_keys():
     assert "grid_phot" in out
     assert "axes" in out
     assert "_preint" in out
-    assert out["grid_phot"].shape == (4, 1)
+    chex.assert_shape(out["grid_phot"], (4, 1))
 
 
 def test_precompute_requires_axis_params():
@@ -185,7 +186,7 @@ def test_auto_collapse_fixed_axis():
     )
     # ebv axis collapsed -> 1-D grid over l5100 only
     assert "_collapsed_axes" in out
-    assert out["grid_phot"].shape == (3, 1)
+    chex.assert_shape(out["grid_phot"], (3, 1))
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -288,8 +289,8 @@ def test_lookup_jit_compiles_and_caches():
     _ = out2.block_until_ready()
     dt_cached = time.time() - t0
 
-    assert jnp.all(jnp.isfinite(out1))
-    assert jnp.all(jnp.isfinite(out2))
+    chex.assert_tree_all_finite(out1)
+    chex.assert_tree_all_finite(out2)
     # Cached should be at least 10× faster than first-call compile.
     # (Informational; soft assertion with generous slack for CI variance.)
     assert dt_cached < dt_compile / 5.0
@@ -318,7 +319,7 @@ def test_build_lookup_returns_composable_lookup_with_axis_names():
     assert fn.axis_names == ("agn_grahsp_l5100",)
     # Still callable as before.
     out = fn(jnp.array(1.0), jnp.array(1e44))
-    assert out.shape == (1,)
+    chex.assert_shape(out, (1,))
 
 
 def test_kernel_accepts_arbitrary_axis_names():
@@ -417,5 +418,5 @@ def test_lookup_works_with_explicit_jit_wrapper():
     fn = composable_precompute.build_lookup(pre)
     jit_fn = jax.jit(fn)
     out = jit_fn(jnp.array(1.0), jnp.array(1e44))
-    assert out.shape == (3,)
-    assert jnp.all(jnp.isfinite(out))
+    chex.assert_shape(out, (3,))
+    chex.assert_tree_all_finite(out)

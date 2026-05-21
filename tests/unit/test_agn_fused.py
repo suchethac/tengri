@@ -11,6 +11,7 @@ Validates that:
 import warnings
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -143,7 +144,7 @@ class TestAGNFusedPhotometry:
         params = parametric_agn_spec.sample(key)
         phot = model.predict_photometry(params)
 
-        assert jnp.all(jnp.isfinite(phot)), f"Non-finite photometry: {phot}"
+        chex.assert_tree_all_finite(phot), f"Non-finite photometry: {phot}"
         assert jnp.all(phot > 0), f"Non-positive photometry: {phot}"
 
     def test_gradients_finite(self, parametric_agn_spec, synthetic_ssp, simple_filters):
@@ -162,8 +163,9 @@ class TestAGNFusedPhotometry:
 
         for name, grad_val in grads.items():
             if grad_val is not None:
-                assert jnp.all(jnp.isfinite(grad_val)), (
-                    f"Non-finite gradient for {name}: {grad_val}"
+                (
+                    chex.assert_tree_all_finite(grad_val),
+                    (f"Non-finite gradient for {name}: {grad_val}"),
                 )
 
     def test_agn_lbol_affects_photometry(self, parametric_agn_spec, synthetic_ssp, simple_filters):
@@ -238,8 +240,8 @@ class TestAGNFusedVsExact:
         phot_exact = model_exact.predict_photometry(params)
 
         # Both should be finite and positive
-        assert jnp.all(jnp.isfinite(phot_fused))
-        assert jnp.all(jnp.isfinite(phot_exact))
+        chex.assert_tree_all_finite(phot_fused)
+        chex.assert_tree_all_finite(phot_exact)
         assert jnp.all(phot_fused > 0)
         assert jnp.all(phot_exact > 0)
 
@@ -304,8 +306,8 @@ class TestAGNFusedVsExact:
         phot_fused = model_fused.predict_photometry(params)
         phot_exact = model_exact.predict_photometry(params)
 
-        assert jnp.all(jnp.isfinite(phot_fused)), f"Non-finite fused photometry: {phot_fused}"
-        assert jnp.all(jnp.isfinite(phot_exact)), f"Non-finite exact photometry: {phot_exact}"
+        chex.assert_tree_all_finite(phot_fused), f"Non-finite fused photometry: {phot_fused}"
+        chex.assert_tree_all_finite(phot_exact), f"Non-finite exact photometry: {phot_exact}"
         assert jnp.all(phot_fused > 0), f"Non-positive fused photometry: {phot_fused}"
         assert jnp.all(phot_exact > 0), f"Non-positive exact photometry: {phot_exact}"
 
@@ -337,7 +339,7 @@ class TestAGNPredictSED:
         params = parametric_agn_spec.sample(key)
         sed = model.predict_rest_sed(params).sed
 
-        assert jnp.all(jnp.isfinite(sed)), "SED contains non-finite values"
+        chex.assert_tree_all_finite(sed), "SED contains non-finite values"
         assert sed.shape == (len(synthetic_ssp.ssp_wave),)
 
     def test_parametric_sed_includes_agn(self):
@@ -371,7 +373,7 @@ class TestAGNPredictSED:
             agn_torus_frac=0.5,
         )
 
-        assert jnp.all(jnp.isfinite(lnu_high)), "AGN SED should be finite"
+        chex.assert_tree_all_finite(lnu_high), "AGN SED should be finite"
         assert jnp.all(lnu_high > 0), "AGN SED should be positive"
 
         # L_bol ratio of 10^4 should produce proportionally brighter AGN
@@ -441,7 +443,7 @@ class TestSKIRTORPreintegration:
         params = skirtor_spec.sample(key)
         phot = model.predict_photometry(params)
 
-        assert jnp.all(jnp.isfinite(phot)), f"Non-finite SKIRTOR preintegrated photometry: {phot}"
+        chex.assert_tree_all_finite(phot), f"Non-finite SKIRTOR preintegrated photometry: {phot}"
         assert jnp.all(phot > 0), f"Non-positive SKIRTOR preintegrated photometry: {phot}"
 
     def test_preintegrated_matches_fullwave(self, skirtor_spec, synthetic_ssp, simple_filters):
@@ -467,8 +469,8 @@ class TestSKIRTORPreintegration:
         phot_hybrid = model_hybrid.predict_photometry(params)
         phot_exact = model_exact.predict_photometry(params)
 
-        assert jnp.all(jnp.isfinite(phot_hybrid)), f"Non-finite hybrid photometry: {phot_hybrid}"
-        assert jnp.all(jnp.isfinite(phot_exact)), f"Non-finite exact photometry: {phot_exact}"
+        chex.assert_tree_all_finite(phot_hybrid), f"Non-finite hybrid photometry: {phot_hybrid}"
+        chex.assert_tree_all_finite(phot_exact), f"Non-finite exact photometry: {phot_exact}"
 
         rel_error = jnp.abs(phot_hybrid - phot_exact) / (jnp.abs(phot_exact) + 1e-40)
         max_rel_error = float(jnp.max(rel_error))

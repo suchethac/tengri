@@ -7,6 +7,7 @@ measurable speedup.
 
 import time
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -62,7 +63,7 @@ class TestPrecomputeDustAgeWeights:
     def test_output_shape(self, age_grid):
         """Output has same shape as age_grid."""
         weights = precompute_dust_age_weights(age_grid)
-        assert weights.shape == age_grid.shape
+        chex.assert_equal_shape([weights, age_grid])
 
     def test_young_stars_near_one(self, age_grid):
         """Stars younger than t_birth have weight ~1."""
@@ -295,7 +296,7 @@ class TestFastDustGradients:
             )
 
         result = fn(0.5, 0.3)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
 
 # ── Benchmark ─────────────────────────────────────────────────────

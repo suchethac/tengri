@@ -14,6 +14,7 @@ Validates:
 - Missing required keys error in create_skirtor_from_grid
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -69,7 +70,7 @@ class TestSKIRTORAnalytic:
         from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave)
-        assert sed.shape == wave.shape
+        chex.assert_equal_shape([sed, wave])
 
     def test_output_positive(self, wave):
         from tengri.components.agn.skirtor import skirtor_analytic
@@ -82,7 +83,7 @@ class TestSKIRTORAnalytic:
         from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave)
-        assert jnp.all(jnp.isfinite(sed)), "SKIRTOR SED should be finite everywhere"
+        chex.assert_tree_all_finite(sed)
 
     def test_type1_vs_type2_spectral_shape(self, ir_wave):
         """Face-on (Type 1) and edge-on (Type 2) SEDs should differ meaningfully.
@@ -395,8 +396,8 @@ class TestSKIRTORJIT:
 
         fn = jax.jit(lambda tau, ci: skirtor_analytic(wave, agn_tau_skirtor=tau, agn_cos_inc=ci))
         sed = fn(7.0, 0.5)
-        assert sed.shape == wave.shape
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_equal_shape([sed, wave])
+        chex.assert_tree_all_finite(sed)
 
     def test_jit_registered_model(self, wave):
         from tengri.components.agn import AGN_MODELS
@@ -413,8 +414,8 @@ class TestSKIRTORJIT:
             )
         )
         sed = fn(7.0, 1.0, 1.0, 40.0, 0.5)
-        assert sed.shape == wave.shape
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_equal_shape([sed, wave])
+        chex.assert_tree_all_finite(sed)
 
     def test_jit_grad_combined(self, wave):
         """JIT of grad agrees with FD for agn_tau_skirtor."""
@@ -445,51 +446,51 @@ class TestSKIRTOREdgeCases:
         from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave, agn_tau_skirtor=3.0)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_extreme_tau_high(self, wave):
         from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave, agn_tau_skirtor=11.0)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_fully_face_on(self, wave):
         from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave, agn_cos_inc=1.0)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
         assert float(jnp.max(sed)) > 0
 
     def test_fully_edge_on(self, wave):
         from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave, agn_cos_inc=0.0)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
         assert float(jnp.max(sed)) > 0
 
     def test_narrow_opening_angle(self, wave):
         from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave, agn_oa_skirtor=20.0)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_wide_opening_angle(self, wave):
         from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave, agn_oa_skirtor=60.0)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_zero_p_and_q(self, wave):
         from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave, agn_p_skirtor=0.0, agn_q_skirtor=0.0)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_max_p_and_q(self, wave):
         from tengri.components.agn.skirtor import skirtor_analytic
 
         sed = skirtor_analytic(wave, agn_p_skirtor=1.5, agn_q_skirtor=1.5)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
 
 class TestNovikovThorneEfficiency:
@@ -624,7 +625,7 @@ class TestCreateSkirtorFromGridNpz:
         fn = create_skirtor_from_grid(mock_npz)
         wave = jnp.logspace(4.0, 6.0, 80)
         out = fn(wave, agn_log_lbol=12.0)
-        assert jnp.all(jnp.isfinite(out)), "NPZ path: NaN/Inf in output"
+        chex.assert_tree_all_finite(out)
 
     def test_npz_output_non_negative(self, mock_npz):
         """NPZ-loaded interpolator must produce non-negative luminosities."""

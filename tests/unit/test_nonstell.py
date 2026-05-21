@@ -11,6 +11,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import chex
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -166,7 +167,7 @@ class TestBuildNonstellFn:
 
         result = fn(weights, p, stellar_sed, stellar_intr)
 
-        assert result.shape == stellar_sed.shape
+        chex.assert_equal_shape([result, stellar_sed])
         np.testing.assert_allclose(np.array(result), np.array(stellar_sed), rtol=1e-6)
 
     def test_output_shape_matches_rest_wave(self):
@@ -177,7 +178,7 @@ class TestBuildNonstellFn:
         weights = jnp.ones(64)
         sed = jnp.ones(64) * 1e32
         result = fn(weights, {}, sed, sed)
-        assert result.shape == (64,)
+        chex.assert_shape(result, (64,))
 
     def test_pure_stellar_returns_float64(self):
         fn, _ = self._make_pure_stellar_fn()

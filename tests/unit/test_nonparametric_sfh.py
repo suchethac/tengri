@@ -8,6 +8,7 @@ Tests cover:
 - Registry integration: both models resolve via resolve_sfh().
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -49,7 +50,7 @@ class TestContinuitySFH:
         sfr = continuity(AGE_YR, log_total_mass=10.0, **kwargs)
 
         # SFR should be roughly constant (within interpolation artifacts)
-        assert sfr.shape == AGE_YR.shape
+        chex.assert_equal_shape([sfr, AGE_YR])
         relative_spread = (jnp.max(sfr) - jnp.min(sfr)) / jnp.mean(sfr)
         assert relative_spread < 0.15, f"Flat SFH spread too large: {relative_spread:.3f}"
 
@@ -97,7 +98,7 @@ class TestContinuitySFH:
         n_bins = 4
         kwargs = {f"ratio_{i}": 0.0 for i in range(n_bins - 1)}
         sfr = continuity(AGE_YR, log_total_mass=10.0, bin_edges_gyr=custom_edges, **kwargs)
-        assert sfr.shape == AGE_YR.shape
+        chex.assert_equal_shape([sfr, AGE_YR])
         assert jnp.all(sfr >= 0)
 
     def test_non_negative(self):
@@ -115,7 +116,7 @@ class TestContinuitySFH:
             return continuity(AGE_YR, log_total_mass=10.0, **kwargs)
 
         sfr = _eval()
-        assert sfr.shape == AGE_YR.shape
+        chex.assert_equal_shape([sfr, AGE_YR])
 
     def test_gradient_compatible(self):
         """Gradients w.r.t. ratios and mass should be computable."""
@@ -128,7 +129,7 @@ class TestContinuitySFH:
         ratios = jnp.zeros(6)
         grad_ratios, _grad_mass = jax.grad(loss, argnums=(0, 1))(ratios, 10.0)
 
-        assert grad_ratios.shape == (6,)
+        chex.assert_shape(grad_ratios, (6,))
 
         # FD check on ratio_0 (one representative component)
         def f_r0(r0):
@@ -239,7 +240,7 @@ class TestDirichletSFH:
         kwargs = {f"z_frac_{i}": equal_z[i] for i in range(6)}
         sfr = dirichlet(AGE_YR, log_total_mass=10.0, **kwargs)
 
-        assert sfr.shape == AGE_YR.shape
+        chex.assert_equal_shape([sfr, AGE_YR])
         assert jnp.all(sfr >= 0)
 
         # With equal mass fracs but unequal bin widths, SFR varies proportionally
@@ -300,7 +301,7 @@ class TestDirichletSFH:
             return dirichlet(AGE_YR, log_total_mass=10.0, **kwargs)
 
         sfr = _eval()
-        assert sfr.shape == AGE_YR.shape
+        chex.assert_equal_shape([sfr, AGE_YR])
 
     def test_custom_bin_edges(self):
         """Custom bin edges should work."""
@@ -308,7 +309,7 @@ class TestDirichletSFH:
         n_bins = 4
         kwargs = {f"z_frac_{i}": 0.5 for i in range(n_bins - 1)}
         sfr = dirichlet(AGE_YR, log_total_mass=10.0, bin_edges_gyr=custom_edges, **kwargs)
-        assert sfr.shape == AGE_YR.shape
+        chex.assert_equal_shape([sfr, AGE_YR])
 
 
 # ── Registry integration tests ────────────────────────────────────
@@ -369,8 +370,8 @@ class TestRegistryIntegration:
             internal_kw[f"ratio_{i}"] = 0.0
 
         sfr = fn(AGE_YR, **internal_kw)
-        assert sfr.shape == AGE_YR.shape
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_equal_shape([sfr, AGE_YR])
+        chex.assert_tree_all_finite(sfr)
 
 
 # ── Bursty continuity prior (Tacchella+2022) ─────────────────────
@@ -625,7 +626,7 @@ class TestPSBContinuitySFH:
             ratio_young=0.0,
             ratio_old_0=0.0,
         )
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_mass_scales_with_log_total_mass(self, age_yr, default_edges):
         from tengri.components.stellar.sfh.nonparametric import psb_continuity
@@ -659,7 +660,7 @@ class TestPSBContinuitySFH:
         # bin_edges_gyr is a fixed structural arg — bake it in via partial before JIT
         fn = jax.jit(functools.partial(psb_continuity, bin_edges_gyr=default_edges))
         sfr = fn(age_yr, 10.0, tlast_gyr=0.5, tflex_gyr=2.0, ratio_young=0.0, ratio_old_0=0.0)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_grad_wrt_log_total_mass(self, age_yr, default_edges):
         from tengri.components.stellar.sfh.nonparametric import psb_continuity
@@ -713,7 +714,7 @@ class TestRegistryBinEdges:
         age_yr = jnp.linspace(1e6, 3.3e9, 100)
         kwargs = {v[0]: 0.0 for v in params.values() if v[0] != "log_total_mass"}
         sfr = fn(age_yr, log_total_mass=10.0, **kwargs)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
         assert jnp.any(sfr > 0)
 
     def test_none_uses_default_edges(self):
@@ -723,7 +724,7 @@ class TestRegistryBinEdges:
         age_yr = jnp.linspace(1e6, 13.7e9, 100)
         kwargs = {v[0]: 0.0 for v in params.values() if v[0] != "log_total_mass"}
         sfr = fn(age_yr, log_total_mass=10.0, **kwargs)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_dirichlet_custom_edges(self):
         from tengri.components.stellar.sfh.nonparametric import make_agebins_from_zred
@@ -735,7 +736,7 @@ class TestRegistryBinEdges:
         # param_map: {public_name: (internal_name, scale, offset)}
         kwargs = {v[0]: 0.5 for v in param_map.values() if v[0] != "log_total_mass"}
         sfr = fn(age_yr, log_total_mass=10.0, **kwargs)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
 
 # ── ContinuityFlex SFH (Leja+2019) ───────────────────────────────
@@ -760,7 +761,7 @@ class TestContinuityFlexSFH:
             flex_2=0.0,
             ratio_old=0.0,
         )
-        assert sfr.shape == (256,)
+        chex.assert_shape(sfr, (256,))
 
     def test_non_negative(self):
         from tengri.components.stellar.sfh.nonparametric import continuity_flex
@@ -816,7 +817,7 @@ class TestContinuityFlexSFH:
 
         t = self._age_grid()
         sfr = continuity_flex(t, log_total_mass=10.0, ratio_young=0.0, ratio_old=0.0)
-        assert sfr.shape == t.shape
+        chex.assert_equal_shape([sfr, t])
         assert jnp.all(sfr >= 0.0)
 
     def test_custom_anchor_edges(self):
@@ -833,7 +834,7 @@ class TestContinuityFlexSFH:
             flex_0=0.2,
             ratio_old=0.0,
         )
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
         assert jnp.any(sfr > 0)
 
     def test_jit_compatible(self):
@@ -845,7 +846,7 @@ class TestContinuityFlexSFH:
             return continuity_flex(t, 10.0, ratio_young=ry, flex_0=f0, flex_1=f1, ratio_old=ro)
 
         sfr = jax.jit(_fn)(0.3, 0.1, -0.2, -0.4)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_gradient_through_ratio_young(self):
         """Gradient w.r.t. ratio_young should be finite."""
@@ -887,15 +888,15 @@ class TestContinuityFlexSFH:
         t = jnp.logspace(6.0, 10.14, 100)
         internal_kw = {v[0]: 0.0 for k, v in param_map.items() if v[0] != "log_total_mass"}
         sfr = fn(t, log_total_mass=10.0, **internal_kw)
-        assert sfr.shape == (100,)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_shape(sfr, (100,))
+        chex.assert_tree_all_finite(sfr)
 
     def test_prior_logp_shape(self):
         """continuity_flex_prior_logp should return a scalar."""
         from tengri.components.stellar.sfh.nonparametric import continuity_flex_prior_logp
 
         logp = continuity_flex_prior_logp(0.3, jnp.array([0.1, -0.2, 0.0]), -0.4)
-        assert logp.shape == ()
+        chex.assert_shape(logp, ())
 
     def test_prior_logp_zero_ratios(self):
         """All-zero ratios should give maximum log-probability."""

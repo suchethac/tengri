@@ -11,6 +11,7 @@ Validates:
 8. Gradient differentiability and JIT compatibility
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -92,9 +93,9 @@ class TestPreintegrateGridBasic:
             template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
         )
 
-        assert result.phot.shape == (n_met, n_age, n_filters)
-        assert result.effective_wavelengths.shape == (n_filters,)
-        assert result.effective_wavelengths_rest.shape == (n_filters,)
+        chex.assert_shape(result.phot, (n_met, n_age, n_filters))
+        chex.assert_shape(result.effective_wavelengths, (n_filters,))
+        chex.assert_shape(result.effective_wavelengths_rest, (n_filters,))
 
     def test_output_finiteness(self, synthetic_template_3d, tophat_filters):
         """All output values are finite (no NaN/Inf)."""
@@ -107,12 +108,12 @@ class TestPreintegrateGridBasic:
             template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
         )
 
-        assert jnp.all(jnp.isfinite(result.phot))
-        assert jnp.all(jnp.isfinite(result.effective_wavelengths))
-        assert jnp.all(jnp.isfinite(result.effective_wavelengths_rest))
+        chex.assert_tree_all_finite(result.phot)
+        chex.assert_tree_all_finite(result.effective_wavelengths)
+        chex.assert_tree_all_finite(result.effective_wavelengths_rest)
         assert jnp.isfinite(result.flux_scale)
         if result.moment is not None:
-            assert jnp.all(jnp.isfinite(result.moment))
+            chex.assert_tree_all_finite(result.moment)
 
     def test_flux_scale_positive(self, synthetic_template_3d, tophat_filters):
         """flux_scale is positive."""
@@ -179,7 +180,7 @@ class TestPreintegrateGridEnergyNormalization:
             energy_normalize=True,
         )
 
-        assert result.phot.shape == (3, 5, 3)
+        chex.assert_shape(result.phot, (3, 5, 3))
 
     def test_energy_normalize_makes_values_comparable(self, synthetic_template_3d, tophat_filters):
         """With energy_normalize=True, photometry becomes more comparable across filters.
@@ -230,7 +231,7 @@ class TestPreintegrateGridTaylorMoment:
         )
 
         assert result.moment is not None
-        assert result.moment.shape == result.phot.shape
+        chex.assert_equal_shape([result.moment, result.phot])
 
     def test_taylor_moment_finiteness(self, synthetic_template_3d, tophat_filters):
         """Taylor moment values are finite."""
@@ -243,7 +244,7 @@ class TestPreintegrateGridTaylorMoment:
             template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28, taylor=True
         )
 
-        assert jnp.all(jnp.isfinite(result.moment))
+        chex.assert_tree_all_finite(result.moment)
 
     def test_taylor_moment_approximately_zero_for_flat_template(self):
         """For a spectrally flat template, the Taylor moment should be ~zero.
@@ -346,7 +347,7 @@ class TestPreintegrateLines:
 
         result = preintegrate_lines(lines, filter_waves, filter_trans, redshift=0.0)
 
-        assert result.line_filter_weights.shape == (n_lines, n_filters)
+        chex.assert_shape(result.line_filter_weights, (n_lines, n_filters))
 
     def test_output_nonnegative(self, tophat_filters, line_wavelengths):
         """Line weights are non-negative."""
@@ -368,7 +369,7 @@ class TestPreintegrateLines:
 
         result = preintegrate_lines(lines, filter_waves, filter_trans, redshift=0.0)
 
-        assert jnp.all(jnp.isfinite(result.line_filter_weights))
+        chex.assert_tree_all_finite(result.line_filter_weights)
 
     def test_lines_outside_filters_have_small_weight(self, tophat_filters):
         """Lines far outside filter ranges have near-zero weight."""
@@ -487,7 +488,7 @@ class TestInterpNdTriweight1D:
 
         result = interp_nd_triweight(grid_values, axes, edges, (0.5,))
 
-        assert result.shape == (5,)
+        chex.assert_shape(result, (5,))
 
     def test_output_finite_1d(self):
         """1D interpolation produces finite values."""
@@ -500,7 +501,7 @@ class TestInterpNdTriweight1D:
 
         result = interp_nd_triweight(grid_values, axes, edges, (0.5,))
 
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
 
 # ── Tests: interp_nd_triweight() 2D case ──────────────────────────
@@ -523,7 +524,7 @@ class TestInterpNdTriweight2D:
 
         result = interp_nd_triweight(grid_values, axes, edges, (0.5, 0.5))
 
-        assert result.shape == (3,)
+        chex.assert_shape(result, (3,))
 
     def test_query_at_grid_corner_2d(self):
         """Querying at a 2D grid corner returns approximately that corner's value."""
@@ -564,7 +565,7 @@ class TestInterpNdTriweight2D:
 
         result = interp_nd_triweight(grid_values, axes, edges, (0.5, 0.5))
 
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
 
 # ── Tests: Gradient and JIT compatibility ─────────────────────────
@@ -637,7 +638,7 @@ class TestEdgeCasesAndStability:
         )
 
         # Should not produce NaN/Inf
-        assert jnp.all(jnp.isfinite(result.phot))
+        chex.assert_tree_all_finite(result.phot)
 
     def test_very_large_template_values(self, tophat_filters):
         """Very large template values are handled without overflow."""
@@ -652,7 +653,7 @@ class TestEdgeCasesAndStability:
         )
 
         # Should not produce NaN/Inf
-        assert jnp.all(jnp.isfinite(result.phot))
+        chex.assert_tree_all_finite(result.phot)
 
     def test_narrow_filter_bandwidth(self):
         """Narrow filter (small bandwidth) is handled correctly."""
@@ -669,8 +670,8 @@ class TestEdgeCasesAndStability:
         )
 
         # Should handle narrow bandwidth
-        assert jnp.all(jnp.isfinite(result.phot))
-        assert result.phot.shape == (2, 3, 1)
+        chex.assert_tree_all_finite(result.phot)
+        chex.assert_shape(result.phot, (2, 3, 1))
 
     def test_single_wavelength_per_filter(self):
         """Single wavelength per filter (delta function approx)."""
@@ -686,7 +687,7 @@ class TestEdgeCasesAndStability:
             template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
         )
 
-        assert jnp.all(jnp.isfinite(result.phot))
+        chex.assert_tree_all_finite(result.phot)
 
     def test_interp_query_outside_grid_range(self):
         """Interpolation query outside grid range is handled gracefully."""
@@ -700,7 +701,7 @@ class TestEdgeCasesAndStability:
         # Query way outside range
         result = interp_nd_triweight(grid_values, axes, edges, (10.0,))
 
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
 
 # ── Tests: slice_fixed_axes() ─────────────────────────────────────
@@ -787,7 +788,7 @@ class TestSliceFixedAxes:
         sliced = slice_fixed_axes(result, {0: 0.5, 2: 0.5})
         assert sliced.phot.shape == (n_b, len(filter_waves))
         assert len(sliced.axes) == 1
-        assert jnp.all(jnp.isfinite(sliced.phot))
+        chex.assert_tree_all_finite(sliced.phot)
 
     def test_empty_fixed_returns_same(self, synthetic_template_3d, tophat_filters):
         """Empty fixed dict returns the same grid."""

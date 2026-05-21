@@ -6,6 +6,7 @@ C²-continuous triweight interpolation, giving finite gradients everywhere.
 
 from __future__ import annotations
 
+import chex
 import pytest
 
 pytest.importorskip("h5py", reason="h5py required for MAPPINGS grid tests")
@@ -254,7 +255,7 @@ class TestGradients:
 
         params = jnp.array([v_mid, b_mid, n_mid])
         grads = jax.grad(sum_ratios)(params)
-        assert jnp.all(jnp.isfinite(grads)), f"Non-finite joint gradient: {grads}"
+        chex.assert_tree_all_finite(grads), f"Non-finite joint gradient: {grads}"
 
         # FD check on each component individually
         def f_v(v):
@@ -290,8 +291,8 @@ class TestComputeShockSed:
             shock_b_over_sqrt_n=b_mid,
             line_sigma_aa=5.0,
         )
-        assert sed.shape == wave.shape
-        assert jnp.all(jnp.isfinite(sed)), "compute_shock_sed returned non-finite SED"
+        chex.assert_equal_shape([sed, wave])
+        chex.assert_tree_all_finite(sed), "compute_shock_sed returned non-finite SED"
         assert jnp.any(sed > 0), "compute_shock_sed returned all-zero SED"
 
     def test_sed_gradient_wrt_velocity(self):

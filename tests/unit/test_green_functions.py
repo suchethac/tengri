@@ -7,6 +7,7 @@ Tests cover:
 - compute_time_sensitivity_matrix: shape and consistency with per-wavelength Green's functions
 """
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -56,12 +57,12 @@ class TestComputeGreenFunctionMonochromatic:
         ssp_flux, ssp_wave, _ = synthetic_ssp
         wave_target = 5500.0
         g = compute_green_function(ssp_flux, ssp_wave, wave_target=wave_target)
-        assert g.shape == (ssp_flux.shape[0],)
+        chex.assert_shape(g, (ssp_flux.shape[0],))
 
     def test_output_finite(self, synthetic_ssp):
         ssp_flux, ssp_wave, _ = synthetic_ssp
         g = compute_green_function(ssp_flux, ssp_wave, wave_target=5000.0)
-        assert jnp.all(jnp.isfinite(g))
+        chex.assert_tree_all_finite(g)
 
     def test_values_positive_for_positive_flux(self, synthetic_ssp):
         ssp_flux, ssp_wave, _ = synthetic_ssp
@@ -111,7 +112,7 @@ class TestComputeGreenFunctionFilter:
         g = compute_green_function(
             ssp_flux, ssp_wave, filter_wave=filter_wave, filter_trans=filter_trans
         )
-        assert g.shape == (ssp_flux.shape[0],)
+        chex.assert_shape(g, (ssp_flux.shape[0],))
 
     def test_filter_values_finite(self, synthetic_ssp):
         ssp_flux, ssp_wave, _ = synthetic_ssp
@@ -120,7 +121,7 @@ class TestComputeGreenFunctionFilter:
         g = compute_green_function(
             ssp_flux, ssp_wave, filter_wave=filter_wave, filter_trans=filter_trans
         )
-        assert jnp.all(jnp.isfinite(g))
+        chex.assert_tree_all_finite(g)
 
     def test_flat_filter_uniform_ssp(self, uniform_ssp):
         """Uniform SSP + flat filter → G(t) constant at all ages."""
@@ -159,7 +160,7 @@ class TestComputeWindowFunction:
         g = jnp.ones(n_age)
         sfr = jnp.ones(n_age)
         w = compute_window_function(g, sfr)
-        assert w.shape == (n_age,)
+        chex.assert_shape(w, (n_age,))
 
     def test_definition_product(self):
         """W(t) = G(t) * SFR(t) — exact product."""
@@ -200,8 +201,8 @@ class TestComputeWindowFunctionFourier:
         power, omega = compute_window_function_fourier(window_fn, ages_yr)
         # rfft output length for n points is n//2 + 1
         expected_len = n_age // 2 + 1
-        assert power.shape == (expected_len,)
-        assert omega.shape == (expected_len,)
+        chex.assert_shape(power, (expected_len,))
+        chex.assert_shape(omega, (expected_len,))
 
     def test_power_non_negative(self, synthetic_ssp):
         _, _, ages_yr = synthetic_ssp
@@ -214,8 +215,8 @@ class TestComputeWindowFunctionFourier:
         _, _, ages_yr = synthetic_ssp
         window_fn = jnp.ones(ages_yr.shape[0])
         power, omega = compute_window_function_fourier(window_fn, ages_yr)
-        assert jnp.all(jnp.isfinite(power))
-        assert jnp.all(jnp.isfinite(omega))
+        chex.assert_tree_all_finite(power)
+        chex.assert_tree_all_finite(omega)
 
     def test_zero_window_gives_zero_power(self, synthetic_ssp):
         _, _, ages_yr = synthetic_ssp
@@ -253,13 +254,13 @@ class TestComputeTimeSensitivityMatrix:
         n_age = ssp_flux.shape[0]
         wavelengths = jnp.array([3000.0, 5500.0, 8000.0])
         s = compute_time_sensitivity_matrix(ssp_flux, ssp_wave, wavelengths)
-        assert s.shape == (3, n_age)
+        chex.assert_shape(s, (3, n_age))
 
     def test_finite_values(self, synthetic_ssp):
         ssp_flux, ssp_wave, _ = synthetic_ssp
         wavelengths = jnp.array([4000.0, 6000.0])
         s = compute_time_sensitivity_matrix(ssp_flux, ssp_wave, wavelengths)
-        assert jnp.all(jnp.isfinite(s))
+        chex.assert_tree_all_finite(s)
 
     def test_rows_match_individual_green_functions(self, synthetic_ssp):
         """Each row of the matrix must equal compute_green_function for that wavelength."""
@@ -274,7 +275,7 @@ class TestComputeTimeSensitivityMatrix:
         ssp_flux, ssp_wave, _ = synthetic_ssp
         wavelengths = jnp.array([5000.0])
         s = compute_time_sensitivity_matrix(ssp_flux, ssp_wave, wavelengths)
-        assert s.shape == (1, ssp_flux.shape[0])
+        chex.assert_shape(s, (1, ssp_flux.shape[0]))
 
     def test_uniform_ssp_all_rows_equal(self, uniform_ssp):
         """Uniform SSP flux → G(t) is the same for every wavelength within the grid."""

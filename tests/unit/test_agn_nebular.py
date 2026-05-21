@@ -6,6 +6,7 @@ AGN NLR dispatcher.
 
 from pathlib import Path
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -154,7 +155,7 @@ class TestAgnNlrCue:
     def test_nonzero_luminosity(self, cue_backend):
         """Line luminosities should be positive and nonzero."""
         _wav, lum = agn_nlr_cue(cue_backend, l_acc_erg=1e44)
-        assert jnp.all(jnp.isfinite(lum))
+        chex.assert_tree_all_finite(lum)
         assert jnp.any(lum > 0)
 
     @requires_cue

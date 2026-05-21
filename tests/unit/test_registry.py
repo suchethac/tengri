@@ -4,6 +4,7 @@ Tests the registry lookup, composition engine (additive, mixture,
 modulator), parameter merging, and validation.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -148,7 +149,7 @@ class TestComposedFunction:
         fn, _, _, _ = resolve_sfh("tsnorm")
         t = jnp.logspace(6, 10, 200)
         sfr = fn(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=3.0)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
         assert jnp.max(sfr) > 0
 
     def test_field_modulation_with_gp(self):
@@ -189,7 +190,7 @@ class TestComposedFunction:
             log_tmax_myr=1.0,
         )
         sfr = fn(t, **kw)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
         assert jnp.max(sfr) > 0
 
     def test_composed_is_jittable(self):
@@ -212,7 +213,7 @@ class TestComposedFunction:
             )
         )
         sfr = jit_fn(t)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
 
 class TestComputeFieldGP:
@@ -228,7 +229,7 @@ class TestComputeFieldGP:
             n_grid=64,
             d_log_age=0.065,
         )
-        assert gp_x.shape == (64,)
+        chex.assert_shape(gp_x, (64,))
         assert jnp.isfinite(k0_half)
         # With zero xi, GP should be zero
         assert_allclose(gp_x, 0.0, atol=1e-10)

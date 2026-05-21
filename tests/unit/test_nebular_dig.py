@@ -11,6 +11,7 @@ Uses a deterministic MockNebularBackend so the test runs without any data files.
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -176,8 +177,8 @@ def test_dig_jit_traced_frac(mock_backend, common_kw):
 
     frac = jnp.array(0.4)
     out = fn(frac)
-    assert jnp.all(jnp.isfinite(out)), "JIT output contains non-finite values"
-    assert out.shape == (N_WAVE,), f"Shape mismatch: {out.shape}"
+    chex.assert_tree_all_finite(out), "JIT output contains non-finite values"
+    chex.assert_shape(out, (N_WAVE,))
 
 
 def test_dig_jit_consistent_with_python(mock_backend, common_kw):
@@ -225,11 +226,11 @@ def test_dig_output_shape(mock_backend, common_kw):
     """Output shape matches ssp_wave shape for all fractions."""
     for frac in (0.0, 0.5, 1.0):
         out = mix_dig_emission(mock_backend, neb_logU=-3.0, neb_dig_frac=frac, **common_kw)
-        assert out.shape == (N_WAVE,), f"frac={frac}: shape {out.shape} != ({N_WAVE},)"
+        chex.assert_shape(out, (N_WAVE,))
 
 
 def test_dig_output_finite(mock_backend, common_kw):
     """Output is finite for all fractions when backend returns finite values."""
     for frac in (0.0, 0.25, 0.5, 0.75, 1.0):
         out = mix_dig_emission(mock_backend, neb_logU=-3.0, neb_dig_frac=frac, **common_kw)
-        assert jnp.all(jnp.isfinite(out)), f"frac={frac}: output contains non-finite values"
+        chex.assert_tree_all_finite(out), f"frac={frac}: output contains non-finite values"

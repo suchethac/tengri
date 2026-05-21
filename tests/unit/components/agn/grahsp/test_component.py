@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import chex
 import jax.numpy as jnp
 import numpy as np
 
@@ -39,8 +40,8 @@ def test_apply_runs_end_to_end():
     component = GRAHSPSEDComponent()
     state = ForwardState(wave=jnp.logspace(3, 6, 200))  # 1000 Å to 1e6 Å
     out = component.apply(state, _default_params())
-    assert out.sed_intrinsic.shape == state.wave.shape
-    assert jnp.all(jnp.isfinite(out.sed_intrinsic))
+    chex.assert_equal_shape([out.sed_intrinsic, state.wave])
+    chex.assert_tree_all_finite(out.sed_intrinsic)
     assert "L_agn_bol" in out.derived
     assert "L_agn_torus" in out.derived
     assert out.derived["L_agn_bol"] > 0
@@ -88,7 +89,7 @@ def test_compose_only_bbb():
     # Mid-IR contribution should be that of the BBB alone, not the torus.
     # At 12 um (120000 Å) the BBB is many orders of magnitude below the
     # torus-on case, so just check positive and finite.
-    assert jnp.all(jnp.isfinite(out.sed_intrinsic))
+    chex.assert_tree_all_finite(out.sed_intrinsic)
     assert float(out.sed_intrinsic.max()) > 0
     assert out.derived["L_agn_torus"] == 0.0
 
@@ -137,5 +138,5 @@ def test_jit_apply():
         return component.apply(state, p, templates_state).sed_intrinsic
 
     out = fwd(_default_params())
-    assert out.shape == (100,)
-    assert jnp.all(jnp.isfinite(out))
+    chex.assert_shape(out, (100,))
+    chex.assert_tree_all_finite(out)

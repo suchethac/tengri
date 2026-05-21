@@ -15,6 +15,7 @@ Tests verify:
 8. Gradient finiteness
 """
 
+import chex
 import jax
 
 jax.config.update("jax_enable_x64", True)
@@ -37,7 +38,7 @@ class TestMadau1995IGM:
         """Output shape matches input; dtype is float64."""
         wave_obs = jnp.linspace(900.0, 10000.0, 200)
         T = igm_transmission_madau(wave_obs, z=2.0)
-        assert T.shape == (200,), f"Expected shape (200,), got {T.shape}"
+        chex.assert_shape(T, (200,))
         assert T.dtype == jnp.float64, f"Expected float64, got {T.dtype}"
 
     def test_transmission_bounds(self):
@@ -121,7 +122,7 @@ class TestMadau1995IGM:
         jitted_fn = jax.jit(igm_transmission_madau)
         wave_obs = jnp.array([1000.0, 2000.0, 4000.0, 8000.0])
         T = jitted_fn(wave_obs, z=2.5)
-        assert jnp.all(jnp.isfinite(T)), "igm_transmission_madau not JIT-compatible"
+        chex.assert_tree_all_finite(T), "igm_transmission_madau not JIT-compatible"
 
     def test_gradient_wrt_z_finite(self):
         """Gradient ∂T/∂z is finite and sensible (negative sign expected).
@@ -170,7 +171,7 @@ class TestMadau1995IGM:
         T = igm_transmission_madau(wave_obs, z=z)
 
         # All outputs should be finite and in bounds
-        assert jnp.all(jnp.isfinite(T)), "NaN in transmission vector"
+        chex.assert_tree_all_finite(T), "NaN in transmission vector"
         assert jnp.all((T >= 0.0) & (T <= 1.0)), "T outside [0, 1]"
 
     def test_consistency_across_redshifts(self):

@@ -12,6 +12,7 @@ References
 - Markov, V., et al. 2025, A&A (arXiv:2504.12378)
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -143,7 +144,7 @@ class TestJAXCompatibility:
     def test_jit_compatible(self):
         f = jax.jit(li08)
         k = f(WAVS)
-        assert k.shape == (8,)
+        chex.assert_shape(k, (8,))
 
     def test_gradient_wrt_c1(self):
         def loss(c1):
@@ -169,7 +170,7 @@ class TestJAXCompatibility:
         """Should work with vmap for batched evaluation."""
         batch_wavs = jnp.stack([WAVS, WAVS * 1.1])
         k_batch = jax.vmap(li08)(batch_wavs)
-        assert k_batch.shape == (2, 8)
+        chex.assert_shape(k_batch, (2, 8))
 
     def test_gradient_wrt_all_params(self):
         """Full gradient should be finite for all 4 parameters."""

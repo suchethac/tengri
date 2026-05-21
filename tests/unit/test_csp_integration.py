@@ -20,6 +20,7 @@ Reference: Johnson et al. 2021, ApJS 254, 22 (Prospector), Appendix B.
 
 import time
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -76,12 +77,12 @@ class TestCspAgeDt:
     def test_trapz_shapes(self):
         ages = make_log_spaced_ages(107)
         dt = csp_age_dt(ages, "trapz")
-        assert dt.shape == (107,)
+        chex.assert_shape(dt, (107,))
 
     def test_log_trapz_shapes(self):
         ages = make_log_spaced_ages(107)
         dt = csp_age_dt(ages, "log_trapz")
-        assert dt.shape == (107,)
+        chex.assert_shape(dt, (107,))
 
     def test_invalid_method_raises(self):
         ages = make_log_spaced_ages(10)
@@ -329,7 +330,7 @@ class TestCspLogInterpMatrix:
     def test_shape(self):
         ages = make_log_spaced_ages(107)
         A = csp_log_interp_matrix(ages)
-        assert A.shape == (107, 107)
+        chex.assert_shape(A, (107, 107))
 
     def test_all_nonnegative(self):
         """All matrix entries must be >= 0 (they are integrals of positive functions)."""

@@ -16,6 +16,7 @@ References
 - Attenuation cutoff: Leitherer+2002 ApJS 140 303 Eq. 14 (970-1800 A valid range)
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -102,7 +103,7 @@ class TestRingAreaPi:
         l_nu = multicolor_disc(
             _WAVE, agn_log_lbol=12.0, agn_frac=1.0, agn_log_mbh=8.0, agn_cos_inc=0.5
         )
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)
 
     def test_kubota_done_disc_finite(self):
@@ -112,7 +113,7 @@ class TestRingAreaPi:
         l_nu = kubota_done_disc(
             _WAVE, agn_log_lbol=12.0, agn_frac=1.0, agn_log_mbh=8.0, agn_log_ledd=-1.0
         )
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)
 
     def test_adaf_disc_finite(self):
@@ -122,7 +123,7 @@ class TestRingAreaPi:
         l_nu = adaf_disc(
             _WAVE, agn_log_lbol=10.0, agn_frac=0.1, agn_log_mbh=8.0, agn_log_ledd=-3.0
         )
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)
 
 
@@ -175,7 +176,7 @@ class TestWarmComptonization:
         _H_PLANCK = 6.626e-27
         nu_warm = 0.2 * _KEV_TO_ERG / _H_PLANCK
         b_nu = _warm_comptonization_lnu(nu, 1e5, nu_warm, 2.5)
-        assert jnp.all(jnp.isfinite(b_nu))
+        chex.assert_tree_all_finite(b_nu)
         assert jnp.all(b_nu >= 0.0)
 
 
@@ -407,8 +408,8 @@ class TestNonparametricJITSafe:
             return continuity(age_yr, log_total_mass=10.0, bin_edges_gyr=edges, **kwargs)
 
         sfr = _eval(DEFAULT_BIN_EDGES_GYR)
-        assert sfr.shape == age_yr.shape
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_equal_shape([sfr, age_yr])
+        chex.assert_tree_all_finite(sfr)
 
     def test_dirichlet_sfh_jit(self):
         """dirichlet should JIT-compile with JAX array bin_edges."""
@@ -422,7 +423,7 @@ class TestNonparametricJITSafe:
             return dirichlet(age_yr, log_total_mass=10.0, bin_edges_gyr=edges, **kwargs)
 
         sfr = _eval(DEFAULT_BIN_EDGES_GYR)
-        assert sfr.shape == age_yr.shape
+        chex.assert_equal_shape([sfr, age_yr])
 
     def test_continuity_sfh_piecewise_constant(self):
         """continuity should return piecewise-constant SFR (step function per Leja+2019)."""
@@ -505,8 +506,8 @@ class TestAttenuationFloatEqualitySafe:
         # Non-default values should not activate redshift scaling
         k_custom = _eval(-0.4, 0.5)
 
-        assert jnp.all(jnp.isfinite(k_default))
-        assert jnp.all(jnp.isfinite(k_custom))
+        chex.assert_tree_all_finite(k_default)
+        chex.assert_tree_all_finite(k_custom)
         # The two should be different (different delta values)
         assert not jnp.allclose(k_default, k_custom)
 
@@ -630,8 +631,8 @@ class TestSingleComponentDustFastJITSafe:
             return single_component_dust_fast(wave, tau_v=1.0, n_ages=n_ages)
 
         result = _eval()
-        assert result.shape == (n_ages, wave.shape[0])
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_shape(result, (n_ages, wave.shape[0]))
+        chex.assert_tree_all_finite(result)
 
 
 # ── SLOPPY 22: Leitherer02 cutoff consistent at 1800 A ────────────
@@ -716,7 +717,7 @@ class TestRadioAGNSimplified:
 
         wave = jnp.logspace(7.0, 9.0, 100)  # radio wavelengths
         l_nu = radio_agn(wave, L_agn_bol=1e11, radio_loudness=2.0)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)
 
 
@@ -750,8 +751,8 @@ class TestUnifiedAGNTorusFrac:
         # Non-default value — should use the provided value
         l_nu_custom = _eval(0.3)
 
-        assert jnp.all(jnp.isfinite(l_nu_default))
-        assert jnp.all(jnp.isfinite(l_nu_custom))
+        chex.assert_tree_all_finite(l_nu_default)
+        chex.assert_tree_all_finite(l_nu_custom)
 
 
 # ── SLOPPY 28: precompute_dust_age_mask preserves dtype ───────────

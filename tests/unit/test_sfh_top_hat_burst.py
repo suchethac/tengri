@@ -1,5 +1,6 @@
 """Unit tests for top_hat and gaussian_burst parametric SFH models."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -19,7 +20,7 @@ class TestTopHat:
         """Test output shape matches input."""
         t = jnp.logspace(7, 10.14, 64)
         sfr = top_hat(t, amplitude=1.0, t_start=5e9, t_end=3e9)
-        assert sfr.shape == t.shape
+        chex.assert_equal_shape([sfr, t])
 
     @pytest.mark.unit
     def test_top_hat_nonzero_in_window(self):
@@ -99,7 +100,7 @@ class TestTopHat:
 
         t = jnp.linspace(1e8, 1.4e10, 64)
         sfr = compute_sfr(t, 1.5, 5e9, 3e9)
-        assert sfr.shape == t.shape
+        chex.assert_equal_shape([sfr, t])
 
     @pytest.mark.unit
     def test_top_hat_registry(self):
@@ -118,7 +119,7 @@ class TestGaussianBurst:
         """Test output shape matches input."""
         t = jnp.logspace(7, 10.14, 64)
         sfr = gaussian_burst(t, amplitude=5.0, t_peak=1e9, sigma=1e8)
-        assert sfr.shape == t.shape
+        chex.assert_equal_shape([sfr, t])
 
     @pytest.mark.unit
     def test_gaussian_burst_peaks_at_t_peak(self):
@@ -188,7 +189,7 @@ class TestGaussianBurst:
 
         t = jnp.linspace(0.0, 3e9, 64)
         sfr = compute_sfr(t, 5.0, 1e9, 1e8)
-        assert sfr.shape == t.shape
+        chex.assert_equal_shape([sfr, t])
 
     @pytest.mark.unit
     def test_gaussian_burst_registry(self):
@@ -239,7 +240,7 @@ class TestEvolvingMetallicity:
 
         assert "sed" in result
         assert result["sed"].shape[0] > 0
-        assert jnp.all(jnp.isfinite(result["sed"]))
+        chex.assert_tree_all_finite(result["sed"])
 
     def test_simulate_z_scalar_vs_array(self):
         """Test scalar and array metallicity give consistent results."""

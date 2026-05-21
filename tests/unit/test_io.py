@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import chex
 import numpy as np
 import pytest
 
@@ -401,7 +402,7 @@ class TestSpecutils1DBridge:
 
         spec = from_spectrum1d(spec_1d)
         assert np.allclose(spec.wave, wave)
-        assert spec.flux.shape == (1,)
+        chex.assert_shape(spec.flux, (1,))
 
     def test_from_spectrum1d_without_specutils_raises(self):
         """Test that ImportError is raised when specutils is missing."""

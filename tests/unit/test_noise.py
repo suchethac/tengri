@@ -4,6 +4,7 @@ Tests the core noise computation functions, the detection helper,
 and the GGN metric-vector product for VariableCovarianceGaussian.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy.testing as npt
@@ -73,7 +74,7 @@ class TestComputeEffectiveNoise:
         noise_obs = jnp.array([0.1, 0.2])
         model_flux = jnp.array([10.0, 20.0])
         result = fn(noise_obs, model_flux, 0.05)
-        assert result.shape == (2,)
+        chex.assert_shape(result, (2,))
 
     def test_grad_through_f_cal(self):
         """Gradient through f_cal is well-defined."""
@@ -538,4 +539,4 @@ class TestVariableNoiseMetricVec:
             )
         )
         result = fn(setup["xi"], setup["v"])
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)

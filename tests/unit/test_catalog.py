@@ -4,6 +4,7 @@ Tests Feature 4 — the ``read_catalog`` function and ``Catalog`` dataclass
 in ``tengri.observation.catalog``.
 """
 
+import chex
 import numpy as np
 import numpy.testing as npt
 import pytest
@@ -80,15 +81,15 @@ class TestReadCatalogBasic:
 
     def test_flux_shape(self, basic_csv):
         cat = read_catalog(basic_csv)
-        assert cat.flux.shape == (3, 3)
+        chex.assert_shape(cat.flux, (3, 3))
 
     def test_noise_shape(self, basic_csv):
         cat = read_catalog(basic_csv)
-        assert cat.noise.shape == (3, 3)
+        chex.assert_shape(cat.noise, (3, 3))
 
     def test_mask_shape(self, basic_csv):
         cat = read_catalog(basic_csv)
-        assert cat.mask.shape == (3, 3)
+        chex.assert_shape(cat.mask, (3, 3))
 
     def test_ids_correct(self, basic_csv):
         cat = read_catalog(basic_csv)

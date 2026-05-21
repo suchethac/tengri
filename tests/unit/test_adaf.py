@@ -1,5 +1,6 @@
 """Tests for the ADAF + truncated disc model (disc.adaf_disc + unified.adaf_agn)."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -46,8 +47,8 @@ class TestAdafDisc:
             agn_log_ledd=-3.0,
             agn_r_tr=100.0,
         )
-        assert jnp.all(jnp.isfinite(l_nu))
-        assert l_nu.shape == wavelength.shape
+        chex.assert_tree_all_finite(l_nu)
+        chex.assert_equal_shape([l_nu, wavelength])
 
     def test_non_negative(self, wavelength):
         """ADAF SED is non-negative everywhere."""
@@ -195,7 +196,7 @@ class TestAdafJitGrad:
             return adaf_disc(wave, agn_log_lbol=42.0, agn_frac=0.1)
 
         result = _run(wavelength)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
     def test_gradient_wrt_lbol(self, optical_wavelength):
         """FD check: ∂(∑SED)/∂log_lbol for adaf_disc."""
@@ -297,8 +298,8 @@ class TestAdafRegistry:
 
         model_fn = resolve_agn_model("adaf")
         l_nu = model_fn(optical_wavelength, agn_log_lbol=42.0)
-        assert jnp.all(jnp.isfinite(l_nu))
-        assert l_nu.shape == optical_wavelength.shape
+        chex.assert_tree_all_finite(l_nu)
+        chex.assert_equal_shape([l_nu, optical_wavelength])
 
     def test_adaf_in_unified_disc_fns(self, optical_wavelength):
         """'adaf' disc type works in unified_agn combiner."""
@@ -310,7 +311,7 @@ class TestAdafRegistry:
             disc_model="adaf",
             torus_model="simple",
         )
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
 
 
 # ── simple_agn: power-law disc + single-temperature torus ─────────
@@ -324,9 +325,9 @@ class TestSimpleAgn:
         from tengri.components.agn.unified import simple_agn
 
         l_nu = simple_agn(wavelength, agn_log_lbol=44.0)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)
-        assert l_nu.shape == wavelength.shape
+        chex.assert_equal_shape([l_nu, wavelength])
 
     def test_registered_as_simple(self):
         """'simple' appears in the AGN_MODELS registry."""
@@ -423,7 +424,7 @@ class TestSimpleAgn:
         def _run(wave):
             return simple_agn(wave, agn_log_lbol=44.0)
 
-        assert jnp.all(jnp.isfinite(_run(wavelength)))
+        chex.assert_tree_all_finite(_run(wavelength))
 
     def test_gradient_wrt_lbol(self, optical_wavelength):
         """FD check: ∂(∑SED)/∂agn_log_lbol for simple_agn."""
@@ -452,9 +453,9 @@ class TestStandardAgn:
         from tengri.components.agn.unified import standard_agn
 
         l_nu = standard_agn(wavelength, agn_log_lbol=44.0)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)
-        assert l_nu.shape == wavelength.shape
+        chex.assert_equal_shape([l_nu, wavelength])
 
     def test_registered_as_standard(self):
         """'standard' appears in the AGN_MODELS registry."""
@@ -546,7 +547,7 @@ class TestStandardAgn:
         def _run(wave):
             return standard_agn(wave, agn_log_lbol=44.0)
 
-        assert jnp.all(jnp.isfinite(_run(wavelength)))
+        chex.assert_tree_all_finite(_run(wavelength))
 
     def test_gradient_wrt_lbol(self, optical_wavelength):
         """FD check: ∂(∑SED)/∂agn_log_lbol for standard_agn."""
@@ -607,11 +608,12 @@ class TestUnifiedAgnCombinations:
             disc_model=disc_model,
             torus_model=torus_model,
         )
-        assert jnp.all(jnp.isfinite(l_nu)), (
-            f"Non-finite SED for disc={disc_model}, torus={torus_model}"
+        (
+            chex.assert_tree_all_finite(l_nu),
+            (f"Non-finite SED for disc={disc_model}, torus={torus_model}"),
         )
         assert jnp.all(l_nu >= 0.0), f"Negative SED for disc={disc_model}, torus={torus_model}"
-        assert l_nu.shape == wavelength.shape
+        chex.assert_equal_shape([l_nu, wavelength])
 
     def test_unknown_disc_raises(self, wavelength):
         """Unknown disc_model raises KeyError."""
@@ -673,7 +675,7 @@ class TestUnifiedAgnCombinations:
         def _run(wave):
             return unified_agn(wave, agn_log_lbol=44.0)
 
-        assert jnp.all(jnp.isfinite(_run(wavelength)))
+        chex.assert_tree_all_finite(_run(wavelength))
 
     def test_total_is_disc_plus_torus(self, wavelength):
         """unified_agn output equals disc + torus computed separately."""
@@ -725,8 +727,8 @@ class TestResolveAgn:
             fn = resolve_agn_model("kubota_done")
 
         l_nu = fn(wavelength, agn_log_lbol=44.0)
-        assert jnp.all(jnp.isfinite(l_nu))
-        assert l_nu.shape == wavelength.shape
+        chex.assert_tree_all_finite(l_nu)
+        chex.assert_equal_shape([l_nu, wavelength])
 
     def test_all_canonical_models_in_registry(self):
         """All canonical model names appear in AGN_MODELS."""
@@ -792,9 +794,9 @@ class TestMulticolorAgn:
         from tengri.components.agn.unified import multicolor_agn
 
         l_nu = multicolor_agn(wavelength, agn_log_lbol=44.0)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)
-        assert l_nu.shape == wavelength.shape
+        chex.assert_equal_shape([l_nu, wavelength])
 
     def test_registered_as_multicolor_agn(self):
         """'multicolor_agn' appears in AGN_MODELS."""
@@ -847,7 +849,7 @@ class TestMulticolorAgn:
         def _run(wave):
             return multicolor_agn(wave, agn_log_lbol=44.0)
 
-        assert jnp.all(jnp.isfinite(_run(wavelength)))
+        chex.assert_tree_all_finite(_run(wavelength))
 
 
 # ── kubota_done_full_agn: full 3-zone K&D disc + two-temperature torus
@@ -861,9 +863,9 @@ class TestKubotaDoneFullAgn:
         from tengri.components.agn.unified import kubota_done_full_agn
 
         l_nu = kubota_done_full_agn(wavelength, agn_log_lbol=44.0)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)
-        assert l_nu.shape == wavelength.shape
+        chex.assert_equal_shape([l_nu, wavelength])
 
     def test_registered_as_kubota_done_full(self):
         """'kubota_done_full' appears in AGN_MODELS."""
@@ -929,7 +931,7 @@ class TestKubotaDoneFullAgn:
         def _run(wave):
             return kubota_done_full_agn(wave, agn_log_lbol=44.0)
 
-        assert jnp.all(jnp.isfinite(_run(wavelength)))
+        chex.assert_tree_all_finite(_run(wavelength))
 
 
 # ── _sigmoid_mask: smooth geometric visibility function ───────────
@@ -1019,9 +1021,9 @@ class TestUnifiedNlrBlr:
         from tengri.components.agn.unified import unified_nlr_blr
 
         l_nu = unified_nlr_blr(wavelength, agn_log_lbol=44.0)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)
-        assert l_nu.shape == wavelength.shape
+        chex.assert_equal_shape([l_nu, wavelength])
 
     def test_registered_as_unified_nlr_blr(self):
         """'unified_nlr_blr' appears in AGN_MODELS."""
@@ -1114,4 +1116,4 @@ class TestUnifiedNlrBlr:
         def _run(wave):
             return unified_nlr_blr(wave, agn_log_lbol=44.0)
 
-        assert jnp.all(jnp.isfinite(_run(wavelength)))
+        chex.assert_tree_all_finite(_run(wavelength))

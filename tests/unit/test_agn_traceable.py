@@ -6,6 +6,7 @@ instead of being captured in closures, reducing XLA HLO size.
 
 from __future__ import annotations
 
+import chex
 import jax.numpy as jnp
 
 from tengri.components.agn.skirtor_precompute import (
@@ -51,8 +52,8 @@ class TestSKIRTORTracedArrays:
         )
 
         # Verify output shape (should match n_filters)
-        assert result.shape == (3,)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_shape(result, (3,))
+        chex.assert_tree_all_finite(result)
 
     def test_build_lookup_backward_compat(self):
         """Verify build_lookup still works without grid_arrays_traced (backward compat)."""
@@ -88,8 +89,8 @@ class TestSKIRTORTracedArrays:
         )
 
         # Verify output shape
-        assert result.shape == (2,)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_shape(result, (2,))
+        chex.assert_tree_all_finite(result)
 
     def test_traced_arrays_match_closure_capture(self):
         """Verify traced arrays produce same results as closure capture."""

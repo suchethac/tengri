@@ -4,6 +4,7 @@ Validates that the vmap-based filter integration matches the loop-based version
 across different filter configurations, SED shapes, and edge cases.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -44,9 +45,9 @@ class TestPadFilters:
         fws, fts = sdss_like_filters
         fw_pad, ft_pad, n_valid = pad_filters(fws, fts)
         max_len = max(len(fw) for fw in fws)
-        assert fw_pad.shape == (3, max_len)
-        assert ft_pad.shape == (3, max_len)
-        assert n_valid.shape == (3,)
+        chex.assert_shape(fw_pad, (3, max_len))
+        chex.assert_shape(ft_pad, (3, max_len))
+        chex.assert_shape(n_valid, (3,))
 
     def test_valid_lengths(self, sdss_like_filters):
         fws, fts = sdss_like_filters
@@ -76,7 +77,7 @@ class TestPadFilters:
         fw = [jnp.linspace(4000.0, 5000.0, 50)]
         ft = [jnp.ones(50)]
         fw_pad, _ft_pad, n_valid = pad_filters(fw, ft)
-        assert fw_pad.shape == (1, 50)
+        chex.assert_shape(fw_pad, (1, 50))
         assert n_valid[0] == 50
 
     def test_equal_length_filters(self):
@@ -85,7 +86,7 @@ class TestPadFilters:
         fws = [fw1, fw2]
         fts = [jnp.ones(60), jnp.ones(60)]
         fw_pad, _ft_pad, n_valid = pad_filters(fws, fts)
-        assert fw_pad.shape == (2, 60)
+        chex.assert_shape(fw_pad, (2, 60))
         # No padding needed — all valid
         assert jnp.all(n_valid == 60)
 
@@ -170,7 +171,7 @@ class TestComputeFluxDensityBatch:
             )
 
         grad = jax.grad(loss)(sed)
-        assert jnp.all(jnp.isfinite(grad))
+        chex.assert_tree_all_finite(grad)
 
     def test_jit_compatible(self, flat_sed, sdss_like_filters):
         """Batch function works inside jax.jit."""
@@ -191,5 +192,5 @@ class TestComputeFluxDensityBatch:
             )
 
         result = compute(sed)
-        assert result.shape == (3,)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_shape(result, (3,))
+        chex.assert_tree_all_finite(result)

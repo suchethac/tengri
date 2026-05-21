@@ -6,6 +6,7 @@ constants in the compiled HLO when passed as grid_arrays_traced kwargs.
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -153,7 +154,7 @@ class TestDustEmissionTraceable:
 
         result = model._precomputed.dust_ir_lookup(L_absorbed, dust_alpha_dale)
         assert result.shape[0] > 0, "Lookup should return photometry array"
-        assert not jnp.any(jnp.isnan(result)), "Result should not contain NaN"
+        chex.assert_tree_all_finite(result), "Result should not contain NaN"
 
         # Also try with grid_arrays_traced (new style)
         if model._precomputed.dust_ir_grid_arrays is not None:
@@ -162,7 +163,7 @@ class TestDustEmissionTraceable:
                 dust_alpha_dale,
                 grid_arrays_traced=model._precomputed.dust_ir_grid_arrays,
             )
-            assert result_traced.shape == result.shape
+            chex.assert_equal_shape([result_traced, result])
             # Results should be identical
             assert jnp.allclose(result, result_traced, atol=1e-12)
 

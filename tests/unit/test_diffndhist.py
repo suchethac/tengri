@@ -8,6 +8,7 @@ Vendored from diffsky (Hearin et al.) — tests verify:
 5. Conservation (total weight ≈ npts for well-covered bins)
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 
@@ -25,7 +26,7 @@ class TestTwNdhist1D:
         ndbins_lo = jnp.array([[0.0]])
         ndbins_hi = jnp.array([[10.0]])
         result = tw_ndhist(nddata, ndsig, ndbins_lo, ndbins_hi)
-        assert result.shape == (1,)
+        chex.assert_shape(result, (1,))
         assert jnp.isclose(result[0], 1.0, atol=1e-6)
 
     def test_points_distribute_across_bins(self):
@@ -34,7 +35,7 @@ class TestTwNdhist1D:
         ndbins_lo = jnp.array([[0.0], [4.0], [6.0]])
         ndbins_hi = jnp.array([[4.0], [6.0], [10.0]])
         result = tw_ndhist(nddata, ndsig, ndbins_lo, ndbins_hi)
-        assert result.shape == (3,)
+        chex.assert_shape(result, (3,))
         assert jnp.isclose(result[0], 1.0, atol=0.05)
         assert jnp.isclose(result[1], 1.0, atol=0.05)
         assert jnp.isclose(result[2], 1.0, atol=0.05)
@@ -62,7 +63,7 @@ class TestTwNdhist2D:
         ndbins_lo = jnp.array([[0.0, 0.0]])
         ndbins_hi = jnp.array([[10.0, 10.0]])
         result = tw_ndhist(nddata, ndsig, ndbins_lo, ndbins_hi)
-        assert result.shape == (1,)
+        chex.assert_shape(result, (1,))
         assert jnp.isclose(result[0], 1.0, atol=1e-6)
 
     def test_2d_separation(self):
@@ -116,8 +117,8 @@ class TestDifferentiability:
 
         data = jnp.array([[3.0], [7.0]])
         grads = jax.grad(loss)(data)
-        assert grads.shape == data.shape
-        assert jnp.all(jnp.isfinite(grads))
+        chex.assert_equal_shape([grads, data])
+        chex.assert_tree_all_finite(grads)
 
     def test_grad_through_weighted_ndhist(self):
         def loss(data, y):
@@ -130,8 +131,8 @@ class TestDifferentiability:
         data = jnp.array([[3.0], [7.0]])
         y = jnp.array([1.0, 2.0])
         grads_data, grads_y = jax.grad(loss, argnums=(0, 1))(data, y)
-        assert jnp.all(jnp.isfinite(grads_data))
-        assert jnp.all(jnp.isfinite(grads_y))
+        chex.assert_tree_all_finite(grads_data)
+        chex.assert_tree_all_finite(grads_y)
 
     def test_grad_through_scatter(self):
         def loss(sig):
@@ -143,8 +144,8 @@ class TestDifferentiability:
 
         sig = jnp.array([[0.5], [0.5]])
         grads = jax.grad(loss)(sig)
-        assert grads.shape == sig.shape
-        assert jnp.all(jnp.isfinite(grads))
+        chex.assert_equal_shape([grads, sig])
+        chex.assert_tree_all_finite(grads)
 
 
 class TestJIT:

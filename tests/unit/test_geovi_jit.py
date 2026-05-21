@@ -4,6 +4,7 @@ Tests the nonlinear coordinate transform, sample mode dispatch,
 constants/point_estimates masks, and block schedule configuration.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -182,7 +183,7 @@ class TestGeoVIRuns:
             key=jax.random.PRNGKey(11),
         )
         for name, vals in result.samples.items():
-            assert bool(jnp.all(jnp.isfinite(vals))), f"NaN/Inf in {name}"
+            chex.assert_tree_all_finite(vals), f"NaN/Inf in {name}"
 
     def test_geovi_vs_mgvi_different_posteriors(self, fitter_and_mock):
         """geoVI and MGVI produce non-identical posterior widths.
@@ -348,4 +349,4 @@ class TestNativeGeoVISchedule:
             sample_mode="geovi",
         )
         # Should produce a finite result
-        assert bool(jnp.all(jnp.isfinite(m))), "geovi schedule produced non-finite result"
+        chex.assert_tree_all_finite(m), "geovi schedule produced non-finite result"

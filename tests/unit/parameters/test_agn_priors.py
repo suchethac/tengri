@@ -7,6 +7,7 @@ Tests verify:
 - Expected penalty behavior (e.g., penalty when constraints violated)
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -24,7 +25,7 @@ class TestEnergyBalance:
     def test_shape_scalar(self):
         """Return value is a scalar (0-d array)."""
         lp = agn_prior_energy_balance(l_gal_att=2.0, l_sb_emit=2.5)
-        assert lp.shape == ()
+        chex.assert_shape(lp, ())
 
     def test_return_type_jnp(self):
         """Return type is a JAX array."""
@@ -98,7 +99,7 @@ class TestAGNFractionFloor:
     def test_shape_scalar(self):
         """Return value is a scalar."""
         lp = agn_prior_agn_fraction_floor(l_agn=1.0, l_galaxy=2.0)
-        assert lp.shape == ()
+        chex.assert_shape(lp, ())
 
     def test_return_type_jnp(self):
         """Return type is a JAX array."""
@@ -163,7 +164,7 @@ class TestMidIRUVTie:
     def test_shape_scalar(self):
         """Return value is a scalar."""
         lp = agn_prior_midir_uv_tie(l_mir_torus=2.0, l_uv_disc=2.0)
-        assert lp.shape == ()
+        chex.assert_shape(lp, ())
 
     def test_return_type_jnp(self):
         """Return type is a JAX array."""
@@ -243,8 +244,8 @@ class TestVmapCompatibility:
         l_sb_emits = jnp.array([2.5, 3.0, 3.5])
         f_vmap = jax.vmap(agn_prior_energy_balance)
         lps = f_vmap(l_gal_atts, l_sb_emits)
-        assert lps.shape == (3,)
-        assert jnp.all(jnp.isfinite(lps))
+        chex.assert_shape(lps, (3,))
+        chex.assert_tree_all_finite(lps)
 
     def test_agn_fraction_vmap(self):
         """agn_prior_agn_fraction_floor works with vmap."""
@@ -252,8 +253,8 @@ class TestVmapCompatibility:
         l_galaxies = jnp.array([2.0, 2.0, 2.0])
         f_vmap = jax.vmap(agn_prior_agn_fraction_floor)
         lps = f_vmap(l_agns, l_galaxies)
-        assert lps.shape == (3,)
-        assert jnp.all(jnp.isfinite(lps))
+        chex.assert_shape(lps, (3,))
+        chex.assert_tree_all_finite(lps)
 
     def test_midir_uv_vmap(self):
         """agn_prior_midir_uv_tie works with vmap."""
@@ -261,5 +262,5 @@ class TestVmapCompatibility:
         l_uvs = jnp.array([2.0, 2.0, 2.0])
         f_vmap = jax.vmap(agn_prior_midir_uv_tie)
         lps = f_vmap(l_mirs, l_uvs)
-        assert lps.shape == (3,)
-        assert jnp.all(jnp.isfinite(lps))
+        chex.assert_shape(lps, (3,))
+        chex.assert_tree_all_finite(lps)

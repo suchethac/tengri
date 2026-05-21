@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import h5py
 import numpy as np
 import pytest
@@ -120,6 +121,6 @@ def test_jit_compatible(line_table):
         linewidth_kms=5000.0,
         agn_type=1,
     )
-    assert bl.shape == (1000,)
-    assert jnp.all(jnp.isfinite(bl))
-    assert jnp.all(jnp.isfinite(nl))
+    chex.assert_shape(bl, (1000,))
+    chex.assert_tree_all_finite(bl)
+    chex.assert_tree_all_finite(nl)

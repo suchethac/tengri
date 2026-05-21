@@ -10,6 +10,7 @@ References
 - Iyer et al. (2019), ApJ 879, 116.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 from numpy.testing import assert_allclose
@@ -149,9 +150,9 @@ class TestBuildQuantilePoints:
             age_universe_yr=13.47e9,
         )
         # n_param+2 (endpoints) + 1 (BB) + 3 (SFR constraints) = 9
-        assert time_q.shape == (9,)
-        assert mass_q.shape == (9,)
-        assert yerr.shape == (9,)
+        chex.assert_shape(time_q, (9,))
+        chex.assert_shape(mass_q, (9,))
+        chex.assert_shape(yerr, (9,))
 
     def test_boundary_values(self) -> None:
         tx = jnp.array([0.3, 0.5, 0.8])
@@ -206,7 +207,7 @@ class TestDenseBasisSFH:
 
     def test_output_shape(self) -> None:
         sfr = dense_basis(AGE_YR, **DEFAULT_KW)
-        assert sfr.shape == AGE_YR.shape
+        chex.assert_equal_shape([sfr, AGE_YR])
 
     def test_non_negative(self) -> None:
         sfr = dense_basis(AGE_YR, **DEFAULT_KW)
@@ -364,7 +365,7 @@ class TestDenseBasisSFH:
             tx_frac_2=0.55,
         )
         assert jnp.all(sfr >= 0)
-        assert sfr.shape == AGE_YR.shape
+        chex.assert_equal_shape([sfr, AGE_YR])
 
 
 # ── SFH shape tests (tutorial shapes from Iyer+2019) ──────────────
@@ -488,13 +489,13 @@ class TestDenseBasisEdgeCases:
     def test_extreme_tx_near_zero(self) -> None:
         """Very early mass assembly (all tx near 0)."""
         sfr = _sfh_for_tx(0.05, 0.1, 0.15)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
         assert jnp.all(sfr >= 0)
 
     def test_extreme_tx_near_one(self) -> None:
         """Very late mass assembly (all tx near 1)."""
         sfr = _sfh_for_tx(0.85, 0.9, 0.95)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
         assert jnp.all(sfr >= 0)
 
     def test_low_mass_galaxy(self) -> None:
@@ -534,7 +535,7 @@ class TestDenseBasisEdgeCases:
             tx_frac_1=0.55,
             tx_frac_2=0.8,
         )
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
         assert jnp.all(sfr >= 0)
 
 
@@ -562,7 +563,7 @@ class TestJITNaNRegression:
             )
         )
         sfr = jit_sfh(2.93)
-        assert jnp.all(jnp.isfinite(sfr)), "NaN from high log_sfr_inst under JIT"
+        chex.assert_tree_all_finite(sfr), "NaN from high log_sfr_inst under JIT"
 
     def test_very_high_sfr_no_nan_jit(self) -> None:
         """Extreme SFR (log=3.0) must not produce NaN under JIT."""
@@ -576,7 +577,7 @@ class TestJITNaNRegression:
             )
         )
         sfr = jit_sfh(3.0)
-        assert jnp.all(jnp.isfinite(sfr)), "NaN from extreme log_sfr_inst under JIT"
+        chex.assert_tree_all_finite(sfr), "NaN from extreme log_sfr_inst under JIT"
 
     def test_low_sfr_no_nan_jit(self) -> None:
         """log_sfr_inst=-2.0 (prior lower bound) must not produce NaN under JIT."""
@@ -591,7 +592,7 @@ class TestJITNaNRegression:
             )
         )
         sfr = jit_sfh(-2.0)
-        assert jnp.all(jnp.isfinite(sfr)), "NaN from low log_sfr_inst under JIT"
+        chex.assert_tree_all_finite(sfr), "NaN from low log_sfr_inst under JIT"
 
     def test_random_prior_samples_no_nan_jit(self) -> None:
         """50 random prior samples must produce zero NaN under JIT."""

@@ -9,6 +9,7 @@ References
 - Calistro Rivera et al. 2018 (AGNfitter), ApJ, 863, 56
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -102,15 +103,15 @@ class TestPrevotSMCFunction:
         wavs_edge = jnp.linspace(50.0, 100.0, 50)
         k_edge = prevot_smc(wavs_edge)
         # The transition should be smooth (no NaNs or Infs)
-        assert jnp.all(jnp.isfinite(k_edge)), "Ramp-down should be smooth (no NaN/Inf)"
+        chex.assert_tree_all_finite(k_edge), "Ramp-down should be smooth (no NaN/Inf)"
 
     def test_jit_compatible(self):
         """prevot_smc should work inside jax.jit."""
         f = jax.jit(prevot_smc)
         wavs = jnp.array([1000.0, 5500.0, 10000.0])
         result = f(wavs)
-        assert result.shape == (3,)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_shape(result, (3,))
+        chex.assert_tree_all_finite(result)
 
     def test_gradient_through_wavelength(self):
         """Gradient of k(λ) w.r.t. wavelength should be finite and smooth."""
@@ -135,8 +136,8 @@ class TestPrevotSMCFunction:
         """prevot_smc should handle array inputs correctly."""
         wavs = jnp.linspace(500.0, 50000.0, 500)
         result = prevot_smc(wavs)
-        assert result.shape == (500,)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_shape(result, (500,))
+        chex.assert_tree_all_finite(result)
 
     def test_kwargs_ignored(self):
         """prevot_smc should accept and ignore extra kwargs."""

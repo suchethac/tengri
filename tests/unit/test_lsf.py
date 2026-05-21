@@ -9,6 +9,7 @@ Validates that:
 6. All paths are differentiable and JIT-compatible
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -139,7 +140,7 @@ class TestApplyLSFConstantR:
     def test_output_shape(self, wave, delta_spectrum):
         """Output has same shape as input."""
         result = apply_lsf(delta_spectrum, wave, resolution=100.0)
-        assert result.shape == delta_spectrum.shape
+        chex.assert_equal_shape([result, delta_spectrum])
 
     def test_smooths_delta(self, wave, delta_spectrum):
         """LSF reduces the peak of a delta function."""
@@ -180,7 +181,7 @@ class TestApplyLSFConstantR:
     def test_finite_output(self, wave, delta_spectrum):
         """No NaN or Inf in output."""
         smoothed = apply_lsf(delta_spectrum, wave, resolution=100.0)
-        assert jnp.all(jnp.isfinite(smoothed))
+        chex.assert_tree_all_finite(smoothed)
 
 
 # ── Library resolution subtraction ────────────────────────────────
@@ -216,7 +217,7 @@ class TestApplyLSFVariableR:
         """Output has same shape as input."""
         R_var = 30.0 + 55.0 * (wave / 1e4 - 0.6)
         result = apply_lsf(delta_spectrum, wave, resolution=R_var)
-        assert result.shape == delta_spectrum.shape
+        chex.assert_equal_shape([result, delta_spectrum])
 
     def test_smooths_delta(self, wave, delta_spectrum):
         """Variable-R LSF reduces the peak of a delta function."""
@@ -247,7 +248,7 @@ class TestApplyLSFVariableR:
         """PRISM-like variable R produces finite output."""
         R_var = nirspec_prism_resolution(wave / 1e4)
         smoothed = apply_lsf(delta_spectrum, wave, resolution=R_var)
-        assert jnp.all(jnp.isfinite(smoothed))
+        chex.assert_tree_all_finite(smoothed)
 
     def test_more_bins_better_accuracy(self, wave, delta_spectrum):
         """More bins should give result closer to constant-R case for uniform R."""
@@ -271,7 +272,7 @@ class TestLSFGradients:
             return jnp.sum(apply_lsf(spec, wave, resolution=100.0) ** 2)
 
         g = jax.grad(loss)(delta_spectrum)
-        assert jnp.all(jnp.isfinite(g))
+        chex.assert_tree_all_finite(g)
 
     def test_gradient_wrt_spectrum_variable_r(self, wave, delta_spectrum):
         """Gradient w.r.t. input flux is finite (variable R)."""
@@ -281,7 +282,7 @@ class TestLSFGradients:
             return jnp.sum(apply_lsf(spec, wave, resolution=R_var) ** 2)
 
         g = jax.grad(loss)(delta_spectrum)
-        assert jnp.all(jnp.isfinite(g))
+        chex.assert_tree_all_finite(g)
 
     def test_gradient_wrt_resolution_scalar(self, wave, delta_spectrum):
         """Gradient w.r.t. scalar resolution is finite."""
@@ -299,11 +300,11 @@ class TestLSFGradients:
         """JIT compilation works for constant R."""
         fn = jax.jit(lambda s: apply_lsf(s, wave, resolution=100.0))
         result = fn(delta_spectrum)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
     def test_jit_variable_r(self, wave, delta_spectrum):
         """JIT compilation works for variable R."""
         R_var = 30.0 + 55.0 * (wave / 1e4 - 0.6)
         fn = jax.jit(lambda s: apply_lsf(s, wave, resolution=R_var))
         result = fn(delta_spectrum)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)

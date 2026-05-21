@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import numpy as np
 import pytest
 
@@ -84,5 +85,5 @@ def test_sbpl_jit_compatible():
         plbendwidth=1.0,
         cutoff_nm=-1.0,
     )
-    assert out.shape == (3,)
-    assert jnp.all(jnp.isfinite(out))
+    chex.assert_shape(out, (3,))
+    chex.assert_tree_all_finite(out)

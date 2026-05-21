@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 
@@ -198,7 +199,7 @@ def test_sed_zero_sfh(ssp_data_wne):
     sed = result["sed"]
 
     # All wavelengths should be zero (within numerical precision)
-    assert jnp.all(jnp.isfinite(sed)), "SED contains non-finite values for zero SFH"
+    chex.assert_tree_all_finite(sed), "SED contains non-finite values for zero SFH"
     assert jnp.max(jnp.abs(sed)) < 1e-15, (
         f"Zero SFH should yield zero SED, got max |SED| = {jnp.max(jnp.abs(sed))}"
     )

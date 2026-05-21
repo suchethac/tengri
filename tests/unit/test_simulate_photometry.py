@@ -1,5 +1,6 @@
 """Tests for simulate.photometry_from_sfh filter handling."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -78,7 +79,7 @@ def test_sed_from_sfh_array_metallicity(synthetic_ssp):
     out = sed_from_sfh(t, sfr, synthetic_ssp, log_z=log_z_arr)
     assert "sed" in out
     assert out["sed"].shape == synthetic_ssp.ssp_wave.shape
-    assert jnp.all(jnp.isfinite(out["sed"]))
+    chex.assert_tree_all_finite(out["sed"])
 
 
 def test_sed_from_sfh_with_dust(synthetic_ssp):
@@ -90,7 +91,7 @@ def test_sed_from_sfh_with_dust(synthetic_ssp):
     out_no_dust = sed_from_sfh(t, sfr, synthetic_ssp, log_z=-0.3, dust_tau_bc=0.0)
     out_dust = sed_from_sfh(t, sfr, synthetic_ssp, log_z=-0.3, dust_tau_bc=1.0, dust_tau_diff=0.5)
     # Dust reduces UV flux
-    assert jnp.all(jnp.isfinite(out_dust["sed"]))
+    chex.assert_tree_all_finite(out_dust["sed"])
     assert float(jnp.sum(out_dust["sed"])) < float(jnp.sum(out_no_dust["sed"]))
 
 
@@ -106,7 +107,7 @@ def test_photometry_with_igm(synthetic_ssp, sdss_r_only):
         apply_igm=True,
     )
     assert out["flux"].shape == (1,)
-    assert jnp.all(jnp.isfinite(out["flux"]))
+    chex.assert_tree_all_finite(out["flux"])
 
 
 def test_spectrum_from_sfh_basic(synthetic_ssp):
@@ -119,7 +120,7 @@ def test_spectrum_from_sfh_basic(synthetic_ssp):
     out = spectrum_from_sfh(t, sfr, synthetic_ssp, wave_obs, log_z=-0.3, redshift=0.0)
     assert "flux" in out
     assert out["flux"].shape == (200,)
-    assert jnp.all(jnp.isfinite(out["flux"]))
+    chex.assert_tree_all_finite(out["flux"])
 
 
 def test_spectrum_from_sfh_with_igm(synthetic_ssp):
@@ -131,4 +132,4 @@ def test_spectrum_from_sfh_with_igm(synthetic_ssp):
     wave_obs = jnp.linspace(4000.0, 9000.0, 150)
     out = spectrum_from_sfh(t, sfr, synthetic_ssp, wave_obs, log_z=-0.3, redshift=0.3)
     assert out["flux"].shape == (150,)
-    assert jnp.all(jnp.isfinite(out["flux"]))
+    chex.assert_tree_all_finite(out["flux"])

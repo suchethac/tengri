@@ -1,5 +1,6 @@
 """Tests for Elliptical Slice Sampling inference."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -135,4 +136,4 @@ class TestLoglikelihoodUnbounded:
         init = fitter._initialize_unbounded(jax.random.PRNGKey(0))
         grad = jax.grad(lambda p: loglik_fn(p, data_args))(init)
         for name, g in grad.items():
-            assert jnp.all(jnp.isfinite(g)), f"Non-finite gradient for {name}"
+            chex.assert_tree_all_finite(g), f"Non-finite gradient for {name}"

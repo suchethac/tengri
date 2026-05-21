@@ -6,6 +6,7 @@ and the SEDModel-level ``csp_integration='dsps_native'`` / ``'dsps_met_table'`` 
 All tests are CPU-only (no SSP file required).
 """
 
+import chex
 import pytest
 
 pytest.importorskip("dsps", reason="dsps not installed")
@@ -68,8 +69,8 @@ def test_output_shapes():
         LGMET,
         LGMET_SCATTER,
     )
-    assert aw.shape == (N_AGE,), f"age_weights shape {aw.shape} != ({N_AGE},)"
-    assert flux_z.shape == (N_AGE, N_WAVE), f"ssp_flux_at_z shape {flux_z.shape}"
+    chex.assert_shape(aw, (N_AGE,))
+    chex.assert_shape(flux_z, (N_AGE, N_WAVE))
 
 
 def test_age_weights_non_negative():
@@ -179,8 +180,8 @@ def test_finite_output():
         LGMET,
         LGMET_SCATTER,
     )
-    assert jnp.all(jnp.isfinite(aw)), "NaN/Inf in age_weights"
-    assert jnp.all(jnp.isfinite(flux_z)), "NaN/Inf in ssp_flux_at_z"
+    chex.assert_tree_all_finite(aw), "NaN/Inf in age_weights"
+    chex.assert_tree_all_finite(flux_z), "NaN/Inf in ssp_flux_at_z"
 
 
 def test_jit_compatible():
@@ -202,7 +203,7 @@ def test_jit_compatible():
         return aw, fz
 
     aw, _fz = _call(sfr)
-    assert aw.shape == (N_AGE,)
+    chex.assert_shape(aw, (N_AGE,))
 
 
 def test_grad_wrt_lgmet():
@@ -303,8 +304,8 @@ def test_met_table_output_shapes():
         T_OBS_GYR,
         LGMET_SCATTER,
     )
-    assert aw.shape == (N_AGE,), f"age_weights shape {aw.shape} != ({N_AGE},)"
-    assert flux_z.shape == (N_AGE, N_WAVE), f"ssp_flux_at_z shape {flux_z.shape}"
+    chex.assert_shape(aw, (N_AGE,))
+    chex.assert_shape(flux_z, (N_AGE, N_WAVE))
 
 
 def test_met_table_age_weights_non_negative():
@@ -336,8 +337,8 @@ def test_met_table_finite_output():
         T_OBS_GYR,
         LGMET_SCATTER,
     )
-    assert jnp.all(jnp.isfinite(aw)), "NaN/Inf in age_weights"
-    assert jnp.all(jnp.isfinite(flux_z)), "NaN/Inf in ssp_flux_at_z"
+    chex.assert_tree_all_finite(aw), "NaN/Inf in age_weights"
+    chex.assert_tree_all_finite(flux_z), "NaN/Inf in ssp_flux_at_z"
 
 
 def test_met_table_zero_sfr_gives_zero_weights():
@@ -412,8 +413,8 @@ def test_met_table_jit_compatible():
         )
 
     aw, fz = _call(sfr, lgmet)
-    assert aw.shape == (N_AGE,)
-    assert fz.shape == (N_AGE, N_WAVE)
+    chex.assert_shape(aw, (N_AGE,))
+    chex.assert_shape(fz, (N_AGE, N_WAVE))
 
 
 def test_met_table_grad_wrt_lgmet():
@@ -428,7 +429,7 @@ def test_met_table_grad_wrt_lgmet():
 
     lgmet = jnp.array(LGMET_TABLE)
     grad = jax.grad(total_mass)(lgmet)
-    assert jnp.all(jnp.isfinite(grad)), f"Non-finite gradient: {grad}"
+    chex.assert_tree_all_finite(grad), f"Non-finite gradient: {grad}"
 
 
 # ── SEDModel-level: csp_integration='dsps_met_table' accepted ────────

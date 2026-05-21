@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+import chex
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -589,7 +590,7 @@ class TestDustLawCombinations:
         fn = resolve_dust_law(name)
         kwargs = {"dust_Rv": 3.1} if name in self._REQUIRES_RV else {}
         k = np.array(fn(self.WL, **kwargs))
-        assert np.all(np.isfinite(k))
+        chex.assert_tree_all_finite(k)
         assert np.all(k >= 0.0), f"{name}: negative k values"
         assert 0.95 < k[3] < 1.05, f"{name}: k(5500Å) = {k[3]:.3f}"
         assert 1.5 < k[0] < 15.0, f"{name}: k(FUV) = {k[0]:.2f}"
@@ -651,7 +652,7 @@ class TestAGNModelCombinations:
         assert 1e22 < L_pos.max() < 1e33, (
             f"{name}: max L_ν = {L_pos.max():.2e} erg/s/Hz (outside 1e22–1e33)"
         )
-        assert np.all(np.isfinite(L)), f"{name}: NaN/Inf in output"
+        chex.assert_tree_all_finite(L), f"{name}: NaN/Inf in output"
 
     @pytest.mark.parametrize("name", _ALL_MODELS)
     def test_agn_model_linear_in_Lbol(self, name):
@@ -777,9 +778,9 @@ class TestSFHForms:
         sfh = model.predict_sfh({})
         sfr = np.array(sfh["sfr_mean"])
         t = np.array(sfh["t_gyr"])
-        assert sfr.shape == t.shape
+        chex.assert_equal_shape([sfr, t])
         assert np.all(sfr >= 0.0), f"{sfh_type}: negative SFR"
-        assert np.all(np.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
         dt_yr = np.abs(np.diff(t)) * 1e9
         mass = float(np.sum(sfr[:-1] * dt_yr))
         assert 1e7 < mass < 1e12, f"{sfh_type}: cumulative mass {mass:.2e} M⊙ outside [1e7, 1e12]"

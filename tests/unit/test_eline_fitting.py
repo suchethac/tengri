@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import types
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -31,7 +32,7 @@ class TestDesignMatrix:
         wave = jnp.linspace(4000, 7000, 1000)
         lines = jnp.array([4862.68, 5008.24, 6564.61])  # vacuum Hβ, [OIII]5007, Hα
         G = build_eline_design_matrix(wave, lines, 2000.0, 0.0)
-        assert G.shape == (1000, 3)
+        chex.assert_shape(G, (1000, 3))
 
     def test_normalized_profiles(self):
         """Each column should integrate to approximately 1."""
@@ -74,7 +75,7 @@ class TestDesignMatrix:
         wave = jnp.linspace(4000, 7000, 500)
         lines = jnp.array([6564.61])  # vacuum Hα
         G = build_eline_design_matrix(wave, lines, 2000.0, 0.0)
-        assert G.shape == (500, 1)
+        chex.assert_shape(G, (500, 1))
 
 
 class TestDoubletConstraints:
@@ -208,7 +209,7 @@ class TestMarginalization:
         noise_arr = jnp.ones(500) * 0.1
         ln_l, a_hat, _a_cov = run(data, noise_arr)
         assert jnp.isfinite(ln_l)
-        assert a_hat.shape == (3,)
+        chex.assert_shape(a_hat, (3,))
 
     def test_gradient_matches_finite_difference(self):
         """AD gradient of -ln_L w.r.t. continuum level must match finite-difference.

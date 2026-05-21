@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import chex
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -68,7 +69,7 @@ class TestLoadFilter:
     def test_transmission_nonnegative(self, sample_filter):
         """Raw transmission values must be finite and non-negative."""
         assert float(jnp.min(sample_filter.trans)) >= 0.0
-        assert bool(jnp.all(jnp.isfinite(sample_filter.trans)))
+        chex.assert_tree_all_finite(sample_filter.trans)
 
     def test_wavelength_monotonic(self, sample_filter):
         """Wavelengths must be strictly increasing."""
@@ -121,7 +122,7 @@ class TestLoadCustomFilter:
     def test_transmission_nonnegative(self, custom_filter_path):
         fc = load_custom_filter(custom_filter_path)
         assert float(jnp.min(fc.trans)) >= 0.0
-        assert bool(jnp.all(jnp.isfinite(fc.trans)))
+        chex.assert_tree_all_finite(fc.trans)
 
     def test_wavelength_monotonic(self, custom_filter_path):
         fc = load_custom_filter(custom_filter_path)

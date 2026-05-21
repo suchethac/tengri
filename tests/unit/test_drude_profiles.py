@@ -1,5 +1,6 @@
 """Tests for PAH Drude-profile decomposition (drude_profiles.py)."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -80,7 +81,7 @@ class TestDrudeProfile:
     def test_output_shape(self):
         wave = jnp.linspace(3.0, 15.0, 500)
         out = drude_profile(wave, 7.6, 0.044)
-        assert out.shape == (500,)
+        chex.assert_shape(out, (500,))
 
     def test_non_negative(self):
         wave = jnp.linspace(0.1, 30.0, 3000)
@@ -91,7 +92,7 @@ class TestDrudeProfile:
 class TestPAHTemplate:
     def test_output_shape(self):
         out = compute_pah_template(_WAVE_UM)
-        assert out.shape == _WAVE_UM.shape
+        chex.assert_equal_shape([out, _WAVE_UM])
 
     def test_non_negative_everywhere(self):
         out = compute_pah_template(_WAVE_UM)
@@ -123,7 +124,7 @@ class TestPAHTemplate:
             return jnp.sum(compute_pah_template(_WAVE_UM, strengths=strengths))
 
         g = jax.grad(total)(s)
-        assert jnp.all(jnp.isfinite(g))
+        chex.assert_tree_all_finite(g)
 
     def test_major_features_are_peaks(self):
         """The 7.60 and 6.22 μm features produce local maxima in a coarse SED."""
@@ -181,7 +182,7 @@ class TestDecomposePAH:
             return jnp.sum(decompose_pah(_WAVE_UM, sed)["strengths"])
 
         g = jax.grad(total_strength)(sed)
-        assert jnp.all(jnp.isfinite(g))
+        chex.assert_tree_all_finite(g)
 
     def test_continuum_subtraction(self):
         """With a flat continuum added, continuum= kwarg should recover same strengths."""

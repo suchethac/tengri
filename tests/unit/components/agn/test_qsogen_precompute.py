@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -31,7 +32,7 @@ def test_precompute_shape_finite(filter_set):
     result = qsogen_precompute.precompute(waves, trans, redshift=1.0, parameters=None)
     phot = np.asarray(result["grid_phot"])
     assert phot.shape[-1] == len(waves)
-    assert np.all(np.isfinite(phot))
+    chex.assert_tree_all_finite(phot)
 
 
 def test_lookup_jit(filter_set):
@@ -44,7 +45,7 @@ def test_lookup_jit(filter_set):
     n_axes = len(qsogen_precompute.AXIS_PARAMS)
     args = (jnp.float64(1.0), *tuple(jnp.float64(0.0) for _ in range(n_axes)))
     out = jit_lookup(*args)
-    assert np.all(np.isfinite(np.asarray(out)))
+    chex.assert_tree_all_finite(np.asarray(out))
 
 
 def test_qsogen_registered():

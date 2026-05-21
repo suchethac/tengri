@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -176,7 +177,7 @@ class TestShockJITTraceSafety:
 
         # This should succeed without TracerArrayConversionError
         sed1 = jit_fn(model1, params1)
-        assert np.all(np.isfinite(sed1)), "First JIT trace produced non-finite output"
+        chex.assert_tree_all_finite(sed1), "First JIT trace produced non-finite output"
 
         # Build a second SEDModel (cache already warm)
         model2 = SEDModel(spec, ssp_data, observation=observation, precompute=False)
@@ -190,7 +191,7 @@ class TestShockJITTraceSafety:
 
         # This should also succeed without tracer leaks
         sed2 = jit_fn2(model2, params2)
-        assert np.all(np.isfinite(sed2)), "Second JIT trace produced non-finite output"
+        chex.assert_tree_all_finite(sed2), "Second JIT trace produced non-finite output"
 
         # Build a third SEDModel to stress-test cache persistence
         model3 = SEDModel(spec, ssp_data, observation=observation, precompute=False)
@@ -199,7 +200,7 @@ class TestShockJITTraceSafety:
 
         jit_fn3 = jax.jit(jit_predict_phot, static_argnames=[])
         sed3 = jit_fn3(model3, params3)
-        assert np.all(np.isfinite(sed3)), "Third JIT trace produced non-finite output"
+        chex.assert_tree_all_finite(sed3), "Third JIT trace produced non-finite output"
 
 
 class TestCat3DGridCacheWarming:
@@ -220,7 +221,7 @@ class TestCat3DGridCacheWarming:
         try:
             wave = jnp.linspace(1000, 10000, 100)
             _output = fn(wave)
-            assert _output.shape == (100,), "CAT3D-Wind output has unexpected shape"
+            chex.assert_shape(_output, (100,))
         except Exception as e:
             pytest.fail(f"CAT3D-Wind callable failed: {e}")
 
@@ -248,7 +249,7 @@ class TestCat3DJITTraceSafety:
 
         # This should succeed without TracerArrayConversionError
         sed1 = jit_fn(model1, params1)
-        assert np.all(np.isfinite(sed1)), "CAT3D first JIT trace produced non-finite output"
+        chex.assert_tree_all_finite(sed1), "CAT3D first JIT trace produced non-finite output"
 
         # Build a second SEDModel with CAT3D (cache already warm)
         model2 = SEDModel(spec, ssp_data, observation=observation, precompute=False)
@@ -258,4 +259,4 @@ class TestCat3DJITTraceSafety:
 
         jit_fn2 = jax.jit(jit_predict_phot, static_argnames=[])
         sed2 = jit_fn2(model2, params2)
-        assert np.all(np.isfinite(sed2)), "CAT3D second JIT trace produced non-finite output"
+        chex.assert_tree_all_finite(sed2), "CAT3D second JIT trace produced non-finite output"

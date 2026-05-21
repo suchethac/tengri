@@ -13,6 +13,7 @@ References
 - Leja+2019: Continuity SFH
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -247,7 +248,7 @@ class TestPSBSFHPhysics:
                 beta=beta,
                 fburst=fburst,
             )
-            assert jnp.all(jnp.isfinite(sfr))
+            chex.assert_tree_all_finite(sfr)
             assert float(jnp.max(sfr)) > 0
 
     def test_sfr_nonzero_at_burstage(self):

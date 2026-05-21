@@ -7,6 +7,7 @@ Validates that:
 4. Gradients through the z-table + IGM path are finite
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -58,7 +59,7 @@ class TestIGMPrecomputation:
         """IGM table has shape (n_z, n_filters)."""
         fw, ft = filters
         zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=10, apply_igm=True)
-        assert zt.igm_trans_table.shape == (10, 3)
+        chex.assert_shape(zt.igm_trans_table, (10, 3))
 
     def test_igm_values_in_range(self, ssp_data, filters):
         """IGM transmission is in [0, 1]."""
@@ -88,7 +89,7 @@ class TestIGMPrecomputation:
         """All IGM values are finite."""
         fw, ft = filters
         zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=15, apply_igm=True)
-        assert jnp.all(jnp.isfinite(zt.igm_trans_table))
+        chex.assert_tree_all_finite(zt.igm_trans_table)
 
     def test_igm_unity_at_low_z_red_filters(self, ssp_data, filters):
         """At low z, red filters should have ~1.0 IGM transmission.
@@ -262,5 +263,5 @@ class TestIGMGradients:
             return interpolate_igm_ztable(zt.igm_trans_table, zt.z_grid, z)
 
         result = fn(0.5)
-        assert jnp.all(jnp.isfinite(result))
-        assert result.shape == (3,)
+        chex.assert_tree_all_finite(result)
+        chex.assert_shape(result, (3,))

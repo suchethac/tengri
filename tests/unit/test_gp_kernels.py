@@ -1,5 +1,6 @@
 """Tests for GP covariance kernels in spectral noise modeling."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -20,14 +21,14 @@ class TestExpSquaredKernel:
         """Test square kernel matrix shape when x2 is None."""
         x = jnp.linspace(4000.0, 8000.0, 20)
         K = exp_squared_kernel(x, amplitude=1.0, length_scale=500.0)
-        assert K.shape == (20, 20)
+        chex.assert_shape(K, (20, 20))
 
     def test_shape_cross(self):
         """Test cross-covariance kernel matrix shape."""
         x = jnp.linspace(4000.0, 8000.0, 20)
         x2 = jnp.linspace(4000.0, 8000.0, 15)
         K = exp_squared_kernel(x, amplitude=1.0, length_scale=500.0, x2=x2)
-        assert K.shape == (20, 15)
+        chex.assert_shape(K, (20, 15))
 
     def test_symmetric(self):
         """Test that square kernel matrix is symmetric."""
@@ -53,7 +54,7 @@ class TestExpSquaredKernel:
         x = jnp.linspace(4000.0, 8000.0, 20)
         fn = jax.jit(exp_squared_kernel)
         K = fn(x, amplitude=1.0, length_scale=500.0)
-        assert K.shape == (20, 20)
+        chex.assert_shape(K, (20, 20))
 
     def test_amplitude_scaling(self):
         """Test that amplitude scales kernel correctly."""
@@ -104,14 +105,14 @@ class TestMatern32Kernel:
         """Test kernel matrix shape."""
         x = jnp.linspace(4000.0, 8000.0, 20)
         K = matern32_kernel(x, amplitude=1.0, length_scale=500.0)
-        assert K.shape == (20, 20)
+        chex.assert_shape(K, (20, 20))
 
     def test_shape_cross(self):
         """Test cross-covariance kernel matrix shape."""
         x = jnp.linspace(4000.0, 8000.0, 20)
         x2 = jnp.linspace(4000.0, 8000.0, 15)
         K = matern32_kernel(x, amplitude=1.0, length_scale=500.0, x2=x2)
-        assert K.shape == (20, 15)
+        chex.assert_shape(K, (20, 15))
 
     def test_symmetric(self):
         """Test that square kernel matrix is symmetric."""
@@ -137,7 +138,7 @@ class TestMatern32Kernel:
         x = jnp.linspace(4000.0, 8000.0, 20)
         fn = jax.jit(matern32_kernel)
         K = fn(x, amplitude=1.0, length_scale=500.0)
-        assert K.shape == (20, 20)
+        chex.assert_shape(K, (20, 20))
 
     def test_shorter_length_scale_falls_off_faster(self):
         """Test that shorter length scales give faster decay."""
@@ -189,7 +190,7 @@ class TestGPNoiseCovariance:
         wave = jnp.linspace(4000.0, 8000.0, 30)
         noise = jnp.ones(30) * 0.1
         N = gp_noise_covariance(wave, noise, gp_amplitude=0.5, gp_length_scale=300.0)
-        assert N.shape == (30, 30)
+        chex.assert_shape(N, (30, 30))
 
     def test_diagonal_has_obs_noise(self):
         """Test that diagonal is dominated by observation noise when GP is small."""
@@ -210,7 +211,7 @@ class TestGPNoiseCovariance:
             gp_length_scale=300.0,
             kernel="matern32",
         )
-        assert N.shape == (20, 20)
+        chex.assert_shape(N, (20, 20))
 
     def test_exp_squared_option(self):
         """Test using squared exponential kernel (default)."""
@@ -223,7 +224,7 @@ class TestGPNoiseCovariance:
             gp_length_scale=300.0,
             kernel="exp_squared",
         )
-        assert N.shape == (20, 20)
+        chex.assert_shape(N, (20, 20))
 
     def test_invalid_kernel_raises(self):
         """Test that invalid kernel name raises ValueError."""
@@ -265,5 +266,5 @@ class TestGPNoiseCovariance:
         wave = jnp.linspace(4000.0, 8000.0, 20)
         noise = jnp.linspace(0.05, 0.2, 20)
         N = gp_noise_covariance(wave, noise, gp_amplitude=0.5, gp_length_scale=300.0)
-        assert N.shape == (20, 20)
+        chex.assert_shape(N, (20, 20))
         assert jnp.allclose(jnp.diag(N), noise**2 + 0.5**2, atol=1e-10)

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -98,7 +99,7 @@ def test_fit_batch_map_vmap_returns_finite_map_for_small_catalog(ssp_data_wne):
         a = jnp.asarray(arr)
         # Per-galaxy leading axis
         assert a.shape[0] == n_gal, f"{name!r} has shape {a.shape}, expected leading {n_gal}"
-        assert jnp.all(jnp.isfinite(a)), f"{name!r} produced non-finite MAP estimates"
+        chex.assert_tree_all_finite(a), f"{name!r} produced non-finite MAP estimates"
 
     # Spot-check: log_peak_sfr should sit well inside its prior bounds
     log_sfr = result["sfh_tsnorm_log_peak_sfr"]

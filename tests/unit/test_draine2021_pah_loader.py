@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import numpy as np
 import pytest
 
@@ -44,7 +45,7 @@ def test_grid_shape_and_axes(templates):
     assert n_ion == 3
     assert n_size == 3
     assert n_wave > 1000
-    assert templates.nu_pnu_total.shape == (n_sl, n_slab, n_lgU, n_ion, n_size, n_wave)
+    chex.assert_shape(templates.nu_pnu_total, (n_sl, n_slab, n_lgU, n_ion, n_size, n_wave))
 
     np.testing.assert_allclose(
         np.asarray(templates.lgU),

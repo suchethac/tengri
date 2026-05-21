@@ -23,6 +23,7 @@ References
 
 from __future__ import annotations
 
+import chex
 import jax
 import numpy as np
 import pytest
@@ -207,15 +208,12 @@ class TestRadioSynchrotronPrecomputeEquivalence:
         phot_precomp = model_precomp.predict_photometry(params_precomp)
 
         # Compute relative error
-        denom = np.maximum(np.abs(phot_runtime), 1e-30)
-        rel_err = np.abs(phot_precomp - phot_runtime) / denom
-        max_rel_err = float(np.max(rel_err))
-
-        print(f"radio_synchrotron max rel error: {max_rel_err:.4e}")
-        np.testing.assert_array_less(
-            rel_err,
-            1e-3,
-            err_msg=f"radio_synchrotron precompute↔runtime: max rel error = {max_rel_err:.4e}",
+        chex.assert_trees_all_close(
+            phot_precomp,
+            phot_runtime,
+            rtol=1e-3,
+            atol=1e-30,
+            custom_message="radio_synchrotron precompute↔runtime",
         )
 
 
@@ -236,15 +234,12 @@ class TestRadioFreefreePrecomputeEquivalence:
         phot_runtime = model_runtime.predict_photometry(params_runtime)
         phot_precomp = model_precomp.predict_photometry(params_precomp)
 
-        denom = np.maximum(np.abs(phot_runtime), 1e-30)
-        rel_err = np.abs(phot_precomp - phot_runtime) / denom
-        max_rel_err = float(np.max(rel_err))
-
-        print(f"radio_freefree max rel error: {max_rel_err:.4e}")
-        np.testing.assert_array_less(
-            rel_err,
-            1e-3,
-            err_msg=f"radio_freefree precompute↔runtime: max rel error = {max_rel_err:.4e}",
+        chex.assert_trees_all_close(
+            phot_precomp,
+            phot_runtime,
+            rtol=1e-3,
+            atol=1e-30,
+            custom_message="radio_freefree precompute↔runtime",
         )
 
 
@@ -265,15 +260,12 @@ class TestRadioAGNJetPrecomputeEquivalence:
         phot_runtime = model_runtime.predict_photometry(params_runtime)
         phot_precomp = model_precomp.predict_photometry(params_precomp)
 
-        denom = np.maximum(np.abs(phot_runtime), 1e-30)
-        rel_err = np.abs(phot_precomp - phot_runtime) / denom
-        max_rel_err = float(np.max(rel_err))
-
-        print(f"radio_agn_jet max rel error: {max_rel_err:.4e}")
-        np.testing.assert_array_less(
-            rel_err,
-            1e-3,
-            err_msg=f"radio_agn_jet precompute↔runtime: max rel error = {max_rel_err:.4e}",
+        chex.assert_trees_all_close(
+            phot_precomp,
+            phot_runtime,
+            rtol=1e-3,
+            atol=1e-30,
+            custom_message="radio_agn_jet precompute↔runtime",
         )
 
 
@@ -297,15 +289,12 @@ class TestXRayXRBPrecomputeEquivalence:
         phot_runtime = model_runtime.predict_photometry(params_runtime)
         phot_precomp = model_precomp.predict_photometry(params_precomp)
 
-        denom = np.maximum(np.abs(phot_runtime), 1e-30)
-        rel_err = np.abs(phot_precomp - phot_runtime) / denom
-        max_rel_err = float(np.max(rel_err))
-
-        print(f"xray_xrb max rel error: {max_rel_err:.4e}")
-        np.testing.assert_array_less(
-            rel_err,
-            1e-3,
-            err_msg=f"xray_xrb precompute↔runtime: max rel error = {max_rel_err:.4e}",
+        chex.assert_trees_all_close(
+            phot_precomp,
+            phot_runtime,
+            rtol=1e-3,
+            atol=1e-30,
+            custom_message="xray_xrb precompute↔runtime",
         )
 
 
@@ -326,15 +315,12 @@ class TestXRayCoronaPrecomputeEquivalence:
         phot_runtime = model_runtime.predict_photometry(params_runtime)
         phot_precomp = model_precomp.predict_photometry(params_precomp)
 
-        denom = np.maximum(np.abs(phot_runtime), 1e-30)
-        rel_err = np.abs(phot_precomp - phot_runtime) / denom
-        max_rel_err = float(np.max(rel_err))
-
-        print(f"xray_corona max rel error: {max_rel_err:.4e}")
-        np.testing.assert_array_less(
-            rel_err,
-            1e-3,
-            err_msg=f"xray_corona precompute↔runtime: max rel error = {max_rel_err:.4e}",
+        chex.assert_trees_all_close(
+            phot_precomp,
+            phot_runtime,
+            rtol=1e-3,
+            atol=1e-30,
+            custom_message="xray_corona precompute↔runtime",
         )
 
 
@@ -360,15 +346,12 @@ class TestXRayCoronaLopez24PrecomputeEquivalence:
         phot_runtime = model_runtime.predict_photometry(params_runtime)
         phot_precomp = model_precomp.predict_photometry(params_precomp)
 
-        denom = np.maximum(np.abs(phot_runtime), 1e-30)
-        rel_err = np.abs(phot_precomp - phot_runtime) / denom
-        max_rel_err = float(np.max(rel_err))
-
-        print(f"xray_corona_lopez24 max rel error: {max_rel_err:.4e}")
-        np.testing.assert_array_less(
-            rel_err,
-            1e-3,
-            err_msg=f"xray_corona_lopez24 precompute↔runtime: max rel error = {max_rel_err:.4e}",
+        chex.assert_trees_all_close(
+            phot_precomp,
+            phot_runtime,
+            rtol=1e-3,
+            atol=1e-30,
+            custom_message="xray_corona_lopez24 precompute↔runtime",
         )
 
 
@@ -396,15 +379,12 @@ class TestQSOgenPrecomputeEquivalence:
         phot_runtime = model_runtime.predict_photometry(params_runtime)
         phot_precomp = model_precomp.predict_photometry(params_precomp)
 
-        denom = np.maximum(np.abs(phot_runtime), 1e-30)
-        rel_err = np.abs(phot_precomp - phot_runtime) / denom
-        max_rel_err = float(np.max(rel_err))
-
-        print(f"qsogen max rel error: {max_rel_err:.4e}")
-        np.testing.assert_array_less(
-            rel_err,
-            1e-3,
-            err_msg=f"qsogen precompute↔runtime: max rel error = {max_rel_err:.4e}",
+        chex.assert_trees_all_close(
+            phot_precomp,
+            phot_runtime,
+            rtol=1e-3,
+            atol=1e-30,
+            custom_message="qsogen precompute↔runtime",
         )
 
 
@@ -436,15 +416,12 @@ class TestSilva04PrecomputeEquivalence:
         phot_runtime = model_runtime.predict_photometry(params_runtime)
         phot_precomp = model_precomp.predict_photometry(params_precomp)
 
-        denom = np.maximum(np.abs(phot_runtime), 1e-30)
-        rel_err = np.abs(phot_precomp - phot_runtime) / denom
-        max_rel_err = float(np.max(rel_err))
-
-        print(f"silva04 max rel error: {max_rel_err:.4e}")
-        np.testing.assert_array_less(
-            rel_err,
-            1e-3,
-            err_msg=f"silva04 precompute↔runtime: max rel error = {max_rel_err:.4e}",
+        chex.assert_trees_all_close(
+            phot_precomp,
+            phot_runtime,
+            rtol=1e-3,
+            atol=1e-30,
+            custom_message="silva04 precompute↔runtime",
         )
 
 
@@ -473,15 +450,12 @@ class TestCAT3DWindPrecomputeEquivalence:
         phot_runtime = model_runtime.predict_photometry(params_runtime)
         phot_precomp = model_precomp.predict_photometry(params_precomp)
 
-        denom = np.maximum(np.abs(phot_runtime), 1e-30)
-        rel_err = np.abs(phot_precomp - phot_runtime) / denom
-        max_rel_err = float(np.max(rel_err))
-
-        print(f"cat3d_wind max rel error: {max_rel_err:.4e}")
-        np.testing.assert_array_less(
-            rel_err,
-            1e-3,
-            err_msg=f"cat3d_wind precompute↔runtime: max rel error = {max_rel_err:.4e}",
+        chex.assert_trees_all_close(
+            phot_precomp,
+            phot_runtime,
+            rtol=1e-3,
+            atol=1e-30,
+            custom_message="cat3d_wind precompute↔runtime",
         )
 
 
@@ -586,15 +560,12 @@ class TestModifiedBlackbodyPrecomputeEquivalence:
         phot_runtime = model_runtime.predict_photometry(params_runtime)
         phot_precomp = model_precomp.predict_photometry(params_precomp)
 
-        denom = np.maximum(np.abs(phot_runtime), 1e-30)
-        rel_err = np.abs(phot_precomp - phot_runtime) / denom
-        max_rel_err = float(np.max(rel_err))
-
-        print(f"modified_blackbody max rel error: {max_rel_err:.4e}")
-        np.testing.assert_array_less(
-            rel_err,
-            1e-3,
-            err_msg=f"modified_blackbody precompute↔runtime: max rel error = {max_rel_err:.4e}",
+        chex.assert_trees_all_close(
+            phot_precomp,
+            phot_runtime,
+            rtol=1e-3,
+            atol=1e-30,
+            custom_message="modified_blackbody precompute↔runtime",
         )
 
 
@@ -619,15 +590,12 @@ class TestCasey2012PrecomputeEquivalence:
         phot_runtime = model_runtime.predict_photometry(params_runtime)
         phot_precomp = model_precomp.predict_photometry(params_precomp)
 
-        denom = np.maximum(np.abs(phot_runtime), 1e-30)
-        rel_err = np.abs(phot_precomp - phot_runtime) / denom
-        max_rel_err = float(np.max(rel_err))
-
-        print(f"casey2012 max rel error: {max_rel_err:.4e}")
-        np.testing.assert_array_less(
-            rel_err,
-            1e-3,
-            err_msg=f"casey2012 precompute↔runtime: max rel error = {max_rel_err:.4e}",
+        chex.assert_trees_all_close(
+            phot_precomp,
+            phot_runtime,
+            rtol=1e-3,
+            atol=1e-30,
+            custom_message="casey2012 precompute↔runtime",
         )
 
 
@@ -652,14 +620,11 @@ class TestPAHDrudePrecomputeEquivalence:
         phot_runtime = model_runtime.predict_photometry(params_runtime)
         phot_precomp = model_precomp.predict_photometry(params_precomp)
 
-        denom = np.maximum(np.abs(phot_runtime), 1e-30)
-        rel_err = np.abs(phot_precomp - phot_runtime) / denom
-        max_rel_err = float(np.max(rel_err))
-
-        print(f"pah_drude max rel error: {max_rel_err:.4e}")
         # PAH template has no grid axes, so numerical error should be < 1e-10
-        np.testing.assert_array_less(
-            rel_err,
-            1e-10,
-            err_msg=f"pah_drude precompute↔runtime: max rel error = {max_rel_err:.4e}",
+        chex.assert_trees_all_close(
+            phot_precomp,
+            phot_runtime,
+            rtol=1e-10,
+            atol=1e-30,
+            custom_message="pah_drude precompute↔runtime",
         )

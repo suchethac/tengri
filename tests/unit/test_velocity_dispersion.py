@@ -9,6 +9,7 @@ Validates that:
 6. Results are physically reasonable for typical galaxy σ_v
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -54,7 +55,7 @@ class TestVelocityBroadenBasics:
     def test_output_shape(self, wave, sharp_spectrum):
         """Output has same shape as input."""
         result = velocity_broaden(sharp_spectrum, wave, 150.0)
-        assert result.shape == sharp_spectrum.shape
+        chex.assert_equal_shape([result, sharp_spectrum])
 
     def test_zero_sigma_identity(self, wave, sharp_spectrum):
         """sigma_v=0 gives back the original spectrum."""
@@ -104,7 +105,7 @@ class TestVelocityBroadenPhysics:
         """Works for typical galaxy velocity dispersions (50-300 km/s)."""
         for sigma in [50.0, 100.0, 150.0, 200.0, 250.0, 300.0]:
             result = velocity_broaden(sharp_spectrum, wave, sigma)
-            assert jnp.all(jnp.isfinite(result)), f"NaN at sigma_v={sigma}"
+            chex.assert_tree_all_finite(result), f"NaN at sigma_v={sigma}"
 
 
 class TestVelocityBroadenGradients:
@@ -133,10 +134,10 @@ class TestVelocityBroadenGradients:
             return jnp.sum(velocity_broaden(f, wave, 150.0) ** 2)
 
         g = jax.grad(loss)(flux)
-        assert jnp.all(jnp.isfinite(g))
+        chex.assert_tree_all_finite(g)
 
     def test_jit_compatible(self, wave, sharp_spectrum):
         """Works inside jax.jit."""
         fn = jax.jit(lambda f, s: velocity_broaden(f, wave, s))
         result = fn(sharp_spectrum, 150.0)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -16,13 +17,13 @@ from tengri.components.stellar.sfh import (
 @pytest.mark.parametrize("family", ["dpl", "tsnorm", "snorm", "norm", "exp", "dexp"])
 def test_shape_matches_default_grid(family: str) -> None:
     age, curves = sample_sfh_prior(family, jax.random.PRNGKey(0), n=4)
-    assert age.shape == DEFAULT_AGE_GRID_YR.shape
-    assert curves.shape == (4, age.shape[0])
+    chex.assert_equal_shape([age, DEFAULT_AGE_GRID_YR])
+    chex.assert_shape(curves, (4, age.shape[0]))
 
 
 def test_curves_are_finite_and_non_negative() -> None:
     _, curves = sample_sfh_prior("tsnorm", jax.random.PRNGKey(0), n=8)
-    assert jnp.all(jnp.isfinite(curves))
+    chex.assert_tree_all_finite(curves)
     # SFR should be non-negative for all the smooth additive families.
     assert jnp.all(curves >= -1e-12)
 
@@ -51,8 +52,8 @@ def test_prior_override_narrows_range() -> None:
 
 def test_composed_tsnorm_burst() -> None:
     age, curves = sample_sfh_prior(["tsnorm", "burst"], jax.random.PRNGKey(0), n=3)
-    assert curves.shape == (3, age.shape[0])
-    assert jnp.all(jnp.isfinite(curves))
+    chex.assert_shape(curves, (3, age.shape[0]))
+    chex.assert_tree_all_finite(curves)
 
 
 def test_field_modulator_rejected() -> None:
@@ -68,5 +69,5 @@ def test_unknown_family_raises_keyerror() -> None:
 def test_custom_age_grid() -> None:
     custom_grid = jnp.linspace(1e8, 1e10, 64)
     age, curves = sample_sfh_prior("dpl", jax.random.PRNGKey(0), n=2, age_grid_yr=custom_grid)
-    assert age.shape == (64,)
-    assert curves.shape == (2, 64)
+    chex.assert_shape(age, (64,))
+    chex.assert_shape(curves, (2, 64))

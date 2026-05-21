@@ -17,6 +17,7 @@ Coverage targets:
 
 import types
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -102,8 +103,8 @@ class TestBuildSspComponentLinear:
         # Use metallicity in the middle of the grid
         log_z = float(_LGMET_GRID[1])
         ssp_at_z, weights = fn(sfr, log_z)
-        assert ssp_at_z.shape == (N_AGE, N_WAVE)
-        assert weights.shape == (N_AGE,)
+        chex.assert_shape(ssp_at_z, (N_AGE, N_WAVE))
+        chex.assert_shape(weights, (N_AGE,))
 
     def test_weights_proportional_to_sfr_x_dt(self):
         """weights = sfr * age_dt when csp_integration != 'log_interp'."""
@@ -120,7 +121,7 @@ class TestBuildSspComponentLinear:
         fn = build_ssp_component(model)
         sfr = jnp.ones(N_AGE)
         ssp_at_z, _ = fn(sfr, float(_LGMET_GRID[2]))
-        assert jnp.all(jnp.isfinite(ssp_at_z))
+        chex.assert_tree_all_finite(ssp_at_z)
 
     def test_extrapolation_clamps_to_grid_edge(self):
         """log_z below grid → clamped to grid[0], ssp flux = first met plane."""
@@ -142,7 +143,7 @@ class TestBuildSspComponentLinear:
         _ssp0, _ = fn(sfr, log_z, alpha_fe=0.0)
         ssp1, _ = fn(sfr, log_z, alpha_fe=0.3)
         # Both should be ≈ 1.0 (flat SSP), but we check they are finite
-        assert jnp.all(jnp.isfinite(ssp1))
+        chex.assert_tree_all_finite(ssp1)
 
 
 # ── build_ssp_component — log_interp (matrix) path ────────────────
@@ -171,8 +172,8 @@ class TestBuildSspComponentMatrix:
         fn = build_ssp_component(model)
         sfr = jnp.ones(N_AGE)
         ssp_at_z, weights = fn(sfr, float(_LGMET_GRID[2]))
-        assert ssp_at_z.shape == (N_AGE, N_WAVE)
-        assert weights.shape == (N_AGE,)
+        chex.assert_shape(ssp_at_z, (N_AGE, N_WAVE))
+        chex.assert_shape(weights, (N_AGE,))
 
 
 # ── build_ssp_component — smooth interpolation path ───────────────
@@ -189,15 +190,15 @@ class TestBuildSspComponentSmooth:
         fn = build_ssp_component(model)
         sfr = jnp.ones(N_AGE)
         ssp_at_z, weights = fn(sfr, float(_LGMET_GRID[1]))
-        assert ssp_at_z.shape == (N_AGE, N_WAVE)
-        assert weights.shape == (N_AGE,)
+        chex.assert_shape(ssp_at_z, (N_AGE, N_WAVE))
+        chex.assert_shape(weights, (N_AGE,))
 
     def test_smooth_path_finite(self):
         model = _make_model_for_ssp(met_interp="smooth")
         fn = build_ssp_component(model)
         sfr = jnp.ones(N_AGE)
         ssp_at_z, _ = fn(sfr, float(_LGMET_GRID[2]))
-        assert jnp.all(jnp.isfinite(ssp_at_z))
+        chex.assert_tree_all_finite(ssp_at_z)
 
 
 # ── build_dust_atten_component ────────────────────────────────────
@@ -218,9 +219,9 @@ class TestBuildDustAttenComponent:
 
     def test_output_shapes(self):
         sed_atten, sed_intr, L_abs = self._call()
-        assert sed_atten.shape == (N_WAVE,)
-        assert sed_intr.shape == (N_WAVE,)
-        assert L_abs.shape == ()
+        chex.assert_shape(sed_atten, (N_WAVE,))
+        chex.assert_shape(sed_intr, (N_WAVE,))
+        chex.assert_shape(L_abs, ())
 
     def test_no_dust_atten_equals_intrinsic(self):
         """With tau_bc=tau_diff=0, dust transmission=1 → sed_atten = sed_intr."""
@@ -244,8 +245,8 @@ class TestBuildDustAttenComponent:
 
     def test_outputs_finite(self):
         sed_atten, sed_intr, L_abs = self._call(tau_bc=1.0, tau_diff=0.3)
-        assert jnp.all(jnp.isfinite(sed_atten))
-        assert jnp.all(jnp.isfinite(sed_intr))
+        chex.assert_tree_all_finite(sed_atten)
+        chex.assert_tree_all_finite(sed_intr)
         assert jnp.isfinite(L_abs)
 
     def test_dual_law_same_as_single_law_when_identical(self):

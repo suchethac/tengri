@@ -16,6 +16,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -76,21 +77,21 @@ class TestModeRouting:
         key = jax.random.PRNGKey(0)
         params = model.spec.sample(key)
         phot = model.predict_photometry(params, mode="compositional")
-        assert jnp.all(jnp.isfinite(phot))
+        chex.assert_tree_all_finite(phot)
         assert jnp.all(phot > 0)
 
     def test_explicit_hybrid_mode_runs(self, model):
         key = jax.random.PRNGKey(0)
         params = model.spec.sample(key)
         phot = model.predict_photometry(params, mode="hybrid")
-        assert jnp.all(jnp.isfinite(phot))
+        chex.assert_tree_all_finite(phot)
         assert jnp.all(phot > 0)
 
     def test_explicit_exact_mode_runs(self, model):
         key = jax.random.PRNGKey(0)
         params = model.spec.sample(key)
         phot = model.predict_photometry(params, mode="exact")
-        assert jnp.all(jnp.isfinite(phot))
+        chex.assert_tree_all_finite(phot)
         assert jnp.all(phot > 0)
 
 
@@ -208,7 +209,7 @@ class TestModeWithStochasticSFH:
         params = stochastic_model.spec.sample(key)
         for mode in ("compositional", "hybrid", "exact"):
             phot = stochastic_model.predict_photometry(params, mode=mode)
-            assert jnp.all(jnp.isfinite(phot)), f"NaN/Inf in mode={mode} with stochastic SFH"
+            chex.assert_tree_all_finite(phot), f"NaN/Inf in mode={mode} with stochastic SFH"
 
     def test_compositional_exact_agreement_stochastic(self, stochastic_model):
         key = jax.random.PRNGKey(3)

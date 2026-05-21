@@ -11,6 +11,7 @@ caps the achievable per-band SNR at 50.
 
 from __future__ import annotations
 
+import chex
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -65,5 +66,5 @@ class TestApplyZpFloor:
         noise = jnp.array([0.5, 0.2])
         out = apply_zp_floor(flux, noise, 0.05)
         out_np = np.asarray(out)
-        assert np.all(np.isfinite(out_np))
+        chex.assert_tree_all_finite(out_np)
         assert np.all(out_np > 0)

@@ -1,5 +1,6 @@
 """Tests for SSP pre-computation at fixed redshift."""
 
+import chex
 import jax
 import jax.numpy as jnp
 from numpy.testing import assert_allclose
@@ -23,7 +24,7 @@ class TestFastPhotometry:
         ssp_phot = jnp.ones((n_age, n_filt))
         dust = jnp.ones((n_age, n_filt))
         flux = fast_photometry(weights, ssp_phot, dust, 1.0)
-        assert flux.shape == (n_filt,)
+        chex.assert_shape(flux, (n_filt,))
 
     def test_no_dust_equals_ssp_weighted_sum(self):
         """With dust=1 and uniform weights, flux = mean(ssp_phot) * scale."""
@@ -59,7 +60,7 @@ class TestFastPhotometry:
         ssp_phot = jnp.ones((n_age, n_filt))
         dust = jnp.ones((n_age, n_filt))
         flux = fast_photometry(weights, ssp_phot, dust, 1.0)
-        assert flux.shape == (n_filt,)
+        chex.assert_shape(flux, (n_filt,))
 
     def test_has_gradients(self):
         """Gradients w.r.t. weights and dust are finite."""
@@ -73,8 +74,8 @@ class TestFastPhotometry:
         d = jnp.ones((n_age, n_filt)) * 0.8
 
         gw, gd = jax.grad(loss, argnums=(0, 1))(w, d)
-        assert jnp.all(jnp.isfinite(gw))
-        assert jnp.all(jnp.isfinite(gd))
+        chex.assert_tree_all_finite(gw)
+        chex.assert_tree_all_finite(gd)
 
 
 class TestFastSpectrum:
@@ -87,7 +88,7 @@ class TestFastSpectrum:
         ssp_pix = jnp.ones((n_age, n_pix))
         dust = jnp.ones((n_age, n_pix))
         spec = fast_spectrum(weights, ssp_pix, dust, 1.0)
-        assert spec.shape == (n_pix,)
+        chex.assert_shape(spec, (n_pix,))
 
     def test_has_gradients(self):
         """Gradients through fast_spectrum are finite."""
@@ -100,7 +101,7 @@ class TestFastSpectrum:
 
         w = jnp.ones(n_age) / n_age
         g = jax.grad(loss)(w)
-        assert jnp.all(jnp.isfinite(g))
+        chex.assert_tree_all_finite(g)
 
 
 class TestMetallicityInterpolation:

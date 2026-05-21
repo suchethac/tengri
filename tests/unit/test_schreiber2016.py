@@ -1,5 +1,6 @@
 """Tests for Schreiber et al. (2016) dust emission model."""
 
+import chex
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -229,7 +230,7 @@ class TestSchreiber2016:
             dust_f_pah=0.5,
         )
 
-        assert l_nu.shape == wavelength_grid.shape
+        chex.assert_equal_shape([l_nu, wavelength_grid])
 
     def test_redshift_correction_applied(self, wavelength_grid, l_absorbed):
         """Test that non-zero redshift changes temperature (CMB correction)."""

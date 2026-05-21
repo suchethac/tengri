@@ -1,5 +1,6 @@
 """Unit tests for compute_analytic_nebular_continuum in _shared.py."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -28,7 +29,7 @@ class TestAnalyticNebularContinuumBasic:
     def test_output_shape(self):
         """Output shape must match input wavelength grid."""
         sed = compute_analytic_nebular_continuum(_WAVE_AA, _Q_H_REF, log_z_abs=-1.848)
-        assert sed.shape == _WAVE_AA.shape
+        chex.assert_equal_shape([sed, _WAVE_AA])
 
     def test_non_negative(self):
         """SED must be non-negative everywhere."""
@@ -38,7 +39,7 @@ class TestAnalyticNebularContinuumBasic:
     def test_finite(self):
         """SED must be finite everywhere."""
         sed = compute_analytic_nebular_continuum(_WAVE_AA, _Q_H_REF, log_z_abs=-1.848)
-        assert jnp.all(jnp.isfinite(sed)), "SED contains NaN or Inf"
+        chex.assert_tree_all_finite(sed), "SED contains NaN or Inf"
 
     def test_zero_qh_gives_zero_sed(self):
         """Q_H = 0 must produce a zero SED."""
@@ -226,5 +227,5 @@ class TestAnalyticNebularContinuumDifferentiability:
             return compute_analytic_nebular_continuum(wave, q_h, log_z_abs=-1.848)
 
         sed = _compute(_Q_H_REF)
-        assert sed.shape == wave.shape
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_equal_shape([sed, wave])
+        chex.assert_tree_all_finite(sed)

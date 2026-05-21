@@ -1,5 +1,6 @@
 """Tests for Witt & Gordon (2000) dust geometry transmission functions."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -36,7 +37,7 @@ class TestWG00Shell:
     def test_output_shape(self, wavelength):
         """Output shape matches input wavelength array."""
         result = wg00_shell(wavelength, tau_v=1.0)
-        assert result.shape == wavelength.shape
+        chex.assert_equal_shape([result, wavelength])
 
     def test_zero_tau_gives_unity(self, wavelength):
         """Zero optical depth gives full transmission."""
@@ -117,7 +118,7 @@ class TestWG00Cloudy:
 
     def test_output_shape(self, wavelength):
         result = wg00_cloudy(wavelength, tau_v=1.0)
-        assert result.shape == wavelength.shape
+        chex.assert_equal_shape([result, wavelength])
 
     def test_zero_tau_gives_unity(self, wavelength):
         """Zero optical depth gives full transmission."""
@@ -157,7 +158,7 @@ class TestWG00Cloudy:
     def test_numerical_stability_small_tau(self, wavelength):
         """No NaN or inf at very small optical depths."""
         result = wg00_cloudy(wavelength, tau_v=1e-12)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
         assert_allclose(result, 1.0, atol=1e-4)
 
     def test_more_dust_less_transmission(self, wavelength):
@@ -198,7 +199,7 @@ class TestWG00Dusty:
 
     def test_output_shape(self, wavelength):
         result = wg00_dusty(wavelength, tau_v=1.0)
-        assert result.shape == wavelength.shape
+        chex.assert_equal_shape([result, wavelength])
 
     def test_zero_tau_gives_unity(self, wavelength):
         """Zero optical depth gives full transmission."""

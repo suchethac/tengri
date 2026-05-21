@@ -5,6 +5,7 @@ runs without errors and produces reasonable results for a smooth SFH
 model with synthetic SSP data.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -119,7 +120,7 @@ class TestEVIRuns:
         )
 
         for name, vals in result.samples.items():
-            assert jnp.all(jnp.isfinite(vals)), f"{name} has non-finite samples"
+            chex.assert_tree_all_finite(vals), f"{name} has non-finite samples"
 
     def test_evi_with_multiseed(self, model_and_mock, simple_spec):
         """EVI with multiple seeds runs without error."""

@@ -8,6 +8,7 @@ Validates:
 
 from __future__ import annotations
 
+import chex
 import numpy as np
 from numpy.testing import assert_allclose
 
@@ -60,14 +61,14 @@ class TestTaylorMomentTensor:
         fw, ft = _simple_filters()
         pc = precompute_photometry(ssp, fw, ft, 0.1, 1e28, taylor_correction=True)
         assert pc.ssp_phot_moment is not None
-        assert pc.ssp_phot_moment.shape == pc.ssp_phot.shape
+        chex.assert_equal_shape([pc.ssp_phot_moment, pc.ssp_phot])
 
     def test_moment_finite(self):
         """Ψ contains no NaN or Inf."""
         ssp = _SSPData()
         fw, ft = _simple_filters()
         pc = precompute_photometry(ssp, fw, ft, 0.1, 1e28)
-        assert np.all(np.isfinite(np.asarray(pc.ssp_phot_moment)))
+        chex.assert_tree_all_finite(np.asarray(pc.ssp_phot_moment))
 
     def test_moment_zero_for_flat_ssp(self):
         """For a flat SSP (constant across λ), Ψ = SSP · <λ - λ_eff> = 0."""

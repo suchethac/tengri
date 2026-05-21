@@ -6,6 +6,7 @@ Physics references:
 - Ranalli+2003, A&A 399, 39 (combined XRB calibration)
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -136,7 +137,7 @@ class TestXRayAGN:
     def test_agn_corona_finite(self):
         """xray_agn_corona returns finite values for typical AGN luminosity."""
         L_nu = xray_agn_corona(_WAVE_GRID, L_agn_bol=1e44)
-        assert jnp.all(jnp.isfinite(L_nu)), "xray_agn_corona: non-finite output"
+        chex.assert_tree_all_finite(L_nu), "xray_agn_corona: non-finite output"
 
     def test_total_additive(self):
         """xray_total = xray_xrb + xray_agn_corona (additive)."""

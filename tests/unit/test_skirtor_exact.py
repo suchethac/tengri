@@ -4,6 +4,7 @@ Validates piecewise power-law disc spectra, extinction curves, anisotropic
 luminosity geometry, and fracAGN conversions against known CIGALE values.
 """
 
+import chex
 import jax.numpy as jnp
 import numpy as np
 
@@ -33,7 +34,7 @@ class TestPiecewisePowerlawDisk:
         limits = jnp.array([8.0, 10.0, 100.0, 5000.0, 1e6])
         coefs = jnp.array([0.2, -1.0, -1.5, -4.0])
         spectrum = piecewise_powerlaw_disk(wavelength, limits, coefs)
-        assert spectrum.shape == wavelength.shape
+        chex.assert_equal_shape([spectrum, wavelength])
 
     def test_normalization_unity(self):
         """Spectrum integrates to approximately 1.0."""
@@ -80,7 +81,7 @@ class TestSKIRTORDiskSpectrum:
         """Output shape matches input."""
         wavelength = jnp.linspace(100.0, 1e5, 100)
         spectrum = skirtor_disk_spectrum(wavelength, delta=0.0)
-        assert spectrum.shape == wavelength.shape
+        chex.assert_equal_shape([spectrum, wavelength])
 
     def test_normalization(self):
         """Spectrum integrates to ~1.0."""
@@ -121,7 +122,7 @@ class TestSchartmann2005DiskSpectrum:
         """Output shape matches input."""
         wavelength = jnp.linspace(100.0, 1e5, 100)
         spectrum = schartmann2005_disk_spectrum(wavelength, delta=0.0)
-        assert spectrum.shape == wavelength.shape
+        chex.assert_equal_shape([spectrum, wavelength])
 
     def test_normalization(self):
         """Spectrum integrates to ~1.0."""
@@ -148,7 +149,7 @@ class TestADAFDiskSpectrum:
         """Output shape matches input."""
         wavelength = jnp.linspace(100.0, 1e5, 100)
         spectrum = adaf_disk_spectrum(wavelength, delta=0.0)
-        assert spectrum.shape == wavelength.shape
+        chex.assert_equal_shape([spectrum, wavelength])
 
     def test_normalization(self):
         """Spectrum integrates to ~1.0."""
@@ -186,7 +187,7 @@ class TestCalzetti2000Extinction:
         """Output shape matches input."""
         wavelength = jnp.linspace(1000.0, 20000.0, 100)
         k_lambda = calzetti2000_extinction_curve(wavelength)
-        assert k_lambda.shape == wavelength.shape
+        chex.assert_equal_shape([k_lambda, wavelength])
 
     def test_positivity(self):
         """Extinction coefficient is non-negative."""
@@ -227,7 +228,7 @@ class TestGaskell2004Extinction:
         """Output shape matches input."""
         wavelength = jnp.linspace(1000.0, 20000.0, 100)
         k_lambda = gaskell2004_extinction_curve(wavelength)
-        assert k_lambda.shape == wavelength.shape
+        chex.assert_equal_shape([k_lambda, wavelength])
 
     def test_positivity(self):
         """Extinction coefficient is non-negative."""

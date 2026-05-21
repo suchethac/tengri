@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import pathlib
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -81,7 +82,7 @@ def test_orchestrator_chain_eager(ssp, base_params):
     s = run_components(components, state0, base_params)
 
     assert s.sed_intrinsic is not None
-    assert bool(jnp.all(jnp.isfinite(s.sed_intrinsic)))
+    chex.assert_tree_all_finite(s.sed_intrinsic)
     # Stellar contract keys present
     for k in ("log_mstar", "log_mstar_formed", "sfr", "lnu_age", "nion"):
         assert k in s.derived
@@ -187,7 +188,7 @@ def test_full_chain_composability(ssp, full_chain_params, agn_model, dust_law, e
     s_eager = run_components(chain, state0, full_chain_params)
     s_jit = jax.jit(lambda p: run_components(chain, state0, p))(full_chain_params)
 
-    assert bool(jnp.all(jnp.isfinite(s_eager.sed_intrinsic)))
+    chex.assert_tree_all_finite(s_eager.sed_intrinsic)
     assert jnp.allclose(s_jit.sed_intrinsic, s_eager.sed_intrinsic, rtol=1e-12)
     # Cross-component publications all populated:
     for k in ("L_ir", "L_agn_bol", "sed_radio", "sed_xray", "igm_transmission"):

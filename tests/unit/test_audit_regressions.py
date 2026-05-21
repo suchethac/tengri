@@ -9,6 +9,7 @@ RULE: When fixing a bug, the fixer MUST:
 3. Verify this test fails before the fix and passes after
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -236,7 +237,7 @@ class TestBug13NonparametricJit:
         # This should work but currently raises ConcretizationTypeError
         jitted = jax.jit(continuity)
         result = jitted(log_ratios, age_grid, bin_edges)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
 
 # ── BUG-16: Dead code in eline_priors.py — FIXED (bare expression removed)
@@ -421,8 +422,8 @@ class TestBug04WarmComptonization:
         nu = jnp.array(np.logspace(13, np.log10(5e18), 200))
         # K&D 2018 default warm zone: Gamma=2.5, kTe=0.2 keV, kTbb=10 eV = 0.01 keV
         shape = nthcomp_lnu_interp(nu, gamma=2.5, kTe_keV=0.2, kTbb_keV=0.01)
-        assert shape.shape == nu.shape
-        assert jnp.all(jnp.isfinite(shape)), "nthcomp template shape must be finite everywhere"
+        chex.assert_equal_shape([shape, nu])
+        chex.assert_tree_all_finite(shape)
         assert jnp.all(shape >= 0.0), "nthcomp template shape must be non-negative"
         assert jnp.any(shape > 0), "nthcomp template shape must be non-zero somewhere"
 
@@ -524,7 +525,7 @@ class TestBug04WarmComptonization:
 
         result = disc_mod.kubota_done_disc(wav_xray, agn_log_lbol=46.0)
 
-        assert jnp.all(jnp.isfinite(result)), "nthcomp SED contains non-finite values"
+        chex.assert_tree_all_finite(result)
         assert float(jnp.max(result)) > 0.0, (
             "nthcomp SED is identically zero — warm Comptonization path not reached"
         )
@@ -799,11 +800,10 @@ class TestBugNSS01PosteriorDerivedNone:
         # Check that other fields are present and finite
         assert "stellar_mass" in derived
         assert derived["stellar_mass"].shape == (n_samples,)
-        assert jnp.all(jnp.isfinite(derived["stellar_mass"])), "stellar_mass should be finite"
-
+        chex.assert_tree_all_finite(derived["stellar_mass"])
         assert "sfr_100myr" in derived
         assert derived["sfr_100myr"].shape == (n_samples,)
-        assert jnp.all(jnp.isfinite(derived["sfr_100myr"])), "sfr_100myr should be finite"
+        chex.assert_tree_all_finite(derived["sfr_100myr"])
 
 
 # ── BUG-NSS-03: qsogen AGN tracer leak ────────────────────────────
@@ -852,7 +852,7 @@ class TestBugNSS03QsogenJit:
                 agn_bcnorm=0.0,
             )
             # Should complete without error and return finite array
-            assert jnp.all(jnp.isfinite(sed)), "SED contains non-finite values"
+            chex.assert_tree_all_finite(sed)
             assert sed.shape == wavelength.shape, (
                 f"Shape mismatch: {sed.shape} vs {wavelength.shape}"
             )
@@ -895,8 +895,8 @@ class TestBugNSS03QsogenJit:
 
         try:
             seds = vmapped_qsogen(log_lbol_values)
-            assert seds.shape == (3, wavelength.shape[0])
-            assert jnp.all(jnp.isfinite(seds))
+            chex.assert_shape(seds, (3, wavelength.shape[0]))
+            chex.assert_tree_all_finite(seds)
         except Exception as e:
             pytest.fail(
                 f"BUG-NSS-03 vmap regression: vmapped compute_qsogen_sed raised "
@@ -1051,7 +1051,7 @@ class TestBugNSS02EvolvingMetFusedKernel:
         # Future enhancement: expose _predict_photometry_exact in the public API
         # for unit-test-level comparison.
 
-        assert jnp.all(jnp.isfinite(phot_compositional)), "Compositional photometry must be finite"
+        chex.assert_tree_all_finite(phot_compositional)
         assert jnp.all(phot_compositional > 0), "Compositional photometry must be positive"
 
     def test_translate_evolving_keys_present(self):

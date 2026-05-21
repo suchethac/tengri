@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -165,7 +166,7 @@ class TestShockEmissionSed:
     def test_output_shape(self, wavelength):
         """Output shape should match the input wavelength grid."""
         sed = compute_shock_sed(wavelength, 300.0, 1e6)
-        assert sed.shape == wavelength.shape
+        chex.assert_equal_shape([sed, wavelength])
 
     def test_zero_luminosity_gives_zero_sed(self, wavelength):
         """l_shock_halpha=0 must give a zero SED."""
@@ -225,7 +226,7 @@ class TestShockJIT:
             return compute_shock_sed(wave, v, lum)
 
         sed = _compute(300.0, 1e6)
-        assert sed.shape == wave.shape
+        chex.assert_equal_shape([sed, wave])
 
 
 # ── Differentiability ─────────────────────────────────────────────
@@ -346,15 +347,15 @@ class TestShockBackend:
     def test_predict_nebular_sed_returns_finite_sed(self):
         b = ShockBackend()
         sed = b.predict_nebular_sed(self._WAVE, 300.0, 1e40)
-        assert sed.shape == (self._WAVE.shape[0],)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_shape(sed, (self._WAVE.shape[0],))
+        chex.assert_tree_all_finite(sed)
         assert jnp.all(sed >= 0.0)
 
     def test_predict_nebular_sed_extra_kwargs_ignored(self):
         """**_kwargs allows protocol-uniform call sites to pass extra args."""
         b = ShockBackend()
         sed = b.predict_nebular_sed(self._WAVE, 300.0, 1e40, ssp_weights=None, log_z=0.0)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_has_continuum_and_has_free_params_not_settable_via_init(self):
         """has_continuum and has_free_params are fixed; init=False in dataclass."""

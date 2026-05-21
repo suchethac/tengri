@@ -8,6 +8,7 @@ SKIRTORComponents named tuple interface.
 import tempfile
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -114,9 +115,9 @@ class TestSKIRTORComponentsV3:
         fn = create_skirtor_components_from_grid(v3_grid_path)
         wavelength = jnp.logspace(1, 7, 80)
         result = fn(wavelength)
-        assert result.disk.shape == (80,)
-        assert result.dust.shape == (80,)
-        assert result.total.shape == (80,)
+        chex.assert_shape(result.disk, (80,))
+        chex.assert_shape(result.dust, (80,))
+        chex.assert_shape(result.total, (80,))
 
     def test_components_nonnegative(self, v3_grid_path):
         from tengri.components.agn.skirtor import create_skirtor_components_from_grid
@@ -143,9 +144,9 @@ class TestSKIRTORComponentsV3:
         fn = create_skirtor_components_from_grid(v3_grid_path)
         wavelength = jnp.logspace(1, 7, 100)
         result = fn(wavelength)
-        assert jnp.all(jnp.isfinite(result.disk))
-        assert jnp.all(jnp.isfinite(result.dust))
-        assert jnp.all(jnp.isfinite(result.total))
+        chex.assert_tree_all_finite(result.disk)
+        chex.assert_tree_all_finite(result.dust)
+        chex.assert_tree_all_finite(result.total)
 
     def test_torus_frac_scales_output(self, v3_grid_path):
         from tengri.components.agn.skirtor import create_skirtor_components_from_grid
@@ -166,8 +167,8 @@ class TestV3BackwardCompat:
         fn = create_skirtor_from_grid(v3_grid_path)
         wavelength = jnp.logspace(1, 7, 100)
         result = fn(wavelength, agn_log_lbol=44.0)
-        assert result.shape == (100,)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_shape(result, (100,))
+        chex.assert_tree_all_finite(result)
 
     def test_v2_raises_on_components(self, v2_grid_path):
         """create_skirtor_components_from_grid fails gracefully on v2."""
@@ -183,8 +184,8 @@ class TestV3BackwardCompat:
         fn = create_skirtor_from_grid(v2_grid_path)
         wavelength = jnp.logspace(1, 7, 100)
         result = fn(wavelength)
-        assert result.shape == (100,)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_shape(result, (100,))
+        chex.assert_tree_all_finite(result)
 
 
 class TestJITAndGradients:
@@ -199,7 +200,7 @@ class TestJITAndGradients:
             return fn(w, agn_log_lbol=44.0)
 
         result = compute(wavelength)
-        assert jnp.all(jnp.isfinite(result.total))
+        chex.assert_tree_all_finite(result.total)
 
     def test_grad_through_components(self, v3_grid_path):
         from tengri.components.agn.skirtor import create_skirtor_components_from_grid

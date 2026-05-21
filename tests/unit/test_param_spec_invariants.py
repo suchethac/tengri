@@ -16,6 +16,7 @@ Key invariant (corrected from naive expectation):
 
 from __future__ import annotations
 
+import chex
 import jax
 import pytest
 
@@ -118,7 +119,7 @@ class TestSampleKeys:
         key = jax.random.PRNGKey(4)
         sample = stochastic_spec.sample(key)
         xi = sample["sfh_field_xi"]
-        assert xi.shape == (16,), f"sfh_field_xi shape {xi.shape} does not match n_grid=16"
+        chex.assert_shape(xi, (16,))
 
     def test_sample_non_stochastic_has_no_xi(self, dpl_spec: Parameters) -> None:
         key = jax.random.PRNGKey(5)

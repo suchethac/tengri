@@ -12,6 +12,7 @@ Model: each galaxy has a scalar param 'x' in p["gal"]["x"].
 
 import math
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -69,8 +70,8 @@ def test_chunked_matches_sequential(n_gal, n_dpg, K):
     out_k1 = sr_k1(p_k1)
     out_kn = sr_kn(p_kn)
 
-    assert out_k1.shape == (n_gal * n_dpg,)
-    assert out_kn.shape == (n_gal * n_dpg,)
+    chex.assert_shape(out_k1, (n_gal * n_dpg,))
+    chex.assert_shape(out_kn, (n_gal * n_dpg,))
     assert jnp.allclose(out_k1, out_kn, atol=1e-10), (
         f"K={K}, n_gal={n_gal}: max diff = {jnp.max(jnp.abs(out_k1 - out_kn)):.2e}"
     )
@@ -83,7 +84,7 @@ def test_chunked_output_shape_non_divisible():
     assert n_padded == 8  # ceil(7/4)*4
     p = _make_params(n_gal, n_padded)
     out = sr_kn(p)
-    assert out.shape == (n_gal * n_dpg,)
+    chex.assert_shape(out, (n_gal * n_dpg,))
 
 
 def test_padding_zeros_dont_affect_real_predictions():

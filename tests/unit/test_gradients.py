@@ -15,6 +15,7 @@ Coverage:
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -281,7 +282,7 @@ class TestGradientThroughPipeline:
 
         # Gradient w.r.t. xi — check one representative component with FD
         grad_xi = jax.grad(pipeline, argnums=0)(xi, 1.0)
-        assert grad_xi.shape == xi.shape
+        chex.assert_equal_shape([grad_xi, xi])
 
         xi0_val = float(xi[0])
 

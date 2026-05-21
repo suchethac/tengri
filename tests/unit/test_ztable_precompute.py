@@ -8,6 +8,7 @@ Validates that:
 5. Default z grid covers reasonable range
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -62,9 +63,9 @@ class TestZTablePrecomputation:
         fw, ft = filters
         zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=10)
         assert zt.ssp_phot_table.shape == (10, 3, 20, 3)  # (n_z, n_met, n_age, n_filt)
-        assert zt.eff_waves_rest_table.shape == (10, 3)
-        assert zt.flux_scale_table.shape == (10,)
-        assert zt.z_grid.shape == (10,)
+        chex.assert_shape(zt.eff_waves_rest_table, (10, 3))
+        chex.assert_shape(zt.flux_scale_table, (10,))
+        chex.assert_shape(zt.z_grid, (10,))
         assert zt.n_filters == 3
 
     def test_custom_z_grid(self, ssp_data, filters):
@@ -94,9 +95,9 @@ class TestZTablePrecomputation:
         """All precomputed values are finite."""
         fw, ft = filters
         zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=10)
-        assert jnp.all(jnp.isfinite(zt.ssp_phot_table))
-        assert jnp.all(jnp.isfinite(zt.eff_waves_rest_table))
-        assert jnp.all(jnp.isfinite(zt.flux_scale_table))
+        chex.assert_tree_all_finite(zt.ssp_phot_table)
+        chex.assert_tree_all_finite(zt.eff_waves_rest_table)
+        chex.assert_tree_all_finite(zt.flux_scale_table)
 
 
 # ── Tests: interpolation accuracy ─────────────────────────────────
@@ -235,7 +236,7 @@ class TestZTableGradients:
             )
 
         ssp_phot, _eff_rest, _flux_scale = fn(0.5)
-        assert jnp.all(jnp.isfinite(ssp_phot))
+        chex.assert_tree_all_finite(ssp_phot)
 
 
 # ── Tests: smooth (triweight) interpolation ───────────────────────
@@ -260,8 +261,8 @@ class TestZTableSmoothInterpolation:
             0.5,
             self._scatter(zt),
         )
-        assert ssp_phot.shape == (3, 20, 3)
-        assert eff_rest.shape == (3,)
+        chex.assert_shape(ssp_phot, (3, 20, 3))
+        chex.assert_shape(eff_rest, (3,))
         assert jnp.ndim(flux_scale) == 0
 
     def test_all_values_finite(self, ssp_data, filters):
@@ -276,8 +277,8 @@ class TestZTableSmoothInterpolation:
             0.5,
             self._scatter(zt),
         )
-        assert jnp.all(jnp.isfinite(ssp_phot))
-        assert jnp.all(jnp.isfinite(eff_rest))
+        chex.assert_tree_all_finite(ssp_phot)
+        chex.assert_tree_all_finite(eff_rest)
         assert jnp.isfinite(flux_scale)
 
     def test_gradient_wrt_z_finite(self, ssp_data, filters):
@@ -401,4 +402,4 @@ class TestZTableSmoothInterpolation:
             )
 
         ssp_phot, _eff_rest, _flux_scale = fn(0.5)
-        assert jnp.all(jnp.isfinite(ssp_phot))
+        chex.assert_tree_all_finite(ssp_phot)

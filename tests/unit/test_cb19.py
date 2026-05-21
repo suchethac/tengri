@@ -19,6 +19,7 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -155,7 +156,7 @@ class TestInterp6D:
         vals = (-3.2, 7.0, -3.0, 2.0, -0.36, 0.0)
         result = cb19_module._interp_6d(grid.log_line_ratios, grids, vals)
         n_lines = grid.log_line_ratios.shape[-1]
-        assert result.shape == (n_lines,)
+        chex.assert_shape(result, (n_lines,))
 
     def test_constant_grid_returns_constant(self, cb19_module, fake_grid_data):
         """Interpolation on a constant grid (all 0.0) returns 0.0 everywhere."""
@@ -185,7 +186,7 @@ class TestInterp6D:
         )
         vals = (-3.5, 7.0, -2.5, 2.0, -0.5, 0.1)
         result = cb19_module._interp_6d(grid.log_line_ratios, grids, vals)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
 
 # ── CB19Backend (with mocked grid) ────────────────────────────────
@@ -222,8 +223,8 @@ class TestCB19BackendMocked:
         waves, lums = backend.predict_nebular_line_luminosities(
             ssp_weights, ssp_log_ages, log_z=-1.848
         )
-        assert waves.shape == (n_lines,)
-        assert lums.shape == (n_lines,)
+        chex.assert_shape(waves, (n_lines,))
+        chex.assert_shape(lums, (n_lines,))
 
     def test_predict_line_lums_finite(self, backend_with_fake_grid):
         """Line luminosities must be finite (no NaN from unit conversion)."""
@@ -307,7 +308,7 @@ class TestCB19BackendMocked:
         sed = backend.predict_nebular_sed(
             jnp.ones(3), ssp_wave, jnp.array([7.0, 7.5, 8.0]), log_z=-1.848
         )
-        assert sed.shape == (n_wave,)
+        chex.assert_shape(sed, (n_wave,))
 
     def test_predict_sed_units_are_erg_s_hz(self, backend_with_fake_grid, cb19_module):
         """predict_nebular_sed must return erg/s/Hz, not Lsun/Hz.
@@ -421,7 +422,7 @@ class TestJITCompatibility:
             return lums
 
         result = _call(jnp.array(-1.848))
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
 
 # ── preintegrate_for_photometry: CLOUDY-shape duck-typed surface ──
@@ -513,7 +514,7 @@ class TestPreintegrateForPhotometry:
         n_age = backend_for_preint.grid.log_age_grid.shape[0]
         n_u = backend_for_preint.grid.log_U_grid.shape[0]
         n_lines = backend_for_preint.grid.line_wavelengths.shape[0]
-        assert backend_for_preint._line_lum_collapsed.shape == (n_met, n_age, n_u, n_lines)
+        chex.assert_shape(backend_for_preint._line_lum_collapsed, (n_met, n_age, n_u, n_lines))
         # fake grid is all 0.0 ratios → collapsed value = log_hb_per_qh
         np.testing.assert_allclose(
             np.array(backend_for_preint._line_lum_collapsed),
@@ -528,7 +529,7 @@ class TestPreintegrateForPhotometry:
         weights = backend_for_preint._preint_lines.line_filter_weights
         n_lines = backend_for_preint.grid.line_wavelengths.shape[0]
         assert weights.shape == (n_lines, len(fw))
-        assert bool(jnp.all(jnp.isfinite(weights)))
+        chex.assert_tree_all_finite(weights)
 
     def test_fixed_collapses_axis(self, backend_for_preint, synthetic_filters):
         """Passing ``fixed={2: -3.0}`` must drop the log_U axis from line_lum and
@@ -538,7 +539,7 @@ class TestPreintegrateForPhotometry:
         n_met = backend_for_preint.grid.log_OH_grid.shape[0]
         n_age = backend_for_preint.grid.log_age_grid.shape[0]
         n_lines = backend_for_preint.grid.line_wavelengths.shape[0]
-        assert backend_for_preint._line_lum_collapsed.shape == (n_met, n_age, n_lines)
+        chex.assert_shape(backend_for_preint._line_lum_collapsed, (n_met, n_age, n_lines))
         assert len(backend_for_preint._preint_lines.axes) == 2
 
     def test_preint_lines_agree_with_runtime_at_grid_point(
@@ -616,7 +617,7 @@ class TestPreintegrateForPhotometry:
 
         out = _line_phot(jnp.array(-2.0), jnp.array(7.0), jnp.array(-3.0), jnp.array(1e54))
         assert out.shape == (len(fw),)
-        assert bool(jnp.all(jnp.isfinite(out)))
+        chex.assert_tree_all_finite(out)
 
 
 # ── Missing HDF5 file raises FileNotFoundError ────────────────────

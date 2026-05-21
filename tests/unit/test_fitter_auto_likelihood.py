@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -143,8 +144,8 @@ def test_joint_auto_builds_composite_with_data_split():
     phot, spec = lk.likelihoods
     assert isinstance(phot, PhotometryLikelihood)
     assert isinstance(spec, SpectroscopyLikelihood)
-    assert phot.fnu_obs.shape == (n_phot,)
-    assert spec.fnu_obs.shape == (5,)
+    chex.assert_shape(phot.fnu_obs, (n_phot,))
+    chex.assert_shape(spec.fnu_obs, (5,))
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -311,7 +312,7 @@ def test_spectral_indices_compose_into_composite_with_base():
     indices_lk = next(
         c for c in lk.likelihoods if isinstance(c, GaussianLikelihood) and c.channel == "indices"
     )
-    assert indices_lk.obs.shape == (1,)
+    chex.assert_shape(indices_lk.obs, (1,))
 
 
 @pytest.mark.unit

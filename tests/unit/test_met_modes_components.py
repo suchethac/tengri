@@ -19,6 +19,7 @@ the SED responds to the metallicity input.
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -116,7 +117,7 @@ class TestTwoStep:
         m = SEDModel(spec_pos, synthetic_ssp)
         sed = m.predict_state({}).sed_intrinsic
         sed_delta = _delta_sed(synthetic_ssp, 1.1)  # midpoint
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
         assert float(jnp.max(jnp.abs(sed - sed_delta) / jnp.maximum(sed_delta, 1e-30))) > 1e-3
 
 

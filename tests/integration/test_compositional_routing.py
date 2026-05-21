@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -91,7 +92,7 @@ class TestEvolvingZRouting:
 
     def test_photometry_finite(self, evolvingz_model, evolvingz_params):
         phot = evolvingz_model.predict_photometry(evolvingz_params)
-        assert jnp.all(jnp.isfinite(phot)), f"Non-finite photometry: {phot}"
+        chex.assert_tree_all_finite(phot), f"Non-finite photometry: {phot}"
 
     def test_photometry_positive(self, evolvingz_model, evolvingz_params):
         phot = evolvingz_model.predict_photometry(evolvingz_params)
@@ -99,7 +100,7 @@ class TestEvolvingZRouting:
 
     def test_photometry_shape(self, evolvingz_model, evolvingz_params):
         phot = evolvingz_model.predict_photometry(evolvingz_params)
-        assert phot.shape == (_N_FILTERS,)
+        chex.assert_shape(phot, (_N_FILTERS,))
 
 
 # ── TestChemEvolRouting ───────────────────────────────────────────
@@ -140,7 +141,7 @@ class TestChemEvolRouting:
 
     def test_photometry_finite(self, chemevol_model, chemevol_params):
         phot = chemevol_model.predict_photometry(chemevol_params)
-        assert jnp.all(jnp.isfinite(phot)), f"Non-finite photometry: {phot}"
+        chex.assert_tree_all_finite(phot), f"Non-finite photometry: {phot}"
 
     def test_photometry_positive(self, chemevol_model, chemevol_params):
         phot = chemevol_model.predict_photometry(chemevol_params)
@@ -148,7 +149,7 @@ class TestChemEvolRouting:
 
     def test_photometry_shape(self, chemevol_model, chemevol_params):
         phot = chemevol_model.predict_photometry(chemevol_params)
-        assert phot.shape == (_N_FILTERS,)
+        chex.assert_shape(phot, (_N_FILTERS,))
 
 
 # ── TestTabularSFHRouting ─────────────────────────────────────────
@@ -199,15 +200,15 @@ class TestTabularSFHRouting:
     def test_first_call_finite(self, tabular_model, base_params):
         params = self._add_sfh(base_params, jax.random.PRNGKey(10))
         phot = tabular_model.predict_photometry(params)
-        assert jnp.all(jnp.isfinite(phot)), f"Non-finite photometry (call 1): {phot}"
+        chex.assert_tree_all_finite(phot), f"Non-finite photometry (call 1): {phot}"
 
     def test_second_call_finite_no_recompile(self, tabular_model, base_params):
         """Second call with a different SFH array must succeed without error."""
         params = self._add_sfh(base_params, jax.random.PRNGKey(99))
         phot = tabular_model.predict_photometry(params)
-        assert jnp.all(jnp.isfinite(phot)), f"Non-finite photometry (call 2): {phot}"
+        chex.assert_tree_all_finite(phot), f"Non-finite photometry (call 2): {phot}"
 
     def test_photometry_shape(self, tabular_model, base_params):
         params = self._add_sfh(base_params, jax.random.PRNGKey(7))
         phot = tabular_model.predict_photometry(params)
-        assert phot.shape == (_N_FILTERS,)
+        chex.assert_shape(phot, (_N_FILTERS,))

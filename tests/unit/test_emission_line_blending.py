@@ -8,6 +8,7 @@ Verifies:
 5. Pure JAX, JIT-compatible, and differentiable
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -186,8 +187,8 @@ class TestJAXCompatibility:
         # static_argnums not needed since R is a traced scalar, but
         # the function should work either way
         spec = blend_emission_lines(lam, lum, 500.0, wave)
-        assert spec.shape == wave.shape
-        assert jnp.all(jnp.isfinite(spec))
+        chex.assert_equal_shape([spec, wave])
+        chex.assert_tree_all_finite(spec)
 
     def test_gradient_wrt_luminosity(self, halpha):
         """Gradient w.r.t. line luminosity should be finite and positive."""
@@ -252,7 +253,7 @@ class TestJAXCompatibility:
             return blend_emission_lines(lam, lum, 500.0, wave)
 
         batch_spec = jax.vmap(single)(lum_batch)
-        assert batch_spec.shape == (3, 500)
+        chex.assert_shape(batch_spec, (3, 500))
         # Linearity check: 2x luminosity -> 2x flux
         assert_allclose(batch_spec[1], 2.0 * batch_spec[0], rtol=1e-12)
 

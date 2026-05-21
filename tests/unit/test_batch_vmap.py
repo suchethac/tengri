@@ -4,6 +4,7 @@ Validates that batched (vmapped) predictions match individual
 predictions, and that vmap provides speedup over Python loops.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -160,5 +161,5 @@ class TestVmapBatchGradients:
             sfr_batch,
             jnp.full(n_batch, -1.0),
         )
-        assert jnp.all(jnp.isfinite(g_sfr))
-        assert jnp.all(jnp.isfinite(g_lz))
+        chex.assert_tree_all_finite(g_sfr)
+        chex.assert_tree_all_finite(g_lz)

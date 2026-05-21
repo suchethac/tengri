@@ -14,6 +14,7 @@ Pitfalls guarded:
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 
@@ -133,7 +134,7 @@ def test_compute_flux_density_unit_consistency_across_filters():
     f_nir = compute_flux_density(sed, wave_rest, *gauss_filter(20000.0, 1000.0), z, dl_cm)
 
     fluxes = jnp.array([f_uv, f_optical, f_nir])
-    assert bool(jnp.all(jnp.isfinite(fluxes))), "non-finite flux across canonical filters"
+    chex.assert_tree_all_finite(fluxes), "non-finite flux across canonical filters"
 
     # All three should be in the same physical regime (within ~3 dex of each
     # other for this smooth SED). A unit error would put one filter 33 dex
@@ -166,4 +167,4 @@ def test_filter_jit_and_grad_compatible():
     val = float(jitted(sed))
     grad = jax.grad(lambda s: compute_flux_density(s, wave_rest, fw, ft, z, dl_cm).sum())(sed)
     assert jnp.isfinite(val) and val > 0
-    assert bool(jnp.all(jnp.isfinite(grad))), "non-finite gradient through filter convolution"
+    chex.assert_tree_all_finite(grad), "non-finite gradient through filter convolution"

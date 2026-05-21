@@ -9,6 +9,7 @@ Validates:
 
 import time
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -264,4 +265,4 @@ class TestGradientCleanliness:
             if g.ndim == 0:
                 assert bool(jnp.isfinite(g)), f"{name}: grad not finite"
             else:
-                assert bool(jnp.all(jnp.isfinite(g))), f"{name}: some grads not finite"
+                chex.assert_tree_all_finite(g), f"{name}: some grads not finite"

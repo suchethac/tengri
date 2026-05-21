@@ -1,5 +1,6 @@
 """Tests for energy_balance_split two-temperature dust emission model."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -185,8 +186,8 @@ class TestJITCompatibility:
 
         jitted = jax.jit(energy_balance_split)
         sed = jitted(wavelengths, L_absorbed)
-        assert sed.shape == wavelengths.shape
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_equal_shape([sed, wavelengths])
+        chex.assert_tree_all_finite(sed)
 
     def test_vmap(self, wavelengths):
         from tengri.components.dust.emission import energy_balance_split
@@ -347,14 +348,14 @@ class TestPlanckBnu:
         from tengri.components.dust.emission import planck_bnu
 
         bnu = planck_bnu(wave_ir, temperature=30.0)
-        assert jnp.all(jnp.isfinite(bnu))
+        chex.assert_tree_all_finite(bnu)
         assert jnp.all(bnu > 0.0)
 
     def test_output_shape(self, wave_ir):
         from tengri.components.dust.emission import planck_bnu
 
         bnu = planck_bnu(wave_ir, temperature=30.0)
-        assert bnu.shape == wave_ir.shape
+        chex.assert_equal_shape([bnu, wave_ir])
 
     def test_hotter_peaks_at_shorter_wavelength(self, wave_ir):
         """Wien's displacement law: hotter BB peaks at shorter λ."""
@@ -380,7 +381,7 @@ class TestPlanckBnu:
 
         wave_uv = jnp.array([10.0, 100.0, 1000.0])  # Angstrom
         bnu = planck_bnu(wave_uv, temperature=1e4)
-        assert jnp.all(jnp.isfinite(bnu))
+        chex.assert_tree_all_finite(bnu)
         assert jnp.all(bnu >= 0.0)
 
     def test_jit_compatible(self, wave_ir):
@@ -391,7 +392,7 @@ class TestPlanckBnu:
 
         jitted = jax.jit(planck_bnu)
         bnu = jitted(wave_ir, 30.0)
-        assert jnp.all(jnp.isfinite(bnu))
+        chex.assert_tree_all_finite(bnu)
 
     def test_gradient_wrt_temperature(self, wave_ir):
         """FD check: ∂(∑B_nu)/∂T."""
@@ -423,14 +424,14 @@ class TestModifiedBlackbody:
         from tengri.components.dust.emission import modified_blackbody
 
         sed = modified_blackbody(wave_fir, L_absorbed=1e10)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
         assert jnp.all(sed >= 0.0)
 
     def test_output_shape(self, wave_fir):
         from tengri.components.dust.emission import modified_blackbody
 
         sed = modified_blackbody(wave_fir, L_absorbed=1e10)
-        assert sed.shape == wave_fir.shape
+        chex.assert_equal_shape([sed, wave_fir])
 
     def test_energy_conservation(self, wave_fir):
         """Integral of output ≈ L_absorbed (frequency integral)."""
@@ -484,7 +485,7 @@ class TestModifiedBlackbody:
 
         jitted = jax.jit(modified_blackbody)
         sed = jitted(wave_fir, 1e10)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_gradient_wrt_L_absorbed(self, wave_fir):
         import jax
@@ -532,14 +533,14 @@ class TestCasey2012:
         from tengri.components.dust.emission import casey2012
 
         sed = casey2012(wave_ir, L_absorbed=1e10)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
         assert jnp.all(sed >= 0.0)
 
     def test_output_shape(self, wave_ir):
         from tengri.components.dust.emission import casey2012
 
         sed = casey2012(wave_ir, L_absorbed=1e10)
-        assert sed.shape == wave_ir.shape
+        chex.assert_equal_shape([sed, wave_ir])
 
     def test_energy_conservation(self, wave_ir):
         """Integral of output ≈ L_absorbed."""
@@ -595,7 +596,7 @@ class TestCasey2012:
 
         jitted = jax.jit(casey2012)
         sed = jitted(wave_ir, 1e10)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_gradient_wrt_L_absorbed(self, wave_ir):
         import jax
@@ -750,7 +751,7 @@ class TestCmbContrastFactor:
 
         wave = jnp.logspace(3, 9, 300)
         factor = cmb_contrast_factor(wave, T_eff=35.0, redshift=3.0)
-        assert jnp.all(jnp.isfinite(factor))
+        chex.assert_tree_all_finite(factor)
 
     def test_gradient_compatible(self):
         """Gradient w.r.t. T_eff is finite and positive."""
@@ -1018,4 +1019,4 @@ class TestMbbWithCmbCorrection:
 
         wave = jnp.logspace(4, 9, 200)
         sed = modified_blackbody(wave, 1e10, dust_T=30.0, redshift=10.0)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)

@@ -5,6 +5,7 @@ matching the Tier 3 exact path (compute_sed_components) to <0.1% for
 all supported component combinations.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -368,7 +369,7 @@ class TestFallbacks:
         # This should work (falls back to Tier 3)
         sed = model.predict_rest_sed(params_tab).sed
         assert sed.shape == (len(model.ssp_data.ssp_wave),)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_tier2_jit_traces(self, synthetic_ssp, simple_spec, simple_params):
         """Tier 2 kernel can be JIT-compiled and re-called."""
@@ -561,5 +562,5 @@ class TestFusedTier2Photometry:
 
         params = spec.sample(jax.random.PRNGKey(42))
         phot = model._predict_photometry_compositional(params)
-        assert phot.shape == (1,)
-        assert jnp.all(jnp.isfinite(phot))
+        chex.assert_shape(phot, (1,))
+        chex.assert_tree_all_finite(phot)

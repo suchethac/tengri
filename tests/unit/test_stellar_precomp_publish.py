@@ -7,6 +7,7 @@ of sed_intrinsic (exact path) on a stellar-only SDSS model.
 import pathlib
 import warnings
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -242,7 +243,7 @@ def test_free_z_ztable_interpolation_matches_grid_points(stellar_only_free_z_mod
     # roughly the right magnitude. Strict bit equivalence to the einsum
     # marginalisation requires reconstructing joint_weights, which is the
     # cost the proper Phase 3d invariant test pays.
-    assert jnp.all(jnp.isfinite(lut_path))
+    chex.assert_tree_all_finite(lut_path)
     assert jnp.all(lut_path > 0)
     # Magnitude sanity: within a factor of 100 of the naive sum.
     ratio = lut_path / manual
@@ -368,7 +369,7 @@ def test_taylor_moment_published_in_fixed_z(stellar_only_model):
     )
     moment = state.derived["stellar_phot_moment_precomp"]
     lnu = state.derived["stellar_phot_lnu_precomp"]
-    assert jnp.all(jnp.isfinite(moment))
+    chex.assert_tree_all_finite(moment)
     # Order-of-magnitude check: |Ψ| should be at most a few filter widths × |Φ|.
     # SDSS filter widths are ~500–1500 Å; allow up to 1e5 Å as a sanity bound.
     ratio = jnp.abs(moment) / jnp.abs(lnu)
@@ -466,7 +467,7 @@ def test_dust_attenuation_precomps_published(stellar_dust_model):
     # A = exp(-tau_v * k(λ)) ∈ (0, 1] for non-negative dust.
     assert jnp.all((a > 0) & (a <= 1.0)), f"A out of physical range: {a}"
     # A' = -tau_v * k'(λ) * A. For Calzetti, k'<0 in optical → A'>0 at red end.
-    assert jnp.all(jnp.isfinite(a_slope))
+    chex.assert_tree_all_finite(a_slope)
     # |A'| × Å (filter width scale) should be comparable to |A| at most.
     # k changes by O(1) over ~1000 Å → |A'| ≤ ~tau_v / 1000 ≈ 3e-4 for tau_v=0.3.
     # Loose bound: |A'| < 1/Å.
@@ -772,7 +773,7 @@ def test_agn_phot_lnu_precomp_published(ssp):
         m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
     state = m.predict_state(_PARAMS)
     assert "agn_phot_lnu_precomp" in state.derived
-    assert jnp.all(jnp.isfinite(state.derived["agn_phot_lnu_precomp"]))
+    chex.assert_tree_all_finite(state.derived["agn_phot_lnu_precomp"])
 
 
 def test_dust_luts_absent_without_wave_precomp(ssp):

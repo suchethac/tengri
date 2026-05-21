@@ -18,6 +18,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -101,7 +102,7 @@ class TestTier2Functionality:
         """Tier-2 forward model must produce finite photometry."""
         phot = model_fixed_z.predict_photometry(sample_params)
         assert phot.shape == (5,)  # 5 filters
-        assert jnp.all(jnp.isfinite(phot)), "NaN or Inf in photometry"
+        chex.assert_tree_all_finite(phot), "NaN or Inf in photometry"
 
     def test_tier2_photometry_is_positive(self, model_fixed_z, sample_params):
         """Tier-2 photometry must be positive (rest-frame component)."""
@@ -118,8 +119,8 @@ class TestTier2Functionality:
         """Tier-2 spectrum must produce finite flux."""
         wave_obs = jnp.linspace(1000.0, 10000.0, 100)  # Å
         spec = model_fixed_z.predict_spectrum(sample_params, wave_obs)
-        assert spec.shape == (100,)
-        assert jnp.all(jnp.isfinite(spec)), "NaN or Inf in spectrum"
+        chex.assert_shape(spec, (100,))
+        chex.assert_tree_all_finite(spec), "NaN or Inf in spectrum"
 
 
 @_needs_ssp
@@ -229,8 +230,8 @@ class TestTier2Dispatch:
 
         # Call the public method (should use tier-2 internally)
         phot = model.predict_photometry(params)
-        assert phot.shape == (2,)
-        assert jnp.all(jnp.isfinite(phot))
+        chex.assert_shape(phot, (2,))
+        chex.assert_tree_all_finite(phot)
 
 
 @_needs_ssp
@@ -251,7 +252,7 @@ class TestTier2EdgeCases:
         key = jax.random.PRNGKey(0)
         params = model.spec.sample(key)
         phot = model.predict_photometry(params)
-        assert jnp.all(jnp.isfinite(phot))
+        chex.assert_tree_all_finite(phot)
 
     def test_tier2_with_stochastic_sfh(self):
         """Tier-2 should work with stochastic SFH (field+mean)."""
@@ -266,4 +267,4 @@ class TestTier2EdgeCases:
         key = jax.random.PRNGKey(0)
         params = model.spec.sample(key)
         phot = model.predict_photometry(params)
-        assert jnp.all(jnp.isfinite(phot))
+        chex.assert_tree_all_finite(phot)

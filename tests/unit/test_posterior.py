@@ -1,5 +1,6 @@
 """Tests for the Posterior class."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -220,10 +221,10 @@ class TestBPT:
 
     def test_sampling_returns_array(self, sampling_eline_posterior):
         x, y = sampling_eline_posterior.bpt_nii()
-        assert x.shape == (100,)
-        assert y.shape == (100,)
-        assert jnp.all(jnp.isfinite(x))
-        assert jnp.all(jnp.isfinite(y))
+        chex.assert_shape(x, (100,))
+        chex.assert_shape(y, (100,))
+        chex.assert_tree_all_finite(x)
+        chex.assert_tree_all_finite(y)
 
     def test_negative_flux_gives_nan(self, negative_flux_eline_posterior):
         x, _y = negative_flux_eline_posterior.bpt_nii()
@@ -642,7 +643,7 @@ class TestPosteriorPredictive:
         assert out["residuals"].shape == (n, bands)
         assert out["chi2"].shape == (n,)
         # chi^2 must all be finite
-        assert np.all(np.isfinite(np.asarray(out["chi2"])))
+        chex.assert_tree_all_finite(np.asarray(out["chi2"]))
 
     def test_chi2_increases_with_misfit(self):
         bands = 3
@@ -744,7 +745,7 @@ class TestBPTClassification:
         p = _make_bpt_posterior(fluxes)
         labels = p.bpt_class()
         assert isinstance(labels, np.ndarray)
-        assert labels.shape == (n,)
+        chex.assert_shape(labels, (n,))
         # All draws should classify as SF given small spread
         assert np.all(labels == "SF")
 

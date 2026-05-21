@@ -14,6 +14,7 @@ with hard wavelength caps. Tengri must avoid the same pitfall.
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -102,9 +103,12 @@ class TestDustAttenuationFiniteness:
         law_func = DUST_LAWS[law_name].callable
         k = law_func(wide_wavelength_grid, **{})
 
-        assert jnp.all(jnp.isfinite(k)), (
-            f"Law {law_name!r} produced NaN or inf on wide grid: "
-            f"finite count {jnp.sum(jnp.isfinite(k))}/{len(k)}"
+        (
+            chex.assert_tree_all_finite(k),
+            (
+                f"Law {law_name!r} produced NaN or inf on wide grid: "
+                f"finite count {jnp.sum(jnp.isfinite(k))}/{len(k)}"
+            ),
         )
 
     @pytest.mark.parametrize(
@@ -320,7 +324,7 @@ class TestDustAttenuationJitCompatibility:
 
         # Should compile and run without error
         k = jitted_law(wide_wavelength_grid)
-        assert jnp.all(jnp.isfinite(k))
+        chex.assert_tree_all_finite(k)
 
     @pytest.mark.parametrize(
         "law_name",
@@ -347,4 +351,4 @@ class TestDustAttenuationJitCompatibility:
         # Should compute gradients without error
         grad_fn = jax.grad(loss_fn)
         grad_val = grad_fn(wide_wavelength_grid)
-        assert jnp.all(jnp.isfinite(grad_val))
+        chex.assert_tree_all_finite(grad_val)

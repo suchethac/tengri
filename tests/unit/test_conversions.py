@@ -9,6 +9,7 @@ Tests cover:
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -99,7 +100,7 @@ class TestSpectralDensityConversions:
         llambda = lnu_to_llambda(lnu, wavelength)
         expected = lnu * C_AA / (wavelength**2)
         assert_allclose(llambda, expected, rtol=1e-10)
-        assert llambda.shape == wavelength.shape
+        chex.assert_equal_shape([llambda, wavelength])
 
     def test_fnu_to_flambda_consistency_with_lnu_to_llambda(self):
         """Test that flux and luminosity conversions use same formula."""
@@ -279,7 +280,7 @@ class TestCosmologicalFlux:
         dl_cm = jnp.array([[1e26], [1e27], [1e28]])  # 3×1
         z = jnp.array([0.01, 0.05, 0.1])  # 3 objects
         fnu = lnu_to_fnu(lnu, dl_cm, z)
-        assert fnu.shape == (3, 3)
+        chex.assert_shape(fnu, (3, 3))
 
 
 class TestOpticalDepth:
@@ -379,7 +380,7 @@ class TestWavelengthConversions:
         """Test that array inputs work correctly."""
         vacuum_array = np.array([3000.0, 5500.0, 8000.0])
         air_array = vacuum_to_air(vacuum_array)
-        assert air_array.shape == vacuum_array.shape
+        chex.assert_equal_shape([air_array, vacuum_array])
         assert np.all(air_array < vacuum_array)
         for i in range(len(vacuum_array)):
             air_single = vacuum_to_air(np.array(vacuum_array[i]))

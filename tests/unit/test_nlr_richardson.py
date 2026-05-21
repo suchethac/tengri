@@ -1,5 +1,6 @@
 """Unit tests for Richardson+2014 NLR AGN emission-line template."""
 
+import chex
 import jax
 import jax.numpy as jnp
 
@@ -15,7 +16,7 @@ class TestRichardsonNLR:
         """Output shape matches input wavelength array."""
         wave = jnp.linspace(3000, 10000, 200)
         sed = compute_nlr_sed_richardson2014(wave, l_disc_bol_erg=1e44)
-        assert sed.shape == (200,)
+        chex.assert_shape(sed, (200,))
 
     def test_non_negative(self):
         """All output values are non-negative."""
@@ -27,7 +28,7 @@ class TestRichardsonNLR:
         """All output values are finite (no NaN or Inf)."""
         wave = jnp.linspace(3000, 10000, 200)
         sed = compute_nlr_sed_richardson2014(wave, l_disc_bol_erg=1e44)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_oiii_dominates(self):
         """[O III] 5007 is the strongest line (8.53x Hbeta)."""
@@ -48,7 +49,7 @@ class TestRichardsonNLR:
         wave = jnp.linspace(3000, 10000, 200)
         fn = jax.jit(compute_nlr_sed_richardson2014)
         sed = fn(wave, l_disc_bol_erg=1e44)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_scales_with_luminosity(self):
         """Output scales linearly with disc bolometric luminosity."""
@@ -117,8 +118,8 @@ class TestRichardsonNLR:
             return compute_nlr_sed_richardson2014(waves, l_disc_bol_erg=l_bol)
 
         seds = jax.vmap(compute_one_sed)(l_bolometric)
-        assert seds.shape == (3, 200)
-        assert jnp.all(jnp.isfinite(seds))
+        chex.assert_shape(seds, (3, 200))
+        chex.assert_tree_all_finite(seds)
 
         # Check that flux scales with luminosity
         assert jnp.allclose(seds[1], 2.0 * seds[0], rtol=1e-5)

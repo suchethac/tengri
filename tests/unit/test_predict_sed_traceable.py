@@ -8,6 +8,7 @@ Verifies that:
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -103,7 +104,7 @@ class TestComputeRestSedCompositionalSignature:
             ssp_lgmet_traced=model.ssp_data.ssp_lgmet,
         )
 
-        assert jnp.all(jnp.isfinite(sed_with_traced))
+        chex.assert_tree_all_finite(sed_with_traced)
 
     def test_default_none_backward_compat(self, synthetic_ssp, simple_spec, simple_params):
         """_compute_rest_sed_compositional works with default None kwargs."""
@@ -112,7 +113,7 @@ class TestComputeRestSedCompositionalSignature:
         # Call without traced kwargs (backward compat, closure capture)
         sed_without_traced = model._compute_rest_sed_compositional(simple_params)
 
-        assert jnp.all(jnp.isfinite(sed_without_traced))
+        chex.assert_tree_all_finite(sed_without_traced)
 
 
 # ── Test 2: Numerical equivalence (bit-identical or near-identical) ────
@@ -166,8 +167,8 @@ class TestImplementationPath:
         sed_closure = model._compute_rest_sed_compositional(simple_params)
 
         # Both should be finite and positive
-        assert jnp.all(jnp.isfinite(sed_traced))
-        assert jnp.all(jnp.isfinite(sed_closure))
+        chex.assert_tree_all_finite(sed_traced)
+        chex.assert_tree_all_finite(sed_closure)
         assert jnp.all(sed_traced > 0)
         assert jnp.all(sed_closure > 0)
 
@@ -187,7 +188,7 @@ class TestPredictRestSedTraceable:
 
         result = model.predict_rest_sed(simple_params)
 
-        assert jnp.all(jnp.isfinite(result.sed))
+        chex.assert_tree_all_finite(result.sed)
         assert jnp.all(result.sed > 0)
 
     def test_predict_rest_sed_consistency(self, synthetic_ssp, simple_spec, simple_params):
@@ -225,8 +226,8 @@ class TestBackwardCompatibility:
         # This internally calls _compute_rest_sed_compositional
         phot = model._predict_photometry_compositional(simple_params)
 
-        assert jnp.all(jnp.isfinite(phot))
-        assert phot.shape == (1,)
+        chex.assert_tree_all_finite(phot)
+        chex.assert_shape(phot, (1,))
 
     def test_spectrum_path_works(self, synthetic_ssp, simple_spec, simple_params):
         """_predict_spectrum_compositional calls traced path."""
@@ -237,5 +238,5 @@ class TestBackwardCompatibility:
         # This internally calls _compute_rest_sed_compositional
         flux = model._predict_spectrum_compositional(simple_params, wave_obs)
 
-        assert jnp.all(jnp.isfinite(flux))
-        assert flux.shape == wave_obs.shape
+        chex.assert_tree_all_finite(flux)
+        chex.assert_equal_shape([flux, wave_obs])

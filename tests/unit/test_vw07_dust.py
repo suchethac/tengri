@@ -9,6 +9,7 @@ Verifies:
 6. JIT compatibility and gradient flow
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -94,8 +95,8 @@ class TestTwoComponentIntegration:
             law_bc="vw07_bc",
             law_diff="vw07_diff",
         )
-        assert trans.shape == (6, 200)
-        assert jnp.all(jnp.isfinite(trans))
+        chex.assert_shape(trans, (6, 200))
+        chex.assert_tree_all_finite(trans)
         assert jnp.all(trans >= 0.0)
         assert jnp.all(trans <= 1.0)
 
@@ -118,12 +119,12 @@ class TestJITAndGradients:
     def test_jit_vw07_bc(self, wavelengths):
         jit_fn = jax.jit(vw07_bc)
         k = jit_fn(wavelengths)
-        assert jnp.all(jnp.isfinite(k))
+        chex.assert_tree_all_finite(k)
 
     def test_jit_vw07_diff(self, wavelengths):
         jit_fn = jax.jit(vw07_diff)
         k = jit_fn(wavelengths)
-        assert jnp.all(jnp.isfinite(k))
+        chex.assert_tree_all_finite(k)
 
     def test_extra_kwargs_ignored(self, wavelengths):
         """Should accept and ignore extra kwargs (like n_slope)."""

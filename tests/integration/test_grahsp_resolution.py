@@ -11,6 +11,7 @@ defaults.
 
 from __future__ import annotations
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -26,8 +27,8 @@ def test_agn_models_contains_grahsp():
 def test_resolve_agn_model_returns_callable():
     fn = resolve_agn_model("grahsp")
     out = fn(jnp.logspace(2, 6, 200), agn_log_lbol=45.0, agn_frac=1.0)
-    assert out.shape == (200,)
-    assert jnp.all(jnp.isfinite(out))
+    chex.assert_shape(out, (200,))
+    chex.assert_tree_all_finite(out)
 
 
 def test_parameters_accepts_grahsp_params():

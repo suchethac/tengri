@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import chex
 import jax.numpy as jnp
 import numpy as np
 
@@ -23,7 +24,7 @@ def test_precompute_returns_expected_shapes():
         redshift=0.0,
     )
     # Default grid is plslope (3) x ebv (5) x n_filters (2)
-    assert out["grid_phot"].shape == (3, 5, 2)
+    chex.assert_shape(out["grid_phot"], (3, 5, 2))
     assert len(out["axes"]) == 2
 
 
@@ -60,7 +61,7 @@ def test_precompute_collapses_fixed_axes():
     )
     # ebv axis collapsed -> only plslope (3) remains
     assert "_collapsed_axes" in out
-    assert out["grid_phot"].shape == (3, 1)
+    chex.assert_shape(out["grid_phot"], (3, 1))
 
 
 def test_runtime_lookup_returns_finite_photometry():
@@ -76,8 +77,8 @@ def test_runtime_lookup_returns_finite_photometry():
     # Default lookup: (scale, *grid_params). GRAHSP normalises internally so
     # the natural scale is 1.0; the grid points are (plslope, ebv).
     out = fn(jnp.array(1.0), jnp.array(-1.7), jnp.array(0.1))
-    assert jnp.all(jnp.isfinite(out))
-    assert out.shape == (1,)
+    chex.assert_tree_all_finite(out)
+    chex.assert_shape(out, (1,))
 
 
 def test_runtime_lookup_jit():
@@ -95,7 +96,7 @@ def test_runtime_lookup_jit():
     fn_jit = jax.jit(fn)
     out1 = fn_jit(jnp.array(1.0), jnp.array(-1.7), jnp.array(0.1))
     out2 = fn_jit(jnp.array(1.0), jnp.array(-2.0), jnp.array(0.5))
-    assert out1.shape == (3,)
-    assert out2.shape == (3,)
-    assert jnp.all(jnp.isfinite(out1))
-    assert jnp.all(jnp.isfinite(out2))
+    chex.assert_shape(out1, (3,))
+    chex.assert_shape(out2, (3,))
+    chex.assert_tree_all_finite(out1)
+    chex.assert_tree_all_finite(out2)

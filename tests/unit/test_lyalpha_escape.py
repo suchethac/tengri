@@ -17,6 +17,7 @@ Physical properties tested:
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -142,8 +143,8 @@ class TestLyaScaleFormula:
             return _apply_lya_escape(waves, lums, neb_fesc=0.0, neb_fesc_lya=fesc_lya)
 
         result = run(0.5)
-        assert result.shape == lums.shape
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_equal_shape([result, lums])
+        chex.assert_tree_all_finite(result)
 
 
 class TestLyaEscapePhysicalDirection:

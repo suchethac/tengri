@@ -20,6 +20,7 @@ Reference papers:
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -82,8 +83,8 @@ def test_nebular_continuum_and_lines_are_separable(
     _, lum_lines = cue_backend.predict_nebular_line_luminosities(**cue_test_params, neb_fesc=0.0)
 
     # Both must be finite arrays
-    assert bool(jnp.all(jnp.isfinite(lum_cont))), "Nebular continuum has NaN/inf"
-    assert bool(jnp.all(jnp.isfinite(lum_lines))), "Nebular line luminosities have NaN/inf"
+    chex.assert_tree_all_finite(lum_cont), "Nebular continuum has NaN/inf"
+    chex.assert_tree_all_finite(lum_lines), "Nebular line luminosities have NaN/inf"
 
     # Both must be non-negative (astrophysical emission)
     assert bool(jnp.all(lum_cont >= 0.0)), "Nebular continuum has negative values"

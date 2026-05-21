@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -59,7 +60,7 @@ def test_grid_metadata_sensible() -> None:
     assert jnp.all(a[1:] > a[:-1]), "a_axis must be ascending"
     assert jnp.all(fwd[1:] > fwd[:-1]), "fwd_axis must be ascending"
     assert wave.ndim == 1 and jnp.all(wave[1:] > wave[:-1])
-    assert tpl.shape == (incl.size, a.size, fwd.size, wave.size)
+    chex.assert_shape(tpl, (incl.size, a.size, fwd.size, wave.size))
 
 
 def test_output_shape_and_finiteness(torus_fn, wavelength) -> None:
@@ -71,8 +72,8 @@ def test_output_shape_and_finiteness(torus_fn, wavelength) -> None:
         agn_fwd_cat3d=0.2,
         agn_torus_frac=0.5,
     )
-    assert sed.shape == wavelength.shape
-    assert bool(jnp.all(jnp.isfinite(sed)))
+    chex.assert_equal_shape([sed, wavelength])
+    chex.assert_tree_all_finite(sed)
     assert float(sed.max()) > 0.0
 
 
@@ -104,7 +105,7 @@ def test_jit_compatible(torus_fn, wavelength) -> None:
         lambda ci, a, fwd: torus_fn(wavelength, agn_cos_inc=ci, agn_a_cat3d=a, agn_fwd_cat3d=fwd)
     )
     sed = jitted(0.4, -1.5, 0.3)
-    assert bool(jnp.all(jnp.isfinite(sed)))
+    chex.assert_tree_all_finite(sed)
 
 
 def test_grad_flows_through_all_axes(torus_fn, wavelength) -> None:
@@ -133,5 +134,5 @@ def test_unified_dispatch_registered() -> None:
         agn_a_cat3d=-2.0,
         agn_fwd_cat3d=0.2,
     )
-    assert sed.shape == wl.shape
+    chex.assert_equal_shape([sed, wl])
     assert float(sed.max()) > 0.0

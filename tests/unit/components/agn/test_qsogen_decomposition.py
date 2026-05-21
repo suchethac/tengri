@@ -8,6 +8,7 @@ same internal helper :func:`_qsogen_components`.
 
 from __future__ import annotations
 
+import chex
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -79,4 +80,4 @@ def test_qsogen_components_helper_keys():
         "smc_factor",
     }
     for k, arr in out.items():
-        assert jnp.all(jnp.isfinite(arr)), f"{k} has non-finite values"
+        chex.assert_tree_all_finite(arr), f"{k} has non-finite values"

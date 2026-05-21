@@ -37,6 +37,7 @@ Notes on Table 4 column units (paper Sidewaystable, columns 5-21)::
 
 from __future__ import annotations
 
+import chex
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -119,9 +120,9 @@ def test_brown2019_sed_finite_and_physical(source):
     wave_nm = jnp.logspace(2, 5, 500)
     sed = evaluate_grahsp_agn(wave_nm, params)
 
-    assert jnp.all(jnp.isfinite(sed.bbb)), f"{source} BBB has non-finite values"
-    assert jnp.all(jnp.isfinite(sed.torus)), f"{source} torus has non-finite values"
-    assert jnp.all(jnp.isfinite(sed.bbb_attenuated))
+    chex.assert_tree_all_finite(sed.bbb), f"{source} BBB has non-finite values"
+    chex.assert_tree_all_finite(sed.torus), f"{source} torus has non-finite values"
+    chex.assert_tree_all_finite(sed.bbb_attenuated)
     assert sed.l_bol_bbb > 0
     assert sed.l_bol_torus > 0
     # Heavy attenuation should always reduce the AGN-attenuated SED.

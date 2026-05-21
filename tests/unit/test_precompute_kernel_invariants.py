@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -145,7 +146,7 @@ class TestCacheInvalidation:
         key = jax.random.PRNGKey(0)
         params = model.spec.sample(key)
         flux = model.predict_spectrum(params, wave_obs=wave_obs)
-        assert jnp.all(jnp.isfinite(flux)), "Flux has NaN/Inf after double precompute"
+        chex.assert_tree_all_finite(flux), "Flux has NaN/Inf after double precompute"
 
 
 # ── Class 2: len() vs .shape[0] on traced arrays ──────────────────
@@ -191,8 +192,8 @@ class TestJITSafeSearchsorted:
 
         batch_interp = jax.vmap(interp_one, in_axes=(0, None))
         idxs, fracs = batch_interp(lz_batch, grid)
-        assert idxs.shape == (10,)
-        assert fracs.shape == (10,)
+        chex.assert_shape(idxs, (10,))
+        chex.assert_shape(fracs, (10,))
         assert jnp.all(fracs >= 0.0) and jnp.all(fracs <= 1.0)
 
     def test_two_axis_alpha_interp_vmap_safe(self):
@@ -278,7 +279,7 @@ class TestJITSafeSearchsorted:
         lz_batch = jnp.array([-1.8, -1.0, -0.5])
         batched = jax.vmap(interp_shape0, in_axes=(0, 0))
         idxs = batched(lz_batch, grid_batch)
-        assert idxs.shape == (3,)
+        chex.assert_shape(idxs, (3,))
 
 
 # ── Class 3: traced mode routing and JIT composability ────────

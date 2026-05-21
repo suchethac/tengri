@@ -1,5 +1,6 @@
 """Tests for build_native_vi_linear_engine in isolation."""
 
+import chex
 import jax
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
@@ -55,14 +56,14 @@ def test_draw_residuals_shape():
     best_flat, _ = run_fn(flat0, key, n_iter=10, n_samp=2, rtol=1e-2)
     draw_keys = jax.random.split(jax.random.PRNGKey(1), 5)
     residuals = draw_res(best_flat, draw_keys)
-    assert residuals.shape == (5, flat0.shape[0])
+    chex.assert_shape(residuals, (5, flat0.shape[0]))
 
 
 def test_hamiltonian_is_scalar():
     sr, data, noise, flat0, flatten, unravel, _ = _make_linear_problem()
     _, _, hamiltonian = build_native_vi_linear_engine(sr, data, noise, flatten, unravel)
     h = hamiltonian(flat0)
-    assert h.shape == ()
+    chex.assert_shape(h, ())
 
 
 def test_independent_engines_dont_share_state():

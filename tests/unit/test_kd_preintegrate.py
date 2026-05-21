@@ -11,6 +11,7 @@ tolerance. The preintegration approximation errors come from:
 Target: <5% per-filter error for SDSS ugriz at z=0.1.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -59,7 +60,7 @@ class TestPlanckFilterTable:
         T_grid = np.geomspace(1000, 1e6, 50)
         fw, ft = _make_sdss_like_filters()
         table = _build_planck_filter_table(T_grid, fw, ft, redshift=0.1)
-        assert table.shape == (50, 5)
+        chex.assert_shape(table, (50, 5))
         assert np.all(table >= 0)
 
     def test_planck_table_monotonic_in_T(self):
@@ -131,7 +132,7 @@ class TestCoronaFilterTable:
         kT_grid = np.geomspace(10, 500, 8)
         fw, ft = _make_sdss_like_filters()
         table = _build_corona_filter_table(Gamma_grid, kT_grid, fw, ft, redshift=0.1)
-        assert table.shape == (10, 8, 5)
+        chex.assert_shape(table, (10, 8, 5))
 
     def test_corona_harder_gives_less_optical(self):
         """Steeper Gamma (softer) should give MORE optical flux."""
@@ -327,8 +328,8 @@ class TestKDPreintegrationPipeline:
             )
 
         result = _predict(11.0)
-        assert result.shape == (5,)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_shape(result, (5,))
+        chex.assert_tree_all_finite(result)
 
 
 # numpy >= 2.0 uses trapezoid; older versions used trapz

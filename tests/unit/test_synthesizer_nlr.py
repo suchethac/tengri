@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -42,7 +43,7 @@ class TestGridLoading:
         """Grid loads successfully from HDF5."""
         grid = _load_synthesizer_nlr_grid(grid_path)
         assert grid.log_line_per_qh.shape[-1] == 215
-        assert grid.line_wavelengths_aa.shape == (215,)
+        chex.assert_shape(grid.line_wavelengths_aa, (215,))
 
     def test_grid_axes_structure(self, grid_path):
         """Grid axes have expected lengths and are finite."""
@@ -53,14 +54,14 @@ class TestGridLoading:
         assert len(grid.metallicity_axis) == 2
         assert len(grid.logU_axis) == 2
         assert len(grid.logn_axis) == 2
-        assert jnp.all(jnp.isfinite(grid.mass_axis))
-        assert jnp.all(jnp.isfinite(grid.eddington_axis))
-        assert jnp.all(jnp.isfinite(grid.cosine_axis))
+        chex.assert_tree_all_finite(grid.mass_axis)
+        chex.assert_tree_all_finite(grid.eddington_axis)
+        chex.assert_tree_all_finite(grid.cosine_axis)
 
     def test_grid_log_luminosities_finite(self, grid_path):
         """Grid log_line_per_qh contains finite values (not NaN/Inf)."""
         grid = _load_synthesizer_nlr_grid(grid_path)
-        assert jnp.all(jnp.isfinite(grid.log_line_per_qh))
+        chex.assert_tree_all_finite(grid.log_line_per_qh)
 
     def test_missing_grid_raises_error(self):
         """FileNotFoundError raised if grid file does not exist."""
@@ -102,8 +103,8 @@ class TestPrediction:
             log_nH=4.0,
             log_qh=53.0,
         )
-        assert wave.shape == (215,)
-        assert lum.shape == (215,)
+        chex.assert_shape(wave, (215,))
+        chex.assert_shape(lum, (215,))
 
     def test_predict_luminosities_finite(self, synthesizer_backend):
         """Predicted luminosities are all finite (no NaN/Inf)."""
@@ -116,7 +117,7 @@ class TestPrediction:
             log_nH=4.0,
             log_qh=53.0,
         )
-        assert jnp.all(jnp.isfinite(lum))
+        chex.assert_tree_all_finite(lum)
 
     def test_predict_luminosities_nonnegative(self, synthesizer_backend):
         """Predicted luminosities are non-negative."""
@@ -203,9 +204,9 @@ class TestJitCompatibility:
             )
 
         wave, lum = jitted_predict(38.3, -0.3, 0.2, 0.0, -1.5, 4.0, 53.0)
-        assert wave.shape == (215,)
-        assert lum.shape == (215,)
-        assert jnp.all(jnp.isfinite(lum))
+        chex.assert_shape(wave, (215,))
+        chex.assert_shape(lum, (215,))
+        chex.assert_tree_all_finite(lum)
 
     def test_predict_jit_consistent(self, synthesizer_backend):
         """JIT-compiled and non-JIT predictions match."""

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import numpy as np
 import pytest
 
@@ -98,8 +99,8 @@ def test_jit_compatible():
 
     fn1 = jax.jit(torus_dust_continuum)
     out = fn1(jnp.array([1000.0, 12000.0, 50000.0]), 1.0e36, 0.4, 20.0, 0.5, 3.0, 0.5, 1.0)
-    assert out.shape == (3,)
-    assert jnp.all(jnp.isfinite(out))
+    chex.assert_shape(out, (3,))
+    chex.assert_tree_all_finite(out)
     fn2 = jax.jit(si_feature)
     out2 = fn2(jnp.array([8000.0, 9841.0, 14224.0, 20000.0]), 1.0e36, 0.4, 1.0)
-    assert jnp.all(jnp.isfinite(out2))
+    chex.assert_tree_all_finite(out2)
