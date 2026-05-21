@@ -1,14 +1,12 @@
-"""SEDComponent protocol: the contract each physics module satisfies.
+"""SEDComponent protocol: the shape each physics block satisfies.
 
 A component owns one block of the forward model — stellar emission,
 dust attenuation+emission, nebular lines, AGN, IGM, radio, X-ray —
 plus the parameters and precomputed tensors that go with it. The
 :class:`tengri.SEDModel` orchestrator runs components in order, threading
-a :class:`ForwardState` through them.
-
-This module is part of the Part II-1 scaffold. Nothing in `tengri`
-consumes these classes yet; they exist so future phases (II-2 onwards)
-can migrate one component at a time onto a stable interface.
+a :class:`ForwardState` through them. Each component declares the
+derived keys it reads (`inputs()`) and the ones it writes (`outputs()`),
+so the orchestrator can check the chain of physics before any JIT compile.
 
 Notes
 -----
@@ -31,10 +29,11 @@ from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 import jax.numpy as jnp
 
-from tengri.protocols.derived_bundle import DerivedBundle
+from tengri.protocols.derived_state import DerivedState
 
 __all__ = [
     "BARE_NAME_ALLOWLIST",
+    "ComponentIOError",
     "DerivedKey",
     "ForwardState",
     "ParamDeclaration",
@@ -45,16 +44,20 @@ __all__ = [
 ]
 
 
-class PipelineContractError(ValueError):
-    """Raised by :func:`tengri.forward.orchestrator.validate_pipeline` when
-    the output/input contract is violated at component-list construction time.
+class ComponentIOError(ValueError):
+    """Raised when one component's declared inputs/outputs disagree with the chain.
 
-    The contract is checked once at :class:`tengri.SEDModel` construction,
-    before any JIT compile. A raised ``PipelineContractError`` always names
-    the offending component class and the offending derived key, plus a
-    "Did you mean: ..." suggestion when a missing-producer likely indicates
-    a typo. See :func:`validate_pipeline` for the full list of checks.
+    Checked once at :class:`tengri.SEDModel` construction by
+    :func:`tengri.forward.orchestrator.validate_pipeline`, before any
+    JIT compile. The error message always names the offending component
+    class and the offending derived key, with a "Did you mean: ..." hint
+    when a missing producer looks like a typo. See
+    :func:`validate_pipeline` for the full list of checks.
     """
+
+
+# Deprecated alias — old name kept for one release.
+PipelineContractError = ComponentIOError
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -248,16 +251,16 @@ class ForwardState:
     sed_attenuated: jnp.ndarray | None = None
     sed_observed: jnp.ndarray | None = None
     lines: Mapping[str, jnp.ndarray] | None = None
-    # ``derived`` is a typed :class:`DerivedBundle`. Dict-shaped writes
+    # ``derived`` is a typed :class:`DerivedState`. Dict-shaped writes
     # at construction or via ``with_(derived={...})`` are auto-coerced
     # for backward compatibility (see ``__post_init__`` and ``with_``).
-    derived: DerivedBundle = field(default_factory=lambda: DerivedBundle())
+    derived: DerivedState = field(default_factory=lambda: DerivedState())
 
     def __post_init__(self) -> None:
-        """Coerce dict-shaped ``derived`` input to a :class:`DerivedBundle`."""
-        if not isinstance(self.derived, DerivedBundle):
+        """Coerce dict-shaped ``derived`` input to a :class:`DerivedState`."""
+        if not isinstance(self.derived, DerivedState):
             # Frozen dataclass — bypass the guard with object.__setattr__.
-            object.__setattr__(self, "derived", DerivedBundle.from_dict(dict(self.derived)))
+            object.__setattr__(self, "derived", DerivedState.from_dict(dict(self.derived)))
 
     def with_(self, **overrides: Any) -> ForwardState:
         """Return a copy of this state with selected fields replaced.
@@ -268,13 +271,13 @@ class ForwardState:
 
         Equivalent to ``dataclasses.replace`` but reads better at call
         sites. A dict-shaped ``derived=`` is auto-coerced to
-        :class:`DerivedBundle` so existing dict-style write patterns
+        :class:`DerivedState` so existing dict-style write patterns
         keep working unchanged.
         """
         from dataclasses import replace
 
-        if "derived" in overrides and not isinstance(overrides["derived"], DerivedBundle):
-            overrides["derived"] = DerivedBundle.from_dict(dict(overrides["derived"]))
+        if "derived" in overrides and not isinstance(overrides["derived"], DerivedState):
+            overrides["derived"] = DerivedState.from_dict(dict(overrides["derived"]))
         return replace(self, **overrides)
 
     def add_intrinsic(self, L_component: jnp.ndarray) -> ForwardState:
