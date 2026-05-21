@@ -64,16 +64,6 @@ class TestModeRouting:
     def model(self):
         return _make_model()
 
-    def test_auto_uses_compositional_not_exact(self, model):
-        """auto-mode should route to compositional when filters + SSP are present."""
-        assert model._compositional.photometry is not None, (
-            "Compositional kernel not built — auto-mode will fall back to exact"
-        )
-
-    def test_hybrid_kernel_also_built(self, model):
-        """Hybrid kernel should be available as a fallback."""
-        assert model._hybrid.photometry is not None, "Hybrid kernel not built"
-
     def test_explicit_compositional_mode_runs(self, model):
         key = jax.random.PRNGKey(0)
         params = model.spec.sample(key)

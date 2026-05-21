@@ -82,7 +82,9 @@ def test_structural_kernel_cache_hit():
     sig2 = m2.compile_signature()
     assert sig1 == sig2, "Identical configs should have identical signatures"
 
-    # Kernels should be the same Python object (cache hit)
+    # Identity check on the private cache attrs is the only way to prove
+    # a cache HIT — there is no public side-channel for "did we reuse the
+    # compiled kernels?". This is the test the cache exists for.
     assert m1._compositional_kernels is m2._compositional_kernels, (
         "Compositional kernels not shared across instances"
     )
@@ -137,6 +139,7 @@ def test_structural_kernel_cache_miss_different_config():
     sig2 = m2.compile_signature()
 
     assert sig1 != sig2, "Different configs should produce different signatures"
+    # Negative identity check — same justification as the positive one above.
     assert m1._compositional_kernels is not m2._compositional_kernels, (
         "Different signatures should have separate kernels"
     )
