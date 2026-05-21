@@ -1,6 +1,17 @@
 # Unify forward-projection paths under `state → observation.predict() → Observables`
 
-**Status:** Draft for review — revision 2 (2026-05-19)
+**Status:** **Shipped** through Phase 6 in PR #135 (2026-05-20). Phases 1–6
+are in `main`; the kernel adapter family is removed, the predict surface
+collapses into ``predict_observables_jit``, and ``approx=WavePrecomp(...)``
+is the build-time opt-in for the LUT path. Open follow-ups: orchestrator
+SSP threading (Phase 4-B) is in but **Cue/Cloudy weights threading** is
+deferred; per-galaxy ``Fixed(redshift)`` catalogs still get N compiles
+(Phase 4 cross-galaxy signature, deferred). See
+[`orchestrator_ssp_threading.md`](orchestrator_ssp_threading.md).
+
+---
+
+**Status (historical):** Draft for review — revision 2 (2026-05-19)
 **Supersedes:** `docs/dev/predict_consolidation_design.md` (delete before review) and revision 1 of this file.
 **Builds on:**
 - [`three_evaluation_modes.md`](three_evaluation_modes.md) — the three-mode contract (one physics, three execution modes), today realised at the **component layer**.

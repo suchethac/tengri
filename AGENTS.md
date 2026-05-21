@@ -69,13 +69,16 @@ The forward model is mid-migration from the monolithic `SEDModel` class onto the
 `models/observation/` promoted to top-level `observation/`; `diagnostics/` +
 `plotting.py` + `simulate.py` moved under `analysis/`; `distributions.py` →
 `parameters/priors.py`; `runtime/` → `config/` for settings/exceptions/display/deprecation;
-`mock.py` moved from `observation/` → `analysis/`; `kernels/` → `_kernels/` (private JIT details)).
+`mock.py` moved from `observation/` → `analysis/`; ``_kernels/`` was deleted
+entirely in Phase 6 (PR #135) — the orchestrator path through
+``predict_observables_jit`` replaced it. ``KernelStrategy`` and
+``NoCompatibleKernelError`` are now ImportError stubs.
 Public API (`from tengri import ...`) unchanged.
 
 | File | Purpose | When to read |
 |------|---------|--------------|
 | `src/tengri/forward/sed_model.py` | High-level SEDModel class (2957L, split deferred) | Understanding the forward model |
-| `src/tengri/forward/_kernels/` | JIT kernel strategies (hybrid, compositional, exact) — private implementation detail | Core forward model |
+| `src/tengri/forward/orchestrator.py` | The SEDComponent chain runner — replaced the kernel adapter family in Phase 6 (PR #135, 2026-05-20). Calls each component's `apply(state, params, ssp_data=...)` in sequence. | Core forward model |
 | `src/tengri/forward/pipeline.py` | SED computation engine (non-fused path) | Tracing SED assembly |
 | `src/tengri/forward/precompute/` | Precompute Protocol + registry + algorithm (`protocol.py`, `registry.py`, `grid.py`, `templates.py`) | Extending precompute |
 | `src/tengri/parameters/parameters.py` | Parameters class (canonical, was ParamSpec) | Parameter handling |
@@ -451,9 +454,10 @@ All major components are implemented and tested:
   in `components/sps/precompute.py`). Template adapters (DL07/Dale/DL14/…) and
   SKIRTOR still use zeroth-order only. Enabling Taylor across all template
   adapters should be a future benchmark study.
-- **Large-file splits.** `forward/_kernels/` (assembly, hybrid, compositional, exact — private JIT strategies) and
-  `forward/sed_model.py` (2957L) moved from `core/` unsplit; the planned split
-  by fusion strategy (exact / compositional / hybrid / traceable / dispatch)
+- **Large-file splits.** `forward/_kernels/` was deleted entirely in Phase 6
+  (PR #135) — the orchestrator path through ``predict_observables_jit``
+  replaces the kernel adapter family. `forward/sed_model.py` was ~6000L
+  pre-Phase-6 and is now ~5050L; the planned split by fusion strategy
   and by lifecycle (class / factory / fit / predict / summary / precompute)
   is deferred. `analysis/plotting/all.py` (1156L) and
   `components/dust/emission.py` (2459L) splits likewise deferred.
