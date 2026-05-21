@@ -102,7 +102,7 @@ All functions are JIT-compatible and differentiable through JAX.
 
 import os
 import warnings
-from typing import ClassVar, NamedTuple
+from typing import Any, ClassVar, NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -1171,8 +1171,11 @@ class CueBackend:
             ionspec_logLratio3=_pick("ionspec_logLratio3", ionspec_logLratio3, 0.2),
         )
 
-    def _forward_lines(self, p: dict, cloudyfsps_only=True, neb_fesc=0.0, neb_fesc_lya=0.0):
+    def _forward_lines(
+        self, p: dict, cloudyfsps_only=True, neb_fesc=0.0, neb_fesc_lya=0.0, template_data=None
+    ):
         """Low-level line prediction from resolved param dict."""
+        weights = template_data if template_data is not None else self.weights
         nn_params = _prepare_nn_params(
             jnp.asarray(p["ionspec_index1"], dtype=jnp.float32),
             jnp.asarray(p["ionspec_index2"], dtype=jnp.float32),
@@ -1193,7 +1196,7 @@ class CueBackend:
         )
         wav, lum = predict_all_lines(
             nn_params,
-            self.weights,
+            weights,
             gas_logq,
             jnp.asarray(p["gas_logqion"], dtype=jnp.float32),
         )
@@ -1202,12 +1205,13 @@ class CueBackend:
         lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(1.0 - neb_fesc, 1e-10)
         lum = lum.at[lya_idx].multiply(lya_scale)
         if cloudyfsps_only:
-            old_idx = self.weights.line_old_idx
+            old_idx = weights.line_old_idx
             return wav[old_idx], lum[old_idx]
         return wav, lum
 
-    def _forward_continuum(self, p: dict):
+    def _forward_continuum(self, p: dict, template_data=None):
         """Low-level continuum prediction from resolved param dict."""
+        weights = template_data if template_data is not None else self.weights
         nn_params = _prepare_nn_params(
             jnp.asarray(p["ionspec_index1"], dtype=jnp.float32),
             jnp.asarray(p["ionspec_index2"], dtype=jnp.float32),
@@ -1228,7 +1232,7 @@ class CueBackend:
         )
         return predict_continuum(
             nn_params,
-            self.weights,
+            weights,
             gas_logq,
             jnp.asarray(p["gas_logqion"], dtype=jnp.float32),
         )
@@ -1358,6 +1362,7 @@ class CueBackend:
         ionspec_logLratio1: float | None = None,
         ionspec_logLratio2: float | None = None,
         ionspec_logLratio3: float | None = None,
+        template_data: Any | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Predict emission line luminosities.
@@ -1446,6 +1451,7 @@ class CueBackend:
             cloudyfsps_only=cloudyfsps_only,
             neb_fesc=neb_fesc,
             neb_fesc_lya=neb_fesc_lya,
+            template_data=template_data,
         )
         return wav, lum * _LSUN_ERG
 
@@ -1555,6 +1561,7 @@ class CueBackend:
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
         line_sigma_aa: float = 0.0,
+        template_data: Any | None = None,
         **neb_params,
     ) -> jnp.ndarray:
         """Predict total nebular emission on an arbitrary wavelength grid.
@@ -1581,6 +1588,10 @@ class CueBackend:
             Escape fractions.
         line_sigma_aa : float
             Gaussian width for emission lines (Angstrom). 0 = delta function.
+        template_data : Any | None, optional
+            Cue weights object. When provided, overrides ``self.weights``
+            for JIT purposes (threading as a runtime parameter instead of
+            closure-capturing). Default ``None`` uses ``self.weights``.
         **neb_params
             Additional Cue-specific overrides (gas_logn, gas_logno, etc.).
 
@@ -1626,10 +1637,11 @@ class CueBackend:
             cloudyfsps_only=False,
             neb_fesc=neb_fesc,
             neb_fesc_lya=neb_fesc_lya,
+            template_data=template_data,
         )
 
         # Continuum (same resolved params — no double computation)
-        cont_wav, cont_lum = self._forward_continuum(p)
+        cont_wav, cont_lum = self._forward_continuum(p, template_data=template_data)
         cont_lum = cont_lum * (1.0 - neb_fesc)  # escape fraction suppression
 
         # Interpolate continuum onto SSP grid

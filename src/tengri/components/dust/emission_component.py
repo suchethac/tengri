@@ -479,6 +479,7 @@ class DustEmissionSEDComponent:
         params: Mapping[str, jnp.ndarray],
         precomputed: DustEmissionSEDComponentState | None = None,
         ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         r"""Add IR re-emission to ``state.sed_intrinsic``.
 

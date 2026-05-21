@@ -509,6 +509,7 @@ class SEDComponent(Protocol):
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
         ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         """Pure JAX step.
 
@@ -534,6 +535,12 @@ class SEDComponent(Protocol):
             When provided, should override any SSP data held in ``self``
             for JIT purposes (threading as a runtime parameter instead of
             closure-capturing).
+        template_data : Any | None, optional
+            Nebular backend grids and weights (Cue, CloudyGrid, etc.).
+            Passed by the orchestrator for components that need it
+            (typically nebular). Components that do not use it should
+            ignore this argument. When provided, should override any
+            template data held in ``self`` for JIT purposes.
 
         Returns
         -------

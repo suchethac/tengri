@@ -3665,7 +3665,7 @@ class SEDModel:
 
         return state_to_emission_lines(self.predict_state(params))
 
-    def predict_state(self, params, fixed_values=None, ssp_data=None):
+    def predict_state(self, params, fixed_values=None, ssp_data=None, template_data=None):
         """Forward pass via the SEDComponent orchestrator.
 
         Builds a component chain from this model's structural settings
@@ -3697,6 +3697,11 @@ class SEDModel:
             JIT runtime input instead of using closure capture (Phase 4-B).
             Defaults to ``None``, which causes components to use their
             internal ``self.ssp_data``.
+        template_data : Any | None, optional
+            Nebular backend grids and weights. When provided, passed to
+            components as JIT runtime inputs instead of closure capture (Phase 4-C).
+            Defaults to ``None``, which causes components to use their
+            internal template data.
 
         Returns
         -------
@@ -3766,7 +3771,10 @@ class SEDModel:
 
         # Phase 4-B: thread ssp_data as JIT input. Defaults to None,
         # which causes components to use their closure-captured self.ssp_data.
-        return run_components(chain, state0, full_params, ssp_data=ssp_data)
+        # Phase 4-C: thread template_data (nebular grids) as JIT input.
+        return run_components(
+            chain, state0, full_params, ssp_data=ssp_data, template_data=template_data
+        )
 
     def predict_observables(self, params):
         """Project the orchestrator state into every configured observable.
@@ -3871,9 +3879,13 @@ class SEDModel:
         runtime input rather than closure-captured. The SSP grid becomes a
         ``Parameter`` op in the compiled HLO instead of a ``Constant`` op,
         reducing compile size and time.
+
+        Phase 4-C (2026-05-21): nebular backend grids and weights are now
+        passed as JIT runtime inputs. Backend grids become ``Parameter`` ops
+        instead of ``Constant`` ops, reducing compile size for Cue and CloudyGrid.
         """
         return self._get_or_build_predict_observables_jit()(
-            params, self.spec.get_fixed_values(), self.ssp_data
+            params, self.spec.get_fixed_values(), self.ssp_data, self._template_data_for_jit()
         )
 
     def _get_or_build_predict_observables_jit(self):
@@ -3921,8 +3933,13 @@ class SEDModel:
         if getattr(self, "_cached_component_chain", None) is None:
             self._cached_component_chain = self._build_component_chain()
 
-        def _impl(params, fixed_values, ssp_data):
-            state = self.predict_state(params, fixed_values=fixed_values, ssp_data=ssp_data)
+        def _impl(params, fixed_values, ssp_data, template_data):
+            state = self.predict_state(
+                params,
+                fixed_values=fixed_values,
+                ssp_data=ssp_data,
+                template_data=template_data,
+            )
             full = {**fixed_values, **params}
             if observation.can_do_spectroscopy:
                 return observation.predict(
@@ -3944,6 +3961,41 @@ class SEDModel:
         jit_fn = jax.jit(_impl)
         cache["predict_observables_jit"] = jit_fn
         return jit_fn
+
+    def _template_data_for_jit(self):
+        """Collect nebular backend grids and weights for JIT threading.
+
+        Walks the cached component chain (built by predict_state warmup)
+        to find the nebular component and extract its backend's grid/weights.
+        Returns ``None`` if no nebular component is present or if the active
+        backend does not require template data (e.g., 'baked_in').
+
+        Returns
+        -------
+        Any | None
+            Nebular backend grid/weights object (CueWeights, CloudyGrid grid, etc.),
+            or None if not applicable.
+        """
+        cached = getattr(self, "_cached_component_chain", None)
+        if cached is None:
+            return None
+
+        # Find the nebular component in the chain
+        from tengri.components.nebular.component import NebularSEDComponent
+
+        for component in cached:
+            if isinstance(component, NebularSEDComponent):
+                # Only Cue and CloudyGrid backends need threading
+                if component.config.backend == "cue":
+                    return component.backend.weights
+                elif component.config.backend == "cloudy_grid":
+                    return component.backend.grid
+                else:
+                    # baked_in, shock, etc. don't need template threading
+                    return None
+
+        # No nebular component found
+        return None
 
     def _build_component_chain(self):
         """Construct the orchestrator chain from ``self``'s settings.

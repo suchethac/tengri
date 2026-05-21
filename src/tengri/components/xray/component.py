@@ -159,6 +159,7 @@ class XRaySEDComponent:
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
         ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         r"""Add X-ray emission to ``state.sed_intrinsic``.
 

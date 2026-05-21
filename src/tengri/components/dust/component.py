@@ -176,6 +176,7 @@ class DustAttenuationSEDComponent:
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
         ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         r"""Apply screen attenuation to ``state.sed_intrinsic``.
 
