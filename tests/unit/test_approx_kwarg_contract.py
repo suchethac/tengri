@@ -258,12 +258,8 @@ def test_wave_precomp_z_bounds_create_distinct_compile_signatures(fixed_z_spec, 
 
 
 def test_predict_observables_routes_through_lut_when_wave_precomp(fixed_z_spec, ssp, obs):
-    """The non-JIT ``predict_observables`` mirrors ``predict_photometry`` —
-    when built with ``approx=WavePrecomp()``, both return the LUT-projected
-    flux. (``predict_observables_jit`` does *not* yet route via the LUT
-    because ``predict_via_precomp`` has Python-level guards that can't be
-    JIT-traced; that's a documented follow-up in
-    ``docs/dev/orchestrator_ssp_threading.md``.)
+    """When built with ``approx=WavePrecomp()``, ``predict_observables``
+    returns the LUT-projected flux.
     """
     model = _silent_build(fixed_z_spec, ssp, obs, approx=WavePrecomp())
     params = {}
@@ -277,4 +273,25 @@ def test_predict_observables_routes_through_lut_when_wave_precomp(fixed_z_spec, 
     assert jnp.array_equal(via_method, via_obs), (
         "predict_observables must equal observation.predict_via_precomp().phot_fnu "
         "when built with approx=WavePrecomp()."
+    )
+
+
+def test_predict_observables_jit_routes_through_lut_when_wave_precomp(fixed_z_spec, ssp, obs):
+    """Catalog inference uses ``predict_observables_jit``; the JIT'd path
+    must also route through the LUT when built with ``approx=WavePrecomp()``,
+    otherwise the build-time speed knob never reaches the fitter.
+    Bit-exact agreement with the non-JIT path proves both go through the
+    same projection.
+    """
+    model = _silent_build(fixed_z_spec, ssp, obs, approx=WavePrecomp())
+    params = {}
+
+    via_jit = model.predict_observables_jit(params).phot_fnu
+    via_method = model.predict_observables(params).phot_fnu
+
+    # JIT and non-JIT paths agree to floating-point precision (JIT may
+    # reorder ops, so bit-equal isn't guaranteed).
+    assert jnp.allclose(via_jit, via_method, rtol=1e-12, atol=0), (
+        "predict_observables_jit must equal predict_observables when both are "
+        "routed through the LUT (built with approx=WavePrecomp())."
     )

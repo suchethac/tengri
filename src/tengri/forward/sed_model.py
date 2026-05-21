@@ -3986,7 +3986,21 @@ class SEDModel:
         from tengri.forward import build_components, run_components
         from tengri.protocols.component import ForwardState
 
-        chain = self._build_component_chain()
+        # Phase 3d-5 (2026-05-20): cache the built chain on the model. Chain
+        # construction runs each component's ``precompute()``, which for the
+        # stellar component with ``wave_precomp=True`` calls
+        # ``preintegrate_grid`` — a numpy-level routine with Python ``float()``
+        # calls that can't be re-traced under ``jax.jit``. Building the chain
+        # once at first call (or earlier) makes subsequent ``predict_state``
+        # invocations pure: they just thread ``params`` through the cached
+        # chain via ``run_components``. The chain depends only on structural
+        # config (spec, ssp_data, filters, approx), all of which are immutable
+        # after ``__init__``.
+        cached = getattr(self, "_cached_component_chain", None)
+        if cached is None:
+            cached = self._build_component_chain()
+            self._cached_component_chain = cached
+        chain = cached
         # Initialise the chain on the panchromatic-extended grid when
         # radio/xray is configured. RadioSEDComponent / XRaySEDComponent
         # populate ``state.derived["sed_radio"]`` / ``["sed_xray"]``
@@ -4131,17 +4145,23 @@ class SEDModel:
             )
         )
         observables_type = self._Observables
-        # NB (Phase 3d-4): we *would* route the photometry channel through
-        # ``observation.predict_via_precomp`` here when the model was built
-        # with ``approx=WavePrecomp(...)``, but that method carries Python-
-        # level ``float(l_ir) > 0`` / ``float(jnp.max(sed_nebular)) > 0``
-        # guards that can't be traced under ``jax.jit``. Until those guards
-        # are lifted to build-time validation (see
-        # ``docs/dev/orchestrator_ssp_threading.md``), ``predict_observables_jit``
-        # stays on the exact wave-grid path even when ``WavePrecomp`` is set.
-        # The non-JIT ``predict_observables`` and ``predict_photometry`` do
-        # take the LUT route — direct callers see the speedup; only the
-        # catalog-inference JIT'd path doesn't yet.
+        # Phase 3d-5: route the photometry channel through the LUT projection
+        # when the model was built with ``approx=WavePrecomp(...)``. The
+        # routing decision is closure-captured per-model and baked into
+        # ``compile_signature`` (via the resolved ``approx`` config tuple),
+        # so structurally-equal models share a compile across the two
+        # routings without colliding. Spectrum stays exact — no spectrum
+        # LUT yet.
+        use_lut = bool(self._approx.get("wave_precomp")) and not observation.can_do_spectroscopy
+
+        # Warm the component-chain cache OUTSIDE the JIT trace. The chain
+        # build runs each component's ``precompute()``, which for the
+        # stellar component with ``wave_precomp=True`` calls
+        # ``preintegrate_grid`` — a numpy-level routine with Python
+        # ``float()`` calls that can't be traced. After this warmup,
+        # ``predict_state`` inside the JIT reuses the cached chain.
+        if getattr(self, "_cached_component_chain", None) is None:
+            self._cached_component_chain = self._build_component_chain()
 
         def _impl(params):
             state = self.predict_state(params)
@@ -4156,6 +4176,10 @@ class SEDModel:
                     lsf_sigma_lib_kms=sigma_lib_kms,
                     lsf_n_bins=lsf_n_bins,
                     observables_type=observables_type,
+                )
+            if use_lut:
+                return observation.predict_via_precomp(
+                    state, full, observables_type=observables_type
                 )
             return observation.predict(state, full, observables_type=observables_type)
 

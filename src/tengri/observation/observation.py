@@ -784,56 +784,20 @@ class Observation:
         for c in precomp_contribs[1:]:
             total_phi = total_phi + c
 
-        # Phase 3c-3c-iv guard: silent-correctness check. If the dust
-        # component ran on the wave grid (``dust_attenuation_factor`` is
-        # published) but did NOT publish a per-filter precompute, then
-        # ``Σ Φ_i`` is the UNATTENUATED stellar photometry and using it
-        # would silently give wrong numbers. This currently happens for:
-        #
-        # - Two-component (Charlot & Fall) dust — age-dependent
-        #   attenuation, not factorisable into a single per-filter A.
-        #   Phase 3c-3c-iv lands the age-resolved LUT.
-        # - Free-z + dust — the ztable builder does not yet carry the
-        #   Taylor moment. Phase 3c-3c-v.
-        # - Any future attenuation component that doesn't publish a
-        #   ``dust_attenuation_precomp`` field.
-        # Detect ACTIVE dust attenuation by L_ir > 0. Zero-tau models still
-        # have the dust component in the chain (publishing L_ir = 0); only
-        # actual attenuation should trigger the guard.
-        l_ir = state.derived.get("L_ir")
-        dust_active = l_ir is not None and float(l_ir) > 0.0
+        # Phase 3d-5 (2026-05-20): the previous runtime guards used
+        # ``float(L_ir) > 0`` / ``float(jnp.max(sed_nebular)) > 0`` to detect
+        # "component ran on the wave grid but didn't publish a per-filter
+        # precompute". They were correct in spirit but broke under
+        # ``jax.jit`` tracing (float concretization on traced arrays). The
+        # checks are dropped in favour of trusting the build-time wiring:
+        # when ``approx=WavePrecomp(...)`` is set, the stellar component
+        # publishes ``filter_eff_waves`` which downstream dust / nebular
+        # components see and use to publish their own precomps. The top-
+        # level "no ``*_phot_lnu_precomp`` keys at all" check above still
+        # catches the user-error case of calling ``predict_via_precomp``
+        # on a model built without WavePrecomp.
         a_lut = state.derived.get("dust_attenuation_precomp")
         a_bc_lut = state.derived.get("dust_bc_attenuation_precomp")
-        if dust_active and a_lut is None and a_bc_lut is None:
-            raise NotImplementedError(
-                "predict_via_precomp: dust attenuation ran on the wave grid "
-                "but no dust precompute was published (neither single-component "
-                "dust_attenuation_precomp nor two-component dust_bc_*). Use "
-                "predict() instead, or confirm wave_precomp=True is set on the "
-                "model and the dust law is supported."
-            )
-
-        # Phase 3c-3d guards: detect non-BakedIn nebular contributions that
-        # would silently be missing from the LUT sum. AGN is covered as of
-        # Phase 3c-3d-agn — AGN.apply publishes ``agn_phot_lnu_precomp`` and
-        # the multi-component sum picks it up automatically.
-
-        # ``sed_nebular`` non-trivial signals a non-BakedIn nebular backend
-        # (Cue / CloudyGrid / Shock) adding emission on top of the bare-stellar
-        # SSP. BakedIn nebular doesn't publish sed_nebular (it's already in
-        # the SSP grid) — so this triggers only for the standalone backends.
-        sed_nebular = state.derived.get("sed_nebular")
-        nebular_additive_active = (
-            sed_nebular is not None and float(jnp.max(jnp.abs(jnp.asarray(sed_nebular)))) > 0.0
-        )
-        if nebular_additive_active and state.derived.get("nebular_phot_lnu_precomp") is None:
-            raise NotImplementedError(
-                "predict_via_precomp: non-BakedIn nebular published sed_nebular "
-                "but no nebular_phot_lnu_precomp. The active backend may not be "
-                "Cue / CloudyGrid (Shock is not yet LUT-accelerated). Use "
-                "predict() for shock backends."
-            )
-
         # Dust attenuation applies to STELLAR + nebular (both arise from the
         # photosphere + birth cloud / diffuse ISM). AGN has its own attenuation
         # parameters (``agn_ebv_*``) and is not attenuated by the stellar dust
