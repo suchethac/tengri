@@ -1159,9 +1159,12 @@ def leitherer02(
     # Calzetti IR polynomial (valid 0.63-2.2 um)
     k_ir = 2.659 * (-1.857 + 1.040 * x) + rv
 
-    # Use L02 up to 0.18 um (full L02 range), Calzetti above
+    # Use L02 up to 1800 Å (full L02 range), Calzetti above.
+    # Compare in Å (exact for clean integers) rather than wave_um <= 0.18 —
+    # the latter is platform-dependent at the boundary because 1800/1e4 is
+    # not exactly representable in float64.
     k_calz = jnp.where(wave_um >= 0.63, k_ir, k_uv)
-    k_prime = jnp.where(wave_um <= 0.18, k_l02, k_calz)
+    k_prime = jnp.where(wavelength <= 1800.0, k_l02, k_calz)
 
     return jnp.clip(k_prime / rv, 0.0)
 

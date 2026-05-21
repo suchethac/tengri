@@ -63,19 +63,15 @@ jobs:
       # MAP/VI/MCMC fits and individually push runtime past 15 min.
       # Re-introduce via a slow-tier job in a follow-up PR.
       #
-      # Three numerical-tolerance + one autodiff failure and two
-      # missing-fixture files are skipped here. The rehome surfaced
-      # them — they were never run on CI before because old CI was
-      # scoped to tests/unit/ only. Follow-up issues track each.
+      # Two missing-fixture files remain skipped; the three numerical
+      # / autodiff failures the rehome surfaced were fixed in the same
+      # PR that removed the --deselect lines.
       - run: |
           pytest tests/components tests/contract tests/physics tests/regression -q \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
-            --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py \
-            --deselect tests/components/sfh/test_cigale_sfh.py::TestDelayedBq::test_has_gradients_tau \
-            --deselect tests/components/sps/test_dsps_native_csp.py::test_grad_wrt_lgmet \
-            --deselect tests/regression/paper/test_dust_attenuation_laws.py::TestLeitherer02::test_reference_values
+            --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
         timeout-minutes: 15
 
   # Sampler-heavy inference tests (NUTS, Pathfinder, VI, MCLMC, etc.).

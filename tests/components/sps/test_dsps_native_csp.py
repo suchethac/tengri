@@ -208,11 +208,19 @@ def test_jit_compatible():
 
 
 def test_grad_wrt_lgmet():
-    """Gradient of total CSP mass w.r.t. lgmet is finite and non-zero."""
+    """Gradient w.r.t. lgmet flows through to the metallicity-weighted SSP flux.
+
+    Total CSP mass (``sum(age_weights_msun)``) is mathematically independent
+    of lgmet by construction — it equals ``trapezoid(SFR, t) * joint.sum()``
+    where ``joint.sum() = 1`` for any well-formed PDF. So that quantity has
+    an exact-zero analytical gradient (autodiff returns 0; FD picks up float
+    noise). To verify autodiff is wired through lgmet, check a quantity that
+    genuinely depends on it: the metallicity-marginalized SSP flux.
+    """
     sfr = _flat_sfr()
 
-    def total_mass(lgmet):
-        aw, _ = compute_dsps_native_weights(
+    def total_flux(lgmet):
+        _, ssp_flux_at_z = compute_dsps_native_weights(
             sfr,
             SSP_AGES_YR,
             SSP_LGMET,
@@ -222,10 +230,10 @@ def test_grad_wrt_lgmet():
             lgmet,
             LGMET_SCATTER,
         )
-        return jnp.sum(aw)
+        return jnp.sum(ssp_flux_at_z)
 
-    grad_jax = float(jax.grad(total_mass)(jnp.array(LGMET)))
-    grad_fd = fd_grad(lambda x: float(total_mass(x)), LGMET)
+    grad_jax = float(jax.grad(total_flux)(jnp.array(LGMET)))
+    grad_fd = fd_grad(lambda x: float(total_flux(x)), LGMET)
     np.testing.assert_allclose(
         grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
     )
