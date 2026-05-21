@@ -534,37 +534,27 @@ class SEDComponent(Protocol):
         """
         ...
 
-    def citations(self) -> tuple[str, ...]:
-        """Bib keys for papers this component implements.
-
-        Returns the bibliography keys (strings from
-        :data:`tengri.citations.registry.REGISTRY`) for all papers this
-        component models, solves for, or ports from. Defaults to empty
-        tuple.
-
-        Returns
-        -------
-        tuple of str
-            Zero or more citation registry keys (e.g. ``("calzetti2000",
-            "charlot_fall2000")`` for a dust component). Empty tuple if
-            the component has no associated citations.
-
-        Notes
-        -----
-        **JIT-compatible**: no — pure Python introspection.
-
-        This is a component-level *declaration* of citations. The
-        orchestrator reads ``citations()`` from each component in a
-        ``SEDModel`` and unions them with the static association tables
-        in :mod:`tengri.citations.associations` to assemble the full
-        citation list.
-
-        Example
-        -------
-        A dust component implementing Calzetti (2000) attenuation and
-        Draine & Li (2007) thermal emission:
-
-        >>> def citations(self) -> tuple[str, ...]:
-        ...     return ("calzetti2000", "draine_li2007")
-        """
-        return ()
+    # ``citations`` is OPTIONAL — not part of the runtime_checkable
+    # surface.
+    # :func:`tengri.citations.collect._citations_from_components` reads
+    # it via ``getattr(c, "citations", None)``, so components that
+    # haven't been annotated still satisfy
+    # ``isinstance(c, SEDComponent)``. Concrete components that DO want
+    # to declare citations add a method with the signature::
+    #
+    #     def citations(self) -> tuple[str, ...]:
+    #         return ("calzetti2000", "draine_li2007")
+    #
+    # Returns the bibliography keys (strings from
+    # :data:`tengri.citations.registry.REGISTRY`) for all papers this
+    # component implements, solves for, or ports from. Components without
+    # the method contribute no per-component citations; the static
+    # association tables in :mod:`tengri.citations.associations` still
+    # apply.
+    #
+    # Required-method form was tried in 6598355e but ``@runtime_checkable``
+    # does NOT honour method bodies as defaults for non-inheriting
+    # classes — the orchestrator's structural ``isinstance`` check would
+    # then reject every concrete component that didn't override
+    # ``citations()``. Mirroring the ``outputs``/``inputs`` pattern
+    # (above) keeps the contract optional and structural.
