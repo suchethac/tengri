@@ -28,6 +28,9 @@ class TestBugNSS04ZTableIGM:
     formula change. Inoue et al. (2014) MNRAS 442, 1805 governs the IGM model itself.
     """
 
+    @pytest.mark.skip(
+        reason="forward/_kernels/hybrid.py deleted in Phase 6; IGM now wired in orchestrator"
+    )
     def test_ztable_igm_wiring_present_in_source(self):
         """Smoke: verify z-table kernel wires has_igm to actual IGM application.
 
