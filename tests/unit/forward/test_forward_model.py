@@ -60,3 +60,26 @@ def test_build_rejects_multi_population_in_tracer_bullet(
     ]
     with pytest.raises(NotImplementedError, match="ADR-0012"):
         ForwardModel.build(populations=pops, observation=simple_observation)
+
+
+def test_predict_returns_mapping_with_expected_keys(sed_model_minimal, simple_observation) -> None:
+    forward = ForwardModel.build(sed=sed_model_minimal, observation=simple_observation)
+    params = {name: 0.5 for name in sed_model_minimal.spec.free_params}
+    pred = forward.predict(params)
+    assert isinstance(pred, dict)
+    # Must publish at least one photometric-channel key.
+    assert any(k in pred for k in ("phot_fnu", "fnu_obs"))
+
+
+def test_predict_matches_legacy_sedmodel(sed_model_minimal, simple_observation) -> None:
+    """The shell must not change the numerical result vs the existing path."""
+    import jax.numpy as jnp
+
+    forward = ForwardModel.build(sed=sed_model_minimal, observation=simple_observation)
+    params = {name: 0.5 for name in sed_model_minimal.spec.free_params}
+    pred_new = forward.predict(params)
+    pred_old = sed_model_minimal.predict_photometry(params)
+
+    new_phot = pred_new.get("phot_fnu", pred_new.get("fnu_obs"))
+    assert new_phot is not None, f"Prediction dict missing photometric key: {list(pred_new)}"
+    assert jnp.allclose(new_phot, pred_old, rtol=1e-10, atol=0.0)

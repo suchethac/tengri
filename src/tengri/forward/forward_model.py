@@ -132,15 +132,47 @@ class ForwardModel:
     ) -> Mapping[str, jnp.ndarray]:
         """Predicted observables for the given parameters.
 
-        Tracer-bullet implementation: single-population only. Detailed
-        implementation lands in Task 5.
+        Iterates over ``populations`` (per-population orchestration —
+        architecture spec §9.1). For the tracer-bullet single-population
+        case, the loop is a one-element loop and the result is returned
+        directly.
 
-        Raises
-        ------
-        NotImplementedError
-            Always raised in this Task-4 skeleton. Task 5 fills in
-            the actual prediction path.
+        The current implementation delegates to the wrapped
+        :class:`SEDModel`'s photometry path. Subsequent plans replace
+        this with a true ``observation.predict(state, params)`` call
+        once the observation adopts the Protocol surface.
+
+        Parameters
+        ----------
+        params : mapping of str -> array
+            Free parameter values.
+
+        Returns
+        -------
+        mapping of str -> array
+            Prediction dict. Single-population: ``{"phot_fnu": ...}``.
         """
-        raise NotImplementedError(
-            "ForwardModel.predict is implemented in Task 5 of the tracer-bullet plan."
-        )
+        per_pop: dict[str, Mapping[str, jnp.ndarray]] = {}
+        for pop in self.populations:
+            if pop.spatial is not None:
+                raise NotImplementedError(
+                    "Population.spatial is reserved for the spatial-model plan."
+                )
+            legacy = pop.sed
+            # In the tracer-bullet, every population's sed is a
+            # _LegacySEDSubModel wrapping an SEDModel. Reach into the
+            # wrapped model and call its existing photometric path.
+            sed_model = getattr(legacy, "sed_model", None)
+            if sed_model is None:
+                raise NotImplementedError(
+                    "ForwardModel.predict currently supports only "
+                    "_LegacySEDSubModel-wrapped populations. "
+                    "True SubModel.run-based prediction lands in a "
+                    "subsequent plan."
+                )
+            per_pop[pop.name] = {"phot_fnu": sed_model.predict_photometry(params)}
+
+        if len(per_pop) == 1:
+            (only,) = per_pop.values()
+            return only
+        raise NotImplementedError("Multi-population summing is the ADR-0012 plan, not this slice.")
