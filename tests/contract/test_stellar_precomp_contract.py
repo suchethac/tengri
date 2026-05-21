@@ -1,0 +1,259 @@
+"""Contract tests for stellar precomp publish/require interface.
+
+Validates that the stellar SED component correctly registers derived keys,
+publishes required outputs at the right times, and respects wave_precomp
+configuration flags.
+"""
+
+import pathlib
+import warnings
+
+import jax.numpy as jnp
+import pytest
+
+from tengri import Parameters, SEDModel
+from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+from tengri.observation import Observation, Photometry
+from tengri.parameters.priors import Fixed, Uniform
+
+pytestmark = pytest.mark.contract
+
+_SSP = pathlib.Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5").resolve()
+
+
+@pytest.fixture(scope="module")
+def ssp():
+    if not _SSP.exists():
+        pytest.skip(f"SSP not available at {_SSP}")
+    return load_ssp_data(str(_SSP))
+
+
+@pytest.fixture(scope="module")
+def stellar_only_model(ssp):
+    """Stellar-only SED model for contract tests."""
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+    )
+    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    obs = Observation(photometry=phot)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+
+
+@pytest.fixture(scope="module")
+def stellar_only_free_z_model(ssp):
+    """Free-redshift variant of stellar_only_model for contract tests."""
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol=Fixed(-0.5),
+        redshift=Uniform(0.0, 2.0),  # FREE
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+    )
+    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    obs = Observation(photometry=phot)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+
+
+_PARAMS = {
+    "sfh_tsnorm_log_peak_sfr": 1.0,
+    "sfh_tsnorm_peak_lbt_gyr": 2.0,
+    "sfh_tsnorm_width_gyr": 1.0,
+    "sfh_tsnorm_skew": 0.0,
+    "sfh_tsnorm_trunc": 3.0,
+}
+
+
+# ── Contract: DerivedKey registration and publish/require ───────────────────
+
+
+def test_lut_only_published_when_wave_precomp_on(ssp):
+    """state.derived has no stellar_phot_lnu_precomp when wave_precomp=False (default)."""
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+    )
+    phot = Photometry.from_names(["sdss_u"])
+    obs = Observation(photometry=phot)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = SEDModel(spec, ssp, observation=obs)  # wave_precomp default False
+    state = m.predict_state(_PARAMS)
+    assert "stellar_phot_lnu_precomp" not in state.derived
+
+
+def test_free_z_state_carries_ztable_not_lut(stellar_only_free_z_model):
+    """Phase 3c-1: component's _state has ssp_phot_ztable populated, ssp_phot_lut None."""
+    m = stellar_only_free_z_model
+    chain = m._build_component_chain()
+    stellar_comp = chain[0]
+    assert stellar_comp._state is not None
+    assert stellar_comp._state.ssp_phot_ztable is not None, (
+        "Free-z model should populate ssp_phot_ztable"
+    )
+    assert stellar_comp._state.ssp_phot_lut is None, "Free-z model should have ssp_phot_lut=None"
+
+
+def test_dust_attenuation_precomps_published(ssp):
+    """DustAttenuationSEDComponent publishes A and A' per filter when filter_eff_waves
+    is in state.derived (i.e. wave_precomp is on).
+    """
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_v=Fixed(0.3),
+        dust_model="single_component",
+        dust_law_bc="calzetti",
+        apply_igm=False,
+    )
+    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    obs = Observation(photometry=phot)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+    state = m.predict_state(_PARAMS)
+    assert "filter_eff_waves" in state.derived, (
+        "Stellar should publish filter_eff_waves when wave_precomp=True"
+    )
+    assert "dust_attenuation_precomp" in state.derived, (
+        "Dust should publish dust_attenuation_precomp when filter_eff_waves is available"
+    )
+    assert "dust_attenuation_slope_precomp" in state.derived, (
+        "Dust should publish dust_attenuation_slope_precomp when filter_eff_waves is available"
+    )
+
+
+def test_two_component_dust_publishes_bc_diff_precomp(ssp):
+    """Phase 3c-3c-iv-b: two-component dust publishes A_bc, A_diff and slopes
+    when filter_eff_waves is available (i.e. wave_precomp is on).
+
+    Phase 3c-3c-iv-c will consume these to apply the per-age Charlot-Fall
+    expansion. For now we only validate the publish.
+    """
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.5),
+        dust_tau_diff=Fixed(0.3),
+        apply_igm=False,
+    )
+    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r"])
+    obs = Observation(photometry=phot)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+    state = m.predict_state(_PARAMS)
+
+    assert "dust_bc_attenuation_precomp" in state.derived
+    assert "dust_bc_attenuation_slope_precomp" in state.derived
+    assert "dust_diff_attenuation_precomp" in state.derived
+    assert "dust_diff_attenuation_slope_precomp" in state.derived
+    assert "dust_young_indicator" in state.derived
+
+
+def test_predict_via_precomp_handles_bakedin_only_no_neb_precomp(stellar_only_model):
+    """BakedIn nebular models do NOT publish nebular_phot_lnu_precomp because
+    the emission is already in the stellar SSP grid. ``predict_via_precomp``
+    must not raise — the multi-component sum reduces to stellar (which
+    includes BakedIn nebular).
+    """
+    m = stellar_only_model
+    state = m.predict_state(_PARAMS)
+    assert state.derived.get("nebular_phot_lnu_precomp") is None
+    full = {**m.spec.get_fixed_values(), **_PARAMS}
+    # Should not raise — BakedIn nebular is handled by stellar LUT.
+    m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
+
+
+def test_agn_phot_lnu_precomp_published(ssp):
+    """AGN component publishes agn_phot_lnu_precomp when wave_precomp is on."""
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+        agn_model="qsogen",
+        agn_log_lbol=Fixed(45.0),
+        agn_frac=Fixed(0.5),
+    )
+    phot = Photometry.from_names(["sdss_r"])
+    obs = Observation(photometry=phot)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+    state = m.predict_state(_PARAMS)
+    assert "agn_phot_lnu_precomp" in state.derived
+    assert jnp.all(jnp.isfinite(state.derived["agn_phot_lnu_precomp"]))
+
+
+def test_dust_luts_absent_without_wave_precomp(ssp):
+    """No filter_eff_waves publish when wave_precomp=False."""
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_v=Fixed(0.3),
+        dust_model="single_component",
+        apply_igm=False,
+    )
+    phot = Photometry.from_names(["sdss_r"])
+    obs = Observation(photometry=phot)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = SEDModel(spec, ssp, observation=obs)  # no wave_precomp
+    state = m.predict_state(_PARAMS)
+    assert state.derived.get("filter_eff_waves") is None
+    assert state.derived.get("dust_attenuation_precomp") is None
+    assert state.derived.get("dust_attenuation_slope_precomp") is None
