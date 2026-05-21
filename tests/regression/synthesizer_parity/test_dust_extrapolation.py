@@ -18,6 +18,8 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+pytestmark = pytest.mark.regression_paper
+
 jax.config.update("jax_enable_x64", True)
 
 from tengri.components.dust.attenuation import (
