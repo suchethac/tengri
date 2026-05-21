@@ -1,46 +1,51 @@
-"""Core protocols for the tengri SED forward-model pipeline (Part II-1).
+"""Inter-component interfaces for the tengri SED forward model.
 
-This subpackage defines the **contracts** that physics components,
-observation models, and likelihoods must implement so that future
-phases can migrate :class:`tengri.SEDModel` from a hardcoded tier
-dispatch (~2957 lines today) into a thin orchestrator over a list of
-:class:`SEDComponent` objects.
+A `SEDModel` is a list of physics blocks (stellar, dust, nebular, AGN,
+radio, X-ray, IGM, …) evaluated in order. Each block reads and writes
+a typed bag of derived quantities — `ForwardState.derived`, a
+:class:`DerivedState` — so a stellar block can publish ``L_uv`` for a
+downstream dust block to read.
 
-This is intentionally a **scaffold**: nothing in `tengri` consumes
-these protocols yet. The classes live here so:
+The objects defined here are the small, stable surface that physics
+components target:
 
-1. Future component implementations have a single, stable interface
-   to target (`StellarSEDComponent`, `DustSEDComponent`, …).
-2. The contract is reviewable on its own, before any migration touches
-   `forward/sed_model.py`.
-3. A unit test asserts the protocol shape so accidental breaking
-   changes during the migration are caught early.
+- :class:`SEDComponent` — the protocol every physics block satisfies.
+- :class:`ForwardState`, :class:`DerivedState` — the typed bags that
+  flow between components.
+- :class:`DerivedKey`, :class:`ParamDeclaration` — the labels a
+  component uses to declare its inputs, outputs, and free parameters.
+- :class:`Likelihood`, :class:`ObservationModel` — analogous shapes
+  for the observation layer.
+- :class:`ComponentIOError` (alias :data:`PipelineContractError`,
+  deprecated) — raised when one block's declared inputs disagree with
+  what an upstream block publishes.
 
-See ``docs/dev/REFACTOR.md`` and the in-tree design plans for the
-full re-architecture proposal.
+See ``docs/architecture/`` and the in-tree ADRs for the wider design.
 """
 
 from __future__ import annotations
 
 from tengri.protocols.component import (
     BARE_NAME_ALLOWLIST,
+    ComponentIOError,
     DerivedKey,
     ForwardState,
     ParamDeclaration,
-    PipelineContractError,
+    PipelineContractError,  # deprecated alias of ComponentIOError; removed in v1.0
     PipelineState,  # soft alias of ForwardState; removed in v1.0
     SEDComponent,
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.protocols.derived_bundle import DerivedBundle
+from tengri.protocols.derived_state import DerivedState
 from tengri.protocols.likelihood import Likelihood
 from tengri.protocols.observation import ObservationModel
 
 __all__ = [
     "BARE_NAME_ALLOWLIST",
-    "DerivedBundle",
+    "ComponentIOError",
     "DerivedKey",
+    "DerivedState",
     "ForwardState",
     "Likelihood",
     "ObservationModel",
@@ -51,3 +56,20 @@ __all__ = [
     "SEDComponentConfig",
     "SEDComponentState",
 ]
+
+
+_RENAMED_SYMBOLS = {
+    "DerivedBundle": ("DerivedState", "tengri.protocols.DerivedState"),
+}
+
+
+def __getattr__(name: str) -> object:
+    if name in _RENAMED_SYMBOLS:
+        new_name, new_path = _RENAMED_SYMBOLS[name]
+        from tengri._deprecated import deprecated_attribute
+
+        new_obj = globals()[new_name]
+        return deprecated_attribute(
+            new_obj, old_name=f"tengri.protocols.{name}", new_name=new_path
+        )
+    raise AttributeError(f"module 'tengri.protocols' has no attribute {name!r}")
