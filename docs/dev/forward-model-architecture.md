@@ -445,7 +445,147 @@ against it the first time, then reuses. This is exactly how
 `SEDModel` works today; nothing in the architecture changes the JAX
 story.
 
-## 9. Spatial model extension path (forward-looking)
+## 9. Compilation discipline (graph size + closure)
+
+Two operational rules govern how `ForwardModel` is *structured* for
+JAX. Both exist to keep JIT compilation **bounded**. Compile-time
+blowup on multi-component fits has been the single largest pain point
+in past tengri work (see `docs/dev/notebook_orchestration_oom.md`);
+this section codifies the avoidance strategy.
+
+Neither rule restricts the user. End-to-end `jax.jit` of
+`loss(params)` remains supported and is in fact the *recommended* mode
+for tight inference loops. The rules govern how `ForwardModel`
+*exposes* its internal structure so the user can pick the JIT boundary
+that fits the workload.
+
+### 9.1 Per-population orchestration — populations are separate functions, JIT boundary is the caller's choice
+
+`ForwardModel.predict(params)` runs each population's sub-model
+through an independently-callable sub-function. Populations are
+summed at the observation layer in linear flux, with Python-level
+orchestration over the per-population calls — **not** via `vmap` or
+`lax.scan` over a fused, padded population axis.
+
+```python
+class ForwardModel:
+    def predict(self, params):
+        per_pop = {
+            pop.name: self._predict_population(pop, params)   # callable per pop
+            for pop in self.populations
+        }
+        return self.observation.predict_summed(per_pop, params)
+```
+
+This structure supports three usage modes naturally — the JIT
+boundary is set by the caller, not baked into the architecture:
+
+| Mode | Where `@jit` lives | When to use |
+|---|---|---|
+| **End-to-end JIT** (default for inference) | the outer `loss(params)` function | tight inference loops — HMC inner step, VI gradient eval. JAX traces *through* the per-population calls and fuses them into one graph. Compile cost amortized over many evaluations. |
+| **Per-population JIT, no outer fusion** | inside `_predict_population` | interactive use, exploratory `model.predict(params)` in a notebook. Each population is its own cache entry; tweaking one population only retraces that population. |
+| **No JIT at all** | nowhere | debugging — eager execution, full Python stack traces. |
+
+The key design property is that the per-population structure is the
+**default callable shape** even when end-to-end JIT fuses through it.
+A future inference backend that wants to control compile granularity
+(say, MCMC with per-population block-Gibbs steps) gets per-population
+sub-functions for free; it doesn't need a separate API.
+
+What we explicitly do **not** do:
+
+- **`vmap` over populations.** Populations have different component
+  lists (AGN: torus + corona; bulge: stellar + dust; disc: stellar +
+  dust + nebular). Their pipelines have different shapes. `vmap`
+  would require padding to a union schema, defeating the point of
+  structurally distinct populations.
+- **`lax.scan` over populations** for the same reason.
+- **Pretend there's only one population structurally.** The
+  per-population code path exists even for single-population fits
+  (it's a one-element loop). The convenience kwargs
+  (`sed=...`, `spatial=...`) build a one-population tuple
+  internally; the loop is still the loop.
+
+### 9.2 Minimize closure — data files are arguments, not free variables
+
+A pure JAX function should take its inputs as **explicit arguments**.
+Data files (SSP grids, filter convolution matrices, dust IR
+templates, emission-line tables, K-correction tables) MUST NOT be
+captured into a `@jit`'d function via free-variable closure. They
+live in:
+
+1. **Component-owned frozen state** — produced by
+   `precompute(...)`, returned as a `SEDComponentState` pytree, held
+   on the component as a registered-dataclass field.
+2. **The traced `params` dict** — for anything that varies per
+   evaluation.
+
+The pattern *to avoid*:
+
+```python
+# DO NOT do this — bakes ssp_data into the closure.
+ssp_data = load_h5("ssp.h5")
+
+@jax.jit
+def predict(params):
+    return run_chain(params, ssp_data)   # ssp_data is a captured free variable
+```
+
+The pattern *to follow*:
+
+```python
+@dataclass(frozen=True)
+class StellarSEDComponent:
+    state: StellarSEDComponentState   # carries SSP grids as a pytree
+
+    def apply(self, state, params):
+        return run_chain(params, self.state)   # explicit, no free vars
+```
+
+Why this matters:
+
+- **JIT cache stability.** A function with a captured global is
+  invalidated when *any* Python module reloads. An
+  explicit-argument function with a static-pytree input is stable
+  across reloads.
+- **Memory.** Closed-over arrays pin themselves into the JIT cache
+  indefinitely; explicit arguments respect normal Python lifetimes.
+- **Persistent JIT cache** (`docs/dev/jax_compilation_cache.md`)
+  works correctly. The persistent cache hashes the traced function;
+  if the function captures a global numpy array, the hash includes
+  Python identity rather than array content, leading to spurious
+  cache misses on reload.
+- **Readability.** A function signature that names what it depends
+  on is the difference between an astronomer reading the
+  architecture and an astronomer reverse-engineering a closure
+  graph.
+
+The rule scales: **functions in `tengri.forward.*` should have short
+closures**. If a helper function captures more than ~2 free
+variables, lift them to explicit arguments. Free-variable count is a
+useful proxy for "how much hidden state is this function carrying?".
+
+### 9.3 Implications for the implementation plan
+
+These two rules constrain the implementation, not just the
+abstractions:
+
+- `ForwardModel.predict` composes Python-level over populations,
+  exposing each as an independently-callable function. Multi-population
+  fusion (when the caller end-to-end-JITs) happens *through* this
+  structure, not by collapsing it.
+- Every component-owned data file flows through `precompute(...)`
+  → `SEDComponentState`. No module-level globals consumed inside a
+  `@jit`'d function.
+- The implementation plan includes two smoke tests:
+  - **JIT cache count.** After 3-population per-population-JIT use,
+    cache entries = `N_populations`. After end-to-end JIT on the same
+    model, cache entries = 1.
+  - **Closure size.** A static-analysis check on `tengri.forward.*`
+    that flags functions with > 2 free variables consumed inside a
+    JAX transform.
+
+## 10. Spatial model extension path (forward-looking)
 
 Spatial in this architecture is what unlocks **joint spec-phot done
 physically**, the simplest case being a Sérsic plus a fiber aperture
@@ -462,7 +602,7 @@ When the resolved / IFU case lands (post-v1), the new pieces are:
 - No core change to `ForwardModel`, `Population`, `SubModel`
   Protocol, or the component bases.
 
-## 10. What changes vs the current codebase
+## 11. What changes vs the current codebase
 
 Not a rewrite — a relayering. The bottom three layers (components,
 observation, likelihood) already exist as Protocols. The work is at
@@ -481,7 +621,7 @@ Implementation order, breaking changes, and migration story are out
 of scope for this design doc — they will be captured in an
 implementation plan after this design is approved.
 
-## 11. Open dependencies
+## 12. Open dependencies
 
 Before this document is treated as the canonical architecture:
 
