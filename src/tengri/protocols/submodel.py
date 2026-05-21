@@ -14,11 +14,11 @@ The runtime-checkable variant is provided so smoke tests can assert
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import jax.numpy as jnp
 
-from tengri.protocols.component import ForwardState
+from tengri.protocols.component import ForwardState, ParamDeclaration
 
 __all__ = ["SubModel"]
 
@@ -54,8 +54,25 @@ class SubModel(Protocol):
 
     name: str
 
-    def declared_parameters(self) -> list[Any]:
-        """Aggregated parameter declarations from this SubModel's components."""
+    def declared_parameters(self) -> list[ParamDeclaration]:
+        """Aggregated parameter declarations from this SubModel's components.
+
+        Returns
+        -------
+        list of :class:`ParamDeclaration`
+            One entry per free parameter this SubModel exposes,
+            aggregated across its components. The orchestrator hands
+            these to :class:`tengri.Parameters` so the user doesn't
+            have to register them by hand.
+
+        Notes
+        -----
+        Every ``name`` MUST start with the corresponding component's
+        :attr:`parameter_prefix` *or* be listed in
+        :data:`BARE_NAME_ALLOWLIST` (currently just ``redshift``). The
+        param-prefix CI guard at ``tools/check_param_prefixes.py``
+        enforces this across the aggregated set.
+        """
         ...
 
     def run(
@@ -63,5 +80,25 @@ class SubModel(Protocol):
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
     ) -> ForwardState:
-        """Pure JAX. Thread state through this SubModel's components."""
+        """Pure JAX step. Thread state through this SubModel's components.
+
+        Reads ``params`` (already sliced to this SubModel's parameter
+        prefixes by the caller) plus any frozen tensors held by ``self``,
+        then returns a *new* :class:`ForwardState` with this SubModel's
+        contribution applied.
+
+        Parameters
+        ----------
+        state : ForwardState
+            Current state from upstream sub-models (e.g. spatial reads
+            keys produced by SED in :class:`SpatialSEDModel`).
+        params : mapping of str -> array
+            Free parameter values for parameters owned by this
+            SubModel's components.
+
+        Returns
+        -------
+        ForwardState
+            New state. MUST NOT mutate the input.
+        """
         ...
