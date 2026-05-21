@@ -927,6 +927,7 @@ class TestBugNSS02EvolvingMetFusedKernel:
     5. Remove silent fallback; raise clear KeyError if neither path is available.
     """
 
+    @pytest.mark.skip(reason="fused kernel deleted in Phase 6")
     def test_fused_kernel_evolving_metallicity_finite(self):
         """Fused kernel with evolving_metallicity=True must return finite photometry."""
         from pathlib import Path

@@ -33,7 +33,6 @@ Usage::
 
 from __future__ import annotations
 
-import contextlib
 import dataclasses
 import types
 import warnings
@@ -48,20 +47,8 @@ from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.components.stellar.sps.precompute import (
     precompute_photometry,
-    precompute_photometry_ztable,
-    precompute_spectroscopy,
 )
 from tengri.config.exceptions import ParameterMapError
-from tengri.forward._kernels import (
-    DEFAULT as DEFAULT_KERNEL_STRATEGY,
-    build_exact_sed,
-    build_fused_rest_sed,
-    build_fused_tier2_photometry,
-    build_fused_tier2_spectrum,
-    build_hybrid_photometry,
-    build_hybrid_photometry_ztable,
-    build_hybrid_spectrum,
-)
 from tengri.forward.pipeline import (
     interp_metallicity,
     interp_metallicity_evolving,
@@ -90,7 +77,6 @@ from tengri.utils.grid import (
     log_age_to_age_yr,
     make_log_age_grid,
 )
-from tengri.utils.jit_logging import logged_jit
 
 # Re-export supporting types for backwards compatibility
 __all__ = [
@@ -336,10 +322,11 @@ class SEDModel:
         strategy=None,
         compile=None,
     ):
-        # ── Kernel-selection strategy ─────────────────────────────
-        # Stored before any kernel builds so ``_get_strategy`` returns the
-        # caller's choice (default :data:`tengri.DEFAULT_KERNEL_STRATEGY`).
-        self._strategy = strategy if strategy is not None else DEFAULT_KERNEL_STRATEGY
+        # ``strategy`` is accepted for backwards-compat signature but ignored —
+        # the kernel-selection strategy machinery was removed in Phase 6
+        # (kernel adapters deleted). ``predict_observables_jit`` is the only
+        # forward path now.
+        del strategy
         self._agn_config = agn_config
         # ── Observation ────────────────────────────────────────────
         observation, spec = self._init_observation(spec, filters, observation)
@@ -486,33 +473,6 @@ class SEDModel:
             param_map=self._param_map,
             igm_fn=self._igm_fn,
         )
-
-        # ── Kernels (consume self._state) ─────────────────────────
-        # Route through structural cache keyed on compile_signature()
-        # so two instances with identical structure share compiled kernels.
-        from tengri.inference._model_cache import get_structural_kernel_cache
-
-        sig = self.compile_signature()
-        shared_cache = get_structural_kernel_cache(sig)
-
-        if "compositional" not in shared_cache:
-            shared_cache["compositional"] = self._build_compositional_kernels()
-        self._compositional_kernels = shared_cache["compositional"]
-
-        if "hybrid" not in shared_cache:
-            shared_cache["hybrid"] = self._build_hybrid_kernels()
-        self._hybrid_kernels = shared_cache["hybrid"]
-
-        if precompute is not False:
-            self._maybe_auto_precompute_ztable()
-
-        if (
-            observation is not None
-            and observation.can_do_spectroscopy
-            and self._z_fixed is not None
-            and precompute is not False
-        ):
-            self.precompute_spectroscopy(observation.spectroscopy.wave_obs)
 
     def __repr__(self) -> str:
         """One-line summary of how this model is wired."""
@@ -1004,114 +964,6 @@ class SEDModel:
 
         # Freeze the merged map using MappingProxyType
         self._param_map = types.MappingProxyType(merged)
-
-    # ── Kernel management ─────────────────────────────────────────────
-
-    @property
-    def _compositional(self):
-        """Lazily build compositional kernels on first access."""
-        if self._compositional_kernels is None:
-            from tengri.inference._model_cache import get_structural_kernel_cache
-
-            sig = self.compile_signature()
-            shared_cache = get_structural_kernel_cache(sig)
-            if "compositional" not in shared_cache:
-                shared_cache["compositional"] = self._build_compositional_kernels()
-            self._compositional_kernels = shared_cache["compositional"]
-        return self._compositional_kernels
-
-    @property
-    def _hybrid(self):
-        """Lazily build hybrid kernels on first access."""
-        if self._hybrid_kernels is None:
-            from tengri.inference._model_cache import get_structural_kernel_cache
-
-            sig = self.compile_signature()
-            shared_cache = get_structural_kernel_cache(sig)
-            if "hybrid" not in shared_cache:
-                shared_cache["hybrid"] = self._build_hybrid_kernels()
-            self._hybrid_kernels = shared_cache["hybrid"]
-        return self._hybrid_kernels
-
-    def _invalidate_kernels(self):
-        """Reset cached kernels so they're rebuilt on next access."""
-        self._compositional_kernels = None
-        self._hybrid_kernels = None
-        # Records why each kernel slot is filled / empty / failed. Populated
-        # by ``_try_build_kernel``; inspected via ``list_available_kernels``.
-        self._kernel_build_log: dict[str, str] = {}
-
-    def _try_build_kernel(self, name, builder):
-        """Run a kernel builder, recording success/failure in the build log.
-
-        Replaces the historical ``contextlib.suppress(Exception)`` blocks so
-        failures are no longer silent: the user gets a ``UserWarning`` and a
-        diagnostic entry visible via ``list_available_kernels``.
-
-        Parameters
-        ----------
-        name : str
-            Stable adapter name (e.g. ``"hybrid_photometry"``).
-        builder : callable
-            Zero-argument callable that performs the build and returns the
-            closure (or ``None``).
-
-        Returns
-        -------
-        object or None
-            The builder's return value, or ``None`` if it raised.
-        """
-        if getattr(self, "_kernel_build_log", None) is None:
-            self._kernel_build_log = {}
-        try:
-            result = builder()
-        except Exception as exc:
-            self._kernel_build_log[name] = (
-                f"build_failed: {type(exc).__name__}: {str(exc).splitlines()[0]}"
-            )
-            warnings.warn(
-                f"Kernel '{name}' build failed: {type(exc).__name__}: {exc}",
-                UserWarning,
-                stacklevel=3,
-            )
-            return None
-        if result is None:
-            self._kernel_build_log[name] = "build_returned_none"
-        else:
-            self._kernel_build_log[name] = "ok"
-        return result
-
-    def _get_strategy(self):
-        """Return the kernel-selection strategy for this model.
-
-        Defaults to :data:`tengri.forward._kernels.DEFAULT` (the historical
-        cascade order). PR3 will expose a ``strategy=`` kwarg on
-        :meth:`__init__` and :meth:`predict_photometry`; until then this
-        helper centralises the default.
-        """
-        strategy = getattr(self, "_strategy", None)
-        return strategy if strategy is not None else DEFAULT_KERNEL_STRATEGY
-
-    def list_available_kernels(self):
-        """Report the state of every kernel attempted during build.
-
-        Returns
-        -------
-        dict[str, str]
-            Mapping ``{kernel_name: status}`` where status is one of
-            ``"ok"``, ``"build_returned_none"``, ``"build_failed: <exc>"``,
-            or absent if the kernel was never attempted (e.g. preconditions
-            on state were not met).
-
-        Notes
-        -----
-        The strategy module (``tengri.forward._kernels.strategy``) lists
-        every adapter name; entries missing from this dict mean the
-        adapter's ``is_compatible`` predicate returned False before any
-        build attempt — usually a missing precompute or a free redshift
-        excluding the fixed-z hybrid kernels.
-        """
-        return dict(getattr(self, "_kernel_build_log", None) or {})
 
     def _precompute_dust_ir_photometry(self):
         """Precompute dust IR template photometry for fast hybrid kernel lookup.
@@ -1899,98 +1751,6 @@ class SEDModel:
             xray_corona_lopez24_preintegrated=xray_corona_lopez24_preint,
             feltre_nlr_lookup=feltre_nlr_lookup,
         )
-
-    def _build_compositional_kernels(self):
-        """Build Level 2: full-resolution JIT-compiled kernels."""
-        exact_sed = self._try_build_kernel("exact_rest_sed", lambda: build_exact_sed(self._state))
-        rest_sed = self._try_build_kernel(
-            "compositional_rest_sed", lambda: build_fused_rest_sed(self._state, self)
-        )
-
-        # Store partial result so build_fused_tier2_photometry can read
-        # model._compositional.rest_sed during construction.
-        self._compositional_kernels = CompositionalKernels(
-            rest_sed=rest_sed,
-            exact_sed=exact_sed,
-        )
-
-        fused_phot = None
-        fused_phot_raw = None
-        fused_spec = None
-        fused_spec_raw = None
-        if rest_sed is not None and self.filter_waves is not None:
-            fused_phot_raw = self._try_build_kernel(
-                "compositional_photometry",
-                lambda: build_fused_tier2_photometry(self._state, self),
-            )
-            fused_phot = (
-                logged_jit(fused_phot_raw, name="compositional_phot")
-                if fused_phot_raw is not None
-                else None
-            )
-
-        if rest_sed is not None:
-            fused_spec_raw = self._try_build_kernel(
-                "compositional_spectrum",
-                lambda: build_fused_tier2_spectrum(self._state, self),
-            )
-            fused_spec = (
-                logged_jit(fused_spec_raw, name="compositional_spec")
-                if fused_spec_raw is not None
-                else None
-            )
-
-        ck = CompositionalKernels(
-            rest_sed=rest_sed,
-            photometry=fused_phot,
-            spectrum=fused_spec,
-            exact_sed=exact_sed,
-        )
-        # Store raw (un-JIT'd) versions for NIFTy tracing
-        ck._photometry_raw = fused_phot_raw
-        ck._spectrum_raw = fused_spec_raw
-        return ck
-
-    def _build_hybrid_kernels(self):
-        """Build Level 3: precomputed SSP + exact non-stellar kernels.
-
-        The hybrid kernel uses precomputed SSP×filter photometry for stellar
-        (fast, ~0.4% error) and evaluates all non-stellar components at full
-        wavelength resolution via emission_helpers.py, then integrates
-        through filters (exact).
-        """
-        hybrid_phot = None
-        hybrid_phot_raw = None
-        if self._precomputed.photometry is not None and self._z_fixed is not None:
-            hybrid_phot_raw = self._try_build_kernel(
-                "hybrid_photometry",
-                lambda: build_hybrid_photometry(self._state, self),
-            )
-            hybrid_phot = (
-                logged_jit(hybrid_phot_raw, name="hybrid_phot")
-                if hybrid_phot_raw is not None
-                else None
-            )
-
-        hybrid_spec = None
-        hybrid_spec_raw = None
-        if self._precomputed.spectroscopy is not None and self._z_fixed is not None:
-            hybrid_spec_raw = self._try_build_kernel(
-                "hybrid_spectrum",
-                lambda: build_hybrid_spectrum(self._state, self),
-            )
-            hybrid_spec = (
-                logged_jit(hybrid_spec_raw, name="hybrid_spec")
-                if hybrid_spec_raw is not None
-                else None
-            )
-
-        hk = HybridKernels(photometry=hybrid_phot, spectrum=hybrid_spec)
-        hk._photometry_raw = hybrid_phot_raw
-        hk._spectrum_raw = hybrid_spec_raw
-        return hk
-
-    # ── Parameter translation ─────────────────────────────────────────
 
     def _get_internal_params(self, params):
         """Translate public param dict to internal names with unit conversion.
@@ -5153,206 +4913,6 @@ class SEDModel:
     def _interp_metallicity_evolving(self, log_z_per_age):
         """Dispatch evolving metallicity interpolation (per-age Z)."""
         return interp_metallicity_evolving(self, log_z_per_age)
-
-    def precompute_spectroscopy(self, wave_obs):
-        """Pre-interpolate SSP templates to observed wavelength grid.
-
-        Call this before spectroscopic fitting to get a ~20x speedup.
-        Requires fixed redshift.
-
-        Parameters
-        ----------
-        wave_obs : array, shape (n_pix,)
-            Observed wavelength grid (Angstrom).
-
-        Returns
-        -------
-        self
-            The same model instance, with ``_state.precomputed.spectroscopy``
-            and ``_state.wave_obs`` updated immutably via
-            ``dataclasses.replace``. Returned for chaining; both
-            ``model.precompute_spectroscopy(wave); model.fit(data)`` and
-            ``fit = model.precompute_spectroscopy(wave).fit(data)`` work.
-
-        Notes
-        -----
-        State internals (``_precomputed``, ``_state``) are frozen
-        dataclasses; this method swaps them via ``dataclasses.replace``
-        rather than mutating their fields. The model object itself is
-        the controller and is not replaced — see Phase 3 of the
-        refactor: cached compiled artefacts are dropped via
-        ``clear_model_cache(self)`` and lazily rebuilt on next use.
-
-        Caches precomputed SSP spectra at the fixed redshift,
-        enabling ~10-20× speedup for repeated spectrum predictions.
-        Requires fixed redshift (raises ValueError otherwise).
-
-        Examples
-        --------
-        >>> wave_obs = np.linspace(3500, 7000, 2000)
-        >>> model.precompute_spectroscopy(wave_obs)
-        >>> flux = model.predict_spectrum(params)
-        """
-        if self._z_fixed is None:
-            raise ValueError("Spectroscopy precomputation requires fixed redshift")
-        spec_precomp = precompute_spectroscopy(
-            self.ssp_data,
-            jnp.asarray(wave_obs),
-            self._z_fixed,
-            self._dl_cm_fixed,
-        )
-        self._precomputed = dataclasses.replace(self._precomputed, spectroscopy=spec_precomp)
-        self._wave_obs = jnp.asarray(wave_obs)
-        self._state = dataclasses.replace(
-            self._state, precomputed=self._precomputed, wave_obs=self._wave_obs
-        )
-
-        # Invalidate cached kernels and fitter loss-fn caches so any attached
-        # Fitter picks up the new precomputed spectroscopy path on next run().
-        # Compiled artefacts can always be regenerated, so we just drop them.
-        from tengri.inference._model_cache import clear_model_cache
-
-        self._invalidate_kernels()
-        clear_model_cache(self)
-
-        # Rebuild compositional spectrum kernel (full-resolution end-to-end JIT)
-        if self._compositional.rest_sed is not None:
-            _raw = self._try_build_kernel(
-                "compositional_spectrum",
-                lambda: build_fused_tier2_spectrum(self._state, self),
-            )
-            self._compositional.spectrum = jax.jit(_raw) if _raw else None
-            # Preserve the raw closure for ``mode="traced"`` (NIFTy VI),
-            # which reads ``_spectrum_raw`` directly from the kernel container.
-            self._compositional._spectrum_raw = _raw
-
-        # Rebuild hybrid spectrum kernel (precomputed SSP + exact non-stellar)
-        if self._compositional.rest_sed is not None:
-            _raw = self._try_build_kernel(
-                "hybrid_spectrum",
-                lambda: build_hybrid_spectrum(self._state, self),
-            )
-            self._hybrid.spectrum = jax.jit(_raw) if _raw else None
-            self._hybrid._spectrum_raw = _raw
-
-        return self
-
-    def _maybe_auto_precompute_ztable(self) -> None:
-        """Auto-fire ``precompute_ztable`` for free-z photometry models.
-
-        Triggered when:
-        - ``self._approx["ztable"]`` is truthy (default True);
-        - redshift is a free parameter (``self._z_fixed is None``);
-        - photometry filters are available (``self.filter_waves is not None``).
-
-        Pulls ``z_min``/``z_max`` from the redshift prior and uses
-        ``n_z=100`` by default (override via
-        ``approx={"ztable": {"n_z": 200, ...}}``). Failures are swallowed —
-        we fall back to the compositional path silently rather than blocking
-        construction.
-        """
-        ztable_cfg = self._approx.get("ztable", True)
-        if not ztable_cfg:
-            return
-        if self._z_fixed is not None:
-            return
-        if getattr(self, "filter_waves", None) is None:
-            return
-        try:
-            redshift_dist = self.spec.get_distribution("redshift")
-            z_lo, z_hi = float(redshift_dist.bounds[0]), float(redshift_dist.bounds[1])
-        except Exception:
-            return
-
-        kwargs = {
-            "z_min": max(0.001, z_lo - 0.01 * (z_hi - z_lo)),
-            "z_max": z_hi + 0.01 * (z_hi - z_lo),
-            "n_z": 100,
-        }
-        if isinstance(ztable_cfg, dict):
-            kwargs.update({k: v for k, v in ztable_cfg.items() if k in {"z_min", "z_max", "n_z"}})
-
-        with contextlib.suppress(Exception):
-            self.precompute_ztable(**kwargs)
-
-    def precompute_ztable(self, z_grid=None, z_min=0.001, z_max=3.0, n_z=100):
-        """Pre-compute SSP photometry on a redshift grid for free-z fitting.
-
-        At inference time, the precomputed table is interpolated to the
-        current z — same speedup as fixed-z precomputation, but z is free.
-        Follows the DSPS ``precompute_ssp_obsmags_on_z_table`` approach.
-
-        Parameters
-        ----------
-        z_grid : array, optional
-            Custom redshift grid. If None, uses linspace(z_min, z_max, n_z).
-        z_min : float
-            Minimum redshift (default 0.001).
-        z_max : float
-            Maximum redshift (default 3.0).
-        n_z : int
-            Number of grid points (default 100). More points = more accurate
-            interpolation. 100 gives <0.01% interpolation error for smooth
-            filter transmission curves.
-
-        Returns
-        -------
-        self
-            The same model instance, with ``_state.precomputed.photometry_ztable``
-            updated immutably via ``dataclasses.replace``. Returned for
-            chaining; cache cleared via ``clear_model_cache(self)``.
-
-        Notes
-        -----
-        Enables fast photometry prediction with free redshift (no fixed z).
-        Interpolates precomputed SSP×filter grid to current z at inference time,
-        achieving similar speedup as fixed-z precomputation.
-
-        Examples
-        --------
-        >>> model.precompute_ztable(z_min=0.01, z_max=4.0, n_z=200)
-        >>> flux = model.predict_photometry(params)  # z now free
-        """
-        if self.filter_waves is None:
-            raise ValueError("Z-table precomputation requires filters to be set")
-        ztable = precompute_photometry_ztable(
-            self.ssp_data,
-            self.filter_waves,
-            self.filter_trans,
-            z_grid=z_grid,
-            z_min=z_min,
-            z_max=z_max,
-            n_z=n_z,
-            apply_igm=self._uses_igm and self._approx.get("igm", True),
-        )
-        self._precomputed = dataclasses.replace(self._precomputed, photometry_ztable=ztable)
-        self._state = dataclasses.replace(self._state, precomputed=self._precomputed)
-
-        # Invalidate fitter loss-fn caches so any attached Fitter uses the
-        # new ztable interpolation path on next run(). Compiled artefacts can
-        # always be regenerated, so we just drop them.
-        from tengri.inference._model_cache import clear_model_cache
-
-        clear_model_cache(self)
-
-        # Build hybrid z-table kernel if using hybrid mode
-        if self._hybrid.photometry is not None or any(
-            (
-                getattr(self._nebular_backend, "has_free_params", False),
-                getattr(getattr(self, "_shock_backend", None), "has_free_params", False),
-                getattr(self, "_has_dust_ir_full", False),
-                getattr(self, "_has_agn_full", False),
-                getattr(self, "_has_radio", False),
-                getattr(self, "_has_xray", False),
-            )
-        ):
-            _raw = self._try_build_kernel(
-                "hybrid_photometry_ztable",
-                lambda: build_hybrid_photometry_ztable(self._state, self),
-            )
-            self._hybrid.photometry = jax.jit(_raw) if _raw else None
-
-        return self
 
     def _method_recommendation(self) -> tuple[str, str]:
         """Return (method_name, reason) for the recommended inference method."""

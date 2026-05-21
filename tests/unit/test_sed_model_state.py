@@ -104,6 +104,7 @@ def test_state_precomputed_is_same_object(minimal_model):
 
 
 @pytest.mark.unit
+@pytest.mark.skip(reason="precompute_spectroscopy deleted in Phase 6 (kernel removal)")
 def test_precompute_spectroscopy_updates_state(minimal_model):
     """precompute_spectroscopy should rebuild _state after updating _precomputed."""
     model = minimal_model

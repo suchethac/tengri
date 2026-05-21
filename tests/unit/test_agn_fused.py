@@ -111,20 +111,13 @@ class TestAGNModeDetection:
             model = SEDModel(legacy_agn_spec, synthetic_ssp, filters=simple_filters)
         assert model._agn_luminosity_mode is False
 
+    @pytest.mark.skip(reason="hybrid kernel deleted in Phase 6")
     def test_parametric_enables_hybrid(self, parametric_agn_spec, synthetic_ssp, simple_filters):
-        """Parametric AGN allows hybrid kernel."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            model = SEDModel(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
-        assert model._hybrid.photometry is not None
+        pass
 
+    @pytest.mark.skip(reason="hybrid kernel deleted in Phase 6")
     def test_legacy_still_builds_hybrid(self, legacy_agn_spec, synthetic_ssp, simple_filters):
-        """Legacy AGN still builds hybrid kernel (non-stellar at full res)."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            model = SEDModel(legacy_agn_spec, synthetic_ssp, filters=simple_filters)
-        # Hybrid handles all AGN modes (frac computed from broadband L_bol)
-        assert model._hybrid.photometry is not None
+        pass
 
 
 # ── Tests: fused AGN photometry correctness ───────────────────────
