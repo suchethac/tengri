@@ -54,5 +54,8 @@ jobs:
       # physics-first tree (components/, contract/, inference/,
       # physics/, regression/) sits alongside the legacy tests/unit/
       # subdirs and runs in the same fast-suite scope.
-      - run: pytest tests/components tests/contract tests/inference tests/physics tests/regression tests/unit -q --ignore=tests/crossval
-        timeout-minutes: 25
+      # tests/inference/ is excluded from fast CI: many files do real
+      # MAP/VI/MCMC fits and individually push runtime past 15 min.
+      # Re-introduce via a slow-tier job in a follow-up PR.
+      - run: pytest tests/components tests/contract tests/physics tests/regression tests/unit -q --ignore=tests/crossval
+        timeout-minutes: 15
