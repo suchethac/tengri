@@ -255,11 +255,13 @@ class Uniform(Distribution):
     >>> print(f"log p(0.5): {log_prob:.4f}")  # ≈ 0.0 (log(1) = 0)
     """
 
-    def __init__(self, lo: float, hi: float):
+    def __init__(self, lo: float, hi: float, description: str = "", *, units: str = ""):
         if lo >= hi:
             raise ValueError(f"Uniform requires lo < hi, got lo={lo}, hi={hi}")
         self._lo = float(lo)
         self._hi = float(hi)
+        self.description = description
+        self.units = units
 
     @property
     def lo(self) -> float:
@@ -430,7 +432,14 @@ class Gaussian(Distribution):
     """
 
     def __init__(
-        self, mu: float, sigma: float, lo: float = float("-inf"), hi: float = float("inf")
+        self,
+        mu: float,
+        sigma: float,
+        lo: float = float("-inf"),
+        hi: float = float("inf"),
+        description: str = "",
+        *,
+        units: str = "",
     ):
         if sigma <= 0:
             raise ValueError(f"Gaussian requires sigma > 0, got {sigma}")
@@ -440,6 +449,8 @@ class Gaussian(Distribution):
         self._sigma = float(sigma)
         self._lo = float(lo)
         self._hi = float(hi)
+        self.description = description
+        self.units = units
 
     @property
     def mu(self) -> float:
@@ -1149,8 +1160,10 @@ class Fixed(Distribution):
     solar
     """
 
-    def __init__(self, value: float | str):
+    def __init__(self, value: float | str, description: str = "", *, units: str = ""):
         self._value = value if isinstance(value, str) else float(value)
+        self.description = description
+        self.units = units
 
     @property
     def value(self) -> float | str:
