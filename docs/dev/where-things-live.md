@@ -61,7 +61,10 @@ Each component owns its own `_params.py` (see the list above and the
 
 | Want to... | Open |
 |---|---|
-| Build the SED end to end | `forward/sed_model.py` (the `SEDModel` class) |
+| Reach the forward model from inference | `forward/forward_model.py` (`ForwardModel` — outer shell + `.build()` + `.predict()`). Single-population only in v0; multi-population lands with ADR-0012. |
+| Compose populations | `forward/population.py` (`Population(name, sed, spatial=None)` — one SubModel pair per population) |
+| Find the SubModel Protocol | `protocols/submodel.py` — runtime-checkable contract (`run`, `declared_parameters`) |
+| Build the SED end to end | `forward/sed_model.py` (the `SEDModel` class — still the SED chain; `ForwardModel` wraps it) |
 | Understand which kernel (exact / hybrid / fast) is chosen | `forward/_kernels/` |
 | Wire a new physics component into the pipeline | `forward/components_assembly.py` |
 | Add filter-preintegration to a new component | `forward/precompute/` (registry) + new `*_precompute.py` next to the component |
