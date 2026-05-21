@@ -43,11 +43,8 @@ EXPECTED_ALL = frozenset(
         "SpatialModel",
         "SpatialSEDModel",
         "WavePrecomp",
-        # Component / pipeline contract (astronomer-facing extension surface)
-        "DerivedBundle",
-        "DerivedKey",
-        "ForwardState",
-        "PipelineContractError",
+        # Component-extension surface — demoted to `tengri.protocols.*`,
+        # no longer advertised at top level (importable for back-compat).
         # Physics modules
         "agn",
         "builders",
@@ -95,19 +92,13 @@ EXPECTED_ALL = frozenset(
         "search",
         "summary",
         "tutorial",
-        # Runtime verbs
-        "cache_size_bytes",
+        # Runtime verbs (cache machinery demoted to tengri.utils.jax_cache /
+        # tengri.inference.jit_engine — clear_cache is the only top-level entry)
         "cite_components",
         "clear_cache",
-        "clear_shared_caches",
         "doctor",
         "download_ssp",
-        "enable_persistent_cache",
-        "gc",
-        "is_cache_enabled",
-        "lean",
         "list_known_ssps",
-        "persistent",
         "register_component",
         # Exceptions
         "BackendError",

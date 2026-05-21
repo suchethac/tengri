@@ -196,7 +196,7 @@ def test_sed_output_snapshot(config_name, ssp_data_wne):
 
     # ADR-0007 Phase 4 invariant: every component now writes to
     # state.derived via the typed bundle's with_(...) method. The
-    # _extras spillover dict on DerivedBundle is opt-in only (the
+    # _extras spillover dict on DerivedState is opt-in only (the
     # default ``from_dict(d, allow_extras=False)`` raises on unknown
     # keys). If a Phase-4 production forward pass leaves anything in
     # _extras, some write site has regressed to the dict-style path
@@ -204,7 +204,7 @@ def test_sed_output_snapshot(config_name, ssp_data_wne):
     # here rather than letting the silent untyped write live in main.
     assert final.derived._extras == {}, (
         f"Pipeline {config_name!r} left unexpected entries in "
-        f"DerivedBundle._extras: {list(final.derived._extras.keys())!r}. "
+        f"DerivedState._extras: {list(final.derived._extras.keys())!r}. "
         f"Some component's apply() must be writing through the dict-style "
         f"shim. Migrate it to ``state.derived.with_(X=value)`` (ADR-0007 "
         f"Phase 3 / Phase 4)."
