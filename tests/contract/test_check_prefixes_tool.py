@@ -15,8 +15,9 @@ from pathlib import Path
 
 import pytest
 
-# Add tools/ to path so we can import the check script
-tools_dir = Path(__file__).parent.parent.parent.parent / "tools"
+# Add tools/ to path so we can import the check script.
+# Layout: tests/contract/<this_file> -> repo root is 2 levels up.
+tools_dir = Path(__file__).parent.parent.parent / "tools"
 sys.path.insert(0, str(tools_dir))
 
 from check_param_prefixes import is_valid_param_name
