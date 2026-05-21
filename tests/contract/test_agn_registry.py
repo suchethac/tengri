@@ -8,6 +8,14 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from tengri.components.agn.unified import (
+    AGN_MODELS as _AGN_MODELS,
+    register_agn_model,
+    resolve_agn_model,
+)
+
+AGN_MODELS = _AGN_MODELS
+
 jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.contract
@@ -31,7 +39,6 @@ class TestResolveAgn:
 
     def test_kubota_done_emits_deprecation_warning(self, wavelength):
         """resolve_agn_model('kubota_done') emits DeprecationWarning."""
-        from tengri.components.agn.unified import resolve_agn_model
 
         with pytest.warns(DeprecationWarning, match="kubota_done.*deprecated"):
             fn = resolve_agn_model("kubota_done")
@@ -39,7 +46,6 @@ class TestResolveAgn:
 
     def test_kubota_done_still_returns_valid_function(self, wavelength):
         """Despite the deprecation warning, the returned function produces finite output."""
-        from tengri.components.agn.unified import resolve_agn_model
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
@@ -87,7 +93,6 @@ class TestRegisterAgn:
 
     def test_decorator_returns_original_function(self):
         """The decorator is transparent: the decorated function is returned unchanged."""
-        from tengri.components.agn.unified import AGN_MODELS, register_agn_model
 
         def _raw(wavelength, agn_log_lbol, **_kw):
             return wavelength * agn_log_lbol

@@ -29,6 +29,7 @@ from tengri.components.stellar.sfh.nonparametric import (
     continuity_flex_prior_logp,
     continuity_prior_logp,
     dirichlet,
+    make_agebins_from_zred,
 )
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
 
@@ -266,7 +267,6 @@ class TestRegistryBinEdges:
         assert jnp.any(sfr > 0)
 
     def test_dirichlet_custom_edges(self):
-        from tengri.components.stellar.sfh.nonparametric import make_agebins_from_zred
 
         edges = make_agebins_from_zred(3.0, n_bins=6)
         fn, _, param_map, _ = resolve_sfh("dirichlet", bin_edges_gyr=edges)

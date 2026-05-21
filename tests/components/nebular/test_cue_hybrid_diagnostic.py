@@ -1,0 +1,140 @@
+"""Tests for the Cue hybrid photometry energy-balance fix.
+
+Previously showed ~23% hybrid error vs exact.  Root cause was the same as the DL07
+hybrid bug: L_absorbed_stellar was computed from a Voronoi-bandwidth-weighted sum over
+SDSS filter bands only, missing all UV absorption where dust attenuation peaks.  Fixed
+by replacing the Voronoi sum with a 200-point coarse-wavelength trapz.
+
+These tests verify:
+1. Cue hybrid error < 5% per SDSS band at z=0.1 (was ~23%).
+2. Hybrid photometry is finite and positive.
+3. Exact photometry is finite (sanity check).
+
+All tests require SSP data on disk; they are skipped gracefully when missing.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import jax
+import jax.numpy as jnp
+import pytest
+
+pytestmark = pytest.mark.bounds
+
+jax.config.update("jax_enable_x64", True)
+
+from tengri.forward.sed_model import SEDModel
+from tengri.parameters.parameters import Parameters
+from tengri.parameters.priors import Fixed, Uniform
+
+# ── Skip guards ───────────────────────────────────────────────────
+
+_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+_SSP_FILE = _DATA_DIR / "bc03_pdva_stelib_chabrier.h5"
+_SSP_EXISTS = _SSP_FILE.is_file()
+
+pytestmark = pytest.mark.skipif(
+    not _SSP_EXISTS,
+    reason=(
+        "BC03 bare-stellar SSP not found — required for Cue diagnostics "
+        "(wNE SSPs raise CueWNESSPError). "
+        "Run `tengri.download_ssp('bc03_pdva_stelib_chabrier')`."
+    ),
+)
+
+_FILTER_NAMES = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+
+
+# ── Fixtures ──────────────────────────────────────────────────────
+
+
+@pytest.fixture(scope="module")
+def ssp_data(ssp_data_bc03):
+    """Cue needs bare-stellar SSPs (see ``ssp_data_bc03`` in conftest)."""
+    return ssp_data_bc03
+
+
+@pytest.fixture(scope="module")
+def filters(sdss_filters):
+    return sdss_filters
+
+
+@pytest.fixture(scope="module")
+def cue_spec():
+    """DPL SFH + Cue nebular emulator, no dust emission, fixed z=0.1."""
+    return Parameters(
+        mean_sfh_type="dpl",
+        sfh_dpl_alpha=Uniform(0.5, 3.0),
+        sfh_dpl_beta=Uniform(0.3, 2.0),
+        sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
+        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+        met_logzsol=Fixed(-1.5),
+        dust_tau_bc=Fixed(0.3),
+        dust_tau_diff=Fixed(0.1),
+        dust_slope=Fixed(-0.7),
+        nebular="cue",
+        redshift=0.1,
+    )
+
+
+@pytest.fixture(scope="module")
+def cue_model(ssp_data, filters, cue_spec):
+    """SEDModel with Cue nebular emulator, no dust IR emission."""
+    try:
+        return SEDModel(cue_spec, ssp_data, filters=filters)
+    except (ImportError, FileNotFoundError) as exc:
+        pytest.skip(f"Cue emulator not available: {exc}")
+
+
+_KEY = jax.random.PRNGKey(42)
+
+
+@pytest.fixture(scope="module")
+def cue_params(cue_spec):
+    return cue_spec.sample(_KEY)
+
+
+# ── Diagnostic: compare exact vs hybrid, assert discrepancy is documented
+
+
+class TestCueHybridDiagnostic:
+    """Cue hybrid photometry error-bound and sanity checks."""
+
+    def test_cue_hybrid_error_below_5pct(self, cue_model, cue_params):
+        """Cue hybrid photometry agrees with exact within 5% per band.
+
+        Previously failed with ~23% error (root cause: L_absorbed_stellar computed
+        from Voronoi-bandwidth-weighted sum over SDSS filter bands, missing UV absorption).
+        Fixed alongside DL07 hybrid: replaced Voronoi sum with 200-point coarse-wavelength
+        trapz, matching the exact/compositional path.
+        """
+        flux_hybrid = cue_model.predict_photometry(cue_params, mode="hybrid")
+        flux_exact = cue_model.predict_photometry(cue_params, mode="exact")
+
+        err = jnp.abs(flux_hybrid - flux_exact) / (jnp.abs(flux_exact) + 1e-50)
+        max_err_pct = float(jnp.max(err)) * 100.0
+        band_errs = {b: float(e) * 100.0 for b, e in zip(_FILTER_NAMES, err)}
+        per_band = "  ".join(f"{b}:{v:.1f}%" for b, v in band_errs.items())
+
+        assert max_err_pct < 5.0, (
+            f"Cue hybrid max per-band error {max_err_pct:.1f}% exceeds 5%. "
+            f"Per-band: {per_band}. "
+            "See test_cue_hybrid_diagnostic.py for investigation notes."
+        )
+
+    def test_cue_hybrid_photometry_is_finite(self, cue_model, cue_params):
+        """Cue hybrid photometry must be finite regardless of the magnitude error."""
+        flux = cue_model.predict_photometry(cue_params, mode="hybrid")
+        assert jnp.all(jnp.isfinite(flux)), "Cue hybrid photometry contains NaN/Inf"
+
+    def test_cue_hybrid_photometry_is_positive(self, cue_model, cue_params):
+        """Cue hybrid photometry must be positive regardless of the magnitude error."""
+        flux = cue_model.predict_photometry(cue_params, mode="hybrid")
+        assert jnp.all(flux > 0.0), "Cue hybrid photometry has non-positive values"
+
+    def test_cue_exact_photometry_is_finite(self, cue_model, cue_params):
+        """Cue exact photometry must be finite (sanity check)."""
+        flux = cue_model.predict_photometry(cue_params, mode="exact")
+        assert jnp.all(jnp.isfinite(flux)), "Cue exact photometry contains NaN/Inf"

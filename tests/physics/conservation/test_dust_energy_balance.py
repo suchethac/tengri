@@ -8,6 +8,12 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.components.dust.emission import (
+    compute_absorbed_luminosity,
+    energy_balance_split,
+    modified_blackbody,
+)
+
 jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.conservation
@@ -48,7 +54,6 @@ class TestEnergyConservation:
         assert jnp.isclose(integral, L_absorbed, rtol=0.05)
 
     def test_eta_half(self, wavelengths, L_absorbed):
-        from tengri.components.dust.emission import energy_balance_split
 
         eta = 0.5
         sed = energy_balance_split(wavelengths, L_absorbed, eta_balance=eta)
@@ -58,7 +63,6 @@ class TestEnergyConservation:
         assert jnp.isclose(integral, expected, rtol=0.05)
 
     def test_eta_plus_agn(self, wavelengths, L_absorbed):
-        from tengri.components.dust.emission import energy_balance_split
 
         eta = 0.8
         L_agn = 2e9
@@ -117,7 +121,6 @@ class TestMbbWithCmbCorrection:
 
     def test_high_z_sed_differs_from_z0(self):
         """SED at z=5 differs from z=0 due to CMB heating."""
-        from tengri.components.dust.emission import modified_blackbody
 
         wave = jnp.logspace(5, 8, 200)
         sed_z0 = modified_blackbody(wave, 1e10, dust_T=20.0, redshift=0.0)
@@ -127,7 +130,6 @@ class TestMbbWithCmbCorrection:
 
     def test_high_z_peaks_at_shorter_wavelength(self):
         """CMB heating at z=5 shifts the MBB peak to shorter wavelengths."""
-        from tengri.components.dust.emission import modified_blackbody
 
         wave = jnp.logspace(5, 8, 500)
         sed_z0 = modified_blackbody(wave, 1e10, dust_T=20.0, redshift=0.0)
@@ -138,7 +140,6 @@ class TestMbbWithCmbCorrection:
 
     def test_finite_at_extreme_redshift(self):
         """No NaN/Inf at z=10."""
-        from tengri.components.dust.emission import modified_blackbody
 
         wave = jnp.logspace(4, 9, 200)
         sed = modified_blackbody(wave, 1e10, dust_T=30.0, redshift=10.0)
@@ -162,7 +163,6 @@ class TestComputeAbsorbedLuminosity:
 
     def test_full_absorption_gives_positive(self):
         """Zero transmission (T=0) → all energy absorbed → positive result."""
-        from tengri.components.dust.emission import compute_absorbed_luminosity
 
         wave = jnp.linspace(1e3, 1e7, 500)
         L_nu = jnp.ones_like(wave)
@@ -171,7 +171,6 @@ class TestComputeAbsorbedLuminosity:
 
     def test_partial_absorption_between_extremes(self):
         """Partial transmission produces result between zero and full-absorption."""
-        from tengri.components.dust.emission import compute_absorbed_luminosity
 
         wave = jnp.linspace(1e3, 1e7, 500)
         L_nu = jnp.ones_like(wave) * 1e10
@@ -219,7 +218,6 @@ class TestAGNContribution:
         return 1e10
 
     def test_agn_adds_luminosity(self, wavelengths, L_absorbed):
-        from tengri.components.dust.emission import energy_balance_split
 
         sed_no_agn = energy_balance_split(
             wavelengths,
@@ -239,7 +237,6 @@ class TestAGNContribution:
 
     def test_agn_only(self, wavelengths):
         """If L_absorbed_stellar=0, only AGN contributes."""
-        from tengri.components.dust.emission import energy_balance_split
 
         L_agn = 1e10
         sed = energy_balance_split(

@@ -8,6 +8,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+pytestmark = pytest.mark.bounds
 pytestmark = pytest.mark.conservation
 
 _MAPPINGS_H5 = (

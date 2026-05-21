@@ -10,6 +10,10 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.components.dust.emission import draine_li2007, modified_blackbody
+from tengri.components.radio.radio import radio_sfr_bell2003
+from tengri.components.stellar.sfh.chemical_evolution import closed_box_metallicity
+
 LSUN_ERG = 3.828e33  # erg/s
 
 pytestmark = pytest.mark.conservation
@@ -32,7 +36,6 @@ class TestDustEmission:
 
     def test_mbb_integrates_to_L_absorbed(self):
         """∫L_ν dν = L_abs (within 2% trapezoid tolerance)."""
-        from tengri.dust import modified_blackbody
 
         wl = jnp.logspace(np.log10(1e4), np.log10(1e7), 5000)
         c_aa_per_s = 2.9979e18
@@ -44,7 +47,6 @@ class TestDustEmission:
 
     def test_mbb_beta_index_controls_submm_slope(self):
         """Higher β makes submillimeter steeper: L_ν ∝ ν^(2+β)."""
-        from tengri.dust import modified_blackbody
 
         wl = jnp.array([5e5, 1e6])  # 50, 100 μm (submm side)
         L1 = np.array(modified_blackbody(wl, 1.0, dust_T=30.0, dust_beta_ir=1.0))
@@ -63,7 +65,6 @@ class TestDustEmission:
 
     def test_dl07_pah_features_present(self):
         """DL07 with q_PAH=2.5 must show raised emission near 7.7 μm vs continuum baseline."""
-        from tengri.dust import draine_li2007
 
         wl = jnp.array([5.0e4, 7.7e4, 11.3e4])  # 5, 7.7, 11.3 μm
         L = np.array(draine_li2007(wl, 1e44, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5))
@@ -99,7 +100,6 @@ class TestRadioContinuum:
 
     def test_bell2003_synchrotron_slope(self):
         """α=0.8 ⇒ L_ν(150 MHz) / L_ν(1.4 GHz) = (0.15/1.4)^(-0.8) ≈ 5.9."""
-        from tengri.components.radio.radio import radio_sfr_bell2003
 
         # 150 MHz → λ = c/ν = 2e9 cm = 2e17 Å; 1.4 GHz → 2.14e9 Å.
         # Note: lambda[Å] = 3e18 / ν[Hz]
@@ -111,7 +111,6 @@ class TestRadioContinuum:
 
     def test_bell2003_q_shift_lowers_radio(self):
         """Higher q_IR ⇒ less radio per L_IR (linear in 10^-q_IR)."""
-        from tengri.components.radio.radio import radio_sfr_bell2003
 
         L_low = float(np.array(radio_sfr_bell2003(self.WL_1P4GHZ, L_ir=1e44, q_ir=2.3))[0])
         L_hi = float(np.array(radio_sfr_bell2003(self.WL_1P4GHZ, L_ir=1e44, q_ir=2.9))[0])
@@ -176,7 +175,6 @@ class TestChemicalEvolution:
         assert np.all(log_z >= -4.0) and np.all(log_z <= 1.0)
 
     def test_outflow_lowers_metallicity(self):
-        from tengri.components.stellar.sfh import closed_box_metallicity
 
         t_yr = np.linspace(0, 13.8e9, 200)
         sfr = np.ones_like(t_yr)
@@ -185,7 +183,6 @@ class TestChemicalEvolution:
         assert z_leaky[0] < z_closed[0]
 
     def test_higher_yield_raises_metallicity(self):
-        from tengri.components.stellar.sfh import closed_box_metallicity
 
         t_yr = np.linspace(0, 13.8e9, 200)
         sfr = np.ones_like(t_yr)

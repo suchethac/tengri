@@ -3,10 +3,19 @@
 Verify model registration, dispatcher routing, and module-level aliases.
 """
 
+import jax.numpy as jnp
 import pytest
 
-pytestmark = pytest.mark.contract
+from tengri.components.dust import emission as em
+from tengri.components.dust.emission import (
+    DUST_EMISSION_MODELS as _DUST_EMISSION_MODELS,
+    preload_emission_model,
+    resolve_emission_model,
+)
 
+DUST_EMISSION_MODELS = _DUST_EMISSION_MODELS
+
+pytestmark = pytest.mark.contract
 
 # ── Registration ──────────────────────────────────────────────────
 
@@ -26,22 +35,18 @@ class TestRegistration:
         assert callable(fn)
 
     def test_modified_blackbody_in_registry(self):
-        from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
         assert "modified_blackbody" in DUST_EMISSION_MODELS
 
     def test_casey2012_in_registry(self):
-        from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
         assert "casey2012" in DUST_EMISSION_MODELS
 
     def test_in_registry(self):
-        from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
         assert "energy_balance_split" in DUST_EMISSION_MODELS
 
     def test_resolve_emission_model(self):
-        from tengri.components.dust.emission import resolve_emission_model
 
         fn = resolve_emission_model("energy_balance_split")
         assert callable(fn)
@@ -55,7 +60,6 @@ class TestRegistryUtilities:
 
     def test_resolve_returns_callable(self):
         """resolve_emission_model returns a callable for known models."""
-        from tengri.components.dust.emission import resolve_emission_model
 
         for name in ("modified_blackbody", "energy_balance_split", "casey2012"):
             fn = resolve_emission_model(name)
@@ -63,7 +67,6 @@ class TestRegistryUtilities:
 
     def test_resolve_unknown_raises_value_error(self):
         """resolve_emission_model raises ValueError for unknown model names."""
-        from tengri.components.dust.emission import resolve_emission_model
 
         with pytest.raises(ValueError, match="Unknown dust emission model"):
             resolve_emission_model("definitely_not_a_model_12345")
@@ -77,7 +80,6 @@ class TestRegistryUtilities:
 
     def test_preload_known_returns_callable(self):
         """preload_emission_model returns a callable for the MBB model (no data needed)."""
-        from tengri.components.dust.emission import preload_emission_model
 
         fn = preload_emission_model("modified_blackbody")
         assert callable(fn)
@@ -104,7 +106,6 @@ class TestRegistryUtilities:
 
     def test_all_lazy_models_in_registry(self):
         """All expected lazy-loaded models are present in DUST_EMISSION_MODELS."""
-        from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
         for name in ("draine_li2007", "dale2014", "draine_li2014", "astrodust", "bosa", "themis"):
             assert name in DUST_EMISSION_MODELS, f"'{name}' missing from registry"
@@ -134,7 +135,6 @@ class TestApplyDustEmission:
 
     def test_delegates_to_casey2012(self):
         """apply_dust_emission with 'casey2012' matches direct call."""
-        import jax.numpy as jnp
 
         from tengri.components.dust.emission import apply_dust_emission, casey2012
 
@@ -147,7 +147,6 @@ class TestApplyDustEmission:
 
     def test_unknown_name_raises(self):
         """apply_dust_emission raises ValueError for unknown model names."""
-        import jax.numpy as jnp
 
         from tengri.components.dust.emission import apply_dust_emission
 
@@ -167,37 +166,31 @@ class TestModuleLevelAliases:
 
     def test_draine_li2007_alias_callable(self):
         """draine_li2007 module-level function is callable."""
-        from tengri.components.dust import emission as em
 
         assert callable(em.draine_li2007)
 
     def test_dale2014_alias_callable(self):
         """dale2014 module-level function is callable."""
-        from tengri.components.dust import emission as em
 
         assert callable(em.dale2014)
 
     def test_astrodust_alias_callable(self):
         """astrodust module-level function is callable."""
-        from tengri.components.dust import emission as em
 
         assert callable(em.astrodust)
 
     def test_bosa_alias_callable(self):
         """bosa module-level function is callable."""
-        from tengri.components.dust import emission as em
 
         assert callable(em.bosa)
 
     def test_themis_alias_callable(self):
         """themis module-level function is callable."""
-        from tengri.components.dust import emission as em
 
         assert callable(em.themis)
 
     def test_draine_li2014_alias_callable(self):
         """draine_li2014 module-level function is callable."""
-        from tengri.components.dust import emission as em
 
         assert callable(em.draine_li2014)
 
@@ -209,7 +202,6 @@ class TestModifiedBlackbody:
     """Standalone tests for modified_blackbody."""
 
     def test_registered_in_models(self):
-        from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
         assert "modified_blackbody" in DUST_EMISSION_MODELS
 
@@ -221,6 +213,5 @@ class TestCasey2012:
     """Standalone tests for casey2012 (MBB + mid-IR power law)."""
 
     def test_registered_in_models(self):
-        from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
         assert "casey2012" in DUST_EMISSION_MODELS

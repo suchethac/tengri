@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
+
+from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
 pytestmark = pytest.mark.bounds
 
@@ -72,9 +76,6 @@ class TestSSPMetallicity:
         tengri stores ``ssp_lgmet`` in ABSOLUTE log10(Z), with LOG10_ZSUN = -1.848
         (MILES convention). So ssp_lgmet range should be ~[-4.1, -1.55].
         """
-        from pathlib import Path
-
-        from tengri import load_ssp_data
 
         ssp_path = Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
         if not ssp_path.exists():

@@ -9,6 +9,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.utils.grid_interp import preintegrate_grid
+
 jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.conservation
@@ -121,7 +123,6 @@ class TestTaylorMomentConservation:
         Conservation of moment definition: ∫ (λ - λ_eff) × T(λ) dλ ≈ 0
         by construction of effective wavelength.
         """
-        from tengri.forward.precompute.grid import preintegrate_grid
 
         # Flat template (constant SED)
         template = jnp.ones((2, 3, 100))

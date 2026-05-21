@@ -14,7 +14,17 @@ support including:
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
+
+from tengri.components.stellar.sps.dsps_wrapper import (
+    SSPData,
+    compute_alpha_fe_evolving,
+    effective_metallicity,
+    has_alpha_grid,
+    interpolate_met_alpha,
+    interpolate_met_alpha_evolving,
+)
 
 jax.config.update("jax_enable_x64", True)
 
@@ -88,7 +98,6 @@ def ssp_data_4d(alpha_ssp_grid):
 @pytest.fixture
 def ssp_data_3d():
     """SSPData with standard 3D grid (no alpha)."""
-    from tengri.components.stellar.sps.dsps_wrapper import SSPData
 
     n_met, n_age, n_wave = 3, 10, 20
     key = jax.random.PRNGKey(0)
@@ -114,13 +123,11 @@ class TestHasAlphaGrid:
 
     def test_3d_grid_not_detected(self, ssp_data_3d):
         """3D grid without ssp_alpha_fe must not be detected."""
-        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
 
         assert has_alpha_grid(ssp_data_3d) is False
 
     def test_none_alpha_not_detected(self, ssp_data_3d):
         """3D grid with ssp_alpha_fe=None must not be detected."""
-        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
 
         assert has_alpha_grid(ssp_data_3d) is False
 
@@ -154,7 +161,6 @@ class TestInterpolateMetAlpha:
 
         Test bounds: linear interpolation is exact for piecewise-linear spaces.
         """
-        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
         # Midpoint between lgmet[0]=-1.5 and lgmet[1]=-0.5 at alpha[1]=0.0
@@ -173,7 +179,6 @@ class TestInterpolateMetAlpha:
 
         Test bounds: the spectral response to [α/Fe] must be non-zero.
         """
-        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
         sed_solar = interpolate_met_alpha(
@@ -194,7 +199,6 @@ class TestInterpolateMetAlpha:
 
     def test_output_shape(self, alpha_ssp_grid):
         """Output must be (n_age, n_wave) regardless of input."""
-        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
         result = interpolate_met_alpha(
@@ -211,7 +215,6 @@ class TestInterpolateMetAlpha:
 
         Bounds test: numerical overflow/underflow in interpolation.
         """
-        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
         for lz in [-1.5, -1.0, -0.5, 0.0]:
@@ -230,7 +233,6 @@ class TestInterpolateMetAlpha:
 
         Bounds test: behavior outside the grid extent.
         """
-        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
         # Beyond low Z boundary
@@ -252,7 +254,6 @@ class TestInterpolateMetAlpha:
 
     def test_jit_compatible(self, alpha_ssp_grid):
         """Should work under jax.jit."""
-        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
         jit_fn = jax.jit(interpolate_met_alpha, static_argnames=[])
@@ -268,8 +269,6 @@ class TestInterpolateMetAlpha:
     def test_differentiable_wrt_log_z(self, alpha_ssp_grid):
         """Gradient w.r.t. log_z should be finite and match FD (gradient test)."""
         import numpy as np
-
-        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
 
@@ -292,9 +291,6 @@ class TestInterpolateMetAlpha:
 
     def test_differentiable_wrt_alpha_fe(self, alpha_ssp_grid):
         """Gradient w.r.t. [α/Fe] should be finite and match FD (gradient test)."""
-        import numpy as np
-
-        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
 
         g = alpha_ssp_grid
 
@@ -383,7 +379,6 @@ class TestInterpolateMetAlphaEvolving:
 
     def test_output_shape(self, alpha_ssp_grid):
         """Output shape must be (n_age, n_wave)."""
-        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha_evolving
 
         g = alpha_ssp_grid
         n_age = len(g["ssp_lg_age_gyr"])
@@ -399,7 +394,6 @@ class TestInterpolateMetAlphaEvolving:
 
     def test_jit_compatible(self, alpha_ssp_grid):
         """Should work under jax.jit."""
-        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha_evolving
 
         g = alpha_ssp_grid
         n_age = len(g["ssp_lg_age_gyr"])
@@ -439,7 +433,6 @@ class TestComputeAlphaFeEvolving:
 
         Bounds test: boundary value at t_lookback=t_universe.
         """
-        from tengri.components.stellar.sps.dsps_wrapper import compute_alpha_fe_evolving
 
         lg_ages = jnp.array([-2.0, -1.0, 0.0, 1.14])  # 10^1.14 ≈ 13.8 Gyr
         result = compute_alpha_fe_evolving(lg_ages, 0.4, 0.0, 13.7)
@@ -453,7 +446,6 @@ class TestComputeAlphaFeEvolving:
         Bounds test: physical ordering (α-enhancement only gets stronger
         as you go back in time, never decreases).
         """
-        from tengri.components.stellar.sps.dsps_wrapper import compute_alpha_fe_evolving
 
         lg_ages = jnp.linspace(-2.0, 1.1, 20)
         result = compute_alpha_fe_evolving(lg_ages, 0.4, 0.0, 13.7)
@@ -466,7 +458,6 @@ class TestComputeAlphaFeEvolving:
 
         Bounds test: degenerate case (no evolution).
         """
-        from tengri.components.stellar.sps.dsps_wrapper import compute_alpha_fe_evolving
 
         lg_ages = jnp.linspace(-2.0, 1.1, 20)
         result = compute_alpha_fe_evolving(lg_ages, 0.3, 0.3, 13.7)
@@ -475,9 +466,6 @@ class TestComputeAlphaFeEvolving:
 
     def test_differentiable(self):
         """Should be differentiable w.r.t. alpha_fe_old and match FD (gradient test)."""
-        import numpy as np
-
-        from tengri.components.stellar.sps.dsps_wrapper import compute_alpha_fe_evolving
 
         lg_ages = jnp.linspace(-2.0, 1.1, 20)
 
@@ -512,7 +500,6 @@ class TestEffectiveMetallicity:
 
         Bounds test: physical direction (more alpha → higher effective Z).
         """
-        from tengri.components.stellar.sps.dsps_wrapper import effective_metallicity
 
         z_eff = effective_metallicity(-0.5, 0.4)
         assert float(z_eff) > -0.5
@@ -522,7 +509,6 @@ class TestEffectiveMetallicity:
 
         Bounds test: standard approximation formula magnitude.
         """
-        from tengri.components.stellar.sps.dsps_wrapper import effective_metallicity
 
         z_eff = effective_metallicity(0.0, 1.0)
         assert float(z_eff) == pytest.approx(0.75, abs=0.01)

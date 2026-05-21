@@ -20,6 +20,7 @@ from tengri.components.stellar.sfh.nonparametric import (
 
 pytestmark = pytest.mark.bounds
 
+
 AGE_YR = jnp.linspace(1e7, 13.5e9, 200)
 
 

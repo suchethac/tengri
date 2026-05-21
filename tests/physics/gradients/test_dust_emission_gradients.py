@@ -8,7 +8,16 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri.components.dust.emission import (
+    casey2012,
+    cmb_corrected_temperature,
+    energy_balance_split,
+    modified_blackbody,
+    planck_bnu,
+)
+
 jax.config.update("jax_enable_x64", True)
+
 
 pytestmark = pytest.mark.gradient
 
@@ -48,7 +57,6 @@ class TestJITCompatibility:
         assert jnp.all(jnp.isfinite(sed))
 
     def test_vmap(self, wavelengths):
-        from tengri.components.dust.emission import energy_balance_split
 
         L_values = jnp.array([1e9, 5e9, 1e10])
         vmapped = jax.vmap(energy_balance_split, in_axes=(None, 0))
@@ -63,7 +71,6 @@ class TestGradientCompatibility:
     """SEDModel is differentiable w.r.t. all continuous parameters."""
 
     def test_grad_L_absorbed(self, wavelengths):
-        from tengri.components.dust.emission import energy_balance_split
 
         def loss(L_abs):
             sed = energy_balance_split(wavelengths, L_abs)
@@ -81,7 +88,6 @@ class TestGradientCompatibility:
         assert g_jax > 0.0
 
     def test_grad_f_cold(self, wavelengths, L_absorbed):
-        from tengri.components.dust.emission import energy_balance_split
 
         def loss(f_cold):
             sed = energy_balance_split(wavelengths, L_absorbed, f_cold=f_cold)
@@ -95,7 +101,6 @@ class TestGradientCompatibility:
         )
 
     def test_grad_temperatures(self, wavelengths, L_absorbed):
-        from tengri.components.dust.emission import energy_balance_split
 
         def loss_warm(T_warm):
             sed = energy_balance_split(
@@ -134,7 +139,6 @@ class TestGradientCompatibility:
         )
 
     def test_grad_eta(self, wavelengths, L_absorbed):
-        from tengri.components.dust.emission import energy_balance_split
 
         def loss(eta):
             sed = energy_balance_split(wavelengths, L_absorbed, eta_balance=eta)
@@ -159,7 +163,6 @@ class TestPlanckBnuGradient:
 
     def test_jit_compatible(self, wave_ir):
         """planck_bnu is JIT-compilable."""
-        import jax
 
         from tengri.components.dust.emission import planck_bnu
 
@@ -169,9 +172,6 @@ class TestPlanckBnuGradient:
 
     def test_gradient_wrt_temperature(self, wave_ir):
         """FD check: ∂(∑B_nu)/∂T > 0 (hotter → more luminous)."""
-        import jax
-
-        from tengri.components.dust.emission import planck_bnu
 
         def loss(T):
             return jnp.sum(planck_bnu(wave_ir, T))
@@ -191,7 +191,6 @@ class TestModifiedBlackbodyGradient:
         return jnp.logspace(5, 9, 400)
 
     def test_jit_compatible(self, wave_fir):
-        import jax
 
         from tengri.components.dust.emission import modified_blackbody
 
@@ -200,9 +199,6 @@ class TestModifiedBlackbodyGradient:
         assert jnp.all(jnp.isfinite(sed))
 
     def test_gradient_wrt_L_absorbed(self, wave_fir):
-        import jax
-
-        from tengri.components.dust.emission import modified_blackbody
 
         def loss(L_abs):
             return jnp.sum(modified_blackbody(wave_fir, L_abs))
@@ -213,9 +209,6 @@ class TestModifiedBlackbodyGradient:
         assert g_jax > 0.0
 
     def test_gradient_wrt_temperature(self, wave_fir):
-        import jax
-
-        from tengri.components.dust.emission import modified_blackbody
 
         def loss(T):
             return jnp.sum(modified_blackbody(wave_fir, L_absorbed=1e10, dust_T=T))
@@ -234,7 +227,6 @@ class TestCasey2012Gradient:
         return jnp.logspace(4, 9, 500)
 
     def test_jit_compatible(self, wave_ir):
-        import jax
 
         from tengri.components.dust.emission import casey2012
 
@@ -243,9 +235,6 @@ class TestCasey2012Gradient:
         assert jnp.all(jnp.isfinite(sed))
 
     def test_gradient_wrt_L_absorbed(self, wave_ir):
-        import jax
-
-        from tengri.components.dust.emission import casey2012
 
         def loss(L_abs):
             return jnp.sum(casey2012(wave_ir, L_abs))
@@ -256,9 +245,6 @@ class TestCasey2012Gradient:
         assert g_jax > 0.0
 
     def test_gradient_wrt_temperature(self, wave_ir):
-        import jax
-
-        from tengri.components.dust.emission import casey2012
 
         def loss(T):
             return jnp.sum(casey2012(wave_ir, L_absorbed=1e10, dust_T=T))
@@ -288,7 +274,6 @@ class TestCmbCorrectedTemperatureGradient:
 
         ∂T_eff / ∂z > 0: higher redshift → higher CMB temperature → higher T_eff.
         """
-        from tengri.components.dust.emission import cmb_corrected_temperature
 
         grad_fn = jax.grad(lambda z: cmb_corrected_temperature(25.0, redshift=z))
         g = float(grad_fn(2.0))
