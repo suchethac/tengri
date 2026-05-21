@@ -287,9 +287,9 @@ class NebularSEDComponent:
         Promotes the previously-fatal KeyError at JIT trace time
         (``state.derived["lnu_age"]`` → ``KeyError`` if Stellar is
         absent) to a construction-time
-        :class:`tengri.protocols.component.PipelineContractError` with a
+        :class:`tengri.protocols.component.ComponentIOError` with a
         "Did you mean: ..." hint. Phase A of issue #21; see
-        ADR-0004 for the contract design.
+        ADR-0004 for the input/output design.
         """
         backend = self.config.backend
         if backend == "baked_in":
