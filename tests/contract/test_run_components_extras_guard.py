@@ -8,7 +8,7 @@ hand-rolled component lists that bypass the snapshot test.
 
 The check fires only when ``state.derived._extras`` is non-empty at
 the end of the forward pass. After ADR-0007 Phase 4 made
-``DerivedBundle.from_dict`` strict, the only way ``_extras`` becomes
+``DerivedState.from_dict`` strict, the only way ``_extras`` becomes
 non-empty is via explicit ``allow_extras=True`` or direct
 ``_extras={...}`` construction — both deliberate opt-ins.
 """
@@ -26,9 +26,9 @@ import jax.numpy as jnp
 import pytest
 
 from tengri.forward.orchestrator import run_components
-from tengri.protocols import DerivedBundle, ForwardState
+from tengri.protocols import DerivedState, ForwardState
 from tengri.protocols.component import (
-    PipelineContractError,
+    ComponentIOError,
     SEDComponentConfig,
 )
 
@@ -70,7 +70,7 @@ class _LeakyComponent:
         # Force a dict round-trip through the *opt-in* spillover path.
         # In production code this is not how components should write —
         # but we use it here to manufacture the failure mode.
-        leaked = DerivedBundle.from_dict(
+        leaked = DerivedState.from_dict(
             {"future_unknown_key": jnp.asarray(1.0)},
             allow_extras=True,
         )
@@ -90,17 +90,17 @@ class TestHappyPath:
 
 class TestLeakDetected:
     def test_leaky_component_raises(self):
-        with pytest.raises(PipelineContractError, match="future_unknown_key"):
+        with pytest.raises(ComponentIOError, match="future_unknown_key"):
             run_components([_LeakyComponent()], _state(), {})
 
     def test_error_message_names_phase_3(self):
         """The error should guide the developer to the migration target."""
         try:
             run_components([_LeakyComponent()], _state(), {})
-        except PipelineContractError as e:
+        except ComponentIOError as e:
             assert "ADR-0007" in str(e) or "with_" in str(e)
         else:
-            pytest.fail("expected PipelineContractError")
+            pytest.fail("expected ComponentIOError")
 
 
 class TestEnvVarBypass:
@@ -116,17 +116,17 @@ class TestEnvVarBypass:
         """Only the literal ``"1"`` bypasses; ``"true"``, ``"yes"``, etc. do not."""
         for val in ("0", "true", "yes", "", "TRUE"):
             monkeypatch.setenv("TENGRI_ALLOW_DERIVED_EXTRAS", val)
-            with pytest.raises(PipelineContractError):
+            with pytest.raises(ComponentIOError):
                 run_components([_LeakyComponent()], _state(), {})
 
 
 class TestBackwardCompatibility:
     def test_state_without_derivedbundle_passes_silently(self):
-        """If a state's ``derived`` somehow isn't a DerivedBundle (e.g.
+        """If a state's ``derived`` somehow isn't a DerivedState (e.g.
         a hand-rolled test with a plain dict pre-Phase-2), the guard
         does not crash — ``getattr(..., '_extras', None)`` returns
         ``None``, which is falsy. Real production code always has a
-        DerivedBundle thanks to ``__post_init__`` coercion."""
+        DerivedState thanks to ``__post_init__`` coercion."""
         # Construct via __new__ to bypass __post_init__ coercion.
         # This is an unusual path; just verify the guard is defensive.
         from dataclasses import replace as _replace
@@ -137,7 +137,7 @@ class TestBackwardCompatibility:
         derived_dict: dict[str, Any] = {}
         state_with_dict = _replace(state)
         object.__setattr__(state_with_dict, "derived", derived_dict)
-        # Sanity: derived is now a dict, not a DerivedBundle.
+        # Sanity: derived is now a dict, not a DerivedState.
         assert isinstance(state_with_dict.derived, dict)
         # The guard's ``getattr(state.derived, "_extras", None)`` returns
         # None for a plain dict → falsy → no raise.

@@ -43,11 +43,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "Exponential",
         "FlatSlab",
         "Sersic",
-        # ── SEDComponent extension surface (Phase II protocols) ─────
-        "DerivedBundle",
-        "DerivedKey",
-        "ForwardState",
-        "PipelineContractError",
+        # ── SEDComponent extension surface — demoted; see DEMOTED_BUT_IMPORTABLE
         # ── Priors (parameters/) ─────────────────────────────────────
         "Fixed",
         "Gaussian",
@@ -63,17 +59,12 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "TengriError",
         "TengriIOError",
         # ── Cache helpers ───────────────────────────────────────────
-        "cache_size_bytes",
+        # Only the single entry point is advertised; the rest live in
+        # tengri.utils.jax_cache / tengri.inference.jit_engine.
         "clear_cache",
-        "enable_persistent_cache",
-        "is_cache_enabled",
         # ── Top-level convenience verbs ─────────────────────────────
         "cite_components",
-        "clear_shared_caches",
         "doctor",
-        "gc",
-        "lean",
-        "persistent",
         "register_component",
         "search",
         # ── SSP data setup ──────────────────────────────────────────
@@ -160,12 +151,31 @@ DEMOTED_BUT_IMPORTABLE: frozenset[str] = frozenset(
         # `tengri.sps.load_ssp_data` instead
         "load_filter_set",
         "load_ssp_data",
+        # Cache machinery — use `tengri.utils.jax_cache.*` /
+        # `tengri.inference.jit_engine.*` instead
+        "cache_size_bytes",
+        "clear_shared_caches",
+        "enable_persistent_cache",
+        "gc",
+        "is_cache_enabled",
+        "lean",
+        "persistent",
+        # SEDComponent extension surface — demoted to `tengri.protocols.*`
+        # Both renamed names and back-compat aliases resolve here.
+        "ComponentIOError",
+        "DerivedKey",
+        "DerivedState",
+        "ForwardState",
+        # Back-compat aliases for renamed classes — emit DeprecationWarning
+        "DerivedBundle",
+        "PipelineContractError",
+        "Provenance",
         # ── Phase 2 (2026-05) — relocated to sub-namespaces ─────────
         # Resolve via `__getattr__` deprecation shim, emit DeprecationWarning.
         # Result classes → tengri.results
+        "FitRecord",
         "FitResult",
         "MockData",
-        "Provenance",
         "Posterior",
         "CatalogPosterior",
         "PopulationPosterior",
