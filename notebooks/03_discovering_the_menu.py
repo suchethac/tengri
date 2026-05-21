@@ -127,10 +127,9 @@ fig.savefig(FIG_DIR / "03_sfh_variants.png", dpi=300, bbox_inches="tight")
 # ## Dust laws and IR templates
 #
 # Attenuation laws — Calzetti, Cardelli (MW/LMC/SMC), Prevot SMC, Li 2008,
-# Witt & Gordon 2000, Conroy/Charlot–Fall variants — live under
-# `tengri.components.dust.attenuation_models`. IR re-emission templates
-# (Dale 2014, Draine–Li, THEMIS, Astrodust, BOSA, Casey 2012, modified
-# blackbody) live under `emission_models`. Both are flat namespaces.
+# Witt & Gordon 2000, Conroy/Charlot–Fall variants — and IR re-emission
+# templates (Dale 2014, Draine–Li, THEMIS, Astrodust, BOSA, Casey 2012,
+# modified blackbody) all live under `tengri.components.dust`.
 
 # %%
 tengri.list_dust_laws()
