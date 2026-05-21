@@ -12,13 +12,13 @@ from tengri.components import agn, dust, igm, nebular, radio, stellar, xray
 from tengri.components.sed_model_component import SEDModelComponent
 
 __all__ = [
+    "SEDModelComponent",
     "agn",
     "dust",
     "igm",
     "nebular",
     "radio",
     "register_component",
-    "SEDModelComponent",
     "stellar",
     "xray",
 ]

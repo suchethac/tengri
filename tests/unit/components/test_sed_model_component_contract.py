@@ -1,7 +1,13 @@
+# ruff: noqa: RUF012
 """Contract tests for SEDModelComponent base class.
 
 Tests auto-discovery of priors, registry collision detection, Protocol
 conformance, input/output contract building, and end-to-end apply flow.
+
+`inputs` / `outputs` are part of the astronomer-facing class-level contract
+on `SEDModelComponent` subclasses: the base parses them once in
+`__init_subclass__` and deletes them. The mutable-default rule (RUF012)
+doesn't apply at that level.
 """
 
 from __future__ import annotations
@@ -9,9 +15,12 @@ from __future__ import annotations
 import jax.numpy as jnp
 import pytest
 
-from tengri.components.sed_model_component import SEDModelComponent, _REGISTRY
-from tengri.parameters.priors import Distribution, Fixed, Gaussian, Uniform
-from tengri.protocols.component import DerivedKey, ForwardState, ParamDeclaration, SEDComponentConfig
+from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent
+from tengri.parameters.priors import Fixed, Gaussian, Uniform
+from tengri.protocols.component import (
+    ForwardState,
+    SEDComponentConfig,
+)
 
 
 class TestPriorDiscovery:
@@ -258,6 +267,7 @@ class TestPrecompute:
 
         # Should get back a state object
         from tengri.protocols.component import SEDComponentState
+
         assert isinstance(state, SEDComponentState)
         assert state.name == "test_no_load"
 
