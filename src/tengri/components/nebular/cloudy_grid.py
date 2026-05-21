@@ -101,7 +101,7 @@ References
 
 import os
 import warnings
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import h5py
 import jax
@@ -678,6 +678,7 @@ class CloudyGridBackend:
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
+        template_data: Any | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Compute emission line luminosities (vectorized over age bins).
@@ -721,7 +722,7 @@ class CloudyGridBackend:
         if neb_logZ_gas is None:
             neb_logZ_gas = log_z
 
-        grid = self.grid
+        grid = template_data if template_data is not None else self.grid
 
         # Only young SSP age bins contribute (age < ~20 Myr)
         # Slice to young bins only — 93 → ~10 bins, ~10x less work
@@ -769,6 +770,7 @@ class CloudyGridBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
+        template_data: Any | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Compute nebular continuum SED (vectorized over age bins).
@@ -813,7 +815,7 @@ class CloudyGridBackend:
         if neb_logZ_gas is None:
             neb_logZ_gas = log_z
 
-        grid = self.grid
+        grid = template_data if template_data is not None else self.grid
 
         # Only young age bins
         young_idx = self._young_idx
@@ -854,6 +856,7 @@ class CloudyGridBackend:
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
         line_sigma_aa: float = 0.0,
+        template_data: Any | None = None,
         **_kwargs,
     ) -> jnp.ndarray:
         """Compute total nebular emission on the SSP wavelength grid.
@@ -910,6 +913,7 @@ class CloudyGridBackend:
             neb_logZ_gas=neb_logZ_gas,
             neb_fesc=neb_fesc,
             neb_fesc_lya=neb_fesc_lya,
+            template_data=template_data,
         )
 
         # Get continuum
@@ -920,6 +924,7 @@ class CloudyGridBackend:
             neb_logU=neb_logU,
             neb_logZ_gas=neb_logZ_gas,
             neb_fesc=neb_fesc,
+            template_data=template_data,
         )
 
         # Interpolate continuum onto SSP wavelength grid

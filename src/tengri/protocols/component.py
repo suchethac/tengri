@@ -58,7 +58,7 @@ class PipelineContractError(ValueError):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Contract decisions resolved by the Phase II-1 first-adapter pass
+# Contract decisions resolved by the first-adapter pass
 # (RadioSEDComponent + IGMSEDComponent, 2026-05).
 # ─────────────────────────────────────────────────────────────────────
 
@@ -212,9 +212,9 @@ class ForwardState:
 
     The carrier object for the forward model: holds the SED-in-progress
     plus a typed bag of derived quantities that downstream components
-    read from upstream components. Renamed from ``ForwardState`` in
-    Phase II-3.2 (2026-05-18) for astronomer-friendly user-facing names;
-    ``ForwardState`` remains as a soft alias for one minor version.
+    read from upstream components. Renamed from ``PipelineState``
+    (2026-05-18) for astronomer-friendly user-facing names;
+    ``PipelineState`` remains as a soft alias for one minor version.
 
     Each component reads what it needs and returns a new ``ForwardState``
     (immutable). Field semantics match :mod:`tengri.forward.prediction`:
@@ -352,7 +352,7 @@ del _tree_util
 
 
 # Soft alias for backwards compatibility. ``ForwardState`` is the canonical
-# name as of Phase II-3.2 (2026-05-18); ``PipelineState`` will be removed in
+# name as of 2026-05-18; ``PipelineState`` will be removed in
 # tengri v1.0. Aliasing the class object (rather than wrapping it) preserves
 # isinstance checks and type-annotation equivalence in downstream code.
 PipelineState = ForwardState
@@ -471,8 +471,8 @@ class SEDComponent(Protocol):
     # the canonical optional-read pattern, and ADR-0009 for the full
     # rationale.
     #
-    # Renamed from ``publishes`` / ``requires`` / ``requires_optional`` in
-    # Phase II-3.2 (2026-05-18). The old method names are still accepted by
+    # Renamed from ``publishes`` / ``requires`` / ``requires_optional``
+    # (2026-05-18). The old method names are still accepted by
     # the orchestrator as a backwards-compatible fallback for one minor
     # version; they emit a ``DeprecationWarning`` at validate_pipeline time.
 
@@ -508,6 +508,8 @@ class SEDComponent(Protocol):
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         """Pure JAX step.
 
@@ -526,6 +528,19 @@ class SEDComponent(Protocol):
             Free parameters whose name starts with
             :attr:`parameter_prefix`. The orchestrator does the
             slicing.
+        ssp_data : Any | None, optional
+            SSP stellar population synthesis grid. Passed by the
+            orchestrator for components that need it (typically stellar).
+            Components that do not use it should ignore this argument.
+            When provided, should override any SSP data held in ``self``
+            for JIT purposes (threading as a runtime parameter instead of
+            closure-capturing).
+        template_data : Any | None, optional
+            Nebular backend grids and weights (Cue, CloudyGrid, etc.).
+            Passed by the orchestrator for components that need it
+            (typically nebular). Components that do not use it should
+            ignore this argument. When provided, should override any
+            template data held in ``self`` for JIT purposes.
 
         Returns
         -------

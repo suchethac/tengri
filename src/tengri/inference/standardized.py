@@ -247,12 +247,12 @@ class StandardizedForwardModel:
         params = self.xi_to_params(xi)
 
         if data_type == "photometry":
-            return self.model.predict_photometry(params, mode="_traceable")
+            return self.model.predict_photometry(params, mode="traced")
         elif data_type == "spectroscopy":
-            return self.model.predict_spectrum(params, wave_obs, mode="_traceable")
+            return self.model.predict_spectrum(params, wave_obs, mode="traced")
         elif data_type == "joint":
-            phot = self.model.predict_photometry(params, mode="_traceable")
-            spec = self.model.predict_spectrum(params, wave_obs, mode="_traceable")
+            phot = self.model.predict_photometry(params, mode="traced")
+            spec = self.model.predict_spectrum(params, wave_obs, mode="traced")
             return jnp.concatenate([phot, spec])
         else:
             raise ValueError(f"Unknown data_type: {data_type}")

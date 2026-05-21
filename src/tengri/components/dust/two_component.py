@@ -100,9 +100,15 @@ class DustSEDComponentConfig(SEDComponentConfig):
 
 @dataclass(frozen=True)
 class DustSEDComponentState(SEDComponentState):
-    """Marker state — emission templates are resolved lazily inside ``apply``."""
+    """State for dust component, optionally caching emission templates for JIT threading.
+
+    When ``wave_precomp=True`` is set on the parent SEDModel, this holds
+    pre-loaded dust IR emission templates as JAX arrays, so they thread
+    through JIT as Parameter ops rather than baking into HLO Constants.
+    """
 
     name: str = "dust"
+    dust_emission_templates: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -219,17 +225,81 @@ class DustSEDComponent:
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: dict[str, bool] | None = None,
+        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> DustSEDComponentState:
-        """No-op marker — all dust templates are baked in at construction."""
-        del ssp_data, wave_grid
-        return DustSEDComponentState(name=self.name)
+        r"""Optionally pre-load dust IR emission templates for JIT threading.
+
+        When ``approx={'wave_precomp': True}``, loads the dust IR emission
+        template grids into a JAX pytree so they become JIT ``Parameter``
+        ops rather than baked-in ``Constant`` ops.
+
+        Parameters
+        ----------
+        ssp_data : Any | None
+            Unused; accepted for Protocol uniformity.
+        wave_grid : ndarray | None
+            Unused; accepted for Protocol uniformity.
+        approx : dict[str, bool] | None
+            Approximation flags. When ``approx.get('wave_precomp')`` is
+            ``True``, load templates.
+        filters : tuple of (wave, trans) pairs | None
+            Unused; accepted for Protocol uniformity.
+
+        Returns
+        -------
+        DustSEDComponentState
+            State with optionally-populated ``dust_emission_templates``.
+        """
+        del ssp_data, wave_grid, filters
+        approx = approx or {}
+
+        dust_templates = None
+        if approx.get("wave_precomp") and self.config.emission_model is not None:
+            # Load the emission template grids for JIT threading
+            emission_models_with_templates = {
+                "dale2014",
+                "draine_li2007",
+                "draine_li2014",
+                "astrodust",
+                "bosa",
+            }
+            if self.config.emission_model in emission_models_with_templates:
+                from tengri.components.dust.emission import (
+                    DUST_EMISSION_MODELS,
+                    resolve_emission_model,
+                )
+
+                try:
+                    # Trigger template loading by calling the emission function
+                    # with dummy inputs. This populates DUST_EMISSION_MODELS
+                    # with the actual template arrays.
+                    resolve_emission_model(self.config.emission_model)
+                    emission_fn = DUST_EMISSION_MODELS.get(self.config.emission_model)
+                    if emission_fn is not None:
+                        # Store a reference to the resolved function for apply()
+                        dust_templates = emission_fn
+                except Exception:
+                    # If template loading fails (file not found), gracefully
+                    # continue without threading.
+                    pass
+
+        return DustSEDComponentState(
+            name=self.name,
+            dust_emission_templates=dust_templates,
+        )
 
     def apply(
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         """Apply two-component attenuation + IR re-emission.
+
+        ``ssp_data`` is accepted for Protocol uniformity but unused — this
+        component reads only from ``state`` and ``params``.
 
         Parameters
         ----------

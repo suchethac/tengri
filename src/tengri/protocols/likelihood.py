@@ -5,9 +5,9 @@ Decouples inference (:mod:`tengri.inference`) from the forward model
 that a likelihood produces a scalar log-probability given (data,
 prediction); it doesn't need to import any physics module.
 
-This is part of the Part II-1 scaffold. Nothing in `tengri` consumes
-this protocol yet — current inference reaches into ``Fitter``-internal
-helpers. Phase II-5 will rewire them to a Likelihood implementation.
+Nothing in `tengri` consumes this protocol yet — current inference
+reaches into ``Fitter``-internal helpers. A future pass will rewire
+them to a Likelihood implementation.
 """
 
 from __future__ import annotations

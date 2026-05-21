@@ -168,6 +168,13 @@ testpaths = ["tests"]
 addopts = "-v --tb=short -m 'not crossval'"
 markers = [
     "crossval: cross-validation tests against community SED codes (bagpipes, etc.)",
+    "conservation: energy/mass/photon balance across a transformation",
+    "bounds: non-negativity, monotonicity, unit-interval, credible-interval ordering",
+    "limit: zero-input recovers the analytical answer (tau=0 -> intrinsic, etc.)",
+    "regression_paper: numerical match to a published equation/table (cite in docstring)",
+    "regression_bug: frozen output for a previously-fixed bug (cite ADR/commit)",
+    "gradient: jax.grad sanity + finite-difference checks",
+    "contract: public-API surface, deprecation alias, registry round-trip",
 ]
 
 [tool.jupytext]

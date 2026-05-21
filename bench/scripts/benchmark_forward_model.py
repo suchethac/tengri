@@ -1,10 +1,18 @@
 #!/usr/bin/env python
-"""Comprehensive forward model benchmark: all modes × all configs × SFH types.
+"""Forward model benchmark: exact wave-grid vs ``approx=WavePrecomp()`` LUT.
 
-Measures per-call timing and approximation error for exact, compositional,
-and hybrid prediction modes across all implemented model components. Tests
-parametric (DPL, D=6), non-parametric (dense_basis, D=8), and stochastic
-(field, D~137) SFH types.
+After Phase 6 (PR #135) the kernel adapter family was deleted; the
+former "compositional/hybrid/exact" benchmark axis collapsed. The two
+remaining forward paths are:
+
+- ``SEDModel(...)`` (no ``approx``) — exact wave-grid integration via
+  ``observation.predict``.
+- ``SEDModel(..., approx=WavePrecomp())`` — precomputed SSP×filter LUT
+  via ``observation.predict_via_precomp``.
+
+Both go through ``predict_observables_jit``; this benchmark times them
+across parametric (DPL, D=6), non-parametric (dense_basis, D=8), and
+stochastic (field, D~137) SFH types.
 
 Usage:
     source .venv/bin/activate
@@ -52,22 +60,34 @@ def max_rel_error(val, ref):
 
 
 def bench_config(label, model, params):
-    """Benchmark one model config across exact/compositional/hybrid."""
-    ref = model.predict_photometry(params, mode="exact")
+    """Benchmark one model config — single-path after Phase 6.
 
-    results = {}
-    for mode in ["exact", "compositional", "hybrid"]:
-        try:
+    Phase 6 (PR #135): the kernel adapter family was deleted. The former
+    ``mode="compositional"|"hybrid"|"exact"`` axis collapsed onto a single
+    ``predict_observables_jit`` path. ``mode=`` is still accepted as a
+    deprecated no-op for backward compat, so this benchmark runs but
+    times all three "modes" against an identical path. Rewrite to compare
+    ``approx=None`` vs ``approx=WavePrecomp()`` (two models) is a TODO.
+    """
+    import warnings as _w
 
-            def fn(m=mode):
-                return model.predict_photometry(params, mode=m)
+    with _w.catch_warnings():
+        _w.simplefilter("ignore", DeprecationWarning)
+        ref = model.predict_photometry(params, mode="exact")
 
-            us = bench_one(fn)
-            val = fn()
-            err = max_rel_error(val, ref)
-            results[mode] = (us, err)
-        except Exception:
-            results[mode] = (None, None)
+        results = {}
+        for mode in ["exact", "compositional", "hybrid"]:
+            try:
+
+                def fn(m=mode):
+                    return model.predict_photometry(params, mode=m)
+
+                us = bench_one(fn)
+                val = fn()
+                err = max_rel_error(val, ref)
+                results[mode] = (us, err)
+            except Exception:
+                results[mode] = (None, None)
 
     ex_us = results["exact"][0] or 1.0
     comp_us, comp_err = results["compositional"]

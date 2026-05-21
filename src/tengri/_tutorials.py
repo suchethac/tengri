@@ -206,7 +206,7 @@ _CUSTOM_LIKELIHOOD = _Tutorial(
         fitter = tengri.Fitter(model, data=fluxes, noise=student_t)
 
         # For genuinely non-standard likelihoods, implement the Likelihood
-        # Protocol from tengri.protocols (Phase II-1 scaffold).  Minimum surface:
+        # Protocol from tengri.protocols.  Minimum surface:
         #
         #     class MyLikelihood:
         #         def log_prob(self, params, predicted, data) -> float: ...

@@ -173,14 +173,36 @@ from tengri.config.exceptions import (
     TengriIOError,
 )
 from tengri.facade import Galaxy, doctor
-from tengri.forward._kernels import (
-    COMPOSITIONAL_ONLY as COMPOSITIONAL_ONLY_KERNEL_STRATEGY,
-    DEFAULT as DEFAULT_KERNEL_STRATEGY,
-    EXACT_ONLY as EXACT_ONLY_KERNEL_STRATEGY,
-    LOW_MEMORY as LOW_MEMORY_KERNEL_STRATEGY,
-    KernelStrategy,
-    NoCompatibleKernelError,
-)
+
+
+class _KernelsRemoved:
+    """Stand-in raised on access of removed ``KernelStrategy`` / ``NoCompatibleKernelError``.
+
+    The kernel-adapter family (``tengri.forward._kernels``) was removed in
+    Phase 6. Importing the old names from ``tengri`` returns this stand-in;
+    any attempt to call, instantiate, or subscript it raises ImportError
+    with a migration message.
+    """
+
+    def __init__(self, name: str) -> None:
+        self._name = name
+
+    def _raise(self, *_args, **_kwargs):
+        raise ImportError(
+            f"{self._name} was removed in Phase 6 (kernel adapter deletion). "
+            "The structural-cache opt-in for fast photometry is now "
+            "``approx=WavePrecomp(...)`` at build time; the JIT-safe "
+            "forward path is ``model.predict_observables_jit(params)``. "
+            f"{self._name} has no replacement — drop it."
+        )
+
+    __call__ = _raise
+    __getitem__ = _raise
+    __getattr__ = _raise
+
+
+KernelStrategy = _KernelsRemoved("KernelStrategy")
+NoCompatibleKernelError = _KernelsRemoved("NoCompatibleKernelError")
 from tengri.forward.convenience import catalog_summary, fit_batch
 from tengri.forward.prediction import (
     DerivedQuantities,
@@ -190,7 +212,7 @@ from tengri.forward.prediction import (
     SFHQuantities,
 )
 from tengri.forward.result import SEDResult
-from tengri.forward.sed_model import PriorPredictive, SEDModel
+from tengri.forward.sed_model import PriorPredictive, SEDModel, WavePrecomp
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
 from tengri.observation.filters import load_filter_set
 from tengri.observation.noise import (
@@ -220,8 +242,8 @@ from tengri.utils import jit_logging
 agn = _components.agn
 dust = _components.dust
 nebular = _components.nebular
-# sfh/sps were folded into stellar in Phase II-2.1; the top-level
-# convenience aliases continue to resolve to the canonical location.
+# sfh/sps were folded into stellar; the top-level convenience aliases
+# continue to resolve to the canonical location.
 sfh = _components.stellar.sfh
 sps = _components.stellar.sps
 stellar = _components.stellar
@@ -243,10 +265,9 @@ sys.modules["tengri.xray"] = xray
 # Observation layer shortcut (already exists in imports above)
 # observation module is imported separately below
 
-# Filter discovery helpers
-from tengri import filters as _filters_module
+# Filter discovery helpers (canonical path: tengri.observation.filters)
+from tengri.observation import filters
 
-filters = _filters_module
 sys.modules["tengri.filters"] = filters
 
 # I/O layer
@@ -338,6 +359,7 @@ __all__ = [
     "TengriError",
     "TengriIOError",
     "Uniform",
+    "WavePrecomp",
     "agn",
     "builders",
     "cache_size_bytes",
@@ -407,6 +429,22 @@ __all__ = [
 # (``tengri.inference.Fitter``, ``tengri.results.Posterior``, …) remain
 # valid; this is just an additional re-export, not a relocation.
 # ──────────────────────────────────────────────────────────────────
+# Plotting utilities
+# Import observation module for namespace alias (already in imports above, adding as alias)
+from tengri import observation
+from tengri.analysis.plotting import (
+    COLORS,
+    SDSS_WAVE_EFF,
+    SPECTRAL_FEATURES,
+    diagnostics_table,
+    plot_corner_comparison,
+    plot_sed_fit,
+    plot_sfh,
+    plot_sfh_comparison,
+    plot_spectrum_fit,
+    safe_corner,
+    setup_style,
+)
 from tengri.config.settings import (
     AGNConfig,
     DustConfig,
@@ -433,60 +471,6 @@ from tengri.results import (
     Provenance,
     generate_mock,
     posteriors_to_dataframe,
-)
-
-# Internal-only relocation shim — names that genuinely moved and still
-# warn when accessed via the old path. The user-facing API above is
-# *not* in this dict, so accessing those is silent and supported.
-_RELOCATED: dict[str, tuple[str, str]] = {
-    "LineFluxData": ("tengri.observation", "LineFluxData"),
-    "SpectralIndexDef": ("tengri.observation", "SpectralIndexDef"),
-    "SpectralIndexData": ("tengri.observation", "SpectralIndexData"),
-}
-
-
-def __getattr__(name: str):
-    """Resolve relocated symbols with a DeprecationWarning (PEP 562)."""
-    if name in _RELOCATED:
-        import importlib
-
-        from tengri._deprecated import deprecated_attribute
-
-        module_path, attr = _RELOCATED[name]
-        value = getattr(importlib.import_module(module_path), attr)
-        return deprecated_attribute(
-            value,
-            old_name=f"tengri.{name}",
-            new_name=f"{module_path}.{attr}",
-        )
-    # Set ``name`` and ``obj`` so Python's built-in "Did you mean: …"
-    # suggestion (PEP 657, fired when formatting the traceback) kicks in
-    # against the curated ``__dir__``. Without these attributes a custom
-    # __getattr__ swallows the suggestion mechanism.
-    import sys as _sys
-
-    raise AttributeError(
-        f"module 'tengri' has no attribute {name!r}",
-        name=name,
-        obj=_sys.modules[__name__],
-    )
-
-
-# Plotting utilities
-# Import observation module for namespace alias (already in imports above, adding as alias)
-from tengri import observation
-from tengri.analysis.plotting import (
-    COLORS,
-    SDSS_WAVE_EFF,
-    SPECTRAL_FEATURES,
-    diagnostics_table,
-    plot_corner_comparison,
-    plot_sed_fit,
-    plot_sfh,
-    plot_sfh_comparison,
-    plot_spectrum_fit,
-    safe_corner,
-    setup_style,
 )
 
 # ──────────────────────────────────────────────────────────────────
@@ -522,6 +506,7 @@ _CURATED_DIR = (
     # 2.  Build a fit
     "Parameters",
     "SEDModel",
+    "WavePrecomp",
     "Fitter",
     "Observation",
     "Photometry",

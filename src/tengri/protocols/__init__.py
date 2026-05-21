@@ -16,8 +16,8 @@ these protocols yet. The classes live here so:
 3. A unit test asserts the protocol shape so accidental breaking
    changes during the migration are caught early.
 
-See ``~/.claude/plans/i-want-you-to-soft-torvalds.md`` Part II for the
-full re-architecture proposal and Phase II-2 onwards.
+See ``docs/dev/REFACTOR.md`` and the in-tree design plans for the
+full re-architecture proposal.
 """
 
 from __future__ import annotations

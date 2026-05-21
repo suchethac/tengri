@@ -257,8 +257,6 @@ _register(
     citation="Bellstedt et al. 2020 (arXiv:2005.11917)",
     short_doc="Truncated skew-normal SFH (Bellstedt+2020)",
 )
-# Register canonical name (same spec object, just different key)
-SFH_REGISTRY["truncated_skewnormal_sfh"] = SFH_REGISTRY["tsnorm"]
 
 # --- snorm (skew-normal) — canonical: skewnormal_sfh ---
 _snorm_spec = SFHModelSpec(
@@ -288,10 +286,7 @@ _register(
     citation="Bellstedt et al. 2020 (arXiv:2005.11917)",
     short_doc="Skew-normal SFH (Bellstedt+2020)",
 )
-# Register canonical name (same spec object, just different key)
-SFH_REGISTRY["skewnormal_sfh"] = SFH_REGISTRY["snorm"]
-
-# --- snorm_burst (skew-normal + flat burst) — canonical: snorm_burst_sfh ---
+# --- snorm_burst (skew-normal + flat burst) ---
 _snorm_burst_spec = SFHModelSpec(
     name="snorm_burst",
     fn=snorm_burst,
@@ -329,9 +324,7 @@ _register(
     citation="Robotham et al. 2020 (arXiv:2002.06980) ProSpect",
     short_doc="Skew-normal + flat recent burst (ProSpect)",
 )
-SFH_REGISTRY["snorm_burst_sfh"] = SFH_REGISTRY["snorm_burst"]
-
-# --- tsnorm_burst (truncated skew-normal + flat burst) — canonical: snorm_trunc_burst_sfh ---
+# --- tsnorm_burst (truncated skew-normal + flat burst) ---
 _tsnorm_burst_spec = SFHModelSpec(
     name="tsnorm_burst",
     fn=snorm_trunc_burst,
@@ -373,9 +366,7 @@ _register(
     citation="Robotham et al. 2020 (arXiv:2002.06980) ProSpect",
     short_doc="Truncated skew-normal + flat burst (ProSpect)",
 )
-SFH_REGISTRY["snorm_trunc_burst_sfh"] = SFH_REGISTRY["tsnorm_burst"]
-
-# --- norm (Gaussian) — canonical: gaussian_sfh ---
+# --- norm (Gaussian) ---
 _norm_spec = SFHModelSpec(
     name="norm",
     fn=norm,
@@ -397,10 +388,8 @@ _norm_spec = SFHModelSpec(
     composition_type="additive",
 )
 _register(_norm_spec, short_doc="Gaussian SFH")
-# Register canonical name (same spec object, just different key)
-SFH_REGISTRY["gaussian_sfh"] = SFH_REGISTRY["norm"]
 
-# --- lnorm (log-normal) — canonical: lognormal_sfh ---
+# --- lnorm (log-normal) ---
 _lnorm_spec = SFHModelSpec(
     name="lnorm",
     fn=lnorm,
@@ -422,8 +411,6 @@ _lnorm_spec = SFHModelSpec(
     composition_type="additive",
 )
 _register(_lnorm_spec, short_doc="Log-normal SFH")
-# Register canonical name (same spec object, just different key)
-SFH_REGISTRY["lognormal_sfh"] = SFH_REGISTRY["lnorm"]
 
 # --- dpl (double power law) ---
 _register(

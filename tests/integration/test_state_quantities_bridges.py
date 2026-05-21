@@ -2,7 +2,7 @@
 """Regression tests for the orchestrator → legacy-Quantities bridges.
 
 The :func:`tengri.forward.state_to_*_quantities` helpers and their
-``SEDModel.predict_*_via_orchestrator`` wrappers convert a
+``SEDModel.predict_*_components`` wrappers convert a
 :class:`tengri.protocols.ForwardState` into the legacy
 :class:`SFHQuantities` / :class:`SEDQuantities` NamedTuples (and the
 new :class:`RadioQuantities` / :class:`XRayQuantities` /

@@ -66,14 +66,19 @@ class NebularSEDComponentConfig(SEDComponentConfig):
 
 @dataclass(frozen=True)
 class NebularSEDComponentState(SEDComponentState):
-    r"""Marker state — BakedIn has no precomputed tensors.
+    r"""State for the nebular component.
 
-    The backend handle is held on the component itself (see
-    :class:`NebularSEDComponent._backend`), not on the state, so
-    serialising the state remains cheap.
+    BakedIn has no precomputed tensors — the backend handle is held on
+    the component itself. Non-BakedIn backends (Cue / CloudyGrid /
+    Shock) optionally cache filter passbands when
+    ``approx={'wave_precomp': True}`` is set on the parent SEDModel;
+    :meth:`NebularSEDComponent.apply` uses them to filter-integrate the
+    nebular SED contribution and publish ``nebular_phot_lnu_precomp``.
     """
 
     name: str = "nebular"
+    filter_waves: Any | None = None
+    filter_trans: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -97,6 +102,7 @@ class NebularSEDComponent:
     config: NebularSEDComponentConfig = field(default_factory=NebularSEDComponentConfig)
     backend: Any | None = None
     name: str = "nebular"
+    _state: NebularSEDComponentState | None = None
     # Tuple prefix so the MAPPINGS shock backend (``shock_*``) and the
     # photoionisation backends (``neb_*``, ``ionspec_*``, ``gas_*``) all
     # flow through the standard prefix-stripping path. Backends silently
@@ -151,7 +157,7 @@ class NebularSEDComponent:
             ),
         ]
 
-        if self.config.backend == "cloudy_grid":
+        if self.config.backend in ("cloudy_grid", "cb19", "mappings"):
             return std_knobs
 
         if self.config.backend == "cue":
@@ -248,7 +254,7 @@ class NebularSEDComponent:
 
         raise NotImplementedError(
             f"NebularSEDComponent unknown backend {self.config.backend!r}; "
-            f"supported: 'baked_in', 'cloudy_grid', 'cue', 'shock'."
+            f"supported: 'baked_in', 'cloudy_grid', 'cb19', 'mappings', 'cue', 'shock'."
         )
 
     def outputs(self) -> tuple[DerivedKey, ...]:
@@ -303,28 +309,53 @@ class NebularSEDComponent:
         approx: Mapping[str, bool] | None = None,
         filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> NebularSEDComponentState:
-        r"""Construct the backend handle (no JAX work)."""
-        del ssp_data, wave_grid, filters
+        r"""Construct the backend handle and cache filters when wave_precomp on.
+
+        BakedIn nebular doesn't need filters — its emission is in the SSP
+        grid and is covered by the stellar LUT. Non-BakedIn backends
+        (Cue / CloudyGrid / Shock) cache the filter passbands so
+        :meth:`apply` can publish ``nebular_phot_lnu_precomp`` for
+        consumption by ``predict_via_precomp``.
+        """
+        del ssp_data, wave_grid
+        approx = approx or {}
+        cache_filters = (
+            approx.get("wave_precomp")
+            and filters is not None
+            and self.config.backend != "baked_in"
+        )
+        cached_filter_waves = None
+        cached_filter_trans = None
+        if cache_filters:
+            cached_filter_waves = tuple(jnp.asarray(fw) for fw, _ in filters)
+            cached_filter_trans = tuple(jnp.asarray(ft) for _, ft in filters)
+
         if self.config.backend == "baked_in":
             warning_mode = "suppress" if self.config.suppress_baked_in_warning else "warn"
             BakedInBackend(ionizing_source_warning=warning_mode)
             return NebularSEDComponentState(name=self.name)
-        if self.config.backend in ("cloudy_grid", "cue", "shock"):
+        if self.config.backend in ("cloudy_grid", "cb19", "mappings", "cue", "shock"):
             if self.backend is None:
                 raise ValueError(
                     f"NebularSEDComponent(backend={self.config.backend!r}) requires "
                     f"a pre-constructed backend instance via the ``backend`` "
-                    f"constructor field (Cue/CloudyGrid/MAPPINGS need their "
+                    f"constructor field (Cue/CloudyGrid/CB19/MAPPINGS/Shock need their "
                     f"weights/grid/abundance configuration which the "
                     f"orchestrator does not know about)."
                 )
-            return NebularSEDComponentState(name=self.name)
+            return NebularSEDComponentState(
+                name=self.name,
+                filter_waves=cached_filter_waves,
+                filter_trans=cached_filter_trans,
+            )
         raise NotImplementedError(f"NebularSEDComponent unknown backend {self.config.backend!r}.")
 
     def apply(
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         r"""Compute nebular SED via the configured backend; add to ``sed_intrinsic``.
 
@@ -452,13 +483,15 @@ class NebularSEDComponent:
                 nion = state.derived.get("nion")
                 if nion is not None:
                     common_kwargs["gas_logqion"] = jnp.log10(jnp.maximum(nion, 1.0))
-            nebular_sed = self.backend.predict_nebular_sed(**common_kwargs, **cue_extras)
-        else:  # cloudy_grid
+            nebular_sed = self.backend.predict_nebular_sed(
+                **common_kwargs, **cue_extras, template_data=template_data
+            )
+        else:  # cloudy_grid, cb19, mappings
             ssp_ages_yr = state.derived.get("ssp_ages_yr")
             age_weights = state.derived.get("age_weights")
             if ssp_ages_yr is None or age_weights is None:
                 raise ValueError(
-                    "CloudyGrid backend requires state.derived['ssp_ages_yr'] "
+                    f"{self.config.backend.upper()} backend requires state.derived['ssp_ages_yr'] "
                     "and state.derived['age_weights'] (CSP mass weights from "
                     "StellarSEDComponent). Build the chain with a stellar "
                     "component upstream."
@@ -468,6 +501,7 @@ class NebularSEDComponent:
             nebular_sed = self.backend.predict_nebular_sed(
                 ssp_weights=ssp_weights,
                 ssp_log_ages_yr=ssp_log_ages_yr,
+                template_data=template_data,
                 **common_kwargs,
             )
 
@@ -478,12 +512,13 @@ class NebularSEDComponent:
             try:
                 if self.config.backend == "cue":
                     line_waves, line_lums = self.backend.predict_nebular_line_luminosities(
-                        **common_kwargs, **cue_extras
+                        **common_kwargs, **cue_extras, template_data=template_data
                     )
-                else:  # cloudy_grid
+                else:  # cloudy_grid, cb19, mappings
                     line_waves, line_lums = self.backend.predict_nebular_line_luminosities(
                         ssp_weights=ssp_weights,
                         ssp_log_ages_yr=ssp_log_ages_yr,
+                        template_data=template_data,
                         **common_kwargs,
                     )
                 # CLAUDE.md contract: vacuum wavelengths throughout.
@@ -507,7 +542,7 @@ class NebularSEDComponent:
                 # or floating-point noise around any one probe value.
                 # Hα 6564.61 v / 6562.80 a, Hβ 4862.68 v / 4861.33 a,
                 # Hγ 4341.68 v / 4340.47 a.
-                if self.config.backend in ("cue", "cloudy_grid"):
+                if self.config.backend in ("cue", "cloudy_grid", "cb19", "mappings"):
                     line_waves_np = np.asarray(line_waves)
                     _BALMER_AIR_VAC = (
                         (6562.80, 6564.61),
@@ -554,6 +589,40 @@ class NebularSEDComponent:
 
         # Photoionised path: ``sed_nebular`` carries continuum + lines;
         # shock contribution is zero (this branch is not the shock backend).
+        # Phase 3c-3d-neb: filter-integrate nebular SED and publish
+        # ``nebular_phot_lnu_precomp`` for consumption by predict_via_precomp.
+        derived_overrides = dict(sed_nebular=nebular_sed, sed_shock=zeros)
+        if (
+            self._state is not None
+            and self._state.filter_waves is not None
+            and self._state.filter_trans is not None
+        ):
+            from tengri.observation.photometry import compute_flux_density
+
+            z = jnp.asarray(params.get("redshift", 0.0))
+            inv_cosmology = 4.0 * jnp.pi * 1.0**2 / (1.0 + z)
+            nebular_phot_lnu_precomp = (
+                jnp.asarray(
+                    [
+                        compute_flux_density(
+                            nebular_sed,
+                            state.wave,
+                            fw,
+                            ft,
+                            redshift=z,
+                            dl_cm=jnp.asarray(1.0),
+                        )
+                        for fw, ft in zip(
+                            self._state.filter_waves,
+                            self._state.filter_trans,
+                            strict=False,
+                        )
+                    ]
+                )
+                * inv_cosmology
+            )
+            derived_overrides["nebular_phot_lnu_precomp"] = nebular_phot_lnu_precomp
+
         return state.add_intrinsic(nebular_sed).with_(
-            derived=state.derived.with_(sed_nebular=nebular_sed, sed_shock=zeros),
+            derived=state.derived.with_(**derived_overrides),
         )

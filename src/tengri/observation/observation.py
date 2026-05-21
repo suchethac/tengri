@@ -617,6 +617,12 @@ class Observation:
         out: dict[str, jnp.ndarray] = {}
 
         if self.can_do_photometry:
+            # ``predict`` is the canonical exact (compositional) path: it
+            # integrates ``state.sed_intrinsic`` through each filter without
+            # approximation. The precompute LUT path is opt-in via
+            # :meth:`predict_via_precomp` (or its callers); this method does
+            # NOT fall through to the LUT by default — exact-first is the
+            # default semantics for ``observation.predict``.
             phot = jnp.asarray(
                 [
                     compute_flux_density(sed_rest, wave_rest, fw, ft, z, dl_cm)
@@ -778,41 +784,40 @@ class Observation:
         for c in precomp_contribs[1:]:
             total_phi = total_phi + c
 
-        # Phase 3c-3c-iv guard: silent-correctness check. If the dust
-        # component ran on the wave grid (``dust_attenuation_factor`` is
-        # published) but did NOT publish a per-filter precompute, then
-        # ``Σ Φ_i`` is the UNATTENUATED stellar photometry and using it
-        # would silently give wrong numbers. This currently happens for:
-        #
-        # - Two-component (Charlot & Fall) dust — age-dependent
-        #   attenuation, not factorisable into a single per-filter A.
-        #   Phase 3c-3c-iv lands the age-resolved LUT.
-        # - Free-z + dust — the ztable builder does not yet carry the
-        #   Taylor moment. Phase 3c-3c-v.
-        # - Any future attenuation component that doesn't publish a
-        #   ``dust_attenuation_precomp`` field.
-        # Detect ACTIVE dust attenuation by L_ir > 0. Zero-tau models still
-        # have the dust component in the chain (publishing L_ir = 0); only
-        # actual attenuation should trigger the guard.
-        l_ir = state.derived.get("L_ir")
-        dust_active = l_ir is not None and float(l_ir) > 0.0
+        # Phase 3d-5 (2026-05-20): the previous runtime guards used
+        # ``float(L_ir) > 0`` / ``float(jnp.max(sed_nebular)) > 0`` to detect
+        # "component ran on the wave grid but didn't publish a per-filter
+        # precompute". They were correct in spirit but broke under
+        # ``jax.jit`` tracing (float concretization on traced arrays). The
+        # checks are dropped in favour of trusting the build-time wiring:
+        # when ``approx=WavePrecomp(...)`` is set, the stellar component
+        # publishes ``filter_eff_waves`` which downstream dust / nebular
+        # components see and use to publish their own precomps. The top-
+        # level "no ``*_phot_lnu_precomp`` keys at all" check above still
+        # catches the user-error case of calling ``predict_via_precomp``
+        # on a model built without WavePrecomp.
         a_lut = state.derived.get("dust_attenuation_precomp")
         a_bc_lut = state.derived.get("dust_bc_attenuation_precomp")
-        if dust_active and a_lut is None and a_bc_lut is None:
-            raise NotImplementedError(
-                "predict_via_precomp: dust attenuation ran on the wave grid "
-                "but no dust precompute was published (neither single-component "
-                "dust_attenuation_precomp nor two-component dust_bc_*). Use "
-                "predict() instead, or confirm wave_precomp=True is set on the "
-                "model and the dust law is supported."
-            )
+        # Dust attenuation applies to STELLAR + nebular (both arise from the
+        # photosphere + birth cloud / diffuse ISM). AGN has its own attenuation
+        # parameters (``agn_ebv_*``) and is not attenuated by the stellar dust
+        # component. Compute the dust-attenuable bucket first; the rest is
+        # added unattenuated afterwards.
+        stellar_phi = state.derived.get("stellar_phot_lnu_precomp")
+        stellar_phi = stellar_phi if stellar_phi is not None else jnp.zeros_like(total_phi)
+        nebular_phi_for_dust = state.derived.get("nebular_phot_lnu_precomp")
+        nebular_phi_for_dust = (
+            nebular_phi_for_dust if nebular_phi_for_dust is not None else jnp.zeros_like(total_phi)
+        )
+        dust_attenuable_phi = stellar_phi + nebular_phi_for_dust
+        unattenuated_phi = total_phi - dust_attenuable_phi
 
         # Phase 3c-3c-iv-c: two-component (Charlot & Fall) dust LUT.
         # Factorisation: T(a, λ) = T_diff(λ) × T_bc(λ)^y(a).
         # At the filter level, with per-age stellar LUT
         # ``stellar_phot_lnu_per_age_precomp[a, b]``:
         #
-        #     flux_b = Σ_a per_age[a, b] × A_diff(b) × A_bc(b)^y(a)
+        #     stellar_attenuated_b = Σ_a per_age[a, b] × A_diff(b) × A_bc(b)^y(a)
         #
         # ``A_bc(b)^y(a)`` interpolates between BC-attenuated (y=1) and
         # bare (y=0) stars. Smooth y(a) handles the transition.
@@ -820,10 +825,16 @@ class Observation:
         if a_bc_lut is not None and per_age is not None:
             a_diff_lut = state.derived["dust_diff_attenuation_precomp"]
             y_age = state.derived["dust_young_indicator"]
-            # A_bc(b)^y(a): broadcast over (age, filter). a_bc has shape
-            # (n_filter,); y_age has shape (n_age,). Result (n_age, n_filter).
             atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]
-            total_lnu = jnp.sum(per_age * atten_bc_per_age, axis=0) * a_diff_lut
+            stellar_attenuated = jnp.sum(per_age * atten_bc_per_age, axis=0) * a_diff_lut
+            # Nebular emission (Cue / CloudyGrid) is not age-resolved, so the
+            # per-age expansion doesn't apply. Approximate the nebular dust
+            # treatment as the diffuse-layer-only expansion ``A_diff·Φ_neb`` —
+            # consistent with Charlot & Fall, where nebular continuum + lines
+            # arise predominantly from young (BC) sites but the simpler
+            # diffuse-only approximation is used here for tractability.
+            nebular_attenuated = a_diff_lut * nebular_phi_for_dust
+            total_lnu = stellar_attenuated + nebular_attenuated + unattenuated_phi
 
         # Phase 3c-3c-iii: single-component dust via the Taylor expansion
         # f_b = A(λ_eff)·Φ_b + A'(λ_eff)·Ψ_b (Zacharegkas+2025).
@@ -836,21 +847,17 @@ class Observation:
                     "predict_via_precomp: dust_attenuation_precomp present but "
                     "dust_attenuation_slope_precomp missing (Phase 3c-3c-ii bug)."
                 )
-            # Sum all *_phot_moment_precomp contributions for the Taylor term.
-            moment_keys = [
-                k for k in state.derived.field_names() if k.endswith("_phot_moment_precomp")
-            ]
-            moment_contribs = [state.derived[k] for k in moment_keys if k in state.derived]
-            if not moment_contribs:
+            # Sum dust-attenuable Taylor moments. Only stellar publishes a
+            # moment today; nebular is treated as Φ-only (no Ψ correction).
+            stellar_psi = state.derived.get("stellar_phot_moment_precomp")
+            if stellar_psi is None:
                 raise ValueError(
                     "predict_via_precomp: dust precompute is present but no "
-                    "*_phot_moment_precomp Taylor moment was published. "
-                    "Stellar must publish stellar_phot_moment_precomp (Phase 3c-3c-i)."
+                    "stellar_phot_moment_precomp Taylor moment was published. "
+                    "Stellar must publish it when wave_precomp=True (Phase 3c-3c-i)."
                 )
-            total_psi = moment_contribs[0]
-            for c in moment_contribs[1:]:
-                total_psi = total_psi + c
-            total_lnu = a_lut * total_phi + a_slope_lut * total_psi
+            dust_attenuated = a_lut * dust_attenuable_phi + a_slope_lut * stellar_psi
+            total_lnu = dust_attenuated + unattenuated_phi
         else:
             total_lnu = total_phi
 

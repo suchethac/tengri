@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Build orchestrator-compatible component chains from a single call.
 
-Phase II-2.6 public-API helper. Lets users assemble the
-``run_components`` chain from a flat set of keyword arguments without
-constructing each :class:`SEDComponent` subclass by hand::
+Public-API helper that lets users assemble the ``run_components`` chain
+from a flat set of keyword arguments without constructing each
+:class:`SEDComponent` subclass by hand::
 
     from tengri.forward.component_factory import build_components
     from tengri.forward.orchestrator import run_components
@@ -201,11 +201,13 @@ def build_components(
     lgmet_scatter : float
         Gaussian σ in log10(Z) for the DSPS triweight kernel [dex].
     nebular_backend : str | None
-        ``"baked_in"`` (default), ``"cloudy_grid"``, ``"cue"``, or
-        ``None`` to omit nebular entirely.
+        ``"baked_in"`` (default), ``"cloudy_grid"``, ``"cb19"``,
+        ``"mappings"``, ``"cue"``, ``"shock"``, or ``None`` to omit
+        nebular entirely.
     nebular_backend_instance : object | None
-        Pre-constructed backend object for ``cloudy_grid`` / ``cue``
-        (which need HDF5 / weights paths). Required for those backends.
+        Pre-constructed backend object for ``cloudy_grid`` / ``cb19`` /
+        ``mappings`` / ``cue`` / ``shock`` (which need HDF5 / weights
+        paths). Required for those backends.
     agn_model : str | None
         AGN model registry key (``"simple"``, ``"standard"``, …) or
         ``None`` to omit AGN.
@@ -228,11 +230,10 @@ def build_components(
     -----
     **JIT-compatible**: yes — the returned components flow through
     ``jax.jit`` once :class:`tengri.protocols.ForwardState` is registered
-    as a pytree (Phase II-2.2-followup).
+    as a pytree.
 
-    The ``StellarSEDComponent`` carries ``ssp_data`` on its instance
-    (the most natural plumbing per Phase II-2.2). All other adapters
-    are stateless except their config knobs.
+    The ``StellarSEDComponent`` carries ``ssp_data`` on its instance.
+    All other adapters are stateless except their config knobs.
     """
     components: list[SEDComponent] = []
 

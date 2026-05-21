@@ -556,7 +556,7 @@ def _build_signal_response(fitter):
     fixed_values = fitter._fixed_values
     spec = fitter.spec
     stochastic = spec.stochastic
-    use_orchestrator = bool(getattr(fitter, "use_orchestrator", False))
+    use_components = bool(getattr(fitter, "use_components", False))
 
     def _primals_to_params(primals):
         """Convert unbounded (standardized) primals dict to bounded physical params."""
@@ -575,20 +575,20 @@ def _build_signal_response(fitter):
         """Compute predicted data from unbounded parameters."""
         params = _primals_to_params(primals)
         if data_type == "photometry":
-            if use_orchestrator:
-                return model.predict_photometry_via_orchestrator(params)
-            return model.predict_photometry(params, mode="_traceable")
+            if use_components:
+                return model.predict_photometry_components(params)
+            return model.predict_photometry(params, mode="traced")
         elif data_type == "spectroscopy":
-            if use_orchestrator:
-                return model.predict_spectrum_via_orchestrator(params, model._wave_obs)
-            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+            if use_components:
+                return model.predict_spectrum_components(params, model._wave_obs)
+            return model.predict_spectrum(params, model._wave_obs, mode="traced")
         elif data_type == "joint":
-            if use_orchestrator:
-                p = model.predict_photometry_via_orchestrator(params)
-                s = model.predict_spectrum_via_orchestrator(params, model._wave_obs)
+            if use_components:
+                p = model.predict_photometry_components(params)
+                s = model.predict_spectrum_components(params, model._wave_obs)
             else:
-                p = model.predict_photometry(params, mode="_traceable")
-                s = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                p = model.predict_photometry(params, mode="traced")
+                s = model.predict_spectrum(params, model._wave_obs, mode="traced")
             return jnp.concatenate([p, s])
         raise ValueError(f"Unknown data_type: {data_type}")
 
@@ -704,7 +704,7 @@ def build_jit_engine(fitter, pos_dict):
     # so that the compiled engine can be reused across galaxies.
     use_variable_noise = has_noise_model(fitter.spec)
     noise_dof = get_noise_dof(fitter.spec) if uses_student_t(fitter.spec) else None
-    use_orchestrator = bool(getattr(fitter, "use_orchestrator", False))
+    use_components = bool(getattr(fitter, "use_components", False))
 
     # --- Signal response (physics only) ---
     # NOT JIT'd here — must remain traceable so jax.jvp/vjp (in metric_vec)
@@ -728,22 +728,22 @@ def build_jit_engine(fitter, pos_dict):
             """Return (predicted, std_inv) tuple for variable noise metric."""
             params = _primals_to_params(primals)
             if data_type == "photometry":
-                if use_orchestrator:
-                    predicted = model.predict_photometry_via_orchestrator(params)
+                if use_components:
+                    predicted = model.predict_photometry_components(params)
                 else:
-                    predicted = model.predict_photometry(params, mode="_traceable")
+                    predicted = model.predict_photometry(params, mode="traced")
             elif data_type == "spectroscopy":
-                if use_orchestrator:
-                    predicted = model.predict_spectrum_via_orchestrator(params, model._wave_obs)
+                if use_components:
+                    predicted = model.predict_spectrum_components(params, model._wave_obs)
                 else:
-                    predicted = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                    predicted = model.predict_spectrum(params, model._wave_obs, mode="traced")
             elif data_type == "joint":
-                if use_orchestrator:
-                    p = model.predict_photometry_via_orchestrator(params)
-                    s = model.predict_spectrum_via_orchestrator(params, model._wave_obs)
+                if use_components:
+                    p = model.predict_photometry_components(params)
+                    s = model.predict_spectrum_components(params, model._wave_obs)
                 else:
-                    p = model.predict_photometry(params, mode="_traceable")
-                    s = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                    p = model.predict_photometry(params, mode="traced")
+                    s = model.predict_spectrum(params, model._wave_obs, mode="traced")
                 predicted = jnp.concatenate([p, s])
             else:
                 raise ValueError(f"Unknown data_type: {data_type}")
