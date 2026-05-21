@@ -3966,35 +3966,46 @@ class SEDModel:
         """Collect nebular backend grids and weights for JIT threading.
 
         Walks the cached component chain (built by predict_state warmup)
-        to find the nebular component and extract its backend's grid/weights.
-        Returns ``None`` if no nebular component is present or if the active
-        backend does not require template data (e.g., 'baked_in').
+        to find the nebular component and extract its backend's
+        grid/weights attribute as a runtime JIT input, so the underlying
+        array stays a JAX ``Parameter`` op rather than a baked-in HLO
+        ``Constant``.
+
+        The lookup is **duck-typed** on the backend object: any backend
+        carrying a ``.grid`` or ``.weights`` attribute pointing at a
+        jax-pytree-flatable value participates. New backends with the
+        same convention pick up threading without code changes here.
 
         Returns
         -------
         Any | None
-            Nebular backend grid/weights object (CueWeights, CloudyGrid grid, etc.),
-            or None if not applicable.
+            Backend grid/weights object, or ``None`` if no nebular
+            component is present or if the active backend exposes
+            neither attribute (e.g. ``BakedIn`` carries no separate
+            template data).
         """
         cached = getattr(self, "_cached_component_chain", None)
         if cached is None:
             return None
 
-        # Find the nebular component in the chain
         from tengri.components.nebular.component import NebularSEDComponent
 
         for component in cached:
-            if isinstance(component, NebularSEDComponent):
-                # Only Cue and CloudyGrid backends need threading
-                if component.config.backend == "cue":
-                    return component.backend.weights
-                elif component.config.backend == "cloudy_grid":
-                    return component.backend.grid
-                else:
-                    # baked_in, shock, etc. don't need template threading
-                    return None
+            if not isinstance(component, NebularSEDComponent):
+                continue
+            backend = getattr(component, "backend", None)
+            if backend is None:
+                return None
+            # Duck-type: prefer .weights (NN-backed backends like Cue),
+            # then .grid (interpolation-table backends like CloudyGrid,
+            # CB19, MAPPINGS, AGN NLR). Falls back to None for backends
+            # that carry no per-call template data (BakedIn, Shock).
+            for attr in ("weights", "grid"):
+                template = getattr(backend, attr, None)
+                if template is not None:
+                    return template
+            return None
 
-        # No nebular component found
         return None
 
     def _build_component_chain(self):
