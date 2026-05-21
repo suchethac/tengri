@@ -81,3 +81,23 @@ def test_forward_model_predict_deterministic(sed_model_minimal, simple_observati
     pred2 = forward.predict(params)
 
     assert jnp.allclose(pred1["phot_fnu"], pred2["phot_fnu"])
+
+
+@pytest.mark.integration
+def test_forward_model_closure_audit() -> None:
+    """ForwardModel.predict must not capture data-file globals (§9.2).
+
+    Architecture spec ``docs/dev/forward-model-architecture.md`` §9.2:
+    data files (SSP grids, filter matrices, templates) MUST flow through
+    component-owned frozen state, never through free-variable closure
+    capture in a ``@jit``-able function. The closure count is a useful
+    proxy for "how much hidden state is this function carrying?".
+    """
+    from tengri.forward.forward_model import ForwardModel
+
+    closure = ForwardModel.predict.__closure__ or ()
+    assert len(closure) == 0, (
+        f"ForwardModel.predict closes over {len(closure)} free variables; "
+        "data files must flow through component state, not closures "
+        "(architecture spec §9.2)."
+    )
