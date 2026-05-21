@@ -8,6 +8,7 @@ Physics references:
 - Fan+2006, AJ 132, 117 (Lya forest mean transmission)
 """
 
+import chex
 import jax
 import pytest
 
@@ -130,7 +131,7 @@ class TestIGMConvention:
         f = jax.jit(igm_transmission)
         wave = jnp.array([1216.0 * 4.0, 912.0 * 5.0])
         result = f(wave, 3.0)
-        assert jnp.all(jnp.isfinite(result)), "igm_transmission not JIT-compatible"
+        chex.assert_tree_all_finite(result)
 
     @pytest.mark.xfail(
         strict=True,

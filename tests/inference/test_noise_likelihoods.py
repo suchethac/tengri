@@ -4,6 +4,7 @@ Tests JIT compatibility, gradient flow, and physical correctness of
 PoissonNoiseLikelihood and StudentTLikelihood.
 """
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.contract
@@ -40,7 +41,7 @@ class TestPoissonNoiseLikelihood:
         predicted = jnp.array([100.0])
         lp = lh.log_prob(observed, predicted)
         # Pure Poisson: σ = sqrt(100) = 10, log_prob = -log(10) ≈ -2.303
-        assert jnp.all(jnp.isfinite(lp))
+        chex.assert_tree_all_finite(lp)
         expected = -jnp.log(10.0)
         npt.assert_allclose(lp[0], expected, rtol=1e-10)
 
@@ -96,7 +97,7 @@ class TestPoissonNoiseLikelihood:
         observed = jnp.array([0.1, 0.0])
         predicted = jnp.array([0.0, 0.0])  # Edge case
         lp = lh.log_prob(observed, predicted)
-        assert jnp.all(jnp.isfinite(lp))
+        chex.assert_tree_all_finite(lp)
 
     def test_jit_compatible(self):
         """Function compiles under jax.jit."""
@@ -105,8 +106,8 @@ class TestPoissonNoiseLikelihood:
         observed = jnp.array([100.0, 200.0])
         predicted = jnp.array([95.0, 205.0])
         lp = lh_jit(observed, predicted)
-        assert lp.shape == (2,)
-        assert jnp.all(jnp.isfinite(lp))
+        chex.assert_shape(lp, (2,))
+        chex.assert_tree_all_finite(lp)
 
     def test_grad_w_r_t_predicted(self):
         """Gradient flows through predicted flux (differentiable)."""
@@ -146,7 +147,7 @@ class TestStudentTLikelihood:
         predicted = jnp.array([0.5, 1.0, 2.0])
         sigma = jnp.array([0.1, 0.2, 0.3])
         lp = lh.log_prob(observed, predicted, sigma)
-        assert jnp.all(jnp.isfinite(lp))
+        chex.assert_tree_all_finite(lp)
 
     def test_zero_residual_is_maximum(self):
         """Log-prob at residual=0 is greater than at nonzero residual."""
@@ -209,7 +210,7 @@ class TestStudentTLikelihood:
         predicted = jnp.array([0.0])
         sigma = jnp.array([0.0])  # Edge case
         lp = lh.log_prob(observed, predicted, sigma)
-        assert jnp.all(jnp.isfinite(lp))
+        chex.assert_tree_all_finite(lp)
 
     def test_jit_compatible(self):
         """Function compiles under jax.jit."""
@@ -219,8 +220,8 @@ class TestStudentTLikelihood:
         predicted = jnp.array([0.0, 2.0, 5.0])
         sigma = jnp.array([1.0, 1.0, 2.0])
         lp = lh_jit(observed, predicted, sigma)
-        assert lp.shape == (3,)
-        assert jnp.all(jnp.isfinite(lp))
+        chex.assert_shape(lp, (3,))
+        chex.assert_tree_all_finite(lp)
 
     def test_grad_w_r_t_all_inputs(self):
         """Gradient flows through obs, pred, and sigma."""
@@ -267,11 +268,11 @@ class TestLikelihoodIntegration:
         lh = PoissonNoiseLikelihood(gain=1.0, systematic_floor=0.02)
         lp = lh.log_prob(observed, predicted)
         # Should be well-behaved for all bands
-        assert jnp.all(jnp.isfinite(lp))
+        chex.assert_tree_all_finite(lp)
         # Residuals < 1 sigma → expect negative log_prob (since we're
         # logging a likelihood, not neg-log-likelihood)
         # Actually, each lp should represent per-band log-likelihood
-        assert lp.shape == (5,)
+        chex.assert_shape(lp, (5,))
 
     def test_student_t_with_outlier(self):
         """Student-t robustly handles one bad measurement."""
@@ -295,4 +296,4 @@ class TestLikelihoodIntegration:
         observed = jnp.array([100.0, 500.0, 1000.0])
         predicted = jnp.array([100.0, 510.0, 950.0])
         lp = lh.log_prob(observed, predicted)
-        assert jnp.all(jnp.isfinite(lp))
+        chex.assert_tree_all_finite(lp)

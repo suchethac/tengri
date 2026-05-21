@@ -4,6 +4,7 @@ Tests verify that all SFH models produce non-negative star formation rates
 and correctly conserve the total stellar mass.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -47,7 +48,7 @@ class TestContinuitySFHMassConservation:
         n_bins = 4
         kwargs = {f"ratio_{i}": 0.0 for i in range(n_bins - 1)}
         sfr = continuity(AGE_YR, log_total_mass=10.0, bin_edges_gyr=custom_edges, **kwargs)
-        assert sfr.shape == AGE_YR.shape
+        chex.assert_equal_shape([sfr, AGE_YR])
         assert jnp.all(sfr >= 0)
 
 
@@ -241,7 +242,7 @@ class TestPSBContinuitySFH:
             ratio_young=0.0,
             ratio_old_0=0.0,
         )
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_mass_scales_with_log_total_mass(self, age_yr, default_edges):
         sfr10 = psb_continuity(
@@ -271,7 +272,7 @@ class TestPSBContinuitySFH:
         # bin_edges_gyr is a fixed structural arg — bake it in via partial before JIT
         fn = jax.jit(functools.partial(psb_continuity, bin_edges_gyr=default_edges))
         sfr = fn(age_yr, 10.0, tlast_gyr=0.5, tflex_gyr=2.0, ratio_young=0.0, ratio_old_0=0.0)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_grad_wrt_log_total_mass(self, age_yr, default_edges):
         g = jax.grad(
@@ -320,7 +321,7 @@ class TestRegistryBinEdges:
         age_yr = jnp.linspace(1e6, 3.3e9, 100)
         kwargs = {v[0]: 0.0 for v in params.values() if v[0] != "log_total_mass"}
         sfr = fn(age_yr, log_total_mass=10.0, **kwargs)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
         assert jnp.any(sfr > 0)
 
     def test_none_uses_default_edges(self):
@@ -330,7 +331,7 @@ class TestRegistryBinEdges:
         age_yr = jnp.linspace(1e6, 13.7e9, 100)
         kwargs = {v[0]: 0.0 for v in params.values() if v[0] != "log_total_mass"}
         sfr = fn(age_yr, log_total_mass=10.0, **kwargs)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_dirichlet_custom_edges(self):
         from tengri.components.stellar.sfh.registry import resolve_sfh
@@ -341,4 +342,4 @@ class TestRegistryBinEdges:
         # param_map: {public_name: (internal_name, scale, offset)}
         kwargs = {v[0]: 0.5 for v in param_map.values() if v[0] != "log_total_mass"}
         sfr = fn(age_yr, log_total_mass=10.0, **kwargs)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)

@@ -7,6 +7,7 @@ with the instrumental LSF and the SSP-library resolution.
 
 from __future__ import annotations
 
+import chex
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -71,7 +72,7 @@ class TestApplyLSFVelocityDispersion:
         wave = _log_wave_grid()
         flux = _delta_spectrum(wave, line_idx=2048)
         out = apply_lsf(flux, wave, resolution=2000.0, sigma_v_kms=100.0)
-        assert out.shape == flux.shape
+        chex.assert_equal_shape([out, flux])
         np.testing.assert_array_less(0.0, np.asarray(out).max())
 
     def test_variable_r_path(self):
@@ -80,7 +81,7 @@ class TestApplyLSFVelocityDispersion:
         # Per-pixel resolution
         R = jnp.linspace(1500.0, 3000.0, wave.shape[0])
         out = apply_lsf(flux, wave, resolution=R, sigma_v_kms=100.0)
-        assert out.shape == flux.shape
+        chex.assert_equal_shape([out, flux])
         np.testing.assert_array_less(0.0, np.asarray(out).max())
 
     def test_negative_sigma_v_clamped_to_zero(self):

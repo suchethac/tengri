@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -27,7 +28,7 @@ class TestLineListDefault13:
 
     def test_wavelengths_shape(self):
         cat = LineList.default_13()
-        assert cat.wavelengths.shape == (13,)
+        chex.assert_shape(cat.wavelengths, (13,))
 
 
 class TestLineListDefaultOptical:
@@ -74,7 +75,7 @@ class TestConstraintMatrix:
     def test_shape(self):
         cat = LineList.default_optical()
         C = cat.build_constraint_matrix()
-        assert C.shape == (cat.n_lines, cat.n_independent)
+        chex.assert_shape(C, (cat.n_lines, cat.n_independent))
         assert cat.n_independent == cat.n_lines - len(cat.doublets)
 
     def test_oiii_ratio_encoded(self):
@@ -101,7 +102,7 @@ class TestConstraintMatrix:
             plot_group=("halpha_nii_6548_48",),
         )
         C = cat.build_constraint_matrix()
-        assert C.shape == (1, 1)
+        chex.assert_shape(C, (1, 1))
         assert abs(float(C[0, 0]) - 1.0) < 1e-6
 
 

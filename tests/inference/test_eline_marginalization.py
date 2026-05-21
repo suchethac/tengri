@@ -11,6 +11,7 @@ Verifies:
 8. Zero-amplitude lines don't affect likelihood
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -209,7 +210,7 @@ class TestGradients:
             return ln_l
 
         grad = jax.grad(loss)(jnp.ones_like(wave))
-        assert jnp.all(jnp.isfinite(grad)), "Gradient w.r.t. continuum should be finite"
+        chex.assert_tree_all_finite(grad)
 
     def test_grad_wrt_noise(self, simple_setup):
         """Gradient of lnL w.r.t. noise should be finite."""
@@ -223,7 +224,7 @@ class TestGradients:
             return ln_l
 
         grad = jax.grad(loss)(jnp.ones_like(wave) * 0.1)
-        assert jnp.all(jnp.isfinite(grad)), "Gradient w.r.t. noise should be finite"
+        chex.assert_tree_all_finite(grad)
 
     def test_grad_through_predict(self, simple_setup):
         """Gradient should flow through predict_with_marginalized_lines."""
@@ -238,7 +239,7 @@ class TestGradients:
             return jnp.sum((data - model_full) ** 2)
 
         grad = jax.grad(loss)(jnp.ones_like(wave))
-        assert jnp.all(jnp.isfinite(grad)), "Gradient through predict should be finite"
+        chex.assert_tree_all_finite(grad)
 
 
 # ── 5. Prior shrinks amplitudes toward zero ───────────────────────
@@ -296,7 +297,7 @@ class TestJIT:
         line_waves = jnp.array([5000.0, 6000.0])
         G = build_eline_design_matrix(wave_grid, line_waves, 1000.0, 0.0)
         assert G.shape == (len(wave_grid), 2)
-        assert jnp.all(jnp.isfinite(G))
+        chex.assert_tree_all_finite(G)
 
     def test_marginalize_jit(self, simple_setup):
         """marginalize_emission_lines should JIT-compile."""
@@ -306,8 +307,8 @@ class TestJIT:
 
         ln_l, a_hat, a_cov = marginalize_emission_lines(residual, noise, G)
         assert jnp.isfinite(ln_l)
-        assert jnp.all(jnp.isfinite(a_hat))
-        assert jnp.all(jnp.isfinite(a_cov))
+        chex.assert_tree_all_finite(a_hat)
+        chex.assert_tree_all_finite(a_cov)
 
     def test_predict_jit(self, simple_setup):
         """predict_with_marginalized_lines should JIT-compile."""
@@ -315,8 +316,8 @@ class TestJIT:
         continuum = jnp.ones_like(wave)
         a_hat = jnp.array([3.0])
         model = predict_with_marginalized_lines(continuum, G, a_hat)
-        assert model.shape == wave.shape
-        assert jnp.all(jnp.isfinite(model))
+        chex.assert_equal_shape([model, wave])
+        chex.assert_tree_all_finite(model)
 
     def test_full_pipeline_jit(self, wave_grid):
         """End-to-end pipeline should JIT-compile."""
@@ -337,7 +338,7 @@ class TestJIT:
         data = continuum + 0.5
         ln_l, model = pipeline(data, continuum, noise)
         assert jnp.isfinite(ln_l)
-        assert jnp.all(jnp.isfinite(model))
+        chex.assert_tree_all_finite(model)
 
 
 # ── 7. Multiple lines don't interfere ─────────────────────────────
@@ -458,7 +459,7 @@ class TestEdgeCases:
         # Should not crash — prior regularizes the underdetermined system
         ln_l, a_hat, _a_cov = marginalize_emission_lines(residual, noise, G)
         assert jnp.isfinite(ln_l), "Should handle n_lines > n_pix"
-        assert jnp.all(jnp.isfinite(a_hat))
+        chex.assert_tree_all_finite(a_hat)
 
     def test_posterior_covariance_symmetric(self, simple_setup):
         """Posterior covariance should be symmetric."""

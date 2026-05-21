@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -146,7 +147,7 @@ class TestSKIRTORPredictParity:
 
         sed_out, published = skirtor_component.predict(params, sed_in, wave)
 
-        assert sed_out.shape == wave.shape
+        chex.assert_equal_shape([sed_out, wave])
         assert "L_agn_torus" in published
         assert published["L_agn_torus"].shape == ()
 
@@ -168,7 +169,7 @@ class TestSKIRTORPredictParity:
             pytest.skip("Could not load SKIRTOR templates")
 
         sed_out, _ = skirtor_component.predict(params, sed_in, wave)
-        assert sed_out.shape == sed_in.shape
+        chex.assert_equal_shape([sed_out, sed_in])
 
     def test_output_positive(self, skirtor_component, wave):
         """Output SED is non-negative."""

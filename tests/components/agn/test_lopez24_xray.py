@@ -10,6 +10,7 @@ Validates:
 - Combination with XRB component
 """
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -55,7 +56,7 @@ class TestBolometricCorrectionDuras:
 class TestLopez24Corona:
     def test_output_shape(self, xray_wavelength):
         result = xray_agn_corona_lopez24(xray_wavelength, l_12um_erg_hz=1e30)
-        assert result.shape == xray_wavelength.shape
+        chex.assert_equal_shape([result, xray_wavelength])
 
     def test_nonnegative(self, xray_wavelength):
         result = xray_agn_corona_lopez24(xray_wavelength, l_12um_erg_hz=1e30)
@@ -150,7 +151,7 @@ class TestLopez24Corona:
     def test_jit(self, xray_wavelength):
         fn = jax.jit(lambda w: xray_agn_corona_lopez24(w, l_12um_erg_hz=1e30))
         result = fn(xray_wavelength)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
     def test_gradient_wrt_alpha_irx(self, xray_wavelength):
         def loss(a):
@@ -185,7 +186,7 @@ class TestLopez24Corona:
 class TestTotalLopez24:
     def test_output_shape(self, xray_wavelength):
         result = xray_total_lopez24(xray_wavelength)
-        assert result.shape == xray_wavelength.shape
+        chex.assert_equal_shape([result, xray_wavelength])
 
     def test_xrb_only_when_no_agn(self, xray_wavelength):
         from tengri.components.xray.xray import xray_xrb
@@ -213,4 +214,4 @@ class TestTotalLopez24:
     def test_jit(self, xray_wavelength):
         fn = jax.jit(lambda w: xray_total_lopez24(w, l_12um_erg_hz=1e30))
         result = fn(xray_wavelength)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)

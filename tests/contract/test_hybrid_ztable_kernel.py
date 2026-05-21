@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -76,8 +77,8 @@ class TestZTableBasic:
         ztable = precompute_photometry_ztable(ssp_data, fw, ft, n_z=15)
 
         assert ztable.ssp_phot_table.shape == (15, 5, 15, 3)  # (n_z, n_met, n_age, n_filt)
-        assert jnp.all(jnp.isfinite(ztable.ssp_phot_table))
-        assert jnp.all(jnp.isfinite(ztable.flux_scale_table))
+        chex.assert_tree_all_finite(ztable.ssp_phot_table)
+        chex.assert_tree_all_finite(ztable.flux_scale_table)
 
     def test_ztable_interpolation_at_grid_point(self, ssp_data, filters):
         """Z-table interpolation matches fixed-z at grid points."""
@@ -206,7 +207,7 @@ class TestZTableEdgeCases:
             ztable.z_grid,
             0.001,
         )
-        assert jnp.all(jnp.isfinite(ssp_phot))
+        chex.assert_tree_all_finite(ssp_phot)
 
     def test_very_large_z(self, ssp_data, filters):
         """Z-table works at large redshift (z ~ 3.0)."""
@@ -220,7 +221,7 @@ class TestZTableEdgeCases:
             ztable.z_grid,
             2.9,
         )
-        assert jnp.all(jnp.isfinite(ssp_phot))
+        chex.assert_tree_all_finite(ssp_phot)
 
     def test_extrapolation_outside_grid(self, ssp_data, filters):
         """Extrapolation outside z-grid gives reasonable (if not exact) results."""
@@ -236,7 +237,7 @@ class TestZTableEdgeCases:
             ztable.z_grid,
             0.55,  # Beyond 0.5
         )
-        assert jnp.all(jnp.isfinite(ssp_phot))
+        chex.assert_tree_all_finite(ssp_phot)
 
     def test_interpolation_at_boundaries(self, ssp_data, filters):
         """Interpolation works at grid boundaries."""
@@ -251,8 +252,7 @@ class TestZTableEdgeCases:
             ztable.z_grid,
             float(ztable.z_grid[0]),
         )
-        assert jnp.all(jnp.isfinite(ssp_phot_min))
-
+        chex.assert_tree_all_finite(ssp_phot_min)
         # At max boundary
         ssp_phot_max, _, _ = interpolate_ztable(
             ztable.ssp_phot_table,
@@ -261,7 +261,7 @@ class TestZTableEdgeCases:
             ztable.z_grid,
             float(ztable.z_grid[-1]),
         )
-        assert jnp.all(jnp.isfinite(ssp_phot_max))
+        chex.assert_tree_all_finite(ssp_phot_max)
 
 
 class TestZTableConsistency:

@@ -9,6 +9,7 @@ Validates that precomputed LUT outputs satisfy physical constraints:
 import pathlib
 import warnings
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -138,7 +139,7 @@ def test_free_z_ztable_interpolation_matches_grid_points(stellar_only_free_z_mod
     ssp_phot_grid = ztable.ssp_phot_table[i_mid]  # (n_met, n_age, n_filt)
     manual = jnp.einsum("a,maf->mf", age_weights, ssp_phot_grid).sum(axis=0) * LSUN_ERG_PER_S
 
-    assert jnp.all(jnp.isfinite(lut_path))
+    chex.assert_tree_all_finite(lut_path)
     assert jnp.all(lut_path > 0)
     # Magnitude sanity: within a factor of 100 of the naive sum.
     ratio = lut_path / manual
@@ -249,7 +250,7 @@ def test_taylor_moment_published_in_fixed_z(stellar_only_model):
     )
     moment = state.derived["stellar_phot_moment_precomp"]
     lnu = state.derived["stellar_phot_lnu_precomp"]
-    assert jnp.all(jnp.isfinite(moment))
+    chex.assert_tree_all_finite(moment)
     # Order-of-magnitude check: |Ψ| should be at most a few filter widths × |Φ|.
     # SDSS filter widths are ~500–1500 Å; allow up to 1e5 Å as a sanity bound.
     ratio = jnp.abs(moment) / jnp.abs(lnu)

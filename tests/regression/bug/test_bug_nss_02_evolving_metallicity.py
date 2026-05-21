@@ -5,6 +5,7 @@ See ADR / docs/known_bugs.md for full context.
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -154,7 +155,7 @@ class TestBugNSS02EvolvingMetFusedKernel:
         # Future enhancement: expose _predict_photometry_exact in the public API
         # for unit-test-level comparison.
 
-        assert jnp.all(jnp.isfinite(phot_compositional)), "Compositional photometry must be finite"
+        chex.assert_tree_all_finite(phot_compositional)
         assert jnp.all(phot_compositional > 0), "Compositional photometry must be positive"
 
     def test_translate_evolving_keys_present(self):

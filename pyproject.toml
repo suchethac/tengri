@@ -76,6 +76,9 @@ dev = [
     "pytest-xdist>=3.5",
     "ruff>=0.9",
     "jupytext>=1.16",
+    # JAX-native test assertions (shape, finiteness, tree-allclose, JIT/eager
+    # variants). See docs/dev/testing-with-chex.md for the conventions.
+    "chex>=0.1.86",
     # Tests cover optional inference paths (MAP via optax/jaxopt, NUTS via
     # blackjax) — the imports themselves are guarded inside functions, but
     # pytest still hits them via tests in test_map_*.py etc. Bundle into dev

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -42,7 +43,7 @@ class TestPlanckLnuExtracted:
 
         nu = jnp.linspace(1e12, 1e16, 100)  # UV to far-IR
         result = planck_lnu(nu, 5778.0)  # solar temperature
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
         assert jnp.all(result >= 0.0)
 
     def test_planck_zero_temperature_returns_finite(self):
@@ -50,7 +51,7 @@ class TestPlanckLnuExtracted:
 
         nu = jnp.array([1e14])
         result = planck_lnu(nu, 0.0)  # temperature = 0 → clamp to 1 K
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
     def test_disc_still_importable(self):
         """disc.py must still import cleanly after removing local _planck_lnu."""
@@ -73,8 +74,8 @@ class TestLinesToSed:
 
         result = lines_to_sed(line_wav, line_lum, wave_obs, fwhm_kms=200.0)
 
-        assert result.shape == (500,)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_shape(result, (500,))
+        chex.assert_tree_all_finite(result)
         assert jnp.any(result > 0.0)
 
     def test_lines_to_sed_peaks_near_line_centres(self):
@@ -199,7 +200,7 @@ class TestEmissionLineCatalog:
         from tengri.observation.eline_catalog import get_line_wavelengths
 
         wav = get_line_wavelengths("bpt")
-        assert wav.shape == (4,)
+        chex.assert_shape(wav, (4,))
         # Hbeta at ~4862.68 (vacuum wavelength)
         assert any(abs(float(w) - 4862.68) < 1.0 for w in wav)
 
@@ -211,7 +212,7 @@ class TestEmissionLineCatalog:
         )
 
         assert len(DEFAULT_LINE_NAMES) == 13
-        assert DEFAULT_LINE_WAVELENGTHS.shape == (13,)
+        chex.assert_shape(DEFAULT_LINE_WAVELENGTHS, (13,))
 
     def test_backward_compat_cloudy_line_arrays(self):
         """Old CLOUDY_LINE_NAMES/WAVELENGTHS still importable from eline_priors."""
@@ -221,7 +222,7 @@ class TestEmissionLineCatalog:
         )
 
         assert len(CLOUDY_LINE_NAMES) == 12
-        assert CLOUDY_LINE_WAVELENGTHS.shape == (12,)
+        chex.assert_shape(CLOUDY_LINE_WAVELENGTHS, (12,))
 
 
 # ── Task 5: Unified build_line_design_matrix ──────────────────────
@@ -245,7 +246,7 @@ class TestBuildLineDesignMatrix:
         A_old = build_eline_design_matrix(wave, line_wav, spectral_resolution=2000.0, redshift=0.0)
         A_new = build_line_design_matrix(wave, line_wav)
 
-        assert A_old.shape == A_new.shape
+        chex.assert_equal_shape([A_old, A_new])
         assert jnp.allclose(A_old, A_new, atol=1e-6)
 
     def test_narrow_plus_broad_has_extra_columns(self):

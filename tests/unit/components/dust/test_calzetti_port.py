@@ -7,6 +7,7 @@ parity vs the legacy adapter is deferred to a follow-up.
 
 from __future__ import annotations
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -52,7 +53,7 @@ def test_predict_returns_attenuated_sed_and_publishes_L_absorbed():
     state = ForwardState(wave=wave, sed_intrinsic=sed_in)
     p = {"tau_v": jnp.asarray(0.5), "delta": jnp.asarray(0.0)}
     sed_out, published = comp.predict(p, sed_in, wave)
-    assert sed_out.shape == sed_in.shape
+    chex.assert_equal_shape([sed_out, sed_in])
     # tau_v > 0 must attenuate everywhere
     assert bool(jnp.all(sed_out < sed_in))
     assert "L_absorbed" in published

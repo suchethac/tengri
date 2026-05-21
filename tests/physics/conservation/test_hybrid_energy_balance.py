@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -121,7 +122,7 @@ class TestDL07EnergyBalance:
     def test_dl07_hybrid_photometry_is_finite(self, dl07_model, dl07_params):
         """DL07 hybrid photometry must be finite in all bands."""
         flux = dl07_model.predict_photometry(dl07_params, mode="hybrid")
-        assert jnp.all(jnp.isfinite(flux)), "DL07 hybrid photometry contains NaN/Inf"
+        chex.assert_tree_all_finite(flux)
 
     def test_dl07_hybrid_photometry_is_positive(self, dl07_model, dl07_params):
         """DL07 hybrid photometry must be positive in all bands."""

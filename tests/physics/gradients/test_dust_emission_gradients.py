@@ -3,6 +3,7 @@
 jax.grad differentiability and finite-difference validation.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -53,8 +54,8 @@ class TestJITCompatibility:
 
         jitted = jax.jit(energy_balance_split)
         sed = jitted(wavelengths, L_absorbed)
-        assert sed.shape == wavelengths.shape
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_equal_shape([sed, wavelengths])
+        chex.assert_tree_all_finite(sed)
 
     def test_vmap(self, wavelengths):
 
@@ -168,7 +169,7 @@ class TestPlanckBnuGradient:
 
         jitted = jax.jit(planck_bnu)
         bnu = jitted(wave_ir, 30.0)
-        assert jnp.all(jnp.isfinite(bnu))
+        chex.assert_tree_all_finite(bnu)
 
     def test_gradient_wrt_temperature(self, wave_ir):
         """FD check: ∂(∑B_nu)/∂T > 0 (hotter → more luminous)."""
@@ -196,7 +197,7 @@ class TestModifiedBlackbodyGradient:
 
         jitted = jax.jit(modified_blackbody)
         sed = jitted(wave_fir, 1e10)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_gradient_wrt_L_absorbed(self, wave_fir):
 
@@ -232,7 +233,7 @@ class TestCasey2012Gradient:
 
         jitted = jax.jit(casey2012)
         sed = jitted(wave_ir, 1e10)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_gradient_wrt_L_absorbed(self, wave_ir):
 

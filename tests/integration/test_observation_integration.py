@@ -5,6 +5,7 @@ Requires SSP data — skips gracefully if not found.
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -264,8 +265,7 @@ class TestObservationEndToEnd:
         phot_data = jnp.ones(3) * 1e-29
         spec_data = jnp.ones(50) * 1e-30
         packed = obs.pack_data(phot=phot_data, spec=spec_data)
-        assert packed.shape == (53,)
-
+        chex.assert_shape(packed, (53,))
         unpacked = obs.unpack_prediction(packed)
         assert unpacked["photometry"].shape == (3,)
         assert unpacked["spectroscopy"].shape == (50,)

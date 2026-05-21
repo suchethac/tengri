@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+import chex
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -104,7 +105,7 @@ class TestDustLawCombinations:
         fn = resolve_dust_law(name)
         kwargs = {"dust_Rv": 3.1} if name in self._REQUIRES_RV else {}
         k = np.array(fn(self.WL, **kwargs))
-        assert np.all(np.isfinite(k))
+        chex.assert_tree_all_finite(k)
         assert np.all(k >= 0.0), f"{name}: negative k values"
         assert 0.95 < k[3] < 1.05, f"{name}: k(5500Å) = {k[3]:.3f}"
         assert 1.5 < k[0] < 15.0, f"{name}: k(FUV) = {k[0]:.2f}"

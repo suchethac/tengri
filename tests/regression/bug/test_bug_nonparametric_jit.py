@@ -3,6 +3,7 @@
 Bug: nonparametric.py:74,210 — len(bin_edges_gyr) raises ConcretizationTypeError in JIT.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -25,8 +26,8 @@ class TestNonparametricJITSafe:
             return continuity(age_yr, log_total_mass=10.0, bin_edges_gyr=edges, **kwargs)
 
         sfr = _eval(DEFAULT_BIN_EDGES_GYR)
-        assert sfr.shape == age_yr.shape
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_equal_shape([sfr, age_yr])
+        chex.assert_tree_all_finite(sfr)
 
     def test_dirichlet_sfh_jit(self):
         """dirichlet should JIT-compile with JAX array bin_edges."""
@@ -40,7 +41,7 @@ class TestNonparametricJITSafe:
             return dirichlet(age_yr, log_total_mass=10.0, bin_edges_gyr=edges, **kwargs)
 
         sfr = _eval(DEFAULT_BIN_EDGES_GYR)
-        assert sfr.shape == age_yr.shape
+        chex.assert_equal_shape([sfr, age_yr])
 
     def test_continuity_sfh_piecewise_constant(self):
         """continuity should return piecewise-constant SFR (step function per Leja+2019)."""

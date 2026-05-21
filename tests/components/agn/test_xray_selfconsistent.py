@@ -3,6 +3,7 @@
 Tests alpha_ox_from_l2500, xray_anisotropy, and xray_agn_corona_from_disc.
 """
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -203,8 +204,8 @@ class TestXrayAgnCoronaFromDisc:
         """Function should be JIT-compilable."""
         jitted = jax.jit(lambda w, l: xray_agn_corona_from_disc(w, l, apply_anisotropy=True))
         result = jitted(WAVE_XRAY, 1e30)
-        assert result.shape == WAVE_XRAY.shape
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_equal_shape([result, WAVE_XRAY])
+        chex.assert_tree_all_finite(result)
 
     def test_gradient(self):
         """Gradient through the function agrees with FD (more UV → more X-ray)."""

@@ -307,6 +307,8 @@ Test organization:
 
 Bug fix rule: every fix MUST cite the original paper equation and include a regression test.
 
+Use `chex` for array shape/finite/tree-allclose assertions in tests — see `docs/dev/testing-with-chex.md` for the conventions and conversion recipes.
+
 ## qmd search (MANDATORY before reading files)
 
 Search qmd first using `collections: ["tengri"]` before reading any file. Fall back to Read/Glob/Grep only if qmd returns insufficient results.

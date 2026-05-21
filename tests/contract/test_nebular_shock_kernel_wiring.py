@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import numpy as np
 import pytest
@@ -128,7 +129,7 @@ class TestShockDefaultOffRegression:
         sed_no_shock = model_no_shock.predict_photometry(params)
 
         # Verify output is finite and non-negative
-        assert np.all(np.isfinite(sed_no_shock)), "Baseline SED contains non-finite values"
+        chex.assert_tree_all_finite(sed_no_shock)
         assert np.all(sed_no_shock >= 0.0), "Baseline SED contains negative values"
 
         # When shock=False, the baseline should be self-consistent
@@ -148,7 +149,7 @@ class TestShockEnabledRuntimeSmoke:
 
         sed_shock = model_shock.predict_photometry(params)
 
-        assert np.all(np.isfinite(sed_shock)), "Shock-enabled SED contains non-finite values"
+        chex.assert_tree_all_finite(sed_shock)
         assert np.all(sed_shock >= 0.0), "Shock-enabled SED contains negative values"
         assert sed_shock.shape[-1] == 5, f"Expected 5 filters, got {sed_shock.shape}"
 
@@ -178,9 +179,8 @@ class TestShockPrecomputeRuntimeEquivalence:
         sed_precomp = model_precomp.predict_photometry(params_precomp)
 
         # Ensure both are finite
-        assert np.all(np.isfinite(sed_runtime)), "Runtime SED is non-finite"
-        assert np.all(np.isfinite(sed_precomp)), "Precompute SED is non-finite"
-
+        chex.assert_tree_all_finite(sed_runtime)
+        chex.assert_tree_all_finite(sed_precomp)
         # Compute relative error (avoid division by zero with max(|val|, 1e-30))
         rel_err = np.abs(sed_precomp - sed_runtime) / np.maximum(np.abs(sed_runtime), 1e-30)
 

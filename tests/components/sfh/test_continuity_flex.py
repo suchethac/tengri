@@ -4,6 +4,7 @@ Tests cover shape, non-negativity, mass conservation, custom anchors,
 JIT/gradient compatibility, and prior log-probability.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -34,7 +35,7 @@ class TestContinuityFlexSFH:
             flex_2=0.0,
             ratio_old=0.0,
         )
-        assert sfr.shape == (256,)
+        chex.assert_shape(sfr, (256,))
 
     def test_non_negative(self):
         t = self._age_grid()
@@ -82,7 +83,7 @@ class TestContinuityFlexSFH:
         """With no flex_* kwargs, n_flex_ratios=0 and we still get a valid SFH."""
         t = self._age_grid()
         sfr = continuity_flex(t, log_total_mass=10.0, ratio_young=0.0, ratio_old=0.0)
-        assert sfr.shape == t.shape
+        chex.assert_equal_shape([sfr, t])
         assert jnp.all(sfr >= 0.0)
 
     def test_custom_anchor_edges(self):
@@ -97,7 +98,7 @@ class TestContinuityFlexSFH:
             flex_0=0.2,
             ratio_old=0.0,
         )
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
         assert jnp.any(sfr > 0)
 
     def test_jit_compatible(self):
@@ -107,7 +108,7 @@ class TestContinuityFlexSFH:
             return continuity_flex(t, 10.0, ratio_young=ry, flex_0=f0, flex_1=f1, ratio_old=ro)
 
         sfr = jax.jit(_fn)(0.3, 0.1, -0.2, -0.4)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_gradient_through_ratio_young(self):
         """Gradient w.r.t. ratio_young should be finite."""

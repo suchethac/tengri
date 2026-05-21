@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -16,10 +17,10 @@ def test_full_pipeline_runs():
     wave_nm = jnp.logspace(2, 5, 200)  # 100 nm to 100 um
     p = GRAHSPParams(l5100=1.0e44, ebv=0.1, ebv_agn=0.0)
     sed = evaluate_grahsp_agn(wave_nm, p)
-    assert sed.bbb.shape == wave_nm.shape
-    assert jnp.all(jnp.isfinite(sed.bbb))
-    assert jnp.all(jnp.isfinite(sed.torus))
-    assert jnp.all(jnp.isfinite(sed.bbb_attenuated))
+    chex.assert_equal_shape([sed.bbb, wave_nm])
+    chex.assert_tree_all_finite(sed.bbb)
+    chex.assert_tree_all_finite(sed.torus)
+    chex.assert_tree_all_finite(sed.bbb_attenuated)
     assert jnp.all(sed.bbb_attenuated <= sed.bbb + sed.broad_lines + sed.narrow_lines + sed.feii)
     assert sed.l_bol_bbb > 0
     assert sed.l_bol_torus > 0
@@ -65,5 +66,5 @@ def test_jit_full_pipeline():
         return evaluate_grahsp_agn(jnp.logspace(2, 5, 100), p, templates).bbb_attenuated
 
     out = fwd(1.0e44, 0.2)
-    assert out.shape == (100,)
-    assert jnp.all(jnp.isfinite(out))
+    chex.assert_shape(out, (100,))
+    chex.assert_tree_all_finite(out)

@@ -5,6 +5,7 @@ should not be used for science. They must warn loudly (once per process)
 so users know to switch to skirtor_analytic.
 """
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.contract
@@ -43,8 +44,8 @@ class TestSimpleTorusDeprecation:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             result = simple_torus(wave, agn_log_lbol=12.0)
-        assert result.shape == wave.shape
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_equal_shape([result, wave])
+        chex.assert_tree_all_finite(result)
         assert jnp.all(result >= 0.0)
 
     def test_output_not_plain_mbb(self, wave):
@@ -77,8 +78,8 @@ class TestTwoTemperatureTorusDeprecation:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             result = two_temperature_torus(wave, agn_log_lbol=12.0)
-        assert result.shape == wave.shape
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_equal_shape([result, wave])
+        chex.assert_tree_all_finite(result)
         assert jnp.all(result >= 0.0)
 
     def test_differs_from_simple_torus(self, wave):

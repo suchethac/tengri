@@ -5,6 +5,7 @@ inversion, remnant mass recipes, and the top-level
 compute_mass_remaining_fraction integration.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -322,7 +323,7 @@ class TestComputeMassRemainingFraction:
 
         ages = jnp.array([1.0, 5.0, 10.0, 13.0])
         result = compute_mass_remaining_fraction(ages)
-        assert result.shape == ages.shape
+        chex.assert_equal_shape([result, ages])
 
     def test_fraction_in_zero_one(self):
         """Mass remaining fraction must be in (0, 1]."""
@@ -339,7 +340,7 @@ class TestComputeMassRemainingFraction:
 
         ages = jnp.logspace(-1, 1.2, 30)  # 0.1 to 15.8 Gyr
         fractions = compute_mass_remaining_fraction(ages)
-        assert jnp.all(jnp.isfinite(fractions))
+        chex.assert_tree_all_finite(fractions)
 
     def test_decreasing_with_age(self):
         """Older populations have more mass locked up in remnants (lower fraction)."""
@@ -411,8 +412,8 @@ class TestComputeMassRemainingFraction:
         jitted = jax.jit(compute_mass_remaining_fraction)
         ages = jnp.array([1.0, 5.0, 10.0])
         result = jitted(ages)
-        assert jnp.all(jnp.isfinite(result))
-        assert result.shape == ages.shape
+        chex.assert_tree_all_finite(result)
+        chex.assert_equal_shape([result, ages])
 
     def test_n_mass_parameter(self):
         """Changing n_mass (integration resolution) gives consistent results."""

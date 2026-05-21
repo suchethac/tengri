@@ -17,6 +17,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import chex
 import h5py
 import jax
 import jax.numpy as jnp
@@ -223,7 +224,7 @@ class TestCAT3DRuntimeConsistency:
             agn_fwd_cat3d=0.45,
             agn_torus_frac=0.5,
         )
-        assert np.all(np.isfinite(sed)), "Runtime SED contains NaN/inf"
+        chex.assert_tree_all_finite(sed)
         assert sed.shape == wavelength.shape, f"Shape mismatch: {sed.shape} vs {wavelength.shape}"
 
     def test_runtime_respects_inclination(self, cat3d_runtime):

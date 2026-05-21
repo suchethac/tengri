@@ -13,6 +13,7 @@ Verifies:
 10. Parameters correctly adds/removes parameters based on chem_evol flag
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -107,7 +108,7 @@ class TestClosedBoxMetallicity:
     def test_output_shape(self, age_grid, constant_sfr):
         """Output shape should match input."""
         log_z = closed_box_metallicity(age_grid, constant_sfr)
-        assert log_z.shape == age_grid.shape
+        chex.assert_equal_shape([log_z, age_grid])
 
     def test_reasonable_solar_metallicity(self, age_grid, constant_sfr):
         """With default params, present-day Z should be in a reasonable range."""
@@ -152,8 +153,8 @@ class TestClosedBoxAnalytic:
         # Higher return fraction means more gas available, so slower
         # depletion and different Z trajectory
         # Both should be finite and in range
-        assert jnp.all(jnp.isfinite(log_z_low_r))
-        assert jnp.all(jnp.isfinite(log_z_high_r))
+        chex.assert_tree_all_finite(log_z_low_r)
+        chex.assert_tree_all_finite(log_z_high_r)
 
 
 # ── JAX compatibility ─────────────────────────────────────────────
@@ -166,7 +167,7 @@ class TestJAXCompatibility:
         """closed_box_metallicity should be JIT-compilable."""
         jit_fn = jax.jit(closed_box_metallicity)
         log_z = jit_fn(age_grid, constant_sfr)
-        assert jnp.all(jnp.isfinite(log_z))
+        chex.assert_tree_all_finite(log_z)
 
     def test_gradient_wrt_yield(self, age_grid, constant_sfr):
         """Gradient of Z wrt yield_y should exist and be positive."""
@@ -196,7 +197,7 @@ class TestJAXCompatibility:
         sfr = jnp.ones_like(age_grid)
         grad_fn = jax.grad(loss)
         g = grad_fn(sfr)
-        assert jnp.all(jnp.isfinite(g)), "Gradients wrt SFR should be finite"
+        chex.assert_tree_all_finite(g)
 
     def test_gradient_wrt_eta(self, age_grid, constant_sfr):
         """Gradient of Z wrt eta_outflow should be negative."""
@@ -224,8 +225,8 @@ class TestJAXCompatibility:
 
         jit_fn = jax.jit(chem_evol_metallicity_on_ssp_grid)
         log_z_abs = jit_fn(ssp_log_ages, log_age_grid, sfr)
-        assert jnp.all(jnp.isfinite(log_z_abs))
-        assert log_z_abs.shape == ssp_log_ages.shape
+        chex.assert_tree_all_finite(log_z_abs)
+        chex.assert_equal_shape([log_z_abs, ssp_log_ages])
 
 
 # ── SSP grid interpolation ────────────────────────────────────────
@@ -254,7 +255,7 @@ class TestChemEvolOnSSPGrid:
         sfr = jnp.ones(64)
 
         log_z_abs = chem_evol_metallicity_on_ssp_grid(ssp_log_ages, log_age_grid, sfr)
-        assert log_z_abs.shape == (94,)
+        chex.assert_shape(log_z_abs, (94,))
 
 
 # ── Anchored version ──────────────────────────────────────────────
@@ -292,7 +293,7 @@ class TestAnchoredMetallicity:
         sfr = jnp.ones(n) * 0.5
 
         log_z = closed_box_metallicity_anchored(age_yr, sfr, met_logzsol_final=-1.0)
-        assert jnp.all(jnp.isfinite(log_z))
+        chex.assert_tree_all_finite(log_z)
         assert log_z[0] < 0.0, "Sub-solar target should give sub-solar Z"
 
 
@@ -411,5 +412,5 @@ class TestMassMetallicityRelation:
         # Note: the initial gas mass scales with total formed mass,
         # so both should reach similar final Z. The key test is that
         # both are finite and reasonable.
-        assert jnp.all(jnp.isfinite(log_z_low))
-        assert jnp.all(jnp.isfinite(log_z_high))
+        chex.assert_tree_all_finite(log_z_low)
+        chex.assert_tree_all_finite(log_z_high)

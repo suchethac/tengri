@@ -8,6 +8,7 @@ Unit tests that don't require real SSP data, focusing on:
 
 import math
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -57,7 +58,7 @@ class TestObservablesBuilding:
         )
         assert o.phot_fnu[0] == 1e-26
         assert o.phot_rest_fnu[0] == 2e-26
-        assert o.spec_fnu.shape == (100,)
+        chex.assert_shape(o.spec_fnu, (100,))
         assert hasattr(o, "mag_apparent")
         assert hasattr(o, "mag_absolute")
 

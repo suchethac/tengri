@@ -1,5 +1,6 @@
 """Gradient tests for ADAF disc model."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -41,7 +42,7 @@ class TestAdafJitGrad:
             return adaf_disc(wave, agn_log_lbol=42.0, agn_frac=0.1)
 
         result = _run(wavelength)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
     def test_gradient_wrt_lbol(self, optical_wavelength):
         """∂(∑SED)/∂log_lbol for adaf_disc.

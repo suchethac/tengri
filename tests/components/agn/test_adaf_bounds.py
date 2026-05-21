@@ -1,5 +1,6 @@
 """Tests for ADAF bounds and physical correctness."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -45,8 +46,8 @@ class TestAdafDiscBounds:
             agn_log_ledd=-3.0,
             agn_r_tr=100.0,
         )
-        assert jnp.all(jnp.isfinite(l_nu))
-        assert l_nu.shape == wavelength.shape
+        chex.assert_tree_all_finite(l_nu)
+        chex.assert_equal_shape([l_nu, wavelength])
 
     def test_non_negative(self, wavelength):
         """ADAF SED is non-negative everywhere.

@@ -6,6 +6,7 @@ and Parameters.with_params(). No SSP data needed — pure config/logic.
 
 import dataclasses
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -188,7 +189,7 @@ class TestSpectroscopy:
         R = jnp.linspace(30, 300, 50)
         sc = Spectroscopy(wave_obs=wave, resolution=R)
         assert sc.has_lsf
-        assert sc.resolution.shape == (50,)
+        chex.assert_shape(sc.resolution, (50,))
 
     def test_calibration_params_order_0(self):
         """calibration_order=0 → no params."""
@@ -212,7 +213,7 @@ class TestSpectroscopy:
         sc = Spectroscopy.nirspec_prism(wave)
         assert sc.has_lsf
         assert isinstance(sc.resolution, jnp.ndarray)
-        assert sc.resolution.shape == (200,)
+        chex.assert_shape(sc.resolution, (200,))
 
     def test_nirspec_g140m_factory(self):
         """nirspec_g140m() creates config with R~1000 via resolution function."""
@@ -332,7 +333,7 @@ class TestObservation:
         p = jnp.array([1.0, 2.0])
         s = jnp.ones(150) * 3.0
         packed = obs.pack_data(phot=p, spec=s)
-        assert packed.shape == (152,)
+        chex.assert_shape(packed, (152,))
         np.testing.assert_array_equal(packed[:2], p)
         np.testing.assert_array_equal(packed[2:], s)
 

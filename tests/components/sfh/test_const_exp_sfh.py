@@ -1,5 +1,6 @@
 """Tests for constant_then_exponential and its registry entry."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -88,8 +89,8 @@ class TestConstantThenExponentialSFH:
         """Function works under JAX JIT."""
         fn = jax.jit(constant_then_exponential)
         sfr = fn(t_lookback, 1.0, 1e9, 5e9, 10e9)
-        assert sfr.shape == t_lookback.shape
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_equal_shape([sfr, t_lookback])
+        chex.assert_tree_all_finite(sfr)
 
     def test_grad_compatible(self):
         """Function is differentiable w.r.t. log_sfr."""
@@ -141,7 +142,7 @@ class TestConstExpRegistry:
             "age": 10e9,
         }
         sfr = fn(t, **internal_kw)
-        assert sfr.shape == t.shape
+        chex.assert_equal_shape([sfr, t])
         assert float(jnp.max(sfr)) == pytest.approx(10.0, rel=1e-10)
 
     def test_unit_conversion_gyr_to_yr(self):

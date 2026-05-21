@@ -6,6 +6,7 @@ integration.  The QSOgen emission-line template file is checked for
 existence before tests that require it.
 """
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -42,7 +43,7 @@ class TestBrokenPowerlawContinuum:
         from tengri.components.agn.qsogen import _broken_powerlaw_continuum
 
         cont = _broken_powerlaw_continuum(uv_optical_wave, -0.349, 0.593, 3880.0)
-        assert jnp.all(jnp.isfinite(cont))
+        chex.assert_tree_all_finite(cont)
 
     def test_normalized_at_5500_angstrom(self):
         """Continuum is normalized to ~1.0 at 5500 Å."""
@@ -64,7 +65,7 @@ class TestBrokenPowerlawContinuum:
 
         jitted = jax.jit(_broken_powerlaw_continuum, static_argnums=())
         cont = jitted(uv_optical_wave, -0.349, 0.593, 3880.0)
-        assert jnp.all(jnp.isfinite(cont))
+        chex.assert_tree_all_finite(cont)
 
     def test_slope_uv_side(self):
         """Below the break (UV), slope is set by plslp1."""
@@ -76,7 +77,7 @@ class TestBrokenPowerlawContinuum:
         # In terms of f_lambda ~ lambda^alpha, the UV slope should produce
         # a falling spectrum toward shorter wavelengths for typical QSO slopes
         # Just verify it's finite and positive
-        assert jnp.all(jnp.isfinite(cont))
+        chex.assert_tree_all_finite(cont)
         assert jnp.all(cont > 0.0)
 
     def test_steeper_slope_changes_shape(self):
@@ -102,7 +103,7 @@ class TestHotDustBlackbody:
 
         cont = _broken_powerlaw_continuum(broad_wave, -0.349, 0.593, 3880.0)
         bb = _hot_dust_blackbody(broad_wave, cont, tbb=1240.0, bbnorm=3.96)
-        assert jnp.all(jnp.isfinite(bb))
+        chex.assert_tree_all_finite(bb)
 
     def test_non_negative(self, broad_wave):
         from tengri.components.agn.qsogen import _broken_powerlaw_continuum, _hot_dust_blackbody
@@ -135,7 +136,7 @@ class TestHotDustBlackbody:
         cont = _broken_powerlaw_continuum(broad_wave, -0.349, 0.593, 3880.0)
         jitted = jax.jit(_hot_dust_blackbody)
         bb = jitted(broad_wave, cont, tbb=1240.0, bbnorm=3.96)
-        assert jnp.all(jnp.isfinite(bb))
+        chex.assert_tree_all_finite(bb)
 
 
 # ── Balmer continuum ──────────────────────────────────────────────
@@ -147,7 +148,7 @@ class TestBalmerContinuum:
 
         cont = _broken_powerlaw_continuum(uv_optical_wave, -0.349, 0.593, 3880.0)
         bc = _balmer_continuum(uv_optical_wave, cont)
-        assert jnp.all(jnp.isfinite(bc))
+        chex.assert_tree_all_finite(bc)
 
     def test_non_negative(self, uv_optical_wave):
         from tengri.components.agn.qsogen import _balmer_continuum, _broken_powerlaw_continuum
@@ -239,13 +240,13 @@ class TestComputeQsogenSed:
         from tengri.components.agn.qsogen import compute_qsogen_sed
 
         sed = compute_qsogen_sed(broad_wave)
-        assert sed.shape == broad_wave.shape
+        chex.assert_equal_shape([sed, broad_wave])
 
     def test_finite_output(self, broad_wave):
         from tengri.components.agn.qsogen import compute_qsogen_sed
 
         sed = compute_qsogen_sed(broad_wave)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_non_negative(self, broad_wave):
         from tengri.components.agn.qsogen import compute_qsogen_sed
@@ -319,7 +320,7 @@ class TestComputeQsogenSed:
 
         jitted = jax.jit(compute_qsogen_sed)
         sed = jitted(broad_wave)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_gradient_wrt_lbol(self, broad_wave):
         """FD check: ∂(∑SED)/∂agn_log_lbol."""
@@ -387,13 +388,13 @@ class TestWavelengthToNu:
         from tengri.components.agn.qsogen import _wavelength_to_nu
 
         nu = _wavelength_to_nu(broad_wave)
-        assert nu.shape == broad_wave.shape
+        chex.assert_equal_shape([nu, broad_wave])
 
     def test_finite_and_positive(self, broad_wave):
         from tengri.components.agn.qsogen import _wavelength_to_nu
 
         nu = _wavelength_to_nu(broad_wave)
-        assert jnp.all(jnp.isfinite(nu))
+        chex.assert_tree_all_finite(nu)
         assert jnp.all(nu > 0.0)
 
 
@@ -405,7 +406,7 @@ class TestPlanckBlambda:
         from tengri.components.agn.qsogen import _planck_blambda
 
         blam = _planck_blambda(uv_optical_wave, 1240.0)
-        assert jnp.all(jnp.isfinite(blam))
+        chex.assert_tree_all_finite(blam)
 
     def test_non_negative(self, uv_optical_wave):
         from tengri.components.agn.qsogen import _planck_blambda
@@ -428,20 +429,20 @@ class TestPlanckBlambda:
 
         wave = jnp.array([5500.0])
         blam = _planck_blambda(wave, 0.0)
-        assert jnp.all(jnp.isfinite(blam))
+        chex.assert_tree_all_finite(blam)
 
     def test_output_shape(self, broad_wave):
         from tengri.components.agn.qsogen import _planck_blambda
 
         blam = _planck_blambda(broad_wave, 1240.0)
-        assert blam.shape == broad_wave.shape
+        chex.assert_equal_shape([blam, broad_wave])
 
     def test_jit_compatible(self, uv_optical_wave):
         from tengri.components.agn.qsogen import _planck_blambda
 
         jitted = jax.jit(_planck_blambda)
         blam = jitted(uv_optical_wave, 1240.0)
-        assert jnp.all(jnp.isfinite(blam))
+        chex.assert_tree_all_finite(blam)
 
 
 # ── _apply_dust_reddening ─────────────────────────────────────────
@@ -480,7 +481,7 @@ class TestApplyDustReddening:
 
         cont = _broken_powerlaw_continuum(uv_optical_wave, -0.349, 0.593, 3880.0)
         reddened = _apply_dust_reddening(uv_optical_wave, cont, 0.1)
-        assert reddened.shape == uv_optical_wave.shape
+        chex.assert_equal_shape([reddened, uv_optical_wave])
 
 
 # ── qsogen registered wrapper ─────────────────────────────────────
@@ -500,13 +501,13 @@ class TestQsogenWrapper:
         from tengri.components.agn.qsogen import qsogen
 
         sed = qsogen(broad_wave, agn_log_lbol=45.0, agn_ebv=0.1, agn_bbnorm=2.0)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_output_shape(self, broad_wave):
         from tengri.components.agn.qsogen import qsogen
 
         sed = qsogen(broad_wave)
-        assert sed.shape == broad_wave.shape
+        chex.assert_equal_shape([sed, broad_wave])
 
 
 class TestBrokenPowerlawEuvBranch:
@@ -549,8 +550,8 @@ class TestBrokenPowerlawEuvBranch:
         # EUV should be dimmer per unit wavelength than extrapolated UV power-law
         # Check: mean EUV flux is lower relative to wave range than UV
         assert float(jnp.mean(f_euv)) >= 0.0
-        assert jnp.all(jnp.isfinite(f_euv))
-        assert jnp.all(jnp.isfinite(f_uv))
+        chex.assert_tree_all_finite(f_euv)
+        chex.assert_tree_all_finite(f_uv)
 
     def test_euv_slope_matches_sl3(self):
         """Below plbrk3, measured log-log slope equals sl1 - plstep = -(plslp1+plstep).
@@ -601,7 +602,7 @@ class TestBrokenPowerlawEuvBranch:
             plstep=1.5,
             plbrk3=1200.0,
         )
-        assert jnp.all(jnp.isfinite(f)), "EUV branch: NaN/Inf in output"
+        chex.assert_tree_all_finite(f)
         assert jnp.all(f >= 0.0), "EUV branch: negative flux"
 
 

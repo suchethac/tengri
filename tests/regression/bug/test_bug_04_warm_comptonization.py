@@ -3,6 +3,7 @@
 See ADR / docs/known_bugs.md for full context.
 """
 
+import chex
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -36,8 +37,8 @@ class TestBug04WarmComptonization:
         nu = jnp.array(np.logspace(13, np.log10(5e18), 200))
         # K&D 2018 default warm zone: Gamma=2.5, kTe=0.2 keV, kTbb=10 eV = 0.01 keV
         shape = nthcomp_lnu_interp(nu, gamma=2.5, kTe_keV=0.2, kTbb_keV=0.01)
-        assert shape.shape == nu.shape
-        assert jnp.all(jnp.isfinite(shape)), "nthcomp template shape must be finite everywhere"
+        chex.assert_equal_shape([shape, nu])
+        chex.assert_tree_all_finite(shape)
         assert jnp.all(shape >= 0.0), "nthcomp template shape must be non-negative"
         assert jnp.any(shape > 0), "nthcomp template shape must be non-zero somewhere"
 
@@ -139,7 +140,7 @@ class TestBug04WarmComptonization:
 
         result = disc_mod.kubota_done_disc(wav_xray, agn_log_lbol=46.0)
 
-        assert jnp.all(jnp.isfinite(result)), "nthcomp SED contains non-finite values"
+        chex.assert_tree_all_finite(result)
         assert float(jnp.max(result)) > 0.0, (
             "nthcomp SED is identically zero — warm Comptonization path not reached"
         )

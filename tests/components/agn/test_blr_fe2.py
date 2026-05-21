@@ -1,5 +1,6 @@
 """Tests for Fe II pseudo-continuum in BLR emission."""
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -33,7 +34,7 @@ class TestFe2PseudoContinuum:
 
     def test_zero_strength_returns_zeros(self, wavelength):
         result = _fe2_pseudo_continuum(wavelength, fwhm_kms=3000.0, fe2_strength=0.0)
-        assert result.shape == wavelength.shape
+        chex.assert_equal_shape([result, wavelength])
         assert jnp.allclose(result, 0.0, atol=1e-30)
 
     def test_positive_strength_has_flux(self, wavelength):
@@ -76,8 +77,8 @@ class TestFe2PseudoContinuum:
         """Function should be JIT-compilable."""
         fn = jax.jit(lambda w: _fe2_pseudo_continuum(w, fwhm_kms=3000.0, fe2_strength=1.0))
         result = fn(wavelength)
-        assert result.shape == wavelength.shape
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_equal_shape([result, wavelength])
+        chex.assert_tree_all_finite(result)
 
     def test_differentiable(self, wavelength):
         """Fe II output should be differentiable w.r.t. fe2_strength."""
@@ -128,5 +129,5 @@ class TestBlrEmissionWithFe2:
         """compute_blr_sed with Fe II should be JIT-compilable."""
         fn = jax.jit(lambda w: compute_blr_sed(w, l_disc_bol_erg=1e45, agn_fe2_strength=1.0))
         result = fn(wavelength)
-        assert jnp.all(jnp.isfinite(result))
-        assert result.shape == wavelength.shape
+        chex.assert_tree_all_finite(result)
+        chex.assert_equal_shape([result, wavelength])

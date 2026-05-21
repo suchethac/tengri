@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -57,7 +58,7 @@ def test_radio_lookups_jit_compatible(model_name, filter_set):
         phot = jitted_lookup(jnp.float64(scale), jnp.float64(float(alpha_grid[1])))
 
     assert phot.shape == (len(waves),), f"Expected shape ({len(waves)},), got {phot.shape}"
-    assert np.all(np.isfinite(np.asarray(phot))), "Lookup produced non-finite values"
+    chex.assert_tree_all_finite(np.asarray(phot))
     # Radio photometry should be positive (L_nu > 0)
     assert np.all(np.asarray(phot) >= 0.0), "Lookup produced negative photometry"
 

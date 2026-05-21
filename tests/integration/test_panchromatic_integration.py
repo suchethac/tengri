@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -121,7 +122,7 @@ class TestFullPanchromaticSED:
         """Full panchromatic SED must be finite and mostly positive."""
         result = dusty_sfg_model.predict_rest_sed(dusty_params)
         assert isinstance(result, SEDResult)
-        assert jnp.all(jnp.isfinite(result.sed))
+        chex.assert_tree_all_finite(result.sed)
         # Allow a few zero pixels at extreme wavelengths
         frac_positive = float(jnp.mean(result.sed > 0))
         assert frac_positive > 0.9, f"Only {frac_positive:.1%} positive pixels"
@@ -134,7 +135,7 @@ class TestFullPanchromaticSED:
         """
         phot = dusty_sfg_model.predict_photometry(dusty_params)
         assert phot.shape == (14,)  # 14 bands
-        assert jnp.all(jnp.isfinite(phot))
+        chex.assert_tree_all_finite(phot)
         assert jnp.all(phot > 0), "All bands must have positive flux"
 
         # Reasonable flux range for a z=0.1 galaxy

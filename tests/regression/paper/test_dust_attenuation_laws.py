@@ -12,6 +12,7 @@ References
 - Salim, Boquien & Lee 2018, ApJ, 859, 11
 """
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.regression_paper
@@ -83,7 +84,7 @@ class TestLeitherer02:
         f = jax.jit(leitherer02)
         wavs = jnp.array([1500.0, 5500.0])
         result = f(wavs)
-        assert result.shape == (2,)
+        chex.assert_shape(result, (2,))
 
     def test_gradient(self):
         """Should be differentiable (for use in optimization)."""
@@ -168,7 +169,7 @@ class TestNoll09:
         """Should work inside jax.jit."""
         f = jax.jit(lambda w: noll09(w, dust_bump_strength=2.0, dust_delta=-0.1))
         result = f(jnp.array(WAVS))
-        assert result.shape == WAVS.shape
+        chex.assert_equal_shape([result, WAVS])
 
     def test_gradient_wrt_params(self):
         """Gradients of noll09 match central FD w.r.t. bump strength and slope."""
@@ -257,7 +258,7 @@ class TestSalimSBL18:
         """Should work inside jax.jit."""
         f = jax.jit(lambda w: salim_sbl18(w, dust_bump_strength=2.0, dust_delta=-0.1))
         result = f(jnp.array(WAVS))
-        assert result.shape == WAVS.shape
+        chex.assert_equal_shape([result, WAVS])
 
     def test_gradient_wrt_params(self):
         """Gradients of salim_sbl18 match central FD w.r.t. bump strength and slope."""

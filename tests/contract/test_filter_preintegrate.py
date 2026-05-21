@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 # SPDX-License-Identifier: BSD-3-Clause
+import chex
 import pytest
 
 """Smoke + correctness tests for ``preintegrate_ssp_filter_grid``.
@@ -44,13 +45,13 @@ def _toy_box_filter(center: float, width: float, n: int = 41):
 def test_preintegrate_shape(ssp):
     fws, fts = zip(*[_toy_box_filter(c, 500.0) for c in (3500.0, 5000.0, 7500.0)])
     out = preintegrate_ssp_filter_grid(ssp, list(fws), list(fts), redshift=0.0)
-    assert out.shape == (ssp.ssp_flux.shape[0], ssp.ssp_flux.shape[1], 3)
+    chex.assert_shape(out, (ssp.ssp_flux.shape[0], ssp.ssp_flux.shape[1], 3))
 
 
 def test_preintegrate_finite_and_positive(ssp):
     fw, ft = _toy_box_filter(5000.0, 500.0)
     out = preintegrate_ssp_filter_grid(ssp, [fw], [ft], redshift=0.0)
-    assert jnp.all(jnp.isfinite(out))
+    chex.assert_tree_all_finite(out)
     assert jnp.all(out > 0.0)
 
 

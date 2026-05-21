@@ -8,6 +8,7 @@ Tests cover:
 - Registry integration: both models resolve via resolve_sfh().
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -52,7 +53,7 @@ class TestContinuitySFH:
         sfr = continuity(AGE_YR, log_total_mass=10.0, **kwargs)
 
         # SFR should be roughly constant (within interpolation artifacts)
-        assert sfr.shape == AGE_YR.shape
+        chex.assert_equal_shape([sfr, AGE_YR])
         relative_spread = (jnp.max(sfr) - jnp.min(sfr)) / jnp.mean(sfr)
         assert relative_spread < 0.15, f"Flat SFH spread too large: {relative_spread:.3f}"
 
@@ -90,7 +91,7 @@ class TestContinuitySFH:
             return continuity(AGE_YR, log_total_mass=10.0, **kwargs)
 
         sfr = _eval()
-        assert sfr.shape == AGE_YR.shape
+        chex.assert_equal_shape([sfr, AGE_YR])
 
     def test_gradient_compatible(self):
         """Gradients w.r.t. ratios and mass should be computable."""
@@ -103,7 +104,7 @@ class TestContinuitySFH:
         ratios = jnp.zeros(6)
         grad_ratios, _grad_mass = jax.grad(loss, argnums=(0, 1))(ratios, 10.0)
 
-        assert grad_ratios.shape == (6,)
+        chex.assert_shape(grad_ratios, (6,))
 
 
 class TestContinuityPrior:
@@ -151,7 +152,7 @@ class TestDirichletSFH:
         kwargs = {f"z_frac_{i}": equal_z[i] for i in range(6)}
         sfr = dirichlet(AGE_YR, log_total_mass=10.0, **kwargs)
 
-        assert sfr.shape == AGE_YR.shape
+        chex.assert_equal_shape([sfr, AGE_YR])
         assert jnp.all(sfr >= 0)
 
         # With equal mass fracs but unequal bin widths, SFR varies proportionally
@@ -194,7 +195,7 @@ class TestDirichletSFH:
             return dirichlet(AGE_YR, log_total_mass=10.0, **kwargs)
 
         sfr = _eval()
-        assert sfr.shape == AGE_YR.shape
+        chex.assert_equal_shape([sfr, AGE_YR])
 
     def test_custom_bin_edges(self):
         """Custom bin edges should work."""
@@ -202,7 +203,7 @@ class TestDirichletSFH:
         n_bins = 4
         kwargs = {f"z_frac_{i}": 0.5 for i in range(n_bins - 1)}
         sfr = dirichlet(AGE_YR, log_total_mass=10.0, bin_edges_gyr=custom_edges, **kwargs)
-        assert sfr.shape == AGE_YR.shape
+        chex.assert_equal_shape([sfr, AGE_YR])
 
 
 # ── Registry integration tests ────────────────────────────────────
@@ -263,7 +264,7 @@ class TestRegistryBinEdges:
         age_yr = jnp.linspace(1e6, 3.3e9, 100)
         kwargs = {v[0]: 0.0 for v in params.values() if v[0] != "log_total_mass"}
         sfr = fn(age_yr, log_total_mass=10.0, **kwargs)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
         assert jnp.any(sfr > 0)
 
     def test_dirichlet_custom_edges(self):
@@ -274,14 +275,14 @@ class TestRegistryBinEdges:
         # param_map: {public_name: (internal_name, scale, offset)}
         kwargs = {v[0]: 0.5 for v in param_map.values() if v[0] != "log_total_mass"}
         sfr = fn(age_yr, log_total_mass=10.0, **kwargs)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_none_uses_default_edges(self):
         fn, params, _, _ = resolve_sfh("continuity", bin_edges_gyr=None)
         age_yr = jnp.linspace(1e6, 13.7e9, 100)
         kwargs = {v[0]: 0.0 for v in params.values() if v[0] != "log_total_mass"}
         sfr = fn(age_yr, log_total_mass=10.0, **kwargs)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
 
 # ── Bursty continuity prior (Tacchella+2022) ─────────────────────
@@ -394,7 +395,7 @@ class TestContinuityFlexSFH:
             flex_2=0.0,
             ratio_old=0.0,
         )
-        assert sfr.shape == (256,)
+        chex.assert_shape(sfr, (256,))
 
     def test_non_negative(self):
         t = self._age_grid()
@@ -415,7 +416,7 @@ class TestContinuityFlexSFH:
             return continuity_flex(t, 10.0, ratio_young=ry, flex_0=f0, flex_1=f1, ratio_old=ro)
 
         sfr = jax.jit(_fn)(0.3, 0.1, -0.2, -0.4)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_prior_logp_zero_ratios(self):
         """All-zero ratios should give maximum log-probability."""
@@ -447,5 +448,5 @@ def test_resolved_fn_callable():
         internal_kw[f"ratio_{i}"] = 0.0
 
     sfr = fn(AGE_YR, **internal_kw)
-    assert sfr.shape == AGE_YR.shape
-    assert jnp.all(jnp.isfinite(sfr))
+    chex.assert_equal_shape([sfr, AGE_YR])
+    chex.assert_tree_all_finite(sfr)

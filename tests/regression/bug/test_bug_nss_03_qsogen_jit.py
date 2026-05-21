@@ -3,6 +3,7 @@
 See ADR / docs/known_bugs.md for full context.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -57,7 +58,7 @@ class TestBugNSS03QsogenJit:
                 agn_bcnorm=0.0,
             )
             # Should complete without error and return finite array
-            assert jnp.all(jnp.isfinite(sed)), "SED contains non-finite values"
+            chex.assert_tree_all_finite(sed)
             assert sed.shape == wavelength.shape, (
                 f"Shape mismatch: {sed.shape} vs {wavelength.shape}"
             )
@@ -100,8 +101,8 @@ class TestBugNSS03QsogenJit:
 
         try:
             seds = vmapped_qsogen(log_lbol_values)
-            assert seds.shape == (3, wavelength.shape[0])
-            assert jnp.all(jnp.isfinite(seds))
+            chex.assert_shape(seds, (3, wavelength.shape[0]))
+            chex.assert_tree_all_finite(seds)
         except Exception as e:
             pytest.fail(
                 f"BUG-NSS-03 vmap regression: vmapped compute_qsogen_sed raised "

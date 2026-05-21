@@ -13,6 +13,7 @@ Each model is tested for:
 - Physical consistency (energy conservation, monotonicity where expected)
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -44,7 +45,7 @@ class TestDelayedBq:
         """Output shape matches input."""
         t = jnp.logspace(7, 10, 100)
         sfr = delayed_bq(t, tau_main_yr=2e9, age_main_yr=5e9, age_bq_yr=500e6, r_sfr=0.5)
-        assert sfr.shape == t.shape
+        chex.assert_equal_shape([sfr, t])
 
     def test_nonnegative(self):
         """SFR is non-negative everywhere."""
@@ -108,7 +109,7 @@ class TestDelayedBq:
         fn = jax.jit(delayed_bq)
         t = jnp.logspace(7, 10, 100)
         sfr = fn(t, tau_main_yr=2e9, age_main_yr=5e9, age_bq_yr=500e6, r_sfr=0.5)
-        assert sfr.shape == (100,)
+        chex.assert_shape(sfr, (100,))
 
     def test_has_gradients_tau(self):
         """Gradient w.r.t. tau_main_yr via jax.grad.
@@ -192,7 +193,7 @@ class TestPeriodic:
         """Output shape matches input."""
         t = jnp.logspace(6, 9.5, 150)
         sfr = periodic(t, delta_bursts_yr=50e6, tau_bursts_yr=20e6, burst_type=0, age_yr=1000e6)
-        assert sfr.shape == t.shape
+        chex.assert_equal_shape([sfr, t])
 
     def test_nonnegative(self):
         """SFR is non-negative everywhere."""
@@ -240,7 +241,7 @@ class TestPeriodic:
         fn = jax.jit(periodic)
         t = jnp.logspace(6, 9.5, 100)
         sfr = fn(t, delta_bursts_yr=50e6, tau_bursts_yr=20e6, burst_type=0, age_yr=1000e6)
-        assert sfr.shape == (100,)
+        chex.assert_shape(sfr, (100,))
 
     def test_has_gradients_delta(self):
         """Gradient w.r.t. delta_bursts_yr via jax.grad."""
@@ -287,7 +288,7 @@ class TestBuat08:
         """Output shape matches input."""
         t = jnp.logspace(7, 10, 100)
         sfr = buat08(t, velocity_km_s=220.0)
-        assert sfr.shape == t.shape
+        chex.assert_equal_shape([sfr, t])
 
     def test_nonnegative(self):
         """SFR is non-negative everywhere."""
@@ -338,7 +339,7 @@ class TestBuat08:
         fn = jax.jit(buat08)
         t = jnp.logspace(7, 10, 100)
         sfr = fn(t, velocity_km_s=220.0)
-        assert sfr.shape == (100,)
+        chex.assert_shape(sfr, (100,))
 
     def test_has_gradients(self):
         """Gradient w.r.t. velocity_km_s via jax.grad."""
