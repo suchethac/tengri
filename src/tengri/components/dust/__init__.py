@@ -18,6 +18,12 @@ Narayanan+2018 cosmological RT simulations.
 """
 
 # Convenience re-exports for `from tengri.dust import ...`
+# Dust block in the SEDComponent pipeline — combines UV–optical attenuation
+# with IR re-emission via ``DustEmissionSEDComponentConfig.template``.
+from tengri.components.dust.astrodust_ir import (
+    AstrodustIRConfig as AstrodustIRConfig,
+    AstrodustIRSEDComponent as AstrodustIRSEDComponent,
+)
 from tengri.components.dust.attenuation import (
     DUST_LAWS,
     calzetti as calzetti,
@@ -44,6 +50,18 @@ from tengri.components.dust.attenuation import (
     wg00_cloudy,
     wg00_dusty,
     wg00_shell,
+)
+from tengri.components.dust.dale2014_ir import (
+    Dale2014IRConfig as Dale2014IRConfig,
+    Dale2014IRSEDComponent as Dale2014IRSEDComponent,
+)
+from tengri.components.dust.dl14_ir import (
+    DL14IRConfig as DL14IRConfig,
+    DL14IRSEDComponent as DL14IRSEDComponent,
+)
+from tengri.components.dust.draine2021_pah_ir import (
+    Draine2021PAHIRConfig as Draine2021PAHIRConfig,
+    Draine2021PAHIRSEDComponent as Draine2021PAHIRSEDComponent,
 )
 
 # New names
@@ -90,23 +108,6 @@ from tengri.components.dust.emission import (
     register_themis_tabulated,
     resolve_emission_model,
     themis,
-)
-
-# Dust block in the SEDComponent pipeline — combines UV–optical attenuation
-# with IR re-emission via ``DustEmissionSEDComponentConfig.template``.
-from tengri.components.dust.astrodust_ir import (
-    AstrodustIRConfig as AstrodustIRConfig,
-    AstrodustIRSEDComponent as AstrodustIRSEDComponent,
-)
-from tengri.components.dust.dale2014_ir import (
-    Dale2014IRConfig as Dale2014IRConfig,
-    Dale2014IRSEDComponent as Dale2014IRSEDComponent,
-)
-from tengri.components.dust.dl14_ir import DL14IRConfig as DL14IRConfig
-from tengri.components.dust.dl14_ir import DL14IRSEDComponent as DL14IRSEDComponent
-from tengri.components.dust.draine2021_pah_ir import (
-    Draine2021PAHIRConfig as Draine2021PAHIRConfig,
-    Draine2021PAHIRSEDComponent as Draine2021PAHIRSEDComponent,
 )
 from tengri.components.dust.emission_component import (
     DustEmissionSEDComponent,
