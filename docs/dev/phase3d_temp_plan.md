@@ -1,6 +1,9 @@
 # Phase 3d — kernel adapter deletion + `approx=` enum (temporary plan, delete after merge)
 
-**Status:** Active plan.
+**Status:** Phase 3d-A (typed `WavePrecomp` opt-in) shipped in PR #135;
+kernel deletion deferred — see
+[`orchestrator_ssp_threading.md`](orchestrator_ssp_threading.md) for the
+SSP-as-traced-kwarg prerequisite that must land first.
 **Date:** 2026-05-20.
 **Delete after the implementing PR merges.**
 
