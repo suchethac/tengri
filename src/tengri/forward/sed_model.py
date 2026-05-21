@@ -3963,50 +3963,59 @@ class SEDModel:
         return jit_fn
 
     def _template_data_for_jit(self):
-        """Collect nebular backend grids and weights for JIT threading.
+        """Collect template data (nebular + AGN) for JIT threading.
 
-        Walks the cached component chain (built by predict_state warmup)
-        to find the nebular component and extract its backend's
-        grid/weights attribute as a runtime JIT input, so the underlying
-        array stays a JAX ``Parameter`` op rather than a baked-in HLO
-        ``Constant``.
+        Walks the cached component chain to extract backend grids/weights
+        needed by components so they become JAX ``Parameter`` ops rather
+        than baked-in HLO ``Constant`` ops. Returns a nested dict with
+        per-component namespace keys ("nebular", "agn") to avoid collisions.
 
-        The lookup is **duck-typed** on the backend object: any backend
-        carrying a ``.grid`` or ``.weights`` attribute pointing at a
-        jax-pytree-flatable value participates. New backends with the
-        same convention pick up threading without code changes here.
+        Lookups are **duck-typed** on backend objects carrying ``.grid``
+        or ``.weights`` attributes. New backends with these conventions
+        participate automatically.
 
         Returns
         -------
-        Any | None
-            Backend grid/weights object, or ``None`` if no nebular
-            component is present or if the active backend exposes
-            neither attribute (e.g. ``BakedIn`` carries no separate
-            template data).
+        dict[str, Any] | None
+            Nested dict with namespace keys ("nebular", "agn") pointing
+            to template structures, or ``None`` if no templates present.
         """
         cached = getattr(self, "_cached_component_chain", None)
         if cached is None:
             return None
 
+        from tengri.components.agn.component import AGNSEDComponent
         from tengri.components.nebular.component import NebularSEDComponent
 
-        for component in cached:
-            if not isinstance(component, NebularSEDComponent):
-                continue
-            backend = getattr(component, "backend", None)
-            if backend is None:
-                return None
-            # Duck-type: prefer .weights (NN-backed backends like Cue),
-            # then .grid (interpolation-table backends like CloudyGrid,
-            # CB19, MAPPINGS, AGN NLR). Falls back to None for backends
-            # that carry no per-call template data (BakedIn, Shock).
-            for attr in ("weights", "grid"):
-                template = getattr(backend, attr, None)
-                if template is not None:
-                    return template
-            return None
+        template_data = {}
 
-        return None
+        # Extract nebular backend template data
+        for component in cached:
+            if isinstance(component, NebularSEDComponent):
+                backend = getattr(component, "backend", None)
+                if backend is not None:
+                    # Duck-type: prefer .weights (Cue), then .grid (CloudyGrid, etc)
+                    for attr in ("weights", "grid"):
+                        template = getattr(backend, attr, None)
+                        if template is not None:
+                            template_data["nebular"] = template
+                            break
+                break
+
+        # Extract AGN template data
+        for component in cached:
+            if isinstance(component, AGNSEDComponent):
+                agn_templates = {}
+                if (
+                    component._state is not None
+                    and component._state.skirtor_templates is not None
+                ):
+                    agn_templates["skirtor"] = component._state.skirtor_templates
+                if agn_templates:
+                    template_data["agn"] = agn_templates
+                break
+
+        return template_data if template_data else None
 
     def _build_component_chain(self):
         """Construct the orchestrator chain from ``self``'s settings.
