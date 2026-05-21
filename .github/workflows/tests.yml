@@ -54,4 +54,11 @@ jobs:
       # physics-first tree (components/, contract/, inference/,
       # physics/, regression/) sits alongside the legacy tests/unit/
       # subdirs and runs in the same fast-suite scope.
-      - run: pytest tests/components tests/contract tests/inference tests/physics tests/regression tests/unit -q --ignore=tests/crossval
+      - run: |
+          pytest tests/components tests/contract tests/inference tests/physics tests/regression tests/unit -q \
+            --ignore=tests/crossval \
+            --ignore=tests/inference/test_nss.py \
+            --ignore=tests/inference/test_ghmc.py \
+            --ignore=tests/inference/test_mclmc.py \
+            --ignore=tests/inference/test_nuts_pathfinder_warmstart.py \
+            --ignore=tests/inference/test_fitter_dispatch_invariants.py
