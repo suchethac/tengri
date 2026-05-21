@@ -73,6 +73,7 @@ all = [
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "pytest-xdist>=3.5",
     "ruff>=0.9",
     "jupytext>=1.16",
     # Tests cover optional inference paths (MAP via optax/jaxopt, NUTS via

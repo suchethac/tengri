@@ -66,8 +66,13 @@ jobs:
       # Two missing-fixture files remain skipped; the three numerical
       # / autodiff failures the rehome surfaced were fixed in the same
       # PR that removed the --deselect lines.
+      #
+      # pytest-xdist `-n auto` runs tests in parallel across all CPU cores on
+      # the GitHub runner (typically 4 vCPUs). Gives ~2-3x wall-clock speedup
+      # on the ~5800-test fast suite.
       - run: |
           pytest tests/components tests/contract tests/physics tests/regression -q \
+            -n auto \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
