@@ -49,4 +49,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
-      - run: pytest tests/ -q --ignore=tests/crossval
+      # Match the pre-rehome scope: fast tests only.
+      # tests/integration/ and tests/crossval/ are gated; the new
+      # physics-first tree (components/, contract/, inference/,
+      # physics/, regression/) sits alongside the legacy tests/unit/
+      # subdirs and runs in the same fast-suite scope.
+      - run: pytest tests/components tests/contract tests/inference tests/physics tests/regression tests/unit -q --ignore=tests/crossval
