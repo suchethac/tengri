@@ -3963,50 +3963,95 @@ class SEDModel:
         return jit_fn
 
     def _template_data_for_jit(self):
-        """Collect nebular backend grids and weights for JIT threading.
+        """Collect template grids/weights for JIT threading (nebular + dust IR).
 
         Walks the cached component chain (built by predict_state warmup)
-        to find the nebular component and extract its backend's
-        grid/weights attribute as a runtime JIT input, so the underlying
-        array stays a JAX ``Parameter`` op rather than a baked-in HLO
-        ``Constant``.
+        to collect template arrays that should be threaded as JIT runtime
+        inputs instead of closure-captured, so they appear as JAX
+        ``Parameter`` ops rather than baked-in HLO ``Constant`` ops.
 
-        The lookup is **duck-typed** on the backend object: any backend
-        carrying a ``.grid`` or ``.weights`` attribute pointing at a
-        jax-pytree-flatable value participates. New backends with the
-        same convention pick up threading without code changes here.
+        **Nebular templates** (Phase 4-C): duck-typed on backend ``.grid``
+        / ``.weights`` attributes (Cue, CloudyGrid, etc.).
+
+        **Dust IR templates** (Phase 4-D-B): extracted from the
+        DustEmissionSEDComponent's cached state (PAHspec, Astrodust, etc.),
+        indexed by template type.
 
         Returns
         -------
-        Any | None
-            Backend grid/weights object, or ``None`` if no nebular
-            component is present or if the active backend exposes
-            neither attribute (e.g. ``BakedIn`` carries no separate
-            template data).
+        dict[str, Any] | None
+            Dict with ``"nebular"`` and/or ``"dust_ir"`` keys, each
+            carrying the threaded template data for that subsystem.
+            Returns ``None`` if no components need threading.
         """
         cached = getattr(self, "_cached_component_chain", None)
         if cached is None:
             return None
 
+        from tengri.components.dust.emission_component import DustEmissionSEDComponent
         from tengri.components.nebular.component import NebularSEDComponent
 
+        result = {}
+
+        # ── Nebular backend threading (Phase 4-C) ──
         for component in cached:
             if not isinstance(component, NebularSEDComponent):
                 continue
             backend = getattr(component, "backend", None)
             if backend is None:
-                return None
-            # Duck-type: prefer .weights (NN-backed backends like Cue),
-            # then .grid (interpolation-table backends like CloudyGrid,
-            # CB19, MAPPINGS, AGN NLR). Falls back to None for backends
-            # that carry no per-call template data (BakedIn, Shock).
+                continue
+            # Duck-type: prefer .weights (NN-backed like Cue),
+            # then .grid (interpolation-table like CloudyGrid/CB19/MAPPINGS/AGN NLR).
+            # Falls back to skipping for backends with no separate template data
+            # (BakedIn, Shock).
             for attr in ("weights", "grid"):
                 template = getattr(backend, attr, None)
                 if template is not None:
-                    return template
-            return None
+                    result["nebular"] = template
+                    break
+            break
 
-        return None
+        # ── Dust IR template threading (Phase 4-D-B) ──
+        for component in cached:
+            if not isinstance(component, DustEmissionSEDComponent):
+                continue
+            # For dust emission, we need to precompute templates if they're
+            # template-based (PAHspec, Astrodust). Analytic models have no
+            # templates to thread. The wave_grid is needed for template resampling;
+            # we use a dummy grid (length 1) since the actual grid is only needed
+            # for reshaping, and the precomputed state is cached internally by
+            # the loaders via @functools.cache.
+            template_type = component.config.template
+            if template_type == "modified_blackbody":
+                # No templates to thread for analytic models.
+                pass
+            else:
+                # PAHspec and Astrodust need precompute to load their HDF5 grids.
+                # Use a minimal dummy wave_grid since the actual grid shape is
+                # irrelevant for threading — we just need the grids from the
+                # precompute path. In the actual apply() path, the real wave_grid
+                # from state will be used for dust computation.
+                dust_state = component.precompute(
+                    ssp_data=None,
+                    wave_grid=jnp.asarray([1.0, 2.0]),  # Dummy grid for precompute
+                )
+
+                if template_type == "draine2021_pah":
+                    result["dust_ir"] = {
+                        "pahspec_lgU_grid": dust_state.pahspec_lgU_grid,
+                        "pahspec_lnu_template": dust_state.pahspec_lnu_template,
+                        "pahspec_norm_per_lgU": dust_state.pahspec_norm_per_lgU,
+                    }
+                elif template_type == "astrodust":
+                    result["dust_ir"] = {
+                        "astrodust_lgU_grid": dust_state.astrodust_lgU_grid,
+                        "astrodust_lnu_template": dust_state.astrodust_lnu_template,
+                        "astrodust_norm_per_lgU": dust_state.astrodust_norm_per_lgU,
+                        "astrodust_lnu_spinning": dust_state.astrodust_lnu_spinning,
+                    }
+            break
+
+        return result if result else None
 
     def _build_component_chain(self):
         """Construct the orchestrator chain from ``self``'s settings.
