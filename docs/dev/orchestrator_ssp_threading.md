@@ -104,6 +104,53 @@ Either way the public `predict_observables_jit` closure needs to thread
 existing `compile_signature()` keying gates correctness; threading gates
 performance.
 
+## Related catalog-inference concerns (Phase 3d-4, 2026-05-20)
+
+PR #135 introduced ``approx=WavePrecomp(...)`` as the build-time opt-in
+for the LUT path, but discovered two additional gaps when validating the
+many-galaxy story:
+
+### 1. Cache collision when WavePrecomp config differs (fixed)
+
+``compile_signature()`` originally only included the boolean
+``wave_precomp`` / ``ztable`` / ``igm`` flags from ``self._approx``. Two
+models built with ``WavePrecomp(n_z=100)`` and ``WavePrecomp(n_z=200)``
+shared a signature → the structural kernel cache reused the first
+model's compiled LUT for the second, silently miscompiling the second
+galaxy. Fixed in this PR by adding the resolved ``n_z``, ``z_min``,
+``z_max`` to the signature alongside the boolean flags.
+
+### 2. `predict_observables_jit` cannot route through the LUT (open)
+
+The non-JIT ``predict_observables`` and ``predict_photometry`` route
+through ``observation.predict_via_precomp`` when ``WavePrecomp`` is set
+— callers see the LUT speedup. But ``predict_observables_jit`` (the
+catalog-fitter entry point) cannot, because ``predict_via_precomp``
+carries Python-level guards that don't trace under ``jax.jit``:
+
+```python
+# observation.py:804
+dust_active = l_ir is not None and float(l_ir) > 0.0    # ← concretizes l_ir
+# observation.py:827
+nebular_additive_active = sed_nebular is not None and float(jnp.max(jnp.abs(...))) > 0.0
+```
+
+These guards exist to give a clear ``NotImplementedError`` if the user
+calls ``predict_via_precomp`` on a model whose dust / nebular component
+ran on the wave grid but didn't publish a precompute. They're *structural*
+checks (does this combination of components support the LUT?) but
+implemented as *runtime* checks (with ``float()`` calls).
+
+**The fix** is to lift these guards to build-time validation — a
+``_validate_lut_path_or_raise()`` that runs once when ``approx=WavePrecomp``
+is requested, checks the published derived-key set against the resolved
+component chain, and raises immediately if the combination is unsupported.
+After that, the call-time path is free of ``float()`` concretizations
+and can be ``jax.jit``'d.
+
+Until then, catalog inference doesn't see the LUT speedup. Direct callers
+of ``predict_photometry`` and ``predict_observables`` do.
+
 ## What this blocks
 
 Until the orchestrator threads SSP as a traced kwarg:

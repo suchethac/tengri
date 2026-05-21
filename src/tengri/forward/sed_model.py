@@ -2676,10 +2676,25 @@ class SEDModel:
         # Compile mode (Phase 2)
         compile_mode = str(self._compile_mode)
 
-        # Approximation settings (Phase 2), resolved and sorted
-        approx_resolved = tuple(
+        # Approximation settings (Phase 2), resolved and sorted.
+        # Phase 3d (2026-05-20): include the resolved WavePrecomp configuration
+        # so two models with different ztable sampling (n_z / z_min / z_max)
+        # get distinct cache slots. Without this, ``WavePrecomp(n_z=100)`` and
+        # ``WavePrecomp(n_z=200)`` would collide and the second galaxy would
+        # reuse the first's stale compiled LUT.
+        approx_resolved_flags = tuple(
             sorted((k, bool(v)) for k, v in (self._approx or {}).items() if isinstance(v, bool))
         )
+        if self._approx_config is not None:
+            cfg = self._approx_config
+            approx_resolved = (
+                approx_resolved_flags,
+                ("n_z", int(cfg.n_z)),
+                ("z_min", None if cfg.z_min is None else round(float(cfg.z_min), 12)),
+                ("z_max", None if cfg.z_max is None else round(float(cfg.z_max), 12)),
+            )
+        else:
+            approx_resolved = approx_resolved_flags
 
         # Fixed-parameter values from spec. The compositional/hybrid kernels
         # capture self via closure at build time, so two models with identical
@@ -4030,6 +4045,14 @@ class SEDModel:
             )
         state = self.predict_state(params)
         full = {**self.spec.get_fixed_values(), **params}
+        # Phase 3d-4: when built with ``approx=WavePrecomp(...)`` and no
+        # spectrum channel, route photometry through the LUT projection.
+        # Mirrors ``predict_observables_jit`` so the JIT and non-JIT paths
+        # give bit-identical observables.
+        if self._approx.get("wave_precomp") and not self.observation.can_do_spectroscopy:
+            return self.observation.predict_via_precomp(
+                state, full, observables_type=self._Observables
+            )
         kwargs = {}
         if self.observation.can_do_spectroscopy:
             kwargs.update(
@@ -4108,6 +4131,17 @@ class SEDModel:
             )
         )
         observables_type = self._Observables
+        # NB (Phase 3d-4): we *would* route the photometry channel through
+        # ``observation.predict_via_precomp`` here when the model was built
+        # with ``approx=WavePrecomp(...)``, but that method carries Python-
+        # level ``float(l_ir) > 0`` / ``float(jnp.max(sed_nebular)) > 0``
+        # guards that can't be traced under ``jax.jit``. Until those guards
+        # are lifted to build-time validation (see
+        # ``docs/dev/orchestrator_ssp_threading.md``), ``predict_observables_jit``
+        # stays on the exact wave-grid path even when ``WavePrecomp`` is set.
+        # The non-JIT ``predict_observables`` and ``predict_photometry`` do
+        # take the LUT route — direct callers see the speedup; only the
+        # catalog-inference JIT'd path doesn't yet.
 
         def _impl(params):
             state = self.predict_state(params)

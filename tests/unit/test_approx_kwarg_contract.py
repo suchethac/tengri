@@ -227,3 +227,54 @@ def test_free_z_model_with_wave_precomp_handles_off_grid_redshifts(free_z_spec, 
         out = model.predict_photometry(params)
         assert jnp.all(jnp.isfinite(out)), f"non-finite photometry at z={z}"
         assert out.shape[0] == 5
+
+
+# ── Catalog-inference safety (Phase 3d-4) ────────────────────────────────────
+
+
+def test_wave_precomp_n_z_creates_distinct_compile_signatures(fixed_z_spec, ssp, obs):
+    """``WavePrecomp(n_z=100)`` and ``WavePrecomp(n_z=200)`` must produce
+    distinct ``compile_signature()`` tuples so the structural kernel cache
+    doesn't reuse one model's compiled LUT for the other. If the n_z
+    override falls out of the signature, catalog inference with mixed
+    sampling silently miscompiles.
+    """
+    m100 = _silent_build(fixed_z_spec, ssp, obs, approx=WavePrecomp(n_z=100))
+    m200 = _silent_build(fixed_z_spec, ssp, obs, approx=WavePrecomp(n_z=200))
+    assert m100.compile_signature() != m200.compile_signature(), (
+        "WavePrecomp(n_z=100) and WavePrecomp(n_z=200) share a compile_signature; "
+        "they would collide in the structural kernel cache."
+    )
+
+
+def test_wave_precomp_z_bounds_create_distinct_compile_signatures(fixed_z_spec, ssp, obs):
+    """Same guarantee for ``z_min`` / ``z_max`` overrides."""
+    m1 = _silent_build(fixed_z_spec, ssp, obs, approx=WavePrecomp(z_min=0.5, z_max=1.5))
+    m2 = _silent_build(fixed_z_spec, ssp, obs, approx=WavePrecomp(z_min=0.6, z_max=1.5))
+    assert m1.compile_signature() != m2.compile_signature(), (
+        "WavePrecomp(z_min=0.5) and WavePrecomp(z_min=0.6) share a compile_signature; "
+        "they would collide in the structural kernel cache."
+    )
+
+
+def test_predict_observables_routes_through_lut_when_wave_precomp(fixed_z_spec, ssp, obs):
+    """The non-JIT ``predict_observables`` mirrors ``predict_photometry`` —
+    when built with ``approx=WavePrecomp()``, both return the LUT-projected
+    flux. (``predict_observables_jit`` does *not* yet route via the LUT
+    because ``predict_via_precomp`` has Python-level guards that can't be
+    JIT-traced; that's a documented follow-up in
+    ``docs/dev/orchestrator_ssp_threading.md``.)
+    """
+    model = _silent_build(fixed_z_spec, ssp, obs, approx=WavePrecomp())
+    params = {}
+
+    via_method = model.predict_observables(params).phot_fnu
+
+    state = model.predict_state(params)
+    full = {**model.spec.get_fixed_values(), **params}
+    via_obs = model.observation.predict_via_precomp(state, full)["phot_fnu"]
+
+    assert jnp.array_equal(via_method, via_obs), (
+        "predict_observables must equal observation.predict_via_precomp().phot_fnu "
+        "when built with approx=WavePrecomp()."
+    )
