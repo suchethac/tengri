@@ -17,7 +17,6 @@ pytestmark = pytest.mark.unit
 
 def test_cue_nebular_component_registered():
     """Cue component is registered in the global registry."""
-    from tengri.components.nebular.cue_model import CueNebularSEDComponent  # noqa: F401
     from tengri.components.sed_model_component import _REGISTRY
 
     assert "cue_emulator" in _REGISTRY, "cue_emulator not in component registry"
