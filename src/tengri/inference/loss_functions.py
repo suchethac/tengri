@@ -3,7 +3,7 @@
 Three public builders — :func:`build_loss_fn`, :func:`build_loglikelihood_fn`,
 and :func:`build_loglikelihood_unbounded_fn` — are thin wrappers over a
 single private core, :func:`_build_data_neg_log_likelihood_fn`. The core
-routes through ``fitter._user_likelihood`` (the Phase II-1 adapter cohort
+routes through ``fitter._user_likelihood`` (the likelihood-adapter cohort
 auto-built by :meth:`Fitter._maybe_build_default_likelihood`) and falls
 through to one tiny legacy χ² branch only for the case the cohort cannot
 yet express (``data_mask + non-photometry``).
@@ -55,7 +55,7 @@ def _build_prediction(
     has_indices,
     index_defs,
     data_args,
-    use_orchestrator=False,
+    use_components=False,
 ):
     """Forward-model prediction in one place.
 
@@ -67,21 +67,21 @@ def _build_prediction(
     - ``pred_phot`` / ``pred_spec``: split components or ``None``.
     """
     if data_type == "photometry":
-        if use_orchestrator:
-            predicted = model.predict_photometry_via_orchestrator(params)
+        if use_components:
+            predicted = model.predict_photometry_components(params)
         else:
             predicted = model.predict_photometry(params, mode=mode)
         pred_phot, pred_spec = predicted, None
     elif data_type == "spectroscopy":
-        if use_orchestrator:
-            predicted = model.predict_spectrum_via_orchestrator(params, model._wave_obs)
+        if use_components:
+            predicted = model.predict_spectrum_components(params, model._wave_obs)
         else:
             predicted = model.predict_spectrum(params, model._wave_obs, mode=mode)
         pred_phot, pred_spec = None, predicted
     elif data_type == "joint":
-        if use_orchestrator:
-            pred_phot = model.predict_photometry_via_orchestrator(params)
-            pred_spec = model.predict_spectrum_via_orchestrator(params, model._wave_obs)
+        if use_components:
+            pred_phot = model.predict_photometry_components(params)
+            pred_spec = model.predict_spectrum_components(params, model._wave_obs)
         else:
             pred_phot = model.predict_photometry(params, mode=mode)
             pred_spec = model.predict_spectrum(params, model._wave_obs, mode=mode)
@@ -107,7 +107,7 @@ def _build_prediction(
 # ── Builders ─────────────────────────────────────────────────────────────
 
 
-def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
+def _build_data_neg_log_likelihood_fn(fitter, mode="traced"):
     """Build the data-term function ``neg_log_lik(params, data_args) -> -log p(d|params)``.
 
     Single source of truth for the data term. All three public builders
@@ -146,7 +146,7 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
         if obs_for_idx is not None and obs_for_idx.spectral_indices is not None:
             index_defs = obs_for_idx.spectral_indices.index_defs
     user_likelihood = getattr(fitter, "_user_likelihood", None)
-    use_orchestrator = bool(getattr(fitter, "use_orchestrator", False))
+    use_components = bool(getattr(fitter, "use_components", False))
 
     def neg_log_lik(params, data_args):
         """-log p(d | params). Caller supplies physical params + data_args."""
@@ -162,7 +162,7 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
             has_indices=has_indices,
             index_defs=index_defs,
             data_args=data_args,
-            use_orchestrator=use_orchestrator,
+            use_components=use_components,
         )
 
         # Auto-built / user-supplied Likelihood adapter handles the data
@@ -170,8 +170,8 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
         if user_likelihood is not None:
             return -user_likelihood.log_prob(prediction, params)
 
-        # Legacy χ² fall-through. Exactly one case reaches this code path
-        # post Phase II-2.3: data_mask + spec/joint (censoring across the
+        # Legacy χ² fall-through. Exactly one case reaches this code path:
+        # data_mask + spec/joint (censoring across the
         # concatenated data array, not addressable via a single-channel
         # adapter). All other configurations are covered by auto-build
         # in Fitter._maybe_build_default_likelihood. If you find yourself
@@ -216,7 +216,7 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
     return neg_log_lik
 
 
-def build_loss_fn(fitter, mode="_traceable"):
+def build_loss_fn(fitter, mode="traced"):
     """Build the information Hamiltonian (loss function) from Fitter state.
 
     Constructs a JAX-differentiable loss function encapsulating the likelihood
@@ -244,7 +244,7 @@ def build_loss_fn(fitter, mode="_traceable"):
         Fitter instance with model, data, parameters, and configuration.
 
     mode : str, optional
-        Forward model prediction mode. Default ``"_traceable"`` is safe
+        Forward model prediction mode. Default ``"traced"`` is safe
         inside JIT scopes (used by NIFTy geoVI). Use ``"auto"`` (~1.5×
         speedup) for non-JIT methods (MAP, Laplace, Pathfinder, NUTS,
         Ray Tracing, NSS). See
@@ -402,7 +402,7 @@ def build_logprior_fn(fitter):
     return logprior_fn
 
 
-def build_loglikelihood_fn(fitter, mode="_traceable"):
+def build_loglikelihood_fn(fitter, mode="traced"):
     """Build log-likelihood function in physical parameter space.
 
     Constructs a JAX-differentiable function that computes the log-likelihood
@@ -416,7 +416,7 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
         Fitter instance with model, data, parameters, and likelihood config.
 
     mode : str, optional
-        Forward model prediction mode. Default ``"_traceable"`` is safe
+        Forward model prediction mode. Default ``"traced"`` is safe
         inside JIT (used by NIFTy geoVI). Use ``"auto"`` (~1.5× speedup)
         for non-JIT methods (MAP, Laplace, Pathfinder, NUTS, Ray Tracing, NSS).
 
@@ -467,7 +467,7 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
     return loglikelihood_fn
 
 
-def build_loglikelihood_unbounded_fn(fitter, mode="_traceable"):
+def build_loglikelihood_unbounded_fn(fitter, mode="traced"):
     """Build a log-likelihood function in unbounded parameter space.
 
     For Elliptical Slice Sampling, which handles the N(0,I) prior
@@ -477,7 +477,7 @@ def build_loglikelihood_unbounded_fn(fitter, mode="_traceable"):
     ----------
     fitter : Fitter
     mode : str, optional
-        Forward model prediction mode. Default "_traceable" is safe inside
+        Forward model prediction mode. Default "traced" is safe inside
         JIT scopes (used by NIFTy VI/geoVI). Use "auto" for better performance
         with MAP, Laplace, Pathfinder, NUTS, Raytrace, NSS (~1.5x speedup).
 

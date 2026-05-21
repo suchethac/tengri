@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Build orchestrator-compatible component chains from a single call.
 
-Phase II-2.6 public-API helper. Lets users assemble the
-``run_components`` chain from a flat set of keyword arguments without
-constructing each :class:`SEDComponent` subclass by hand::
+Public-API helper that lets users assemble the ``run_components`` chain
+from a flat set of keyword arguments without constructing each
+:class:`SEDComponent` subclass by hand::
 
     from tengri.forward.component_factory import build_components
     from tengri.forward.orchestrator import run_components
@@ -228,11 +228,10 @@ def build_components(
     -----
     **JIT-compatible**: yes — the returned components flow through
     ``jax.jit`` once :class:`tengri.protocols.ForwardState` is registered
-    as a pytree (Phase II-2.2-followup).
+    as a pytree.
 
-    The ``StellarSEDComponent`` carries ``ssp_data`` on its instance
-    (the most natural plumbing per Phase II-2.2). All other adapters
-    are stateless except their config knobs.
+    The ``StellarSEDComponent`` carries ``ssp_data`` on its instance.
+    All other adapters are stateless except their config knobs.
     """
     components: list[SEDComponent] = []
 

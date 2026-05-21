@@ -139,6 +139,8 @@ class DustAttenuationSEDComponent:
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
+        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> DustAttenuationSEDComponentState:
         r"""Evaluate the attenuation curve k(λ) on the pipeline wave grid.
 
@@ -155,7 +157,7 @@ class DustAttenuationSEDComponent:
         DustAttenuationSEDComponentState
             Holds the cached k(λ) tensor.
         """
-        del ssp_data
+        del ssp_data, filters
         if wave_grid is None:
             # Permissive path: contract tests call precompute() with no
             # args. Return an unprimed state; apply() will compute
@@ -230,19 +232,45 @@ class DustAttenuationSEDComponent:
         order = jnp.argsort(nu)
         l_ir = jnp.trapezoid(absorbed_lnu[order], nu[order])  # erg/s
 
-        # ``state.sed_intrinsic`` carries the current cumulative SED for
-        # downstream consumers (radio / xray fall-backs,
-        # ``predict_rest_sed`` return value, etc.).
-        # Overwrite with the post-attenuation value so this component
-        # matches the two-component ``DustSEDComponent`` behaviour and
-        # the chain stays composable.
+        # Phase 3c-3c-ii: filter-level A(λ_eff) and A'(λ_eff) LUTs.
+        # Published only when an upstream component (stellar) has put
+        # ``filter_eff_waves`` into ``state.derived`` — i.e. only when
+        # ``approx={'wave_precomp': True}`` is set on SEDModel.
+        derived_overrides = dict(
+            dust_attenuation_factor=attenuation,
+            L_ir=l_ir,
+            L_absorbed=l_ir,
+            sed_dust_attenuated=attenuated,
+        )
+        filter_eff = state.derived.get("filter_eff_waves")
+        if filter_eff is not None:
+            # Evaluate the attenuation law at the filter pivots and at a
+            # finite-difference offset to compute the slope analytically.
+            if self.config.law == "calzetti":
+                k_at = calzetti(filter_eff)
+            else:
+                law_fn = resolve_dust_law(self.config.law)
+                k_at = law_fn(filter_eff)
+            a_lut = jnp.exp(-tau_v * k_at)
+            # k'(λ) via central finite difference. δλ = 1 Å is small
+            # compared with filter widths (~100–10000 Å) and gives an
+            # accurate slope for smooth analytic dust laws.
+            d_lambda = jnp.asarray(1.0)
+            if self.config.law == "calzetti":
+                k_plus = calzetti(filter_eff + d_lambda)
+                k_minus = calzetti(filter_eff - d_lambda)
+            else:
+                law_fn = resolve_dust_law(self.config.law)
+                k_plus = law_fn(filter_eff + d_lambda)
+                k_minus = law_fn(filter_eff - d_lambda)
+            k_slope = (k_plus - k_minus) / (2.0 * d_lambda)
+            # A'(λ) = d/dλ exp(-τ·k(λ)) = -τ · k'(λ) · A(λ).
+            a_slope_lut = -tau_v * k_slope * a_lut
+            derived_overrides["dust_attenuation_precomp"] = a_lut
+            derived_overrides["dust_attenuation_slope_precomp"] = a_slope_lut
+
         return state.with_(
             sed_intrinsic=attenuated,
             sed_attenuated=attenuated,
-            derived=state.derived.with_(
-                dust_attenuation_factor=attenuation,
-                L_ir=l_ir,
-                L_absorbed=l_ir,
-                sed_dust_attenuated=attenuated,
-            ),
+            derived=state.derived.with_(**derived_overrides),
         )

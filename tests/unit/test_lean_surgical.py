@@ -12,9 +12,15 @@ import pytest
 
 import tengri
 from tengri.inference._model_cache import (
-    _STRUCTURAL_KERNEL_CACHE,
+    _default_owner,
     get_structural_kernel_cache,
 )
+
+# Reach the real structural cache via the singleton ``ModelCacheOwner``;
+# the module-level ``_STRUCTURAL_KERNEL_CACHE`` global is a stale legacy
+# alias that no longer reflects current state after the cache-owner
+# refactor.
+_STRUCTURAL_KERNEL_CACHE = _default_owner._kernel_cache
 from tengri.inference.jit_engine import (
     _SHARED_ENGINE_CACHE,
     _SHARED_GRAD_FN_CACHE,
@@ -23,6 +29,22 @@ from tengri.inference.jit_engine import (
     _SHARED_SIGNAL_RESPONSE_CACHE,
     clear_shared_caches,
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_shared_caches():
+    """Reset the process-wide JIT caches around each test in this module.
+
+    These tests poke ``_SHARED_*_CACHE`` and ``_STRUCTURAL_KERNEL_CACHE``
+    directly. Other tests in the suite leave real (model-keyed) entries
+    behind, which makes order-dependent assertions like "the entry I just
+    added is the only one in the cache" flake under CI ordering.
+    """
+    clear_shared_caches(scope="all", drop_xla=False)
+    _STRUCTURAL_KERNEL_CACHE.clear()
+    yield
+    clear_shared_caches(scope="all", drop_xla=False)
+    _STRUCTURAL_KERNEL_CACHE.clear()
 
 
 @pytest.mark.unit

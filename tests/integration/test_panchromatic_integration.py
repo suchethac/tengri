@@ -566,7 +566,7 @@ class TestEnergyBalanceEndToEnd:
         the MBB approximation.
         """
         params = {"dust_T": 30.0, "dust_beta_ir": 1.8}
-        state = energy_model.predict_via_orchestrator(params)
+        state = energy_model.predict_state(params)
         derived = state.derived
 
         wave = np.asarray(state.wave)

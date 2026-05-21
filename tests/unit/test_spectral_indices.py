@@ -334,12 +334,12 @@ class TestMeasureIndex:
 
 class TestTopLevelExports:
     def test_spectral_index_data_importable(self):
-        from tengri import SpectralIndexData as SID
+        from tengri.observation import SpectralIndexData as SID
 
         assert SID is SpectralIndexData
 
     def test_spectral_index_def_importable(self):
-        from tengri import SpectralIndexDef as SIDef
+        from tengri.observation import SpectralIndexDef as SIDef
 
         assert SIDef is SpectralIndexDef
 

@@ -11,23 +11,23 @@ Models
 ------
 Canonical names (short name alias in parentheses):
 
-- **truncated_skewnormal_sfh** (tsnorm): Bellstedt+2020, Robotham+2020 snorm_trunc.
+- **truncated_skewnormal** (tsnorm): Bellstedt+2020, Robotham+2020 snorm_trunc.
   Most flexible smooth model — 5 params: peak location, width, skew, truncation.
-- **skewnormal_sfh** (snorm): truncated_skewnormal_sfh without truncation (4 params).
-- **gaussian_sfh** (norm): skewnormal_sfh with skew=0 (3 params).
-- **lognormal_sfh** (lnorm): Gaussian in log10(age) space (3 params).
+- **skewnormal** (snorm): ``truncated_skewnormal`` without truncation (4 params).
+- **gaussian** (norm): ``skewnormal`` with skew=0 (3 params).
+- **lognormal** (lnorm): Gaussian in log10(age) space (3 params).
 - **dpl** (canonical): Carnall+2018 BAGPIPES parameterization with log_peak_sfr (4 params).
-- **double_powerlaw**: Low-level implementation used by dpl.
-- **constant_sfh** (const): flat SFR between start and end times (3 params).
-- **exponential_sfh** (exp): declining exponential from start (3 params).
-- **delayed_exponential_sfh** (dexp): peaks at start + tau (3 params).
+- **double_powerlaw**: Low-level implementation used by ``dpl``.
+- **constant** (const): flat SFR between start and end times (3 params).
+- **exponential** (exp): declining exponential from start (3 params).
+- **delayed_exponential** (dexp): peaks at start + tau (3 params).
 - **declining_exponential** (tau): FSPS/bagpipes tau model in lookback time (3 params).
 - **triweight_burst**: compact triweight kernel in log-age for burst component.
-- **spline_sfh**: N-node monotone cubic (PCHIP) spline in log-age space. Nodes are
+- **spline**: N-node monotone cubic (PCHIP) spline in log-age space. Nodes are
   static (set at JIT-compile time); SFR values are free parameters. Use directly
   (not via the registry — array node inputs don't fit the scalar-kwarg registry).
-- **snorm_burst_sfh** (snorm_burst): skew-normal SFH + flat recent burst.
-- **snorm_trunc_burst_sfh** (tsnorm_burst): truncated skew-normal + flat recent burst.
+- **snorm_burst**: skew-normal SFH + flat recent burst.
+- **snorm_trunc_burst** (tsnorm_burst): truncated skew-normal + flat recent burst.
 
 References
 ----------
@@ -1340,11 +1340,11 @@ def spline(
     --------
     >>> import jax.numpy as jnp
     >>> import numpy as np
-    >>> from tengri.components.stellar.sfh.mean_sfh import spline_sfh
+    >>> from tengri.components.stellar.sfh.mean_sfh import spline
     >>> node_ages = np.array([1e5, 2e9, 9e9, 13e9])
     >>> sfr_nodes = jnp.array([5.0, 10.0, 3.0, 0.5])
     >>> t = jnp.logspace(5.0, 10.14, 100)
-    >>> sfr = spline_sfh(t, sfr_nodes, node_ages)
+    >>> sfr = spline(t, sfr_nodes, node_ages)
     >>> sfr.shape
     (100,)
     """
@@ -1448,7 +1448,7 @@ def snorm_trunc_burst(
 
     Adds a constant burst SFR to the truncated skew-normal SFH (tsnorm) at
     lookback times younger than ``burst_age``. Combines the smooth quenching
-    truncation of ``truncated_skewnormal_sfh`` with a superimposed recent burst.
+    truncation of ``truncated_skewnormal`` with a superimposed recent burst.
 
     Parameters
     ----------
@@ -1670,32 +1670,3 @@ def gaussian_burst(
     dt = t_lookback - t_peak
     exponent = -0.5 * (dt / sigma) ** 2
     return amplitude * jnp.exp(exponent)
-
-
-# ── Deprecated aliases (Phase 3) ──────────────────────────────────
-# The `_sfh` suffix was redundant inside the `tengri.components.stellar.sfh`
-# namespace. Wrapped with `deprecated_alias` so a DeprecationWarning fires
-# on first call. Will be removed in v1.0. See docs/dev/api_migration_v0.x.md.
-from tengri._deprecated import deprecated_alias as _deprecated_alias
-
-constant_sfh = _deprecated_alias(constant, old_name="constant_sfh")
-exponential_sfh = _deprecated_alias(exponential, old_name="exponential_sfh")
-delayed_exponential_sfh = _deprecated_alias(
-    delayed_exponential, old_name="delayed_exponential_sfh"
-)
-gaussian_sfh = _deprecated_alias(gaussian, old_name="gaussian_sfh")
-lognormal_sfh = _deprecated_alias(lognormal, old_name="lognormal_sfh")
-powerlaw_sfh = _deprecated_alias(powerlaw, old_name="powerlaw_sfh")
-skewnormal_sfh = _deprecated_alias(skewnormal, old_name="skewnormal_sfh")
-snorm_burst_sfh = _deprecated_alias(snorm_burst, old_name="snorm_burst_sfh")
-snorm_trunc_burst_sfh = _deprecated_alias(snorm_trunc_burst, old_name="snorm_trunc_burst_sfh")
-spline_sfh = _deprecated_alias(spline, old_name="spline_sfh")
-truncated_skewnormal_sfh = _deprecated_alias(
-    truncated_skewnormal, old_name="truncated_skewnormal_sfh"
-)
-declining_exponential_sfh = _deprecated_alias(
-    declining_exponential, old_name="declining_exponential_sfh"
-)
-constant_then_exponential_sfh = _deprecated_alias(
-    constant_then_exponential, old_name="constant_then_exponential_sfh"
-)

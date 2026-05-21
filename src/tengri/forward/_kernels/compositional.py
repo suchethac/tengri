@@ -243,19 +243,20 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
     if is_free_z:
         from tengri.utils.cosmology import luminosity_distance as _lum_dist
 
-    # Phase II-2 (focused): SSP arrays passed as JIT-traced inputs rather than
-    # captured by closure. Without this, the simple non-evolving-Z trapz path
-    # below would close over `model.ssp_data.ssp_flux` (~114 MB at MIST grid
-    # size) and XLA's constant-folder would bake transposes of it into the
-    # compiled HLO, blowing past the 2 GB protobuf serialization limit. With
-    # `ssp_flux_traced` and `ssp_lgmet_traced` as JIT inputs, the array stays a
-    # runtime tensor — closed paths below that still take `model` (alpha_fe,
-    # ramp metallicity) are unchanged for now and remain on the closure-capture
-    # path; those branches are not on the quickstart's photometry path. See
+    # SSP arrays are passed as JIT-traced inputs rather than captured by
+    # closure. Without this, the simple non-evolving-Z trapz path below
+    # would close over `model.ssp_data.ssp_flux` (~114 MB at MIST grid
+    # size) and XLA's constant-folder would bake transposes of it into
+    # the compiled HLO, blowing past the 2 GB protobuf serialization
+    # limit. With `ssp_flux_traced` and `ssp_lgmet_traced` as JIT inputs
+    # the array stays a runtime tensor — closed paths below that still
+    # take `model` (alpha_fe, ramp metallicity) are unchanged for now and
+    # remain on the closure-capture path; those branches are not on the
+    # quickstart's photometry path. See
     # `docs/dev/quickstart_oom_diagnosis.md`.
 
     # Closure-captured fallbacks for SSP arrays (used when callers don't pass
-    # traced inputs — e.g. legacy callsites and the non-_traceable predict_*
+    # traced inputs — e.g. legacy callsites and the non-traced predict_*
     # methods that go through the lazily-built logged_jit wrapper).
     _ssp_flux_closure = state.ssp_data.ssp_flux
     _ssp_lgmet_closure = state.ssp_data.ssp_lgmet
@@ -264,12 +265,12 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
     _met_use_smooth = state.met_interp == "smooth"
 
     # ── Closure-path-A captures (no-α / non-ramp / non-native default) ──
-    # The exact path's ``compute_sed_components`` was migrated in Phase II-2.6
-    # to use ``calc_rest_sed_sfh_table_lognormal_mdf`` with trapezoidal
-    # cosmic-time SFH integration on the orchestrator's 64-pt grid +
-    # lognormal-MDF metallicity weighting. To match bit-exactly we replicate
-    # those semantics here. SFH type re-enters the JIT closure (Option 1
-    # accepted): switching SFH models triggers recompilation.
+    # The exact path's ``compute_sed_components`` uses
+    # ``calc_rest_sed_sfh_table_lognormal_mdf`` with trapezoidal cosmic-time
+    # SFH integration on the orchestrator's 64-pt grid + lognormal-MDF
+    # metallicity weighting. To match bit-exactly we replicate those
+    # semantics here. SFH type re-enters the JIT closure: switching SFH
+    # models triggers recompilation.
     # See ``forward/pipeline.py:_closure_a_sfh_prep`` for the canonical impl.
     _ssp_lg_age_gyr_ca = state.ssp_data.ssp_lg_age_gyr
     from tengri.components.stellar.sfh.gp_sfh import (
@@ -300,11 +301,10 @@ def build_fused_tier2_photometry(state: SEDModelState, model=None, rest_sed_kern
         Keeping SFH outside this function prevents the SFH type from entering
         the JIT closure, so switching SFH models does not cause recompilation.
 
-        When ``ssp_flux_traced`` and ``ssp_lgmet_traced`` are provided
-        (Phase II-2 trace path), the metallicity-interpolation step uses
-        these as JIT-traced inputs rather than the closure-captured SSP
-        arrays — which keeps XLA from baking the 114 MB SSP flux grid
-        into the compiled HLO.
+        When ``ssp_flux_traced`` and ``ssp_lgmet_traced`` are provided,
+        the metallicity-interpolation step uses these as JIT-traced
+        inputs rather than the closure-captured SSP arrays — which keeps
+        XLA from baking the 114 MB SSP flux grid into the compiled HLO.
         """
         p = get_internal_params(params, param_map, spec, has_field, strict_unknown_params=False)
 
@@ -662,9 +662,8 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
     if is_free_z:
         from tengri.utils.cosmology import luminosity_distance as _lum_dist_spec
 
-    # Phase II-2: closure fallbacks for SSP arrays so legacy callers
-    # (logged_jit wrapper, batch fitter) still work when traced kwargs
-    # are absent.
+    # Closure fallbacks for SSP arrays so legacy callers (logged_jit
+    # wrapper, batch fitter) still work when traced kwargs are absent.
     _ssp_flux_closure_spec = state.ssp_data.ssp_flux
     _ssp_lgmet_closure_spec = state.ssp_data.ssp_lgmet
     _lgmet_scatter_closure_spec = float(state.lgmet_scatter)
@@ -693,10 +692,10 @@ def build_fused_tier2_spectrum(state: SEDModelState, model=None, rest_sed_kernel
     ):
         """Compute rest-frame SED for the spectroscopy kernel given pre-computed SFR weights.
 
-        ``ssp_flux_traced`` / ``ssp_lgmet_traced`` (Phase II-2 trace path):
-        when provided, the smooth-Z metallicity-interpolation step uses
-        them as JIT-traced inputs instead of closure-captured SSP arrays.
-        Keeps XLA from baking the 114 MB SSP grid into the compiled HLO.
+        When ``ssp_flux_traced`` / ``ssp_lgmet_traced`` are provided,
+        the smooth-Z metallicity-interpolation step uses them as
+        JIT-traced inputs instead of closure-captured SSP arrays —
+        keeps XLA from baking the 114 MB SSP grid into the compiled HLO.
         """
         p = get_internal_params(params, param_map, spec, has_field, strict_unknown_params=False)
         if _use_dsps_native_spec:
@@ -1054,10 +1053,10 @@ def build_hybrid_spectrum(state: SEDModelState, model=None):
     ):
         """Compute hybrid spectrum: precomputed stellar + non-stellar.
 
-        Phase II-2: when ``ssp_flux_traced`` and ``ssp_lgmet_traced`` are
-        supplied, the metallicity interpolation step uses them as
-        JIT-traced inputs rather than closure-captured constants — keeps
-        XLA from baking the full SSP grid into the compiled HLO.
+        When ``ssp_flux_traced`` and ``ssp_lgmet_traced`` are supplied,
+        the metallicity interpolation step uses them as JIT-traced
+        inputs rather than closure-captured constants — keeps XLA from
+        baking the full SSP grid into the compiled HLO.
         """
         p = get_internal_params(params, param_map, spec, has_field, strict_unknown_params=False)
 

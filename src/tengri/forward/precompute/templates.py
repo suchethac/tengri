@@ -2,10 +2,10 @@
 
 Thin wrappers over :mod:`tengri.forward.precompute.grid`
 (:func:`~tengri.forward.precompute.grid.preintegrate_grid` +
-:func:`~tengri.forward.precompute.grid.interp_nd_triweight`) that handle common
-adapter boilerplate: L_λ → L_ν unit conversion, energy-normalization for
-templates scaled by L_absorbed / L_bol at runtime, and a standard JIT lookup
-closure.
+:func:`~tengri.forward.precompute.grid.interp_nd_triweight`) that handle the
+three steps every template adapter needs: L_λ → L_ν unit conversion,
+energy-normalization for templates scaled by L_absorbed / L_bol at runtime,
+and a standard JIT lookup closure.
 
 Component-specific adapters (``components/dust/dust_emission_precompute.py``,
 ``components/agn/skirtor_precompute.py``, etc.) should call these functions

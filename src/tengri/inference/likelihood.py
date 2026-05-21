@@ -28,7 +28,7 @@ __all__ = ["build_base_likelihood", "build_likelihood_extras"]
 def build_base_likelihood(context: InferenceContext):
     """Choose the BASE adapter for the main data channel(s).
 
-    Routes through the Phase II-1 likelihood protocol cohort:
+    Routes through the likelihood protocol cohort:
 
     - simple diagonal Gaussian → ``PhotometryLikelihood`` /
       ``SpectroscopyLikelihood``

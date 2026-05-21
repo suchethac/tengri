@@ -39,7 +39,7 @@ class TestMCLMCSignatures:
         from tengri.inference.backends.mcmc.mclmc import run_mclmc
 
         sig = inspect.signature(run_mclmc)
-        assert "fitter" in sig.parameters
+        assert "context" in sig.parameters
         assert "key" in sig.parameters
         assert "n_warmup" in sig.parameters
         assert "n_samples" in sig.parameters
@@ -51,7 +51,7 @@ class TestMCLMCSignatures:
         from tengri.inference.backends.mcmc.mclmc import run_adjusted_mclmc
 
         sig = inspect.signature(run_adjusted_mclmc)
-        assert "fitter" in sig.parameters
+        assert "context" in sig.parameters
         assert "key" in sig.parameters
         assert "n_warmup" in sig.parameters
         assert "n_samples" in sig.parameters

@@ -38,8 +38,9 @@ def interp_metallicity(model, log_z, ssp_flux=None, ssp_lgmet=None):
     ssp_flux : ndarray, optional
         Traced override for ``model.ssp_data.ssp_flux``. When provided
         with ``ssp_lgmet``, the SSP arrays enter the JIT graph as
-        runtime tensors instead of closure-captured constants
-        (Phase II-2 trace path; see ``docs/dev/quickstart_oom_diagnosis.md``).
+        runtime tensors instead of closure-captured constants — the
+        memory-efficient path; see
+        ``docs/dev/quickstart_oom_diagnosis.md``.
     ssp_lgmet : ndarray, optional
         Traced override for ``model.ssp_data.ssp_lgmet``.
 

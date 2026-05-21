@@ -58,7 +58,7 @@ class PipelineContractError(ValueError):
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Contract decisions resolved by the Phase II-1 first-adapter pass
+# Contract decisions resolved by the first-adapter pass
 # (RadioSEDComponent + IGMSEDComponent, 2026-05).
 # ─────────────────────────────────────────────────────────────────────
 
@@ -212,9 +212,9 @@ class ForwardState:
 
     The carrier object for the forward model: holds the SED-in-progress
     plus a typed bag of derived quantities that downstream components
-    read from upstream components. Renamed from ``ForwardState`` in
-    Phase II-3.2 (2026-05-18) for astronomer-friendly user-facing names;
-    ``ForwardState`` remains as a soft alias for one minor version.
+    read from upstream components. Renamed from ``PipelineState``
+    (2026-05-18) for astronomer-friendly user-facing names;
+    ``PipelineState`` remains as a soft alias for one minor version.
 
     Each component reads what it needs and returns a new ``ForwardState``
     (immutable). Field semantics match :mod:`tengri.forward.prediction`:
@@ -352,7 +352,7 @@ del _tree_util
 
 
 # Soft alias for backwards compatibility. ``ForwardState`` is the canonical
-# name as of Phase II-3.2 (2026-05-18); ``PipelineState`` will be removed in
+# name as of 2026-05-18; ``PipelineState`` will be removed in
 # tengri v1.0. Aliasing the class object (rather than wrapping it) preserves
 # isinstance checks and type-annotation equivalence in downstream code.
 PipelineState = ForwardState
@@ -471,8 +471,8 @@ class SEDComponent(Protocol):
     # the canonical optional-read pattern, and ADR-0009 for the full
     # rationale.
     #
-    # Renamed from ``publishes`` / ``requires`` / ``requires_optional`` in
-    # Phase II-3.2 (2026-05-18). The old method names are still accepted by
+    # Renamed from ``publishes`` / ``requires`` / ``requires_optional``
+    # (2026-05-18). The old method names are still accepted by
     # the orchestrator as a backwards-compatible fallback for one minor
     # version; they emit a ``DeprecationWarning`` at validate_pipeline time.
 
@@ -480,6 +480,8 @@ class SEDComponent(Protocol):
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
+        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> SEDComponentState:
         """Cache static tensors. Run once before any JIT compile.
 
@@ -488,6 +490,17 @@ class SEDComponent(Protocol):
         builds its transmission curve on the observed-frame grid at
         :meth:`apply` time). Components that *do* need them will fail
         their own validation if either is ``None``.
+
+        ``approx`` is the build-time approximation dict (the resolved
+        ``SEDModel._approx``). Each component reads the flags it owns
+        (e.g. :class:`StellarSEDComponent` reads
+        ``approx.get("wave_precomp")``) and ignores the rest. ``None``
+        is equivalent to no approximations — all exact paths.
+
+        ``filters`` is a tuple of (filter_wave_obs, filter_trans) pairs,
+        where each pair contains 1-D arrays. Used only by components that
+        build photometric lookup tables. ``None`` means no photometric
+        precomputation is available.
         """
         ...
 

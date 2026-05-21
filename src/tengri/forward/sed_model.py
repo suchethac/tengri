@@ -168,19 +168,28 @@ class SEDModel:
 
         Cosmological distances always use float64 (float32 overflows at z > 0.01).
     approx : dict or bool, optional
-        Control which approximations the fused kernel uses. Default True enables
+        Control which approximations enter the component chain. Default True enables
         all approximations (fastest). False disables all (forces exact path
         everywhere). A dict enables selective control:
 
-        - ``"dust_attenuation"``: use dust at filter effective wavelengths (True, default)
-        - ``"dust_emission"``: use MBB at filter effective wavelengths (True, default)
-        - ``"igm"``: use IGM at filter effective wavelengths (True, default)
+        - ``"ztable"``: SSP × filter lookup table indexed on redshift grid (True, default)
+        - ``"wave_precomp"``: SSP × filter lookup table on fixed wavelength grid (False, default)
 
-        Approximation accuracy (Zacharegkas+2025 [1]_):
+        Approximation dependencies (resolved at build time):
 
-        - dust_attenuation: <3% for most laws, ~36% for SMC
-        - dust_emission: negligible for optical (MBB peak >50 μm)
-        - igm: exact for fixed z (precomputed once)
+        - ``wave_precomp=True`` with free redshift auto-enables ``ztable=True``.
+        - ``ztable=True`` requires ``wave_precomp=True``.
+        - Unknown flag names raise ``ValueError`` with list of legal flags.
+
+    compile : str, optional
+        JIT-wrapping strategy for the forward pass. Default ``"per_component"``
+        wraps each :class:`SEDComponent.apply` independently for faster cold-starts
+        in notebooks; ``"fused"`` compiles the entire ``observation.predict ∘
+        run_components`` chain at once for hot inference loops; ``"auto"`` is a
+        stub that currently resolves to ``"per_component"``.
+
+        **Legal values:** ``"per_component"`` (default), ``"fused"``, ``"auto"``.
+        Invalid values raise ``ValueError``.
 
     csp_integration : str, optional
         CSP age integration scheme. Default ``"trapz"`` (trapezoidal on
@@ -260,18 +269,18 @@ class SEDModel:
     """
 
     # Default approximation settings (immutable — used as template only)
+    # Phase 2: owned by components, per the unification plan.
+    # "wave_precomp" = SSP × filter LUT on fixed wavelength grid (stellar component)
+    # "ztable" = SSP × filter LUT indexed on redshift grid, requires wave_precomp
+    # ztable is auto-enabled when wave_precomp=True and redshift is free.
+    # "igm" = pre-compute IGM transmission at filter effective wavelengths for
+    # the hybrid kernel at fixed z. Default True matches the historic behavior
+    # before the Phase 3 ``approx=`` flag was introduced (``_build_precomputed_data``
+    # always computed ``igm_eff`` when ``_uses_igm`` and ``_z_fixed`` were set).
     _DEFAULT_APPROX: ClassVar[dict] = {
-        "dust_attenuation": True,
-        "dust_emission": True,
+        "wave_precomp": False,
+        "ztable": False,
         "igm": True,
-        # When True (default), an SEDModel built with a *free* redshift prior
-        # and photometry filters will automatically call ``precompute_ztable``
-        # at construction so forward evaluation under inference uses the
-        # hybrid_ztable kernel (compact graph, fast first-call) instead of
-        # the compositional full-wave fallback.  Set to False to opt out;
-        # set to a dict like ``{"ztable": {"n_z": 200, "z_min": 0.01}}`` to
-        # tune the grid.
-        "ztable": True,
     }
 
     _PREDICTION_MODES: ClassVar[frozenset] = frozenset(
@@ -293,6 +302,7 @@ class SEDModel:
         wave_chunk_size=None,
         agn_config=None,
         strategy=None,
+        compile=None,
     ):
         # ── Kernel-selection strategy ─────────────────────────────
         # Stored before any kernel builds so ``_get_strategy`` returns the
@@ -307,13 +317,76 @@ class SEDModel:
         self._forward_dtype = jnp.dtype(forward_dtype)
         self._wave_chunk_size = wave_chunk_size
 
-        # ── Approximation settings ────────────────────────────────
+        # ── Observables NamedTuple (Phase 2) ─────────────────────
+        from tengri.observation.observables import build_observables_class
+
+        self._Observables = (
+            build_observables_class(self.observation) if self.observation is not None else None
+        )
+
+        # ── Compile mode + Approximation settings ─────────────────
+        # Validate compile= kwarg
+        if compile is None:
+            compile = "per_component"
+        if compile not in ("per_component", "fused", "auto"):
+            legal = "per_component, fused, auto"
+            raise ValueError(f"compile={compile!r} is illegal. Legal values: {legal}.")
+        self._compile_mode = compile
+
+        # Resolve and validate approximation settings
         if approx is None or approx is True:
             self._approx = dict(self._DEFAULT_APPROX)
         elif approx is False:
             self._approx = {k: False for k in self._DEFAULT_APPROX}
         else:
             self._approx = {**self._DEFAULT_APPROX, **approx}
+
+        # Validate approx flag names
+        legal_flags = {"ztable", "wave_precomp", "igm"}
+        unknown = set(self._approx.keys()) - legal_flags
+        if unknown:
+            raise ValueError(
+                f"Unknown approximation flag(s): {sorted(unknown)}. "
+                f"Legal flags: {sorted(legal_flags)}."
+            )
+
+        # Resolve approx dependencies. Distinguish explicit-False from
+        # unspecified so we can raise on the contradictory case
+        # (wave_precomp=True with ztable=False explicit + free z) while
+        # silently upgrading the unspecified case.
+        wave_precomp = self._approx.get("wave_precomp", False)
+        ztable = self._approx.get("ztable", False)
+        ztable_explicit = isinstance(approx, dict) and "ztable" in approx
+        redshift_dist = spec.get_distribution("redshift")
+        is_z_free = not redshift_dist.is_fixed
+
+        if wave_precomp and not ztable and is_z_free and ztable_explicit:
+            # Explicit ztable=False is a contradiction with wave_precomp + free z.
+            raise ValueError(
+                "wave_precomp=True with free redshift requires ztable=True. "
+                "Either enable ztable or fix redshift."
+            )
+        elif wave_precomp and not ztable and is_z_free:
+            # ztable unspecified — auto-enable with a log line.
+            warnings.warn(
+                "wave_precomp with free redshift requires ztable; auto-enabling.",
+                UserWarning,
+                stacklevel=2,
+            )
+            self._approx["ztable"] = True
+        elif ztable and not wave_precomp:
+            # ztable requires wave_precomp
+            raise ValueError(
+                "ztable=True requires wave_precomp=True. ztable is the free-z "
+                "variant of wave_precomp; it has nothing to index without it."
+            )
+        elif wave_precomp and ztable and not is_z_free and "ztable" in (approx or {}):
+            # Warn if user explicitly set ztable=True with fixed z
+            warnings.warn(
+                "ztable is irrelevant when redshift is Fixed; consider removing it.",
+                UserWarning,
+                stacklevel=2,
+            )
 
         # ── Stellar populations ───────────────────────────────────
         self._init_ssp(spec, ssp_data, csp_integration)
@@ -509,6 +582,34 @@ class SEDModel:
         if self.observation is not None and self.observation.can_do_photometry:
             return list(self.observation.photometry.filter_trans)
         return None
+
+    @property
+    def Observables(self) -> type:
+        """Return the per-model :class:`Observables` NamedTuple class.
+
+        Returns
+        -------
+        type
+            A :class:`typing.NamedTuple` subclass whose fields match the
+            configured observation sub-blocks. Synthesised at construction
+            time by :func:`build_observables_class`.
+
+        Raises
+        ------
+        ValueError
+            If no observation is configured.
+
+        Notes
+        -----
+        Phase 2 of forward-projection unification. Each model gets its own
+        NamedTuple class, with fields (and magnitude properties) appearing
+        only when the corresponding observation sub-block is configured.
+        """
+        if self._Observables is None:
+            raise ValueError(
+                "Observables requires an Observation. Build the model with observation= set."
+            )
+        return self._Observables
 
     @staticmethod
     def _init_observation(spec, filters, observation):
@@ -1261,7 +1362,7 @@ class SEDModel:
         # Dust IR emission template preintegration (for hybrid kernel, fixed z)
         # For template-based dust models (DL07, Dale2014, etc.), pre-integrate
         # templates through filters at init time for fast runtime triweight lookup.
-        # Also extract grid arrays for threading as JIT-traced inputs (Phase II-3).
+        # Also extract grid arrays for threading as JIT-traced inputs.
         dust_ir_lookup = None
         dust_ir_grid_arrays = None
         if (
@@ -1747,9 +1848,9 @@ class SEDModel:
                     stacklevel=2,
                 )
 
-        # Build component_grid_arrays dict from registry for Phase II-6 extension.
-        # This dict holds JIT-traceable arrays that can be threaded as kwargs
-        # to component lookups, avoiding closure capture of large constants.
+        # Build component_grid_arrays dict from registry. This dict holds
+        # JIT-traceable arrays that can be threaded as kwargs to component
+        # lookups, avoiding closure capture of large constants.
         component_grid_arrays_dict: dict[str, tuple] = {}
         if dust_ir_grid_arrays is not None:
             component_grid_arrays_dict["dust_ir"] = dust_ir_grid_arrays
@@ -2163,7 +2264,7 @@ class SEDModel:
         Notes
         -----
         **JIT-compatible**: no — computes SED components via the
-        orchestrator path (:meth:`predict_via_orchestrator`) which is not
+        orchestrator path (:meth:`predict_state`) which is not
         JIT'd. For JIT-compatible SED access, use
         :meth:`predict_sed_quantities` instead.
 
@@ -2203,7 +2304,7 @@ class SEDModel:
         """
         from tengri.forward.result import SEDResult
 
-        state = self.predict_via_orchestrator(params)
+        state = self.predict_state(params)
         if wave is None:
             # Use ``state.wave`` (the orchestrator's runtime wavelength
             # grid, which may differ from ``self._rest_wavelength`` —
@@ -2556,6 +2657,14 @@ class SEDModel:
         # Velocity dispersion
         has_sigma_v = bool(self._has_sigma_v)
 
+        # Compile mode (Phase 2)
+        compile_mode = str(self._compile_mode)
+
+        # Approximation settings (Phase 2), resolved and sorted
+        approx_resolved = tuple(
+            sorted((k, bool(v)) for k, v in (self._approx or {}).items() if isinstance(v, bool))
+        )
+
         # Fixed-parameter values from spec. The compositional/hybrid kernels
         # capture self via closure at build time, so two models with identical
         # *structural* signature but different Fixed defaults must NOT share
@@ -2618,6 +2727,8 @@ class SEDModel:
             radio_include_freefree,
             radio_sfr_mode,
             has_sigma_v,
+            compile_mode,
+            approx_resolved,
             spec_fixed_id,
         )
 
@@ -2715,18 +2826,35 @@ class SEDModel:
         if approx is not None:
             mode = "auto" if approx else "exact"
 
-        # _traceable: un-JIT'd path for NIFTy/VI tracing (not user-facing)
-        if mode == "_traceable":
-            return self._predict_photometry_traceable(params)
+        # traced: un-JIT'd path for NIFTy/VI tracing (not user-facing)
+        if mode == "traced":
+            return self._predict_photometry_traced(params)
 
         if mode not in self._PREDICTION_MODES:
             raise ValueError(
                 f"Unknown mode {mode!r}. Choose from: {sorted(self._PREDICTION_MODES)}"
             )
 
+        # Phase 3e: deprecate explicit mode= in favour of predict_observables
+        # (which auto-selects the precomputed LUT path when available — see
+        # docs/dev/photometry_path_unification.md). The mode= kwarg will be
+        # removed once predict_via_precomp covers two-component dust and
+        # free-z+dust (Phase 3c-3c-iv/v follow-ups).
+        if mode != "auto":
+            warnings.warn(
+                "predict_photometry(mode=...) is deprecated. Use "
+                "model.predict_observables(params).phot_fnu for new code — it "
+                "auto-selects the precomputed LUT path when available and falls "
+                "back to the orchestrator integration otherwise. The mode= kwarg "
+                "will be removed once Phase 3c-3c follow-ups land "
+                "(two-component dust + free-z+dust LUTs).",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         if mode == "auto":
             return self._predict_photometry_auto(params)
-        if mode == "_traceable":
+        if mode == "traced":
             # Raw un-JIT'd path for use inside inference JIT scopes.
             # Picks hybrid (precomputed, tiny graph) if available,
             # otherwise falls back to auto.
@@ -2863,12 +2991,26 @@ class SEDModel:
         if wave_chunk_size is None:
             wave_chunk_size = self._wave_chunk_size
 
-        if mode == "_traceable":
-            return self._predict_spectrum_traceable(params, wave_obs, wave_chunk_size)
+        if mode == "traced":
+            return self._predict_spectrum_traced(params, wave_obs, wave_chunk_size)
 
         if mode not in self._PREDICTION_MODES:
             raise ValueError(
                 f"Unknown mode {mode!r}. Choose from: {sorted(self._PREDICTION_MODES)}"
+            )
+
+        # Phase 3e: deprecate explicit mode= (see predict_photometry for the
+        # full rationale). predict_observables(params).spec_fnu is the new
+        # canonical path; the mode= kwarg will be removed once Phase 3c-3
+        # spectroscopy follow-ups land.
+        if mode != "auto":
+            warnings.warn(
+                "predict_spectrum(mode=...) is deprecated. Use "
+                "model.predict_observables(params).spec_fnu for new code. The "
+                "mode= kwarg will be removed once predict_via_precomp covers "
+                "spectroscopy.",
+                DeprecationWarning,
+                stacklevel=2,
             )
 
         if mode == "auto":
@@ -3029,7 +3171,7 @@ class SEDModel:
         # ``predict_nebular_line_luminosities`` with SSP-derived
         # ``ssp_weights`` + ``ssp_log_ages_yr`` and the canonical
         # neb_logZ_gas → absolute-log10(Z) translation.
-        state = self.predict_via_orchestrator(params)
+        state = self.predict_state(params)
         if "line_waves" not in state.derived or "line_lums" not in state.derived:
             raise ValueError(
                 "Configured nebular backend did not publish a discrete "
@@ -3079,7 +3221,7 @@ class SEDModel:
         flux = selected_lums * L_SUN / (4.0 * jnp.pi * dl_cm**2)
         return flux
 
-    def predict_spectral_indices(self, params, index_defs, mode="_traceable"):
+    def predict_spectral_indices(self, params, index_defs, mode="traced"):
         """Predict spectral index values from the model SED.
 
         Generates a rest-frame spectrum covering the index wavelength
@@ -3105,7 +3247,7 @@ class SEDModel:
 
         Notes
         -----
-        **JIT-compatible**: depends on ``mode`` (``"_traceable"`` by default).
+        **JIT-compatible**: depends on ``mode`` (``"traced"`` by default).
 
         Measures spectral indices (equivalent width or break ratio) from a
         rest-frame spectrum covering all wavelength ranges in ``index_defs``.
@@ -3397,12 +3539,12 @@ class SEDModel:
             # Closure-A consistency: route through the orchestrator so
             # ``predict_sfh_quantities`` returns the same stellar_mass /
             # weights as ``predict_derived`` (which uses
-            # ``predict_via_orchestrator`` internally via
+            # ``predict_state`` internally via
             # ``Prediction._ensure_sfh``). Was 4.1% apart with the
             # legacy rectangle rule (``sfr_on_ssp * _csp_age_dt``).
             # See ``tests/integration/test_derived_quantities.py::
             # test_mstar_consistent_between_methods``.
-            state_orch = self.predict_via_orchestrator(params)
+            state_orch = self.predict_state(params)
             weights = jnp.asarray(state_orch.derived["age_weights"])
         mass_formed = jnp.sum(weights)
 
@@ -3585,18 +3727,18 @@ class SEDModel:
         # reconstruction has a hidden DSPS-joint-weight discrepancy
         # under trapz. The orchestrator value is the physically correct
         # one (energy-conserving by construction).
-        return self.predict_sed_quantities_via_orchestrator(params)
+        return self.predict_sed_quantities_components(params)
 
-    # ── Component orchestrator path (Phase II-2.6 opt-in) ─────────────
+    # ── Component orchestrator path (opt-in) ──────────────────────────
 
-    def predict_sfh_quantities_via_orchestrator(self, params):
+    def predict_sfh_quantities_components(self, params):
         """Drop-in replacement for :meth:`predict_sfh_quantities`.
 
         Routes through the orchestrator and converts the resulting
         :class:`ForwardState` to a legacy :class:`SFHQuantities`
         NamedTuple via :func:`tengri.forward.state_to_sfh_quantities`.
         Same return shape as the legacy method, computed via the
-        Phase II SEDComponent path.
+        SEDComponent path.
 
         Returns
         -------
@@ -3605,9 +3747,9 @@ class SEDModel:
         """
         from tengri.forward import state_to_sfh_quantities
 
-        return state_to_sfh_quantities(self.predict_via_orchestrator(params))
+        return state_to_sfh_quantities(self.predict_state(params))
 
-    def predict_sed_quantities_via_orchestrator(self, params):
+    def predict_sed_quantities_components(self, params):
         """Drop-in replacement for :meth:`predict_sed_quantities`.
 
         Returns
@@ -3617,10 +3759,10 @@ class SEDModel:
         """
         from tengri.forward import state_to_sed_quantities
 
-        return state_to_sed_quantities(self.predict_via_orchestrator(params))
+        return state_to_sed_quantities(self.predict_state(params))
 
-    def predict_radio_quantities_via_orchestrator(self, params):
-        """Phase II-2.6 orchestrator-path radio quantities.
+    def predict_radio_quantities(self, params):
+        """Orchestrator-path radio quantities.
 
         Returns
         -------
@@ -3631,10 +3773,10 @@ class SEDModel:
         """
         from tengri.forward import state_to_radio_quantities
 
-        return state_to_radio_quantities(self.predict_via_orchestrator(params))
+        return state_to_radio_quantities(self.predict_state(params))
 
-    def predict_xray_quantities_via_orchestrator(self, params):
-        """Phase II-2.6 orchestrator-path X-ray quantities.
+    def predict_xray_quantities(self, params):
+        """Orchestrator-path X-ray quantities.
 
         Returns
         -------
@@ -3643,10 +3785,10 @@ class SEDModel:
         """
         from tengri.forward import state_to_xray_quantities
 
-        return state_to_xray_quantities(self.predict_via_orchestrator(params))
+        return state_to_xray_quantities(self.predict_state(params))
 
-    def predict_ionizing_quantities_via_orchestrator(self, params):
-        """Phase II-2.6 orchestrator-path ionizing-photon quantities.
+    def predict_ionizing_quantities(self, params):
+        """Orchestrator-path ionizing-photon quantities.
 
         Returns
         -------
@@ -3655,9 +3797,9 @@ class SEDModel:
         """
         from tengri.forward import state_to_ionizing_quantities
 
-        return state_to_ionizing_quantities(self.predict_via_orchestrator(params))
+        return state_to_ionizing_quantities(self.predict_state(params))
 
-    def predict_photometry_via_orchestrator(self, params):
+    def predict_photometry_components(self, params):
         """Photometry through the orchestrator path.
 
         Runs the SEDComponent chain on the model's configuration,
@@ -3669,7 +3811,7 @@ class SEDModel:
         ----------
         params : Mapping
             Free-parameter dict (same shape as
-            :meth:`predict_via_orchestrator`).
+            :meth:`predict_state`).
 
         Returns
         -------
@@ -3697,34 +3839,16 @@ class SEDModel:
         """
         if not self.observation.can_do_photometry:
             raise ValueError(
-                "predict_photometry_via_orchestrator requires photometric "
+                "predict_photometry_components requires photometric "
                 "filters configured on the observation. Construct the "
                 "model with ``filters=`` or pass an Observation that "
                 "carries a Photometry instance."
             )
-        from tengri.observation.photometry import compute_flux_density
-        from tengri.utils.cosmology import luminosity_distance
+        state = self.predict_state(params)
+        full = {**self.spec.get_fixed_values(), **params}
+        return self.observation.predict(state, full)["phot_fnu"]
 
-        state = self.predict_via_orchestrator(params)
-        z = jnp.asarray(params.get("redshift", 0.0))
-        # ``luminosity_distance`` returns cm directly (per its docstring).
-        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-
-        sed_rest = state.sed_intrinsic
-        wave_rest = state.wave
-        photometry = jnp.asarray(
-            [
-                compute_flux_density(sed_rest, wave_rest, fw, ft, redshift=z, dl_cm=dl_cm)
-                for fw, ft in zip(
-                    self.observation.photometry.filter_waves,
-                    self.observation.photometry.filter_trans,
-                    strict=False,
-                )
-            ]
-        )
-        return photometry
-
-    def predict_spectrum_via_orchestrator(self, params, wave_obs=None):
+    def predict_spectrum_components(self, params, wave_obs=None):
         """Spectrum through the orchestrator path.
 
         Runs the SEDComponent chain, applies the cosmological redshift +
@@ -3738,7 +3862,7 @@ class SEDModel:
         ----------
         params : Mapping
             Free-parameter dict (same shape as
-            :meth:`predict_via_orchestrator`).
+            :meth:`predict_state`).
         wave_obs : array_like, shape (n_pix,), optional
             Observed-frame wavelength grid [Angstrom]. If ``None``,
             falls back to the precomputed grid (`self._wave_obs` or
@@ -3762,40 +3886,30 @@ class SEDModel:
         is applied; callers that need calibration should compose it on
         top via the user-likelihood Protocol path.
         """
-        from tengri.forward._kernels.compositional import observe_spectrum_from_rest_sed
-        from tengri.observation.spectrum import apply_lsf
-        from tengri.utils.cosmology import luminosity_distance
-
         if wave_obs is None and self._precomputed.spectroscopy is not None:
             wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
         elif wave_obs is None and hasattr(self, "_wave_obs"):
             wave_obs = self._wave_obs
         elif wave_obs is None:
             raise ValueError(
-                "predict_spectrum_via_orchestrator requires a wave_obs grid "
+                "predict_spectrum_components requires a wave_obs grid "
                 "(pass it explicitly or call precompute_spectroscopy()."
             )
 
-        state = self.predict_via_orchestrator(params)
-        z = jnp.asarray(params.get("redshift", 0.0))
-        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+        state = self.predict_state(params)
+        full = {**self.spec.get_fixed_values(), **params}
+        return self.observation.predict(
+            state,
+            full,
+            wave_obs=wave_obs,
+            sigma_v_kms=self._get_sigma_v_kms(params),
+            lsf_resolution=self._lsf_resolution,
+            lsf_sigma_lib_kms=self._sigma_lib_kms,
+            lsf_n_bins=self._lsf_n_bins,
+        )["spec_fnu"]
 
-        flux = observe_spectrum_from_rest_sed(state.sed_intrinsic, state.wave, wave_obs, z, dl_cm)
-
-        resolution = self._lsf_resolution
-        if resolution is not None:
-            flux = apply_lsf(
-                flux,
-                wave_obs,
-                resolution,
-                sigma_lib_kms=self._sigma_lib_kms,
-                n_bins=self._lsf_n_bins,
-                sigma_v_kms=self._get_sigma_v_kms(params),
-            )
-        return flux
-
-    def predict_emission_lines_via_orchestrator(self, params):
-        """Phase II-2.6 orchestrator-path emission-line luminosities.
+    def predict_emission_lines(self, params):
+        """Orchestrator-path emission-line luminosities.
 
         Returns
         -------
@@ -3807,10 +3921,10 @@ class SEDModel:
         """
         from tengri.forward import state_to_emission_lines
 
-        return state_to_emission_lines(self.predict_via_orchestrator(params))
+        return state_to_emission_lines(self.predict_state(params))
 
-    def predict_via_orchestrator(self, params):
-        """Forward pass via the Phase II SEDComponent orchestrator.
+    def predict_state(self, params):
+        """Forward pass via the SEDComponent orchestrator.
 
         Builds a component chain from this model's structural settings
         (``self.spec`` + ``self.ssp_data`` + dust / nebular / AGN / radio
@@ -3873,9 +3987,146 @@ class SEDModel:
         # Inject Fixed values from spec for parameters absent from
         # ``params``. Matches the legacy ``get_internal_params``
         # convention so callers using ``predict_rest_sed`` and
-        # ``predict_via_orchestrator`` can pass the same params dict.
+        # ``predict_state`` can pass the same params dict.
         full_params = {**self.spec.get_fixed_values(), **params}
         return run_components(chain, state0, full_params)
+
+    def predict_observables(self, params):
+        """Project the orchestrator state into every configured observable.
+
+        Single bit-exact entry point: runs the SEDComponent chain and
+        delegates to :meth:`Observation.predict` for projection. Returns
+        an :class:`Observables` NamedTuple with one field per configured
+        observation sub-block (``phot_fnu``, ``phot_rest_fnu``, ``spec_fnu``).
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict.
+
+        Returns
+        -------
+        Observables
+            NamedTuple with fields keyed by configured sub-blocks:
+            ``phot_fnu`` [erg/s/cm²/Hz] shape ``(n_filters,)``,
+            ``phot_rest_fnu`` [erg/s/cm²/Hz] shape ``(n_filters,)``,
+            ``spec_fnu`` [erg/s/cm²/Hz] shape ``(n_pixels,)``.
+
+        Notes
+        -----
+        **JIT-compatible**: yes. Not self-JIT'd — wrap with
+        :func:`jax.jit` for hot loops, or call
+        :meth:`predict_observables_jit` for the pre-cached version.
+
+        **Phase 2 of forward-projection unification.** Synthesised per-model
+        at :meth:`__init__` from observation contents; missing channels
+        raise ``AttributeError`` on access.
+        """
+        if self.observation is None:
+            raise ValueError(
+                "predict_observables requires an Observation. Build the "
+                "model with ``observation=`` set."
+            )
+        state = self.predict_state(params)
+        full = {**self.spec.get_fixed_values(), **params}
+        kwargs = {}
+        if self.observation.can_do_spectroscopy:
+            kwargs.update(
+                wave_obs=self._wave_obs
+                if hasattr(self, "_wave_obs")
+                else self.observation.spectroscopy.wave_obs,
+                sigma_v_kms=self._get_sigma_v_kms(params),
+                lsf_resolution=self._lsf_resolution,
+                lsf_sigma_lib_kms=self._sigma_lib_kms,
+                lsf_n_bins=self._lsf_n_bins,
+            )
+        return self.observation.predict(state, full, observables_type=self._Observables, **kwargs)
+
+    def predict_observables_jit(self, params):
+        """Self-JIT'd, structurally-cached version of :meth:`predict_observables`.
+
+        Bit-exact with :meth:`predict_observables` (same orchestrator
+        chain, same :meth:`Observation.predict` projection). The compiled
+        function is cached on :meth:`compile_signature`, so two SEDModel
+        instances with identical structure (same physics, same filter
+        set, same observation shape) share one compile across galaxies.
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict.
+
+        Returns
+        -------
+        Observables
+            NamedTuple with fields keyed by configured sub-blocks.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — this method IS the JIT entry point.
+
+        The compiled closure captures ``self.spec.get_fixed_values()``
+        and the LSF settings. When any fixed value changes per galaxy
+        (per-galaxy redshift, per-galaxy calibration coefficient, …)
+        the :meth:`compile_signature` changes and a new compile fires.
+        Build with free priors and pass per-galaxy values via ``params``
+        to share one compile across a catalogue.
+
+        See Also
+        --------
+        predict_observables : un-JIT'd version (debug / one-shot).
+        compile_signature : structural fingerprint controlling cache reuse.
+        """
+        return self._get_or_build_predict_observables_jit()(params)
+
+    def _get_or_build_predict_observables_jit(self):
+        """Return (and cache) the JIT'd predict_observables closure."""
+        from tengri.inference._model_cache import _default_owner
+
+        cache = _default_owner.get_structural_kernel(self.compile_signature())
+        fn = cache.get("predict_observables_jit")
+        if fn is not None:
+            return fn
+
+        import jax
+
+        # Capture the model's per-instance LSF + wave_obs into the closure.
+        # These are part of compile_signature when spectroscopy is configured,
+        # so caching is safe across instances with identical structure.
+        observation = self.observation
+        fixed_values = self.spec.get_fixed_values()
+        sigma_v_getter = self._get_sigma_v_kms
+        lsf_resolution = self._lsf_resolution
+        sigma_lib_kms = self._sigma_lib_kms
+        lsf_n_bins = self._lsf_n_bins
+        wave_obs = (
+            getattr(self, "_wave_obs", None)
+            if observation is None or not observation.can_do_spectroscopy
+            else (
+                self._wave_obs if hasattr(self, "_wave_obs") else observation.spectroscopy.wave_obs
+            )
+        )
+        observables_type = self._Observables
+
+        def _impl(params):
+            state = self.predict_state(params)
+            full = {**fixed_values, **params}
+            if observation.can_do_spectroscopy:
+                return observation.predict(
+                    state,
+                    full,
+                    wave_obs=wave_obs,
+                    sigma_v_kms=sigma_v_getter(full),
+                    lsf_resolution=lsf_resolution,
+                    lsf_sigma_lib_kms=sigma_lib_kms,
+                    lsf_n_bins=lsf_n_bins,
+                    observables_type=observables_type,
+                )
+            return observation.predict(state, full, observables_type=observables_type)
+
+        jit_fn = jax.jit(_impl)
+        cache["predict_observables_jit"] = jit_fn
+        return jit_fn
 
     def _build_component_chain(self):
         """Construct the orchestrator chain from ``self``'s settings.
@@ -3915,7 +4166,7 @@ class SEDModel:
                 neb_backend_name = "baked_in"  # fallback
             neb_backend_instance = neb_inst
 
-        return build_components(
+        chain = build_components(
             ssp_data=self.ssp_data,
             sfh_model=mean_model,
             field=field_on,
@@ -3934,6 +4185,100 @@ class SEDModel:
             use_xray=bool(getattr(self, "_uses_xray", False)),
             use_igm=bool(getattr(self, "_uses_igm", False)),
         )
+
+        # Phase 3b/3c: Eager precompute stellar photometry LUT when wave_precomp is enabled.
+        # Phase 3b: fixed-z LUT when redshift is Fixed.
+        # Phase 3c-1: free-z ztable when redshift is Free (Uniform prior).
+        if (
+            self._approx.get("wave_precomp")
+            and self.observation is not None
+            and hasattr(self.observation, "photometry")
+            and self.observation.photometry is not None
+            and len(chain) > 0
+            and chain[0].name == "stellar"
+        ):
+            from dataclasses import replace
+
+            from tengri.components.stellar.component import StellarSEDComponent
+
+            stellar = chain[0]
+            if isinstance(stellar, StellarSEDComponent):
+                # Build filter tuple from observation photometry.
+                filters = tuple(
+                    zip(
+                        self.observation.photometry.filter_waves,
+                        self.observation.photometry.filter_trans,
+                        strict=False,
+                    )
+                )
+
+                # Determine redshift spec: fixed or free. Phase 3c-1 dispatch.
+                try:
+                    redshift_dist = self.spec.get_distribution("redshift")
+                    is_fixed = redshift_dist.is_fixed
+                    z_bounds = redshift_dist.bounds
+                except (AttributeError, KeyError):
+                    # Fallback: assume fixed at 0.0 if redshift not in spec
+                    is_fixed = True
+                    z_bounds = (0.0,)
+
+                if is_fixed:
+                    # Phase 3b: fixed-z LUT
+                    redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
+                else:
+                    # Phase 3c-1: free-z ztable with padding
+                    z_lo, z_hi = float(z_bounds[0]), float(z_bounds[1])
+                    pad = 0.01 * (z_hi - z_lo)
+                    redshift_spec = {
+                        "mode": "free",
+                        "z_min": max(0.001, z_lo - pad),
+                        "z_max": z_hi + pad,
+                        "n_z": 100,
+                    }
+
+                # Call precompute to build the LUT or ztable.
+                state = stellar.precompute(
+                    ssp_data=stellar.ssp_data,
+                    wave_grid=None,
+                    approx=self._approx,
+                    filters=filters,
+                    redshift_spec=redshift_spec,
+                )
+                # Replace the stellar component with one carrying the precomputed state.
+                chain[0] = replace(stellar, _state=state)
+
+                # Phase 3c-3d-agn: AGN component also needs filter passbands
+                # so its apply() can publish ``agn_phot_lnu_precomp``. Find the
+                # AGN component in the chain and re-precompute it with filters.
+                from tengri.components.agn.component import AGNSEDComponent
+
+                for idx, comp in enumerate(chain):
+                    if isinstance(comp, AGNSEDComponent):
+                        agn_state = comp.precompute(
+                            ssp_data=None,
+                            wave_grid=None,
+                            approx=self._approx,
+                            filters=filters,
+                        )
+                        chain[idx] = replace(comp, _state=agn_state)
+                        break
+
+                # Phase 3c-3d-neb: non-BakedIn nebular component caches
+                # filters too, for its filter-integrated precompute publish.
+                from tengri.components.nebular.component import NebularSEDComponent
+
+                for idx, comp in enumerate(chain):
+                    if isinstance(comp, NebularSEDComponent):
+                        neb_state = comp.precompute(
+                            ssp_data=None,
+                            wave_grid=None,
+                            approx=self._approx,
+                            filters=filters,
+                        )
+                        chain[idx] = replace(comp, _state=neb_state)
+                        break
+
+        return chain
 
     # ── Batch operations ──────────────────────────────────────────────
 
@@ -4087,7 +4432,7 @@ class SEDModel:
 
         return self._hybrid.photometry(self._jit_safe_params(params))
 
-    def _predict_photometry_traceable(self, params):
+    def _predict_photometry_traced(self, params):
         """Un-JIT'd photometry for use inside JAX tracing (NIFTy VI).
 
         Returns the same result as hybrid/compositional but without
@@ -4103,12 +4448,12 @@ class SEDModel:
             if raw is not None:
                 return raw(params)
         # Fall back to compositional raw.
-        # Phase II-2 (focused): thread the SSP arrays as JIT-traced kwargs so
-        # XLA treats them as runtime inputs rather than baking them into the
-        # compiled HLO as constants (a 114 MB constant on the MIST grid).
-        # The compositional kernel falls back to closure-captured copies if
-        # these kwargs are absent — keeps the logged-jit wrapper and
-        # external callers working unchanged.
+        # Thread the SSP arrays as JIT-traced kwargs so XLA treats them as
+        # runtime inputs rather than baking them into the compiled HLO as
+        # constants (a 114 MB constant on the MIST grid). The compositional
+        # kernel falls back to closure-captured copies if these kwargs are
+        # absent — keeps the logged-jit wrapper and external callers working
+        # unchanged.
         if self._compositional_kernels is not None:
             raw = getattr(self._compositional_kernels, "_photometry_raw", None)
             if raw is not None:
@@ -4192,7 +4537,7 @@ class SEDModel:
         path with a warning if no strategy-preferred spectrum kernel is
         compatible.
 
-        Note: inference uses ``mode="_traceable"`` (separate path) which
+        Note: inference uses ``mode="traced"`` (separate path) which
         prefers the hybrid raw kernel directly via ``_hybrid_kernels._spectrum_raw``.
         """
         import warnings
@@ -4299,10 +4644,10 @@ class SEDModel:
 
         return flux
 
-    def _predict_spectrum_traceable(self, params, wave_obs=None, wave_chunk_size=None):
+    def _predict_spectrum_traced(self, params, wave_obs=None, wave_chunk_size=None):
         """Un-JIT'd spectrum for use inside JAX tracing (NIFTy VI).
 
-        Mirrors _predict_photometry_traceable: uses the hybrid spectrum kernel
+        Mirrors _predict_photometry_traced: uses the hybrid spectrum kernel
         (precomputed SSPs on pixel grid, ~200 pts) rather than the full
         compositional rest-SED path (~10k wavelengths).  This reduces the
         XLA graph size during VI by ~50×.
@@ -4310,9 +4655,9 @@ class SEDModel:
         Requires spectroscopy precomputation.  Falls back to the compositional
         auto path if no precomputed spectrum kernel is available.
         """
-        # Prefer hybrid spectrum raw (precomputed SSP on pixel grid)
-        # Phase II-2: thread SSP arrays as JIT-traced kwargs so XLA does not
-        # bake the full SSP grid into the compiled HLO as constants.
+        # Prefer hybrid spectrum raw (precomputed SSP on pixel grid).
+        # Thread SSP arrays as JIT-traced kwargs so XLA does not bake the
+        # full SSP grid into the compiled HLO as constants.
         if self._hybrid_kernels is not None:
             raw = getattr(self._hybrid_kernels, "_spectrum_raw", None)
             if raw is not None:
@@ -4359,8 +4704,8 @@ class SEDModel:
             p = self._get_internal_params(params)
             sfr = self._compute_sfr(p)
             sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-            # Phase II-2: pass SSP arrays as JIT-traced kwargs to keep the
-            # 100+ MB SSP flux grid out of the compiled HLO as constants.
+            # Pass SSP arrays as JIT-traced kwargs to keep the 100+ MB SSP
+            # flux grid out of the compiled HLO as constants.
             flux = self._compositional.spectrum(
                 sfr_on_ssp,
                 params,
@@ -4416,8 +4761,9 @@ class SEDModel:
         ssp_flux_traced : ndarray, optional
             Traced override for ``model.ssp_data.ssp_flux``. When provided
             with ``ssp_lgmet_traced``, the SSP arrays enter the JIT graph as
-            runtime tensors instead of closure-captured constants
-            (Phase III trace path; see ``docs/dev/quickstart_oom_diagnosis.md``).
+            runtime tensors instead of closure-captured constants — the
+            memory-efficient path; see
+            ``docs/dev/quickstart_oom_diagnosis.md``.
         ssp_lgmet_traced : ndarray, optional
             Traced override for ``model.ssp_data.ssp_lgmet``.
         ssp_alpha_fe_traced : ndarray, optional
@@ -4720,7 +5066,7 @@ class SEDModel:
     ) -> SEDModel:
         """Build a SEDModel from a grouped configuration dict.
 
-        Reduces boilerplate for the common case: instead of constructing
+        For the common case: instead of constructing
         ``Parameters``, ``SSPData``, ``Observation``, and ``SEDModel`` separately,
         provide a single grouped config and receive a fully configured ``SEDModel``.
 
@@ -5442,7 +5788,7 @@ class SEDModel:
                 lambda: build_fused_tier2_spectrum(self._state, self),
             )
             self._compositional.spectrum = jax.jit(_raw) if _raw else None
-            # Preserve the raw closure for ``mode="_traceable"`` (NIFTy VI),
+            # Preserve the raw closure for ``mode="traced"`` (NIFTy VI),
             # which reads ``_spectrum_raw`` directly from the kernel container.
             self._compositional._spectrum_raw = _raw
 

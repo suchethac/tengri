@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Phase II opt-in: Fitter(use_orchestrator=True) routes prediction through
-:meth:`SEDModel.predict_photometry_via_orchestrator` instead of the legacy
+"""Phase II opt-in: Fitter(use_components=True) routes prediction through
+:meth:`SEDModel.predict_photometry_components` instead of the legacy
 fused kernel.
 
 Smoke-tests only — full numerical-equivalence sweep is part of the eventual
@@ -66,7 +66,7 @@ class _DualPathModel:
         self.legacy_calls += 1
         return jnp.array([1.0, 2.0, 3.0])
 
-    def predict_photometry_via_orchestrator(self, params):
+    def predict_photometry_components(self, params):
         self.orchestrator_calls += 1
         return jnp.array([10.0, 20.0, 30.0])
 
@@ -74,12 +74,12 @@ class _DualPathModel:
         self.legacy_calls += 1
         return jnp.array([1.0, 2.0, 3.0])
 
-    def predict_spectrum_via_orchestrator(self, params, wave_obs):
+    def predict_spectrum_components(self, params, wave_obs):
         self.orchestrator_calls += 1
         return jnp.array([10.0, 20.0, 30.0])
 
 
-def _make_fitter(*, use_orchestrator: bool):
+def _make_fitter(*, use_components: bool):
     spec = _MockSpec(free_names=["flux_scale"])
     model = _DualPathModel()
     model.spec = spec
@@ -101,28 +101,28 @@ def _make_fitter(*, use_orchestrator: bool):
         _bounds={"flux_scale": (-jnp.inf, jnp.inf)},
         _data_args={"data": fnu_obs, "noise": fnu_err},
         _user_likelihood=user_likelihood,
-        use_orchestrator=use_orchestrator,
+        use_components=use_components,
     )
     return fitter, model
 
 
 def test_default_routes_through_legacy_path():
-    fitter, model = _make_fitter(use_orchestrator=False)
+    fitter, model = _make_fitter(use_components=False)
     loglik = build_loglikelihood_fn(fitter, mode="auto")
     _ = loglik({"flux_scale": 1.0}, fitter._data_args)
     assert model.legacy_calls == 1
     assert model.orchestrator_calls == 0
 
 
-def test_use_orchestrator_routes_through_component_path():
-    fitter, model = _make_fitter(use_orchestrator=True)
+def test_use_components_routes_through_component_path():
+    fitter, model = _make_fitter(use_components=True)
     loglik = build_loglikelihood_fn(fitter, mode="auto")
     _ = loglik({"flux_scale": 1.0}, fitter._data_args)
     assert model.legacy_calls == 0
     assert model.orchestrator_calls == 1
 
 
-def _make_spectroscopy_fitter(*, use_orchestrator: bool):
+def _make_spectroscopy_fitter(*, use_components: bool):
     spec = _MockSpec(free_names=["flux_scale"])
     model = _DualPathModel()
     model.spec = spec
@@ -142,14 +142,14 @@ def _make_spectroscopy_fitter(*, use_orchestrator: bool):
         _bounds={"flux_scale": (-jnp.inf, jnp.inf)},
         _data_args={"data": fnu_obs, "noise": fnu_err},
         _user_likelihood=None,  # use legacy χ² path; data type drives routing
-        use_orchestrator=use_orchestrator,
+        use_components=use_components,
     )
     return fitter, model
 
 
-def test_use_orchestrator_routes_spectrum_through_component_path():
+def test_use_components_routes_spectrum_through_component_path():
     """Spectroscopy now also routes through the orchestrator when opted in."""
-    fitter, model = _make_spectroscopy_fitter(use_orchestrator=True)
+    fitter, model = _make_spectroscopy_fitter(use_components=True)
     # We're not asserting numerical outcome (no user_likelihood / loss math
     # here) — just that the dispatch in _build_prediction picks the
     # orchestrator branch.
@@ -159,19 +159,19 @@ def test_use_orchestrator_routes_spectrum_through_component_path():
         model,
         {"flux_scale": 1.0},
         "spectroscopy",
-        "_traceable",
+        "traced",
         has_line_fluxes=False,
         has_indices=False,
         index_defs=None,
         data_args=fitter._data_args,
-        use_orchestrator=True,
+        use_components=True,
     )
     assert model.legacy_calls == 0
     assert model.orchestrator_calls == 1
 
 
-def test_use_orchestrator_rejects_unknown_data_type_at_construction():
-    """Sanity: an unknown data_type with use_orchestrator=True still raises."""
+def test_use_components_rejects_unknown_data_type_at_construction():
+    """Sanity: an unknown data_type with use_components=True still raises."""
     from tengri.inference.fitter import Fitter
 
     class _StubModel:
@@ -188,6 +188,6 @@ def test_use_orchestrator_rejects_unknown_data_type_at_construction():
             data=jnp.array([1.0, 2.0]),
             noise=jnp.array([0.1, 0.1]),
             data_type="not_a_real_type",
-            use_orchestrator=True,
+            use_components=True,
             auto_protocol_likelihood=False,
         )

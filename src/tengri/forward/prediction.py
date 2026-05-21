@@ -1725,7 +1725,7 @@ class Prediction:
         if "weights" in self._cache:
             return
         p = self._model._get_internal_params(self._params)
-        state = self._model.predict_via_orchestrator(self._params)
+        state = self._model.predict_state(self._params)
         derived = state.derived
         # The stellar block integrates the SFH on
         # ``spec.n_grid`` (default 64) regardless of whether the model
@@ -1792,9 +1792,7 @@ class Prediction:
         :class:`~tengri.components.nebular.component.NebularSEDComponent`
         (``state.derived["line_waves"]`` / ``["line_lums"]``). Matches
         legacy-path luminosities within numerical tolerance for both
-        Cue and CloudyGrid backends after the Phase II-3 PR 5b'
-        orchestrator fixes (``age_weights`` plumbing +
-        ``neb_logZ_gas`` translation; commit b7dff1b).
+        Cue and CloudyGrid backends.
         """
         if "line_waves" in self._cache:
             return
@@ -1812,7 +1810,7 @@ class Prediction:
         # publication. BakedIn / Shock backends won't publish it; fall
         # back to all-NaN for those (matches the legacy "no catalogue"
         # behaviour without raising).
-        state = model.predict_via_orchestrator(self._params)
+        state = model.predict_state(self._params)
         derived = state.derived
         if "line_waves" in derived and "line_lums" in derived:
             self._cache["line_waves"] = jnp.asarray(derived["line_waves"])

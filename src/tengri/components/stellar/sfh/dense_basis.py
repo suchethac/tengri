@@ -495,7 +495,7 @@ def dense_basis(
     # --- Validate and collect tx fractions ---
     n_param = len(tx_kwargs)
     if n_param == 0:
-        raise ValueError("dense_basis_sfh requires at least one tx_frac_* parameter")
+        raise ValueError("dense_basis requires at least one tx_frac_* parameter")
     for i in range(n_param):
         key = f"tx_frac_{i}"
         if key not in tx_kwargs:
@@ -602,7 +602,7 @@ def dense_basis_pure(
 ) -> jnp.ndarray:
     """Pure quantile-based SFH using monotone cubic Hermite interpolation (PCHIP).
 
-    A lightweight variant of :func:`dense_basis_sfh` optimized for use as the
+    A lightweight variant of :func:`dense_basis` optimized for use as the
     mean component in a composed model with a GP field modulator
     (``sfh=["dense_basis", "field"]``). Eliminates the GP kernel overhead
     and observation-epoch SFR constraints, using fast PCHIP monotone interpolation
@@ -636,7 +636,7 @@ def dense_basis_pure(
     algorithm computes slopes such that the interpolant never violates the
     monotonicity of the input points.
 
-    Compared to :func:`dense_basis_sfh`:
+    Compared to :func:`dense_basis`:
 
     - **Pros**: Faster (no matrix solve), more robust (always monotonic),
       fewer hyperparameters (no GP kernel bandwidth).
@@ -660,7 +660,7 @@ def dense_basis_pure(
     """
     n_param = len(tx_kwargs)
     if n_param == 0:
-        raise ValueError("dense_basis_pure_sfh requires at least one tx_frac_*")
+        raise ValueError("dense_basis_pure requires at least one tx_frac_*")
     for i in range(n_param):
         key = f"tx_frac_{i}"
         if key not in tx_kwargs:
@@ -694,12 +694,3 @@ def dense_basis_pure(
 
     result = jnp.interp(age_yr, t_lookback_yr, sfr)
     return jnp.maximum(result, 0.0)
-
-
-# ── Deprecated aliases (Phase 3) ──────────────────────────────────
-# Wrapped with `deprecated_alias` so a DeprecationWarning fires on first call.
-# Will be removed in v1.0. See docs/dev/api_migration_v0.x.md.
-from tengri._deprecated import deprecated_alias as _deprecated_alias
-
-dense_basis_sfh = _deprecated_alias(dense_basis, old_name="dense_basis_sfh")
-dense_basis_pure_sfh = _deprecated_alias(dense_basis_pure, old_name="dense_basis_pure_sfh")

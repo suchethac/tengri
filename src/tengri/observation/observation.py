@@ -521,6 +521,399 @@ class Observation:
             )
         return flux
 
+    # ── Unified projection (ObservationModel Protocol) ────────────
+
+    def predict(
+        self,
+        state,
+        params,
+        *,
+        dl_cm=None,
+        wave_obs=None,
+        sigma_v_kms: float = 0.0,
+        lsf_resolution=None,
+        lsf_sigma_lib_kms: float | None = None,
+        lsf_n_bins: int | None = None,
+        observables_type=None,
+    ) -> dict[str, jnp.ndarray]:
+        """Project an orchestrator :class:`ForwardState` into observable channels.
+
+        Unified projection seam matching the :class:`ObservationModel`
+        Protocol in :mod:`tengri.protocols.observation`. Phase 1 of the
+        forward-projection unification (``docs/dev/photometry_path_unification.md``).
+
+        Parameters
+        ----------
+        state : ForwardState
+            Orchestrator output. Reads ``state.sed_intrinsic`` (rest-frame
+            L_nu in erg/s/Hz) and ``state.wave`` (rest-frame Angstrom).
+        params : Mapping[str, jnp.ndarray]
+            Parameter dict. Reads ``redshift`` for the cosmology calculation.
+        dl_cm : float or jnp.ndarray, optional
+            Luminosity distance [cm]. If ``None``, derived from
+            ``params["redshift"]`` via :func:`tengri.utils.cosmology.luminosity_distance`.
+        wave_obs : jnp.ndarray, optional
+            Observed-frame wavelength grid for the spectrum. Defaults to
+            ``self.spectroscopy.wave_obs``.
+        sigma_v_kms : float, default 0.0
+            Velocity dispersion [km/s] for LSF convolution.
+        lsf_resolution : float, ndarray, or None
+            Override LSF resolution. ``None`` reuses
+            ``self.spectroscopy.resolution``.
+        lsf_sigma_lib_kms : float, optional
+            Override SSP library sigma [km/s]. ``None`` reuses
+            ``self.spectroscopy.sigma_lib_kms``.
+        lsf_n_bins : int, optional
+            Override piecewise-constant LSF bin count. ``None`` reuses
+            ``self.spectroscopy.lsf_n_bins``.
+        observables_type : type or None
+            If provided, a :class:`typing.NamedTuple` class produced by
+            :func:`build_observables_class`. When ``None``, returns a dict
+            (backward-compat). When provided, populates and returns an instance
+            of this class.
+
+        Returns
+        -------
+        dict[str, jnp.ndarray] or Observables
+            When ``observables_type`` is ``None``: Observable channels as dict,
+            keyed by which sub-blocks are configured:
+
+            - ``"phot_fnu"`` if :attr:`can_do_photometry` — shape ``(n_filters,)``,
+              F_nu [erg/s/cm^2/Hz].
+            - ``"spec_fnu"`` if :attr:`can_do_spectroscopy` — shape ``(n_pix,)``,
+              F_nu [erg/s/cm^2/Hz].
+
+            When ``observables_type`` is provided: an instance of the passed
+            NamedTuple class with fields populated in order: ``phot_fnu``,
+            ``phot_rest_fnu``, ``spec_fnu``, ``lines_flux``, ``indices``.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — same kernels as
+        :meth:`observe_photometry` and :meth:`observe_spectrum`.
+
+        Joint observations (``is_joint``) return both keys from a single
+        forward pass — Phase 2 of the unification plan will collapse
+        ``loss_functions._build_prediction``'s two-call joint branch
+        onto this single call.
+
+        When ``observables_type`` is provided and the observation has
+        ``line_fluxes`` or ``spectral_indices`` configured, raises
+        ``NotImplementedError`` — Phase 3+ territory.
+        """
+        from tengri.observation.photometry import compute_flux_density
+        from tengri.observation.spectrum import apply_lsf, compute_spectrum
+        from tengri.utils.cosmology import luminosity_distance
+
+        z = jnp.asarray(params.get("redshift", 0.0))
+        if dl_cm is None:
+            dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+        else:
+            dl_cm = jnp.asarray(dl_cm)
+
+        sed_rest = state.sed_intrinsic
+        wave_rest = state.wave
+
+        out: dict[str, jnp.ndarray] = {}
+
+        if self.can_do_photometry:
+            # ``predict`` is the canonical exact (compositional) path: it
+            # integrates ``state.sed_intrinsic`` through each filter without
+            # approximation. The precompute LUT path is opt-in via
+            # :meth:`predict_via_precomp` (or its callers); this method does
+            # NOT fall through to the LUT by default — exact-first is the
+            # default semantics for ``observation.predict``.
+            phot = jnp.asarray(
+                [
+                    compute_flux_density(sed_rest, wave_rest, fw, ft, z, dl_cm)
+                    for fw, ft in zip(
+                        self.photometry.filter_waves,
+                        self.photometry.filter_trans,
+                        strict=False,
+                    )
+                ]
+            )
+            out["phot_fnu"] = phot
+
+        if self.can_do_spectroscopy:
+            wo = wave_obs if wave_obs is not None else self.spectroscopy.wave_obs
+            flux = compute_spectrum(sed_rest, wave_rest, wo, z, dl_cm)
+            resolution = (
+                lsf_resolution if lsf_resolution is not None else self.spectroscopy.resolution
+            )
+            if resolution is not None:
+                sigma_lib = (
+                    lsf_sigma_lib_kms
+                    if lsf_sigma_lib_kms is not None
+                    else self.spectroscopy.sigma_lib_kms
+                )
+                n_bins = lsf_n_bins if lsf_n_bins is not None else self.spectroscopy.lsf_n_bins
+                flux = apply_lsf(
+                    flux,
+                    wo,
+                    resolution,
+                    sigma_lib_kms=sigma_lib,
+                    n_bins=n_bins,
+                    sigma_v_kms=sigma_v_kms,
+                )
+            out["spec_fnu"] = flux
+
+        # Phase 2: if observables_type is provided, populate and return NamedTuple
+        if observables_type is not None:
+            if self.has_line_fluxes or self.has_spectral_indices:
+                raise NotImplementedError(
+                    "observables_type (Phase 2) does not yet support line_fluxes or "
+                    "spectral_indices. This is Phase 3+ territory. Use the dict-returning "
+                    "path (observables_type=None) for now."
+                )
+
+            # Compute phot_rest_fnu: rest-frame photometry at z=0, d_L=10pc
+            phot_rest = None
+            if self.can_do_photometry:
+                from tengri.utils.physics_constants import TEN_PC_CM
+
+                dl_rest = TEN_PC_CM  # 10 pc in cm
+                phot_rest = jnp.asarray(
+                    [
+                        compute_flux_density(sed_rest, wave_rest, fw, ft, 0.0, dl_rest)
+                        for fw, ft in zip(
+                            self.photometry.filter_waves,
+                            self.photometry.filter_trans,
+                            strict=False,
+                        )
+                    ]
+                )
+
+            # Build positional arguments in order: phot_fnu, phot_rest_fnu, spec_fnu
+            args = []
+            if self.can_do_photometry:
+                args.append(out["phot_fnu"])
+                args.append(phot_rest)
+            if self.can_do_spectroscopy:
+                args.append(out["spec_fnu"])
+
+            return observables_type(*args)
+
+        return out
+
+    def predict_via_precomp(
+        self,
+        state,
+        params,
+        *,
+        observables_type=None,
+    ):
+        """Project observables via the photometric LUT instead of integrating ``sed_intrinsic``.
+
+        Phase 3c-3 opt-in fast path. Sums all ``*_phot_lnu_lut`` keys
+        present in ``state.derived`` (the rest-frame Lν contributions
+        from each component that publishes one) and applies the cosmology
+        factor ``(1+z)/(4π·dl²)`` to convert to observed F_ν.
+
+        Components that publish a LUT entry as of this PR:
+
+        - ``stellar_phot_lnu_precomp`` — :class:`StellarSEDComponent` (Phase 3b/3c-1).
+          For ``BakedIn`` nebular backends this already contains the nebular
+          contribution, since the SSP grid carries baked-in nebular emission.
+        - ``nebular_phot_lnu_precomp`` — :class:`NebularSEDComponent` (Phase 3c-3b
+          and later, when the backend supports filter-level precomputation;
+          non-BakedIn backends only).
+
+        Future entries (``dust_*``, ``agn_*``, …) sum in automatically.
+
+        Photometry only — spectroscopy / line_fluxes / spectral_indices
+        land in Phase 3c-3 final scope.
+
+        Parameters
+        ----------
+        state : ForwardState
+            Orchestrator state with at least ``stellar_phot_lnu_precomp``.
+        params : Mapping[str, jnp.ndarray]
+            Param dict; reads ``redshift``.
+        observables_type : type, optional
+            Per-model :class:`Observables` NamedTuple class (from
+            :meth:`SEDModel.Observables`). When provided, returns an
+            instance; when ``None``, returns a dict.
+
+        Returns
+        -------
+        Observables or dict
+            ``phot_fnu`` and ``phot_rest_fnu`` populated.
+
+        Raises
+        ------
+        ValueError
+            If no ``*_phot_lnu_lut`` keys are present (i.e. the model was
+            not built with ``approx={"wave_precomp": True}``).
+        NotImplementedError
+            If the observation has spectroscopy, line_fluxes, or
+            spectral_indices.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — pure JAX arithmetic on the LUT entries.
+
+        See Also
+        --------
+        predict : The default projection path that integrates
+            ``sed_intrinsic`` through filters. Stays the canonical
+            reference until Phase 3c-3e flips the default.
+        """
+        from tengri.utils.cosmology import luminosity_distance
+
+        # Sum all *_phot_lnu_precomp contributions from components that published
+        # one. New components add their precompute field to DerivedBundle and
+        # apply() — no change to predict_via_precomp required.
+        precomp_keys = [k for k in state.derived.field_names() if k.endswith("_phot_lnu_precomp")]
+        precomp_contribs = [state.derived[k] for k in precomp_keys if k in state.derived]
+        if not precomp_contribs:
+            raise ValueError(
+                "predict_via_precomp requires at least one *_phot_lnu_precomp in state.derived. "
+                "Build the model with approx={'wave_precomp': True}."
+            )
+        if self.can_do_spectroscopy or self.has_line_fluxes or self.has_spectral_indices:
+            raise NotImplementedError(
+                "predict_via_precomp (Phase 3c-3) handles photometry only. "
+                "Spectroscopy / lines / indices land in Phase 3c-3 final scope."
+            )
+        if not self.can_do_photometry:
+            raise ValueError("predict_via_precomp requires photometry to be configured.")
+
+        # Sum all precompute contributions — rest-frame Lν at the source's z.
+        total_phi = precomp_contribs[0]
+        for c in precomp_contribs[1:]:
+            total_phi = total_phi + c
+
+        # Phase 3c-3c-iv guard: silent-correctness check. If the dust
+        # component ran on the wave grid (``dust_attenuation_factor`` is
+        # published) but did NOT publish a per-filter precompute, then
+        # ``Σ Φ_i`` is the UNATTENUATED stellar photometry and using it
+        # would silently give wrong numbers. This currently happens for:
+        #
+        # - Two-component (Charlot & Fall) dust — age-dependent
+        #   attenuation, not factorisable into a single per-filter A.
+        #   Phase 3c-3c-iv lands the age-resolved LUT.
+        # - Free-z + dust — the ztable builder does not yet carry the
+        #   Taylor moment. Phase 3c-3c-v.
+        # - Any future attenuation component that doesn't publish a
+        #   ``dust_attenuation_precomp`` field.
+        # Detect ACTIVE dust attenuation by L_ir > 0. Zero-tau models still
+        # have the dust component in the chain (publishing L_ir = 0); only
+        # actual attenuation should trigger the guard.
+        l_ir = state.derived.get("L_ir")
+        dust_active = l_ir is not None and float(l_ir) > 0.0
+        a_lut = state.derived.get("dust_attenuation_precomp")
+        a_bc_lut = state.derived.get("dust_bc_attenuation_precomp")
+        if dust_active and a_lut is None and a_bc_lut is None:
+            raise NotImplementedError(
+                "predict_via_precomp: dust attenuation ran on the wave grid "
+                "but no dust precompute was published (neither single-component "
+                "dust_attenuation_precomp nor two-component dust_bc_*). Use "
+                "predict() instead, or confirm wave_precomp=True is set on the "
+                "model and the dust law is supported."
+            )
+
+        # Phase 3c-3d guards: detect non-BakedIn nebular contributions that
+        # would silently be missing from the LUT sum. AGN is covered as of
+        # Phase 3c-3d-agn — AGN.apply publishes ``agn_phot_lnu_precomp`` and
+        # the multi-component sum picks it up automatically.
+
+        # ``sed_nebular`` non-trivial signals a non-BakedIn nebular backend
+        # (Cue / CloudyGrid / Shock) adding emission on top of the bare-stellar
+        # SSP. BakedIn nebular doesn't publish sed_nebular (it's already in
+        # the SSP grid) — so this triggers only for the standalone backends.
+        sed_nebular = state.derived.get("sed_nebular")
+        nebular_additive_active = (
+            sed_nebular is not None and float(jnp.max(jnp.abs(jnp.asarray(sed_nebular)))) > 0.0
+        )
+        if nebular_additive_active and state.derived.get("nebular_phot_lnu_precomp") is None:
+            raise NotImplementedError(
+                "predict_via_precomp: non-BakedIn nebular published sed_nebular "
+                "but no nebular_phot_lnu_precomp. The active backend may not be "
+                "Cue / CloudyGrid (Shock is not yet LUT-accelerated). Use "
+                "predict() for shock backends."
+            )
+
+        # Dust attenuation applies to STELLAR + nebular (both arise from the
+        # photosphere + birth cloud / diffuse ISM). AGN has its own attenuation
+        # parameters (``agn_ebv_*``) and is not attenuated by the stellar dust
+        # component. Compute the dust-attenuable bucket first; the rest is
+        # added unattenuated afterwards.
+        stellar_phi = state.derived.get("stellar_phot_lnu_precomp")
+        stellar_phi = stellar_phi if stellar_phi is not None else jnp.zeros_like(total_phi)
+        nebular_phi_for_dust = state.derived.get("nebular_phot_lnu_precomp")
+        nebular_phi_for_dust = (
+            nebular_phi_for_dust if nebular_phi_for_dust is not None else jnp.zeros_like(total_phi)
+        )
+        dust_attenuable_phi = stellar_phi + nebular_phi_for_dust
+        unattenuated_phi = total_phi - dust_attenuable_phi
+
+        # Phase 3c-3c-iv-c: two-component (Charlot & Fall) dust LUT.
+        # Factorisation: T(a, λ) = T_diff(λ) × T_bc(λ)^y(a).
+        # At the filter level, with per-age stellar LUT
+        # ``stellar_phot_lnu_per_age_precomp[a, b]``:
+        #
+        #     stellar_attenuated_b = Σ_a per_age[a, b] × A_diff(b) × A_bc(b)^y(a)
+        #
+        # ``A_bc(b)^y(a)`` interpolates between BC-attenuated (y=1) and
+        # bare (y=0) stars. Smooth y(a) handles the transition.
+        per_age = state.derived.get("stellar_phot_lnu_per_age_precomp")
+        if a_bc_lut is not None and per_age is not None:
+            a_diff_lut = state.derived["dust_diff_attenuation_precomp"]
+            y_age = state.derived["dust_young_indicator"]
+            atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]
+            stellar_attenuated = jnp.sum(per_age * atten_bc_per_age, axis=0) * a_diff_lut
+            # Nebular emission (Cue / CloudyGrid) is not age-resolved, so the
+            # per-age expansion doesn't apply. Approximate the nebular dust
+            # treatment as the diffuse-layer-only expansion ``A_diff·Φ_neb`` —
+            # consistent with Charlot & Fall, where nebular continuum + lines
+            # arise predominantly from young (BC) sites but the simpler
+            # diffuse-only approximation is used here for tractability.
+            nebular_attenuated = a_diff_lut * nebular_phi_for_dust
+            total_lnu = stellar_attenuated + nebular_attenuated + unattenuated_phi
+
+        # Phase 3c-3c-iii: single-component dust via the Taylor expansion
+        # f_b = A(λ_eff)·Φ_b + A'(λ_eff)·Ψ_b (Zacharegkas+2025).
+        # When dust precompute is present, the Taylor moment Ψ MUST also be
+        # present (the dust expansion is only valid with the second term).
+        elif a_lut is not None:
+            a_slope_lut = state.derived.get("dust_attenuation_slope_precomp")
+            if a_slope_lut is None:
+                raise ValueError(
+                    "predict_via_precomp: dust_attenuation_precomp present but "
+                    "dust_attenuation_slope_precomp missing (Phase 3c-3c-ii bug)."
+                )
+            # Sum dust-attenuable Taylor moments. Only stellar publishes a
+            # moment today; nebular is treated as Φ-only (no Ψ correction).
+            stellar_psi = state.derived.get("stellar_phot_moment_precomp")
+            if stellar_psi is None:
+                raise ValueError(
+                    "predict_via_precomp: dust precompute is present but no "
+                    "stellar_phot_moment_precomp Taylor moment was published. "
+                    "Stellar must publish it when wave_precomp=True (Phase 3c-3c-i)."
+                )
+            dust_attenuated = a_lut * dust_attenuable_phi + a_slope_lut * stellar_psi
+            total_lnu = dust_attenuated + unattenuated_phi
+        else:
+            total_lnu = total_phi
+
+        z = jnp.asarray(params.get("redshift", 0.0))
+        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+        cosmology = (1.0 + z) / (4.0 * jnp.pi * dl_cm**2)
+        phot_fnu = total_lnu * cosmology
+
+        # phot_rest_fnu: same LUT sum projected at z=0, d_L=10pc.
+        from tengri.utils.physics_constants import TEN_PC_CM
+
+        cosmology_rest = 1.0 / (4.0 * jnp.pi * TEN_PC_CM**2)
+        phot_rest_fnu = total_lnu * cosmology_rest
+
+        out = {"phot_fnu": phot_fnu, "phot_rest_fnu": phot_rest_fnu}
+
+        if observables_type is not None:
+            return observables_type(phot_fnu, phot_rest_fnu)
+        return out
+
     # ── Display ───────────────────────────────────────────────────
 
     def summary(self) -> str:

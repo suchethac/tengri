@@ -1,8 +1,8 @@
-"""Backward-compatibility shim for AGNConfig.
+"""Re-export of :class:`~tengri.config.settings.AGNConfig`.
 
-AGNConfig has been moved to src/tengri/config/settings.py to consolidate
-all configuration classes. This module re-exports for backward compatibility
-and to avoid circular imports within components/agn/.
+The canonical definition lives in :mod:`tengri.config.settings` alongside the
+other ``*Config`` dataclasses; this module re-exports it so imports inside
+:mod:`tengri.components.agn` do not have to reach across the package.
 """
 
 from tengri.config.settings import AGNConfig

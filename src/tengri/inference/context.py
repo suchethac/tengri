@@ -125,8 +125,8 @@ class InferenceContext:
 
         Notes
         -----
-        Renamed from ``loss_fn`` in Phase II-3.2 (2026-05-18) for
-        astronomer-friendly naming. ``loss_fn`` remains as a deprecated
+        Renamed from ``loss_fn`` (2026-05-18) for astronomer-friendly
+        naming. ``loss_fn`` remains as a deprecated
         property; both return the same callable. ``loss_fn`` is removed
         in tengri v1.0.
         """

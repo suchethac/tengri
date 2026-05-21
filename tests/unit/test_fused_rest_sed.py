@@ -118,7 +118,7 @@ class TestTier2VsTier3:
         model = SEDModel(simple_spec, synthetic_ssp)
 
         # Tier 3: exact path
-        sed_tier3 = model.predict_via_orchestrator(simple_params).sed_intrinsic
+        sed_tier3 = model.predict_state(simple_params).sed_intrinsic
 
         # Tier 2: compositional kernel
         sed_tier2 = model._compute_rest_sed_compositional(simple_params)
@@ -236,7 +236,7 @@ class TestComponentCombinations:
         }
 
         # Tier 2 should produce the same as Tier 3
-        tier3 = model.predict_via_orchestrator(params).sed_intrinsic
+        tier3 = model.predict_state(params).sed_intrinsic
         tier2 = model._compute_rest_sed_compositional(params)
 
         assert_allclose(tier2, tier3, rtol=1e-3, atol=1e-30)
@@ -261,7 +261,7 @@ class TestComponentCombinations:
         model = SEDModel(spec, synthetic_ssp)
         assert model._compositional.rest_sed is not None
 
-        tier3 = model.predict_via_orchestrator(simple_params).sed_intrinsic
+        tier3 = model.predict_state(simple_params).sed_intrinsic
         tier2 = model._compute_rest_sed_compositional(simple_params)
 
         assert_allclose(tier2, tier3, rtol=1e-3, atol=1e-30)
@@ -292,7 +292,7 @@ class TestComponentCombinations:
         # Sample params including GP latent vector
         params = spec.sample(jax.random.PRNGKey(7))
 
-        tier3 = model.predict_via_orchestrator(params).sed_intrinsic
+        tier3 = model.predict_state(params).sed_intrinsic
         tier2 = model._compute_rest_sed_compositional(params)
 
         assert_allclose(tier2, tier3, rtol=1e-3, atol=1e-30)

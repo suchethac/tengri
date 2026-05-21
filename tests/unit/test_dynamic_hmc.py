@@ -34,7 +34,7 @@ class TestDynamicHMCSignatures:
         from tengri.inference.backends.mcmc.dynamic_hmc import run_dynamic_hmc
 
         sig = inspect.signature(run_dynamic_hmc)
-        assert "fitter" in sig.parameters
+        assert "context" in sig.parameters
         assert "key" in sig.parameters
         assert "n_warmup" in sig.parameters
         assert "n_burnin" in sig.parameters

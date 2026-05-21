@@ -588,8 +588,8 @@ class PopulationFitter:
         def _predict(params):
             """Predict data from parameters for single or batch mode."""
             if data_type == "photometry":
-                return model.predict_photometry(params, mode="_traceable")
-            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                return model.predict_photometry(params, mode="traced")
+            return model.predict_spectrum(params, model._wave_obs, mode="traced")
 
         # --- Hierarchical signal_response (lax.map, O(1) memory in N_gal) ---
         def signal_response(p):
@@ -937,8 +937,8 @@ class PopulationFitter:
         def _predict(params):
             """Predict data from parameters for single or batch mode."""
             if data_type == "photometry":
-                return model.predict_photometry(params, mode="_traceable")
-            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                return model.predict_photometry(params, mode="traced")
+            return model.predict_spectrum(params, model._wave_obs, mode="traced")
 
         # --- Hierarchical signal_response (lax.map, O(1) memory in N_gal) ---
         def signal_response(p):
@@ -1274,8 +1274,8 @@ class PopulationFitter:
         def _predict_cfm(params):
             """Predict data from parameters (CorrelatedFieldMaker variant)."""
             if data_type == "photometry":
-                return model.predict_photometry(params, mode="_traceable")
-            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                return model.predict_photometry(params, mode="traced")
+            return model.predict_spectrum(params, model._wave_obs, mode="traced")
 
         if verbose:
             print(f"Hierarchical geoVI (CorrelatedFieldMaker): {n_gal} galaxies, n_grid={n_grid}")
@@ -1657,9 +1657,9 @@ class PopulationFitter:
         def _predict_single(params):
             """Single-galaxy forward model (for vmap)."""
             if data_type == "photometry":
-                return model.predict_photometry(params, mode="_traceable")
+                return model.predict_photometry(params, mode="traced")
             else:
-                return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                return model.predict_spectrum(params, model._wave_obs, mode="traced")
 
         def signal_response(primals):
             """Map hierarchical primals to stacked predictions for all galaxies."""
@@ -1937,8 +1937,8 @@ class PopulationFitter:
         def _predict_rt(params):
             """Predict data from parameters (ray-trace variant)."""
             if data_type == "photometry":
-                return model.predict_photometry(params, mode="_traceable")
-            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                return model.predict_photometry(params, mode="traced")
+            return model.predict_spectrum(params, model._wave_obs, mode="traced")
 
         def log_prob(flat_params):
             """Compute log posterior for hierarchical ray-tracing."""

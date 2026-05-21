@@ -12,8 +12,8 @@ Class 2 — len() on traced JAX arrays inside JIT
   arr is a vmapped or function-argument array.  .shape[0] is always a
   concrete integer regardless of tracing context.
 
-Class 3 — _traceable mode routing and JIT composability
-  predict_spectrum/photometry(mode='_traceable') must route to the
+Class 3 — traced mode routing and JIT composability
+  predict_spectrum/photometry(mode='traced') must route to the
   lean precomputed kernel, not the full compositional SED path.  It
   must also be composable inside jax.jit and jax.grad without raising
   "jit inside jit" or shape errors.
@@ -82,7 +82,9 @@ class TestCacheInvalidation:
     @_needs_ssp
     def test_precompute_spectroscopy_clears_model_cache(self):
         """get_model_cache(model) is empty after precompute_spectroscopy."""
-        from tengri.inference._model_cache import _caches, get_model_cache
+        from tengri.inference._model_cache import _default_owner, get_model_cache
+
+        _caches = _default_owner._model_caches
 
         model, wave_obs = _make_spec_model()
         cache = get_model_cache(model)
@@ -101,7 +103,9 @@ class TestCacheInvalidation:
     @_needs_ssp
     def test_precompute_ztable_clears_model_cache(self):
         """get_model_cache(model) is empty after precompute_ztable."""
-        from tengri.inference._model_cache import _caches, get_model_cache
+        from tengri.inference._model_cache import _default_owner, get_model_cache
+
+        _caches = _default_owner._model_caches
 
         model = _make_phot_model()
         cache = get_model_cache(model)
@@ -120,7 +124,9 @@ class TestCacheInvalidation:
     @_needs_ssp
     def test_no_error_when_caches_absent(self):
         """precompute_* must not raise if no cache entry exists for the model."""
-        from tengri.inference._model_cache import _caches
+        from tengri.inference._model_cache import _default_owner
+
+        _caches = _default_owner._model_caches
 
         model, wave_obs = _make_spec_model()
         _caches.pop(model, None)
@@ -275,28 +281,28 @@ class TestJITSafeSearchsorted:
         assert idxs.shape == (3,)
 
 
-# ── Class 3: _traceable mode routing and JIT composability ────────
+# ── Class 3: traced mode routing and JIT composability ────────
 
 
 class TestTraceableRouting:
-    """_traceable mode must route to the lean precomputed kernel and be JIT-safe."""
+    """traced mode must route to the lean precomputed kernel and be JIT-safe."""
 
-    def test_traceable_methods_exist(self):
-        """Both _predict_*_traceable methods must exist on SEDModel."""
+    def testtraced_methods_exist(self):
+        """Both _predict_*traced methods must exist on SEDModel."""
         from tengri.forward.sed_model import SEDModel
 
-        assert hasattr(SEDModel, "_predict_photometry_traceable"), (
-            "_predict_photometry_traceable missing from SEDModel"
+        assert hasattr(SEDModel, "_predict_photometry_traced"), (
+            "_predict_photometry_traced missing from SEDModel"
         )
-        assert hasattr(SEDModel, "_predict_spectrum_traceable"), (
-            "_predict_spectrum_traceable missing — spectrum VI will use full SED path"
+        assert hasattr(SEDModel, "_predict_spectrum_traced"), (
+            "_predict_spectrum_traced missing — spectrum VI will use full SED path"
         )
 
     @_needs_ssp
-    def test_traceable_spectrum_composable_with_jit(self):
-        """predict_spectrum(_traceable) must not raise inside jax.jit scope.
+    def testtraced_spectrum_composable_with_jit(self):
+        """predict_spectrum(traced) must not raise inside jax.jit scope.
 
-        If _traceable internally calls jax.jit, a nested-JIT error is raised.
+        If traced internally calls jax.jit, a nested-JIT error is raised.
         This verifies the 'no jit-inside-jit' invariant that keeps VI memory
         from exploding.
         """
@@ -306,30 +312,30 @@ class TestTraceableRouting:
 
         @jax.jit
         def loss(params):
-            flux = model.predict_spectrum(params, wave_obs=wave_obs, mode="_traceable")
+            flux = model.predict_spectrum(params, wave_obs=wave_obs, mode="traced")
             return jnp.sum(flux**2)
 
         val = loss(params)
-        assert jnp.isfinite(val), "_traceable spectrum inside jit produced non-finite loss"
+        assert jnp.isfinite(val), "traced spectrum inside jit produced non-finite loss"
 
     @_needs_ssp
-    def test_traceable_photometry_composable_with_jit(self):
-        """predict_photometry(_traceable) must not raise inside jax.jit scope."""
+    def testtraced_photometry_composable_with_jit(self):
+        """predict_photometry(traced) must not raise inside jax.jit scope."""
         model = _make_phot_model()
         key = jax.random.PRNGKey(2)
         params = model.spec.sample(key)
 
         @jax.jit
         def loss(params):
-            flux = model.predict_photometry(params, mode="_traceable")
+            flux = model.predict_photometry(params, mode="traced")
             return jnp.sum(flux**2)
 
         val = loss(params)
         assert jnp.isfinite(val)
 
     @_needs_ssp
-    def test_traceable_spectrum_gradient_finite(self):
-        """jax.grad through _traceable spectrum must produce finite gradients.
+    def testtraced_spectrum_gradient_finite(self):
+        """jax.grad through traced spectrum must produce finite gradients.
 
         VI/MAP optimization differentiates through predict_spectrum at every
         step.  Non-finite gradients cause immediate divergence.
@@ -345,23 +351,23 @@ class TestTraceableRouting:
 
         def loss(val):
             p = {**params, test_param: val}
-            flux = model.predict_spectrum(p, wave_obs=wave_obs, mode="_traceable")
+            flux = model.predict_spectrum(p, wave_obs=wave_obs, mode="traced")
             return jnp.sum(flux)
 
         grad = jax.grad(loss)(params[test_param])
         assert jnp.isfinite(grad), (
-            f"Non-finite gradient d(sum_flux)/d({test_param}) from _traceable spectrum — "
+            f"Non-finite gradient d(sum_flux)/d({test_param}) from traced spectrum — "
             "gradient will diverge during VI"
         )
 
     @_needs_ssp
-    def test_traceable_spectrum_matches_compositional(self):
-        """_traceable and compositional spectra must agree to within 2%."""
+    def testtraced_spectrum_matches_compositional(self):
+        """traced and compositional spectra must agree to within 2%."""
         model, wave_obs = _make_spec_model()
         key = jax.random.PRNGKey(4)
         params = model.spec.sample(key)
 
-        flux_t = model.predict_spectrum(params, wave_obs=wave_obs, mode="_traceable")
+        flux_t = model.predict_spectrum(params, wave_obs=wave_obs, mode="traced")
         flux_c = model.predict_spectrum(params, wave_obs=wave_obs, mode="compositional")
 
         med = jnp.median(jnp.abs(flux_c))
@@ -370,7 +376,7 @@ class TestTraceableRouting:
 
         rel_err = jnp.max(jnp.abs(flux_t - flux_c)) / (med + 1e-30)
         assert float(rel_err) < 0.02, (
-            f"_traceable vs compositional max relative error {float(rel_err):.3%} — "
+            f"traced vs compositional max relative error {float(rel_err):.3%} — "
             "routing to the wrong kernel"
         )
 
