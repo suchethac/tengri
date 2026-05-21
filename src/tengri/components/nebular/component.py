@@ -354,6 +354,8 @@ class NebularSEDComponent:
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         r"""Compute nebular SED via the configured backend; add to ``sed_intrinsic``.
 
@@ -481,7 +483,9 @@ class NebularSEDComponent:
                 nion = state.derived.get("nion")
                 if nion is not None:
                     common_kwargs["gas_logqion"] = jnp.log10(jnp.maximum(nion, 1.0))
-            nebular_sed = self.backend.predict_nebular_sed(**common_kwargs, **cue_extras)
+            nebular_sed = self.backend.predict_nebular_sed(
+                **common_kwargs, **cue_extras, template_data=template_data
+            )
         else:  # cloudy_grid
             ssp_ages_yr = state.derived.get("ssp_ages_yr")
             age_weights = state.derived.get("age_weights")
@@ -497,6 +501,7 @@ class NebularSEDComponent:
             nebular_sed = self.backend.predict_nebular_sed(
                 ssp_weights=ssp_weights,
                 ssp_log_ages_yr=ssp_log_ages_yr,
+                template_data=template_data,
                 **common_kwargs,
             )
 
@@ -507,12 +512,13 @@ class NebularSEDComponent:
             try:
                 if self.config.backend == "cue":
                     line_waves, line_lums = self.backend.predict_nebular_line_luminosities(
-                        **common_kwargs, **cue_extras
+                        **common_kwargs, **cue_extras, template_data=template_data
                     )
                 else:  # cloudy_grid
                     line_waves, line_lums = self.backend.predict_nebular_line_luminosities(
                         ssp_weights=ssp_weights,
                         ssp_log_ages_yr=ssp_log_ages_yr,
+                        template_data=template_data,
                         **common_kwargs,
                     )
                 # CLAUDE.md contract: vacuum wavelengths throughout.

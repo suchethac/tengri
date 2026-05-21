@@ -59,6 +59,7 @@ class TestCompositionalKernelLAbsorbedGuard:
 
         assert float(L_out) == pytest.approx(float(L_in), rel=1e-6)
 
+    @pytest.mark.skip(reason="forward/_kernels/ deleted in Phase 6; guard sites no longer exist")
     def test_guard_present_in_source(self):
         """Smoke test: verify the isfinite guard exists in both guard sites.
 

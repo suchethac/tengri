@@ -228,8 +228,13 @@ class DustSEDComponent:
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         """Apply two-component attenuation + IR re-emission.
+
+        ``ssp_data`` is accepted for Protocol uniformity but unused — this
+        component reads only from ``state`` and ``params``.
 
         Parameters
         ----------
