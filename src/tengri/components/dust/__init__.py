@@ -48,9 +48,6 @@ from tengri.components.dust.attenuation import (
 
 # SEDModelComponent-style attenuation ports
 from tengri.components.dust.calzetti_model import Calzetti as Calzetti
-from tengri.components.dust.mw_model import MilkyWay as MilkyWay
-from tengri.components.dust.salim18_model import Salim18 as Salim18
-from tengri.components.dust.smc_model import SMC as SMC
 
 # New names
 from tengri.components.dust.drude_profiles import (
@@ -109,12 +106,15 @@ from tengri.components.dust.emission_templates import (
     Draine2021PAHTemplates,
     load_draine2021_pahspec_templates,
 )
+from tengri.components.dust.mw_model import MilkyWay as MilkyWay
 
 # New names
 from tengri.components.dust.priors import (
     narayanan_prior,
     narayanan_tau_prior,
 )
+from tengri.components.dust.salim18_model import Salim18 as Salim18
+from tengri.components.dust.smc_model import SMC as SMC
 
 # ──────────────────────────────────────────────────────────────────
 # Curated tab-completion surface for `tengri.dust.<TAB>`.
