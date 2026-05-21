@@ -22,12 +22,19 @@ class TestBug01SfrCached:
         """Verify the orchestrator computes SFR rather than hard-coding 1.0."""
         import inspect
 
-        from tengri.forward import sed_model
+        from tengri.components.stellar import component as stellar_component
+        from tengri.forward import orchestrator, sed_model
 
-        src = inspect.getsource(sed_model)
+        src = "\n".join(
+            [
+                inspect.getsource(sed_model),
+                inspect.getsource(orchestrator),
+                inspect.getsource(stellar_component),
+            ]
+        )
         # The fix: the canonical 10 Myr time-weighted helper is wired in.
         assert "time_weighted_sfr" in src, (
-            "sed_model must call time_weighted_sfr to compute _sfr_current"
+            "stellar component must call time_weighted_sfr to compute _sfr_current"
         )
         # Guard against any re-introduction of the 1.0 fallback at the _sfr_current line
         lines = [l for l in src.split("\n") if "_sfr_current" in l and "1.0" in l]

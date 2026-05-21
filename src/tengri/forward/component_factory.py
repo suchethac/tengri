@@ -201,11 +201,13 @@ def build_components(
     lgmet_scatter : float
         Gaussian σ in log10(Z) for the DSPS triweight kernel [dex].
     nebular_backend : str | None
-        ``"baked_in"`` (default), ``"cloudy_grid"``, ``"cue"``, or
-        ``None`` to omit nebular entirely.
+        ``"baked_in"`` (default), ``"cloudy_grid"``, ``"cb19"``,
+        ``"mappings"``, ``"cue"``, ``"shock"``, or ``None`` to omit
+        nebular entirely.
     nebular_backend_instance : object | None
-        Pre-constructed backend object for ``cloudy_grid`` / ``cue``
-        (which need HDF5 / weights paths). Required for those backends.
+        Pre-constructed backend object for ``cloudy_grid`` / ``cb19`` /
+        ``mappings`` / ``cue`` / ``shock`` (which need HDF5 / weights
+        paths). Required for those backends.
     agn_model : str | None
         AGN model registry key (``"simple"``, ``"standard"``, …) or
         ``None`` to omit AGN.

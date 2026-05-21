@@ -785,7 +785,14 @@ class TestExactVsPrecomputed:
     """Precomputed (fused) photometry must agree with exact within tolerance."""
 
     def test_fused_matches_exact(self, ssp, sdss_filters):
-        """Fused kernel photometry within 3% of exact SED integration."""
+        """Wave-precomp (LUT) photometry within 3 % of the exact wave-grid path.
+
+        Build two models with the same physics — one default (exact wave-grid),
+        one with ``approx=WavePrecomp()`` (LUT) — and confirm they agree on
+        broadband flux density.
+        """
+        from tengri import WavePrecomp
+
         spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Fixed(2.0),
@@ -797,15 +804,16 @@ class TestExactVsPrecomputed:
             dust_tau_diff=Fixed(0.3),
             redshift=0.1,
         )
-        model = SEDModel(spec, ssp, filters=sdss_filters)
+        model_exact = SEDModel(spec, ssp, filters=sdss_filters)
+        model_fast = SEDModel(spec, ssp, filters=sdss_filters, approx=WavePrecomp())
 
         params = {}
-        phot_exact = model.predict_photometry(params, approx=False)
-        phot_fast = model.predict_photometry(params, approx=True)
+        phot_exact = model_exact.predict_photometry(params)
+        phot_fast = model_fast.predict_photometry(params)
 
         np.testing.assert_allclose(
             np.array(phot_fast),
             np.array(phot_exact),
             rtol=0.03,
-            err_msg="Fused and exact photometry disagree by > 3%",
+            err_msg="Wave-precomp and exact photometry disagree by > 3 %",
         )

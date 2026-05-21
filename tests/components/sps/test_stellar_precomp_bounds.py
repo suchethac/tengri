@@ -12,7 +12,7 @@ import warnings
 import jax.numpy as jnp
 import pytest
 
-from tengri import Parameters, SEDModel
+from tengri import Parameters, SEDModel, WavePrecomp
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed, Uniform
@@ -49,7 +49,7 @@ def stellar_only_model(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        return SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
 
 
 @pytest.fixture(scope="module")
@@ -72,7 +72,7 @@ def stellar_only_free_z_model(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        return SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
 
 
 _PARAMS = {
@@ -186,7 +186,7 @@ def test_lut_publishes_for_metallicity_mode(ssp, metallicity_model, met_params):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
     state = m.predict_state(_PARAMS)
     assert "stellar_phot_lnu_precomp" in state.derived, (
         f"stellar_phot_lnu_precomp missing for metallicity_model={metallicity_model}"
@@ -282,7 +282,7 @@ def test_taylor_moment_published_in_free_z(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
     params = {**_PARAMS, "redshift": 0.5}
     state = m.predict_state(params)
     for k in (
@@ -316,7 +316,7 @@ def test_dust_attenuation_precomp_consistent_with_pipeline(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
     state = m.predict_state(_PARAMS)
     a = state.derived["dust_attenuation_precomp"]
     filter_eff = state.derived["filter_eff_waves"]
@@ -358,7 +358,7 @@ def test_predict_via_precomp_with_dust_matches_predict(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
     state = m.predict_state(_PARAMS)
     full = {**m.spec.get_fixed_values(), **_PARAMS}
     default = m.observation.predict(state, full, observables_type=m.Observables)
@@ -390,7 +390,7 @@ def test_predict_via_precomp_dust_attenuates_phot_fnu(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m_no_dust = SEDModel(spec_no_dust, ssp, observation=obs, approx={"wave_precomp": True})
+        m_no_dust = SEDModel(spec_no_dust, ssp, observation=obs, approx=WavePrecomp())
     state_no_dust = m_no_dust.predict_state(_PARAMS)
     full_no_dust = {**m_no_dust.spec.get_fixed_values(), **_PARAMS}
     fnu_no_dust = m_no_dust.observation.predict_via_precomp(
@@ -411,7 +411,7 @@ def test_predict_via_precomp_dust_attenuates_phot_fnu(ssp):
         dust_law_bc="calzetti",
         apply_igm=False,
     )
-    m_dust = SEDModel(spec_dust, ssp, observation=obs, approx={"wave_precomp": True})
+    m_dust = SEDModel(spec_dust, ssp, observation=obs, approx=WavePrecomp())
     state_dust = m_dust.predict_state(_PARAMS)
     full_dust = {**m_dust.spec.get_fixed_values(), **_PARAMS}
     fnu_dust = m_dust.observation.predict_via_precomp(
@@ -453,7 +453,7 @@ def test_predict_via_precomp_two_component_dust_matches_predict(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
     state = m.predict_state(_PARAMS)
     full = {**m.spec.get_fixed_values(), **_PARAMS}
     default = m.observation.predict(state, full, observables_type=m.Observables)
@@ -492,7 +492,7 @@ def test_predict_via_precomp_free_z_with_dust_matches_predict(ssp, z_test):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
     params = {**_PARAMS, "redshift": z_test}
     state = m.predict_state(params)
     full = {**m.spec.get_fixed_values(), **params}
@@ -537,7 +537,7 @@ def test_predict_via_precomp_agn_matches_predict(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
     state = m.predict_state(_PARAMS)
     full = {**m.spec.get_fixed_values(), **_PARAMS}
     default = m.observation.predict(state, full, observables_type=m.Observables)
@@ -576,7 +576,7 @@ def test_predict_via_precomp_handles_bakedin_nebular(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
     state = m.predict_state(_PARAMS)
     # BakedIn nebular doesn't publish a separate LUT.
     assert state.derived.get("nebular_phot_lnu_precomp") is None, (
@@ -617,7 +617,7 @@ def test_predict_via_precomp_matches_default_predict_observables(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
     state = m.predict_state(_PARAMS)
     full = {**m.spec.get_fixed_values(), **_PARAMS}
     default = m.observation.predict(state, full, observables_type=m.Observables)
@@ -652,7 +652,7 @@ def test_predict_via_precomp_raises_without_wave_precomp(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m = SEDModel(spec, ssp, observation=obs)  # NO approx={"wave_precomp": True}
+        m = SEDModel(spec, ssp, observation=obs)  # NO approx=WavePrecomp()
     state = m.predict_state(_PARAMS)
     full = {**m.spec.get_fixed_values(), **_PARAMS}
     try:
@@ -681,7 +681,7 @@ def test_lut_metallicity_changes_with_logzsol(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m_lo = SEDModel(spec_lo, ssp, observation=obs, approx={"wave_precomp": True})
+        m_lo = SEDModel(spec_lo, ssp, observation=obs, approx=WavePrecomp())
 
     spec_hi = Parameters(
         mean_sfh_type=["tsnorm"],
@@ -698,7 +698,7 @@ def test_lut_metallicity_changes_with_logzsol(ssp):
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m_hi = SEDModel(spec_hi, ssp, observation=obs, approx={"wave_precomp": True})
+        m_hi = SEDModel(spec_hi, ssp, observation=obs, approx=WavePrecomp())
 
     lut_lo = m_lo.predict_state(_PARAMS).derived["stellar_phot_lnu_precomp"]
     lut_hi = m_hi.predict_state(_PARAMS).derived["stellar_phot_lnu_precomp"]

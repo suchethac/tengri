@@ -33,6 +33,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "Galaxy",
         "Parameters",
         "SEDModel",
+        "WavePrecomp",
         # ── SEDComponent extension surface (Phase II protocols) ─────
         "DerivedBundle",
         "DerivedKey",

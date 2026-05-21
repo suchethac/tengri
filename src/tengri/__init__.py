@@ -173,7 +173,36 @@ from tengri.config.exceptions import (
     TengriIOError,
 )
 from tengri.facade import Galaxy, doctor
-from tengri.forward._kernels import KernelStrategy, NoCompatibleKernelError
+
+
+class _KernelsRemoved:
+    """Stand-in raised on access of removed ``KernelStrategy`` / ``NoCompatibleKernelError``.
+
+    The kernel-adapter family (``tengri.forward._kernels``) was removed in
+    Phase 6. Importing the old names from ``tengri`` returns this stand-in;
+    any attempt to call, instantiate, or subscript it raises ImportError
+    with a migration message.
+    """
+
+    def __init__(self, name: str) -> None:
+        self._name = name
+
+    def _raise(self, *_args, **_kwargs):
+        raise ImportError(
+            f"{self._name} was removed in Phase 6 (kernel adapter deletion). "
+            "The structural-cache opt-in for fast photometry is now "
+            "``approx=WavePrecomp(...)`` at build time; the JIT-safe "
+            "forward path is ``model.predict_observables_jit(params)``. "
+            f"{self._name} has no replacement — drop it."
+        )
+
+    __call__ = _raise
+    __getitem__ = _raise
+    __getattr__ = _raise
+
+
+KernelStrategy = _KernelsRemoved("KernelStrategy")
+NoCompatibleKernelError = _KernelsRemoved("NoCompatibleKernelError")
 from tengri.forward.convenience import catalog_summary, fit_batch
 from tengri.forward.prediction import (
     DerivedQuantities,
@@ -183,7 +212,7 @@ from tengri.forward.prediction import (
     SFHQuantities,
 )
 from tengri.forward.result import SEDResult
-from tengri.forward.sed_model import PriorPredictive, SEDModel
+from tengri.forward.sed_model import PriorPredictive, SEDModel, WavePrecomp
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
 from tengri.observation.filters import load_filter_set
 from tengri.observation.noise import (
@@ -330,6 +359,7 @@ __all__ = [
     "TengriError",
     "TengriIOError",
     "Uniform",
+    "WavePrecomp",
     "agn",
     "builders",
     "cache_size_bytes",
@@ -476,6 +506,7 @@ _CURATED_DIR = (
     # 2.  Build a fit
     "Parameters",
     "SEDModel",
+    "WavePrecomp",
     "Fitter",
     "Observation",
     "Photometry",

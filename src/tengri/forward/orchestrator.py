@@ -628,6 +628,8 @@ def run_components(
     components: Iterable[SEDComponent],
     state: ForwardState,
     params: Mapping[str, jnp.ndarray],
+    ssp_data: Any | None = None,
+    template_data: Any | None = None,
 ) -> ForwardState:
     r"""Thread ``state`` through ``components`` in order.
 
@@ -642,6 +644,18 @@ def run_components(
     params : mapping
         Full parameter dict. Each component sees only its
         prefix-matched slice plus the bare-name allowlist.
+    ssp_data : Any | None, optional
+        SSP stellar population synthesis grid. When provided, is passed
+        to each component's ``apply()`` method as a JIT runtime
+        parameter. Components that do not need it should ignore the
+        argument. Default ``None`` means components rely on their
+        internal ``self.ssp_data``.
+    template_data : Any | None, optional
+        Nebular backend grids and weights. When provided, is passed
+        to each component's ``apply()`` method as a JIT runtime
+        parameter. Components that do not need it should ignore the
+        argument. Default ``None`` means components rely on their
+        internal template data.
 
     Returns
     -------
@@ -670,7 +684,7 @@ def run_components(
 
     for component in components:
         sliced = slice_params_for_component(component, params)
-        state = component.apply(state, sliced)
+        state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
     # ADR-0007 Phase 4 invariant — strict typed-only writes (#64
     # added the same check at the snapshot-test boundary; this one

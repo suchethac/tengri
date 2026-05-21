@@ -117,17 +117,18 @@ def test_no_residual_sfr_minus_one_in_orchestrator():
     """Regression: ``sfr[-1]`` / ``sfr_on_ssp[-1]`` must not be set as
     ``_sfr_current`` anywhere in the live orchestrator path. The canonical
     helper is now the only correct source of present-day SFR.
+
+    Phase 6 (PR #135): kernel adapter family deleted; only sed_model and
+    the orchestrator carry the production SFR path now.
     """
     import inspect
 
-    from tengri.forward import _kernels, sed_model
+    from tengri.forward import orchestrator, sed_model
 
-    # Aggregate the live orchestrator + JIT-kernel sources
     src = "\n".join(
         [
             inspect.getsource(sed_model),
-            inspect.getsource(_kernels.compositional),
-            inspect.getsource(_kernels.hybrid),
+            inspect.getsource(orchestrator),
         ]
     )
 

@@ -189,12 +189,10 @@ spec = Parameters(
     dust_tau_diff=LogUniform(0.01, 1.5),
     dust_slope=Fixed(-0.7),
     # No dust_emission: UV-NIR alone is well-constrained without IR.
-    # Free redshift — `SEDModel(approx={"ztable": ...})` auto-precomputes
-    # a redshift table interpolated by the `hybrid_ztable` kernel, so
-    # free z costs no more compile time than fixed z. Defaults: z_min /
-    # z_max pulled from the prior with 1% padding, n_z=100. Override:
-    #   approx={"ztable": {"z_min": 0.01, "z_max": 3.0, "n_z": 200}}
-    # or disable: approx={"ztable": False}.
+    # Free redshift — pass `approx=WavePrecomp()` to SEDModel and the
+    # ztable interpolation is auto-enabled (free z costs no more compile
+    # time than fixed z). Use `WavePrecomp(n_z=200, z_min=0.0, z_max=3.0)`
+    # to override the default sampling.
     redshift=Uniform(0.01, 0.5),
 )
 print(f"\nModel: {spec.n_free} free parameters")

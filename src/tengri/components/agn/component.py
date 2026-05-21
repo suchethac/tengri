@@ -76,11 +76,15 @@ class AGNSEDComponentState(SEDComponentState):
     is set on the parent SEDModel. The component uses them at
     :meth:`AGNSEDComponent.apply` time to filter-integrate the
     analytically computed AGN SED and publish ``agn_phot_lnu_precomp``.
+
+    Also optionally caches SKIRTOR torus template grids for JIT threading
+    so they become Parameter ops rather than baked Constants.
     """
 
     name: str = "agn"
     filter_waves: Any | None = None
     filter_trans: Any | None = None
+    skirtor_templates: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -135,30 +139,69 @@ class AGNSEDComponent:
         approx: Mapping[str, bool] | None = None,
         filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> AGNSEDComponentState:
-        """Cache filter passbands when ``approx={'wave_precomp': True}``.
+        r"""Cache filter passbands and SKIRTOR templates for precomputation.
 
-        AGN models are analytic — there's no template grid to integrate
-        at startup time. But when ``wave_precomp`` is on, we store the
-        filter passbands so :meth:`apply` can publish a filter-integrated
-        precompute key (``agn_phot_lnu_precomp``) on top of the existing
-        full-wavelength ``sed_agn``.
+        When ``approx={'wave_precomp': True}`` is set:
+        - Stores filter passbands so :meth:`apply` can publish
+          ``agn_phot_lnu_precomp`` (filter-integrated AGN photometry).
+        - If the AGN model is "skirtor", pre-loads the template grids
+          so they thread through JIT as Parameter ops.
+
+        Parameters
+        ----------
+        ssp_data : Any | None
+            Unused; accepted for Protocol uniformity.
+        wave_grid : ndarray | None
+            Unused; accepted for Protocol uniformity.
+        approx : Mapping[str, bool] | None
+            Approximation flags. When ``approx.get('wave_precomp')``
+            is ``True``, cache templates and filters.
+        filters : tuple of (wave, trans) pairs | None
+            Filter wavelengths and transmissions to cache.
+
+        Returns
+        -------
+        AGNSEDComponentState
+            State with optionally-populated filter_waves, filter_trans,
+            and skirtor_templates.
         """
         del ssp_data, wave_grid
         approx = approx or {}
+
+        filter_waves = None
+        filter_trans = None
+        skirtor_templates = None
+
         if approx.get("wave_precomp") and filters is not None:
             filter_waves = tuple(jnp.asarray(fw) for fw, _ in filters)
             filter_trans = tuple(jnp.asarray(ft) for _, ft in filters)
-            return AGNSEDComponentState(
-                name=self.name,
-                filter_waves=filter_waves,
-                filter_trans=filter_trans,
-            )
-        return AGNSEDComponentState(name=self.name)
+
+        # SKIRTOR torus models require template grids. Load them here so
+        # they're available for JIT threading.
+        if self.config.model == "skirtor":
+            try:
+                from tengri.components.agn.skirtor import _load_skirtor_default
+
+                skirtor_templates = _load_skirtor_default()
+            except Exception:
+                # If SKIRTOR template loading fails (file not found),
+                # gracefully continue without threading. The apply() path
+                # will fall back to lazy loading.
+                pass
+
+        return AGNSEDComponentState(
+            name=self.name,
+            filter_waves=filter_waves,
+            filter_trans=filter_trans,
+            skirtor_templates=skirtor_templates,
+        )
 
     def apply(
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         """Add AGN emission to ``state.sed_intrinsic`` and publish ``L_agn_bol``.
 
@@ -169,6 +212,11 @@ class AGNSEDComponent:
             ``None`` it is initialised to zeros of the same shape.
         params : mapping
             Receives ``agn_*`` keys plus the bare ``redshift``.
+        template_data : dict | None
+            Nested dict with component namespaces ("nebular", "agn", etc)
+            carrying template grids/weights for JIT threading. When present,
+            SKIRTOR templates are read from ``template_data["agn"]["skirtor"]``
+            as a JIT runtime input instead of module-level lazy-loaded cache.
 
         Returns
         -------
@@ -185,27 +233,38 @@ class AGNSEDComponent:
 
         # Resolve the AGN model from the registry. resolve_agn_model is
         # a factory-time lookup but the returned callable is pure JAX
-        # so it folds into a JIT trace cleanly.
+        # so it folds into a JIT trace cleanly. If template_data is
+        # provided, extract AGN SKIRTOR template and thread it.
         agn_fn = resolve_agn_model(self.config.model)
-        L_agn = agn_fn(
-            wave,
-            agn_log_lbol=agn_log_lbol,
-            agn_frac=jnp.asarray(params.get("agn_frac", 1.0)),
-            agn_alpha=jnp.asarray(params.get("agn_alpha", -1.0)),
-            agn_log_mbh=jnp.asarray(params.get("agn_log_mbh", 8.0)),
-            agn_log_ledd=jnp.asarray(params.get("agn_log_ledd", -1.0)),
-            agn_a_spin=jnp.asarray(params.get("agn_a_spin", 0.0)),
-            agn_torus_frac=jnp.asarray(params.get("agn_torus_frac", 0.5)),
-            agn_T_torus=jnp.asarray(params.get("agn_T_torus", 1000.0)),
-            agn_tau_torus=jnp.asarray(params.get("agn_tau_torus", 3.0)),
-            agn_T_hot=jnp.asarray(params.get("agn_T_hot", 1500.0)),
-            agn_T_warm=jnp.asarray(params.get("agn_T_warm", 300.0)),
-            agn_frac_hot=jnp.asarray(params.get("agn_frac_hot", 0.5)),
-            agn_cos_inc=jnp.asarray(params.get("agn_cos_inc", 0.5)),
-            agn_polar_ebv=jnp.asarray(params.get("agn_polar_ebv", 0.0)),
-            agn_polar_oa=jnp.asarray(params.get("agn_polar_oa", 40.0)),
-            agn_ebv_disc=jnp.asarray(params.get("agn_ebv_disc", 0.0)),
-        )
+
+        # Phase 4-D: thread SKIRTOR template as JIT runtime input
+        skirtor_template = None
+        if template_data is not None and isinstance(template_data, dict):
+            agn_data = template_data.get("agn")
+            if agn_data is not None and isinstance(agn_data, dict):
+                skirtor_template = agn_data.get("skirtor")
+        # Build kwargs, adding _template for SKIRTOR threading if available
+        agn_kwargs = {
+            "agn_frac": jnp.asarray(params.get("agn_frac", 1.0)),
+            "agn_alpha": jnp.asarray(params.get("agn_alpha", -1.0)),
+            "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", 8.0)),
+            "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", -1.0)),
+            "agn_a_spin": jnp.asarray(params.get("agn_a_spin", 0.0)),
+            "agn_torus_frac": jnp.asarray(params.get("agn_torus_frac", 0.5)),
+            "agn_T_torus": jnp.asarray(params.get("agn_T_torus", 1000.0)),
+            "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", 3.0)),
+            "agn_T_hot": jnp.asarray(params.get("agn_T_hot", 1500.0)),
+            "agn_T_warm": jnp.asarray(params.get("agn_T_warm", 300.0)),
+            "agn_frac_hot": jnp.asarray(params.get("agn_frac_hot", 0.5)),
+            "agn_cos_inc": jnp.asarray(params.get("agn_cos_inc", 0.5)),
+            "agn_polar_ebv": jnp.asarray(params.get("agn_polar_ebv", 0.0)),
+            "agn_polar_oa": jnp.asarray(params.get("agn_polar_oa", 40.0)),
+            "agn_ebv_disc": jnp.asarray(params.get("agn_ebv_disc", 0.0)),
+        }
+        if skirtor_template is not None:
+            agn_kwargs["_template"] = skirtor_template
+
+        L_agn = agn_fn(wave, agn_log_lbol=agn_log_lbol, **agn_kwargs)
 
         # Phase 3c-3d-agn: filter-integrate L_agn through the cached filter
         # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp

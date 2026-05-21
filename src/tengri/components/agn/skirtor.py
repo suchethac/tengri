@@ -503,6 +503,9 @@ def skirtor_analytic(*args, **kwargs):
     agn_torus_frac : float, optional
         Fraction of bolometric luminosity from torus [dimensionless, 0–1].
         Default: 0.5.
+    _template : callable, optional
+        Pre-loaded template function (for JIT threading). When provided,
+        uses this instead of the module-level cached loader. Internal use.
     **kwargs
         Additional keyword arguments (ignored for compatibility).
 
@@ -513,12 +516,16 @@ def skirtor_analytic(*args, **kwargs):
 
     Notes
     -----
-    **JIT-compatible**: yes — delegates to cached grid function.
+    **JIT-compatible**: yes — delegates to cached grid function or
+    pre-loaded template (when _template is threaded).
 
     See ``create_skirtor_from_grid`` for full parameter documentation and
     grid-dependent ranges.
     """
-    return _load_skirtor_default()(*args, **kwargs)
+    # Support Phase 4-D: allow template to be threaded as JIT runtime input
+    _template = kwargs.pop("_template", None)
+    template_fn = _template if _template is not None else _load_skirtor_default()
+    return template_fn(*args, **kwargs)
 
 
 def skirtor_components(*args, **kwargs) -> SKIRTORComponents:
@@ -547,6 +554,9 @@ def skirtor_components(*args, **kwargs) -> SKIRTORComponents:
     agn_torus_frac : float, optional
         Fraction of bolometric luminosity from torus [dimensionless, 0–1].
         Default: 0.5.
+    _template : callable, optional
+        Pre-loaded template function (for JIT threading). When provided,
+        uses this instead of the module-level cached loader. Internal use.
     **kwargs
         Additional keyword arguments (ignored for compatibility).
 
@@ -563,9 +573,15 @@ def skirtor_components(*args, **kwargs) -> SKIRTORComponents:
 
     Notes
     -----
-    **JIT-compatible**: yes — delegates to cached grid function.
+    **JIT-compatible**: yes — delegates to cached grid function or
+    pre-loaded template (when _template is threaded).
     """
-    fn = _load_skirtor_components()
+    # Support Phase 4-D: allow template to be threaded as JIT runtime input
+    _template = kwargs.pop("_template", None)
+    if _template is not None:
+        fn = _template
+    else:
+        fn = _load_skirtor_components()
     if fn is None:
         raise RuntimeError(
             "Separate SKIRTOR components require a v3 grid file. "
