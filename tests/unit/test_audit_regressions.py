@@ -582,6 +582,7 @@ class TestCompositionalKernelLAbsorbedGuard:
 
         assert float(L_out) == pytest.approx(float(L_in), rel=1e-6)
 
+    @pytest.mark.skip(reason="hybrid kernel module deleted in Phase 6")
     def test_guard_present_in_source(self):
         """Smoke test: verify the isfinite guard exists in both guard sites.
 
@@ -629,6 +630,7 @@ class TestBugNSS04ZTableIGM:
     formula change. Inoue et al. (2014) MNRAS 442, 1805 governs the IGM model itself.
     """
 
+    @pytest.mark.skip(reason="hybrid kernel module deleted in Phase 6")
     def test_ztable_igm_wiring_present_in_source(self):
         """Smoke: verify z-table kernel wires has_igm to actual IGM application.
 

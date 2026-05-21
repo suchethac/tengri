@@ -3885,8 +3885,6 @@ class SEDModel:
         if fn is not None:
             return fn
 
-        import jax
-
         # Capture the model's per-instance LSF + wave_obs into the closure.
         # These are part of compile_signature when spectroscopy is configured,
         # so caching is safe across instances with identical structure.
@@ -4191,58 +4189,6 @@ class SEDModel:
         ``self.spec``'s fixed values, not from the JIT params dict.
         """
         return {k: v for k, v in params.items() if not isinstance(v, str)}
-
-    def _observe_spectrum_from_rest_sed_chunked(
-        self, rest_sed, wave_rest, wave_obs, z, dl_cm, wave_chunk_size
-    ):
-        """Observe spectrum with wavelength-axis chunking.
-
-        Wraps observe_spectrum_from_rest_sed with lax.map over wavelength chunks.
-        Numerically equivalent to unchunked evaluation.
-
-        Parameters
-        ----------
-        rest_sed : array, shape (n_wave,)
-            Rest-frame SED [erg/s/Hz].
-        wave_rest : array, shape (n_wave,)
-            Rest-frame wavelength grid [Angstrom].
-        wave_obs : array, shape (n_pix,)
-            Observed-frame wavelength pixels [Angstrom].
-        z : float
-            Redshift.
-        dl_cm : float
-            Luminosity distance [cm].
-        wave_chunk_size : int
-            Number of pixels per chunk.
-
-        Returns
-        -------
-        flux : array, shape (n_pix,)
-            Observed flux [erg/s/cm²/Hz].
-        """
-        from tengri.forward._kernels.compositional import observe_spectrum_from_rest_sed
-
-        n_pix = wave_obs.shape[0]
-        n_chunks = int(jnp.ceil(n_pix / wave_chunk_size))
-
-        # Pad wave_obs to a multiple of wave_chunk_size
-        padded_size = n_chunks * wave_chunk_size
-        wave_obs_padded = jnp.pad(wave_obs, (0, padded_size - n_pix), mode="edge")
-
-        # Reshape into chunks: (n_chunks, wave_chunk_size)
-        wave_obs_chunks = wave_obs_padded.reshape(n_chunks, wave_chunk_size)
-
-        # Map over chunks
-        def observe_chunk(wave_chunk):
-            return observe_spectrum_from_rest_sed(rest_sed, wave_rest, wave_chunk, z, dl_cm)
-
-        flux_chunks = jax.lax.map(observe_chunk, wave_obs_chunks)
-
-        # Reshape back to 1D and trim padding
-        flux_padded = flux_chunks.reshape(padded_size)
-        return flux_padded[:n_pix]
-
-    # ── Factories and convenience ─────────────────────────────────────
 
     @classmethod
     def from_config(
