@@ -86,27 +86,26 @@ def test_ssp_threaded_as_jit_parameter(model_stellar_only):
     """
     fn_jit = model_stellar_only._get_or_build_predict_observables_jit()
 
-    # Trace the function with dummy inputs to inspect the signature.
-    # The closure contains: params, fixed_values, ssp_data
-    # (Phase 4-A added fixed_values; Phase 4-B adds ssp_data).
+    # Trace the function with dummy inputs to inspect the jaxpr's input
+    # avals. The closure takes (params, fixed_values, ssp_data) at the
+    # Python level — but ``jax.make_jaxpr`` flattens pytrees, so the
+    # number of in_avals equals the total leaf count across all three.
+    # That's a structural property: the SSP arrays MUST appear among the
+    # leaves (they're traced inputs), not be baked as constants.
     dummy_params = {}
     dummy_fixed = model_stellar_only.spec.get_fixed_values()
     dummy_ssp = model_stellar_only.ssp_data
-
-    # Make a jaxpr to see the input signature.
     jaxpr = jax.make_jaxpr(fn_jit)(dummy_params, dummy_fixed, dummy_ssp)
 
-    # The jaxpr should have 3 in_avals corresponding to:
-    # [params_pytree, fixed_values_pytree, ssp_data_pytree]
-    assert len(jaxpr.in_avals) == 3, (
-        f"Expected 3 JIT inputs (params, fixed_values, ssp_data), got {len(jaxpr.in_avals)}"
-    )
-
-    # The third input (ssp_data) should be a structured pytree.
-    # For SSPData (NamedTuple), this will be multiple leaves per field.
-    ssp_avals = jaxpr.in_avals[2]
-    assert isinstance(ssp_avals, tuple) or hasattr(ssp_avals, "shape"), (
-        f"ssp_data should be a pytree (NamedTuple), got {type(ssp_avals)}"
+    # SSP grid shapes that we expect among the traced inputs. If the SSP
+    # arrays were closure-baked, they'd appear as Constant ops with no
+    # corresponding in_aval. Check the SSP flux shape is present.
+    ssp_flux_shape = tuple(model_stellar_only.ssp_data.ssp_flux.shape)
+    aval_shapes = [tuple(a.shape) for a in jaxpr.in_avals if hasattr(a, "shape")]
+    assert ssp_flux_shape in aval_shapes, (
+        f"SSP flux grid (shape {ssp_flux_shape}) is not among the JIT input "
+        f"avals — it was closure-captured and baked into HLO as a Constant. "
+        f"Phase 4-B threading is incomplete. in_avals shapes: {aval_shapes}"
     )
 
 
