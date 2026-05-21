@@ -24,6 +24,9 @@ References
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.regression_paper
 from pathlib import Path
 
 import jax

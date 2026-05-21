@@ -3963,59 +3963,110 @@ class SEDModel:
         return jit_fn
 
     def _template_data_for_jit(self):
-        """Collect template data (nebular + AGN) for JIT threading.
+        """Collect template grids/weights for JIT threading (nebular + dust IR + AGN).
 
-        Walks the cached component chain to extract backend grids/weights
-        needed by components so they become JAX ``Parameter`` ops rather
-        than baked-in HLO ``Constant`` ops. Returns a nested dict with
-        per-component namespace keys ("nebular", "agn") to avoid collisions.
+        Walks the cached component chain (built by predict_state warmup)
+        to collect template arrays that should be threaded as JIT runtime
+        inputs instead of closure-captured, so they appear as JAX
+        ``Parameter`` ops rather than baked-in HLO ``Constant`` ops.
 
-        Lookups are **duck-typed** on backend objects carrying ``.grid``
-        or ``.weights`` attributes. New backends with these conventions
-        participate automatically.
+        **Nebular templates** (Phase 4-C): duck-typed on backend ``.grid``
+        / ``.weights`` attributes (Cue, CloudyGrid, etc.).
+
+        **Dust IR templates** (Phase 4-D-B): extracted from the
+        DustEmissionSEDComponent's cached state (PAHspec, Astrodust, etc.),
+        indexed by template type.
+
+        **AGN templates** (Phase 4-D-C): extracted from the
+        AGNSEDComponent's cached state (SKIRTOR templates).
 
         Returns
         -------
         dict[str, Any] | None
-            Nested dict with namespace keys ("nebular", "agn") pointing
-            to template structures, or ``None`` if no templates present.
+            Nested dict with namespace keys (``"nebular"``, ``"dust_ir"``,
+            ``"agn"``) carrying the threaded template data for that
+            subsystem. Returns ``None`` if no components need threading.
         """
         cached = getattr(self, "_cached_component_chain", None)
         if cached is None:
             return None
 
         from tengri.components.agn.component import AGNSEDComponent
+        from tengri.components.dust.emission_component import DustEmissionSEDComponent
         from tengri.components.nebular.component import NebularSEDComponent
 
-        template_data = {}
+        result = {}
 
-        # Extract nebular backend template data
+        # ── Nebular backend threading (Phase 4-C) ──
         for component in cached:
-            if isinstance(component, NebularSEDComponent):
-                backend = getattr(component, "backend", None)
-                if backend is not None:
-                    # Duck-type: prefer .weights (Cue), then .grid (CloudyGrid, etc)
-                    for attr in ("weights", "grid"):
-                        template = getattr(backend, attr, None)
-                        if template is not None:
-                            template_data["nebular"] = template
-                            break
-                break
+            if not isinstance(component, NebularSEDComponent):
+                continue
+            backend = getattr(component, "backend", None)
+            if backend is None:
+                continue
+            # Duck-type: prefer .weights (NN-backed like Cue),
+            # then .grid (interpolation-table like CloudyGrid/CB19/MAPPINGS/AGN NLR).
+            # Falls back to skipping for backends with no separate template data
+            # (BakedIn, Shock).
+            for attr in ("weights", "grid"):
+                template = getattr(backend, attr, None)
+                if template is not None:
+                    result["nebular"] = template
+                    break
+            break
 
-        # Extract AGN template data
+        # ── Dust IR template threading (Phase 4-D-B) ──
         for component in cached:
-            if isinstance(component, AGNSEDComponent):
-                agn_templates = {}
-                if (
-                    component._state is not None
-                    and component._state.skirtor_templates is not None
-                ):
-                    agn_templates["skirtor"] = component._state.skirtor_templates
-                if agn_templates:
-                    template_data["agn"] = agn_templates
-                break
+            if not isinstance(component, DustEmissionSEDComponent):
+                continue
+            # For dust emission, we need to precompute templates if they're
+            # template-based (PAHspec, Astrodust). Analytic models have no
+            # templates to thread. The wave_grid is needed for template resampling;
+            # we use a dummy grid (length 1) since the actual grid is only needed
+            # for reshaping, and the precomputed state is cached internally by
+            # the loaders via @functools.cache.
+            template_type = component.config.template
+            if template_type == "modified_blackbody":
+                # No templates to thread for analytic models.
+                pass
+            else:
+                # PAHspec and Astrodust need precompute to load their HDF5 grids.
+                # Use a minimal dummy wave_grid since the actual grid shape is
+                # irrelevant for threading — we just need the grids from the
+                # precompute path. In the actual apply() path, the real wave_grid
+                # from state will be used for dust computation.
+                dust_state = component.precompute(
+                    ssp_data=None,
+                    wave_grid=jnp.asarray([1.0, 2.0]),  # Dummy grid for precompute
+                )
 
-        return template_data if template_data else None
+                if template_type == "draine2021_pah":
+                    result["dust_ir"] = {
+                        "pahspec_lgU_grid": dust_state.pahspec_lgU_grid,
+                        "pahspec_lnu_template": dust_state.pahspec_lnu_template,
+                        "pahspec_norm_per_lgU": dust_state.pahspec_norm_per_lgU,
+                    }
+                elif template_type == "astrodust":
+                    result["dust_ir"] = {
+                        "astrodust_lgU_grid": dust_state.astrodust_lgU_grid,
+                        "astrodust_lnu_template": dust_state.astrodust_lnu_template,
+                        "astrodust_norm_per_lgU": dust_state.astrodust_norm_per_lgU,
+                        "astrodust_lnu_spinning": dust_state.astrodust_lnu_spinning,
+                    }
+            break
+
+        # ── AGN template threading (Phase 4-D-C) ──
+        for component in cached:
+            if not isinstance(component, AGNSEDComponent):
+                continue
+            agn_templates = {}
+            if component._state is not None and component._state.skirtor_templates is not None:
+                agn_templates["skirtor"] = component._state.skirtor_templates
+            if agn_templates:
+                result["agn"] = agn_templates
+            break
+
+        return result if result else None
 
     def _build_component_chain(self):
         """Construct the orchestrator chain from ``self``'s settings.
