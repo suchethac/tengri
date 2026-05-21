@@ -86,14 +86,15 @@ print(inspect.signature(builders.sfh.dpl))
 # Two SFHs at the same mass, side by side:
 
 # %%
-obs = Observation(photometry=Photometry.from_names(
-    ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "wise_w1"]
-))
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "wise_w1"])
+)
 
 
 def _build_sfh(sfh_factory):
     return SEDModel.build(
-        ssp_data=ssp, observation=obs,
+        ssp_data=ssp,
+        observation=obs,
         sfh=sfh_factory(defaults=FIXED),
         dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
         neb={"type": "none"},
@@ -103,8 +104,8 @@ def _build_sfh(sfh_factory):
 
 fig, ax = plt.subplots(figsize=(7, 3.6))
 for name, factory, color in [
-    ("DPL",          builders.sfh.dpl,    "#3a76d9"),
-    ("delayed-exp",  builders.sfh.dexp,   "#c8377d"),
+    ("DPL", builders.sfh.dpl, "#3a76d9"),
+    ("delayed-exp", builders.sfh.dexp, "#c8377d"),
     ("tsnorm burst", builders.sfh.tsnorm, "#d97a3a"),
 ]:
     m = _build_sfh(factory)
@@ -189,8 +190,7 @@ tengri.list_inference_methods()
 # physics ingredient.
 
 # %%
-example = SEDModel.build(ssp_data=ssp, observation=obs,
-                                **recipes.star_forming_photometry())
+example = SEDModel.build(ssp_data=ssp, observation=obs, **recipes.star_forming_photometry())
 example.spec.summary()
 
 # %%

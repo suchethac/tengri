@@ -77,13 +77,31 @@ if not SSP.exists():
 ssp = load_ssp_data(str(SSP))
 
 filters = [
-    "galex_fuv", "galex_nuv",
-    "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-    "ukidss_y", "ukidss_j", "ukidss_h", "ukidss_k",
-    "irac_36", "irac_45", "irac_58", "irac_80",
-    "wise_w3", "wise_w4",
-    "mips_24", "mips_70", "mips_160",
-    "herschel_100", "herschel_160", "herschel_250", "herschel_350", "herschel_500",
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "ukidss_y",
+    "ukidss_j",
+    "ukidss_h",
+    "ukidss_k",
+    "irac_36",
+    "irac_45",
+    "irac_58",
+    "irac_80",
+    "wise_w3",
+    "wise_w4",
+    "mips_24",
+    "mips_70",
+    "mips_160",
+    "herschel_100",
+    "herschel_160",
+    "herschel_250",
+    "herschel_350",
+    "herschel_500",
 ]
 obs = Observation(photometry=Photometry.from_names(filters))
 
@@ -99,17 +117,28 @@ obs = Observation(photometry=Photometry.from_names(filters))
 
 # %%
 kitchen_sink = dict(
-    sfh={"type": "dpl", "*": FIXED,
-         "log_peak_sfr": 1.6, "alpha": 2.2, "beta": 1.4,
-         "tau_gyr": 4.0, "log_mstar": 10.6},
-    dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED,
-          "tau_bc": 0.8, "tau_diff": 0.3, "slope": -0.4,
-          "emission": {"type": "dale2014", "*": FIXED, "alpha": 2.2}},
+    sfh={
+        "type": "dpl",
+        "*": FIXED,
+        "log_peak_sfr": 1.6,
+        "alpha": 2.2,
+        "beta": 1.4,
+        "tau_gyr": 4.0,
+        "log_mstar": 10.6,
+    },
+    dust={
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": FIXED,
+        "tau_bc": 0.8,
+        "tau_diff": 0.3,
+        "slope": -0.4,
+        "emission": {"type": "dale2014", "*": FIXED, "alpha": 2.2},
+    },
     neb={"type": "cue", "*": FIXED},
     agn={
         "disc": {"type": "multicolor", "*": FIXED, "log_lbol": 45.0},
-        "torus": {"type": "skirtor", "*": FIXED, "tau_9p7": 5.0,
-                  "cos_theta_torus": 0.5},
+        "torus": {"type": "skirtor", "*": FIXED, "tau_9p7": 5.0, "cos_theta_torus": 0.5},
         "lines": {"type": "nlr", "*": FIXED},
     },
     radio=True,
@@ -139,9 +168,10 @@ citations.print_citations(model)
 params = model.spec.sample(jax.random.PRNGKey(0))
 state = model.predict_state(params)
 
-wave_rest = np.asarray(state.wave)         # Å
-nu = 2.998e18 / wave_rest                  # Hz
-total = np.asarray(state.sed_intrinsic)    # erg/s/Hz, post-dust-attenuation + emission
+wave_rest = np.asarray(state.wave)  # Å
+nu = 2.998e18 / wave_rest  # Hz
+total = np.asarray(state.sed_intrinsic)  # erg/s/Hz, post-dust-attenuation + emission
+
 
 # Per-component contributions from the orchestrator's derived bundle.
 def _get(key, default=None):
@@ -149,20 +179,20 @@ def _get(key, default=None):
     return None if arr is None else np.asarray(arr)
 
 
-lnu_age = _get("lnu_age")                       # (n_age, n_wave) intrinsic
+lnu_age = _get("lnu_age")  # (n_age, n_wave) intrinsic
 sed_stellar_intrinsic = lnu_age.sum(axis=0) if lnu_age is not None else None
 sed_stellar_attenuated = _get("sed_dust_attenuated")
 sed_nebular = _get("sed_nebular")
 sed_dust_emission = _get("sed_dust_ir")
-sed_agn = _get("sed_agn", _get("sed_grahsp"))   # AGN may be off in some builds
+sed_agn = _get("sed_agn", _get("sed_grahsp"))  # AGN may be off in some builds
 
 C = {
-    "stellar": "#d97a3a",       # warm
-    "nebular": "#c8377d",       # magenta
-    "dust_att": "#3a76d9",      # blue
-    "dust_em":  "#c3372a",      # red
-    "agn":      "#7c3fbf",      # violet
-    "total":    "0.05",         # near-black
+    "stellar": "#d97a3a",  # warm
+    "nebular": "#c8377d",  # magenta
+    "dust_att": "#3a76d9",  # blue
+    "dust_em": "#c3372a",  # red
+    "agn": "#7c3fbf",  # violet
+    "total": "0.05",  # near-black
 }
 
 fig, ax = plt.subplots(figsize=(9.5, 5.4))
@@ -171,26 +201,37 @@ ax.set_yscale("log")
 ax.set_xlabel(r"rest-frame wavelength $\lambda$  [$\mu$m]")
 ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 wave_um = wave_rest / 1e4
-nuLnu = lambda y: nu * y if y is not None else None
 
-ax.plot(wave_um, nuLnu(total),
-        color=C["total"], lw=2.2, label="total")
+
+def nuLnu(y):
+    return nu * y if y is not None else None
+
+
+ax.plot(wave_um, nuLnu(total), color=C["total"], lw=2.2, label="total")
 if sed_stellar_intrinsic is not None:
-    ax.plot(wave_um, nuLnu(sed_stellar_intrinsic),
-            color=C["stellar"], lw=1.0, ls="--", alpha=0.7,
-            label="stellar (intrinsic)")
+    ax.plot(
+        wave_um,
+        nuLnu(sed_stellar_intrinsic),
+        color=C["stellar"],
+        lw=1.0,
+        ls="--",
+        alpha=0.7,
+        label="stellar (intrinsic)",
+    )
 if sed_stellar_attenuated is not None:
-    ax.plot(wave_um, nuLnu(sed_stellar_attenuated),
-            color=C["dust_att"], lw=1.4, label="stellar (attenuated)")
+    ax.plot(
+        wave_um,
+        nuLnu(sed_stellar_attenuated),
+        color=C["dust_att"],
+        lw=1.4,
+        label="stellar (attenuated)",
+    )
 if sed_nebular is not None:
-    ax.plot(wave_um, nuLnu(sed_nebular),
-            color=C["nebular"], lw=1.0, label="nebular")
+    ax.plot(wave_um, nuLnu(sed_nebular), color=C["nebular"], lw=1.0, label="nebular")
 if sed_dust_emission is not None:
-    ax.plot(wave_um, nuLnu(sed_dust_emission),
-            color=C["dust_em"], lw=1.4, label="dust emission")
+    ax.plot(wave_um, nuLnu(sed_dust_emission), color=C["dust_em"], lw=1.4, label="dust emission")
 if sed_agn is not None:
-    ax.plot(wave_um, nuLnu(sed_agn),
-            color=C["agn"], lw=1.4, label="AGN (disc + torus + NLR)")
+    ax.plot(wave_um, nuLnu(sed_agn), color=C["agn"], lw=1.4, label="AGN (disc + torus + NLR)")
 
 # Annotate physical features.
 for lam_um, label in [
@@ -204,10 +245,16 @@ for lam_um, label in [
     if lam_um < wave_um.min() or lam_um > wave_um.max():
         continue
     y = np.interp(lam_um, wave_um, nuLnu(total))
-    ax.annotate(label, xy=(lam_um, y), xytext=(0, 18),
-                textcoords="offset points", fontsize=8, ha="center",
-                color="0.25",
-                arrowprops=dict(arrowstyle="-", color="0.5", lw=0.5))
+    ax.annotate(
+        label,
+        xy=(lam_um, y),
+        xytext=(0, 18),
+        textcoords="offset points",
+        fontsize=8,
+        ha="center",
+        color="0.25",
+        arrowprops=dict(arrowstyle="-", color="0.5", lw=0.5),
+    )
 
 ax.set_xlim(1e-2, 1e4)
 ax.set_ylim(nuLnu(total).max() * 1e-7, nuLnu(total).max() * 3)
@@ -246,19 +293,21 @@ ax = axes[0, 0]
 for label, sfh_dict, color in [
     ("exponential", builders.sfh.exp(defaults=FIXED), "#d97a3a"),
     ("delayed-exp", builders.sfh.dexp(defaults=FIXED), "#c8377d"),
-    ("DPL",         builders.sfh.dpl(defaults=FIXED),  "#3a76d9"),
+    ("DPL", builders.sfh.dpl(defaults=FIXED), "#3a76d9"),
 ]:
     cfg = deepcopy(base)
     cfg["sfh"] = sfh_dict
     m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
     p = m.spec.sample(jax.random.PRNGKey(0))
     w, sed = predict_rest(m, p)
-    ax.plot(w / 1e4, w * sed * 0 + 2.998e18 / w * sed,
-            label=label, color=color, lw=1.3)
-ax.set_xscale("log"); ax.set_yscale("log")
-ax.set_xlim(0.05, 30); ax.set_xlabel(r"$\lambda$ [$\mu$m]")
+    ax.plot(w / 1e4, w * sed * 0 + 2.998e18 / w * sed, label=label, color=color, lw=1.3)
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(0.05, 30)
+ax.set_xlabel(r"$\lambda$ [$\mu$m]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
-ax.set_title("SFH shape"); ax.legend(frameon=False, fontsize=9)
+ax.set_title("SFH shape")
+ax.legend(frameon=False, fontsize=9)
 
 # (b) Birth-cloud τ_V sweep — same SFH, varying attenuation
 ax = axes[0, 1]
@@ -270,12 +319,14 @@ for tau, col in zip(tau_grid, cmap(np.linspace(0.15, 0.85, len(tau_grid)))):
     m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
     p = m.spec.sample(jax.random.PRNGKey(0))
     w, sed = predict_rest(m, p)
-    ax.plot(w / 1e4, 2.998e18 / w * sed, color=col, lw=1.2,
-            label=fr"$\tau_{{\rm BC}}={tau:g}$")
-ax.set_xscale("log"); ax.set_yscale("log")
-ax.set_xlim(0.05, 30); ax.set_xlabel(r"$\lambda$ [$\mu$m]")
+    ax.plot(w / 1e4, 2.998e18 / w * sed, color=col, lw=1.2, label=rf"$\tau_{{\rm BC}}={tau:g}$")
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(0.05, 30)
+ax.set_xlabel(r"$\lambda$ [$\mu$m]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
-ax.set_title("Birth-cloud optical depth"); ax.legend(frameon=False, fontsize=9, ncol=2)
+ax.set_title("Birth-cloud optical depth")
+ax.legend(frameon=False, fontsize=9, ncol=2)
 
 # (c) AGN bolometric luminosity sweep
 # Lightweight AGN (multicolour disc + Nenkova torus): five rebuilds of
@@ -293,13 +344,17 @@ for log_lbol, col in zip(log_lbol_grid, cmap(np.linspace(0.15, 0.85, len(log_lbo
     m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
     p = m.spec.sample(jax.random.PRNGKey(0))
     w, sed = predict_rest(m, p)
-    ax.plot(w / 1e4, 2.998e18 / w * sed, color=col, lw=1.2,
-            label=fr"$\log L_{{\rm AGN}}={log_lbol:g}$")
+    ax.plot(
+        w / 1e4, 2.998e18 / w * sed, color=col, lw=1.2, label=rf"$\log L_{{\rm AGN}}={log_lbol:g}$"
+    )
     del m
-ax.set_xscale("log"); ax.set_yscale("log")
-ax.set_xlim(0.05, 30); ax.set_xlabel(r"$\lambda$ [$\mu$m]")
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(0.05, 30)
+ax.set_xlabel(r"$\lambda$ [$\mu$m]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
-ax.set_title("AGN luminosity"); ax.legend(frameon=False, fontsize=8, ncol=1)
+ax.set_title("AGN luminosity")
+ax.legend(frameon=False, fontsize=8, ncol=1)
 
 # (d) Redshift sweep — same intrinsic, different IGM + observed-frame
 ax = axes[1, 1]
@@ -312,12 +367,14 @@ for z, col in zip(z_grid, cmap(np.linspace(0.15, 0.85, len(z_grid)))):
     m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
     p = m.spec.sample(jax.random.PRNGKey(0))
     w, sed = predict_rest(m, p)
-    ax.plot(w * (1 + z) / 1e4, 2.998e18 / w * sed, color=col, lw=1.2,
-            label=fr"$z={z:g}$")
-ax.set_xscale("log"); ax.set_yscale("log")
-ax.set_xlim(0.05, 30); ax.set_xlabel(r"$\lambda_{\rm obs}$ [$\mu$m]")
+    ax.plot(w * (1 + z) / 1e4, 2.998e18 / w * sed, color=col, lw=1.2, label=rf"$z={z:g}$")
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(0.05, 30)
+ax.set_xlabel(r"$\lambda_{\rm obs}$ [$\mu$m]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
-ax.set_title("Redshift + IGM"); ax.legend(frameon=False, fontsize=9)
+ax.set_title("Redshift + IGM")
+ax.legend(frameon=False, fontsize=9)
 
 fig.savefig(FIG_DIR / "02_anatomy_sweeps.png", dpi=300, bbox_inches="tight")
 
@@ -330,7 +387,7 @@ fig.savefig(FIG_DIR / "02_anatomy_sweeps.png", dpi=300, bbox_inches="tight")
 
 # %%
 groups = model.spec.to_groups()
-groups["dust"]["tau_bc"] = Fixed(1.5)        # double the birth-cloud opacity
+groups["dust"]["tau_bc"] = Fixed(1.5)  # double the birth-cloud opacity
 model_edited = SEDModel.build(ssp_data=ssp, observation=obs, **groups)
 print(model_edited.summary())
 

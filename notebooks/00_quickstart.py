@@ -153,14 +153,17 @@ posterior.summary()
 
 # %%
 draw_batch = posterior.resample(jax.random.PRNGKey(11), n=200)
-phot_draws = np.asarray(
-    jax.vmap(lambda p: model.predict_observables(p).phot_fnu)(draw_batch)
-)
+phot_draws = np.asarray(jax.vmap(lambda p: model.predict_observables(p).phot_fnu)(draw_batch))
 phot = obs.photometry
-wave_eff = np.array([
-    np.trapezoid(w * t, w) / np.trapezoid(t, w)
-    for w, t in zip(phot.filter_waves, phot.filter_trans)
-]) / 1e4  # μm, transmission-weighted mean per band
+wave_eff = (
+    np.array(
+        [
+            np.trapezoid(w * t, w) / np.trapezoid(t, w)
+            for w, t in zip(phot.filter_waves, phot.filter_trans)
+        ]
+    )
+    / 1e4
+)  # μm, transmission-weighted mean per band
 
 fig = plt.figure(figsize=(7.2, 6.4))
 gs = fig.add_gridspec(2, 1, height_ratios=[1, 1], hspace=0.35)
@@ -172,19 +175,29 @@ flux_lo, flux_med, flux_hi = np.percentile(phot_draws, [16, 50, 84], axis=0)
 ax_sed.fill_between(wave_eff, flux_lo, flux_hi, color="#3a76d9", alpha=0.25, label="68% band")
 ax_sed.plot(wave_eff, flux_med, color="#3a76d9", lw=1.4, label="posterior median")
 ax_sed.plot(wave_eff, np.asarray(mock["flux_true"]), color="0.2", lw=1.0, ls="--", label="truth")
-ax_sed.errorbar(wave_eff, np.asarray(flux_obs), yerr=np.asarray(noise),
-                fmt="o", color="#c3372a", ms=4, capsize=2, label="observed")
-ax_sed.set_xscale("log"); ax_sed.set_yscale("log")
+ax_sed.errorbar(
+    wave_eff,
+    np.asarray(flux_obs),
+    yerr=np.asarray(noise),
+    fmt="o",
+    color="#c3372a",
+    ms=4,
+    capsize=2,
+    label="observed",
+)
+ax_sed.set_xscale("log")
+ax_sed.set_yscale("log")
 ax_sed.set_xlabel(r"observed wavelength $\lambda$  [$\mu$m]")
 ax_sed.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
 ax_sed.legend(frameon=False, fontsize=9, loc="best")
+
 
 # SFH panel — SFH history lives in the orchestrator state, not the
 # Prediction wrapper (which only exposes scalar derived quantities).
 def _sfh(p_dict):
     s = model.predict_state(p_dict)
-    return (np.asarray(s.derived["sfh_grid_lbt_yr"]) / 1e9,
-            np.asarray(s.derived["sfr_history"]))
+    return (np.asarray(s.derived["sfh_grid_lbt_yr"]) / 1e9, np.asarray(s.derived["sfr_history"]))
+
 
 sfr_draws, lbt = [], None
 fixed = model.spec.get_fixed_values()
@@ -218,10 +231,17 @@ fig.savefig(FIG_DIR / "00_posterior_sed_sfh.png", dpi=300, bbox_inches="tight")
 
 # %%
 import corner
+
 sampled = list(posterior.samples.keys())
-prefer = ["sfh_tsnorm_log_peak_sfr", "sfh_tsnorm_peak_lbt_gyr",
-          "sfh_tsnorm_width_gyr", "dust_tau_bc",
-          "sfh_dpl_log_peak_sfr", "sfh_dpl_alpha", "redshift"]
+prefer = [
+    "sfh_tsnorm_log_peak_sfr",
+    "sfh_tsnorm_peak_lbt_gyr",
+    "sfh_tsnorm_width_gyr",
+    "dust_tau_bc",
+    "sfh_dpl_log_peak_sfr",
+    "sfh_dpl_alpha",
+    "redshift",
+]
 # Keep only params with non-trivial dynamic range (a stuck chain or
 # tightly-pinned param breaks corner.corner otherwise).
 corner_params = []

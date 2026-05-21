@@ -68,9 +68,9 @@ if not SSP.exists():
     SSP = Path(tengri.download_ssp("fsps_prsc_miles_chabrier"))
 ssp = load_ssp_data(str(SSP))
 
-obs = Observation(photometry=Photometry.from_names(
-    ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "wise_w1"]
-))
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "wise_w1"])
+)
 model = SEDModel.build(ssp_data=ssp, observation=obs, **recipes.mock_recovery_minimal())
 
 truth = model.spec.sample(jax.random.PRNGKey(0))
@@ -124,7 +124,7 @@ for i in range(LSFR.shape[0]):
         g_tau[i, j] = float(gy)
 
 log_post = -(nll_grid - nll_grid.min())  # peak at zero
-step_x, step_y = -g_log_sfr, -g_tau      # ascend the posterior
+step_x, step_y = -g_log_sfr, -g_tau  # ascend the posterior
 mag = np.hypot(step_x, step_y)
 step_x = step_x / (mag + 1e-12)
 step_y = step_y / (mag + 1e-12)
@@ -133,9 +133,16 @@ fig, axes = plt.subplots(1, 2, figsize=(11, 4.6), constrained_layout=True)
 levels = -np.array([0.5 * s * s for s in (1.0, 2.0, 3.0)])[::-1]
 cs = axes[0].contourf(LSFR, TAU, log_post, levels=20, cmap="magma")
 axes[0].contour(LSFR, TAU, log_post, levels=levels, colors="white", linewidths=0.8)
-axes[0].scatter([truth[free_keys[0]]], [truth[free_keys[1]]],
-                marker="*", s=140, c="white", edgecolor="k", zorder=5,
-                label="truth")
+axes[0].scatter(
+    [truth[free_keys[0]]],
+    [truth[free_keys[1]]],
+    marker="*",
+    s=140,
+    c="white",
+    edgecolor="k",
+    zorder=5,
+    label="truth",
+)
 axes[0].set_xlabel(r"$\log_{10}(\mathrm{peak\ SFR})\ [M_\odot/\mathrm{yr}]$")
 axes[0].set_ylabel(r"birth-cloud $\tau_V$")
 axes[0].set_title("log posterior")
@@ -145,13 +152,26 @@ fig.colorbar(cs, ax=axes[0], shrink=0.85, label=r"$\ln \mathcal{P}$")
 stride = 4
 axes[1].contour(LSFR, TAU, log_post, levels=levels, colors="0.5", linewidths=0.8)
 axes[1].quiver(
-    LSFR[::stride, ::stride], TAU[::stride, ::stride],
-    step_x[::stride, ::stride], step_y[::stride, ::stride],
-    mag[::stride, ::stride], cmap="viridis",
-    pivot="middle", scale=35, width=0.003, alpha=0.9,
+    LSFR[::stride, ::stride],
+    TAU[::stride, ::stride],
+    step_x[::stride, ::stride],
+    step_y[::stride, ::stride],
+    mag[::stride, ::stride],
+    cmap="viridis",
+    pivot="middle",
+    scale=35,
+    width=0.003,
+    alpha=0.9,
 )
-axes[1].scatter([truth[free_keys[0]]], [truth[free_keys[1]]],
-                marker="*", s=140, c="white", edgecolor="k", zorder=5)
+axes[1].scatter(
+    [truth[free_keys[0]]],
+    [truth[free_keys[1]]],
+    marker="*",
+    s=140,
+    c="white",
+    edgecolor="k",
+    zorder=5,
+)
 axes[1].set_xlabel(r"$\log_{10}(\mathrm{peak\ SFR})\ [M_\odot/\mathrm{yr}]$")
 axes[1].set_ylabel(r"birth-cloud $\tau_V$")
 axes[1].set_title(r"$-\nabla\, \chi^2 / 2$  (NUTS/HMC follows these arrows)")
@@ -160,8 +180,12 @@ fig.savefig(FIG_DIR / "01_gradient_map.png", dpi=300, bbox_inches="tight")
 # %% [markdown]
 # Three lines of code carry that whole picture:
 
+
 # %%
-loss = lambda p: 0.5 * jnp.sum(((model.predict_observables(p).phot_fnu - flux_obs) / noise) ** 2)
+def loss(p):
+    return 0.5 * jnp.sum(((model.predict_observables(p).phot_fnu - flux_obs) / noise) ** 2)
+
+
 grad_at_truth = jax.grad(loss)(truth)
 {k: float(v) for k, v in grad_at_truth.items() if k in free_keys}
 
@@ -184,7 +208,7 @@ for _ in range(50):
     _ = model.predict_observables(truth).phot_fnu.block_until_ready()
 t_single = (perf_counter() - t0) / 50
 
-tengri.clear_shared_caches()   # free graphs from the gradient figure
+tengri.clear_shared_caches()  # free graphs from the gradient figure
 n_batch = 200
 keys = jax.random.split(jax.random.PRNGKey(5), n_batch)
 batch_params = jax.vmap(model.spec.sample)(keys)
@@ -197,8 +221,10 @@ t_batch = perf_counter() - t0
 
 t0 = perf_counter()
 posterior = Fitter(model, flux_obs, noise, data_type="photometry").run(
-    method="mcmc_nuts", key=jax.random.PRNGKey(2),
-    n_warmup=300, n_samples=300,
+    method="mcmc_nuts",
+    key=jax.random.PRNGKey(2),
+    n_warmup=300,
+    n_samples=300,
 )
 t_nuts = perf_counter() - t0
 
@@ -235,7 +261,9 @@ fig2.savefig(FIG_DIR / "01_wallclock.png", dpi=300, bbox_inches="tight")
 
 # %%
 model_fused = SEDModel.build(
-    ssp_data=ssp, observation=obs, compile="fused",
+    ssp_data=ssp,
+    observation=obs,
+    compile="fused",
     **recipes.mock_recovery_minimal(),
 )
 
