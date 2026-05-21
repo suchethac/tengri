@@ -362,6 +362,7 @@ class StellarSEDComponent:
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
     ) -> ForwardState:
         """Compute stellar SED and publish derived quantities.
 
@@ -378,6 +379,11 @@ class StellarSEDComponent:
         params : mapping
             Receives ``sfh_*``, ``met_*``, ``chem_*`` keys plus the bare
             ``redshift`` from :data:`BARE_NAME_ALLOWLIST`.
+        ssp_data : Any | None, optional
+            SSP data passed as a JIT runtime input (Phase 4-B threading).
+            When provided, uses this instead of ``self.ssp_data``. Enables
+            SSP arrays to be ``Parameter`` ops in compiled code rather than
+            ``Constant`` ops, reducing HLO size and compile time.
 
         Returns
         -------
@@ -385,7 +391,10 @@ class StellarSEDComponent:
             New state with ``sed_intrinsic`` set and 13 derived keys
             published.
         """
-        if self.ssp_data is None:
+        # Phase 4-B: use ssp_data if threaded as JIT input, otherwise fall
+        # back to the closure (for non-JIT paths).
+        ssp = ssp_data if ssp_data is not None else self.ssp_data
+        if ssp is None:
             raise ValueError(
                 "StellarSEDComponent.apply requires ssp_data set on the component. "
                 "Pass it at construction: StellarSEDComponent(ssp_data=ssp)."
@@ -437,8 +446,6 @@ class StellarSEDComponent:
                 f"{_SUPPORTED_MET}. Add a branch in StellarSEDComponent.apply() "
                 f"per docs/dev/20260506-met-mode-wiring-blueprint.md."
             )
-
-        ssp = self.ssp_data
         ssp_ages_yr = (10.0**ssp.ssp_lg_age_gyr) * 1e9
         n_grid = self.config.n_grid
 

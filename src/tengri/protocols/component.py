@@ -508,6 +508,7 @@ class SEDComponent(Protocol):
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
     ) -> ForwardState:
         """Pure JAX step.
 
@@ -526,6 +527,13 @@ class SEDComponent(Protocol):
             Free parameters whose name starts with
             :attr:`parameter_prefix`. The orchestrator does the
             slicing.
+        ssp_data : Any | None, optional
+            SSP stellar population synthesis grid. Passed by the
+            orchestrator for components that need it (typically stellar).
+            Components that do not use it should ignore this argument.
+            When provided, should override any SSP data held in ``self``
+            for JIT purposes (threading as a runtime parameter instead of
+            closure-capturing).
 
         Returns
         -------

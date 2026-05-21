@@ -124,6 +124,7 @@ class IGMSEDComponent:
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
     ) -> ForwardState:
         r"""Multiply ``state.sed_observed`` by the Inoue+2014 transmission.
 

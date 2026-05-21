@@ -354,6 +354,7 @@ class NebularSEDComponent:
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
     ) -> ForwardState:
         r"""Compute nebular SED via the configured backend; add to ``sed_intrinsic``.
 

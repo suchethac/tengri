@@ -3949,7 +3949,7 @@ class SEDModel:
 
         return state_to_emission_lines(self.predict_state(params))
 
-    def predict_state(self, params, fixed_values=None):
+    def predict_state(self, params, fixed_values=None, ssp_data=None):
         """Forward pass via the SEDComponent orchestrator.
 
         Builds a component chain from this model's structural settings
@@ -3972,6 +3972,15 @@ class SEDModel:
             Free parameters keyed by canonical name (``sfh_*``,
             ``met_*``, ``dust_*``, ``agn_*``, ``radio_*``, ``xray_*``,
             ``igm_*``, ``redshift``).
+        fixed_values : Mapping | None, optional
+            Fixed parameter values. When provided, overrides
+            ``self.spec.get_fixed_values()``. Used by :meth:`predict_observables_jit`
+            to thread per-galaxy fixed values as JIT runtime inputs (Phase 4-A).
+        ssp_data : Any | None, optional
+            SSP grid. When provided, passed to components that need it as a
+            JIT runtime input instead of using closure capture (Phase 4-B).
+            Defaults to ``None``, which causes components to use their
+            internal ``self.ssp_data``.
 
         Returns
         -------
@@ -4038,7 +4047,10 @@ class SEDModel:
         if fixed_values is None:
             fixed_values = self.spec.get_fixed_values()
         full_params = {**fixed_values, **params}
-        return run_components(chain, state0, full_params)
+
+        # Phase 4-B: thread ssp_data as JIT input. Defaults to None,
+        # which causes components to use their closure-captured self.ssp_data.
+        return run_components(chain, state0, full_params, ssp_data=ssp_data)
 
     def predict_observables(self, params):
         """Project the orchestrator state into every configured observable.
@@ -4138,8 +4150,15 @@ class SEDModel:
         --------
         predict_observables : un-JIT'd version (debug / one-shot).
         compile_signature : structural fingerprint controlling cache reuse.
+
+        Phase 4-B (2026-05-20): ``self.ssp_data`` is now passed as a JIT
+        runtime input rather than closure-captured. The SSP grid becomes a
+        ``Parameter`` op in the compiled HLO instead of a ``Constant`` op,
+        reducing compile size and time.
         """
-        return self._get_or_build_predict_observables_jit()(params, self.spec.get_fixed_values())
+        return self._get_or_build_predict_observables_jit()(
+            params, self.spec.get_fixed_values(), self.ssp_data
+        )
 
     def _get_or_build_predict_observables_jit(self):
         """Return (and cache) the JIT'd predict_observables closure."""
@@ -4188,8 +4207,8 @@ class SEDModel:
         if getattr(self, "_cached_component_chain", None) is None:
             self._cached_component_chain = self._build_component_chain()
 
-        def _impl(params, fixed_values):
-            state = self.predict_state(params, fixed_values=fixed_values)
+        def _impl(params, fixed_values, ssp_data):
+            state = self.predict_state(params, fixed_values=fixed_values, ssp_data=ssp_data)
             full = {**fixed_values, **params}
             if observation.can_do_spectroscopy:
                 return observation.predict(
