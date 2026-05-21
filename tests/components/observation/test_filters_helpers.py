@@ -1,8 +1,8 @@
-"""Tests for filter discovery helpers (tengri.filters namespace)."""
+"""Tests for filter discovery helpers (tengri.observation.filters namespace)."""
 
 import pytest
 
-from tengri.filters import describe, list_filters, load, suggest
+from tengri.observation.filters import describe, list_filters, load, suggest
 
 pytestmark = pytest.mark.bounds
 

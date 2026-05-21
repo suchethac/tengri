@@ -226,10 +226,10 @@ print(f"Filter names for Photometry():\n{filter_names}")
 
 # %%
 # Suggest a bandset for a low-redshift galaxy (z=0.05) and a high-z target (z=2.5).
-low_z_filters = tengri.filters.suggest(redshift=0.05, coverage="visible_to_nir")
+low_z_filters = tengri.observation.filters.suggest(redshift=0.05, coverage="visible_to_nir")
 print(f"Suggested filters for z=0.05:\n  {low_z_filters}\n")
 
-high_z_filters = tengri.filters.suggest(redshift=2.5, coverage="visible_to_nir")
+high_z_filters = tengri.observation.filters.suggest(redshift=2.5, coverage="visible_to_nir")
 print(f"Suggested filters for z=2.5:\n  {high_z_filters}\n")
 
 # %% [markdown]
@@ -237,7 +237,7 @@ print(f"Suggested filters for z=2.5:\n  {high_z_filters}\n")
 
 # %%
 # Inspect a single filter in detail.
-info = tengri.filters.filter_info("jwst_f200w")
+info = tengri.observation.filters.filter_info("jwst_f200w")
 print(f"Filter info for {info['name']}:")
 print(f"  Facility: {info['facility']}")
 print(f"  λ_eff: {info['lambda_eff_str']}")
@@ -250,10 +250,10 @@ print(f"  FWHM: {info['fwhm_str']}\n")
 # Load a few filters and compute their properties
 test_filters = ["sdss_u", "sdss_g", "2mass_j"]
 for fname in test_filters:
-    fc = tengri.filters.load_filter(fname)
+    fc = tengri.observation.filters.load_filter(fname)
     wave_np, trans_np = (np.asarray(fc.wave), np.asarray(fc.trans))
-    lam_eff = tengri.filters.compute_effective_wavelength(wave_np, trans_np)
-    fwhm = tengri.filters.compute_fwhm(wave_np, trans_np)
+    lam_eff = tengri.observation.filters.compute_effective_wavelength(wave_np, trans_np)
+    fwhm = tengri.observation.filters.compute_fwhm(wave_np, trans_np)
     print(f"{fname:15s}  λ_eff={lam_eff:8.1f} Å  FWHM={fwhm:7.1f} Å")
 
 # %% [markdown]
@@ -440,9 +440,9 @@ print(f"Loading filters: {all_filter_names}\n")
 filters_data = []
 for name in all_filter_names:
     try:
-        fc = tengri.filters.load_filter(name)
+        fc = tengri.observation.filters.load_filter(name)
         wave_np, trans_np = np.asarray(fc.wave), np.asarray(fc.trans)
-        lam_eff = tengri.filters.compute_effective_wavelength(wave_np, trans_np)
+        lam_eff = tengri.observation.filters.compute_effective_wavelength(wave_np, trans_np)
         filters_data.append({
             'name': name,
             'wave': wave_np,

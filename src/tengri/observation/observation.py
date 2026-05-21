@@ -617,6 +617,12 @@ class Observation:
         out: dict[str, jnp.ndarray] = {}
 
         if self.can_do_photometry:
+            # ``predict`` is the canonical exact (compositional) path: it
+            # integrates ``state.sed_intrinsic`` through each filter without
+            # approximation. The precompute LUT path is opt-in via
+            # :meth:`predict_via_precomp` (or its callers); this method does
+            # NOT fall through to the LUT by default — exact-first is the
+            # default semantics for ``observation.predict``.
             phot = jnp.asarray(
                 [
                     compute_flux_density(sed_rest, wave_rest, fw, ft, z, dl_cm)

@@ -22,8 +22,6 @@ SKELETON_MODULES = (
     "tengri.components.igm._params",
     "tengri.components.xray._params",
     "tengri.components.stellar._params",
-    "tengri.components.stellar.sfh._params",
-    "tengri.components.stellar.sps._params",
 )
 
 # Skeletons whose ``PARAMS`` have been populated by later PRs in the
