@@ -295,3 +295,85 @@ def test_predict_observables_jit_routes_through_lut_when_wave_precomp(fixed_z_sp
         "predict_observables_jit must equal predict_observables when both are "
         "routed through the LUT (built with approx=WavePrecomp())."
     )
+
+
+# ── Cross-galaxy compile reuse (Phase 4-A) ───────────────────────────────────
+
+
+def _build_catalog_galaxy(ssp, obs, *, dust_tau_bc_fixed):
+    """Build a catalog model where the per-galaxy parameter is a
+    *runtime-read* fixed value (``dust_tau_bc``), not a chain-construction-
+    time one (``redshift``).
+
+    Redshift specifically gets baked into the stellar component's LUT at
+    chain-build time when no ``WavePrecomp(ztable)`` is in use, so two
+    models with different fixed ``redshift`` would have structurally
+    different chains. Per-galaxy ``dust_tau_bc`` is the cleaner test
+    because dust attenuation is evaluated at runtime from
+    ``params['dust_tau_bc']`` regardless of fixed/free status.
+    """
+    spec = Parameters(
+        mean_sfh_type="dpl",
+        sfh_dpl_alpha=Fixed(2.0),
+        sfh_dpl_beta=Fixed(1.0),
+        sfh_dpl_tau_gyr=Fixed(5.0),
+        sfh_dpl_log_peak_sfr=Fixed(1.0),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.1),  # SAME for both galaxies — chain matches
+        dust_tau_bc=Fixed(dust_tau_bc_fixed),  # ← per-galaxy
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel(spec, ssp, observation=obs)
+
+
+def test_compile_signature_drops_fixed_value(ssp, obs):
+    """Two SEDModels that differ only in fixed-parameter VALUES (not in
+    the set of fixed parameter NAMES) must share a compile_signature.
+    Pre-Phase 4-A the per-galaxy fixed dust_tau_bc was baked into the
+    signature; Phase 4-A drops it so the structural cache hits.
+    """
+    m1 = _build_catalog_galaxy(ssp, obs, dust_tau_bc_fixed=0.1)
+    m2 = _build_catalog_galaxy(ssp, obs, dust_tau_bc_fixed=0.8)
+    assert m1.compile_signature() == m2.compile_signature(), (
+        "Two models with identical structural config but different fixed "
+        "dust_tau_bc values must share a compile_signature after Phase 4-A — "
+        "fixed values are threaded as JIT runtime inputs, not baked into "
+        "the cache key."
+    )
+
+
+def test_cross_galaxy_predict_observables_jit_uses_per_galaxy_values(ssp, obs):
+    """The Phase 4-A payoff: two galaxies with identical structure but
+    different runtime-read fixed values (``dust_tau_bc``) each get the
+    correct per-galaxy result from ``predict_observables_jit`` — even
+    though they share one compiled function under the hood.
+    """
+    m1 = _build_catalog_galaxy(ssp, obs, dust_tau_bc_fixed=0.1)
+    m2 = _build_catalog_galaxy(ssp, obs, dust_tau_bc_fixed=0.8)
+
+    # Shared compile slot.
+    assert m1.compile_signature() == m2.compile_signature()
+
+    # Both calls produce finite photometry.
+    phot1 = m1.predict_observables_jit({}).phot_fnu
+    phot2 = m2.predict_observables_jit({}).phot_fnu
+    assert jnp.all(jnp.isfinite(phot1))
+    assert jnp.all(jnp.isfinite(phot2))
+
+    # The two galaxies produce DIFFERENT photometry — proves each call
+    # threaded its own fixed_values rather than reusing the first model's.
+    # Heavier dust attenuation (galaxy 2) gives fainter flux.
+    assert jnp.all(phot2 < phot1), (
+        "Galaxy 2 (dust_tau_bc=0.8) should be fainter than galaxy 1 "
+        "(dust_tau_bc=0.1) — heavier attenuation. If they're equal or "
+        "reversed, the closure leaked the first model's fixed values."
+    )
+
+    # Cross-check: each result agrees with the non-JIT path on the same
+    # model, confirming the per-galaxy fixed value flowed through both
+    # the orchestrator chain and the observation projection.
+    assert jnp.allclose(phot1, m1.predict_observables({}).phot_fnu, rtol=1e-12)
+    assert jnp.allclose(phot2, m2.predict_observables({}).phot_fnu, rtol=1e-12)

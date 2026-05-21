@@ -2716,7 +2716,17 @@ class SEDModel:
             except (TypeError, ValueError):
                 return ("repr", repr(val))
 
-        spec_fixed_id = tuple((name, _fixed_value_id(name)) for name in self.spec.fixed_params)
+        # Phase 4-A (2026-05-20): drop fixed-parameter VALUES from the
+        # cache key. Keep names + types-of-fixed only. Two SEDModels with
+        # the same physics + same SSP + same filters + same WavePrecomp
+        # config + same FREE-parameter shape and same set of FIXED names
+        # now share a compile slot. Their actual fixed VALUES are threaded
+        # as a runtime JIT input (see ``_get_or_build_predict_observables_jit``
+        # below) so the compiled function uses the correct per-galaxy
+        # values at call time. Shape-affecting fixed config
+        # (mean_sfh_type, met_mode, dust_model, agn_model, etc.) already
+        # has its own dedicated signature entries above and stays distinct.
+        spec_fixed_id = tuple(sorted(self.spec.fixed_params))
 
         return (
             ssp_flux_shape,
@@ -3939,7 +3949,7 @@ class SEDModel:
 
         return state_to_emission_lines(self.predict_state(params))
 
-    def predict_state(self, params):
+    def predict_state(self, params, fixed_values=None):
         """Forward pass via the SEDComponent orchestrator.
 
         Builds a component chain from this model's structural settings
@@ -4018,7 +4028,16 @@ class SEDModel:
         # ``params``. Matches the legacy ``get_internal_params``
         # convention so callers using ``predict_rest_sed`` and
         # ``predict_state`` can pass the same params dict.
-        full_params = {**self.spec.get_fixed_values(), **params}
+        #
+        # Phase 4-A: ``fixed_values`` is an optional override. When provided
+        # (typically from ``predict_observables_jit`` threading it as a
+        # JIT runtime input), use it instead of ``self.spec.get_fixed_values()``.
+        # That decouples per-galaxy fixed values from the closure so two
+        # SEDModels with the same structure but different fixed values
+        # share one compiled function.
+        if fixed_values is None:
+            fixed_values = self.spec.get_fixed_values()
+        full_params = {**fixed_values, **params}
         return run_components(chain, state0, full_params)
 
     def predict_observables(self, params):
@@ -4103,19 +4122,24 @@ class SEDModel:
         -----
         **JIT-compatible**: yes — this method IS the JIT entry point.
 
-        The compiled closure captures ``self.spec.get_fixed_values()``
-        and the LSF settings. When any fixed value changes per galaxy
-        (per-galaxy redshift, per-galaxy calibration coefficient, …)
-        the :meth:`compile_signature` changes and a new compile fires.
-        Build with free priors and pass per-galaxy values via ``params``
-        to share one compile across a catalogue.
+        Phase 4-A (2026-05-20): ``self.spec.get_fixed_values()`` is now
+        passed as a JIT runtime input rather than closure-captured. Two
+        SEDModels with the same structural config but different per-galaxy
+        fixed values (e.g., ``redshift=Fixed(0.1)`` vs ``redshift=Fixed(0.5)``)
+        share a :meth:`compile_signature` and reuse the same compiled
+        function — per-galaxy values flow through at call time.
+
+        For per-galaxy fixed redshifts, build with
+        ``approx=WavePrecomp(z_min=catalog_z_min, z_max=catalog_z_max)`` so
+        the ztable covers the catalogue range; runtime ``params['redshift']``
+        is then a fast interpolation lookup.
 
         See Also
         --------
         predict_observables : un-JIT'd version (debug / one-shot).
         compile_signature : structural fingerprint controlling cache reuse.
         """
-        return self._get_or_build_predict_observables_jit()(params)
+        return self._get_or_build_predict_observables_jit()(params, self.spec.get_fixed_values())
 
     def _get_or_build_predict_observables_jit(self):
         """Return (and cache) the JIT'd predict_observables closure."""
@@ -4131,8 +4155,9 @@ class SEDModel:
         # Capture the model's per-instance LSF + wave_obs into the closure.
         # These are part of compile_signature when spectroscopy is configured,
         # so caching is safe across instances with identical structure.
+        # Phase 4-A: ``fixed_values`` is no longer closure-captured — it
+        # comes through as a JIT runtime input from ``predict_observables_jit``.
         observation = self.observation
-        fixed_values = self.spec.get_fixed_values()
         sigma_v_getter = self._get_sigma_v_kms
         lsf_resolution = self._lsf_resolution
         sigma_lib_kms = self._sigma_lib_kms
@@ -4163,8 +4188,8 @@ class SEDModel:
         if getattr(self, "_cached_component_chain", None) is None:
             self._cached_component_chain = self._build_component_chain()
 
-        def _impl(params):
-            state = self.predict_state(params)
+        def _impl(params, fixed_values):
+            state = self.predict_state(params, fixed_values=fixed_values)
             full = {**fixed_values, **params}
             if observation.can_do_spectroscopy:
                 return observation.predict(

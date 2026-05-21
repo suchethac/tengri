@@ -104,6 +104,45 @@ Either way the public `predict_observables_jit` closure needs to thread
 existing `compile_signature()` keying gates correctness; threading gates
 performance.
 
+## Phase 4-A landed (2026-05-20): runtime-parameter threading
+
+PR #135 includes a smaller cousin of the SSP-threading work — threading
+**fixed parameter values** as a runtime JIT input instead of closure
+capture. This unblocks cross-galaxy compile reuse when galaxies differ
+on a fixed parameter whose value is read at *runtime* (e.g. ``dust_tau_bc``,
+``met_logzsol``, ``neb_logU``) — but **not** for fixed values used at
+*chain-construction time* (notably ``redshift`` when the stellar LUT is
+built at the spec's fixed z).
+
+Concrete changes:
+
+1. ``compile_signature()``'s ``spec_fixed_id`` now keys on fixed-parameter
+   *names* only (sorted tuple), not name+value pairs.
+2. ``predict_state(params, fixed_values=None)`` accepts an optional
+   ``fixed_values`` override; when ``None`` it falls back to
+   ``self.spec.get_fixed_values()``.
+3. ``_get_or_build_predict_observables_jit`` builds a closure of shape
+   ``_impl(params, fixed_values)`` — both are JIT runtime inputs.
+4. ``predict_observables_jit(params)`` threads
+   ``self.spec.get_fixed_values()`` through explicitly:
+   ``fn(params, self.spec.get_fixed_values())``.
+
+Two contract tests (in ``tests/unit/test_approx_kwarg_contract.py``)
+pin the behaviour: same compile_signature across galaxies, correct
+per-galaxy result, agreement with the non-JIT path.
+
+**What this does NOT solve** (still open, the rest of this doc):
+
+- Per-galaxy ``Fixed(redshift)`` catalogs — the stellar LUT is built
+  at the spec's fixed z, so each galaxy has a structurally different
+  chain. The workaround is to build with ``approx=WavePrecomp(z_min, z_max)``
+  covering the catalogue range and pass the per-galaxy z via ``params``
+  on a *free-redshift* spec.
+- SSP-as-HLO-constant: the 114 MB SSP grid is still closure-captured
+  via ``self.ssp_data`` inside the chain's components.
+
+Both remain Phase 4-B / future work.
+
 ## Related catalog-inference concerns (Phase 3d-4, 2026-05-20)
 
 PR #135 introduced ``approx=WavePrecomp(...)`` as the build-time opt-in
