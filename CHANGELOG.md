@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **`tengri.ForwardModel`** — the outer-shell forward-model class.
+  Wraps populations + observation and exposes a single
+  `.predict(params)` method. Tracer-bullet single-population only;
+  multi-population lands in the ADR-0012 follow-up plan. See
+  `docs/dev/forward-model-architecture.md`.
+- **`tengri.Population`** — one (SED, spatial) pair held by
+  `ForwardModel`. Spatial submodel is reserved (`None`) in this
+  slice.
+- **`tengri.protocols.SubModel`** — runtime-checkable Protocol for
+  one mode of `ForwardModel` (SED, spatial, joint). Two-method
+  contract (`run`, `declared_parameters`).
+
 ### Internal
 
 - Scaffolded per-component `_params.py` skeletons (PR1/5 of the
