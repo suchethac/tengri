@@ -76,11 +76,15 @@ class AGNSEDComponentState(SEDComponentState):
     is set on the parent SEDModel. The component uses them at
     :meth:`AGNSEDComponent.apply` time to filter-integrate the
     analytically computed AGN SED and publish ``agn_phot_lnu_precomp``.
+
+    Also optionally caches SKIRTOR torus template grids for JIT threading
+    so they become Parameter ops rather than baked Constants.
     """
 
     name: str = "agn"
     filter_waves: Any | None = None
     filter_trans: Any | None = None
+    skirtor_templates: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -135,25 +139,62 @@ class AGNSEDComponent:
         approx: Mapping[str, bool] | None = None,
         filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> AGNSEDComponentState:
-        """Cache filter passbands when ``approx={'wave_precomp': True}``.
+        r"""Cache filter passbands and SKIRTOR templates for precomputation.
 
-        AGN models are analytic — there's no template grid to integrate
-        at startup time. But when ``wave_precomp`` is on, we store the
-        filter passbands so :meth:`apply` can publish a filter-integrated
-        precompute key (``agn_phot_lnu_precomp``) on top of the existing
-        full-wavelength ``sed_agn``.
+        When ``approx={'wave_precomp': True}`` is set:
+        - Stores filter passbands so :meth:`apply` can publish
+          ``agn_phot_lnu_precomp`` (filter-integrated AGN photometry).
+        - If the AGN model is "skirtor", pre-loads the template grids
+          so they thread through JIT as Parameter ops.
+
+        Parameters
+        ----------
+        ssp_data : Any | None
+            Unused; accepted for Protocol uniformity.
+        wave_grid : ndarray | None
+            Unused; accepted for Protocol uniformity.
+        approx : Mapping[str, bool] | None
+            Approximation flags. When ``approx.get('wave_precomp')``
+            is ``True``, cache templates and filters.
+        filters : tuple of (wave, trans) pairs | None
+            Filter wavelengths and transmissions to cache.
+
+        Returns
+        -------
+        AGNSEDComponentState
+            State with optionally-populated filter_waves, filter_trans,
+            and skirtor_templates.
         """
         del ssp_data, wave_grid
         approx = approx or {}
+
+        filter_waves = None
+        filter_trans = None
+        skirtor_templates = None
+
         if approx.get("wave_precomp") and filters is not None:
             filter_waves = tuple(jnp.asarray(fw) for fw, _ in filters)
             filter_trans = tuple(jnp.asarray(ft) for _, ft in filters)
-            return AGNSEDComponentState(
-                name=self.name,
-                filter_waves=filter_waves,
-                filter_trans=filter_trans,
-            )
-        return AGNSEDComponentState(name=self.name)
+
+        # SKIRTOR torus models require template grids. Load them here so
+        # they're available for JIT threading.
+        if self.config.model == "skirtor":
+            try:
+                from tengri.components.agn.skirtor import _load_skirtor_default
+
+                skirtor_templates = _load_skirtor_default()
+            except Exception:
+                # If SKIRTOR template loading fails (file not found),
+                # gracefully continue without threading. The apply() path
+                # will fall back to lazy loading.
+                pass
+
+        return AGNSEDComponentState(
+            name=self.name,
+            filter_waves=filter_waves,
+            filter_trans=filter_trans,
+            skirtor_templates=skirtor_templates,
+        )
 
     def apply(
         self,

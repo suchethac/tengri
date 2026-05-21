@@ -4036,8 +4036,12 @@ class SEDModel:
             cls_name = type(neb_inst).__name__.lower()
             if "bakedin" in cls_name:
                 neb_backend_name = "baked_in"
+            elif "cb19" in cls_name:
+                neb_backend_name = "cb19"
             elif "cloudygrid" in cls_name:
                 neb_backend_name = "cloudy_grid"
+            elif "mappings" in cls_name:
+                neb_backend_name = "mappings"
             elif "cue" in cls_name:
                 neb_backend_name = "cue"
             elif "shock" in cls_name:
@@ -4282,7 +4286,8 @@ class SEDModel:
         dust : str
             Dust attenuation law. ``"charlot_fall"`` (default), ``"calzetti"``, etc.
         nebular : str or None
-            Nebular emission backend. ``"baked_in"``, ``"cloudy"``, ``"cue"``, or None.
+            Nebular emission backend. ``"baked_in"``, ``"cloudy_grid"``, ``"cb19"``,
+            ``"mappings"``, ``"cue"``, ``"shock"``, or None.
         agn : str or None
             AGN model. None (disabled) or any AGN model name.
         redshift : float or str
