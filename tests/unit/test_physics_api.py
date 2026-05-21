@@ -268,7 +268,7 @@ class TestAGNConfig:
         assert hasattr(tengri, "AGNConfig")
 
     def test_default_construction(self):
-        from tengri.components.agn.agn_config import AGNConfig
+        from tengri.components.agn import AGNConfig
 
         cfg = AGNConfig()
         assert cfg.disc == "multicolor"
@@ -277,27 +277,27 @@ class TestAGNConfig:
         assert cfg.polar_dust is False
 
     def test_custom_construction(self):
-        from tengri.components.agn.agn_config import AGNConfig
+        from tengri.components.agn import AGNConfig
 
         cfg = AGNConfig(disc="kubota_done", torus="skirtor", nlr="cue", blr=True, polar_dust=True)
         assert cfg.disc == "kubota_done"
         assert cfg.polar_dust is True
 
     def test_frozen_immutable(self):
-        from tengri.components.agn.agn_config import AGNConfig
+        from tengri.components.agn import AGNConfig
 
         cfg = AGNConfig()
         with pytest.raises((AttributeError, TypeError)):
             cfg.disc = "adaf"  # type: ignore[misc]
 
     def test_invalid_disc_raises(self):
-        from tengri.components.agn.agn_config import AGNConfig
+        from tengri.components.agn import AGNConfig
 
         with pytest.raises(ValueError, match="disc"):
             AGNConfig(disc="invalid_model")
 
     def test_invalid_torus_raises(self):
-        from tengri.components.agn.agn_config import AGNConfig
+        from tengri.components.agn import AGNConfig
 
         with pytest.raises(ValueError, match="torus"):
             AGNConfig(torus="photon_torpedo")
