@@ -9,6 +9,7 @@ computes rest-frame specific luminosity L_nu over its spectral domain.
 # Import canonical submodules eagerly so users can write
 # ``tengri.components.dust`` etc. without an explicit submodule import.
 from tengri.components import agn, dust, igm, nebular, radio, stellar, xray
+from tengri.components.sed_model_component import SEDModelComponent
 
 __all__ = [
     "agn",
@@ -17,6 +18,7 @@ __all__ = [
     "nebular",
     "radio",
     "register_component",
+    "SEDModelComponent",
     "stellar",
     "xray",
 ]
