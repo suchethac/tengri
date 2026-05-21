@@ -34,7 +34,8 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
       - run: python tools/check_param_prefixes.py
-      - run: pytest tests/unit/test_alpha_fe.py tests/unit/test_stellar_skeleton.py -q --no-header
+      - run: python tools/check_test_markers.py
+      - run: pytest tests/components/sps/test_alpha_fe.py tests/components/stellar/test_stellar_skeleton.py -q --no-header
 
   test:
     runs-on: ubuntu-latest
@@ -48,4 +49,4 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
-      - run: pytest tests/unit/ -q
+      - run: pytest tests/ -q --ignore=tests/crossval
