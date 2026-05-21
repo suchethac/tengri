@@ -138,6 +138,30 @@ class TestStepFunctionRegression:
         )
 
 
+class TestDirichletSFH:
+    """Tests for Dirichlet SFH mass conservation."""
+
+    def test_mass_fractions_sum_to_one(self):
+        """Stick-breaking mass fractions must sum to 1."""
+        from tengri.components.stellar.sfh.nonparametric import _stick_breaking
+
+        z = jnp.array([0.3, 0.5, 0.7, 0.2, 0.8, 0.4])
+        fracs = _stick_breaking(z)
+        assert jnp.allclose(jnp.sum(fracs), 1.0, atol=1e-10)
+
+    def test_total_mass_conserved(self):
+        """Integrated SFR * dt should match specified total mass."""
+        log_mass = 10.0
+        equal_z = [1 / 7, 1 / 6, 1 / 5, 1 / 4, 1 / 3, 1 / 2]
+        kwargs = {f"z_frac_{i}": equal_z[i] for i in range(6)}
+        sfr = dirichlet(AGE_YR, log_total_mass=log_mass, **kwargs)
+
+        integrated_mass = jnp.trapezoid(sfr, AGE_YR)
+        expected_mass = 10.0**log_mass
+        relative_error = jnp.abs(integrated_mass - expected_mass) / expected_mass
+        assert relative_error < 0.25, f"Mass error: {relative_error:.3f}"
+
+
 # ── make_agebins_from_zred ────────────────────────────────────────
 
 
@@ -247,6 +271,38 @@ class TestPSBContinuitySFH:
         fn = jax.jit(functools.partial(psb_continuity, bin_edges_gyr=default_edges))
         sfr = fn(age_yr, 10.0, tlast_gyr=0.5, tflex_gyr=2.0, ratio_young=0.0, ratio_old_0=0.0)
         assert jnp.all(jnp.isfinite(sfr))
+
+    def test_grad_wrt_log_total_mass(self, age_yr, default_edges):
+        g = jax.grad(
+            lambda m: jnp.sum(
+                psb_continuity(
+                    age_yr,
+                    m,
+                    tlast_gyr=0.5,
+                    tflex_gyr=2.0,
+                    bin_edges_gyr=default_edges,
+                    ratio_young=0.0,
+                    ratio_old_0=0.0,
+                )
+            )
+        )(10.0)
+        assert jnp.isfinite(g) and g > 0
+
+    def test_grad_wrt_ratio_young(self, age_yr, default_edges):
+        g = jax.grad(
+            lambda r: jnp.sum(
+                psb_continuity(
+                    age_yr,
+                    10.0,
+                    tlast_gyr=0.5,
+                    tflex_gyr=2.0,
+                    bin_edges_gyr=default_edges,
+                    ratio_young=r,
+                    ratio_old_0=0.0,
+                )
+            )
+        )(0.0)
+        assert jnp.isfinite(g)
 
 
 # ── Registry bin_edges_gyr support ───────────────────────────────

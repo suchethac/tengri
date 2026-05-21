@@ -251,6 +251,39 @@ class TestRegistryIntegration:
         assert "sfh_field_psd_sigma" in params
 
 
+class TestRegistryBinEdges:
+    """Tests for resolve_sfh bin_edges_gyr argument."""
+
+    def test_custom_edges_passed_through(self):
+        from tengri.components.stellar.sfh.nonparametric import make_agebins_from_zred
+
+        edges = make_agebins_from_zred(2.0, n_bins=6)
+        fn, params, _, _ = resolve_sfh("continuity", bin_edges_gyr=edges)
+        age_yr = jnp.linspace(1e6, 3.3e9, 100)
+        kwargs = {v[0]: 0.0 for v in params.values() if v[0] != "log_total_mass"}
+        sfr = fn(age_yr, log_total_mass=10.0, **kwargs)
+        assert jnp.all(jnp.isfinite(sfr))
+        assert jnp.any(sfr > 0)
+
+    def test_dirichlet_custom_edges(self):
+        from tengri.components.stellar.sfh.nonparametric import make_agebins_from_zred
+
+        edges = make_agebins_from_zred(3.0, n_bins=6)
+        fn, _, param_map, _ = resolve_sfh("dirichlet", bin_edges_gyr=edges)
+        age_yr = jnp.linspace(1e6, 2.0e9, 100)
+        # param_map: {public_name: (internal_name, scale, offset)}
+        kwargs = {v[0]: 0.5 for v in param_map.values() if v[0] != "log_total_mass"}
+        sfr = fn(age_yr, log_total_mass=10.0, **kwargs)
+        assert jnp.all(jnp.isfinite(sfr))
+
+    def test_none_uses_default_edges(self):
+        fn, params, _, _ = resolve_sfh("continuity", bin_edges_gyr=None)
+        age_yr = jnp.linspace(1e6, 13.7e9, 100)
+        kwargs = {v[0]: 0.0 for v in params.values() if v[0] != "log_total_mass"}
+        sfr = fn(age_yr, log_total_mass=10.0, **kwargs)
+        assert jnp.all(jnp.isfinite(sfr))
+
+
 # ── Bursty continuity prior (Tacchella+2022) ─────────────────────
 
 
@@ -389,3 +422,30 @@ class TestContinuityFlexSFH:
         logp_zero = continuity_flex_prior_logp(0.0, jnp.array([0.0, 0.0]), 0.0)
         logp_nonzero = continuity_flex_prior_logp(1.0, jnp.array([1.0, 1.0]), 1.0)
         assert float(logp_zero) > float(logp_nonzero)
+
+
+# ── Singletons ────────────────────────────────────────────────────
+
+
+def test_default_7_bins():
+    """Default configuration uses 7 bins (8 edges)."""
+    from tengri.components.stellar.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR, DEFAULT_N_BINS
+
+    assert DEFAULT_N_BINS == 7
+    assert len(DEFAULT_BIN_EDGES_GYR) == 8
+
+
+def test_resolved_fn_callable():
+    """The composed function from resolve_sfh should be callable."""
+    fn, _params, _param_map, _settings = resolve_sfh("continuity")
+
+    # Build internal kwargs
+    internal_kw = {
+        "log_total_mass": 10.0,
+    }
+    for i in range(6):
+        internal_kw[f"ratio_{i}"] = 0.0
+
+    sfr = fn(AGE_YR, **internal_kw)
+    assert sfr.shape == AGE_YR.shape
+    assert jnp.all(jnp.isfinite(sfr))

@@ -35,6 +35,17 @@ class TestRegistration:
 
         assert "casey2012" in DUST_EMISSION_MODELS
 
+    def test_in_registry(self):
+        from tengri.components.dust.emission import DUST_EMISSION_MODELS
+
+        assert "energy_balance_split" in DUST_EMISSION_MODELS
+
+    def test_resolve_emission_model(self):
+        from tengri.components.dust.emission import resolve_emission_model
+
+        fn = resolve_emission_model("energy_balance_split")
+        assert callable(fn)
+
 
 # ── Registry utilities ────────────────────────────────────────────
 
@@ -189,3 +200,27 @@ class TestModuleLevelAliases:
         from tengri.components.dust import emission as em
 
         assert callable(em.draine_li2014)
+
+
+# ── TestModifiedBlackbody registry check ──────────────────────────
+
+
+class TestModifiedBlackbody:
+    """Standalone tests for modified_blackbody."""
+
+    def test_registered_in_models(self):
+        from tengri.components.dust.emission import DUST_EMISSION_MODELS
+
+        assert "modified_blackbody" in DUST_EMISSION_MODELS
+
+
+# ── TestCasey2012 registry check ──────────────────────────────────
+
+
+class TestCasey2012:
+    """Standalone tests for casey2012 (MBB + mid-IR power law)."""
+
+    def test_registered_in_models(self):
+        from tengri.components.dust.emission import DUST_EMISSION_MODELS
+
+        assert "casey2012" in DUST_EMISSION_MODELS

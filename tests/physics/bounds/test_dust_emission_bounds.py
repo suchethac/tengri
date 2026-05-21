@@ -366,3 +366,46 @@ class TestCmbContrastFactorBounds:
         wave = jnp.logspace(3, 9, 300)
         factor = cmb_contrast_factor(wave, T_eff=35.0, redshift=3.0)
         assert jnp.all(jnp.isfinite(factor))
+
+
+# ── Additional TestCasey2012 bounds tests ─────────────────────────
+
+
+class TestCasey2012DetailedBounds:
+    """Additional detailed bounds tests for casey2012."""
+
+    @pytest.fixture
+    def wave_ir(self):
+        """Broad IR wavelength grid (Angstrom), 1 μm – 10 mm."""
+        return jnp.logspace(4, 9, 500)
+
+    def test_alpha_affects_mid_ir(self, wave_ir):
+        """Larger dust_alpha_mir increases mid-IR power-law contribution."""
+        from tengri.components.dust.emission import casey2012
+
+        mir_mask = (wave_ir > 8e4) & (wave_ir < 4e5)
+        sed_low = casey2012(wave_ir, L_absorbed=1e10, dust_alpha_mir=1.5)
+        sed_high = casey2012(wave_ir, L_absorbed=1e10, dust_alpha_mir=3.0)
+        # Different alpha → different MIR shapes
+        assert not jnp.allclose(sed_low[mir_mask], sed_high[mir_mask], rtol=0.01)
+
+    def test_mid_ir_excess_vs_pure_mbb(self, wave_ir):
+        """For T=35K cold dust, casey2012 has LESS 8–40 μm flux than a pure MBB.
+
+        The Casey (2012) model blends a power-law (short-λ) with the MBB (long-λ)
+        using a transition function f(λ).  At 8–40 μm the MBB component is
+        suppressed by (1-f) while the power-law Wien cutoff exp(-hν/kT) is
+        negligible for T=35K (x ≈ 10–51 at 40–8 μm).  The casey2012 mid-IR
+        flux is therefore lower than a pure MBB normalized to the same L_absorbed.
+        The model's value lies in its shape flexibility: alpha_mir controls the
+        power-law slope for hotter dust / warmer galaxies.
+        """
+        from tengri.components.dust.emission import casey2012, modified_blackbody
+
+        L_abs = 1e10
+        sed_casey = casey2012(wave_ir, L_absorbed=L_abs, dust_T=35.0)
+        sed_mbb = modified_blackbody(wave_ir, L_absorbed=L_abs, dust_T=35.0)
+
+        # 8–40 μm in Angstrom — casey2012 MBB suppressed by (1-f) transition factor
+        mir_mask = (wave_ir > 8e4) & (wave_ir < 4e5)
+        assert jnp.sum(sed_casey[mir_mask]) < jnp.sum(sed_mbb[mir_mask])

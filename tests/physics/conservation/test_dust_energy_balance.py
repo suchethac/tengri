@@ -203,3 +203,54 @@ class TestComputeAbsorbedLuminosity:
             compute_absorbed_luminosity_from_tau(wave, L_nu, jnp.full_like(wave, 100.0))
         )
         np.testing.assert_allclose(large_tau, full, rtol=1e-4)
+
+
+class TestAGNContribution:
+    """AGN IR adds extra luminosity beyond stellar absorption."""
+
+    @pytest.fixture
+    def wavelengths(self):
+        """IR wavelength grid (Angstrom), 1 -- 1000 um."""
+        return jnp.linspace(1e4, 1e7, 500)
+
+    @pytest.fixture
+    def L_absorbed(self):
+        """Typical absorbed luminosity in Lsun."""
+        return 1e10
+
+    def test_agn_adds_luminosity(self, wavelengths, L_absorbed):
+        from tengri.components.dust.emission import energy_balance_split
+
+        sed_no_agn = energy_balance_split(
+            wavelengths,
+            L_absorbed,
+            L_agn_ir=0.0,
+        )
+        sed_with_agn = energy_balance_split(
+            wavelengths,
+            L_absorbed,
+            L_agn_ir=5e9,
+        )
+        # With AGN, total integrated flux should be larger
+        nu = 2.99792458e10 / (wavelengths * 1e-8)
+        integral_no_agn = -jnp.trapezoid(sed_no_agn, nu)
+        integral_with_agn = -jnp.trapezoid(sed_with_agn, nu)
+        assert integral_with_agn > integral_no_agn
+
+    def test_agn_only(self, wavelengths):
+        """If L_absorbed_stellar=0, only AGN contributes."""
+        from tengri.components.dust.emission import energy_balance_split
+
+        L_agn = 1e10
+        sed = energy_balance_split(
+            wavelengths,
+            L_absorbed_stellar=0.0,
+            L_agn_ir=L_agn,
+        )
+        # Should be non-zero
+        assert jnp.any(sed > 0.0)
+
+        # Integral should approximate L_agn
+        nu = 2.99792458e10 / (wavelengths * 1e-8)
+        integral = -jnp.trapezoid(sed, nu)
+        assert jnp.isclose(integral, L_agn, rtol=0.05)

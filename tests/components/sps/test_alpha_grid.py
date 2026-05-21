@@ -265,6 +265,56 @@ class TestInterpolateMetAlpha:
         )
         assert jnp.all(jnp.isfinite(result))
 
+    def test_differentiable_wrt_log_z(self, alpha_ssp_grid):
+        """Gradient w.r.t. log_z should be finite and match FD (gradient test)."""
+        import numpy as np
+
+        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
+
+        g = alpha_ssp_grid
+
+        def total_flux(lz):
+            return jnp.sum(
+                interpolate_met_alpha(
+                    g["ssp_flux"],
+                    g["ssp_lgmet"],
+                    g["ssp_alpha_fe"],
+                    log_z=lz,
+                    alpha_fe=0.0,
+                )
+            )
+
+        grad_jax = float(jax.grad(total_flux)(-0.7))
+        grad_fd = fd_grad(total_flux, -0.7)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
+
+    def test_differentiable_wrt_alpha_fe(self, alpha_ssp_grid):
+        """Gradient w.r.t. [α/Fe] should be finite and match FD (gradient test)."""
+        import numpy as np
+
+        from tengri.components.stellar.sps.dsps_wrapper import interpolate_met_alpha
+
+        g = alpha_ssp_grid
+
+        def total_flux(afe):
+            return jnp.sum(
+                interpolate_met_alpha(
+                    g["ssp_flux"],
+                    g["ssp_lgmet"],
+                    g["ssp_alpha_fe"],
+                    log_z=-0.7,
+                    alpha_fe=afe,
+                )
+            )
+
+        grad_jax = float(jax.grad(total_flux)(0.1))
+        grad_fd = fd_grad(total_flux, 0.1)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
+
 
 # ── Per-age evolving (Z, [α/Fe]) interpolation ────────────────────
 
@@ -422,6 +472,24 @@ class TestComputeAlphaFeEvolving:
         result = compute_alpha_fe_evolving(lg_ages, 0.3, 0.3, 13.7)
 
         assert jnp.allclose(result, 0.3, atol=1e-10)
+
+    def test_differentiable(self):
+        """Should be differentiable w.r.t. alpha_fe_old and match FD (gradient test)."""
+        import numpy as np
+
+        from tengri.components.stellar.sps.dsps_wrapper import compute_alpha_fe_evolving
+
+        lg_ages = jnp.linspace(-2.0, 1.1, 20)
+
+        def total(alpha_old):
+            return jnp.sum(compute_alpha_fe_evolving(lg_ages, alpha_old, 0.0, 13.7))
+
+        grad_jax = float(jax.grad(total)(0.4))
+        grad_fd = fd_grad(total, 0.4)
+        np.testing.assert_allclose(
+            grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
+        )
+        assert grad_jax > 0  # more alpha_old → higher total
 
 
 # ── Effective metallicity (backward compatibility) ────────────────
