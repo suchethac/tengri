@@ -46,6 +46,12 @@ from tengri.components.dust.attenuation import (
     wg00_shell,
 )
 
+# SEDModelComponent-style attenuation ports
+from tengri.components.dust.calzetti_model import Calzetti as Calzetti
+from tengri.components.dust.mw_model import MilkyWay as MilkyWay
+from tengri.components.dust.salim18_model import Salim18 as Salim18
+from tengri.components.dust.smc_model import SMC as SMC
+
 # New names
 from tengri.components.dust.drude_profiles import (
     N_PAH_FEATURES,
@@ -145,6 +151,11 @@ _CURATED_DIR = (
     "draine_li2014",
     "modified_blackbody",
     "themis",
+    # SEDModelComponent-style attenuation ports
+    "Calzetti",
+    "MilkyWay",
+    "Salim18",
+    "SMC",
     # Composable SEDComponent adapter (template= dispatch)
     "DustEmissionSEDComponent",
     "DustEmissionSEDComponentConfig",
