@@ -13,7 +13,7 @@ four separate modules:
    closed-form formula, atlas interpolation, or NN emulator.
 2. **Component adapter** (`components/<domain>/component.py`) — the bare
    `SEDComponent` Protocol implementation with `declared_parameters()`,
-   `publishes()`, `precompute()`, and `apply()`.
+   `outputs()`, `precompute()`, and `apply()`.
 3. **Parameter registration** (`parameters/_param_defs.py`) — priors and units
    for every free parameter (must match `declared_parameters()` exactly).
 4. **Builder integration** (`parameters/groups.py`) — nested-dict entries mapping
@@ -60,8 +60,8 @@ class ModifiedBlackbody(SEDModelComponent):
     beta = Uniform( 1.0,  3.0, "dust emissivity index", units="")
 
     # Cross-component contract
-    reads     = {"L_absorbed": "erg/s"}
-    publishes = {"L_ir": "erg/s"}
+    inputs     = {"L_absorbed": "erg/s"}
+    outputs = {"L_ir": "erg/s"}
 
     def load(self, wave):
         return None     # no precomputation
@@ -93,11 +93,11 @@ class ModifiedBlackbody(SEDModelComponent):
 
 4. **`apply(state, params)`** dispatches to the subclass `predict()`:
    - Slice `params` to prefix-stripped keys (e.g., `dust_T` → `p['T']`)
-   - Look up each `reads` key in `state.derived` with type-safe fallback
+   - Look up each `inputs` key in `state.derived` with type-safe fallback
    - Call `predict(p, sed_in, wave, **reads_dict)` (pure JAX)
    - Merge returned `published` dict into `state.derived`
 
-5. **Cross-component contract** — `reads` and `publishes` are class-level
+5. **Cross-component contract** — `inputs` and `outputs` are class-level
    dicts (or `None` for empty). The base class converts them to
    `tuple[DerivedKey, ...]` via `outputs()` and `optional_inputs()` that
    the validator (ADR-0009) understands. Units are validated at construction
@@ -144,7 +144,7 @@ as efficient as a hand-written adapter.
 
 - **Auto-discovery by walking `_state` dataclass fields.** Conflates two concerns:
   "what static data do I need at apply time" and "what metadata about my
-  component." Explicit `reads`/`publishes` dicts are clearer.
+  component." Explicit `inputs`/`outputs` dicts are clearer.
 
 - **Refactoring the bare `SEDComponent` Protocol itself.** Rejected. The Protocol
   is correct and value is high for the rare component that doesn't fit the
@@ -164,7 +164,7 @@ as efficient as a hand-written adapter.
   lines for simple closed-form). Write the physics and metadata; the framework
   handles parameters, registration, and cross-component wiring.
 - **Cross-component contract is visible at the top of every class.** The
-  `reads` and `publishes` dicts appear at the class level, no need to read
+  `inputs` and `outputs` dicts appear at the class level, no need to read
   `declared_parameters()` and `apply()` to understand dependencies.
 - **Parameter single source of truth.** The prior object lives in the class
   definition; no separate _param_defs.py entries to keep in sync.
@@ -189,7 +189,7 @@ as efficient as a hand-written adapter.
   - Simple models (closed-form) have `self.data = None` and pay zero cost.
 
 - **Registry is module-local.** The registry dict `_REGISTRY` lives in
-  `sed_model_component.py`. Imports must be explicit: `SEDModel.build()` reads
+  `sed_model_component.py`. Imports must be explicit: `SEDModel.build()` inputs
   from the registry at module-import time. This is intentional — domains
   (dust, AGN, etc.) can be in separate subpackages without collisions.
 
@@ -214,10 +214,10 @@ as efficient as a hand-written adapter.
 - `declared_parameters()` returns a list of `ParamDeclaration` objects
   synthesised from the class-level prior objects. Units are embedded in the
   `Prior` instance, so there's a single source of truth.
-- Type-safe `reads` lookup: The base class's `apply()` inspects the
-  `optional_inputs()` method (which reflects the `reads` dict). Missing keys
+- Type-safe `inputs` lookup: The base class's `apply()` inspects the
+  `optional_inputs()` method (which reflects the `inputs` dict). Missing keys
   are looked up in `state.derived.get(key, fallback)` where fallback is `0.0`
-  (numeric, JAX-safe). If a key is declared in `reads` but missing, the return
+  (numeric, JAX-safe). If a key is declared in `inputs` but missing, the return
   is a traced zero, not an exception.
 - `__init_subclass__` fires when a subclass is *defined*, not instantiated.
   The registry is populated at module-import time, so `SEDModel.build()` sees
