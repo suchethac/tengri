@@ -33,6 +33,7 @@ EXPECTED_ALL = frozenset(
         "Galaxy",
         "Parameters",
         "SEDModel",
+        "WavePrecomp",
         # Component / pipeline contract (astronomer-facing extension surface)
         "DerivedBundle",
         "DerivedKey",
