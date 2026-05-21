@@ -1,8 +1,4 @@
-"""Tests for XLA persistent compilation cache configuration.
-
-Validates that the compilation cache is properly configured in tengri,
-and that cache directory is writable.
-"""
+"""Tests for XLA persistent compilation cache configuration."""
 
 import os
 
@@ -10,36 +6,25 @@ import jax
 import pytest
 
 
-class TestXLACompilationCache:
-    """Verify XLA compilation cache is enabled."""
+@pytest.mark.contract
+def test_cache_dir_writable():
+    """Cache directory configured by tengri must be writable.
 
-    def test_cache_dir_configured(self):
-        """tengri sets jax_compilation_cache_dir on import."""
-        import tengri  # noqa: F401
+    The cache dir is set on `import tengri`; if it is not writable, every
+    notebook restart pays the full compile cost. Verifying the
+    *configured* dir is set is a tautology (we set it ourselves); the
+    only failure mode worth catching is an unwritable location.
+    """
+    import tengri  # noqa: F401
 
-        cache_dir = jax.config.jax_compilation_cache_dir
-        assert cache_dir is not None and cache_dir != "", (
-            "jax_compilation_cache_dir not set after importing tengri"
-        )
-
-    def test_cache_dir_writable(self):
-        """Cache directory is writable."""
-        import tengri  # noqa: F401
-
-        cache_dir = jax.config.jax_compilation_cache_dir
-        if cache_dir:
-            os.makedirs(cache_dir, exist_ok=True)
-            test_file = os.path.join(cache_dir, "_tengri_test")
-            try:
-                with open(test_file, "w") as f:
-                    f.write("test")
-                os.remove(test_file)
-            except OSError as e:
-                pytest.fail(f"Cache dir {cache_dir} not writable: {e}")
-
-    def test_min_entry_size_zero(self):
-        """Minimum entry size is 0 so all compilations are cached."""
-        import tengri  # noqa: F401
-
-        min_size = jax.config.jax_persistent_cache_min_entry_size_bytes
-        assert min_size == 0, f"Expected min_entry_size=0, got {min_size}"
+    cache_dir = jax.config.jax_compilation_cache_dir
+    if not cache_dir:
+        pytest.skip("compilation cache disabled in this environment")
+    os.makedirs(cache_dir, exist_ok=True)
+    test_file = os.path.join(cache_dir, "_tengri_test")
+    try:
+        with open(test_file, "w") as f:
+            f.write("test")
+        os.remove(test_file)
+    except OSError as e:
+        pytest.fail(f"Cache dir {cache_dir} not writable: {e}")

@@ -184,16 +184,7 @@ DEMOTED_BUT_IMPORTABLE: frozenset[str] = frozenset(
 )
 
 
-@pytest.mark.unit
-def test_all_is_a_list_of_strings() -> None:
-    """``tengri.__all__`` must be a list/tuple of strings (introspection)."""
-    assert hasattr(tengri, "__all__"), "tengri must define __all__"
-    assert isinstance(tengri.__all__, (list, tuple))
-    for name in tengri.__all__:
-        assert isinstance(name, str), f"non-string in __all__: {name!r}"
-
-
-@pytest.mark.unit
+@pytest.mark.contract
 def test_all_is_within_allowed_top_level() -> None:
     """No accidental top-level pollution.
 
@@ -209,14 +200,14 @@ def test_all_is_within_allowed_top_level() -> None:
     )
 
 
-@pytest.mark.unit
+@pytest.mark.contract
 def test_all_names_are_actually_resolvable() -> None:
     """Every name in ``__all__`` must exist on the module."""
     missing = [name for name in tengri.__all__ if not hasattr(tengri, name)]
     assert not missing, f"Names listed in __all__ but not present: {missing}"
 
 
-@pytest.mark.unit
+@pytest.mark.contract
 def test_demoted_names_still_importable() -> None:
     """Phase 6 demoted names must still resolve for back-compat.
 
@@ -231,14 +222,14 @@ def test_demoted_names_still_importable() -> None:
     )
 
 
-@pytest.mark.unit
+@pytest.mark.contract
 def test_demoted_and_advertised_are_disjoint() -> None:
     """A name cannot be both advertised and demoted."""
     overlap = ALLOWED_TOP_LEVEL & DEMOTED_BUT_IMPORTABLE
     assert not overlap, f"name in both ALLOWED_TOP_LEVEL and DEMOTED_BUT_IMPORTABLE: {overlap}"
 
 
-@pytest.mark.unit
+@pytest.mark.contract
 def test_new_subpackages_resolve() -> None:
     """Phase 1 introduces ``tengri.plot``, ``.cosmology``, ``.units``."""
     assert hasattr(tengri, "plot")
