@@ -1067,6 +1067,10 @@ def describe(name: str) -> _DescribeRecord:
     KeyError
         If the name is not registered anywhere.
     """
+    # Core classes — ForwardModel, SEDModel, Parameters, Fitter, Posterior, Observation.
+    if name in _CORE_CLASSES:
+        return _DescribeRecord(_CORE_CLASSES[name])
+
     for fn in (
         list_inference_methods,
         list_agn_models,
@@ -1083,9 +1087,8 @@ def describe(name: str) -> _DescribeRecord:
                 return _DescribeRecord(entry)
     raise KeyError(
         f"Unknown name '{name}'.  Try tengri.summary() for a menu of every "
-        "AGN model, dust law, SFH variant, nebular backend, component, "
-        "filter, or "
-        "inference method that exists."
+        "core class, AGN model, dust law, SFH variant, nebular backend, "
+        "component, filter, or inference method that exists."
     )
 
 
@@ -1320,6 +1323,61 @@ def list_all() -> dict[str, _RegistryTable]:
 # ──────────────────────────────────────────────────────────────────
 
 
+_CORE_CLASSES: dict[str, dict[str, str]] = {
+    "SEDModel": {
+        "kind": "core_class",
+        "name": "SEDModel",
+        "module": "tengri.forward.sed_model",
+        "purpose": (
+            "Differentiable SED forward chain "
+            "(stellar → dust → nebular → AGN → IGM → radio → X-ray)."
+        ),
+        "see_also": "tengri.SEDModel.build(...)",
+    },
+    "ForwardModel": {
+        "kind": "core_class",
+        "name": "ForwardModel",
+        "module": "tengri.forward.forward_model",
+        "purpose": (
+            "Thin outer shell that inference talks to. Owns an SED chain and "
+            "an observation; exposes .predict(params) → channel dict."
+        ),
+        "see_also": "tengri.ForwardModel.build(sed=..., observation=...)",
+    },
+    "Parameters": {
+        "kind": "core_class",
+        "name": "Parameters",
+        "module": "tengri.parameters.parameters",
+        "purpose": "Free / fixed parameter spec with priors.",
+        "see_also": "tengri.Parameters(...)",
+    },
+    "Fitter": {
+        "kind": "core_class",
+        "name": "Fitter",
+        "module": "tengri.inference.fitter",
+        "purpose": (
+            "Inference driver. Runs MAP / NUTS / VI / Pathfinder / Ray Tracing "
+            "/ geoVI / evidence against a forward model."
+        ),
+        "see_also": 'fitter.run("map") or "nuts" / "vi" / "pathfinder" / ...',
+    },
+    "Posterior": {
+        "kind": "core_class",
+        "name": "Posterior",
+        "module": "tengri.inference.posterior",
+        "purpose": ("Return value of fitter.run(). Posterior samples / mean / median / 68% CI."),
+        "see_also": "posterior.summary()",
+    },
+    "Observation": {
+        "kind": "core_class",
+        "name": "Observation",
+        "module": "tengri.observation.observation",
+        "purpose": "Frozen configuration container for photometry + spectroscopy.",
+        "see_also": "tengri.Observation(photometry=..., spectroscopy=...)",
+    },
+}
+
+
 def summary() -> None:
     """Print a one-line count of every menu in tengri.
 
@@ -1348,6 +1406,12 @@ def summary() -> None:
         (len(list_inference_methods()), "total inference methods", "list_inference_methods()"),
     ]
     _display("\ntengri — what's available:\n")
+    _display("  Core classes (the four nouns inference talks to):")
+    _display("    tengri.SEDModel         differentiable SED forward chain")
+    _display("    tengri.ForwardModel     outer shell — owns SED + observation, exposes .predict")
+    _display("    tengri.Parameters       priors + fixed values")
+    _display("    tengri.Fitter           inference driver")
+    _display("")
     width = max(len(label) for _, label, _ in counts)
     for n, label, call in counts:
         _display(f"  {n:>4}  {label.ljust(width)}    tengri.{call}")
@@ -1451,13 +1515,20 @@ tengri — differentiable galaxy SED fitting in JAX
 ────────────────────────────────────────────────────────────────────
     obs        = tengri.Observation(photometry=tengri.Photometry.from_names([...]))
     parameters = tengri.Parameters(...)        # priors + fixed values
-    model      = tengri.SEDModel(parameters, ssp_data, observation=obs)
-    fitter     = tengri.Fitter(model, data, noise)
+    sed        = tengri.SEDModel.build(ssp_data=..., observation=obs, ...)
+    forward    = tengri.ForwardModel.build(sed=sed, observation=obs)
+    fitter     = tengri.Fitter(forward, data, noise)
     posterior  = fitter.run("map")             # or "nuts", "vi", …
     posterior.summary()                        # median ± 68% CI per param
 
     Pick the right kwargs:
       tengri.suggest_parameters(mean_sfh_type="dpl", agn_model="skirtor")
+
+    The outer shell:
+      tengri.ForwardModel — thin shell inference talks to. Owns the SED
+        chain and the observation; exposes a single .predict(params)
+        method that returns a {{channel: array}} dict (phot_fnu, spec_fnu).
+        Inference doesn't need to know which prediction method to call.
 
 ────────────────────────────────────────────────────────────────────
 4.  Contribute a new physics alternative
