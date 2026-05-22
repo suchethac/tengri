@@ -67,6 +67,60 @@ def test_predict_returns_mapping_with_expected_keys(sed_model_minimal, simple_ob
     assert any(k in pred for k in ("phot_fnu", "fnu_obs"))
 
 
+def test_build_accepts_spatial_kwarg(sed_model_minimal, simple_observation) -> None:
+    """ForwardModel.build(spatial=...) wraps SED + Spatial into one Population."""
+    from tengri.components.spatial.sersic import Sersic
+    from tengri.forward.spatial_model import SpatialModel
+
+    spatial = SpatialModel(components=[Sersic()])
+    forward = ForwardModel.build(
+        sed=sed_model_minimal,
+        spatial=spatial,
+        observation=simple_observation,
+    )
+    assert forward.populations[0].spatial is spatial
+
+
+def test_build_rejects_spatial_without_sed(simple_observation) -> None:
+    """spatial=... requires sed=... too."""
+    from tengri.components.spatial.sersic import Sersic
+    from tengri.forward.spatial_model import SpatialModel
+
+    spatial = SpatialModel(components=[Sersic()])
+    with pytest.raises(ValueError, match="requires sed"):
+        ForwardModel.build(spatial=spatial, observation=simple_observation)
+
+
+def test_predict_with_spatial_threads_state(sed_model_minimal, simple_observation) -> None:
+    """When spatial is present, the spatial sub-model runs without breaking photometry."""
+    import jax.numpy as jnp
+
+    from tengri.components.spatial.sersic import Sersic
+    from tengri.forward.spatial_model import SpatialModel
+
+    forward = ForwardModel.build(
+        sed=sed_model_minimal,
+        spatial=SpatialModel(components=[Sersic()]),
+        observation=simple_observation,
+    )
+    # SED params (all fixed in the minimal model) + Sersic free params
+    params: dict = dict.fromkeys(sed_model_minimal.spec.free_params, 0.5)
+    params.update(
+        {
+            "spatial_re_kpc": jnp.float64(1.0),
+            "spatial_n": jnp.float64(1.0),
+            "spatial_axis_ratio": jnp.float64(1.0),
+            "spatial_pa_deg": jnp.float64(0.0),
+        }
+    )
+    pred = forward.predict(params)
+    # Photometry still works (no observation adapter consumes the spatial
+    # profile yet — that's the next slice of item #6).
+    new_phot = pred.get("phot_fnu", pred.get("fnu_obs"))
+    assert new_phot is not None
+    assert jnp.all(jnp.isfinite(new_phot))
+
+
 def test_predict_matches_legacy_sedmodel(sed_model_minimal, simple_observation) -> None:
     """The shell must not change the numerical result vs the existing path."""
     import jax.numpy as jnp
