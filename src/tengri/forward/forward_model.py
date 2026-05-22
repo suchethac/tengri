@@ -8,7 +8,6 @@ the tracer-bullet single-population slice.
 
 Subsequent plans add:
   * Multi-population orchestration (ADR-0012)
-  * Spatial submodel composition (spatial-model plan)
 """
 
 from __future__ import annotations
@@ -43,10 +42,9 @@ class ForwardModel:
 
     Notes
     -----
-    Tracer-bullet limitations:
-      * Single population only.
-      * Spatial SubModels are not constructed (subsequent plan).
-      * Parameter names are not namespaced (ADR-0012 plan).
+    Limitations (deferred to subsequent plans):
+      * Single population only — multi-population is ADR-0012.
+      * Parameter names are not yet namespaced (ADR-0012).
     """
 
     populations: tuple[Population, ...]
@@ -66,21 +64,21 @@ class ForwardModel:
         Convenience entry point. Two forms:
 
         - **Single-population sugar (the common case):** pass
-          ``sed=<SEDModel>`` and ``observation=<Observation>``. The
-          SED is wrapped into a one-element ``populations`` tuple
-          with ``name="default"``.
+          ``sed=<SEDModel>`` and ``observation=<Observation>``,
+          optionally ``spatial=<SpatialModel>``. They are wrapped into
+          a one-element ``populations`` tuple with ``name="default"``.
         - **Explicit populations:** pass ``populations=[...]``. Used
-          once multi-population lands (ADR-0012). The tracer-bullet
-          accepts the form but raises on >1 entry.
+          once multi-population lands (ADR-0012). Accepts the form but
+          raises on >1 entry in this slice.
 
         Parameters
         ----------
         sed : SEDModel or SubModel, optional
             Single-population shortcut. Mutually exclusive with
             ``populations``.
-        spatial : optional
-            Reserved for the spatial-model plan. Raises if provided
-            in the tracer-bullet.
+        spatial : SpatialModel or SubModel, optional
+            Single-population spatial side. Only valid when
+            ``sed=`` is also given; otherwise raises.
         populations : iterable of Population, optional
             Explicit population list. Mutually exclusive with ``sed``.
         observation : object
@@ -93,20 +91,21 @@ class ForwardModel:
         Raises
         ------
         ValueError
-            If neither ``sed`` nor ``populations`` is given, or both.
+            If neither ``sed`` nor ``populations`` is given, or both;
+            or if ``spatial=`` is given without ``sed=``.
         NotImplementedError
-            If ``len(populations) > 1`` (ADR-0012) or if ``spatial``
-            is provided (subsequent plan).
+            If ``len(populations) > 1`` (ADR-0012).
         """
-        if spatial is not None:
-            raise NotImplementedError(
-                "ForwardModel.build(spatial=...) is reserved for the spatial-model plan."
+        if spatial is not None and sed is None:
+            raise ValueError(
+                "ForwardModel.build(spatial=...) requires sed=... too. "
+                "Use populations=[...] for explicit pairing."
             )
         if (sed is None) == (populations is None):
             raise ValueError("ForwardModel.build needs exactly one of sed=... or populations=...")
 
         if sed is not None:
-            pops = (Population(name="default", sed=sed),)
+            pops = (Population(name="default", sed=sed, spatial=spatial),)
         else:
             assert populations is not None
             pops = tuple(populations)
@@ -152,10 +151,6 @@ class ForwardModel:
         """
         per_pop: dict[str, Mapping[str, jnp.ndarray]] = {}
         for pop in self.populations:
-            if pop.spatial is not None:
-                raise NotImplementedError(
-                    "Population.spatial is reserved for the spatial-model plan."
-                )
             # Merge the user's free-parameter values with the SubModel's
             # fixed-parameter values so the downstream projection has
             # everything it needs (redshift, calibration coefficients, etc.).
@@ -174,6 +169,12 @@ class ForwardModel:
             # freshly-populated state. The 1-element wave is overwritten.
             init_state = ForwardState(wave=jnp.zeros(1))
             state = pop.sed.run(init_state, full_params)
+            # Run the spatial SubModel if present. The SpatialModel inserts
+            # its grid and threads state through its components; downstream
+            # ObservationModels (e.g. FiberSpectroscopyObservation) consume
+            # ``state.derived["spatial_profile_2d"]`` from the result.
+            if pop.spatial is not None:
+                state = pop.spatial.run(state, full_params)
             per_pop[pop.name] = self.observation.predict(state, full_params)
 
         if len(per_pop) == 1:
