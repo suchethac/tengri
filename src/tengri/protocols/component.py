@@ -549,27 +549,39 @@ class SEDComponent(Protocol):
         """
         ...
 
-    # ``citations`` is OPTIONAL — not part of the runtime_checkable
-    # surface.
-    # :func:`tengri.citations.collect._citations_from_components` reads
-    # it via ``getattr(c, "citations", None)``, so components that
-    # haven't been annotated still satisfy
-    # ``isinstance(c, SEDComponent)``. Concrete components that DO want
-    # to declare citations add a method with the signature::
-    #
-    #     def citations(self) -> tuple[str, ...]:
-    #         return ("calzetti2000", "draine_li2007")
-    #
-    # Returns the bibliography keys (strings from
-    # :data:`tengri.citations.registry.REGISTRY`) for all papers this
-    # component implements, solves for, or ports from. Components without
-    # the method contribute no per-component citations; the static
-    # association tables in :mod:`tengri.citations.associations` still
-    # apply.
-    #
-    # Required-method form was tried in 6598355e but ``@runtime_checkable``
-    # does NOT honour method bodies as defaults for non-inheriting
-    # classes — the orchestrator's structural ``isinstance`` check would
-    # then reject every concrete component that didn't override
-    # ``citations()``. Mirroring the ``outputs``/``inputs`` pattern
-    # (above) keeps the contract optional and structural.
+    def citations(self) -> tuple[str, ...]:
+        """Bib keys for papers this component implements, solves for, or ports.
+
+        Returns
+        -------
+        tuple of str
+            Zero or more keys into
+            :data:`tengri.citations.registry.REGISTRY`. Components with
+            no associated papers return ``()``; components that ship
+            real physics return the keys for every paper whose
+            equation, atlas, NN weights, or algorithm they use. The
+            walker in :mod:`tengri.citations.collect` unions these with
+            the static association tables in
+            :mod:`tengri.citations.associations` to assemble the full
+            bibliography for a :class:`SEDModel`.
+
+        Notes
+        -----
+        **JIT-compatible:** no. Called once, eagerly, when the walker
+        assembles a model's bibliography. Never inside a JAX trace.
+
+        **Required, not optional.** Concrete components MUST implement
+        this — empty tuple is a valid return for boilerplate components
+        with no physics paper, but the method itself is part of the
+        contract. The earlier optional form (commit 8c06e142) silently
+        dropped provenance from any component that forgot to annotate.
+
+        Examples
+        --------
+        A dust component implementing Calzetti (2000) attenuation and
+        Draine & Li (2007) thermal emission:
+
+        >>> def citations(self) -> tuple[str, ...]:
+        ...     return ("calzetti2000", "draine_li2007")
+        """
+        ...

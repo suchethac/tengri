@@ -257,6 +257,7 @@ class SEDModelComponent:
     _priors: ClassVar[dict[str, Distribution]] = {}
     _inputs_tuple: ClassVar[tuple[DerivedKey, ...]] = ()
     _outputs_tuple: ClassVar[tuple[DerivedKey, ...]] = ()
+    _citations_tuple: ClassVar[tuple[str, ...]] = ()
 
     # Instance attributes (set by subclass, but with class defaults)
     name: str = "component"
@@ -301,6 +302,17 @@ class SEDModelComponent:
             delattr(cls, "inputs")
         if "outputs" in vars(cls):
             delattr(cls, "outputs")
+
+        # Citations: read class attribute (tuple of bib keys), store on class.
+        # Subclasses declare ``citations = ("calzetti2000", ...)``; the
+        # citations() method synthesised below returns the tuple. Default ().
+        citations_attr = vars(cls).get("citations", ())
+        if not isinstance(citations_attr, tuple):
+            citations_attr = tuple(citations_attr)
+        cls._citations_tuple = citations_attr
+        # Delete the class attribute so the method takes precedence on lookup.
+        if "citations" in vars(cls):
+            delattr(cls, "citations")
 
         # Register by name
         component_name = vars(cls).get("name", "component")
@@ -375,6 +387,18 @@ class SEDModelComponent:
             Constructed from the ``outputs`` class dict at class-definition time.
         """
         return self._outputs_tuple
+
+    def citations(self) -> tuple[str, ...]:
+        """Bib keys for papers this component implements, solves for, or ports.
+
+        Returns
+        -------
+        tuple of str
+            Keys into :data:`tengri.citations.registry.REGISTRY`.
+            Subclasses declare the tuple via a ``citations`` class
+            attribute; this method returns it. Default is ``()``.
+        """
+        return self._citations_tuple
 
     def precompute(
         self,

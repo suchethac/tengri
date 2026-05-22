@@ -105,6 +105,12 @@ class AGNSEDComponent:
     parameter_prefix: str = "agn_"
     _state: AGNSEDComponentState | None = None
 
+    def citations(self) -> tuple[str, ...]:
+        """AGN sub-block citations (disc, torus, BLR) flow from
+        :mod:`tengri.citations.associations`; the wrapper has no
+        always-required paper."""
+        return ()
+
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free parameters this component owns.
 

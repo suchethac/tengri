@@ -95,6 +95,12 @@ class XRaySEDComponent:
     name: str = "xray"
     parameter_prefix: str = "xray_"
 
+    def citations(self) -> tuple[str, ...]:
+        """X-ray sub-blocks (XRB scaling, AGN corona) carry their citations
+        via :mod:`tengri.citations.associations`; no always-required
+        wrapper paper."""
+        return ()
+
     def declared_parameters(self) -> list[ParamDeclaration]:
         r"""Free parameters this component owns.
 

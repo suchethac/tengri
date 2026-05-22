@@ -158,6 +158,10 @@ class GRAHSPSEDComponent:
     name: str = "agn_grahsp"
     parameter_prefix: str = "agn_grahsp_"
 
+    def citations(self) -> tuple[str, ...]:
+        """GRAHSP/QSOgen big-blue-bump template from Temple+2021."""
+        return ("temple2021_qsogen",)
+
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free parameters this component owns.
 

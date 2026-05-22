@@ -277,6 +277,12 @@ class DustEmissionSEDComponent:
             log_z_solar=self.config.pahspec_auto_log_z_solar,
         )
 
+    def citations(self) -> tuple[str, ...]:
+        """Dust IR template citations (DL07 / DL14 / Dale2014 / MBB) are
+        config-driven via
+        :data:`tengri.citations.associations.DUST_EMISSION_CITATIONS`."""
+        return ()
+
     def declared_parameters(self) -> list[ParamDeclaration]:
         r"""Free parameters this component owns, by template.
 
