@@ -48,6 +48,8 @@ from tengri.protocols.component import (
 )
 from tengri.protocols.derived_bundle import DerivedBundle
 
+pytestmark = pytest.mark.contract
+
 # ── (1) Registered classes round-trip cleanly ─────────────────────────────
 
 # (cls, factory that builds a representative instance)
