@@ -37,6 +37,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `DerivedBundle` gained two canonical fields, `spatial_profile_2d`
   and `spatial_grid_xy_kpc`, with matching entries in the
   orchestrator's `_CANONICAL_UNITS` table.
+- **`tengri.forward.spatial_model.SpatialModel`** — SubModel composer
+  over a list of `SpatialComponent`s. Mirror of `SEDModel` at the
+  sub-model layer (no physics of its own; aggregates declared
+  parameters; threads `ForwardState` through components).
+- **`tengri.forward.spatial_model.SpatialSEDModel`** — joint
+  composer holding one SED SubModel + one `SpatialModel`. Runs
+  SED → Spatial per architecture spec §4.3 so spatial components can
+  optionally read SED-derived state keys. The scientific main path
+  for combined spatial+SED fits once observation adapters land.
 
 ### Internal
 

@@ -90,6 +90,8 @@ Each component owns its own `_params.py` (see the list above and the
 | Build the SED end to end | `forward/sed_model.py` (the `SEDModel` class — the SED chain; satisfies `SubModel` directly via `.run()` + `.declared_parameters()`) |
 | Write / edit a spatial profile (Sérsic, exponential, flat slab) | `components/spatial/<name>.py` — subclass `SpatialModelComponent` (auto-discovered free params, default `apply()` writes `state.derived["spatial_profile_2d"]`) |
 | Find the SpatialComponent Protocol | `protocols/spatial.py` — runtime-checkable mirror of `SEDComponent` |
+| Compose a list of spatial components into one sub-model | `forward/spatial_model.py` — `SpatialModel(components=[...])` satisfies `SubModel` |
+| Join a SED chain with a spatial chain for joint fits | `forward/spatial_model.py` — `SpatialSEDModel(sed=..., spatial=...)` runs SED then Spatial |
 | Understand which kernel (exact / hybrid / fast) is chosen | `forward/_kernels/` |
 | Wire a new physics component into the pipeline | `forward/components_assembly.py` |
 | Add filter-preintegration to a new component | `forward/precompute/` (registry) + new `*_precompute.py` next to the component |
