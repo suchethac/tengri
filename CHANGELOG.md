@@ -30,6 +30,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `ForwardModel.predict` consume `SEDModel` instances directly. No
   user-visible change to the public API — additive on `SEDModel`,
   internal cleanup on `ForwardModel`.
+- **`ForwardModel.predict` now projects through `Observation.predict`.**
+  Previously the outer shell reached into `SEDModel.predict_photometry`
+  for the photometric channel; it now follows the architectural seam —
+  per-population SED `SubModel.run(state, params) → ForwardState`, then
+  `Observation.predict(state, params) → dict`. Fixed parameter values
+  are merged into the params dict before projection so callers can pass
+  only their free-parameter overrides. No user-visible API change; the
+  prediction dict still matches the legacy path numerically.
 - Scaffolded per-component `_params.py` skeletons (PR1/5 of the
   parameter-registry consolidation) and extended
   `tengri.core.component.ParamDeclaration` with optional `bound_check`
