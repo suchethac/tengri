@@ -42,6 +42,7 @@ EXPECTED_ALL = frozenset(
         "SpatialModel",
         "SpatialSEDModel",
         "WavePrecomp",
+        "SpectrumPrecomp",
         # Component / pipeline contract (astronomer-facing extension surface)
         "DerivedBundle",
         "DerivedKey",
