@@ -128,8 +128,58 @@ def test_stellar_grad_finite(ssp, base_params):
     # The peak-SFR gradient must be positive (more SFR → more L).
     assert float(g["sfh_tsnorm_log_peak_sfr"]) > 0.0
     # All gradient leaves are finite.
-    leaves = jax.tree.leaves(g)
-    assert all(bool(jnp.all(jnp.isfinite(jnp.asarray(x)))) for x in leaves)
+    chex.assert_tree_all_finite(g)
+
+
+def test_orchestrator_chain_traces_once(ssp, base_params):
+    """The full Stellar→Radio→XRay→IGM chain must not retrace on repeated
+    same-shape calls — the recompile of a 4-component chain costs ~30 s on
+    real SSP grids, so an accidental retrace caused by a Python-scalar leak
+    in any apply() would be immediately user-visible. ``n=1`` is tight by
+    design; the only way to pass is to compile once and then hit the cache."""
+    chex.clear_trace_counter()
+    components = [
+        StellarSEDComponent(ssp_data=ssp),
+        RadioSEDComponent(),
+        XRaySEDComponent(),
+        IGMSEDComponent(),
+    ]
+    state0 = ForwardState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
+
+    @jax.jit
+    @chex.assert_max_traces(n=1)
+    def chain(p):
+        return run_components(components, state0, p)
+
+    chain(base_params)
+    chain(base_params)
+    chain(base_params)
+
+
+def test_orchestrator_jit_grad_traces_once(ssp, base_params):
+    """jit ∘ grad over the orchestrator must not retrace either. This is the
+    hot path under every gradient-based fitter (MAP, VI, NUTS warmup); a
+    retrace here is the most expensive class of regression in the codebase
+    since the AD-compiled XLA graph is roughly 3-4× the forward graph."""
+    chex.clear_trace_counter()
+    components = [
+        StellarSEDComponent(ssp_data=ssp),
+        RadioSEDComponent(),
+        XRaySEDComponent(),
+        IGMSEDComponent(),
+    ]
+    state0 = ForwardState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
+
+    def loss(p):
+        return jnp.sum(run_components(components, state0, p).sed_intrinsic)
+
+    @jax.jit
+    @chex.assert_max_traces(n=1)
+    def grad_chain(p):
+        return jax.grad(loss)(p)
+
+    grad_chain(base_params)
+    grad_chain(base_params)
 
 
 @pytest.fixture(scope="module")
