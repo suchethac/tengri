@@ -38,23 +38,25 @@ How it works
 ------------
 1. ``PopulationSEDModel`` satisfies :class:`tengri.protocols.SubModel` — it
    has ``name`` (``"population_sed_model"``), ``declared_parameters``
-   (population-wide, from the SED template), and ``run`` (currently a
-   stub raising ``NotImplementedError``; the forward-time batched-vmap
-   path lands in a follow-up refactor — see issue #211).
+   (population-wide, from the SED template), and ``run`` (vmaps the
+   template's ``run`` over the galaxy axis to produce a batched
+   :class:`ForwardState`).
 
 2. ``ForwardModel.build(population=pop, observation=obs)`` slots the
    PopulationSEDModel into ``Population(name="default", sed=pop)`` so the
    outer shell stays uniform.
 
-3. ``Fitter(forward, ...)`` detects that ``forward.populations[0].sed``
-   is a :class:`PopulationSEDModel` and routes inference to the existing
-   :class:`tengri.PopulationFitter` machinery. The user calls
-   ``fitter.run('vi')`` exactly as for a single-galaxy fit. The two
-   shared PSD parameters' priors and the per-galaxy data come from the
-   ``PopulationSEDModel`` construction.
+3. ``Fitter(forward).run('vi')`` works exactly as for a single-galaxy
+   fit. The standard inference path (NUTS / VI / MAP / Pathfinder /
+   Ray Tracing / nested) consumes the batched ``(N_gal, n_filters)``
+   prediction directly; the spec view publishes ``(N_gal,)`` shapes
+   for per-galaxy latents; the prior penalty sums over all latent
+   axes. **One information-Hamiltonian path** for every fit shape.
+   See ``docs/forward_model/index.md`` 'Hierarchical population fits'.
 
 The legacy ``PopulationFitter`` / ``HierarchicalFitter`` direct API
-keeps working unchanged. New code should reach for ``PopulationSEDModel``.
+remains importable but emits a one-shot ``DeprecationWarning``
+pointing at the canonical path above; it will be removed in v1.0.
 
 See ``docs/dev/forward-model-architecture.md`` §6 and issue #211.
 """
