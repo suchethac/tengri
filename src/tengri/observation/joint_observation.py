@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """JointObservation — composer that merges multiple observation models.
 
 Used when a single fit consumes multiple data channels — total-flux

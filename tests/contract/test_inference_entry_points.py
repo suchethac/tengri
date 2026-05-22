@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the canonical inference entry point — ``ForwardModel.fit`` /
 ``Fitter(forward, ...)`` — and the deprecation shims around the legacy paths.
 

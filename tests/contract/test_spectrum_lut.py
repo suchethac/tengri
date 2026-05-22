@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Phase 5: Spectrum LUT (SpectrumPrecomp) contract tests.
 
 Tests the SpectrumPrecomp dataclass, spectrum grid wiring, and agreement

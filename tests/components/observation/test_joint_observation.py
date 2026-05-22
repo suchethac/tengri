@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for JointObservation composer."""
 
 from __future__ import annotations

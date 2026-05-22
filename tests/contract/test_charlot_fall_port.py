@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Contract tests for the Charlot & Fall (2000) SEDModelComponent port.
 
 Structural-only: registry, isinstance, prior discovery, predict-shape.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Numeric smoke tests for the FlatSlab uniform-aperture profile."""
 
 from __future__ import annotations

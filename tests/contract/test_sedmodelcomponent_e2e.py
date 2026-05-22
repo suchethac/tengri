@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """End-to-end smoke tests for `SEDModelComponent` ports.
 
 For each domain (dust attenuation, dust IR emission, AGN, nebular, radio,

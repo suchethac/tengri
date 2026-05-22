@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SpatialModelComponent: astronomer-facing base for spatial physics blocks.
 
 Mirror of :class:`tengri.components.sed_model_component.SEDModelComponent`

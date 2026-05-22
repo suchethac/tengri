@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Sersic spatial profile.
 
 Surface-brightness profile of the form
