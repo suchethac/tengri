@@ -8,7 +8,6 @@ the tracer-bullet single-population slice.
 
 Subsequent plans add:
   * Multi-population orchestration (ADR-0012)
-  * Spatial submodel composition (spatial-model plan)
 """
 
 from __future__ import annotations
@@ -19,8 +18,8 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from tengri.forward._sed_submodel_adapter import _LegacySEDSubModel
 from tengri.forward.population import Population
+from tengri.protocols.component import ForwardState
 
 __all__ = ["ForwardModel"]
 
@@ -43,10 +42,9 @@ class ForwardModel:
 
     Notes
     -----
-    Tracer-bullet limitations:
-      * Single population only.
-      * Spatial SubModels are not constructed (subsequent plan).
-      * Parameter names are not namespaced (ADR-0012 plan).
+    Limitations (deferred to subsequent plans):
+      * Single population only — multi-population is ADR-0012.
+      * Parameter names are not yet namespaced (ADR-0012).
     """
 
     populations: tuple[Population, ...]
@@ -66,21 +64,21 @@ class ForwardModel:
         Convenience entry point. Two forms:
 
         - **Single-population sugar (the common case):** pass
-          ``sed=<SEDModel>`` and ``observation=<Observation>``. The
-          SED is wrapped into a one-element ``populations`` tuple
-          with ``name="default"``.
+          ``sed=<SEDModel>`` and ``observation=<Observation>``,
+          optionally ``spatial=<SpatialModel>``. They are wrapped into
+          a one-element ``populations`` tuple with ``name="default"``.
         - **Explicit populations:** pass ``populations=[...]``. Used
-          once multi-population lands (ADR-0012). The tracer-bullet
-          accepts the form but raises on >1 entry.
+          once multi-population lands (ADR-0012). Accepts the form but
+          raises on >1 entry in this slice.
 
         Parameters
         ----------
         sed : SEDModel or SubModel, optional
             Single-population shortcut. Mutually exclusive with
             ``populations``.
-        spatial : optional
-            Reserved for the spatial-model plan. Raises if provided
-            in the tracer-bullet.
+        spatial : SpatialModel or SubModel, optional
+            Single-population spatial side. Only valid when
+            ``sed=`` is also given; otherwise raises.
         populations : iterable of Population, optional
             Explicit population list. Mutually exclusive with ``sed``.
         observation : object
@@ -93,25 +91,21 @@ class ForwardModel:
         Raises
         ------
         ValueError
-            If neither ``sed`` nor ``populations`` is given, or both.
+            If neither ``sed`` nor ``populations`` is given, or both;
+            or if ``spatial=`` is given without ``sed=``.
         NotImplementedError
-            If ``len(populations) > 1`` (ADR-0012) or if ``spatial``
-            is provided (subsequent plan).
+            If ``len(populations) > 1`` (ADR-0012).
         """
-        if spatial is not None:
-            raise NotImplementedError(
-                "ForwardModel.build(spatial=...) is reserved for the spatial-model plan."
+        if spatial is not None and sed is None:
+            raise ValueError(
+                "ForwardModel.build(spatial=...) requires sed=... too. "
+                "Use populations=[...] for explicit pairing."
             )
         if (sed is None) == (populations is None):
             raise ValueError("ForwardModel.build needs exactly one of sed=... or populations=...")
 
         if sed is not None:
-            # Local import to avoid an import cycle through
-            # tengri.forward.sed_model -> tengri.forward.forward_model.
-            from tengri.forward.sed_model import SEDModel
-
-            sub = sed if not isinstance(sed, SEDModel) else _LegacySEDSubModel(sed)
-            pops = (Population(name="default", sed=sub),)
+            pops = (Population(name="default", sed=sed, spatial=spatial),)
         else:
             assert populations is not None
             pops = tuple(populations)
@@ -137,10 +131,11 @@ class ForwardModel:
         case, the loop is a one-element loop and the result is returned
         directly.
 
-        The current implementation delegates to the wrapped
-        :class:`SEDModel`'s photometry path. Subsequent plans replace
-        this with a true ``observation.predict(state, params)`` call
-        once the observation adopts the Protocol surface.
+        For each population, the SED ``SubModel`` produces a
+        :class:`tengri.protocols.ForwardState`; the observation then
+        projects that state into the channel dict
+        (``{"phot_fnu": ...}``, ``{"spec_fnu": ...}``, joint, …) via
+        :meth:`tengri.observation.Observation.predict`.
 
         Parameters
         ----------
@@ -150,27 +145,37 @@ class ForwardModel:
         Returns
         -------
         mapping of str -> array
-            Prediction dict. Single-population: ``{"phot_fnu": ...}``.
+            Prediction dict, keyed by observation channel. The keys
+            depend on the observation's configuration (photometric,
+            spectroscopic, or joint).
         """
         per_pop: dict[str, Mapping[str, jnp.ndarray]] = {}
         for pop in self.populations:
+            # Merge the user's free-parameter values with the SubModel's
+            # fixed-parameter values so the downstream projection has
+            # everything it needs (redshift, calibration coefficients, etc.).
+            # Free params override fixed ones when names collide — the user's
+            # value wins. The legacy ``SEDModel.predict_photometry`` did this
+            # merge internally; ``Observation.predict`` does not, so the
+            # outer shell threads it.
+            full_params: dict[str, Any] = {}
+            spec = getattr(pop.sed, "spec", None)
+            if spec is not None and hasattr(spec, "get_fixed_values"):
+                full_params.update(spec.get_fixed_values())
+            full_params.update(params)
+
+            # The initial ForwardState is a placeholder — SED is the head of
+            # the per-population chain and the SubModel's run() produces a
+            # freshly-populated state. The 1-element wave is overwritten.
+            init_state = ForwardState(wave=jnp.zeros(1))
+            state = pop.sed.run(init_state, full_params)
+            # Run the spatial SubModel if present. The SpatialModel inserts
+            # its grid and threads state through its components; downstream
+            # ObservationModels (e.g. FiberSpectroscopyObservation) consume
+            # ``state.derived["spatial_profile_2d"]`` from the result.
             if pop.spatial is not None:
-                raise NotImplementedError(
-                    "Population.spatial is reserved for the spatial-model plan."
-                )
-            legacy = pop.sed
-            # In the tracer-bullet, every population's sed is a
-            # _LegacySEDSubModel wrapping an SEDModel. Reach into the
-            # wrapped model and call its existing photometric path.
-            sed_model = getattr(legacy, "sed_model", None)
-            if sed_model is None:
-                raise NotImplementedError(
-                    "ForwardModel.predict currently supports only "
-                    "_LegacySEDSubModel-wrapped populations. "
-                    "True SubModel.run-based prediction lands in a "
-                    "subsequent plan."
-                )
-            per_pop[pop.name] = {"phot_fnu": sed_model.predict_photometry(params)}
+                state = pop.spatial.run(state, full_params)
+            per_pop[pop.name] = self.observation.predict(state, full_params)
 
         if len(per_pop) == 1:
             (only,) = per_pop.values()

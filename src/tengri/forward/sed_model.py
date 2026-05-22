@@ -286,6 +286,13 @@ class SEDModel:
         model = SEDModel(spec, ssp, observation=phot)
     """
 
+    # ── SubModel Protocol surface ──────────────────────────────────────
+    # See docs/dev/forward-model-architecture.md §4. SEDModel directly
+    # satisfies tengri.protocols.SubModel; ForwardModel's per-population
+    # orchestration consumes the `run` and `declared_parameters` methods.
+
+    name: str = "sed"
+
     # Default approximation settings (immutable — used as template only)
     # Phase 2: owned by components, per the unification plan.
     # "wave_precomp" = SSP × filter LUT on fixed wavelength grid (stellar component)
@@ -3664,6 +3671,57 @@ class SEDModel:
         from tengri.forward import state_to_emission_lines
 
         return state_to_emission_lines(self.predict_state(params))
+
+    def declared_parameters(self):
+        """Free-parameter declarations for this SED chain.
+
+        Returns
+        -------
+        list of :class:`tengri.protocols.ParamDeclaration`
+            One entry per free parameter, lifted from ``self.spec``.
+
+        Notes
+        -----
+        Satisfies :class:`tengri.protocols.SubModel`.
+        """
+        from tengri.protocols.component import ParamDeclaration
+
+        spec = self.spec
+        decls: list[ParamDeclaration] = []
+        for pname in spec.free_params:
+            prior = spec.get_distribution(pname)
+            decls.append(ParamDeclaration(name=pname, prior=prior, description="", units=""))
+        return decls
+
+    def run(self, state, params):
+        """Run the SED forward chain. Pure JAX.
+
+        SED is the head of the per-population orchestration; in the
+        tracer-bullet single-population path, ``state`` is an empty
+        :class:`tengri.protocols.ForwardState` with just the wavelength
+        grid. The method delegates to :meth:`predict_state` for the
+        actual physics.
+
+        Parameters
+        ----------
+        state : ForwardState
+            Incoming state (empty for SED as the head of the chain).
+        params : Mapping
+            Free parameter values.
+
+        Returns
+        -------
+        ForwardState
+            State with SED contributions populated.
+
+        Notes
+        -----
+        Satisfies :class:`tengri.protocols.SubModel`. Threading non-empty
+        upstream state is reserved for a future ``ResolvedSEDModel`` mode
+        that needs SED to read spatial keys; today the contract is
+        "incoming state ignored, output state freshly built."
+        """
+        return self.predict_state(params)
 
     def predict_state(self, params, fixed_values=None, ssp_data=None, template_data=None):
         """Forward pass via the SEDComponent orchestrator.

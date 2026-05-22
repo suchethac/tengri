@@ -25,6 +25,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - run: pip install "ruff==0.15.6"
       - run: ruff check src/ tests/
       - run: ruff format --check src/ tests/
@@ -37,6 +39,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
       - run: python tools/check_param_prefixes.py
       - run: python tools/check_test_markers.py
@@ -45,14 +49,13 @@ jobs:
   test:
     runs-on: ubuntu-latest
     needs: smoke
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
       # Match the pre-rehome scope: fast tests only.
       # tests/integration/ and tests/crossval/ are gated; the new
@@ -81,9 +84,7 @@ jobs:
             --ignore=tests/contract/test_agn_ports.py \
             --deselect "tests/components/dust/test_dust_emission_models.py::TestDustEmissionCombinations::test_dust_emission_peaks_in_ir[modified_blackbody]" \
             --deselect "tests/components/dust/test_dust_emission_models.py::TestDustEmissionCombinations::test_dust_emission_energy_balance[modified_blackbody]" \
-            --deselect "tests/physics/conservation/test_amplitude_scaling.py::TestDustEmission::test_mbb_linear_in_L_absorbed" \
-            --deselect "tests/components/dust/test_dust_precompute.py::TestFastDustSpeedup::test_fast_path_not_slower" \
-            --deselect "tests/contract/test_fused_kernels.py::TestFusedKernelSpeedup::test_fused_photometry_speedup"
+            --deselect "tests/physics/conservation/test_amplitude_scaling.py::TestDustEmission::test_mbb_linear_in_L_absorbed"
         timeout-minutes: 15
 
   # Sampler-heavy inference tests (NUTS, Pathfinder, VI, MCLMC, etc.).
@@ -104,6 +105,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
       - run: pytest tests/inference tests/integration -q --ignore=tests/crossval
         timeout-minutes: 40
