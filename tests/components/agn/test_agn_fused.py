@@ -63,7 +63,7 @@ def parametric_agn_spec():
         dust_tau_diff=Fixed(0.2),
         dust_slope=Fixed(-0.7),
         redshift=Fixed(0.1),
-        agn_model="simple",
+        agn_model="multicolor_agn",
         agn_log_lbol=Uniform(8.0, 12.0),
         agn_alpha=Fixed(-1.0),
         agn_T_torus=Fixed(1000.0),
@@ -85,7 +85,7 @@ def legacy_agn_spec():
         dust_tau_diff=Fixed(0.2),
         dust_slope=Fixed(-0.7),
         redshift=Fixed(0.1),
-        agn_model="simple",
+        agn_model="multicolor_agn",
         agn_frac=Uniform(0.01, 0.5),
         agn_alpha=Fixed(-1.0),
         agn_T_torus=Fixed(1000.0),
@@ -211,7 +211,7 @@ class TestAGNFusedVsExact:
             dust_tau_diff=Fixed(0.2),
             dust_slope=Fixed(-0.7),
             redshift=Fixed(0.1),
-            agn_model="simple",
+            agn_model="multicolor_agn",
             agn_log_lbol=Fixed(10.5),
             agn_alpha=Fixed(-1.0),
             agn_T_torus=Fixed(1000.0),
@@ -264,7 +264,7 @@ class TestAGNFusedVsExact:
             dust_tau_diff=Fixed(0.2),
             dust_slope=Fixed(-0.7),
             redshift=Fixed(0.1),
-            agn_model="simple",
+            agn_model="multicolor_agn",
             agn_log_lbol=Uniform(8.0, 12.0),  # FREE → _agn_luminosity_mode=True
             agn_alpha=Fixed(-1.0),
             agn_T_torus=Fixed(1000.0),
@@ -324,7 +324,7 @@ class TestAGNPredictSED:
         from tengri.components.agn import resolve_agn_model
 
         wave = jnp.linspace(3000.0, 10000.0, 100)
-        agn_fn = resolve_agn_model("simple")
+        agn_fn = resolve_agn_model("multicolor_agn")
         # AGN with high L_bol
         lnu_high = agn_fn(
             wave,

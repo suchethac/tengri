@@ -53,6 +53,17 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "LogUniform",
         "StudentT",
         "Uniform",
+        # ── Sentinels (parameters/sentinels.py) ──────────────────────
+        # Used by every recipe and 100+ tests via `from tengri import FIXED, FREE`.
+        "FIXED",
+        "FREE",
+        # ── Forward-model outputs and helpers ────────────────────────
+        "PriorPredictive",
+        "SEDResult",
+        # ── Top-level convenience verbs (additional) ─────────────────
+        "fit_batch",
+        # ── Data discovery helpers ───────────────────────────────────
+        "data_path",
         # ── Exceptions ──────────────────────────────────────────────
         "BackendError",
         "ConfigError",

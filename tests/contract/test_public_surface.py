@@ -116,6 +116,16 @@ EXPECTED_ALL = frozenset(
         "LogUniform",
         "StudentT",
         "Uniform",
+        # Sentinels (used in every recipe + 100+ tests)
+        "FIXED",
+        "FREE",
+        # Forward-model outputs and helpers
+        "PriorPredictive",
+        "SEDResult",
+        # Top-level convenience verbs
+        "fit_batch",
+        # Data discovery helpers
+        "data_path",
     }
 )
 
