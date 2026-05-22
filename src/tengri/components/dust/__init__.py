@@ -51,6 +51,9 @@ from tengri.components.dust.attenuation import (
     wg00_dusty,
     wg00_shell,
 )
+
+# SEDModelComponent-style attenuation ports
+from tengri.components.dust.calzetti_model import Calzetti as Calzetti
 from tengri.components.dust.dale2014_ir import (
     Dale2014IRConfig as Dale2014IRConfig,
     Dale2014IRSEDComponent as Dale2014IRSEDComponent,
@@ -63,9 +66,6 @@ from tengri.components.dust.draine2021_pah_ir import (
     Draine2021PAHIRConfig as Draine2021PAHIRConfig,
     Draine2021PAHIRSEDComponent as Draine2021PAHIRSEDComponent,
 )
-
-# SEDModelComponent-style attenuation ports
-from tengri.components.dust.calzetti_model import Calzetti as Calzetti
 
 # New names
 from tengri.components.dust.drude_profiles import (
