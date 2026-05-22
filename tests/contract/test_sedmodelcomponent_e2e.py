@@ -286,7 +286,7 @@ def test_radio_powerlaw_actually_reads_L_ir_when_published():
     """
     from tengri.components.radio.radio_model import RadioPowerLawSEDComponent
     from tengri.protocols.component import ForwardState
-    from tengri.protocols.derived_bundle import DerivedBundle
+    from tengri.protocols.derived_state import DerivedState
 
     comp = RadioPowerLawSEDComponent()
     wave = jnp.geomspace(1e6, 1e9, 64)  # radio wavelengths (Å)
@@ -303,7 +303,7 @@ def test_radio_powerlaw_actually_reads_L_ir_when_published():
     state_with_L_ir = ForwardState(
         wave=wave,
         sed_intrinsic=jnp.zeros_like(wave),
-        derived=DerivedBundle.from_dict({"L_ir": jnp.asarray(1e44)}),
+        derived=DerivedState.from_dict({"L_ir": jnp.asarray(1e44)}),
     )
 
     out_no = comp.apply(state_no_L_ir, params)
