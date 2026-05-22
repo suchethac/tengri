@@ -87,6 +87,7 @@ __all__ = [
     "PriorPredictive",
     "SEDModel",
     "SEDModelState",
+    "SpectrumPrecomp",
     "WavePrecomp",
 ]
 
@@ -123,6 +124,37 @@ class WavePrecomp:
     n_z: int = 100
     z_min: float | None = None
     z_max: float | None = None
+
+
+@dataclasses.dataclass(frozen=True)
+class SpectrumPrecomp:
+    """Configuration for spectrum-grid LUT precomputation (Phase 5).
+
+    Pass this to :class:`SEDModel` via ``approx=`` to enable spectroscopic
+    LUT precomputation. The SSP × dust × IGM stack is precomputed at
+    spectrum pixel centres (effective wavelengths in the galaxy rest frame)
+    and cached per redshift. This is analogous to the photometric LUT path
+    (Phase 3b/3c) but for spectroscopy.
+
+    In v0 (Phase 5 scope), no tuning knobs are exposed; pixel grid and
+    redshift are inherited from the Observation and Parameters. Future
+    extensions will add Taylor refinement and higher-order expansions.
+
+    Notes
+    -----
+    If the model includes a line-publishing nebular backend (Cue, CloudyGrid,
+    CB19, MAPPINGS, or Cue-NLR), construction raises a clear error. Those
+    backends require line rasterisation on the exact grid (Phase 5 follow-up,
+    option A in the design doc). Workaround: use a BakedIn nebular backend
+    (e.g. ``neb_type='bakedIn'`` with BC03 or else-stellar SSP).
+
+    Examples
+    --------
+    >>> from tengri import SEDModel, SpectrumPrecomp
+    >>> SEDModel(..., approx=SpectrumPrecomp())  # spectrum LUT path
+    """
+
+    pass  # No tuning knobs in v0
 
 
 class SEDModel:
@@ -376,13 +408,30 @@ class SEDModel:
             self._approx = dict(self._DEFAULT_APPROX)
             self._approx["wave_precomp"] = True
             self._approx_config = approx
+        elif isinstance(approx, SpectrumPrecomp):
+            # Phase 5: spectrum LUT path. Currently no tuning knobs; full-grid
+            # redshift handling until Taylor refinement lands.
+            self._approx = dict(self._DEFAULT_APPROX)
+            self._approx["spectrum_precomp"] = True
+            self._approx_config = approx
+            # Validate: reject line-publishing nebular backends
+            nebular_type = spec.config.nebular_type if hasattr(spec, "config") else None
+            if nebular_type is not None and nebular_type not in ("bakedIn", "none"):
+                raise ValueError(
+                    f"SpectrumPrecomp (Phase 5, v0) does not support line-publishing "
+                    f"nebular backends like '{nebular_type}'. Workaround: use a "
+                    f"BakedIn nebular backend (neb_type='bakedIn' with BC03 SSP) or "
+                    f"neb_type='none'. Follow-up (Phase 5 option A): line "
+                    f"rasterisation on the exact grid."
+                )
         else:
             raise TypeError(
                 f"approx={approx!r} is not a legal value. Legal forms: "
-                "None (default — exact wave-grid), or "
+                "None (default — exact wave-grid), "
                 "WavePrecomp() / WavePrecomp(n_z=..., z_min=..., z_max=...) "
-                "for the precomputed SSP × filter LUT path. The pre-3d dict / "
-                "bool / string forms (e.g. approx={'wave_precomp': True}, "
+                "for the precomputed SSP × filter LUT path, or "
+                "SpectrumPrecomp() for the spectrum LUT path (Phase 5). "
+                "The pre-3d dict / bool / string forms (e.g. approx={'wave_precomp': True}, "
                 "approx=True, approx='wave_precomp') were removed."
             )
 
@@ -3872,6 +3921,20 @@ class SEDModel:
             )
         state = self.predict_state(params)
         full = {**self.spec.get_fixed_values(), **params}
+
+        # Phase 5: if SpectrumPrecomp is active and spectroscopy is configured,
+        # inject spec_eff_waves (rest-frame pixel centres) into state.derived.
+        if self._approx.get("spectrum_precomp") and self.observation.can_do_spectroscopy:
+            z = jnp.asarray(full.get("redshift", 0.0))
+            wave_obs = (
+                self._wave_obs
+                if hasattr(self, "_wave_obs")
+                else self.observation.spectroscopy.wave_obs
+            )
+            # spec_eff_waves = observed wavelengths / (1 + z)
+            spec_eff_waves = jnp.asarray(wave_obs) / (1.0 + z)
+            state = state.with_(derived=state.derived.with_(spec_eff_waves=spec_eff_waves))
+
         # Phase 3d-4: when built with ``approx=WavePrecomp(...)`` and no
         # spectrum channel, route photometry through the LUT projection.
         # Mirrors ``predict_observables_jit`` so the JIT and non-JIT paths

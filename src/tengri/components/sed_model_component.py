@@ -491,6 +491,15 @@ class SEDModelComponent:
         else:
             sed_in = state.sed_intrinsic
 
+        # Check for spectrum LUT mode (Phase 5)
+        spec_eff_waves = state.derived.get("spec_eff_waves")
+        if spec_eff_waves is not None:
+            # SpectrumPrecomp path: compute spectrum LUTs
+            published = self._apply_spec_precomp(p_sliced, sed_in, spec_eff_waves, **input_kwargs)
+            # Do NOT update sed_intrinsic on the LUT path (only publish LUTs)
+            new_derived = self._merge_published(state.derived, published)
+            return state.with_(derived=new_derived)
+
         # Check for WavePrecomp mode
         filter_eff_waves = state.derived.get("filter_eff_waves")
         if filter_eff_waves is not None:
@@ -575,6 +584,42 @@ class SEDModelComponent:
             published[f"{self.name}_phot_lnu_slope_precomp"] = slope
 
         return published
+
+    def _apply_spec_precomp(
+        self,
+        p: Mapping[str, jnp.ndarray],
+        sed_in: jnp.ndarray,
+        spec_eff_waves: jnp.ndarray,
+        **inputs: Any,
+    ) -> Mapping[str, jnp.ndarray]:
+        """Compute spectrum LUT at pixel centres (Phase 5).
+
+        Called by :meth:`apply` when approx=SpectrumPrecomp() is active.
+        Evaluates :meth:`predict` at spectrum pixel effective wavelengths
+        (in the galaxy rest frame) to build a per-pixel spectrum LUT.
+
+        Parameters
+        ----------
+        p : mapping[str, ndarray]
+            Parameters with prefix stripped.
+        sed_in : ndarray
+            Input SED (used for shape/dtype, but not consumed on LUT path).
+        spec_eff_waves : ndarray, shape (n_spec_pixel,)
+            Rest-frame effective wavelengths of spectrum pixels in Angstrom.
+        **inputs : ndarray
+            Cross-component inputs from state.derived.
+
+        Returns
+        -------
+        mapping[str, ndarray]
+            Published keys for this component, keyed as
+            ``{self.name}_spec_lnu_precomp`` with shape (n_spec_pixel,).
+        """
+        # Evaluate predict at spectrum pixel centres
+        spec_lnu_precomp, _ = self.predict(p, jnp.zeros_like(spec_eff_waves), spec_eff_waves, **inputs)
+
+        # Publish the per-pixel spectrum contribution
+        return {f"{self.name}_spec_lnu_precomp": spec_lnu_precomp}
 
     def predict_precomp(
         self,
