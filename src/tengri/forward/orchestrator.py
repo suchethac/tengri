@@ -171,6 +171,11 @@ _CANONICAL_UNITS: dict[str, str] = {
     "igm_transmission": "",
     # Shock (MAPPINGS path)
     "shock_log_lhalpha": "dex",
+    # Spatial — 2D surface-brightness profile + the (x, y) kpc grid
+    # underlying it. Published by spatial components (Sersic, Exponential,
+    # FlatSlab, …). See architecture spec §3.3.
+    "spatial_profile_2d": "",
+    "spatial_grid_xy_kpc": "",
 }
 
 

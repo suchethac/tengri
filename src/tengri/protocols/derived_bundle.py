@@ -185,6 +185,18 @@ class DerivedBundle:
     igm_transmission: jnp.ndarray | None = None
     shock_log_lhalpha: jnp.ndarray | None = None
 
+    # Spatial — 2D surface-brightness profile and the (x, y) kpc grid that
+    # underlies it. Published by spatial components (Sersic, Exponential,
+    # FlatSlab, …). Reserved B-path keys (``spatial_profile_per_age``,
+    # ``spatial_profile_per_wave``) will be added when those components land.
+    # See architecture spec §3.3.
+    spatial_profile_2d: jnp.ndarray | None = None
+    # ``spatial_grid_xy_kpc`` is a tuple of two 2D arrays ``(x_grid, y_grid)``
+    # so it is intentionally not a jnp.ndarray field. The bundle still
+    # accepts it via ``with_(spatial_grid_xy_kpc=...)``; the type annotation
+    # is permissive.
+    spatial_grid_xy_kpc: Any = None
+
     # Free-form spillover dict for keys not yet promoted to fields.
     # Empty in steady state; provides a graceful path when an
     # in-flight migration declares a new key in _CANONICAL_UNITS
