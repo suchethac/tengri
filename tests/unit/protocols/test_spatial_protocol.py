@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import jax.numpy as jnp
-
 from tengri.protocols.component import ForwardState, ParamDeclaration, SEDComponentConfig
 from tengri.protocols.spatial import (
     SpatialComponent,
