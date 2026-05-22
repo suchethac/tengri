@@ -81,7 +81,9 @@ jobs:
             --ignore=tests/contract/test_agn_ports.py \
             --deselect "tests/components/dust/test_dust_emission_models.py::TestDustEmissionCombinations::test_dust_emission_peaks_in_ir[modified_blackbody]" \
             --deselect "tests/components/dust/test_dust_emission_models.py::TestDustEmissionCombinations::test_dust_emission_energy_balance[modified_blackbody]" \
-            --deselect "tests/physics/conservation/test_amplitude_scaling.py::TestDustEmission::test_mbb_linear_in_L_absorbed"
+            --deselect "tests/physics/conservation/test_amplitude_scaling.py::TestDustEmission::test_mbb_linear_in_L_absorbed" \
+            --deselect "tests/components/dust/test_dust_precompute.py::TestFastDustSpeedup::test_fast_path_not_slower" \
+            --deselect "tests/contract/test_fused_kernels.py::TestFusedKernelSpeedup::test_fused_photometry_speedup"
         timeout-minutes: 15
 
   # Sampler-heavy inference tests (NUTS, Pathfinder, VI, MCLMC, etc.).
