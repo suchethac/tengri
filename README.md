@@ -74,7 +74,7 @@ wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/ssp_fsps_v3.2.h5 -P
 ```python
 import jax
 from tengri import (
-    SEDModel, Parameters, Fitter,
+    ForwardModel, SEDModel, Parameters, Fitter,
     Uniform, Gaussian, Observation, Photometry, load_ssp_data,
 )
 
@@ -91,13 +91,14 @@ spec = Parameters(
     dust_tau_bc=Uniform(0, 4),
     redshift=0.1,
 )
-model = SEDModel(spec, ssp, observation=obs)
+sed = SEDModel(spec, ssp, observation=obs)
+forward = ForwardModel.build(sed=sed, observation=obs)
 
 # Mock recovery. For real data, pass your own (flux, noise) to Fitter.
 key = jax.random.PRNGKey(0)
-mock = model.mock(spec.sample(key), key=key)
+mock = sed.mock(spec.sample(key), key=key)
 
-fitter = Fitter(model, mock["flux_obs"], mock["noise"])
+fitter = Fitter(forward, mock["flux_obs"], mock["noise"])
 result = fitter.run("mcmc_nuts")
 print(result.summary_table())
 ```
@@ -148,7 +149,7 @@ python -m tengri doctor
 
 ## Inference methods
 
-`Parameters` declares priors. The SSP grid holds pre-computed stellar populations. `SEDModel` ties them into a differentiable forward model, and `Fitter` runs inference, returning a `Posterior`.
+`Parameters` declares priors. The SSP grid holds pre-computed stellar populations. `SEDModel` ties them into a differentiable SED chain. `ForwardModel` wraps the SED chain and the observation into a single `.predict(params)` interface that every inference backend consumes. `Fitter` drives the chosen method and returns a `Posterior`.
 
 | Method        | Command                            | Best for                                                  |
 |---------------|------------------------------------|-----------------------------------------------------------|
