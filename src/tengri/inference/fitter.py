@@ -116,6 +116,35 @@ def _maybe_warn_legacy_sedmodel(model) -> None:
         )
 
 
+def _maybe_extract_batched_data(model):
+    """Auto-extract ``(data, noise)`` from a ForwardModel's population.
+
+    Returns ``(None, None)`` if ``model`` is not a ForwardModel-with-
+    PopulationSEDModel, otherwise the stacked ``(N, n_filters)`` arrays
+    from ``pop.batched_data()``. Lets users write
+    ``Fitter(forward).run('vi')`` without manually stacking.
+
+    Explicit ``data=`` and ``noise=`` always override this default —
+    auto-extraction only fires when both are ``None``.
+    """
+    try:
+        from tengri.forward.forward_model import ForwardModel
+        from tengri.forward.population_sed_model import PopulationSEDModel
+    except ImportError:
+        return None, None
+
+    if not isinstance(model, ForwardModel):
+        return None, None
+    populations = getattr(model, "populations", ())
+    if len(populations) != 1:
+        return None, None
+    pop_sed = getattr(populations[0], "sed", None)
+    if not isinstance(pop_sed, PopulationSEDModel):
+        return None, None
+
+    return pop_sed.batched_data()
+
+
 def _maybe_population_delegate(model):
     """Return a configured :class:`PopulationFitter` when ``model`` is hierarchical.
 
@@ -421,14 +450,32 @@ class Fitter:
         use_components=False,
         compile_modes=None,
         cache=None,
+        *,
+        _skip_population_delegate: bool = False,
     ):
-        # ── Hierarchical-population routing (issue #211) ────────────
-        # When ``model`` is a ForwardModel whose SubModel is a
-        # PopulationSEDModel, the per-galaxy data already lives on the
-        # population (in pop.galaxies). Route inference through the
-        # existing PopulationFitter machinery; the user-facing
-        # Fitter(forward).run('vi') call stays uniform.
-        self._population_delegate = _maybe_population_delegate(model)
+        # ── Auto-extract batched data for hierarchical ForwardModels ─
+        # When ``model`` is a ForwardModel whose SubModel publishes
+        # batched_axes (e.g. PopulationSEDModel publishes {'galaxy': 0}),
+        # the per-galaxy data already lives on the population. Auto-
+        # extract (N, n_filters) arrays so users can write
+        # ``Fitter(forward).run('vi')`` without manually stacking.
+        if data is None and noise is None:
+            data, noise = _maybe_extract_batched_data(model)
+
+        # ── Hierarchical-population routing (issue #211, deprecated) ─
+        # Legacy: when ``model`` is a ForwardModel whose SubModel is a
+        # PopulationSEDModel, route inference through PopulationFitter.
+        # Kept for back-compat while the standard path (operating on
+        # batched output directly) stabilises. Removal is the next
+        # step in PR #239's plan.
+        # ``_skip_population_delegate=True`` (private kwarg) bypasses
+        # the legacy delegation so the standard path can be exercised
+        # on hierarchical fits during the migration window. Real callers
+        # do not need this. Replaced by full delegate removal in the
+        # next PR.
+        self._population_delegate = (
+            None if _skip_population_delegate else _maybe_population_delegate(model)
+        )
         if self._population_delegate is not None:
             self.model = model
             # Surface the SED-template spec so callers that inspect
