@@ -134,6 +134,11 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
     inputs: ClassVar = {"L_ir": "erg/s"}
     outputs: ClassVar = {"L_ir_emission": "erg/s"}
 
+    def __init__(self, config: Draine2021PAHIRConfig | None = None) -> None:
+        # Override the class-level default config if an instance is provided.
+        if config is not None:
+            self.config = config
+
     def _resolve_starlight(self) -> str:
         """Resolve starlight selector, expanding 'auto' if needed."""
         if self.config.starlight != "auto":

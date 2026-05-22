@@ -222,7 +222,9 @@ class DerivedBundle:
         from dataclasses import replace
 
         # Pre-check unknown keys to produce a friendly hint message.
-        known = set(self.field_names())
+        # ``_extras`` is the documented escape hatch for keys not yet
+        # promoted to typed fields — explicitly allow it.
+        known = set(self.field_names()) | {"_extras"}
         unknown = [k for k in overrides if k not in known]
         if unknown:
             offender = unknown[0]

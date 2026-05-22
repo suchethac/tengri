@@ -13,7 +13,7 @@ import pytest
 
 from tengri.components.dust.dl07_ir import DL07IRSEDComponent
 from tengri.components.dust.emission import modified_blackbody as mbb_legacy
-from tengri.components.dust.modified_blackbody import ModifiedBlackbodySED
+from tengri.components.dust.modified_blackbody_ir import ModifiedBlackbodySED
 from tengri.components.sed_model_component import _REGISTRY
 
 pytestmark = pytest.mark.contract
@@ -237,7 +237,7 @@ class TestSEDComponentProtocol:
 def test_imports():
     """New components should be importable from their modules."""
     from tengri.components.dust.dl07_ir import DL07IRSEDComponent as DL07_1
-    from tengri.components.dust.modified_blackbody import ModifiedBlackbodySED as MBB1
+    from tengri.components.dust.modified_blackbody_ir import ModifiedBlackbodySED as MBB1
 
     assert MBB1 is ModifiedBlackbodySED
     assert DL07_1 is DL07IRSEDComponent

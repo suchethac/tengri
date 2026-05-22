@@ -139,15 +139,21 @@ class KD18Disc(SEDModelComponent):
     log_lbol = Uniform(8.0, 14.0, description="AGN bolometric luminosity", units="dex (L_sun)")
     log_mbh = Uniform(6.0, 10.0, description="Black hole mass", units="dex (M_sun)")
     log_ledd = Uniform(-3.0, 0.0, description="Eddington ratio", units="dex")
-    a_spin = Uniform(0.0, 0.998, description="Black hole spin parameter", units="")
-    cos_inc = Uniform(0.01, 1.0, description="Cosine of inclination", units="")
-    f_hard = Uniform(0.01, 0.5, description="Corona luminosity fraction", units="")
-    gamma_warm = Uniform(1.5, 3.5, description="Warm Comptonization photon index", units="")
+    a_spin = Uniform(0.0, 0.998, description="Black hole spin parameter", units="dimensionless")
+    cos_inc = Uniform(0.01, 1.0, description="Cosine of inclination", units="dimensionless")
+    f_hard = Uniform(0.01, 0.5, description="Corona luminosity fraction", units="dimensionless")
+    gamma_warm = Uniform(
+        1.5, 3.5, description="Warm Comptonization photon index", units="dimensionless"
+    )
     kt_warm = Uniform(0.1, 0.5, description="Warm zone electron temperature", units="keV")
-    gamma_hard = Uniform(1.5, 2.5, description="Hard X-ray photon index", units="")
+    gamma_hard = Uniform(1.5, 2.5, description="Hard X-ray photon index", units="dimensionless")
     kt_hot = Uniform(50.0, 200.0, description="Hot corona electron temperature", units="keV")
-    r_warm_ratio = Uniform(1.1, 5.0, description="Radius ratio R_warm / R_hot", units="")
-    frac = Uniform(0.0, 1.0, description="Disc luminosity fraction of L_bol", units="")
+    r_warm_ratio = Uniform(
+        1.1, 5.0, description="Radius ratio R_warm / R_hot", units="dimensionless"
+    )
+    frac = Uniform(
+        0.0, 1.0, description="Disc luminosity fraction of L_bol", units="dimensionless"
+    )
 
     # Cross-component output
     outputs: ClassVar[dict[str, str]] = {"L_agn_disc": "erg/s"}

@@ -77,12 +77,21 @@ class TestDL14IRComponent:
     def test_inputs_outputs_contract(self):
         """DL14IR declares inputs and outputs."""
         comp = DL14IRSEDComponent()
-        assert hasattr(comp, "inputs")
-        assert hasattr(comp, "outputs")
-        assert "L_ir" in comp.inputs
-        assert comp.inputs["L_ir"] == "erg/s"
-        assert "L_ir_emission" in comp.outputs
-        assert comp.outputs["L_ir_emission"] == "erg/s"
+        assert callable(comp.inputs)
+
+        assert callable(comp.outputs)
+
+        inputs_map = {k.name: k.units for k in comp.inputs()}
+
+        outputs_map = {k.name: k.units for k in comp.outputs()}
+
+        assert "L_ir" in inputs_map
+
+        assert inputs_map["L_ir"] == "erg/s"
+
+        assert "L_ir_emission" in outputs_map
+
+        assert outputs_map["L_ir_emission"] == "erg/s"
 
 
 class TestDale2014IRComponent:
@@ -128,12 +137,21 @@ class TestDale2014IRComponent:
     def test_inputs_outputs_contract(self):
         """Dale2014IR declares inputs and outputs."""
         comp = Dale2014IRSEDComponent()
-        assert hasattr(comp, "inputs")
-        assert hasattr(comp, "outputs")
-        assert "L_ir" in comp.inputs
-        assert comp.inputs["L_ir"] == "erg/s"
-        assert "L_ir_emission" in comp.outputs
-        assert comp.outputs["L_ir_emission"] == "erg/s"
+        assert callable(comp.inputs)
+
+        assert callable(comp.outputs)
+
+        inputs_map = {k.name: k.units for k in comp.inputs()}
+
+        outputs_map = {k.name: k.units for k in comp.outputs()}
+
+        assert "L_ir" in inputs_map
+
+        assert inputs_map["L_ir"] == "erg/s"
+
+        assert "L_ir_emission" in outputs_map
+
+        assert outputs_map["L_ir_emission"] == "erg/s"
 
 
 class TestAstrodustIRComponent:
@@ -185,12 +203,21 @@ class TestAstrodustIRComponent:
     def test_inputs_outputs_contract(self):
         """AstrodustIR declares inputs and outputs."""
         comp = AstrodustIRSEDComponent()
-        assert hasattr(comp, "inputs")
-        assert hasattr(comp, "outputs")
-        assert "L_ir" in comp.inputs
-        assert comp.inputs["L_ir"] == "erg/s"
-        assert "L_ir_emission" in comp.outputs
-        assert comp.outputs["L_ir_emission"] == "erg/s"
+        assert callable(comp.inputs)
+
+        assert callable(comp.outputs)
+
+        inputs_map = {k.name: k.units for k in comp.inputs()}
+
+        outputs_map = {k.name: k.units for k in comp.outputs()}
+
+        assert "L_ir" in inputs_map
+
+        assert inputs_map["L_ir"] == "erg/s"
+
+        assert "L_ir_emission" in outputs_map
+
+        assert outputs_map["L_ir_emission"] == "erg/s"
 
 
 class TestDraine2021PAHIRComponent:
@@ -236,12 +263,21 @@ class TestDraine2021PAHIRComponent:
     def test_inputs_outputs_contract(self):
         """Draine2021PAHIR declares inputs and outputs."""
         comp = Draine2021PAHIRSEDComponent()
-        assert hasattr(comp, "inputs")
-        assert hasattr(comp, "outputs")
-        assert "L_ir" in comp.inputs
-        assert comp.inputs["L_ir"] == "erg/s"
-        assert "L_ir_emission" in comp.outputs
-        assert comp.outputs["L_ir_emission"] == "erg/s"
+        assert callable(comp.inputs)
+
+        assert callable(comp.outputs)
+
+        inputs_map = {k.name: k.units for k in comp.inputs()}
+
+        outputs_map = {k.name: k.units for k in comp.outputs()}
+
+        assert "L_ir" in inputs_map
+
+        assert inputs_map["L_ir"] == "erg/s"
+
+        assert "L_ir_emission" in outputs_map
+
+        assert outputs_map["L_ir_emission"] == "erg/s"
 
     def test_config_auto_starlight(self):
         """Draine2021PAHIR config supports auto starlight selection."""
