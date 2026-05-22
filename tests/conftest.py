@@ -2,6 +2,7 @@
 """Shared test fixtures for tengri test suite."""
 
 import os
+from collections import Counter
 from pathlib import Path
 
 import h5py
@@ -9,6 +10,45 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+
+# ─────────────────────────────────────────────────────────────────────
+# Skip-tally hook: surface how many parity-sweep ports actually ran
+# vs. skipped due to missing data. Without this, the test report says
+# "X passed, Y skipped" without itemising whether the skipped ones
+# were ports the session was supposed to verify.
+# ─────────────────────────────────────────────────────────────────────
+
+_SKIPPED_PARITY_TESTS: Counter[str] = Counter()
+
+
+def pytest_runtest_makereport(item, call):  # pragma: no cover — pytest hook
+    """Track skips on the parity-sweep tests so the terminal summary
+    can flag low coverage."""
+    if call.when != "setup" and call.when != "call":
+        return
+    rep = getattr(call, "excinfo", None)
+    if rep is None:
+        return
+    nodeid = item.nodeid
+    if "test_sedmodelcomponent_e2e" not in nodeid and "test_spectrum_lut" not in nodeid:
+        return
+    if call.excinfo.typename == "Skipped":
+        _SKIPPED_PARITY_TESTS[nodeid] += 1
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):  # pragma: no cover
+    """Surface parity-sweep skip count in the terminal summary."""
+    n_skipped = sum(_SKIPPED_PARITY_TESTS.values())
+    if n_skipped > 0:
+        terminalreporter.write_sep("=", "PARITY-SWEEP SKIP TALLY")
+        terminalreporter.write_line(
+            f"{n_skipped} parity-sweep test(s) skipped — usually data missing on CI runner."
+        )
+        terminalreporter.write_line(
+            "If this count is high (>50%), the coverage claim in the README is misleading. "
+            "Either ship tiny synthetic test fixtures or accept the coverage gap honestly."
+        )
+
 
 # Suppress background JIT compilation in the test suite.  Without this,
 # every Fitter() instantiation spawns a compilation thread; with many test
