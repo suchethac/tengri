@@ -118,6 +118,32 @@ class PopulationSpecView:
         """Fixed values from the template (broadcast across galaxies)."""
         return self._template.get_fixed_values()
 
+    def param_init_shape(self, name: str) -> tuple[int, ...]:
+        """Initial-xi shape for one free parameter.
+
+        For unbounded-space initialization in the Fitter (paper §2
+        Standardized Inference): per-galaxy free parameters get a
+        leading ``(N,)`` axis; shared parameters stay scalar.
+        ``Parameters`` (the scalar template) implicitly returns
+        ``()`` for every name — that fallback is provided in
+        :meth:`Fitter._initialize_unbounded` via ``getattr``, so
+        scalar specs don't need this method.
+        """
+        return () if name in self._shared else (self._n_galaxies,)
+
+    @property
+    def psd_xi_init_shape(self) -> tuple[int, ...]:
+        """Initial-shape for the stochastic-SFH latent field.
+
+        Hierarchical fits have one ``psd_xi`` realization per galaxy
+        — shape ``(N_galaxies, n_grid)``. Scalar fits stay
+        ``(n_grid,)``.
+        """
+        n_grid = self._n_grid
+        if n_grid is None:
+            return ()
+        return (self._n_galaxies, int(n_grid))
+
     def resolve_mirrors(self, params: dict) -> dict:
         """Delegate mirror resolution to the template.
 

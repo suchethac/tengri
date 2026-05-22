@@ -49,14 +49,14 @@ def test_fitter_constructs_via_standard_path_for_population(
     pop = PopulationSEDModel(
         sed=template,
         galaxies=[
-            {"flux_obs": jnp.ones(5) * 1e-18, "noise": jnp.ones(5) * 1e-19} for _ in range(N)
+            {"flux_obs": jnp.ones(3) * 1e-18, "noise": jnp.ones(3) * 1e-19} for _ in range(N)
         ],
     )
     forward = ForwardModel.build(population=pop, observation=simple_observation)
     fitter = Fitter(forward, _skip_population_delegate=True)
     assert fitter.model is forward
-    assert fitter.data.shape == (N, 5)
-    assert fitter.noise.shape == (N, 5)
+    assert fitter.data.shape == (N, 3)
+    assert fitter.noise.shape == (N, 3)
     # Spec is the wrapped PopulationSpecView
     from tengri.parameters._population_view import PopulationSpecView
 
@@ -65,28 +65,19 @@ def test_fitter_constructs_via_standard_path_for_population(
     assert fitter._population_delegate is None
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Fitter._initialize_unbounded produces scalar xi per free name. "
-        "Hierarchical needs (N,)-shape for per-galaxy params. "
-        "Next incremental PR."
-    )
-)
 def test_fitter_loss_fn_evaluates_on_hierarchical(synthetic_ssp, simple_observation) -> None:
     """neg_log_posterior_fn evaluates to a scalar on a hierarchical fit.
 
-    The chi^2 broadcasts over the galaxy axis naturally; the prior
-    term sums xi^T xi where xi has (N,) leading shape for per-galaxy
-    free params. End-to-end: forward.predict -> chi^2 -> scalar.
+    The chi² broadcasts over the galaxy axis naturally; the prior
+    term sums ξᵀξ where ξ has (N,) leading shape for per-galaxy
+    free params. End-to-end: forward.predict → χ² → scalar.
 
-    Couplings fixed so far (incremental):
+    Couplings fixed (incremental, across PRs):
     - PopulationSEDModel.__hash__ → id(self) (compile-cache hashability)
     - PopulationSpecView.resolve_mirrors → template delegation
     - ForwardModel.predict_photometry → routes through self.predict
-      so batched output flows instead of falling back to scalar SED
-
-    Remaining: Fitter._initialize_unbounded must produce (N,)-shape
-    xi for per-galaxy free params; currently scalar everywhere.
+    - PopulationSpecView.param_init_shape → (N,) per-galaxy, () shared;
+      Fitter._initialize_unbounded honors it.
     """
     from tengri.inference.fitter import Fitter
 
@@ -95,7 +86,7 @@ def test_fitter_loss_fn_evaluates_on_hierarchical(synthetic_ssp, simple_observat
     pop = PopulationSEDModel(
         sed=template,
         galaxies=[
-            {"flux_obs": jnp.ones(5) * 1e-18, "noise": jnp.ones(5) * 1e-19} for _ in range(N)
+            {"flux_obs": jnp.ones(3) * 1e-18, "noise": jnp.ones(3) * 1e-19} for _ in range(N)
         ],
     )
     forward = ForwardModel.build(population=pop, observation=simple_observation)
