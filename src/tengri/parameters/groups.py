@@ -88,6 +88,26 @@ from tengri.parameters.sentinels import FIXED, FREE
 __all__ = ["parameters_to_groups", "parse_groups"]
 
 
+# Ensure SEDModelComponent subclasses are imported and registered.
+# This populates _REGISTRY so the resolver can consult it.
+def _ensure_registry_loaded():
+    """Import all SEDModelComponent subclasses to populate _REGISTRY."""
+    try:
+        # Import key component modules that contain SEDModelComponent subclasses
+        import tengri.components.dust  # noqa: F401
+        import tengri.components.nebular  # noqa: F401
+        import tengri.components.agn  # noqa: F401
+        import tengri.components.radio  # noqa: F401
+        import tengri.components.xray  # noqa: F401
+    except ImportError:
+        # If imports fail (missing dependencies), gracefully continue.
+        # The registry just won't have those types available.
+        pass
+
+
+_ensure_registry_loaded()
+
+
 # ── Constants ──────────────────────────────────────────────────────────────
 
 
@@ -499,10 +519,25 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
 
 
 def _translate_dust(dust_dict: dict, result: dict) -> None:
-    """Translate dust group to dust_model, dust_law_bc, dust_emission."""
+    """Translate dust group to dust_model, dust_law_bc, dust_emission.
+
+    Consults the SEDModelComponent _REGISTRY to allow SEDModelComponent port names
+    to pass through as valid dust types. When a SEDModelComponent type is recognized,
+    the resolution is deferred to the component factory, and we use a default
+    Parameters dust_model to avoid validation errors.
+    """
     dust_type = dust_dict.get("type", "two_component")
 
-    # Validate type
+    # Check if this is a SEDModelComponent type (consult _REGISTRY)
+    from tengri.components.sed_model_component import _REGISTRY
+
+    if dust_type in _REGISTRY:
+        # Recognized as a SEDModelComponent port — use default Parameters dust model
+        # and let the component factory handle component selection
+        result["dust_model"] = "two_component"
+        return
+
+    # Validate type against hard-coded dust model types
     if dust_type not in _VALID_DUST_TYPES:
         suggestions = difflib.get_close_matches(dust_type, _VALID_DUST_TYPES, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
@@ -536,6 +571,11 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
         if isinstance(emission_dict, dict):
             emission_type = emission_dict.get("type", None)
             if emission_type is not None:
+                # Check if this is a SEDModelComponent port
+                if emission_type in _REGISTRY:
+                    result["dust_emission"] = emission_type
+                    return
+
                 if emission_type not in _VALID_DUST_EMISSION_TYPES:
                     suggestions = difflib.get_close_matches(
                         emission_type, _VALID_DUST_EMISSION_TYPES, n=3, cutoff=0.6
