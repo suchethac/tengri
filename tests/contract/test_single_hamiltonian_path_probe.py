@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Probe tests for the standard Fitter path on hierarchical fits.
+"""Tests for the standard Fitter path on hierarchical fits.
 
-Bypasses the legacy ``_maybe_population_delegate`` to exercise the
-standard NUTS/MAP/VI machinery on a PopulationSEDModel. These tests
-discover what breaks in the standard path so the deep removal can
-proceed deliberately.
+After PRs #241-#245 the legacy ``_maybe_population_delegate`` was
+removed. These tests pin the standard NUTS/MAP/VI path's behaviour
+on hierarchical (PopulationSEDModel) fits — the single information-
+Hamiltonian path the tengri paper §2 describes.
 
-Part of PR #239's plan; deleted before the final removal PR merges.
+Originally probes for the migration; kept as the canonical
+hierarchical-fit smoke tests.
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ def _template(synthetic_ssp, simple_observation):
 def test_fitter_constructs_via_standard_path_for_population(
     synthetic_ssp, simple_observation
 ) -> None:
-    """Fitter(forward, _skip_population_delegate=True) constructs on a hierarchical fit.
+    """Fitter(forward) constructs on a hierarchical fit.
 
     Auto-extracts (N, n_filters) data from pop.batched_data(); spec is
     the PopulationSpecView from #241. The construction completes
@@ -53,7 +54,7 @@ def test_fitter_constructs_via_standard_path_for_population(
         ],
     )
     forward = ForwardModel.build(population=pop, observation=simple_observation)
-    fitter = Fitter(forward, _skip_population_delegate=True)
+    fitter = Fitter(forward)
     assert fitter.model is forward
     assert fitter.data.shape == (N, 3)
     assert fitter.noise.shape == (N, 3)
@@ -61,8 +62,9 @@ def test_fitter_constructs_via_standard_path_for_population(
     from tengri.parameters._population_view import PopulationSpecView
 
     assert isinstance(fitter.spec, PopulationSpecView)
-    # No delegate
-    assert fitter._population_delegate is None
+    # Legacy _population_delegate attribute is gone in the
+    # single-Hamiltonian path; this assertion was the canary.
+    assert not hasattr(fitter, "_population_delegate")
 
 
 def test_fitter_loss_fn_evaluates_on_hierarchical(synthetic_ssp, simple_observation) -> None:
@@ -90,7 +92,7 @@ def test_fitter_loss_fn_evaluates_on_hierarchical(synthetic_ssp, simple_observat
         ],
     )
     forward = ForwardModel.build(population=pop, observation=simple_observation)
-    fitter = Fitter(forward, _skip_population_delegate=True)
+    fitter = Fitter(forward)
 
     # Draw a sample from the spec (gives batched-shape params)
     import jax
@@ -131,7 +133,7 @@ def test_fitter_run_map_on_hierarchical(synthetic_ssp, simple_observation) -> No
         ],
     )
     forward = ForwardModel.build(population=pop, observation=simple_observation)
-    fitter = Fitter(forward, _skip_population_delegate=True)
+    fitter = Fitter(forward)
     result = fitter.run("map", key=jax.random.PRNGKey(0), n_steps=10)
     # Just verify we got back a Posterior and the MAP point is finite
     assert result is not None
