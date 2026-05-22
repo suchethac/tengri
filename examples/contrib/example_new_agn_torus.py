@@ -130,6 +130,7 @@ print(
         # Load SSP data
         from pathlib import Path
         from tengri import (
+    ForwardModel,
             Fitter,
     ForwardModel,
             Observation,
@@ -174,7 +175,8 @@ print(
         mock_data = tengri.generate_mock(model, truth_params, snr=100.0)
 
         # Fit with MAP
-        fitter = Fitter(model, mock_data["flux_obs"], mock_data["noise"])
+        forward = ForwardModel.build(sed=model, observation=obs)
+        fitter = Fitter(forward, mock_data["flux_obs"], mock_data["noise"])
         result = fitter.run("map", n_steps=50, learning_rate=0.01)
         print(result)
     """

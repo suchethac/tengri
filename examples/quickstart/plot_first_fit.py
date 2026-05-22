@@ -25,6 +25,7 @@ from tengri import (
     FREE,
     Fitter,
     Fixed,
+    ForwardModel,
     Observation,
     Photometry,
     SEDModel,
@@ -53,7 +54,9 @@ sed = SEDModel.build(
     redshift=Fixed(0.05),
 )
 
-# --- Wrap with ForwardModel for fitting ---
+# --- Wrap with ForwardModel — the outer shell inference consumes ---
+forward = ForwardModel.build(sed=sed, observation=obs)
+
 # --- Mock a star-forming galaxy at z=0.05 (SNR=20) ---
 key = jax.random.PRNGKey(42)
 truth = sed.spec.sample(key)
@@ -66,7 +69,7 @@ truth.update(
 mock = sed.mock(truth, snr=20.0, key=key)
 
 # --- Fit with MAP (Adam) ---
-posterior = Fitter(sed, data=mock.flux_obs, noise=mock.noise).run(
+posterior = Fitter(forward, data=mock.flux_obs, noise=mock.noise).run(
     "map", optimizer="adam", n_steps=300, verbose=False
 )
 

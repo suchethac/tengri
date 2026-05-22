@@ -20,6 +20,7 @@ import numpy as np
 from tengri import (
     Fitter,
     Fixed,
+    ForwardModel,
     Observation,
     Parameters,
     Photometry,
@@ -66,7 +67,8 @@ true_params["sfh_tsnorm_skew"] = 0.3  # Positive skew = recent star formation
 mock = model.mock(true_params, snr=20.0, key=key)
 
 # --- Fit: MAP ---
-fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
+forward = ForwardModel.build(sed=model, observation=obs)
+fitter = Fitter(forward, mock.flux_obs, mock.noise, data_type="photometry")
 result_map = fitter.run("map", n_steps=300, verbose=False)
 
 # --- Fit: vi/geoVI (quick settings) ---

@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 from tengri import (
     Fitter,
     Fixed,
+    ForwardModel,
     Observation,
     Parameters,
     Photometry,
@@ -60,7 +61,8 @@ true_params["sfh_tsnorm_log_peak_sfr"] = 1.0
 mock = model.mock(true_params, snr=25.0, key=key)
 
 # --- Fit ---
-fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
+forward = ForwardModel.build(sed=model, observation=obs)
+fitter = Fitter(forward, mock.flux_obs, mock.noise, data_type="photometry")
 fitter.run("map", n_steps=300, verbose=False)
 fitter.compile(verbose=False)
 posterior = fitter.run(

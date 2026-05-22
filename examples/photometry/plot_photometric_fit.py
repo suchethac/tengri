@@ -23,6 +23,7 @@ from tengri import (
     FREE,
     Fitter,
     Fixed,
+    ForwardModel,
     Observation,
     Photometry,
     SEDModel,
@@ -59,7 +60,8 @@ true_params["sfh_tsnorm_skew"] = 0.3
 mock = sed.mock(true_params, snr=20.0, key=jax.random.PRNGKey(43))
 
 # --- Fit with MAP ---
-posterior = Fitter(sed, data=mock.flux_obs, noise=mock.noise).run(
+forward = ForwardModel.build(sed=sed, observation=obs)
+posterior = Fitter(forward, data=mock.flux_obs, noise=mock.noise).run(
     "map", optimizer="adam", n_steps=300, verbose=False
 )
 best_fit = sed.predict_photometry(posterior.params)

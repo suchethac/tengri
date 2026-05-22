@@ -24,6 +24,7 @@ import numpy as np
 from tengri import (
     Fitter,
     Fixed,
+    ForwardModel,
     Observation,
     Parameters,
     Photometry,
@@ -96,7 +97,8 @@ spec_correct = Parameters(
     mean_sfh_type="tsnorm",
 )
 model_correct = SEDModel(spec_correct, ssp, observation=obs)
-fitter_c = Fitter(model_correct, data=mock.flux_obs, noise=mock.noise)
+forward = ForwardModel.build(sed=model_correct, observation=obs)
+fitter_c = Fitter(forward, data=mock.flux_obs, noise=mock.noise)
 post_correct = fitter_c.run("map", optimizer="adam", n_steps=400, verbose=False)
 
 # --- Fit 2: wrong model (delayed-tau, smooth) ---

@@ -24,6 +24,7 @@ import numpy as np
 from tengri import (
     Fitter,
     Fixed,
+    ForwardModel,
     Observation,
     Parameters,
     Photometry,
@@ -120,7 +121,8 @@ mock = {
 # %%
 # Fit with MAP
 # -------------
-fitter = Fitter(model, mock["flux_obs"], mock["noise"], data_type="joint")
+forward = ForwardModel.build(sed=model, observation=obs)
+fitter = Fitter(forward, mock["flux_obs"], mock["noise"], data_type="joint")
 posterior = fitter.run("map", optimizer="adam")
 
 # %%

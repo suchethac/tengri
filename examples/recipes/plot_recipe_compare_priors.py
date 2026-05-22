@@ -21,6 +21,7 @@ import numpy as np
 from tengri import (
     Fitter,
     Fixed,
+    ForwardModel,
     Gaussian,
     Observation,
     Parameters,
@@ -85,7 +86,8 @@ spec_uniform = Parameters(
     mean_sfh_type="tsnorm",
 )
 model_uniform = SEDModel(spec_uniform, ssp, observation=obs)
-fitter_uniform = Fitter(model_uniform, data=mock.flux_obs, noise=mock.noise)
+forward = ForwardModel.build(sed=model_uniform, observation=obs)
+fitter_uniform = Fitter(forward, data=mock.flux_obs, noise=mock.noise)
 fitter_uniform.run("map", optimizer="adam", n_steps=200, verbose=False)
 posterior_uniform = fitter_uniform.run(
     "vi",

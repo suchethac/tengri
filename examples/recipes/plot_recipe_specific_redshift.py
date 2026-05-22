@@ -21,6 +21,7 @@ import numpy as np
 from tengri import (
     Fitter,
     Fixed,
+    ForwardModel,
     Observation,
     Parameters,
     Photometry,
@@ -86,7 +87,8 @@ spec_fixed_z = Parameters(
     mean_sfh_type="tsnorm",
 )
 model_fixed = SEDModel(spec_fixed_z, ssp, observation=obs)
-fitter_fixed = Fitter(model_fixed, data=mock.flux_obs, noise=mock.noise)
+forward = ForwardModel.build(sed=model_fixed, observation=obs)
+fitter_fixed = Fitter(forward, data=mock.flux_obs, noise=mock.noise)
 posterior_fixed = fitter_fixed.run("map", optimizer="adam", n_steps=200, verbose=False)
 
 # --- Fit 2: Redshift FREE (photometry only) ---

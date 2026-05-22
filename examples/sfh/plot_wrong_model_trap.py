@@ -22,6 +22,7 @@ import numpy as np
 from tengri import (
     Fitter,
     Fixed,
+    ForwardModel,
     Observation,
     Parameters,
     SEDModel,
@@ -78,7 +79,8 @@ spec_smooth = Parameters(
 )
 model_smooth = SEDModel(spec_smooth, ssp, observation=obs)
 
-fitter_smooth = Fitter(model_smooth, mock.flux_obs, mock.noise, data_type="spectroscopy")
+forward = ForwardModel.build(sed=model_smooth, observation=obs)
+fitter_smooth = Fitter(forward, mock.flux_obs, mock.noise, data_type="spectroscopy")
 map_smooth = fitter_smooth.run("map", n_steps=400, verbose=False)
 
 # --- Compare SFHs ---

@@ -22,6 +22,7 @@ import numpy as np
 from tengri import (
     Fitter,
     Fixed,
+    ForwardModel,
     Observation,
     Parameters,
     Photometry,
@@ -76,7 +77,8 @@ true_params["dust_tau_bc"] = 0.1
 mock = model.mock(true_params, snr=15.0, key=key)
 
 # --- Fit with MAP ---
-fitter = Fitter(model, data=mock.flux_obs, noise=mock.noise)
+forward = ForwardModel.build(sed=model, observation=obs)
+fitter = Fitter(forward, data=mock.flux_obs, noise=mock.noise)
 posterior = fitter.run("map", optimizer="adam", n_steps=400, verbose=False)
 
 # --- Plot: SED with dropout signature ---

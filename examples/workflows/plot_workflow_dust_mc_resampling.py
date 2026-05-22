@@ -24,6 +24,7 @@ import numpy as np
 from tengri import (
     Fitter,
     Fixed,
+    ForwardModel,
     Observation,
     Parameters,
     Photometry,
@@ -76,7 +77,8 @@ true_params["dust_tau_diff"] = 0.3
 mock = model.mock(true_params, snr=20.0, key=key)
 
 # --- Fit with NUTS (generates posterior samples) ---
-fitter = Fitter(model, data=mock.flux_obs, noise=mock.noise)
+forward = ForwardModel.build(sed=model, observation=obs)
+fitter = Fitter(forward, data=mock.flux_obs, noise=mock.noise)
 # Use MAP first to warm-start NUTS
 fitter.run("map", optimizer="adam", n_steps=300, verbose=False)
 fitter.compile(verbose=False)

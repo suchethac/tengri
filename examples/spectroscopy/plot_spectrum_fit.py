@@ -21,6 +21,7 @@ import numpy as np
 from tengri import (
     Fitter,
     Fixed,
+    ForwardModel,
     Observation,
     Parameters,
     SEDModel,
@@ -65,7 +66,8 @@ true_params = spec.sample(jax.random.PRNGKey(42))
 mock = model.mock_spectrum(true_params, WAVE_OBS, snr=30.0, key=jax.random.PRNGKey(1))
 
 # --- Fit with MAP ---
-fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="spectroscopy")
+forward = ForwardModel.build(sed=model, observation=obs)
+fitter = Fitter(forward, mock.flux_obs, mock.noise, data_type="spectroscopy")
 posterior = fitter.run("map", optimizer="adam", n_steps=500, verbose=False)
 best_spec = model.predict_spectrum(posterior.params, WAVE_OBS)
 

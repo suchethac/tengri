@@ -22,6 +22,7 @@ import numpy as np
 from tengri import (
     Fitter,
     Fixed,
+    ForwardModel,
     Observation,
     Parameters,
     Photometry,
@@ -88,7 +89,8 @@ for gal_idx, gal in enumerate(galaxy_data):
     )
     model = SEDModel(spec, ssp, observation=obs_config)
     # MAP fit
-    fitter = Fitter(model, data=gal["flux"], noise=gal["error"])
+    forward = ForwardModel.build(sed=model, observation=obs_config)
+    fitter = Fitter(forward, data=gal["flux"], noise=gal["error"])
     posterior = fitter.run("map", optimizer="adam", n_steps=200, verbose=False)
 
     # Plot
