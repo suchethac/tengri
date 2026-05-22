@@ -181,52 +181,56 @@ variant swapping, and round-trip editing. Design plan:
 - **AGN shared physics**: `_planck_lnu` in `components/agn/_phys.py` — do NOT duplicate the Planck function.
 - **Notebooks**: edit `.py` files (jupytext percent format), never `.ipynb`.
 
-## Adding a new physics block (Phase II-2 component shape)
+## Adding a new physics block
 
-The forward model is mid-migration to a `SEDComponent`-based pipeline (`src/tengri/protocols/component.py`; `tengri.core` is a deprecation shim as of 2026-05-18, see `docs/dev/api_migration_v0.x.md` §Phase II-3.1). New physics blocks **must** follow the Protocol shape rather than adding branches to `forward/sed_model.py` or `forward/pipeline.py`.
+**Default path — `SEDModelComponent` (one file):**
 
-**Canonical adapter to copy:** `src/tengri/components/radio/component.py`. Mirror its layout exactly.
-
-**Required structure** (see `core/component.py` for the Protocol):
+For any model that has free parameters, a wavelength-dependent emission or
+transformation function, and (optionally) a pre-computed library or trained
+emulator — closed-form attenuation laws, dust IR libraries, AGN torus
+libraries, nebular emulators — subclass `SEDModelComponent`:
 
 ```python
-@dataclass(frozen=True)
-class MySEDComponentConfig(SEDComponentConfig):
-    name: str = "my"
-    # static knobs only — no parameters that the user fits
+class MyModel(SEDModelComponent):
+    name = "my_model"               # registry key
+    parameter_prefix = "my_"
 
-@dataclass(frozen=True)
-class MySEDComponent:
-    config: MySEDComponentConfig = field(default_factory=MySEDComponentConfig)
-    name: str = "my"
-    parameter_prefix: str = "my_"     # CI-enforced via tools/check_param_prefixes.py
+    T    = Uniform(20.0, 80.0, "temperature",    units="K")
+    beta = Uniform( 1.0,  3.0, "emissivity index", units="")
 
-    def declared_parameters(self) -> list[ParamDeclaration]: ...
-    def publishes(self) -> tuple[DerivedKey, ...]: ...   # cross-component outputs
-    def requires(self) -> tuple[DerivedKey, ...]: ...    # default `()` for opportunistic readers
-    def precompute(self, ssp_data=None, wave_grid=None) -> SEDComponentState: ...
-    def apply(self, state: PipelineState, params) -> PipelineState: ...
+    inputs  = {"L_absorbed": "erg/s"}
+    outputs = {"L_ir": "erg/s"}
+
+    def load(self, wave):           # optional: load atlas/weights → self.data
+        return None
+
+    def predict(self, p, sed_in, wave, *, L_absorbed):
+        sed = my_emission_formula(wave, L_absorbed, p["T"], p["beta"])
+        return sed_in + sed, {"L_ir": trapz_freq(sed, wave)}
 ```
 
-**Cross-component contract (`publishes` / `requires`).** Per
-ADR-0009 (`docs/adr/0009-typed-pipeline-contract.md`, originally
-authored as ADR-0004 in PR #19) every component declares the derived
-keys it writes to / reads from `PipelineState.derived` via
-`DerivedKey(name, units, description)`. `validate_pipeline` in
-`forward/orchestrator.py` runs at `build_components` time and refuses
-renames, unit drift, and out-of-order publishers — with a
-"Did you mean: ..." hint for likely typos. New derived keys add one
-line to `_CANONICAL_UNITS` in the same PR that introduces the
-publisher, plus a matching field on `DerivedBundle`
-(`tengri.protocols.derived_bundle`) per ADR-0007.
+`__init_subclass__` auto-discovers class-level `Distribution` priors,
+registers `(name, cls)` so `SEDModel.build(dust={'type': 'my_model'})`
+finds it, auto-fills `inputs()`/`outputs()` from the dicts, and provides
+sensible `apply()`/`precompute()`. Astronomer writes physics only.
 
-**Parameters.** `declared_parameters()` mirrors the entries already in `parameters/_param_defs.py` — do **not** duplicate priors. The `_param_defs.py` registry stays the single source of truth until the migration completes.
+The contract:
+* `p` — parameter dict, prefix stripped (`p["T"]`, not `p["my_T"]`)
+* `sed_in` — rest-frame L_ν from upstream (erg/s/Hz); zeros if first
+* `wave` — rest-frame grid in Å (or filter effective wavelengths under WavePrecomp)
+* `**inputs` — keyword args auto-supplied from `state.derived`
+* Return `(sed_out, published_dict)` — new SED + dict matching `outputs` keys
 
-**Cross-component coupling.** Read upstream quantities from `state.derived` with a documented fallback (e.g. `state.derived.get("L_ir", 0.0)`); publish your own as `state.derived["L_<name>"]`. Never reach into another component's state directly.
+**Reference:**
+- [`docs/dev/sed-model-components.md`](docs/dev/sed-model-components.md) — full how-to + three worked examples (closed-form, library, NN emulator)
+- [`docs/dev/forward-model-architecture.md`](docs/dev/forward-model-architecture.md) — architectural context
+- [`docs/adr/0011-sed-model-component-base.md`](docs/adr/0011-sed-model-component-base.md) — the design decision
+- [`src/tengri/components/dust/calzetti_model.py`](src/tengri/components/dust/calzetti_model.py) — canonical small port (analytic closed-form)
+- [`src/tengri/components/agn/skirtor_model.py`](src/tengri/components/agn/skirtor_model.py) — canonical library port
 
-**Source of truth:** `docs/dev/20260404-refactor.md`. The active plan, entropy budget, and PR order live there.
+**Advanced fallback — the bare `SEDComponent` Protocol:**
 
-**Do not pre-build** `Parameters.from_components(...)` — it is deferred until ≥5 components have landed.
+Reserve this for models that don't fit the `predict(p, sed_in, wave, **inputs)` shape — typically Stellar (SFH + SSP + age weights + nine derived publishes) and IGM (observer-frame transformation). The bare-Protocol pattern is at `src/tengri/protocols/component.py`; the canonical reference is `src/tengri/components/radio/component.py`. Cross-component contract (`inputs/outputs/optional_inputs`) is documented in ADR-0009.
 
 ## Adding a new inference backend (InferenceContext shape — ADR-0010)
 
