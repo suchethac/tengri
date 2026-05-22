@@ -1,7 +1,7 @@
-"""Tests for ForwardModel (forward-model architecture §5).
+"""Tests for ForwardModel (forward-model architecture §5–§6).
 
-Tracer-bullet scope: single-population only. Multi-population lives
-in the ADR-0012 plan.
+Covers both the single-population convenience path and the
+multi-population namespace (ADR-0012).
 """
 
 from __future__ import annotations
@@ -48,15 +48,25 @@ def test_build_accepts_explicit_populations(sed_model_minimal, simple_observatio
     assert forward.populations[0].name == "only"
 
 
-def test_build_rejects_multi_population_in_tracer_bullet(
-    sed_model_minimal, simple_observation
-) -> None:
-    """Multi-population is deferred to ADR-0012 plan. Tracer-bullet ships single-pop."""
+def test_build_accepts_multi_population(sed_model_minimal, simple_observation) -> None:
+    """ADR-0012: build accepts >1 distinct populations."""
     pops = [
         Population(name="a", sed=sed_model_minimal),
         Population(name="b", sed=sed_model_minimal),
     ]
-    with pytest.raises(NotImplementedError, match="ADR-0012"):
+    forward = ForwardModel.build(populations=pops, observation=simple_observation)
+    assert {p.name for p in forward.populations} == {"a", "b"}
+
+
+def test_build_rejects_duplicate_population_names(
+    sed_model_minimal, simple_observation
+) -> None:
+    """Distinct names required (ADR-0012)."""
+    pops = [
+        Population(name="agn", sed=sed_model_minimal),
+        Population(name="agn", sed=sed_model_minimal),
+    ]
+    with pytest.raises(ValueError, match="distinct"):
         ForwardModel.build(populations=pops, observation=simple_observation)
 
 
@@ -135,3 +145,49 @@ def test_predict_matches_legacy_sedmodel(sed_model_minimal, simple_observation) 
     new_phot = pred_new.get("phot_fnu", pred_new.get("fnu_obs"))
     assert new_phot is not None, f"Prediction dict missing photometric key: {list(pred_new)}"
     assert jnp.allclose(new_phot, pred_old, rtol=1e-10, atol=0.0)
+
+
+# ── Multi-population (ADR-0012) ─────────────────────────────────────
+
+
+def test_multi_population_predict_sums_in_linear_flux(
+    sed_model_minimal, simple_observation
+) -> None:
+    """Two populations with identical SEDs ⇒ summed flux = 2 × single-pop flux."""
+    import jax.numpy as jnp
+
+    single = ForwardModel.build(sed=sed_model_minimal, observation=simple_observation)
+    twin = ForwardModel.build(
+        populations=[
+            Population(name="a", sed=sed_model_minimal),
+            Population(name="b", sed=sed_model_minimal),
+        ],
+        observation=simple_observation,
+    )
+    pred_single = single.predict({})
+    pred_twin = twin.predict({})
+
+    single_phot = pred_single.get("phot_fnu", pred_single.get("fnu_obs"))
+    twin_phot = pred_twin.get("phot_fnu", pred_twin.get("fnu_obs"))
+    assert jnp.allclose(twin_phot, 2.0 * single_phot, rtol=1e-10)
+
+
+def test_multi_population_params_slice_by_namespace(
+    sed_model_minimal, simple_observation
+) -> None:
+    """Namespaced params reach the right population; bare names flow everywhere."""
+    import jax.numpy as jnp
+
+    forward = ForwardModel.build(
+        populations=[
+            Population(name="a", sed=sed_model_minimal),
+            Population(name="b", sed=sed_model_minimal),
+        ],
+        observation=simple_observation,
+    )
+    # No free params in this minimal model, but the namespace path should
+    # still produce finite output (this exercises _params_for_population).
+    pred = forward.predict({"redshift": 0.05})
+    phot = pred.get("phot_fnu", pred.get("fnu_obs"))
+    assert phot is not None
+    assert jnp.all(jnp.isfinite(phot))

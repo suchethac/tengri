@@ -68,3 +68,42 @@ def test_joint_passes_state_and_params_to_each_child() -> None:
     assert len(captures) == 2
     assert all(s is state for s, _ in captures)
     assert all(p is params for _, p in captures)
+
+
+# ── Multi-population summing (ADR-0012) ─────────────────────────────
+
+
+def test_predict_summed_linear_flux_sum() -> None:
+    """predict_summed sums each channel across populations in linear flux."""
+    obs = JointObservation(
+        _StubObs(fixed_output={"phot_fnu": jnp.array([1.0, 2.0])}),
+    )
+    state_a = ForwardState(wave=jnp.zeros(1))
+    state_b = ForwardState(wave=jnp.zeros(1))
+    per_pop_states = {"a": state_a, "b": state_b}
+    per_pop_params = {"a": {}, "b": {}}
+    pred = obs.predict_summed(per_pop_states, per_pop_params)
+    # Both populations return [1.0, 2.0]; sum is [2.0, 4.0]
+    assert jnp.allclose(pred["phot_fnu"], jnp.array([2.0, 4.0]))
+
+
+def test_predict_summed_passes_per_pop_params() -> None:
+    """Each child observation sees its population's params."""
+    captures: list[tuple[str, Any]] = []
+
+    @dataclass(frozen=True)
+    class _SpyObs:
+        name: str = "spy"
+
+        def predict(self, state, params):
+            captures.append((params.get("redshift"), state))
+            return {"phot_fnu": jnp.array([1.0])}
+
+    obs = JointObservation(_SpyObs())
+    state_a = ForwardState(wave=jnp.zeros(1))
+    state_b = ForwardState(wave=jnp.zeros(1))
+    per_pop_states = {"a": state_a, "b": state_b}
+    per_pop_params = {"a": {"redshift": 0.1}, "b": {"redshift": 0.3}}
+    obs.predict_summed(per_pop_states, per_pop_params)
+    redshifts = {c[0] for c in captures}
+    assert redshifts == {0.1, 0.3}

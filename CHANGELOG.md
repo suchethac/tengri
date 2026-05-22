@@ -8,10 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- **Multi-population galaxy decompositions (ADR-0012 accepted).**
+  `ForwardModel.build(populations=[...])` now accepts N > 1
+  populations for AGN + bulge + disc and similar galaxy
+  decompositions. Parameter names use the namespace
+  `"<population_name>.<prefix>_<param>"` (e.g.
+  `"disc.sfh_dpl_alpha"`); bare names like `redshift` flow to every
+  population. Each population's prediction is summed in linear flux
+  at the observation layer via `JointObservation.predict_summed`.
+  Cross-population state reads are supported by namespaced keys in
+  `state.derived` (e.g. `"agn.L_bolometric"`). The prefix CI guard
+  strips the namespace before applying the prefix discipline. See
+  `docs/adr/0012-forward-model-population.md`.
 - **`tengri.ForwardModel`** — the outer-shell forward-model class.
   Wraps populations + observation and exposes a single
-  `.predict(params)` method. Tracer-bullet single-population only;
-  multi-population lands in the ADR-0012 follow-up plan. See
+  `.predict(params)` method. See
   `docs/dev/forward-model-architecture.md`.
 - **`tengri.Population`** — one (SED, spatial) pair held by
   `ForwardModel`. Spatial submodel is reserved (`None`) in this

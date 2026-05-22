@@ -68,3 +68,56 @@ class JointObservation:
         for child in self.children:
             out.update(child.predict(state, params))
         return out
+
+    def predict_summed(
+        self,
+        per_pop_states: Mapping[str, ForwardState],
+        per_pop_params: Mapping[str, Mapping[str, jnp.ndarray]],
+    ) -> Mapping[str, jnp.ndarray]:
+        """Sum each child observation's prediction across populations.
+
+        For each child observation, run its ``predict`` on every
+        population's state, then sum the resulting per-population
+        dicts key-by-key (linear flux sum). Returns the merged dict.
+
+        This is the multi-population entry point used by
+        :meth:`tengri.ForwardModel.predict` when more than one
+        :class:`Population` is wired up.
+
+        Parameters
+        ----------
+        per_pop_states : mapping of population name -> ForwardState
+            One state per population (already namespace-merged in
+            ``derived`` so cross-population reads work).
+        per_pop_params : mapping of population name -> params dict
+            The fixed-values-merged parameter dict each population
+            saw, useful when child observations read
+            population-specific parameters (e.g. per-population
+            redshifts).
+
+        Returns
+        -------
+        mapping of str -> array
+            Merged + summed prediction dict, same shape as
+            :meth:`predict`.
+        """
+        summed: dict[str, jnp.ndarray] = {}
+        for child in self.children:
+            per_pop_pred = {
+                name: child.predict(state, per_pop_params[name])
+                for name, state in per_pop_states.items()
+            }
+            all_keys: set[str] = set()
+            for pred in per_pop_pred.values():
+                all_keys.update(pred.keys())
+            for key in all_keys:
+                contributions = [
+                    pred[key] for pred in per_pop_pred.values() if key in pred
+                ]
+                if not contributions:
+                    continue
+                total = contributions[0]
+                for c in contributions[1:]:
+                    total = total + c
+                summed[key] = total  # last child wins on collision (same as predict)
+        return summed
