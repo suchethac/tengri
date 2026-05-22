@@ -7,24 +7,42 @@
 ## Why this exists
 
 Tengri is released under **BSD-3-Clause**. Several physics modules cite "ported
-from" upstream projects whose licenses are not BSD-permissive:
+from" upstream projects. Upstream licenses (verified 2026-05-22):
 
-| Upstream | License | Where it appears in tengri |
-| --- | --- | --- |
-| Prospector (`bd-j/prospector`) | (verify upstream) | `igm.py` (`add_igm` from `fake_fsps.py`), `nlr.py`, line-placement, `psb_logsfr_ratios_to_agebins`, `zred_to_agebins_pbeta` |
-| CIGALE | **CeCILL** (GPL-equivalent) | `polar_dust.py`, `disc_cigale.py`, SFH modules (`sfh_buat08`, `sfhdelayedbq`, `sfhperiodic`), IRX |
-| ProSpect (R package) | **GPL-3** | `massfunc_p4`, `massfunc_p6`, `massfunc_snorm_burst`, `massfunc_snorm_burst_trunc` |
-| AGNfitter / AGNfitter-rX | (verify upstream — paper-published code) | `silva04.py`, BBB helpers |
-| FastSpecFit | (verify upstream) | `analysis/diagnostics/lines.py` (`populate_emtable`, `LineMasker`) |
-| RELAGN / XSpec `donthcomp.f` | (verify upstream) | `_nthcomp.py` |
+| Upstream | License | Compatibility | Where it appears in tengri |
+| --- | --- | --- | --- |
+| Prospector (`bd-j/prospector`) | **MIT** | ✓ permissive | `igm.py` (`add_igm` from `fake_fsps.py`), `nlr.py`, line-placement, `psb_logsfr_ratios_to_agebins`, `zred_to_agebins_pbeta` |
+| FastSpecFit (`desihub/fastspecfit`) | **BSD-3-Clause** | ✓ matches | `analysis/diagnostics/lines.py` (`populate_emtable`, `LineMasker`) |
+| AGNfitter / AGNfitter-rX (`GabrielaCR/AGNfitter`) | **MIT** | ✓ permissive | `silva04.py`, BBB helpers |
+| RELAGN (`scotthgn/RELAGN`) | **MIT** | ✓ permissive | `_nthcomp.py` (XSpec `donthcomp.f` lineage; original XSpec is NASA public domain) |
+| eazy-py (`gbrammer/eazy-py`) | **MIT** | ✓ permissive | IGM coefficient tables in `igm.py` (lines 79–168) |
+| **CIGALE** (`gitlab.lam.fr/cigale/cigale`) | **CeCILL v2** | ⚠ copyleft | `polar_dust.py`, `disc_cigale.py`, SFH modules (`sfh_buat08`, `sfhdelayedbq`, `sfhperiodic`), IRX |
+| **ProSpect** (R package, `asgr/ProSpect`) | **LGPL-3** | ⚠ copyleft (linking-permissive) | `massfunc_p4`, `massfunc_p6`, `massfunc_snorm_burst`, `massfunc_snorm_burst_trunc` |
 
-GPL-3 and CeCILL are viral copyleft licenses. *If* tengri's "ports" are
-substantial derivative works of those codebases, then the BSD-3 release is
-license-incompatible with the upstream's terms and the offending modules
-would need to be (a) re-released under GPL-3, (b) replaced with clean-room
-reimplementations, or (c) shown to fall outside the upstream's copyright
-scope. This issue captures the current assessment and the work needed to
-close it.
+**Revised risk profile (2026-05-22):** the verification flipped the picture
+materially. Prospector — previously suspected of being GPL — is **MIT**,
+which is fully compatible with BSD-3. The same is true of AGNfitter (MIT),
+RELAGN (MIT), and eazy-py (MIT); FastSpecFit is BSD-3 (matches tengri). The
+only remaining copyleft concerns are **CIGALE (CeCILL v2)** and **ProSpect
+(LGPL-3)**.
+
+For the remaining two:
+
+- **CIGALE (CeCILL v2)** is the closest French equivalent of GPL. Viral if
+  the port is a substantial derivative work of CIGALE source code (not just
+  the physics CIGALE implements).
+- **ProSpect (LGPL-3)** is *linking-permissive* — calling ProSpect from
+  BSD-3 code is fine, but *copying* its source into a BSD-3 codebase still
+  triggers LGPL on the copied portion. The current "Ported from ProSpect"
+  notes need to be scrutinised: if they are reimplementations from the
+  published ProSpect / massfunc papers, that is clean; if they are
+  R-to-JAX transliterations of ProSpect functions, LGPL applies.
+
+Resolution options remain the same: (a) re-release the affected modules
+under the upstream license, (b) replace with clean-room reimplementations
+from the original papers, or (c) demonstrate the ports fall outside the
+upstream's copyright scope (e.g. by being short, equation-driven, with
+no carry-over of upstream control-flow or variable naming).
 
 ## Current assessment (port-vs-rewrite, per file)
 
