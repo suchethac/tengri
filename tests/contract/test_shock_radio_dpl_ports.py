@@ -5,6 +5,8 @@ from __future__ import annotations
 import jax.numpy as jnp
 import pytest
 
+pytestmark = pytest.mark.contract
+
 from tengri.components.nebular.shock_model import ShockNebular
 from tengri.components.radio.radio_dpl_model import RadioDPL
 from tengri.components.sed_model_component import _REGISTRY
