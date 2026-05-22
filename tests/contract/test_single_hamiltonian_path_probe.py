@@ -107,3 +107,35 @@ def test_fitter_loss_fn_evaluates_on_hierarchical(synthetic_ssp, simple_observat
         f"loss is non-finite: {float(loss_value)}; "
         f"likely a shape-mismatch in the chi^2 broadcast or prior penalty"
     )
+
+
+def test_fitter_run_map_on_hierarchical(synthetic_ssp, simple_observation) -> None:
+    """``Fitter(forward).run('map')`` completes on a hierarchical fit.
+
+    The standard inference path drives MAP via :func:`jaxopt.LBFGS`
+    minimisation of ``neg_log_posterior_fn``. With #244's batched ξ
+    init and scalar prior penalty, the loss surface is well-defined.
+    This probe verifies the optimiser actually converges to a finite
+    point and surfaces what coupling remains beyond the loss-fn level.
+    """
+    import jax
+
+    from tengri.inference.fitter import Fitter
+
+    template = _template(synthetic_ssp, simple_observation)
+    N = 3
+    pop = PopulationSEDModel(
+        sed=template,
+        galaxies=[
+            {"flux_obs": jnp.ones(3) * 1e-18, "noise": jnp.ones(3) * 1e-19} for _ in range(N)
+        ],
+    )
+    forward = ForwardModel.build(population=pop, observation=simple_observation)
+    fitter = Fitter(forward, _skip_population_delegate=True)
+    result = fitter.run("map", key=jax.random.PRNGKey(0), n_steps=10)
+    # Just verify we got back a Posterior and the MAP point is finite
+    assert result is not None
+    assert hasattr(result, "params")
+    for name, val in result.params.items():
+        if hasattr(val, "shape"):
+            assert jnp.all(jnp.isfinite(val)), f"MAP {name} non-finite: {val}"
