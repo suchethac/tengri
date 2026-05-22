@@ -80,6 +80,29 @@ class ForwardModel:
         """
         return self.populations[0].sed.spec
 
+    def predict_photometry(self, params, **kwargs):
+        """Channel-specific prediction: ``phot_fnu`` extracted from :meth:`predict`.
+
+        Single-galaxy fits return shape ``(n_filters,)``; hierarchical
+        fits (PopulationSEDModel) return shape ``(N_gal, n_filters)``.
+        The Fitter's legacy loss_fn calls this directly; providing it
+        on ForwardModel ensures the batched output flows through
+        instead of falling back to the scalar SEDModel via
+        ``__getattr__``.
+
+        The ``mode=`` kwarg is silently accepted and ignored for
+        back-compat (loss_functions.py passes it; deprecated since
+        2026-05).
+        """
+        pred = self.predict(params)
+        for key in ("phot_fnu", "fnu_obs"):
+            if key in pred:
+                return pred[key]
+        raise KeyError(
+            f"predict_photometry: no photometric channel in prediction dict "
+            f"(saw keys: {list(pred)})"
+        )
+
     def _inner_sed(self):
         """Return the underlying :class:`SEDModel` for legacy attribute access.
 

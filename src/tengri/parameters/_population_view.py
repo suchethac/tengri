@@ -118,6 +118,16 @@ class PopulationSpecView:
         """Fixed values from the template (broadcast across galaxies)."""
         return self._template.get_fixed_values()
 
+    def resolve_mirrors(self, params: dict) -> dict:
+        """Delegate mirror resolution to the template.
+
+        Mirror parameters (target ← source value) are declared at the
+        template level. Under batched sampling, the template's
+        ``resolve_mirrors`` is applied to the per-galaxy and shared
+        param dict alike — the assignment broadcasts naturally.
+        """
+        return self._template.resolve_mirrors(params)
+
     # ── Batched sampling ───────────────────────────────────────────────
 
     def sample(self, key: jax.Array) -> dict[str, jnp.ndarray]:
