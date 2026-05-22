@@ -96,6 +96,56 @@ def check_file(path: Path) -> list[str]:
     return collect_function_violations(source)
 
 
+def check_unit_regrowth() -> list[Path]:
+    """Return any `test_*.py` files found under tests/unit/.
+
+    tests/unit/ was retired in #136/#148 — every test moved to the
+    physics-first tree (`components/`, `contract/`, `inference/`,
+    `physics/`, `regression/`). New tests under `tests/unit/` regress
+    that work. Authors should pick the correct home per `tests/TESTING.md`.
+    """
+    unit_dir = TESTS_DIR / "unit"
+    if not unit_dir.exists():
+        return []
+    return sorted(unit_dir.rglob("test_*.py"))
+
+
+def _suggest_home(path: Path) -> str:
+    """Best-guess destination for a misfiled `tests/unit/` test."""
+    name = path.name
+    # Port / contract / protocol / registry / dispatch / wiring → contract
+    if any(
+        tag in name
+        for tag in ("_port", "_protocol", "_contract", "_registry", "_dispatch", "_wiring")
+    ):
+        return "tests/contract/"
+    # Sampler / fitter / likelihood / posterior → inference
+    if any(tag in name for tag in ("_likelihood", "_fitter", "_posterior", "_sampler", "_vi_")):
+        return "tests/inference/"
+    # Conservation / mass / energy → physics/conservation
+    if any(tag in name for tag in ("_conservation", "_balance", "_mass_")):
+        return "tests/physics/conservation/"
+    # Gradient / autodiff / jit → physics/gradients
+    if any(tag in name for tag in ("_gradient", "_jit", "_autodiff", "_grad_")):
+        return "tests/physics/gradients/"
+    # Per-component default
+    for block in (
+        "agn",
+        "dust",
+        "nebular",
+        "radio",
+        "xray",
+        "sfh",
+        "sps",
+        "stellar",
+        "chem",
+        "igm",
+    ):
+        if block in name:
+            return f"tests/components/{block}/"
+    return "tests/contract/  (default for new tests with unclear home)"
+
+
 def main() -> int:
     violations: list[tuple[Path, list[str]]] = []
     for enforced in ENFORCED_DIRS:
@@ -106,19 +156,40 @@ def main() -> int:
             if offenders:
                 violations.append((path.relative_to(REPO_ROOT), offenders))
 
-    if not violations:
+    regrowth = check_unit_regrowth()
+
+    if not violations and not regrowth:
         print("OK: every enforced test declares a taxonomy marker")
+        print("OK: no tests/unit/ regrowth")
         return 0
 
-    print("FAIL: tests missing taxonomy markers (see tests/TESTING.md)\n")
-    for path, offenders in violations:
-        print(f"  {path}")
-        for fn in offenders:
-            print(f"      - {fn}")
-    print(
-        "\nFix: add `pytestmark = pytest.mark.<marker>` at module top, "
-        "or decorate each test with one of: " + ", ".join(sorted(APPROVED_MARKERS))
-    )
+    if violations:
+        print("FAIL: tests missing taxonomy markers (see tests/TESTING.md)\n")
+        for path, offenders in violations:
+            print(f"  {path}")
+            for fn in offenders:
+                print(f"      - {fn}")
+        print(
+            "\nFix: add `pytestmark = pytest.mark.<marker>` at module top, "
+            "or decorate each test with one of: " + ", ".join(sorted(APPROVED_MARKERS))
+        )
+
+    if regrowth:
+        if violations:
+            print()
+        print(
+            "FAIL: tests/unit/ has regrown — it was retired in #136/#148.\n"
+            "Move each file into the physics-first tree (see tests/TESTING.md):\n"
+        )
+        for path in regrowth:
+            rel = path.relative_to(REPO_ROOT)
+            print(f"  {rel}")
+            print(f"      suggested home: {_suggest_home(rel)}")
+        print(
+            "\nIf the suggestion is wrong, see tests/TESTING.md for the full "
+            "taxonomy. Every moved file must declare `pytestmark = pytest.mark.<marker>`."
+        )
+
     return 1
 
 
