@@ -19,6 +19,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **`tengri.protocols.SubModel`** — runtime-checkable Protocol for
   one mode of `ForwardModel` (SED, spatial, joint). Two-method
   contract (`run`, `declared_parameters`).
+- **`tengri.protocols.SpatialComponent`** — mirror of `SEDComponent`
+  on the spatial side; runtime-checkable Protocol with the same
+  `declared_parameters`/`precompute`/`apply` shape.
+- **`SpatialModelComponent`** astronomer-facing base class
+  (`tengri.components.spatial_model_component`). Mirror of
+  `SEDModelComponent`. Auto-discovers class-level `Distribution`
+  attrs as free parameters, supports `reads`/`publishes` dicts, and
+  provides a default `apply()` that handles param slicing, grid
+  lookup, and writes the resulting profile to
+  `state.derived["spatial_profile_2d"]`.
+- **`tengri.components.spatial.{Sersic, Exponential, FlatSlab}`** —
+  three concrete spatial-profile blocks. `Sersic` implements the
+  full Ciotti & Bertin (1999) expansion for `b_n`; `Exponential` is
+  the standalone n=1 case; `FlatSlab` is the explicit form of the
+  uniform-aperture model that classical SED codes use implicitly.
+- `DerivedBundle` gained two canonical fields, `spatial_profile_2d`
+  and `spatial_grid_xy_kpc`, with matching entries in the
+  orchestrator's `_CANONICAL_UNITS` table.
 
 ### Internal
 
