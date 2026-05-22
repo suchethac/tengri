@@ -58,9 +58,7 @@ def test_build_accepts_multi_population(sed_model_minimal, simple_observation) -
     assert {p.name for p in forward.populations} == {"a", "b"}
 
 
-def test_build_rejects_duplicate_population_names(
-    sed_model_minimal, simple_observation
-) -> None:
+def test_build_rejects_duplicate_population_names(sed_model_minimal, simple_observation) -> None:
     """Distinct names required (ADR-0012)."""
     pops = [
         Population(name="agn", sed=sed_model_minimal),
@@ -172,9 +170,7 @@ def test_multi_population_predict_sums_in_linear_flux(
     assert jnp.allclose(twin_phot, 2.0 * single_phot, rtol=1e-10)
 
 
-def test_multi_population_params_slice_by_namespace(
-    sed_model_minimal, simple_observation
-) -> None:
+def test_multi_population_params_slice_by_namespace(sed_model_minimal, simple_observation) -> None:
     """Namespaced params reach the right population; bare names flow everywhere."""
     import jax.numpy as jnp
 

@@ -111,9 +111,7 @@ class JointObservation:
             for pred in per_pop_pred.values():
                 all_keys.update(pred.keys())
             for key in all_keys:
-                contributions = [
-                    pred[key] for pred in per_pop_pred.values() if key in pred
-                ]
+                contributions = [pred[key] for pred in per_pop_pred.values() if key in pred]
                 if not contributions:
                     continue
                 total = contributions[0]
