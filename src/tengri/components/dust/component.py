@@ -104,6 +104,12 @@ class DustAttenuationSEDComponent:
     parameter_prefix: str = "dust_"
     _state: DustAttenuationSEDComponentState | None = None
 
+    def citations(self) -> tuple[str, ...]:
+        """Attenuation-law citations (Calzetti, Cardelli, SMC, …) are
+        config-driven via
+        :data:`tengri.citations.associations.DUST_LAW_CITATIONS`."""
+        return ()
+
     def declared_parameters(self) -> list[ParamDeclaration]:
         r"""Free parameters this component owns.
 

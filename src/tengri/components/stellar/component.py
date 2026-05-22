@@ -207,6 +207,12 @@ class StellarSEDComponent:
     parameter_prefix: tuple[str, ...] = ("sfh_", "met_", "chem_")
     _state: StellarSEDComponentState | None = None
 
+    def citations(self) -> tuple[str, ...]:
+        """The stellar component is structurally built on DSPS; SFH-family
+        and SSP-grid citations are config-driven via
+        :mod:`tengri.citations.associations`."""
+        return ("dsps",)
+
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free parameters this component owns.
 

@@ -85,6 +85,11 @@ class IGMSEDComponent:
     name: str = "igm"
     parameter_prefix: str = "igm_"
 
+    def citations(self) -> tuple[str, ...]:
+        """IGM transmission backend (Inoue+2014 / Madau+1995) is config-driven;
+        see :data:`tengri.citations.associations.IGM_CITATIONS`."""
+        return ()
+
     def declared_parameters(self) -> list[ParamDeclaration]:
         r"""Free parameters this component owns.
 

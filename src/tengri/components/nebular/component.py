@@ -110,6 +110,12 @@ class NebularSEDComponent:
     # harmless, and vice versa.
     parameter_prefix: tuple[str, ...] = ("neb_", "shock_", "ionspec_", "gas_")
 
+    def citations(self) -> tuple[str, ...]:
+        """Nebular-backend citations (Cue / Cloudy / baked-in / shock) are
+        config-driven via
+        :data:`tengri.citations.associations.NEBULAR_BACKEND_CITATIONS`."""
+        return ()
+
     def declared_parameters(self) -> list[ParamDeclaration]:
         r"""Free parameters this component owns.
 
