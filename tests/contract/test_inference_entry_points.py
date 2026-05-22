@@ -80,6 +80,61 @@ def test_legacy_warn_passes_through_non_model_objects() -> None:
     assert not any(issubclass(w.category, DeprecationWarning) for w in caught)
 
 
+def test_population_fitter_direct_construction_warns() -> None:
+    """``PopulationFitter(...)`` direct API emits a DeprecationWarning.
+
+    The canonical surface is
+    ``ForwardModel.build(population=PopulationSEDModel(...))``; routing
+    through ``Fitter(forward)`` constructs PopulationFitter internally
+    with ``_via_routing=True`` and silences the warning.
+    """
+    from tengri.inference.hierarchical import PopulationFitter
+
+    def _factory(psd_sigma, psd_tau_myr):
+        # Direct construction never reaches model_factory unless `run()`
+        # is called; for this warning-only test we never invoke it.
+        raise AssertionError("factory should not be called in this test")
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        # Intentionally construct with a stub factory + empty galaxies
+        # to verify the warning fires; we don't run anything.
+        with contextlib.suppress(Exception):
+            # template construction may fail with an empty list; the
+            # warning still fires before that error.
+            PopulationFitter(_factory, [])
+    relevant = [
+        w
+        for w in caught
+        if issubclass(w.category, DeprecationWarning)
+        and "PopulationFitter" in str(w.message)
+        and "ForwardModel" in str(w.message)
+    ]
+    assert relevant, "expected a PopulationFitter DeprecationWarning"
+    assert "#211" in str(relevant[0].message)
+
+
+def test_population_fitter_via_routing_no_warning() -> None:
+    """``_via_routing=True`` (used by ``Fitter`` internally) silences the warning."""
+    from tengri.inference.hierarchical import PopulationFitter
+
+    def _factory(psd_sigma, psd_tau_myr):
+        raise AssertionError("factory should not be called in this test")
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with contextlib.suppress(Exception):
+            PopulationFitter(_factory, [], _via_routing=True)
+    relevant = [
+        w
+        for w in caught
+        if issubclass(w.category, DeprecationWarning) and "PopulationFitter" in str(w.message)
+    ]
+    assert not relevant, (
+        f"unexpected warnings via the routing path: {[str(w.message) for w in relevant]}"
+    )
+
+
 def test_legacy_warn_fires_on_bare_sedmodel(synthetic_ssp, simple_observation) -> None:
     """``Fitter(sed_model, ...)`` emits a DeprecationWarning pointing at the new path."""
     from tengri import FIXED

@@ -186,6 +186,7 @@ def _maybe_population_delegate(model):
         psd_sigma_prior=psd_sigma_prior,
         psd_tau_prior=psd_tau_prior,
         data_type=pop_sed.data_type,
+        _via_routing=True,
     )
 
 
