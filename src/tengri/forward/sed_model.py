@@ -108,21 +108,43 @@ class WavePrecomp:
         interpolation, slower precompute.
     z_min : float or None, default None
         Lower bound of the ztable grid. ``None`` → pull from the redshift
-        prior with 1 % padding. Ignored when redshift is ``Fixed``.
+        prior with 1 % padding. Ignored when redshift is ``Fixed`` unless
+        ``catalog_z_range`` is set.
     z_max : float or None, default None
         Upper bound of the ztable grid. ``None`` → pull from the redshift
-        prior with 1 % padding. Ignored when redshift is ``Fixed``.
+        prior with 1 % padding. Ignored when redshift is ``Fixed`` unless
+        ``catalog_z_range`` is set.
+    catalog_z_range : tuple of float or None, default None
+        Catalog-fit reuse knob (Approach A, 2026-05). When set to
+        ``(z_min, z_max)``, the ztable mechanism is forced on even when
+        ``redshift`` is ``Fixed`` in the spec. The Fixed value is then
+        treated as a runtime input to the JIT-compiled forward pass, so
+        a single :class:`SEDModel` instance handles a catalog of
+        per-galaxy ``Fixed(redshift)`` values **with one compile**
+        instead of one compile per row. Compile time amortises across
+        the catalog; runtime cost per fit is the ztable interpolation
+        (~µs).
 
     Examples
     --------
     >>> SEDModel(..., approx=WavePrecomp())  # default ztable sampling
     >>> SEDModel(..., approx=WavePrecomp(n_z=200))  # finer ztable
     >>> SEDModel(..., approx=WavePrecomp(z_min=0.01, z_max=3.0, n_z=200))
+    >>>
+    >>> # Catalog fit: 10⁴ galaxies at per-galaxy Fixed(z), one compile.
+    >>> model = SEDModel.build(
+    ...     ...,
+    ...     redshift=Fixed(0.0),  # placeholder; injected per call
+    ...     approx=WavePrecomp(catalog_z_range=(0.05, 1.5), n_z=200),
+    ... )
+    >>> for row in catalog:
+    ...     posterior = model.fit(row.data, params={"redshift": row.z})
     """
 
     n_z: int = 100
     z_min: float | None = None
     z_max: float | None = None
+    catalog_z_range: tuple[float, float] | None = None
 
 
 class SEDModel:
@@ -390,9 +412,27 @@ class SEDModel:
         # extension of ``wave_precomp`` (free-z interpolation on the same LUT),
         # not a user flag — it switches on transparently when the method is
         # ``wave_precomp`` and redshift is free.
+        #
+        # Catalog-fit override (Approach A, 2026-05): when the astronomer
+        # passes ``WavePrecomp(catalog_z_range=(z_min, z_max))``, force the
+        # ztable mechanism even when redshift is Fixed in the spec. The
+        # forward pass then reads ``params["redshift"]`` at runtime, so a
+        # single SEDModel handles many per-galaxy ``Fixed(z)`` values
+        # without recompiling. See ``docs/dev/cross-compile-fixed-z-design.md``.
+        self._catalog_z_range: tuple[float, float] | None = None
         if self._approx["wave_precomp"]:
             redshift_dist = spec.get_distribution("redshift")
-            if not redshift_dist.is_fixed:
+            cz = self._approx_config.catalog_z_range if self._approx_config is not None else None
+            if cz is not None:
+                if redshift_dist.is_fixed:
+                    self._approx["ztable"] = True
+                    self._catalog_z_range = (float(cz[0]), float(cz[1]))
+                # Free-redshift case: catalog_z_range is harmless (ztable already on)
+                # but record it so the compile_signature still distinguishes ranges.
+                else:
+                    self._approx["ztable"] = True
+                    self._catalog_z_range = (float(cz[0]), float(cz[1]))
+            elif not redshift_dist.is_fixed:
                 self._approx["ztable"] = True
 
         # ── Stellar populations ───────────────────────────────────
@@ -918,10 +958,15 @@ class SEDModel:
     def _init_cosmology(self, spec):
         """Precompute luminosity distance if redshift is fixed."""
         redshift_dist = spec.get_distribution("redshift")
-        if redshift_dist.is_fixed:
+        if redshift_dist.is_fixed and self._catalog_z_range is None:
             self._dl_cm_fixed = luminosity_distance(redshift_dist.bounds[0])
             self._z_fixed = redshift_dist.bounds[0]
         else:
+            # Catalog-fit mode (Approach A): even though redshift is Fixed
+            # in the spec, treat it as a runtime input so different
+            # per-galaxy values reuse the same compiled kernel. The
+            # cosmology + IGM + filter-λ_eff paths fall back to their
+            # already-existing free-redshift runtime branches.
             self._dl_cm_fixed = None
             self._z_fixed = None
 
@@ -2404,6 +2449,14 @@ class SEDModel:
         z_fixed = (
             ("fixed", round(float(self._z_fixed), 8)) if self._z_fixed is not None else ("free",)
         )
+        # Catalog-fit reuse: the explicit range is part of the signature
+        # so two models with different catalog ranges don't share a
+        # compiled kernel (their ztable shape can differ).
+        catalog_z_range = (
+            ("catalog", round(self._catalog_z_range[0], 8), round(self._catalog_z_range[1], 8))
+            if self._catalog_z_range is not None
+            else ("none",)
+        )
 
         # Instrument/spectroscopy
         has_spectroscopy = self.observation is not None and self.observation.can_do_spectroscopy
@@ -2521,6 +2574,7 @@ class SEDModel:
             n_grid,
             alpha_fe_evolving,
             z_fixed,
+            catalog_z_range,
             has_spectroscopy,
             spec_wave_shape,
             sigma_lib_kms,
@@ -4224,16 +4278,30 @@ class SEDModel:
                     is_fixed = True
                     z_bounds = (0.0,)
 
-                if is_fixed:
+                # Catalog-fit reuse (Approach A): when the user passes
+                # ``WavePrecomp(catalog_z_range=...)``, route through the
+                # free-z ztable branch even when redshift is Fixed in the
+                # spec — different per-galaxy ``Fixed(z)`` values then share
+                # the same compile.
+                if is_fixed and self._catalog_z_range is None:
                     # Phase 3b: fixed-z LUT
                     redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
                 else:
                     # Phase 3c-1: free-z ztable. User can override n_z / z_min /
                     # z_max via ``approx=WavePrecomp(...)``; otherwise pull from
                     # the redshift prior with 1 % padding and use n_z=100.
-                    z_lo, z_hi = float(z_bounds[0]), float(z_bounds[1])
-                    pad = 0.01 * (z_hi - z_lo)
                     cfg = self._approx_config or WavePrecomp()
+                    if self._catalog_z_range is not None:
+                        z_lo, z_hi = self._catalog_z_range
+                        pad = 0.0  # explicit range — no padding
+                    elif z_bounds is None or len(z_bounds) < 2:
+                        # Fixed spec falling through (no bounds for a Fixed dist);
+                        # default to a generous photo-z range.
+                        z_lo, z_hi = 0.001, 3.0
+                        pad = 0.0
+                    else:
+                        z_lo, z_hi = float(z_bounds[0]), float(z_bounds[1])
+                        pad = 0.01 * (z_hi - z_lo)
                     redshift_spec = {
                         "mode": "free",
                         "z_min": (cfg.z_min if cfg.z_min is not None else max(0.001, z_lo - pad)),
