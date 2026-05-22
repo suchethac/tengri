@@ -19,7 +19,6 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from tengri.forward._sed_submodel_adapter import _LegacySEDSubModel
 from tengri.forward.population import Population
 
 __all__ = ["ForwardModel"]
@@ -106,12 +105,7 @@ class ForwardModel:
             raise ValueError("ForwardModel.build needs exactly one of sed=... or populations=...")
 
         if sed is not None:
-            # Local import to avoid an import cycle through
-            # tengri.forward.sed_model -> tengri.forward.forward_model.
-            from tengri.forward.sed_model import SEDModel
-
-            sub = sed if not isinstance(sed, SEDModel) else _LegacySEDSubModel(sed)
-            pops = (Population(name="default", sed=sub),)
+            pops = (Population(name="default", sed=sed),)
         else:
             assert populations is not None
             pops = tuple(populations)
@@ -158,19 +152,15 @@ class ForwardModel:
                 raise NotImplementedError(
                     "Population.spatial is reserved for the spatial-model plan."
                 )
-            legacy = pop.sed
-            # In the tracer-bullet, every population's sed is a
-            # _LegacySEDSubModel wrapping an SEDModel. Reach into the
-            # wrapped model and call its existing photometric path.
-            sed_model = getattr(legacy, "sed_model", None)
-            if sed_model is None:
+            from tengri.forward.sed_model import SEDModel
+
+            if not isinstance(pop.sed, SEDModel):
                 raise NotImplementedError(
-                    "ForwardModel.predict currently supports only "
-                    "_LegacySEDSubModel-wrapped populations. "
-                    "True SubModel.run-based prediction lands in a "
-                    "subsequent plan."
+                    "ForwardModel.predict currently supports only SEDModel-based "
+                    "populations. Other SubModel implementations need the "
+                    "observation-Protocol migration plan."
                 )
-            per_pop[pop.name] = {"phot_fnu": sed_model.predict_photometry(params)}
+            per_pop[pop.name] = {"phot_fnu": pop.sed.predict_photometry(params)}
 
         if len(per_pop) == 1:
             (only,) = per_pop.values()

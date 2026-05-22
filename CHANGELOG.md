@@ -22,6 +22,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Internal
 
+- **`SEDModel` directly satisfies `tengri.protocols.SubModel`.** The
+  `run(state, params)` and `declared_parameters()` methods are now on
+  `SEDModel` itself, alongside a `name = "sed"` class attribute. The
+  transitional `_LegacySEDSubModel` adapter introduced in the
+  forward-model tracer-bullet is deleted; `ForwardModel.build` and
+  `ForwardModel.predict` consume `SEDModel` instances directly. No
+  user-visible change to the public API — additive on `SEDModel`,
+  internal cleanup on `ForwardModel`.
 - Scaffolded per-component `_params.py` skeletons (PR1/5 of the
   parameter-registry consolidation) and extended
   `tengri.core.component.ParamDeclaration` with optional `bound_check`
