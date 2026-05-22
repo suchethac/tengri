@@ -1,3 +1,4 @@
+# ruff: noqa: RUF012
 """WavePrecomp integration tests for SEDModelComponent base class.
 
 Verifies that the base class automatically participates in the fast LUT path
