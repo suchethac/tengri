@@ -602,7 +602,7 @@ class Observation:
         ``NotImplementedError`` — Phase 3+ territory.
         """
         from tengri.cosmology import luminosity_distance
-        from tengri.observation.photometry import compute_flux_density
+        from tengri.observation.photometry import compute_flux_density_batch
         from tengri.observation.spectrum import apply_lsf, compute_spectrum
 
         z = jnp.asarray(params.get("redshift", 0.0))
@@ -623,16 +623,20 @@ class Observation:
             # :meth:`predict_via_precomp` (or its callers); this method does
             # NOT fall through to the LUT by default — exact-first is the
             # default semantics for ``observation.predict``.
-            phot = jnp.asarray(
-                [
-                    compute_flux_density(sed_rest, wave_rest, fw, ft, z, dl_cm)
-                    for fw, ft in zip(
-                        self.photometry.filter_waves,
-                        self.photometry.filter_trans,
-                        strict=False,
-                    )
-                ]
-            )
+            #
+            # Use the batched (vmapped) projection over filters padded to
+            # ``FILTER_COUNT_BUCKETS`` so distinct Photometry instances with
+            # similar filter counts share an XLA compile. Padded rows have
+            # all-zero transmission and contribute zero by construction.
+            n_real = self.photometry.n_filters
+            phot = compute_flux_density_batch(
+                sed_rest,
+                wave_rest,
+                self.photometry._fw_padded,
+                self.photometry._ft_padded,
+                z,
+                dl_cm,
+            )[:n_real]
             out["phot_fnu"] = phot
 
         if self.can_do_spectroscopy:
@@ -673,16 +677,15 @@ class Observation:
                 from tengri.utils.physics_constants import TEN_PC_CM
 
                 dl_rest = TEN_PC_CM  # 10 pc in cm
-                phot_rest = jnp.asarray(
-                    [
-                        compute_flux_density(sed_rest, wave_rest, fw, ft, 0.0, dl_rest)
-                        for fw, ft in zip(
-                            self.photometry.filter_waves,
-                            self.photometry.filter_trans,
-                            strict=False,
-                        )
-                    ]
-                )
+                n_real = self.photometry.n_filters
+                phot_rest = compute_flux_density_batch(
+                    sed_rest,
+                    wave_rest,
+                    self.photometry._fw_padded,
+                    self.photometry._ft_padded,
+                    jnp.asarray(0.0),
+                    jnp.asarray(dl_rest),
+                )[:n_real]
 
             # Build positional arguments in order: phot_fnu, phot_rest_fnu, spec_fnu
             args = []

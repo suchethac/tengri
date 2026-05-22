@@ -90,6 +90,13 @@ class Photometry:
     filter_trans: tuple[jnp.ndarray, ...] = dataclasses.field(default=(), hash=False, repr=False)
     n_filters: int = 0
 
+    # Precomputed padded arrays for the batched, JIT-friendly projection
+    # path. n_filters axis is padded to FILTER_COUNT_BUCKETS so different
+    # Photometry instances with similar counts share an XLA cache key.
+    _fw_padded: jnp.ndarray | None = dataclasses.field(default=None, hash=False, repr=False)
+    _ft_padded: jnp.ndarray | None = dataclasses.field(default=None, hash=False, repr=False)
+    _n_valid: jnp.ndarray | None = dataclasses.field(default=None, hash=False, repr=False)
+
     def __post_init__(self):
         if len(self.filters) == 0:
             raise ValueError("Photometry requires at least one filter.")
@@ -114,6 +121,16 @@ class Photometry:
             tuple(f.trans for f in self.filters),
         )
         object.__setattr__(self, "n_filters", len(self.filters))
+
+        # Padded arrays for the batched projection path. n_filters_real is
+        # equal to n_filters (the unpadded count); padded-out rows contribute
+        # zero via the integrand. Lazy-import to avoid a top-level cycle.
+        from tengri.observation.photometry import pad_filters_to_bucket
+
+        fw_p, ft_p, n_v, _ = pad_filters_to_bucket(self.filter_waves, self.filter_trans)
+        object.__setattr__(self, "_fw_padded", fw_p)
+        object.__setattr__(self, "_ft_padded", ft_p)
+        object.__setattr__(self, "_n_valid", n_v)
 
     @staticmethod
     def from_names(
