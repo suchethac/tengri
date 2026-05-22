@@ -80,6 +80,41 @@ _CANONICAL_METHODS = {
 }
 
 
+def _maybe_warn_legacy_sedmodel(model) -> None:
+    """Nudge users from ``Fitter(sed_model, ...)`` to ``Fitter(forward, ...)``.
+
+    Inference is canonically through :class:`ForwardModel` (issue #211).
+    Passing a bare :class:`SEDModel` keeps working — it's the legacy
+    pattern most existing notebooks use — but emits a one-shot
+    :class:`DeprecationWarning` pointing at the canonical surface.
+
+    :class:`ForwardModel` instances pass through silently (they ARE
+    the canonical surface). Anything else (a likelihood Protocol, a
+    test stub, …) also passes through silently — we don't want to
+    warn on legitimate non-SEDModel uses.
+    """
+    try:
+        from tengri.forward.forward_model import ForwardModel
+        from tengri.forward.sed_model import SEDModel
+    except ImportError:
+        return
+    if isinstance(model, ForwardModel):
+        return
+    if isinstance(model, SEDModel):
+        import warnings
+
+        warnings.warn(
+            "Fitter(sed_model, ...) is deprecated and will be removed in "
+            "tengri v1.0. Inference is canonically through ForwardModel "
+            "(issue #211). Replace with: forward = ForwardModel.build("
+            "sed=sed_model, observation=obs); Fitter(forward, data, noise)."
+            "run(method) -- or use the shortcut forward.fit(data, noise, "
+            "method=...).",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+
+
 def _maybe_population_delegate(model):
     """Return a configured :class:`PopulationFitter` when ``model`` is hierarchical.
 
@@ -399,6 +434,12 @@ class Fitter:
             self.spec = getattr(self._population_delegate, "_spec", None)
             self._user_likelihood = likelihood
             return
+
+        # ── Soft deprecation: prefer ForwardModel as the model arg ──
+        # Inference is canonically through ForwardModel (issue #211).
+        # Direct SEDModel as the model arg keeps working but nudges
+        # callers to the new pattern.
+        _maybe_warn_legacy_sedmodel(model)
 
         # ── Validate data/noise for the standard (non-hierarchical) path ──
         if data is None or noise is None:

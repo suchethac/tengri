@@ -241,6 +241,56 @@ class ForwardModel:
         }
         return _linear_flux_sum(per_pop_pred)
 
+    def fit(
+        self,
+        data: Any = None,
+        noise: Any = None,
+        method: str = "vi",
+        *,
+        key: Any = None,
+        **kwargs: Any,
+    ):
+        """Run inference. Canonical convenience entry point.
+
+        Equivalent to ``Fitter(self, data, noise).run(method, **kwargs)``
+        — wires the standard inference pipeline through the
+        :class:`ForwardModel` exactly as the architecture spec
+        prescribes ('inference is always through ForwardModel',
+        issue #211).
+
+        Parameters
+        ----------
+        data : array, optional
+            Observed flux (photometry / spectroscopy). Optional for
+            hierarchical fits where the per-galaxy data lives on the
+            :class:`PopulationSEDModel`.
+        noise : array, optional
+            1-sigma uncertainties matching ``data``.
+        method : str, default ``"vi"``
+            Inference method. Any value accepted by
+            :meth:`Fitter.run` (``"vi"``, ``"mcmc_nuts"``, ``"map"``,
+            …).
+        key : jax.random.PRNGKey, optional
+            Inference seed.
+        **kwargs : Any
+            Forwarded to :meth:`Fitter.run`.
+
+        Returns
+        -------
+        Posterior
+            Same return as :meth:`Fitter.run`.
+
+        Notes
+        -----
+        Prefer this entry over :meth:`SEDModel.fit` for new code.
+        ``Fitter(forward, data, noise).run(method)`` remains the
+        low-level path; ``forward.fit(...)`` is just the shortcut.
+        """
+        from tengri.inference.fitter import Fitter
+
+        fitter = Fitter(self, data=data, noise=noise)
+        return fitter.run(method, key=key, **kwargs)
+
     def _params_for_population(
         self,
         params: Mapping[str, Any],
