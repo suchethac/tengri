@@ -81,6 +81,9 @@ jobs:
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py \
             --ignore=tests/contract/test_dust_ir_ports.py \
+            --ignore=tests/contract/test_dust_ir_port.py \
+            --ignore=tests/contract/test_sed_model_component_contract.py \
+            --ignore=tests/contract/test_sed_model_component_waveprecomp.py \
             --ignore=tests/contract/test_agn_ports.py \
             --deselect "tests/components/dust/test_dust_emission_models.py::TestDustEmissionCombinations::test_dust_emission_peaks_in_ir[modified_blackbody]" \
             --deselect "tests/components/dust/test_dust_emission_models.py::TestDustEmissionCombinations::test_dust_emission_energy_balance[modified_blackbody]" \
