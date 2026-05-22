@@ -22,6 +22,8 @@ from tengri.protocols.component import (
     SEDComponentConfig,
 )
 
+pytestmark = pytest.mark.contract
+
 
 class TestPriorDiscovery:
     """Test auto-discovery of Distribution-typed class attributes."""

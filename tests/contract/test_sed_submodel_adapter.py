@@ -8,6 +8,8 @@ import pytest
 from tengri.forward._sed_submodel_adapter import _LegacySEDSubModel
 from tengri.protocols import SubModel
 
+pytestmark = pytest.mark.contract
+
 
 @pytest.fixture
 def sed_model_minimal(synthetic_ssp, simple_observation):

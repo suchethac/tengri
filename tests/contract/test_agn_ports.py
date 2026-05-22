@@ -9,12 +9,15 @@ Validates:
 """
 
 import jax.numpy as jnp
+import pytest
 
 from tengri.components.agn.cat3d_torus_model import CAT3DTorus
 from tengri.components.agn.kd18_disc_model import KD18Disc
 from tengri.components.agn.powerlaw_disc_model import PowerLawDisc
 from tengri.components.agn.silva04_model import Silva04Torus
 from tengri.components.sed_model_component import SEDModelComponent
+
+pytestmark = pytest.mark.contract
 
 
 class TestKD18DiscContract:

@@ -8,6 +8,8 @@ import pytest
 
 from tengri.forward.population import Population
 
+pytestmark = pytest.mark.contract
+
 
 class _DummySubModel:
     name = "dummy"

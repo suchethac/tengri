@@ -16,6 +16,8 @@ from tengri.components.dust.emission import modified_blackbody as mbb_legacy
 from tengri.components.dust.modified_blackbody import ModifiedBlackbodySED
 from tengri.components.sed_model_component import _REGISTRY
 
+pytestmark = pytest.mark.contract
+
 
 class TestModifiedBlackbodyComponent:
     """Contract and parity tests for ModifiedBlackbodySED."""

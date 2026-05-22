@@ -10,6 +10,7 @@ from __future__ import annotations
 import warnings
 
 import jax.numpy as jnp
+import pytest
 
 from tengri.components.dust.astrodust_ir import AstrodustIRSEDComponent
 from tengri.components.dust.dale2014_ir import Dale2014IRSEDComponent
@@ -20,6 +21,8 @@ from tengri.components.dust.draine2021_pah_ir import (
 )
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.protocols.component import ParamDeclaration
+
+pytestmark = pytest.mark.contract
 
 __all__ = []
 

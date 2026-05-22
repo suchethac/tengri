@@ -6,9 +6,12 @@ and registry expectations.
 """
 
 import jax.numpy as jnp
+import pytest
 
 from tengri.components.radio.radio_model import RadioPowerLawSEDComponent
 from tengri.protocols.component import DerivedKey, ParamDeclaration
+
+pytestmark = pytest.mark.contract
 
 
 class TestRadioPowerLawPort:

@@ -20,6 +20,8 @@ from tengri.protocols.component import (
     SEDComponent,
 )
 
+pytestmark = pytest.mark.contract
+
 
 def test_registry_entry():
     assert "calzetti" in _REGISTRY

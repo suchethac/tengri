@@ -12,6 +12,8 @@ from tengri.components.nebular.cloudy_grid_model import CloudyGridSEDComponent
 from tengri.components.nebular.mappings_model import MAPPINGSSEDComponent
 from tengri.protocols.component import DerivedKey, ParamDeclaration
 
+pytestmark = pytest.mark.contract
+
 
 class TestCloudyGridPort:
     """Contract tests for CloudyGridSEDComponent."""

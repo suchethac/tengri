@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import jax.numpy as jnp
+import pytest
 
 from tengri.protocols import SubModel
 from tengri.protocols.component import ForwardState, ParamDeclaration
+
+pytestmark = pytest.mark.contract
 
 
 class _MinimalSubModel:

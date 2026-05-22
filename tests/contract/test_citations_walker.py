@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+import pytest
+
 from tengri.citations import collect_citations
 from tengri.citations.collect import _citations_from_components
 from tengri.protocols.component import (
@@ -12,6 +14,8 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
+
+pytestmark = pytest.mark.contract
 
 # ────────────────────────────────────────────────────────────────────────
 # Stub components for testing

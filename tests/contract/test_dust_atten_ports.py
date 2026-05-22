@@ -21,6 +21,8 @@ from tengri.protocols.component import (
     SEDComponent,
 )
 
+pytestmark = pytest.mark.contract
+
 
 class TestSMCRegistry:
     def test_registry_entry(self):

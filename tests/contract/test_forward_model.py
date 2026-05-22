@@ -11,6 +11,8 @@ import pytest
 from tengri.forward.forward_model import ForwardModel
 from tengri.forward.population import Population
 
+pytestmark = pytest.mark.contract
+
 
 @pytest.fixture
 def sed_model_minimal(synthetic_ssp, simple_observation):
