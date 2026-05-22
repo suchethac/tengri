@@ -87,6 +87,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, ClassVar
 
+import jax
 import jax.numpy as jnp
 
 from tengri.parameters.priors import Distribution
@@ -123,6 +124,9 @@ class SEDModelComponent:
     config : SEDComponentConfig
         Frozen structural knobs (e.g., which dust law, which radio model).
         Defaults to base :class:`SEDComponentConfig` if not overridden.
+    taylor_order : int, default 0
+        Taylor expansion order for WavePrecomp refinement. Set to 1 to enable
+        first-order derivative publishing (``{name}_phot_lnu_slope_precomp``).
 
     Optional class-level declarations (auto-processed by __init_subclass__)
     ----------
@@ -189,8 +193,19 @@ class SEDModelComponent:
 
     apply(state, params) -> ForwardState
         Default orchestration: slices params to prefix, looks up inputs from
-        state.derived, calls :meth:`predict`, and returns new state with
-        updated sed_intrinsic and published keys. Generally no need to override.
+        state.derived, calls :meth:`predict` (or :meth:`_apply_precomp` if
+        WavePrecomp is active), and returns new state with updated sed_intrinsic
+        and published keys. Generally no need to override.
+
+    _apply_precomp(p, sed_in, filter_eff_waves, **inputs) -> dict
+        Helper called by :meth:`apply` when ``filter_eff_waves`` is in
+        state.derived (WavePrecomp active). Computes photometric LUTs via
+        :meth:`predict_precomp`, optionally with Taylor first-order refinement.
+
+    predict_precomp(p, filter_eff_waves, **inputs) -> tuple[ndarray, dict]
+        Compute photometric LUT at effective filter wavelengths. Default
+        falls back to :meth:`predict`; subclasses with direct photometric
+        paths should override for specialized LUT generation.
 
     Raises
     ------
@@ -247,6 +262,7 @@ class SEDModelComponent:
     name: str = "component"
     parameter_prefix: str = "component_"
     config: SEDComponentConfig = SEDComponentConfig()
+    taylor_order: int = 0  # Taylor expansion order: 0 (zeroth-order), 1 (+ first-order derivative)
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Auto-discover free parameters, inputs, outputs; register by name.
@@ -408,6 +424,11 @@ class SEDModelComponent:
         :attr:`state.sed_intrinsic` with the returned SED and publishes
         returned keys to :attr:`state.derived`.
 
+        When WavePrecomp is active (``filter_eff_waves`` in state.derived),
+        automatically routes through the LUT path via :meth:`predict_precomp`
+        to compute effective-wavelength contributions, optionally with Taylor
+        first-order refinement if ``taylor_order >= 1``.
+
         Parameters
         ----------
         state : ForwardState
@@ -446,14 +467,111 @@ class SEDModelComponent:
         else:
             sed_in = state.sed_intrinsic
 
-        # Call predict
-        sed_out, published = self.predict(p_sliced, sed_in, state.wave, **input_kwargs)
+        # Check for WavePrecomp mode
+        filter_eff_waves = state.derived.get("filter_eff_waves")
+        if filter_eff_waves is not None:
+            # WavePrecomp path: compute photometry LUTs
+            published = self._apply_precomp(p_sliced, sed_in, filter_eff_waves, **input_kwargs)
+            # Do NOT update sed_intrinsic on the LUT path (only publish LUTs)
+            # Use _extras for component-specific precomp LUTs that aren't typed fields
+            new_extras = {**state.derived._extras, **published}
+            return state.with_(derived=state.derived.with_(_extras=new_extras))
+        else:
+            # Default full-grid path
+            sed_out, published = self.predict(p_sliced, sed_in, state.wave, **input_kwargs)
+            # Update state with new SED and published keys
+            new_extras = {**state.derived._extras, **published}
+            return state.with_(
+                sed_intrinsic=sed_out,
+                derived=state.derived.with_(_extras=new_extras),
+            )
 
-        # Update state with new SED and published keys
-        return state.with_(
-            sed_intrinsic=sed_out,
-            derived=state.derived.with_(**published),
-        )
+    def _apply_precomp(
+        self,
+        p: Mapping[str, jnp.ndarray],
+        sed_in: jnp.ndarray,
+        filter_eff_waves: jnp.ndarray,
+        **inputs: Any,
+    ) -> Mapping[str, jnp.ndarray]:
+        """Compute WavePrecomp photometric LUTs for this component.
+
+        Called by :meth:`apply` when WavePrecomp is active. Evaluates
+        :meth:`predict_precomp` at filter effective wavelengths to build
+        a photometric LUT, and optionally computes first-order Taylor
+        refinement if ``taylor_order >= 1``.
+
+        Parameters
+        ----------
+        p : mapping[str, ndarray]
+            Parameters with prefix stripped.
+        sed_in : ndarray
+            Input SED (used for shape/dtype, but not consumed on LUT path).
+        filter_eff_waves : ndarray, shape (n_filter,)
+            Rest-frame effective wavelengths of filters in Angstrom.
+        **inputs : ndarray
+            Cross-component inputs from state.derived.
+
+        Returns
+        -------
+        mapping[str, ndarray]
+            Published keys for this component, keyed as
+            ``{self.name}_phot_lnu_precomp`` and optionally
+            ``{self.name}_phot_lnu_slope_precomp`` if Taylor mode is enabled.
+        """
+        # Compute zeroth-order LUT
+        phot_lnu_precomp, _ = self.predict_precomp(p, filter_eff_waves, **inputs)
+
+        published = {f"{self.name}_phot_lnu_precomp": phot_lnu_precomp}
+
+        # Optionally compute first-order Taylor slope
+        if self.taylor_order >= 1:
+            # Compute ∂predict_precomp/∂wave at each filter wavelength via vmap
+            def predict_precomp_scalar(wave_scalar):
+                # Reshape to (1,) for predict_precomp, extract scalar result
+                result, _ = self.predict_precomp(p, jnp.asarray([wave_scalar]), **inputs)
+                return result[0]
+
+            # Element-wise gradient using vmap
+            slope = jax.vmap(jax.grad(predict_precomp_scalar))(filter_eff_waves)
+            published[f"{self.name}_phot_lnu_slope_precomp"] = slope
+
+        return published
+
+    def predict_precomp(
+        self,
+        p: Mapping[str, jnp.ndarray],
+        filter_eff_waves: jnp.ndarray,
+        **inputs: Any,
+    ) -> tuple[jnp.ndarray, Mapping[str, jnp.ndarray]]:
+        """Compute photometric LUT at effective filter wavelengths.
+
+        Called by :meth:`_apply_precomp` when WavePrecomp is active.
+        Default implementation calls :meth:`predict` with a dummy SED
+        (zeros) and extracts the relevant LUT. Subclasses that consume
+        photometric data directly (stellar, nebular, AGN, dust) should
+        override to return specialized LUTs without computing the full SED.
+
+        Parameters
+        ----------
+        p : mapping[str, ndarray]
+            Parameters with prefix stripped.
+        filter_eff_waves : ndarray, shape (n_filter,)
+            Rest-frame effective filter wavelengths in Angstrom.
+        **inputs : ndarray
+            Cross-component inputs from state.derived.
+
+        Returns
+        -------
+        tuple[ndarray, mapping[str, ndarray]]
+            (phot_lnu, published) where phot_lnu is shape (n_filter,) in
+            erg/s/Hz, and published is a dict of derived keys (may be empty).
+        """
+        # Default: evaluate the full-grid predict at filter effective wavelengths
+        # This is a fallback; subclasses that have direct photometric paths
+        # should override with specialized implementations.
+        sed_dummy = jnp.zeros_like(filter_eff_waves)
+        sed_out, published = self.predict(p, sed_dummy, filter_eff_waves, **inputs)
+        return sed_out, published
 
     def predict(
         self, p: Mapping[str, jnp.ndarray], sed_in: jnp.ndarray, wave: jnp.ndarray, **inputs: Any
