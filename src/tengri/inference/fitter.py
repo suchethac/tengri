@@ -1464,20 +1464,40 @@ class Fitter:
     # ── Parameter transforms ──────────────────────────────────────────
 
     def _initialize_unbounded(self, key: Any) -> dict:
-        """Create initial unbounded parameter dict."""
+        """Create initial unbounded parameter dict.
+
+        Per-param shape comes from ``self.spec.param_init_shape(name)``
+        when available (the PopulationSpecView publishes this — see
+        PR #239 plan Task 5). Scalar specs (the standard
+        :class:`Parameters`) fall back to shape ``()``.
+
+        For hierarchical fits, per-galaxy free params get a leading
+        ``(N,)`` axis; shared parameters stay scalar. This is what
+        the standardized hierarchical Hamiltonian (paper §4) expects.
+        """
         params = {}
         keys = jax.random.split(key, len(self._free_names) + 1)
+        # Shape provider — defaults to scalar for non-Population specs
+        get_shape = getattr(self.spec, "param_init_shape", lambda _n: ())
 
         for i, name in enumerate(self._free_names):
             dist = self.spec.get_distribution(name)
+            shape = get_shape(name)
             if isinstance(dist, Gaussian):
-                params[name] = dist.standardize(jnp.array(dist.mu))
+                base = dist.standardize(jnp.array(dist.mu))
+                params[name] = jnp.broadcast_to(base, shape) if shape else base
             else:
                 # Initialize near midpoint (u=0) with small perturbation
-                params[name] = 0.1 * jax.random.normal(keys[i])
+                params[name] = 0.1 * jax.random.normal(keys[i], shape=shape)
 
         if self.spec.stochastic:
-            params["psd_xi"] = 0.1 * jax.random.normal(keys[-1], shape=(self.spec.n_grid,))
+            # psd_xi shape: scalar fits use (n_grid,); hierarchical
+            # populations use (N, n_grid) — published via the spec.
+            psd_shape = getattr(self.spec, "psd_xi_init_shape", None) or (self.spec.n_grid,)
+            # Property vs callable — both supported
+            if callable(psd_shape):
+                psd_shape = psd_shape()
+            params["psd_xi"] = 0.1 * jax.random.normal(keys[-1], shape=psd_shape)
 
         return params
 

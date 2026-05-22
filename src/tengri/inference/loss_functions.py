@@ -319,9 +319,15 @@ def build_loss_fn(fitter, mode="traced"):
         # cancels the prior density and leaves the isotropic quadratic
         # term. Exact for Uniform, Gaussian, LogUniform, LogNormal,
         # StudentT priors.  Reference: tengri paper §2.2 + Appendix A.
+        # Sum across batched per-galaxy axes too: hierarchical fits
+        # (PopulationSEDModel) have per-galaxy xi with shape (N,) or
+        # higher rank. The prior penalty must reduce to a scalar so
+        # the loss is a single number. ``jnp.sum`` is a no-op for
+        # rank-0 xi (single-galaxy fits) and reduces (N,) → scalar
+        # for hierarchical.
         prior_penalty = 0.0
         for name in free_names:
-            prior_penalty = prior_penalty + params_unbounded[name] ** 2
+            prior_penalty = prior_penalty + jnp.sum(params_unbounded[name] ** 2)
         if stochastic and "psd_xi" in params_unbounded:
             prior_penalty = prior_penalty + jnp.sum(params_unbounded["psd_xi"] ** 2)
         return e_lh + 0.5 * prior_penalty
