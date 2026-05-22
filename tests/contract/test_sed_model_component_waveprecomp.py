@@ -252,7 +252,7 @@ class TestComponentContract:
 
         assert len(params) == 1
         assert params[0].name == "dust_tau_v"
-        assert params[0].units == ""
+        assert params[0].units == "dimensionless"
 
     def test_inputs_outputs_unchanged(self):
         """inputs() and outputs() should be unaffected."""
