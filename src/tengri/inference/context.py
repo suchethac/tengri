@@ -158,6 +158,79 @@ class InferenceContext:
         """JIT-compiled gradient of :attr:`neg_log_posterior_fn`."""
         return self.fitter._get_or_build_grad_fn()
 
+    @property
+    def log_likelihood_fn(self) -> Callable:
+        """JIT-compiled log-likelihood ``log p(d | xi)`` in standardized space.
+
+        The pure data term of the information Hamiltonian, with the
+        prior contribution stripped off. Useful for inference methods
+        that consume likelihood and prior separately — most notably
+        Nested Sampling, which draws from the prior under a
+        likelihood-threshold constraint.
+
+        Sign convention: returns the **positive** log-likelihood
+        (i.e. ``-0.5 * chi^2 + const``); negate to get the χ² term
+        of :math:`\\mathcal{H}`.
+
+        Signature: ``log_likelihood_fn(params_unbounded, data_args) -> scalar``.
+
+        See Also
+        --------
+        log_prior_fn
+            The pure prior term ``log p(xi) = -0.5 * xi^T xi``.
+        neg_log_posterior_fn
+            The combined :math:`\\mathcal{H} = -\\log p(d|\\xi) - \\log p(\\xi)`.
+        """
+        return self.fitter._get_or_build_loglikelihood_unbounded_fn()
+
+    @property
+    def log_prior_fn(self) -> Callable:
+        """Log-prior ``log p(xi)`` in standardized space.
+
+        In the standardized latent space (paper §2 'Standardized
+        Inference'), the prior is :math:`\\mathcal{N}(0, I)` for every
+        free parameter — see ``_unstandardize_parameters`` in
+        :mod:`tengri.inference.loss_functions`. The (unnormalised)
+        log-prior is therefore:
+
+        .. math::
+
+            \\log p(\\boldsymbol{\\xi}) =
+                -\\tfrac{1}{2}\\,\\boldsymbol{\\xi}^{\\!\\top}\\boldsymbol{\\xi} + \\text{const}
+
+        i.e. the prior penalty term of the information Hamiltonian
+        with the opposite sign.
+
+        Signature: ``log_prior_fn(params_unbounded) -> scalar``.
+
+        Stochastic-SFH free fields contribute their ``psd_xi`` array
+        to the same quadratic form (paper §2.2 and Appendix A justify
+        the same isotropic-normal cancellation across prior types).
+
+        See Also
+        --------
+        log_likelihood_fn
+            The pure data term.
+        neg_log_posterior_fn
+            The combined :math:`\\mathcal{H}`.
+        """
+        import jax.numpy as _jnp
+
+        spec = self.fitter.spec
+        free_names = self.fitter._free_names
+        stochastic = spec.stochastic
+
+        def log_prior(params_unbounded):
+            """log p(xi) = -0.5 * sum(xi^2) for the standardized N(0,I) prior."""
+            penalty = _jnp.zeros(())
+            for name in free_names:
+                penalty = penalty + params_unbounded[name] ** 2
+            if stochastic and "psd_xi" in params_unbounded:
+                penalty = penalty + _jnp.sum(params_unbounded["psd_xi"] ** 2)
+            return -0.5 * penalty
+
+        return log_prior
+
     # ── Data and run-time controls ───────────────────────────────────────
     @property
     def data_args(self) -> dict:

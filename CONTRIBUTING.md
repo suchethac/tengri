@@ -329,7 +329,7 @@ Releases are cut by the maintainer (see GOVERNANCE.md). The process:
 
 - **Governance:** See GOVERNANCE.md for decision-making and maintainer responsibilities
 - **Contributors:** Major contributors are listed in CONTRIBUTORS.md
-- **Code of Conduct:** See CODE_OF_CONDUCT.md
+- **Code of Conduct:** See [.github/CODE_OF_CONDUCT.md](.github/CODE_OF_CONDUCT.md)
 
 ## Questions?
 

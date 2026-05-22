@@ -202,7 +202,8 @@ class TestSEDComponentProtocol:
         Tests that apply() slices parameters, looks up inputs, and updates
         state as expected.
         """
-        from tengri.protocols.component import DerivedBundle, ForwardState
+        from tengri.protocols.component import ForwardState
+        from tengri.protocols.derived_state import DerivedState
 
         comp = comp_cls()
         wave = jnp.logspace(1.5, 4.5, 128)
@@ -211,7 +212,7 @@ class TestSEDComponentProtocol:
         state = ForwardState(
             wave=wave,
             sed_intrinsic=jnp.zeros_like(wave),
-            derived=DerivedBundle(**{"L_ir": jnp.array(1e45)}),
+            derived=DerivedState(**{"L_ir": jnp.array(1e45)}),
         )
 
         # Parameters (with prefix)

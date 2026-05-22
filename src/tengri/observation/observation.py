@@ -763,7 +763,7 @@ class Observation:
         from tengri.cosmology import luminosity_distance
 
         # Sum all *_phot_lnu_precomp contributions from components that published
-        # one. New components add their precompute field to DerivedBundle and
+        # one. New components add their precompute field to DerivedState and
         # apply() — no change to predict_via_precomp required.
         precomp_keys = [k for k in state.derived.field_names() if k.endswith("_phot_lnu_precomp")]
         precomp_contribs = [state.derived[k] for k in precomp_keys if k in state.derived]

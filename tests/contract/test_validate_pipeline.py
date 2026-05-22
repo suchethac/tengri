@@ -20,8 +20,8 @@ pytestmark = pytest.mark.contract
 
 from tengri.forward.orchestrator import validate_pipeline
 from tengri.protocols.component import (
+    ComponentIOError,
     DerivedKey,
-    PipelineContractError,
     SEDComponentConfig,
 )
 
@@ -77,7 +77,7 @@ class TestHappyPath:
 class TestMissingPublisher:
     def test_missing_key_raises(self):
         consumer = _mk("FakeRadio", requires=(DerivedKey("L_ir", "erg/s"),))
-        with pytest.raises(PipelineContractError, match="L_ir"):
+        with pytest.raises(ComponentIOError, match="L_ir"):
             validate_pipeline([consumer])
 
     def test_did_you_mean_for_likely_typo(self):
@@ -92,7 +92,7 @@ class TestMissingPublisher:
         # check doesn't fire first.
         publisher = _mk("FakeDust", publishes=(DerivedKey("L_IR", "erg/s"),))
         consumer = _mk("FakeRadio", requires=(DerivedKey("L_ir", "erg/s"),))
-        with pytest.raises(PipelineContractError, match="Did you mean"):
+        with pytest.raises(ComponentIOError, match="Did you mean"):
             validate_pipeline([publisher, consumer])
 
 
@@ -100,7 +100,7 @@ class TestOutOfOrder:
     def test_consumer_before_publisher_raises(self):
         consumer = _mk("FakeRadio", requires=(DerivedKey("L_ir", "erg/s"),))
         publisher = _mk("FakeDust", publishes=(DerivedKey("L_ir", "erg/s"),))
-        with pytest.raises(PipelineContractError, match="strictly before"):
+        with pytest.raises(ComponentIOError, match="strictly before"):
             validate_pipeline([consumer, publisher])
 
     def test_self_publish_is_out_of_order(self):
@@ -112,7 +112,7 @@ class TestOutOfOrder:
             publishes=(DerivedKey("L_ir", "erg/s"),),
             requires=(DerivedKey("L_ir", "erg/s"),),
         )
-        with pytest.raises(PipelineContractError, match="strictly before"):
+        with pytest.raises(ComponentIOError, match="strictly before"):
             validate_pipeline([comp])
 
 
@@ -120,7 +120,7 @@ class TestDuplicatePublisher:
     def test_two_publishers_of_same_key_raises(self):
         a = _mk("FakeA", publishes=(DerivedKey("L_ir", "erg/s"),))
         b = _mk("FakeB", publishes=(DerivedKey("L_ir", "erg/s"),))
-        with pytest.raises(PipelineContractError, match="published by both"):
+        with pytest.raises(ComponentIOError, match="published by both"):
             validate_pipeline([a, b])
 
     def test_alternate_publishers_allowed(self):
@@ -141,7 +141,7 @@ class TestUnitsMismatch:
         # NOTE: The canonical-units check fires first (Lsun for L_ir
         # violates the table), so we match on either error message.
         consumer = _mk("FakeRadio", requires=(DerivedKey("L_ir", "Lsun"),))
-        with pytest.raises(PipelineContractError, match=r"erg/s|Lsun"):
+        with pytest.raises(ComponentIOError, match=r"erg/s|Lsun"):
             validate_pipeline([publisher, consumer])
 
     def test_publisher_violates_canonical_units(self):
@@ -150,7 +150,7 @@ class TestUnitsMismatch:
         # contract that prevents a new component from inventing its own
         # units convention.
         publisher = _mk("BadDust", publishes=(DerivedKey("L_ir", "Lsun"),))
-        with pytest.raises(PipelineContractError, match="canonical"):
+        with pytest.raises(ComponentIOError, match="canonical"):
             validate_pipeline([publisher])
 
 
@@ -171,7 +171,7 @@ class TestNebularRequiresStellar:
         )
 
         neb = NebularSEDComponent(config=NebularSEDComponentConfig(backend="cue"))
-        with pytest.raises(PipelineContractError, match=r"lnu_age|ssp_ages_yr"):
+        with pytest.raises(ComponentIOError, match=r"lnu_age|ssp_ages_yr"):
             validate_pipeline([neb])
 
     def test_real_baked_in_nebular_alone_is_ok(self):
@@ -198,7 +198,7 @@ class TestNebularRequiresStellar:
         # No publisher → missing-publisher error fires on the first
         # required key (lnu_age) before the validator reaches age_weights,
         # so we match on any of the three to be robust.
-        with pytest.raises(PipelineContractError, match=r"lnu_age|ssp_ages_yr|age_weights"):
+        with pytest.raises(ComponentIOError, match=r"lnu_age|ssp_ages_yr|age_weights"):
             validate_pipeline([neb])
 
 
@@ -236,7 +236,7 @@ class TestRequiresOptional:
             # from the canonical table. Both are real failure modes.
             {"requires_optional": lambda self: (DerivedKey("L_ir", "Lsun"),)},
         )()
-        with pytest.raises(PipelineContractError, match=r"erg/s|Lsun|canonical"):
+        with pytest.raises(ComponentIOError, match=r"erg/s|Lsun|canonical"):
             validate_pipeline([publisher, consumer])
 
     def test_publisher_present_matching_units_passes(self):
@@ -257,7 +257,7 @@ class TestRequiresOptional:
             {"requires_optional": lambda self: (DerivedKey("L_ir", "erg/s"),)},
         )()
         publisher = _mk("FakeDust", publishes=(DerivedKey("L_ir", "erg/s"),))
-        with pytest.raises(PipelineContractError, match=r"strictly before"):
+        with pytest.raises(ComponentIOError, match=r"strictly before"):
             validate_pipeline([consumer, publisher])
 
     def test_real_radio_alone_validates(self):

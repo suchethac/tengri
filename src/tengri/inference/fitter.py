@@ -1343,6 +1343,22 @@ class Fitter:
         """
         return build_loglikelihood_unbounded_fn(self, mode=mode)
 
+    def _get_or_build_loglikelihood_unbounded_fn(self, mode: str = "traced") -> Callable:
+        """Return the cached unbounded-space log-likelihood, building if needed.
+
+        Caches per-model (no shared cross-fitter cache, unlike ``loss_fn``);
+        unbounded-space log-likelihood is a thin wrapper over the data term
+        plus :func:`_unstandardize_parameters`, so the compile cost is
+        marginal and the cache key would mirror the loss cache anyway.
+        """
+        cache_key = (self._engine_cache_key(), mode)
+        per_model = get_model_cache(self.model).setdefault("loglik_unbounded_fn", {})
+        if cache_key in per_model:
+            return per_model[cache_key]
+        fn = self._build_loglikelihood_unbounded_fn(mode=mode)
+        per_model[cache_key] = fn
+        return fn
+
     def _get_or_build_grad_fn(self, mode: str = "traced") -> Callable:
         """Return cached JIT-compiled value_and_grad of the loss function.
 

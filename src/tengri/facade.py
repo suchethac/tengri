@@ -645,14 +645,14 @@ class Galaxy:
         if self.result is None:
             raise RuntimeError("Galaxy has not been fitted. Call .fit(...) first.")
 
-        from tengri.results import FitResult, Provenance
+        from tengri.results import FitRecord, FitResult
 
         # Citation keys for this run — mirror the logic in self._infer_citation_keys()
         citation_keys = self._infer_citation_keys()
 
         fr = FitResult(
             inner=self.result,
-            provenance=Provenance.capture(),
+            record=FitRecord.capture(),
             citation_keys=citation_keys,
             backend=getattr(self, "_last_backend", None),
             preset=getattr(self, "preset_name", None),

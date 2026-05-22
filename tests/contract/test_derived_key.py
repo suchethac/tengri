@@ -15,8 +15,8 @@ import pytest
 pytestmark = pytest.mark.contract
 
 from tengri.protocols.component import (
+    ComponentIOError,
     DerivedKey,
-    PipelineContractError,
 )
 
 
@@ -56,14 +56,14 @@ class TestDerivedKeyShape:
         assert len(s) == 1
 
 
-class TestPipelineContractError:
+class TestComponentIOError:
     def test_is_value_error(self):
         # ValueError is the canonical base for "this argument is bad"
         # errors in tengri. Subclassing it means callers can catch
         # ValueError to handle both classical and contract-level
         # validation failures uniformly.
-        assert issubclass(PipelineContractError, ValueError)
+        assert issubclass(ComponentIOError, ValueError)
 
     def test_can_raise_and_catch(self):
-        with pytest.raises(PipelineContractError, match="some explanation"):
-            raise PipelineContractError("some explanation")
+        with pytest.raises(ComponentIOError, match="some explanation"):
+            raise ComponentIOError("some explanation")

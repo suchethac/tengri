@@ -242,7 +242,7 @@ from tengri.parameters.registry import (
     recipe_parameters,
 )
 from tengri.parameters.sentinels import FIXED, FREE
-from tengri.protocols import DerivedBundle, DerivedKey, ForwardState, PipelineContractError
+from tengri.protocols import ComponentIOError, DerivedKey, DerivedState, ForwardState
 from tengri.utils import jit_logging
 
 agn = _components.agn
@@ -340,20 +340,22 @@ from tengri.registry import (
 #                    observation, pipeline, plot, preprocessing, presets,
 #                    results, units
 #   Registry verbs:  describe, help, list_*, summary
-#   Runtime verbs:   cache_size_bytes, clear_cache, doctor,
-#                    enable_persistent_cache, is_cache_enabled
+#   Runtime verbs:   clear_cache, doctor
 #   Exceptions:      *Error, TengriIOError
 #   Priors:          Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
+#
+# Cache / JIT machinery (gc, lean, persistent, clear_shared_caches,
+# cache_size_bytes, enable_persistent_cache, is_cache_enabled) is
+# intentionally NOT advertised. The one entry point at the top level is
+# ``tengri.clear_cache()``; the rest live in ``tengri.utils.jax_cache``
+# and ``tengri.inference.jit_engine`` for callers who need them.
 __all__ = [
     "BackendError",
     "ConfigError",
-    "DerivedBundle",
-    "DerivedKey",
     "Exponential",
     "Fixed",
     "FlatSlab",
     "ForwardModel",
-    "ForwardState",
     "Galaxy",
     "Gaussian",
     "InferenceError",
@@ -362,7 +364,6 @@ __all__ = [
     "ParameterError",
     "ParameterRecord",
     "Parameters",
-    "PipelineContractError",
     "Population",
     "PopulationSEDModel",
     "SEDModel",
@@ -377,11 +378,9 @@ __all__ = [
     "WavePrecomp",
     "agn",
     "builders",
-    "cache_size_bytes",
     "citations",
     "cite_components",
     "clear_cache",
-    "clear_shared_caches",
     "config",
     "cosmology",
     "describe",
@@ -389,17 +388,13 @@ __all__ = [
     "doctor",
     "download_ssp",
     "dust",
-    "enable_persistent_cache",
     "examples",
     "explain",
     "filters",
-    "gc",
     "help",
     "igm",
     "inference",
     "io",
-    "is_cache_enabled",
-    "lean",
     "list_agn_models",
     "list_all",
     "list_components",
@@ -414,7 +409,6 @@ __all__ = [
     "list_sfh_models",
     "nebular",
     "observation",
-    "persistent",
     "pipeline",
     "plot",
     "preprocessing",
@@ -479,11 +473,11 @@ from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectroscopy import Spectroscopy
 from tengri.results import (
     CatalogPosterior,
+    FitRecord,
     FitResult,
     MockData,
     PopulationPosterior,
     Posterior,
-    Provenance,
     generate_mock,
     posteriors_to_dataframe,
 )
@@ -559,3 +553,23 @@ def __dir__() -> list[str]:
     completion surface is trimmed.
     """
     return list(_CURATED_DIR)
+
+
+# Backward-compatibility shims for renamed public symbols. Each old name
+# resolves once, emits a DeprecationWarning pointing at the new name, and
+# then forwards. Will be removed in v1.0.
+_RENAMED_SYMBOLS = {
+    "Provenance": ("FitRecord", "tengri.FitRecord"),
+    "DerivedBundle": ("DerivedState", "tengri.protocols.DerivedState"),
+    "PipelineContractError": ("ComponentIOError", "tengri.protocols.ComponentIOError"),
+}
+
+
+def __getattr__(name: str) -> object:
+    if name in _RENAMED_SYMBOLS:
+        new_name, new_path = _RENAMED_SYMBOLS[name]
+        from tengri._deprecated import deprecated_attribute
+
+        new_obj = globals()[new_name]
+        return deprecated_attribute(new_obj, old_name=f"tengri.{name}", new_name=new_path)
+    raise AttributeError(f"module 'tengri' has no attribute {name!r}")

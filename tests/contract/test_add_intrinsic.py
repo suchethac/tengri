@@ -95,14 +95,14 @@ class TestAddIntrinsic:
 
     def test_add_intrinsic_immutability_with_derived(self):
         """add_intrinsic returns a new state; original.derived is unchanged."""
-        from tengri.protocols.derived_bundle import DerivedBundle
+        from tengri.protocols.derived_state import DerivedState
 
         wave = jnp.linspace(1000, 10000, 100)
         L_initial = jnp.ones(100) * 1e38
         L_component = jnp.ones(100) * 2e38
 
         # Create a bundle with one field set
-        bundle = DerivedBundle(log_mstar=jnp.array(10.0))
+        bundle = DerivedState(log_mstar=jnp.array(10.0))
         state = PipelineState(
             wave=wave,
             sed_intrinsic=L_initial,
@@ -116,5 +116,5 @@ class TestAddIntrinsic:
 
         # Original state is unchanged
         np.testing.assert_array_equal(state.sed_intrinsic, L_initial)
-        # Derived bundle is shared (DerivedBundle is also immutable)
+        # Derived bundle is shared (DerivedState is also immutable)
         assert state.derived is new_state.derived

@@ -246,12 +246,12 @@ def test_load_result_roundtrip(tmp_path):
     """Galaxy.load_result should restore a FitResult from HDF5."""
     pytest.importorskip("h5py")
     from tengri import Galaxy
-    from tengri.results import FitResult, Provenance
+    from tengri.results import FitRecord, FitResult
 
     # Construct a minimal FitResult and save/load it
     fr = FitResult(
         inner={"samples": {"x": [1.0, 2.0, 3.0]}},
-        provenance=Provenance.capture(),
+        record=FitRecord.capture(),
         citation_keys=["jax", "dsps"],
         backend="map",
         preset="starforming",
