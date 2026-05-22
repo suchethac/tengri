@@ -296,6 +296,75 @@ def test_top_level_import() -> None:
     assert tengri.PopulationSEDModel is PopulationSEDModel
 
 
+# ── PopulationSpecView wiring (single-Hamiltonian-Fitter plan, Task 3) ──
+
+
+def test_spec_returns_population_spec_view() -> None:
+    """``PopulationSEDModel.spec`` returns the batched view, not the bare template."""
+    from typing import ClassVar
+
+    from tengri.parameters._population_view import PopulationSpecView
+
+    class _StubSpec:
+        free_params: ClassVar[list[str]] = ["sfh_dpl_alpha"]
+        all_params: ClassVar[list[str]] = ["sfh_dpl_alpha"]
+        fixed_params: ClassVar[list[str]] = []
+        n_free: int = 1
+        stochastic: bool = False
+        _distributions: ClassVar[dict] = {}
+
+        def get_fixed_values(self):
+            return {}
+
+        def get_distribution(self, name):
+            raise KeyError(name)
+
+        def sample(self, key):
+            return {"sfh_dpl_alpha": 0.5}
+
+    class _StubSED:
+        name = "stub"
+        spec = _StubSpec()
+
+    pop = PopulationSEDModel(sed=_StubSED(), galaxies=[_gal(), _gal()])
+    view = pop.spec
+    assert isinstance(view, PopulationSpecView)
+    # The view wraps the template spec
+    assert view.free_params == _StubSpec.free_params
+    # Population size flows through
+    assert view._n_galaxies == 2
+
+
+# ── batched_data helper (single-Hamiltonian-Fitter plan, Task 4) ──────
+
+
+def test_batched_data_stacks_flux_and_noise() -> None:
+    """``batched_data()`` returns (N, n_filters) arrays for Fitter consumption."""
+    pop = PopulationSEDModel(
+        sed=_StubSED(),
+        galaxies=[
+            {"flux_obs": jnp.array([1.0, 2.0, 3.0]), "noise": jnp.array([0.1, 0.2, 0.3])},
+            {"flux_obs": jnp.array([4.0, 5.0, 6.0]), "noise": jnp.array([0.4, 0.5, 0.6])},
+            {"flux_obs": jnp.array([7.0, 8.0, 9.0]), "noise": jnp.array([0.7, 0.8, 0.9])},
+        ],
+    )
+    flux, noise = pop.batched_data()
+    assert flux.shape == (3, 3)
+    assert noise.shape == (3, 3)
+    assert jnp.allclose(flux[0], jnp.array([1.0, 2.0, 3.0]))
+    assert jnp.allclose(noise[2], jnp.array([0.7, 0.8, 0.9]))
+
+
+def test_batched_data_raises_on_missing_keys() -> None:
+    """Galaxy dict missing flux_obs/noise → KeyError."""
+    pop = PopulationSEDModel(
+        sed=_StubSED(),
+        galaxies=[{"flux_obs": jnp.zeros(3)}],  # missing noise
+    )
+    with pytest.raises(KeyError):
+        pop.batched_data()
+
+
 # ── Fitter routing (issue #211 — inference side) ────────────────────
 
 
