@@ -152,6 +152,19 @@ class PopulationSEDModel:
     def n_galaxies(self) -> int:
         return len(self.galaxies)
 
+    @property
+    def spec(self):
+        """The :class:`Parameters` spec from the SED template.
+
+        Per-galaxy free parameters and shared parameters all originate
+        from the same SED template; the difference is only how they
+        broadcast under :meth:`run`. This delegation lets
+        :class:`ForwardModel` and :class:`Fitter` discover fixed
+        values (``redshift``, calibration coefficients, …) on the
+        PopulationSEDModel without special-casing.
+        """
+        return self.sed.spec
+
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free-parameter declarations seen at the population level.
 
@@ -244,12 +257,19 @@ class PopulationSEDModel:
         return self.sed.run(state, params_one)
 
     def parameter_axes(self, params: Mapping[str, Any]) -> dict[str, int | None]:
-        """Per-parameter vmap axis: 0 for per-galaxy, None for shared (broadcast).
+        """Per-parameter vmap axis: 0 for per-galaxy, None for shared / scalar.
 
-        Parameters declared in ``self.shared`` get axis ``None`` —
-        their single value is broadcast across all N galaxies. Every
-        other parameter is assumed per-galaxy and gets axis ``0`` (i.e.
-        ``params[name]`` is a 1-D array of length N_galaxies).
+        Three cases, in order:
+
+        1. Names in :attr:`shared` always broadcast — axis ``None``.
+        2. Rank-0 / scalar values (e.g. fixed values like ``redshift``
+           merged from :attr:`spec`) also broadcast — axis ``None``.
+        3. Everything else is per-galaxy — axis ``0`` (the value is a
+           1-D array of length N_galaxies).
+
+        The scalar-detection branch is what lets fixed values
+        (``redshift``, calibration coefficients, …) flow through
+        without being treated as per-galaxy data.
 
         Parameters
         ----------
@@ -262,7 +282,14 @@ class PopulationSEDModel:
             One entry per key in ``params``.
         """
         shared_set = set(self.shared)
-        return {name: (None if name in shared_set else 0) for name in params}
+        out: dict[str, int | None] = {}
+        for name, value in params.items():
+            if name in shared_set:
+                out[name] = None
+            else:
+                shape = getattr(value, "shape", ())
+                out[name] = 0 if (shape and len(shape) > 0) else None
+        return out
 
     def run(
         self,
