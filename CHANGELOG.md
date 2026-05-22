@@ -38,8 +38,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   models listed in the AGN module docstring.
 - Promoted to the top-level `tengri` public surface (added to
   `__all__`): `FIXED`, `FREE`, `fit_batch`, `SEDResult`,
-  `PriorPredictive`, `load_filter_set`, `data_path`. No behaviour
-  change — they were importable but not advertised.
+  `PriorPredictive`, `data_path`. No behaviour change — they were
+  importable but not advertised. `load_filter_set` was considered but
+  stays demoted per existing design — import from
+  `tengri.observation.load_filter_set`.
 
 ## [0.1.0] - 2026-05-22
 

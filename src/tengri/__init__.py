@@ -413,7 +413,6 @@ __all__ = [
     "list_parameters",
     "list_plots",
     "list_sfh_models",
-    "load_filter_set",
     "nebular",
     "observation",
     "pipeline",
