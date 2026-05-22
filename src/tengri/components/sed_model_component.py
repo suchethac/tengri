@@ -473,18 +473,33 @@ class SEDModelComponent:
             # WavePrecomp path: compute photometry LUTs
             published = self._apply_precomp(p_sliced, sed_in, filter_eff_waves, **input_kwargs)
             # Do NOT update sed_intrinsic on the LUT path (only publish LUTs)
-            # Use _extras for component-specific precomp LUTs that aren't typed fields
-            new_extras = {**state.derived._extras, **published}
-            return state.with_(derived=state.derived.with_(_extras=new_extras))
+            new_derived = self._merge_published(state.derived, published)
+            return state.with_(derived=new_derived)
         else:
             # Default full-grid path
             sed_out, published = self.predict(p_sliced, sed_in, state.wave, **input_kwargs)
             # Update state with new SED and published keys
-            new_extras = {**state.derived._extras, **published}
-            return state.with_(
-                sed_intrinsic=sed_out,
-                derived=state.derived.with_(_extras=new_extras),
-            )
+            new_derived = self._merge_published(state.derived, published)
+            return state.with_(sed_intrinsic=sed_out, derived=new_derived)
+
+    @staticmethod
+    def _merge_published(derived: Any, published: Mapping[str, Any]) -> Any:
+        """Route published keys to typed fields when defined, else into ``_extras``.
+
+        A component declares output names in its ``outputs`` dict (e.g.
+        ``{"L_ir": "erg/s"}``). If a name matches a typed field on
+        :class:`DerivedBundle`, write through to that field so the value
+        is observable via attribute / ``__contains__`` / mapping access.
+        Otherwise drop the value into ``_extras``, the documented
+        escape hatch for keys not yet promoted to typed fields.
+        """
+        known = set(derived.field_names())
+        typed_updates = {k: v for k, v in published.items() if k in known}
+        extras_updates = {k: v for k, v in published.items() if k not in known}
+        if extras_updates:
+            merged_extras = {**derived._extras, **extras_updates}
+            return derived.with_(_extras=merged_extras, **typed_updates)
+        return derived.with_(**typed_updates) if typed_updates else derived
 
     def _apply_precomp(
         self,
