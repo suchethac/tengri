@@ -216,7 +216,7 @@ from tengri.forward.prediction import (
     SFHQuantities,
 )
 from tengri.forward.result import SEDResult
-from tengri.forward.sed_model import PriorPredictive, SEDModel, WavePrecomp
+from tengri.forward.sed_model import PriorPredictive, SEDModel, SpectrumPrecomp, WavePrecomp
 from tengri.forward.spatial_model import SpatialModel, SpatialSEDModel
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
 from tengri.observation.filters import load_filter_set
@@ -368,6 +368,7 @@ __all__ = [
     "Sersic",
     "SpatialModel",
     "SpatialSEDModel",
+    "SpectrumPrecomp",
     "StudentT",
     "TengriError",
     "TengriIOError",
