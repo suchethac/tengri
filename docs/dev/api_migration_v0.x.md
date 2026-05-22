@@ -717,6 +717,45 @@ drive them. Tracked by issue #74.
 
 ---
 
+## Phase II-4 — `SEDModelComponent` authoring path (2026-05)
+
+A concrete convenience base class `SEDModelComponent` was added at
+`src/tengri/components/sed_model_component.py` to make adding new
+physics models a single-file change. It coexists with the bare
+`SEDComponent` Protocol (canonical reference: `components/radio/component.py`),
+which stays as the fallback for models with rich state (stellar, IGM).
+
+| Aspect                              | Bare `SEDComponent` Protocol               | New `SEDModelComponent` base                 |
+| ----------------------------------- | ------------------------------------------- | --------------------------------------------- |
+| File layout                         | `component.py` + `_params.py`               | one file: `<name>_model.py`                   |
+| Free-parameter declaration          | `_params.py:PARAMS` tuple                   | class-level `Distribution` attrs with `units` |
+| `declared_parameters()`             | Hand-returned                               | Auto-built by `__init_subclass__`             |
+| `inputs()` / `outputs()`            | Hand-implemented as DerivedKey tuples       | Auto-built from class-level `inputs` / `outputs` dicts |
+| `precompute()`                      | Hand-implemented                            | Calls subclass `load(wave_grid) → self.data` |
+| `apply()`                           | Hand-written full body                      | Auto-dispatches to subclass `predict()`       |
+| Registry for `SEDModel.build(type=...)` | Per-domain hard-coded dispatch          | Module-level `_REGISTRY` via `__init_subclass__` |
+| WavePrecomp participation           | Component publishes own LUT                 | Base class calls `predict()` at filter_eff_waves automatically |
+
+**No deprecations.** Both styles work. Existing bare-Protocol components
+(stellar, radio, dust, nebular, AGN, IGM, X-ray) are unchanged. New
+models default to `SEDModelComponent`.
+
+Ported in 2026-05:
+* `Calzetti`, `SMC`, `MilkyWay`, `Salim18` (dust attenuation)
+* `ModifiedBlackbodySED`, `DL07IRSEDComponent`, `DL14IRSEDComponent`,
+  `Dale2014IRSEDComponent`, `AstrodustIRSEDComponent`, `Draine2021PAHIRSEDComponent`
+  (dust IR emission)
+* `SKIRTORTorus`, `KD18Disc`, `PowerLawDisc`, `Silva04Torus`, `CAT3DTorus` (AGN)
+* `CueNebularSEDComponent`, `CloudyGridSEDComponent`, `CB19SEDComponent`,
+  `MAPPINGSSEDComponent` (nebular)
+* `RadioPowerLawSEDComponent`, `XRayAirdSEDComponent` (multiwavelength)
+
+References: `docs/dev/sed-model-components.md` (how-to),
+`docs/dev/forward-model-architecture.md` (architecture),
+`docs/adr/0011-sed-model-component-base.md` (decision).
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in
