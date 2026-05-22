@@ -170,21 +170,63 @@ class PopulationSEDModel:
             for name in self.shared
         ]
 
+    def parameter_axes(self, params: Mapping[str, Any]) -> dict[str, int | None]:
+        """Per-parameter vmap axis: 0 for per-galaxy, None for shared (broadcast).
+
+        Parameters declared in ``self.shared`` get axis ``None`` —
+        their single value is broadcast across all N galaxies. Every
+        other parameter is assumed per-galaxy and gets axis ``0`` (i.e.
+        ``params[name]`` is a 1-D array of length N_galaxies).
+
+        Parameters
+        ----------
+        params : Mapping[str, Any]
+            The parameters dict that ``run`` will be called with.
+
+        Returns
+        -------
+        dict[str, int | None]
+            One entry per key in ``params``.
+        """
+        shared_set = set(self.shared)
+        return {name: (None if name in shared_set else 0) for name in params}
+
     def run(
         self,
         state: ForwardState,
         params: Mapping[str, Any],
     ) -> ForwardState:
-        """Forward-time batched SED across the population.
+        """Forward-time batched SED across the population (via ``jax.vmap``).
 
-        **Not yet implemented.** Today's hierarchical inference path
-        bypasses ``ForwardModel.predict`` entirely (it routes at the
-        :class:`tengri.Fitter` layer through
-        :class:`tengri.PopulationFitter`). When
-        ``ForwardModel.predict`` learns to return batched arrays
-        (issue #211), this method will run the SED template under
-        ``jax.vmap`` across the population and return a ForwardState
-        whose ``sed_intrinsic`` has shape ``(N_galaxies, n_wave)``.
+        Each population-level parameter is either ``shared`` (one value,
+        broadcast across the N galaxies via vmap ``in_axes=None``) or
+        per-galaxy (an array of length N, vmap ``in_axes=0``). The
+        returned :class:`ForwardState` has a leading ``N_galaxies``
+        axis on every per-galaxy quantity (``sed_intrinsic``,
+        ``sed_observed``, ``sed_attenuated``, etc.).
+
+        See ``docs/superpowers/plans/2026-05-22-population-sed-batched-forward.md``
+        for the design rationale.
+
+        Parameters
+        ----------
+        state : ForwardState
+            Initial state. The wavelength grid is shared across the
+            population (broadcast) — the SED template owns the grid.
+        params : Mapping
+            Per-parameter values. Shared params are scalars; per-galaxy
+            params are length-N arrays. ``parameter_axes(params)``
+            returns the vmap-axis dict.
+
+        Returns
+        -------
+        ForwardState
+            Batched state: every per-galaxy quantity has a leading
+            ``N_galaxies`` axis.
+
+        Notes
+        -----
+        JIT/grad/vmap-compatible.
 
         Raises
         ------
@@ -194,11 +236,9 @@ class PopulationSEDModel:
             handles hierarchical population fits without going through
             ``forward.predict``.
         """
-        raise NotImplementedError(
-            "PopulationSEDModel.run (batched forward via vmap) is not yet wired up. "
-            "Use the inference path: "
-            "Fitter(forward, batched_flux, batched_noise).run('vi') — "
-            "the Fitter detects PopulationSEDModel and routes through "
-            "tengri.PopulationFitter under the hood. "
-            "See issue #211 for the forward-path refactor."
-        )
+        import jax
+
+        in_axes_params = self.parameter_axes(params)
+        # State is broadcast across the population (one wavelength grid,
+        # one upstream state); params follow their per-parameter axes.
+        return jax.vmap(self.sed.run, in_axes=(None, in_axes_params))(state, params)

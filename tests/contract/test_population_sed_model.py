@@ -78,14 +78,118 @@ def test_declared_parameters_returns_shared_names() -> None:
     }
 
 
-def test_run_raises_pending_forward_path() -> None:
-    """Forward-time batched run is not yet wired; the inference route is."""
+def test_parameter_axes_partitions_shared_and_per_galaxy() -> None:
+    """``parameter_axes`` returns 0 for per-galaxy and None for shared."""
+    pop = PopulationSEDModel(sed=_StubSED(), galaxies=[_gal()])
+    axes = pop.parameter_axes(
+        {
+            "sfh_field_psd_sigma": 1.0,
+            "sfh_field_psd_tau_myr": 50.0,
+            "sfh_dpl_alpha": jnp.zeros(3),
+            "sfh_dpl_log_peak_sfr": jnp.zeros(3),
+        }
+    )
+    assert axes["sfh_field_psd_sigma"] is None
+    assert axes["sfh_field_psd_tau_myr"] is None
+    assert axes["sfh_dpl_alpha"] == 0
+    assert axes["sfh_dpl_log_peak_sfr"] == 0
+
+
+# ── Forward-time batched ``.run`` path (issue #211 final item) ──────
+
+
+def _real_template(synthetic_ssp, simple_observation):
+    """Build a minimal real SEDModel template for batched-vmap tests."""
+    from tengri import FIXED, SEDModel, Uniform
+
+    return SEDModel.build(
+        ssp_data=synthetic_ssp,
+        observation=simple_observation,
+        # Keep the SFH simple but with one free per-galaxy parameter so
+        # we can verify the vmap actually fans out across galaxies.
+        sfh={"type": "dpl", "*": FIXED, "log_peak_sfr": Uniform(-1.0, 3.0)},
+        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        neb={"type": "none"},
+        redshift=0.05,
+    )
+
+
+def test_run_vmaps_over_population(synthetic_ssp, simple_observation) -> None:
+    """``run`` builds a batched ForwardState across the population via vmap.
+
+    Verifies that:
+    - The vmap path executes cleanly on a real SED template.
+    - Per-galaxy free params (shape ``(N,)``) produce per-galaxy
+      derived quantities with a leading ``N`` axis.
+    """
     from tengri.protocols.component import ForwardState
 
-    pop = PopulationSEDModel(sed=_StubSED(), galaxies=[_gal()])
+    template = _real_template(synthetic_ssp, simple_observation)
+
+    N = 3
+    pop = PopulationSEDModel(
+        sed=template,
+        galaxies=[{"flux_obs": jnp.zeros(5), "noise": jnp.ones(5)} for _ in range(N)],
+    )
+    # Per-galaxy params: each free param is an array of length N.
+    params: dict[str, jnp.ndarray] = {
+        name: jnp.array([0.5] * N) for name in template.spec.free_params
+    }
     state = ForwardState(wave=jnp.zeros(1))
-    with pytest.raises(NotImplementedError, match="not yet wired"):
-        pop.run(state, {})
+    out = pop.run(state, params)
+    # The output state should have a leading N axis on per-galaxy derived
+    # quantities. Find at least one such quantity and check the shape.
+    leading_axes = []
+    for _key, val in dict(out.derived).items():
+        if hasattr(val, "shape") and len(val.shape) > 0:
+            leading_axes.append(val.shape[0])
+    assert leading_axes, "expected at least one derived array to vmap"
+    # Every vmapped quantity should have the same N along axis 0.
+    assert all(axis == N for axis in leading_axes), (
+        f"expected leading axis of size {N} on vmapped derived quantities; got {leading_axes}"
+    )
+
+
+def test_run_single_galaxy_matches_template_directly(synthetic_ssp, simple_observation) -> None:
+    """N=1 vmapped run should match a direct template.run (modulo broadcasting).
+
+    The per-galaxy axis is just a length-1 leading dim; after a squeeze,
+    the numbers should match the bare-template forward pass.
+    """
+    import jax.numpy as _jnp
+
+    from tengri.protocols.component import ForwardState
+
+    template = _real_template(synthetic_ssp, simple_observation)
+
+    # Single-galaxy direct path.
+    params_single: dict[str, _jnp.ndarray] = {
+        name: _jnp.float64(0.5) for name in template.spec.free_params
+    }
+    state = ForwardState(wave=_jnp.zeros(1))
+    direct = template.run(state, params_single)
+
+    # Vmap path with N=1.
+    pop = PopulationSEDModel(
+        sed=template,
+        galaxies=[{"flux_obs": _jnp.zeros(5), "noise": _jnp.ones(5)}],
+    )
+    params_batched = {name: _jnp.array([0.5]) for name in template.spec.free_params}
+    batched = pop.run(state, params_batched)
+
+    # Compare one derived quantity, squeezing the leading axis.
+    found_match = False
+    for key, val_direct in dict(direct.derived).items():
+        if not hasattr(val_direct, "shape"):
+            continue
+        val_batched = dict(batched.derived).get(key)
+        if val_batched is None or not hasattr(val_batched, "shape"):
+            continue
+        # Vmap added one leading axis of size 1
+        if val_batched.shape[0] == 1 and val_batched.shape[1:] == val_direct.shape:
+            assert _jnp.allclose(val_batched[0], val_direct, rtol=1e-10, atol=0.0)
+            found_match = True
+    assert found_match, "could not find a comparable derived quantity"
 
 
 # ── ForwardModel.build(population=...) ──────────────────────────────
