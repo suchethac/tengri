@@ -18,15 +18,11 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
+from tengri.components.agn._phys import planck_lnu, wavelength_to_nu
 from tengri.components.dust.attenuation import smc as smc_extinction_curve
 
 # Physical constants (CGS / Angstrom-compatible)
-from tengri.utils.physics_constants import (
-    C_AA as _C_AA,
-    C_CGS as _C_CGS,
-    H_PLANCK as _H_PLANCK,
-    K_BOLTZ as _K_BOLTZ,
-)
+from tengri.utils.physics_constants import C_AA as _C_AA
 
 # SMC R_V from Pei (1992)
 _RV_SMC = 2.93
@@ -291,28 +287,6 @@ def polar_dust_extinction(
     return l_nu_attenuated, l_absorbed
 
 
-def _planck_nu(wavelength: jnp.ndarray, temperature: float) -> jnp.ndarray:
-    """Planck function B_nu(T) in CGS units [erg/s/cm^2/Hz/sr].
-
-    Parameters
-    ----------
-    wavelength : array
-        Wavelength in Angstrom.
-    temperature : float
-        Temperature in Kelvin.
-
-    Returns
-    -------
-    b_nu : array
-        Planck function values. Same shape as wavelength.
-    """
-    nu = _C_AA / wavelength  # Hz
-    x = _H_PLANCK * nu / (_K_BOLTZ * temperature)
-    # Clip to avoid overflow in exp
-    x_safe = jnp.clip(x, 0.0, 500.0)
-    return 2.0 * _H_PLANCK * nu**3 / _C_CGS**2 / (jnp.exp(x_safe) - 1.0)
-
-
 def polar_dust_emission(
     l_absorbed_total: float,
     wavelength: jnp.ndarray,
@@ -353,7 +327,7 @@ def polar_dust_emission(
     """
     # Greybody: L_nu proportional to (1 - exp(-(lambda_0/lambda)^beta)) * B_nu(T)
     opacity_factor = 1.0 - jnp.exp(-((lambda_0 / wavelength) ** beta))
-    b_nu = _planck_nu(wavelength, temperature)
+    b_nu = planck_lnu(wavelength_to_nu(wavelength), temperature)
     unnormalized = opacity_factor * b_nu
 
     # Normalize so that integral(L_reemit * dnu) = l_absorbed_total

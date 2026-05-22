@@ -250,7 +250,7 @@ def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
 
     # 8. Photometric integration
     if model.filter_waves is not None:
-        from tengri.utils.cosmology import luminosity_distance
+        from tengri.cosmology import luminosity_distance
 
         z = model._get_redshift(params)
         dl_cm = luminosity_distance(z)

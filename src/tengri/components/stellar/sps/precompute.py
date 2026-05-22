@@ -35,7 +35,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.utils.conversions import lnu_to_fnu
+from tengri.units import lnu_to_fnu
 from tengri.utils.grid_interp import preintegrate_grid
 
 # SSP precompute grid axes: (lgmet, lg_age_gyr). The age axis is never user-fixed
@@ -408,7 +408,7 @@ def precompute_photometry_ztable(
     **Gradient-safe**: not applicable (CPU preprocessing).
 
     """
-    from tengri.utils.cosmology import luminosity_distance
+    from tengri.cosmology import luminosity_distance
 
     if z_grid is None:
         z_grid = jnp.linspace(z_min, z_max, n_z)

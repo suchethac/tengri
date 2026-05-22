@@ -516,7 +516,7 @@ class StellarSEDComponent:
         # ── 5. Cosmology: t_obs from redshift ───────────────────────────
         # ``age_at_z`` is JIT-compatible (pure JAX under the hood); keep
         # everything as JAX arrays so the whole apply() stays traceable.
-        from tengri.utils.cosmology import age_at_z as _age_at_z
+        from tengri.cosmology import age_at_z as _age_at_z
 
         z = jnp.asarray(params.get("redshift", 0.0))
         t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())

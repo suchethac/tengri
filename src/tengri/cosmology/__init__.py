@@ -19,6 +19,7 @@ from __future__ import annotations
 from tengri.utils.cosmology import (
     DEFAULT_COSMO,
     PLANCK18,
+    CosmoParams,
     age_at_z,
     age_at_z0,
     angular_diameter_distance,
@@ -39,6 +40,7 @@ from tengri.utils.cosmology import (
 __all__ = [
     "DEFAULT_COSMO",
     "PLANCK18",
+    "CosmoParams",
     "age_at_z",
     "age_at_z0",
     "angular_diameter_distance",
