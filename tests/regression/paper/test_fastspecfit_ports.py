@@ -17,6 +17,7 @@ References
 
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -78,7 +79,7 @@ def test_build_line_mask_scalar_sigma():
 
     mask = build_line_mask(wave, lines, redshift=0.0, line_sigmas_kms=200.0)
 
-    assert mask.shape == wave.shape
+    chex.assert_equal_shape([mask, wave])
     assert mask.sum() > 0
 
 
@@ -128,7 +129,7 @@ def test_compute_line_fluxes_differentiable():
         return jnp.sum(compute_line_fluxes(amps, rest_waves, 0.1, 150.0, 2500.0))
 
     grads = jax.grad(total_flux)(jnp.ones(2) * 1e-17)
-    assert jnp.all(jnp.isfinite(grads)), "Gradients must be finite"
+    chex.assert_tree_all_finite(grads)
     assert jnp.all(grads > 0.0), "Gradients must be positive"
 
 
@@ -165,7 +166,7 @@ def test_compute_equivalent_widths_zero_continuum():
     cont = jnp.array([0.0, 0.0])
     ew = compute_equivalent_widths(fluxes, cont, redshift=0.1)
 
-    assert jnp.all(jnp.isfinite(ew)), "EW must be finite even with zero continuum"
+    chex.assert_tree_all_finite(ew)
     np.testing.assert_array_equal(np.array(ew), 0.0)
 
 
@@ -179,7 +180,7 @@ def test_compute_equivalent_widths_differentiable():
         return jnp.sum(compute_equivalent_widths(fluxes, cont, 0.3))
 
     grads = jax.grad(total_ew)(jnp.array([1e-17, 2e-17]))
-    assert jnp.all(jnp.isfinite(grads))
+    chex.assert_tree_all_finite(grads)
 
 
 # ── compute_line_moments tests ────────────────────────────────────────────────

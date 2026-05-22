@@ -12,6 +12,7 @@ import warnings
 from pathlib import Path
 from types import SimpleNamespace
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -191,7 +192,7 @@ def test_cloudy_grid_triweight_runs(cloudy_triweight_backend, mock_ssp):
     except Exception as e:
         pytest.skip(f"Backend call failed (likely shape mismatch with mock SSP): {e}")
 
-    assert jnp.all(jnp.isfinite(sed)), "Triweight mode produced non-finite SED"
+    chex.assert_tree_all_finite(sed)
     assert jnp.any(sed > 0.0), "Triweight mode produced all-zero SED"
 
 

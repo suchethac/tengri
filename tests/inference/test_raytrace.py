@@ -1,5 +1,6 @@
 """Tests for the Ray Tracing Sampler integration."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -383,7 +384,7 @@ class TestKDKIntegrator:
 
         mean_accept = float(jnp.mean(accept_prob))
         assert mean_accept > 0.3
-        assert chain.shape == (100, D)
+        chex.assert_shape(chain, (100, D))
 
     def test_invalid_integrator_raises(self):
         """Unknown integrator should raise ValueError."""

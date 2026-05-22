@@ -1,5 +1,6 @@
 """Tests for the patchy reionization IGM model (igm.igm_transmission_patchy)."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -144,7 +145,7 @@ class TestPatchyIGM:
         from tengri.components.igm import igm_transmission_patchy
 
         t = igm_transmission_patchy(wave_obs_broad, 7.0, x_HI=0.5, R_bubble=1.0)
-        assert jnp.all(jnp.isfinite(t))
+        chex.assert_tree_all_finite(t)
 
     def test_monotonic_xhi(self, wave_obs_lya_region):
         """Higher x_HI produces lower transmission (more absorption)."""
@@ -183,7 +184,7 @@ class TestPatchyIGMJitGrad:
             return igm_transmission_patchy(wave, z, x_HI=0.5, R_bubble=1.0)
 
         result = _run(wave_obs_broad, 7.0)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
     def test_gradient_wrt_xhi(self, wave_obs_lya_region):
         """Gradient w.r.t. x_HI is finite."""

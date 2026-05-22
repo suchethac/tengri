@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -31,9 +32,9 @@ class TestUnifiedNlrBlr:
         from tengri.components.agn.unified import unified_nlr_blr
 
         l_nu = unified_nlr_blr(wavelength, agn_log_lbol=44.0)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)
-        assert l_nu.shape == wavelength.shape
+        chex.assert_equal_shape([l_nu, wavelength])
 
     def test_registered_as_unified_nlr_blr(self):
         """'unified_nlr_blr' appears in AGN_MODELS."""
@@ -126,4 +127,4 @@ class TestUnifiedNlrBlr:
         def _run(wave):
             return unified_nlr_blr(wave, agn_log_lbol=44.0)
 
-        assert jnp.all(jnp.isfinite(_run(wavelength)))
+        chex.assert_tree_all_finite(_run(wavelength))

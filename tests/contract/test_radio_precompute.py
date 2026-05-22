@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -36,8 +37,7 @@ def test_radio_precompute_and_lookup(model, filter_set):
     result = adapter.precompute(waves, trans, redshift=0.5, parameters=None, model=model)
     phot = np.asarray(result["grid_phot"])
     assert phot.shape[-1] == len(waves)
-    assert np.all(np.isfinite(phot))
-
+    chex.assert_tree_all_finite(phot)
     lookup = adapter.build_lookup(result, model=model)
     n_axes = len(adapter.AXIS_PARAMS[model])
     args = (
@@ -49,7 +49,7 @@ def test_radio_precompute_and_lookup(model, filter_set):
     )
     assert len(args) == 1 + n_axes
     out = jax.jit(lookup)(*args)
-    assert np.all(np.isfinite(np.asarray(out)))
+    chex.assert_tree_all_finite(np.asarray(out))
 
 
 @pytest.mark.parametrize("key", ["radio_synchrotron", "radio_freefree", "radio_agn_jet"])

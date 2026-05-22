@@ -10,6 +10,7 @@ Tests cover:
 - JIT compatibility.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -39,8 +40,8 @@ class TestCloudyLinePriors:
     def test_returns_correct_number_of_lines(self):
         """Should return priors for all 12 reference lines by default."""
         means, sigmas = cloudy_line_priors()
-        assert means.shape == (12,)
-        assert sigmas.shape == (12,)
+        chex.assert_shape(means, (12,))
+        chex.assert_shape(sigmas, (12,))
 
     def test_halpha_hbeta_ratio(self):
         """Halpha/Hbeta should be ~2.86 (Case B recombination)."""
@@ -123,9 +124,8 @@ class TestCloudyLinePriors:
         # Request only Halpha and Hbeta (vacuum wavelengths)
         lines = jnp.array([6564.61, 4862.68])
         means, sigmas = cloudy_line_priors(line_wavelengths=lines)
-        assert means.shape == (2,)
-        assert sigmas.shape == (2,)
-
+        chex.assert_shape(means, (2,))
+        chex.assert_shape(sigmas, (2,))
         # First should be Halpha (~2.86), second should be Hbeta (1.0)
         assert means[0] > 2.0  # Halpha
         assert jnp.allclose(means[1], 1.0, atol=0.1)  # Hbeta
@@ -138,8 +138,8 @@ class TestCloudyLinePriors:
             return cloudy_line_priors(log_z=0.0, neb_logU=-3.0)
 
         means, _sigmas = _eval()
-        assert means.shape == (12,)
-        assert jnp.all(jnp.isfinite(means))
+        chex.assert_shape(means, (12,))
+        chex.assert_tree_all_finite(means)
 
     def test_gradient_matches_finite_difference_log_z(self):
         """AD gradient wrt log_z matches finite-difference at interior grid point.
@@ -230,8 +230,8 @@ class TestMarginalizeEmissionLinesCloudy:
         )
         assert len(result) == 3
         _ln_l, a_hat, a_cov = result
-        assert a_hat.shape == (3,)
-        assert a_cov.shape == (3, 3)
+        chex.assert_shape(a_hat, (3,))
+        chex.assert_shape(a_cov, (3, 3))
 
     def test_finite_output(self, mock_spectral_data):
         """All outputs should be finite."""
@@ -243,8 +243,8 @@ class TestMarginalizeEmissionLinesCloudy:
             line_wavelengths=d["line_wavelengths"],
         )
         assert jnp.isfinite(ln_l)
-        assert jnp.all(jnp.isfinite(a_hat))
-        assert jnp.all(jnp.isfinite(a_cov))
+        chex.assert_tree_all_finite(a_hat)
+        chex.assert_tree_all_finite(a_cov)
 
     def test_prior_constrains_amplitudes(self, mock_spectral_data):
         """With CLOUDY priors, amplitudes should reflect line ratios."""
@@ -403,8 +403,8 @@ class TestBalmerDecrementPrior:
         from tengri.observation.eline_priors import balmer_decrement_prior
 
         wavs, ratios = balmer_decrement_prior(dust_tau_diff=0.0)
-        assert wavs.shape == (4,)
-        assert ratios.shape == (4,)
+        chex.assert_shape(wavs, (4,))
+        chex.assert_shape(ratios, (4,))
 
     def test_zero_dust_gives_intrinsic_ratios(self):
         """With no dust, ratios should equal intrinsic Case B values."""
@@ -576,5 +576,5 @@ class TestCloudyGridLinePriors:
         grid = _MockGridData()
         # Way outside the grid bounds
         means, sigmas = cloudy_grid_line_priors(grid, log_z=5.0, neb_logU=0.0)
-        assert jnp.all(jnp.isfinite(means)), "Clamped extrapolation must return finite values"
-        assert jnp.all(jnp.isfinite(sigmas))
+        chex.assert_tree_all_finite(means)
+        chex.assert_tree_all_finite(sigmas)

@@ -13,6 +13,7 @@ No SSP data needed. All tests use synthetic jnp arrays.
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -310,7 +311,7 @@ class TestIGMAbsorption:
 
         wave_obs = jnp.linspace(900.0, 10000.0, 100)
         trans = igm_transmission(wave_obs, 0.0)
-        assert jnp.all(jnp.isfinite(trans)), "IGM transmission at z=0 contains non-finite values"
+        chex.assert_tree_all_finite(trans)
         # At z=0, transmission must be 1 everywhere (no absorbers along sightline)
         assert jnp.allclose(trans, 1.0, atol=1e-6), (
             f"IGM transmission at z=0 deviates from 1. min={float(jnp.min(trans)):.4f}"

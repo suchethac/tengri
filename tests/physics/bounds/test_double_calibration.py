@@ -1,5 +1,6 @@
 """Tests for double (piecewise) calibration polynomial."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -84,8 +85,8 @@ class TestDoubleCalibrationPolynomial:
         coeffs_blue = jnp.array([0.1])
         coeffs_red = jnp.array([0.05, -0.02, 0.01])
         cal = double_calibration_polynomial(wavelength, coeffs_blue, coeffs_red, wave_split)
-        assert cal.shape == wavelength.shape
-        assert jnp.all(jnp.isfinite(cal))
+        chex.assert_equal_shape([cal, wavelength])
+        chex.assert_tree_all_finite(cal)
 
     def test_jit_compatible(self, wavelength, wave_split):
         fn = jax.jit(double_calibration_polynomial)
@@ -95,7 +96,7 @@ class TestDoubleCalibrationPolynomial:
             jnp.array([0.05, 0.02]),
             wave_split,
         )
-        assert cal.shape == wavelength.shape
+        chex.assert_equal_shape([cal, wavelength])
 
     def test_grad_compatible(self, wavelength, wave_split):
         def scalar_fn(c_blue):
@@ -103,7 +104,7 @@ class TestDoubleCalibrationPolynomial:
             return jnp.sum(cal)
 
         grad_val = jax.grad(scalar_fn)(jnp.array([0.1, -0.05]))
-        assert jnp.all(jnp.isfinite(grad_val))
+        chex.assert_tree_all_finite(grad_val)
 
 
 class TestApplyDoubleCalibration:

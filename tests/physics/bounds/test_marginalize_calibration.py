@@ -1,5 +1,6 @@
 """Tests for analytic calibration polynomial marginalization."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -66,9 +67,9 @@ class TestMarginalizeCalibration:
             log_like, c_hat, _c_hat_err = marginalize_calibration(
                 simple_spectrum, simple_spectrum, obs_err, wavelength, n_poly=n_poly
             )
-            assert c_hat.shape == (n_poly,)
-            assert _c_hat_err.shape == (n_poly,)
-            assert log_like.shape == ()
+            chex.assert_shape(c_hat, (n_poly,))
+            chex.assert_shape(_c_hat_err, (n_poly,))
+            chex.assert_shape(log_like, ())
 
     def test_tighter_prior_shrinks_coefficients(self, wavelength, simple_spectrum):
         """Tighter prior (smaller prior_sigma) should shrink c_hat toward zero."""
@@ -152,7 +153,7 @@ class TestMarginalizeCalibration:
         fn = jax.jit(lambda m, d, e, w: marginalize_calibration(m, d, e, w, n_poly=3))
         log_like, c_hat, _c_hat_err = fn(simple_spectrum, simple_spectrum, obs_err, wavelength)
         assert jnp.isfinite(log_like)
-        assert c_hat.shape == (3,)
+        chex.assert_shape(c_hat, (3,))
 
     def test_differentiable_wrt_model(self, wavelength, simple_spectrum):
         """Marginalized log-likelihood should be differentiable w.r.t. model flux."""
@@ -166,8 +167,8 @@ class TestMarginalizeCalibration:
 
         grad_fn = jax.grad(loss)
         g = grad_fn(simple_spectrum)
-        assert jnp.all(jnp.isfinite(g))
-        assert g.shape == simple_spectrum.shape
+        chex.assert_tree_all_finite(g)
+        chex.assert_equal_shape([g, simple_spectrum])
 
     def test_n_poly_1(self, wavelength, simple_spectrum):
         """Should work with a single polynomial coefficient (linear tilt)."""
@@ -175,5 +176,5 @@ class TestMarginalizeCalibration:
         log_like, c_hat, _c_hat_err = marginalize_calibration(
             simple_spectrum, simple_spectrum, obs_err, wavelength, n_poly=1
         )
-        assert c_hat.shape == (1,)
+        chex.assert_shape(c_hat, (1,))
         assert jnp.isfinite(log_like)

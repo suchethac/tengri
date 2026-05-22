@@ -10,6 +10,7 @@ Covers:
 - compute_radio_components (component decomposition)
 """
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -241,8 +242,8 @@ class TestDelvecchio2021:
     def test_jit_compatible(self):
         jitted = jax.jit(radio_sfr_delvecchio2021, static_argnames=["apply_suppression"])
         L = jitted(_WAVE_RADIO, _L_IR, 10.0, 0.0, apply_suppression=False)
-        assert L.shape == _WAVE_RADIO.shape
-        assert jnp.all(jnp.isfinite(L))
+        chex.assert_equal_shape([L, _WAVE_RADIO])
+        chex.assert_tree_all_finite(L)
 
     def test_gradients_flow_through_log_mstar_and_redshift(self):
         """Gradients should be finite and nonzero w.r.t. log_mstar, redshift."""
@@ -358,8 +359,8 @@ class TestMcCheyne2022:
     def test_jit_compatible(self):
         jitted = jax.jit(radio_sfr_mccheyne2022, static_argnames=["apply_suppression"])
         L = jitted(_WAVE_RADIO, _L_IR, 10.0, 0.0, apply_suppression=False)
-        assert L.shape == _WAVE_RADIO.shape
-        assert jnp.all(jnp.isfinite(L))
+        chex.assert_equal_shape([L, _WAVE_RADIO])
+        chex.assert_tree_all_finite(L)
 
     def test_gradients_flow(self):
         def _loss(log_mstar, redshift):
@@ -586,8 +587,8 @@ class TestFreeFree:
         """radio_freefree traces cleanly under jax.jit."""
         jitted = jax.jit(radio_freefree)
         L = jitted(_WAVE_RADIO, _L_IR)
-        assert L.shape == _WAVE_RADIO.shape
-        assert jnp.all(jnp.isfinite(L))
+        chex.assert_equal_shape([L, _WAVE_RADIO])
+        chex.assert_tree_all_finite(L)
 
     def test_gradients_flow_through_l_ir(self):
         """FD check: ∂(∑L_ff)/∂L_ir. Murphy+2011 linear calibration."""

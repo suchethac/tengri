@@ -8,6 +8,7 @@ Validates that:
 - Fused AGN approximation is within reasonable tolerance of exact path
 """
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -224,8 +225,8 @@ class TestAGNFusedVsExact:
         phot_fused = model_fused.predict_photometry(params)
         phot_exact = model_exact.predict_photometry(params)
         # Both should be finite and positive
-        assert jnp.all(jnp.isfinite(phot_fused))
-        assert jnp.all(jnp.isfinite(phot_exact))
+        chex.assert_tree_all_finite(phot_fused)
+        chex.assert_tree_all_finite(phot_exact)
         assert jnp.all(phot_fused > 0)
         assert jnp.all(phot_exact > 0)
         # The fused (effective-wavelength) approximation error is larger
@@ -310,7 +311,7 @@ class TestAGNPredictSED:
         key = jax.random.PRNGKey(42)
         params = parametric_agn_spec.sample(key)
         sed = model.predict_rest_sed(params).sed
-        assert jnp.all(jnp.isfinite(sed)), "SED contains non-finite values"
+        chex.assert_tree_all_finite(sed)
         assert sed.shape == (len(synthetic_ssp.ssp_wave),)
 
     def test_parametric_sed_includes_agn(self):
@@ -341,7 +342,7 @@ class TestAGNPredictSED:
             agn_T_torus=1000.0,
             agn_torus_frac=0.5,
         )
-        assert jnp.all(jnp.isfinite(lnu_high)), "AGN SED should be finite"
+        chex.assert_tree_all_finite(lnu_high)
         assert jnp.all(lnu_high > 0), "AGN SED should be positive"
         # L_bol ratio of 10^4 should produce proportionally brighter AGN
         ratio = jnp.max(lnu_high) / jnp.max(lnu_low)

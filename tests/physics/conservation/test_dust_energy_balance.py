@@ -3,6 +3,7 @@
 Energy absorbed by dust must equal energy re-radiated (Kirchhoff's law).
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -143,7 +144,7 @@ class TestMbbWithCmbCorrection:
 
         wave = jnp.logspace(4, 9, 200)
         sed = modified_blackbody(wave, 1e10, dust_T=30.0, redshift=10.0)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
 
 class TestComputeAbsorbedLuminosity:

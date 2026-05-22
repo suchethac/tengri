@@ -11,6 +11,7 @@ unified-AGN re-implements physics that synthesizer covers with grid look-ups.
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -87,7 +88,7 @@ def test_unified_agn_is_finite_and_nonnegative(wave_uv_to_fir, physical_log_lbol
         agn_nlr_cf=0.1,
         agn_blr_cf=0.1,
     )
-    assert sed.shape == wave_uv_to_fir.shape
+    chex.assert_equal_shape([sed, wave_uv_to_fir])
     assert bool(jnp.all(jnp.isfinite(sed))), "non-finite values in unified-AGN SED"
     assert bool(jnp.all(sed >= 0.0)), "negative L_nu values in unified-AGN SED"
 

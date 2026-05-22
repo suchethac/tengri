@@ -9,6 +9,7 @@ Verifies:
 6. Diagonal covariance reproduces per-pixel noise
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -53,7 +54,7 @@ class TestInversePrecomputation:
     def test_inverse_shape(self, wave_obs, diagonal_cov):
         spec = Spectroscopy(wave_obs=wave_obs, covariance=diagonal_cov)
         n = len(wave_obs)
-        assert spec.cov_inv.shape == (n, n)
+        chex.assert_shape(spec.cov_inv, (n, n))
 
     def test_inverse_correct_for_diagonal(self, wave_obs):
         n = len(wave_obs)

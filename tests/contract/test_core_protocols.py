@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -173,7 +174,7 @@ def test_minimal_chain_runs_end_to_end() -> None:
     # Sanity: prediction is ~2.0 * exp(-0.5) ~ 1.213; chi2 contribution
     # is small compared with the prior amplitude. Just check it's a
     # finite scalar — the numeric value is not the contract.
-    assert lp.shape == ()
+    chex.assert_shape(lp, ())
     assert jnp.isfinite(lp)
 
 

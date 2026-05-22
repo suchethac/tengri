@@ -10,6 +10,7 @@ Tests cover:
 - Registry integration
 """
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -161,7 +162,7 @@ class TestAstrodust:
         """Output shape matches input wavelength grid."""
         fn = create_astrodust_from_grid(astrodust_grid)
         result = fn(wavelength, 1e10)
-        assert result.shape == wavelength.shape
+        chex.assert_equal_shape([result, wavelength])
 
     def test_output_nonnegative(self, astrodust_grid, wavelength):
         """Emission is non-negative everywhere."""
@@ -201,8 +202,8 @@ class TestAstrodust:
         fn = create_astrodust_from_grid(astrodust_grid)
         jit_fn = jax.jit(lambda w, l: fn(w, l, dust_umin=1.0))
         result = jit_fn(wavelength, 1e10)
-        assert result.shape == wavelength.shape
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_equal_shape([result, wavelength])
+        chex.assert_tree_all_finite(result)
 
     def test_differentiable(self, astrodust_grid, wavelength):
         """Gradients exist with respect to L_absorbed."""
@@ -238,7 +239,7 @@ class TestBOSA:
         """Output shape matches input wavelength grid."""
         fn = create_bosa_from_grid(bosa_grid)
         result = fn(wavelength, 1e10, dust_log_ssfr=-10.0)
-        assert result.shape == wavelength.shape
+        chex.assert_equal_shape([result, wavelength])
 
     def test_output_nonnegative(self, bosa_grid, wavelength):
         """Emission is non-negative everywhere."""
@@ -282,8 +283,8 @@ class TestBOSA:
         fn = create_bosa_from_grid(bosa_grid)
         jit_fn = jax.jit(lambda w, l: fn(w, l, dust_log_ssfr=-10.0))
         result = jit_fn(wavelength, 1e10)
-        assert result.shape == wavelength.shape
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_equal_shape([result, wavelength])
+        chex.assert_tree_all_finite(result)
 
     def test_differentiable(self, bosa_grid, wavelength):
         """Gradients exist with respect to dust_log_ssfr."""
@@ -315,7 +316,7 @@ class TestTHEMIS:
         """Output shape matches input wavelength grid."""
         fn = create_themis_from_grid(themis_grid)
         result = fn(wavelength, 1e10)
-        assert result.shape == wavelength.shape
+        chex.assert_equal_shape([result, wavelength])
 
     def test_output_nonnegative(self, themis_grid, wavelength):
         """Emission is non-negative everywhere."""
@@ -354,8 +355,8 @@ class TestTHEMIS:
         fn = create_themis_from_grid(themis_grid)
         jit_fn = jax.jit(lambda w, l: fn(w, l, dust_umin=1.0, dust_qhac=0.17))
         result = jit_fn(wavelength, 1e10)
-        assert result.shape == wavelength.shape
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_equal_shape([result, wavelength])
+        chex.assert_tree_all_finite(result)
 
     def test_differentiable(self, themis_grid, wavelength):
         """Gradients exist with respect to L_absorbed."""

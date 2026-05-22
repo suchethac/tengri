@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -99,7 +100,7 @@ class TestEvolvingZRouting:
 
     def test_photometry_shape(self, evolvingz_model, evolvingz_params):
         phot = evolvingz_model.predict_photometry(evolvingz_params)
-        assert phot.shape == (_N_FILTERS,)
+        chex.assert_shape(phot, (_N_FILTERS,))
 
 
 # ── TestChemEvolRouting ───────────────────────────────────────────
@@ -148,7 +149,7 @@ class TestChemEvolRouting:
 
     def test_photometry_shape(self, chemevol_model, chemevol_params):
         phot = chemevol_model.predict_photometry(chemevol_params)
-        assert phot.shape == (_N_FILTERS,)
+        chex.assert_shape(phot, (_N_FILTERS,))
 
 
 # ── TestTabularSFHRouting ─────────────────────────────────────────
@@ -210,4 +211,4 @@ class TestTabularSFHRouting:
     def test_photometry_shape(self, tabular_model, base_params):
         params = self._add_sfh(base_params, jax.random.PRNGKey(7))
         phot = tabular_model.predict_photometry(params)
-        assert phot.shape == (_N_FILTERS,)
+        chex.assert_shape(phot, (_N_FILTERS,))

@@ -6,6 +6,7 @@ Covers:
 - kubota_done_disc with agn_self_consistent_gamma=True/False
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -135,8 +136,8 @@ class TestKubotaDoneSelfConsistent:
             agn_log_ledd=-1.0,
             agn_self_consistent_gamma=True,
         )
-        assert result.shape == wavelength.shape
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_equal_shape([result, wavelength])
+        chex.assert_tree_all_finite(result)
         assert jnp.all(result >= 0.0)
 
     def test_self_consistent_gamma_in_range(self, wavelength):
@@ -225,8 +226,8 @@ class TestKubotaDoneSelfConsistent:
         ratio_high = sed_high[xray_mask]
         ratio_low = sed_low[xray_mask]
         # Both should be finite
-        assert jnp.all(jnp.isfinite(ratio_high))
-        assert jnp.all(jnp.isfinite(ratio_low))
+        chex.assert_tree_all_finite(ratio_high)
+        chex.assert_tree_all_finite(ratio_low)
         # The SEDs should differ in the X-ray band
         assert not jnp.allclose(ratio_high, ratio_low, atol=1e-15)
 

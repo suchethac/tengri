@@ -13,6 +13,7 @@ References
 - Leja+2017 (arXiv:1609.09073) — Dirichlet prior
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -98,7 +99,7 @@ class TestDelayedExponentialPhysics:
         assert 0.5e9 < peak_lbt < 10e9, f"Delayed exp peak at {peak_lbt / 1e9:.1f} Gyr"
         # SFR should be non-negative and finite
         assert jnp.all(sfr >= 0)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
 
 # ── 4. DOUBLE POWER LAW — Carnall+2018 ────────────────────────────
@@ -140,7 +141,7 @@ class TestDPLPhysics:
         sfr = dpl(T_LOOKBACK, alpha=2.0, beta=2.0, tau=tau, log_peak_sfr=1.0)
         peak_idx = int(jnp.argmax(sfr))
         # Check that SFR is roughly symmetric in log-time around peak
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
         assert float(jnp.max(sfr)) > 0
 
 
@@ -217,7 +218,7 @@ class TestTriweightBurstPhysics:
         # log_tpeak_myr=2 → 100 Myr, log_tmax_myr=2.5 → ~316 Myr
         sfr = triweight_burst(T_LOOKBACK, log_tpeak_myr=2.0, log_tmax_myr=2.5)
         # SFR should be non-zero near 100 Myr and zero far away
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
         assert jnp.all(sfr >= 0)
         # Peak should be near 100 Myr lookback
         peak_lbt = float(T_LOOKBACK[jnp.argmax(sfr)])

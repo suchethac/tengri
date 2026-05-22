@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import warnings
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -79,8 +80,8 @@ def test_disc_block_smoke(disc):
         agn_log_mbh=8.0,
         agn_log_ledd=-1.0,
     )
-    assert out.shape == wave_aa.shape
-    assert jnp.all(jnp.isfinite(out))
+    chex.assert_equal_shape([out, wave_aa])
+    chex.assert_tree_all_finite(out)
 
 
 @pytest.mark.parametrize("torus", ["nenkova", "two_temperature", "simple"])
@@ -99,7 +100,7 @@ def test_torus_block_smoke(torus):
         agn_log_lbol=44.0,
         agn_torus_frac=0.5,
     )
-    assert jnp.all(jnp.isfinite(out))
+    chex.assert_tree_all_finite(out)
 
 
 def test_polar_dust_factor_within_unit_interval():
@@ -130,7 +131,7 @@ def test_blr_lines_smoke():
         agn_blr_cf=0.1,
         agn_blr_fwhm_kms=3000.0,
     )
-    assert jnp.all(jnp.isfinite(out))
+    chex.assert_tree_all_finite(out)
     assert float(out.sum()) > 0
 
 
@@ -144,7 +145,7 @@ def test_nlr_lines_smoke():
         agn_nlr_cf=0.05,
         agn_nlr_fwhm_kms=300.0,
     )
-    assert jnp.all(jnp.isfinite(out))
+    chex.assert_tree_all_finite(out)
     assert float(out.sum()) > 0
 
 
@@ -167,8 +168,8 @@ def test_jit_through_alternate_recipe():
         )
 
     out = fwd(jnp.array(44.5), jnp.array(8.0))
-    assert out.shape == wave_aa.shape
-    assert jnp.all(jnp.isfinite(out))
+    chex.assert_equal_shape([out, wave_aa])
+    chex.assert_tree_all_finite(out)
 
 
 # ──────────────────────────────────────────────────────────────────────

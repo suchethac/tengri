@@ -7,6 +7,7 @@ Tests:
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -69,7 +70,7 @@ def test_xray_lookups_jit_compatible(model_name, filter_set):
         )
 
     assert phot.shape == (len(waves),), f"Expected shape ({len(waves)},), got {phot.shape}"
-    assert np.all(np.isfinite(np.asarray(phot))), "Lookup produced non-finite values"
+    chex.assert_tree_all_finite(np.asarray(phot))
     # X-ray photometry should be positive (L_nu > 0 when scaled > 0)
     assert np.all(np.asarray(phot) >= 0.0), "Lookup produced negative photometry"
 
@@ -148,9 +149,8 @@ def test_xray_precompute_linearity_in_axis_params(filter_set):
     ratio_gl = phot_var_gl_arr / (phot_base_arr + 1e-50)
 
     # Check that ratios are finite and reasonable
-    assert np.all(np.isfinite(ratio_gh)), "Gamma_hmxb variation produced non-finite photometry"
-    assert np.all(np.isfinite(ratio_gl)), "Gamma_lmxb variation produced non-finite photometry"
-
+    chex.assert_tree_all_finite(ratio_gh)
+    chex.assert_tree_all_finite(ratio_gl)
     # Typically, harder photon indices (larger gamma) should suppress hard X-ray,
     # but the exact relationship is model-dependent. Just check smoothness.
     nonzero_mask = phot_base_arr > 1e-50

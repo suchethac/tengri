@@ -3,6 +3,7 @@
 See ADR / docs/known_bugs.md for full context.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -33,4 +34,4 @@ class TestBug13NonparametricJit:
         # This should work but currently raises ConcretizationTypeError
         jitted = jax.jit(continuity)
         result = jitted(log_ratios, age_grid, bin_edges)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)

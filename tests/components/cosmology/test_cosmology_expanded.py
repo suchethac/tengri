@@ -6,6 +6,7 @@ consistency checks, and numerical accuracy.
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -228,7 +229,7 @@ class TestTimes:
         """age_at_z(array) should return array."""
         z_vals = jnp.array([0.0, 0.5, 1.0])
         ages = age_at_z(z_vals)
-        assert ages.shape == z_vals.shape
+        chex.assert_equal_shape([ages, z_vals])
 
     def test_age_at_z_at_z0(self):
         """age_at_z(0.0) should equal age_at_z0()."""
@@ -455,8 +456,8 @@ class TestEdgeCases:
         """age_at_z should handle array input."""
         z_vals = jnp.linspace(0.0, 3.0, 10)
         ages = age_at_z(z_vals)
-        assert ages.shape == z_vals.shape
-        assert jnp.all(jnp.isfinite(ages))
+        chex.assert_equal_shape([ages, z_vals])
+        chex.assert_tree_all_finite(ages)
 
 
 class TestNumericalStability:
@@ -589,5 +590,5 @@ class TestZAtLookbackTime:
 
         t_lb = jnp.array([0.0, 5.0, 8.0, 12.0])
         z_arr = z_at_lookback_time(t_lb)
-        assert z_arr.shape == (4,)
-        assert jnp.all(jnp.isfinite(z_arr))
+        chex.assert_shape(z_arr, (4,))
+        chex.assert_tree_all_finite(z_arr)

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import chex
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -244,8 +245,8 @@ class TestMappingsPhotoStellarBackend:
         wave, lum = self.backend.predict_nebular_line_luminosities(
             ssp_weights, ssp_log_ages, log_z=-2.0
         )
-        assert wave.shape == (5,)
-        assert lum.shape == (5,)
+        chex.assert_shape(wave, (5,))
+        chex.assert_shape(lum, (5,))
 
     def test_luminosities_positive(self):
         ssp_weights = jnp.ones(4)
@@ -300,8 +301,8 @@ class TestMappingsPhotoStellarBackend:
         sed = self.backend.predict_nebular_sed(
             ssp_weights, ssp_wave, ssp_log_ages, log_z=-2.0, line_sigma_aa=5.0
         )
-        assert sed.shape == (200,)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_shape(sed, (200,))
+        chex.assert_tree_all_finite(sed)
 
     def test_predict_nebular_sed_nonnegative(self):
         ssp_wave = jnp.linspace(1000.0, 10000.0, 200)
@@ -342,8 +343,8 @@ class TestMappingsPhotoAGNBackend:
         wave, lum = self.backend.predict_agn_line_luminosities(
             agn_log_l_ion_erg=45.0, neb_logZ_gas=-2.0
         )
-        assert wave.shape == (5,)
-        assert lum.shape == (5,)
+        chex.assert_shape(wave, (5,))
+        chex.assert_shape(lum, (5,))
 
     def test_luminosities_positive(self):
         _, lum = self.backend.predict_agn_line_luminosities(agn_log_l_ion_erg=45.0)
@@ -373,7 +374,7 @@ class TestMappingsPhotoAGNBackend:
             agn_logedd=0.0,  # above grid max
             neb_logn=10.0,  # above grid max
         )
-        assert jnp.all(jnp.isfinite(lum))
+        chex.assert_tree_all_finite(lum)
 
     def test_expected_luminosity_magnitude(self):
         """Sanity check: typical L_Hβ from a log L_ion=45 AGN."""

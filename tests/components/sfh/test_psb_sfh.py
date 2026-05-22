@@ -9,6 +9,7 @@ Verifies:
 6. Cross-validation against Bagpipes psb_wild2020
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -53,7 +54,7 @@ class TestPSBShape:
     def test_all_finite(self, t_lookback, default_params):
         """SFR should be finite everywhere."""
         sfr = psb_wild2020(t_lookback, **default_params)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_two_component_structure(self, t_lookback, default_params):
         """SFR should be nonzero in both old and burst epochs."""
@@ -156,7 +157,7 @@ class TestJITAndGradients:
         """Should be JIT-compilable."""
         jit_fn = jax.jit(psb_wild2020)
         sfr = jit_fn(t_lookback, **default_params)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_grad_wrt_log_peak_sfr(self, t_lookback, default_params):
         def loss(lp):
@@ -222,7 +223,7 @@ class TestRegistryIntegration:
             "fburst": 0.5,
         }
         sfr = fn(t_lookback, **internal_kw)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
         assert jnp.any(sfr > 0)
 
 
@@ -234,31 +235,31 @@ class TestEdgeCases:
         """Burst at 5 Gyr lookback should still work."""
         params = {**default_params, "burstage": 5e9}
         sfr = psb_wild2020(t_lookback, **params)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_very_young_burst(self, t_lookback, default_params):
         """Burst at 10 Myr lookback should still work."""
         params = {**default_params, "burstage": 10e6}
         sfr = psb_wild2020(t_lookback, **params)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_extreme_slopes(self, t_lookback, default_params):
         """Very steep slopes should not overflow."""
         params = {**default_params, "alpha": 10.0, "beta": 10.0, "fburst": 1.0}
         sfr = psb_wild2020(t_lookback, **params)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_very_short_tau(self, t_lookback, default_params):
         """Very short tau should produce a concentrated old component."""
         params = {**default_params, "tau": 1e7}
         sfr = psb_wild2020(t_lookback, **params)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_age_equals_burstage(self, t_lookback, default_params):
         """When age==burstage, old component vanishes → pure burst."""
         params = {**default_params, "age": 1e9, "burstage": 1e9, "fburst": 0.5}
         sfr = psb_wild2020(t_lookback, **params)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
 
 # ── Regression: fburst mass fraction on log-spaced grid ───────────

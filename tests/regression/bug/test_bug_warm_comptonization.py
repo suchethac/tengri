@@ -5,6 +5,7 @@ so the enhancement was never triggered at optical/UV.  K&D 2018 Eq. 3 prescribes
 the local disc temperature as the seed frequency.
 """
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -56,5 +57,5 @@ class TestWarmComptonization:
         _H_PLANCK = 6.626e-27
         nu_warm = 0.2 * _KEV_TO_ERG / _H_PLANCK
         b_nu = _warm_comptonization_lnu(nu, 1e5, nu_warm, 2.5)
-        assert jnp.all(jnp.isfinite(b_nu))
+        chex.assert_tree_all_finite(b_nu)
         assert jnp.all(b_nu >= 0.0)

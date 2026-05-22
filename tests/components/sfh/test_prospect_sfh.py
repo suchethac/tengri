@@ -14,6 +14,7 @@ Each function is tested for:
 
 from typing import ClassVar
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -70,7 +71,7 @@ class TestPchipSlopes:
         y = jnp.array([1.0, 2.0, 3.0, 2.5, 1.0])
         h = jnp.ones(4)
         d = _pchip_slopes(y, h)
-        assert d.shape == y.shape
+        chex.assert_equal_shape([d, y])
 
 
 # ── spline ───────────────────────────────────────────────────────
@@ -83,13 +84,13 @@ class TestSplineSfh:
         """Output shape matches input lookback time grid — 4 nodes."""
         sfr_nodes = jnp.array([1.0, 5.0, 3.0, 0.5])
         sfr = spline(_T, sfr_nodes, _NODE_AGES_4)
-        assert sfr.shape == _T.shape
+        chex.assert_equal_shape([sfr, _T])
 
     def test_shape_6node(self):
         """Output shape matches input lookback time grid — 6 nodes."""
         sfr_nodes = jnp.array([0.5, 2.0, 5.0, 3.0, 1.0, 0.1])
         sfr = spline(_T, sfr_nodes, _NODE_AGES_6)
-        assert sfr.shape == _T.shape
+        chex.assert_equal_shape([sfr, _T])
 
     def test_nonnegative(self):
         """SFR is always >= 0."""
@@ -125,7 +126,7 @@ class TestSplineSfh:
             return spline(_T, nodes, _NODE_AGES_4)
 
         out = f(sfr_nodes)
-        assert out.shape == _T.shape
+        chex.assert_equal_shape([out, _T])
 
     def test_grad_wrt_sfr_nodes(self):
         """Gradient w.r.t. sfr_nodes exists and is finite."""
@@ -135,8 +136,8 @@ class TestSplineSfh:
             return jnp.sum(spline(_T, nodes, _NODE_AGES_4))
 
         grad = jax.grad(scalar_sum)(sfr_nodes)
-        assert jnp.all(jnp.isfinite(grad))
-        assert grad.shape == sfr_nodes.shape
+        chex.assert_tree_all_finite(grad)
+        chex.assert_equal_shape([grad, sfr_nodes])
 
 
 # ── snorm_burst ──────────────────────────────────────────────────
@@ -151,7 +152,7 @@ class TestSnormBurstSfh:
 
     def test_shape(self):
         sfr = snorm_burst(_T, **self._KWARGS)
-        assert sfr.shape == _T.shape
+        chex.assert_equal_shape([sfr, _T])
 
     def test_nonnegative(self):
         sfr = snorm_burst(_T, **self._KWARGS)
@@ -188,7 +189,7 @@ class TestSnormBurstSfh:
     def test_jit_compatible(self):
         f = jax.jit(snorm_burst)
         out = f(_T, **self._KWARGS)
-        assert out.shape == _T.shape
+        chex.assert_equal_shape([out, _T])
 
     def test_grad_wrt_log_peak_sfr(self):
         kw = {k: v for k, v in self._KWARGS.items() if k != "log_peak_sfr"}
@@ -227,7 +228,7 @@ class TestSnormTruncBurstSfh:
 
     def test_shape(self):
         sfr = snorm_trunc_burst(_T, **self._KWARGS)
-        assert sfr.shape == _T.shape
+        chex.assert_equal_shape([sfr, _T])
 
     def test_nonnegative(self):
         sfr = snorm_trunc_burst(_T, **self._KWARGS)
@@ -265,7 +266,7 @@ class TestSnormTruncBurstSfh:
     def test_jit_compatible(self):
         f = jax.jit(snorm_trunc_burst)
         out = f(_T, **self._KWARGS)
-        assert out.shape == _T.shape
+        chex.assert_equal_shape([out, _T])
 
     def test_grad_wrt_trunc(self):
         kw = {k: v for k, v in self._KWARGS.items() if k != "trunc"}

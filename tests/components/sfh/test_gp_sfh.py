@@ -1,5 +1,6 @@
 """Tests for GP generation from PSD (T2: PSD recovery, T3: ACF recovery)."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -29,7 +30,7 @@ class TestGPFromXi:
         """GP realization has shape (n_points,)."""
         xi = jnp.zeros(N_GRID)
         x = gp_from_xi(xi, sqrt_power, N_GRID)
-        assert x.shape == (N_GRID,)
+        chex.assert_shape(x, (N_GRID,))
 
     def test_zero_xi_gives_zero_gp(self, sqrt_power):
         """xi = 0 produces x(t) = 0 everywhere."""
@@ -49,14 +50,14 @@ class TestGPFromXi:
         fn = jax.jit(lambda xi: gp_from_xi(xi, sqrt_power, N_GRID))
         xi = jax.random.normal(jax.random.PRNGKey(0), shape=(N_GRID,))
         x = fn(xi)
-        assert x.shape == (N_GRID,)
+        chex.assert_shape(x, (N_GRID,))
 
     def test_has_gradients(self, sqrt_power):
         """Gradients w.r.t. xi exist and are finite."""
         grad_fn = jax.grad(lambda xi: jnp.sum(gp_from_xi(xi, sqrt_power, N_GRID)))
         xi = jax.random.normal(jax.random.PRNGKey(0), shape=(N_GRID,))
         g = grad_fn(xi)
-        assert jnp.all(jnp.isfinite(g))
+        chex.assert_tree_all_finite(g)
 
 
 pytestmark = pytest.mark.bounds
@@ -186,7 +187,7 @@ class TestDRWJacobianCorrection:
         """Amplitude operator is finite for physical DRW parameters."""
         d = (10.14 - 6.0) / (N_GRID - 1)
         sqrt_power = compute_sqrt_power_drw(N_GRID, d, 1.0, 50e6)
-        assert jnp.all(jnp.isfinite(sqrt_power))
+        chex.assert_tree_all_finite(sqrt_power)
         assert jnp.all(sqrt_power >= 0)
 
     def test_sqrt_power_reasonable_gp_variance(self):

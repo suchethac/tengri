@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -31,9 +32,9 @@ class TestMulticolorAgn:
         from tengri.components.agn.unified import multicolor_agn
 
         l_nu = multicolor_agn(wavelength, agn_log_lbol=44.0)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)
-        assert l_nu.shape == wavelength.shape
+        chex.assert_equal_shape([l_nu, wavelength])
 
     def test_registered_as_multicolor_agn(self):
         """'multicolor_agn' appears in AGN_MODELS."""
@@ -86,4 +87,4 @@ class TestMulticolorAgn:
         def _run(wave):
             return multicolor_agn(wave, agn_log_lbol=44.0)
 
-        assert jnp.all(jnp.isfinite(_run(wavelength)))
+        chex.assert_tree_all_finite(_run(wavelength))

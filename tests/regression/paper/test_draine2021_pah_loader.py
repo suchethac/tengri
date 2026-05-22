@@ -12,6 +12,7 @@ mMMP non-slab only (135 cells = 15 lgU x 3 ion x 3 size).
 
 from __future__ import annotations
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.regression_paper
@@ -45,7 +46,7 @@ def test_grid_shape_and_axes(templates):
     assert n_ion == 3
     assert n_size == 3
     assert n_wave > 1000
-    assert templates.nu_pnu_total.shape == (n_sl, n_slab, n_lgU, n_ion, n_size, n_wave)
+    chex.assert_shape(templates.nu_pnu_total, (n_sl, n_slab, n_lgU, n_ion, n_size, n_wave))
     np.testing.assert_allclose(
         np.asarray(templates.lgU),
         np.arange(15) * 0.5,

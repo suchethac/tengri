@@ -4,6 +4,7 @@ Bug: attenuation.py:725-730 — narayanan_z used == for float sentinel detection
 which is JIT-unsafe for traced values.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -35,8 +36,8 @@ class TestAttenuationFloatEqualitySafe:
         # Non-default values should not activate redshift scaling
         k_custom = _eval(-0.4, 0.5)
 
-        assert jnp.all(jnp.isfinite(k_default))
-        assert jnp.all(jnp.isfinite(k_custom))
+        chex.assert_tree_all_finite(k_default)
+        chex.assert_tree_all_finite(k_custom)
         # The two should be different (different delta values)
         assert not jnp.allclose(k_default, k_custom)
 

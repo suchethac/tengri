@@ -7,6 +7,7 @@ Since the disc is renormalized to L_bol, the shape is unaffected, but
 l_warm_bol used in the Beloborodov energy budget must include the pi.
 """
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -25,7 +26,7 @@ class TestRingAreaPi:
         l_nu = multicolor_disc(
             _WAVE, agn_log_lbol=12.0, agn_frac=1.0, agn_log_mbh=8.0, agn_cos_inc=0.5
         )
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)
 
     def test_kubota_done_disc_finite(self):
@@ -35,7 +36,7 @@ class TestRingAreaPi:
         l_nu = kubota_done_disc(
             _WAVE, agn_log_lbol=12.0, agn_frac=1.0, agn_log_mbh=8.0, agn_log_ledd=-1.0
         )
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)
 
     def test_adaf_disc_finite(self):
@@ -45,5 +46,5 @@ class TestRingAreaPi:
         l_nu = adaf_disc(
             _WAVE, agn_log_lbol=10.0, agn_frac=0.1, agn_log_mbh=8.0, agn_log_ledd=-3.0
         )
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)

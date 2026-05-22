@@ -6,6 +6,7 @@ and the SEDModel-level ``csp_integration='dsps_native'`` / ``'dsps_met_table'`` 
 All tests are CPU-only (no SSP file required).
 """
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -181,8 +182,8 @@ def test_finite_output():
         LGMET,
         LGMET_SCATTER,
     )
-    assert jnp.all(jnp.isfinite(aw)), "NaN/Inf in age_weights"
-    assert jnp.all(jnp.isfinite(flux_z)), "NaN/Inf in ssp_flux_at_z"
+    chex.assert_tree_all_finite(aw)
+    chex.assert_tree_all_finite(flux_z)
 
 
 def test_jit_compatible():
@@ -204,7 +205,7 @@ def test_jit_compatible():
         return aw, fz
 
     aw, _fz = _call(sfr)
-    assert aw.shape == (N_AGE,)
+    chex.assert_shape(aw, (N_AGE,))
 
 
 def test_grad_wrt_lgmet():
@@ -346,8 +347,8 @@ def test_met_table_finite_output():
         T_OBS_GYR,
         LGMET_SCATTER,
     )
-    assert jnp.all(jnp.isfinite(aw)), "NaN/Inf in age_weights"
-    assert jnp.all(jnp.isfinite(flux_z)), "NaN/Inf in ssp_flux_at_z"
+    chex.assert_tree_all_finite(aw)
+    chex.assert_tree_all_finite(flux_z)
 
 
 def test_met_table_zero_sfr_gives_zero_weights():
@@ -422,8 +423,8 @@ def test_met_table_jit_compatible():
         )
 
     aw, fz = _call(sfr, lgmet)
-    assert aw.shape == (N_AGE,)
-    assert fz.shape == (N_AGE, N_WAVE)
+    chex.assert_shape(aw, (N_AGE,))
+    chex.assert_shape(fz, (N_AGE, N_WAVE))
 
 
 def test_met_table_grad_wrt_lgmet():

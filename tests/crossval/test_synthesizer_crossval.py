@@ -16,6 +16,7 @@ References
 - B. S. Hensley & B. T. Draine, ApJ 948, 55 (2023). arXiv:2208.12365
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -410,7 +411,7 @@ class TestDustAttenuationVsSynthesizer:
 
         wave = jnp.linspace(1000.0, 30000.0, 200)
         k = jax.jit(wd01_smcbar)(wave)
-        assert jnp.all(jnp.isfinite(k))
+        chex.assert_tree_all_finite(k)
         assert jnp.all(k >= 0.0)
 
     def test_wd01_smcbar_no_2175_bump(self):

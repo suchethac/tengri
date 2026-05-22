@@ -1,5 +1,6 @@
 """Tests for polar dust extinction and greybody reemission."""
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -149,8 +150,8 @@ class TestPolarDustTotal:
             ebv=0.2,
             temperature=100.0,
         )
-        assert l_atten.shape == WAVELENGTH.shape
-        assert l_reemit.shape == WAVELENGTH.shape
+        chex.assert_equal_shape([l_atten, WAVELENGTH])
+        chex.assert_equal_shape([l_reemit, WAVELENGTH])
 
     def test_jit_compatible(self):
         """polar_dust_total should work under jax.jit."""
@@ -163,10 +164,10 @@ class TestPolarDustTotal:
             ebv=0.2,
             temperature=100.0,
         )
-        assert l_atten.shape == WAVELENGTH.shape
-        assert l_reemit.shape == WAVELENGTH.shape
-        assert jnp.all(jnp.isfinite(l_atten))
-        assert jnp.all(jnp.isfinite(l_reemit))
+        chex.assert_equal_shape([l_atten, WAVELENGTH])
+        chex.assert_equal_shape([l_reemit, WAVELENGTH])
+        chex.assert_tree_all_finite(l_atten)
+        chex.assert_tree_all_finite(l_reemit)
 
     def test_gradient_flows(self):
         """Gradients should flow through ebv, cos_inc, and temperature."""

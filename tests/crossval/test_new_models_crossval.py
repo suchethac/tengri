@@ -25,6 +25,7 @@ References
 - Gordon et al. 2003, ApJ, 594, 279 (SMC extinction)
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -427,7 +428,7 @@ class TestKDSelfConsistentGamma:
 
         wave = jnp.geomspace(100.0, 1e8, 500)
         l_nu = kubota_done_disc(wave, agn_log_lbol=11.0, agn_self_consistent_gamma=True)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert float(jnp.sum(l_nu)) > 0
 
 
@@ -478,7 +479,7 @@ class TestSelfConsistentCorona:
         wave = jnp.geomspace(0.1, 200.0, 500)  # X-ray
         l_nu = xray_agn_corona_from_disc(wave, l_2500_erg_hz=1e30)
         assert float(jnp.sum(l_nu)) > 0, "Corona should emit X-rays"
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
 
     def test_brighter_disc_more_xray(self):
         """Higher L_2500 → more X-ray (despite steeper alpha_ox)."""

@@ -9,6 +9,7 @@ Each model is tested for:
 - Edge-case stability (t=0, t=AGEMAX)
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -139,7 +140,7 @@ class TestDoublePowerlaw:
         fn = jax.jit(double_powerlaw)
         t = jnp.logspace(6, 10, 100)
         sfr = fn(t, 1.0, 1.0, 1e9, 10.0)
-        assert sfr.shape == (100,)
+        chex.assert_shape(sfr, (100,))
 
     def test_has_gradients(self):
         """FD check: gradients w.r.t. all 4 DPL parameters (alpha, beta, tau, norm)."""
@@ -212,7 +213,7 @@ class TestDpl:
         t = jnp.logspace(6, 10, 100)
         fn = jax.jit(dpl)
         sfr = fn(t, 1.0, 1.0, 1e9, 1.0)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
         def _loss_lp(lp: float) -> float:
             return float(jnp.sum(dpl(t, 1.0, 1.0, 1e9, lp)))
@@ -295,7 +296,7 @@ class TestTsnorm:
         t = jnp.logspace(6, 10, 100)
         fn = jax.jit(tsnorm)
         sfr = fn(t, 1.0, 5e9, 2e9, 0.0, 3.0)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
         def _loss_lp(lp: float) -> float:
             return float(jnp.sum(tsnorm(t, lp, 5e9, 2e9, 0.0, 3.0)))
@@ -394,7 +395,7 @@ class TestConstantSFH:
         """Output shape matches input."""
         t = jnp.logspace(6, 10, 42)
         sfr = constant(t, log_sfr=0.0)
-        assert sfr.shape == (42,)
+        chex.assert_shape(sfr, (42,))
 
 
 class TestExponentialSFH:
@@ -540,8 +541,8 @@ class TestAllModelsJitAndGrad:
         t = jnp.logspace(6, 10, 100)
         jit_fn = jax.jit(lambda t_: fn(t_, **kwargs))
         sfr = jit_fn(t)
-        assert jnp.all(jnp.isfinite(sfr))
-        assert sfr.shape == (100,)
+        chex.assert_tree_all_finite(sfr)
+        chex.assert_shape(sfr, (100,))
 
     @pytest.mark.parametrize(
         "fn,kwargs,grad_key",

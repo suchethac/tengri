@@ -6,6 +6,7 @@ Tests backward compatibility (flags off) and correct spectral composition
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -110,7 +111,7 @@ def test_xray_off_radio_off_baseline_is_nonnegative(wave_uv_ir, agn_lbol_physica
         include_radio=False,
     )
     assert jnp.all(sed >= 0.0), "Baseline SED has negative values."
-    assert jnp.all(jnp.isfinite(sed)), "Baseline SED contains NaN or Inf."
+    chex.assert_tree_all_finite(sed)
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +163,7 @@ def test_xray_is_nonnegative_and_finite(wave_uv_to_radio, agn_lbol_physical):
         xray_E_cut=250.0,
         include_radio=False,
     )
-    assert jnp.all(jnp.isfinite(sed)), "X-ray SED contains NaN or Inf."
+    chex.assert_tree_all_finite(sed)
     assert jnp.all(sed >= 0.0), "X-ray SED has negative values."
 
 
@@ -217,7 +218,7 @@ def test_radio_is_nonnegative_and_finite(wave_uv_to_radio, agn_lbol_physical):
         radio_loudness=0.5,
         radio_alpha_agn=0.65,
     )
-    assert jnp.all(jnp.isfinite(sed)), "Radio SED contains NaN or Inf."
+    chex.assert_tree_all_finite(sed)
     assert jnp.all(sed >= 0.0), "Radio SED has negative values."
 
 
@@ -243,7 +244,7 @@ def test_both_xray_and_radio_on_spans_full_multiwavelength(wave_uv_to_radio, agn
     )
 
     # Check validity
-    assert jnp.all(jnp.isfinite(sed)), "Combined SED contains NaN or Inf."
+    chex.assert_tree_all_finite(sed)
     assert jnp.all(sed >= 0.0), "Combined SED has negative values."
 
     # Check that there are non-zero contributions in all three regimes
@@ -282,7 +283,7 @@ def test_xray_radio_jit_compatible(wave_uv_to_radio, agn_lbol_physical):
 
     # Should JIT without error
     sed = call_with_xray_radio(wave_uv_to_radio, agn_lbol_physical)
-    assert jnp.all(jnp.isfinite(sed))
+    chex.assert_tree_all_finite(sed)
 
 
 def test_xray_radio_grad_compatible(wave_uv_to_radio, agn_lbol_physical):

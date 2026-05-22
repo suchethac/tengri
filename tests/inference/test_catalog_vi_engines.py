@@ -8,6 +8,7 @@ data.  They verify the engines' public contracts:
   - different noise -> different converged positions (no state sharing)
 """
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.contract
@@ -66,8 +67,8 @@ def test_linear_engine_run_output_shape():
     sr, data, noise, flat0, flatten, unravel, _ = _make_problem()
     run_fn, _, _ = build_native_vi_catalog_linear_engine(sr, flatten, unravel)
     best, n_iters = run_fn(flat0, jax.random.PRNGKey(0), data, noise, 10, 2, 1e-2)
-    assert best.shape == flat0.shape
-    assert n_iters.shape == ()
+    chex.assert_equal_shape([best, flat0])
+    chex.assert_shape(n_iters, ())
 
 
 def test_linear_engine_lowers_hamiltonian():
@@ -86,7 +87,7 @@ def test_linear_engine_draw_shape():
     n_draws = 7
     draw_keys = jax.random.split(jax.random.PRNGKey(1), n_draws)
     residuals = draw_fn(best, draw_keys, noise)
-    assert residuals.shape == (n_draws, flat0.shape[0])
+    chex.assert_shape(residuals, (n_draws, flat0.shape[0]))
 
 
 def test_linear_engine_different_noise_different_result():
@@ -113,8 +114,8 @@ def test_linear_engine_vmap_over_catalog():
     bests, n_iters = jax.vmap(lambda ini, k, d, n: run_fn(ini, k, d, n, 5, 2, 0.0))(
         batch_init, batch_keys, batch_data, batch_noise
     )
-    assert bests.shape == (2, flat0.shape[0])
-    assert n_iters.shape == (2,)
+    chex.assert_shape(bests, (2, flat0.shape[0]))
+    chex.assert_shape(n_iters, (2,))
 
 
 # ---------------------------------------------------------------------------
@@ -136,8 +137,8 @@ def test_nonlinear_engine_run_output_shape():
     sr, data, noise, flat0, flatten, unravel, _ = _make_problem()
     run_fn, _, _ = build_native_vi_catalog_nonlinear_engine(sr, flatten, unravel)
     best, n_iters = run_fn(flat0, jax.random.PRNGKey(0), data, noise, 5, 2, 1e-2)
-    assert best.shape == flat0.shape
-    assert n_iters.shape == ()
+    chex.assert_equal_shape([best, flat0])
+    chex.assert_shape(n_iters, ())
 
 
 def test_nonlinear_engine_draw_shape():
@@ -148,7 +149,7 @@ def test_nonlinear_engine_draw_shape():
     n_keys = 4
     draw_keys = jax.random.split(jax.random.PRNGKey(1), n_keys)
     residuals = draw_fn(best, draw_keys, noise)
-    assert residuals.shape == (2 * n_keys, flat0.shape[0])
+    chex.assert_shape(residuals, (2 * n_keys, flat0.shape[0]))
 
 
 def test_nonlinear_engine_different_noise_different_result():
