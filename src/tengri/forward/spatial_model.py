@@ -129,9 +129,7 @@ class SpatialModel:
             New state with ``spatial_profile_2d`` populated.
         """
         if "spatial_grid_xy_kpc" not in state.derived:
-            state = state.with_(
-                derived=state.derived.with_(spatial_grid_xy_kpc=self.grid_kpc)
-            )
+            state = state.with_(derived=state.derived.with_(spatial_grid_xy_kpc=self.grid_kpc))
         for comp in self.components:
             state = comp.apply(state, params)
         return state
