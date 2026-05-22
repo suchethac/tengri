@@ -145,120 +145,6 @@ def _maybe_extract_batched_data(model):
     return pop_sed.batched_data()
 
 
-def _maybe_population_delegate(model):
-    """Return a configured :class:`PopulationFitter` when ``model`` is hierarchical.
-
-    Detects the case where the user built a ``ForwardModel`` with
-    ``ForwardModel.build(population=PopulationSEDModel(...))``.
-    When that's true, constructs the :class:`PopulationFitter`
-    instance that will drive the hierarchical inference: the SED
-    template is rebuilt with the shared parameters fixed at each
-    inference call, the per-galaxy data lives on the population's
-    ``galaxies`` list, and the shared priors come from
-    ``PopulationSEDModel.priors``.
-
-    Returns ``None`` for the standard (single-galaxy, multi-pop
-    decomposition, spatial-only) cases — the caller continues with
-    the regular Fitter init.
-
-    Parameters
-    ----------
-    model : Any
-        The ``model`` argument passed to ``Fitter.__init__``.
-
-    Returns
-    -------
-    PopulationFitter or None
-        Configured delegate; ``None`` if ``model`` is not a
-        ForwardModel-with-PopulationSEDModel.
-    """
-    try:
-        from tengri.forward.forward_model import ForwardModel
-        from tengri.forward.population_sed_model import PopulationSEDModel
-    except ImportError:
-        return None
-
-    if not isinstance(model, ForwardModel):
-        return None
-    populations = getattr(model, "populations", ())
-    if len(populations) != 1:
-        return None
-    pop = populations[0]
-    pop_sed = getattr(pop, "sed", None)
-    if not isinstance(pop_sed, PopulationSEDModel):
-        return None
-
-    # Today's PopulationFitter only knows the two PSD shared parameters
-    # by name. If the user set ``shared=`` to something else, surface
-    # a clear NotImplementedError rather than silently using the wrong
-    # priors.
-    expected_shared = ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr")
-    if pop_sed.shared != expected_shared:
-        raise NotImplementedError(
-            "Fitter routing for PopulationSEDModel currently supports only the "
-            f"default shared parameters {expected_shared}. PopulationSEDModel "
-            f"with shared={pop_sed.shared!r} needs a generalised "
-            "PopulationFitter — tracked in issue #211."
-        )
-
-    from tengri.inference.hierarchical import PopulationFitter
-
-    # Build the (psd_sigma, psd_tau_myr) -> SEDModel factory expected
-    # by PopulationFitter from the SED template.
-    sed_template = pop_sed.sed
-    factory = _build_population_factory(sed_template)
-    psd_sigma_prior = pop_sed.priors.get("sfh_field_psd_sigma", (0.1, 4.0))
-    psd_tau_prior = pop_sed.priors.get("sfh_field_psd_tau_myr", (1.0, 300.0))
-
-    return PopulationFitter(
-        factory,
-        list(pop_sed.galaxies),
-        psd_sigma_prior=psd_sigma_prior,
-        psd_tau_prior=psd_tau_prior,
-        data_type=pop_sed.data_type,
-        _via_routing=True,
-    )
-
-
-def _build_population_factory(sed_template):
-    """Build a ``(psd_sigma, psd_tau_myr) -> SEDModel`` closure.
-
-    The closure clones the SED template with the shared PSD parameters
-    fixed to the provided values. Used internally by
-    :func:`_maybe_population_delegate` to bridge
-    :class:`PopulationSEDModel` (the new SubModel construction shape)
-    to :class:`PopulationFitter` (the existing inference machinery).
-    """
-
-    def factory(psd_sigma, psd_tau_myr):
-        overrides = {
-            "sfh_field_psd_sigma": psd_sigma,
-            "sfh_field_psd_tau_myr": psd_tau_myr,
-        }
-        if hasattr(sed_template, "with_fixed"):
-            return sed_template.with_fixed(**overrides)
-
-        # Fallback: rebuild via SEDModel constructor with the spec mutated.
-        from tengri.forward.sed_model import SEDModel
-        from tengri.parameters.priors import Fixed
-
-        spec = sed_template.spec
-        spec_kwargs = dict(getattr(spec, "kwargs", {}))
-        for name, value in overrides.items():
-            spec_kwargs[name] = Fixed(value)
-        new_spec = type(spec)(**spec_kwargs)
-        ssp_data = getattr(sed_template, "ssp_data", None)
-        observation = getattr(sed_template, "observation", None)
-        if ssp_data is None or observation is None:
-            raise RuntimeError(
-                "Cannot rebuild SEDModel from template: missing ssp_data or "
-                "observation. Add SEDModel.with_fixed for a clean path."
-            )
-        return SEDModel(new_spec, ssp_data, observation=observation)
-
-    return factory
-
-
 def resolve_method(method: str, emit_warning: bool = True) -> str:
     """Validate that ``method`` is a canonical inference method name.
 
@@ -450,8 +336,6 @@ class Fitter:
         use_components=False,
         compile_modes=None,
         cache=None,
-        *,
-        _skip_population_delegate: bool = False,
     ):
         # ── Auto-extract batched data for hierarchical ForwardModels ─
         # When ``model`` is a ForwardModel whose SubModel publishes
@@ -461,28 +345,6 @@ class Fitter:
         # ``Fitter(forward).run('vi')`` without manually stacking.
         if data is None and noise is None:
             data, noise = _maybe_extract_batched_data(model)
-
-        # ── Hierarchical-population routing (issue #211, deprecated) ─
-        # Legacy: when ``model`` is a ForwardModel whose SubModel is a
-        # PopulationSEDModel, route inference through PopulationFitter.
-        # Kept for back-compat while the standard path (operating on
-        # batched output directly) stabilises. Removal is the next
-        # step in PR #239's plan.
-        # ``_skip_population_delegate=True`` (private kwarg) bypasses
-        # the legacy delegation so the standard path can be exercised
-        # on hierarchical fits during the migration window. Real callers
-        # do not need this. Replaced by full delegate removal in the
-        # next PR.
-        self._population_delegate = (
-            None if _skip_population_delegate else _maybe_population_delegate(model)
-        )
-        if self._population_delegate is not None:
-            self.model = model
-            # Surface the SED-template spec so callers that inspect
-            # fitter.spec still see something meaningful.
-            self.spec = getattr(self._population_delegate, "_spec", None)
-            self._user_likelihood = likelihood
-            return
 
         # ── Soft deprecation: prefer ForwardModel as the model arg ──
         # Inference is canonically through ForwardModel (issue #211).
@@ -1749,13 +1611,6 @@ class Fitter:
 
         >>> result = fitter.run("auto")  # NUTS if D≤20, VI if D>20
         """
-        # ── Hierarchical-population delegation (issue #211) ─────────
-        # Constructed via Fitter(forward) where forward.populations[0].sed
-        # is a PopulationSEDModel. PopulationFitter.run owns the
-        # hierarchical machinery; this Fitter just delegates.
-        if getattr(self, "_population_delegate", None) is not None:
-            return self._population_delegate.run(method, key=key, **kwargs)
-
         if key is None:
             key = jax.random.PRNGKey(42)
 

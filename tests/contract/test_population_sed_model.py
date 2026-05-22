@@ -365,60 +365,9 @@ def test_batched_data_raises_on_missing_keys() -> None:
         pop.batched_data()
 
 
-# ── Fitter routing (issue #211 — inference side) ────────────────────
-
-
-def test_fitter_routes_to_population_fitter_for_population_forward() -> None:
-    """`Fitter(forward)` where forward holds PopulationSEDModel
-    constructs a PopulationFitter under the hood, no data/noise needed."""
-    from tengri.inference.fitter import _maybe_population_delegate
-    from tengri.inference.hierarchical import PopulationFitter
-
-    class _StubSpec:
-        free_params: tuple = ()
-
-    class _StubSEDWithSpec:
-        name = "stub_with_spec"
-        spec = _StubSpec()
-
-        def with_fixed(self, **kw):
-            return self
-
-    pop = PopulationSEDModel(
-        sed=_StubSEDWithSpec(),
-        galaxies=[_gal(), _gal()],
-    )
-    forward = ForwardModel.build(population=pop, observation=object())
-    delegate = _maybe_population_delegate(forward)
-    assert isinstance(delegate, PopulationFitter)
-    assert delegate.n_galaxies == 2
-
-
-def test_fitter_rejects_unsupported_shared_for_routing() -> None:
-    """If shared= isn't the canonical PSD pair, the routing surfaces a clear error."""
-    from tengri.inference.fitter import _maybe_population_delegate
-
-    class _StubSEDWithSpec:
-        name = "stub_with_spec"
-        spec = None
-
-        def with_fixed(self, **kw):
-            return self
-
-    pop = PopulationSEDModel(
-        sed=_StubSEDWithSpec(),
-        galaxies=[_gal()],
-        shared=("met_logzsol",),
-        priors={"met_logzsol": (-2.0, 0.5)},
-    )
-    forward = ForwardModel.build(population=pop, observation=object())
-    with pytest.raises(NotImplementedError, match="issue #211"):
-        _maybe_population_delegate(forward)
-
-
-def test_fitter_returns_none_for_non_population_models() -> None:
-    """Non-population models pass through with no delegate."""
-    from tengri.inference.fitter import _maybe_population_delegate
-
-    assert _maybe_population_delegate("not even a forward") is None
-    assert _maybe_population_delegate(object()) is None
+# ── Fitter standard path (single-Hamiltonian milestone) ────────────────
+# The legacy ``_maybe_population_delegate`` was removed once the
+# standard inference path (Fitter(forward).run(...)) was proven to
+# work end-to-end on hierarchical fits (PRs #241-#245). Tests of
+# that delegation are deleted with the code. The standard path's
+# behavior is pinned in test_single_hamiltonian_path_probe.py.
