@@ -207,6 +207,7 @@ from tengri.components.spatial import Exponential, FlatSlab, Sersic
 from tengri.forward.convenience import catalog_summary, fit_batch
 from tengri.forward.forward_model import ForwardModel
 from tengri.forward.population import Population
+from tengri.forward.population_sed_model import PopulationSEDModel
 from tengri.forward.prediction import (
     DerivedQuantities,
     EmissionLines,
@@ -362,6 +363,7 @@ __all__ = [
     "Parameters",
     "PipelineContractError",
     "Population",
+    "PopulationSEDModel",
     "SEDModel",
     "Sersic",
     "SpatialModel",
