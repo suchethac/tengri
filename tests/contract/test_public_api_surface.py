@@ -30,8 +30,10 @@ pytestmark = pytest.mark.contract
 ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
     {
         # ── Core classes ────────────────────────────────────────────
+        "ForwardModel",
         "Galaxy",
         "Parameters",
+        "Population",
         "SEDModel",
         "WavePrecomp",
         # ── SEDComponent extension surface (Phase II protocols) ─────
