@@ -352,7 +352,32 @@ class PopulationFitter:
         psd_sigma_prior=(0.1, 4.0),
         psd_tau_prior=(1.0, 300.0),
         data_type="photometry",
+        *,
+        _via_routing: bool = False,
     ):
+        # ── Soft deprecation: prefer PopulationSEDModel + Fitter routing ──
+        # Direct ``PopulationFitter(model_factory, galaxies, ...)`` keeps
+        # working bit-for-bit; this nudges new callers to the canonical
+        # surface. Routing through ``Fitter(forward, ...)`` (when
+        # ``forward`` holds a :class:`PopulationSEDModel`) sets
+        # ``_via_routing=True`` and silences the warning.
+        if not _via_routing:
+            import warnings
+
+            warnings.warn(
+                "PopulationFitter(model_factory, galaxies, ...) is deprecated "
+                "and will be removed in tengri v1.0. The canonical entry point "
+                "is the ForwardModel + PopulationSEDModel pattern: "
+                "template = SEDModel.build(...); "
+                "pop = PopulationSEDModel(sed=template, galaxies=galaxies, "
+                "shared=('sfh_field_psd_sigma', 'sfh_field_psd_tau_myr')); "
+                "forward = ForwardModel.build(population=pop, observation=obs); "
+                "result = Fitter(forward).run('vi'). "
+                "See issue #211.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         self.model_factory = model_factory
         self.galaxies = galaxies
         self.n_galaxies = len(galaxies)
