@@ -52,6 +52,70 @@ class ForwardModel:
     populations: tuple[Population, ...]
     observation: Any
 
+    # ── Legacy-SEDModel delegations (for Fitter consumption) ─────────
+    # The Fitter inner machinery (loss_fn, JIT compile, posterior
+    # warm-start) reaches into ~12 SEDModel attributes. These
+    # properties delegate so a ForwardModel can stand in for an
+    # SEDModel anywhere the Fitter needs it. For hierarchical fits,
+    # the inner SubModel is a PopulationSEDModel whose own attributes
+    # delegate to its template SEDModel — three-level chain.
+
+    @property
+    def spec(self):
+        """The :class:`Parameters`-shaped spec the Fitter consumes.
+
+        Delegates to ``self.populations[0].sed.spec``. For single-
+        galaxy fits, that's the :class:`SEDModel`'s scalar spec; for
+        hierarchical fits (PopulationSEDModel), it's the batched
+        :class:`PopulationSpecView` (see PR #241). The Fitter sees
+        the same Protocol surface either way and doesn't need to
+        know which.
+
+        Notes
+        -----
+        For multi-population galaxy decompositions (ADR-0012), this
+        returns the *first* population's spec — those fits use
+        namespaced parameter names and have their own conventions
+        handled elsewhere in the pipeline.
+        """
+        return self.populations[0].sed.spec
+
+    def _inner_sed(self):
+        """Return the underlying :class:`SEDModel` for legacy attribute access.
+
+        For PopulationSEDModel-wrapped forwards, the inner SED is
+        ``pop.sed.sed`` (the template); for plain SEDModel forwards,
+        it's ``pop.sed`` directly.
+        """
+        sub = self.populations[0].sed
+        return getattr(sub, "sed", sub)
+
+    def __getattr__(self, name: str):
+        """Fallback to the inner SEDModel for legacy attribute access.
+
+        Only consulted when normal attribute lookup fails — i.e. when
+        the Fitter (or other legacy caller) reaches for an attribute
+        that lives on the underlying :class:`SEDModel`. Names that
+        ForwardModel defines explicitly (predict, spec, populations,
+        observation, …) take precedence.
+
+        This delegation is the bridge that lets the Fitter consume a
+        ForwardModel as a drop-in for an SEDModel during the migration
+        from the legacy SEDModel-direct path to the canonical
+        ``Fitter(forward).run(...)`` pattern.
+        """
+        # Avoid infinite recursion if populations isn't set yet
+        if name in ("populations", "observation"):
+            raise AttributeError(name)
+        try:
+            sub = self.populations[0].sed
+        except (AttributeError, IndexError):
+            raise AttributeError(name)  # noqa: B904
+        # Walk one level deeper if the SubModel is a composer
+        if hasattr(sub, "sed"):
+            return getattr(sub.sed, name)
+        return getattr(sub, name)
+
     @classmethod
     def build(
         cls,
