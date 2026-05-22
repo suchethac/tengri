@@ -4013,6 +4013,18 @@ class SEDModel:
                 "predict_observables requires an Observation. Build the "
                 "model with ``observation=`` set."
             )
+
+        # Auto-delegate to the JIT-fused path for the common case.
+        # The eager dispatch of ~50 small jaxpr ops costs ~7–12 s of
+        # trace+micro-compile per fresh process; predict_observables_jit
+        # fuses them into one HLO and hits the persistent cache.
+        # spectrum_precomp injects rest-frame pixel centres into
+        # state.derived between predict_state and observation.predict —
+        # not covered by predict_observables_jit yet — so fall through
+        # to the eager path when that approximation is active.
+        if not self._approx.get("spectrum_precomp"):
+            return self.predict_observables_jit(params)
+
         state = self.predict_state(params)
         full = {**self.spec.get_fixed_values(), **params}
 

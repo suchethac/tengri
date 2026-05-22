@@ -49,8 +49,12 @@ After upgrading JAX (`pip install -U jax`), wipe stale entries:
 import tengri; tengri.clear_cache()
 ```
 
-Default `min_compile_time_secs=5.0` keeps small SSP/dust kernels out of
-the cache. See `docs/inference/compilation_cache.md` for full details.
+Default `min_compile_time_secs=0.05` persists per-filter
+`compute_flux_density` kernels and other ~150–250 ms component
+precompute compiles. Threshold history: 5.0 (≤ 2026-05-04, skipped
+the orchestrator chain), 0.5 (≤ 2026-05-22, missed per-filter
+micro-compiles), 0.05 (current). See
+`docs/inference/compilation_cache.md` for full details.
 
 ## Naming contract (MANDATORY)
 
