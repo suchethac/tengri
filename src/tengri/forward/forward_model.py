@@ -10,7 +10,7 @@ Single-population fits use bare parameter names
 ``{population_name}.{prefix}_{param}`` namespace defined in
 `ADR-0012 <../adr/0012-forward-model-population.md>`_. Cross-population
 state keys follow the same convention via the typed
-:class:`tengri.protocols.DerivedBundle`.
+:class:`tengri.protocols.DerivedState`.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ import jax.numpy as jnp
 
 from tengri.forward.population import Population
 from tengri.protocols.component import ForwardState
-from tengri.protocols.derived_bundle import DerivedBundle
+from tengri.protocols.derived_state import DerivedState
 
 __all__ = ["ForwardModel"]
 
@@ -214,10 +214,10 @@ class ForwardModel:
             for name, state in list(per_pop_states.items()):
                 # Use _extras for namespaced keys (typed bundle rejects them).
                 merged_extras = {**state.derived._extras, **namespaced_extras}
-                new_derived = DerivedBundle(
+                new_derived = DerivedState(
                     **{
                         field: getattr(state.derived, field)
-                        for field in DerivedBundle.field_names()
+                        for field in DerivedState.field_names()
                         if field != "_extras"
                     },
                     _extras=merged_extras,
