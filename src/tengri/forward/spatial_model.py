@@ -27,7 +27,34 @@ import jax.numpy as jnp
 from tengri.protocols.component import ForwardState, ParamDeclaration
 from tengri.protocols.spatial import SpatialComponent
 
-__all__ = ["SpatialModel", "SpatialSEDModel"]
+__all__ = ["SpatialModel", "SpatialSEDModel", "default_grid_kpc"]
+
+
+def default_grid_kpc(
+    n: int = 64,
+    extent_kpc: float = 10.0,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """A square ``(n, n)`` grid spanning ``[-extent_kpc, +extent_kpc]`` per axis.
+
+    Returns ``(x_grid, y_grid)`` — both 2D arrays of shape ``(n, n)``.
+    Used as the default for :class:`SpatialModel` when no explicit grid
+    is provided.
+
+    Parameters
+    ----------
+    n : int, default 64
+        Number of points per axis.
+    extent_kpc : float, default 10.0
+        Half-width of the grid in kpc; the full grid spans
+        ``[-extent_kpc, +extent_kpc]`` in both x and y.
+
+    Returns
+    -------
+    tuple[ndarray, ndarray]
+        ``(x_grid, y_grid)`` of shape ``(n, n)`` each.
+    """
+    axis = jnp.linspace(-extent_kpc, extent_kpc, n)
+    return jnp.meshgrid(axis, axis)
 
 
 @dataclass(frozen=True)
@@ -41,17 +68,32 @@ class SpatialModel:
     ----------
     components : sequence of :class:`SpatialComponent`
         Spatial physics blocks to thread state through, in order.
+    grid_kpc : tuple of (ndarray, ndarray), optional
+        ``(x_grid_kpc, y_grid_kpc)`` — the 2D spatial coordinate grids,
+        each of shape ``(ny, nx)``. If omitted, a sensible default
+        ``64×64`` grid spanning ±10 kpc is constructed via
+        :func:`default_grid_kpc`. Pass an explicit grid when the
+        production fit needs different resolution or extent.
 
     Notes
     -----
-    JIT/grad/vmap-compatible: :meth:`run` is pure JAX.
+    JIT/grad/vmap-compatible: :meth:`run` is pure JAX. The grid is held
+    as a static attribute, not closed over.
     """
 
     components: tuple[SpatialComponent, ...]
+    grid_kpc: tuple[jnp.ndarray, jnp.ndarray]
     name: str = "spatial"
 
-    def __init__(self, components: Sequence[SpatialComponent]) -> None:
+    def __init__(
+        self,
+        components: Sequence[SpatialComponent],
+        grid_kpc: tuple[jnp.ndarray, jnp.ndarray] | None = None,
+    ) -> None:
+        if grid_kpc is None:
+            grid_kpc = default_grid_kpc()
         object.__setattr__(self, "components", tuple(components))
+        object.__setattr__(self, "grid_kpc", grid_kpc)
         object.__setattr__(self, "name", "spatial")
 
     def declared_parameters(self) -> list[ParamDeclaration]:
@@ -68,14 +110,16 @@ class SpatialModel:
     ) -> ForwardState:
         """Thread ``state`` through each :attr:`components` in order.
 
-        Reads :attr:`state.derived["spatial_grid_xy_kpc"]` — must be
-        inserted by the caller before :meth:`run`. Each component
-        consumes and updates :attr:`state.derived["spatial_profile_2d"]`.
+        Inserts :attr:`grid_kpc` into ``state.derived["spatial_grid_xy_kpc"]``
+        if not already present (callers can override by setting it on
+        the incoming state). Each component then consumes the grid and
+        updates :attr:`state.derived["spatial_profile_2d"]`.
 
         Parameters
         ----------
         state : ForwardState
-            Incoming state. Must already carry the spatial grid.
+            Incoming state. Wave grid is preserved; spatial grid is
+            inserted (or kept if caller already set it).
         params : Mapping
             Free parameter values.
 
@@ -84,6 +128,10 @@ class SpatialModel:
         ForwardState
             New state with ``spatial_profile_2d`` populated.
         """
+        if "spatial_grid_xy_kpc" not in state.derived:
+            state = state.with_(
+                derived=state.derived.with_(spatial_grid_xy_kpc=self.grid_kpc)
+            )
         for comp in self.components:
             state = comp.apply(state, params)
         return state

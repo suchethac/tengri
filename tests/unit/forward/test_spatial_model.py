@@ -7,7 +7,7 @@ import pytest
 
 from tengri.components.spatial.exponential import Exponential
 from tengri.components.spatial.sersic import Sersic
-from tengri.forward.spatial_model import SpatialModel, SpatialSEDModel
+from tengri.forward.spatial_model import SpatialModel, SpatialSEDModel, default_grid_kpc
 from tengri.protocols import SubModel
 from tengri.protocols.component import ForwardState
 
@@ -84,6 +84,29 @@ def test_spatial_model_threads_through_components(grid_state) -> None:
     # Last (Exponential) overwrites the profile
     chained_profile = chained.derived["spatial_profile_2d"]
     assert not jnp.allclose(chained_profile, sersic_only.derived["spatial_profile_2d"])
+
+
+def test_spatial_model_default_grid_used_when_none_provided() -> None:
+    """SpatialModel(components=...) without grid_kpc uses the default 64x64."""
+    model = SpatialModel(components=[Sersic()])
+    state = ForwardState(wave=jnp.zeros(1))  # no spatial_grid in derived
+    params = {
+        "spatial_re_kpc": jnp.float64(1.0),
+        "spatial_n": jnp.float64(1.0),
+        "spatial_axis_ratio": jnp.float64(1.0),
+        "spatial_pa_deg": jnp.float64(0.0),
+    }
+    out = model.run(state, params)
+    profile = out.derived["spatial_profile_2d"]
+    assert profile.shape == (64, 64)
+
+
+def test_default_grid_kpc_shape() -> None:
+    x, y = default_grid_kpc(n=8, extent_kpc=5.0)
+    assert x.shape == (8, 8)
+    assert y.shape == (8, 8)
+    assert float(x.min()) == -5.0
+    assert float(x.max()) == 5.0
 
 
 def test_spatial_sed_model_satisfies_submodel(grid_state) -> None:
