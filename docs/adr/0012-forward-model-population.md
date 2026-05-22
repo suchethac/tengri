@@ -1,6 +1,6 @@
 # ADR-0012: Forward-model populations and parameter namespacing
 
-- **Status:** Proposed (2026-05-21)
+- **Status:** Accepted (2026-05-22)
 - **Stakeholders:** Suchetha; future contributors adding multi-component
   galaxy models (AGN + host, bulge + disc, mergers).
 - **Related:** [Forward Model Architecture](../dev/forward-model-architecture.md);
@@ -174,7 +174,12 @@ Alternatives considered:
 ## Status notes
 
 - Proposed alongside the forward-model architecture redesign
-  (2026-05-21). Not yet implemented.
-- Implementation order, migration of existing fits, and exact API
-  shape will be captured in a separate implementation plan after this
-  ADR is accepted.
+  (2026-05-21); accepted and implemented 2026-05-22.
+- Implementation: `ForwardModel.build(populations=[...])` accepts
+  N > 1 populations; `ForwardModel.predict` slices parameters by the
+  `"<name>."` prefix before handing each population's SubModel its
+  slice; `JointObservation.predict_summed` runs each child observation
+  on every population's state and sums the resulting channel dicts in
+  linear flux; `tools/check_param_prefixes.py` strips the namespace
+  before applying the prefix discipline.
+- Implementation plan: `docs/superpowers/plans/2026-05-22-multi-population-namespacing.md`.

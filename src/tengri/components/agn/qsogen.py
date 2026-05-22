@@ -104,8 +104,6 @@ from tengri.components.dust.attenuation import smc as smc_curve
 from tengri.utils.physics_constants import (
     AA_TO_CM as _ANGSTROM_CM,
     C_CGS as _C_LIGHT,
-    H_PLANCK as _H_PLANCK,
-    K_BOLTZ as _K_BOLTZ,
     L_SUN as _LSUN_ERG,
 )
 
@@ -214,33 +212,6 @@ _LUMVAL = np.array(
 def _wavelength_to_nu(wavelength: jnp.ndarray) -> jnp.ndarray:
     """Convert wavelength (Angstrom) to frequency (Hz)."""
     return _C_LIGHT / (wavelength * _ANGSTROM_CM)
-
-
-def _planck_blambda(
-    wavelength: jnp.ndarray,
-    temperature: float,
-) -> jnp.ndarray:
-    """Planck function B_lambda(T) [erg s^-1 cm^-2 A^-1 sr^-1].
-
-    Parameters
-    ----------
-    wavelength : array
-        Wavelength [Angstrom].
-    temperature : float
-        Temperature [K].
-
-    Returns
-    -------
-    array
-        B_lambda(T) in per-Angstrom units.
-    """
-    t_safe = jnp.maximum(temperature, 1.0)
-    lam_cm = wavelength * _ANGSTROM_CM
-    x = _H_PLANCK * _C_LIGHT / (lam_cm * _K_BOLTZ * t_safe)
-    x_clip = jnp.clip(x, 0.0, 500.0)
-    prefactor = 2.0 * _H_PLANCK * _C_LIGHT**2 / lam_cm**5
-    # Return in per-Angstrom: divide by 1e8 (cm -> A)
-    return prefactor / (jnp.exp(x_clip) - 1.0) * _ANGSTROM_CM
 
 
 def _broken_powerlaw_continuum(

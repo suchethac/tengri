@@ -602,9 +602,9 @@ class Observation:
         ``line_fluxes`` or ``spectral_indices`` configured, raises
         ``NotImplementedError`` — Phase 3+ territory.
         """
+        from tengri.cosmology import luminosity_distance
         from tengri.observation.photometry import compute_flux_density
         from tengri.observation.spectrum import apply_lsf, compute_spectrum
-        from tengri.utils.cosmology import luminosity_distance
 
         z = jnp.asarray(params.get("redshift", 0.0))
         if dl_cm is None:
@@ -760,7 +760,7 @@ class Observation:
             ``sed_intrinsic`` through filters. Stays the canonical
             reference until Phase 3c-3e flips the default.
         """
-        from tengri.utils.cosmology import luminosity_distance
+        from tengri.cosmology import luminosity_distance
 
         # Sum all *_phot_lnu_precomp contributions from components that published
         # one. New components add their precompute field to DerivedBundle and
@@ -877,6 +877,79 @@ class Observation:
 
         if observables_type is not None:
             return observables_type(phot_fnu, phot_rest_fnu)
+        return out
+
+    def predict_spectrum_via_precomp(
+        self,
+        state,
+        params,
+        *,
+        observables_type=None,
+    ):
+        """Project spectrum observables via the spectrum LUT (Phase 5).
+
+        Phase 5 opt-in fast path for spectroscopy. Sums all ``*_spec_lnu_precomp``
+        keys present in ``state.derived`` and applies the cosmology factor
+        ``(1+z)/(4π·dl²)`` to convert to observed F_ν.
+
+        Parameters
+        ----------
+        state : ForwardState
+            Orchestrator state with at least ``spec_eff_waves`` and
+            one or more ``*_spec_lnu_precomp`` entries.
+        params : Mapping[str, jnp.ndarray]
+            Param dict; reads ``redshift``.
+        observables_type : type, optional
+            Per-model :class:`Observables` NamedTuple class (from
+            :meth:`SEDModel.Observables`). When provided, returns an
+            instance; when ``None``, returns a dict.
+
+        Returns
+        -------
+        Observables or dict
+            ``spec_fnu`` populated from the spectrum LUT path.
+
+        Raises
+        ------
+        ValueError
+            If no ``*_spec_lnu_precomp`` keys are present.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — pure JAX arithmetic on the LUT entries.
+        """
+        from tengri.utils.cosmology import luminosity_distance
+
+        # Sum all *_spec_lnu_precomp contributions from components that published one.
+        precomp_keys = [k for k in state.derived.field_names() if k.endswith("_spec_lnu_precomp")]
+        precomp_contribs = [state.derived[k] for k in precomp_keys if k in state.derived]
+        if not precomp_contribs:
+            raise ValueError(
+                "predict_spectrum_via_precomp requires at least one *_spec_lnu_precomp "
+                "in state.derived. Build the model with approx=SpectrumPrecomp()."
+            )
+
+        # Sum all per-pixel spectrum LUT contributions — rest-frame Lν at the source's z.
+        total_spec_lnu = precomp_contribs[0]
+        for c in precomp_contribs[1:]:
+            total_spec_lnu = total_spec_lnu + c
+
+        # Apply cosmology: observed F_ν = L_ν / (4π·d_L²) × (1 + z)
+        z = jnp.asarray(params.get("redshift", 0.0))
+        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+        cosmology = (1.0 + z) / (4.0 * jnp.pi * dl_cm**2)
+        spec_fnu = total_spec_lnu * cosmology
+
+        # spec_rest_fnu: same LUT sum projected at z=0, d_L=10pc.
+        from tengri.utils.physics_constants import TEN_PC_CM
+
+        cosmology_rest = 1.0 / (4.0 * jnp.pi * TEN_PC_CM**2)
+        spec_rest_fnu = total_spec_lnu * cosmology_rest
+
+        out = {"spec_fnu": spec_fnu, "spec_rest_fnu": spec_rest_fnu}
+
+        if observables_type is not None:
+            return observables_type(spec_fnu=spec_fnu, spec_rest_fnu=spec_rest_fnu)
         return out
 
     # ── Display ───────────────────────────────────────────────────

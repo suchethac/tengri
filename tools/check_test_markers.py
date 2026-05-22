@@ -119,6 +119,7 @@ def main() -> int:
         "\nFix: add `pytestmark = pytest.mark.<marker>` at module top, "
         "or decorate each test with one of: " + ", ".join(sorted(APPROVED_MARKERS))
     )
+
     return 1
 
 

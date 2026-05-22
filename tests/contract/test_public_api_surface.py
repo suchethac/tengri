@@ -35,8 +35,16 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "Galaxy",
         "Parameters",
         "Population",
+        "PopulationSEDModel",
         "SEDModel",
+        "SpatialModel",
+        "SpatialSEDModel",
         "WavePrecomp",
+        "SpectrumPrecomp",
+        # ── Spatial profile components ──────────────────────────────
+        "Exponential",
+        "FlatSlab",
+        "Sersic",
         # ── SEDComponent extension surface (Phase II protocols) ─────
         "DerivedBundle",
         "DerivedKey",

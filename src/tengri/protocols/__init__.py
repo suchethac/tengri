@@ -37,6 +37,7 @@ from tengri.protocols.component import (
 from tengri.protocols.derived_bundle import DerivedBundle
 from tengri.protocols.likelihood import Likelihood
 from tengri.protocols.observation import ObservationModel
+from tengri.protocols.spatial import SpatialComponent
 from tengri.protocols.submodel import SubModel
 
 __all__ = [
@@ -52,5 +53,6 @@ __all__ = [
     "SEDComponent",
     "SEDComponentConfig",
     "SEDComponentState",
+    "SpatialComponent",
     "SubModel",
 ]

@@ -1,5 +1,10 @@
 # Three evaluation modes for the SED forward model
 
+> **Stale (2026-05).** The three-mode design space described here has been
+> superseded by the current `SEDModelComponent` + `WavePrecomp` pair. See
+> [`docs/dev/forward-model-architecture.md`](forward-model-architecture.md)
+> for the canonical picture. Kept for historical reference.
+
 Tengri's forward model evaluates every physics component through one of three
 modes. The same physics callable can run any of them; the choice is a
 workflow trade-off, not a science one.

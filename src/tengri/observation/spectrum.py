@@ -19,7 +19,7 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
-from tengri.utils.conversions import lnu_to_fnu
+from tengri.units import lnu_to_fnu
 
 # ── SSP library spectral resolutions (velocity dispersion in km/s)
 SSP_LIBRARY_RESOLUTIONS: dict[str, float] = {

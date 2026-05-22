@@ -153,6 +153,11 @@ class DerivedBundle:
     # consumers like the dust attenuation LUT). Shape ``(n_filters,)``,
     # units Å.
     filter_eff_waves: jnp.ndarray | None = None
+    # Spectrum pixel effective wavelengths in the rest frame (Phase 5,
+    # published when approx=SpectrumPrecomp() is set). Per-pixel effective
+    # wavelengths in the galaxy rest frame, computed as observed wavelengths
+    # divided by (1 + z). Shape ``(n_spec_pixel,)``, units Å.
+    spec_eff_waves: jnp.ndarray | None = None
 
     # AGN (incl. GRAHSP alternates)
     L_agn_bol: jnp.ndarray | None = None
@@ -179,11 +184,33 @@ class DerivedBundle:
     # baked into the SSP grid and therefore included in stellar_phot_lnu_precomp.
     nebular_phot_lnu_precomp: jnp.ndarray | None = None
 
+    # Spectrum LUT (Phase 5, published only when approx=SpectrumPrecomp()
+    # is set). Per-pixel rest-frame Lν contributions from each component
+    # at spectrum pixel centres (effective wavelengths).
+    # Shape ``(n_spec_pixel,)``, units erg/s/Hz.
+    stellar_spec_lnu_precomp: jnp.ndarray | None = None
+    nebular_spec_lnu_precomp: jnp.ndarray | None = None
+    dust_spec_lnu_precomp: jnp.ndarray | None = None
+    agn_spec_lnu_precomp: jnp.ndarray | None = None
+    igm_spec_transmission_precomp: jnp.ndarray | None = None
+
     # Radio / X-ray / IGM / shock
     sed_radio: jnp.ndarray | None = None
     sed_xray: jnp.ndarray | None = None
     igm_transmission: jnp.ndarray | None = None
     shock_log_lhalpha: jnp.ndarray | None = None
+
+    # Spatial — 2D surface-brightness profile and the (x, y) kpc grid that
+    # underlies it. Published by spatial components (Sersic, Exponential,
+    # FlatSlab, …). Reserved B-path keys (``spatial_profile_per_age``,
+    # ``spatial_profile_per_wave``) will be added when those components land.
+    # See architecture spec §3.3.
+    spatial_profile_2d: jnp.ndarray | None = None
+    # ``spatial_grid_xy_kpc`` is a tuple of two 2D arrays ``(x_grid, y_grid)``
+    # so it is intentionally not a jnp.ndarray field. The bundle still
+    # accepts it via ``with_(spatial_grid_xy_kpc=...)``; the type annotation
+    # is permissive.
+    spatial_grid_xy_kpc: Any = None
 
     # Free-form spillover dict for keys not yet promoted to fields.
     # Empty in steady state; provides a graceful path when an
@@ -210,7 +237,9 @@ class DerivedBundle:
         from dataclasses import replace
 
         # Pre-check unknown keys to produce a friendly hint message.
-        known = set(self.field_names())
+        # ``_extras`` is the documented escape hatch for keys not yet
+        # promoted to typed fields — explicitly allow it.
+        known = set(self.field_names()) | {"_extras"}
         unknown = [k for k in overrides if k not in known]
         if unknown:
             offender = unknown[0]

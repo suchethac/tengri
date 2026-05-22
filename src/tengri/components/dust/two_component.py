@@ -131,6 +131,12 @@ class DustSEDComponent:
     name: str = "dust"
     parameter_prefix: str = "dust_"
 
+    def citations(self) -> tuple[str, ...]:
+        """Structurally implements Charlot & Fall (2000) two-component dust;
+        per-leaf attenuation laws are config-driven via
+        :data:`tengri.citations.associations.DUST_LAW_CITATIONS`."""
+        return ("charlot_fall2000",)
+
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free parameters this component owns.
 

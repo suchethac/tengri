@@ -207,6 +207,12 @@ class StellarSEDComponent:
     parameter_prefix: tuple[str, ...] = ("sfh_", "met_", "chem_")
     _state: StellarSEDComponentState | None = None
 
+    def citations(self) -> tuple[str, ...]:
+        """The stellar component is structurally built on DSPS; SFH-family
+        and SSP-grid citations are config-driven via
+        :mod:`tengri.citations.associations`."""
+        return ("dsps",)
+
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free parameters this component owns.
 
@@ -510,7 +516,7 @@ class StellarSEDComponent:
         # ── 5. Cosmology: t_obs from redshift ───────────────────────────
         # ``age_at_z`` is JIT-compatible (pure JAX under the hood); keep
         # everything as JAX arrays so the whole apply() stays traceable.
-        from tengri.utils.cosmology import age_at_z as _age_at_z
+        from tengri.cosmology import age_at_z as _age_at_z
 
         z = jnp.asarray(params.get("redshift", 0.0))
         t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())

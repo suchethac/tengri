@@ -25,7 +25,8 @@ edit:
 | X-ray (XRBs + AGN corona) | `components/xray/` |
 
 Each component package has:
-- `component.py` — the `SEDComponent` adapter (the orchestration shape)
+- `component.py` — the bare `SEDComponent` Protocol adapter (used by stellar, IGM, and other components with rich state)
+- `<name>_model.py` — single-file `SEDModelComponent` ports (added 2026-05; the default authoring style for new models)
 - `_params.py` — the parameters this component owns (priors, descriptions, units)
 - `*.py` for the actual physics (e.g. `attenuation.py`, `emission.py`)
 - `*_precompute.py` for filter-preintegrated lookup tables (optional)
@@ -33,6 +34,28 @@ Each component package has:
 **North-star file for style:** `components/dust/attenuation.py` reads like
 prose from Charlot & Fall (2000) with a Python skeleton attached. Copy its
 rhythm.
+
+## Adding a new model
+
+For most new models — closed-form attenuation laws, dust IR libraries, AGN
+torus libraries, nebular emulators — write **one file** at
+`components/<domain>/<name>_model.py` subclassing `SEDModelComponent`. The
+canonical small example is
+[`components/dust/calzetti_model.py`](../../src/tengri/components/dust/calzetti_model.py);
+a library example is
+[`components/agn/skirtor_model.py`](../../src/tengri/components/agn/skirtor_model.py).
+
+The base class lives at
+[`components/sed_model_component.py`](../../src/tengri/components/sed_model_component.py).
+For the how-to and the contract, see
+[`docs/dev/sed-model-components.md`](sed-model-components.md); for the
+architectural context (cross-component contract, WavePrecomp, builder
+resolution), see [`forward-model-architecture.md`](forward-model-architecture.md).
+
+The bare `SEDComponent` Protocol stays as the fallback for models that don't
+fit the `predict(p, sed_in, wave, **inputs)` shape — stellar (rich state
+machine), IGM (observer-frame transformation). The canonical bare-Protocol
+reference is `components/radio/component.py`.
 
 ## Defining parameters
 
@@ -61,10 +84,15 @@ Each component owns its own `_params.py` (see the list above and the
 
 | Want to... | Open |
 |---|---|
-| Reach the forward model from inference | `forward/forward_model.py` (`ForwardModel` — outer shell + `.build()` + `.predict()`). Single-population only in v0; multi-population lands with ADR-0012. |
-| Compose populations | `forward/population.py` (`Population(name, sed, spatial=None)` — one SubModel pair per population) |
+| Reach the forward model from inference | `forward/forward_model.py` (`ForwardModel` — outer shell + `.build()` + `.predict()`). Single- and multi-population; the latter uses the `"<pop>.<prefix>_<param>"` namespace per ADR-0012. |
+| Compose populations | `forward/population.py` (`Population(name, sed, spatial=None)` — one SubModel pair per population; names must be distinct and must not contain `.`) |
+| Sum predictions across populations | `observation/joint_observation.py` (`JointObservation.predict_summed` — linear-flux sum across populations per channel) |
 | Find the SubModel Protocol | `protocols/submodel.py` — runtime-checkable contract (`run`, `declared_parameters`) |
-| Build the SED end to end | `forward/sed_model.py` (the `SEDModel` class — still the SED chain; `ForwardModel` wraps it) |
+| Build the SED end to end | `forward/sed_model.py` (the `SEDModel` class — the SED chain; satisfies `SubModel` directly via `.run()` + `.declared_parameters()`) |
+| Write / edit a spatial profile (Sérsic, exponential, flat slab) | `components/spatial/<name>.py` — subclass `SpatialModelComponent` (auto-discovered free params, default `apply()` writes `state.derived["spatial_profile_2d"]`) |
+| Find the SpatialComponent Protocol | `protocols/spatial.py` — runtime-checkable mirror of `SEDComponent` |
+| Compose a list of spatial components into one sub-model | `forward/spatial_model.py` — `SpatialModel(components=[...])` satisfies `SubModel` |
+| Join a SED chain with a spatial chain for joint fits | `forward/spatial_model.py` — `SpatialSEDModel(sed=..., spatial=...)` runs SED then Spatial |
 | Understand which kernel (exact / hybrid / fast) is chosen | `forward/_kernels/` |
 | Wire a new physics component into the pipeline | `forward/components_assembly.py` |
 | Add filter-preintegration to a new component | `forward/precompute/` (registry) + new `*_precompute.py` next to the component |

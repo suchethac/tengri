@@ -49,8 +49,8 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     interpolate_metallicity,
     interpolate_metallicity_evolving,
 )
+from tengri.cosmology import luminosity_distance
 from tengri.parameters.translate import LOG10_ZSUN
-from tengri.utils.cosmology import luminosity_distance
 
 # ── Constants ─────────────────────────────────────────────────────
 

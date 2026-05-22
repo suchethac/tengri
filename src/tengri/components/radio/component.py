@@ -138,6 +138,12 @@ class RadioSEDComponent:
     name: str = "radio"
     parameter_prefix: str = "radio_"
 
+    def citations(self) -> tuple[str, ...]:
+        """No structurally-mandatory paper for this wrapper; the FIR-radio
+        correlation citations are config-driven via
+        :mod:`tengri.citations.associations`."""
+        return ()
+
     def declared_parameters(self) -> list[ParamDeclaration]:
         r"""Free parameters this component owns.
 

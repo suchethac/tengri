@@ -258,6 +258,8 @@ class SEDModelComponent:
     _priors: ClassVar[dict[str, Distribution]] = {}
     _inputs_tuple: ClassVar[tuple[DerivedKey, ...]] = ()
     _outputs_tuple: ClassVar[tuple[DerivedKey, ...]] = ()
+    _optional_inputs_tuple: ClassVar[tuple[DerivedKey, ...]] = ()
+    _citations_tuple: ClassVar[tuple[str, ...]] = ()
 
     # Instance attributes (set by subclass, but with class defaults)
     name: str = "component"
@@ -286,22 +288,40 @@ class SEDModelComponent:
         # Store on the class
         cls._priors = priors
 
-        # Extract and parse inputs / outputs dicts
+        # Extract and parse inputs / outputs / optional_inputs dicts
         inputs_dict = vars(cls).get("inputs", {})
         outputs_dict = vars(cls).get("outputs", {})
+        optional_inputs_dict = vars(cls).get("optional_inputs", {})
 
         # Build DerivedKey tuples
         inputs_tuple = tuple(DerivedKey(name, units, "") for name, units in inputs_dict.items())
         outputs_tuple = tuple(DerivedKey(name, units, "") for name, units in outputs_dict.items())
+        optional_inputs_tuple = tuple(
+            DerivedKey(name, units, "") for name, units in optional_inputs_dict.items()
+        )
 
         cls._inputs_tuple = inputs_tuple
         cls._outputs_tuple = outputs_tuple
+        cls._optional_inputs_tuple = optional_inputs_tuple
 
         # Delete the dicts so method resolution finds the base methods
         if "inputs" in vars(cls):
             delattr(cls, "inputs")
         if "outputs" in vars(cls):
             delattr(cls, "outputs")
+        if "optional_inputs" in vars(cls):
+            delattr(cls, "optional_inputs")
+
+        # Citations: read class attribute (tuple of bib keys), store on class.
+        # Subclasses declare ``citations = ("calzetti2000", ...)``; the
+        # citations() method synthesised below returns the tuple. Default ().
+        citations_attr = vars(cls).get("citations", ())
+        if not isinstance(citations_attr, tuple):
+            citations_attr = tuple(citations_attr)
+        cls._citations_tuple = citations_attr
+        # Delete the class attribute so the method takes precedence on lookup.
+        if "citations" in vars(cls):
+            delattr(cls, "citations")
 
         # Register by name
         component_name = vars(cls).get("name", "component")
@@ -376,6 +396,36 @@ class SEDModelComponent:
             Constructed from the ``outputs`` class dict at class-definition time.
         """
         return self._outputs_tuple
+
+    def optional_inputs(self) -> tuple[DerivedKey, ...]:
+        """Cross-component reads with a documented fallback (zero by default).
+
+        Returns
+        -------
+        tuple[DerivedKey, ...]
+            Derived keys this component reads *opportunistically* — if an
+            upstream component publishes the key, its value is passed to
+            :meth:`predict` as a keyword argument; if not, the framework
+            substitutes ``jnp.asarray(0.0)``. This is how a downstream
+            component like radio can read ``L_ir`` from dust if dust is
+            in the chain but still produce a sensible output if not.
+
+            Constructed from the ``optional_inputs`` class dict at
+            class-definition time, mirroring the ``inputs`` shape.
+        """
+        return self._optional_inputs_tuple
+
+    def citations(self) -> tuple[str, ...]:
+        """Bib keys for papers this component implements, solves for, or ports.
+
+        Returns
+        -------
+        tuple of str
+            Keys into :data:`tengri.citations.registry.REGISTRY`.
+            Subclasses declare the tuple via a ``citations`` class
+            attribute; this method returns it. Default is ``()``.
+        """
+        return self._citations_tuple
 
     def precompute(
         self,
@@ -462,11 +512,30 @@ class SEDModelComponent:
                     f"Available derived keys: {list(state.derived.keys())}"
                 )
 
+        # Look up optional inputs from derived — fallback to 0.0 when missing.
+        # This is the "documented-fallback" cross-component read pattern
+        # used by radio (L_ir / L_agn_bol / log_mstar) and X-ray.
+        for opt_key in self.optional_inputs():
+            key_name = opt_key.name
+            if key_name in state.derived:
+                input_kwargs[key_name] = state.derived[key_name]
+            else:
+                input_kwargs[key_name] = jnp.asarray(0.0)
+
         # Initialize SED if not yet done
         if state.sed_intrinsic is None:
             sed_in = jnp.zeros_like(state.wave)
         else:
             sed_in = state.sed_intrinsic
+
+        # Check for spectrum LUT mode (Phase 5)
+        spec_eff_waves = state.derived.get("spec_eff_waves")
+        if spec_eff_waves is not None:
+            # SpectrumPrecomp path: compute spectrum LUTs
+            published = self._apply_spec_precomp(p_sliced, sed_in, spec_eff_waves, **input_kwargs)
+            # Do NOT update sed_intrinsic on the LUT path (only publish LUTs)
+            new_derived = self._merge_published(state.derived, published)
+            return state.with_(derived=new_derived)
 
         # Check for WavePrecomp mode
         filter_eff_waves = state.derived.get("filter_eff_waves")
@@ -474,18 +543,33 @@ class SEDModelComponent:
             # WavePrecomp path: compute photometry LUTs
             published = self._apply_precomp(p_sliced, sed_in, filter_eff_waves, **input_kwargs)
             # Do NOT update sed_intrinsic on the LUT path (only publish LUTs)
-            # Use _extras for component-specific precomp LUTs that aren't typed fields
-            new_extras = {**state.derived._extras, **published}
-            return state.with_(derived=state.derived.with_(_extras=new_extras))
+            new_derived = self._merge_published(state.derived, published)
+            return state.with_(derived=new_derived)
         else:
             # Default full-grid path
             sed_out, published = self.predict(p_sliced, sed_in, state.wave, **input_kwargs)
             # Update state with new SED and published keys
-            new_extras = {**state.derived._extras, **published}
-            return state.with_(
-                sed_intrinsic=sed_out,
-                derived=state.derived.with_(_extras=new_extras),
-            )
+            new_derived = self._merge_published(state.derived, published)
+            return state.with_(sed_intrinsic=sed_out, derived=new_derived)
+
+    @staticmethod
+    def _merge_published(derived: Any, published: Mapping[str, Any]) -> Any:
+        """Route published keys to typed fields when defined, else into ``_extras``.
+
+        A component declares output names in its ``outputs`` dict (e.g.
+        ``{"L_ir": "erg/s"}``). If a name matches a typed field on
+        :class:`DerivedBundle`, write through to that field so the value
+        is observable via attribute / ``__contains__`` / mapping access.
+        Otherwise drop the value into ``_extras``, the documented
+        escape hatch for keys not yet promoted to typed fields.
+        """
+        known = set(derived.field_names())
+        typed_updates = {k: v for k, v in published.items() if k in known}
+        extras_updates = {k: v for k, v in published.items() if k not in known}
+        if extras_updates:
+            merged_extras = {**derived._extras, **extras_updates}
+            return derived.with_(_extras=merged_extras, **typed_updates)
+        return derived.with_(**typed_updates) if typed_updates else derived
 
     def _apply_precomp(
         self,
@@ -537,6 +621,44 @@ class SEDModelComponent:
             published[f"{self.name}_phot_lnu_slope_precomp"] = slope
 
         return published
+
+    def _apply_spec_precomp(
+        self,
+        p: Mapping[str, jnp.ndarray],
+        sed_in: jnp.ndarray,
+        spec_eff_waves: jnp.ndarray,
+        **inputs: Any,
+    ) -> Mapping[str, jnp.ndarray]:
+        """Compute spectrum LUT at pixel centres (Phase 5).
+
+        Called by :meth:`apply` when approx=SpectrumPrecomp() is active.
+        Evaluates :meth:`predict` at spectrum pixel effective wavelengths
+        (in the galaxy rest frame) to build a per-pixel spectrum LUT.
+
+        Parameters
+        ----------
+        p : mapping[str, ndarray]
+            Parameters with prefix stripped.
+        sed_in : ndarray
+            Input SED (used for shape/dtype, but not consumed on LUT path).
+        spec_eff_waves : ndarray, shape (n_spec_pixel,)
+            Rest-frame effective wavelengths of spectrum pixels in Angstrom.
+        **inputs : ndarray
+            Cross-component inputs from state.derived.
+
+        Returns
+        -------
+        mapping[str, ndarray]
+            Published keys for this component, keyed as
+            ``{self.name}_spec_lnu_precomp`` with shape (n_spec_pixel,).
+        """
+        # Evaluate predict at spectrum pixel centres
+        spec_lnu_precomp, _ = self.predict(
+            p, jnp.zeros_like(spec_eff_waves), spec_eff_waves, **inputs
+        )
+
+        # Publish the per-pixel spectrum contribution
+        return {f"{self.name}_spec_lnu_precomp": spec_lnu_precomp}
 
     def predict_precomp(
         self,

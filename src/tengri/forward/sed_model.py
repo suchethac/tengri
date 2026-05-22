@@ -50,6 +50,7 @@ from tengri.components.stellar.sps.precompute import (
     precompute_photometry,
 )
 from tengri.config.exceptions import ParameterMapError
+from tengri.cosmology import age_at_z, luminosity_distance
 from tengri.forward.pipeline import (
     interp_metallicity,
     interp_metallicity_evolving,
@@ -71,7 +72,6 @@ from tengri.parameters.translate import (
     _build_param_map,
     get_internal_params,
 )
-from tengri.utils.cosmology import age_at_z, luminosity_distance
 from tengri.utils.grid import (
     grid_spacing,
     interpolate_to_linear_time,
@@ -88,6 +88,7 @@ __all__ = [
     "PriorPredictive",
     "SEDModel",
     "SEDModelState",
+    "SpectrumPrecomp",
     "WavePrecomp",
 ]
 
@@ -109,21 +110,74 @@ class WavePrecomp:
         interpolation, slower precompute.
     z_min : float or None, default None
         Lower bound of the ztable grid. ``None`` → pull from the redshift
-        prior with 1 % padding. Ignored when redshift is ``Fixed``.
+        prior with 1 % padding. Ignored when redshift is ``Fixed`` unless
+        ``catalog_z_range`` is set.
     z_max : float or None, default None
         Upper bound of the ztable grid. ``None`` → pull from the redshift
-        prior with 1 % padding. Ignored when redshift is ``Fixed``.
+        prior with 1 % padding. Ignored when redshift is ``Fixed`` unless
+        ``catalog_z_range`` is set.
+    catalog_z_range : tuple of float or None, default None
+        Catalog-fit reuse knob (Approach A, 2026-05). When set to
+        ``(z_min, z_max)``, the ztable mechanism is forced on even when
+        ``redshift`` is ``Fixed`` in the spec. The Fixed value is then
+        treated as a runtime input to the JIT-compiled forward pass, so
+        a single :class:`SEDModel` instance handles a catalog of
+        per-galaxy ``Fixed(redshift)`` values **with one compile**
+        instead of one compile per row. Compile time amortises across
+        the catalog; runtime cost per fit is the ztable interpolation
+        (~µs).
 
     Examples
     --------
     >>> SEDModel(..., approx=WavePrecomp())  # default ztable sampling
     >>> SEDModel(..., approx=WavePrecomp(n_z=200))  # finer ztable
     >>> SEDModel(..., approx=WavePrecomp(z_min=0.01, z_max=3.0, n_z=200))
+    >>>
+    >>> # Catalog fit: 10⁴ galaxies at per-galaxy Fixed(z), one compile.
+    >>> model = SEDModel.build(
+    ...     ...,
+    ...     redshift=Fixed(0.0),  # placeholder; injected per call
+    ...     approx=WavePrecomp(catalog_z_range=(0.05, 1.5), n_z=200),
+    ... )
+    >>> for row in catalog:
+    ...     posterior = model.fit(row.data, params={"redshift": row.z})
     """
 
     n_z: int = 100
     z_min: float | None = None
     z_max: float | None = None
+    catalog_z_range: tuple[float, float] | None = None
+
+
+@dataclasses.dataclass(frozen=True)
+class SpectrumPrecomp:
+    """Configuration for spectrum-grid LUT precomputation (Phase 5).
+
+    Pass this to :class:`SEDModel` via ``approx=`` to enable spectroscopic
+    LUT precomputation. The SSP × dust × IGM stack is precomputed at
+    spectrum pixel centres (effective wavelengths in the galaxy rest frame)
+    and cached per redshift. This is analogous to the photometric LUT path
+    (Phase 3b/3c) but for spectroscopy.
+
+    In v0 (Phase 5 scope), no tuning knobs are exposed; pixel grid and
+    redshift are inherited from the Observation and Parameters. Future
+    extensions will add Taylor refinement and higher-order expansions.
+
+    Notes
+    -----
+    If the model includes a line-publishing nebular backend (Cue, CloudyGrid,
+    CB19, MAPPINGS, or Cue-NLR), construction raises a clear error. Those
+    backends require line rasterisation on the exact grid (Phase 5 follow-up,
+    option A in the design doc). Workaround: use a BakedIn nebular backend
+    (e.g. ``neb_type='bakedIn'`` with BC03 or else-stellar SSP).
+
+    Examples
+    --------
+    >>> from tengri import SEDModel, SpectrumPrecomp
+    >>> SEDModel(..., approx=SpectrumPrecomp())  # spectrum LUT path
+    """
+
+    pass  # No tuning knobs in v0
 
 
 class SEDModel:
@@ -287,6 +341,13 @@ class SEDModel:
         model = SEDModel(spec, ssp, observation=phot)
     """
 
+    # ── SubModel Protocol surface ──────────────────────────────────────
+    # See docs/dev/forward-model-architecture.md §4. SEDModel directly
+    # satisfies tengri.protocols.SubModel; ForwardModel's per-population
+    # orchestration consumes the `run` and `declared_parameters` methods.
+
+    name: str = "sed"
+
     # Default approximation settings (immutable — used as template only)
     # Phase 2: owned by components, per the unification plan.
     # "wave_precomp" = SSP × filter LUT on fixed wavelength grid (stellar component)
@@ -370,13 +431,30 @@ class SEDModel:
             self._approx = dict(self._DEFAULT_APPROX)
             self._approx["wave_precomp"] = True
             self._approx_config = approx
+        elif isinstance(approx, SpectrumPrecomp):
+            # Phase 5: spectrum LUT path. Currently no tuning knobs; full-grid
+            # redshift handling until Taylor refinement lands.
+            self._approx = dict(self._DEFAULT_APPROX)
+            self._approx["spectrum_precomp"] = True
+            self._approx_config = approx
+            # Validate: reject line-publishing nebular backends
+            nebular_type = spec.config.nebular_type if hasattr(spec, "config") else None
+            if nebular_type is not None and nebular_type not in ("bakedIn", "none"):
+                raise ValueError(
+                    f"SpectrumPrecomp (Phase 5, v0) does not support line-publishing "
+                    f"nebular backends like '{nebular_type}'. Workaround: use a "
+                    f"BakedIn nebular backend (neb_type='bakedIn' with BC03 SSP) or "
+                    f"neb_type='none'. Follow-up (Phase 5 option A): line "
+                    f"rasterisation on the exact grid."
+                )
         else:
             raise TypeError(
                 f"approx={approx!r} is not a legal value. Legal forms: "
-                "None (default — exact wave-grid), or "
+                "None (default — exact wave-grid), "
                 "WavePrecomp() / WavePrecomp(n_z=..., z_min=..., z_max=...) "
-                "for the precomputed SSP × filter LUT path. The pre-3d dict / "
-                "bool / string forms (e.g. approx={'wave_precomp': True}, "
+                "for the precomputed SSP × filter LUT path, or "
+                "SpectrumPrecomp() for the spectrum LUT path (Phase 5). "
+                "The pre-3d dict / bool / string forms (e.g. approx={'wave_precomp': True}, "
                 "approx=True, approx='wave_precomp') were removed."
             )
 
@@ -384,9 +462,27 @@ class SEDModel:
         # extension of ``wave_precomp`` (free-z interpolation on the same LUT),
         # not a user flag — it switches on transparently when the method is
         # ``wave_precomp`` and redshift is free.
+        #
+        # Catalog-fit override (Approach A, 2026-05): when the astronomer
+        # passes ``WavePrecomp(catalog_z_range=(z_min, z_max))``, force the
+        # ztable mechanism even when redshift is Fixed in the spec. The
+        # forward pass then reads ``params["redshift"]`` at runtime, so a
+        # single SEDModel handles many per-galaxy ``Fixed(z)`` values
+        # without recompiling. See ``docs/dev/cross-compile-fixed-z-design.md``.
+        self._catalog_z_range: tuple[float, float] | None = None
         if self._approx["wave_precomp"]:
             redshift_dist = spec.get_distribution("redshift")
-            if not redshift_dist.is_fixed:
+            cz = self._approx_config.catalog_z_range if self._approx_config is not None else None
+            if cz is not None:
+                if redshift_dist.is_fixed:
+                    self._approx["ztable"] = True
+                    self._catalog_z_range = (float(cz[0]), float(cz[1]))
+                # Free-redshift case: catalog_z_range is harmless (ztable already on)
+                # but record it so the compile_signature still distinguishes ranges.
+                else:
+                    self._approx["ztable"] = True
+                    self._catalog_z_range = (float(cz[0]), float(cz[1]))
+            elif not redshift_dist.is_fixed:
                 self._approx["ztable"] = True
 
         # ── Stellar populations ───────────────────────────────────
@@ -912,10 +1008,15 @@ class SEDModel:
     def _init_cosmology(self, spec):
         """Precompute luminosity distance if redshift is fixed."""
         redshift_dist = spec.get_distribution("redshift")
-        if redshift_dist.is_fixed:
+        if redshift_dist.is_fixed and self._catalog_z_range is None:
             self._dl_cm_fixed = luminosity_distance(redshift_dist.bounds[0])
             self._z_fixed = redshift_dist.bounds[0]
         else:
+            # Catalog-fit mode (Approach A): even though redshift is Fixed
+            # in the spec, treat it as a runtime input so different
+            # per-galaxy values reuse the same compiled kernel. The
+            # cosmology + IGM + filter-λ_eff paths fall back to their
+            # already-existing free-redshift runtime branches.
             self._dl_cm_fixed = None
             self._z_fixed = None
 
@@ -2398,6 +2499,14 @@ class SEDModel:
         z_fixed = (
             ("fixed", round(float(self._z_fixed), 8)) if self._z_fixed is not None else ("free",)
         )
+        # Catalog-fit reuse: the explicit range is part of the signature
+        # so two models with different catalog ranges don't share a
+        # compiled kernel (their ztable shape can differ).
+        catalog_z_range = (
+            ("catalog", round(self._catalog_z_range[0], 8), round(self._catalog_z_range[1], 8))
+            if self._catalog_z_range is not None
+            else ("none",)
+        )
 
         # Instrument/spectroscopy
         has_spectroscopy = self.observation is not None and self.observation.can_do_spectroscopy
@@ -2515,6 +2624,7 @@ class SEDModel:
             n_grid,
             alpha_fe_evolving,
             z_fixed,
+            catalog_z_range,
             has_spectroscopy,
             spec_wave_shape,
             sigma_lib_kms,
@@ -2800,7 +2910,7 @@ class SEDModel:
         try:
             from dsps import calc_obs_mag
 
-            from tengri.utils.cosmology import DEFAULT_COSMO
+            from tengri.cosmology import DEFAULT_COSMO
 
             sed_lsun = self.predict_luminosity(params)
             z = self._get_redshift(params)
@@ -3666,6 +3776,57 @@ class SEDModel:
 
         return state_to_emission_lines(self.predict_state(params))
 
+    def declared_parameters(self):
+        """Free-parameter declarations for this SED chain.
+
+        Returns
+        -------
+        list of :class:`tengri.protocols.ParamDeclaration`
+            One entry per free parameter, lifted from ``self.spec``.
+
+        Notes
+        -----
+        Satisfies :class:`tengri.protocols.SubModel`.
+        """
+        from tengri.protocols.component import ParamDeclaration
+
+        spec = self.spec
+        decls: list[ParamDeclaration] = []
+        for pname in spec.free_params:
+            prior = spec.get_distribution(pname)
+            decls.append(ParamDeclaration(name=pname, prior=prior, description="", units=""))
+        return decls
+
+    def run(self, state, params):
+        """Run the SED forward chain. Pure JAX.
+
+        SED is the head of the per-population orchestration; in the
+        tracer-bullet single-population path, ``state`` is an empty
+        :class:`tengri.protocols.ForwardState` with just the wavelength
+        grid. The method delegates to :meth:`predict_state` for the
+        actual physics.
+
+        Parameters
+        ----------
+        state : ForwardState
+            Incoming state (empty for SED as the head of the chain).
+        params : Mapping
+            Free parameter values.
+
+        Returns
+        -------
+        ForwardState
+            State with SED contributions populated.
+
+        Notes
+        -----
+        Satisfies :class:`tengri.protocols.SubModel`. Threading non-empty
+        upstream state is reserved for a future ``ResolvedSEDModel`` mode
+        that needs SED to read spatial keys; today the contract is
+        "incoming state ignored, output state freshly built."
+        """
+        return self.predict_state(params)
+
     def predict_state(self, params, fixed_values=None, ssp_data=None, template_data=None):
         """Forward pass via the SEDComponent orchestrator.
 
@@ -3815,6 +3976,20 @@ class SEDModel:
             )
         state = self.predict_state(params)
         full = {**self.spec.get_fixed_values(), **params}
+
+        # Phase 5: if SpectrumPrecomp is active and spectroscopy is configured,
+        # inject spec_eff_waves (rest-frame pixel centres) into state.derived.
+        if self._approx.get("spectrum_precomp") and self.observation.can_do_spectroscopy:
+            z = jnp.asarray(full.get("redshift", 0.0))
+            wave_obs = (
+                self._wave_obs
+                if hasattr(self, "_wave_obs")
+                else self.observation.spectroscopy.wave_obs
+            )
+            # spec_eff_waves = observed wavelengths / (1 + z)
+            spec_eff_waves = jnp.asarray(wave_obs) / (1.0 + z)
+            state = state.with_(derived=state.derived.with_(spec_eff_waves=spec_eff_waves))
+
         # Phase 3d-4: when built with ``approx=WavePrecomp(...)`` and no
         # spectrum channel, route photometry through the LUT projection.
         # Mirrors ``predict_observables_jit`` so the JIT and non-JIT paths
@@ -4167,16 +4342,30 @@ class SEDModel:
                     is_fixed = True
                     z_bounds = (0.0,)
 
-                if is_fixed:
+                # Catalog-fit reuse (Approach A): when the user passes
+                # ``WavePrecomp(catalog_z_range=...)``, route through the
+                # free-z ztable branch even when redshift is Fixed in the
+                # spec — different per-galaxy ``Fixed(z)`` values then share
+                # the same compile.
+                if is_fixed and self._catalog_z_range is None:
                     # Phase 3b: fixed-z LUT
                     redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
                 else:
                     # Phase 3c-1: free-z ztable. User can override n_z / z_min /
                     # z_max via ``approx=WavePrecomp(...)``; otherwise pull from
                     # the redshift prior with 1 % padding and use n_z=100.
-                    z_lo, z_hi = float(z_bounds[0]), float(z_bounds[1])
-                    pad = 0.01 * (z_hi - z_lo)
                     cfg = self._approx_config or WavePrecomp()
+                    if self._catalog_z_range is not None:
+                        z_lo, z_hi = self._catalog_z_range
+                        pad = 0.0  # explicit range — no padding
+                    elif z_bounds is None or len(z_bounds) < 2:
+                        # Fixed spec falling through (no bounds for a Fixed dist);
+                        # default to a generous photo-z range.
+                        z_lo, z_hi = 0.001, 3.0
+                        pad = 0.0
+                    else:
+                        z_lo, z_hi = float(z_bounds[0]), float(z_bounds[1])
+                        pad = 0.01 * (z_hi - z_lo)
                     redshift_spec = {
                         "mode": "free",
                         "z_min": (cfg.z_min if cfg.z_min is not None else max(0.001, z_lo - pad)),
@@ -4570,7 +4759,24 @@ class SEDModel:
         init: str | None = None,
         **kwargs,
     ):
-        """Fit observed data.  Convenience wrapper — no Fitter construction needed.
+        """Fit observed data. Deprecated — prefer ``ForwardModel.fit`` for new code.
+
+        .. deprecated:: 0.x
+            Inference is canonically through :class:`ForwardModel`
+            (issue #211). Replace::
+
+                result = sed.fit(data, noise, method="vi")
+
+            with::
+
+                forward = ForwardModel.build(sed=sed, observation=obs)
+                result = forward.fit(data, noise, method="vi")
+
+            or the equivalent ``Fitter(forward, data, noise).run("vi")``.
+
+            ``SEDModel.fit`` keeps working until tengri v1.0; this method
+            is a thin shim around :func:`tengri.forward.convenience.fit_model`
+            and emits a one-shot DeprecationWarning.
 
         Parameters
         ----------
@@ -4618,6 +4824,17 @@ class SEDModel:
         >>> result = model.fit(flux_obs, noise, init="map")
         >>> result = model.fit(flux_obs, noise).refine("mcmc_raytrace")
         """
+        import warnings
+
+        warnings.warn(
+            "SEDModel.fit is deprecated and will be removed in tengri v1.0. "
+            "Use ForwardModel.fit instead: "
+            "forward = ForwardModel.build(sed=sed, observation=obs); "
+            "result = forward.fit(data, noise, method=...). "
+            "See issue #211.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         from tengri.forward.convenience import fit_model
 
         return fit_model(

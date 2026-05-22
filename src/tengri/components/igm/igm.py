@@ -19,7 +19,7 @@ Coefficient tables from eazy-py (Brammer et al.):
 import jax
 import jax.numpy as jnp
 
-from tengri.utils.cosmology import PLANCK18
+from tengri.cosmology import PLANCK18
 from tengri.utils.physics_constants import C_CGS
 
 # ── Lyman series wavelengths (Angstrom) for lines j=2 (Ly-alpha) to j=40

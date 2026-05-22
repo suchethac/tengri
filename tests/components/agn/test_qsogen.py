@@ -399,53 +399,6 @@ class TestWavelengthToNu:
         assert jnp.all(nu > 0.0)
 
 
-# ── _planck_blambda ───────────────────────────────────────────────
-class TestPlanckBlambda:
-    """_planck_blambda returns B_lambda(T) in per-Angstrom CGS units."""
-
-    def test_finite_output(self, uv_optical_wave):
-        from tengri.components.agn.qsogen import _planck_blambda
-
-        blam = _planck_blambda(uv_optical_wave, 1240.0)
-        chex.assert_tree_all_finite(blam)
-
-    def test_non_negative(self, uv_optical_wave):
-        from tengri.components.agn.qsogen import _planck_blambda
-
-        blam = _planck_blambda(uv_optical_wave, 1240.0)
-        assert jnp.all(blam >= 0.0)
-
-    def test_higher_temperature_brighter_uv(self):
-        """Hotter blackbody emits more in UV (Wien's law)."""
-        from tengri.components.agn.qsogen import _planck_blambda
-
-        wave_uv = jnp.array([2000.0])
-        blam_hot = float(_planck_blambda(wave_uv, 30000.0)[0])
-        blam_cool = float(_planck_blambda(wave_uv, 1240.0)[0])
-        assert blam_hot > blam_cool
-
-    def test_zero_temperature_clamped(self):
-        """T=0 is clamped to T=1 (no division by zero or NaN)."""
-        from tengri.components.agn.qsogen import _planck_blambda
-
-        wave = jnp.array([5500.0])
-        blam = _planck_blambda(wave, 0.0)
-        chex.assert_tree_all_finite(blam)
-
-    def test_output_shape(self, broad_wave):
-        from tengri.components.agn.qsogen import _planck_blambda
-
-        blam = _planck_blambda(broad_wave, 1240.0)
-        chex.assert_equal_shape([blam, broad_wave])
-
-    def test_jit_compatible(self, uv_optical_wave):
-        from tengri.components.agn.qsogen import _planck_blambda
-
-        jitted = jax.jit(_planck_blambda)
-        blam = jitted(uv_optical_wave, 1240.0)
-        chex.assert_tree_all_finite(blam)
-
-
 # ── _apply_dust_reddening ─────────────────────────────────────────
 class TestApplyDustReddening:
     """_apply_dust_reddening applies SMC-like extinction to a spectrum."""
