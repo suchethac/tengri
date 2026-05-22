@@ -43,3 +43,9 @@ def test_population_spatial_defaults_to_none() -> None:
 def test_population_name_must_be_nonempty() -> None:
     with pytest.raises(ValueError, match="non-empty"):
         Population(name="", sed=_DummySubModel())
+
+
+def test_population_name_rejects_dot() -> None:
+    """Per ADR-0012, `.` is the namespace separator and forbidden in names."""
+    with pytest.raises(ValueError, match=r"contains '\.'"):
+        Population(name="foo.bar", sed=_DummySubModel())

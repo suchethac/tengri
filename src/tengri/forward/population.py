@@ -1,9 +1,11 @@
 """Population — one (SED, spatial) pair inside a :class:`ForwardModel`.
 
 A galaxy decomposition (AGN point source + Sérsic bulge + exponential
-disc) is expressed as multiple :class:`Population`s. The tracer-bullet
-implementation supports single-population only; ADR-0012 will lift
-this to multi-population with namespaced parameter names.
+disc) is expressed as multiple :class:`Population`s. The population's
+``name`` is the outer namespace in parameter names — e.g.
+``disc.sfh_dpl_alpha`` for the disc population's stellar
+parameter. See architecture spec §6 + ADR-0012 for the full namespace
+contract.
 
 See ``docs/dev/forward-model-architecture.md`` §5 and ADR-0012.
 """
@@ -24,9 +26,11 @@ class Population:
     Parameters
     ----------
     name : str
-        Population namespace. ``"default"`` for the convenience
-        single-population path. Used by ADR-0012 multi-population
-        parameter naming (not yet active in this slice).
+        Population namespace. Used as the outer prefix in parameter
+        names: ``{name}.{prefix}_{param}`` (ADR-0012). Must be
+        non-empty and must not contain ``.`` (the namespace separator).
+        Convention: use ``"default"`` for single-population fits;
+        ``"agn"``, ``"bulge"``, ``"disc"`` for galaxy decompositions.
     sed : SubModel
         SED SubModel for this population.
     spatial : SubModel or None, optional
@@ -41,3 +45,9 @@ class Population:
     def __post_init__(self) -> None:
         if not self.name:
             raise ValueError("Population.name must be a non-empty string.")
+        if "." in self.name:
+            raise ValueError(
+                f"Population.name {self.name!r} contains '.', which is reserved "
+                f"as the parameter namespace separator (ADR-0012). Use "
+                f"underscores or hyphens instead."
+            )

@@ -84,8 +84,9 @@ Each component owns its own `_params.py` (see the list above and the
 
 | Want to... | Open |
 |---|---|
-| Reach the forward model from inference | `forward/forward_model.py` (`ForwardModel` — outer shell + `.build()` + `.predict()`). Single-population only in v0; multi-population lands with ADR-0012. |
-| Compose populations | `forward/population.py` (`Population(name, sed, spatial=None)` — one SubModel pair per population) |
+| Reach the forward model from inference | `forward/forward_model.py` (`ForwardModel` — outer shell + `.build()` + `.predict()`). Single- and multi-population; the latter uses the `"<pop>.<prefix>_<param>"` namespace per ADR-0012. |
+| Compose populations | `forward/population.py` (`Population(name, sed, spatial=None)` — one SubModel pair per population; names must be distinct and must not contain `.`) |
+| Sum predictions across populations | `observation/joint_observation.py` (`JointObservation.predict_summed` — linear-flux sum across populations per channel) |
 | Find the SubModel Protocol | `protocols/submodel.py` — runtime-checkable contract (`run`, `declared_parameters`) |
 | Build the SED end to end | `forward/sed_model.py` (the `SEDModel` class — the SED chain; satisfies `SubModel` directly via `.run()` + `.declared_parameters()`) |
 | Write / edit a spatial profile (Sérsic, exponential, flat slab) | `components/spatial/<name>.py` — subclass `SpatialModelComponent` (auto-discovered free params, default `apply()` writes `state.derived["spatial_profile_2d"]`) |
