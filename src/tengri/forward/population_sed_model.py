@@ -198,6 +198,22 @@ class PopulationSEDModel:
     ) -> ForwardState:
         """Un-batched primitive: run the SED template for a single galaxy.
 
+        Corresponds to one term in the hierarchical information
+        Hamiltonian's data sum (paper §4):
+
+        .. math::
+
+            \\mathcal{H}_{\\rm hier} = \\tfrac{1}{2}\\sum_{j=1}^{N_{\\rm gal}}
+                \\chi^2\\!\\bigl(\\mathbf{d}^{(j)},\\,
+                    \\mathbf{f}\\!\\bigl(\\mathbf{h}(\\boldsymbol{\\xi}^{(j)},\\,
+                                              \\boldsymbol{\\xi}^{(\\rm hyp)})\\bigr)\\bigr)
+              + \\tfrac{1}{2}\\,\\boldsymbol{\\xi}^{\\!\\top}\\boldsymbol{\\xi}
+
+        where :math:`\\mathbf{f}\\circ\\mathbf{h}` is the per-galaxy
+        forward model from latent space to predicted observables.
+        ``predict_one`` evaluates that pipeline for one galaxy;
+        :meth:`run` vmaps over the population to evaluate the full sum.
+
         Composable with outer ``jax.vmap`` / ``jax.pmap`` / ``shard_map``.
         Use this entry point when you need control over the batching
         strategy — e.g. multi-device sharding, catalog × hierarchical

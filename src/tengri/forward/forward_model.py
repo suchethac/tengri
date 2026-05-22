@@ -338,15 +338,25 @@ def _predict_observation(
     (``{name: axis_position}``, default ``{}``). When non-empty, the
     SubModel's :meth:`run` has already returned a batched
     :class:`ForwardState` along those axes. This helper vmaps
-    ``observation.predict`` once per batched axis so the final
-    prediction dict has the same leading axes — keeping the
-    standardization contract that :meth:`ForwardModel.predict`
-    always returns shape-consistent output regardless of SubModel.
+    ``observation.predict`` once per batched axis so the predicted
+    observables — the channel dict :math:`\\hat{\\mathbf{d}}` that
+    enters the data term of the information Hamiltonian — carry
+    matching leading axes.
 
-    Composability: ``observation.predict`` is the un-batched primitive.
-    Callers wanting outer ``pmap`` / ``shard_map`` can wrap this
-    helper (or just ``observation.predict``) themselves — the hidden
-    batching here is the default, not the only path.
+    The shape-consistency contract: regardless of which SubModel is
+    held, the prediction dict's keys and per-channel array shapes
+    line up with whatever data array the likelihood is fed. For a
+    single-galaxy fit, ``phot_fnu`` has shape ``(n_filters,)``; for
+    a hierarchical fit with :class:`PopulationSEDModel`,
+    ``phot_fnu`` has shape ``(N_gal, n_filters)`` and broadcasts
+    against per-galaxy data and noise in the χ² term of
+    :math:`\\mathcal{H}_{\\rm hier}` (see paper §4 hierarchical
+    inference).
+
+    Composability: ``observation.predict`` is the un-batched
+    primitive. Callers wanting outer ``pmap`` / ``shard_map`` can
+    wrap this helper (or just ``observation.predict``) themselves —
+    the hidden batching here is the default, not the only path.
     """
     import jax
 
