@@ -88,6 +88,8 @@ Each component owns its own `_params.py` (see the list above and the
 | Compose populations | `forward/population.py` (`Population(name, sed, spatial=None)` — one SubModel pair per population) |
 | Find the SubModel Protocol | `protocols/submodel.py` — runtime-checkable contract (`run`, `declared_parameters`) |
 | Build the SED end to end | `forward/sed_model.py` (the `SEDModel` class — the SED chain; satisfies `SubModel` directly via `.run()` + `.declared_parameters()`) |
+| Write / edit a spatial profile (Sérsic, exponential, flat slab) | `components/spatial/<name>.py` — subclass `SpatialModelComponent` (auto-discovered free params, default `apply()` writes `state.derived["spatial_profile_2d"]`) |
+| Find the SpatialComponent Protocol | `protocols/spatial.py` — runtime-checkable mirror of `SEDComponent` |
 | Understand which kernel (exact / hybrid / fast) is chosen | `forward/_kernels/` |
 | Wire a new physics component into the pipeline | `forward/components_assembly.py` |
 | Add filter-preintegration to a new component | `forward/precompute/` (registry) + new `*_precompute.py` next to the component |
