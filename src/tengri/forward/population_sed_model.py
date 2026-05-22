@@ -65,6 +65,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+import jax.numpy as jnp
+
 from tengri.protocols.component import ForwardState, ParamDeclaration
 
 __all__ = ["PopulationSEDModel"]
@@ -154,16 +156,58 @@ class PopulationSEDModel:
 
     @property
     def spec(self):
-        """The :class:`Parameters` spec from the SED template.
+        """The batched-sample :class:`Parameters`-shaped view.
 
-        Per-galaxy free parameters and shared parameters all originate
-        from the same SED template; the difference is only how they
-        broadcast under :meth:`run`. This delegation lets
-        :class:`ForwardModel` and :class:`Fitter` discover fixed
-        values (``redshift``, calibration coefficients, …) on the
-        PopulationSEDModel without special-casing.
+        Returns a :class:`PopulationSpecView` wrapping the SED
+        template's scalar spec. Implements the same implicit Protocol
+        :class:`Fitter` consumes (``free_params``, ``get_fixed_values``,
+        ``sample(key)``, ``_distributions``, …) — but :meth:`sample`
+        returns per-galaxy free parameters with shape ``(N_galaxies,)``,
+        keeping shared parameters scalar.
+
+        Fitter has zero special-case code for hierarchical fits: it
+        just consumes whatever shapes the spec returns.
+
+        Notes
+        -----
+        Construction is cheap (no JAX work). Use ``self.sed.spec`` to
+        access the underlying scalar spec when you need it directly.
         """
-        return self.sed.spec
+        from tengri.parameters._population_view import PopulationSpecView
+
+        return PopulationSpecView(
+            template=self.sed.spec,
+            n_galaxies=self.n_galaxies,
+            shared=self.shared,
+        )
+
+    def batched_data(self) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Return ``(flux_obs, noise)`` arrays stacked across the population.
+
+        Each array has shape ``(N_galaxies, n_filters)`` — the
+        canonical batched shape that :class:`Fitter` accepts as the
+        ``data`` and ``noise`` arguments for hierarchical fits.
+
+        The likelihood's :math:`\\chi^2` broadcasts naturally over
+        the leading galaxy axis against the prediction dict's
+        ``(N_galaxies, n_filters)`` arrays returned by
+        :meth:`ForwardModel.predict`.
+
+        Returns
+        -------
+        flux_obs : ndarray, shape ``(N_galaxies, n_filters)``
+            Per-galaxy observed flux.
+        noise : ndarray, shape ``(N_galaxies, n_filters)``
+            Per-galaxy 1-sigma uncertainty.
+
+        Raises
+        ------
+        KeyError
+            If any galaxy dict is missing ``flux_obs`` or ``noise``.
+        """
+        flux_obs = jnp.stack([gal["flux_obs"] for gal in self.galaxies])
+        noise = jnp.stack([gal["noise"] for gal in self.galaxies])
+        return flux_obs, noise
 
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free-parameter declarations seen at the population level.
