@@ -152,7 +152,7 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
         )
 
         # Integrate X-ray luminosity over spectrum
-        L_xray_total = jnp.trapz(L_xray, wave)
+        L_xray_total = jnp.trapezoid(L_xray, wave)
 
         return sed_in + L_xray, {
             "L_xray_agn": L_xray_total,
