@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for CB_19 CLOUDY photoionization grid backend.
 
 Tests verify:

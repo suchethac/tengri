@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for self-consistent disc-corona X-ray model.
 
 Tests alpha_ox_from_l2500, xray_anisotropy, and xray_agn_corona_from_disc.

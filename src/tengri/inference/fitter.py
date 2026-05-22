@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Inference engine: fit observed data using MAP, NUTS, Ray Tracing, or geoVI.
 
 The Fitter separates inference strategy from the forward model. It builds

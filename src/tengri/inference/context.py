@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Inference context — the Python-level seam between Fitter and backends.
 
 This module defines :class:`InferenceContext`, the bundle of state that

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the GRAHSP precompute path (filter-integrated photometry)."""
 
 from __future__ import annotations

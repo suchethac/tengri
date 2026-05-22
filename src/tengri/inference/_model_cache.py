@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Per-model runtime cache using a WeakKeyDictionary.
 
 Replaces the pattern of monkey-patching private dicts onto SEDModel at runtime

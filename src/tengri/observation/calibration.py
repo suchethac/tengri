@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Spectrophotometric calibration polynomials.
 
 When fitting spectra, the observed spectrum has wavelength-dependent

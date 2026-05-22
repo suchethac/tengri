@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Photometric filter convolution.
 
 Computes observed flux densities by convolving the rest-frame SED

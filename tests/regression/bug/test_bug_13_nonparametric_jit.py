@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for BUG-13: nonparametric len() under JIT.
 
 See ADR / docs/known_bugs.md for full context.

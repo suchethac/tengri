@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate CAT3D-Wind torus module against AGNfitter-rX's template pickles.
 
 The CAT3D-Wind (Hönig & Kishimoto 2017) clumpy-disc-plus-polar-wind torus

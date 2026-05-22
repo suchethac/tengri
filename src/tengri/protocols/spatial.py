@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SpatialComponent Protocol: contract for spatial-physics blocks.
 
 Mirror of :class:`tengri.protocols.component.SEDComponent` on the spatial

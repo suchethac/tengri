@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for emission line flux fitting as direct observables.
 
 Covers LineFluxData construction/validation, Observation integration,

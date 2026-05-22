@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Hensley & Draine (2023) Astrodust+PAH dust emission as an SEDModelComponent.
 
 Implements tabulated-template IR re-emission based on the Astrodust+PAH dust model,

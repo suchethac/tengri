@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for PAH Drude-profile decomposition (drude_profiles.py)."""
 
 import chex

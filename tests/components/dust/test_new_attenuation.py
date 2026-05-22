@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for TEA, Narayanan z-dependent, and Conroy2010 attenuation curves."""
 
 import pytest

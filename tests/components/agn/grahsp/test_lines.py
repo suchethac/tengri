@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the GRAHSP AGN emission lines + Bruhweiler 2008 FeII forest."""
 
 from __future__ import annotations

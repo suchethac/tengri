@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for Suess+2021 PSB nonparametric SFH.
 
 Tests cover positivity, finiteness, mass scaling, and JIT compatibility.

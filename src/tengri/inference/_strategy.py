@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Inference-backend introspection helpers.
 
 Mirrors the role of :mod:`tengri.forward._kernels.strategy` (ADR-0004) on

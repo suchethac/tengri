@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Configuration and runtime plumbing: science config, exceptions, display."""
 
 from tengri.config.exceptions import (

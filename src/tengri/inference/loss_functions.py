@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Loss and log-likelihood builders consumed by the Fitter inference engines.
 
 Three public builders — :func:`build_loss_fn`, :func:`build_loglikelihood_fn`,

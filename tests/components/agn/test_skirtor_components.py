@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for SKIRTOR separate disk/dust component loading.
 
 Validates the v3 HDF5 layout with separate disk_emission and dust_emission

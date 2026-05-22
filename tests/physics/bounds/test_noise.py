@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for tengri.noise — NIFTy-native noise model.
 
 Tests the core noise computation functions, the detection helper,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Differentiable post-inference emission line measurements.
 
 Provides JIT-compatible, differentiable equivalents of FastSpecFit's

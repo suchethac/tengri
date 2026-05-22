@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Fiber aperture-fraction utilities for spatially-resolved spectroscopy.
 
 When a fiber spectrograph observes a galaxy at redshift z with a fiber of

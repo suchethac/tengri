@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """ObservationModel protocol: how a forward-model SED meets data.
 
 An :class:`ObservationModel` takes a :class:`ForwardState` (rest-frame

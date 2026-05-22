@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Pixel-level spectroscopic forward model.
 
 Fits every spectral pixel directly, with an optional multiplicative

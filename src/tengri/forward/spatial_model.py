@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SpatialModel — SubModel composer over a list of :class:`SpatialComponent`s.
 
 Mirror of :class:`tengri.forward.sed_model.SEDModel` on the spatial side,

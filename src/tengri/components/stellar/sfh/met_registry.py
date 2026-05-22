@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Metallicity mode registry (mirrors SFH registry pattern).
 
 Provides a registry of metallicity evolution modes, each with its own

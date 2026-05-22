@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Free-parameter declarations shared across all components.
 
 Single source of truth for redshift, metallicity, noise, and spectroscopy

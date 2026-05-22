@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for Cloudy 23 input-deck generator."""
 
 from __future__ import annotations

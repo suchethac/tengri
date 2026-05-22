@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 r"""QSOgen quasar SED model (Temple, Hewett & Banerji 2021).
 
 Empirical quasar SED producing the characteristic "v-shaped" spectrum:

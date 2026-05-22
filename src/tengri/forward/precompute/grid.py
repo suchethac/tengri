@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Re-export of grid utilities from :mod:`tengri.utils.grid_interp`."""
 
 from tengri.utils.grid_interp import *  # noqa: F403

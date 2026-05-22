@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for metallicity interpolation — synthesizer parity.
 
 Synthesizer issue #702: `weighted_mean(sfzh, Z_grid)` snapped to nearest grid

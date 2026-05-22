@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for photometric filter management (SVO FPS integration)."""
 
 from pathlib import Path

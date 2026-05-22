@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Per-object citation collection — the public ``collect_citations()`` API.
 
 Inspects a Galaxy / SEDModel / Fitter / SEDModelConfig / Parameters instance and

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """PopulationSEDModel — SubModel for hierarchical galaxy populations.
 
 A single class that holds an :class:`tengri.SEDModel` template + a list

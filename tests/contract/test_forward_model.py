@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for ForwardModel (forward-model architecture §5–§6).
 
 Covers both the single-population convenience path and the

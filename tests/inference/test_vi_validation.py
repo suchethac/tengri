@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for run_native_vi parameter validation.
 
 These tests exercise the ValueError and UserWarning paths that fire before

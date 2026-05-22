@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Phase 4-D Category C tests: AGN template threading as JIT runtime inputs.
 
 Extends Phase 4-C (nebular threading) to AGN components with large template

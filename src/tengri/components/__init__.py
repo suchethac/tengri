@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Forward model components: stellar, dust, nebular, AGN, IGM, radio, X-ray.
 
 Physics blocks for the SEDModel pipeline. Each block owns its parameter

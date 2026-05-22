@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 r"""Draine, Li, Hensley et al. 2021 PAHspec template physics.
 
 Pure-JAX physics helpers for the Draine+2021 PAHspec emission grid:

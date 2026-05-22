@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Log-age grid construction and conversion utilities.
 
 The GP is defined on a uniform grid in u = log10(t_age / yr),

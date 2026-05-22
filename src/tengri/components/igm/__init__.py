@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Intergalactic medium (IGM) attenuation models."""
 
 from tengri.components.igm.dla import (

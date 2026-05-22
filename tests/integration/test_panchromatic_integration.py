@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """End-to-end panchromatic integration tests.
 
 Tests that exercise the COMPLETE forward model pipeline including components

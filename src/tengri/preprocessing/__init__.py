@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Pre-fit data-hygiene utilities: zero-point corrections, error floors, upper limits.
 
 This module is a namespace seed. Future additions: Milky Way extinction,

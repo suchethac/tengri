@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Pre-computation of SSP observables at fixed or tabulated redshift.
 
 The key insight: at inference time, redshift is either known (fixed) or

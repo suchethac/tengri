@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Precompute adapter for analytic radio components.
 
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for the

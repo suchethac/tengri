@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """X-ray emission: XRBs (HMXB + LMXB) + AGN corona."""
 
 from tengri.components.xray.xray import (

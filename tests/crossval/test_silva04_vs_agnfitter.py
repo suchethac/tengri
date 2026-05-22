@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate Silva+04 torus module against AGNfitter's raw template pickles.
 
 The Silva, Maiolino & Granato (2004) torus templates were ported from AGNfitter

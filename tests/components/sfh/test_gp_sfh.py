@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for GP generation from PSD (T2: PSD recovery, T3: ACF recovery)."""
 
 import chex

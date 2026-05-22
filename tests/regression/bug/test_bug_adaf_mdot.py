@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for ADAF T_e m_dot dependence bug.
 
 Bug: disc.py:783-789 — T_e = 5e9 * delta^0.5 ignored m_dot.

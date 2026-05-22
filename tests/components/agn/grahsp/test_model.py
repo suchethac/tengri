@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration test: full GRAHSP AGN forward model on a sample wave grid."""
 
 from __future__ import annotations

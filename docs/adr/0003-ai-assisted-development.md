@@ -14,7 +14,7 @@ Acknowledge AI assistance openly. Compensate with stricter verification discipli
 
 **Four rules:**
 
-1. **Primary sources.** Every physics module must cite a primary paper and include a regression test validating against it (see docs/dev/VERIFICATION.md).
+1. **Primary sources.** Every physics module must cite a primary paper and include a regression test validating against it (see docs/dev/verification-protocol.md).
 
 2. **Ported-over-invented.** When an upstream reference implementation exists (Prospector, DSPS, bagpipes, Cue, NIFTy), tengri's version should be a port with a verifiable comment block, not a reinvention. Header example:
    ```python

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Gaussian Process realizations from Power Spectral Density functions.
 
 Two modes:

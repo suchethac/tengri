@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Finite-difference gradient tests for nebular backends.
 
 These tests verify that JAX autodiff gradients match finite-difference

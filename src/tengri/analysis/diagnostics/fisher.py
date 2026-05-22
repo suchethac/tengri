@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Fisher Information Matrix (FIM) computation.
 
 The FIM quantifies how much information the data carries about each

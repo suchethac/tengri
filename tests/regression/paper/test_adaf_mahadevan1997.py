@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for ADAF model against Mahadevan 1997.
 
 Reference:

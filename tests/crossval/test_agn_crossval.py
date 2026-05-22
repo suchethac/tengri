@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validation: tengri AGN models against published reference values.
 
 Tests verify fundamental physics quantities (ISCO, Eddington luminosity,

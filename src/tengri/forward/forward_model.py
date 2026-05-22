@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """ForwardModel — the outer shell of the forward chain.
 
 Owns a tuple of :class:`Population`s and an :class:`Observation`.

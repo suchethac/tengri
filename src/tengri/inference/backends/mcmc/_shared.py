@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Shared MCMC infrastructure: kernel getters, scan functions, logdensity helpers.
 
 Internal — imported by per-sampler modules. Not part of the public API.

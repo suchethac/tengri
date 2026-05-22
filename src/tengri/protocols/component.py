@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SEDComponent protocol: the shape each physics block satisfies.
 
 A component owns one block of the forward model — stellar emission,

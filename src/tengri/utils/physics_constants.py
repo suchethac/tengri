@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Fundamental physical constants in CGS units.
 
 All constants are defined with explicit SI→CGS derivations so the origin of

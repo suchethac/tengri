@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Exponential disk surface-brightness profile.
 
 .. math::

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for wg00_cloudy gradient not zero bug.
 
 Bug: attenuation.py:1198-1202 — safe_tau_k=jnp.where(...,1.0) disconnected the gradient;

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Emission line catalog for spectroscopic fitting.
 
 Provides a comprehensive registry of emission lines with wavelengths, species

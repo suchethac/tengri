@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for CIGALE-derived SFH models.
 
 Tests for three new parametric SFH models from CIGALE:

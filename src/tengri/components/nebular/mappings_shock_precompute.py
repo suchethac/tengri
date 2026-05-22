@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Precompute adapter for MAPPINGS III+V shock emission model.
 
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for

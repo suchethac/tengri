@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unified observation configuration for tengri SED fitting.
 
 Bundles photometric and/or spectroscopic setup with noise configuration

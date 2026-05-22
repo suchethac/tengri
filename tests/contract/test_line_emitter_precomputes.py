@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Smoke tests for the line-emitter precompute adapters (PR 4 parts A + B).
 
 Adapters covered:

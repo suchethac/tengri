@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Narrow Line Region (NLR) emission model.
 
 The NLR is photoionized gas illuminated by the AGN accretion disc.

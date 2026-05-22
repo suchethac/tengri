@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Pin: qsogen monolithic ≡ sum of qsogen blocks.
 
 Verifies that ``compute_qsogen_sed`` (the registered AGN_MODELS["qsogen"]

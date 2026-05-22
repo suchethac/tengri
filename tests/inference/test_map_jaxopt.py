@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for L-BFGS MAP optimizer (optax scan-batch path).
 
 Verifies that L-BFGS converges correctly through the

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physical-amplitude tests for X-ray AGN corona component.
 
 Tests pin alpha_ox and powerlaw slopes against literature values to catch

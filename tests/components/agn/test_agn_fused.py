@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for parametric AGN in fused photometry kernel.
 
 Validates that:

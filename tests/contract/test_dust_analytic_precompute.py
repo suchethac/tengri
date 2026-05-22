@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Smoke tests for the analytic dust-emission precompute adapter (PR 3).
 
 Covers ``modified_blackbody``, ``casey2012``, and the ``pah_drude`` template.

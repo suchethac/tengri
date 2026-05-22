@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for filter metadata: effective wavelength, FWHM, facility inference, and filter_info.
 
 Tests Feature 1 (Rich filter listing) — the functions added to

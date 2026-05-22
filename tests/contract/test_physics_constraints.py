@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for physical consistency of tengri models.
 
 These tests validate that the code obeys known astrophysical relationships,

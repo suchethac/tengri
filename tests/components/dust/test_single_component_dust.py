@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for single-component (uniform screen) dust attenuation."""
 
 import chex

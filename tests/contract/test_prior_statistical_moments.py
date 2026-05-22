@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Statistical moment tests for tengri distributions.
 
 Inspired by prospector's test_priors.py: every distribution should be verified

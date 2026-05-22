@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Photometric filter management via the SVO Filter Profile Service.
 
 Downloads, caches, and loads photometric filter transmission curves from

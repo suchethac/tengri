@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """``Bibliography`` — a live citation container carried by tengri objects.
 
 Each object that performs scientific work (``Galaxy``, ``SEDModel``, a future

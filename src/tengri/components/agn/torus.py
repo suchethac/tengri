@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Toy torus models for AGN infrared emission.
 
 .. warning::

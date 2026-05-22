@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for Madau (1995) IGM absorption model.
 
 Physics references:

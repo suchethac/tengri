@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Shock nebular emission — SEDModelComponent port.
 
 MAPPINGS V (3MdBs) shock + precursor emission lines on an arbitrary

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Drift guards for PyTree-registered frozen dataclasses.
 
 `tengri` uses :func:`jax.tree_util.register_dataclass` (JAX's native helper,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for Witt & Gordon (2000) dust geometry transmission functions."""
 
 import chex

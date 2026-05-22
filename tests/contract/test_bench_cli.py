@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the tengri.bench CLI dispatcher."""
 
 from __future__ import annotations

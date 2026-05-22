@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the user-facing energy-balance diagnostic.
 
 MISSING_FEATURES.md #4. Verifies that the absorbed/emitted-luminosity

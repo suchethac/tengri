@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Command-line entry point — ``python -m tengri <subcommand>``.
 
 Available subcommands::

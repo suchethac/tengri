@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for stellar mass conservation in tabulated SFH forward models.
 
 Pitfall P-16 (from Synthesizer issue #159 + PR #1061): `sample_sfzh()` accepted

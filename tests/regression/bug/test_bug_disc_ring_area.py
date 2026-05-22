@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for disc.py ring area π factor bug.
 
 Bug: disc.py:298/618/639/858 — ring area missing pi from hemisphere integral.

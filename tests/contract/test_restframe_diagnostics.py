@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for rest-frame SED diagnostics."""
 
 import jax.numpy as jnp

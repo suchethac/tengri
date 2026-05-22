@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Inference backend registry — single source of truth for fitter.run dispatch."""
 
 from __future__ import annotations

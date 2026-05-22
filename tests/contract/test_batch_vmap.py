@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for vmap batch photometry and spectroscopy.
 
 Validates that batched (vmapped) predictions match individual

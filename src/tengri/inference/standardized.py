@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Standardized forward model for unified inference.
 
 Maps ξ ~ N(0, I) → predicted observables, absorbing ALL prior

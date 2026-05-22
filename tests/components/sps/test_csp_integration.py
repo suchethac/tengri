@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests and benchmarks for CSP integration methods.
 
 Compares linear-age trapezoidal integration ("trapz") against log-age

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for FeltreNLRBackend and agn_nlr_emission dispatcher.
 
 These tests exercise the backend's behaviour without the actual grid data:

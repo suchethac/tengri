@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for simulate.photometry_from_sfh filter handling."""
 
 import chex

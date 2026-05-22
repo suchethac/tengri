@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate tengri absolute SED normalisation against bagpipes, FSPS, and CIGALE.
 
 This test suite checks whether tengri produces the *correct absolute luminosity*

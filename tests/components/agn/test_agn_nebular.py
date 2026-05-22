@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for AGN NLR emission with multiple backends.
 
 Tests the disc -> Cue -> NLR pipeline (Chain 2) and the unified

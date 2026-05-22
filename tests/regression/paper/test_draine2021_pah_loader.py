@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the Draine+2021 PAHspec template loader.
 
 Loader returns a frozen ``Draine2021PAHTemplates`` dataclass with:

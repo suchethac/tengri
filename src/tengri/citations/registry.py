@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Central registry of citations — populated at import time from ``references.bib``.
 
 The BibTeX file at :data:`BIB_PATH` is the single source of truth. Do not

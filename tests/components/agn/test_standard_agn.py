@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for standard_agn: multi-color disc + two-temperature torus."""
 
 from __future__ import annotations

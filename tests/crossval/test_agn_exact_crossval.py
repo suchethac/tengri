@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Exact cross-validation of AGN model components against analytical formulas
 and reference implementations.
 

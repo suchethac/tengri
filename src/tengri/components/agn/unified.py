@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unified AGN SED: combined disc + torus + NLR + BLR emission.
 
 Combines accretion disc and dust torus models into a single AGN SED.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Phase 3e: ``mode=`` kwarg on predict_photometry / predict_spectrum is
 deprecated in favour of ``predict_observables``.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """End-to-end smoke test: ``Parameters(agn_model="grahsp", ...)`` resolves
 to ``AGN_MODELS["grahsp"]`` and the SED model dispatches GRAHSP params
 correctly through the standard ``nonstell_fn`` path.

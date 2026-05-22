@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for CatalogFitter and CatalogPosterior.
 
 Uses a stub SEDModel and stub Fitter so SSP data is not required.  The tests

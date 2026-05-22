@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Convenience helpers for the tengri paper citations.
 
 The tengri paper series lives in :file:`CITATION.bib` at the repository

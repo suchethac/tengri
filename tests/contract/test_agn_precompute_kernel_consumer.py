@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Smoke tests for AGN disc/torus precompute kernel consumer integration.
 
 Tests for the six wired adapters:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Gradient tests for ADAF disc model."""
 
 import chex

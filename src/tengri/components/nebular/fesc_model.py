@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Empirical Lyman continuum escape fraction models.
 
 This module provides parametric and empirical models for the ionizing photon

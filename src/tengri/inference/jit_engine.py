@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """JIT engine builder extracted from Fitter._build_jit_engine.
 
 Module-level function that accepts a Fitter instance and a position dict,

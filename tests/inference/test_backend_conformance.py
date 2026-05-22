@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Conformance suite for every registered inference backend.
 
 Iterates ``_BACKENDS`` and verifies each entry satisfies the

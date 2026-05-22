@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physical-amplitude regression tests for SED components.
 
 Tests pin amplitude scaling relationships across physical components

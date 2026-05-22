@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for BUG-NSS-03: qsogen AGN tracer leak.
 
 See ADR / docs/known_bugs.md for full context.

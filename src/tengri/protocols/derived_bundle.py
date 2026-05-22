@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Deprecated shim — module renamed to :mod:`tengri.protocols.derived_state`.
 
 Imports of ``tengri.protocols.derived_bundle`` continue to work but

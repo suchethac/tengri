@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """User-facing model presets.
 
 Self-describing: query menus and details via Python rather than REGISTRY.md.

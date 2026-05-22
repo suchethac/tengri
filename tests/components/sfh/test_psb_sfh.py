@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the post-starburst Wild+2020 SFH model.
 
 Verifies:

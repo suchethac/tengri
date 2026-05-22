@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Contract tests for SEDModelComponent-ported AGN backends.
 
 Validates:

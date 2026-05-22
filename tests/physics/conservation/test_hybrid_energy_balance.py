@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for the DL07 hybrid kernel energy-balance fix.
 
 Root cause of the 43% hybrid error (now fixed):

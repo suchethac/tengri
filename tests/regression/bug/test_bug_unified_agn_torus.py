@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for unified.py torus_frac float equality safe bug.
 
 Bug: unified.py:813 — jnp.where(agn_torus_frac == 0.5, ...) JIT-unsafe for traced values.

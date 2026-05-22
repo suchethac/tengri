@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Convenience methods delegated from SEDModel.
 
 Extracted from core/model.py to keep model.py focused on the forward model.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Test dust emission template grids can be threaded as JIT-traced inputs.
 
 Verifies that dust IR template grids don't appear as large >1 MB closure

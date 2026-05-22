@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Invariant tests for Parameters (Parameters) construction and contracts.
 
 Bug classes covered:

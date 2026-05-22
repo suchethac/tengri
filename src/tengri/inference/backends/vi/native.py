@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Variational inference runners for tengri.
 
 Extracted from fitter.py. Called by Fitter.run() dispatch table.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Draine & Li (2014) dust emission as an SEDModelComponent.
 
 Implements tabulated-template IR re-emission based on the DL14 dust model update,

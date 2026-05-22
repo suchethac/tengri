@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for unified_nlr_blr: NLR/BLR decomposition with geometric masking."""
 
 from __future__ import annotations

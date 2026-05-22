@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Lazy prediction object for derived physical quantities.
 
 The :class:`Prediction` class provides on-demand computation of derived

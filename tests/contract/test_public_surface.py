@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Lock the advertised top-level public surface of `tengri`.
 
 Phase 2 of the API cleanup (2026-05) trimmed `tengri.__all__` and moved

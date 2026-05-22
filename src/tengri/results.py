@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """FitResult — a thin record-and-citations wrapper around Posterior / SEDResult.
 
 Does not replace existing result types; wraps them so downstream code can access

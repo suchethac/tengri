@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cosmology helpers (Planck18 default; differentiable in JAX).
 
 This namespace re-exports the cosmology utilities that were previously

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate nebular emission: CLOUDY grid and Cue vs FSPS baked-in.
 
 The baked-in SSP files (wNE) include CLOUDY nebular emission computed by FSPS

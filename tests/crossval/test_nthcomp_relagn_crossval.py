@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validation: tengri nthcomp template interpolation vs RELAGN reference.
 
 Compares tengri's precomputed nthcomp templates (built from RELAGN, via

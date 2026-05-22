@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the BibTeX parser and .bib-driven citation registry."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SDSS/BOSS/eBOSS spectrum reader."""
 
 from __future__ import annotations

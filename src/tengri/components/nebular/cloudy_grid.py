@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """CLOUDY grid nebular emission backend.
 
 Loads precomputed CLOUDY photoionization grids (from FSPS/Byler+2017 or

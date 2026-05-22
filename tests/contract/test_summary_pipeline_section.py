@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for the Pipeline chain section in ``config.display.summary``.
 
 These tests cover the two new module-level helpers

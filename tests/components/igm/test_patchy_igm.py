@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the patchy reionization IGM model (igm.igm_transmission_patchy)."""
 
 import chex

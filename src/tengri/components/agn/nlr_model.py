@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """AGN narrow-line region (NLR) emission — SEDModelComponent port.
 
 The NLR is photoionised gas illuminated by the AGN accretion disc.

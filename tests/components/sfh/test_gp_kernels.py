@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for GP covariance kernels in spectral noise modeling."""
 
 import chex

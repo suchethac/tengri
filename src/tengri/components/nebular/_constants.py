@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physical and astrophysical constants for nebular emission module.
 
 This module centralises constant definitions used across nebular backends.

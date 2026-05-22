@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Systematic tests of dust attenuation curve normalizations and features.
 
 Every registered dust attenuation curve must satisfy k(5500 Å) ≈ 1.

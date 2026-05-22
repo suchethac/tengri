@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Shared post-processing utilities for all inference backends.
 
 Every sampler needs the same three operations after collecting samples:

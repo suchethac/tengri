@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Test SEDModelConfig deprecation alias for ModelConfig."""
 
 from __future__ import annotations

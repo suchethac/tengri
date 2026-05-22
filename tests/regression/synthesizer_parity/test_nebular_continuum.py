@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for nebular continuum / emission line decomposition — synthesizer parity.
 
 Mirrors synthesizer's PR #990 validation logic to ensure nebular continuum and lines

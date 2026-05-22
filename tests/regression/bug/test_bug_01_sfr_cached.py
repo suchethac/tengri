@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for BUG-01: SFR hardcoded to 1.0 Msun/yr.
 
 See ADR / docs/known_bugs.md for full context.

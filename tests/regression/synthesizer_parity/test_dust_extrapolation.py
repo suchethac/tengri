@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for dust attenuation curve extrapolation — synthesizer parity.
 
 Mirrors the *shape* of synthesizer's ``tests/test_dust_attenuation.py`` assertions.

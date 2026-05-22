@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Pipeline profiler for tengri forward model.
 
 Instruments the ``predict_sed`` / ``predict_photometry`` pipeline to

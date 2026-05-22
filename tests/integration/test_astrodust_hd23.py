@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the Hensley & Draine 2023 Astrodust+PAH template branch.
 
 Exercises the ``template="astrodust"`` dispatch on

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Pathfinder: fast approximate posterior via quasi-Newton L-BFGS path.
 
 Pathfinder (Zhang et al. 2022) traces the L-BFGS optimization trajectory

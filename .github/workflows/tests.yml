@@ -30,6 +30,7 @@ jobs:
       - run: pip install "ruff==0.15.6"
       - run: ruff check src/ tests/
       - run: ruff format --check src/ tests/
+      - run: python tools/add_spdx_headers.py --check
 
   smoke:
     runs-on: ubuntu-latest

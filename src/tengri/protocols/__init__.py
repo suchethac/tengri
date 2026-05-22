@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Inter-component interfaces for the tengri SED forward model.
 
 A `SEDModel` is a list of physics blocks (stellar, dust, nebular, AGN,

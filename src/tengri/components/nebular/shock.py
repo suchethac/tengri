@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """MAPPINGS III + V shock emission line model.
 
 Loads Allen+2008 (ApJS 178 20) MAPPINGS III and Alarie & Morisset 2019

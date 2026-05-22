@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests against EXPLICIT numerical values from published papers.
 
 Every assertion here cites a specific equation, table, or figure from a

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for mock galaxy generation (standalone generate_mock function)."""
 
 import chex

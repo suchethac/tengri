@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for PCHIP interpolation and pure quantile SFH in dense_basis.py.
 
 Covers the uncovered branches: pchip_interpolate (lines 173-214),

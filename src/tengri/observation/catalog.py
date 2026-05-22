@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Photometric catalog reader with automatic filter matching and mask generation.
 
 Reads CSV/ASCII catalogs into arrays ready for :class:`~tengri.inference.fitter.Fitter`,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """MAPPINGS V photoionization grid backends (Flury et al. 2024).
 
 Provides stellar (Starburst99, BPASS) and AGN (OPTXAGNF) backends using

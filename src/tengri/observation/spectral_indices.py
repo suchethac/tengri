@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Spectral index definitions and observed data for direct fitting.
 
 Supports two index types:

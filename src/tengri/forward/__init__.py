@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Forward-model orchestration: SEDModel, pipeline, kernels, precompute.
 
 Key class: ``SEDModel`` — the main forward model class.

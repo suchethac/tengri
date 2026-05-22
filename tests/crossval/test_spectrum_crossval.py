@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate tengri spectra against FSPS and bagpipes.
 
 Tests actual spectrum VALUES (Lsun/Hz/Msun) at key wavelengths.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physics tests for radio, X-ray, IGM, PSD, and SED quantities.
 
 References

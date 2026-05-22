@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for continuity_flex SFH model (Leja+2019).
 
 Tests cover shape, non-negativity, mass conservation, custom anchors,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for MAPPINGS III + V shock emission model."""
 
 from pathlib import Path

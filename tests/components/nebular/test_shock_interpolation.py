@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for MAPPINGS V triweight interpolation in shock.py.
 
 Validates that all three continuous axes (velocity, B-field, log_density) use

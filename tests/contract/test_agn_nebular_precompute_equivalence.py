@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Test precompute↔runtime equivalence for AGN-nebular emitters (BLR, NLR-Gaussian).
 
 Verifies that precompute lookups return per-filter photometry matching the

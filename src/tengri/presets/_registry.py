@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Preset registry for self-describing model configurations.
 
 Presets are callable factories that return (SEDModel, Parameters) tuples,

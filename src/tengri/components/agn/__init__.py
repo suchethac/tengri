@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """AGN emission models for tengri.
 
 Provides modular accretion disc and dust torus components that combine

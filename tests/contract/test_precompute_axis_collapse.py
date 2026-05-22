@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Auto-collapse correctness tests for precompute adapters.
 
 Confirms that with each grid axis individually Fixed, the collapsed grid's

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Diffuse Ionized Gas (DIG) nebular emission model.
 
 Models the mixing of ionizing photon-powered emission from two gas components:

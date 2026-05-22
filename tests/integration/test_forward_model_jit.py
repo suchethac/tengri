@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """End-to-end JIT through ForwardModel (forward-model architecture §9.1).
 
 The new shell must be transparent under jax.jit. A loss function that

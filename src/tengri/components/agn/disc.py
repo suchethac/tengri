@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Accretion disc models for AGN emission.
 
 Four models are provided:

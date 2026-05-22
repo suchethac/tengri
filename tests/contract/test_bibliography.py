@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for :class:`tengri.citations.Bibliography` — the live citation container."""
 
 from __future__ import annotations

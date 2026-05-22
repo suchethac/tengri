@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Shared utilities for nebular emission backends.
 
 Functions extracted from individual backends to eliminate duplication.

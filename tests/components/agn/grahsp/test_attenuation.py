@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the GRAHSP SMC-like bi-attenuation curve.
 
 Validates against fixtures generated from the upstream

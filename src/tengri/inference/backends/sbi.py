@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Simulation-Based Inference (SBI) infrastructure for tengri.
 
 Provides training data generation from tengri's forward model, HDF5 I/O

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for Leitherer02 cutoff consistency bug.
 
 Bug: attenuation.py:143 — _calzetti_l02_kprime helper used 0.15 um cutoff,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SEDModel: high-level forward model wrapping the tengri SED pipeline.
 
 SEDModel provides a clean API for:

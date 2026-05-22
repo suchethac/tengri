@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for PipelineState.add_intrinsic helper."""
 
 import jax.numpy as jnp

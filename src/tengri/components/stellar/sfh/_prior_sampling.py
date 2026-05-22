@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Prior-sampling helper for parametric SFH families.
 
 Lets a user draw a fan of SFH realizations from a registered model's default

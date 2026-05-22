@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Salim et al. (2018) dust attenuation — SEDModelComponent port.
 
 The single-file `SEDModelComponent`-style port of the Salim, Boquien & Lee (2018)

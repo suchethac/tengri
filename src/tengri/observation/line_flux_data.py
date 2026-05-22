@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Observed emission line flux data for direct fitting.
 
 Provides a declarative container for observed emission line fluxes

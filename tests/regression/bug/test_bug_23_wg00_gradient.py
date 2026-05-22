@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for BUG-23: wg00_cloudy NaN gradient at tau_k=0.
 
 See ADR / docs/known_bugs.md for full context.

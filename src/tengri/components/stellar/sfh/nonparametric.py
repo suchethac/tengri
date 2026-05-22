@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Non-parametric star formation history models.
 
 Implements the Continuity (Leja+2019), Dirichlet (Leja+2017), Bursty

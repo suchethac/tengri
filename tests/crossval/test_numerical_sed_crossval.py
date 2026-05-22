@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Numerical SED cross-validation against published values and other codes.
 
 Tests verify that tengri produces absolute luminosities, colors, and physical

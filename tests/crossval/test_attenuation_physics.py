@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physics cross-validation for ALL attenuation curve models.
 
 Tests physical correctness of dust attenuation curves against known

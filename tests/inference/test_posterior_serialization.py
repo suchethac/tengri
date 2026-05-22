@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for Posterior stats, autocorrelation, and ESS computation."""
 
 import jax

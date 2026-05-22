@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for eline_priors.py dead code removed bug.
 
 Bug: eline_priors.py:251 — orphaned design_matrix.shape[1] expression (no assignment).

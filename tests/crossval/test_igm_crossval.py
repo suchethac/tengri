@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate IGM transmission against bagpipes (Inoue+2014).
 
 Both tengri and bagpipes implement the same Inoue et al. (2014)

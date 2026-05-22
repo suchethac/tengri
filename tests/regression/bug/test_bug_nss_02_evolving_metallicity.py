@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for BUG-NSS-02: evolving_metallicity in fused kernel.
 
 See ADR / docs/known_bugs.md for full context.

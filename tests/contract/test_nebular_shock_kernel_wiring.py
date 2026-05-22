@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Kernel-consumer wiring tests for shock (MAPPINGS) emission.
 
 Tests verify:

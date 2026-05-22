@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Dust emission models for tengri.
 
 This module implements IR re-emission of UV/optical light absorbed by dust.

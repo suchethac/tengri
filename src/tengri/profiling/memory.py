@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Memory profiling for tengri.
 
 Tracks JAX array footprints (device memory) and process RSS (host memory)

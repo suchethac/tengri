@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for emission line design matrix and marginalization."""
 
 from __future__ import annotations

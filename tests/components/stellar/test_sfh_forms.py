@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for parametric SFH form validity and cumulative mass bounds.
 
 Every parametric SFH form must produce a non-negative SFR array with realistic cumulative mass.

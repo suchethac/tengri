@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Parameter declarations for the observation module.
 
 Noise model parameters (calibration floor, Student-t degrees of freedom)

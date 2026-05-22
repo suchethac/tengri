@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for parametric mean SFH models.
 
 Tests all 9 model functions from the registry plus shared helpers.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Catalog-fit `Fixed(redshift)` cross-compile reuse contract.
 
 `WavePrecomp(catalog_z_range=(z_min, z_max))` should let a single

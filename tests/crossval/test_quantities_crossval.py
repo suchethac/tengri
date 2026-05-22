@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate stellar mass and SFR against bagpipes.
 
 For a constant star formation history, physical quantities are

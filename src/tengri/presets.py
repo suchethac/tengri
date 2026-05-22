@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Vetted factory functions for common galaxy types.
 
 This module provides preset Parameter + SEDModelConfig tuples for typical galaxy

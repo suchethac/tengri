@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Forward-model SEDs from arbitrary SFH and metallicity history arrays.
 
 This module provides the simulation-facing API for tengri: given

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the standardized reparameterization bridge (inference/standardized.py).
 
 StandardizedForwardModel absorbs all prior structure into coordinate transforms

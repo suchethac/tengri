@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Power spectral density models for stochastic star formation histories.
 
 All functions are pure JAX and JIT-compatible. Each PSD function takes

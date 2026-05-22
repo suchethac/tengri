@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Static associations between tengri model configuration and citation keys.
 
 Module layout:

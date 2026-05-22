@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for parametric double-power-law SFH model (DPL)."""
 
 import chex

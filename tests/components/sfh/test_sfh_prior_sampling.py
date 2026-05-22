@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for tengri.components.stellar.sfh.sample_sfh_prior."""
 
 from __future__ import annotations

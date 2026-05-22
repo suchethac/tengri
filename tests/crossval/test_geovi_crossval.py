@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate JIT geoVI implementation against NIFTy's optimize_kl.
 
 The JIT engine in ``Fitter._build_jit_engine`` reimplements NIFTy's geoVI

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validation: tengri Ray Tracer vs Behroozi's reference JAX implementation.
 
 Runs both implementations on a known multivariate Gaussian target and

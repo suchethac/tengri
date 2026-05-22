@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 r"""Clipped PAH feature strengths (Draine, Li, Hensley et al. 2021).
 
 Implements the ``Fclip`` definition in Section 9.1 of Draine, Li,

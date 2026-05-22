@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Diagnostics enabled by full differentiability.
 
 These tools are only possible because the entire pipeline

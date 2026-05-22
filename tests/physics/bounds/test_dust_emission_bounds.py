@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for dust emission physical bounds and limits.
 
 Non-negativity, temperature monotonicity, and limiting cases.

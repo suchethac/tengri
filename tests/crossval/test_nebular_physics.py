@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physics cross-validation for nebular models (shock SED, DIG, NLR/BLR lines).
 
 Tests physical correctness of nebular emission models against known

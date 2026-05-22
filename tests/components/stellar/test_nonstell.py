@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for tengri.forward.nonstell (NonStellarSlot registry + build_nonstell_fn factory).
 
 Tests cover:
