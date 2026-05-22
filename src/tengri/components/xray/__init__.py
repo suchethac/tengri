@@ -8,8 +8,14 @@ from tengri.components.xray.xray import (
     xray_total,
     xray_xrb,
 )
+from tengri.components.xray.xray_model import (
+    XRayAirdSEDComponent,
+    XRayAirdSEDComponentConfig,
+)
 
 __all__ = [
+    "XRayAirdSEDComponent",
+    "XRayAirdSEDComponentConfig",
     "alpha_ox_from_l2500",
     "xray_agn_corona",
     "xray_agn_corona_from_disc",

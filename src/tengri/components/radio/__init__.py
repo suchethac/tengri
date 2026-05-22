@@ -12,8 +12,14 @@ from tengri.components.radio.radio import (
     radio_total,
     radio_total_dpl,
 )
+from tengri.components.radio.radio_model import (
+    RadioPowerLawSEDComponent,
+    RadioPowerLawSEDComponentConfig,
+)
 
 __all__ = [
+    "RadioPowerLawSEDComponent",
+    "RadioPowerLawSEDComponentConfig",
     "compute_radio_components",
     "radio_agn",
     "radio_agn_dpl",
