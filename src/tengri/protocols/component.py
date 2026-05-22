@@ -31,10 +31,19 @@ import jax.numpy as jnp
 
 from tengri.protocols.derived_state import DerivedState
 
+# Deprecated alias kept on tengri.protocols.component for one release —
+# imports of ``DerivedBundle`` from this module continue to work via the
+# renamed canonical type ``DerivedState``. The walker in
+# ``tengri.citations.collect`` and a few port-era test fixtures still
+# read this attribute; remove in v1.0.
+DerivedBundle = DerivedState
+
 __all__ = [
     "BARE_NAME_ALLOWLIST",
     "ComponentIOError",
+    "DerivedBundle",
     "DerivedKey",
+    "DerivedState",
     "ForwardState",
     "ParamDeclaration",
     "PipelineContractError",
