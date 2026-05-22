@@ -17,6 +17,8 @@ from tengri.protocols.component import (
     SEDComponent,
 )
 
+pytestmark = pytest.mark.contract
+
 
 def test_registry_entry():
     assert "charlot_fall" in _REGISTRY
