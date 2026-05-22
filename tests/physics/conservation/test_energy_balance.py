@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for energy balance relaxation via dust_eta_balance parameter.
 
 Validates that:

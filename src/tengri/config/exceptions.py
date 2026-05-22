@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Exception hierarchy for Tengri (Naming Contract §8).
 
 All Tengri exceptions inherit from ``TengriError``.  Domain-specific

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physics validation for template-based dust emission models.
 
 Tests that the REAL template-loaded models (not analytic fallbacks)

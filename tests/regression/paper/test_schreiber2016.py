@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for Schreiber et al. (2016) dust emission model."""
 
 import chex

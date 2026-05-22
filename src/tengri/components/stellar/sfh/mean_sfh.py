@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Smooth parametric mean star formation history components.
 
 The GP x(t) has zero mean, so the overall SFH shape comes from these

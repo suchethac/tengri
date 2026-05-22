@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Sanity test for the vmapped batch MAP fitter.
 
 Verifies that ``fit_batch_map_vmap`` returns finite MAP estimates for a

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Conservation tests for stellar population synthesis: mass and SED balance.
 
 Validates that integrated stellar mass and SED luminosity are self-consistent

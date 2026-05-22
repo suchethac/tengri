@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for toy torus models warning.
 
 Both simple_torus and two_temperature_torus are MBB approximations that

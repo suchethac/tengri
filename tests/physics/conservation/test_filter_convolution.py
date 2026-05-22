@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Conservation tests for filter convolution and spectral integration.
 
 Validates that integrated photometry conserves energy and is self-consistent

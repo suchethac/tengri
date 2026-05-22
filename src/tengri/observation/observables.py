@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Observables — the dual of :class:`Observation` for predicted quantities.
 
 An :class:`Observables` NamedTuple is synthesised per-model at

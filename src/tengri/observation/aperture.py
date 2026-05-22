@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 r"""Aperture-correction preprocessing for catalog photometry.
 
 tengri's forward model assumes inputs are aperture-corrected (i.e., total

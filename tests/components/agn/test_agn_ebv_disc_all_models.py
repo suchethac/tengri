@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Parametrised coverage: ``agn_ebv_disc`` works on every disc+torus model.
 
 The Prévot-SMC disc-reddening helper ``_redden_disc`` is wired into every

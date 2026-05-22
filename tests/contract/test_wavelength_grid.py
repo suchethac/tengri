@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for tengri.utils.wavelength — panchromatic grid and interpolation."""
 
 import jax.numpy as jnp

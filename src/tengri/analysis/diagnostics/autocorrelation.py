@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Autocorrelation time estimation (Sokal method, following Behroozi 2025).
 
 Implements the autocorrelation estimator from the Ray Tracing Sampler

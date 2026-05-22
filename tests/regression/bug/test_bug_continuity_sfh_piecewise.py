@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for continuity SFH piecewise-constant bug.
 
 Bug: nonparametric.py:99-101 — jnp.interp on bin centers gives linear interpolation;

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Parameter transforms for bounded/unbounded optimization.
 
 Inspired by diffsky's utility_funcs.py pattern: all physical parameters

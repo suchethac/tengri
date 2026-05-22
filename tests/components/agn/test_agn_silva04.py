@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for the Silva+04 smooth-torus port.
 
 Grid templates come from AGNfitter (Calistro Rivera et al. 2016); see

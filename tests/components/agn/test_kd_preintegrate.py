@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for K&D 2018 3-zone disc preintegration.
 
 Verifies that the preintegrated (filter-level) K&D computation matches

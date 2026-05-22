@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Component registry for closure-friendly SED component precomputation.
 
 This module provides a registry-driven design for adding new SED components

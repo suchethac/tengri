@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for BPT diagnostic ratio properties in prediction.py.
 
 Synthesizer-inspired: synthesizer/tests/test_line.py TestLineRatiosAndDiagrams

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for JIT/grad finiteness at high redshift.
 
 Synthesizer parity.

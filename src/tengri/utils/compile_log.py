@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Diagnostic tracer for JAX JIT compile events.
 
 Opt-in compile-event logging that records timing, signatures, and cache-hit

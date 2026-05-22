@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Precompute ↔ runtime equivalence tests for radio, X-ray, and AGN-disc components.
 
 Each model tested here uses two identical SEDModels — one with precompute=True

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration test: spectrum prediction with wavelength chunking end-to-end.
 
 Verifies that spectrum prediction with wave_chunk_size produces numerically

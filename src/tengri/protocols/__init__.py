@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Core protocols for the tengri SED forward-model pipeline (Part II-1).
 
 This subpackage defines the **contracts** that physics components,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for DIG (diffuse ionized gas) nebular emission mixing.
 
 Tests three exact algebraic identities:

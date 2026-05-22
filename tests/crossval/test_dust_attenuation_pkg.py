@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate tengri attenuation curves against the dust_attenuation package.
 
 Compares tengri's implementations of C00, L02, N09, SBL18, and WG00 against

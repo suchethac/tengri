@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for models/agn/qsogen.py — QSOgen empirical quasar SED model.
 
 Tests the pure-JAX helper functions (_broken_powerlaw_continuum,

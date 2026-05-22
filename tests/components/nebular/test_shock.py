@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for the MAPPINGS III + V shock grid backend.
 
 Covers grid loading, multi-axis interpolation, backward compatibility, and

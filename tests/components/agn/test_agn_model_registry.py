@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Registry-wide tests for all registered AGN models.
 
 Tests every model at default parameters to ensure physical amplitudes and linearity.

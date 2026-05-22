@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for SFH model registry and composition.
 
 Tests the registry lookup, composition engine (additive, mixture,

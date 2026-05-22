@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """End-to-end SED amplitude tests for Milky-Way-like galaxy models.
 
 These test amplitude at key wavelengths (UV, optical, NIR, submm)

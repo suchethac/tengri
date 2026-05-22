@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for ionizing photon escape fraction (neb_fesc) — synthesizer parity.
 
 Mirrors synthesizer issue #126 — fesc (ionizing photon escape fraction) was

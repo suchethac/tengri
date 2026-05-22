@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for parameter registration of newly-wired models.
 
 Verifies that THEMIS, BOSA, and patchy IGM parameters appear in

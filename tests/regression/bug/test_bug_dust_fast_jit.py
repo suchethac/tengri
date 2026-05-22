@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for single_component_dust_fast JIT-safe bug.
 
 Bug: attenuation.py:1077 — len(wavelengths) is not JIT-safe.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for Balmer continuum tau direction bug.
 
 Bug: qsogen.py:397 — tau ∝ (lambda/lambda_BE)^3 made tau larger at longer wavelengths.

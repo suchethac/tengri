@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Wavelength grid construction and interpolation utilities.
 
 Provides functions for building panchromatic wavelength grids that extend

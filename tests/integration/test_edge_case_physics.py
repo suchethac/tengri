@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Edge case physics tests for extreme parameter values.
 
 These tests verify that the forward model remains physically sensible

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for shock emission unit consistency bug.
 
 Bug: shock.py:182-206 — Gaussian branch multiplied by _LSUN_ERG giving erg/s/Hz;

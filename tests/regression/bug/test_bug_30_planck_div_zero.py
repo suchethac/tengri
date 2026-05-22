@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for BUG-30: Planck function divide-by-zero.
 
 See ADR / docs/known_bugs.md for full context.

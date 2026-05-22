@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for _LegacySEDSubModel — wraps existing SEDModel as a SubModel."""
 
 from __future__ import annotations

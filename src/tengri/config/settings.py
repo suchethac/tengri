@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Frozen configuration dataclasses for sub-model selection.
 
 These objects encode *which* physics modules are active — structural choices that

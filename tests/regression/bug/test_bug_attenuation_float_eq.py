@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for attenuation.py float equality safe bug.
 
 Bug: attenuation.py:725-730 — narayanan_z used == for float sentinel detection,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests for EVI inference pipeline.
 
 Validates that the full EVI pipeline (build engine → optimize → sample)

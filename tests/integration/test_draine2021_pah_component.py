@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SEDComponent tests for Draine+2021 PAHspec emission template.
 
 The PAHspec model is exposed as the ``template="draine2021_pah"``

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate remaining physics modules against external references.
 
 Covers: cosmology, dust attenuation laws, PSD models, mean SFH,

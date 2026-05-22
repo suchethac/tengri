@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """X-ray SED models: binaries, AGN corona, hot gas.
 
 Predicts X-ray emission (0.1–10 keV, λ < 124 Å) from three physical components:

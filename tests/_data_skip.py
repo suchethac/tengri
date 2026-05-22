@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Shared skip markers for tests that need optional data bundles.
 
 Used by tests/unit/components/agn/ to skip on CI runners that lack the

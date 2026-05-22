@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for build_native_vi_linear_engine in isolation."""
 
 import chex

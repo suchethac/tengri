@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """CB_19 (Charlot & Bruzual 2019) CLOUDY photoionization grid backend.
 
 Source

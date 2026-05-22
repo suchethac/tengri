@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Free-parameter declarations owned by the nebular component.
 
 Each tuple in this module is the canonical source for one legacy

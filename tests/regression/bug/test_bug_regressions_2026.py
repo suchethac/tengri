@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for bugs fixed in 2026-04.
 
 Each test documents a specific bug from CLAUDE.md, cites the fix, and

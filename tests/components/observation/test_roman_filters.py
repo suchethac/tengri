@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Test Roman Space Telescope WFI filter pack loading and properties."""
 
 from typing import ClassVar

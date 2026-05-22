@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for vectorized filter integration (pad_filters + compute_flux_density_batch).
 
 Validates that the vmap-based filter integration matches the loop-based version

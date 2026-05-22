@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Shared fixtures for cross-validation tests against community SED codes.
 
 These tests compare tengri's physics implementations against bagpipes

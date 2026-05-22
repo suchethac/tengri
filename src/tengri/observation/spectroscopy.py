@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Spectroscopic observation configuration.
 
 Declarative specification of the spectroscopic instrument: wavelength grid,

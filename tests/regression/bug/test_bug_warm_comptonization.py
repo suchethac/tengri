@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for warm Comptonization UV boost bug.
 
 Bug: disc.py:321-362 — warm zone used kT_warm (soft X-rays) as seed frequency,

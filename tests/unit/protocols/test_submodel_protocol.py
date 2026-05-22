@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Smoke tests for the SubModel Protocol (forward-model architecture §4)."""
 
 from __future__ import annotations

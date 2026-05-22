@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cloudy 23 input-deck generator for photoionization grid regeneration.
 
 Generates complete Cloudy 23 input files (text) given ionization parameter,

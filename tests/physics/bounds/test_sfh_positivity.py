@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for SFH positivity and mass conservation bounds.
 
 Tests verify that all SFH models produce non-negative star formation rates

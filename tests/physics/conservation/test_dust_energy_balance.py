@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for dust energy balance conservation.
 
 Energy absorbed by dust must equal energy re-radiated (Kirchhoff's law).

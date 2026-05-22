@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Contract tests for AGN model registry: resolve and registration."""
 
 from __future__ import annotations

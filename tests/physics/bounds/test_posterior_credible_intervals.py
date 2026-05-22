@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for Posterior bounds: line fluxes, BPT, Balmer, EW, and credible intervals."""
 
 import chex

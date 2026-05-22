@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Phase 4-D Category B tests: dust IR template data threading as JIT runtime inputs.
 
 Extends Phase 4-C (nebular threading) to dust IR emission templates (PAHspec,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physics-motivated numerical tests for multiwavelength SED components.
 
 ALL inputs use CGS units (erg/s for luminosities) to match the documented

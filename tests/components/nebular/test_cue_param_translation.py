@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for Cue param plumbing through translate.py.
 
 Regression test for MISSING_FEATURES.md #16: ``gas_logno``, ``gas_logco``,

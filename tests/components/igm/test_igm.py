@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for IGM absorption module (models/igm.py).
 
 CRITICAL CONVENTION: igm_transmission(wave_obs, z_source) takes OBSERVED-FRAME

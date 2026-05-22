@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for top_hat and gaussian_burst parametric SFH models."""
 
 import chex

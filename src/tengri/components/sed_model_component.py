@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SEDModelComponent: astronomer-facing base class for SED physics blocks.
 
 Provides a convenient superclass over the :class:`SEDComponent` Protocol,

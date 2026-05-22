@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Silva, Maiolino & Granato (2004) AGN torus SEDModelComponent adapter.
 
 Ports the Silva+04 semi-empirical smooth torus library to the

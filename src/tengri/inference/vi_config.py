@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Configuration for NIFTy variational inference (geoVI/MGVI/EVI).
 
 Default values follow Philipp Frank's recommendations (2025 discussion).

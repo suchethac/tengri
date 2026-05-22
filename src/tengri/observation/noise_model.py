@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Noise model configuration for observations.
 
 Declarative specification of the noise model: calibration floor and

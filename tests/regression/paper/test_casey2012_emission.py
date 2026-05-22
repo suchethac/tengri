@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for the Casey (2012) dust emission model.
 
 Synthesizer-inspired: synthesizer/tests/test_dust_generators.py tests every dust

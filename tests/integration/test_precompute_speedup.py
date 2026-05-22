@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Benchmark tests for photometry precomputation speedup and gradient cleanliness.
 
 Validates:

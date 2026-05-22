@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Dense Basis GP-SFH: non-parametric star formation history via mass-time quantiles.
 
 Parameterizes the SFH using a small number of mass-time quantile pairs

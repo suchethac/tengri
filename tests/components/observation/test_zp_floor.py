@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the per-band photometric zero-point systematic-floor utility.
 
 MISSING_FEATURES.md #6. Inflates the per-band noise to incorporate

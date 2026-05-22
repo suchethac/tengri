@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for models/sps/mass_remaining.py — stellar remnant mass fractions.
 
 Covers all three IMFs, main-sequence lifetime, Newton-Raphson turnoff

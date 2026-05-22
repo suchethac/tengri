@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Shared test fixtures for tengri test suite."""
 
 import os

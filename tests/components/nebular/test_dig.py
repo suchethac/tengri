@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for diffuse ionized gas (DIG) nebular emission mixing."""
 
 import jax

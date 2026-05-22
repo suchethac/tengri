@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Profiling infrastructure for tengri.
 
 JAX-aware timing, memory tracking, and pipeline profiling utilities

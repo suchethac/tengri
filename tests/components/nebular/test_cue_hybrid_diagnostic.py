@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the Cue hybrid photometry energy-balance fix.
 
 Previously showed ~23% hybrid error vs exact.  Root cause was the same as the DL07

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for NEV variability and bolometric quantities."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cardelli et al. (1989) Milky Way dust attenuation — SEDModelComponent port.
 
 The single-file `SEDModelComponent`-style port of the Cardelli, Clayton & Mathis

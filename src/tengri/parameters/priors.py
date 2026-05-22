@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Probability distribution objects for parameter specification.
 
 Each distribution defines a prior for a single model parameter.

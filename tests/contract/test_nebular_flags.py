@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for nebular backend flag validation in Parameters."""
 
 import warnings

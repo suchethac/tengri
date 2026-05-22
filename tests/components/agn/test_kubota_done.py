@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for kubota_done_full_agn: full 3-zone K&D disc + two-temperature torus."""
 
 from __future__ import annotations

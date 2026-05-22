@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SKIRTOR clumpy two-phase torus model (Stalevski et al. 2012, 2016).
 
 Loads the full SKIRTOR SED library (``create_skirtor_from_grid``) and performs

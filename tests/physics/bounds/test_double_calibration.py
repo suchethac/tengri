@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for double (piecewise) calibration polynomial."""
 
 import chex

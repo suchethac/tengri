@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Convergence diagnostics and posterior summary visualization.
 
 Utilities for monitoring MCMC/VI convergence and reporting effective sample sizes,

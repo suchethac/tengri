@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for physics API redesign (physics_api_redesign.md).
 
 - No-SSP tests: _planck_lnu deduplication, lines_to_sed, eline_catalog,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for Wild+2007 two-component dust attenuation curves.
 
 Verifies:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Phenomenological metallicity history models (Bagpipes-compatible).
 
 Provides time-varying metallicity Z(t) functions modelled after the

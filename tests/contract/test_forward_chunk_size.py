@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for forward_chunk_size chunked signal_response logic.
 
 Tests the lax.map(vmap_K) chunked path in isolation, without spinning up a full

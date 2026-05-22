@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests: all physics parameters reach the pipeline call sites.
 
 Each test verifies that a parameter wired in parameters.py + model.py is also

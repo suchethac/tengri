@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Smooth grid interpolation via the triweight kernel (Hearin et al. 2023).
 
 Provides C²-continuous weights for interpolating over 1-D grid axes.

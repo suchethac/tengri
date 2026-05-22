@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for PSD models (T1: PSD integral, analytic properties)."""
 
 import chex

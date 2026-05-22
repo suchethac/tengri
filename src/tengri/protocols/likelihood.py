@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Likelihood protocol: log-probability of data given a forward-model prediction.
 
 Decouples inference (:mod:`tengri.inference`) from the forward model

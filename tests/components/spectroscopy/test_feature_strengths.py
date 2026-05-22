@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for ``tengri.analysis.feature_strengths.clip_feature``.
 
 The "clipped feature strength" Fclip is defined in Draine, Li, Hensley

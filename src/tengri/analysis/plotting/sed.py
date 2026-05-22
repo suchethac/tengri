@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SED, spectrum, and parameter sweep plotting utilities.
 
 Publication-quality spectral energy distribution visualization for photometry,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Phase 4-D tests: complete template threading (nebular backends, dust IR, AGN SKIRTOR).
 
 Tests for Category A (CB19/MAPPINGS wiring), Category B (dust IR template

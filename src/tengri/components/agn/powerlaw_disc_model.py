@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Simple power-law AGN disc SEDModelComponent adapter.
 
 Ports the phenomenological power-law accretion disc model to the

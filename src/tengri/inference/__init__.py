@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Inference engine: Fitter, Posterior, PopulationFitter, and backends."""
 
 # Populate the backend registry. Imported for side effects only —

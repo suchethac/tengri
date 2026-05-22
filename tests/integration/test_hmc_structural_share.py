@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration test for HMC structural sharing across Fitter instances (Phase B).
 
 Tests verify that smart-lean (the default) keeps the L3 entry whose key

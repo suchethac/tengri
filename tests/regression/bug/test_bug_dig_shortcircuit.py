@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for DIG short-circuit when frac=0 bug.
 
 Bug: dig.py:110-113 — DIG forward pass always called even when neb_dig_frac=0.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for ``CatalogFitter._resolve_n_padded``.
 
 End-to-end correctness with real SSP data lives in

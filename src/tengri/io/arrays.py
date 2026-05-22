@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Core data structure for spectroscopic I/O."""
 
 from __future__ import annotations

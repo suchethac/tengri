@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the GRAHSP smooth bending power-law (SBPL) BBB.
 
 Compares the JAX implementation against fixtures generated from upstream

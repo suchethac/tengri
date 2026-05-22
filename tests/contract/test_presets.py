@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for tengri.presets module.
 
 Tests the factory functions for common galaxy type presets.

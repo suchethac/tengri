@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for private helper functions in line_list.py.
 
 Covers uncovered branches in:

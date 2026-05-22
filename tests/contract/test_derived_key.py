@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Shape, equality, and hashability tests for :class:`DerivedKey`.
 
 These tests cover the new typed cross-component contract introduced

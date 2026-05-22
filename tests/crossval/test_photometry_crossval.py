@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate photometry and apparent magnitudes against FSPS.
 
 Tests AB magnitudes through SDSS ugriz and 2MASS JHKs filters at

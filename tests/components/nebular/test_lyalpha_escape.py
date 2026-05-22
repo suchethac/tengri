@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for the Lyman-alpha escape fraction in nebular emission.
 
 Synthesizer-inspired: synthesizer/tests/test_emissions.py verifies that

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for catalog batch fitting: Posterior save/load, checkpoint resume, catalog_summary."""
 
 import os

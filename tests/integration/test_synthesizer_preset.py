@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests for synthesizer_default preset.
 
 Tests that the preset builds without data, JIT-compiles, propagates gradients,

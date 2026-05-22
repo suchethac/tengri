@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Observation models: photometry, spectroscopy, calibration, and configuration.
 
 Sub-namespaces (additive, browseable groupings of the same objects):

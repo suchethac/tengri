@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for simple_agn: power-law disc + single-temperature torus."""
 
 from __future__ import annotations

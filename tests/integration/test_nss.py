@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests for NSS with real forward model.
 
 Requires SSP data files. Skipped gracefully if not found.

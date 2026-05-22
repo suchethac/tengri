@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for Prospector-β redshift-aware age bin construction.
 
 Tests verify monotonicity, coverage, and numpy array output type.

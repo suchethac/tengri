@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Test JIT-traced array threading for AGN precomputed models.
 
 Verifies that grid arrays are properly threaded as JIT-traced kwargs

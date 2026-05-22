@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Skip all GRAHSP tests in this directory when the template bundle is absent.
 
 The full GRAHSP suite needs ``data/grahsp/grahsp_templates.h5`` which is not

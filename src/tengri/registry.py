@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Public introspection façade — list and describe everything available in tengri.
 
 This is the first thing a new user should reach for. Open a notebook, run::

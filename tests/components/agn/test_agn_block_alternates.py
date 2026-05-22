@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the 14 non-GRAHSP block adapters wrapping existing tengri AGN
 pieces (multicolor / kubota_done / adaf disc; nenkova / skirtor / silva04 /
 cat3d_wind torus; BLR / NLR lines; polar dust attenuation; 5 qsogen blocks).

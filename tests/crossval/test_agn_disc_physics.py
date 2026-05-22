@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physics cross-validation for AGN disc, torus, BLR, and NLR models.
 
 Tests physical correctness against known astrophysical relationships:

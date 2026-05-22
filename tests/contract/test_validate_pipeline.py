@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Construction-time contract checks over the publish/require graph.
 
 Covers every error path of

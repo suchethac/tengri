@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Polar dust extinction and greybody reemission for AGN.
 
 Implements the X-CIGALE polar dust model (Yang et al. 2020, Section 2.2.2):

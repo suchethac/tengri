@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SMC dust attenuation model — SEDModelComponent port.
 
 The single-file `SEDModelComponent`-style port of the SMC Bar

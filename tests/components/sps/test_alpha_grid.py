@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for alpha-enhanced SSP grid interpolation.
 
 Validates the new 4D (metallicity, [α/Fe], age, wavelength) SSP grid

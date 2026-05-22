@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """CAT3D-Wind clumpy-disc-plus-polar-wind AGN torus SEDModelComponent adapter.
 
 Ports the CAT3D-Wind torus model (Hönig & Kishimoto 2017) to the

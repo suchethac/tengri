@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for filter / photometry edge cases — synthesizer parity.
 
 Mirrors synthesizer's ``tests/test_filters.py`` and ``tests/test_photometry.py``

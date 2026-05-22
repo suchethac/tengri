@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Nested Slice Sampling for Bayesian evidence (log Z).
 
 Extracted from fitter.py.

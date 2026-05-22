@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cosmology utilities backed by DSPS.
 
 Thin wrappers around dsps.cosmology.flat_wcdm (Hearin+ JAX-based flat w0-wa-CDM).

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for CIGALE SKIRTOR disc models and extinction laws.
 
 Validates piecewise power-law disc spectra, extinction curves, anisotropic

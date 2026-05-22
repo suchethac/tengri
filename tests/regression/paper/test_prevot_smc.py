@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for Prevot et al. (1984) SMC extinction curve.
 
 Tests the prevot_smc() dust attenuation law, including functional form validation,

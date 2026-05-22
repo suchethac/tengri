@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for censored (upper/lower limit) likelihood.
 
 Tests Feature 3 — the ``censored_neg_log_likelihood`` function in

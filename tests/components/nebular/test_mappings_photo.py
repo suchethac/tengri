@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for MappingsPhotoStellarBackend and MappingsPhotoAGNBackend.
 
 These tests run without the actual HDF5 file by patching the load functions

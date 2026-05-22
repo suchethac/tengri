@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Pure JAX, JIT-compatible spectral unit conversion utilities.
 
 All functions take and return bare jnp arrays (no unit objects) in CGS units:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Smoke tests for the analytic AGN disc precompute adapters (PR 1).
 
 Exercises the build/lookup surface for ``powerlaw_disc``, ``ss_disc``, and

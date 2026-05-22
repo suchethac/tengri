@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for NUTS with Pathfinder warm-start.
 
 Exercises the ``pathfinder_warmstart=True`` path in

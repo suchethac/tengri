@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests for Observation with SEDModel and Fitter.
 
 Requires SSP data — skips gracefully if not found.

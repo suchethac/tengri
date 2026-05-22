@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Smoke tests for the alternative AGN torus precompute adapters (PR 2).
 
 Covers ``silva04`` and ``cat3d_wind`` — the SKIRTOR alternatives.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """_LegacySEDSubModel — migration shim wrapping :class:`SEDModel` as a :class:`SubModel`.
 
 This adapter exists to land the ``ForwardModel`` outer shell without

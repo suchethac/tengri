@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Silva, Maiolino & Granato (2004) smooth AGN torus — differentiable JAX port.
 
 One-parameter semi-empirical torus library keyed on hydrogen column density

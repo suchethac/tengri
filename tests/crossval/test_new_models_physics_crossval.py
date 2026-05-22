@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physics cross-validation for the 10 new models.
 
 Tests physical correctness against published reference values, analytic

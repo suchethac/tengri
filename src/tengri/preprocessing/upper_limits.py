@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Upper limit detection and conversion for photometric measurements."""
 
 from __future__ import annotations

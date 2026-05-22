@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for DSPS CSP integration modes: 'dsps_native' and 'dsps_met_table'.
 
 Tests :func:`compute_dsps_native_weights`, :func:`compute_dsps_met_table_weights`,

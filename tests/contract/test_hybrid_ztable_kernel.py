@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for hybrid photometry kernel with z-table interpolation.
 
 Validates that:

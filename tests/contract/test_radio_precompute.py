@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Smoke tests for the radio precompute adapter (PR 5)."""
 
 from __future__ import annotations

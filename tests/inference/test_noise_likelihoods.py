@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for Poisson and Student-t photon-counting likelihoods.
 
 Tests JIT compatibility, gradient flow, and physical correctness of

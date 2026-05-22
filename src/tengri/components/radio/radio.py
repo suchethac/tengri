@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Radio SED models: synchrotron + free-free + AGN jets.
 
 Predicts radio emission (mm–cm wavelengths) from three physical components:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the ``agn_ebv_disc`` free parameter.
 
 The Prévot (1984) SMC law is applied to the disc-component of every

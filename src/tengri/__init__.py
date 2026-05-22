@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """tengri: Differentiable SED fitting with IFT star formation history priors.
 
 A modular, fully differentiable JAX pipeline:

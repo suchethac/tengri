@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Variational inference backends: native JAX, NIFTy library integration."""
 
 from tengri.inference.backends.vi.native import run_native_vi

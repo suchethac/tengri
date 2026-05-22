@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Style constants, color palettes, and matplotlib configuration for tengri plotting.
 
 Reusable color schemes (colorblind-safe, print-friendly) and style setup for

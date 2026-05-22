@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for SSP data setup and download helpers."""
 
 import pytest

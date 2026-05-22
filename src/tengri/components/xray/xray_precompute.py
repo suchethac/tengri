@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Precompute adapter for analytic X-ray components.
 
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for

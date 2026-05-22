@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for ForwardModel (forward-model architecture §5).
 
 Tracer-bullet scope: single-population only. Multi-population lives

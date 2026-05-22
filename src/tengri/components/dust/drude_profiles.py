@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """PAH Drude-profile decomposition (Smith+2007).
 
 This module provides a public interface for Polycyclic Aromatic Hydrocarbon

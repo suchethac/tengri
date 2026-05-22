@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Diagnostic tests for nthcomp gradient flow issues.
 
 This test suite isolates which operations within nthcomp_lnu_interp produce NaN

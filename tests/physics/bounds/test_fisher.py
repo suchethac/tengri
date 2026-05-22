@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for tengri.analysis.diagnostics.fisher.
 
 Tests cover the pure-math functions (no forward model required):

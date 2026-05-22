@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Green's functions and window functions for SFH sensitivity.
 
 The Green's function G_lambda(t_age) tells you how much a stellar

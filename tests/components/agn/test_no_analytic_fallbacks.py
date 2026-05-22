@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests that dust and AGN emission models raise FileNotFoundError when templates
 are missing, rather than silently falling back to wrong analytic approximations.
 

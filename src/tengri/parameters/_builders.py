@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Parameter registry builder and lazy bucket resolution.
 
 This module contains the aggregator logic that converts component-owned

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Brown 2019 AGN atlas regression test (3 representative sources).
 
 Uses best-fit parameters from Table 4 of Buchner+ 2024 (arXiv:2405.19297) for

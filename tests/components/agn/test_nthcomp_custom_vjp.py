@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Test custom VJP for nthcomp to handle gradient issues."""
 
 import pytest

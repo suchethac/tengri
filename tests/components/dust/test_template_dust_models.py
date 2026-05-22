@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for template-based dust emission models: Astrodust, BOSA, THEMIS.
 
 Tests cover:

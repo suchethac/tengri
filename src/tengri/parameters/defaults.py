@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Load default model configuration from defaults.toml.
 
 Search order (first found wins):

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Intergalactic medium absorption (Inoue et al. 2014).
 
 Computes the mean IGM transmission T_IGM(lambda_obs, z_source) accounting for:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 ###**************************************
 ### Ray Tracing Sampler
 ### Original HMC Implementation: Copyright (C) 2024, Martin Marek

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests guarding the shape of the public API surface.
 
 These tests catch accidental top-level pollution and accidental removal

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Core SED computation pipeline.
 
 This module implements the forward model engine that translates

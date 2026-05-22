@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for SFR hardcoded to 1.0 Msun/yr bug.
 
 Bug: sed_pipeline.py:638 — SFR fallback was 1.0 Msun/yr for all parametric SFH.

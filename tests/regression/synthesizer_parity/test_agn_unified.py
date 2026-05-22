@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for the unified AGN SED — synthesizer parity.
 
 Mirrors the *shape* of synthesizer's ``tests/test_unified_agn.py`` assertions.

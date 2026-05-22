@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Generic FITS spectrum reader with column name auto-detection."""
 
 from __future__ import annotations

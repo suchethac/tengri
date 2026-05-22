@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 r"""Dust energy-balance diagnostic.
 
 Self-contained utility for verifying that a model prediction conserves

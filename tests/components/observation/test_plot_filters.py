@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for filter transmission curve visualization.
 
 Tests Feature 2 — the plotting functions in

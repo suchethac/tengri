@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Parameter translation between public and internal names.
 
 Naming Conventions

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for dust emission registry and public API contract.
 
 Verify model registration, dispatcher routing, and module-level aliases.

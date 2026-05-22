@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Hierarchical inference for population-level PSD recovery.
 
 Shares PSD hyperparameters (σ_PSD, τ_PSD) across N galaxies while

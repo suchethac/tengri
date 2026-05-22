@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Parity and contract tests for ported dust IR emission components.
 
 Verifies that ModifiedBlackbodySED and DL07IRSEDComponent:

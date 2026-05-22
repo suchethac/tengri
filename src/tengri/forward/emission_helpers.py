@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Shared emission-component helpers for the SED forward model.
 
 Both the non-fused pipeline (``sed_pipeline.py``) and the fused JIT

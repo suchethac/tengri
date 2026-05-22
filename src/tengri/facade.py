@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """High-level Galaxy facade for one-liner SED fitting.
 
 The Galaxy class bundles SSP data, observation, parameters, and model

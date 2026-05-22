@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Bounds and finiteness tests for stellar precomputed LUT paths.
 
 Validates that precomputed LUT outputs satisfy physical constraints:

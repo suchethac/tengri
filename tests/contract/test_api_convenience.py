@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the new convenience API.
 
 No-SSP tests run unconditionally. SSP-required tests are skipped when data is absent.

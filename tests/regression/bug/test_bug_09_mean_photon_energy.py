@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for BUG-09: Mean ionizing photon energy.
 
 See ADR / docs/known_bugs.md for full context.

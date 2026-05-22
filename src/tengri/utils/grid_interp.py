@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Generic template preintegration through photometric filters.
 
 Provides a universal function to collapse the wavelength dimension of any

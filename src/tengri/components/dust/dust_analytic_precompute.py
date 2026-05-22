@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Precompute adapters for analytic dust-emission models.
 
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for BLR Fe II normalization grid-resolution-dependent bug.
 
 Bug: blr.py:217 — jnp.sum used for Fe II normalization; result depends on pixel spacing.

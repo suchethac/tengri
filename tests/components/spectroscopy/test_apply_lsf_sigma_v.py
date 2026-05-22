@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for sigma_v_kms support in apply_lsf and Parameters.
 
 MISSING_FEATURES.md #8. Adds an explicit ``sigma_v_kms`` free

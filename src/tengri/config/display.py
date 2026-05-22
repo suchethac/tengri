@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Display / introspection helpers extracted from core/model.py.
 
 Each function takes an SEDModel instance as its first argument so that model.py

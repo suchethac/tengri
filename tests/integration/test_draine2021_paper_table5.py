@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """End-to-end checks against Draine, Li, Hensley et al. 2021 (arXiv:2011.07046).
 
 These tests assert facts that must hold exactly, derived from the

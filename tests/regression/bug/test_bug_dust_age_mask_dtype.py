@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for precompute_dust_age_mask dtype preservation bug.
 
 Bug: attenuation.py:836 — hardcoded jnp.float64 defeats mixed-precision support.

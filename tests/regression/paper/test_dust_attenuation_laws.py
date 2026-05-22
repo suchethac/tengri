@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for new attenuation curves: leitherer02, noll09, salim_sbl18.
 
 Tests use hardcoded reference values computed from the dust_attenuation

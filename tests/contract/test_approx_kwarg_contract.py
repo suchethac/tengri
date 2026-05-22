@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Phase 3d — ``approx=`` kwarg contract on :class:`SEDModel`.
 
 Tests the **user-observable** contract:

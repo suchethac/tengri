@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Damped Lyman-alpha (DLA) absorption from individual foreground absorbers.
 
 Computes transmission through a DLA system with known neutral hydrogen

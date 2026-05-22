@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """End-to-end correctness tests for ``CatalogFitter`` ``n_pad``.
 
 The core safety property: padding a catalog with dummy galaxies must

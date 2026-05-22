@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Precompute algorithm, Protocol, and registry for template-based components.
 
 Key extension point: implement :class:`PrecomputeModule` to make a component

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Smoke tests for the Part II-1 SEDComponent / ObservationModel /
 Likelihood protocols.
 

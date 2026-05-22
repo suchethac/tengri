@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Posterior inference results with sampling and diagnostics.
 
 The Posterior object stores parameter samples (or point estimates for MAP),

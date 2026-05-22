@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for ``select_pahspec_starlight_auto``.
 
 Nearest-neighbour selection of the best Draine+2021 PAHspec starlight

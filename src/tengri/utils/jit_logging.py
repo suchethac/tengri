@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """JIT compile / cache-hit logging for tengri kernels.
 
 Usage

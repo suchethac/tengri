@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for fused forward model JIT kernels.
 
 Validates that the fused kernels (single JIT scope for

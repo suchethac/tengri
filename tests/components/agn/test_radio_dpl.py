@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for AGNfitter-rx double power-law radio model."""
 
 import chex

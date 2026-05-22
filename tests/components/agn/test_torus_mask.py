@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for _sigmoid_mask: smooth geometric visibility function."""
 
 from __future__ import annotations

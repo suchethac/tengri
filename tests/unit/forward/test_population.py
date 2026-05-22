@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the Population dataclass (forward-model architecture §5)."""
 
 from __future__ import annotations

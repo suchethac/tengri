@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the aperture-correction preprocessing utility.
 
 MISSING_FEATURES.md #10. tengri's pipeline assumes aperture-corrected

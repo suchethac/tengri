@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for wavelength-dependent Line Spread Function (LSF) convolution.
 
 Validates that:

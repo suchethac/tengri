@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit test for parameter prefix guard (NAMING_CONTRACT §3.2).
 
 Verifies that all free parameters in preset configurations comply with the

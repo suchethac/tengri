@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Inference backends: variational (vi), MCMC (mcmc), nested sampling (nested)."""
 
 from tengri.inference.backends.evidence import run_nss

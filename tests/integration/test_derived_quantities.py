@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests for stellar mass and derived quantities.
 
 Verifies that SEDModel.predict_sfh_quantities() and SEDModel.predict_derived()

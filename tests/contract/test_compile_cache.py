@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for CompileCache — explicit owner of JIT compilation state.
 
 ADR-deepen Step C: per-Fitter or per-CatalogFitter cache isolation.

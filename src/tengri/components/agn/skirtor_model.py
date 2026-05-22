@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SKIRTOR torus SEDModelComponent adapter.
 
 Ports the SKIRTOR clumpy torus (Stalevski et al. 2012, 2016) to the

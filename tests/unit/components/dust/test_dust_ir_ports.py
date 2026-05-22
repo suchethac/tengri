@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Contract tests for ported dust IR emission SEDModelComponent backends.
 
 Tests contract compliance (isinstance, declared_parameters, predict signature)
