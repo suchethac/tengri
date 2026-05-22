@@ -316,6 +316,30 @@ remain and resolve to the canonical location without warning.
 
 ---
 
+## Forward-model outer shell (2026-05-21)
+
+Three new top-level names were added to `tengri.__all__` as part of the
+forward-model architecture tracer-bullet
+(`docs/dev/forward-model-architecture.md`, PR #149). All three are
+purely additive — no existing name was renamed, removed, or shadowed.
+
+| New top-level name | Lives in                              | Purpose                                                                                  |
+| ------------------ | ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `ForwardModel`     | `tengri.forward.forward_model`        | Outer-shell forward-model class. `build(sed=..., observation=...)` + `predict(params)`. |
+| `Population`       | `tengri.forward.population`           | `(name, sed, spatial=None)` pair held by `ForwardModel`. Single-population in v0.       |
+
+A fourth name lives one level deeper, exposed via the protocols subpackage:
+
+| New name                  | Lives in                            | Purpose                                                              |
+| ------------------------- | ----------------------------------- | -------------------------------------------------------------------- |
+| `tengri.protocols.SubModel` | `tengri.protocols.submodel`        | Runtime-checkable Protocol with the 2-method contract that all sub-models satisfy. |
+
+Existing `SEDModel` usage is unchanged. The follow-up plans (multi-population
+ADR-0012, SpatialModel, SEDModel-as-SubModel refactor) build on this surface
+without breaking it.
+
+---
+
 ## Phase II-3.1 — `tengri.core` renamed to `tengri.protocols` (2026-05-18)
 
 The `tengri.core` package was renamed to `tengri.protocols` because its
