@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """AGNSEDComponent: unified AGN emission (disc + torus + lines + jets/corona).
 
-Dispatches to any registered AGN model (``"simple"``, ``"standard"``,
-``"kubota_done_full"``, ``"adaf"``, ``"unified_nlr_blr"``, etc.) via
+Dispatches to any registered AGN model (``"multicolor_agn"``,
+``"kubota_done_full"``, ``"adaf"``, ``"unified_nlr_blr"``, ``"skirtor"``,
+``"silva04"``, ``"cat3d_wind"``, ``"relagn"``, ``"qsogen"``) via
 :func:`tengri.components.agn.unified.resolve_agn_model`.
 
 Cross-component reads
@@ -58,14 +59,15 @@ class AGNSEDComponentConfig(SEDComponentConfig):
     name : str
         Diagnostic identifier. Default ``"agn"``.
     model : str
-        AGN model registry key. One of ``"simple"`` (powerlaw disc +
-        single-temp torus), ``"standard"`` (multicolor disc +
-        two-temp torus), ``"kubota_done_full"``, ``"adaf"``,
-        ``"unified_nlr_blr"``, etc. Default ``"simple"``.
+        AGN model registry key. One of ``"multicolor_agn"`` (Kubota & Done
+        outer-zone disc + 2-T torus), ``"kubota_done_full"`` (full 3-zone
+        disc), ``"adaf"``, ``"unified_nlr_blr"``, ``"skirtor"``,
+        ``"silva04"``, ``"cat3d_wind"``, ``"relagn"``, ``"qsogen"``.
+        Default ``"multicolor_agn"``.
     """
 
     name: str = "agn"
-    model: str = "simple"
+    model: str = "multicolor_agn"
 
 
 @dataclass(frozen=True)

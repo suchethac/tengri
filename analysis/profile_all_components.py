@@ -481,29 +481,14 @@ print(format_row("IGM (Inoue+2014, z=3.0)", t_igm2))
 
 # --- AGN ---
 print()
-from tengri.agn.unified import simple_agn
+from tengri.agn.unified import multicolor_agn
 
-fn_agn = jax.jit(lambda: simple_agn(wave, agn_log_lbol=44.0, agn_alpha=-1.0,
-                                      agn_T_torus=1000.0))
+fn_agn = jax.jit(lambda: multicolor_agn(wave, agn_log_lbol=11.0))
 t_agn, r_agn = bench(fn_agn, n=200)
-grad_agn = jax.jit(jax.grad(
-    lambda lbol: jnp.sum(simple_agn(wave, agn_log_lbol=lbol, agn_alpha=-1.0,
-                                     agn_T_torus=1000.0))
-))
-_ = grad_agn(44.0)
-t_gagn, _ = bench(lambda: grad_agn(44.0), n=200)
-print(format_row("AGN simple (disc + torus)", t_agn, t_gagn, array_mb(r_agn)))
-
-# Standard AGN (multicolor disc + 2-temp torus)
-try:
-    from tengri.agn.unified import AGN_MODELS
-    if "standard" in AGN_MODELS:
-        std_agn = AGN_MODELS["standard"]
-        fn_std = jax.jit(lambda: std_agn(wave, agn_log_lbol=44.0))
-        t_std, _ = bench(fn_std, n=100)
-        print(format_row("AGN standard (multicolor + 2T)", t_std))
-except Exception:
-    pass
+grad_agn = jax.jit(jax.grad(lambda lbol: jnp.sum(multicolor_agn(wave, agn_log_lbol=lbol))))
+_ = grad_agn(11.0)
+t_gagn, _ = bench(lambda: grad_agn(11.0), n=200)
+print(format_row("AGN multicolor_agn (K&D disc + 2T torus)", t_agn, t_gagn, array_mb(r_agn)))
 
 # --- Photometric integration ---
 print()

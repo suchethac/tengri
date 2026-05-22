@@ -60,10 +60,15 @@ for compatibility with gradient-based inference (VI, HMC):
 
 Pre-registered configurations
 ------------------------------
-- **simple**: power-law disc + single-temperature torus (3 free params).
-- **standard**: multi-color disc + two-temperature torus (5-6 free params).
-- **kubota_done**: multi-color disc with BH physics + clumpy torus (8+ params).
+- **multicolor_agn** (= deprecated alias ``kubota_done``): multi-color disc with
+  BH physics + 2-T torus (8+ params).
+- **kubota_done_full**: full Kubota & Done 3-zone disc + 2-T torus (13+ params).
+- **adaf**: ADAF + truncated disc + IR torus for low-luminosity AGN (6 params).
 - **unified_nlr_blr**: full Synthesizer-inspired model with NLR/BLR + polar dust.
+- **skirtor**: power-law disc + SKIRTOR clumpy torus (Stalevski+2012, 2016).
+- **silva04**: power-law disc + Silva+04 smooth torus.
+- **cat3d_wind**: power-law disc + CAT3D-Wind clumpy torus.
+- **relagn**: RELAGN relativistic disc + 2-T torus.
 
 .. warning::
 
@@ -98,11 +103,11 @@ Usage::
 
     # Use a named configuration. agn_log_lbol = 11 → L_bol ≈ 4e44 erg/s
     # (a typical bright Seyfert nucleus).
-    model_fn = resolve_agn_model("simple")
+    model_fn = resolve_agn_model("multicolor_agn")
     l_nu = model_fn(wavelength, agn_log_lbol=11.0, agn_frac=0.1, ...)
 
     # Or use the generic combiner directly.
-    l_nu = unified_agn(wavelength, agn_log_lbol=11.0, disc_model="powerlaw", ...)
+    l_nu = unified_agn(wavelength, agn_log_lbol=11.0, disc_model="multicolor", ...)
 
 References
 ----------
@@ -459,119 +464,6 @@ def unified_agn(
 
 
 # ── Pre-registered AGN models ─────────────────────────────────────
-
-
-@register_agn_model("simple", status="demo", short_doc="Toy 3-zone disc + single-T torus")
-def simple_agn(
-    wavelength: jnp.ndarray,
-    agn_log_lbol: float,
-    agn_frac: float = 0.1,
-    agn_alpha: float = -1.0,
-    agn_T_torus: float = 1000.0,
-    agn_torus_frac: float = 0.5,
-    **_kwargs,
-) -> jnp.ndarray:
-    """Simple AGN: power-law disc + single-temperature torus.
-
-    Minimal 3-parameter model (+ overall luminosity scaling).
-
-    Parameters
-    ----------
-    wavelength : array_like, shape (n_wave,)
-        Rest-frame wavelength [Angstrom].
-    agn_log_lbol : float
-        log10 of bolometric luminosity [Lsun].
-    agn_frac : float, optional
-        AGN luminosity fraction of total galaxy SED [dimensionless].
-        Applied as overall scaling. Default 0.1.
-    agn_alpha : float, optional
-        Disc spectral slope [dimensionless]. Default -1.0.
-    agn_T_torus : float, optional
-        Torus temperature [K]. Default 1000.
-    agn_torus_frac : float, optional
-        Torus covering factor [dimensionless], range [0, 1]. Default 0.5.
-
-    Returns
-    -------
-    ndarray, shape (n_wave,)
-        L_nu [erg/s/Hz].
-
-    Notes
-    -----
-    **JIT-compatible**: yes — delegates to :func:`unified_agn`.
-    """
-    l_nu = unified_agn(
-        wavelength,
-        agn_log_lbol=agn_log_lbol,
-        disc_model="powerlaw",
-        torus_model="simple",
-        agn_alpha=agn_alpha,
-        agn_T_torus=agn_T_torus,
-        agn_torus_frac=agn_torus_frac,
-    )
-    return l_nu * agn_frac
-
-
-@register_agn_model("standard", short_doc="Multi-color disc + 2-T torus")
-def standard_agn(
-    wavelength: jnp.ndarray,
-    agn_log_lbol: float,
-    agn_frac: float = 0.1,
-    agn_log_mbh: float = 8.0,
-    agn_log_ledd: float = -1.0,
-    agn_T_hot: float = 1200.0,
-    agn_T_warm: float = 300.0,
-    agn_frac_hot: float = 0.3,
-    agn_torus_frac: float = 0.5,
-    **_kwargs,
-) -> jnp.ndarray:
-    """Standard AGN: multi-color disc + two-temperature torus.
-
-    5-6 free parameters controlling BH accretion physics and dust emission.
-
-    Parameters
-    ----------
-    wavelength : array_like, shape (n_wave,)
-        Rest-frame wavelength [Angstrom].
-    agn_log_lbol : float
-        log10 of bolometric luminosity [Lsun].
-    agn_frac : float, optional
-        AGN luminosity fraction [dimensionless]. Default 0.1.
-    agn_log_mbh : float, optional
-        log10 of black hole mass [Msun]. Default 8.0.
-    agn_log_ledd : float, optional
-        log10 of Eddington ratio [dimensionless]. Default -1.0.
-    agn_T_hot : float, optional
-        Hot dust temperature [K]. Default 1200.
-    agn_T_warm : float, optional
-        Warm dust temperature [K]. Default 300.
-    agn_frac_hot : float, optional
-        Hot component mass fraction [dimensionless]. Default 0.3.
-    agn_torus_frac : float, optional
-        Torus covering factor [dimensionless]. Default 0.5.
-
-    Returns
-    -------
-    ndarray, shape (n_wave,)
-        L_nu [erg/s/Hz].
-
-    Notes
-    -----
-    **JIT-compatible**: yes — delegates to :func:`unified_agn` with multicolor disc.
-    """
-    l_nu = unified_agn(
-        wavelength,
-        agn_log_lbol=agn_log_lbol,
-        disc_model="multicolor",
-        torus_model="two_temperature",
-        agn_log_mbh=agn_log_mbh,
-        agn_log_ledd=agn_log_ledd,
-        agn_T_hot=agn_T_hot,
-        agn_T_warm=agn_T_warm,
-        agn_frac_hot=agn_frac_hot,
-        agn_torus_frac=agn_torus_frac,
-    )
-    return l_nu * agn_frac
 
 
 @register_agn_model(

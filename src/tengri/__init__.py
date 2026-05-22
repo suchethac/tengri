@@ -350,6 +350,8 @@ from tengri.registry import (
 # ``tengri.clear_cache()``; the rest live in ``tengri.utils.jax_cache``
 # and ``tengri.inference.jit_engine`` for callers who need them.
 __all__ = [
+    "FIXED",
+    "FREE",
     "BackendError",
     "ConfigError",
     "Exponential",
@@ -366,7 +368,9 @@ __all__ = [
     "Parameters",
     "Population",
     "PopulationSEDModel",
+    "PriorPredictive",
     "SEDModel",
+    "SEDResult",
     "Sersic",
     "SpatialModel",
     "SpatialSEDModel",
@@ -383,6 +387,7 @@ __all__ = [
     "clear_cache",
     "config",
     "cosmology",
+    "data_path",
     "describe",
     "describe_parameter",
     "doctor",
@@ -391,6 +396,7 @@ __all__ = [
     "examples",
     "explain",
     "filters",
+    "fit_batch",
     "help",
     "igm",
     "inference",
@@ -407,6 +413,7 @@ __all__ = [
     "list_parameters",
     "list_plots",
     "list_sfh_models",
+    "load_filter_set",
     "nebular",
     "observation",
     "pipeline",
