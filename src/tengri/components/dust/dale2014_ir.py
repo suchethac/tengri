@@ -89,9 +89,7 @@ class Dale2014IRSEDComponent(SEDModelComponent):
     config: Dale2014IRConfig = Dale2014IRConfig()
 
     # Free parameters — auto-discovered by base class
-    alpha_dale = Uniform(
-        0.5, 3.0, description="Radiation field power-law index", units=""
-    )
+    alpha_dale = Uniform(0.5, 3.0, description="Radiation field power-law index", units="")
 
     # Cross-component contract
     inputs: ClassVar = {"L_ir": "erg/s"}
