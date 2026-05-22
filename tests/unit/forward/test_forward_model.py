@@ -41,9 +41,7 @@ def test_build_rejects_no_sed_no_populations(simple_observation) -> None:
 
 
 def test_build_accepts_explicit_populations(sed_model_minimal, simple_observation) -> None:
-    from tengri.forward._sed_submodel_adapter import _LegacySEDSubModel
-
-    pop = Population(name="only", sed=_LegacySEDSubModel(sed_model_minimal))
+    pop = Population(name="only", sed=sed_model_minimal)
     forward = ForwardModel.build(populations=[pop], observation=simple_observation)
     assert forward.populations[0].name == "only"
 
@@ -52,11 +50,9 @@ def test_build_rejects_multi_population_in_tracer_bullet(
     sed_model_minimal, simple_observation
 ) -> None:
     """Multi-population is deferred to ADR-0012 plan. Tracer-bullet ships single-pop."""
-    from tengri.forward._sed_submodel_adapter import _LegacySEDSubModel
-
     pops = [
-        Population(name="a", sed=_LegacySEDSubModel(sed_model_minimal)),
-        Population(name="b", sed=_LegacySEDSubModel(sed_model_minimal)),
+        Population(name="a", sed=sed_model_minimal),
+        Population(name="b", sed=sed_model_minimal),
     ]
     with pytest.raises(NotImplementedError, match="ADR-0012"):
         ForwardModel.build(populations=pops, observation=simple_observation)

@@ -1,5 +1,12 @@
 # Unify forward-projection paths under `state → observation.predict() → Observables`
 
+> **Superseded (2026-05).** The unification described here shipped; the
+> current architecture story lives in
+> [`docs/dev/forward-model-architecture.md`](forward-model-architecture.md)
+> and the `SEDModelComponent` how-to at
+> [`docs/dev/sed-model-components.md`](sed-model-components.md). Kept for
+> historical context.
+
 **Status:** **Shipped** through Phase 6 in PR #135 (2026-05-20). Phases 1–6
 are in `main`; the kernel adapter family is removed, the predict surface
 collapses into ``predict_observables_jit``, and ``approx=WavePrecomp(...)``
