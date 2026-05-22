@@ -218,7 +218,7 @@ def test_charlot_fall_attenuation_calibration():
     assert abs(atten - expected) < 0.01  # <1% error
 ```
 
-See VERIFICATION.md for a status table of all physics modules.
+See [docs/dev/verification-protocol.md](docs/dev/verification-protocol.md) for a status table of all physics modules.
 
 ## Docstring expectations
 

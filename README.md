@@ -17,7 +17,7 @@ Tengri fits galaxy spectral energy distributions in JAX. One differentiable forw
 
 ## Verification and Provenance
 
-This codebase was initially drafted with AI assistance (Claude Code) and is progressively being human-verified. See [VERIFICATION.md](VERIFICATION.md) for the verification protocol and component status. Physics components marked PENDING there should not be used for publication-grade science without independent cross-validation.
+This codebase was initially drafted with AI assistance (Claude Code) and is progressively being human-verified. See [docs/dev/verification-protocol.md](docs/dev/verification-protocol.md) for the verification protocol and component status. Physics components marked PENDING there should not be used for publication-grade science without independent cross-validation.
 
 ## Installation
 
@@ -178,7 +178,7 @@ Pre-1.0, actively developed, and API-unstable. Paper I in preparation.
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — community standards
 - [SECURITY.md](SECURITY.md) — security reporting
 - [SUPPORT.md](SUPPORT.md) — getting help
-- [VERIFICATION.md](VERIFICATION.md) — component verification status
+- [docs/dev/verification-protocol.md](docs/dev/verification-protocol.md) — component verification status
 - [CHANGELOG.md](CHANGELOG.md) — version history
 - [ROADMAP.md](ROADMAP.md) — planned features
 

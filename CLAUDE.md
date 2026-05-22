@@ -315,8 +315,8 @@ Search qmd first using `collections: ["tengri"]` before reading any file. Fall b
 
 ## References
 
-- `AGENTS.md` — AI agent documentation
-- `HANDOFF.md` — project status and next steps
+- `docs/dev/agents.md` — AI agent documentation
+- `docs/dev/history/handoff-2026-04.md` — frozen project-status snapshot (pre Phase II-3 closure)
 - `docs/dev/design_philosophy.md` — architecture decisions
 - `docs/dev/NAMING_CONTRACT.md` — naming conventions (read before any rename/refactor)
 - `docs/dev/REFACTOR.md` — refactor plan
