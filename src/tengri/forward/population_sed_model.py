@@ -170,6 +170,78 @@ class PopulationSEDModel:
             for name in self.shared
         ]
 
+    @property
+    def batched_axes(self) -> dict[str, int]:
+        """Named batched axes this SubModel introduces.
+
+        Returns ``{"galaxy": 0}`` — PopulationSEDModel publishes a single
+        named axis (``"galaxy"``) at position 0 of every per-galaxy
+        array. Single-galaxy SubModels (``SEDModel``, ``SpatialModel``,
+        …) return ``{}``.
+
+        Used by :meth:`ForwardModel.predict` and by the inference layer
+        to compose batching (vmap / pmap / shard_map) without hidden
+        nested vmaps. See :meth:`predict_one` for the un-batched
+        primitive.
+
+        Returns
+        -------
+        dict[str, int]
+            Map from named axis to its integer position in arrays.
+        """
+        return {"galaxy": 0}
+
+    def predict_one(
+        self,
+        state: ForwardState,
+        params_one: Mapping[str, Any],
+    ) -> ForwardState:
+        """Un-batched primitive: run the SED template for a single galaxy.
+
+        Corresponds to one term in the hierarchical information
+        Hamiltonian's data sum (paper §4):
+
+        .. math::
+
+            \\mathcal{H}_{\\rm hier} = \\tfrac{1}{2}\\sum_{j=1}^{N_{\\rm gal}}
+                \\chi^2\\!\\bigl(\\mathbf{d}^{(j)},\\,
+                    \\mathbf{f}\\!\\bigl(\\mathbf{h}(\\boldsymbol{\\xi}^{(j)},\\,
+                                              \\boldsymbol{\\xi}^{(\\rm hyp)})\\bigr)\\bigr)
+              + \\tfrac{1}{2}\\,\\boldsymbol{\\xi}^{\\!\\top}\\boldsymbol{\\xi}
+
+        where :math:`\\mathbf{f}\\circ\\mathbf{h}` is the per-galaxy
+        forward model from latent space to predicted observables.
+        ``predict_one`` evaluates that pipeline for one galaxy;
+        :meth:`run` vmaps over the population to evaluate the full sum.
+
+        Composable with outer ``jax.vmap`` / ``jax.pmap`` / ``shard_map``.
+        Use this entry point when you need control over the batching
+        strategy — e.g. multi-device sharding, catalog × hierarchical
+        fits, or posterior-predictive sweeps that already have an
+        outer ``vmap``. Use :meth:`run` for the default batched path.
+
+        Parameters
+        ----------
+        state : ForwardState
+            Initial state. Wavelength grid + any upstream state.
+        params_one : Mapping
+            **Un-batched** parameters for a single galaxy. Every
+            value is a scalar (no leading ``N_galaxies`` axis).
+
+        Returns
+        -------
+        ForwardState
+            Single-galaxy state. No leading galaxy axis.
+
+        Notes
+        -----
+        Pure JAX. JIT/grad/vmap/pmap-compatible. Forwarding to
+        ``self.sed.run`` is a no-op layer that exists so external
+        callers can compose their own batching without nesting
+        :meth:`run`'s internal vmap.
+        """
+        return self.sed.run(state, params_one)
+
     def parameter_axes(self, params: Mapping[str, Any]) -> dict[str, int | None]:
         """Per-parameter vmap axis: 0 for per-galaxy, None for shared (broadcast).
 
@@ -228,17 +300,19 @@ class PopulationSEDModel:
         -----
         JIT/grad/vmap-compatible.
 
-        Raises
-        ------
-        NotImplementedError
-            Always, until the batched-vmap forward path lands. Use
-            ``Fitter(forward, ...).run('vi')`` — the inference path
-            handles hierarchical population fits without going through
-            ``forward.predict``.
+        Notes (composability)
+        ---------------------
+        This method is the default convenience path; it vmaps
+        :meth:`predict_one` over the galaxy axis. For multi-device
+        sharding, catalog × hierarchical fits, or any case where you
+        need to compose outer batching, call :meth:`predict_one`
+        directly with your own ``vmap`` / ``pmap`` / ``shard_map``.
+        The :attr:`batched_axes` property publishes the axis layout
+        so external code can stay axis-aware.
         """
         import jax
 
         in_axes_params = self.parameter_axes(params)
         # State is broadcast across the population (one wavelength grid,
         # one upstream state); params follow their per-parameter axes.
-        return jax.vmap(self.sed.run, in_axes=(None, in_axes_params))(state, params)
+        return jax.vmap(self.predict_one, in_axes=(None, in_axes_params))(state, params)
