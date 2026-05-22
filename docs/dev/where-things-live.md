@@ -25,7 +25,8 @@ edit:
 | X-ray (XRBs + AGN corona) | `components/xray/` |
 
 Each component package has:
-- `component.py` — the `SEDComponent` adapter (the orchestration shape)
+- `component.py` — the bare `SEDComponent` Protocol adapter (used by stellar, IGM, and other components with rich state)
+- `<name>_model.py` — single-file `SEDModelComponent` ports (added 2026-05; the default authoring style for new models)
 - `_params.py` — the parameters this component owns (priors, descriptions, units)
 - `*.py` for the actual physics (e.g. `attenuation.py`, `emission.py`)
 - `*_precompute.py` for filter-preintegrated lookup tables (optional)
@@ -33,6 +34,28 @@ Each component package has:
 **North-star file for style:** `components/dust/attenuation.py` reads like
 prose from Charlot & Fall (2000) with a Python skeleton attached. Copy its
 rhythm.
+
+## Adding a new model
+
+For most new models — closed-form attenuation laws, dust IR libraries, AGN
+torus libraries, nebular emulators — write **one file** at
+`components/<domain>/<name>_model.py` subclassing `SEDModelComponent`. The
+canonical small example is
+[`components/dust/calzetti_model.py`](../../src/tengri/components/dust/calzetti_model.py);
+a library example is
+[`components/agn/skirtor_model.py`](../../src/tengri/components/agn/skirtor_model.py).
+
+The base class lives at
+[`components/sed_model_component.py`](../../src/tengri/components/sed_model_component.py).
+For the how-to and the contract, see
+[`docs/dev/sed-model-components.md`](sed-model-components.md); for the
+architectural context (cross-component contract, WavePrecomp, builder
+resolution), see [`forward-model-architecture.md`](forward-model-architecture.md).
+
+The bare `SEDComponent` Protocol stays as the fallback for models that don't
+fit the `predict(p, sed_in, wave, **inputs)` shape — stellar (rich state
+machine), IGM (observer-frame transformation). The canonical bare-Protocol
+reference is `components/radio/component.py`.
 
 ## Defining parameters
 
