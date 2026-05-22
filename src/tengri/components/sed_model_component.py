@@ -257,6 +257,7 @@ class SEDModelComponent:
     _priors: ClassVar[dict[str, Distribution]] = {}
     _inputs_tuple: ClassVar[tuple[DerivedKey, ...]] = ()
     _outputs_tuple: ClassVar[tuple[DerivedKey, ...]] = ()
+    _optional_inputs_tuple: ClassVar[tuple[DerivedKey, ...]] = ()
     _citations_tuple: ClassVar[tuple[str, ...]] = ()
 
     # Instance attributes (set by subclass, but with class defaults)
@@ -286,22 +287,29 @@ class SEDModelComponent:
         # Store on the class
         cls._priors = priors
 
-        # Extract and parse inputs / outputs dicts
+        # Extract and parse inputs / outputs / optional_inputs dicts
         inputs_dict = vars(cls).get("inputs", {})
         outputs_dict = vars(cls).get("outputs", {})
+        optional_inputs_dict = vars(cls).get("optional_inputs", {})
 
         # Build DerivedKey tuples
         inputs_tuple = tuple(DerivedKey(name, units, "") for name, units in inputs_dict.items())
         outputs_tuple = tuple(DerivedKey(name, units, "") for name, units in outputs_dict.items())
+        optional_inputs_tuple = tuple(
+            DerivedKey(name, units, "") for name, units in optional_inputs_dict.items()
+        )
 
         cls._inputs_tuple = inputs_tuple
         cls._outputs_tuple = outputs_tuple
+        cls._optional_inputs_tuple = optional_inputs_tuple
 
         # Delete the dicts so method resolution finds the base methods
         if "inputs" in vars(cls):
             delattr(cls, "inputs")
         if "outputs" in vars(cls):
             delattr(cls, "outputs")
+        if "optional_inputs" in vars(cls):
+            delattr(cls, "optional_inputs")
 
         # Citations: read class attribute (tuple of bib keys), store on class.
         # Subclasses declare ``citations = ("calzetti2000", ...)``; the
@@ -387,6 +395,24 @@ class SEDModelComponent:
             Constructed from the ``outputs`` class dict at class-definition time.
         """
         return self._outputs_tuple
+
+    def optional_inputs(self) -> tuple[DerivedKey, ...]:
+        """Cross-component reads with a documented fallback (zero by default).
+
+        Returns
+        -------
+        tuple[DerivedKey, ...]
+            Derived keys this component reads *opportunistically* — if an
+            upstream component publishes the key, its value is passed to
+            :meth:`predict` as a keyword argument; if not, the framework
+            substitutes ``jnp.asarray(0.0)``. This is how a downstream
+            component like radio can read ``L_ir`` from dust if dust is
+            in the chain but still produce a sensible output if not.
+
+            Constructed from the ``optional_inputs`` class dict at
+            class-definition time, mirroring the ``inputs`` shape.
+        """
+        return self._optional_inputs_tuple
 
     def citations(self) -> tuple[str, ...]:
         """Bib keys for papers this component implements, solves for, or ports.
@@ -484,6 +510,16 @@ class SEDModelComponent:
                     f"but it was not published by any upstream component. "
                     f"Available derived keys: {list(state.derived.keys())}"
                 )
+
+        # Look up optional inputs from derived — fallback to 0.0 when missing.
+        # This is the "documented-fallback" cross-component read pattern
+        # used by radio (L_ir / L_agn_bol / log_mstar) and X-ray.
+        for opt_key in self.optional_inputs():
+            key_name = opt_key.name
+            if key_name in state.derived:
+                input_kwargs[key_name] = state.derived[key_name]
+            else:
+                input_kwargs[key_name] = jnp.asarray(0.0)
 
         # Initialize SED if not yet done
         if state.sed_intrinsic is None:
