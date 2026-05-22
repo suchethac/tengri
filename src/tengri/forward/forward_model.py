@@ -20,6 +20,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.forward.population import Population
+from tengri.protocols.component import ForwardState
 
 __all__ = ["ForwardModel"]
 
@@ -131,10 +132,11 @@ class ForwardModel:
         case, the loop is a one-element loop and the result is returned
         directly.
 
-        The current implementation delegates to the wrapped
-        :class:`SEDModel`'s photometry path. Subsequent plans replace
-        this with a true ``observation.predict(state, params)`` call
-        once the observation adopts the Protocol surface.
+        For each population, the SED ``SubModel`` produces a
+        :class:`tengri.protocols.ForwardState`; the observation then
+        projects that state into the channel dict
+        (``{"phot_fnu": ...}``, ``{"spec_fnu": ...}``, joint, …) via
+        :meth:`tengri.observation.Observation.predict`.
 
         Parameters
         ----------
@@ -144,7 +146,9 @@ class ForwardModel:
         Returns
         -------
         mapping of str -> array
-            Prediction dict. Single-population: ``{"phot_fnu": ...}``.
+            Prediction dict, keyed by observation channel. The keys
+            depend on the observation's configuration (photometric,
+            spectroscopic, or joint).
         """
         per_pop: dict[str, Mapping[str, jnp.ndarray]] = {}
         for pop in self.populations:
@@ -152,15 +156,25 @@ class ForwardModel:
                 raise NotImplementedError(
                     "Population.spatial is reserved for the spatial-model plan."
                 )
-            from tengri.forward.sed_model import SEDModel
+            # Merge the user's free-parameter values with the SubModel's
+            # fixed-parameter values so the downstream projection has
+            # everything it needs (redshift, calibration coefficients, etc.).
+            # Free params override fixed ones when names collide — the user's
+            # value wins. The legacy ``SEDModel.predict_photometry`` did this
+            # merge internally; ``Observation.predict`` does not, so the
+            # outer shell threads it.
+            full_params: dict[str, Any] = {}
+            spec = getattr(pop.sed, "spec", None)
+            if spec is not None and hasattr(spec, "get_fixed_values"):
+                full_params.update(spec.get_fixed_values())
+            full_params.update(params)
 
-            if not isinstance(pop.sed, SEDModel):
-                raise NotImplementedError(
-                    "ForwardModel.predict currently supports only SEDModel-based "
-                    "populations. Other SubModel implementations need the "
-                    "observation-Protocol migration plan."
-                )
-            per_pop[pop.name] = {"phot_fnu": pop.sed.predict_photometry(params)}
+            # The initial ForwardState is a placeholder — SED is the head of
+            # the per-population chain and the SubModel's run() produces a
+            # freshly-populated state. The 1-element wave is overwritten.
+            init_state = ForwardState(wave=jnp.zeros(1))
+            state = pop.sed.run(init_state, full_params)
+            per_pop[pop.name] = self.observation.predict(state, full_params)
 
         if len(per_pop) == 1:
             (only,) = per_pop.values()
