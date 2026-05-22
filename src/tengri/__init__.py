@@ -203,6 +203,7 @@ class _KernelsRemoved:
 
 KernelStrategy = _KernelsRemoved("KernelStrategy")
 NoCompatibleKernelError = _KernelsRemoved("NoCompatibleKernelError")
+from tengri.components.spatial import Exponential, FlatSlab, Sersic
 from tengri.forward.convenience import catalog_summary, fit_batch
 from tengri.forward.forward_model import ForwardModel
 from tengri.forward.population import Population
@@ -215,6 +216,7 @@ from tengri.forward.prediction import (
 )
 from tengri.forward.result import SEDResult
 from tengri.forward.sed_model import PriorPredictive, SEDModel, WavePrecomp
+from tengri.forward.spatial_model import SpatialModel, SpatialSEDModel
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
 from tengri.observation.filters import load_filter_set
 from tengri.observation.noise import (
@@ -345,7 +347,9 @@ __all__ = [
     "ConfigError",
     "DerivedBundle",
     "DerivedKey",
+    "Exponential",
     "Fixed",
+    "FlatSlab",
     "ForwardModel",
     "ForwardState",
     "Galaxy",
@@ -359,6 +363,9 @@ __all__ = [
     "PipelineContractError",
     "Population",
     "SEDModel",
+    "Sersic",
+    "SpatialModel",
+    "SpatialSEDModel",
     "StudentT",
     "TengriError",
     "TengriIOError",
