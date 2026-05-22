@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SEDModel directly satisfies the SubModel Protocol.
 
 This makes the _LegacySEDSubModel adapter unnecessary; that file is

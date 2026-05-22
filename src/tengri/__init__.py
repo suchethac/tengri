@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """tengri: Differentiable SED fitting with IFT star formation history priors.
 
 A modular, fully differentiable JAX pipeline:
@@ -216,7 +217,7 @@ from tengri.forward.prediction import (
     SFHQuantities,
 )
 from tengri.forward.result import SEDResult
-from tengri.forward.sed_model import PriorPredictive, SEDModel, WavePrecomp
+from tengri.forward.sed_model import PriorPredictive, SEDModel, SpectrumPrecomp, WavePrecomp
 from tengri.forward.spatial_model import SpatialModel, SpatialSEDModel
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
 from tengri.observation.filters import load_filter_set
@@ -349,6 +350,8 @@ from tengri.registry import (
 # ``tengri.clear_cache()``; the rest live in ``tengri.utils.jax_cache``
 # and ``tengri.inference.jit_engine`` for callers who need them.
 __all__ = [
+    "FIXED",
+    "FREE",
     "BackendError",
     "ConfigError",
     "Exponential",
@@ -365,10 +368,13 @@ __all__ = [
     "Parameters",
     "Population",
     "PopulationSEDModel",
+    "PriorPredictive",
     "SEDModel",
+    "SEDResult",
     "Sersic",
     "SpatialModel",
     "SpatialSEDModel",
+    "SpectrumPrecomp",
     "StudentT",
     "TengriError",
     "TengriIOError",
@@ -381,6 +387,7 @@ __all__ = [
     "clear_cache",
     "config",
     "cosmology",
+    "data_path",
     "describe",
     "describe_parameter",
     "doctor",
@@ -389,6 +396,7 @@ __all__ = [
     "examples",
     "explain",
     "filters",
+    "fit_batch",
     "help",
     "igm",
     "inference",

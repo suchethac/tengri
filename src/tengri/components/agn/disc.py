@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Accretion disc models for AGN emission.
 
 Four models are provided:
@@ -1547,7 +1548,8 @@ def _adaf_truncated_disc_spectrum(
 
 
 # ADAF disc model (Mahadevan 1997; Yuan & Narayan 2014). The current implementation
-# contains documented physics discrepancies and requires a full rewrite. See docs/dev/TODO.md.
+# contains documented physics discrepancies vs Mahadevan (1997) and is scheduled for
+# a full rewrite; do not use for publication-grade fits. Tracking: ROADMAP.md.
 def adaf_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,

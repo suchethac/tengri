@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Utilities for fracAGN parameter conversion.
 
 Thin wrappers for converting between the fracAGN parameter (bolometric

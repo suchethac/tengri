@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: BSD-3-Clause
 """Robustness tests for mode parameter across dimensionalities and methods.
 
 Tests the mode="traced" vs mode="auto" implementation across:

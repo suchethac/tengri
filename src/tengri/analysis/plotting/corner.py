@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Corner plot utilities for posterior visualization and comparison.
 
 Safe wrappers around corner-plot generation that handle degenerate posteriors

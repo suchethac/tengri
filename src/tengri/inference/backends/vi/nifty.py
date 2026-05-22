@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """geoVI-preconditioned NUTS: exact MCMC in geoVI-flattened coordinates.
 
 Uses geoVI's nonlinear coordinate transform g(ξ; m*) to precondition

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the Chisholm+2022 LyC escape fraction model.
 
 Reference: Chisholm et al. 2022, ApJ, 931, 37 (LzLCS).

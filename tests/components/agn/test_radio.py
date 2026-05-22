@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the three-mode SFR radio physics models.
 
 Covers:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Laplace approximation: Gaussian posterior from Hessian at MAP.
 
 The cheapest uncertainty estimate available — compute the Hessian of the

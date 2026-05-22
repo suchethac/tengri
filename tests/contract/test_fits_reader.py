@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for Spectroscopy FITS reader factory methods.
 
 Uses synthetic FITS files to test round-trip I/O without requiring real data.

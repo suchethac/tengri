@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for parse_groups() nested-dict model builder.
 
 This module tests the translation from Bagpipes-style nested dicts

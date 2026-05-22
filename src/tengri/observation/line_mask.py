@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Boolean pixel mask for emission lines in observed-frame spectra."""
 
 from __future__ import annotations

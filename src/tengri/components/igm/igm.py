@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Intergalactic medium absorption (Inoue et al. 2014).
 
 Computes the mean IGM transmission T_IGM(lambda_obs, z_source) accounting for:
@@ -18,7 +19,7 @@ Coefficient tables from eazy-py (Brammer et al.):
 import jax
 import jax.numpy as jnp
 
-from tengri.utils.cosmology import PLANCK18
+from tengri.cosmology import PLANCK18
 from tengri.utils.physics_constants import C_CGS
 
 # ── Lyman series wavelengths (Angstrom) for lines j=2 (Ly-alpha) to j=40

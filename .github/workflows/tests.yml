@@ -30,6 +30,29 @@ jobs:
       - run: pip install "ruff==0.15.6"
       - run: ruff check src/ tests/
       - run: ruff format --check src/ tests/
+      - run: python tools/add_spdx_headers.py --check
+
+  # Static security scan + dependency vulnerability check. Informational
+  # for now (continue-on-error) — surfaces findings in the PR check UI
+  # without blocking. Promote to required once the baseline is clean.
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install bandit pip-audit
+      - name: Static security scan (bandit, high severity)
+        run: bandit -r src/ -ll
+        continue-on-error: true
+      - name: Install for dependency audit
+        run: pip install -e .
+      - name: Dependency vulnerability scan (pip-audit)
+        run: pip-audit --disable-pip
+        continue-on-error: true
 
   smoke:
     runs-on: ubuntu-latest
@@ -76,11 +99,18 @@ jobs:
       - run: |
           pytest tests/components tests/contract tests/physics tests/regression -q \
             -n auto \
+            --cov=src/tengri --cov-report=xml --cov-report=term:skip-covered \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
         timeout-minutes: 15
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+        continue-on-error: true
 
   # Sampler-heavy inference tests (NUTS, Pathfinder, VI, MCLMC, etc.).
   # Run on:

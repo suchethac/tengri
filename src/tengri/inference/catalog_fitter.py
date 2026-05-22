@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Independent per-galaxy catalog inference with optional K-way parallelism.
 
 Unlike :class:`PopulationFitter`, galaxies share no parameters.

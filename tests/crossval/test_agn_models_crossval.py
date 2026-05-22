@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate QSOGen and SKIRTOR AGN models.
 
 QSOGen: tengri's JAX implementation vs the original Python code

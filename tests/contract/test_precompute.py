@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for SSP pre-computation at fixed redshift."""
 
 import chex

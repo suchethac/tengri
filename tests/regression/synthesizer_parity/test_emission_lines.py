@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for emission line doublet ratios and wavelength conventions.
 
 Synthesizer parity.

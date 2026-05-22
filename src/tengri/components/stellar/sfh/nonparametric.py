@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Non-parametric star formation history models.
 
 Implements the Continuity (Leja+2019), Dirichlet (Leja+2017), Bursty
@@ -419,7 +420,7 @@ def make_agebins_from_zred(
     >>> bool((edges[:-1] < edges[1:]).all())  # monotone
     True
     """
-    from tengri.utils.cosmology import DEFAULT_COSMO, age_at_z
+    from tengri.cosmology import DEFAULT_COSMO, age_at_z
 
     if cosmo is None:
         cosmo = DEFAULT_COSMO

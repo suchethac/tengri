@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Kubota & Done (2018) 3-zone disc preintegration through photometric filters.
 
 Precomputes filter-integrated lookup tables for the three K&D disc zones:

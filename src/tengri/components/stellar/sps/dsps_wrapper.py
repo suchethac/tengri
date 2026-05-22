@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """DSPS integration: differentiable CSP synthesis and SSP template management.
 
 This module wraps the Differentiable Stellar Population Synthesis (DSPS) library

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for Sokal/Behroozi autocorrelation time estimator."""
 
 import numpy as np

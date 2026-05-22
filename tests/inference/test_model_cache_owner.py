@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for ModelCacheOwner isolation, thread safety, and backward compatibility."""
 
 from __future__ import annotations

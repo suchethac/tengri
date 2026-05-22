@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physics cross-validation for AGN disc, torus, BLR, and NLR models.
 
 Tests physical correctness against known astrophysical relationships:
@@ -488,7 +489,7 @@ class TestUnifiedAGNPhysics:
         """Simple AGN model produces finite positive SED."""
         from tengri.components.agn import resolve_agn_model
 
-        model_fn = resolve_agn_model("simple")
+        model_fn = resolve_agn_model("multicolor_agn")
         l_nu = model_fn(WAVE, agn_log_lbol=11.0)
         chex.assert_tree_all_finite(l_nu)
         assert float(jnp.sum(l_nu)) > 0

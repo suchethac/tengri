@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate dust IR emission against bagpipes.
 
 Bagpipes uses the full tabulated Draine & Li (2007) template grids,

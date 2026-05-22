@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """PopulationSEDModel — SubModel for hierarchical galaxy populations.
 
 A single class that holds an :class:`tengri.SEDModel` template + a list
@@ -63,6 +64,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
+
+import jax.numpy as jnp
 
 from tengri.protocols.component import ForwardState, ParamDeclaration
 
@@ -147,9 +150,81 @@ class PopulationSEDModel:
         object.__setattr__(self, "data_type", data_type)
         object.__setattr__(self, "name", "population_sed_model")
 
+    def __hash__(self) -> int:
+        """Identity-based hash.
+
+        Frozen-dataclass auto-generated ``__hash__`` would hash the
+        field tuple, but ``galaxies`` is a tuple of ``Mapping``s
+        whose contents are JAX arrays / dicts — unhashable. The cache
+        machinery (:class:`weakref.WeakKeyDictionary` in
+        :mod:`tengri.inference._model_cache`) uses object identity
+        anyway, so identity-hash is functionally equivalent and
+        sidesteps the unhashable-field problem.
+
+        Equality semantics retained: two PopulationSEDModel instances
+        with identical contents are still ``__eq__``, but they hash
+        differently. This matches the spirit of weak-keyed caches.
+        """
+        return id(self)
+
     @property
     def n_galaxies(self) -> int:
         return len(self.galaxies)
+
+    @property
+    def spec(self):
+        """The batched-sample :class:`Parameters`-shaped view.
+
+        Returns a :class:`PopulationSpecView` wrapping the SED
+        template's scalar spec. Implements the same implicit Protocol
+        :class:`Fitter` consumes (``free_params``, ``get_fixed_values``,
+        ``sample(key)``, ``_distributions``, …) — but :meth:`sample`
+        returns per-galaxy free parameters with shape ``(N_galaxies,)``,
+        keeping shared parameters scalar.
+
+        Fitter has zero special-case code for hierarchical fits: it
+        just consumes whatever shapes the spec returns.
+
+        Notes
+        -----
+        Construction is cheap (no JAX work). Use ``self.sed.spec`` to
+        access the underlying scalar spec when you need it directly.
+        """
+        from tengri.parameters._population_view import PopulationSpecView
+
+        return PopulationSpecView(
+            template=self.sed.spec,
+            n_galaxies=self.n_galaxies,
+            shared=self.shared,
+        )
+
+    def batched_data(self) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Return ``(flux_obs, noise)`` arrays stacked across the population.
+
+        Each array has shape ``(N_galaxies, n_filters)`` — the
+        canonical batched shape that :class:`Fitter` accepts as the
+        ``data`` and ``noise`` arguments for hierarchical fits.
+
+        The likelihood's :math:`\\chi^2` broadcasts naturally over
+        the leading galaxy axis against the prediction dict's
+        ``(N_galaxies, n_filters)`` arrays returned by
+        :meth:`ForwardModel.predict`.
+
+        Returns
+        -------
+        flux_obs : ndarray, shape ``(N_galaxies, n_filters)``
+            Per-galaxy observed flux.
+        noise : ndarray, shape ``(N_galaxies, n_filters)``
+            Per-galaxy 1-sigma uncertainty.
+
+        Raises
+        ------
+        KeyError
+            If any galaxy dict is missing ``flux_obs`` or ``noise``.
+        """
+        flux_obs = jnp.stack([gal["flux_obs"] for gal in self.galaxies])
+        noise = jnp.stack([gal["noise"] for gal in self.galaxies])
+        return flux_obs, noise
 
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free-parameter declarations seen at the population level.
@@ -170,35 +245,163 @@ class PopulationSEDModel:
             for name in self.shared
         ]
 
+    @property
+    def batched_axes(self) -> dict[str, int]:
+        """Named batched axes this SubModel introduces.
+
+        Returns ``{"galaxy": 0}`` — PopulationSEDModel publishes a single
+        named axis (``"galaxy"``) at position 0 of every per-galaxy
+        array. Single-galaxy SubModels (``SEDModel``, ``SpatialModel``,
+        …) return ``{}``.
+
+        Used by :meth:`ForwardModel.predict` and by the inference layer
+        to compose batching (vmap / pmap / shard_map) without hidden
+        nested vmaps. See :meth:`predict_one` for the un-batched
+        primitive.
+
+        Returns
+        -------
+        dict[str, int]
+            Map from named axis to its integer position in arrays.
+        """
+        return {"galaxy": 0}
+
+    def predict_one(
+        self,
+        state: ForwardState,
+        params_one: Mapping[str, Any],
+    ) -> ForwardState:
+        """Un-batched primitive: run the SED template for a single galaxy.
+
+        Corresponds to one term in the hierarchical information
+        Hamiltonian's data sum (paper §4):
+
+        .. math::
+
+            \\mathcal{H}_{\\rm hier} = \\tfrac{1}{2}\\sum_{j=1}^{N_{\\rm gal}}
+                \\chi^2\\!\\bigl(\\mathbf{d}^{(j)},\\,
+                    \\mathbf{f}\\!\\bigl(\\mathbf{h}(\\boldsymbol{\\xi}^{(j)},\\,
+                                              \\boldsymbol{\\xi}^{(\\rm hyp)})\\bigr)\\bigr)
+              + \\tfrac{1}{2}\\,\\boldsymbol{\\xi}^{\\!\\top}\\boldsymbol{\\xi}
+
+        where :math:`\\mathbf{f}\\circ\\mathbf{h}` is the per-galaxy
+        forward model from latent space to predicted observables.
+        ``predict_one`` evaluates that pipeline for one galaxy;
+        :meth:`run` vmaps over the population to evaluate the full sum.
+
+        Composable with outer ``jax.vmap`` / ``jax.pmap`` / ``shard_map``.
+        Use this entry point when you need control over the batching
+        strategy — e.g. multi-device sharding, catalog × hierarchical
+        fits, or posterior-predictive sweeps that already have an
+        outer ``vmap``. Use :meth:`run` for the default batched path.
+
+        Parameters
+        ----------
+        state : ForwardState
+            Initial state. Wavelength grid + any upstream state.
+        params_one : Mapping
+            **Un-batched** parameters for a single galaxy. Every
+            value is a scalar (no leading ``N_galaxies`` axis).
+
+        Returns
+        -------
+        ForwardState
+            Single-galaxy state. No leading galaxy axis.
+
+        Notes
+        -----
+        Pure JAX. JIT/grad/vmap/pmap-compatible. Forwarding to
+        ``self.sed.run`` is a no-op layer that exists so external
+        callers can compose their own batching without nesting
+        :meth:`run`'s internal vmap.
+        """
+        return self.sed.run(state, params_one)
+
+    def parameter_axes(self, params: Mapping[str, Any]) -> dict[str, int | None]:
+        """Per-parameter vmap axis: 0 for per-galaxy, None for shared / scalar.
+
+        Three cases, in order:
+
+        1. Names in :attr:`shared` always broadcast — axis ``None``.
+        2. Rank-0 / scalar values (e.g. fixed values like ``redshift``
+           merged from :attr:`spec`) also broadcast — axis ``None``.
+        3. Everything else is per-galaxy — axis ``0`` (the value is a
+           1-D array of length N_galaxies).
+
+        The scalar-detection branch is what lets fixed values
+        (``redshift``, calibration coefficients, …) flow through
+        without being treated as per-galaxy data.
+
+        Parameters
+        ----------
+        params : Mapping[str, Any]
+            The parameters dict that ``run`` will be called with.
+
+        Returns
+        -------
+        dict[str, int | None]
+            One entry per key in ``params``.
+        """
+        shared_set = set(self.shared)
+        out: dict[str, int | None] = {}
+        for name, value in params.items():
+            if name in shared_set:
+                out[name] = None
+            else:
+                shape = getattr(value, "shape", ())
+                out[name] = 0 if (shape and len(shape) > 0) else None
+        return out
+
     def run(
         self,
         state: ForwardState,
         params: Mapping[str, Any],
     ) -> ForwardState:
-        """Forward-time batched SED across the population.
+        """Forward-time batched SED across the population (via ``jax.vmap``).
 
-        **Not yet implemented.** Today's hierarchical inference path
-        bypasses ``ForwardModel.predict`` entirely (it routes at the
-        :class:`tengri.Fitter` layer through
-        :class:`tengri.PopulationFitter`). When
-        ``ForwardModel.predict`` learns to return batched arrays
-        (issue #211), this method will run the SED template under
-        ``jax.vmap`` across the population and return a ForwardState
-        whose ``sed_intrinsic`` has shape ``(N_galaxies, n_wave)``.
+        Each population-level parameter is either ``shared`` (one value,
+        broadcast across the N galaxies via vmap ``in_axes=None``) or
+        per-galaxy (an array of length N, vmap ``in_axes=0``). The
+        returned :class:`ForwardState` has a leading ``N_galaxies``
+        axis on every per-galaxy quantity (``sed_intrinsic``,
+        ``sed_observed``, ``sed_attenuated``, etc.).
 
-        Raises
-        ------
-        NotImplementedError
-            Always, until the batched-vmap forward path lands. Use
-            ``Fitter(forward, ...).run('vi')`` — the inference path
-            handles hierarchical population fits without going through
-            ``forward.predict``.
+        See ``docs/superpowers/plans/2026-05-22-population-sed-batched-forward.md``
+        for the design rationale.
+
+        Parameters
+        ----------
+        state : ForwardState
+            Initial state. The wavelength grid is shared across the
+            population (broadcast) — the SED template owns the grid.
+        params : Mapping
+            Per-parameter values. Shared params are scalars; per-galaxy
+            params are length-N arrays. ``parameter_axes(params)``
+            returns the vmap-axis dict.
+
+        Returns
+        -------
+        ForwardState
+            Batched state: every per-galaxy quantity has a leading
+            ``N_galaxies`` axis.
+
+        Notes
+        -----
+        JIT/grad/vmap-compatible.
+
+        Notes (composability)
+        ---------------------
+        This method is the default convenience path; it vmaps
+        :meth:`predict_one` over the galaxy axis. For multi-device
+        sharding, catalog × hierarchical fits, or any case where you
+        need to compose outer batching, call :meth:`predict_one`
+        directly with your own ``vmap`` / ``pmap`` / ``shard_map``.
+        The :attr:`batched_axes` property publishes the axis layout
+        so external code can stay axis-aware.
         """
-        raise NotImplementedError(
-            "PopulationSEDModel.run (batched forward via vmap) is not yet wired up. "
-            "Use the inference path: "
-            "Fitter(forward, batched_flux, batched_noise).run('vi') — "
-            "the Fitter detects PopulationSEDModel and routes through "
-            "tengri.PopulationFitter under the hood. "
-            "See issue #211 for the forward-path refactor."
-        )
+        import jax
+
+        in_axes_params = self.parameter_axes(params)
+        # State is broadcast across the population (one wavelength grid,
+        # one upstream state); params follow their per-parameter axes.
+        return jax.vmap(self.predict_one, in_axes=(None, in_axes_params))(state, params)

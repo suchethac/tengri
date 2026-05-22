@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Precompute adapter for Feltre+2016 AGN NLR photoionization grid.
 
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for

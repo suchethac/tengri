@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cue neural network emulator for nebular emission (pure JAX).
 
 A JAX re-implementation of the Cue emulator (Li et al. 2025) that predicts

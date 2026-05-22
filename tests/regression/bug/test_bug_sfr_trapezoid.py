@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for SFR time-averaging trapezoid non-negative bug.
 
 Bug: model.py:791-804 — zeroed age array caused negative SFR integrals.

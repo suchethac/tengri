@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Lock the advertised top-level public surface of `tengri`.
 
 Phase 2 of the API cleanup (2026-05) trimmed `tengri.__all__` and moved
@@ -43,6 +44,7 @@ EXPECTED_ALL = frozenset(
         "SpatialModel",
         "SpatialSEDModel",
         "WavePrecomp",
+        "SpectrumPrecomp",
         # Component-extension surface — demoted to `tengri.protocols.*`,
         # no longer advertised at top level (importable for back-compat).
         # Physics modules
@@ -114,6 +116,16 @@ EXPECTED_ALL = frozenset(
         "LogUniform",
         "StudentT",
         "Uniform",
+        # Sentinels (used in every recipe + 100+ tests)
+        "FIXED",
+        "FREE",
+        # Forward-model outputs and helpers
+        "PriorPredictive",
+        "SEDResult",
+        # Top-level convenience verbs
+        "fit_batch",
+        # Data discovery helpers
+        "data_path",
     }
 )
 

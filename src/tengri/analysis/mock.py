@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Mock galaxy generation utilities.
 
 Standalone ``generate_mock`` function for quick mock photometry

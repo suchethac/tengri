@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Rest-frame SED spectral diagnostics for galaxy analysis.
 
 This module provides pure-JAX functions for computing rest-frame spectral

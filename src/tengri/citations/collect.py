@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Per-object citation collection — the public ``collect_citations()`` API.
 
 Inspects a Galaxy / SEDModel / Fitter / SEDModelConfig / Parameters instance and
@@ -415,8 +416,8 @@ def citations_report(obj: Any, *, include_backend: bool = True) -> str:
 
     Examples
     --------
-    >>> from tengri.config.settings import ModelConfig, DustConfig
-    >>> mc = ModelConfig(dust=DustConfig(law_bc="calzetti"))
+    >>> from tengri.config.settings import SEDModelConfig, DustConfig
+    >>> mc = SEDModelConfig(dust=DustConfig(law_bc="calzetti"))
     >>> report = tg.citations_report(mc, include_backend=False)  # doctest: +SKIP
     >>> "Calzetti" in report  # doctest: +SKIP
     True
@@ -473,8 +474,8 @@ def citations_bibtex(obj: Any, *, include_backend: bool = True) -> str:
 
     Examples
     --------
-    >>> from tengri.config.settings import ModelConfig, DustConfig
-    >>> mc = ModelConfig(dust=DustConfig(law_bc="calzetti"))
+    >>> from tengri.config.settings import SEDModelConfig, DustConfig
+    >>> mc = SEDModelConfig(dust=DustConfig(law_bc="calzetti"))
     >>> bibtex = tg.citations_bibtex(mc, include_backend=False)  # doctest: +SKIP
     >>> "@article{Calzetti_2000" in bibtex  # doctest: +SKIP
     True

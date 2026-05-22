@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests verifying compositional kernel routing for special SFH/metallicity modes.
 
 Tests cover:

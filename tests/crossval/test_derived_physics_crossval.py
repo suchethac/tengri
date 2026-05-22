@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate derived physical quantities against published relations.
 
 Tests SSP color sequences, mass-to-light ratios, and IGM transmission

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for preprocessing module."""
 
 from __future__ import annotations

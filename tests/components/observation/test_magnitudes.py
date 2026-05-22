@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for magnitude system utilities (AB, Vega, absolute, apparent, surface brightness).
 
 Validates:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate tengri implementations against synthesizer (Wilkins et al. 2025).
 
 Synthesizer is an independent SED forward-modeling toolkit with pure

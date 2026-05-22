@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Photometric catalog reader (CSV / VOTable / FITS table).
 
 Loads a row-per-galaxy catalogue and tries to auto-detect the columns

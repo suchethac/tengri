@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SFH model registry and composition engine.
 
 Provides a registry of parametric SFH models that can be composed

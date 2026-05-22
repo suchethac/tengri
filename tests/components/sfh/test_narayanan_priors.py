@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for Narayanan+2018 redshift-dependent dust attenuation priors."""
 
 import numpy as np

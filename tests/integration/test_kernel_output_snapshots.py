@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Snapshot regression: predict_photometry/spectrum output across modes.
 
 Pins the numerical output of every prediction mode under a fixed param

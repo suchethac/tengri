@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration test: Fitter with emission line marginalization (skips if no SSP data)."""
 
 from __future__ import annotations

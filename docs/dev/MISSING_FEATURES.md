@@ -14,7 +14,7 @@ Before working on any item, run a quick sanity check:
 rg -i "<keyword>" src/tengri/ docs/
 
 # Check if a related TODO/known-bug entry already covers it
-rg -i "<keyword>" docs/known_bugs.md HANDOFF.md docs/dev/
+rg -i "<keyword>" docs/known_bugs.md docs/dev/
 ```
 
 If you find evidence the feature shipped, **update this file** (move the item to a "Resolved" section at the bottom) rather than starting work.

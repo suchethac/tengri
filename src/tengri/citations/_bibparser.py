@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Minimal BibTeX parser (stdlib-only).
 
 Supports the subset of BibTeX we need for tengri's citation database:

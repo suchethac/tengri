@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Shared physical utility functions for AGN sub-models.
 
 Extracted from disc.py, torus.py, and skirtor.py to eliminate

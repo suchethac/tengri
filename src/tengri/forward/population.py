@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Population — one (SED, spatial) pair inside a :class:`ForwardModel`.
 
 A galaxy decomposition (AGN point source + Sérsic bulge + exponential

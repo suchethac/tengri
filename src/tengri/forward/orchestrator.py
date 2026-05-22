@@ -156,6 +156,14 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Nebular — photometry LUT (Phase 3c-3b; only non-BakedIn backends
     # publish, when ``approx={'wave_precomp': True}`` is set).
     "nebular_phot_lnu_precomp": "erg/s/Hz",
+    # Spectrum LUT (Phase 5; published when approx=SpectrumPrecomp() is set).
+    # Per-pixel rest-frame Lν at spectrum pixel centres.
+    "spec_eff_waves": "Angstrom",
+    "stellar_spec_lnu_precomp": "erg/s/Hz",
+    "nebular_spec_lnu_precomp": "erg/s/Hz",
+    "dust_spec_lnu_precomp": "erg/s/Hz",
+    "agn_spec_lnu_precomp": "erg/s/Hz",
+    "igm_spec_transmission_precomp": "",
     # Radio / X-ray / IGM
     "sed_radio": "erg/s/Hz",
     "sed_xray": "erg/s/Hz",

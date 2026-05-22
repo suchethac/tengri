@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the SKIRTOR clumpy torus model (Stalevski+2012, 2016).
 
 Validates:

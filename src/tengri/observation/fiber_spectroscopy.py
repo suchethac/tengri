@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """FiberSpectroscopyObservation — fiber-aperture-aware spectroscopy adapter.
 
 Wraps an existing :class:`tengri.Observation` (configured for

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for tengri.io module."""
 
 from __future__ import annotations

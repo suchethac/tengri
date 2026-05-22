@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physics cross-validation for SFH models.
 
 Tests physical correctness of parametric, non-parametric, and GP-based

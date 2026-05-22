@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for fiber aperture-fraction utilities."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 # ruff: noqa: F821
 """Unit tests for the MAGPHYS 4-component dust emission model (da Cunha+2008).
 

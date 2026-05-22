@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for tengri.forward.components_assembly closure builders.
 
 All builder functions take a ``model``-like object and return a pure JAX

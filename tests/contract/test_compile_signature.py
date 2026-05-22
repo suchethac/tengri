@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for SEDModel.compile_signature() and Fitter.compile_signature().
 
 Verifies that:

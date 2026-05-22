@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Smoke tests for the SpatialComponent Protocol (mirror of SEDComponent)."""
 
 from __future__ import annotations

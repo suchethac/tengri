@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Parity tests: verify tengri.inference.ns matches handley-lab/blackjax.
 
 These tests require the handley-lab blackjax fork to be installed:

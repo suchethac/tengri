@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Test AGN-nebular emitter wiring into the forward kernel.
 
 Tests that BLR-Gaussian and NLR-Gaussian emitters are properly wired,

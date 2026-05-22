@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for posterior summary_table diagnostic key names bug.
 
 Bug: posterior.py:349-352 — checked 'acceptance_rate'/'n_divergences' but

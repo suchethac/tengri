@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for compile_log diagnostic tracer."""
 
 from __future__ import annotations

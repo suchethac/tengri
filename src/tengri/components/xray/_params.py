@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Free-parameter declarations owned by the X-ray component.
 
 Single source of truth for the ``xray_*`` priors.

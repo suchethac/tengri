@@ -6,6 +6,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Removed
+
+- Toy AGN registered models `"simple"` (`simple_agn`) and `"standard"`
+  (`standard_agn`). Both were modified-blackbody-based demo models flagged
+  with once-per-process warnings; the science path remains the
+  Kubota & Done 2018 models (`"multicolor_agn"` = deprecated alias
+  `"kubota_done"`, `"kubota_done_full"`) and the SKIRTOR / Silva+04 /
+  CAT3D-Wind / RELAGN templates.
+- Public re-exports of `simple_torus` and `two_temperature_torus` from
+  `tengri.components.agn`. The functions remain importable from
+  `tengri.components.agn.torus` for the production models that still
+  call them internally (`multicolor_agn`, `kubota_done_full`, `adaf`,
+  `relagn`) — see #233 for the planned IR-torus substitution.
+- Demo examples `examples/agn/plot_agn_polar_dust_temp_sweep.py`,
+  `plot_agn_templates.py`, `plot_polar_dust.py`,
+  `plot_torus_comparison.py` and the corresponding
+  `docs/auto_examples/agn/` artifacts. They used the deleted toy AGN
+  public surface; the SKIRTOR-based examples (`plot_agn_cos_inc_sweep`,
+  `plot_agn_oa_sweep`, `plot_skirtor_variants`, etc.) remain.
+- `tests/contract/test_torus_deprecation.py` (the warn-once contract
+  test for the now-private toy torus functions).
+- `tests/components/agn/test_simple_agn.py` and `test_standard_agn.py`.
+
+### Changed
+
+- Default AGN model for `AGNSEDComponentConfig` changed from `"simple"`
+  to `"multicolor_agn"` (the Kubota & Done 2018 outer-zone disc + 2-T
+  torus). Existing fits that explicitly set `agn_model="simple"` will
+  fail with a clear `ValueError`; update to one of the production
+  models listed in the AGN module docstring.
+- Promoted to the top-level `tengri` public surface (added to
+  `__all__`): `FIXED`, `FREE`, `fit_batch`, `SEDResult`,
+  `PriorPredictive`, `data_path`. No behaviour change — they were
+  importable but not advertised. `load_filter_set` was considered but
+  stays demoted per existing design — import from
+  `tengri.observation.load_filter_set`.
+
+## [0.1.0] - 2026-05-22
+
+First public preview release.
+
 ### Added
 
 - **`tengri.PopulationSEDModel` — hierarchical SubModel.**

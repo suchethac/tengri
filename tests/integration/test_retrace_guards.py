@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Retrace guards for the user-facing SEDModel forward paths.
 
 `chex.assert_max_traces(n=1)` fails the wrapped function if JAX retraces it

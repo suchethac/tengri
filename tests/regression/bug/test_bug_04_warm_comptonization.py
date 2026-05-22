@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for BUG-04: Warm Comptonization uses simplified power-law.
 
 See ADR / docs/known_bugs.md for full context.

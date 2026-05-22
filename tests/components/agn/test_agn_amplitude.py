@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physical-amplitude tests for AGN optical/UV disc and torus components.
 
 Tests pin powerlaw slopes and Seyfert/QSO amplitude ranges against literature.

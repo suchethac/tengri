@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Sentinel objects for nested-dict model builder API.
 
 Provides two module-level singleton sentinels:

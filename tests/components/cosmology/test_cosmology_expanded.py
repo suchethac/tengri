@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Comprehensive tests for DSPS-backed cosmology utilities.
 
 Tests cover all cosmology functions including flexible API, backward compat,

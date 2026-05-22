@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Star formation history models: PSD kernels, GP generation, mean SFH, registry."""
 
 from tengri.components.stellar.sfh._prior_sampling import (

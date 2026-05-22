@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """ForwardModel — the outer shell of the forward chain.
 
 Owns a tuple of :class:`Population`s and an :class:`Observation`.
@@ -10,7 +11,7 @@ Single-population fits use bare parameter names
 ``{population_name}.{prefix}_{param}`` namespace defined in
 `ADR-0012 <../adr/0012-forward-model-population.md>`_. Cross-population
 state keys follow the same convention via the typed
-:class:`tengri.protocols.DerivedBundle`.
+:class:`tengri.protocols.DerivedState`.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ import jax.numpy as jnp
 
 from tengri.forward.population import Population
 from tengri.protocols.component import ForwardState
-from tengri.protocols.derived_bundle import DerivedBundle
+from tengri.protocols.derived_state import DerivedState
 
 __all__ = ["ForwardModel"]
 
@@ -50,6 +51,93 @@ class ForwardModel:
 
     populations: tuple[Population, ...]
     observation: Any
+
+    # ── Legacy-SEDModel delegations (for Fitter consumption) ─────────
+    # The Fitter inner machinery (loss_fn, JIT compile, posterior
+    # warm-start) reaches into ~12 SEDModel attributes. These
+    # properties delegate so a ForwardModel can stand in for an
+    # SEDModel anywhere the Fitter needs it. For hierarchical fits,
+    # the inner SubModel is a PopulationSEDModel whose own attributes
+    # delegate to its template SEDModel — three-level chain.
+
+    @property
+    def spec(self):
+        """The :class:`Parameters`-shaped spec the Fitter consumes.
+
+        Delegates to ``self.populations[0].sed.spec``. For single-
+        galaxy fits, that's the :class:`SEDModel`'s scalar spec; for
+        hierarchical fits (PopulationSEDModel), it's the batched
+        :class:`PopulationSpecView` (see PR #241). The Fitter sees
+        the same Protocol surface either way and doesn't need to
+        know which.
+
+        Notes
+        -----
+        For multi-population galaxy decompositions (ADR-0012), this
+        returns the *first* population's spec — those fits use
+        namespaced parameter names and have their own conventions
+        handled elsewhere in the pipeline.
+        """
+        return self.populations[0].sed.spec
+
+    def predict_photometry(self, params, **kwargs):
+        """Channel-specific prediction: ``phot_fnu`` extracted from :meth:`predict`.
+
+        Single-galaxy fits return shape ``(n_filters,)``; hierarchical
+        fits (PopulationSEDModel) return shape ``(N_gal, n_filters)``.
+        The Fitter's legacy loss_fn calls this directly; providing it
+        on ForwardModel ensures the batched output flows through
+        instead of falling back to the scalar SEDModel via
+        ``__getattr__``.
+
+        The ``mode=`` kwarg is silently accepted and ignored for
+        back-compat (loss_functions.py passes it; deprecated since
+        2026-05).
+        """
+        pred = self.predict(params)
+        for key in ("phot_fnu", "fnu_obs"):
+            if key in pred:
+                return pred[key]
+        raise KeyError(
+            f"predict_photometry: no photometric channel in prediction dict "
+            f"(saw keys: {list(pred)})"
+        )
+
+    def _inner_sed(self):
+        """Return the underlying :class:`SEDModel` for legacy attribute access.
+
+        For PopulationSEDModel-wrapped forwards, the inner SED is
+        ``pop.sed.sed`` (the template); for plain SEDModel forwards,
+        it's ``pop.sed`` directly.
+        """
+        sub = self.populations[0].sed
+        return getattr(sub, "sed", sub)
+
+    def __getattr__(self, name: str):
+        """Fallback to the inner SEDModel for legacy attribute access.
+
+        Only consulted when normal attribute lookup fails — i.e. when
+        the Fitter (or other legacy caller) reaches for an attribute
+        that lives on the underlying :class:`SEDModel`. Names that
+        ForwardModel defines explicitly (predict, spec, populations,
+        observation, …) take precedence.
+
+        This delegation is the bridge that lets the Fitter consume a
+        ForwardModel as a drop-in for an SEDModel during the migration
+        from the legacy SEDModel-direct path to the canonical
+        ``Fitter(forward).run(...)`` pattern.
+        """
+        # Avoid infinite recursion if populations isn't set yet
+        if name in ("populations", "observation"):
+            raise AttributeError(name)
+        try:
+            sub = self.populations[0].sed
+        except (AttributeError, IndexError):
+            raise AttributeError(name)  # noqa: B904
+        # Walk one level deeper if the SubModel is a composer
+        if hasattr(sub, "sed"):
+            return getattr(sub.sed, name)
+        return getattr(sub, name)
 
     @classmethod
     def build(
@@ -214,10 +302,10 @@ class ForwardModel:
             for name, state in list(per_pop_states.items()):
                 # Use _extras for namespaced keys (typed bundle rejects them).
                 merged_extras = {**state.derived._extras, **namespaced_extras}
-                new_derived = DerivedBundle(
+                new_derived = DerivedState(
                     **{
                         field: getattr(state.derived, field)
-                        for field in DerivedBundle.field_names()
+                        for field in DerivedState.field_names()
                         if field != "_extras"
                     },
                     _extras=merged_extras,
@@ -228,7 +316,8 @@ class ForwardModel:
         if not is_multipop:
             (only_state,) = per_pop_states.values()
             (only_params,) = per_pop_params.values()
-            return self.observation.predict(only_state, only_params)
+            (only_pop,) = self.populations
+            return _predict_observation(self.observation, only_pop.sed, only_state, only_params)
 
         if hasattr(self.observation, "predict_summed"):
             return self.observation.predict_summed(per_pop_states, per_pop_params)
@@ -240,6 +329,56 @@ class ForwardModel:
             for name, state in per_pop_states.items()
         }
         return _linear_flux_sum(per_pop_pred)
+
+    def fit(
+        self,
+        data: Any = None,
+        noise: Any = None,
+        method: str = "vi",
+        *,
+        key: Any = None,
+        **kwargs: Any,
+    ):
+        """Run inference. Canonical convenience entry point.
+
+        Equivalent to ``Fitter(self, data, noise).run(method, **kwargs)``
+        — wires the standard inference pipeline through the
+        :class:`ForwardModel` exactly as the architecture spec
+        prescribes ('inference is always through ForwardModel',
+        issue #211).
+
+        Parameters
+        ----------
+        data : array, optional
+            Observed flux (photometry / spectroscopy). Optional for
+            hierarchical fits where the per-galaxy data lives on the
+            :class:`PopulationSEDModel`.
+        noise : array, optional
+            1-sigma uncertainties matching ``data``.
+        method : str, default ``"vi"``
+            Inference method. Any value accepted by
+            :meth:`Fitter.run` (``"vi"``, ``"mcmc_nuts"``, ``"map"``,
+            …).
+        key : jax.random.PRNGKey, optional
+            Inference seed.
+        **kwargs : Any
+            Forwarded to :meth:`Fitter.run`.
+
+        Returns
+        -------
+        Posterior
+            Same return as :meth:`Fitter.run`.
+
+        Notes
+        -----
+        Prefer this entry over :meth:`SEDModel.fit` for new code.
+        ``Fitter(forward, data, noise).run(method)`` remains the
+        low-level path; ``forward.fit(...)`` is just the shortcut.
+        """
+        from tengri.inference.fitter import Fitter
+
+        fitter = Fitter(self, data=data, noise=noise)
+        return fitter.run(method, key=key, **kwargs)
 
     def _params_for_population(
         self,
@@ -273,6 +412,56 @@ class ForwardModel:
             full.update(spec.get_fixed_values())
         full.update(sliced)
         return full
+
+
+def _predict_observation(
+    observation: Any,
+    sub_model: Any,
+    state: ForwardState,
+    params: Mapping[str, Any],
+) -> Mapping[str, jnp.ndarray]:
+    """Run ``observation.predict``, vmapping over any axes the SubModel published.
+
+    SubModels publish their batched axes via :attr:`batched_axes`
+    (``{name: axis_position}``, default ``{}``). When non-empty, the
+    SubModel's :meth:`run` has already returned a batched
+    :class:`ForwardState` along those axes. This helper vmaps
+    ``observation.predict`` once per batched axis so the predicted
+    observables — the channel dict :math:`\\hat{\\mathbf{d}}` that
+    enters the data term of the information Hamiltonian — carry
+    matching leading axes.
+
+    The shape-consistency contract: regardless of which SubModel is
+    held, the prediction dict's keys and per-channel array shapes
+    line up with whatever data array the likelihood is fed. For a
+    single-galaxy fit, ``phot_fnu`` has shape ``(n_filters,)``; for
+    a hierarchical fit with :class:`PopulationSEDModel`,
+    ``phot_fnu`` has shape ``(N_gal, n_filters)`` and broadcasts
+    against per-galaxy data and noise in the χ² term of
+    :math:`\\mathcal{H}_{\\rm hier}` (see paper §4 hierarchical
+    inference).
+
+    Composability: ``observation.predict`` is the un-batched
+    primitive. Callers wanting outer ``pmap`` / ``shard_map`` can
+    wrap this helper (or just ``observation.predict``) themselves —
+    the hidden batching here is the default, not the only path.
+    """
+    import jax
+
+    batched_axes = getattr(sub_model, "batched_axes", {}) or {}
+    if not batched_axes:
+        return observation.predict(state, params)
+
+    # Vmap once per batched axis. ``params`` axes are inferred from
+    # the SubModel's parameter_axes when available; otherwise broadcast.
+    predict_fn = observation.predict
+    if hasattr(sub_model, "parameter_axes"):
+        params_axes = sub_model.parameter_axes(params)
+    else:
+        params_axes = {name: None for name in params}
+    for axis_pos in batched_axes.values():
+        predict_fn = jax.vmap(predict_fn, in_axes=(axis_pos, params_axes))
+    return predict_fn(state, params)
 
 
 def _linear_flux_sum(

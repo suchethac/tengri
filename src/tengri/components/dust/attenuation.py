@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Dust attenuation model for tengri.
 
 This module provides a generalized two-component dust attenuation framework

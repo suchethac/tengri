@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Draine, Li, Hensley et al. (2021) PAHspec dust emission as an SEDModelComponent.
 
 Implements tabulated-template IR re-emission based on the PAHspec dust model,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for nthcomp gradient stability.
 
 Tests the JAX autodiff behavior when division-by-near-zero occurs in where

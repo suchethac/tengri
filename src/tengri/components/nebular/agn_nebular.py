@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """AGN Narrow Line Region emission with physically-motivated backends.
 
 Provides a unified interface for computing AGN NLR emission using:

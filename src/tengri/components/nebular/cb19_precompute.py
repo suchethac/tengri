@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Precompute adapter for CB_19 (Charlot & Bruzual 2019) CLOUDY photoionization grid.
 
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for

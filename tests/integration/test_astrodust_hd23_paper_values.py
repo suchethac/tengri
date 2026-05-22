@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Numerical regression tests against H&D 2022/2023 published values.
 
 These tests reproduce the computations performed in the canonical

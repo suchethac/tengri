@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SFH mass conservation tests — trapezoid integral vs analytical formula.
 
 Inspired by bagpipes' star_formation_history.py, which integrates SFH × dt to

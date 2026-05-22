@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Convenience helpers for downloading pre-computed SSP grids."""
 
 import os

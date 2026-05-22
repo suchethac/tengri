@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for mixed-precision forward model (float32 with float64 output).
 
 Validates that using forward_dtype="float32" gives results within

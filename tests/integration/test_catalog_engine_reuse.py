@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration test: verify cross-galaxy engine reuse in CatalogFitter.
 
 Tests that CatalogFitter with multiple galaxies reuses a single compiled

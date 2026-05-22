@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for Lopez+2024 IRX-based X-ray AGN model.
 
 Validates:

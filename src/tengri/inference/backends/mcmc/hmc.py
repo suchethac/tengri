@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Standard Hamiltonian Monte Carlo via BlackJAX.
 
 Extracted from mcmc/common.py. Import via ``tengri.inference.backends.mcmc``.

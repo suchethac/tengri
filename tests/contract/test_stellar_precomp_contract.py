@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Contract tests for stellar precomp publish/require interface.
 
 Validates that the stellar SED component correctly registers derived keys,

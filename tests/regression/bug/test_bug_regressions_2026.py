@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for bugs fixed in 2026-04.
 
 Each test documents a specific bug from CLAUDE.md, cites the fix, and
@@ -108,12 +109,12 @@ class TestTorusFracGradientContinuity:
 
     def test_gradient_continuous_around_half(self):
         """Gradient of L_total w.r.t. agn_torus_frac must vary smoothly."""
-        from tengri.components.agn.unified import simple_agn
+        from tengri.components.agn.unified import multicolor_agn
 
         wave = jnp.linspace(500.0, 200000.0, 1000)
 
         def total_flux(frac):
-            return jnp.sum(simple_agn(wave, agn_log_lbol=11.0, agn_torus_frac=frac))
+            return jnp.sum(multicolor_agn(wave, agn_log_lbol=11.0, agn_torus_frac=frac))
 
         grad_fn = jax.grad(total_flux)
         g_049 = float(grad_fn(0.49))

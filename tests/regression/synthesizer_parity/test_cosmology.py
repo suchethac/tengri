@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for cosmology utilities — synthesizer parity.
 
 Mirrors synthesizer's ``tests/test_cosmology.py`` shape. The relations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Finite-difference gradient checks for SED model components.
 
 These tests catch sign errors, missing terms, and non-differentiable branches

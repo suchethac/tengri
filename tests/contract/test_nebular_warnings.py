@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for nebular backend warning and error emission.
 
 These tests verify that:

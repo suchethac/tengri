@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Interactive tutorials — runnable, copy-pasteable code recipes.
 
 Each tutorial is a small self-contained snippet teaching one concrete

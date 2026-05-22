@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for Compositional kernel L_absorbed_stellar guard.
 
 See ADR / docs/known_bugs.md for full context.

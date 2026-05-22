@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Noise models for SED fitting likelihoods.
 
 Following NIFTy Information Field Theory (IFT) principles, noise parameters

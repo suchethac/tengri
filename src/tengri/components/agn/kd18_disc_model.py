@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Kubota & Done (2018) accretion disc SEDModelComponent adapter.
 
 Ports the three-zone accretion disc model (Kubota & Done 2018) to the

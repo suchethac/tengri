@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Broad Line Region (BLR) emission model.
 
 The BLR is dense gas close to the black hole producing broad permitted

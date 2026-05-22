@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for metallicity-dependent dust-to-gas ratio (Rémy-Ruyer+2014).
 
 Reference: Rémy-Ruyer et al. 2014, A&A, 563, A31, Table 1.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Pure JAX functions for computing derived physical quantities from SEDs.
 
 This module provides the computational primitives used by both the lazy

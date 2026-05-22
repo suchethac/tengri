@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for BUG-29: XRB uses formed mass, not surviving mass.
 
 See ADR / docs/known_bugs.md for full context.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SED result container.
 
 Provides the :class:`SEDResult` NamedTuple returned by

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate tengri physics against python-fsps.
 
 Tests component-level agreement between tengri implementations

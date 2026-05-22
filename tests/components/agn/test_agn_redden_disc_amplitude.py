@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Pin the absolute amplitude of AGN disc reddening.
 
 Regression test for the convention introduced when prevot_smc was

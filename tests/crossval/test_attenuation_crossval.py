@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validation tests for new attenuation curves.
 
 TEA E_b(delta) relation against Haskell+2024 calibration points.

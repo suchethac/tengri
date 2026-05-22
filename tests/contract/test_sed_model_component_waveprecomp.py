@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 # ruff: noqa: RUF012
 """WavePrecomp integration tests for SEDModelComponent base class.
 

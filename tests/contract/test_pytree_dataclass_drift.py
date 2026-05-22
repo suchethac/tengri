@@ -1,8 +1,9 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Drift guards for PyTree-registered frozen dataclasses.
 
 `tengri` uses :func:`jax.tree_util.register_dataclass` (JAX's native helper,
 the modern replacement for the older :func:`register_pytree_node` pattern)
-to make frozen dataclasses like :class:`ForwardState`, :class:`DerivedBundle`,
+to make frozen dataclasses like :class:`ForwardState`, :class:`DerivedState`,
 and :class:`StellarSEDComponent` traversable as JAX PyTrees.
 
 Two failure modes this file guards against:
@@ -15,7 +16,7 @@ Two failure modes this file guards against:
    regression precisely.
 
 2. **Hidden array field in an unregistered subclass.** ``SEDComponentState``,
-   ``SEDComponentConfig``, and ``DerivedBundle`` have ~29 subclasses
+   ``SEDComponentConfig``, and ``DerivedState`` have ~29 subclasses
    (per-component config / state types). These subclasses are intentionally
    *not* registered as PyTrees — they're held in the parent's ``meta_fields``
    and used as static metadata. But if someone adds a traced array field to
@@ -46,7 +47,7 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.protocols.derived_bundle import DerivedBundle
+from tengri.protocols.derived_state import DerivedState
 
 pytestmark = pytest.mark.contract
 
@@ -62,12 +63,12 @@ _REGISTERED_CASES: list[tuple[type, Callable[[], object]]] = [
             sed_attenuated=jnp.array([5.0, 6.0]),
             sed_observed=jnp.array([7.0, 8.0]),
             lines={"halpha": jnp.array([9.0, 10.0])},
-            derived=DerivedBundle(log_mstar=jnp.asarray(10.5)),
+            derived=DerivedState(log_mstar=jnp.asarray(10.5)),
         ),
     ),
     (SEDComponentState, lambda: SEDComponentState(name="probe")),
     (SEDComponentConfig, lambda: SEDComponentConfig(name="probe")),
-    (DerivedBundle, lambda: DerivedBundle(log_mstar=jnp.asarray(10.5))),
+    (DerivedState, lambda: DerivedState(log_mstar=jnp.asarray(10.5))),
 ]
 
 
@@ -207,7 +208,7 @@ def test_unregistered_subclasses_carry_only_static_fields():
     import jax._src.tree_util as ptu
 
     registered = ptu._registry
-    parents = (SEDComponentState, SEDComponentConfig, ForwardState, DerivedBundle)
+    parents = (SEDComponentState, SEDComponentConfig, ForwardState, DerivedState)
     parent_field_names = {P: {f.name for f in dataclasses.fields(P)} for P in parents}
 
     new_suspicious: list[str] = []

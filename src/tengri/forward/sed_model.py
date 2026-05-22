@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SEDModel: high-level forward model wrapping the tengri SED pipeline.
 
 SEDModel provides a clean API for:
@@ -49,6 +50,7 @@ from tengri.components.stellar.sps.precompute import (
     precompute_photometry,
 )
 from tengri.config.exceptions import ParameterMapError
+from tengri.cosmology import age_at_z, luminosity_distance
 from tengri.forward.pipeline import (
     interp_metallicity,
     interp_metallicity_evolving,
@@ -70,7 +72,6 @@ from tengri.parameters.translate import (
     _build_param_map,
     get_internal_params,
 )
-from tengri.utils.cosmology import age_at_z, luminosity_distance
 from tengri.utils.grid import (
     grid_spacing,
     interpolate_to_linear_time,
@@ -87,6 +88,7 @@ __all__ = [
     "PriorPredictive",
     "SEDModel",
     "SEDModelState",
+    "SpectrumPrecomp",
     "WavePrecomp",
 ]
 
@@ -145,6 +147,37 @@ class WavePrecomp:
     z_min: float | None = None
     z_max: float | None = None
     catalog_z_range: tuple[float, float] | None = None
+
+
+@dataclasses.dataclass(frozen=True)
+class SpectrumPrecomp:
+    """Configuration for spectrum-grid LUT precomputation (Phase 5).
+
+    Pass this to :class:`SEDModel` via ``approx=`` to enable spectroscopic
+    LUT precomputation. The SSP × dust × IGM stack is precomputed at
+    spectrum pixel centres (effective wavelengths in the galaxy rest frame)
+    and cached per redshift. This is analogous to the photometric LUT path
+    (Phase 3b/3c) but for spectroscopy.
+
+    In v0 (Phase 5 scope), no tuning knobs are exposed; pixel grid and
+    redshift are inherited from the Observation and Parameters. Future
+    extensions will add Taylor refinement and higher-order expansions.
+
+    Notes
+    -----
+    If the model includes a line-publishing nebular backend (Cue, CloudyGrid,
+    CB19, MAPPINGS, or Cue-NLR), construction raises a clear error. Those
+    backends require line rasterisation on the exact grid (Phase 5 follow-up,
+    option A in the design doc). Workaround: use a BakedIn nebular backend
+    (e.g. ``neb_type='bakedIn'`` with BC03 or else-stellar SSP).
+
+    Examples
+    --------
+    >>> from tengri import SEDModel, SpectrumPrecomp
+    >>> SEDModel(..., approx=SpectrumPrecomp())  # spectrum LUT path
+    """
+
+    pass  # No tuning knobs in v0
 
 
 class SEDModel:
@@ -398,13 +431,30 @@ class SEDModel:
             self._approx = dict(self._DEFAULT_APPROX)
             self._approx["wave_precomp"] = True
             self._approx_config = approx
+        elif isinstance(approx, SpectrumPrecomp):
+            # Phase 5: spectrum LUT path. Currently no tuning knobs; full-grid
+            # redshift handling until Taylor refinement lands.
+            self._approx = dict(self._DEFAULT_APPROX)
+            self._approx["spectrum_precomp"] = True
+            self._approx_config = approx
+            # Validate: reject line-publishing nebular backends
+            nebular_type = spec.config.nebular_type if hasattr(spec, "config") else None
+            if nebular_type is not None and nebular_type not in ("bakedIn", "none"):
+                raise ValueError(
+                    f"SpectrumPrecomp (Phase 5, v0) does not support line-publishing "
+                    f"nebular backends like '{nebular_type}'. Workaround: use a "
+                    f"BakedIn nebular backend (neb_type='bakedIn' with BC03 SSP) or "
+                    f"neb_type='none'. Follow-up (Phase 5 option A): line "
+                    f"rasterisation on the exact grid."
+                )
         else:
             raise TypeError(
                 f"approx={approx!r} is not a legal value. Legal forms: "
-                "None (default — exact wave-grid), or "
+                "None (default — exact wave-grid), "
                 "WavePrecomp() / WavePrecomp(n_z=..., z_min=..., z_max=...) "
-                "for the precomputed SSP × filter LUT path. The pre-3d dict / "
-                "bool / string forms (e.g. approx={'wave_precomp': True}, "
+                "for the precomputed SSP × filter LUT path, or "
+                "SpectrumPrecomp() for the spectrum LUT path (Phase 5). "
+                "The pre-3d dict / bool / string forms (e.g. approx={'wave_precomp': True}, "
                 "approx=True, approx='wave_precomp') were removed."
             )
 
@@ -2860,7 +2910,7 @@ class SEDModel:
         try:
             from dsps import calc_obs_mag
 
-            from tengri.utils.cosmology import DEFAULT_COSMO
+            from tengri.cosmology import DEFAULT_COSMO
 
             sed_lsun = self.predict_luminosity(params)
             z = self._get_redshift(params)
@@ -3926,6 +3976,20 @@ class SEDModel:
             )
         state = self.predict_state(params)
         full = {**self.spec.get_fixed_values(), **params}
+
+        # Phase 5: if SpectrumPrecomp is active and spectroscopy is configured,
+        # inject spec_eff_waves (rest-frame pixel centres) into state.derived.
+        if self._approx.get("spectrum_precomp") and self.observation.can_do_spectroscopy:
+            z = jnp.asarray(full.get("redshift", 0.0))
+            wave_obs = (
+                self._wave_obs
+                if hasattr(self, "_wave_obs")
+                else self.observation.spectroscopy.wave_obs
+            )
+            # spec_eff_waves = observed wavelengths / (1 + z)
+            spec_eff_waves = jnp.asarray(wave_obs) / (1.0 + z)
+            state = state.with_(derived=state.derived.with_(spec_eff_waves=spec_eff_waves))
+
         # Phase 3d-4: when built with ``approx=WavePrecomp(...)`` and no
         # spectrum channel, route photometry through the LUT projection.
         # Mirrors ``predict_observables_jit`` so the JIT and non-JIT paths
@@ -4695,7 +4759,24 @@ class SEDModel:
         init: str | None = None,
         **kwargs,
     ):
-        """Fit observed data.  Convenience wrapper — no Fitter construction needed.
+        """Fit observed data. Deprecated — prefer ``ForwardModel.fit`` for new code.
+
+        .. deprecated:: 0.x
+            Inference is canonically through :class:`ForwardModel`
+            (issue #211). Replace::
+
+                result = sed.fit(data, noise, method="vi")
+
+            with::
+
+                forward = ForwardModel.build(sed=sed, observation=obs)
+                result = forward.fit(data, noise, method="vi")
+
+            or the equivalent ``Fitter(forward, data, noise).run("vi")``.
+
+            ``SEDModel.fit`` keeps working until tengri v1.0; this method
+            is a thin shim around :func:`tengri.forward.convenience.fit_model`
+            and emits a one-shot DeprecationWarning.
 
         Parameters
         ----------
@@ -4743,6 +4824,17 @@ class SEDModel:
         >>> result = model.fit(flux_obs, noise, init="map")
         >>> result = model.fit(flux_obs, noise).refine("mcmc_raytrace")
         """
+        import warnings
+
+        warnings.warn(
+            "SEDModel.fit is deprecated and will be removed in tengri v1.0. "
+            "Use ForwardModel.fit instead: "
+            "forward = ForwardModel.build(sed=sed, observation=obs); "
+            "result = forward.fit(data, noise, method=...). "
+            "See issue #211.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         from tengri.forward.convenience import fit_model
 
         return fit_model(

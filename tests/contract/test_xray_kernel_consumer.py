@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Smoke and numerical equivalence tests for X-ray kernel consumer integration (PR 6).
 
 Tests:

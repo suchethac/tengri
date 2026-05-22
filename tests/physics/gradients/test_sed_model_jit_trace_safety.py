@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests verifying SEDModel JIT trace safety for HDF5 grid loaders.
 
 Caches @functools.cache decorators on HDF5 loaders can leak JAX tracers into

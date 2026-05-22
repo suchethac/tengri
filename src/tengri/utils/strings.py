@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tiny string helpers shared across the tree.
 
 The Levenshtein primitive here is the standard dynamic-programming edit

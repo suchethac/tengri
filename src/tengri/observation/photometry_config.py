@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Photometric observation configuration.
 
 Wraps filter transmission curves into a frozen, immutable container

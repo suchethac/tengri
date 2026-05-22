@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validation: Bagpipes feature parity for gap-analysis items.
 
 Tests physics equivalence between Tengri and Bagpipes for each feature

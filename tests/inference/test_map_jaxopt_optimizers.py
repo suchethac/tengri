@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for quasi-Newton optimizers in MAP dispatch.
 
 Verifies that L-BFGS is accessible through the MAP optimizer= kwarg

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for background JIT compilation in Fitter.__init__.
 
 Ensures that:

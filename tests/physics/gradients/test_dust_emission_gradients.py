@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for dust emission gradient compatibility.
 
 jax.grad differentiability and finite-difference validation.

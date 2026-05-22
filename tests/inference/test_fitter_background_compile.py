@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for compile_modes parameter controlling background JIT compilation.
 
 Ensures that:

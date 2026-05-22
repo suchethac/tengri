@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for filter discovery helpers (tengri.observation.filters namespace)."""
 
 import pytest

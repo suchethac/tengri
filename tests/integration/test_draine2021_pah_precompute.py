@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests for the Draine+2021 PAHspec precompute adapter.
 
 Exercises the photometry-grid pre-integration path used by SEDModel

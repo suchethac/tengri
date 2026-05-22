@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Radio AGN double-power-law model — SEDModelComponent port.
 
 AGNfitter-rx broken double power-law with phenomenological
@@ -74,6 +75,12 @@ class RadioDPL(SEDModelComponent):
     alpha_ff = Fixed(-0.1, description="thermal free-free spectral index", units="")
 
     inputs: dict[str, str] = {}  # noqa: RUF012
+    # Opportunistic cross-component reads — fallback to 0 when not published.
+    optional_inputs: dict[str, str] = {  # noqa: RUF012
+        "L_ir": "erg/s",
+        "L_agn_bol": "erg/s",
+        "log_mstar": "dex",
+    }
     outputs: dict[str, str] = {"sed_radio": "erg/s/Hz"}  # noqa: RUF012
 
     SFR_MODE: str = "bell2003"
@@ -84,26 +91,22 @@ class RadioDPL(SEDModelComponent):
         p: dict[str, Any],
         sed_in: jnp.ndarray,
         wave: jnp.ndarray,
+        **inputs: Any,
     ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
-        # Read opportunistic upstream cross-component quantities; the
-        # base apply() doesn't yet thread these through **inputs because
-        # they aren't declared in inputs={} above (we want None-fallbacks
-        # rather than hard contract checks). The base class hands us p
-        # already sliced to our prefix; redshift comes via the bare-name
-        # allowlist into the broader params namespace upstream of the
-        # base's apply(). For now, read from `sed_in`/wave alone — most
-        # users carry L_ir / L_agn_bol via Fixed values in their model
-        # build, which means they appear as scalars passed in p.
+        # Optional cross-component reads — the base class supplies these
+        # via ``optional_inputs`` with a 0.0 fallback when upstream
+        # didn't publish. The radio output is anchored to L_ir / L_agn_bol,
+        # so when both are 0 the model produces zero output regardless of
+        # log_mstar — the 0 fallback for log_mstar is harmless in that case.
+        L_ir = jnp.asarray(inputs.get("L_ir", 0.0))
+        L_agn_bol = jnp.asarray(inputs.get("L_agn_bol", 0.0))
+        log_mstar = jnp.asarray(inputs.get("log_mstar", 10.0))
+        redshift = jnp.asarray(p.get("redshift", 0.0))
 
-        # The agentic ports prior to this kept these scalars as Fixed knobs;
-        # the bare-Protocol RadioSEDComponent reads them from state.derived.
-        # Until cross-component reads with fallbacks are wired into the
-        # SEDModelComponent base, this port is best paired with
-        # Fixed L_ir / L_agn_bol / log_mstar at build time.
         addition = radio_total_dpl(
             wavelength=wave,
-            L_ir=jnp.asarray(0.0),  # default; overridable via param injection
-            L_agn_bol=jnp.asarray(0.0),
+            L_ir=L_ir,
+            L_agn_bol=L_agn_bol,
             q_ir=p["q_ir"],
             alpha_sf=p["alpha_sf"],
             radio_loudness=p["loudness"],
@@ -112,8 +115,8 @@ class RadioDPL(SEDModelComponent):
             log_nu_t=p["log_nu_t"],
             log_nu_cut=p["log_nu_cut"],
             sfr_mode=self.SFR_MODE,
-            log_mstar=jnp.asarray(10.0),
-            redshift=jnp.asarray(0.0),
+            log_mstar=log_mstar,
+            redshift=redshift,
             include_freefree=self.INCLUDE_FREEFREE,
             T_e=p["T_e"],
             alpha_ff=p["alpha_ff"],

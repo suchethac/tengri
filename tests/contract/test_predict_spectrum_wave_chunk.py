@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for spectrum prediction with wavelength-axis chunking.
 
 Verifies that:

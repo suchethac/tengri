@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Phase 4-C tests: nebular template data threading as JIT runtime inputs.
 
 Extends Phase 4-B (SSP threading) to nebular backend grids (Cue weights,

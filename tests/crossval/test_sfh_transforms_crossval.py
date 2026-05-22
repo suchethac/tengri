@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate SFH generation, parameter transforms, and grid utilities.
 
 Covers: GP SFH via IFFT, precomputation consistency, parameter transforms

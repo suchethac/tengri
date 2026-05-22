@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Free-parameter declarations owned by the stellar component.
 
 Currently holds the alpha-element enhancement priors. Stellar's main

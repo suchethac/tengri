@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Legacy parameter alias resolution and deprecation warnings.
 
 This module consolidates all legacy parameter name handling:

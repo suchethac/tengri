@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Charlot & Fall (2000) two-component dust attenuation — SEDModelComponent port.
 
 Birth-cloud + diffuse-ISM attenuation, applied per stellar age. Young

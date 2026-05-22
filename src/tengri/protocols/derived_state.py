@@ -153,6 +153,11 @@ class DerivedState:
     # consumers like the dust attenuation LUT). Shape ``(n_filters,)``,
     # units Å.
     filter_eff_waves: jnp.ndarray | None = None
+    # Spectrum pixel effective wavelengths in the rest frame (Phase 5,
+    # published when approx=SpectrumPrecomp() is set). Per-pixel effective
+    # wavelengths in the galaxy rest frame, computed as observed wavelengths
+    # divided by (1 + z). Shape ``(n_spec_pixel,)``, units Å.
+    spec_eff_waves: jnp.ndarray | None = None
 
     # AGN (incl. GRAHSP alternates)
     L_agn_bol: jnp.ndarray | None = None
@@ -178,6 +183,16 @@ class DerivedState:
     # For BakedIn nebular this is None — the nebular emission is already
     # baked into the SSP grid and therefore included in stellar_phot_lnu_precomp.
     nebular_phot_lnu_precomp: jnp.ndarray | None = None
+
+    # Spectrum LUT (Phase 5, published only when approx=SpectrumPrecomp()
+    # is set). Per-pixel rest-frame Lν contributions from each component
+    # at spectrum pixel centres (effective wavelengths).
+    # Shape ``(n_spec_pixel,)``, units erg/s/Hz.
+    stellar_spec_lnu_precomp: jnp.ndarray | None = None
+    nebular_spec_lnu_precomp: jnp.ndarray | None = None
+    dust_spec_lnu_precomp: jnp.ndarray | None = None
+    agn_spec_lnu_precomp: jnp.ndarray | None = None
+    igm_spec_transmission_precomp: jnp.ndarray | None = None
 
     # Radio / X-ray / IGM / shock
     sed_radio: jnp.ndarray | None = None

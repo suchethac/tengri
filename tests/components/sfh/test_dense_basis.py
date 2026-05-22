@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for non-parametric SFH models (continuity + Dirichlet).
 
 Tests cover:

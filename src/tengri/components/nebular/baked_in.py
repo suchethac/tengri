@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Baked-in nebular emission backend.
 
 When SSP files already include nebular emission (wNE files),

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate radio, X-ray, and AGN models against CIGALE formulas.
 
 Radio: tengri and CIGALE both use the FIR-radio correlation

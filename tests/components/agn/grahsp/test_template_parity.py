@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Byte-parity test: tengri's HDF5 template bundle vs upstream's loaders.
 
 Re-runs the upstream ``database_builder`` loaders directly on the raw text

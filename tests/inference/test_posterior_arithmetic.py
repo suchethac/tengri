@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for Posterior arithmetic, resampling, and parameter-spec conversion."""
 
 import jax

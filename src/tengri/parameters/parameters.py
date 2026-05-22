@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Parameter specification for tengri models.
 
 Parameters defines all model parameters: their names, distributions (or fixed

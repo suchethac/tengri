@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Parity and contract tests for ported dust IR emission components.
 
 Verifies that ModifiedBlackbodySED and DL07IRSEDComponent:
@@ -103,7 +104,7 @@ class TestModifiedBlackbodyComponent:
             f"Max relative error: {max_rel_err}"
         )
 
-        # Check that published dict is empty (L_ir_emission not yet in DerivedBundle)
+        # Check that published dict is empty (L_ir_emission not yet in DerivedState)
         assert published == {}
 
 
@@ -201,7 +202,8 @@ class TestSEDComponentProtocol:
         Tests that apply() slices parameters, looks up inputs, and updates
         state as expected.
         """
-        from tengri.protocols.component import DerivedBundle, ForwardState
+        from tengri.protocols.component import ForwardState
+        from tengri.protocols.derived_state import DerivedState
 
         comp = comp_cls()
         wave = jnp.logspace(1.5, 4.5, 128)
@@ -210,7 +212,7 @@ class TestSEDComponentProtocol:
         state = ForwardState(
             wave=wave,
             sed_intrinsic=jnp.zeros_like(wave),
-            derived=DerivedBundle(**{"L_ir": jnp.array(1e45)}),
+            derived=DerivedState(**{"L_ir": jnp.array(1e45)}),
         )
 
         # Parameters (with prefix)
@@ -227,7 +229,7 @@ class TestSEDComponentProtocol:
         try:
             state_out = comp.apply(state, params)
             assert state_out.sed_intrinsic is not None
-            # L_ir_emission not yet in DerivedBundle, so it won't appear
+            # L_ir_emission not yet in DerivedState, so it won't appear
         except KeyError as e:
             # Expected if component requires input not in state
             if "L_ir" not in str(e):

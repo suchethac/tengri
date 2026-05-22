@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 r"""Hensley & Draine 2023 Astrodust+PAH template physics.
 
 Pure-JAX physics helpers for the Astrodust+PAH emission grid published

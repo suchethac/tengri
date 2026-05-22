@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate Cue JAX implementation against TensorFlow reference outputs.
 
 The Cue emulator (Li et al. 2024) was originally implemented in TensorFlow.

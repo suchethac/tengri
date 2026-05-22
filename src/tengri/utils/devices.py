@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """JAX device and resource management.
 
 Handles GPU/CPU/TPU detection, memory reporting, and platform-aware

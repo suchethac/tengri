@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Ionizing spectrum fitting for the Cue neural emulator.
 
 This module fits piecewise power-law parameterisations of the hydrogen-ionizing

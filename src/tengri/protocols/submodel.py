@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SubModel protocol: one mode of the ForwardModel (SED, spatial, joint).
 
 Defined by the forward-model architecture spec

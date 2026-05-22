@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Comprehensive tests for tengri.utils.conversions module.
 
 Tests cover:

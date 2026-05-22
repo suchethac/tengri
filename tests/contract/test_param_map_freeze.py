@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Test that SEDModel._param_map is frozen after construction.
 
 Regression tests for Step A: Freeze `SEDModel._param_map` after construction

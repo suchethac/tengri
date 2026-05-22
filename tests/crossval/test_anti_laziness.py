@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Anti-laziness tests: catch fake, stubbed, or incomplete implementations.
 
 These tests are specifically designed to detect common lazy implementation

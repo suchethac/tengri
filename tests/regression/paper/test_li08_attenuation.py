@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for the Li et al. (2008, ApJ, 685, 1046) attenuation curve.
 
 The Li08 curve uses 4 dimensionless parameters (c1-c4) in an analytical

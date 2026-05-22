@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for Observables NamedTuple synthesis and Phase 2 unification.
 
 Unit tests that don't require real SSP data, focusing on:

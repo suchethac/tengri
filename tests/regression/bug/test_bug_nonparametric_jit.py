@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for nonparametric.py JIT-safe bug.
 
 Bug: nonparametric.py:74,210 — len(bin_edges_gyr) raises ConcretizationTypeError in JIT.

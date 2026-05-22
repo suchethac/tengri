@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Exact cross-validation tests for newly implemented models.
 
 Every test cites the specific equation, table, or figure from the

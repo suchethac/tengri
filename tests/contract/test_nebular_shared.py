@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for models/nebular/_shared.py — shared nebular utilities.
 
 Covers:

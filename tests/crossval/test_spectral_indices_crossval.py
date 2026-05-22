@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validation: spectral index measurement against Bagpipes.
 
 Measures Dn4000 and HdA on synthetic spectra using both Tengri's

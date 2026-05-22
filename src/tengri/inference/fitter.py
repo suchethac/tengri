@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Inference engine: fit observed data using MAP, NUTS, Ray Tracing, or geoVI.
 
 The Fitter separates inference strategy from the forward model. It builds
@@ -78,6 +79,70 @@ _CANONICAL_METHODS = {
     "nss",  # Nested Slice Sampling, log Z (D≤30)
     "auto",  # auto: mcmc_nuts (D≤20) or vi (D>20)
 }
+
+
+def _maybe_warn_legacy_sedmodel(model) -> None:
+    """Nudge users from ``Fitter(sed_model, ...)`` to ``Fitter(forward, ...)``.
+
+    Inference is canonically through :class:`ForwardModel` (issue #211).
+    Passing a bare :class:`SEDModel` keeps working — it's the legacy
+    pattern most existing notebooks use — but emits a one-shot
+    :class:`DeprecationWarning` pointing at the canonical surface.
+
+    :class:`ForwardModel` instances pass through silently (they ARE
+    the canonical surface). Anything else (a likelihood Protocol, a
+    test stub, …) also passes through silently — we don't want to
+    warn on legitimate non-SEDModel uses.
+    """
+    try:
+        from tengri.forward.forward_model import ForwardModel
+        from tengri.forward.sed_model import SEDModel
+    except ImportError:
+        return
+    if isinstance(model, ForwardModel):
+        return
+    if isinstance(model, SEDModel):
+        import warnings
+
+        warnings.warn(
+            "Fitter(sed_model, ...) is deprecated and will be removed in "
+            "tengri v1.0. Inference is canonically through ForwardModel "
+            "(issue #211). Replace with: forward = ForwardModel.build("
+            "sed=sed_model, observation=obs); Fitter(forward, data, noise)."
+            "run(method) -- or use the shortcut forward.fit(data, noise, "
+            "method=...).",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+
+
+def _maybe_extract_batched_data(model):
+    """Auto-extract ``(data, noise)`` from a ForwardModel's population.
+
+    Returns ``(None, None)`` if ``model`` is not a ForwardModel-with-
+    PopulationSEDModel, otherwise the stacked ``(N, n_filters)`` arrays
+    from ``pop.batched_data()``. Lets users write
+    ``Fitter(forward).run('vi')`` without manually stacking.
+
+    Explicit ``data=`` and ``noise=`` always override this default —
+    auto-extraction only fires when both are ``None``.
+    """
+    try:
+        from tengri.forward.forward_model import ForwardModel
+        from tengri.forward.population_sed_model import PopulationSEDModel
+    except ImportError:
+        return None, None
+
+    if not isinstance(model, ForwardModel):
+        return None, None
+    populations = getattr(model, "populations", ())
+    if len(populations) != 1:
+        return None, None
+    pop_sed = getattr(populations[0], "sed", None)
+    if not isinstance(pop_sed, PopulationSEDModel):
+        return None, None
+
+    return pop_sed.batched_data()
 
 
 def resolve_method(method: str, emit_warning: bool = True) -> str:
@@ -257,8 +322,8 @@ class Fitter:
     def __init__(
         self,
         model,
-        data,
-        noise,
+        data=None,
+        noise=None,
         data_type=None,
         data_mask=None,
         calibration_marginalize=False,
@@ -272,6 +337,30 @@ class Fitter:
         compile_modes=None,
         cache=None,
     ):
+        # ── Auto-extract batched data for hierarchical ForwardModels ─
+        # When ``model`` is a ForwardModel whose SubModel publishes
+        # batched_axes (e.g. PopulationSEDModel publishes {'galaxy': 0}),
+        # the per-galaxy data already lives on the population. Auto-
+        # extract (N, n_filters) arrays so users can write
+        # ``Fitter(forward).run('vi')`` without manually stacking.
+        if data is None and noise is None:
+            data, noise = _maybe_extract_batched_data(model)
+
+        # ── Soft deprecation: prefer ForwardModel as the model arg ──
+        # Inference is canonically through ForwardModel (issue #211).
+        # Direct SEDModel as the model arg keeps working but nudges
+        # callers to the new pattern.
+        _maybe_warn_legacy_sedmodel(model)
+
+        # ── Validate data/noise for the standard (non-hierarchical) path ──
+        if data is None or noise is None:
+            raise ValueError(
+                "Fitter(model, data, noise) requires data and noise for "
+                "non-hierarchical fits. For hierarchical fits, pass a "
+                "ForwardModel built with population=PopulationSEDModel(...) "
+                "and the per-galaxy data lives on the population."
+            )
+
         # ── User-supplied Likelihood (Protocol path) ────────────────
         # When non-None, replaces the built-in χ² dispatch. The user
         # owns the entire data-term math and is responsible for
@@ -1163,6 +1252,22 @@ class Fitter:
         """
         return build_loglikelihood_unbounded_fn(self, mode=mode)
 
+    def _get_or_build_loglikelihood_unbounded_fn(self, mode: str = "traced") -> Callable:
+        """Return the cached unbounded-space log-likelihood, building if needed.
+
+        Caches per-model (no shared cross-fitter cache, unlike ``loss_fn``);
+        unbounded-space log-likelihood is a thin wrapper over the data term
+        plus :func:`_unstandardize_parameters`, so the compile cost is
+        marginal and the cache key would mirror the loss cache anyway.
+        """
+        cache_key = (self._engine_cache_key(), mode)
+        per_model = get_model_cache(self.model).setdefault("loglik_unbounded_fn", {})
+        if cache_key in per_model:
+            return per_model[cache_key]
+        fn = self._build_loglikelihood_unbounded_fn(mode=mode)
+        per_model[cache_key] = fn
+        return fn
+
     def _get_or_build_grad_fn(self, mode: str = "traced") -> Callable:
         """Return cached JIT-compiled value_and_grad of the loss function.
 
@@ -1221,20 +1326,40 @@ class Fitter:
     # ── Parameter transforms ──────────────────────────────────────────
 
     def _initialize_unbounded(self, key: Any) -> dict:
-        """Create initial unbounded parameter dict."""
+        """Create initial unbounded parameter dict.
+
+        Per-param shape comes from ``self.spec.param_init_shape(name)``
+        when available (the PopulationSpecView publishes this — see
+        PR #239 plan Task 5). Scalar specs (the standard
+        :class:`Parameters`) fall back to shape ``()``.
+
+        For hierarchical fits, per-galaxy free params get a leading
+        ``(N,)`` axis; shared parameters stay scalar. This is what
+        the standardized hierarchical Hamiltonian (paper §4) expects.
+        """
         params = {}
         keys = jax.random.split(key, len(self._free_names) + 1)
+        # Shape provider — defaults to scalar for non-Population specs
+        get_shape = getattr(self.spec, "param_init_shape", lambda _n: ())
 
         for i, name in enumerate(self._free_names):
             dist = self.spec.get_distribution(name)
+            shape = get_shape(name)
             if isinstance(dist, Gaussian):
-                params[name] = dist.standardize(jnp.array(dist.mu))
+                base = dist.standardize(jnp.array(dist.mu))
+                params[name] = jnp.broadcast_to(base, shape) if shape else base
             else:
                 # Initialize near midpoint (u=0) with small perturbation
-                params[name] = 0.1 * jax.random.normal(keys[i])
+                params[name] = 0.1 * jax.random.normal(keys[i], shape=shape)
 
         if self.spec.stochastic:
-            params["psd_xi"] = 0.1 * jax.random.normal(keys[-1], shape=(self.spec.n_grid,))
+            # psd_xi shape: scalar fits use (n_grid,); hierarchical
+            # populations use (N, n_grid) — published via the spec.
+            psd_shape = getattr(self.spec, "psd_xi_init_shape", None) or (self.spec.n_grid,)
+            # Property vs callable — both supported
+            if callable(psd_shape):
+                psd_shape = psd_shape()
+            params["psd_xi"] = 0.1 * jax.random.normal(keys[-1], shape=psd_shape)
 
         return params
 
@@ -1275,6 +1400,11 @@ class Fitter:
         Dispatches to the underlying inference backend (variational, MCMC,
         point estimation, or nested sampling) and returns a ``Posterior``
         object with samples, diagnostics, and derived quantities.
+
+        Hierarchical fits (``model`` is a ForwardModel built with
+        ``population=PopulationSEDModel(...)``) route through
+        :class:`tengri.PopulationFitter` automatically. No change in
+        the user-facing call site.
 
         Parameters
         ----------

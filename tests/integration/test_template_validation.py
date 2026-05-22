@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """End-to-end validation of Astrodust, BOSA, and THEMIS dust emission templates.
 
 Tests cover:

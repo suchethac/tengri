@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Measure end-to-end inference speed for realistic galaxy fitting scenarios.
 
 Tests actual inference time (not just loss function timing) for:

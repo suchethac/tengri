@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validation of tengri's dense_basis GP-SFH against the original package.
 
 Compares the SFH shapes produced by tengri's JAX reimplementation against

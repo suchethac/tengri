@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the Beloborodov (1999) self-consistent Gamma_hot and L2500 helper.
 
 Covers:

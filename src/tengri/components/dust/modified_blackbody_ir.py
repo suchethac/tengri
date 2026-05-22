@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Modified blackbody dust emission as an SEDModelComponent.
 
 Implements optically-thin modified blackbody re-emission of dust-absorbed
@@ -130,7 +131,7 @@ class ModifiedBlackbodySED(SEDModelComponent):
         )
 
         # Return updated SED and published luminosity
-        # Note: L_ir_emission not yet a typed field in DerivedBundle
+        # Note: L_ir_emission not yet a typed field in DerivedState
         sed_out = sed_in + sed_emission
 
         return sed_out, {}

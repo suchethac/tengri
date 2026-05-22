@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Flat-slab (uniform aperture) spatial profile.
 
 A uniform top-hat disk: intensity = 1 inside ``radius_kpc``, 0 outside.

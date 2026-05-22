@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """CLOUDY-based emission line priors for spectral fitting.
 
 Provides informative Gaussian priors on emission line amplitudes based on

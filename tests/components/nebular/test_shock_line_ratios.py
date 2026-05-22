@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for shock-line atomic physics and Balmer ratios via MAPPINGS V.
 
 These pin atomic transition ratios (Case B Balmer) and density-sensitive diagnostics.

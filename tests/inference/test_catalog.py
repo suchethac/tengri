@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for photometric catalog reader.
 
 Tests Feature 4 — the ``read_catalog`` function and ``Catalog`` dataclass

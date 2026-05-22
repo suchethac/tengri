@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for dust age weight precomputation and fast dust attenuation.
 
 Validates that precomputing the age-dependent sigmoid weight once

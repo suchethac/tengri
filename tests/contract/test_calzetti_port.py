@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Contract tests for the new Calzetti `SEDModelComponent` port.
 
 These are structural tests only — registry lookup, parameter discovery,

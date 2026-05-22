@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Filter transmission curve visualization.
 
 Plot, compare, and inspect photometric filter transmission curves using

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for BUG-02: SFR time-averaging trapezoid boundary bias.
 
 See ADR / docs/known_bugs.md for full context.

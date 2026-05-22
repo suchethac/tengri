@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Smoke tests for the per-component ``_params.py`` skeletons (PR1).
 
 PR1 of the parameter-registry consolidation introduces empty

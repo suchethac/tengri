@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Plotting helpers for tengri results.
 
 Re-exports the plotting functions and visual constants from

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the GRAHSP torus (cool + hot log-Gaussian + Si feature)."""
 
 from __future__ import annotations

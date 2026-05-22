@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Elliptical Slice Sampling (ESS) for Gaussian-prior latent models.
 
 Murray, Adams & MacKay (2010). Exact MCMC sampler designed for models

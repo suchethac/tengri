@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Precompute Protocol — the contract each component's precompute module implements.
 
 Each component that supports preintegration (wavelength-integral cached against

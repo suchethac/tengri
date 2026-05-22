@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for differentiable N-dimensional triweight histograms.
 
 Vendored from diffsky (Hearin et al.) — tests verify:

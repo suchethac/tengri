@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Explicit registry of precompute-enabled components.
 
 Single source of truth mapping component identifiers (physics-model names used

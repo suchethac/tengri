@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Hybrid-vs-exact agreement for the four DL07-shape template models:
 Astrodust, THEMIS, DL14, BOSA.
 

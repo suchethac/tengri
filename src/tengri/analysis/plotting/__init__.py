@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Plotting utilities.
 
 Organized by plot type into reusable modules: styles, SFH, SED, corner plots,

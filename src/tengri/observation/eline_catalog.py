@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Emission line catalog for tengri spectral fitting.
 
 Single source of truth for emission line rest-frame wavelengths

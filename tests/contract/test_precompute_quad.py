@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the Taylor-corrected photometric precomputation.
 
 Validates:

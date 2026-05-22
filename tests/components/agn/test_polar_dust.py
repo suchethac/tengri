@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for polar dust extinction and greybody reemission."""
 
 import chex

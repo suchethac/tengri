@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Phase 4-B — threading SSP arrays as JIT runtime inputs.
 
 Tests that the SSP grid is passed through the component chain as a JIT

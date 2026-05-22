@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for the dense_basis GP-SFH model.
 
 Tests the Matérn 3/2 + Linear kernel, GP interpolation, and the

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Contract tests for AGN model registry: resolve and registration."""
 
 from __future__ import annotations
@@ -61,8 +62,6 @@ class TestResolveAgn:
         from tengri.components.agn.unified import AGN_MODELS
 
         for name in (
-            "simple",
-            "standard",
             "multicolor_agn",
             "kubota_done",
             "kubota_done_full",

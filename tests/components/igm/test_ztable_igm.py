@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for IGM transmission precomputation in the z-table path.
 
 Validates that:

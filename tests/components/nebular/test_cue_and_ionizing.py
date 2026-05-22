@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for Cue emulator and ionizing spectrum fitting."""
 
 import chex

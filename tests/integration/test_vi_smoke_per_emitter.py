@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """VI smoke-fit tests exercising dust emission precompute paths with 50-step gradient inference.
 
 These tests validate the end-to-end inference stack against dust emission models

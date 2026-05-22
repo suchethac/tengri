@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for dust emission template models (MBB, DL07, DL14, Casey).
 
 Every dust-emission template must peak in IR and conserve energy (∫L_ν dν ≈ L_absorbed).

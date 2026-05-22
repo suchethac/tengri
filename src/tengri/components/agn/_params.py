@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Free-parameter declarations owned by the AGN component.
 
 Single source of truth for the ``agn_*`` priors.

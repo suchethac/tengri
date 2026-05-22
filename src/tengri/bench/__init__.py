@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """``python -m tengri.bench`` — performance health check + benchmark dispatcher.
 
 Two modes:

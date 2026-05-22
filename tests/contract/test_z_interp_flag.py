@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the ``z_interp`` flag that selects triweight vs. linear z-table
 interpolation inside the hybrid forward kernel.
 

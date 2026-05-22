@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for :mod:`tengri.citations.associations`.
 
 Pins the component-value → citation-key mappings so a future rename in

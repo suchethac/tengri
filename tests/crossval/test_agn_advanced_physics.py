@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physics tests for unified_nlr_blr, QSOgen, and SKIRTOR AGN models.
 
 References

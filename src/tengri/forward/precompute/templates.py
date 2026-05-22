@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Generic template-based precompute helpers.
 
 Thin wrappers over :mod:`tengri.forward.precompute.grid`

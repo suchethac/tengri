@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for X-ray and radio wiring in unified_nlr_blr.
 
 Tests backward compatibility (flags off) and correct spectral composition

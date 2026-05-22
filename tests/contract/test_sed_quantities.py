@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for pure JAX functions in sed_quantities.py.
 
 Tests use synthetic data with known analytical results to verify

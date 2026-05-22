@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Comprehensive user scenario testing for model combinations × inference engines.
 
 Tests various SFH types, component combinations, and inference methods from an

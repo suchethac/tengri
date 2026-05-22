@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """JIT-vs-eager parity for canonical SEDModel forward paths.
 
 `tests/integration/test_components_jit.py` already covers the

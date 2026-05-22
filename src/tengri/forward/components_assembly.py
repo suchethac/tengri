@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Compositional rest-frame SED component builders.
 
 Each builder function takes a ``model`` instance, captures static config

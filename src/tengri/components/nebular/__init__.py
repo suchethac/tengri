@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Nebular emission models for tengri.
 
 Provides modular backends for adding nebular emission (emission lines +

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Analytical emission-line marginalization for spectral fitting.
 
 When fitting spectra, individual emission-line amplitudes are nuisance

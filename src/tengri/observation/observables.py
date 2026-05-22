@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Observables — the dual of :class:`Observation` for predicted quantities.
 
 An :class:`Observables` NamedTuple is synthesised per-model at
@@ -100,7 +101,7 @@ def build_observables_class(observation) -> type:
     # Done by subclassing rather than monkey-patching so the NamedTuple
     # remains a clean pytree leaf-or-tree from JAX's perspective.
     if has_phot:
-        from tengri.utils.magnitudes import fnu_to_ab_mag
+        from tengri.units import fnu_to_ab_mag
 
         class Observables(base):  # type: ignore[misc, valid-type]
             __slots__ = ()

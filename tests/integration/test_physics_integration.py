@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests for physical consistency of tengri forward model.
 
 These tests use full SEDModel predictions with real SSP data to verify that

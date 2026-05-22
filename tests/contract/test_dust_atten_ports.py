@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Contract tests for SEDModelComponent-style dust attenuation law ports.
 
 Tests for SMC, Cardelli (MW), and Salim+18 ports. These are structural

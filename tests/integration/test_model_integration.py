@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests for the new SEDModel class with real SSP data."""
 
 from pathlib import Path

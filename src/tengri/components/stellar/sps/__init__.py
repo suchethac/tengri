@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Stellar population synthesis wrappers (DSPS backend)."""
 
 # Convenience re-exports for `from tengri.sps import ...`

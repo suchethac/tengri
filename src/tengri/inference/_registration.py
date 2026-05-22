@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Backend registry initialization for ``tengri.inference``.
 
 This module is imported for its side effects — every
