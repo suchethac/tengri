@@ -31,11 +31,16 @@ _RELOCATED: dict[str, tuple[str, str]] = {
 EXPECTED_ALL = frozenset(
     {
         # Core
+        "Exponential",
+        "FlatSlab",
         "ForwardModel",
         "Galaxy",
         "Parameters",
         "Population",
         "SEDModel",
+        "Sersic",
+        "SpatialModel",
+        "SpatialSEDModel",
         "WavePrecomp",
         # Component / pipeline contract (astronomer-facing extension surface)
         "DerivedBundle",
