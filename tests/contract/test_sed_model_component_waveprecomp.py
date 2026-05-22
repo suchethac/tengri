@@ -20,35 +20,44 @@ pytestmark = pytest.mark.contract
 
 
 class SimpleDustComponent(SEDModelComponent):
-    """Minimal dust attenuation component for testing WavePrecomp."""
+    """Minimal additive dust-emission component for testing WavePrecomp.
+
+    Additive (emission), not multiplicative (attenuation), so the base
+    class's default :meth:`predict_precomp` — which calls ``predict`` with
+    a zero ``sed_in`` to extract the component's own contribution —
+    naturally returns meaningful per-filter values. A multiplicative
+    component cannot be tested via the default path without an override
+    because ``zeros * factor == zeros`` collapses the LUT to zero.
+    """
 
     name = "test_dust"
     parameter_prefix = "dust_"
-    tau_v = Uniform(0.0, 2.0, description="V-band optical depth", units="")
+    tau_v = Uniform(0.0, 2.0, description="V-band optical depth", units="dimensionless")
 
     outputs = {"L_ir": "erg/s"}
 
     def predict(
         self, p: dict[str, Any], sed_in: jnp.ndarray, wave: jnp.ndarray, **inputs: Any
     ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
-        """Apply simple attenuation: k(λ) = 1/λ (inverse-wavelength dust law)."""
+        """Add a wavelength-dependent emission proportional to tau."""
         tau_v = p["tau_v"]
-        # Simple power-law dust law: k(λ) ∝ λ^{-1}
-        k_lambda = 1.0 / (wave / 5500.0)  # normalized to V-band
-        attenuation = jnp.exp(-tau_v * k_lambda)
-        attenuated = sed_in * attenuation
-
-        # Compute total IR luminosity as a sanity check
-        l_ir = jnp.sum(attenuated)
-        return attenuated, {"L_ir": l_ir}
+        # Toy emission profile: peaks in the blue and falls as 1/λ.
+        emission = tau_v * (5500.0 / wave)
+        out = sed_in + emission
+        l_ir = jnp.sum(emission)
+        return out, {"L_ir": l_ir}
 
 
 class SimpleDustComponentWithTaylor(SEDModelComponent):
-    """Dust component with Taylor order=1 for slope LUT generation."""
+    """Same additive emission as :class:`SimpleDustComponent` plus Taylor order=1.
+
+    Used to exercise the slope-LUT publishing branch of
+    :meth:`SEDModelComponent._apply_precomp`.
+    """
 
     name = "test_dust_taylor"
     parameter_prefix = "dust_taylor_"
-    tau_v = Uniform(0.0, 2.0, description="V-band optical depth", units="")
+    tau_v = Uniform(0.0, 2.0, description="V-band optical depth", units="dimensionless")
     taylor_order = 1
 
     outputs = {"L_ir": "erg/s"}
@@ -56,13 +65,12 @@ class SimpleDustComponentWithTaylor(SEDModelComponent):
     def predict(
         self, p: dict[str, Any], sed_in: jnp.ndarray, wave: jnp.ndarray, **inputs: Any
     ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
-        """Apply simple attenuation with inverse-wavelength dust law."""
+        """Same emission profile as :class:`SimpleDustComponent`."""
         tau_v = p["tau_v"]
-        k_lambda = 1.0 / (wave / 5500.0)
-        attenuation = jnp.exp(-tau_v * k_lambda)
-        attenuated = sed_in * attenuation
-        l_ir = jnp.sum(attenuated)
-        return attenuated, {"L_ir": l_ir}
+        emission = tau_v * (5500.0 / wave)
+        out = sed_in + emission
+        l_ir = jnp.sum(emission)
+        return out, {"L_ir": l_ir}
 
 
 class TestWavePrecompActivation:
@@ -103,42 +111,53 @@ class TestWavePrecompActivation:
 
         result = comp.apply(state, params)
 
-        # Should NOT update sed_intrinsic on LUT path
-        assert result.sed_intrinsic == state.sed_intrinsic
+        # Should NOT update sed_intrinsic on LUT path.
+        # Use jnp.array_equal — direct `==` on arrays returns an ambiguous
+        # bool array and trips Python's truth-value rule.
+        assert jnp.array_equal(result.sed_intrinsic, state.sed_intrinsic)
         # Should publish precomp LUT
         assert "test_dust_phot_lnu_precomp" in result.derived
         lut = result.derived["test_dust_phot_lnu_precomp"]
         assert lut.shape == filter_eff.shape
 
     def test_precomp_photometry_accuracy(self):
-        """Verify WavePrecomp photometry within ~0.5% of exact full-grid path."""
+        """LUT-path emission at filter pivots equals full-grid emission interpolated.
+
+        The base-class default :meth:`predict_precomp` calls ``predict``
+        with a zero ``sed_in`` to isolate the component's own per-filter
+        contribution. For an additive emission component, that equals the
+        emission evaluated directly at the filter wavelengths — which is
+        what the full-grid path produces when interpolated at the same
+        filter pivots.
+        """
+        from scipy.interpolate import interp1d
+
         comp = SimpleDustComponent()
         wave = jnp.linspace(1000, 10000, 500)
         filter_eff = jnp.array([3500.0, 4700.0, 5500.0, 7000.0, 9000.0])
-        sed_in = jnp.ones(500)
         params = {"dust_tau_v": 0.7}
 
-        # Full-grid path: apply component, then project through filters
-        state_full = ForwardState(wave=wave, sed_intrinsic=sed_in, derived={})
+        # Full-grid path with sed_in = 0 isolates the emission contribution.
+        state_full = ForwardState(wave=wave, sed_intrinsic=jnp.zeros(500), derived={})
         result_full = comp.apply(state_full, params)
-        sed_attenuated = result_full.sed_intrinsic
+        emission_grid = result_full.sed_intrinsic
+        emission_at_filters = jnp.asarray(
+            interp1d(wave, emission_grid, kind="linear", fill_value="extrapolate")(filter_eff)
+        )
 
-        # Manually integrate at effective wavelengths (rough simulation)
-        # by evaluating predict at filter wavelengths
-        from scipy.interpolate import interp1d
-
-        sed_interp = interp1d(wave, sed_attenuated, kind="linear", fill_value="extrapolate")
-        exact_phot = sed_interp(filter_eff)
-
-        # WavePrecomp path
+        # WavePrecomp path: sed_in is irrelevant — predict_precomp ignores it
+        # by construction. Pass ones to make that explicit.
         state_precomp = ForwardState(
-            wave=wave, sed_intrinsic=sed_in, derived={"filter_eff_waves": filter_eff}
+            wave=wave,
+            sed_intrinsic=jnp.ones(500),
+            derived={"filter_eff_waves": filter_eff},
         )
         result_precomp = comp.apply(state_precomp, params)
         phot_lut = result_precomp.derived["test_dust_phot_lnu_precomp"]
 
-        # Check agreement (within 1% due to interpolation)
-        relative_error = jnp.abs(phot_lut - exact_phot) / jnp.maximum(jnp.abs(exact_phot), 1e-10)
+        relative_error = jnp.abs(phot_lut - emission_at_filters) / jnp.maximum(
+            jnp.abs(emission_at_filters), 1e-10
+        )
         assert jnp.all(relative_error < 0.01), f"Max error: {jnp.max(relative_error)}"
 
 
