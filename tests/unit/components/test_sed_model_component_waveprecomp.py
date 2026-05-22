@@ -9,13 +9,10 @@ from __future__ import annotations
 from typing import Any
 
 import jax.numpy as jnp
-import pytest
 
-from tengri import Fixed, Uniform
+from tengri import Uniform
 from tengri.components.sed_model_component import SEDModelComponent
-from tengri.observation.observation import Observation
-from tengri.parameters.priors import Distribution
-from tengri.protocols.component import DerivedKey, ForwardState
+from tengri.protocols.component import ForwardState
 
 
 class SimpleDustComponent(SEDModelComponent):

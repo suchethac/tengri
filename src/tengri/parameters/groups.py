@@ -99,9 +99,15 @@ def _ensure_registry_loaded() -> None:
         import tengri.components.nebular
         import tengri.components.radio
         import tengri.components.xray
+
         # Force use of imports so they're not removed as unused
-        _ = (tengri.components.agn, tengri.components.dust, tengri.components.nebular,
-             tengri.components.radio, tengri.components.xray)
+        _ = (
+            tengri.components.agn,
+            tengri.components.dust,
+            tengri.components.nebular,
+            tengri.components.radio,
+            tengri.components.xray,
+        )
     except ImportError:
         # If imports fail (missing dependencies), gracefully continue.
         # The registry just won't have those types available.
