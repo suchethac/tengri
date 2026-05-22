@@ -104,7 +104,7 @@ class TestModifiedBlackbodyComponent:
             f"Max relative error: {max_rel_err}"
         )
 
-        # Check that published dict is empty (L_ir_emission not yet in DerivedBundle)
+        # Check that published dict is empty (L_ir_emission not yet in DerivedState)
         assert published == {}
 
 
@@ -229,7 +229,7 @@ class TestSEDComponentProtocol:
         try:
             state_out = comp.apply(state, params)
             assert state_out.sed_intrinsic is not None
-            # L_ir_emission not yet in DerivedBundle, so it won't appear
+            # L_ir_emission not yet in DerivedState, so it won't appear
         except KeyError as e:
             # Expected if component requires input not in state
             if "L_ir" not in str(e):

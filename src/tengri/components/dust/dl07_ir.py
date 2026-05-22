@@ -244,7 +244,7 @@ class DL07IRSEDComponent(SEDModelComponent):
         sed_emission = norm * sed_lnu
 
         # Return updated SED and published luminosity
-        # Note: L_ir_emission not yet a typed field in DerivedBundle
+        # Note: L_ir_emission not yet a typed field in DerivedState
         sed_out = sed_in + sed_emission
 
         return sed_out, {}

@@ -558,7 +558,7 @@ class SEDModelComponent:
 
         A component declares output names in its ``outputs`` dict (e.g.
         ``{"L_ir": "erg/s"}``). If a name matches a typed field on
-        :class:`DerivedBundle`, write through to that field so the value
+        :class:`DerivedState`, write through to that field so the value
         is observable via attribute / ``__contains__`` / mapping access.
         Otherwise drop the value into ``_extras``, the documented
         escape hatch for keys not yet promoted to typed fields.

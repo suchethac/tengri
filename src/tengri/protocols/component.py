@@ -38,7 +38,6 @@ __all__ = [
     "DerivedKey",
     "ForwardState",
     "ParamDeclaration",
-    "PipelineContractError",
     "SEDComponent",
     "SEDComponentConfig",
     "SEDComponentState",
@@ -55,10 +54,6 @@ class ComponentIOError(ValueError):
     when a missing producer looks like a typo. See
     :func:`validate_pipeline` for the full list of checks.
     """
-
-
-# Deprecated alias — old name kept for one release.
-PipelineContractError = ComponentIOError
 
 
 # ─────────────────────────────────────────────────────────────────────
