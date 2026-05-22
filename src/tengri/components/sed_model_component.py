@@ -616,7 +616,9 @@ class SEDModelComponent:
             ``{self.name}_spec_lnu_precomp`` with shape (n_spec_pixel,).
         """
         # Evaluate predict at spectrum pixel centres
-        spec_lnu_precomp, _ = self.predict(p, jnp.zeros_like(spec_eff_waves), spec_eff_waves, **inputs)
+        spec_lnu_precomp, _ = self.predict(
+            p, jnp.zeros_like(spec_eff_waves), spec_eff_waves, **inputs
+        )
 
         # Publish the per-pixel spectrum contribution
         return {f"{self.name}_spec_lnu_precomp": spec_lnu_precomp}

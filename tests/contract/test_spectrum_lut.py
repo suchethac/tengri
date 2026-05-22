@@ -5,7 +5,6 @@ between exact and LUT-based spectrum predictions.
 """
 
 import pytest
-import jax.numpy as jnp
 
 from tengri import SpectrumPrecomp
 
