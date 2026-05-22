@@ -34,6 +34,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "Galaxy",
         "Parameters",
         "Population",
+        "PopulationSED",
         "SEDModel",
         "SpatialModel",
         "SpatialSEDModel",

@@ -37,6 +37,7 @@ EXPECTED_ALL = frozenset(
         "Galaxy",
         "Parameters",
         "Population",
+        "PopulationSED",
         "SEDModel",
         "Sersic",
         "SpatialModel",

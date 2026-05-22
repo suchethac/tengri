@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- **`tengri.PopulationSED`** — convenience wrapper for hierarchical
+  population fits with shared parameters. Bundles one `SEDModel`
+  template + a list of per-galaxy data dicts + a list of shared
+  parameter names into a single class with a `.fit("vi")` method.
+  Replaces the awkward `model_factory(psd_sigma, psd_tau_myr) → Model`
+  closure that the legacy `PopulationFitter` requires. Defaults to
+  the canonical PSD hyperparameters
+  (`sfh_field_psd_sigma`, `sfh_field_psd_tau_myr`) and PSD-typical
+  prior bounds; both can be overridden. Delegates inference to
+  `PopulationFitter` under the hood, so existing notebooks and
+  analysis scripts work unchanged.
 - **Multi-population galaxy decompositions (ADR-0012 accepted).**
   `ForwardModel.build(populations=[...])` now accepts N > 1
   populations for AGN + bulge + disc and similar galaxy
