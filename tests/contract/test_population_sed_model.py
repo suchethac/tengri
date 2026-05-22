@@ -150,6 +150,73 @@ def test_run_vmaps_over_population(synthetic_ssp, simple_observation) -> None:
     )
 
 
+def test_batched_axes_publishes_galaxy_axis() -> None:
+    """PopulationSEDModel.batched_axes publishes the named galaxy axis at position 0."""
+    pop = PopulationSEDModel(sed=_StubSED(), galaxies=[_gal()])
+    assert pop.batched_axes == {"galaxy": 0}
+
+
+def test_predict_one_is_un_batched_primitive(synthetic_ssp, simple_observation) -> None:
+    """predict_one runs the SED template once, no vmap, no leading axis.
+
+    Composable with outer jax.vmap / pmap / shard_map.
+    """
+    import jax.numpy as _jnp
+
+    from tengri.protocols.component import ForwardState
+
+    template = _real_template(synthetic_ssp, simple_observation)
+    pop = PopulationSEDModel(
+        sed=template,
+        galaxies=[{"flux_obs": _jnp.zeros(5), "noise": _jnp.ones(5)}],
+    )
+    params_one: dict[str, _jnp.ndarray] = {
+        name: _jnp.float64(0.5) for name in template.spec.free_params
+    }
+    state = ForwardState(wave=_jnp.zeros(1))
+    direct = template.run(state, params_one)
+    via_predict_one = pop.predict_one(state, params_one)
+    # predict_one should be identical to the bare template (it's a thin pass-through).
+    for key, val_direct in dict(direct.derived).items():
+        if not hasattr(val_direct, "shape"):
+            continue
+        val_via = dict(via_predict_one.derived).get(key)
+        if val_via is not None and hasattr(val_via, "shape"):
+            assert val_via.shape == val_direct.shape
+            assert _jnp.allclose(val_via, val_direct, rtol=1e-10, atol=0.0)
+
+
+def test_predict_one_composes_with_outer_vmap(synthetic_ssp, simple_observation) -> None:
+    """Outer vmap over predict_one matches run — composability sanity check."""
+    import jax
+    import jax.numpy as _jnp
+
+    from tengri.protocols.component import ForwardState
+
+    template = _real_template(synthetic_ssp, simple_observation)
+    pop = PopulationSEDModel(
+        sed=template,
+        galaxies=[{"flux_obs": _jnp.zeros(5), "noise": _jnp.ones(5)} for _ in range(3)],
+    )
+    state = ForwardState(wave=_jnp.zeros(1))
+    params = {name: _jnp.array([0.5] * 3) for name in template.spec.free_params}
+
+    # Default-batched path (uses internal vmap of predict_one)
+    via_run = pop.run(state, params)
+    # External vmap of predict_one (the un-batched primitive)
+    axes = pop.parameter_axes(params)
+    via_outer_vmap = jax.vmap(pop.predict_one, in_axes=(None, axes))(state, params)
+
+    # The two paths should be numerically identical.
+    for key, val_run in dict(via_run.derived).items():
+        if not hasattr(val_run, "shape"):
+            continue
+        val_outer = dict(via_outer_vmap.derived).get(key)
+        if val_outer is not None and hasattr(val_outer, "shape"):
+            assert val_outer.shape == val_run.shape
+            assert _jnp.allclose(val_outer, val_run, rtol=1e-10, atol=0.0)
+
+
 def test_run_single_galaxy_matches_template_directly(synthetic_ssp, simple_observation) -> None:
     """N=1 vmapped run should match a direct template.run (modulo broadcasting).
 

@@ -228,7 +228,8 @@ class ForwardModel:
         if not is_multipop:
             (only_state,) = per_pop_states.values()
             (only_params,) = per_pop_params.values()
-            return self.observation.predict(only_state, only_params)
+            (only_pop,) = self.populations
+            return _predict_observation(self.observation, only_pop.sed, only_state, only_params)
 
         if hasattr(self.observation, "predict_summed"):
             return self.observation.predict_summed(per_pop_states, per_pop_params)
@@ -323,6 +324,46 @@ class ForwardModel:
             full.update(spec.get_fixed_values())
         full.update(sliced)
         return full
+
+
+def _predict_observation(
+    observation: Any,
+    sub_model: Any,
+    state: ForwardState,
+    params: Mapping[str, Any],
+) -> Mapping[str, jnp.ndarray]:
+    """Run ``observation.predict``, vmapping over any axes the SubModel published.
+
+    SubModels publish their batched axes via :attr:`batched_axes`
+    (``{name: axis_position}``, default ``{}``). When non-empty, the
+    SubModel's :meth:`run` has already returned a batched
+    :class:`ForwardState` along those axes. This helper vmaps
+    ``observation.predict`` once per batched axis so the final
+    prediction dict has the same leading axes — keeping the
+    standardization contract that :meth:`ForwardModel.predict`
+    always returns shape-consistent output regardless of SubModel.
+
+    Composability: ``observation.predict`` is the un-batched primitive.
+    Callers wanting outer ``pmap`` / ``shard_map`` can wrap this
+    helper (or just ``observation.predict``) themselves — the hidden
+    batching here is the default, not the only path.
+    """
+    import jax
+
+    batched_axes = getattr(sub_model, "batched_axes", {}) or {}
+    if not batched_axes:
+        return observation.predict(state, params)
+
+    # Vmap once per batched axis. ``params`` axes are inferred from
+    # the SubModel's parameter_axes when available; otherwise broadcast.
+    predict_fn = observation.predict
+    if hasattr(sub_model, "parameter_axes"):
+        params_axes = sub_model.parameter_axes(params)
+    else:
+        params_axes = {name: None for name in params}
+    for axis_pos in batched_axes.values():
+        predict_fn = jax.vmap(predict_fn, in_axes=(axis_pos, params_axes))
+    return predict_fn(state, params)
 
 
 def _linear_flux_sum(
