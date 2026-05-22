@@ -18,7 +18,7 @@ f_esc = 1 (all photons escape).
 import matplotlib.pyplot as plt
 
 from tengri import Fixed, Parameters, SEDModel, load_ssp
-from tengri.analysis.plotting import sweep_parameter
+from tengri.analysis.plotting import SWEEP_CMAPS, sweep_parameter
 from tengri.plot import setup_style
 
 setup_style()
@@ -52,7 +52,7 @@ fig, ax = sweep_parameter(
     model,
     "neb_fesc",
     values,
-    cmap="Purples",
+    cmap=SWEEP_CMAPS["nebular"],
     label_fmt=r"$f_{{\mathrm{{esc}}}}$ = {:.1f}",
     wave_range=(1000, 8000),
 )

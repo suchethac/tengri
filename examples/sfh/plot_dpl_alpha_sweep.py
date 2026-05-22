@@ -16,7 +16,7 @@ Steeper α = more abrupt onset, younger mean age.
 import matplotlib.pyplot as plt
 
 from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp, setup_style
-from tengri.analysis.plotting import sfh_sed_comparison
+from tengri.analysis.plotting import SWEEP_CMAPS, sfh_sed_comparison
 
 setup_style()
 
@@ -42,7 +42,7 @@ model = SEDModel(spec, ssp)
 # Sweep parameter
 values = [0.3, 0.7, 1.5, 3.0, 6.0]
 
-fig = sfh_sed_comparison(model, "sfh_dpl_alpha", values, cmap="Oranges")
+fig = sfh_sed_comparison(model, "sfh_dpl_alpha", values, cmap=SWEEP_CMAPS["sfh"])
 fig.suptitle("Double Power-Law SFH: Rising Slope α", fontsize=12, y=1.00)
 plt.tight_layout()
 plt.savefig("plot_dpl_alpha_sweep.png", dpi=150, bbox_inches="tight")

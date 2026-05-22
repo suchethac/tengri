@@ -16,7 +16,7 @@ the SFH and changes UV slope, 4000 Å break, and NIR mass.
 import matplotlib.pyplot as plt
 
 from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp, setup_style
-from tengri.analysis.plotting import sfh_sed_comparison
+from tengri.analysis.plotting import SWEEP_CMAPS, sfh_sed_comparison
 
 setup_style()
 
@@ -41,7 +41,7 @@ model = SEDModel(spec, ssp)
 # Sweep parameter
 values = [1.0, 3.0, 5.0, 8.0, 11.0]
 
-fig = sfh_sed_comparison(model, "sfh_lnorm_peak_lbt_gyr", values, cmap="Purples")
+fig = sfh_sed_comparison(model, "sfh_lnorm_peak_lbt_gyr", values, cmap=SWEEP_CMAPS["sfh"])
 fig.suptitle("Log-Normal SFH: Peak Lookback Time", fontsize=12, y=1.00)
 plt.tight_layout()
 plt.savefig("plot_lnorm_peak_sweep.png", dpi=150, bbox_inches="tight")

@@ -16,7 +16,7 @@ after its peak. Shorter `τ` means faster quenching, older mean stellar age.
 import matplotlib.pyplot as plt
 
 from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp, setup_style
-from tengri.analysis.plotting import sfh_sed_comparison
+from tengri.analysis.plotting import SWEEP_CMAPS, sfh_sed_comparison
 
 setup_style()
 
@@ -41,7 +41,7 @@ model = SEDModel(spec, ssp)
 # Sweep parameter
 values = [0.5, 1.0, 2.0, 5.0, 10.0]
 
-fig = sfh_sed_comparison(model, "sfh_dexp_tau_gyr", values, cmap="Blues")
+fig = sfh_sed_comparison(model, "sfh_dexp_tau_gyr", values, cmap=SWEEP_CMAPS["sfh"])
 fig.suptitle("Delayed Exponential SFH: Timescale τ", fontsize=12, y=1.00)
 plt.tight_layout()
 plt.savefig("plot_dexp_tau_sweep.png", dpi=150, bbox_inches="tight")

@@ -17,7 +17,7 @@ are used to measure oxygen abundances in star-forming galaxies.
 import matplotlib.pyplot as plt
 
 from tengri import Fixed, Parameters, SEDModel, load_ssp
-from tengri.analysis.plotting import sweep_parameter
+from tengri.analysis.plotting import SWEEP_CMAPS, sweep_parameter
 from tengri.plot import setup_style
 
 setup_style()
@@ -50,7 +50,7 @@ fig, ax = sweep_parameter(
     model,
     "neb_logZ_gas",
     values,
-    cmap="YlGn",
+    cmap=SWEEP_CMAPS["nebular"],
     label_fmt=r"$\log Z/Z_\odot$ = {:.1f}",
     wave_range=(4500, 7500),
 )

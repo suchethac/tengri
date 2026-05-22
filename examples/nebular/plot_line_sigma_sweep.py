@@ -18,7 +18,7 @@ and measuring dynamics in high-redshift galaxies.
 import matplotlib.pyplot as plt
 
 from tengri import Fixed, Parameters, SEDModel, load_ssp
-from tengri.analysis.plotting import sweep_parameter
+from tengri.analysis.plotting import SWEEP_CMAPS, sweep_parameter
 from tengri.plot import setup_style
 
 setup_style()
@@ -53,7 +53,7 @@ fig, ax = sweep_parameter(
     model,
     "eline_sigma_kms",
     values,
-    cmap="Blues",
+    cmap=SWEEP_CMAPS["nebular"],
     label_fmt=r"$\sigma$ = {:.0f} km/s",
     wave_range=(4700, 5200),
 )

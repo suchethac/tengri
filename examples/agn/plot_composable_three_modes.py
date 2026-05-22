@@ -211,4 +211,5 @@ print(
 
 fig.suptitle("Composable AGN: three evaluation modes for the same recipe", fontsize=11)
 fig.tight_layout()
+plt.savefig("plot_composable_three_modes.png", dpi=150, bbox_inches="tight")
 plt.show()

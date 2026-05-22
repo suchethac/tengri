@@ -116,4 +116,5 @@ ax.set_title(
     "same call site, four selector tuples"
 )
 fig.tight_layout()
+plt.savefig("plot_composable_recipes.png", dpi=150, bbox_inches="tight")
 plt.show()

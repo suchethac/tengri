@@ -18,7 +18,7 @@ f_DIG = 1 is pure DIG.
 import matplotlib.pyplot as plt
 
 from tengri import Fixed, Parameters, SEDModel, load_ssp
-from tengri.analysis.plotting import sweep_parameter
+from tengri.analysis.plotting import SWEEP_CMAPS, sweep_parameter
 from tengri.plot import setup_style
 
 setup_style()
@@ -53,7 +53,7 @@ fig, ax = sweep_parameter(
     model,
     "neb_dig_frac",
     values,
-    cmap="BuPu",
+    cmap=SWEEP_CMAPS["nebular"],
     label_fmt=r"$f_{{\mathrm{{DIG}}}}$ = {:.1f}",
     wave_range=(4500, 7500),
 )
