@@ -67,8 +67,9 @@ def test_fitter_constructs_via_standard_path_for_population(
 
 @pytest.mark.xfail(
     reason=(
-        "Loss-fn machinery requires hashable model for compile cache; "
-        "PopulationSEDModel.galaxies contains dicts. Tracked in follow-up."
+        "Fitter._initialize_unbounded produces scalar xi per free name. "
+        "Hierarchical needs (N,)-shape for per-galaxy params. "
+        "Next incremental PR."
     )
 )
 def test_fitter_loss_fn_evaluates_on_hierarchical(synthetic_ssp, simple_observation) -> None:
@@ -78,11 +79,14 @@ def test_fitter_loss_fn_evaluates_on_hierarchical(synthetic_ssp, simple_observat
     term sums xi^T xi where xi has (N,) leading shape for per-galaxy
     free params. End-to-end: forward.predict -> chi^2 -> scalar.
 
-    Currently xfail: the Fitter's compile-cache wants a hashable
-    model key, and PopulationSEDModel.galaxies contains dicts
-    (unhashable). Fix is to either freeze the galaxy data or
-    rework the cache-key derivation. Tracked in the deep-removal
-    follow-up.
+    Couplings fixed so far (incremental):
+    - PopulationSEDModel.__hash__ → id(self) (compile-cache hashability)
+    - PopulationSpecView.resolve_mirrors → template delegation
+    - ForwardModel.predict_photometry → routes through self.predict
+      so batched output flows instead of falling back to scalar SED
+
+    Remaining: Fitter._initialize_unbounded must produce (N,)-shape
+    xi for per-galaxy free params; currently scalar everywhere.
     """
     from tengri.inference.fitter import Fitter
 

@@ -150,6 +150,23 @@ class PopulationSEDModel:
         object.__setattr__(self, "data_type", data_type)
         object.__setattr__(self, "name", "population_sed_model")
 
+    def __hash__(self) -> int:
+        """Identity-based hash.
+
+        Frozen-dataclass auto-generated ``__hash__`` would hash the
+        field tuple, but ``galaxies`` is a tuple of ``Mapping``s
+        whose contents are JAX arrays / dicts — unhashable. The cache
+        machinery (:class:`weakref.WeakKeyDictionary` in
+        :mod:`tengri.inference._model_cache`) uses object identity
+        anyway, so identity-hash is functionally equivalent and
+        sidesteps the unhashable-field problem.
+
+        Equality semantics retained: two PopulationSEDModel instances
+        with identical contents are still ``__eq__``, but they hash
+        differently. This matches the spirit of weak-keyed caches.
+        """
+        return id(self)
+
     @property
     def n_galaxies(self) -> int:
         return len(self.galaxies)
