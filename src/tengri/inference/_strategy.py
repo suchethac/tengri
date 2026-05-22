@@ -21,7 +21,7 @@ backends carry richer :attr:`BackendEntry.is_compatible` predicates.
 from __future__ import annotations
 
 import importlib
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from tengri.inference._backend_registry import BackendEntry
@@ -29,7 +29,7 @@ from tengri.inference._backend_registry import BackendEntry
 __all__ = ["BackendStatus", "resolve_status"]
 
 
-class BackendStatus(str, Enum):
+class BackendStatus(StrEnum):
     """Whether a backend can run right now.
 
     Members

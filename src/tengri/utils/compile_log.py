@@ -35,6 +35,7 @@ import os
 import threading
 import time
 from dataclasses import asdict, dataclass
+from datetime import UTC
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -212,9 +213,9 @@ def compile_timer(name: str, signature: tuple, method: str | None = None):
 
 def _iso8601_now() -> str:
     """Return current UTC time in ISO 8601 format."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+    return datetime.now(UTC).isoformat(timespec="milliseconds")
 
 
 def instrument_first_call(
