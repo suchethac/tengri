@@ -17,8 +17,8 @@ pytestmark = pytest.mark.contract
 
 from tengri.forward.orchestrator import topological_sort
 from tengri.protocols.component import (
+    ComponentIOError,
     DerivedKey,
-    PipelineContractError,
     SEDComponentConfig,
 )
 
@@ -131,7 +131,7 @@ class TestCycleDetection:
             publishes=(DerivedKey("k2", "dex"),),
             requires=(DerivedKey("k1", "dex"),),
         )
-        with pytest.raises(PipelineContractError, match="cycle"):
+        with pytest.raises(ComponentIOError, match="cycle"):
             topological_sort([a, b])
 
 
