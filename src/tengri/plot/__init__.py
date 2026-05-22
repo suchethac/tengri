@@ -22,6 +22,7 @@ from tengri.analysis.plotting import (
     COLORS,
     SDSS_WAVE_EFF,
     SPECTRAL_FEATURES,
+    SWEEP_CMAPS,
     diagnostics_table,
     plot_corner_comparison,
     plot_sed_fit,
@@ -30,12 +31,15 @@ from tengri.analysis.plotting import (
     plot_spectrum_fit,
     safe_corner,
     setup_style,
+    sfh_sed_comparison,
+    sweep_parameter,
 )
 
 __all__ = [
     "COLORS",
     "SDSS_WAVE_EFF",
     "SPECTRAL_FEATURES",
+    "SWEEP_CMAPS",
     "diagnostics_table",
     "plot_corner_comparison",
     "plot_sed_fit",
@@ -44,4 +48,6 @@ __all__ = [
     "plot_spectrum_fit",
     "safe_corner",
     "setup_style",
+    "sfh_sed_comparison",
+    "sweep_parameter",
 ]
