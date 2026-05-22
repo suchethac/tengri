@@ -107,9 +107,7 @@ class SpatialModelComponent:
 
     def inputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component reads, derived from the ``reads`` dict."""
-        return tuple(
-            DerivedKey(name=k, units=u, description="") for k, u in self.reads.items()
-        )
+        return tuple(DerivedKey(name=k, units=u, description="") for k, u in self.reads.items())
 
     def outputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component publishes, derived from the ``publishes`` dict."""
@@ -131,9 +129,7 @@ class SpatialModelComponent:
         """Default orchestration: slice params, lookup grid, call predict, write state."""
         prefix_len = len(self.parameter_prefix)
         p_sliced = {
-            k[prefix_len:]: v
-            for k, v in params.items()
-            if k.startswith(self.parameter_prefix)
+            k[prefix_len:]: v for k, v in params.items() if k.startswith(self.parameter_prefix)
         }
 
         input_kwargs = {}
