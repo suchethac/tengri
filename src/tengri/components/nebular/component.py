@@ -566,7 +566,7 @@ class NebularSEDComponent:
                             vac_hits += 1
                     looks_air = air_hits >= 2 and air_hits > vac_hits
                     if looks_air:
-                        from tengri.utils.conversions import air_to_vacuum
+                        from tengri.units import air_to_vacuum
 
                         in_optical = (line_waves_np >= 2000.0) & (line_waves_np <= 1.0e4)
                         converted = line_waves_np.astype(np.float64).copy()

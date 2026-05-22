@@ -601,9 +601,9 @@ class Observation:
         ``line_fluxes`` or ``spectral_indices`` configured, raises
         ``NotImplementedError`` — Phase 3+ territory.
         """
+        from tengri.cosmology import luminosity_distance
         from tengri.observation.photometry import compute_flux_density
         from tengri.observation.spectrum import apply_lsf, compute_spectrum
-        from tengri.utils.cosmology import luminosity_distance
 
         z = jnp.asarray(params.get("redshift", 0.0))
         if dl_cm is None:
@@ -759,7 +759,7 @@ class Observation:
             ``sed_intrinsic`` through filters. Stays the canonical
             reference until Phase 3c-3e flips the default.
         """
-        from tengri.utils.cosmology import luminosity_distance
+        from tengri.cosmology import luminosity_distance
 
         # Sum all *_phot_lnu_precomp contributions from components that published
         # one. New components add their precompute field to DerivedBundle and

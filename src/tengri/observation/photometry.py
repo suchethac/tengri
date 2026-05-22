@@ -11,8 +11,7 @@ import dataclasses
 import jax
 import jax.numpy as jnp
 
-from tengri.utils.conversions import lnu_to_fnu
-from tengri.utils.magnitudes import fnu_to_ab_mag
+from tengri.units import fnu_to_ab_mag, lnu_to_fnu
 
 
 @dataclasses.dataclass(frozen=True)

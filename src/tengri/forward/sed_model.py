@@ -49,6 +49,7 @@ from tengri.components.stellar.sps.precompute import (
     precompute_photometry,
 )
 from tengri.config.exceptions import ParameterMapError
+from tengri.cosmology import age_at_z, luminosity_distance
 from tengri.forward.pipeline import (
     interp_metallicity,
     interp_metallicity_evolving,
@@ -70,7 +71,6 @@ from tengri.parameters.translate import (
     _build_param_map,
     get_internal_params,
 )
-from tengri.utils.cosmology import age_at_z, luminosity_distance
 from tengri.utils.grid import (
     grid_spacing,
     interpolate_to_linear_time,
@@ -2799,7 +2799,7 @@ class SEDModel:
         try:
             from dsps import calc_obs_mag
 
-            from tengri.utils.cosmology import DEFAULT_COSMO
+            from tengri.cosmology import DEFAULT_COSMO
 
             sed_lsun = self.predict_luminosity(params)
             z = self._get_redshift(params)
