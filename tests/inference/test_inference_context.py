@@ -123,6 +123,58 @@ class TestContextAccessors:
         assert ctx.cache is fitter.cache
 
 
+class TestHamiltonianSplit:
+    """log_likelihood_fn + log_prior_fn split — paper §2 + §4 alignment.
+
+    Inference methods like Nested Sampling need the data term and the
+    prior term exposed separately, not bundled into neg_log_posterior_fn.
+    These tests pin the split contract.
+    """
+
+    def test_log_prior_fn_is_standard_normal_quadratic(self):
+        """log p(xi) = -0.5 * sum(xi^2) for the standardized N(0,I) prior.
+
+        Paper §2 'Standardized Inference': every free parameter lives
+        in the N(0,I) latent space after ``_unstandardize_parameters``.
+        The log-prior is therefore the quadratic form irrespective of
+        physical-prior type (Uniform, Gaussian, LogUniform).
+        """
+        fitter = _build_fitter()
+        ctx = InferenceContext(fitter=fitter)
+        log_prior = ctx.log_prior_fn
+
+        # At xi=0 (the mode), log-prior should be 0 (the constant
+        # offset -D/2 * log(2pi) is dropped).
+        xi_zero = {name: jnp.float64(0.0) for name in fitter._free_names}
+        assert float(log_prior(xi_zero)) == 0.0
+
+        # At xi=1 for every dim, log_prior = -0.5 * D
+        xi_one = {name: jnp.float64(1.0) for name in fitter._free_names}
+        D = len(fitter._free_names)
+        assert float(log_prior(xi_one)) == pytest.approx(-0.5 * D)
+
+        # At xi=2 for one dim, log_prior += -0.5 * (4 - 1) = -1.5
+        xi_two_one = {name: jnp.float64(1.0) for name in fitter._free_names}
+        xi_two_one[fitter._free_names[0]] = jnp.float64(2.0)
+        assert float(log_prior(xi_two_one)) == pytest.approx(-0.5 * (D + 3))
+
+    def test_log_prior_fn_is_pure_function(self):
+        """log_prior_fn returns the same value across calls — pure JAX-friendly."""
+        fitter = _build_fitter()
+        ctx = InferenceContext(fitter=fitter)
+        xi = {name: jnp.float64(0.5) for name in fitter._free_names}
+        v1 = float(ctx.log_prior_fn(xi))
+        v2 = float(ctx.log_prior_fn(xi))
+        assert v1 == v2
+
+    def test_log_likelihood_fn_property_exists(self):
+        """log_likelihood_fn is exposed and returns a callable."""
+        fitter = _build_fitter()
+        ctx = InferenceContext(fitter=fitter)
+        loglik_fn = ctx.log_likelihood_fn
+        assert callable(loglik_fn)
+
+
 class TestContextFrozenness:
     def test_cannot_replace_fitter(self):
         fitter = _build_fitter()
