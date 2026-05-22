@@ -9,6 +9,8 @@ from __future__ import annotations
 import jax.numpy as jnp
 import pytest
 
+pytestmark = pytest.mark.contract
+
 from tengri.components.dust.charlot_fall_model import CharlotFall
 from tengri.components.sed_model_component import _REGISTRY
 from tengri.parameters.priors import Fixed, Uniform

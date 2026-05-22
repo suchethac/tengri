@@ -91,6 +91,14 @@ jobs:
   # Skip on regular push/PR to keep fast feedback under 15 min.
   slow:
     runs-on: ubuntu-latest
+    # Own concurrency group: do NOT inherit the workflow-level
+    # `cancel-in-progress: true` (which kills slow whenever main moves).
+    # `cancel-in-progress: false` means newer slow triggers queue behind
+    # an existing one — slow always runs to completion, never aborted by
+    # an unrelated main push. See issue #160.
+    concurrency:
+      group: tests-slow-${{ github.ref }}
+      cancel-in-progress: false
     if: |
       github.event_name == 'schedule'
       || github.event_name == 'workflow_dispatch'
