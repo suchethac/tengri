@@ -102,11 +102,9 @@ class TestAGNXRayCoronaPort:
             "e_cut": jnp.array(300.0),
         }
         # With AGN luminosity
-        sed_out_agn, pub_agn = comp.predict(
-            p, sed_in, wave, L_agn_bol=jnp.array(1e46)
-        )
+        sed_out_agn, _pub_agn = comp.predict(p, sed_in, wave, L_agn_bol=jnp.array(1e46))
         # Without AGN luminosity
-        sed_out_no_agn, pub_no_agn = comp.predict(p, sed_in, wave)
+        sed_out_no_agn, _pub_no_agn = comp.predict(p, sed_in, wave)
 
         # AGN case should produce non-zero output
         assert jnp.any(sed_out_agn > 0.0)
