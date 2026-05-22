@@ -87,7 +87,11 @@ class ShockNebular(SEDModelComponent):
             shock_component=self.COMPONENT,
             line_sigma_aa=p["line_sigma_aa"],
         )
-        # Frequency integral of L_nu = L (Parseval-like; the upstream
-        # primitive normalises so the line-integrated luminosity matches
-        # the anchor).
-        return sed_in + addition, {"L_shock": l_halpha}
+        # ``L_shock`` is the total shock-driven luminosity — the
+        # frequency integral of the published L_nu, not just the
+        # Hα anchor. Downstream consumers (radio energy balance,
+        # diagnostic plots) want the total, not a single line.
+        c_aa_per_s = 2.99792458e18
+        nu = c_aa_per_s / wave
+        L_shock = jnp.abs(jnp.trapezoid(addition, nu))
+        return sed_in + addition, {"L_shock": L_shock}
