@@ -159,7 +159,7 @@ python -m tengri doctor
 | NUTS          | `fitter.run("mcmc_nuts")`          | Gold-standard posterior (D ≲ 30)                          |
 | Ray Tracing   | `fitter.run("mcmc_raytrace")`      | Exact MCMC, scales beyond D = 30                          |
 | Evidence      | `fitter.run("evidence")`           | Bayesian evidence for model comparison                    |
-| Population    | `PopulationFitter(...)`            | Shared hyperparameters across galaxy samples              |
+| Population    | `PopulationSEDModel` + `ForwardModel.build(population=)` | Hierarchical fits — shared parameters across galaxies (e.g. PSD) |
 | geoVI         | `fitter.run("vi")`                 | High-dim stochastic SFHs (Paper II preview)               |
 
 ## What's modular

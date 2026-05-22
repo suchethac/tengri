@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- **`tengri.PopulationSEDModel` — hierarchical SubModel.**
+  Bundles one `SEDModel` template + a list of per-galaxy data dicts +
+  the names of parameters tied across the population (default: the
+  two PSD hyperparameters `sfh_field_psd_sigma`,
+  `sfh_field_psd_tau_myr`) + their priors. Held by `ForwardModel`
+  via the new `ForwardModel.build(population=pop, observation=obs)`
+  kwarg slot, so the outer-shell construction signature stays uniform
+  across SubModel variants (`SEDModel`, `SpatialModel`,
+  `SpatialSEDModel`, `PopulationSEDModel`,
+  `PopulationSpatialSEDModel` *(far future)*). The hierarchical
+  inference path itself is tracked in
+  [issue #211](https://github.com/suchethac/tengri/issues/211); until
+  it lands, users continue to drive the fit via
+  `tengri.PopulationFitter` directly (legacy entry point preserved
+  for backward compatibility).
 - **Multi-population galaxy decompositions (ADR-0012 accepted).**
   `ForwardModel.build(populations=[...])` now accepts N > 1
   populations for AGN + bulge + disc and similar galaxy

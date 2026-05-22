@@ -10,14 +10,25 @@ Tengri's forward model is split into two clearly separated layers.
                          ▼
 ┌─────────────────────────────────────────────────────────┐
 │  ForwardModel — the thin outer shell                    │
-│  • owns one SED chain (SEDModel) and one observation    │
+│  • owns one SubModel and one observation                │
 │  • .predict(params) → dict {phot_fnu, spec_fnu, ...}    │
 │  • inference never has to choose between predict_*      │
 │    methods; the dict tells it which channels exist      │
 └────────────────────────┬────────────────────────────────┘
                          ▼
+            ┌────────────┴────────────┐
+            │      SubModels          │
+            ├─────────────────────────┤
+            │  SEDModel               │  single galaxy SED chain
+            │  PopulationSEDModel          │  N galaxies, shared params (hierarchical)
+            │  SpatialModel           │  single galaxy spatial profile
+            │  SpatialSEDModel        │  SED + Spatial (joint)
+            │  PopulationSpatialSED   │  far-future composition of all of the above
+            └─────────────────────────┘
+                         ▼
 ┌─────────────────────────────────────────────────────────┐
-│  SEDModel — the SED physics chain                       │
+│  SEDModel — the SED physics chain (used inside every    │
+│  SubModel variant)                                      │
 │  star formation history → simple stellar populations    │
 │   → nebular and AGN emission → dust attenuation and     │
 │   re-emission → IGM absorption → photometry/spectroscopy│
@@ -25,6 +36,10 @@ Tengri's forward model is split into two clearly separated layers.
 │  batchable through vmap.                                │
 └─────────────────────────────────────────────────────────┘
 ```
+
+The outer-shell signature stays uniform across all SubModel variants —
+construction is always ``ForwardModel.build(<slot>=..., observation=obs)``
+and inference is always through the standard ``Fitter`` pipeline.
 
 ## The minimum usable fit
 
@@ -84,14 +99,70 @@ After the split:
 ```python
 ForwardModel.build(
     *,
-    sed: SEDModel,             # the SED chain
-    observation: Observation,  # photometry + spectroscopy config
+    sed: SEDModel | None = None,             # single-galaxy SED
+    spatial: SpatialModel | None = None,      # add a spatial profile
+    population: PopulationSEDModel | None = None,  # hierarchical multi-galaxy
+    populations: Iterable[Population] | None = None,  # explicit decomposition
+    observation: Observation,
 ) -> ForwardModel
 ```
 
-Returns a frozen dataclass. The only API users typically call afterwards
-is `forward.predict(params) → dict`. Everything else is via `Fitter` or
+Pick exactly one of `sed=`, `population=`, or `populations=`. Returns
+a frozen dataclass. The only API users typically call afterwards is
+`forward.predict(params) → dict`. Everything else is via `Fitter` or
 posterior helpers.
+
+## Hierarchical population fits
+
+When you have many galaxies that share an underlying parameter — the
+canonical case is the PSD hyperparameters ``σ_PSD``, ``τ_PSD`` of the
+stochastic-SFH prior — wrap them in a ``PopulationSEDModel`` and pass it
+to ``ForwardModel.build(population=...)``:
+
+```python
+from tengri import ForwardModel, PopulationSEDModel, SEDModel
+
+template = SEDModel.build(ssp_data=ssp, observation=obs, ...)
+
+pop = PopulationSEDModel(
+    sed=template,
+    galaxies=[{'flux_obs': ..., 'noise': ...}, ...],   # N galaxies
+    # shared= and priors= default to PSD; override for other hierarchies
+)
+
+forward = ForwardModel.build(population=pop, observation=obs)
+```
+
+The PSD priors live on the ``PopulationSEDModel`` construction — not on a
+separate ``HierarchicalFitter`` — so there is one place that
+parameterises the hierarchy.
+
+Inference today routes through the legacy
+:class:`tengri.PopulationFitter` machinery (one ``Fitter``-equivalent
+class that handles hierarchical VI / EVI / raytrace); the deep
+integration that wires this behind ``ForwardModel.predict`` /
+``Fitter`` is tracked in
+`issue #211 <https://github.com/suchethac/tengri/issues/211>`_. Once
+that lands, the user-facing API stays exactly the same — you write
+``ForwardModel.build(population=pop)`` once, and inference is
+``Fitter(forward, ...).run('vi')``.
+
+## Composing SubModels
+
+The SubModel lattice composes — every variant either contains the
+others or runs alongside them, but each is a strict ``SubModel`` from
+``ForwardModel``'s perspective:
+
+| SubModel | Used when |
+|---|---|
+| `SEDModel` | one galaxy, SED only |
+| `SpatialModel` | one galaxy, morphology-only fit (e.g. resolved imaging) |
+| `SpatialSEDModel` | one galaxy, joint spatial + SED (e.g. SDSS-fiber spec + photometry) |
+| `PopulationSEDModel` | many galaxies, hierarchical shared parameters (PSD) |
+| `PopulationSpatialSED` *(far future)* | many galaxies with shared parameters and morphology |
+
+Adding a new SubModel is one Python file plus one entry in the
+ForwardModel-build kwargs table — the inference layer doesn't change.
 
 ## Forward chain — the SED physics
 

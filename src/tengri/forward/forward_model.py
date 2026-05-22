@@ -57,31 +57,47 @@ class ForwardModel:
         *,
         sed: Any | None = None,
         spatial: Any | None = None,
+        population: Any | None = None,
         populations: Iterable[Population] | None = None,
         observation: Any,
     ) -> ForwardModel:
         """Construct a :class:`ForwardModel`.
 
-        Two forms:
+        Three forms:
 
         - **Single-population sugar (the common case):** pass
           ``sed=<SEDModel>`` and ``observation=<Observation>``,
           optionally ``spatial=<SpatialModel>``. They are wrapped into
           a one-element ``populations`` tuple with ``name="default"``.
+        - **Hierarchical population:** pass
+          ``population=<PopulationSEDModel>`` for a hierarchical fit
+          across many galaxies sharing some parameters (e.g. PSD).
+          The PopulationSEDModel holds the SED template, the per-galaxy
+          data, the names of shared parameters, and their priors.
+          Inference goes through the standard
+          ``Fitter(forward, ...).run('vi')`` path; the Fitter routes
+          to the hierarchical machinery when it detects a
+          PopulationSEDModel.
         - **Multi-population explicit:** pass ``populations=[...]``
-          for galaxy decompositions (ADR-0012). Names must be unique
-          and must not contain ``.``.
+          for galaxy decompositions (AGN + bulge + disc — ADR-0012).
+          Names must be unique and must not contain ``.``.
 
         Parameters
         ----------
         sed : SEDModel or SubModel, optional
             Single-population shortcut. Mutually exclusive with
-            ``populations``.
+            ``population`` and ``populations``.
         spatial : SpatialModel or SubModel, optional
-            Single-population spatial side. Only valid when
-            ``sed=`` is also given.
+            Single-population spatial side. Only valid when ``sed=``
+            is also given.
+        population : PopulationSEDModel or SubModel, optional
+            Hierarchical-population shortcut. Mutually exclusive with
+            ``sed`` and ``populations``. The PopulationSEDModel is held
+            inside ``Population(name="default", sed=population)`` —
+            the outer-shell signature stays uniform.
         populations : iterable of Population, optional
-            Explicit population list. Mutually exclusive with ``sed``.
+            Explicit population list for galaxy decompositions.
+            Mutually exclusive with ``sed`` and ``population``.
         observation : object
             Observation model.
 
@@ -92,20 +108,27 @@ class ForwardModel:
         Raises
         ------
         ValueError
-            If neither ``sed`` nor ``populations`` is given (or both);
-            if ``spatial=`` is given without ``sed=``; or if
-            ``populations`` contains duplicate names.
+            If construction doesn't get exactly one of ``sed``,
+            ``population``, or ``populations``; if ``spatial=`` is
+            given without ``sed=``; or if ``populations`` contains
+            duplicate names.
         """
         if spatial is not None and sed is None:
             raise ValueError(
                 "ForwardModel.build(spatial=...) requires sed=... too. "
                 "Use populations=[...] for explicit pairing."
             )
-        if (sed is None) == (populations is None):
-            raise ValueError("ForwardModel.build needs exactly one of sed=... or populations=...")
+        provided = sum(x is not None for x in (sed, population, populations))
+        if provided != 1:
+            raise ValueError(
+                "ForwardModel.build needs exactly one of sed=..., "
+                "population=..., or populations=..."
+            )
 
         if sed is not None:
             pops = (Population(name="default", sed=sed, spatial=spatial),)
+        elif population is not None:
+            pops = (Population(name="default", sed=population),)
         else:
             assert populations is not None
             pops = tuple(populations)
