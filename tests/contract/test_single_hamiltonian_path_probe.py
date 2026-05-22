@@ -65,7 +65,12 @@ def test_fitter_constructs_via_standard_path_for_population(
     assert fitter._population_delegate is None
 
 
-@pytest.mark.xfail(reason="Loss-fn machinery requires hashable model for compile cache; PopulationSEDModel.galaxies contains dicts. Tracked in follow-up.")
+@pytest.mark.xfail(
+    reason=(
+        "Loss-fn machinery requires hashable model for compile cache; "
+        "PopulationSEDModel.galaxies contains dicts. Tracked in follow-up."
+    )
+)
 def test_fitter_loss_fn_evaluates_on_hierarchical(synthetic_ssp, simple_observation) -> None:
     """neg_log_posterior_fn evaluates to a scalar on a hierarchical fit.
 
