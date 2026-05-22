@@ -18,7 +18,7 @@ visible.
 import matplotlib.pyplot as plt
 
 from tengri import FIXED, Fixed, SEDModel, load_ssp, recipes
-from tengri.analysis.plotting import setup_style, sweep_parameter
+from tengri.plot import SWEEP_CMAPS, setup_style, sweep_parameter
 
 setup_style()
 
@@ -28,7 +28,7 @@ recipe["sfh"].update(peak_lbt_gyr=1.0, log_peak_sfr=1.0, width_gyr=0.8, trunc=3.
 recipe["dust"].update(tau_bc=1.0, tau_diff=0.5)
 recipe["dust"]["emission"] = {"type": "modified_blackbody", "*": FIXED, "T": 30.0, "beta_ir": 1.8}
 recipe["redshift"] = Fixed(0.2)
-model = SEDModel.from_groups(ssp_data=load_ssp(), **recipe)
+model = SEDModel.build(ssp_data=load_ssp(), **recipe)
 
 fig, ax = plt.subplots(figsize=(8, 5))
 sweep_parameter(
@@ -36,7 +36,7 @@ sweep_parameter(
     "met_logzsol",
     [-1.5, -0.7, 0.0, 0.5],
     ax=ax,
-    cmap="viridis",
+    cmap=SWEEP_CMAPS["metallicity"],
     label_fmt=r"$\log Z/Z_\odot$ = {:.1f}",
     wave_range=(912, 3e5),  # 912 Å (Lyman limit) → 30 μm (mid-IR)
 )
@@ -46,6 +46,8 @@ ax.set(
     title=r"Metallicity Impact on Panchromatic SED",
     xlabel=r"Wavelength [$\AA$]",
     ylabel=r"$\lambda F_\lambda$ (not normalized)",
+    xlim=(912, 3e5),
+    ylim=(1e-18, 1e-8),
 )
 
 for wl in (1215, 5500, 1e4, 1e5):

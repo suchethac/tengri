@@ -20,7 +20,7 @@ Old-passive recipe + sweep ``met_alpha_fe`` from -0.2 to +0.6.
 import matplotlib.pyplot as plt
 
 from tengri import SEDModel, load_ssp, recipes
-from tengri.analysis.plotting import setup_style, sweep_parameter
+from tengri.plot import SWEEP_CMAPS, setup_style, sweep_parameter
 
 setup_style()
 
@@ -28,7 +28,7 @@ setup_style()
 recipe = recipes.dust_demo()
 recipe["sfh"].update(peak_lbt_gyr=8.0, log_peak_sfr=0.5, width_gyr=1.5, skew=0.0, trunc=10.0)
 recipe["dust"].update(tau_bc=0.0, tau_diff=0.1)
-model = SEDModel.from_groups(ssp_data=load_ssp(), **recipe)
+model = SEDModel.build(ssp_data=load_ssp(), **recipe)
 
 fig, ax = plt.subplots(figsize=(8, 5))
 sweep_parameter(
@@ -36,13 +36,15 @@ sweep_parameter(
     "met_alpha_fe",
     [-0.2, 0.0, 0.2, 0.4, 0.6],
     ax=ax,
-    cmap="magma",
+    cmap=SWEEP_CMAPS["metallicity"],
     label_fmt=r"$[\alpha/\mathrm{{Fe}}]$ = {:.1f}",
     wave_range=(3500, 9000),
 )
 ax.set(
     title=r"$\alpha$-element Enhancement: Impact on Optical Absorption Features",
+    xlabel=r"Wavelength [$\AA$]",
     ylabel=r"$\lambda F_\lambda$ (normalized at 5500 Å)",
+    xlim=(3500, 9000),
     ylim=(0, 2.5e4),
 )
 fig.tight_layout()

@@ -17,12 +17,13 @@ hotter and bluer (less line blanketing), metal-rich are redder. Sweep
 import matplotlib.pyplot as plt
 
 from tengri import SEDModel, load_ssp, recipes
-from tengri.analysis.plotting import setup_style, sweep_parameter
+from tengri.analysis.plotting import sweep_parameter
+from tengri.plot import setup_style
 
 setup_style()
 
 # Intermediate-age galaxy with modest dust (recipe defaults). Sweep met_logzsol.
-model = SEDModel.from_groups(ssp_data=load_ssp(), **recipes.dust_demo())
+model = SEDModel.build(ssp_data=load_ssp(), **recipes.dust_demo())
 
 fig, ax = plt.subplots(figsize=(8, 5))
 sweep_parameter(

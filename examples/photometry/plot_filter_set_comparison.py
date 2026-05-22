@@ -20,16 +20,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import (
+    FIXED,
     Fixed,
     Observation,
-    Parameters,
     Photometry,
     SEDModel,
     data_path,
     load_filter_set,
     load_ssp,
 )
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 
@@ -44,20 +44,6 @@ filter_sets = {
     "2MASS": ["2mass_j", "2mass_h", "2mass_ks"],
     "HST": ["hst_f435w", "hst_f606w", "hst_f814w"],
 }
-
-# Build common model (fixed parameters)
-spec = Parameters(
-    sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-    sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),
-    sfh_tsnorm_width_gyr=Fixed(1.5),
-    sfh_tsnorm_skew=Fixed(0.3),
-    sfh_tsnorm_trunc=Fixed(3.0),
-    met_logzsol=Fixed(-0.2),
-    dust_tau_bc=Fixed(0.4),
-    dust_tau_diff=Fixed(0.2),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.05),
-)
 
 # --- Plot three panels ---
 # Larger figsize + per-panel xlim keeps each survey's bands centred and
@@ -82,7 +68,22 @@ for ax, (survey_name, bands) in zip(axes, filter_sets.items()):
     obs = Observation(
         photometry=Photometry.from_names(bands, cache_dir=str(data_path("filters"))),
     )
-    model = SEDModel(spec, ssp, observation=obs)
+    model = SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={
+            "type": "tsnorm",
+            "*": FIXED,
+            "log_peak_sfr": 1.0,
+            "peak_lbt_gyr": 2.0,
+            "width_gyr": 1.5,
+            "skew": 0.3,
+            "trunc": 3.0,
+        },
+        met={"type": "fixed", "logzsol": -0.2},
+        dust={"type": "two_component", "*": FIXED, "tau_bc": 0.4, "tau_diff": 0.2, "slope": -0.7},
+        redshift=Fixed(0.05),
+    )
 
     pred = model.predict_rest_sed({})
     wave = np.asarray(pred.wavelength)

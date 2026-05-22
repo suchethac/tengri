@@ -18,7 +18,8 @@ f_DIG = 1 is pure DIG.
 import matplotlib.pyplot as plt
 
 from tengri import Fixed, Parameters, SEDModel, load_ssp
-from tengri.analysis.plotting import setup_style, sweep_parameter
+from tengri.analysis.plotting import sweep_parameter
+from tengri.plot import setup_style
 
 setup_style()
 

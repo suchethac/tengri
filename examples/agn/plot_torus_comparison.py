@@ -24,8 +24,8 @@ import numpy as np
 wavelength = jnp.logspace(np.log10(1e4), np.log10(5e6), 512)
 wave_um = np.array(wavelength) / 1e4
 
-from tengri.analysis.plotting import setup_style
-from tengri.components.agn import simple_torus, two_temperature_torus
+from tengri.agn import simple_torus, two_temperature_torus
+from tengri.plot import setup_style
 
 setup_style()
 
@@ -95,7 +95,7 @@ for p in [
         break
 
 if _silva04_path is not None:
-    from tengri.components.agn import create_silva04_from_grid
+    from tengri.agn import create_silva04_from_grid
 
     silva04_fn = create_silva04_from_grid(_silva04_path)
 

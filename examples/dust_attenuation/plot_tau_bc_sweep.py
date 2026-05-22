@@ -17,7 +17,8 @@ emission from embedded HII regions.
 import matplotlib.pyplot as plt
 
 from tengri import SEDModel, load_ssp, recipes
-from tengri.analysis.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
+from tengri.analysis.plotting import SWEEP_CMAPS, sweep_parameter
+from tengri.plot import setup_style
 
 setup_style()
 
@@ -25,7 +26,7 @@ setup_style()
 # typical-galaxy SFH with a 500 Myr-old burst.
 recipe = recipes.dust_demo()
 recipe["sfh"].update(peak_lbt_gyr=0.5, width_gyr=0.3)
-model = SEDModel.from_groups(ssp_data=load_ssp(), **recipe)
+model = SEDModel.build(ssp_data=load_ssp(), **recipe)
 
 fig, ax = plt.subplots(figsize=(8, 5))
 sweep_parameter(

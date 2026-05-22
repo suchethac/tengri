@@ -16,7 +16,8 @@ and pulls the galaxy toward the Seyfert region on the BPT diagram.
 import matplotlib.pyplot as plt
 
 from tengri import Fixed, Parameters, SEDModel, load_ssp
-from tengri.analysis.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
+from tengri.analysis.plotting import SWEEP_CMAPS, sweep_parameter
+from tengri.plot import setup_style
 
 setup_style()
 

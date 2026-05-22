@@ -20,7 +20,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 from tengri.radio import radio_agn
 
 setup_style()

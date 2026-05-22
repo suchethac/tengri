@@ -2,9 +2,10 @@
 Chemical Evolution: Metallicity History Models
 ===============================================
 
-Plot metallicity evolution Z(t) from closed-box and leaky-box chemical
-evolution models. Shows how star formation history and gas outflows
-shape the history of metal enrichment in galaxies.
+Metallicity evolution Z(t) over cosmic time under different chemical enrichment
+scenarios: closed-box (no outflow), leaky-box (with galactic winds), and
+age-metallicity relations. Shows how star formation history and gas outflows
+shape the metal enrichment history of galaxies.
 
 .. sphx-glr-precomputed-img:
 
@@ -17,16 +18,15 @@ shape the history of metal enrichment in galaxies.
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.plotting import setup_style
-from tengri.components.stellar.sfh import closed_box_metallicity
-from tengri.utils.cosmology import age_at_z0
+from tengri import cosmology, setup_style
+from tengri.sfh import closed_box_metallicity
 
 setup_style()
 
 fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
 # Time axis: look-back time in Gyr (cosmology-dependent age)
-age_uni_gyr = float(age_at_z0())
+age_uni_gyr = float(cosmology.age_at_z0())
 t_gyr = np.linspace(0, age_uni_gyr, 200)
 # Convert to years for the function (if needed)
 t_yr = t_gyr * 1e9
@@ -130,5 +130,5 @@ ax.set_ylim(-2.5, 0.5)
 
 fig.suptitle("Chemical Evolution: Metallicity History Models", fontsize=12)
 fig.tight_layout(rect=[0, 0, 1, 0.97])
-plt.savefig("plot_chemical_evolution.png", dpi=100, bbox_inches="tight")
+plt.savefig("plot_chemical_evolution.png", dpi=150, bbox_inches="tight")
 plt.show()

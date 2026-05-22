@@ -28,7 +28,7 @@ from tengri import (
     snorm,
     tsnorm,
 )
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 

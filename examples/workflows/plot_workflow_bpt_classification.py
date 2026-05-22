@@ -27,7 +27,7 @@ from tengri import (
     Uniform,
     load_ssp,
 )
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 

@@ -18,11 +18,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import data_path
-from tengri.analysis.plotting import setup_style
-from tengri.components.dust.draine2021_pah import (
+from tengri.dust.draine2021_pah import (
     load_pahspec_or_raise,
     select_pahspec_axes,
 )
+from tengri.plot import setup_style
 
 setup_style()
 

@@ -19,11 +19,11 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.plotting import setup_style
-from tengri.components.igm import (
+from tengri.igm import (
     igm_transmission,
     igm_transmission_madau,
 )
+from tengri.plot import setup_style
 
 setup_style()
 

@@ -35,7 +35,7 @@ from tengri import (
     load_ssp,
     setup_style,
 )
-from tengri.components.agn import qsogen
+from tengri.agn import qsogen
 
 setup_style()
 

@@ -32,13 +32,12 @@ jax.config.update("jax_enable_x64", True)
 from tengri import (
     Fixed,
     Observation,
-    Parameters,
     SEDModel,
     Spectroscopy,
     load_filter_set,
     load_ssp,
-    setup_style,
 )
+from tengri.plot import setup_style
 
 setup_style()
 
@@ -60,32 +59,37 @@ ssp = load_ssp()
 
 filter_dir = _find_filters()
 
-
 # Generate a template star-forming galaxy SED (rest-frame)
 wave_rest = jnp.logspace(jnp.log10(1000.0), jnp.log10(3e5), 500)  # 0.1 µm – 30 µm [Å]
 obs_dummy = Observation(spectroscopy=Spectroscopy(wave_obs=wave_rest))
 
-spec = Parameters(
-    mean_sfh_type="tsnorm",
-    dust_emission="draine_li2007",
-    sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-    sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),
-    sfh_tsnorm_width_gyr=Fixed(1.5),
-    sfh_tsnorm_skew=Fixed(0.0),
-    sfh_tsnorm_trunc=Fixed(2.0),
-    met_logzsol=Fixed(0.0),
-    dust_tau_bc=Fixed(0.3),
-    dust_tau_diff=Fixed(0.2),
-    dust_slope=Fixed(-0.7),
-    dust_umin=Fixed(2.0),
-    dust_qpah=Fixed(3.5),
-    dust_gamma_dl=Fixed(0.02),
-    redshift=Fixed(0.0),  # Rest-frame for now
+model = SEDModel.build(
+    ssp_data=ssp,
+    observation=obs_dummy,
+    sfh={
+        "type": "tsnorm",
+        "*": Fixed(0.0),
+        "log_peak_sfr": 1.0,
+        "peak_lbt_gyr": 2.0,
+        "width_gyr": 1.5,
+        "skew": 0.0,
+        "trunc": 2.0,
+    },
+    met={"logzsol": Fixed(0.0)},
+    dust={
+        "type": "two_component",
+        "*": Fixed(0.0),
+        "tau_bc": 0.3,
+        "tau_diff": 0.2,
+        "slope": -0.7,
+        "umin": 2.0,
+        "qpah": 3.5,
+        "gamma_dl": 0.02,
+    },
+    redshift=Fixed(0.0),
 )
-
-model = SEDModel(spec, ssp, observation=obs_dummy)
 key = jax.random.PRNGKey(42)
-params = spec.sample(key)
+params = model.spec.sample(key)
 pred = model.predict_rest_sed(params)
 
 wave_rest_um = np.array(pred.wavelength) / 1e4

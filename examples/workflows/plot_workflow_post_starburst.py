@@ -32,7 +32,7 @@ from tengri import (
     data_path,
     load_ssp,
 )
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 
@@ -63,6 +63,7 @@ spec_true = Parameters(
 )
 
 model_true = SEDModel(spec_true, ssp, observation=obs)
+
 
 # Generate mock photometry from post-starburst model
 key = jax.random.PRNGKey(42)

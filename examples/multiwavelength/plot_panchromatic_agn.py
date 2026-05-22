@@ -27,8 +27,8 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.plotting import setup_style
-from tengri.components.agn.qsogen import compute_qsogen_sed
+from tengri.agn.qsogen import compute_qsogen_sed
+from tengri.plot import setup_style
 from tengri.radio import radio_agn, radio_star_forming
 from tengri.xray import xray_agn_corona, xray_xrb
 

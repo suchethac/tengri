@@ -18,8 +18,8 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.plotting import setup_style
-from tengri.components.agn import qsogen
+from tengri.agn import qsogen
+from tengri.plot import setup_style
 
 setup_style()
 

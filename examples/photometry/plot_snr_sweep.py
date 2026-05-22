@@ -19,44 +19,49 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import (
+    FIXED,
     Fixed,
+    ForwardModel,
     Observation,
-    Parameters,
     Photometry,
     SEDModel,
     data_path,
     load_ssp,
 )
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 
 
 ssp = load_ssp()
 
-# --- Setup ---
 bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 obs = Observation(
     photometry=Photometry.from_names(bands, cache_dir=str(data_path("filters"))),
 )
 
-spec = Parameters(
-    sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-    sfh_tsnorm_peak_lbt_gyr=Fixed(3.0),
-    sfh_tsnorm_width_gyr=Fixed(2.0),
-    sfh_tsnorm_skew=Fixed(0.3),
-    sfh_tsnorm_trunc=Fixed(3.0),
-    met_logzsol=Fixed(-0.1),
-    dust_tau_bc=Fixed(0.5),
-    dust_tau_diff=Fixed(0.3),
-    dust_slope=Fixed(-0.7),
+sed = SEDModel.build(
+    ssp_data=ssp,
+    observation=obs,
+    sfh={
+        "type": "tsnorm",
+        "*": FIXED,
+        "log_peak_sfr": 1.0,
+        "peak_lbt_gyr": 3.0,
+        "width_gyr": 2.0,
+        "skew": 0.3,
+        "trunc": 3.0,
+    },
+    met={"logzsol": Fixed(-0.1)},
+    dust={"type": "two_component", "*": FIXED, "tau_bc": 0.5, "tau_diff": 0.3, "slope": -0.7},
     redshift=Fixed(0.05),
 )
-model = SEDModel(spec, ssp, observation=obs)
+
+forward = ForwardModel.build(sed=sed, observation=obs)
 
 # --- Generate mock data once ---
-true_params = spec.sample(jax.random.PRNGKey(42))
-mock_fiducial = model.mock(true_params, snr=30.0, key=jax.random.PRNGKey(0))
+true_params = sed.spec.sample(jax.random.PRNGKey(42))
+mock_fiducial = forward.mock(true_params, snr=30.0)
 
 # --- Plot SNR sweep ---
 snr_values = [3, 5, 10, 30, 100]
@@ -70,7 +75,7 @@ flux = np.asarray(mock_fiducial.flux_obs)
 # Show the underlying model spectrum behind the broadband points so the
 # user can see what the bands are sampling. Convert L_nu (rest-frame) to
 # observed-frame f_nu (1+z scaling); use the same z=0.05 as the model.
-pred = model.predict_rest_sed(true_params)
+pred = sed.predict_rest_sed(true_params)
 wave_rest = np.asarray(pred.wavelength)
 sed_rest = np.asarray(pred.sed)
 # Crude rest -> observed wavelength shift; scale to match photometry magnitude.

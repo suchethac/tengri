@@ -120,7 +120,6 @@ mock = {
 # %%
 # Fit with MAP
 # -------------
-
 fitter = Fitter(model, mock["flux_obs"], mock["noise"], data_type="joint")
 posterior = fitter.run("map", optimizer="adam")
 

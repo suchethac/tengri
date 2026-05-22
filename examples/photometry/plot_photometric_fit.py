@@ -19,59 +19,50 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import (
+    FIXED,
+    FREE,
     Fitter,
     Fixed,
     Observation,
-    Parameters,
     Photometry,
     SEDModel,
     Uniform,
     data_path,
     load_ssp,
 )
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 
 
-# --- Check for SSP data ---
-
-
 ssp = load_ssp()
 
-
-# --- Setup ---
 bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 obs = Observation(
     photometry=Photometry.from_names(bands, cache_dir=str(data_path("filters"))),
 )
 
-spec = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-3.0, 3.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
-    met_logzsol=Uniform(-2.0, 0.2),
-    dust_tau_bc=Fixed(0.3),
-    dust_tau_diff=Fixed(0.2),
-    dust_slope=Fixed(-0.7),
+sed = SEDModel.build(
+    ssp_data=ssp,
+    observation=obs,
+    sfh={"type": "tsnorm", "*": FREE, "logzsol": Uniform(-2.0, 0.2)},
+    dust={"type": "two_component", "*": FIXED, "tau_bc": 0.3, "tau_diff": 0.2, "slope": -0.7},
     redshift=Fixed(0.05),
 )
-model = SEDModel(spec, ssp, observation=obs)
 
 # --- Generate mock data (star-forming galaxy) ---
-true_params = spec.sample(jax.random.PRNGKey(42))
+true_params = sed.spec.sample(jax.random.PRNGKey(42))
 true_params["sfh_tsnorm_peak_lbt_gyr"] = 3.0
 true_params["sfh_tsnorm_width_gyr"] = 2.0
 true_params["sfh_tsnorm_log_peak_sfr"] = 1.0
-true_params["sfh_tsnorm_skew"] = 0.3  # Positive skew = recent star formation
-mock = model.mock(true_params, snr=20.0, key=jax.random.PRNGKey(0))
+true_params["sfh_tsnorm_skew"] = 0.3
+mock = sed.mock(true_params, snr=20.0, key=jax.random.PRNGKey(43))
 
 # --- Fit with MAP ---
-fitter = Fitter(model, mock.flux_obs, mock.noise)
-posterior = fitter.run("map", optimizer="adam", n_steps=300, verbose=False)
-best_fit = model.predict_photometry(posterior.params)
+posterior = Fitter(sed, data=mock.flux_obs, noise=mock.noise).run(
+    "map", optimizer="adam", n_steps=300, verbose=False
+)
+best_fit = sed.predict_photometry(posterior.params)
 
 # --- Plot ---
 wave_eff = np.array([3551, 4686, 6166, 7480, 8932])  # SDSS effective wavelengths

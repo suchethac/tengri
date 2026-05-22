@@ -19,8 +19,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import Fixed, Parameters, Photometry, SEDModel, load_ssp
-from tengri.analysis.plotting import setup_style
-from tengri.observation.photometry import FilterCurve
+
+# Public-API gap: FilterCurve not yet re-exported under tengri.*
+from tengri.observation.filters import FilterCurve
+from tengri.plot import setup_style
 
 setup_style()
 

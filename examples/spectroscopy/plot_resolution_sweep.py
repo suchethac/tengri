@@ -21,7 +21,7 @@ import numpy as np
 from scipy.ndimage import gaussian_filter1d
 
 from tengri import Fixed, Observation, Parameters, SEDModel, Spectroscopy, load_ssp
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 

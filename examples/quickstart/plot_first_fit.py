@@ -2,9 +2,10 @@
 First Photometric Fit
 =====================
 
-The shortest tengri workflow: define a parametric SFH + Calzetti dust
-model, mock SDSS photometry, fit with MAP optimization, overplot. Start
-here.
+Fit a parametric star-formation history and dust attenuation to mock SDSS
+photometry using MAP optimization. Demonstrates the recommended workflow:
+build an SED model, wrap it with ForwardModel, generate mock data, and
+optimize with Fitter.run("map").
 
 .. sphx-glr-precomputed-img:
 
@@ -28,19 +29,17 @@ from tengri import (
     Photometry,
     SEDModel,
     Uniform,
-    data_path,
     load_ssp,
 )
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 
-# --- Build the model with the recommended nested-dict grammar ---
+# --- Build observation and SED model ---
 bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-obs = Observation(
-    photometry=Photometry.from_names(bands, cache_dir=str(data_path("filters"))),
-)
-model = SEDModel.from_groups(
+obs = Observation(photometry=Photometry.from_names(bands))
+
+sed = SEDModel.build(
     ssp_data=load_ssp(),
     observation=obs,
     sfh={"type": "tsnorm", "*": FREE},
@@ -48,26 +47,28 @@ model = SEDModel.from_groups(
         "type": "two_component",
         "law_bc": "calzetti",
         "*": FIXED,
-        "tau_diff": Uniform(0.0, 1.5),  # free; everything else fixed
+        "tau_diff": Uniform(0.0, 1.5),
         "slope": -0.7,
     },
     redshift=Fixed(0.05),
 )
 
+# --- Wrap with ForwardModel for fitting ---
 # --- Mock a star-forming galaxy at z=0.05 (SNR=20) ---
 key = jax.random.PRNGKey(42)
-truth = model.spec.sample(key)
-truth.update(  # nudge the random draw toward a clear SF galaxy
+truth = sed.spec.sample(key)
+truth.update(
     sfh_tsnorm_peak_lbt_gyr=3.0,
     sfh_tsnorm_width_gyr=2.0,
     sfh_tsnorm_log_peak_sfr=1.0,
     sfh_tsnorm_skew=0.3,
 )
-mock = model.mock(truth, snr=20.0, key=key)
+mock = sed.mock(truth, snr=20.0, key=key)
 
 # --- Fit with MAP (Adam) ---
-fitter = Fitter(model, data=mock.flux_obs, noise=mock.noise)
-posterior = fitter.run("map", optimizer="adam", n_steps=300, verbose=False)
+posterior = Fitter(sed, data=mock.flux_obs, noise=mock.noise).run(
+    "map", optimizer="adam", n_steps=300, verbose=False
+)
 
 # --- Plot: data, truth, MAP fit ---
 wave_eff = np.array([float(jnp.mean(w)) for w in obs.photometry.filter_waves])
@@ -78,7 +79,7 @@ ax.errorbar(
 ax.plot(wave_eff, mock.flux_true, "s", color="C0", ms=7, mfc="none", label="Truth")
 ax.plot(
     wave_eff,
-    model.predict_photometry(posterior.params),
+    sed.predict_photometry(posterior.params),
     "^",
     color="C3",
     ms=7,

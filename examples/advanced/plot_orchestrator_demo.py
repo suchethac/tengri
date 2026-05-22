@@ -42,10 +42,10 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
-from tengri.analysis.plotting import setup_style
-from tengri.components.stellar.sps.dsps_wrapper import load_ssp
-from tengri.protocols.component import PipelineState
+from tengri import load_ssp
 from tengri.forward import build_components, chain_summary, run_components
+from tengri.plot import setup_style
+from tengri.protocols.component import PipelineState  # advanced/dev — orchestrator-level demo
 
 setup_style()
 

@@ -18,8 +18,8 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.plotting import setup_style
-from tengri.components.agn import planck_lnu, powerlaw_disc, simple_torus
+from tengri.agn import planck_lnu, powerlaw_disc, simple_torus
+from tengri.plot import setup_style
 
 setup_style()
 
@@ -30,7 +30,7 @@ wave_um = np.array(wavelength) / 1e4
 
 def _planck_l_nu(wave_aa, temp_k):
     """Planck B_ν at wavelength, in [erg/s/cm²/Hz/sr] — thin wrapper around
-    :func:`tengri.components.agn.planck_lnu`, which takes frequency."""
+    :func:`tengri.agn.planck_lnu`, which takes frequency."""
     nu = 2.99792458e10 / (wave_aa * 1e-8)  # cm/s ÷ wavelength[cm]
     return planck_lnu(nu, temp_k)
 

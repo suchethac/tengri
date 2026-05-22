@@ -17,7 +17,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 import tengri
-from tengri.components.agn.unified import register_agn_model
+from tengri.agn.unified import register_agn_model
 
 # ---------------------------------------------------------------------------
 # 1.  Register a toy AGN torus model.
@@ -131,6 +131,7 @@ print(
         from pathlib import Path
         from tengri import (
             Fitter,
+    ForwardModel,
             Observation,
             Parameters,
             Photometry,

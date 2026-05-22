@@ -2,9 +2,10 @@
 SED Components
 ==============
 
-Predict a galaxy SED at fixed parameters, then re-predict with dust
-optical depths set to zero. Overplot to see how much UV-optical light
-the dust absorbed.
+Anatomy of a star-forming galaxy SED: compare the intrinsic (dust-free)
+spectrum to the dust-attenuated spectrum. The shaded region shows how much
+UV-optical emission the dust absorbs, accounting for dust optical depth
+via the Calzetti attenuation law.
 
 .. sphx-glr-precomputed-img:
 
@@ -25,18 +26,16 @@ from tengri import (
     Observation,
     Photometry,
     SEDModel,
-    data_path,
     load_ssp,
 )
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 
 # --- Build a fully-fixed dusty galaxy at z = 0 ---
-obs = Observation(
-    photometry=Photometry.from_names(["sdss_r"], cache_dir=str(data_path("filters"))),
-)
-model = SEDModel.from_groups(
+obs = Observation(photometry=Photometry.from_names(["sdss_r"]))
+
+sed = SEDModel.build(
     ssp_data=load_ssp(),
     observation=obs,
     sfh={
@@ -60,16 +59,16 @@ model = SEDModel.from_groups(
 )
 
 # --- Predict twice: with dust, and with tau_bc=tau_diff=0 ---
-params = model.spec.sample(jax.random.PRNGKey(0))
-sed_total = np.array(model.predict_rest_sed(params).sed)
+params = sed.spec.sample(jax.random.PRNGKey(0))
+sed_total = np.array(sed.predict_rest_sed(params).sed)
 sed_intrinsic = np.array(
-    model.predict_rest_sed(
+    sed.predict_rest_sed(
         {**params, "dust_tau_bc": jnp.array(0.0), "dust_tau_diff": jnp.array(0.0)}
     ).sed
 )
 
 # --- Plot ---
-wave_um = np.array(model.ssp_data.ssp_wave) / 1e4
+wave_um = np.array(sed.ssp_data.ssp_wave) / 1e4
 mask = (wave_um > 0.09) & (wave_um < 3.0)
 
 fig, ax = plt.subplots(figsize=(9, 4.5))

@@ -28,12 +28,12 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.plotting import setup_style
-from tengri.components.agn.blocks import Recipe, composable_agn_l_nu
-from tengri.components.agn.blocks.composable_precompute import (
+from tengri.agn.blocks import Recipe, composable_agn_l_nu
+from tengri.agn.blocks.composable_precompute import (
     build_lookup,
     precompute,
 )
+from tengri.plot import setup_style
 
 setup_style()
 

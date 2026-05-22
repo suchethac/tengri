@@ -16,8 +16,8 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.plotting import setup_style
-from tengri.components.agn.blocks import composable_agn_l_nu
+from tengri.agn.blocks import composable_agn_l_nu
+from tengri.plot import setup_style
 
 setup_style()
 

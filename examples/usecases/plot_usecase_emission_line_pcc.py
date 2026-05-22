@@ -29,14 +29,14 @@ jax.config.update("jax_enable_x64", True)
 
 try:
     from tengri import (
-    Fixed,
-    Observation,
-    Parameters,
-    SEDModel,
-    Uniform,
-    load_ssp,
-    setup_style,
-)
+        Fixed,
+        Observation,
+        Parameters,
+        SEDModel,
+        Uniform,
+        load_ssp,
+        setup_style,
+    )
 
     setup_style()
 
@@ -272,9 +272,16 @@ except Exception as e:
     )
     # Watermark the figure so a reader can't mistake the fallback for real data.
     fig.text(
-        0.5, 0.5, "SYNTHETIC FALLBACK",
-        ha="center", va="center", rotation=30,
-        fontsize=44, color="firebrick", alpha=0.18, zorder=10,
+        0.5,
+        0.5,
+        "SYNTHETIC FALLBACK",
+        ha="center",
+        va="center",
+        rotation=30,
+        fontsize=44,
+        color="firebrick",
+        alpha=0.18,
+        zorder=10,
     )
 
     fig.tight_layout()

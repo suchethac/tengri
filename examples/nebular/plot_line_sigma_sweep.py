@@ -18,7 +18,8 @@ and measuring dynamics in high-redshift galaxies.
 import matplotlib.pyplot as plt
 
 from tengri import Fixed, Parameters, SEDModel, load_ssp
-from tengri.analysis.plotting import setup_style, sweep_parameter
+from tengri.analysis.plotting import sweep_parameter
+from tengri.plot import setup_style
 
 setup_style()
 

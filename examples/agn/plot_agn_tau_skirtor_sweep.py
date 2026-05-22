@@ -41,8 +41,8 @@ if _grid_path is None:
         "Skipping: SKIRTOR grid not found. Run: python scripts/download_skirtor_templates.py"
     )
 
-from tengri.analysis.plotting import setup_style
-from tengri.components.agn import create_skirtor_from_grid
+from tengri.agn import create_skirtor_from_grid
+from tengri.plot import setup_style
 
 setup_style()
 

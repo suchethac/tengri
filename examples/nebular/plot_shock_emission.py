@@ -17,8 +17,8 @@ and can mimic AGN-like emission in diagnostic diagrams.
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.plotting import setup_style
 from tengri.nebular import shock_line_ratios
+from tengri.plot import setup_style
 
 setup_style()
 

@@ -17,7 +17,8 @@ shorter wavelengths.
 import matplotlib.pyplot as plt
 
 from tengri import FIXED, SEDModel, load_ssp, recipes
-from tengri.analysis.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
+from tengri.analysis.plotting import SWEEP_CMAPS, sweep_parameter
+from tengri.plot import setup_style
 
 setup_style()
 
@@ -29,7 +30,7 @@ recipe["dust"]["emission"] = {
     "gamma_dl": 0.01,
     "qpah": 2.5,
 }
-model = SEDModel.from_groups(ssp_data=load_ssp(), **recipe)
+model = SEDModel.build(ssp_data=load_ssp(), **recipe)
 
 fig, ax = plt.subplots(figsize=(8, 5))
 sweep_parameter(

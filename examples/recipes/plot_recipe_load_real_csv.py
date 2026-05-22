@@ -29,7 +29,7 @@ from tengri import (
     Uniform,
     load_ssp,
 )
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 
@@ -87,7 +87,6 @@ for gal_idx, gal in enumerate(galaxy_data):
         mean_sfh_type="tsnorm",
     )
     model = SEDModel(spec, ssp, observation=obs_config)
-
     # MAP fit
     fitter = Fitter(model, data=gal["flux"], noise=gal["error"])
     posterior = fitter.run("map", optimizer="adam", n_steps=200, verbose=False)

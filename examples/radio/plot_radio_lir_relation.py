@@ -25,7 +25,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.plotting import SWEEP_CMAPS, setup_style
+from tengri.analysis.plotting import SWEEP_CMAPS
+from tengri.plot import setup_style
 from tengri.radio import radio_star_forming
 
 setup_style()

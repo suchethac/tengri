@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import Fixed, SEDModel, load_ssp, recipes
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 
@@ -40,7 +40,7 @@ for i, age in enumerate(age_grid):
         recipe["sfh"].update(peak_lbt_gyr=age, width_gyr=0.3, skew=0.0, trunc=max(3.0, age + 2.0))
         recipe["dust"].update(tau_bc=0.0, tau_diff=0.0)
         recipe["redshift"] = Fixed(0.0)
-        model = SEDModel.from_groups(ssp_data=ssp, **recipe)
+        model = SEDModel.build(ssp_data=ssp, **recipe)
 
         params = model.spec.sample(jax.random.PRNGKey(0))
         params["met_logzsol"] = float(logz)

@@ -17,8 +17,8 @@ UV bump region.
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
-from tengri.analysis.plotting import setup_style
 from tengri.dust import list_laws
+from tengri.plot import setup_style
 
 setup_style()
 

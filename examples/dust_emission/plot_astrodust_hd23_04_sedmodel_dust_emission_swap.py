@@ -2,9 +2,19 @@ r"""
 DustEmissionSEDComponent — swap MBB / PAHspec / Astrodust
 =========================================================
 
-Compare dust emission templates at fixed infrared luminosity. Shows how
-spectral shape changes across modified-blackbody, Draine+2021 PAHspec, and
-Hensley & Draine 2023 Astrodust while bolometric output remains conserved.
+Compare three IR dust-emission templates at fixed bolometric L_IR: analytic
+modified blackbody, Draine+2021 PAHspec, and Hensley & Draine 2023 Astrodust.
+The shapes differ — PAH features, cold-tail width, peak position — but L_IR
+is conserved. The script drives each component directly via its
+``apply()`` interface; the user-facing path for this swap inside a full
+forward model is the ``dust={'emission': {'type': ..., ...}}`` slot on
+``SEDModel.build``.
+
+.. note::
+   This script uses ``tengri.protocols.component.PipelineState`` to call a
+   single component without building the full SED pipeline. ``PipelineState``
+   is internal — public-API gap. The recommended user-facing path is
+   ``SEDModel.build(..., dust={'emission': {...}})``.
 
 .. sphx-glr-precomputed-img:
 
@@ -19,12 +29,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import data_path
-from tengri.analysis.plotting import setup_style
-from tengri.components.dust.emission_component import (
+from tengri.dust.emission_component import (
     DustEmissionSEDComponent,
     DustEmissionSEDComponentConfig,
 )
-from tengri.protocols.component import PipelineState
+from tengri.plot import setup_style
+from tengri.protocols.component import PipelineState  # internal — see note above
 
 setup_style()
 

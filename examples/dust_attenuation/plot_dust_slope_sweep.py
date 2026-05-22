@@ -17,7 +17,8 @@ more or less light at short wavelengths.
 import matplotlib.pyplot as plt
 
 from tengri import SEDModel, load_ssp, recipes
-from tengri.analysis.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
+from tengri.analysis.plotting import SWEEP_CMAPS, sweep_parameter
+from tengri.plot import setup_style
 
 setup_style()
 
@@ -26,7 +27,7 @@ setup_style()
 # nebular spike from dominating the λF_λ display at high δ).
 recipe = recipes.dust_demo()
 recipe["dust"].update(tau_bc=1.0, tau_diff=0.5)
-model = SEDModel.from_groups(ssp_data=load_ssp(), **recipe)
+model = SEDModel.build(ssp_data=load_ssp(), **recipe)
 
 fig, ax = plt.subplots(figsize=(8, 5))
 sweep_parameter(

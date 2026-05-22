@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri.agn import AGN_MODELS, resolve_agn_model
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 

@@ -26,12 +26,12 @@ from tengri import (
     Observation,
     Parameters,
     Photometry,
+    Posterior,
     SEDModel,
     Uniform,
     load_ssp,
 )
-from tengri.analysis.plotting import setup_style
-from tengri.inference.posterior import Posterior
+from tengri.plot import setup_style
 
 setup_style()
 

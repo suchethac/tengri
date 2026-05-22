@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri.agn import powerlaw_disc, simple_torus
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 

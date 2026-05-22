@@ -22,8 +22,9 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.plotting import SWEEP_CMAPS, setup_style
+from tengri.analysis.plotting import SWEEP_CMAPS
 from tengri.igm import igm_transmission
+from tengri.plot import setup_style
 
 setup_style()
 

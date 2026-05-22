@@ -18,8 +18,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import data_path
-from tengri.analysis.plotting import setup_style
-from tengri.components.dust.astrodust_hd23 import load_astrodust_hd23_or_raise
+from tengri.dust.astrodust_hd23 import load_astrodust_hd23_or_raise
+from tengri.plot import setup_style
 
 setup_style()
 
