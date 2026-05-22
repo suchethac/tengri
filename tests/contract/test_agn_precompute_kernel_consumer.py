@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -63,7 +64,7 @@ class TestPowerlawDiscPrecomputeConsumer:
         phot = jitted_lookup(jnp.float64(10.5), jnp.float64(-1.0))
 
         assert phot.shape == (len(waves),), f"Expected shape ({len(waves)},), got {phot.shape}"
-        assert np.all(np.isfinite(np.asarray(phot))), "Lookup produced non-finite values"
+        chex.assert_tree_all_finite(np.asarray(phot))
         assert np.all(np.asarray(phot) >= 0.0), "Lookup produced negative photometry"
 
 
@@ -83,7 +84,7 @@ class TestSSDiscPrecomputeConsumer:
         phot = jitted_lookup(jnp.float64(10.5), jnp.float64(8.0), jnp.float64(-1.5))
 
         assert phot.shape == (len(waves),), f"Expected shape ({len(waves)},), got {phot.shape}"
-        assert np.all(np.isfinite(np.asarray(phot))), "Lookup produced non-finite values"
+        chex.assert_tree_all_finite(np.asarray(phot))
 
 
 class TestCigaleDiscPrecomputeConsumer:
@@ -105,7 +106,7 @@ class TestCigaleDiscPrecomputeConsumer:
 
         # Note: cigale_disc may return 1D or 2D depending on precompute path
         assert phot.shape[-1] == len(waves), f"Expected last dim {len(waves)}, got {phot.shape}"
-        assert np.all(np.isfinite(np.asarray(phot))), "Lookup produced non-finite values"
+        chex.assert_tree_all_finite(np.asarray(phot))
 
 
 class TestQSOgenPrecomputeConsumer:
@@ -124,7 +125,7 @@ class TestQSOgenPrecomputeConsumer:
         phot = jitted_lookup(jnp.float64(10.5), jnp.float64(-0.35), jnp.float64(0.1))
 
         assert phot.shape == (len(waves),), f"Expected shape ({len(waves)},), got {phot.shape}"
-        assert np.all(np.isfinite(np.asarray(phot))), "Lookup produced non-finite values"
+        chex.assert_tree_all_finite(np.asarray(phot))
 
 
 class TestSilva04PrecomputeConsumer:
@@ -150,7 +151,7 @@ class TestSilva04PrecomputeConsumer:
         phot = jitted_lookup(jnp.float64(10.5), jnp.float64(21.5), agn_torus_frac=jnp.float64(0.5))
 
         assert phot.shape == (len(waves),), f"Expected shape ({len(waves)},), got {phot.shape}"
-        assert np.all(np.isfinite(np.asarray(phot))), "Lookup produced non-finite values"
+        chex.assert_tree_all_finite(np.asarray(phot))
 
 
 class TestCat3dPrecomputeConsumer:
@@ -183,4 +184,4 @@ class TestCat3dPrecomputeConsumer:
         )
 
         assert phot.shape == (len(waves),), f"Expected shape ({len(waves)},), got {phot.shape}"
-        assert np.all(np.isfinite(np.asarray(phot))), "Lookup produced non-finite values"
+        chex.assert_tree_all_finite(np.asarray(phot))

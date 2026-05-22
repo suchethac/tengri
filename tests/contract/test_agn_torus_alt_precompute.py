@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -57,7 +58,7 @@ class TestSilva04Adapter:
         n_args = len(sig.parameters)
         args = tuple(jnp.float64(0.5) for _ in range(n_args))
         out = jax.jit(lookup)(*args)
-        assert np.all(np.isfinite(np.asarray(out)))
+        chex.assert_tree_all_finite(np.asarray(out))
 
     def test_registered(self):
         from tengri.forward.precompute.registry import _REGISTRY
@@ -90,7 +91,7 @@ class TestCAT3DWindAdapter:
         n_args = len(sig.parameters)
         args = tuple(jnp.float64(0.5) for _ in range(n_args))
         out = jax.jit(lookup)(*args)
-        assert np.all(np.isfinite(np.asarray(out)))
+        chex.assert_tree_all_finite(np.asarray(out))
 
     def test_registered(self):
         from tengri.forward.precompute.registry import _REGISTRY

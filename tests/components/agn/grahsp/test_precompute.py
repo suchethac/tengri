@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -80,8 +81,8 @@ def test_runtime_lookup_returns_finite_photometry():
     # Default lookup: (scale, *grid_params). GRAHSP normalises internally so
     # the natural scale is 1.0; the grid points are (plslope, ebv).
     out = fn(jnp.array(1.0), jnp.array(-1.7), jnp.array(0.1))
-    assert jnp.all(jnp.isfinite(out))
-    assert out.shape == (1,)
+    chex.assert_tree_all_finite(out)
+    chex.assert_shape(out, (1,))
 
 
 def test_runtime_lookup_jit():
@@ -99,7 +100,7 @@ def test_runtime_lookup_jit():
     fn_jit = jax.jit(fn)
     out1 = fn_jit(jnp.array(1.0), jnp.array(-1.7), jnp.array(0.1))
     out2 = fn_jit(jnp.array(1.0), jnp.array(-2.0), jnp.array(0.5))
-    assert out1.shape == (3,)
-    assert out2.shape == (3,)
-    assert jnp.all(jnp.isfinite(out1))
-    assert jnp.all(jnp.isfinite(out2))
+    chex.assert_shape(out1, (3,))
+    chex.assert_shape(out2, (3,))
+    chex.assert_tree_all_finite(out1)
+    chex.assert_tree_all_finite(out2)

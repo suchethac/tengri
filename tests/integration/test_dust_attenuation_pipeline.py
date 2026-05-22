@@ -14,6 +14,7 @@ transforming attenuator without any contract violations.
 
 from __future__ import annotations
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -88,7 +89,7 @@ def test_smc_law_via_config():
     # Just verify it runs and produces finite, attenuating output.
     out = smc_dust.apply(state, {"dust_tau_v": 0.5, "redshift": 0.0})
     assert out.sed_attenuated is not None
-    assert jnp.all(jnp.isfinite(out.sed_attenuated))
+    chex.assert_tree_all_finite(out.sed_attenuated)
     # SMC steeper than Calzetti at UV — UV attenuation must exceed
     # optical attenuation.
     uv_a = float(jnp.mean(out.sed_attenuated[:8])) / float(jnp.mean(intrinsic[:8]))
@@ -162,9 +163,9 @@ def test_four_adapter_chain_runs_end_to_end():
     assert final.sed_intrinsic is not None
     assert final.sed_attenuated is not None
     assert final.sed_observed is not None
-    assert jnp.all(jnp.isfinite(final.sed_intrinsic))
-    assert jnp.all(jnp.isfinite(final.sed_attenuated))
-    assert jnp.all(jnp.isfinite(final.sed_observed))
+    chex.assert_tree_all_finite(final.sed_intrinsic)
+    chex.assert_tree_all_finite(final.sed_attenuated)
+    chex.assert_tree_all_finite(final.sed_observed)
     # All four components published their derived quantities.
     for key in ("sed_radio", "sed_xray", "dust_attenuation_factor"):
         assert key in final.derived, f"{key} missing from final.derived"

@@ -25,6 +25,7 @@ from __future__ import annotations
 import pathlib
 import warnings
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -128,8 +129,7 @@ def test_default_disables_lut_projection(fixed_z_spec, ssp, obs):
     params = {}
     out = model.predict_photometry(params)
     assert out.shape[0] == 5
-    assert jnp.all(jnp.isfinite(out))
-
+    chex.assert_tree_all_finite(out)
     state = model.predict_state(params)
     full = {**model.spec.get_fixed_values(), **params}
     with pytest.raises((AttributeError, KeyError, ValueError, TypeError)):
@@ -181,8 +181,8 @@ def test_wave_precomp_n_z_changes_free_z_interpolation(free_z_spec, ssp, obs):
     phot_coarse = coarse.predict_photometry(params)
     phot_fine = fine.predict_photometry(params)
 
-    assert jnp.all(jnp.isfinite(phot_coarse))
-    assert jnp.all(jnp.isfinite(phot_fine))
+    chex.assert_tree_all_finite(phot_coarse)
+    chex.assert_tree_all_finite(phot_fine)
     # Close, but not bit-identical — proves the grids differ.
     assert jnp.allclose(phot_coarse, phot_fine, rtol=0.05)
     assert not jnp.array_equal(phot_coarse, phot_fine), (
@@ -366,9 +366,8 @@ def test_cross_galaxy_predict_observables_jit_uses_per_galaxy_values(ssp, obs):
     # Both calls produce finite photometry.
     phot1 = m1.predict_observables_jit({}).phot_fnu
     phot2 = m2.predict_observables_jit({}).phot_fnu
-    assert jnp.all(jnp.isfinite(phot1))
-    assert jnp.all(jnp.isfinite(phot2))
-
+    chex.assert_tree_all_finite(phot1)
+    chex.assert_tree_all_finite(phot2)
     # The two galaxies produce DIFFERENT photometry — proves each call
     # threaded its own fixed_values rather than reusing the first model's.
     # Heavier dust attenuation (galaxy 2) gives fainter flux.

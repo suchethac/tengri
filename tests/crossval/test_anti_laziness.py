@@ -18,6 +18,7 @@ These tests should be run after ANY model implementation change to ensure
 no lazy shortcuts were taken.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -475,7 +476,7 @@ class TestWavelengthGridIndependence:
                 wave = jnp.geomspace(100.0, 1e6, n)
                 l_nu = fn(wave, agn_log_lbol=11.0)
                 assert l_nu.shape == (n,), f"Wrong shape: expected ({n},), got {l_nu.shape}"
-                assert jnp.all(jnp.isfinite(l_nu))
+                chex.assert_tree_all_finite(l_nu)
 
 
 # ── 7. NOT RETURNING ZEROS OR ONES ────────────────────────────────

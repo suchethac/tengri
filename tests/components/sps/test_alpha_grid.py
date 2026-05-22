@@ -12,6 +12,7 @@ support including:
 8. Solar [α/Fe]=0.0 equivalence with no-alpha case
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -208,7 +209,7 @@ class TestInterpolateMetAlpha:
             log_z=-0.5,
             alpha_fe=0.2,
         )
-        assert result.shape == (10, 20)
+        chex.assert_shape(result, (10, 20))
 
     def test_finite_output(self, alpha_ssp_grid):
         """All outputs must be finite (no NaN or Inf).
@@ -264,7 +265,7 @@ class TestInterpolateMetAlpha:
             log_z=-0.5,
             alpha_fe=0.2,
         )
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
     def test_differentiable_wrt_log_z(self, alpha_ssp_grid):
         """Gradient w.r.t. log_z should be finite and match FD (gradient test)."""
@@ -374,8 +375,8 @@ class TestInterpolateMetAlphaEvolving:
         )
 
         # Each age bin should be different since [α/Fe] varies
-        assert result.shape == (n_age, 20)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_shape(result, (n_age, 20))
+        chex.assert_tree_all_finite(result)
 
     def test_output_shape(self, alpha_ssp_grid):
         """Output shape must be (n_age, n_wave)."""
@@ -390,7 +391,7 @@ class TestInterpolateMetAlphaEvolving:
             jnp.full(n_age, -0.5),
             jnp.full(n_age, 0.0),
         )
-        assert result.shape == (n_age, 20)
+        chex.assert_shape(result, (n_age, 20))
 
     def test_jit_compatible(self, alpha_ssp_grid):
         """Should work under jax.jit."""
@@ -406,7 +407,7 @@ class TestInterpolateMetAlphaEvolving:
             jnp.full(n_age, -0.5),
             jnp.full(n_age, 0.0),
         )
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
 
 # ── Alpha evolution ramp ──────────────────────────────────────────

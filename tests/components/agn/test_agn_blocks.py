@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import warnings
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -226,8 +227,8 @@ def test_mix_grahsp_disc_with_simple_torus():
         agn_torus_frac=0.5,
         agn_attenuation_ebv=0.2,
     )
-    assert out.shape == wave_aa.shape
-    assert jnp.all(jnp.isfinite(out))
+    chex.assert_equal_shape([out, wave_aa])
+    chex.assert_tree_all_finite(out)
     # Some flux must come through after attenuation.
     assert float(out.sum()) > 0
 
@@ -245,7 +246,7 @@ def test_disc_only_recipe_is_pure_continuum():
         agn_grahsp_l5100=1.0e44,
     )
     # Should be smooth (no line spikes) and positive.
-    assert jnp.all(jnp.isfinite(out))
+    chex.assert_tree_all_finite(out)
     assert jnp.all(out > 0)
 
 
@@ -274,8 +275,8 @@ def test_runner_jit_compatible():
         )
 
     out = fwd(jnp.array(1.0e44), jnp.array(0.1))
-    assert out.shape == wave_aa.shape
-    assert jnp.all(jnp.isfinite(out))
+    chex.assert_equal_shape([out, wave_aa])
+    chex.assert_tree_all_finite(out)
 
 
 def test_resolve_via_agn_models_registry():

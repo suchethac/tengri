@@ -6,6 +6,7 @@ constants in the compiled HLO when passed as grid_arrays_traced kwargs.
 
 from __future__ import annotations
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.gradient
@@ -150,7 +151,7 @@ class TestDustEmissionTraceable:
                 dust_alpha_dale,
                 grid_arrays_traced=model._precomputed.dust_ir_grid_arrays,
             )
-            assert result_traced.shape == result.shape
+            chex.assert_equal_shape([result_traced, result])
             # Results should be identical
             assert jnp.allclose(result, result_traced, atol=1e-12)
 

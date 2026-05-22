@@ -1,5 +1,6 @@
 """Tests for AGNfitter-rx double power-law radio model."""
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -201,8 +202,8 @@ class TestJAXCompatibility:
         wave = _WAVE_RADIO
         jitted = jax.jit(radio_agn_dpl)
         L = jitted(wave, _L_AGN_BOL, radio_loudness=1.0)
-        assert L.shape == wave.shape
-        assert jnp.all(jnp.isfinite(L))
+        chex.assert_equal_shape([L, wave])
+        chex.assert_tree_all_finite(L)
 
     def test_gradient_flows(self):
         """Gradients should flow through alpha1 and log_nu_t."""

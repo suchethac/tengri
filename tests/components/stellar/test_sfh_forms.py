@@ -5,6 +5,7 @@ Every parametric SFH form must produce a non-negative SFR array with realistic c
 
 from __future__ import annotations
 
+import chex
 import numpy as np
 import pytest
 
@@ -80,9 +81,9 @@ class TestSFHForms:
         sfh = model.predict_sfh({})
         sfr = np.array(sfh["sfr_mean"])
         t = np.array(sfh["t_gyr"])
-        assert sfr.shape == t.shape
+        chex.assert_equal_shape([sfr, t])
         assert np.all(sfr >= 0.0), f"{sfh_type}: negative SFR"
-        assert np.all(np.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
         dt_yr = np.abs(np.diff(t)) * 1e9
         mass = float(np.sum(sfr[:-1] * dt_yr))
         assert 1e7 < mass < 1e12, f"{sfh_type}: cumulative mass {mass:.2e} M⊙ outside [1e7, 1e12]"

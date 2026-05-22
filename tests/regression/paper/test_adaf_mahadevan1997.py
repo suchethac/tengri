@@ -6,6 +6,7 @@ Reference:
     https://doi.org/10.1086/304535
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -65,8 +66,8 @@ class TestAdafRegistry:
 
         model_fn = resolve_agn_model("adaf")
         l_nu = model_fn(optical_wavelength, agn_log_lbol=42.0)
-        assert jnp.all(jnp.isfinite(l_nu))
-        assert l_nu.shape == optical_wavelength.shape
+        chex.assert_tree_all_finite(l_nu)
+        chex.assert_equal_shape([l_nu, optical_wavelength])
 
     def test_adaf_in_unified_disc_fns(self, optical_wavelength):
         """'adaf' disc type works in unified_agn combiner.
@@ -82,4 +83,4 @@ class TestAdafRegistry:
             disc_model="adaf",
             torus_model="simple",
         )
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)

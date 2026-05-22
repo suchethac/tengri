@@ -13,6 +13,7 @@ data/fsps_spectrum_reference.npz.
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -193,7 +194,7 @@ class TestDiffsedPhotometry:
 
         try:
             phot = tengri_model.predict_photometry(params)
-            assert jnp.all(jnp.isfinite(phot)), "Photometry has non-finite values"
+            chex.assert_tree_all_finite(phot)
             assert jnp.all(phot > 0), "Photometry should be positive"
         except (ValueError, AttributeError):
             pytest.skip("No filters configured on SEDModel")

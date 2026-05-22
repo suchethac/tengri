@@ -8,6 +8,7 @@ Validates that DL07 and Dale+2014 tabulated templates:
 5. Match bagpipes convention (L_lambda normalized, then converted to L_nu)
 """
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -55,7 +56,7 @@ class TestDL07Tabulated:
         result = fn(wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
         # After first call, the registry should contain the tabulated version
         assert "dl07_tabulated" in DUST_EMISSION_MODELS or "draine_li2007" in DUST_EMISSION_MODELS
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
     def test_energy_conservation(self, ir_wave):
         """Total emitted luminosity should equal L_absorbed (energy balance)."""
@@ -173,7 +174,7 @@ class TestDL07Tabulated:
         dl07 = resolve_emission_model("draine_li2007")
         dl07_jit = jax.jit(dl07, static_argnames=[])
         sed = dl07_jit(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
         assert float(jnp.sum(sed)) > 0
 
     def test_differentiable(self, ir_wave):
@@ -219,7 +220,7 @@ class TestDale2014Tabulated:
         wave = jnp.linspace(1e4, 1e6, 100)
         fn = DUST_EMISSION_MODELS["dale2014"]
         result = fn(wave, 1e10, dust_alpha_dale=2.0)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
     def test_energy_conservation(self, ir_wave):
         """Total emitted luminosity should equal L_absorbed."""
@@ -279,7 +280,7 @@ class TestDale2014Tabulated:
         dale = resolve_emission_model("dale2014")
         dale_jit = jax.jit(dale)
         sed = dale_jit(ir_wave, 1e10, dust_alpha_dale=2.0)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_differentiable(self, ir_wave):
         """Dale2014 should be differentiable w.r.t. alpha."""
@@ -315,7 +316,7 @@ class TestSKIRTORTemplates:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             sed = skirtor_analytic(wave, agn_log_lbol=44.0, agn_torus_frac=0.5)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
         assert float(jnp.sum(sed)) > 0
 
     def test_type1_vs_type2_different(self):
@@ -439,7 +440,7 @@ class TestDL14ExtendedRange:
         from tengri.components.dust.emission import draine_li2014
 
         sed = draine_li2014(ir_wave, 1e10, dust_qpah=7.0)
-        assert jnp.all(jnp.isfinite(sed)), "DL14 should handle q_PAH=7.0%"
+        chex.assert_tree_all_finite(sed)
         assert float(jnp.max(sed)) > 0
 
     def test_dl14_extended_umin_range(self, ir_wave):
@@ -447,7 +448,7 @@ class TestDL14ExtendedRange:
         from tengri.components.dust.emission import draine_li2014
 
         sed = draine_li2014(ir_wave, 1e10, dust_umin=40.0)
-        assert jnp.all(jnp.isfinite(sed)), "DL14 should handle U_min=40"
+        chex.assert_tree_all_finite(sed)
         assert float(jnp.max(sed)) > 0
 
     def test_dl14_gradients(self, ir_wave):

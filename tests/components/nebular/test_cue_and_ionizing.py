@@ -1,5 +1,6 @@
 """Tests for Cue emulator and ionizing spectrum fitting."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -110,8 +111,8 @@ class TestIonizingParamsTable:
             -1.85,  # solar Z
             6.5,  # 3 Myr
         )
-        assert ionspec.shape == (7,)
-        assert jnp.all(jnp.isfinite(ionspec))
+        chex.assert_shape(ionspec, (7,))
+        chex.assert_tree_all_finite(ionspec)
 
 
 # ── Cue backend ───────────────────────────────────────────────────
@@ -145,7 +146,7 @@ class TestCueBackend:
         )
         assert len(wave) > 0
         assert len(lum) == len(wave)
-        assert jnp.all(jnp.isfinite(lum))
+        chex.assert_tree_all_finite(lum)
 
     def test_predict_continuum(self, backend):
         result = backend.predict_nebular_continuum(
@@ -158,9 +159,9 @@ class TestCueBackend:
         if isinstance(result, tuple):
             _wave_cont, lum_cont = result
             assert len(lum_cont) > 0
-            assert jnp.all(jnp.isfinite(lum_cont))
+            chex.assert_tree_all_finite(lum_cont)
         else:
-            assert jnp.all(jnp.isfinite(result))
+            chex.assert_tree_all_finite(result)
 
     def test_halpha_positive(self, backend):
         """H-alpha should be one of the brightest lines."""
@@ -243,7 +244,7 @@ class TestCueWithSSP:
 
     def test_get_ionizing_params(self, backend_with_ssp):
         ionspec, logqion = backend_with_ssp.get_ionizing_params_at(-1.85, 6.5)
-        assert ionspec.shape == (7,)
+        chex.assert_shape(ionspec, (7,))
         assert jnp.isfinite(logqion)
         assert float(logqion) > 40  # should have meaningful Q_H at 3 Myr
 

@@ -8,6 +8,7 @@ compute_jacobian and compute_fisher_matrix require a forward-model instance and
 are not tested here (integration-level concern).
 """
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -39,7 +40,7 @@ class TestFisherParameterErrors:
         n = 5
         fim = jnp.eye(n) * 4.0  # F = 4I → σ = 0.5
         errors = fisher_parameter_errors(fim)
-        assert errors.shape == (n,)
+        chex.assert_shape(errors, (n,))
 
     def test_errors_positive(self):
         """Errors must be strictly positive."""
@@ -67,7 +68,7 @@ class TestFisherParameterErrors:
         a = jnp.array([[2.0, 1.0, 0.0], [0.5, 3.0, 0.5], [0.0, 0.2, 1.5]])
         fim = a.T @ a
         errors = fisher_parameter_errors(fim)
-        assert jnp.all(jnp.isfinite(errors))
+        chex.assert_tree_all_finite(errors)
         assert jnp.all(errors > 0)
 
     def test_output_is_real_valued(self):
@@ -98,7 +99,7 @@ class TestFisherCorrelationMatrix:
         n = 4
         fim = jnp.eye(n) * 2.0
         corr = fisher_correlation_matrix(fim)
-        assert corr.shape == (n, n)
+        chex.assert_shape(corr, (n, n))
 
     def test_values_in_minus_one_to_one(self):
         """All correlation values must lie in [-1, 1]."""
@@ -142,4 +143,4 @@ class TestFisherCorrelationMatrix:
         )
         fim = a.T @ a
         corr = fisher_correlation_matrix(fim)
-        assert jnp.all(jnp.isfinite(corr))
+        chex.assert_tree_all_finite(corr)

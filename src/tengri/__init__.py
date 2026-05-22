@@ -204,6 +204,8 @@ class _KernelsRemoved:
 KernelStrategy = _KernelsRemoved("KernelStrategy")
 NoCompatibleKernelError = _KernelsRemoved("NoCompatibleKernelError")
 from tengri.forward.convenience import catalog_summary, fit_batch
+from tengri.forward.forward_model import ForwardModel
+from tengri.forward.population import Population
 from tengri.forward.prediction import (
     DerivedQuantities,
     EmissionLines,
@@ -344,6 +346,7 @@ __all__ = [
     "DerivedBundle",
     "DerivedKey",
     "Fixed",
+    "ForwardModel",
     "ForwardState",
     "Galaxy",
     "Gaussian",
@@ -354,6 +357,7 @@ __all__ = [
     "ParameterRecord",
     "Parameters",
     "PipelineContractError",
+    "Population",
     "SEDModel",
     "StudentT",
     "TengriError",

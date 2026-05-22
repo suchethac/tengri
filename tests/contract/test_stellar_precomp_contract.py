@@ -8,7 +8,7 @@ configuration flags.
 import pathlib
 import warnings
 
-import jax.numpy as jnp
+import chex
 import pytest
 
 from tengri import Parameters, SEDModel
@@ -230,7 +230,7 @@ def test_agn_phot_lnu_precomp_published(ssp):
         m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
     state = m.predict_state(_PARAMS)
     assert "agn_phot_lnu_precomp" in state.derived
-    assert jnp.all(jnp.isfinite(state.derived["agn_phot_lnu_precomp"]))
+    chex.assert_tree_all_finite(state.derived["agn_phot_lnu_precomp"])
 
 
 def test_dust_luts_absent_without_wave_precomp(ssp):

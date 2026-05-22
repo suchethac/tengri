@@ -1,5 +1,6 @@
 """Tests for mock galaxy generation (standalone generate_mock function)."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -46,7 +47,7 @@ class TestGenerateMock:
 
         assert "flux_obs" in mock
         assert mock["flux_obs"].shape == mock["flux_true"].shape
-        assert jnp.all(jnp.isfinite(mock["flux_obs"]))
+        chex.assert_tree_all_finite(mock["flux_obs"])
 
     def test_noise_level_matches_snr(self, fake_model):
         snr = 50.0

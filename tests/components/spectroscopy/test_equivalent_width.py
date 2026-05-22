@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -80,4 +81,4 @@ class TestEquivalentWidthJIT:
             return equivalent_width(wave, s, 6564.61)
 
         grad = jax.grad(loss)(l_nu)
-        assert jnp.all(jnp.isfinite(grad))
+        chex.assert_tree_all_finite(grad)

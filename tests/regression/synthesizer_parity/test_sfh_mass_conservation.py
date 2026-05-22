@@ -24,6 +24,7 @@ References
 
 from __future__ import annotations
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.regression_paper
@@ -201,7 +202,7 @@ def test_sed_zero_sfh(ssp_data_wne):
     sed = result["sed"]
 
     # All wavelengths should be zero (within numerical precision)
-    assert jnp.all(jnp.isfinite(sed)), "SED contains non-finite values for zero SFH"
+    chex.assert_tree_all_finite(sed)
     assert jnp.max(jnp.abs(sed)) < 1e-15, (
         f"Zero SFH should yield zero SED, got max |SED| = {jnp.max(jnp.abs(sed))}"
     )

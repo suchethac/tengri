@@ -7,6 +7,7 @@ locations, energy conservation, JIT compatibility, and differentiability.
 NOTE: magphys_dc08 not currently implemented. Module skipped.
 """
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.regression_paper
@@ -30,12 +31,12 @@ class TestMagphysOutputShape:
 
     def test_shape_matches_wavelength(self):
         result = magphys_dc08(_WAVE_AA, _L_ABSORBED)
-        assert result.shape == _WAVE_AA.shape
+        chex.assert_equal_shape([result, _WAVE_AA])
 
     def test_shape_small_grid(self):
         wave = jnp.logspace(4.0, 7.0, 100)
         result = magphys_dc08(wave, _L_ABSORBED)
-        assert result.shape == (100,)
+        chex.assert_shape(result, (100,))
 
 
 class TestMagphysNonNegativity:
@@ -182,8 +183,8 @@ class TestMagphysJIT:
     def test_jit_compiles(self):
         jitted = jax.jit(magphys_dc08, static_argnames=())
         result = jitted(_WAVE_AA, _L_ABSORBED)
-        assert result.shape == _WAVE_AA.shape
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_equal_shape([result, _WAVE_AA])
+        chex.assert_tree_all_finite(result)
 
     def test_jit_matches_eager(self):
         eager = magphys_dc08(_WAVE_AA, _L_ABSORBED)
@@ -260,7 +261,7 @@ class TestMagphysRegistry:
         from tengri.components.dust.emission import apply_dust_emission
 
         result = apply_dust_emission("magphys", _WAVE_AA, _L_ABSORBED)
-        assert result.shape == _WAVE_AA.shape
+        chex.assert_equal_shape([result, _WAVE_AA])
 
 
 class TestMagphysCMB:

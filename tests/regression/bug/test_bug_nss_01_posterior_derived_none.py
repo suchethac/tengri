@@ -3,6 +3,7 @@
 See ADR / docs/known_bugs.md for full context.
 """
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -88,8 +89,7 @@ class TestBugNSS01PosteriorDerivedNone:
         # Check that other fields are present and finite
         assert "stellar_mass" in derived
         assert derived["stellar_mass"].shape == (n_samples,)
-        assert jnp.all(jnp.isfinite(derived["stellar_mass"])), "stellar_mass should be finite"
-
+        chex.assert_tree_all_finite(derived["stellar_mass"])
         assert "sfr_100myr" in derived
         assert derived["sfr_100myr"].shape == (n_samples,)
-        assert jnp.all(jnp.isfinite(derived["sfr_100myr"])), "sfr_100myr should be finite"
+        chex.assert_tree_all_finite(derived["sfr_100myr"])

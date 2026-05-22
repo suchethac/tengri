@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import warnings
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -52,8 +53,8 @@ class TestResolveAgn:
             fn = resolve_agn_model("kubota_done")
 
         l_nu = fn(wavelength, agn_log_lbol=44.0)
-        assert jnp.all(jnp.isfinite(l_nu))
-        assert l_nu.shape == wavelength.shape
+        chex.assert_tree_all_finite(l_nu)
+        chex.assert_equal_shape([l_nu, wavelength])
 
     def test_all_canonical_models_in_registry(self):
         """All canonical model names appear in AGN_MODELS."""

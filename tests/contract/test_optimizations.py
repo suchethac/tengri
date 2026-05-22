@@ -1,5 +1,6 @@
 """Tests for performance optimizations."""
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -53,14 +54,14 @@ class TestHartleyTransform:
         fn = jax.jit(hartley)
         x = jax.random.normal(jax.random.PRNGKey(3), shape=(N,))
         h = fn(x)
-        assert h.shape == (N,)
+        chex.assert_shape(h, (N,))
 
     def test_has_gradients(self):
         """Gradients through Hartley transform are finite."""
         grad_fn = jax.grad(lambda x: jnp.sum(hartley(x) ** 2))
         x = jax.random.normal(jax.random.PRNGKey(4), shape=(N,))
         g = grad_fn(x)
-        assert jnp.all(jnp.isfinite(g))
+        chex.assert_tree_all_finite(g)
 
 
 class TestHartleyGP:
@@ -72,7 +73,7 @@ class TestHartleyGP:
         amp = compute_full_amplitude_drw(N, d, 1.0, 50e6)
         xi = jax.random.normal(jax.random.PRNGKey(0), shape=(N,))
         gp = gp_from_xi_hartley(xi, amp)
-        assert gp.shape == (N,)
+        chex.assert_shape(gp, (N,))
 
     def test_gp_hartley_zero_xi_gives_zero(self):
         """Zero xi gives zero GP for Hartley version."""
@@ -89,7 +90,7 @@ class TestHartleyGP:
         grad_fn = jax.grad(lambda xi: jnp.sum(gp_from_xi_hartley(xi, amp)))
         xi = jax.random.normal(jax.random.PRNGKey(0), shape=(N,))
         g = grad_fn(xi)
-        assert jnp.all(jnp.isfinite(g))
+        chex.assert_tree_all_finite(g)
 
     def test_hartley_and_rfft_same_statistics(self):
         """Hartley and rfft GP versions produce similar variance."""
@@ -138,7 +139,7 @@ class TestEffectiveWavelength:
         wave = jnp.linspace(4000.0, 8000.0, 50)
         trans = jnp.ones(50)
         lam_eff = effective_wavelength(wave, trans)
-        assert lam_eff.shape == ()
+        chex.assert_shape(lam_eff, ())
 
     def test_finite(self):
         wave = jnp.linspace(3000.0, 9000.0, 80)
@@ -171,7 +172,7 @@ class TestPrecomputeSspPhotometry:
     def test_output_shape(self):
         ssp_flux, ssp_wave, filter_wave, filter_trans = self._make_inputs()
         c = precompute_ssp_photometry(ssp_flux, ssp_wave, filter_wave, filter_trans, redshift=0.0)
-        assert c.shape == (ssp_flux.shape[0],)
+        chex.assert_shape(c, (ssp_flux.shape[0],))
 
     def test_flat_spectra_constant_output(self):
         """Flat spectra → pre-computed flux is the same for every age bin."""
@@ -182,7 +183,7 @@ class TestPrecomputeSspPhotometry:
     def test_finite_output(self):
         ssp_flux, ssp_wave, filter_wave, filter_trans = self._make_inputs()
         c = precompute_ssp_photometry(ssp_flux, ssp_wave, filter_wave, filter_trans, redshift=0.1)
-        assert jnp.all(jnp.isfinite(c))
+        chex.assert_tree_all_finite(c)
 
     def test_filter_outside_grid_gives_near_zero(self):
         """Filter entirely outside SSP range → pre-computed flux ≈ 0."""
@@ -207,7 +208,7 @@ class TestApproximatePhotometry:
         dust = jnp.ones(n_age)
         dl_cm = 3.086e27  # ~1 Gpc
         result = approximate_photometry(weights, ssp_phot, dust, dl_cm, redshift=0.1)
-        assert result.shape == ()
+        chex.assert_shape(result, ())
 
     def test_finite_output(self):
         n_age = 8
@@ -250,7 +251,7 @@ class TestCheckpointedForwardModel:
         fn = lambda x: jnp.sum(x**2)  # noqa: E731
         cfn = checkpointed_forward_model(fn)
         g = jax.grad(cfn)(jnp.ones(10))
-        assert jnp.all(jnp.isfinite(g))
+        chex.assert_tree_all_finite(g)
 
 
 # ── batched_forward ───────────────────────────────────────────────
@@ -262,7 +263,7 @@ class TestBatchedForward:
         model_fn = lambda p: jnp.sum(p["x"])  # noqa: E731
         params = {"x": jnp.ones((25, 4))}
         result = batched_forward(model_fn, params, batch_size=10)
-        assert result.shape == (25,)
+        chex.assert_shape(result, (25,))
 
     def test_same_as_vmap(self):
         """batched_forward matches jax.vmap over the full batch."""
@@ -278,5 +279,5 @@ class TestBatchedForward:
         model_fn = lambda p: p["v"] * 2.0  # noqa: E731
         params = {"v": jnp.ones(5)}
         result = batched_forward(model_fn, params, batch_size=100)
-        assert result.shape == (5,)
+        chex.assert_shape(result, (5,))
         assert jnp.allclose(result, 2.0)

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import numpy as np
 import pytest
 
@@ -100,6 +101,6 @@ def test_jit_compatible():
 
     fn = jax.jit(attenuation_factors)
     f_gal, f_agn = fn(jnp.array([100.0, 1100.0, 10000.0]), 0.5, 0.3, -1.2, -3.0, 1.2, 1100.0)
-    assert f_gal.shape == (3,)
-    assert jnp.all(jnp.isfinite(f_gal))
-    assert jnp.all(jnp.isfinite(f_agn))
+    chex.assert_shape(f_gal, (3,))
+    chex.assert_tree_all_finite(f_gal)
+    chex.assert_tree_all_finite(f_agn)

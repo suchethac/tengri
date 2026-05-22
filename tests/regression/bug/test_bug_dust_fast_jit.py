@@ -3,6 +3,7 @@
 Bug: attenuation.py:1077 — len(wavelengths) is not JIT-safe.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -25,5 +26,5 @@ class TestSingleComponentDustFastJITSafe:
             return single_component_dust_fast(wave, tau_v=1.0, n_ages=n_ages)
 
         result = _eval()
-        assert result.shape == (n_ages, wave.shape[0])
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_shape(result, (n_ages, wave.shape[0]))
+        chex.assert_tree_all_finite(result)

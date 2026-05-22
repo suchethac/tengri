@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import chex
 import numpy as np
 import pytest
 
@@ -148,8 +149,8 @@ class TestApplyZeropoints:
 
         flux_c, err_c = apply_zeropoints(flux, err, entries)
 
-        assert flux_c.shape == flux.shape
-        assert err_c.shape == err.shape
+        chex.assert_equal_shape([flux_c, flux])
+        chex.assert_equal_shape([err_c, err])
 
     def test_apply_zeropoints_zero_offset_unchanged(self):
         """Verify zero offset and zero sys err leave values unchanged."""
@@ -271,13 +272,12 @@ class TestSystematicFloor:
         flux_1d = np.array([100.0, 50.0])
         err_1d = np.array([5.0, 3.0])
         err_1d_total = add_systematic_floor(flux_1d, err_1d, fractional=0.02)
-        assert err_1d_total.shape == err_1d.shape
-
+        chex.assert_equal_shape([err_1d_total, err_1d])
         # 2D
         flux_2d = np.array([[100.0, 50.0], [200.0, 75.0]])
         err_2d = np.array([[5.0, 3.0], [10.0, 4.0]])
         err_2d_total = add_systematic_floor(flux_2d, err_2d, fractional=0.02)
-        assert err_2d_total.shape == err_2d.shape
+        chex.assert_equal_shape([err_2d_total, err_2d])
 
 
 class TestDetectUpperLimits:
@@ -359,11 +359,10 @@ class TestSigmaUpperLimit:
         """Verify output shape matches input shape."""
         err_1d = np.array([1.0, 2.0, 3.0])
         ul_1d = sigma_upper_limit_from_flux(err_1d)
-        assert ul_1d.shape == err_1d.shape
-
+        chex.assert_equal_shape([ul_1d, err_1d])
         err_2d = np.array([[1.0, 2.0], [3.0, 4.0]])
         ul_2d = sigma_upper_limit_from_flux(err_2d)
-        assert ul_2d.shape == err_2d.shape
+        chex.assert_equal_shape([ul_2d, err_2d])
 
     def test_sigma_upper_limit_zero_error(self):
         """Verify zero error produces zero upper limit."""

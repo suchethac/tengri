@@ -3,6 +3,7 @@
 Bug: unified.py:813 — jnp.where(agn_torus_frac == 0.5, ...) JIT-unsafe for traced values.
 """
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -38,5 +39,5 @@ class TestUnifiedAGNTorusFrac:
         # Non-default value — should use the provided value
         l_nu_custom = _eval(0.3)
 
-        assert jnp.all(jnp.isfinite(l_nu_default))
-        assert jnp.all(jnp.isfinite(l_nu_custom))
+        chex.assert_tree_all_finite(l_nu_default)
+        chex.assert_tree_all_finite(l_nu_custom)

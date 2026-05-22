@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -45,7 +46,7 @@ class TestUnifiedAgnCombinations:
             f"Non-finite SED for disc={disc_model}, torus={torus_model}"
         )
         assert jnp.all(l_nu >= 0.0), f"Negative SED for disc={disc_model}, torus={torus_model}"
-        assert l_nu.shape == wavelength.shape
+        chex.assert_equal_shape([l_nu, wavelength])
 
     def test_unknown_disc_raises(self, wavelength):
         """Unknown disc_model raises KeyError."""
@@ -107,7 +108,7 @@ class TestUnifiedAgnCombinations:
         def _run(wave):
             return unified_agn(wave, agn_log_lbol=44.0)
 
-        assert jnp.all(jnp.isfinite(_run(wavelength)))
+        chex.assert_tree_all_finite(_run(wavelength))
 
     def test_total_is_disc_plus_torus(self, wavelength):
         """unified_agn output equals disc + torus computed separately."""

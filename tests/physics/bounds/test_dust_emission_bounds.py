@@ -3,6 +3,7 @@
 Non-negativity, temperature monotonicity, and limiting cases.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -131,14 +132,14 @@ class TestPlanckBnuBounds:
         from tengri.components.dust.emission import planck_bnu
 
         bnu = planck_bnu(wave_ir, temperature=30.0)
-        assert jnp.all(jnp.isfinite(bnu))
+        chex.assert_tree_all_finite(bnu)
         assert jnp.all(bnu > 0.0)
 
     def test_output_shape(self, wave_ir):
         from tengri.components.dust.emission import planck_bnu
 
         bnu = planck_bnu(wave_ir, temperature=30.0)
-        assert bnu.shape == wave_ir.shape
+        chex.assert_equal_shape([bnu, wave_ir])
 
     def test_hotter_peaks_at_shorter_wavelength(self, wave_ir):
         """Wien's displacement law: hotter BB peaks at shorter λ."""
@@ -167,7 +168,7 @@ class TestPlanckBnuBounds:
 
         wave_uv = jnp.array([10.0, 100.0, 1000.0])  # Angstrom
         bnu = planck_bnu(wave_uv, temperature=1e4)
-        assert jnp.all(jnp.isfinite(bnu))
+        chex.assert_tree_all_finite(bnu)
         assert jnp.all(bnu >= 0.0)
 
 
@@ -183,14 +184,14 @@ class TestModifiedBlackbodyBounds:
         from tengri.components.dust.emission import modified_blackbody
 
         sed = modified_blackbody(wave_fir, L_absorbed=1e10)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
         assert jnp.all(sed >= 0.0)
 
     def test_output_shape(self, wave_fir):
         from tengri.components.dust.emission import modified_blackbody
 
         sed = modified_blackbody(wave_fir, L_absorbed=1e10)
-        assert sed.shape == wave_fir.shape
+        chex.assert_equal_shape([sed, wave_fir])
 
     def test_hotter_peaks_shorter_wavelength(self, wave_fir):
         from tengri.components.dust.emission import modified_blackbody
@@ -238,14 +239,14 @@ class TestCasey2012Bounds:
         from tengri.components.dust.emission import casey2012
 
         sed = casey2012(wave_ir, L_absorbed=1e10)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
         assert jnp.all(sed >= 0.0)
 
     def test_output_shape(self, wave_ir):
         from tengri.components.dust.emission import casey2012
 
         sed = casey2012(wave_ir, L_absorbed=1e10)
-        assert sed.shape == wave_ir.shape
+        chex.assert_equal_shape([sed, wave_ir])
 
     def test_zero_luminosity(self, wave_ir):
         from tengri.components.dust.emission import casey2012
@@ -365,7 +366,7 @@ class TestCmbContrastFactorBounds:
 
         wave = jnp.logspace(3, 9, 300)
         factor = cmb_contrast_factor(wave, T_eff=35.0, redshift=3.0)
-        assert jnp.all(jnp.isfinite(factor))
+        chex.assert_tree_all_finite(factor)
 
 
 # ── Additional TestCasey2012 bounds tests ─────────────────────────

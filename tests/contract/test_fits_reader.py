@@ -5,6 +5,7 @@ Uses synthetic FITS files to test round-trip I/O without requiring real data.
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -64,8 +65,8 @@ class TestFromJwstX1d:
         _write_synthetic_x1d(fpath, grating="PRISM")
         spec, flux, err = Spectroscopy.from_jwst_x1d(fpath)
         assert spec.n_pixels == 200
-        assert flux.shape == (200,)
-        assert err.shape == (200,)
+        chex.assert_shape(flux, (200,))
+        chex.assert_shape(err, (200,))
 
     def test_wavelength_in_angstrom(self, tmp_path):
         fpath = str(tmp_path / "test_x1d.fits")
@@ -84,7 +85,7 @@ class TestFromJwstX1d:
         fpath = str(tmp_path / "test_x1d.fits")
         _write_synthetic_x1d(fpath)
         _, flux, err = Spectroscopy.from_jwst_x1d(fpath)
-        assert jnp.all(jnp.isfinite(flux))
+        chex.assert_tree_all_finite(flux)
         assert float(err[10]) == jnp.inf
 
     def test_prism_resolution_autodetect(self, tmp_path):
@@ -123,7 +124,7 @@ class TestFromFits:
             fpath, wave_col="WAVE", flux_col="FVAL", err_col="FERR"
         )
         assert _spec.n_pixels == 100
-        assert flux.shape == (100,)
+        chex.assert_shape(flux, (100,))
 
     def test_unit_conversion(self, tmp_path):
         fpath = str(tmp_path / "test_spec.fits")

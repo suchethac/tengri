@@ -9,6 +9,7 @@ Verifies:
 6. Gradient flow for fitted parameters
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -67,7 +68,7 @@ class TestTwoStepMetallicity:
     def test_smooth_transition(self, ssp_lg_age_gyr):
         """Transition should be smooth (no NaN/Inf, all finite)."""
         result = two_step_metallicity(ssp_lg_age_gyr, -3.0, -1.5, 1.0)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
     def test_equal_metallicities(self, ssp_lg_age_gyr):
         """When old == young, result should be constant."""
@@ -77,7 +78,7 @@ class TestTwoStepMetallicity:
     def test_jit_compatible(self, ssp_lg_age_gyr):
         jit_fn = jax.jit(two_step_metallicity)
         result = jit_fn(ssp_lg_age_gyr, -3.0, -1.5, 1.0)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
     def test_gradient_wrt_metallicities(self, ssp_lg_age_gyr):
         """Gradient should flow through metallicity parameters."""
@@ -102,7 +103,7 @@ class TestTwoStepMetallicity:
 
     def test_output_shape(self, ssp_lg_age_gyr):
         result = two_step_metallicity(ssp_lg_age_gyr, -3.0, -1.5, 1.0)
-        assert result.shape == ssp_lg_age_gyr.shape
+        chex.assert_equal_shape([result, ssp_lg_age_gyr])
 
     def test_very_old_step_all_young(self, ssp_lg_age_gyr):
         """Step at very old age → nearly all stars get young Z."""
@@ -131,7 +132,7 @@ class TestPSBTwoStepMetallicity:
     def test_jit_compatible(self, ssp_lg_age_gyr):
         jit_fn = jax.jit(psb_two_step_metallicity)
         result = jit_fn(ssp_lg_age_gyr, -3.0, -1.5, 0.5)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
 
 # ── metallicity_bins_on_ssp_grid ──────────────────────────────────
@@ -142,8 +143,8 @@ class TestMetallicityBins:
         n_bins = len(bin_edges_log_yr) - 1
         mets = jnp.linspace(-3.0, -1.0, n_bins)
         result = metallicity_bins_on_ssp_grid(ssp_lg_age_gyr, bin_edges_log_yr, mets)
-        assert result.shape == ssp_lg_age_gyr.shape
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_equal_shape([result, ssp_lg_age_gyr])
+        chex.assert_tree_all_finite(result)
 
     def test_uniform_metallicity(self, ssp_lg_age_gyr, bin_edges_log_yr):
         """If all bins have the same Z, output should be constant."""
@@ -172,7 +173,7 @@ class TestMetallicityBins:
         mets = jnp.linspace(-3.0, -1.0, n_bins)
         jit_fn = jax.jit(metallicity_bins_on_ssp_grid)
         result = jit_fn(ssp_lg_age_gyr, bin_edges_log_yr, mets)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
     def test_gradient_wrt_metallicities(self, ssp_lg_age_gyr, bin_edges_log_yr):
         n_bins = len(bin_edges_log_yr) - 1
@@ -182,7 +183,7 @@ class TestMetallicityBins:
 
         mets = jnp.linspace(-3.0, -1.0, n_bins)
         g = jax.grad(loss)(mets)
-        assert jnp.all(jnp.isfinite(g))
+        chex.assert_tree_all_finite(g)
         assert jnp.all(g > 0), "Increasing any bin Z should increase mean"
 
 
@@ -231,7 +232,7 @@ class TestMetallicityBinsContinuity:
         d_log_z = jnp.zeros(n_bins - 1)
         jit_fn = jax.jit(metallicity_bins_continuity_on_ssp_grid)
         result = jit_fn(ssp_lg_age_gyr, bin_edges_log_yr, -2.0, d_log_z)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
     def test_gradient_wrt_base_and_deltas(self, ssp_lg_age_gyr, bin_edges_log_yr):
         n_bins = len(bin_edges_log_yr) - 1
@@ -246,7 +247,7 @@ class TestMetallicityBinsContinuity:
         d_log_z = jnp.full(n_bins - 1, 0.1)
         g_base, g_deltas = jax.grad(loss, argnums=(0, 1))(-3.0, d_log_z)
         assert jnp.isfinite(g_base)
-        assert jnp.all(jnp.isfinite(g_deltas))
+        chex.assert_tree_all_finite(g_deltas)
         assert g_base > 0, "Increasing base Z should increase mean"
 
 
@@ -259,8 +260,8 @@ class TestTabulatedMetallicity:
         met_log_age_yr = jnp.linspace(6.0, 10.14, 50)
         met_log_z_abs = jnp.linspace(-3.0, -1.5, 50)
         result = tabulated_metallicity_on_ssp_grid(ssp_lg_age_gyr, met_log_age_yr, met_log_z_abs)
-        assert result.shape == ssp_lg_age_gyr.shape
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_equal_shape([result, ssp_lg_age_gyr])
+        chex.assert_tree_all_finite(result)
 
     def test_constant_table(self, ssp_lg_age_gyr):
         """A constant Z table should give constant output."""
@@ -275,7 +276,7 @@ class TestTabulatedMetallicity:
         met_log_z_abs = jnp.linspace(-3.0, -1.5, 20)
         jit_fn = jax.jit(tabulated_metallicity_on_ssp_grid)
         result = jit_fn(ssp_lg_age_gyr, met_log_age_yr, met_log_z_abs)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
     def test_gradient_flows(self, ssp_lg_age_gyr):
         met_log_age_yr = jnp.linspace(6.0, 10.14, 20)
@@ -287,7 +288,7 @@ class TestTabulatedMetallicity:
 
         met_log_z_abs = jnp.linspace(-3.0, -1.5, 20)
         g = jax.grad(loss)(met_log_z_abs)
-        assert jnp.all(jnp.isfinite(g))
+        chex.assert_tree_all_finite(g)
 
     def test_clamped_outside_range(self, ssp_lg_age_gyr):
         """SSP ages outside the table range should clamp to edge values."""

@@ -6,6 +6,7 @@ Covers:
 3. Differentiability and JIT compatibility of both
 """
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -31,7 +32,7 @@ class TestGaussianLineProfile:
 
     def test_output_shape(self, wavelength):
         result = gaussian_line_profile(wavelength, 5007.0, 500.0)
-        assert result.shape == wavelength.shape
+        chex.assert_equal_shape([result, wavelength])
 
     def test_peak_at_line_center(self, wavelength):
         """Profile should peak near the line center wavelength."""
@@ -85,7 +86,7 @@ class TestGaussianLineProfile:
 
         l_bol = 1e45
         sed = compute_nlr_sed(wavelength, l_bol, covering_fraction=0.1)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
         assert float(jnp.max(sed)) > 0.0
 
 
@@ -142,5 +143,5 @@ class TestRingArea:
 
         wave = jnp.linspace(1000.0, 30000.0, 3000)
         sed = multicolor_disc(wave, agn_log_lbol=12.0, agn_cos_inc=0.5)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
         assert float(jnp.max(sed)) > 0.0

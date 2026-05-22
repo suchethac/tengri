@@ -12,6 +12,7 @@ Bug index (from CLAUDE.md):
 - Shock sigma_nu Å→cm conversion
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -396,7 +397,7 @@ class TestCloudyLineGridCollapse:
             "Regression: without fix, interp_nd_triweight would see ndim=3 grid with 2 axes."
         )
         # Values must be finite
-        assert jnp.all(jnp.isfinite(collapsed)), "Collapsed grid contains non-finite values"
+        chex.assert_tree_all_finite(collapsed)
 
     def test_no_fixed_axes_preserves_shape(self):
         """Without fixed axes, line_lum_collapsed must equal the original grid."""

@@ -10,6 +10,7 @@ References
 - Balogh+1999, ApJ, 527, 54 (Dn4000 definition)
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -78,7 +79,7 @@ class TestRadioPhysics:
 
         wave = jnp.geomspace(1e8, 1e10, 100)
         l_nu = radio_agn(wave, L_agn_bol=1e44, radio_loudness=1.0, alpha_agn=0.7)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert float(jnp.sum(l_nu)) > 0, "Radio AGN should produce flux"
 
     def test_radio_loudness_controls_agn_radio(self):
@@ -125,7 +126,7 @@ class TestXrayPhysics:
 
         wave = jnp.geomspace(0.1, 100.0, 200)  # hard X-ray
         l_nu = xray_agn_corona(wave, L_agn_bol=1e44, gamma=1.8)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert float(jnp.sum(l_nu)) > 0
 
     def test_softer_gamma_more_soft_xray(self):
@@ -272,7 +273,7 @@ class TestPSDPhysics:
         f = jnp.geomspace(1e-12, 1e-6, 200)
         psd = psd_extended_regulator(f, s_reg=1.0, tau_in=1e8, tau_eq=1e9, s_dyn=0.5, tau_dyn=1e7)
         assert jnp.all(psd >= 0), "Extended regulator PSD must be non-negative"
-        assert jnp.all(jnp.isfinite(psd)), "Extended regulator PSD must be finite"
+        chex.assert_tree_all_finite(psd)
 
     def test_psd_sigma_scales_amplitude(self):
         """Higher psd_sigma → higher PSD amplitude."""

@@ -6,6 +6,7 @@ C²-continuous triweight interpolation, giving finite gradients everywhere.
 
 from __future__ import annotations
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -292,8 +293,8 @@ class TestComputeShockSed:
             shock_b_over_sqrt_n=b_mid,
             line_sigma_aa=5.0,
         )
-        assert sed.shape == wave.shape
-        assert jnp.all(jnp.isfinite(sed)), "compute_shock_sed returned non-finite SED"
+        chex.assert_equal_shape([sed, wave])
+        chex.assert_tree_all_finite(sed)
         assert jnp.any(sed > 0), "compute_shock_sed returned all-zero SED"
 
     def test_sed_gradient_wrt_velocity(self):

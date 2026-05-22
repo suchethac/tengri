@@ -9,6 +9,7 @@ Covers:
 
 import warnings
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -67,13 +68,13 @@ class TestPlaceLineProfiles:
         from tengri.components.nebular._shared import place_line_profiles
 
         sed = place_line_profiles(single_line_wave, single_line_lum, obs_wave, line_sigma_aa=10.0)
-        assert sed.shape == obs_wave.shape
+        chex.assert_equal_shape([sed, obs_wave])
 
     def test_gaussian_finite(self, obs_wave, single_line_wave, single_line_lum):
         from tengri.components.nebular._shared import place_line_profiles
 
         sed = place_line_profiles(single_line_wave, single_line_lum, obs_wave, line_sigma_aa=10.0)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_gaussian_non_negative(self, obs_wave, single_line_wave, single_line_lum):
         from tengri.components.nebular._shared import place_line_profiles
@@ -103,13 +104,13 @@ class TestPlaceLineProfiles:
         from tengri.components.nebular._shared import place_line_profiles
 
         sed = place_line_profiles(single_line_wave, single_line_lum, obs_wave, line_sigma_aa=0.0)
-        assert sed.shape == obs_wave.shape
+        chex.assert_equal_shape([sed, obs_wave])
 
     def test_delta_function_finite_non_negative(self, obs_wave, single_line_wave, single_line_lum):
         from tengri.components.nebular._shared import place_line_profiles
 
         sed = place_line_profiles(single_line_wave, single_line_lum, obs_wave, line_sigma_aa=-1.0)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
         assert jnp.all(sed >= 0.0)
 
     def test_multiple_lines(self, obs_wave):
@@ -120,8 +121,8 @@ class TestPlaceLineProfiles:
         line_waves = jnp.array([4862.68, 6564.61])
         line_lums = jnp.array([1.0e39, 2.8e39])
         sed = place_line_profiles(line_waves, line_lums, obs_wave, line_sigma_aa=5.0)
-        assert sed.shape == obs_wave.shape
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_equal_shape([sed, obs_wave])
+        chex.assert_tree_all_finite(sed)
         assert jnp.all(sed >= 0.0)
         # Should have non-trivial flux near both lines
         hb_mask = (obs_wave > 4800.0) & (obs_wave < 4920.0)
@@ -235,14 +236,14 @@ class TestComputeAnalyticNebularContinuum:
         from tengri.components.nebular._shared import compute_analytic_nebular_continuum
 
         cont = compute_analytic_nebular_continuum(wave_optical, q_h=1e49, log_z_abs=-1.848)
-        assert jnp.all(jnp.isfinite(cont))
+        chex.assert_tree_all_finite(cont)
         assert jnp.all(cont >= 0.0)
 
     def test_output_shape(self, wave_optical):
         from tengri.components.nebular._shared import compute_analytic_nebular_continuum
 
         cont = compute_analytic_nebular_continuum(wave_optical, q_h=1e49, log_z_abs=-1.848)
-        assert cont.shape == wave_optical.shape
+        chex.assert_equal_shape([cont, wave_optical])
 
     def test_zero_qh_gives_zero(self, wave_optical):
         """No ionizing photons → no nebular continuum."""
@@ -268,7 +269,7 @@ class TestComputeAnalyticNebularContinuum:
         wave = jnp.linspace(900.0, 2000.0, 300)
         cont = compute_analytic_nebular_continuum(wave, q_h=1e49, log_z_abs=-1.848)
         # All finite and non-negative
-        assert jnp.all(jnp.isfinite(cont))
+        chex.assert_tree_all_finite(cont)
         assert jnp.all(cont >= 0.0)
 
     def test_temperature_changes_continuum_shape(self, wave_optical):
@@ -303,7 +304,7 @@ class TestComputeAnalyticNebularContinuum:
 
         jitted = jax.jit(compute_analytic_nebular_continuum)
         cont = jitted(wave_optical, 1e49, -1.848)
-        assert jnp.all(jnp.isfinite(cont))
+        chex.assert_tree_all_finite(cont)
 
 
 # ── NebularContinuumFallback ──────────────────────────────────────
@@ -393,7 +394,7 @@ class TestNebularContinuumFallback:
         result = wrapped.predict_nebular_sed(ssp_wave=wave, gas_logqion=49.0)
         # Should have non-zero continuum added
         assert jnp.any(result > 0.0)
-        assert jnp.all(jnp.isfinite(result))
+        chex.assert_tree_all_finite(result)
 
     def test_tier3_error_mode_raises(self, wave):
         """Tier 3: fallback_mode='error' raises NebularContinuumUnavailableError."""

@@ -20,6 +20,7 @@ References
 - Mahadevan 1997, ApJ, 477, 585
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -207,8 +208,8 @@ class TestMulticolorDiscPhysics:
         # Both finite and positive
         assert float(jnp.sum(l_no_spin)) > 0
         assert float(jnp.sum(l_high_spin)) > 0
-        assert jnp.all(jnp.isfinite(l_no_spin))
-        assert jnp.all(jnp.isfinite(l_high_spin))
+        chex.assert_tree_all_finite(l_no_spin)
+        chex.assert_tree_all_finite(l_high_spin)
 
     def test_face_on_brighter_than_edge_on(self):
         """cos(i) projection: face-on (cos_i=1) > edge-on (cos_i=0.1)."""
@@ -219,8 +220,8 @@ class TestMulticolorDiscPhysics:
 
         # Renormalization brings both to same L_bol, but the disc shape
         # should differ due to limb effects. Both should be valid.
-        assert jnp.all(jnp.isfinite(l_face))
-        assert jnp.all(jnp.isfinite(l_edge))
+        chex.assert_tree_all_finite(l_face)
+        chex.assert_tree_all_finite(l_edge)
 
 
 # ── 5. KUBOTA & DONE 3-ZONE DISC — multi-zone structure ───────────
@@ -234,7 +235,7 @@ class TestKubotaDonePhysics:
         from tengri.components.agn.disc import kubota_done_disc
 
         l_nu = kubota_done_disc(WAVE, agn_log_lbol=11.0)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert float(jnp.sum(l_nu)) > 0
 
     def test_warm_comp_creates_soft_excess(self):
@@ -250,7 +251,7 @@ class TestKubotaDonePhysics:
         # Soft X-ray region: 50-200 A (0.06-0.25 keV)
         sx_mask = (WAVE > 50) & (WAVE < 200)
         # K&D might have different normalization, but soft X-ray shape differs
-        assert jnp.all(jnp.isfinite(l_kd[sx_mask]))
+        chex.assert_tree_all_finite(l_kd[sx_mask])
 
     def test_corona_fraction_controls_hard_xray(self):
         """Higher f_hard → more hard X-ray emission from corona."""
@@ -297,8 +298,8 @@ class TestADAFPhysics:
         l_large_rtr = adaf_disc(WAVE, agn_log_lbol=10.0, agn_r_tr=500.0)
 
         # Both finite
-        assert jnp.all(jnp.isfinite(l_small_rtr))
-        assert jnp.all(jnp.isfinite(l_large_rtr))
+        chex.assert_tree_all_finite(l_small_rtr)
+        chex.assert_tree_all_finite(l_large_rtr)
 
     def test_adaf_beta_controls_synchrotron(self):
         """Higher beta (magnetic pressure) → stronger synchrotron emission."""
@@ -489,7 +490,7 @@ class TestUnifiedAGNPhysics:
 
         model_fn = resolve_agn_model("simple")
         l_nu = model_fn(WAVE, agn_log_lbol=11.0)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert float(jnp.sum(l_nu)) > 0
 
     def test_higher_torus_frac_more_ir(self):

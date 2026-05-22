@@ -15,6 +15,7 @@ Tests verify:
 8. Gradient finiteness
 """
 
+import chex
 import jax
 import pytest
 
@@ -123,7 +124,7 @@ class TestMadau1995IGM:
         jitted_fn = jax.jit(igm_transmission_madau)
         wave_obs = jnp.array([1000.0, 2000.0, 4000.0, 8000.0])
         T = jitted_fn(wave_obs, z=2.5)
-        assert jnp.all(jnp.isfinite(T)), "igm_transmission_madau not JIT-compatible"
+        chex.assert_tree_all_finite(T)
 
     def test_gradient_wrt_z_finite(self):
         """Gradient ∂T/∂z is finite and sensible (negative sign expected).
@@ -172,7 +173,7 @@ class TestMadau1995IGM:
         T = igm_transmission_madau(wave_obs, z=z)
 
         # All outputs should be finite and in bounds
-        assert jnp.all(jnp.isfinite(T)), "NaN in transmission vector"
+        chex.assert_tree_all_finite(T)
         assert jnp.all((T >= 0.0) & (T <= 1.0)), "T outside [0, 1]"
 
     def test_consistency_across_redshifts(self):

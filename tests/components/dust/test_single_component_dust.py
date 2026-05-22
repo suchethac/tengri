@@ -1,5 +1,6 @@
 """Tests for single-component (uniform screen) dust attenuation."""
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
@@ -36,7 +37,7 @@ class TestSingleComponentDust:
         from tengri.components.dust.attenuation import single_component_dust
 
         trans = single_component_dust(wavelengths, tau_v=1.0)
-        assert trans.shape == wavelengths.shape
+        chex.assert_equal_shape([trans, wavelengths])
 
     def test_bounds(self, wavelengths):
         from tengri.components.dust.attenuation import single_component_dust
@@ -107,8 +108,8 @@ class TestSingleComponentDust:
         from tengri.components.dust.attenuation import single_component_dust
 
         trans = single_component_dust(wavelengths, tau_v=1.0, law=law_name)
-        assert trans.shape == wavelengths.shape
-        assert jnp.all(jnp.isfinite(trans))
+        chex.assert_equal_shape([trans, wavelengths])
+        chex.assert_tree_all_finite(trans)
         assert jnp.all(trans >= 0.0)
         assert jnp.all(trans <= 1.0)
 
@@ -117,7 +118,7 @@ class TestSingleComponentDust:
 
         jitted = jax.jit(lambda w, t: single_component_dust(w, tau_v=t))
         trans = jitted(wavelengths, 1.0)
-        assert jnp.all(jnp.isfinite(trans))
+        chex.assert_tree_all_finite(trans)
 
     def test_differentiable(self, wavelengths):
         from tengri.components.dust.attenuation import single_component_dust
@@ -182,7 +183,7 @@ class TestSingleComponentDustFast:
 
         jitted = jax.jit(lambda w, t: single_component_dust_fast(w, n_ages=n_ages, tau_v=t))
         trans = jitted(wavelengths, 1.0)
-        assert jnp.all(jnp.isfinite(trans))
+        chex.assert_tree_all_finite(trans)
 
     def test_differentiable(self, wavelengths, n_ages):
         from tengri.components.dust.attenuation import single_component_dust_fast
@@ -219,4 +220,4 @@ class TestSingleComponentDustFast:
             law=law_name,
         )
         assert trans.shape == (n_ages, len(wavelengths))
-        assert jnp.all(jnp.isfinite(trans))
+        chex.assert_tree_all_finite(trans)

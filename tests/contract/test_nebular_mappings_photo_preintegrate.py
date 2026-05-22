@@ -18,6 +18,7 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
+import chex
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -160,8 +161,7 @@ class TestPreintegrateForPhotometry:
         n_age = backend_for_preint.grid.log_age_yr_axis.shape[0]
         n_u = backend_for_preint.grid.logU_axis.shape[0]
         n_lines = backend_for_preint.grid.line_wavelengths.shape[0]
-        assert backend_for_preint._line_lum_collapsed.shape == (n_z, n_age, n_u, n_lines)
-
+        chex.assert_shape(backend_for_preint._line_lum_collapsed, (n_z, n_age, n_u, n_lines))
         # fake grid: ratio=1, logHB_per_logq=-12 → L_erg_per_q = 10^-12
         # Convert to Lsun and log10: expected = log10(10^-12 / LSUN_ERG)
         expected_val = jnp.log10(10.0 ** (-12.0) / _LSUN_ERG)
@@ -178,7 +178,7 @@ class TestPreintegrateForPhotometry:
         weights = backend_for_preint._preint_lines.line_filter_weights
         n_lines = backend_for_preint.grid.line_wavelengths.shape[0]
         assert weights.shape == (n_lines, len(fw))
-        assert bool(jnp.all(jnp.isfinite(weights)))
+        chex.assert_tree_all_finite(weights)
 
     def test_fixed_collapses_axis(self, backend_for_preint, synthetic_filters):
         """Passing ``fixed={2: -3.0}`` must drop the log_U axis from line_lum and
@@ -188,7 +188,7 @@ class TestPreintegrateForPhotometry:
         n_z = backend_for_preint.grid.zo_axis.shape[0]
         n_age = backend_for_preint.grid.log_age_yr_axis.shape[0]
         n_lines = backend_for_preint.grid.line_wavelengths.shape[0]
-        assert backend_for_preint._line_lum_collapsed.shape == (n_z, n_age, n_lines)
+        chex.assert_shape(backend_for_preint._line_lum_collapsed, (n_z, n_age, n_lines))
         assert len(backend_for_preint._preint_lines.axes) == 2
 
     def test_preint_lines_axes_match_collapsed_lum(self, backend_for_preint, synthetic_filters):
@@ -213,7 +213,7 @@ class TestPreintegrateForPhotometry:
         n_age = backend_for_preint.grid.log_age_yr_axis.shape[0]
         n_u = backend_for_preint.grid.logU_axis.shape[0]
         n_lines = backend_for_preint.grid.line_wavelengths.shape[0]
-        assert backend_for_preint._line_lum_collapsed.shape == (n_age, n_u, n_lines)
+        chex.assert_shape(backend_for_preint._line_lum_collapsed, (n_age, n_u, n_lines))
 
     def test_continuum_effective_wavelengths_zero(self, backend_for_preint, synthetic_filters):
         """Continuum effective wavelengths must be zero (not used)."""

@@ -24,6 +24,7 @@ from __future__ import annotations
 import pathlib
 import warnings
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -129,7 +130,7 @@ def test_stellar_only_orchestrator_runs(stellar_only_model):
     assert state.sed_intrinsic.shape[0] > 1000, (
         f"sed_intrinsic shape too small: {state.sed_intrinsic.shape}"
     )
-    assert jnp.all(jnp.isfinite(state.sed_intrinsic))
+    chex.assert_tree_all_finite(state.sed_intrinsic)
     assert jnp.all(state.sed_intrinsic >= 0)
 
 
@@ -137,7 +138,7 @@ def test_stellar_only_legacy_runs(stellar_only_model):
     """Legacy path produces finite SED of expected shape."""
     legacy = stellar_only_model.predict_rest_sed(_STELLAR_PARAMS)
     assert legacy.sed.shape[0] > 1000
-    assert jnp.all(jnp.isfinite(legacy.sed))
+    chex.assert_tree_all_finite(legacy.sed)
     assert jnp.all(legacy.sed >= 0)
 
 
@@ -176,8 +177,7 @@ def test_orchestrator_rest_sed_close_to_legacy(stellar_only_model):
     legacy = stellar_only_model.predict_rest_sed(_STELLAR_PARAMS)
     state = stellar_only_model.predict_state(_STELLAR_PARAMS)
 
-    assert legacy.sed.shape == state.sed_intrinsic.shape
-
+    chex.assert_equal_shape([legacy.sed, state.sed_intrinsic])
     rel_diff = float(
         jnp.max(
             jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
@@ -268,14 +268,14 @@ def test_field_orchestrator_runs(stellar_field_model):
     """Orchestrator handles field=True without raising and produces finite SFH."""
     state = stellar_field_model.predict_state(_STELLAR_FIELD_PARAMS)
     sfr_history = state.derived["sfr_history"]
-    assert jnp.all(jnp.isfinite(sfr_history)), "sfr_history contains NaN/Inf"
+    chex.assert_tree_all_finite(sfr_history)
     assert jnp.any(sfr_history > 0.0), "sfr_history is all zero — field branch dead?"
 
 
 def test_field_legacy_runs(stellar_field_model):
     """Legacy handles field=True without raising and produces finite SFH."""
     sfh = stellar_field_model.predict_sfh(_STELLAR_FIELD_PARAMS)
-    assert jnp.all(jnp.isfinite(sfh["sfr_full"])), "legacy sfr_full contains NaN/Inf"
+    chex.assert_tree_all_finite(sfh["sfr_full"])
     assert jnp.any(sfh["sfr_full"] > 0.0), "legacy sfr_full all zero — field branch dead?"
 
 
@@ -395,14 +395,14 @@ def test_dirichlet_orchestrator_runs(stellar_dirichlet_model):
     """Orchestrator handles dirichlet SFH: finite sfr_history with positive bins."""
     state = stellar_dirichlet_model.predict_state(_DIRICHLET_PARAMS)
     sfr = state.derived["sfr_history"]
-    assert jnp.all(jnp.isfinite(sfr)), "dirichlet sfr_history NaN/Inf"
+    chex.assert_tree_all_finite(sfr)
     assert jnp.any(sfr > 0.0), "dirichlet sfr_history all zero"
 
 
 def test_dirichlet_legacy_runs(stellar_dirichlet_model):
     """Legacy handles dirichlet SFH without raising."""
     legacy = stellar_dirichlet_model.predict_rest_sed(_DIRICHLET_PARAMS)
-    assert jnp.all(jnp.isfinite(legacy.sed)), "legacy dirichlet SED NaN/Inf"
+    chex.assert_tree_all_finite(legacy.sed)
     assert jnp.any(legacy.sed > 0.0), "legacy dirichlet SED all zero"
 
 
@@ -425,8 +425,7 @@ def test_dirichlet_orchestrator_rest_sed_close_to_legacy(stellar_dirichlet_model
     legacy = stellar_dirichlet_model.predict_rest_sed(_DIRICHLET_PARAMS)
     state = stellar_dirichlet_model.predict_state(_DIRICHLET_PARAMS)
 
-    assert legacy.sed.shape == state.sed_intrinsic.shape
-
+    chex.assert_equal_shape([legacy.sed, state.sed_intrinsic])
     rel_diff = float(
         jnp.max(
             jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
@@ -474,7 +473,7 @@ def test_continuity_orchestrator_rest_sed_close_to_legacy(stellar_continuity_mod
     legacy = stellar_continuity_model.predict_rest_sed(_CONTINUITY_PARAMS)
     state = stellar_continuity_model.predict_state(_CONTINUITY_PARAMS)
 
-    assert legacy.sed.shape == state.sed_intrinsic.shape
+    chex.assert_equal_shape([legacy.sed, state.sed_intrinsic])
     rel_diff = float(
         jnp.max(
             jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
@@ -518,7 +517,7 @@ def test_dense_basis_orchestrator_rest_sed_close_to_legacy(stellar_dense_basis_m
     legacy = stellar_dense_basis_model.predict_rest_sed(_DENSE_BASIS_PARAMS)
     state = stellar_dense_basis_model.predict_state(_DENSE_BASIS_PARAMS)
 
-    assert legacy.sed.shape == state.sed_intrinsic.shape
+    chex.assert_equal_shape([legacy.sed, state.sed_intrinsic])
     rel_diff = float(
         jnp.max(
             jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
@@ -567,7 +566,7 @@ def test_chem_evol_orchestrator_runs(stellar_chem_evol_model):
     finite, monotonically-enriching log_metallicity_history."""
     state = stellar_chem_evol_model.predict_state(_STELLAR_PARAMS)
     log_z_hist = state.derived["log_metallicity_history"]
-    assert jnp.all(jnp.isfinite(log_z_hist)), "log_metallicity_history NaN/Inf"
+    chex.assert_tree_all_finite(log_z_hist)
     # Closed-box enrichment: metallicity at present (lookback≈0) should
     # exceed metallicity at oldest stars (lookback≈14 Gyr). The grid is
     # ascending in lookback time, so log_z_hist[0] is youngest, [-1] oldest.
@@ -580,7 +579,7 @@ def test_chem_evol_orchestrator_runs(stellar_chem_evol_model):
 def test_chem_evol_legacy_runs(stellar_chem_evol_model):
     """Legacy handles metallicity_model='chem_evol' without raising."""
     legacy = stellar_chem_evol_model.predict_rest_sed(_STELLAR_PARAMS)
-    assert jnp.all(jnp.isfinite(legacy.sed)), "legacy SED has NaN/Inf"
+    chex.assert_tree_all_finite(legacy.sed)
     assert jnp.any(legacy.sed > 0.0), "legacy SED all zero"
 
 
@@ -599,8 +598,7 @@ def test_chem_evol_orchestrator_rest_sed_close_to_legacy(stellar_chem_evol_model
     legacy = stellar_chem_evol_model.predict_rest_sed(_STELLAR_PARAMS)
     state = stellar_chem_evol_model.predict_state(_STELLAR_PARAMS)
 
-    assert legacy.sed.shape == state.sed_intrinsic.shape
-
+    chex.assert_equal_shape([legacy.sed, state.sed_intrinsic])
     rel_diff = float(
         jnp.max(
             jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
@@ -646,7 +644,7 @@ def test_ramp_orchestrator_rest_sed_close_to_legacy(stellar_ramp_model):
     """Phase II-2.4: ramp Z(t) orchestrator-vs-legacy at ``rtol=1e-2``."""
     legacy = stellar_ramp_model.predict_rest_sed(_STELLAR_RAMP_PARAMS)
     state = stellar_ramp_model.predict_state(_STELLAR_RAMP_PARAMS)
-    assert legacy.sed.shape == state.sed_intrinsic.shape
+    chex.assert_equal_shape([legacy.sed, state.sed_intrinsic])
     rel_diff = float(
         jnp.max(
             jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
@@ -676,8 +674,7 @@ def test_field_orchestrator_rest_sed_close_to_legacy(stellar_field_model):
     legacy = stellar_field_model.predict_rest_sed(_STELLAR_FIELD_PARAMS)
     state = stellar_field_model.predict_state(_STELLAR_FIELD_PARAMS)
 
-    assert legacy.sed.shape == state.sed_intrinsic.shape
-
+    chex.assert_equal_shape([legacy.sed, state.sed_intrinsic])
     rel_diff = float(
         jnp.max(
             jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
@@ -750,7 +747,7 @@ def _check_sfh_variant_equivalence(ssp, sfh_name: str, sfh_params: dict, rtol: f
         model = SEDModel(spec, ssp)
     legacy = model.predict_rest_sed(sfh_params)
     state = model.predict_state(sfh_params)
-    assert legacy.sed.shape == state.sed_intrinsic.shape
+    chex.assert_equal_shape([legacy.sed, state.sed_intrinsic])
     rel_diff = float(
         jnp.max(
             jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)
@@ -901,7 +898,7 @@ def _check_with_priors(ssp, sfh_name, priors, sfh_params, rtol=2e-2):
         model = SEDModel(spec, ssp)
     legacy = model.predict_rest_sed(sfh_params)
     state = model.predict_state(sfh_params)
-    assert legacy.sed.shape == state.sed_intrinsic.shape
+    chex.assert_equal_shape([legacy.sed, state.sed_intrinsic])
     rel_diff = float(
         jnp.max(
             jnp.abs(legacy.sed - state.sed_intrinsic) / jnp.maximum(jnp.abs(legacy.sed), 1e-30)

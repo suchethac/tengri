@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -127,7 +128,7 @@ class TestCueHybridDiagnostic:
     def test_cue_hybrid_photometry_is_finite(self, cue_model, cue_params):
         """Cue hybrid photometry must be finite regardless of the magnitude error."""
         flux = cue_model.predict_photometry(cue_params, mode="hybrid")
-        assert jnp.all(jnp.isfinite(flux)), "Cue hybrid photometry contains NaN/Inf"
+        chex.assert_tree_all_finite(flux)
 
     def test_cue_hybrid_photometry_is_positive(self, cue_model, cue_params):
         """Cue hybrid photometry must be positive regardless of the magnitude error."""
@@ -137,4 +138,4 @@ class TestCueHybridDiagnostic:
     def test_cue_exact_photometry_is_finite(self, cue_model, cue_params):
         """Cue exact photometry must be finite (sanity check)."""
         flux = cue_model.predict_photometry(cue_params, mode="exact")
-        assert jnp.all(jnp.isfinite(flux)), "Cue exact photometry contains NaN/Inf"
+        chex.assert_tree_all_finite(flux)

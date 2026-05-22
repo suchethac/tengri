@@ -8,6 +8,7 @@ Validates that:
 - Parameters accepts dust_eta_balance as a free parameter
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -67,7 +68,7 @@ class TestEnergyBalanceEta:
     def test_eta_1_preserves_energy_balance(self, synthetic_ssp, base_spec):
         """eta=1.0 should give L_IR = L_absorbed (strict energy conservation)."""
         sed = _make_model_and_predict(synthetic_ssp, base_spec, 1.0)
-        assert jnp.all(jnp.isfinite(sed)), "SED contains non-finite values"
+        chex.assert_tree_all_finite(sed)
         assert sed.shape[-1] > 0, "SED is empty"
 
     def test_eta_2_doubles_ir(self, synthetic_ssp, base_spec):

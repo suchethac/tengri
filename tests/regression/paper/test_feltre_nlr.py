@@ -17,6 +17,7 @@ When ``data/feltre_grid.h5`` *is* present, additional tests validate:
 
 from __future__ import annotations
 
+import chex
 import pytest
 
 pytestmark = pytest.mark.regression_paper
@@ -95,11 +96,11 @@ def test_feltre_backend_loads_grid() -> None:
 
     backend = FeltreNLRBackend(_GRID_PATH)
     g = backend.grid
-    assert g.alpha_axis.shape == (4,)
-    assert g.logUs_axis.shape == (9,)
-    assert g.logn_axis.shape == (3,)
-    assert g.logZ_axis.shape == (16,)
-    assert g.xi_d_axis.shape == (3,)
+    chex.assert_shape(g.alpha_axis, (4,))
+    chex.assert_shape(g.logUs_axis, (9,))
+    chex.assert_shape(g.logn_axis, (3,))
+    chex.assert_shape(g.logZ_axis, (16,))
+    chex.assert_shape(g.xi_d_axis, (3,))
     # Grid dims should be consistent
     n_a, n_u, n_n, n_z, n_xi = (
         len(g.alpha_axis),
@@ -108,9 +109,9 @@ def test_feltre_backend_loads_grid() -> None:
         len(g.logZ_axis),
         len(g.xi_d_axis),
     )
-    assert g.logHB_per_logq.shape == (n_a, n_u, n_n, n_z, n_xi)
+    chex.assert_shape(g.logHB_per_logq, (n_a, n_u, n_n, n_z, n_xi))
     n_lines = g.line_wavelengths_aa.shape[0]
-    assert g.line_ratios.shape == (n_a, n_u, n_n, n_z, n_xi, n_lines)
+    chex.assert_shape(g.line_ratios, (n_a, n_u, n_n, n_z, n_xi, n_lines))
 
 
 @pytest.mark.skipif(not _GRID_AVAILABLE, reason="data/feltre_grid.h5 not found")
@@ -127,10 +128,10 @@ def test_feltre_predict_returns_finite() -> None:
         xi_d=0.3,
         log_qh=53.0,
     )
-    assert jnp.all(jnp.isfinite(wave)), "Line wavelengths contain non-finite values"
-    assert jnp.all(jnp.isfinite(lum)), "Line luminosities contain non-finite values"
+    chex.assert_tree_all_finite(wave)
+    chex.assert_tree_all_finite(lum)
     assert jnp.all(lum >= 0), "Line luminosities must be non-negative"
-    assert wave.shape == lum.shape
+    chex.assert_equal_shape([wave, lum])
 
 
 @pytest.mark.skipif(not _GRID_AVAILABLE, reason="data/feltre_grid.h5 not found")
@@ -455,5 +456,5 @@ def test_feltre_dispatcher_route() -> None:
         xi_d=0.3,
         log_qh=53.0,
     )
-    assert jnp.all(jnp.isfinite(wave))
-    assert jnp.all(jnp.isfinite(lum))
+    chex.assert_tree_all_finite(wave)
+    chex.assert_tree_all_finite(lum)

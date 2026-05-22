@@ -5,6 +5,7 @@ Tests cover positivity, finiteness, mass scaling, and JIT compatibility.
 
 import functools
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -49,7 +50,7 @@ class TestPSBContinuitySFH:
             ratio_young=0.0,
             ratio_old_0=0.0,
         )
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)
 
     def test_mass_scales_with_log_total_mass(self, age_yr, default_edges):
         sfr10 = psb_continuity(
@@ -77,4 +78,4 @@ class TestPSBContinuitySFH:
         # bin_edges_gyr is a fixed structural arg — bake it in via partial before JIT
         fn = jax.jit(functools.partial(psb_continuity, bin_edges_gyr=default_edges))
         sfr = fn(age_yr, 10.0, tlast_gyr=0.5, tflex_gyr=2.0, ratio_young=0.0, ratio_old_0=0.0)
-        assert jnp.all(jnp.isfinite(sfr))
+        chex.assert_tree_all_finite(sfr)

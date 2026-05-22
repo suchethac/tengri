@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -25,9 +26,9 @@ class TestKubotaDoneFullAgn:
         from tengri.components.agn.unified import kubota_done_full_agn
 
         l_nu = kubota_done_full_agn(wavelength, agn_log_lbol=44.0)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)
-        assert l_nu.shape == wavelength.shape
+        chex.assert_equal_shape([l_nu, wavelength])
 
     def test_registered_as_kubota_done_full(self):
         """'kubota_done_full' appears in AGN_MODELS."""
@@ -93,4 +94,4 @@ class TestKubotaDoneFullAgn:
         def _run(wave):
             return kubota_done_full_agn(wave, agn_log_lbol=44.0)
 
-        assert jnp.all(jnp.isfinite(_run(wavelength)))
+        chex.assert_tree_all_finite(_run(wavelength))

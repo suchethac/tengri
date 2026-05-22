@@ -1,5 +1,6 @@
 """Tests for build_native_vi_nonlinear_engine in isolation."""
 
+import chex
 import jax
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
@@ -63,14 +64,14 @@ def test_draw_nonlinear_residuals_shape():
     draw_keys = jax.random.split(jax.random.PRNGKey(1), n_keys)
     residuals = draw_fn(best_flat, draw_keys)
     # Each key produces a mirrored pair → 2*n_keys residuals
-    assert residuals.shape == (2 * n_keys, flat0.shape[0])
+    chex.assert_shape(residuals, (2 * n_keys, flat0.shape[0]))
 
 
 def test_hamiltonian_is_scalar():
     sr, data, noise, flat0, flatten, unravel, _ = _make_linear_problem()
     _, _, hamiltonian = build_native_vi_nonlinear_engine(sr, data, noise, flatten, unravel)
     h = hamiltonian(flat0)
-    assert h.shape == ()
+    chex.assert_shape(h, ())
 
 
 def test_draw_residuals_mirrored_symmetry():

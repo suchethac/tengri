@@ -3,6 +3,7 @@
 Bug: radio.py:113 — L_B = L_agn_bol * _LSUN / (...) / _LSUN; *_LSUN/_LSUN cancelled.
 """
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -18,5 +19,5 @@ class TestRadioAGNSimplified:
 
         wave = jnp.logspace(7.0, 9.0, 100)  # radio wavelengths
         l_nu = radio_agn(wave, L_agn_bol=1e11, radio_loudness=2.0)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)

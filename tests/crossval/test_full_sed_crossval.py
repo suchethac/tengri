@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -236,7 +237,7 @@ class TestStarforming:
         wave = tengri["wave"]
         sed = tengri["sed"]
         optical = (wave > 1000.0) & (wave < 30000.0)
-        assert np.all(np.isfinite(sed[optical])), "NaN or Inf in tengri SED optical range"
+        chex.assert_tree_all_finite(sed[optical])
         assert np.all(sed[optical] >= 0.0), "Negative flux in tengri SED optical range"
 
     def test_m_formed_is_correct(self, tengri):
@@ -680,7 +681,7 @@ class TestDelayedTauSFH:
             },
         )
         optical = (wave > 1000.0) & (wave < 30000.0)
-        assert np.all(np.isfinite(sed[optical])), "NaN/Inf in dexp SED optical"
+        chex.assert_tree_all_finite(sed[optical])
         assert np.all(sed[optical] >= 0.0), "Negative flux in dexp SED optical"
 
     def test_dexp_vs_fsps_vband(self, ssp_data, ref, ref_wave):
@@ -774,7 +775,7 @@ class TestDPLSFH:
             },
         )
         optical = (wave > 1000.0) & (wave < 30000.0)
-        assert np.all(np.isfinite(sed[optical])), "NaN/Inf in DPL SED optical"
+        chex.assert_tree_all_finite(sed[optical])
         assert np.all(sed[optical] >= 0.0), "Negative flux in DPL SED optical"
 
     def test_dpl_vs_fsps_vband_order_of_magnitude(self, ssp_data, ref, ref_wave):
