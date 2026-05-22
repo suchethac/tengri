@@ -19,6 +19,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **`tengri.protocols.SubModel`** — runtime-checkable Protocol for
   one mode of `ForwardModel` (SED, spatial, joint). Two-method
   contract (`run`, `declared_parameters`).
+- **`tengri.protocols.SpatialComponent`** — mirror of `SEDComponent`
+  on the spatial side; runtime-checkable Protocol with the same
+  `declared_parameters`/`precompute`/`apply` shape.
+- **`SpatialModelComponent`** astronomer-facing base class
+  (`tengri.components.spatial_model_component`). Mirror of
+  `SEDModelComponent`. Auto-discovers class-level `Distribution`
+  attrs as free parameters, supports `reads`/`publishes` dicts, and
+  provides a default `apply()` that handles param slicing, grid
+  lookup, and writes the resulting profile to
+  `state.derived["spatial_profile_2d"]`.
+- **`tengri.components.spatial.{Sersic, Exponential, FlatSlab}`** —
+  three concrete spatial-profile blocks. `Sersic` implements the
+  full Ciotti & Bertin (1999) expansion for `b_n`; `Exponential` is
+  the standalone n=1 case; `FlatSlab` is the explicit form of the
+  uniform-aperture model that classical SED codes use implicitly.
+- `DerivedBundle` gained two canonical fields, `spatial_profile_2d`
+  and `spatial_grid_xy_kpc`, with matching entries in the
+  orchestrator's `_CANONICAL_UNITS` table.
 
 ### Internal
 
@@ -30,6 +48,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `ForwardModel.predict` consume `SEDModel` instances directly. No
   user-visible change to the public API — additive on `SEDModel`,
   internal cleanup on `ForwardModel`.
+- **`ForwardModel.predict` now projects through `Observation.predict`.**
+  Previously the outer shell reached into `SEDModel.predict_photometry`
+  for the photometric channel; it now follows the architectural seam —
+  per-population SED `SubModel.run(state, params) → ForwardState`, then
+  `Observation.predict(state, params) → dict`. Fixed parameter values
+  are merged into the params dict before projection so callers can pass
+  only their free-parameter overrides. No user-visible API change; the
+  prediction dict still matches the legacy path numerically.
 - Scaffolded per-component `_params.py` skeletons (PR1/5 of the
   parameter-registry consolidation) and extended
   `tengri.core.component.ParamDeclaration` with optional `bound_check`
