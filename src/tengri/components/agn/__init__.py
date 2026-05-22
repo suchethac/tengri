@@ -52,6 +52,9 @@ from tengri.components.agn.blocks import (
     validate_block_recipe,
 )
 from tengri.components.agn.blr import compute_blr_sed
+
+# SEDModelComponent adapters (Phase II-4)
+from tengri.components.agn.cat3d_torus_model import CAT3DTorus
 from tengri.components.agn.cat3d_wind import cat3d_wind_analytic, create_cat3d_wind_from_grid
 from tengri.components.agn.disc import (
     adaf_disc,
@@ -71,15 +74,19 @@ from tengri.components.agn.grahsp import (
     evaluate_grahsp_agn,
     grahsp,
 )
+from tengri.components.agn.kd18_disc_model import KD18Disc
 from tengri.components.agn.nlr import (
     compute_nlr_sed,
     compute_nlr_sed_richardson2014,
 )
+from tengri.components.agn.powerlaw_disc_model import PowerLawDisc
 
 # QSOgen must be imported after unified (needs register_agn_model)
 from tengri.components.agn.qsogen import compute_qsogen_sed, qsogen
 from tengri.components.agn.silva04 import create_silva04_from_grid, silva04_analytic
+from tengri.components.agn.silva04_model import Silva04Torus
 from tengri.components.agn.skirtor import create_skirtor_from_grid, skirtor_analytic
+from tengri.components.agn.skirtor_model import SKIRTORTorus
 from tengri.components.agn.torus import nenkova_torus, simple_torus, two_temperature_torus
 from tengri.components.agn.unified import (
     AGN_MODELS,
@@ -99,10 +106,15 @@ __all__ = [
     "BLOCK_CATEGORIES",
     "GRAHSPSED",
     "AGNConfig",
+    "CAT3DTorus",
     "GRAHSPParams",
     "GRAHSPSEDComponent",
     "GRAHSPSEDComponentConfig",
+    "KD18Disc",
+    "PowerLawDisc",
     "RecipeWarning",
+    "SKIRTORTorus",
+    "Silva04Torus",
     "adaf_agn",
     "adaf_disc",
     "beloborodov_gamma_hot",
