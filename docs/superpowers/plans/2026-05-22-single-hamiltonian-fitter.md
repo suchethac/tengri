@@ -106,6 +106,12 @@ In `docs/dev/forward-model-architecture.md`, add a §7 ("Hierarchical inference 
 
 Create the wrapper class. Constructor takes `template_spec, n_galaxies, shared_names`. Implements the minimum spec Protocol surface: `free_params`, `get_fixed_values`, `sample(key)`, `_distributions`, etc. Per-galaxy params get the `(N,)` shape in samples; shared params stay scalar.
 
+**Wasteful-path note:** `sample(key)` is implemented as `vmap(template.spec.sample)` over a key split, which draws `(N, ...)` for *every* param — including shared ones — then overwrites shared with a single draw. This wastes N-1 RNG draws and N-1 distribution transforms per shared param. Acceptable because `sample` is only called at init time, not in the inference hot loop. Document, don't optimise.
+
+### Task 2.5: PopulationSpecView protocol conformance test (added after review)
+
+Add `test_population_spec_view_full_protocol_surface` — walks every attribute and method the `Fitter` actually touches on a `spec` and asserts the wrapped view returns the right shape and type. Enumerate the surface by `grep "self\.spec\." src/tengri/inference/ | grep -v test` and `grep "_spec\.\|fitter\.spec" src/tengri/inference/ | grep -v test`. This is the safety net against duck-typing leaks — a backend that reaches into a private attr like `spec._distributions` would silently break without it.
+
 ### Task 3: PopulationSEDModel.spec
 
 `PopulationSEDModel.spec` returns a `PopulationSpecView` instance (not the bare template spec). Existing tests that compare `pop.spec` to `template.spec` need to be updated.
@@ -122,17 +128,57 @@ When `Fitter.__init__` receives `data=None, noise=None` AND the forward's SubMod
 
 Delete from `Fitter.__init__` and `Fitter.run`. The standard inference path now drives both single-galaxy and hierarchical fits.
 
-### Task 7: Test — numerical equivalence at MAP
+### Task 6.5: Compile-cache isolation (added after review)
 
-Generate a small mock population (N=3 galaxies); run MAP through both paths (the legacy `PopulationFitter` and the new `Fitter(forward).run('map')`). Verify posterior medians agree within tolerance. This is the **gate** — if it fails, something about the likelihood broadcasting is wrong.
+The new and legacy paths may share the JAX compile cache via the same `model`. If `PopulationFitter` and `Fitter(forward).run('vi')` build different JIT'd functions and cache them against the same model key, the second one to compile evicts the first — causing surprise recompiles when users switch paths. Two options:
+
+- Each path uses a different cache key namespace (`fitter_population` vs `fitter`).
+- The `PopulationFitter` deprecation path explicitly opts out of the shared cache.
+
+Add a test (`test_compile_cache_does_not_collide_between_paths`) that runs the same hierarchical fit through both paths in succession and asserts neither rebuilds — both reuse their own cached compiles.
+
+### Task 7: Test — numerical equivalence at MAP **and** MCMC
+
+Two-stage gate; **MAP-only is not enough** because hierarchical samplers can drift on chain mixing even with identical $\mathcal{H}$.
+
+**Stage 1: MAP medians at rtol=1e-4.** Generate a small mock population (N=3 galaxies); run MAP through both paths. Verify posterior medians agree within `rtol=1e-4`. This catches likelihood-broadcasting bugs.
+
+**Stage 2: MCMC posterior percentiles.** Run NUTS through both paths with the same data, fixed key. Compute 16 / 50 / 84 percentiles for each shared parameter and a representative per-galaxy parameter. Assert they agree within MCMC noise (use the ESS-scaled standard error). This catches sampler-tuning differences (specialized init, raytrace step-size scaling) that don't show up at MAP.
+
+If Stage 2 fails, the standard `Fitter` backend probably needs `init_from=map_result` warm-start that mimics `PopulationFitter`'s per-galaxy MAP init. Document the workaround, don't gate the PR on full chain equivalence at default settings.
+
+### Task 7.5: psd_xi broadcasting test (added after review)
+
+`psd_xi` (the latent stochastic-SFH field) is a special case in `_unstandardize_parameters` — it bypasses the standard `dist.unstandardize` path. Under vmap-of-`spec.sample`, `psd_xi` should naturally become shape `(N, n_xi)` — N independent SFH realisations conditional on the shared PSD. Add an explicit test that:
+
+1. Builds a hierarchical fit with stochastic-SFH template.
+2. Asserts `pop.spec.sample(key)["psd_xi"]` has shape `(N, n_xi)`.
+3. Asserts the unstandardized params dict reaches `forward.predict` with the right shape (no rank confusion).
 
 ### Task 8: Test — `fitter.run('vi')` returns batched posterior
 
 3-galaxy hierarchical fit; assert posterior samples for `sfh_dpl_alpha` have shape `(n_samples, 3)`, posterior samples for `sfh_field_psd_sigma` have shape `(n_samples,)`. Pin the batched-vs-scalar partition.
 
+### Task 8.5: Warm-start MCMC from MAP for hierarchical (added after review)
+
+`init_from=result_map` is the widely-used pattern: run MAP first, then NUTS / VI warm-started from the MAP point. For hierarchical, the MAP result has batched-shape per-galaxy params; `Fitter._unbounded_from_posterior` (or wherever the warm-start unbouding lives) probably assumes scalar params and will silently produce the wrong shape.
+
+Add a test (`test_fitter_warm_start_hierarchical_map_to_nuts`) that:
+1. Runs MAP on a hierarchical model.
+2. Passes the result via `init_from=` to a NUTS run.
+3. Verifies NUTS doesn't crash and produces samples with the right shapes.
+
+If this fails, a small fix in the warm-start path is in scope — likely adding `axes=pop.parameter_axes(params)` handling to the unbounded-projection helper.
+
 ### Task 9: Posterior projection helpers
 
 `Posterior.samples_for_galaxy(i)` → posterior dict for galaxy `i`. Useful diagnostic helper; no inference impact.
+
+### Task 9.5: Mass-matrix defaults for hierarchical (added after review)
+
+The unit-mass advantage of standardized space holds for every $\xi_i \sim \mathcal{N}(0, I)$. For hierarchical, the latent space is `(N × D_galaxy + D_hyp)`-dimensional. Dense-mass adaptation cost scales as $O((N \cdot D)^2)$ — at $N=20$, $D=137$ → $2700^2 \approx 7 \times 10^6$ elements, prohibitive.
+
+**Action:** in `Fitter.__init__` or the NUTS backend, default mass to `diagonal` when the forward model has non-empty `batched_axes` (use the published metadata, not isinstance). Single-galaxy fits keep dense as the default for D ≲ 100. Document the heuristic.
 
 ### Task 10: Update analysis script test
 
@@ -142,6 +188,17 @@ Generate a small mock population (N=3 galaxies); run MAP through both paths (the
 
 `docs/forward_model/index.md` "Hierarchical population fits" section currently says the inference routes through `PopulationFitter` internally. Update to: "the Fitter sees a `ForwardModel(population=...)` and runs the standard Hamiltonian path on the batched output." Reference paper §2 + §4.
 
+### Task 11.5: Hierarchical compile-time benchmark (added after review)
+
+Not a gate; not a hard task; just record numbers. Add a quick benchmark to `bench/scripts/`:
+
+| Configuration | Single-galaxy compile (s) | Hierarchical compile (s) |
+|---|---|---|
+| Photometry, D=7 free | t_phot_single | t_phot_hier |
+| Photometry, stochastic SFH D=137 | t_dense_single | t_dense_hier |
+
+For stochastic SFH with N=20 galaxies, latent dimension is `20 × 137 + 2 = 2742`. Compile time for the gradient may be many minutes. Record so future regressions are visible.
+
 ### Task 12: CHANGELOG entry, self-review, push, PR
 
 Standard.
@@ -150,11 +207,15 @@ Standard.
 
 ## Risk assessment
 
-**Highest risk:** Task 6 — removing `_maybe_population_delegate` is a breaking change for anyone who *implicitly* relied on the routing. Mitigation: Task 7 (numerical-equivalence gate at MAP) catches regressions before they ship.
+**Highest risk:** Task 6 — removing `_maybe_population_delegate` is a breaking change for anyone who *implicitly* relied on the routing. Mitigation: Task 7's **two-stage gate** (MAP equivalence at rtol=1e-4 *and* MCMC percentile agreement within ESS-scaled noise) catches both correctness and sampler-tuning regressions. MAP-only would be insufficient.
 
-**Second-highest:** Task 2 — `PopulationSpecView` needs to satisfy the full implicit Protocol that `Fitter` expects from `spec`. There are subtle accessors (`spec._distributions`, `spec._fixed_values`, `spec._free_names`, etc.). A test that walks the entire surface (Task 2 conformance test) is the safety net.
+**Second-highest:** Task 2 — `PopulationSpecView` needs to satisfy the full implicit Protocol that `Fitter` expects from `spec`. There are subtle accessors (`spec._distributions`, `spec._fixed_values`, `spec._free_names`, etc.). Task 2.5's conformance test walks the entire surface and is the safety net against duck-typing leaks.
 
 **Third:** Task 5's auto-extraction — if the user passes `data=` and `noise=` to `Fitter(ForwardModel(population=...), data, noise)`, we should respect the explicit values (not auto-extract from `pop.galaxies`). The auto-extraction is for the "convenience default" path; explicit always wins.
+
+**Fourth:** Task 8.5 — warm-start from MAP. The pattern `result = fitter.run('map'); fitter.run('nuts', init_from=result)` is widely used; if the unbounded-projection helper assumes scalar params, it'll silently produce wrong shapes for hierarchical. The fix is small but easy to miss without a test.
+
+**Fifth:** Task 9.5 — dense mass-matrix default at high D. At $N=20$, $D=137$ the dense Hessian is $\sim 7\text{M}$ elements — prohibitive. Switching the default to diagonal for hierarchical fits is a one-liner if the SubModel publishes `batched_axes`. Easy to forget, expensive to discover at runtime.
 
 ---
 
