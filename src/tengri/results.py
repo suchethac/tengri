@@ -170,7 +170,7 @@ class FitRecord:
             platform=f"{_platform.system()} {_platform.machine()}",
             jax_version=jax_v,
             jax_backend=jax_b,
-            timestamp_utc=_dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            timestamp_utc=_dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             wall_time_seconds=wall_time_seconds,
             random_seed=random_seed,
             input_data_hash=input_data_hash,

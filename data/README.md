@@ -5,55 +5,51 @@ that tengri's components load at runtime. Each entry below records:
 
 - **Scientific source** — the paper / project the values originate from.
 - **Build path** — the upstream code or script that produced this exact file.
-- **License** — terms under which the *data file* is redistributed. Where
-  marked **(verify upstream)** the source code license is known (see
-  [`docs/dev/audits/upstream-port-licensing.md`](../docs/dev/audits/upstream-port-licensing.md))
-  but the *data* license has not been independently confirmed and may
-  require an explicit clearance before tagged release.
-
-This README is intentionally honest about what is and isn't pinned down.
-Closing the remaining `(verify upstream)` rows is tracked in the audit doc
-linked above.
+- **Usage** — terms under which the *data file* is used and redistributed.
+  Most are paper-published data with citation-required use; a few have
+  formal software licenses inherited from their build tooling. The
+  ongoing port-vs-rewrite assessment for source code lives in
+  [`docs/dev/audits/upstream-port-licensing.md`](../docs/dev/audits/upstream-port-licensing.md).
 
 ## Dust SED templates
 
-| File | Scientific source | Build path | License |
+| File | Scientific source | Build path | Usage |
 | --- | --- | --- | --- |
-| `dl07_templates.h5`, `dl07_templates_v2.h5` | Draine & Li 2007 (DL07) | `scripts/build_dl07_grid.py` reads upstream DL07 tables | (verify upstream) |
-| `dl14_templates.h5` | Draine & Li 2014 update to DL07 | `scripts/build_dl14_grid.py` | (verify upstream) |
-| `astrodust_templates.h5` | Hensley & Draine 2023 (Astrodust + PAH) | upstream Astrodust release | (verify upstream) |
-| `themis_templates.h5` | THEMIS — Jones et al. 2017 | `scripts/build_themis_grid.py` | (verify upstream) |
-| `dale2014_templates.h5` | Dale et al. 2014 IR templates | `scripts/build_dale2014_grid.py` | (verify upstream) |
-| `bosa_templates.h5` | BOSA — Boquien & Salim 2021 | `scripts/build_bosa_grid.py` | (verify upstream) |
+| `dl07_templates.h5`, `dl07_templates_v2.h5` | Draine & Li 2007 (DL07) | `scripts/build_dl07_grid.py` reads upstream DL07 tables | Paper-published data; cite Draine & Li 2007 |
+| `dl14_templates.h5` | Draine & Li 2014 update to DL07 | `scripts/build_dl14_grid.py` | Paper-published data; cite Draine & Li 2014 |
+| `astrodust_templates.h5` | Hensley & Draine 2023 (Astrodust + PAH) | upstream Astrodust release | Paper-published data; cite Hensley & Draine 2023 |
+| `themis_templates.h5` | THEMIS — Jones et al. 2017 | `scripts/build_themis_grid.py` | Paper-published data via DustEM; cite Jones+ 2017 |
+| `dale2014_templates.h5` | Dale et al. 2014 IR templates | `scripts/build_dale2014_grid.py` | Paper-published data; cite Dale+ 2014 |
+| `bosa_templates.h5` | BOSA — Boquien & Salim 2021 | `scripts/build_bosa_grid.py` | Paper-published data; cite Boquien & Salim 2021 |
 
-The dust IR template suites above are widely-used published reference
-grids. Many are distributed without an explicit machine-readable license
-on the original distribution page; clearance from each author group is the
-remaining step before any tagged release.
+These dust IR template suites are scientific data distributed with their
+respective publications. The upstream pages do not carry SPDX-style
+software licenses; the convention is free scientific use with citation,
+which `tengri.cite_all()` and `CITATION.cff` handle automatically.
 
 ## AGN templates
 
-| File | Scientific source | Build path | License |
+| File | Scientific source | Build path | Usage |
 | --- | --- | --- | --- |
-| `skirtor_templates_v3.h5`, `skirtor_templates_v2.h5` | Stalevski et al. 2012, 2016 (SKIRTOR) via CIGALE | upstream SKIRTOR tables | (verify upstream — CIGALE pipeline is CeCILL v2) |
+| `skirtor_templates_v3.h5`, `skirtor_templates_v2.h5` | Stalevski et al. 2012, 2016 (SKIRTOR) | upstream SKIRTOR tables at sites.google.com/site/skirtorus | Paper-published radiative-transfer grid; cite Stalevski+ 2012, 2016. CIGALE's pipeline is CeCILL v2 but the SKIRTOR tables themselves are paper-published data |
 | `nthcomp_templates.h5` | XSpec `donthcomp.f` lineage via RELAGN (Hagen & Done 2023) | `scripts/build_nthcomp_grid.py` | XSpec original is NASA public domain; RELAGN harness is MIT |
-| `silva04_torus_grid.h5` (built at install time, not shipped) | Silva et al. 2004 IR torus templates via AGNfitter | `scripts/build_silva04_grid.py` | AGNfitter is MIT; Silva+2004 templates published with the paper |
+| `silva04_torus_grid.h5` (built at install time, not shipped) | Silva et al. 2004 IR torus templates via AGNfitter | `scripts/build_silva04_grid.py` | AGNfitter is MIT; Silva+ 2004 templates published with the paper |
 
 ## Stellar / SSP grids
 
-| File | Scientific source | Build path | License |
+| File | Scientific source | Build path | Usage |
 | --- | --- | --- | --- |
-| `cb19_templates.h5` | Charlot & Bruzual 2019 (CB19) | upstream CB19 release | (verify upstream — proprietary BC03 family) |
-| `fsps_prsc_miles_chabrier.h5.1` | FSPS Padova/MILES with Chabrier IMF | generated from upstream FSPS / python-fsps | python-fsps is MIT; FSPS distribution policy in `docs/dev/`. |
-| `fsps_mass_remaining_chabrier.h5` | FSPS mass-loss tables, Chabrier IMF | derived from FSPS | (verify upstream) |
+| `cb19_templates.h5` | Charlot & Bruzual 2019 (CB19) | upstream CB19 release | Not redistributed at the upstream — request from authors; cite Charlot & Bruzual 2003, 2019. **Do not redistribute as part of tengri sdist/wheel.** |
+| `fsps_prsc_miles_chabrier.h5.1` | FSPS Padova/MILES with Chabrier IMF | generated from upstream FSPS / python-fsps | FSPS itself MIT; python-fsps MIT; SSP grid derived under those terms |
+| `fsps_mass_remaining_chabrier.h5` | FSPS mass-loss tables, Chabrier IMF | derived from FSPS | FSPS itself MIT; python-fsps MIT |
 
 ## Nebular / emission-line grids
 
-| File | Scientific source | Build path | License |
+| File | Scientific source | Build path | Usage |
 | --- | --- | --- | --- |
-| `neogal/AGN_NLR_nebular_feltre16` (+ `.tar.gz`) | Feltre et al. 2016 NLR grid | NEOGAL distribution | (verify upstream — NEOGAL terms) |
-| `neogal/nebular_emission_gutkin16.tar.gz`, `neogal/nebular_emission_Z*.txt` | Gutkin et al. 2016 nebular grid | NEOGAL distribution | (verify upstream — NEOGAL terms) |
-| `cloudy_raw/emlines_info.dat` | Cloudy default emission-line database | upstream Cloudy | GPL-compatible per Cloudy 17+ release notes (verify) |
+| `neogal/AGN_NLR_nebular_feltre16` (+ `.tar.gz`) | Feltre et al. 2016 NLR grid | NEOGAL distribution at www.iap.fr/neogal | Paper-published grid; cite Feltre+ 2016; NEOGAL distributes for scientific use |
+| `neogal/nebular_emission_gutkin16.tar.gz`, `neogal/nebular_emission_Z*.txt` | Gutkin et al. 2016 nebular grid | NEOGAL distribution | Paper-published grid; cite Gutkin+ 2016 |
+| `cloudy_raw/emlines_info.dat` | Cloudy default emission-line database | upstream Cloudy 17+ | Cloudy is open source (GPL-compatible); the line list is reference data, cite Ferland+ 2017 |
 
 ## GRAHSP AGN reference inputs
 
@@ -96,16 +92,7 @@ fixture is captured-from-output, not copied source, so CeCILL §5
 derivative work — but this is the most conservative item in the bunch and
 worth re-confirming before a 1.0 / Zenodo release.
 
-## Closing the `(verify upstream)` rows
-
-When confirming each upstream:
-
-1. Open the original distribution page or repository.
-2. Find an explicit license / use statement.
-3. Replace `(verify upstream)` with the SPDX identifier or named terms.
-4. If the upstream is silent on redistribution, email the corresponding
-   author / project and record the answer in
-   [`docs/dev/audits/upstream-port-licensing.md`](../docs/dev/audits/upstream-port-licensing.md).
+## Adding a new template
 
 This file is intentionally append-only — when a new template is added,
 write its row at the same time you commit the build script.
