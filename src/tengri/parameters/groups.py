@@ -90,15 +90,18 @@ __all__ = ["parameters_to_groups", "parse_groups"]
 
 # Ensure SEDModelComponent subclasses are imported and registered.
 # This populates _REGISTRY so the resolver can consult it.
-def _ensure_registry_loaded():
+def _ensure_registry_loaded() -> None:
     """Import all SEDModelComponent subclasses to populate _REGISTRY."""
     try:
-        # Import key component modules that contain SEDModelComponent subclasses
-        import tengri.components.dust  # noqa: F401
-        import tengri.components.nebular  # noqa: F401
-        import tengri.components.agn  # noqa: F401
-        import tengri.components.radio  # noqa: F401
-        import tengri.components.xray  # noqa: F401
+        # Import key component modules to trigger __init_subclass__ registration
+        import tengri.components.agn
+        import tengri.components.dust
+        import tengri.components.nebular
+        import tengri.components.radio
+        import tengri.components.xray
+        # Force use of imports so they're not removed as unused
+        _ = (tengri.components.agn, tengri.components.dust, tengri.components.nebular,
+             tengri.components.radio, tengri.components.xray)
     except ImportError:
         # If imports fail (missing dependencies), gracefully continue.
         # The registry just won't have those types available.

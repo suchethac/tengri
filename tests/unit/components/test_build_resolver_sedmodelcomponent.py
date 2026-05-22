@@ -1,9 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for SEDModel.build resolver consulting _REGISTRY for SEDModelComponent ports."""
 
-import pytest
-
-from tengri import SEDModel, FREE, FIXED, Fixed, Uniform
+from tengri import Fixed, SEDModel
 from tengri.components.sed_model_component import _REGISTRY
 
 
