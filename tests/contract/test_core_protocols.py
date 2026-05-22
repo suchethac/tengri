@@ -75,6 +75,9 @@ class _FakeDustComponent:
         attenuated = state.sed_intrinsic * jnp.exp(-tau)
         return state.with_(sed_attenuated=attenuated)
 
+    def citations(self) -> tuple[str, ...]:
+        return ()
+
 
 class _FakeObservation:
     name = "fake_obs"
