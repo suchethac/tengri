@@ -1,0 +1,1224 @@
+Finished tracing + transforming subtract for pjit in 0.000557899 sec
+Finished tracing + transforming true_divide for pjit in 0.000563860 sec
+Finished tracing + transforming true_divide for pjit in 0.000409842 sec
+Finished tracing + transforming subtract for pjit in 0.001160860 sec
+Finished tracing + transforming multiply for pjit in 0.000684977 sec
+Finished tracing + transforming add for pjit in 0.000424385 sec
+Finished tracing + transforming _linspace for pjit in 0.023937225 sec
+Finished tracing + transforming _power for pjit in 0.000658751 sec
+Finished tracing + transforming _logspace for pjit in 0.029840946 sec
+Finished tracing + transforming subtract for pjit in 0.000293732 sec
+Finished tracing + transforming add for pjit in 0.000236988 sec
+Finished tracing + transforming subtract for pjit in 0.000433922 sec
+Finished tracing + transforming multiply for pjit in 0.000445127 sec
+Finished tracing + transforming true_divide for pjit in 0.001028776 sec
+Finished tracing + transforming add for pjit in 0.000412941 sec
+Finished tracing + transforming multiply for pjit in 0.001080990 sec
+Finished tracing + transforming _power for pjit in 0.000740051 sec
+Finished tracing + transforming subtract for pjit in 0.000282049 sec
+Finished tracing + transforming multiply for pjit in 0.003180027 sec
+Finished tracing + transforming _rho_de_z for pjit in 0.014684916 sec
+Finished tracing + transforming add for pjit in 0.000450134 sec
+Finished tracing + transforming sqrt for pjit in 0.000303030 sec
+Finished tracing + transforming _Ez for pjit in 0.021925211 sec
+Finished tracing + transforming true_divide for pjit in 0.032793045 sec
+Finished tracing + transforming add for pjit in 0.000568867 sec
+Finished tracing + transforming true_divide for pjit in 0.004545927 sec
+Finished tracing + transforming add for pjit in 0.005676031 sec
+Finished tracing + transforming multiply for pjit in 0.000485897 sec
+Finished tracing + transforming true_divide for pjit in 0.069677114 sec
+Finished tracing + transforming add for pjit in 0.000538111 sec
+Finished tracing + transforming _cumtrapz_scan_func for pjit in 0.087853670 sec
+Finished tracing + transforming trapz for pjit in 0.091273069 sec
+Finished tracing + transforming true_divide for pjit in 0.000553370 sec
+Finished tracing + transforming _power for pjit in 0.000512123 sec
+Finished tracing + transforming _rho_de_z for pjit in 0.009356976 sec
+Finished tracing + transforming sqrt for pjit in 0.000692844 sec
+Finished tracing + transforming _Ez for pjit in 0.076781034 sec
+Finished tracing + transforming _hubble_time for pjit in 0.081501245 sec
+Finished tracing + transforming multiply for pjit in 0.001445055 sec
+Finished tracing + transforming age_at_z0 for pjit in 0.325896740 sec
+Compiling jit(age_at_z0) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished tracing + transforming less for pjit in 0.000401735 sec
+Finished tracing + transforming add for pjit in 0.006991148 sec
+Finished jaxpr to MLIR module conversion jit(age_at_z0) in 0.134677887 sec
+W0522 15:32:23.984307 23302221 cpp_gen_intrinsics.cc:74] Empty bitcode string provided for eigen. Optimizations relying on this IR will be disabled.
+Finished XLA compilation of jit(age_at_z0) in 0.440165043 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000494242 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[13]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.007232904 sec
+Finished XLA compilation of jit(convert_element_type) in 0.075912237 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000505209 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[12]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.005543947 sec
+Finished XLA compilation of jit(convert_element_type) in 0.022139072 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000895977 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float32[20]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.015182018 sec
+Finished XLA compilation of jit(convert_element_type) in 0.036509037 sec
+Finished tracing + transforming convert_element_type for pjit in 0.001726866 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float32[15]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.006503105 sec
+Finished XLA compilation of jit(convert_element_type) in 0.026852131 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000298977 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float32[50]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.009228945 sec
+Finished XLA compilation of jit(convert_element_type) in 0.049921036 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000632048 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float32[400]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.017250061 sec
+Finished XLA compilation of jit(convert_element_type) in 0.017014980 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000497818 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float32[20,15,50,400]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.012798071 sec
+Finished XLA compilation of jit(convert_element_type) in 0.062869072 sec
+Finished tracing + transforming sign for pjit in 0.000370026 sec
+Finished tracing + transforming log10 for pjit in 0.000402927 sec
+Finished tracing + transforming true_divide for pjit in 0.000251770 sec
+Finished tracing + transforming subtract for pjit in 0.000364065 sec
+Finished tracing + transforming multiply for pjit in 0.000224829 sec
+Finished tracing + transforming add for pjit in 0.000190973 sec
+Finished tracing + transforming _linspace for pjit in 0.005171776 sec
+Finished tracing + transforming _power for pjit in 0.000681162 sec
+Finished tracing + transforming _logspace for pjit in 0.023967981 sec
+Finished tracing + transforming multiply for pjit in 0.000603914 sec
+Finished tracing + transforming _geomspace for pjit in 0.064328909 sec
+Compiling jit(_geomspace) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(_geomspace) in 0.046868801 sec
+Finished XLA compilation of jit(_geomspace) in 0.786075115 sec
+Finished tracing + transforming convert_element_type for pjit in 0.032564163 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[6]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.055759907 sec
+Finished XLA compilation of jit(convert_element_type) in 0.142355919 sec
+Finished tracing + transforming convert_element_type for pjit in 0.009865046 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[18]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.380528927 sec
+Finished XLA compilation of jit(convert_element_type) in 0.209331036 sec
+Finished tracing + transforming multiply for pjit in 0.026086807 sec
+Compiling jit(multiply) with global shapes and types (ShapedArray(float64[18]), ShapedArray(float64[18])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(multiply) in 0.197064161 sec
+Finished XLA compilation of jit(multiply) in 1.676123142 sec
+Finished tracing + transforming log for pjit in 0.008879900 sec
+Compiling jit(log) with global shapes and types (ShapedArray(float64[], weak_type=True),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(log) in 0.305210114 sec
+Finished XLA compilation of jit(log) in 1.910145044 sec
+Compiling jit(multiply) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(multiply) in 0.556479931 sec
+Finished XLA compilation of jit(multiply) in 0.886003971 sec
+Compiling jit(_power) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(_power) in 0.140291214 sec
+Finished XLA compilation of jit(_power) in 1.226077080 sec
+Compiling jit(true_divide) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(true_divide) in 0.529839277 sec
+Finished XLA compilation of jit(true_divide) in 0.738873005 sec
+Finished tracing + transforming convert_element_type for pjit in 0.134296894 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[9,2]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.081863880 sec
+Finished XLA compilation of jit(convert_element_type) in 0.675691843 sec
+Finished tracing + transforming dynamic_slice for pjit in 0.000611067 sec
+Compiling jit(dynamic_slice) with global shapes and types (ShapedArray(float64[9,2]), ShapedArray(int64[], weak_type=True), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(dynamic_slice) in 0.237090826 sec
+Finished XLA compilation of jit(dynamic_slice) in 0.470399857 sec
+Finished tracing + transforming squeeze for pjit in 0.030509949 sec
+Compiling jit(squeeze) with global shapes and types (ShapedArray(float64[9,1]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(squeeze) in 0.041728735 sec
+Finished XLA compilation of jit(squeeze) in 0.115165949 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000382900 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[5,3]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.024495125 sec
+Finished XLA compilation of jit(convert_element_type) in 0.125356674 sec
+Finished tracing + transforming dynamic_slice for pjit in 0.000466824 sec
+Compiling jit(dynamic_slice) with global shapes and types (ShapedArray(float64[5,3]), ShapedArray(int64[], weak_type=True), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(dynamic_slice) in 0.110855818 sec
+Finished XLA compilation of jit(dynamic_slice) in 0.239084721 sec
+Finished tracing + transforming squeeze for pjit in 0.057436943 sec
+Compiling jit(squeeze) with global shapes and types (ShapedArray(float64[5,1]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(squeeze) in 0.044889927 sec
+Finished XLA compilation of jit(squeeze) in 0.075799942 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000506163 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[11,2]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.007179737 sec
+Finished XLA compilation of jit(convert_element_type) in 0.153707981 sec
+Finished tracing + transforming dynamic_slice for pjit in 0.018616199 sec
+Compiling jit(dynamic_slice) with global shapes and types (ShapedArray(float64[11,2]), ShapedArray(int64[], weak_type=True), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(dynamic_slice) in 0.058744192 sec
+Finished XLA compilation of jit(dynamic_slice) in 0.303260326 sec
+Finished tracing + transforming squeeze for pjit in 0.000464916 sec
+Compiling jit(squeeze) with global shapes and types (ShapedArray(float64[11,1]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(squeeze) in 0.021760941 sec
+Finished XLA compilation of jit(squeeze) in 0.026377916 sec
+Finished tracing + transforming _reduce_sum for pjit in 0.000788927 sec
+Compiling jit(_reduce_sum) with global shapes and types (ShapedArray(float64[11]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(_reduce_sum) in 0.073511839 sec
+Finished XLA compilation of jit(_reduce_sum) in 0.115232944 sec
+Finished tracing + transforming true_divide for pjit in 0.000422955 sec
+Compiling jit(true_divide) with global shapes and types (ShapedArray(float64[11]), ShapedArray(float64[])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(true_divide) in 0.044128895 sec
+Finished XLA compilation of jit(true_divide) in 0.130952835 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000411034 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[23]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.014628887 sec
+Finished XLA compilation of jit(convert_element_type) in 0.037677765 sec
+Compiling jit(sqrt) with global shapes and types (ShapedArray(float64[], weak_type=True),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(sqrt) in 0.032142162 sec
+Finished XLA compilation of jit(sqrt) in 0.186963797 sec
+Finished tracing + transforming convert_element_type for pjit in 0.006238937 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[39]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.022890091 sec
+Finished XLA compilation of jit(convert_element_type) in 0.048852921 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000421762 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[39,3]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.006420135 sec
+Finished XLA compilation of jit(convert_element_type) in 0.088560820 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000531912 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[39,2]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.053242922 sec
+Finished XLA compilation of jit(convert_element_type) in 0.067002773 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000352144 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[17]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.006872177 sec
+Finished XLA compilation of jit(convert_element_type) in 0.107136011 sec
+Finished tracing + transforming log10 for pjit in 0.001175165 sec
+Compiling jit(log10) with global shapes and types (ShapedArray(float64[], weak_type=True),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(log10) in 0.028188944 sec
+Finished XLA compilation of jit(log10) in 0.388633013 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000308990 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[8]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.048852921 sec
+Finished XLA compilation of jit(convert_element_type) in 0.146936893 sec
+Finished tracing + transforming convert_element_type for pjit in 0.003417015 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[11]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.045943022 sec
+Finished XLA compilation of jit(convert_element_type) in 0.141605139 sec
+Finished tracing + transforming true_divide for pjit in 0.000957966 sec
+Finished tracing + transforming subtract for pjit in 0.000504971 sec
+Finished tracing + transforming multiply for pjit in 0.021308899 sec
+Finished tracing + transforming add for pjit in 0.000411034 sec
+Finished tracing + transforming _linspace for pjit in 0.132810116 sec
+Compiling jit(_linspace) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(_linspace) in 0.049602032 sec
+Finished XLA compilation of jit(_linspace) in 0.131428242 sec
+Finished tracing + transforming _power for pjit in 0.007617950 sec
+Compiling jit(_power) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[256])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(_power) in 0.029949903 sec
+Finished XLA compilation of jit(_power) in 0.103954077 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000349998 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[7]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.033478022 sec
+Finished XLA compilation of jit(convert_element_type) in 0.038940907 sec
+Finished tracing + transforming sigmoid for pjit in 0.000474930 sec
+Compiling jit(sigmoid) with global shapes and types (ShapedArray(float64[], weak_type=True),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(sigmoid) in 0.161862135 sec
+W0522 15:33:28.368296 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_sigmoid' with key 'jit_sigmoid-d90bc90f8e6cd29b063d3baebbd85bebeaaf6b4a2a41535898c6573cc4984b2d'
+Finished XLA compilation of jit(sigmoid) in 0.018861055 sec
+Compiling jit(add) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(add) in 0.060018063 sec
+W0522 15:33:28.468026 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_add' with key 'jit_add-68b7caf08d8c6b3c030697d1772c970f268e287640bb57250ed97e79fd0c298d'
+Finished XLA compilation of jit(add) in 0.031348944 sec
+Finished tracing + transforming convert_element_type for pjit in 0.001888990 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[5994]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.006861210 sec
+W0522 15:33:34.752617 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_convert_element_type' with key 'jit_convert_element_type-ec1a1892674ab54b1f8cdc3a08ed883117cd9d123a3fcd74bec1b361c68329e8'
+Finished XLA compilation of jit(convert_element_type) in 0.044300079 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000635862 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[15,93,5994]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.036326170 sec
+W0522 15:33:34.850297 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_convert_element_type' with key 'jit_convert_element_type-ce64e036409eac45ba8e8478bce5af666896df45369c3f2a99a863fc1c82af2f'
+Finished XLA compilation of jit(convert_element_type) in 0.015215158 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000357866 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[93]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.005248070 sec
+Finished XLA compilation of jit(convert_element_type) in 0.071988106 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000418901 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[15]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.047886848 sec
+W0522 15:33:35.043255 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_convert_element_type' with key 'jit_convert_element_type-94488fc310a17ab89d4adb36d57e3b4503747f5e60035b5394df0f5cd8e10aef'
+Finished XLA compilation of jit(convert_element_type) in 0.031449080 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000324726 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[47]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.012722969 sec
+W0522 15:33:35.105283 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_convert_element_type' with key 'jit_convert_element_type-30f5fd32f4646b83b6c51db06dc06f6869aa57e12f1e4330f818f0dbd25b1195'
+Finished XLA compilation of jit(convert_element_type) in 0.021214962 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000324011 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[89]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.038433790 sec
+Finished XLA compilation of jit(convert_element_type) in 0.125486135 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000719786 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[75]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.086070061 sec
+Finished XLA compilation of jit(convert_element_type) in 0.111806154 sec
+Finished tracing + transforming convert_element_type for pjit in 0.031044006 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[141]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.035653830 sec
+Finished XLA compilation of jit(convert_element_type) in 0.088437080 sec
+Finished tracing + transforming convert_element_type for pjit in 0.012275934 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.042426825 sec
+Finished XLA compilation of jit(convert_element_type) in 0.056450129 sec
+Finished tracing + transforming broadcast_in_dim for pjit in 0.000571251 sec
+Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(float64[]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.037830830 sec
+W0522 15:33:35.896882 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_broadcast_in_dim' with key 'jit_broadcast_in_dim-8cf4aadd8e6da6d0e520ecc78401bc2438c2c8f7890acce514284148e3a33dec'
+Finished XLA compilation of jit(broadcast_in_dim) in 0.023815870 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000428200 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(int64[6]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.008757591 sec
+W0522 15:33:35.928338 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_convert_element_type' with key 'jit_convert_element_type-2a7fc1f3aac9af8926db97adb5c8575f9f410059fccefa327a0657e0c0a25b9a'
+Finished XLA compilation of jit(convert_element_type) in 0.005146742 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000636339 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(int32[]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.007665873 sec
+W0522 15:33:35.954043 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_convert_element_type' with key 'jit_convert_element_type-bdb632bae6b07988416b6ebd4f794e48fe9180458f2ef473be1891c6f39b89ab'
+Finished XLA compilation of jit(convert_element_type) in 0.017056942 sec
+Finished tracing + transforming broadcast_in_dim for pjit in 0.007259130 sec
+Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.149983883 sec
+Finished XLA compilation of jit(broadcast_in_dim) in 0.085341930 sec
+Finished tracing + transforming concatenate for pjit in 0.000786304 sec
+Compiling jit(concatenate) with global shapes and types (ShapedArray(int32[1]), ShapedArray(int32[1])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(concatenate) in 0.027761936 sec
+W0522 15:33:36.667547 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_concatenate' with key 'jit_concatenate-b0428807545da1d9b0c37687f2e70297ff3305c293a2e70f7605ce1563db5188'
+Finished XLA compilation of jit(concatenate) in 0.004552364 sec
+Finished tracing + transforming _squeeze for pjit in 0.000526190 sec
+Compiling jit(_squeeze) with global shapes and types (ShapedArray(float64[47]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(_squeeze) in 0.010019779 sec
+W0522 15:33:36.733751 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit__squeeze' with key 'jit__squeeze-1bb332ebe7def23ec1ad7763536ba53a19f367cea3a5da9f29644dd8f61067c5'
+Finished XLA compilation of jit(_squeeze) in 0.029381990 sec
+Finished tracing + transforming scatter for pjit in 0.000922918 sec
+Compiling jit(scatter) with global shapes and types (ShapedArray(float64[6,141]), ShapedArray(int32[2]), ShapedArray(float64[47])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(scatter) in 0.032496929 sec
+W0522 15:33:36.779681 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_scatter' with key 'jit_scatter-2c250049a376dea40669cbd7480069b1528b57d0c187e34c3049bcdef4854663'
+Finished XLA compilation of jit(scatter) in 0.016434193 sec
+Finished tracing + transforming _squeeze for pjit in 0.000196934 sec
+Compiling jit(_squeeze) with global shapes and types (ShapedArray(float64[89]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(_squeeze) in 0.030442953 sec
+W0522 15:33:36.835706 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit__squeeze' with key 'jit__squeeze-b5a82cf78e57000ffdca3ba094e39d472931a175826f10c6039c25c46be1b86f'
+Finished XLA compilation of jit(_squeeze) in 0.002261877 sec
+Finished tracing + transforming scatter for pjit in 0.000674725 sec
+Compiling jit(scatter) with global shapes and types (ShapedArray(float64[6,141]), ShapedArray(int32[2]), ShapedArray(float64[89])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(scatter) in 0.048958063 sec
+W0522 15:33:36.923948 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_scatter' with key 'jit_scatter-afd4ef3577165b7d844df3f041e6baea3aba8370e84c6bce2da9c1d18d6706aa'
+Finished XLA compilation of jit(scatter) in 0.026335955 sec
+Finished tracing + transforming _squeeze for pjit in 0.000191927 sec
+Compiling jit(_squeeze) with global shapes and types (ShapedArray(float64[75]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(_squeeze) in 0.017123938 sec
+Finished XLA compilation of jit(_squeeze) in 0.046175957 sec
+Finished tracing + transforming scatter for pjit in 0.000705004 sec
+Compiling jit(scatter) with global shapes and types (ShapedArray(float64[6,141]), ShapedArray(int32[2]), ShapedArray(float64[75])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(scatter) in 0.046500206 sec
+W0522 15:33:37.191280 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_scatter' with key 'jit_scatter-577ec148abe702c8d2f4cd99a391341064c363aa2138d40957f045e58bd1bd95'
+Finished XLA compilation of jit(scatter) in 0.017809153 sec
+Finished tracing + transforming _squeeze for pjit in 0.000219107 sec
+Compiling jit(_squeeze) with global shapes and types (ShapedArray(float64[141]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(_squeeze) in 0.073490143 sec
+Finished XLA compilation of jit(_squeeze) in 0.127613068 sec
+Finished tracing + transforming scatter for pjit in 0.000581026 sec
+Compiling jit(scatter) with global shapes and types (ShapedArray(float64[6,141]), ShapedArray(int32[1]), ShapedArray(float64[141])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(scatter) in 0.089016914 sec
+W0522 15:33:37.590252 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_scatter' with key 'jit_scatter-c20df95eddc9824a4a6b7042021773cb3df12b52ce1bf5aafffa5b9f2b5a5b28'
+Finished XLA compilation of jit(scatter) in 0.149413109 sec
+Finished tracing + transforming add for pjit in 0.000462055 sec
+Compiling jit(add) with global shapes and types (ShapedArray(float64[93]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(add) in 0.116275072 sec
+W0522 15:33:38.053044 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_add' with key 'jit_add-38bf8022b2d717fe555c8869f32c4e5fc8182d29f014a782a58d51fd71910cdf'
+Finished XLA compilation of jit(add) in 0.089306116 sec
+Finished tracing + transforming _power for pjit in 0.001068115 sec
+Compiling jit(_power) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[93])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(_power) in 0.019289017 sec
+W0522 15:33:38.123317 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit__power' with key 'jit__power-50d0de534578c5b8062a4428c708d93d85ff7501f8869d7a8969b2e3e06e97be'
+Finished XLA compilation of jit(_power) in 0.021671057 sec
+Finished tracing + transforming dynamic_slice for pjit in 0.000367880 sec
+Compiling jit(dynamic_slice) with global shapes and types (ShapedArray(float64[93]), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(dynamic_slice) in 0.149551153 sec
+W0522 15:33:38.359433 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_dynamic_slice' with key 'jit_dynamic_slice-d2ebd535e96a6c8e9a01a0e3fa27dd8012c55819bda8266a8a4729de2f536a04'
+Finished XLA compilation of jit(dynamic_slice) in 0.106005192 sec
+Finished tracing + transforming squeeze for pjit in 0.000262737 sec
+Compiling jit(squeeze) with global shapes and types (ShapedArray(float64[1]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(squeeze) in 0.066488981 sec
+Finished XLA compilation of jit(squeeze) in 0.042812109 sec
+Compiling jit(subtract) with global shapes and types (ShapedArray(float64[]), ShapedArray(float64[])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(subtract) in 0.087847233 sec
+W0522 15:33:38.627914 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_subtract' with key 'jit_subtract-3423eea3c58b2ff8483c74d6d6f8ac7b0342b86252882f80c15563ebc9e0d392'
+Finished XLA compilation of jit(subtract) in 0.008234978 sec
+Compiling jit(multiply) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(multiply) in 0.100898743 sec
+W0522 15:33:38.735706 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_multiply' with key 'jit_multiply-caf787248acf930c1cc66431307461003ca0ca9e0e8def4b6a7e47bd41391836'
+Finished XLA compilation of jit(multiply) in 0.053045988 sec
+Finished tracing + transforming broadcast_in_dim for pjit in 0.000221968 sec
+Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(float64[]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.014708996 sec
+Finished XLA compilation of jit(broadcast_in_dim) in 0.024484158 sec
+Finished tracing + transforming dynamic_slice for pjit in 0.000806093 sec
+Compiling jit(dynamic_slice) with global shapes and types (ShapedArray(float64[93]), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(dynamic_slice) in 0.029952049 sec
+W0522 15:33:38.866735 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_dynamic_slice' with key 'jit_dynamic_slice-79de788c12a6183bdd2e882756e053aa919fdc6588c748dd5ad8d8cf0846540f'
+Finished XLA compilation of jit(dynamic_slice) in 0.006595135 sec
+Finished tracing + transforming subtract for pjit in 0.000375986 sec
+Compiling jit(subtract) with global shapes and types (ShapedArray(float64[91]), ShapedArray(float64[91])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(subtract) in 0.038753033 sec
+W0522 15:33:38.915337 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_subtract' with key 'jit_subtract-a1b3403c00557c2c24ab70b9d0df5b553f4d460cc6b87e575770c649c81719bd'
+Finished XLA compilation of jit(subtract) in 0.016729116 sec
+Finished tracing + transforming multiply for pjit in 0.000473976 sec
+Compiling jit(multiply) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[91])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(multiply) in 0.011862993 sec
+W0522 15:33:38.947999 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_multiply' with key 'jit_multiply-4fe8bcd8b5556e878f48459ec82881d01c2b8bb2b24e587593a954660dc87709'
+Finished XLA compilation of jit(multiply) in 0.019900084 sec
+Finished tracing + transforming concatenate for pjit in 0.000617027 sec
+Compiling jit(concatenate) with global shapes and types (ShapedArray(float64[1]), ShapedArray(float64[91]), ShapedArray(float64[1])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(concatenate) in 0.067483902 sec
+W0522 15:33:39.105248 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_concatenate' with key 'jit_concatenate-06f9361d851b5d5ab4d8ccba1266d2a6db3be0fa9295a8d6cba55fa24ee846bb'
+Finished XLA compilation of jit(concatenate) in 0.020636320 sec
+Finished tracing + transforming dynamic_slice for pjit in 0.000339031 sec
+Compiling jit(dynamic_slice) with global shapes and types (ShapedArray(float64[256]), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(dynamic_slice) in 0.011301041 sec
+W0522 15:33:39.179646 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_dynamic_slice' with key 'jit_dynamic_slice-e92cfbfdb4ae2a023fe56dba94964f7b0a3ad25058f5b5bd0369ced7d246c4c9'
+Finished XLA compilation of jit(dynamic_slice) in 0.019844055 sec
+/Users/suchethacooray/.claude-squad/worktrees/cs/cache-management_18b20040f2bbfb40/src/tengri/forward/sed_model.py:905: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
+  self._nebular_backend = BakedInBackend()
+Finished tracing + transforming _linspace for pjit in 0.003740788 sec
+Finished tracing + transforming add for pjit in 0.000562906 sec
+Finished tracing + transforming multiply for pjit in 0.000864029 sec
+Finished tracing + transforming true_divide for pjit in 0.005428076 sec
+Finished tracing + transforming _power for pjit in 0.000644684 sec
+Finished tracing + transforming subtract for pjit in 0.000332117 sec
+Finished tracing + transforming multiply for pjit in 0.000323296 sec
+Finished tracing + transforming _rho_de_z for pjit in 0.025007725 sec
+Finished tracing + transforming add for pjit in 0.002832174 sec
+Finished tracing + transforming sqrt for pjit in 0.000253916 sec
+Finished tracing + transforming _Ez for pjit in 0.037581921 sec
+Finished tracing + transforming true_divide for pjit in 0.004012108 sec
+Finished tracing + transforming _integrand_oneOverEz for pjit in 0.043011904 sec
+Finished tracing + transforming trapz for pjit in 0.014644861 sec
+Finished tracing + transforming multiply for pjit in 0.021723986 sec
+Finished tracing + transforming comoving_distance_to_z for pjit in 0.105716944 sec
+Finished tracing + transforming add for pjit in 0.018174887 sec
+Finished tracing + transforming luminosity_distance_to_z for pjit in 0.132530928 sec
+Compiling jit(luminosity_distance_to_z) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(luminosity_distance_to_z) in 0.180909157 sec
+W0522 15:33:39.541816 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_luminosity_distance_to_z' with key 'jit_luminosity_distance_to_z-54e8c6ed416fec251ddf5c56620604209e63fd1dacf608bc7f048b20e9d87adb'
+Finished XLA compilation of jit(luminosity_distance_to_z) in 0.093070984 sec
+Compiling jit(multiply) with global shapes and types (ShapedArray(float64[]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(multiply) in 0.025119066 sec
+W0522 15:33:39.706180 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_multiply' with key 'jit_multiply-2a3a0090f455427b79ce10c181f450e71ae4598e808100b337abe2a84a473d92'
+Finished XLA compilation of jit(multiply) in 0.036236048 sec
+Finished tracing + transforming convert_element_type for pjit in 0.001868010 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[15,93,6]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.014485836 sec
+W0522 15:33:40.376298 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_convert_element_type' with key 'jit_convert_element_type-efcadc95ce79b84545b5fd7c55923bcc49cf7bad10a7c5b4b376f99c66156852'
+Finished XLA compilation of jit(convert_element_type) in 0.099296093 sec
+Finished tracing + transforming true_divide for pjit in 0.005877018 sec
+Finished tracing + transforming lnu_to_fnu for pjit in 0.011392117 sec
+Compiling jit(lnu_to_fnu) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(lnu_to_fnu) in 0.064996004 sec
+W0522 15:33:40.634105 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_lnu_to_fnu' with key 'jit_lnu_to_fnu-c47635476d18e3283ee56c790a33a9a3cde3d69126628f693460d5083ce7f945'
+Finished XLA compilation of jit(lnu_to_fnu) in 0.019130945 sec
+Finished tracing + transforming dynamic_slice for pjit in 0.003218174 sec
+Compiling jit(dynamic_slice) with global shapes and types (ShapedArray(float64[15]), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(dynamic_slice) in 0.013818026 sec
+W0522 15:33:40.743391 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_dynamic_slice' with key 'jit_dynamic_slice-8845ec6713ab96fe0843ba7d6d5fb78a95f6460ce4eb387982c0cfbba34c02b5'
+Finished XLA compilation of jit(dynamic_slice) in 0.002131939 sec
+Compiling jit(true_divide) with global shapes and types (ShapedArray(float64[]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(true_divide) in 0.022067308 sec
+W0522 15:33:40.775823 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_true_divide' with key 'jit_true_divide-8145cf6accfde624acd52338ccb4a599fc92155ed9019b2a5ef813ca5ee0c601'
+Finished XLA compilation of jit(true_divide) in 0.004014969 sec
+Finished tracing + transforming subtract for pjit in 0.001122952 sec
+Compiling jit(subtract) with global shapes and types (ShapedArray(float64[1]), ShapedArray(float64[])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(subtract) in 0.059009075 sec
+W0522 15:33:40.874060 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_subtract' with key 'jit_subtract-5785a04a68f29245d7479e31152d64a5657d92186f8fa2665c7dd7a9e00f7805'
+Finished XLA compilation of jit(subtract) in 0.002232075 sec
+Finished tracing + transforming dynamic_slice for pjit in 0.001514912 sec
+Compiling jit(dynamic_slice) with global shapes and types (ShapedArray(float64[15]), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(dynamic_slice) in 0.017035961 sec
+W0522 15:33:40.916584 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_dynamic_slice' with key 'jit_dynamic_slice-6f7d003f36e6173d66ddd31a35e9b3e417636d3a52f65257db20a3e479442365'
+Finished XLA compilation of jit(dynamic_slice) in 0.040904284 sec
+Finished tracing + transforming add for pjit in 0.000580072 sec
+Compiling jit(add) with global shapes and types (ShapedArray(float64[14]), ShapedArray(float64[14])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(add) in 0.008676052 sec
+W0522 15:33:40.959784 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_add' with key 'jit_add-2a3906dd56484fda7fb293513c9203301e87b13773f2a8b8f63b06e4215966e8'
+Finished XLA compilation of jit(add) in 0.033705950 sec
+Finished tracing + transforming true_divide for pjit in 0.000966311 sec
+Compiling jit(true_divide) with global shapes and types (ShapedArray(float64[14]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(true_divide) in 0.012069941 sec
+W0522 15:33:41.010612 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_true_divide' with key 'jit_true_divide-820bf0bb2dff3ca10c77f92d40558d95fbcd7bebf7b942b44004824d580ea9a0'
+Finished XLA compilation of jit(true_divide) in 0.017124176 sec
+Finished tracing + transforming add for pjit in 0.000826836 sec
+Compiling jit(add) with global shapes and types (ShapedArray(float64[1]), ShapedArray(float64[])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(add) in 0.041702271 sec
+W0522 15:33:41.150228 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_add' with key 'jit_add-5dc4f19df122be5bcb1f38e6d3437bfa07ab6d6ccb3ec90843443b6e8438d7b8'
+Finished XLA compilation of jit(add) in 0.111003876 sec
+Finished tracing + transforming concatenate for pjit in 0.000560760 sec
+Compiling jit(concatenate) with global shapes and types (ShapedArray(float64[1]), ShapedArray(float64[14]), ShapedArray(float64[1])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(concatenate) in 0.046925068 sec
+W0522 15:33:41.241397 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_concatenate' with key 'jit_concatenate-b9d99f4276aef4d5b62d618b205859ff9199b9505c36d4a29bf8d12025580c7e'
+Finished XLA compilation of jit(concatenate) in 0.022325039 sec
+Finished tracing + transforming dynamic_slice for pjit in 0.000483751 sec
+Compiling jit(dynamic_slice) with global shapes and types (ShapedArray(float64[93]), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(dynamic_slice) in 0.012356997 sec
+W0522 15:33:41.382180 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_dynamic_slice' with key 'jit_dynamic_slice-46d0be1fb8e26589765e543930578354f52840ae53f7f34a6fb5a4b91977d424'
+Finished XLA compilation of jit(dynamic_slice) in 0.005844831 sec
+Finished tracing + transforming add for pjit in 0.003875017 sec
+Compiling jit(add) with global shapes and types (ShapedArray(float64[92]), ShapedArray(float64[92])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(add) in 0.031749725 sec
+W0522 15:33:41.432710 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_add' with key 'jit_add-4003a7be5a3b62150456f38270098fc719488019cf8f6d30a0101291183cfdab'
+Finished XLA compilation of jit(add) in 0.014772892 sec
+Finished tracing + transforming true_divide for pjit in 0.001320839 sec
+Compiling jit(true_divide) with global shapes and types (ShapedArray(float64[92]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(true_divide) in 0.041164637 sec
+W0522 15:33:41.520695 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_true_divide' with key 'jit_true_divide-340a1d0ee497ad710daa05a4ec835b5df7244fc8103030099502974615211fdb'
+Finished XLA compilation of jit(true_divide) in 0.008357763 sec
+Finished tracing + transforming concatenate for pjit in 0.000302076 sec
+Compiling jit(concatenate) with global shapes and types (ShapedArray(float64[1]), ShapedArray(float64[92]), ShapedArray(float64[1])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(concatenate) in 0.098994017 sec
+W0522 15:33:41.692333 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_concatenate' with key 'jit_concatenate-8d6aceacc604543beb4665fce153c1fdf39a95d6ec25e55506c777d1ed3bc799'
+Finished XLA compilation of jit(concatenate) in 0.048702955 sec
+Finished tracing + transforming broadcast_in_dim for pjit in 0.000356913 sec
+Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(float64[39]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.025253773 sec
+W0522 15:33:41.760510 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_broadcast_in_dim' with key 'jit_broadcast_in_dim-c12cca7f8d6865a26dbc4a7efa96393a53ff9ca47a574e0f942f3294e107fbd9'
+Finished XLA compilation of jit(broadcast_in_dim) in 0.003014803 sec
+Finished tracing + transforming broadcast_in_dim for pjit in 0.002114058 sec
+Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(float64[6]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.018580914 sec
+W0522 15:33:41.834540 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_broadcast_in_dim' with key 'jit_broadcast_in_dim-f421aea0b02baf9731b0b2e560071bcb20134dab87ed87cdc7b1744abf9d9588'
+Finished XLA compilation of jit(broadcast_in_dim) in 0.053588152 sec
+Finished tracing + transforming multiply for pjit in 0.002436876 sec
+Compiling jit(multiply) with global shapes and types (ShapedArray(float64[39,1]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(multiply) in 0.010529041 sec
+W0522 15:33:41.923612 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_multiply' with key 'jit_multiply-6af008c3a6d97b0dcf0d3629459b65a5c63f343f4b5eebce28c6206512f7ff8c'
+Finished XLA compilation of jit(multiply) in 0.026570082 sec
+Finished tracing + transforming greater for pjit in 0.008475304 sec
+Compiling jit(greater) with global shapes and types (ShapedArray(float64[1,6]), ShapedArray(float64[39,1])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(greater) in 0.071622849 sec
+W0522 15:33:42.083653 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_greater' with key 'jit_greater-add548bdf58853622a801f846b0de30c7e91b269ee0f1527a73bd58283553f27'
+Finished XLA compilation of jit(greater) in 0.059981108 sec
+Finished tracing + transforming less_equal for pjit in 0.020810366 sec
+Compiling jit(less_equal) with global shapes and types (ShapedArray(float64[1,6]), ShapedArray(float64[39,1])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(less_equal) in 0.045576811 sec
+W0522 15:33:42.356785 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_less_equal' with key 'jit_less_equal-c882ba2f6deec77ed7ee9e0dea9354e93d0bb6889cedeb6bda527720ef5785ef'
+Finished XLA compilation of jit(less_equal) in 0.030153990 sec
+Finished tracing + transforming bitwise_and for pjit in 0.000660181 sec
+Compiling jit(bitwise_and) with global shapes and types (ShapedArray(bool[39,6]), ShapedArray(bool[39,6])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(bitwise_and) in 0.022458792 sec
+W0522 15:33:42.413813 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_bitwise_and' with key 'jit_bitwise_and-7f34e32d19c353685f351cf476738398264cf7e8b8c185786cc5fc21087b6717'
+Finished XLA compilation of jit(bitwise_and) in 0.019073009 sec
+Finished tracing + transforming multiply for pjit in 0.002013922 sec
+Compiling jit(multiply) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[39,1])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(multiply) in 0.050640821 sec
+W0522 15:33:42.511000 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_multiply' with key 'jit_multiply-8c9c1f7d6d89b4193f71433d63e46ebb0d7341d1e6cb1d25d94b82016e0f67bf'
+Finished XLA compilation of jit(multiply) in 0.133325100 sec
+Finished tracing + transforming true_divide for pjit in 0.041973114 sec
+Compiling jit(true_divide) with global shapes and types (ShapedArray(float64[1,6]), ShapedArray(float64[39,1])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(true_divide) in 0.060388088 sec
+W0522 15:33:42.796969 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_true_divide' with key 'jit_true_divide-2ae7ce64c5149b38b43da87f1a9347c493292aa7736ab75909f3a52e3650d96a'
+Finished XLA compilation of jit(true_divide) in 0.030359745 sec
+Finished tracing + transforming dynamic_slice for pjit in 0.000585079 sec
+Compiling jit(dynamic_slice) with global shapes and types (ShapedArray(float64[39,3]), ShapedArray(int64[], weak_type=True), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(dynamic_slice) in 0.061070204 sec
+W0522 15:33:43.041786 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_dynamic_slice' with key 'jit_dynamic_slice-d79a47291f8bf9de8dc33770398a18683ea9a1f90e92087e88b6f06a54ff137d'
+Finished XLA compilation of jit(dynamic_slice) in 0.003880978 sec
+Finished tracing + transforming _power for pjit in 0.056146860 sec
+Compiling jit(_power) with global shapes and types (ShapedArray(float64[39,6]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(_power) in 0.073848724 sec
+W0522 15:33:43.180053 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit__power' with key 'jit__power-a50a7e2ae8bbc02e07f4f7e507c4b1dcfeee810f3d239638ca53fa74b835ffe3'
+Finished XLA compilation of jit(_power) in 0.037657261 sec
+Finished tracing + transforming multiply for pjit in 0.001168728 sec
+Compiling jit(multiply) with global shapes and types (ShapedArray(float64[39,1]), ShapedArray(float64[39,6])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(multiply) in 0.060592890 sec
+W0522 15:33:43.347830 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_multiply' with key 'jit_multiply-4ef1eccc1c5a0414601cae7f8a209f1bb8a53c99cb4e2b37528af9207d222d5b'
+Finished XLA compilation of jit(multiply) in 0.052307844 sec
+Finished tracing + transforming less for pjit in 0.023712635 sec
+Compiling jit(less) with global shapes and types (ShapedArray(float64[1,6]), ShapedArray(float64[39,1])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(less) in 0.039803267 sec
+W0522 15:33:43.496907 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_less' with key 'jit_less-ddd46f3b9154ac35b70da7a3dfffeb7f71d43277bc3f84ac3009dde0aff85f4b'
+Finished XLA compilation of jit(less) in 0.046128988 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.000370026 sec
+Finished tracing + transforming _where for pjit in 0.002068043 sec
+Compiling jit(_where) with global shapes and types (ShapedArray(bool[39,6]), ShapedArray(float64[39,6]), ShapedArray(float64[39,6])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(_where) in 0.067383051 sec
+W0522 15:33:43.589571 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit__where' with key 'jit__where-200c83412a821bfd4975e0e2f53018fe9fcc6501dba53cc77b887a9a719a5b1b'
+Finished XLA compilation of jit(_where) in 0.128511906 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.002957106 sec
+Finished tracing + transforming _where for pjit in 0.008097887 sec
+Compiling jit(_where) with global shapes and types (ShapedArray(bool[39,6]), ShapedArray(float64[39,6]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(_where) in 0.041600704 sec
+W0522 15:33:43.776367 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit__where' with key 'jit__where-adb0985e20cd031248d00525370fe3635cc7d26871b5dbeeac43342515ecf647'
+Finished XLA compilation of jit(_where) in 0.021984100 sec
+Finished tracing + transforming _reduce_sum for pjit in 0.001196861 sec
+Compiling jit(_reduce_sum) with global shapes and types (ShapedArray(float64[39,6]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(_reduce_sum) in 0.042969227 sec
+W0522 15:33:43.845360 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit__reduce_sum' with key 'jit__reduce_sum-f4af4c33e3e96b2cde91b72a894286a3ef50ccf15e768478d2ccdafdbfcbbbdc'
+Finished XLA compilation of jit(_reduce_sum) in 0.004747868 sec
+Finished tracing + transforming dynamic_slice for pjit in 0.000572920 sec
+Compiling jit(dynamic_slice) with global shapes and types (ShapedArray(float64[39,2]), ShapedArray(int64[], weak_type=True), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(dynamic_slice) in 0.081577778 sec
+W0522 15:33:43.943390 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_dynamic_slice' with key 'jit_dynamic_slice-f573e59e840bf4bb444cda3d4999a4d3cdacac8533e978f8492c5b49fa0a9a6f'
+Finished XLA compilation of jit(dynamic_slice) in 0.002665758 sec
+Finished tracing + transforming add for pjit in 0.006158113 sec
+Compiling jit(add) with global shapes and types (ShapedArray(float64[6]), ShapedArray(float64[6])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(add) in 0.056702137 sec
+W0522 15:33:44.017498 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_add' with key 'jit_add-9b3dc370f0855c14ffdabc3570cbffba72e49be7ba81c7e71cbff858049ffdc4'
+Finished XLA compilation of jit(add) in 0.014018059 sec
+Finished tracing + transforming greater for pjit in 0.000673056 sec
+Compiling jit(greater) with global shapes and types (ShapedArray(float64[6]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(greater) in 0.036708117 sec
+W0522 15:33:44.071725 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_greater' with key 'jit_greater-0319062dc1072bd076558452d65ec56b391bfef0ec27e8bb2957ec6597af0403'
+Finished XLA compilation of jit(greater) in 0.045911074 sec
+Finished tracing + transforming less_equal for pjit in 0.020844936 sec
+Compiling jit(less_equal) with global shapes and types (ShapedArray(float64[6]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(less_equal) in 0.046673059 sec
+W0522 15:33:44.190428 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_less_equal' with key 'jit_less_equal-e8c55b8cf2d6c10f77a7b082594685564f7d60abde93938a098dc4e02aa4a63f'
+Finished XLA compilation of jit(less_equal) in 0.016344070 sec
+Finished tracing + transforming bitwise_and for pjit in 0.000642061 sec
+Compiling jit(bitwise_and) with global shapes and types (ShapedArray(bool[6]), ShapedArray(bool[6])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(bitwise_and) in 0.022308111 sec
+W0522 15:33:44.264981 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_bitwise_and' with key 'jit_bitwise_and-fc18d8ceefaa207780616435d2301a2f91fe31331107396dce5b80992fee1f25'
+Finished XLA compilation of jit(bitwise_and) in 0.037836075 sec
+Finished tracing + transforming true_divide for pjit in 0.000790119 sec
+Compiling jit(true_divide) with global shapes and types (ShapedArray(float64[6]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(true_divide) in 0.019158125 sec
+W0522 15:33:44.343814 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_true_divide' with key 'jit_true_divide-dd8e3d82df8f9b088a571e9da310e323656b74057ed9098e7d4eb3c7c09250be'
+Finished XLA compilation of jit(true_divide) in 0.004052877 sec
+Finished tracing + transforming subtract for pjit in 0.000442982 sec
+Compiling jit(subtract) with global shapes and types (ShapedArray(float64[6]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(subtract) in 0.006739855 sec
+W0522 15:33:44.357461 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_subtract' with key 'jit_subtract-7b7874184f28084858efc2e1b75766aefba2ade02a4e8402e5d3e47aca0173af'
+Finished XLA compilation of jit(subtract) in 0.004047871 sec
+Finished tracing + transforming maximum for pjit in 0.000723839 sec
+Compiling jit(maximum) with global shapes and types (ShapedArray(float64[6]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(maximum) in 0.015814066 sec
+W0522 15:33:44.392705 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_maximum' with key 'jit_maximum-4202a6328af2b25541dce34a819ef7f6a9abe1d4310be4d2714810a643624ffe'
+Finished XLA compilation of jit(maximum) in 0.007900238 sec
+Finished tracing + transforming add for pjit in 0.001587868 sec
+Compiling jit(add) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[6])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(add) in 0.033167839 sec
+W0522 15:33:44.442256 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_add' with key 'jit_add-e96a5d55c96fe713286d635e116b352e1f1b057e0e5743c898a4bd5a10982e25'
+Finished XLA compilation of jit(add) in 0.019649982 sec
+Finished tracing + transforming _power for pjit in 0.000644207 sec
+Compiling jit(_power) with global shapes and types (ShapedArray(float64[6]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(_power) in 0.040582895 sec
+W0522 15:33:44.514179 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit__power' with key 'jit__power-58de1b87d5f74616726fc3a381a53867453107beb357959136dcd204edd71fdb'
+Finished XLA compilation of jit(_power) in 0.013733864 sec
+Finished tracing + transforming minimum for pjit in 0.000484705 sec
+Finished tracing + transforming clip for pjit in 0.001082897 sec
+Compiling jit(clip) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(clip) in 0.070236921 sec
+W0522 15:33:44.628412 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_clip' with key 'jit_clip-4b520c0e844fac34a08f26385f608dccce86ab51b5e8c7de734781e515e38500'
+Finished XLA compilation of jit(clip) in 0.027968884 sec
+Finished tracing + transforming multiply for pjit in 0.027657986 sec
+Compiling jit(multiply) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[6])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(multiply) in 0.011196852 sec
+W0522 15:33:44.677839 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_multiply' with key 'jit_multiply-bc5bb3fb97c4dee278e1434835d698dce70167adc2733c2699fe952b25e425b1'
+Finished XLA compilation of jit(multiply) in 0.019075155 sec
+Finished tracing + transforming subtract for pjit in 0.000560284 sec
+Compiling jit(subtract) with global shapes and types (ShapedArray(float64[6]), ShapedArray(float64[6])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(subtract) in 0.018598318 sec
+W0522 15:33:44.743647 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_subtract' with key 'jit_subtract-773919aca0226cf8a33ba0b89815ce8c938a95a39434bb2959eeca4467d87529'
+Finished XLA compilation of jit(subtract) in 0.008068323 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.000161886 sec
+Finished tracing + transforming _where for pjit in 0.001667023 sec
+Compiling jit(_where) with global shapes and types (ShapedArray(bool[]), ShapedArray(float64[6]), ShapedArray(float64[6])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(_where) in 0.127815962 sec
+W0522 15:33:44.889943 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit__where' with key 'jit__where-b660c15fa1fe894df60aa49c3a794289c9ae01ef321facde5d267ca89f77c222'
+Finished XLA compilation of jit(_where) in 0.004929066 sec
+Finished tracing + transforming maximum for pjit in 0.000908852 sec
+Finished tracing + transforming clip for pjit in 0.001689196 sec
+Compiling jit(clip) with global shapes and types (ShapedArray(float64[6]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(clip) in 0.038084984 sec
+W0522 15:33:44.964391 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_clip' with key 'jit_clip-d2dd0da5f79f105e0c6d38d96e3058493dd515bea9eb209c7de6de283db1425c'
+Finished XLA compilation of jit(clip) in 0.036872864 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.010666132 sec
+Finished tracing + transforming _where for pjit in 0.011857748 sec
+Compiling jit(_where) with global shapes and types (ShapedArray(bool[6]), ShapedArray(float64[6]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(_where) in 0.024039984 sec
+W0522 15:33:45.038776 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit__where' with key 'jit__where-b3d1dc10d2fc7eb67b19e981997f7bf2f359da1bf8d287176fcbcee8cef34043'
+Finished XLA compilation of jit(_where) in 0.063153982 sec
+Finished tracing + transforming subtract for pjit in 0.006122112 sec
+Compiling jit(subtract) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[6])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(subtract) in 0.044561863 sec
+W0522 15:33:45.195259 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_subtract' with key 'jit_subtract-42ddc3ebb24cdefd985f900916b545ceb5c047dc7b309d68f4098a01717b58d3'
+Finished XLA compilation of jit(subtract) in 0.029620171 sec
+Finished tracing + transforming exp for pjit in 0.000622988 sec
+Compiling jit(exp) with global shapes and types (ShapedArray(float64[], weak_type=True),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(exp) in 0.018655062 sec
+W0522 15:33:45.296132 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_exp' with key 'jit_exp-29330ead33a9965a668e94e58b6d47ab2f4ffd0b538531767e4ca66b14175a3c'
+Finished XLA compilation of jit(exp) in 0.081116915 sec
+Finished tracing + transforming multiply for pjit in 0.000574827 sec
+Compiling jit(multiply) with global shapes and types (ShapedArray(float64[6]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(multiply) in 0.030279875 sec
+W0522 15:33:45.375200 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_multiply' with key 'jit_multiply-36574dcc7ebc89fa6fd456953a4ccd0ecab3d3d8dde7652bb72bc11c564fda02'
+Finished XLA compilation of jit(multiply) in 0.043175220 sec
+Finished tracing + transforming true_divide for pjit in 0.001792908 sec
+Compiling jit(true_divide) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[6])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(true_divide) in 0.062134981 sec
+W0522 15:33:45.511213 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_true_divide' with key 'jit_true_divide-c8486eed470206364610834983a8d0d4676efe2a761aa8a8c9bfee23d25abf46'
+Finished XLA compilation of jit(true_divide) in 0.018333912 sec
+Finished tracing + transforming integer_pow for pjit in 0.003032923 sec
+Compiling jit(integer_pow) with global shapes and types (ShapedArray(float64[6]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(integer_pow) in 0.010914087 sec
+W0522 15:33:45.551028 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_integer_pow' with key 'jit_integer_pow-080ddf8e41858cf299b71ded5bba1b435fa6ae728b6f50712ef56503e69f77ed'
+Finished XLA compilation of jit(integer_pow) in 0.033758402 sec
+Finished tracing + transforming add for pjit in 0.000439167 sec
+Compiling jit(add) with global shapes and types (ShapedArray(float64[6]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(add) in 0.057268858 sec
+W0522 15:33:45.642371 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_add' with key 'jit_add-380261907772ba1a79fc5d214a9928c7d67155fb172ce7e0e970cfdfa224daba'
+Finished XLA compilation of jit(add) in 0.079505920 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.000587702 sec
+Finished tracing + transforming _where for pjit in 0.002567053 sec
+Compiling jit(_where) with global shapes and types (ShapedArray(bool[]), ShapedArray(float64[6]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(_where) in 0.011915922 sec
+W0522 15:33:45.751279 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit__where' with key 'jit__where-f8e8f354e0a2b811d11aeec75b8dd5cd6306e7c418565ce14050705da145828f'
+Finished XLA compilation of jit(_where) in 0.004247904 sec
+Finished tracing + transforming negative for pjit in 0.001426935 sec
+Compiling jit(negative) with global shapes and types (ShapedArray(float64[6]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(negative) in 0.045697927 sec
+W0522 15:33:45.810610 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_negative' with key 'jit_negative-2cf344e91c9a94285955d797cdcfef439b7aea5a608181a21ef945e2aea94c27'
+Finished XLA compilation of jit(negative) in 0.005597115 sec
+Finished tracing + transforming exp for pjit in 0.004497051 sec
+Compiling jit(exp) with global shapes and types (ShapedArray(float64[6]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(exp) in 0.054799080 sec
+W0522 15:33:45.886778 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_exp' with key 'jit_exp-cd141078014a755a90b5b52f9f57bab269caeb8c588cbe3e1cf528ff3818c039'
+Finished XLA compilation of jit(exp) in 0.009661198 sec
+Finished tracing + transforming argsort for pjit in 0.000646830 sec
+Compiling jit(argsort) with global shapes and types (ShapedArray(float64[6]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(argsort) in 0.178072929 sec
+W0522 15:33:46.132401 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_argsort' with key 'jit_argsort-f5428f86b12d91bdcd206dde6859a0a3253fb3c273480de892f835c844378119'
+Finished XLA compilation of jit(argsort) in 0.049068928 sec
+Finished tracing + transforming less for pjit in 0.001121998 sec
+Compiling jit(less) with global shapes and types (ShapedArray(int64[6]), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(less) in 0.028529882 sec
+W0522 15:33:46.179249 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_less' with key 'jit_less-451dd6d8b52872c5a1735b18d299db2f692bb95b1235d697b3d33a8a34faff1e'
+Finished XLA compilation of jit(less) in 0.029538155 sec
+Finished tracing + transforming add for pjit in 0.000548124 sec
+Compiling jit(add) with global shapes and types (ShapedArray(int64[6]), ShapedArray(int64[])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(add) in 0.020187855 sec
+W0522 15:33:46.237914 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_add' with key 'jit_add-bbd8a6393f0cd2b83c7829ae5e2219bebf0b756c0045f2d43f9ffbabf6605301'
+Finished XLA compilation of jit(add) in 0.022423029 sec
+Finished tracing + transforming select_n for pjit in 0.017637014 sec
+Compiling jit(select_n) with global shapes and types (ShapedArray(bool[6]), ShapedArray(int64[6]), ShapedArray(int64[6])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(select_n) in 0.483034849 sec
+W0522 15:33:46.875034 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_select_n' with key 'jit_select_n-d2a6846065e3da93685ca9d141fb9ec32ecc0c2dcc1dc990639de680d1024141'
+Finished XLA compilation of jit(select_n) in 0.027278900 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.000231028 sec
+Compiling jit(_broadcast_arrays) with global shapes and types (ShapedArray(int64[6]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(_broadcast_arrays) in 0.073683262 sec
+Finished XLA compilation of jit(_broadcast_arrays) in 0.093923807 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000493765 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(int64[6]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.031534195 sec
+W0522 15:33:47.097526 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_convert_element_type' with key 'jit_convert_element_type-d8cab3698a5083493124a34d4a52e4bb6f8f354199b8026294fa4573bc323582'
+Finished XLA compilation of jit(convert_element_type) in 0.042601109 sec
+Finished tracing + transforming broadcast_in_dim for pjit in 0.000515223 sec
+Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[6]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.063602924 sec
+W0522 15:33:47.218732 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_broadcast_in_dim' with key 'jit_broadcast_in_dim-0636fafe0fab9005498593463ca0d52b73705bac7f4bea095a4d2768f33eeb1e'
+Finished XLA compilation of jit(broadcast_in_dim) in 0.003801107 sec
+Finished tracing + transforming gather for pjit in 0.007450819 sec
+Compiling jit(gather) with global shapes and types (ShapedArray(float64[6]), ShapedArray(int32[6,1])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(gather) in 0.083646059 sec
+W0522 15:33:47.317711 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_gather' with key 'jit_gather-a37663446b406e57da6ad9165bceda9270b923720922a1cb4bf2dec95dba6fdb'
+Finished XLA compilation of jit(gather) in 0.009461164 sec
+Finished tracing + transforming broadcast_in_dim for pjit in 0.000506878 sec
+Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(float64[6]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.028783798 sec
+W0522 15:33:47.403997 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_broadcast_in_dim' with key 'jit_broadcast_in_dim-0a94a978cde333076690b9775bec42b5bfa9207edd2df7e2288a919e2430ac96'
+Finished XLA compilation of jit(broadcast_in_dim) in 0.045868158 sec
+Finished tracing + transforming dynamic_slice for pjit in 0.000294209 sec
+Compiling jit(dynamic_slice) with global shapes and types (ShapedArray(float64[6]), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(dynamic_slice) in 0.071361065 sec
+W0522 15:33:47.524021 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_dynamic_slice' with key 'jit_dynamic_slice-7382c0632fea159980515c538e36c47a352b13903201c20504bc6362f75b2fb8'
+Finished XLA compilation of jit(dynamic_slice) in 0.024553061 sec
+Finished tracing + transforming add for pjit in 0.004626036 sec
+Compiling jit(add) with global shapes and types (ShapedArray(float64[5]), ShapedArray(float64[5])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(add) in 0.464469194 sec
+W0522 15:33:48.189301 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_add' with key 'jit_add-0ed5c1149dee1fa5471d7d0bf1890ff3e39982a7914444adef07d7fa97f4be32'
+Finished XLA compilation of jit(add) in 0.205266237 sec
+Finished tracing + transforming multiply for pjit in 0.001544237 sec
+Compiling jit(multiply) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[5])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(multiply) in 0.063863039 sec
+W0522 15:33:48.661895 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_multiply' with key 'jit_multiply-b0b8878af2feb49c7ac6207016491fe0abbb87ccfa3ba98e1df6ce550ef295d5'
+Finished XLA compilation of jit(multiply) in 0.237189054 sec
+Finished tracing + transforming dynamic_slice for pjit in 0.000313997 sec
+Compiling jit(dynamic_slice) with global shapes and types (ShapedArray(float64[6]), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(dynamic_slice) in 0.104330063 sec
+W0522 15:33:49.131783 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_dynamic_slice' with key 'jit_dynamic_slice-5e2eb876e711450288ad182b24f9583551182dfe108259c0fb6c7ff09d2168aa'
+Finished XLA compilation of jit(dynamic_slice) in 0.111966133 sec
+Compiling jit(add) with global shapes and types (ShapedArray(float64[]), ShapedArray(float64[])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(add) in 0.157443047 sec
+W0522 15:33:49.458427 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_add' with key 'jit_add-68b7caf08d8c6b3c030697d1772c970f268e287640bb57250ed97e79fd0c298d'
+Finished XLA compilation of jit(add) in 0.107668161 sec
+Finished tracing + transforming maximum for pjit in 0.007576227 sec
+Compiling jit(maximum) with global shapes and types (ShapedArray(float64[]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(maximum) in 0.253093243 sec
+W0522 15:33:49.999378 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_maximum' with key 'jit_maximum-69983f6d43a5583daf725b77f043539d090d97b570572ac2a7fe79fd3b63f641'
+Finished XLA compilation of jit(maximum) in 0.028820992 sec
+Finished tracing + transforming concatenate for pjit in 0.083555222 sec
+Compiling jit(concatenate) with global shapes and types (ShapedArray(float64[1]), ShapedArray(float64[5]), ShapedArray(float64[1])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(concatenate) in 0.051894665 sec
+W0522 15:33:50.309936 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_concatenate' with key 'jit_concatenate-a6f16aa7b179f04257d8ffed1a026c252959088f8d78b3488180bb500965d7a8'
+Finished XLA compilation of jit(concatenate) in 0.158116102 sec
+Finished tracing + transforming dynamic_slice for pjit in 0.026703835 sec
+Compiling jit(dynamic_slice) with global shapes and types (ShapedArray(float64[7]), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(dynamic_slice) in 0.111321926 sec
+W0522 15:33:50.636091 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_dynamic_slice' with key 'jit_dynamic_slice-733fc699a436ae130a41f25d8e5f1e3835915a58fc07e59b98214f58de4f8608'
+Finished XLA compilation of jit(dynamic_slice) in 0.063606977 sec
+Finished tracing + transforming argsort for pjit in 0.000310898 sec
+Compiling jit(argsort) with global shapes and types (ShapedArray(int64[6]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(argsort) in 0.042837143 sec
+W0522 15:33:50.713619 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_argsort' with key 'jit_argsort-bacad3c5d765a70d73752356a87ef402be141b29b6174f1ceac729de29391b99'
+Finished XLA compilation of jit(argsort) in 0.007336855 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000277996 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(int64[]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.009968042 sec
+Finished XLA compilation of jit(convert_element_type) in 0.823402166 sec
+Finished tracing + transforming bitwise_and for pjit in 0.004375935 sec
+Finished tracing + transforming _threefry_seed for pjit in 0.101238966 sec
+Compiling jit(_threefry_seed) with global shapes and types (ShapedArray(int64[]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(_threefry_seed) in 0.628023863 sec
+W0522 15:33:52.468423 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit__threefry_seed' with key 'jit__threefry_seed-dcfd60cc5a87602dd3a2bfaacdf9a88622ae7a203701461424b81dc3754b315a'
+Finished XLA compilation of jit(_threefry_seed) in 0.116985083 sec
+Finished tracing + transforming _threefry_split_foldlike for pjit in 0.033842802 sec
+Finished tracing + transforming _threefry_split for pjit in 0.052834988 sec
+Compiling jit(_threefry_split) with global shapes and types (ShapedArray(uint32[2]),). Argument mapping: (UnspecifiedValue,).
+Finished tracing + transforming bitwise_xor for pjit in 0.004486084 sec
+Finished tracing + transforming add for pjit in 0.000416040 sec
+Finished tracing + transforming add for pjit in 0.000342846 sec
+Finished tracing + transforming subtract for pjit in 0.008285999 sec
+Finished tracing + transforming bitwise_or for pjit in 0.000420094 sec
+Finished tracing + transforming bitwise_xor for pjit in 0.000805140 sec
+Finished jaxpr to MLIR module conversion jit(_threefry_split) in 0.489843845 sec
+W0522 15:33:53.505501 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit__threefry_split' with key 'jit__threefry_split-2ed2e42d0eb4d151e7dab85e2b4316d88f16be3ee861cdba7e837de3e1146605'
+Finished XLA compilation of jit(_threefry_split) in 0.578177691 sec
+Finished tracing + transforming dynamic_slice for pjit in 0.043890238 sec
+Compiling jit(dynamic_slice) with global shapes and types (ShapedArray(uint32[19,2]), ShapedArray(int64[], weak_type=True), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(dynamic_slice) in 0.269330025 sec
+W0522 15:33:54.591278 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_dynamic_slice' with key 'jit_dynamic_slice-384301914f6f52bccaa8c6fe9bc299987894ef0767c40ad4fb4752bca105cb92'
+Finished XLA compilation of jit(dynamic_slice) in 0.052364826 sec
+Finished tracing + transforming squeeze for pjit in 0.000370979 sec
+Compiling jit(squeeze) with global shapes and types (ShapedArray(uint32[1,2]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(squeeze) in 0.009841204 sec
+W0522 15:33:54.851830 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_squeeze' with key 'jit_squeeze-5c9bfbe62ae81e2ea4616487f1a3fa491d88493ce6cf37407e014275bee1016a'
+Finished XLA compilation of jit(squeeze) in 0.085881233 sec
+Finished tracing + transforming convert_element_type for pjit in 0.000504971 sec
+Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[]),). Argument mapping: (UnspecifiedValue,).
+Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.068411112 sec
+W0522 15:33:55.038932 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit_convert_element_type' with key 'jit_convert_element_type-a310e0b48ebe58186201c22b077325dd2964fa17345d991a833c1a2158bca5d2'
+Finished XLA compilation of jit(convert_element_type) in 0.038087845 sec
+Finished tracing + transforming _uniform for pjit in 0.163052082 sec
+Compiling jit(_uniform) with global shapes and types (ShapedArray(key<fry>[]), ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished tracing + transforming bitwise_or for pjit in 0.001950979 sec
+Finished tracing + transforming add for pjit in 0.000403166 sec
+Finished tracing + transforming bitwise_or for pjit in 0.005897045 sec
+Finished jaxpr to MLIR module conversion jit(_uniform) in 0.772350073 sec
+W0522 15:33:56.152116 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit__uniform' with key 'jit__uniform-9791adf47b6f0a338f9a49bc424127ff5954bf10c1877c9853ec34ac5d0310f5'
+Finished XLA compilation of jit(_uniform) in 0.106848955 sec
+Finished tracing + transforming multiply for pjit in 0.063272238 sec
+Finished tracing + transforming true_divide for pjit in 0.000975132 sec
+Finished tracing + transforming subtract for pjit in 0.000656843 sec
+Finished tracing + transforming multiply for pjit in 0.000345945 sec
+Finished tracing + transforming add for pjit in 0.003678799 sec
+Finished tracing + transforming _linspace for pjit in 0.015909910 sec
+Finished tracing + transforming _power for pjit in 0.001418114 sec
+Finished tracing + transforming add for pjit in 0.001198053 sec
+Finished tracing + transforming maximum for pjit in 0.007418156 sec
+Finished tracing + transforming minimum for pjit in 0.000314236 sec
+Finished tracing + transforming clip for pjit in 0.031545877 sec
+Finished tracing + transforming _power for pjit in 0.000975132 sec
+Finished tracing + transforming subtract for pjit in 0.000458956 sec
+Finished tracing + transforming true_divide for pjit in 0.004610062 sec
+Finished tracing + transforming arcsinh for pjit in 0.000310183 sec
+Finished tracing + transforming multiply for pjit in 0.001033783 sec
+Finished tracing + transforming exp for pjit in 0.081262112 sec
+Finished tracing + transforming multiply for pjit in 0.000634193 sec
+Finished tracing + transforming negative for pjit in 0.000512123 sec
+Finished tracing + transforming true_divide for pjit in 0.001735926 sec
+Finished tracing + transforming multiply for pjit in 0.000340939 sec
+Finished tracing + transforming multiply for pjit in 0.000207901 sec
+Finished tracing + transforming maximum for pjit in 0.000586033 sec
+Finished tracing + transforming _squeeze for pjit in 0.000239849 sec
+Finished tracing + transforming add for pjit in 0.000308037 sec
+Finished tracing + transforming less for pjit in 0.000610113 sec
+Finished tracing + transforming add for pjit in 0.000395060 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.000119209 sec
+Finished tracing + transforming _where for pjit in 0.000952959 sec
+Finished tracing + transforming searchsorted for pjit in 0.245944023 sec
+Finished tracing + transforming maximum for pjit in 0.000300884 sec
+Finished tracing + transforming minimum for pjit in 0.000222206 sec
+Finished tracing + transforming clip for pjit in 0.001057148 sec
+Finished tracing + transforming less for pjit in 0.000221252 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.000066042 sec
+Finished tracing + transforming subtract for pjit in 0.000643969 sec
+Finished tracing + transforming subtract for pjit in 0.001327276 sec
+Finished tracing + transforming less_equal for pjit in 0.005526066 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.000590086 sec
+Finished tracing + transforming _where for pjit in 0.010304928 sec
+Finished tracing + transforming true_divide for pjit in 0.039649010 sec
+Finished tracing + transforming multiply for pjit in 0.096238136 sec
+Finished tracing + transforming add for pjit in 0.000339985 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.000120163 sec
+Finished tracing + transforming _where for pjit in 0.000783920 sec
+Finished tracing + transforming less for pjit in 0.000537157 sec
+Finished tracing + transforming _where for pjit in 0.000511885 sec
+Finished tracing + transforming greater for pjit in 0.010775805 sec
+Finished tracing + transforming _interp for pjit in 0.885996103 sec
+Finished tracing + transforming atleast_1d for pjit in 0.000304699 sec
+Finished tracing + transforming _linspace for pjit in 0.062124729 sec
+Finished tracing + transforming lookback_to_z for pjit in 0.166039944 sec
+Finished tracing + transforming _age_at_z_kern for pjit in 0.254271030 sec
+Finished tracing + transforming _age_at_z_kern for pjit in 1.679624319 sec
+Finished tracing + transforming age_at_z for pjit in 1.683597088 sec
+Finished tracing + transforming effective_metallicity for pjit in 0.019232035 sec
+Finished tracing + transforming true_divide for pjit in 0.000950098 sec
+Finished tracing + transforming subtract for pjit in 0.013254881 sec
+Finished tracing + transforming maximum for pjit in 0.000601053 sec
+Finished tracing + transforming greater for pjit in 0.000248194 sec
+Finished tracing + transforming bitwise_not for pjit in 0.000827074 sec
+Finished tracing + transforming _reduce_sum for pjit in 0.036779881 sec
+Finished tracing + transforming less for pjit in 0.000242949 sec
+Finished tracing + transforming add for pjit in 0.000235081 sec
+Finished tracing + transforming multiply for pjit in 0.001871109 sec
+Finished tracing + transforming maximum for pjit in 0.005748987 sec
+Finished tracing + transforming true_divide for pjit in 0.002315760 sec
+Finished tracing + transforming add for pjit in 0.000241280 sec
+Finished tracing + transforming _where for pjit in 0.000307083 sec
+Finished tracing + transforming _where for pjit in 0.000444174 sec
+Finished tracing + transforming subtract for pjit in 0.001947165 sec
+Finished tracing + transforming diff for pjit in 0.020887136 sec
+Finished tracing + transforming _moveaxis for pjit in 0.104945898 sec
+Finished tracing + transforming multiply for pjit in 0.015094995 sec
+Finished tracing + transforming _reduce_sum for pjit in 0.001968145 sec
+Finished tracing + transforming trapezoid for pjit in 0.169978857 sec
+Finished tracing + transforming less for pjit in 0.000303745 sec
+Finished tracing + transforming _squeeze for pjit in 0.000147104 sec
+Finished tracing + transforming cumtrapz for pjit in 0.005543232 sec
+Finished tracing + transforming cumulative_mstar_formed for pjit in 0.172523022 sec
+Finished tracing + transforming log10 for pjit in 0.006208897 sec
+Finished tracing + transforming _calc_logsm_table_from_sfh_table for pjit in 0.199918032 sec
+Finished tracing + transforming multiply for pjit in 0.001876831 sec
+Finished tracing + transforming diff for pjit in 0.007897139 sec
+Finished tracing + transforming _squeeze for pjit in 0.000222921 sec
+Finished tracing + transforming true_divide for pjit in 0.015736818 sec
+Finished tracing + transforming _jax_get_dt_array for pjit in 0.232346058 sec
+Finished tracing + transforming true_divide for pjit in 0.000287056 sec
+Finished tracing + transforming _get_lg_age_bin_edges for pjit in 0.274684906 sec
+Finished tracing + transforming _power for pjit in 0.006082058 sec
+Finished tracing + transforming subtract for pjit in 0.068057060 sec
+Finished tracing + transforming less for pjit in 0.001580954 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.086132288 sec
+Finished tracing + transforming _where for pjit in 0.090746164 sec
+Finished tracing + transforming log10 for pjit in 0.023008823 sec
+Finished tracing + transforming _get_lgt_birth for pjit in 0.300734043 sec
+Finished tracing + transforming _power for pjit in 0.000585079 sec
+Finished tracing + transforming _get_lgt_birth for pjit in 0.001899958 sec
+Finished tracing + transforming _squeeze for pjit in 0.000284910 sec
+Finished tracing + transforming searchsorted for pjit in 0.428092957 sec
+Finished tracing + transforming maximum for pjit in 0.060705900 sec
+Finished tracing + transforming minimum for pjit in 0.026617050 sec
+Finished tracing + transforming clip for pjit in 0.098400831 sec
+Finished tracing + transforming less for pjit in 0.010800123 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.029900074 sec
+Finished tracing + transforming subtract for pjit in 0.015984774 sec
+Finished tracing + transforming subtract for pjit in 0.017461061 sec
+Finished tracing + transforming less_equal for pjit in 0.000535011 sec
+Finished tracing + transforming _where for pjit in 0.021820068 sec
+Finished tracing + transforming true_divide for pjit in 0.000483036 sec
+Finished tracing + transforming multiply for pjit in 0.000211000 sec
+Finished tracing + transforming add for pjit in 0.000193834 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.009238958 sec
+Finished tracing + transforming _where for pjit in 0.010152102 sec
+Finished tracing + transforming less for pjit in 0.000247717 sec
+Finished tracing + transforming _where for pjit in 0.000874996 sec
+Finished tracing + transforming greater for pjit in 0.000531912 sec
+Finished tracing + transforming _interp for pjit in 1.172106981 sec
+Finished tracing + transforming diff for pjit in 0.000470161 sec
+Finished tracing + transforming negative for pjit in 0.000165939 sec
+Finished tracing + transforming _reduce_sum for pjit in 0.008687258 sec
+Finished tracing + transforming true_divide for pjit in 0.000416994 sec
+Finished tracing + transforming _calc_age_weights_from_logsm_table for pjit in 1.808527708 sec
+Finished tracing + transforming calc_age_weights_from_sfh_table for pjit in 2.052319288 sec
+Finished tracing + transforming multiply for pjit in 0.022120953 sec
+Finished tracing + transforming subtract for pjit in 0.000865221 sec
+Finished tracing + transforming diff for pjit in 0.035188913 sec
+Finished tracing + transforming _squeeze for pjit in 0.000573397 sec
+Finished tracing + transforming _jax_get_dt_array for pjit in 1.174831152 sec
+Finished tracing + transforming true_divide for pjit in 0.067613840 sec
+Finished tracing + transforming subtract for pjit in 0.256433964 sec
+Finished tracing + transforming _squeeze for pjit in 0.000463963 sec
+Finished tracing + transforming _get_bin_edges for pjit in 2.560228825 sec
+Finished tracing + transforming multiply for pjit in 0.000438213 sec
+Finished tracing + transforming less for pjit in 0.023401976 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.019038916 sec
+Finished tracing + transforming _where for pjit in 0.105257034 sec
+Finished tracing + transforming greater for pjit in 0.114032030 sec
+Finished tracing + transforming _tw_cuml_kern for pjit in 0.736313820 sec
+Finished tracing + transforming _triweighted_histogram_kernel for pjit in 0.870341063 sec
+Finished tracing + transforming _triweighted_histogram_kernel for pjit in 2.611498833 sec
+Finished tracing + transforming triweighted_histogram for pjit in 2.654935122 sec
+Finished tracing + transforming _reduce_sum for pjit in 0.021569967 sec
+Finished tracing + transforming equal for pjit in 0.000719070 sec
+Finished tracing + transforming _where for pjit in 0.022900105 sec
+Finished tracing + transforming true_divide for pjit in 0.014864206 sec
+Finished tracing + transforming equal for pjit in 0.000539064 sec
+Finished tracing + transforming _reduce_all for pjit in 0.044984102 sec
+Finished tracing + transforming less for pjit in 0.000554085 sec
+Finished tracing + transforming greater for pjit in 0.000282049 sec
+Finished tracing + transforming bitwise_and for pjit in 0.018050194 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.000187159 sec
+Finished tracing + transforming _where for pjit in 0.089968920 sec
+Finished tracing + transforming _fill_empty_weights_singlepoint for pjit in 0.292629004 sec
+Finished tracing + transforming _get_lgmet_weights_singlegal for pjit in 3.326614857 sec
+Finished tracing + transforming calc_lgmet_weights_from_lognormal_mdf for pjit in 6.138350725 sec
+Finished tracing + transforming multiply for pjit in 0.020648003 sec
+Finished tracing + transforming _reduce_sum for pjit in 0.021887779 sec
+Finished tracing + transforming true_divide for pjit in 0.012003183 sec
+Finished tracing + transforming calc_ssp_weights_sfh_table_lognormal_mdf for pjit in 8.343757153 sec
+Finished tracing + transforming multiply for pjit in 0.000462055 sec
+Finished tracing + transforming _reduce_sum for pjit in 0.000663996 sec
+Finished tracing + transforming searchsorted for pjit in 0.246096134 sec
+Finished tracing + transforming maximum for pjit in 0.031373262 sec
+Finished tracing + transforming minimum for pjit in 0.000421762 sec
+Finished tracing + transforming clip for pjit in 0.032648087 sec
+Finished tracing + transforming subtract for pjit in 0.000578165 sec
+Finished tracing + transforming less_equal for pjit in 0.000271082 sec
+Finished tracing + transforming _where for pjit in 0.007364035 sec
+Finished tracing + transforming _interp for pjit in 0.420228720 sec
+Finished tracing + transforming _power for pjit in 0.149631977 sec
+Finished tracing + transforming multiply for pjit in 0.001887083 sec
+Finished tracing + transforming calc_rest_sed_sfh_table_lognormal_mdf for pjit in 8.991753817 sec
+Finished tracing + transforming _einsum for pjit in 0.001681089 sec
+Finished tracing + transforming _reduce_sum for pjit in 0.044327974 sec
+Finished tracing + transforming multiply for pjit in 0.000458002 sec
+Finished tracing + transforming multiply for pjit in 0.000527143 sec
+Finished tracing + transforming multiply for pjit in 0.102860928 sec
+Finished tracing + transforming _reduce_sum for pjit in 0.161787748 sec
+Finished tracing + transforming subtract for pjit in 0.000870943 sec
+Finished tracing + transforming subtract for pjit in 0.081583977 sec
+Finished tracing + transforming multiply for pjit in 0.000881910 sec
+Finished tracing + transforming true_divide for pjit in 0.000833035 sec
+Finished tracing + transforming true_divide for pjit in 0.032936096 sec
+Finished tracing + transforming gradient for pjit in 0.238072872 sec
+Finished tracing + transforming less_equal for pjit in 0.001385927 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.035330057 sec
+Finished tracing + transforming _where for pjit in 0.084442139 sec
+Finished tracing + transforming _reduce_sum for pjit in 0.000943899 sec
+Finished tracing + transforming greater for pjit in 0.000511169 sec
+Finished tracing + transforming true_divide for pjit in 0.000483990 sec
+Finished tracing + transforming multiply for pjit in 0.000794888 sec
+Finished tracing + transforming subtract for pjit in 0.000348091 sec
+Finished tracing + transforming diff for pjit in 0.001520872 sec
+Finished tracing + transforming _moveaxis for pjit in 0.001112938 sec
+Finished tracing + transforming add for pjit in 0.000333786 sec
+Finished tracing + transforming multiply for pjit in 0.156926870 sec
+Finished tracing + transforming _reduce_sum for pjit in 0.002497196 sec
+Finished tracing + transforming multiply for pjit in 0.005086184 sec
+Finished tracing + transforming trapezoid for pjit in 0.217206955 sec
+Finished tracing + transforming less for pjit in 0.001137257 sec
+Finished tracing + transforming multiply for pjit in 0.049031258 sec
+Finished tracing + transforming true_divide for pjit in 0.012019873 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.018954992 sec
+Finished tracing + transforming _where for pjit in 0.148504972 sec
+Finished tracing + transforming _moveaxis for pjit in 0.000257015 sec
+Finished tracing + transforming add for pjit in 0.000343084 sec
+Finished tracing + transforming multiply for pjit in 0.152327776 sec
+Finished tracing + transforming _reduce_sum for pjit in 0.006391764 sec
+Finished tracing + transforming trapezoid for pjit in 8.351676941 sec
+Finished tracing + transforming absolute for pjit in 0.007186890 sec
+Finished tracing + transforming abs for pjit in 0.007680893 sec
+Finished tracing + transforming true_divide for pjit in 0.003574848 sec
+Finished tracing + transforming add for pjit in 0.004751921 sec
+Finished tracing + transforming subtract for pjit in 0.000300884 sec
+Finished tracing + transforming add for pjit in 0.000215054 sec
+Finished tracing + transforming greater_equal for pjit in 0.001069069 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.039623260 sec
+Finished tracing + transforming _where for pjit in 0.099525213 sec
+Finished tracing + transforming add for pjit in 0.001983881 sec
+Finished tracing + transforming maximum for pjit in 0.076983929 sec
+Finished tracing + transforming clip for pjit in 0.141785860 sec
+Finished tracing + transforming subtract for pjit in 0.016823053 sec
+Finished tracing + transforming sigmoid for pjit in 0.044551134 sec
+Finished tracing + transforming multiply for pjit in 0.000540972 sec
+Finished tracing + transforming multiply for pjit in 0.097362041 sec
+Finished tracing + transforming multiply for pjit in 0.169925928 sec
+Finished tracing + transforming add for pjit in 0.017431736 sec
+Finished tracing + transforming negative for pjit in 0.000193834 sec
+Finished tracing + transforming exp for pjit in 0.045233011 sec
+Finished tracing + transforming multiply for pjit in 0.232522011 sec
+Finished tracing + transforming add for pjit in 0.121586084 sec
+Finished tracing + transforming multiply for pjit in 0.152889729 sec
+Finished tracing + transforming multiply for pjit in 0.000622034 sec
+Finished tracing + transforming greater for pjit in 0.000462055 sec
+Finished tracing + transforming less_equal for pjit in 0.000644207 sec
+Finished tracing + transforming bitwise_and for pjit in 0.000307798 sec
+Finished tracing + transforming true_divide for pjit in 0.182453871 sec
+Finished tracing + transforming _power for pjit in 0.202208042 sec
+Finished tracing + transforming multiply for pjit in 0.087609291 sec
+Finished tracing + transforming less for pjit in 0.245342016 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.129004002 sec
+Finished tracing + transforming _where for pjit in 0.243972063 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.028680801 sec
+Finished tracing + transforming _where for pjit in 0.180583954 sec
+Finished tracing + transforming _reduce_sum for pjit in 0.007069826 sec
+Finished tracing + transforming greater for pjit in 0.012821913 sec
+Finished tracing + transforming less_equal for pjit in 0.000328064 sec
+Finished tracing + transforming bitwise_and for pjit in 0.000337839 sec
+Finished tracing + transforming subtract for pjit in 0.000224113 sec
+Finished tracing + transforming maximum for pjit in 0.000210047 sec
+Finished tracing + transforming _power for pjit in 0.034691095 sec
+Finished tracing + transforming less for pjit in 0.000451088 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.000079870 sec
+Finished tracing + transforming _where for pjit in 0.000500917 sec
+Finished tracing + transforming clip for pjit in 0.011122227 sec
+Finished tracing + transforming subtract for pjit in 0.004116297 sec
+Finished tracing + transforming negative for pjit in 0.054543734 sec
+Finished tracing + transforming greater for pjit in 0.017119884 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.027797937 sec
+Finished tracing + transforming _where for pjit in 0.037659883 sec
+Finished tracing + transforming _where for pjit in 0.000711203 sec
+Finished tracing + transforming negative for pjit in 0.000302792 sec
+Finished tracing + transforming exp for pjit in 0.000603914 sec
+Finished tracing + transforming multiply for pjit in 0.035254002 sec
+Finished tracing + transforming searchsorted for pjit in 0.408537865 sec
+Finished tracing + transforming maximum for pjit in 0.000414848 sec
+Finished tracing + transforming minimum for pjit in 0.000257015 sec
+Finished tracing + transforming clip for pjit in 0.001355886 sec
+Finished tracing + transforming less for pjit in 0.000241995 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.000068903 sec
+Finished tracing + transforming subtract for pjit in 0.000215769 sec
+Finished tracing + transforming subtract for pjit in 0.000569105 sec
+Finished tracing + transforming less_equal for pjit in 0.057249069 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.027048826 sec
+Finished tracing + transforming _where for pjit in 0.034067869 sec
+Finished tracing + transforming true_divide for pjit in 0.092323065 sec
+Finished tracing + transforming multiply for pjit in 0.000714064 sec
+Finished tracing + transforming add for pjit in 0.000755310 sec
+Finished tracing + transforming _broadcast_arrays for pjit in 0.000354052 sec
+Finished tracing + transforming _where for pjit in 0.001884222 sec
+Finished tracing + transforming less for pjit in 0.000793219 sec
+Finished tracing + transforming _where for pjit in 0.011709929 sec
+Finished tracing + transforming greater for pjit in 0.003679037 sec
+Finished tracing + transforming _interp for pjit in 1.870939970 sec
+Finished tracing + transforming subtract for pjit in 0.072890759 sec
+Finished tracing + transforming diff for pjit in 0.163190126 sec
+Finished tracing + transforming _moveaxis for pjit in 0.000178099 sec
+Finished tracing + transforming add for pjit in 0.000348806 sec
+Finished tracing + transforming multiply for pjit in 0.000210762 sec
+Finished tracing + transforming _reduce_sum for pjit in 0.049554110 sec
+Finished tracing + transforming trapezoid for pjit in 0.254896879 sec
+Finished tracing + transforming _interp for pjit in 0.000018120 sec
+Finished tracing + transforming lnu_to_fnu for pjit in 0.004154205 sec
+Finished tracing + transforming _impl for pjit in 31.917814016 sec
+Compiling jit(_impl) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[]), ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True), ShapedArray(float64[]), ShapedArray(float64[], weak_type=True), ShapedArray(float64[]), ShapedArray(float64[]), ShapedArray(float64[]), ShapedArray(float64[]), ShapedArray(float64[]), ShapedArray(float64[15,93,5994]), ShapedArray(float64[93]), ShapedArray(float64[15])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+Finished jaxpr to MLIR module conversion jit(_impl) in 4.887194872 sec
+W0522 15:34:33.472480 23301849 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
+Persistent compilation cache hit for 'jit__impl' with key 'jit__impl-f9a300de82763d628fff675334182fe5c404c2f4736bce1649caad603f757791'
+Finished XLA compilation of jit(_impl) in 1.337003946 sec
+[post_bucket_warm] build_model            :  21.60s
+[post_bucket_warm] predict_observables  #1 :  38.33s  (eager)
+[post_bucket_warm] predict_observables  #2 :   0.01s  (eager)
+[post_bucket_warm] predict_observables_jit #1:   0.63s  (compile)
+[post_bucket_warm] predict_observables_jit #2:   0.25s  (warm in-proc)
+[post_bucket_warm] cache_size_total       : 0.4 MiB
