@@ -140,8 +140,7 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
             return self.config.starlight
         if self.config.auto_age_myr is None:
             raise ValueError(
-                "starlight='auto' requires auto_age_myr (Myr) "
-                "to be set on Draine2021PAHIRConfig."
+                "starlight='auto' requires auto_age_myr (Myr) to be set on Draine2021PAHIRConfig."
             )
         if self.config.auto_log_z_solar is None:
             raise ValueError(
