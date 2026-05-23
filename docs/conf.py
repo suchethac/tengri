@@ -120,22 +120,34 @@ sphinx_gallery_conf = {
 # pedagogically (onboarding → physics building blocks → observation
 # layer → inference → applications) rather than alphabetical.
 _GALLERY_SECTION_ORDER = (
+    # Onboarding: where every astronomer should start.
     "quickstart",
-    "workflows",
     "recipes",
+    "workflows",
+    # The stellar engine: what produces the continuum.
     "sps",
     "sfh",
     "metallicity",
+    # ISM processing: what happens between the stars and us.
+    # Order mirrors the radiative-transfer pipeline:
+    #   stellar continuum --> nebular reprocessing at the source
+    #   --> dust attenuation along the line of sight
+    #   --> dust thermal re-emission set by energy balance.
+    "nebular",
     "dust_attenuation",
     "dust_emission",
-    "nebular",
-    "igm",
+    # AGN: the alternative engine.
     "agn",
+    # Wavelength extensions: long- and short-λ companions of the optical
+    # SED, plus the cosmological line-of-sight absorption.
     "radio",
     "xray",
+    "igm",
+    # Observation layer: how the SED couples to instruments.
     "photometry",
     "spectroscopy",
     "multiwavelength",
+    # Inference and science applications.
     "inference",
     "usecases",
     "advanced",
