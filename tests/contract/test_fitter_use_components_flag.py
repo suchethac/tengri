@@ -113,7 +113,7 @@ def _make_fitter(*, use_components: bool):
 
 def test_default_routes_through_legacy_path():
     fitter, model = _make_fitter(use_components=False)
-    loglik = build_loglikelihood_fn(fitter, mode="auto")
+    loglik = build_loglikelihood_fn(fitter)
     _ = loglik({"flux_scale": 1.0}, fitter._data_args)
     assert model.legacy_calls == 1
     assert model.orchestrator_calls == 0
@@ -121,7 +121,7 @@ def test_default_routes_through_legacy_path():
 
 def test_use_components_routes_through_component_path():
     fitter, model = _make_fitter(use_components=True)
-    loglik = build_loglikelihood_fn(fitter, mode="auto")
+    loglik = build_loglikelihood_fn(fitter)
     _ = loglik({"flux_scale": 1.0}, fitter._data_args)
     assert model.legacy_calls == 0
     assert model.orchestrator_calls == 1
@@ -164,7 +164,6 @@ def test_use_components_routes_spectrum_through_component_path():
         model,
         {"flux_scale": 1.0},
         "spectroscopy",
-        "traced",
         has_line_fluxes=False,
         has_indices=False,
         index_defs=None,

@@ -337,7 +337,7 @@ _SHARED_CACHES: dict[str, tuple[OrderedDict, threading.Lock]] = {
 }
 
 
-def get_or_build_cached(fitter, mode: str, kind: str, builder):
+def get_or_build_cached(fitter, kind: str, builder):
     """Shared LRU cache for compiled `kind` functions.
 
     ``kind`` is one of ``"loss"``, ``"grad"``, ``"logdensity"``, ``"loglik"``.
@@ -345,7 +345,7 @@ def get_or_build_cached(fitter, mode: str, kind: str, builder):
     cache, lock = _SHARED_CACHES[kind]
     if _SHARED_CACHES_DISABLED:
         return builder()
-    key = (fitter.compile_signature(), mode)
+    key = fitter.compile_signature()
     with lock:
         if key in cache:
             cache.move_to_end(key)
@@ -366,12 +366,11 @@ def _lru_set(cache: OrderedDict, key, value, maxsize: int) -> None:
 def _key_matches_sig(key, keep_sig: tuple) -> bool:
     """True if ``key`` should be kept under ``keep_sig`` (prefix match).
 
-    Cache keys are tuples like ``(fitter.compile_signature(), mode)``.
-    A ``keep_sig`` of ``(compile_sig, mode)`` keeps only entries with
-    that exact ``(sig, mode)`` pair. A shorter ``keep_sig`` of
-    ``(compile_sig,)`` keeps every mode for that signature. Used by
-    surgical lean to retain the entry that matches the call about to
-    run while dropping stale entries from prior phases.
+    Cache keys are ``fitter.compile_signature()`` tuples. ``keep_sig``
+    is the same shape and the match is a prefix-equality check, so
+    callers may pass a shorter prefix to keep a broader bucket. Used
+    by surgical lean to retain the entry that matches the call about
+    to run while dropping stale entries from prior phases.
     """
     if not isinstance(key, tuple) or not isinstance(keep_sig, tuple):
         return key == keep_sig
