@@ -76,6 +76,7 @@ def _line_ratios(model, dig_frac: float, dig_delta_logU: float) -> dict:
     }
 
 
+@pytest.mark.regression_bug
 def test_dig_frac_zero_matches_hii_only(base_model):
     """dig_frac=0 must reproduce the pre-fix (HII-only) ratios bit-exactly."""
     # Two calls with dig_frac=0 but different dig_delta_logU must be
@@ -88,6 +89,7 @@ def test_dig_frac_zero_matches_hii_only(base_model):
         )
 
 
+@pytest.mark.regression_bug
 def test_dig_delta_logU_moves_line_ratios(base_model):
     """At dig_frac=0.9, sweeping dig_delta_logU must move line ratios.
 
@@ -108,6 +110,7 @@ def test_dig_delta_logU_moves_line_ratios(base_model):
         )
 
 
+@pytest.mark.regression_bug
 def test_oiii_hb_rises_as_dig_approaches_hii(base_model):
     """Δlog U → 0 should make the DIG component look more like an HII
     region (more [O III]). Δlog U = -3 keeps it deep in low-ionization
