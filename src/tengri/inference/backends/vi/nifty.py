@@ -635,10 +635,10 @@ def _get_or_build_nifty_likelihood(fitter):
             if data_type == "photometry":
                 return model.predict_photometry(params)
             elif data_type == "spectroscopy":
-                return model.predict_spectrum(params, model._wave_obs)
+                return model.predict_spectrum(params)
             elif data_type == "joint":
                 p = model.predict_photometry(params)
-                s = model.predict_spectrum(params, model._wave_obs)
+                s = model.predict_spectrum(params)
                 return jnp.concatenate([p, s])
             raise ValueError(f"Unknown data_type: {data_type}")
 

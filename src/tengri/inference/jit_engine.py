@@ -580,15 +580,15 @@ def _build_signal_response(fitter):
             return model.predict_photometry(params)
         elif data_type == "spectroscopy":
             if use_components:
-                return model.predict_spectrum_components(params, model._wave_obs)
-            return model.predict_spectrum(params, model._wave_obs)
+                return model.predict_spectrum_components(params)
+            return model.predict_spectrum(params)
         elif data_type == "joint":
             if use_components:
                 p = model.predict_photometry_components(params)
-                s = model.predict_spectrum_components(params, model._wave_obs)
+                s = model.predict_spectrum_components(params)
             else:
                 p = model.predict_photometry(params)
-                s = model.predict_spectrum(params, model._wave_obs)
+                s = model.predict_spectrum(params)
             return jnp.concatenate([p, s])
         raise ValueError(f"Unknown data_type: {data_type}")
 
@@ -734,16 +734,16 @@ def build_jit_engine(fitter, pos_dict):
                     predicted = model.predict_photometry(params)
             elif data_type == "spectroscopy":
                 if use_components:
-                    predicted = model.predict_spectrum_components(params, model._wave_obs)
+                    predicted = model.predict_spectrum_components(params)
                 else:
-                    predicted = model.predict_spectrum(params, model._wave_obs)
+                    predicted = model.predict_spectrum(params)
             elif data_type == "joint":
                 if use_components:
                     p = model.predict_photometry_components(params)
-                    s = model.predict_spectrum_components(params, model._wave_obs)
+                    s = model.predict_spectrum_components(params)
                 else:
                     p = model.predict_photometry(params)
-                    s = model.predict_spectrum(params, model._wave_obs)
+                    s = model.predict_spectrum(params)
                 predicted = jnp.concatenate([p, s])
             else:
                 raise ValueError(f"Unknown data_type: {data_type}")

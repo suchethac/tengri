@@ -427,8 +427,8 @@ def profile_pipeline(
     _ = model.predict_photometry(params)
     _sync(model.predict_photometry(params))
 
-    has_fast_path = model._precomputed.photometry is not None and (
-        getattr(model._hybrid, "photometry", None) is not None
+    has_fast_path = model.precomputed.photometry is not None and (
+        getattr(model.hybrid, "photometry", None) is not None
         or getattr(model._compositional, "photometry", None) is not None
     )
 

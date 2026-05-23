@@ -644,6 +644,82 @@ class SEDModel:
         return None
 
     @property
+    def wave_obs(self):
+        """Configured observed-frame spectroscopy wavelength grid, or ``None``.
+
+        Public accessor for the internal ``_wave_obs`` attribute. Returns
+        ``None`` if no spectroscopy grid has been precomputed or configured.
+
+        Returns
+        -------
+        ndarray or None
+            Observed-frame wavelength grid [Angstrom], shape ``(n_pix,)``.
+        """
+        return getattr(self, "_wave_obs", None)
+
+    @property
+    def precomputed(self):
+        """Container of precomputed forward-model tables (photometry, spectroscopy, …).
+
+        Public accessor for the internal ``_precomputed`` attribute. The
+        container exposes ``photometry``, ``spectroscopy``, ``photometry_ztable``,
+        and ``dust_age_weights`` slots; any may be ``None`` if not configured.
+        Used by inference / diagnostics to query precompute state.
+        """
+        return self._precomputed
+
+    @property
+    def hybrid(self):
+        """Container of hybrid (precomputed × on-the-fly) kernels, or ``None``.
+
+        Public accessor for the internal ``_hybrid`` attribute. Returns
+        ``None`` when no hybrid kernels were built (e.g. when the model
+        is constructed without ``precompute=True``). Slots (``photometry``,
+        ``spectroscopy``) on the returned container are individually
+        ``None`` when that channel's hybrid path is unavailable.
+        """
+        return getattr(self, "_hybrid", None)
+
+    @property
+    def z_fixed(self):
+        """Fixed redshift value if redshift is not a free parameter, else ``None``.
+
+        Public accessor for the internal ``_z_fixed`` attribute. Set at
+        construction from ``spec.get_fixed_values().get('redshift')``.
+        """
+        return getattr(self, "_z_fixed", None)
+
+    @property
+    def dl_cm_fixed(self):
+        """Fixed luminosity distance [cm] when redshift is fixed, else ``None``.
+
+        Public accessor for the internal ``_dl_cm_fixed`` attribute. Used
+        by inference to detect a redshift-fixed forward model eligible
+        for the fast precomputed-photometry path.
+        """
+        return getattr(self, "_dl_cm_fixed", None)
+
+    @property
+    def n_grid(self):
+        """PSD-grid resolution for stochastic SFH, else ``0``.
+
+        Public accessor for the internal ``_n_grid`` attribute. Non-zero
+        only when the model uses a stochastic SFH (correlated-field
+        prior on the SFH); used by inference to size the latent grid.
+        """
+        return getattr(self, "_n_grid", 0)
+
+    @property
+    def uses_stochastic_sfh(self) -> bool:
+        """``True`` if the SFH is a stochastic correlated-field model.
+
+        Public accessor for the internal ``_uses_stochastic_sfh`` flag.
+        Stochastic SFH adds an additional ``psd_xi`` latent of shape
+        ``(n_grid,)`` to the free-parameter set.
+        """
+        return bool(getattr(self, "_uses_stochastic_sfh", False))
+
+    @property
     def Observables(self) -> type:
         """Return the per-model :class:`Observables` NamedTuple class.
 
@@ -1209,6 +1285,40 @@ class SEDModel:
                 _load_cat3d_default()
             except Exception:
                 pass
+
+    def ensure_photometry_precomputed(self) -> bool:
+        """Lazily run photometry precomputation if not yet done.
+
+        Encapsulates the lazy precompute path previously open-coded in
+        :meth:`Fitter._auto_precompute_photometry`. Returns ``True`` if
+        the table was built by this call, ``False`` if it was already
+        present or any of the required inputs (fixed redshift, filters)
+        is missing.
+
+        Migration-2 contract: callers (Fitter, diagnostics, …) should
+        invoke this method instead of mutating ``self._precomputed``
+        directly. The method is idempotent — calling it twice is a no-op.
+
+        Returns
+        -------
+        bool
+            ``True`` if precomputation ran on this call, ``False`` otherwise.
+        """
+        if self._precomputed.photometry is not None:
+            return False
+        if self._z_fixed is None or self.filter_waves is None:
+            return False
+
+        from tengri.components.stellar.sps.precompute import precompute_photometry
+
+        self._precomputed.photometry = precompute_photometry(
+            self.ssp_data,
+            self.filter_waves,
+            self.filter_trans,
+            self._z_fixed,
+            self._dl_cm_fixed,
+        )
+        return True
 
     def _build_precomputed_data(self, ssp_data, precompute):
         """Build Level 1: precomputed SSP tensors."""
@@ -4627,25 +4737,6 @@ class SEDModel:
             observation=observation,
             **model_kwargs,
         )
-
-    @classmethod
-    def from_groups(cls, *args, **kwargs) -> SEDModel:
-        """Deprecated alias for :meth:`SEDModel.build`.
-
-        .. deprecated:: 0.x
-            Use :meth:`SEDModel.build` instead. ``from_groups`` will be
-            removed in tengri v1.0. The ``from_*`` namespace is reserved
-            for future deserialization entry points.
-        """
-        import warnings
-
-        warnings.warn(
-            "`SEDModel.from_groups` is deprecated and will be removed in "
-            "tengri v1.0; use `SEDModel.build` instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return cls.build(*args, **kwargs)
 
     def prior_predictive(self, n: int = 500, seed: int = 42) -> PriorPredictive:
         """Sample from the prior and evaluate forward model on each draw.

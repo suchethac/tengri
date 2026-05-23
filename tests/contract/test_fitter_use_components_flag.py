@@ -75,11 +75,11 @@ class _DualPathModel:
         self.orchestrator_calls += 1
         return jnp.array([10.0, 20.0, 30.0])
 
-    def predict_spectrum(self, params, wave_obs):
+    def predict_spectrum(self, params, wave_obs=None):
         self.legacy_calls += 1
         return jnp.array([1.0, 2.0, 3.0])
 
-    def predict_spectrum_components(self, params, wave_obs):
+    def predict_spectrum_components(self, params, wave_obs=None):
         self.orchestrator_calls += 1
         return jnp.array([10.0, 20.0, 30.0])
 

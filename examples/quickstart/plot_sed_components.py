@@ -36,7 +36,7 @@ setup_style()
 obs = Observation(
     photometry=Photometry.from_names(["sdss_r"], cache_dir=str(data_path("filters"))),
 )
-model = SEDModel.from_groups(
+model = SEDModel.build(
     ssp_data=load_ssp(),
     observation=obs,
     sfh={

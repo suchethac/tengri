@@ -21,7 +21,7 @@ from tengri.analysis.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
 
 setup_style()
 
-model = SEDModel.from_groups(ssp_data=load_ssp(), **recipes.dust_demo())
+model = SEDModel.build(ssp_data=load_ssp(), **recipes.dust_demo())
 
 fig, ax = plt.subplots(figsize=(8, 5))
 sweep_parameter(

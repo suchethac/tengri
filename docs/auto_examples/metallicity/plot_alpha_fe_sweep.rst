@@ -72,7 +72,7 @@ Old-passive recipe + sweep ``met_alpha_fe`` from -0.2 to +0.6.
     recipe = recipes.dust_demo()
     recipe["sfh"].update(peak_lbt_gyr=8.0, log_peak_sfr=0.5, width_gyr=1.5, skew=0.0, trunc=10.0)
     recipe["dust"].update(tau_bc=0.0, tau_diff=0.1)
-    model = SEDModel.from_groups(ssp_data=load_ssp(), **recipe)
+    model = SEDModel.build(ssp_data=load_ssp(), **recipe)
 
     fig, ax = plt.subplots(figsize=(8, 5))
     sweep_parameter(

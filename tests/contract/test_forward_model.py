@@ -225,3 +225,97 @@ def test_multi_population_cross_pop_namespaced_extras(sed_model_minimal) -> None
     assert b_namespaced, "Pop 'b' should see 'a.*' namespaced keys after Pass 2"
     # Symmetric: identical SubModels publish identical key sets.
     assert {k[2:] for k in a_namespaced} == {k[2:] for k in b_namespaced}
+
+
+# ── Migration-2 public-property delegation contract ─────────────────
+
+
+@pytest.mark.parametrize(
+    "attr",
+    [
+        "wave_obs",
+        "precomputed",
+        "hybrid",
+        "z_fixed",
+        "dl_cm_fixed",
+        "n_grid",
+        "uses_stochastic_sfh",
+        "wavelengths",
+    ],
+)
+def test_forward_model_public_property_matches_inner_sed(
+    sed_model_minimal, simple_observation, attr
+) -> None:
+    """Migration 2 step 2/4 contract: each public property promoted off
+    the legacy ``__getattr__`` fall-through must read identically to the
+    inner SED's same-named attribute.
+
+    Pins the property surface so future refactors don't silently drop a
+    delegation (or, worse, redirect it through stale state).
+    """
+    forward = ForwardModel.build(sed=sed_model_minimal, observation=simple_observation)
+    inner_value = getattr(sed_model_minimal, attr)
+    forward_value = getattr(forward, attr)
+    assert forward_value is inner_value or forward_value == inner_value
+
+
+def test_forward_model_compile_signature_matches_inner_sed(
+    sed_model_minimal, simple_observation
+) -> None:
+    """``compile_signature`` is the JIT cache key — it MUST be stable across
+    the SEDModel / ForwardModel boundary so Fitter cache lookups don't fork.
+    """
+    forward = ForwardModel.build(sed=sed_model_minimal, observation=simple_observation)
+    assert forward.compile_signature() == sed_model_minimal.compile_signature()
+
+
+def test_forward_model_predict_delegates_match_inner_sed(
+    sed_model_minimal, simple_observation
+) -> None:
+    """Spot-check that explicit method delegates produce the same output as
+    calling the inner SED directly. Guards against accidental wrapper drift.
+    """
+    forward = ForwardModel.build(sed=sed_model_minimal, observation=simple_observation)
+    params = {"redshift": 0.05}
+    import jax.numpy as jnp
+
+    direct_phot = sed_model_minimal.predict_photometry(params)
+    forward_phot = forward.predict_photometry(params)
+    assert jnp.allclose(direct_phot, forward_phot, rtol=1e-12)
+
+
+def test_forward_model_delegation_walks_into_population_sed_model(
+    sed_model_minimal, simple_observation
+) -> None:
+    """ForwardModel wrapping a :class:`PopulationSEDModel` must resolve the
+    promoted properties through the *two-level* chain
+    ``forward.populations[0].sed`` → ``pop.sed`` (the template SEDModel).
+
+    Migration 2's ``_inner_sed_for_delegation`` does ``getattr(sub, 'sed', sub)``
+    — this test pins that walk so a future refactor doesn't accidentally
+    flatten back to the single-level lookup and break hierarchical fits.
+    """
+    import jax.numpy as jnp
+
+    from tengri.forward.population_sed_model import PopulationSEDModel
+
+    pop = PopulationSEDModel(
+        sed=sed_model_minimal,
+        galaxies=[
+            {"flux_obs": jnp.ones(3) * 1e-18, "noise": jnp.ones(3) * 1e-19} for _ in range(2)
+        ],
+    )
+    forward = ForwardModel.build(population=pop, observation=simple_observation)
+    # Each promoted property must reach the *template* (sed_model_minimal),
+    # not stop at the PopulationSEDModel wrapper.
+    template = sed_model_minimal
+    assert forward.wave_obs is getattr(template, "wave_obs", None) or forward.wave_obs == getattr(
+        template, "wave_obs", None
+    )
+    assert forward.precomputed is template.precomputed
+    assert forward.z_fixed == template.z_fixed
+    assert forward.n_grid == template.n_grid
+    assert forward.uses_stochastic_sfh == template.uses_stochastic_sfh
+    assert forward.wavelengths is template.wavelengths
+    # compile_signature is structural — must match the template, not the wrapper.
+    assert forward.compile_signature() == template.compile_signature()

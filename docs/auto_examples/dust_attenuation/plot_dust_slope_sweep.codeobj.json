@@ -1,5 +1,5 @@
 {
- "SEDModel.from_groups": [
+ "SEDModel.build": [
   {
    "is_class": false,
    "is_explicit": false,

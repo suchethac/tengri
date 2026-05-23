@@ -72,7 +72,7 @@ redward toward the submillimeter.
         "T": 35.0,
         "beta_ir": 1.6,
     }
-    model = SEDModel.from_groups(ssp_data=load_ssp(), **recipe)
+    model = SEDModel.build(ssp_data=load_ssp(), **recipe)
 
     fig, ax = plt.subplots(figsize=(8, 5))
     sweep_parameter(

@@ -526,31 +526,24 @@ class Fitter:
     def _auto_precompute_photometry(self, model: Any) -> None:
         """Auto-trigger photometry precomputation if conditions are met.
 
-        Fires when: fixed redshift + filters present + not yet precomputed.
-        Lets users create a Model without ``precompute=True`` and still get
-        the fast fused path when they construct a Fitter.
+        Fires when: photometry / joint data_type + the model declares an
+        :meth:`ensure_photometry_precomputed` method. Lets users build a
+        Model without ``precompute=True`` and still get the fast fused
+        path when they construct a Fitter.
+
+        The actual gate (fixed redshift + filters + not-yet-precomputed)
+        lives inside :meth:`SEDModel.ensure_photometry_precomputed` so
+        Fitter doesn't reach into model internals. Migration 2 step 3:
+        prior open-coded version touched ``model._precomputed``,
+        ``model._z_fixed``, ``model._dl_cm_fixed`` and a no-op
+        ``model._build_hybrid_kernels()`` call (the method has been
+        absent for a long time and the result was silently dropped).
         """
-        if (
-            self.data_type not in ("photometry", "joint")
-            or model._precomputed.photometry is not None
-            or getattr(model, "_z_fixed", None) is None
-            or getattr(model, "filter_waves", None) is None
-        ):
+        if self.data_type not in ("photometry", "joint"):
             return
-
-        import contextlib
-
-        from tengri.components.stellar.sps.precompute import precompute_photometry
-
-        model._precomputed.photometry = precompute_photometry(
-            model.ssp_data,
-            model.filter_waves,
-            model.filter_trans,
-            model._z_fixed,
-            model._dl_cm_fixed,
-        )
-        with contextlib.suppress(Exception):
-            model._hybrid = model._build_hybrid_kernels()
+        ensure = getattr(model, "ensure_photometry_precomputed", None)
+        if ensure is not None:
+            ensure()
 
     def _init_emission_lines(self, model, eline_marginalize, eline_prior_type):
         """Configure emission line marginalization and fitted-amplitude modes."""
@@ -1780,7 +1773,7 @@ class Fitter:
 
         # Dimensionality
         n_free = len(self._free_names)
-        n_grid = self.model._n_grid if self.model._uses_stochastic_sfh else 0
+        n_grid = self.model.n_grid if self.model.uses_stochastic_sfh else 0
         dim_str = f"{n_free} free"
         if n_grid:
             dim_str += f" + {n_grid} latent (ξ)"
@@ -2339,7 +2332,7 @@ class Fitter:
             for g in batch
         )
         _use_vmap_map = (
-            method == "map" and self.model._precomputed.photometry is not None and _same_shape
+            method == "map" and self.model.precomputed.photometry is not None and _same_shape
         )
 
         if _use_vmap_map:
@@ -2354,7 +2347,7 @@ class Fitter:
         }
         _use_vmap_mcmc = (
             method in _mcmc_methods
-            and self.model._precomputed.photometry is not None
+            and self.model.precomputed.photometry is not None
             and _same_shape
             and not self.spec.stochastic
         )

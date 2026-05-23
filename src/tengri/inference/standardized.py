@@ -1,6 +1,17 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Standardized forward model for unified inference.
 
+.. note::
+    Legacy parallel implementation — **not on the canonical inference
+    path**. As of 2026-05 (the single-Hamiltonian Fitter consolidation
+    documented in CLAUDE.md), production inference flows through
+    :class:`tengri.Fitter` + :func:`tengri.inference.loss_functions.build_loss_fn`,
+    which does the same ξ → physical-params mapping via
+    :func:`~tengri.inference.loss_functions._unstandardize_parameters`.
+    This module is kept because its 27 unit tests still document the
+    standardization math, but no `src/` code outside this file imports
+    :class:`StandardizedForwardModel`. Candidate for removal in v1.0.
+
 Maps ξ ~ N(0, I) → predicted observables, absorbing ALL prior
 structure into the forward model. The loss is always:
 
