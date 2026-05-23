@@ -131,21 +131,33 @@ pop = PopulationSEDModel(
 )
 
 forward = ForwardModel.build(population=pop, observation=obs)
+
+# Inference is the same as for a single galaxy: one Hamiltonian path,
+# Fitter sees a (N_gal, n_filters)-shaped batched prediction and
+# minimises chi^2 + xi^T xi over the joint latent space.
+fitter = Fitter(forward)          # auto-extracts (data, noise) from pop.galaxies
+posterior = fitter.run('vi')
 ```
 
 The PSD priors live on the ``PopulationSEDModel`` construction — not on a
 separate ``HierarchicalFitter`` — so there is one place that
 parameterises the hierarchy.
 
-Inference today routes through the legacy
-:class:`tengri.PopulationFitter` machinery (one ``Fitter``-equivalent
-class that handles hierarchical VI / EVI / raytrace); the deep
-integration that wires this behind ``ForwardModel.predict`` /
-``Fitter`` is tracked in
-`issue #211 <https://github.com/suchethac/tengri/issues/211>`_. Once
-that lands, the user-facing API stays exactly the same — you write
-``ForwardModel.build(population=pop)`` once, and inference is
-``Fitter(forward, ...).run('vi')``.
+Inference routes through the standard
+:class:`tengri.Fitter` machinery natively (PRs #241–#246, 2026-05).
+There is **one** information-Hamiltonian path —
+``Fitter(forward, ...).run('vi')`` — whether ``forward`` holds an
+:class:`SEDModel` (single galaxy), a :class:`PopulationSEDModel`
+(hierarchical), or :class:`SpatialSEDModel`. The
+:class:`PopulationSEDModel` publishes its batched axes
+(``{'galaxy': 0}``) and the spec view publishes per-param shapes
+(``(N_gal,)`` for per-galaxy, ``()`` for shared); the Fitter's
+existing inference backends consume the batched output without any
+type-specific code.
+
+The legacy :class:`tengri.PopulationFitter` direct API remains
+importable but emits a one-shot ``DeprecationWarning`` pointing at
+this canonical path; the legacy class will be removed in v1.0.
 
 ## Composing SubModels
 

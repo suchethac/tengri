@@ -5,14 +5,9 @@ DustEmissionSEDComponent — swap MBB / PAHspec / Astrodust
 Compare dust emission templates at fixed infrared luminosity. Shows how
 spectral shape changes across modified-blackbody, Draine+2021 PAHspec, and
 Hensley & Draine 2023 Astrodust while bolometric output remains conserved.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_astrodust_hd23_04_sedmodel_dust_emission_swap_001.png
-   :alt: plot_astrodust_hd23_04_sedmodel_dust_emission_swap
-   :class: sphx-glr-single-img
-
 """
+
+import warnings
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -27,6 +22,8 @@ from tengri.components.dust.emission_component import (
 from tengri.protocols.component import PipelineState
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 
 def _eval(comp: DustEmissionSEDComponent, wave_aa: jnp.ndarray, params: dict) -> np.ndarray:
@@ -99,9 +96,7 @@ ax.set(
     ylabel=r"$\nu L_\nu\ [\mathrm{erg\,s^{-1}}]$",
     xlim=(1.0, 1.0e3),
     ylim=(1.0e40, 5.0e43),
-    title=r"Same $L_{\rm ir}=10^{44}\,\mathrm{erg\,s^{-1}}$, three templates",
 )
 ax.legend(loc="lower center", frameon=False, fontsize=10)
 fig.tight_layout()
-plt.savefig("plot_astrodust_hd23_04_sedmodel_dust_emission_swap.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_astrodust_hd23_04_sedmodel_dust_emission_swap.png", dpi=150, bbox_inches="tight")

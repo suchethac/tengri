@@ -1,80 +1,72 @@
 """
-Corner Plot with Truth Overlay
-==============================
+Posterior corner plot from variational inference
+================================================
 
-Fits mock photometry and displays a corner plot with injected truth
-values marked. Uses tengri's safe_corner utility.
+Demonstrates parameter degeneracies and individual 1-D marginalized
+posteriors after fitting mock 5-band SDSS photometry. The corner plot
+shows the full 2-D covariance structure between parameters; blue lines
+mark the injected truth. Note: for demonstration scale; production runs
+use 10× more VI iterations and samples.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_corner_001.png
-   :alt: plot_corner
-   :class: sphx-glr-single-img
-
+Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 """
 
-import jax
-import matplotlib.pyplot as plt
+import warnings
 
-from tengri import (
-    Fitter,
-    Fixed,
-    Observation,
-    Parameters,
-    Photometry,
-    SEDModel,
-    Uniform,
-    load_ssp,
-    safe_corner,
-    setup_style,
-)
+import corner
+import jax
+import jax.numpy as jnp
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-
-# --- Data ---
-
-ssp = load_ssp()
-obs = Observation(
-    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+ssp = tengri.load_ssp()
+obs = tengri.Observation(
+    photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 )
 
-# --- SEDModel + mock ---
-spec = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    met_logzsol=Uniform(-2.0, 0.2),
-    dust_tau_diff=Uniform(0.0, 1.5),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.1),
-    mean_sfh_type="tsnorm",
+model = tengri.SEDModel.build(
+    ssp,
+    observation=obs,
+    sfh={"type": "tsnorm", "*": tengri.FREE, "skew": tengri.Fixed(0.3), "trunc": tengri.Fixed(10.0)},
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_diff": tengri.Uniform(0.0, 1.5),
+        "slope": -0.7,
+    },
+    redshift=tengri.Fixed(0.1),
 )
-model = SEDModel(spec, ssp, observation=obs)
+
 key = jax.random.PRNGKey(99)
-true_params = spec.sample(key)
-# Override to ensure star-forming galaxy
-true_params["sfh_tsnorm_peak_lbt_gyr"] = 3.0
-true_params["sfh_tsnorm_width_gyr"] = 2.0
-true_params["sfh_tsnorm_log_peak_sfr"] = 1.0
-mock = model.mock(true_params, snr=25.0, key=key)
+truth = dict(model.spec.sample(key))
+truth.update(
+    sfh_tsnorm_peak_lbt_gyr=3.0,
+    sfh_tsnorm_width_gyr=2.0,
+    sfh_tsnorm_log_peak_sfr=1.0,
+    dust_tau_diff=0.3,
+)
+mock = model.mock(truth, snr=25.0, key=key)
 
-# --- Fit ---
-fitter = Fitter(model, mock.flux_obs, mock.noise, data_type="photometry")
-fitter.run("map", n_steps=300, verbose=False)
-fitter.compile(verbose=False)
-posterior = fitter.run(
-    "vi",
-    n_iterations=10,
-    n_samples=4,
-    n_posterior_samples=3000,
+forward = tengri.ForwardModel.build(sed=model, observation=obs)
+posterior = forward.fit(
+    mock.flux_obs, mock.noise, method="native_vi_nonlinear", n_iterations=500, n_samples=3,
     verbose=False,
 )
 
-# --- Corner plot ---
-fig = safe_corner(posterior, truths=true_params)
-if fig is not None:
-    fig.suptitle("Posterior corner plot (truth = blue lines)", y=1.02)
+samples_dict = posterior.samples
+param_names = list(samples_dict.keys())
+samples_array = np.array([samples_dict[p] for p in param_names]).T
+truths = [float(truth[p]) for p in param_names]
 
-plt.savefig("plot_corner.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig = corner.corner(
+    samples_array, labels=param_names, truths=truths, color="C0",
+    hist_kwargs={"density": True}, show_titles=False,
+)
+
+fig.savefig("plot_corner.png", dpi=150, bbox_inches="tight")

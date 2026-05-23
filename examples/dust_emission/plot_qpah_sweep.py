@@ -5,14 +5,9 @@ PAH Mass Fraction (q_PAH)
 PAH mass fraction controls strength of polycyclic aromatic hydrocarbon
 mid-infrared emission features. Higher q_PAH produces stronger features at
 3.3, 6.2, 7.7, 8.6, 11.3 μm. Range varies by dust model.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_qpah_sweep_001.png
-   :alt: plot_qpah_sweep
-   :class: sphx-glr-single-img
-
 """
+
+import warnings
 
 import matplotlib.pyplot as plt
 
@@ -20,6 +15,8 @@ from tengri import FIXED, SEDModel, load_ssp, recipes
 from tengri.analysis.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 recipe = recipes.dust_demo()
 recipe["dust"]["emission"] = {
@@ -46,9 +43,7 @@ ax.set(
     xscale="log",
     yscale="log",
     ylim=(1e31, 1e37),
-    title="PAH Mass Fraction: Mid-Infrared Feature Strength",
     ylabel=r"$\lambda F_\lambda$ (not normalized)",
 )
 fig.tight_layout()
-plt.savefig("plot_qpah_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_qpah_sweep.png", dpi=150, bbox_inches="tight")

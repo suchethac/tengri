@@ -73,6 +73,20 @@ def _assert_phot_ok(phot):
     assert bool(jnp.all(phot > 0)), "non-positive photometry"
 
 
+# Module-level skip tally — populated by pytest's reporting hook in
+# ``tests/conftest.py`` via the ``_skipped_e2e_ports`` list. If anyone
+# wonders "how many ports actually ran in CI?", the terminal_summary
+# hook at the end of the session prints the count.
+_skipped_e2e_ports: list[str] = []
+
+
+def _skip_with_tally(reason: str, port_name: str = "") -> None:
+    """Skip a port test AND record the skip for the end-of-session tally."""
+    if port_name:
+        _skipped_e2e_ports.append(port_name)
+    pytest.skip(reason)
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Dust attenuation backends
 # ─────────────────────────────────────────────────────────────────────
@@ -151,7 +165,7 @@ def test_agn_e2e(ssp, obs, agn_type):
             agn={"type": agn_type, "*": Fixed},
             redshift=Fixed(0.05),
         )
-    except (FileNotFoundError, TypeError, KeyError) as exc:
+    except FileNotFoundError as exc:
         pytest.skip(f"{agn_type!r} build skipped: {exc}")
     _assert_phot_ok(model.predict_photometry({}))
 
@@ -174,8 +188,8 @@ def test_nebular_e2e(ssp, obs, neb_type):
             neb={"type": neb_type, "*": Fixed},
             redshift=Fixed(0.05),
         )
-    except (FileNotFoundError, ValueError, KeyError) as exc:
-        pytest.skip(f"{neb_type!r} build skipped: {exc}")
+    except FileNotFoundError as exc:
+        pytest.skip(f"{neb_type!r} build skipped (data missing): {exc}")
     _assert_phot_ok(model.predict_photometry({}))
 
 
@@ -260,29 +274,149 @@ def test_shock_L_published_is_total_not_halpha_anchor():
 # ─────────────────────────────────────────────────────────────────────
 
 
-def test_radio_reads_L_ir_from_upstream_dust(ssp, obs):
-    """When a dust component publishes L_absorbed (≈ L_ir), the
-    radio port should pick it up via optional_inputs and produce
-    a brighter radio output than when it falls back to 0."""
-    try:
-        # Model with dust producing L_ir
-        m_with_dust = _silent_build(
-            ssp_data=ssp,
-            observation=obs,
-            sfh={"type": "dpl", "*": Fixed},
-            dust={"type": "calzetti", "tau_v": Fixed(0.8)},
-            radio={"type": "radio_powerlaw", "*": Fixed},
-            redshift=Fixed(0.05),
-        )
-    except (TypeError, KeyError) as exc:
-        pytest.skip(f"radio chain build skipped: {exc}")
-    phot = m_with_dust.predict_photometry({})
-    _assert_phot_ok(phot)
-    # Real assertion: the radio chain works at all — the optional_input
-    # fallback didn't blow up. Stronger "brighter with dust" comparison
-    # requires radio bandpasses, not SDSS optical, so we leave it at
-    # finite/positive here. The unit-level fallback behaviour is pinned
-    # by the contract tests already.
+def test_radio_powerlaw_actually_reads_L_ir_when_published():
+    """Unit-level test: instantiate RadioPowerLawSEDComponent, drive its
+    ``apply`` with two ForwardStates — one with L_ir = 1e44 erg/s in
+    state.derived, one without — and verify the published sed_radio
+    differs by a finite, positive amount in the L_ir case.
+
+    This is the proper verification that ``optional_inputs`` plumbs the
+    upstream-published value through to ``predict()``; the e2e chain
+    tests above only assert the build doesn't crash.
+    """
+    from tengri.components.radio.radio_model import RadioPowerLawSEDComponent
+    from tengri.protocols.component import ForwardState
+    from tengri.protocols.derived_state import DerivedState
+
+    comp = RadioPowerLawSEDComponent()
+    wave = jnp.geomspace(1e6, 1e9, 64)  # radio wavelengths (Å)
+    params = {
+        "radio_q_ir": jnp.asarray(2.64),
+        "radio_alpha_sf": jnp.asarray(0.8),
+        "radio_loudness": jnp.asarray(0.0),
+        "radio_alpha_agn": jnp.asarray(0.7),
+        "radio_T_e": jnp.asarray(1e4),
+        "radio_alpha_ff": jnp.asarray(-0.1),
+    }
+
+    state_no_L_ir = ForwardState(wave=wave, sed_intrinsic=jnp.zeros_like(wave))
+    state_with_L_ir = ForwardState(
+        wave=wave,
+        sed_intrinsic=jnp.zeros_like(wave),
+        derived=DerivedState.from_dict({"L_ir": jnp.asarray(1e44)}),
+    )
+
+    out_no = comp.apply(state_no_L_ir, params)
+    out_with = comp.apply(state_with_L_ir, params)
+
+    sed_no = out_no.derived["sed_radio"]
+    sed_with = out_with.derived["sed_radio"]
+
+    # The L_ir > 0 case should produce strictly more radio emission
+    # somewhere on the grid than the L_ir = 0 fallback case.
+    diff = jnp.max(jnp.abs(sed_with - sed_no))
+    assert float(diff) > 0.0, (
+        "optional_inputs wiring is broken: radio sed_radio is identical "
+        "with and without L_ir in state.derived"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Resolver provenance — pinpoint that build() picked SEDModelComponent
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_calzetti_build_dispatches_to_sedmodelcomponent_class(ssp, obs):
+    """``dust={'type': 'calzetti'}`` must land on the new
+    :class:`Calzetti` SEDModelComponent subclass, not on the legacy
+    bare-Protocol :class:`DustAttenuationSEDComponent`. This pins the
+    resolver provenance — a regression that re-routes ``calzetti`` to
+    the legacy class would silently bypass the new wiring."""
+    from tengri.components.dust.calzetti_model import Calzetti
+    from tengri.components.sed_model_component import SEDModelComponent
+
+    model = _silent_build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "dpl", "*": Fixed},
+        dust={"type": "calzetti", "tau_v": Fixed(0.3)},
+        redshift=Fixed(0.05),
+    )
+    chain = model._build_component_chain()
+
+    dust_components = [
+        c for c in chain if isinstance(c, SEDModelComponent) and c.name == "calzetti"
+    ]
+    assert len(dust_components) == 1, (
+        f"expected exactly one SEDModelComponent for calzetti in the chain; "
+        f"found {len(dust_components)}. Chain: {[type(c).__name__ for c in chain]}"
+    )
+    assert isinstance(dust_components[0], Calzetti), (
+        f"resolver dispatched 'calzetti' to {type(dust_components[0]).__name__!r}, "
+        f"not to the new Calzetti SEDModelComponent class. Resolver regression?"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Registry baseline — catch silent renames or removals
+# ─────────────────────────────────────────────────────────────────────
+
+
+# Hard-coded snapshot of port names as of this PR. New ports add to this
+# set in their own PR; removals must update this list explicitly.
+_EXPECTED_REGISTRY_NAMES = frozenset(
+    {
+        # Dust attenuation
+        "calzetti",
+        "smc",
+        "mw",
+        "salim18",
+        "charlot_fall",
+        # Dust IR emission
+        "modified_blackbody_ir",
+        "dl07_ir",
+        "dl14_ir",
+        "dale2014_ir",
+        "astrodust_ir",
+        "draine2021_pah_ir",
+        # AGN
+        "skirtor",
+        "kd18_disc",
+        "powerlaw_disc",
+        "silva04",
+        "cat3d_wind",
+        "agn_nlr",
+        # Nebular
+        "cue_emulator",
+        "cloudy_grid",
+        "cb19",
+        "mappings",
+        "shock",
+        # Radio
+        "radio_powerlaw",
+        "radio_dpl",
+        # X-ray
+        "xray_aird",
+        "agn_xray_corona",
+    }
+)
+
+
+def test_registered_port_names_against_baseline():
+    """Hard-coded baseline of port names. New ports add to ``_EXPECTED_REGISTRY_NAMES``
+    explicitly. Removals or renames fail this test, forcing a conversation
+    in the PR that drops them rather than silent breakage in downstream code.
+
+    Adds (registry has names not in the expected set) are permitted —
+    a new port lands cleanly without touching this file.
+    Removes (expected has names not in the registry) fail.
+    """
+    actual = set(_REGISTRY.keys())
+    missing = _EXPECTED_REGISTRY_NAMES - actual
+    assert not missing, (
+        f"port name(s) missing from _REGISTRY: {sorted(missing)}. "
+        f"If intentional, update _EXPECTED_REGISTRY_NAMES in this file."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────

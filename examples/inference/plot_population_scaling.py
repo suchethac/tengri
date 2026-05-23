@@ -1,45 +1,17 @@
 """
 Population VI scaling: time, memory, and convergence
-=====================================================
+====================================================
 
 Renders the wall-time / peak-memory / iteration scaling of tengri's two
 pure-JAX population variational engines on a 5-band SDSS photometry
-catalog with a stochastic-SFH forward model:
+catalog with a stochastic-SFH forward model. Data source: cached benchmark
+from ``bench/scripts/benchmark_vi_xlarge.py``.
 
-* ``native_vi_linear`` — linearised geometric VI (MGVI).
-* ``native_vi_nonlinear`` — full geometric VI (geoVI).
+This script is **render-only**: it loads results from a precomputed JSON
+and does not run the benchmark. Instructions for (re)generating the benchmark
+are printed on first missing-data run.
 
-The grid scans N ∈ {4, …, 8192} galaxies × K ∈ {1, 2, 4, 8} forward
-chunks. Each cell is run in a fresh Python subprocess so the peak-RSS
-reading is clean.
-
-This script is **render-only**: it loads results from
-``bench/results/vi_scaling_benchmark.json`` produced by
-
-.. code-block:: bash
-
-    JAX_PLATFORMS=cpu python bench/scripts/benchmark_vi_xlarge.py
-
-If the JSON is absent, the script prints instructions and exits.
-
-Convergence policy
-------------------
-Both engines stop early via ``kl_rtol=1e-2``. The benchmark uses an
-iteration cap of 50 (retry 100); a row is *converged* iff
-``iters_used < cap``. Non-converged rows are flagged on the iteration
-panel.
-
-Memory policy
--------------
-Each run is bounded to ≤ 30 GB peak per worker. Columns abort once a
-row exceeds the budget — those (N, K) cells are absent from the plot.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_population_scaling_001.png
-   :alt: plot_population_scaling
-   :class: sphx-glr-single-img
-
+Reference: Asterhan et al. (forthcoming, stochastic SFH + hierarchical inference).
 """
 
 from __future__ import annotations
@@ -50,7 +22,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import setup_style
+import tengri
+from tengri.analysis.plotting import setup_style
 
 setup_style()
 
