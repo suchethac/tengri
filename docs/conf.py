@@ -79,7 +79,7 @@ sphinx_gallery_conf = {
     "ignore_pattern": (
         # Heavy NUTS/SVI scripts whose runtime + memory footprint OOMs the
         # build (each NUTS warmup can peak at 20+ GB per CLAUDE.md gotcha).
-        r"plot_(population_scaling|hierarchical_convergence|prior_posterior_compare)\.py$"
+        r"plot_(population_scaling|hierarchical_convergence|prior_posterior_compare|wrong_model_trap)\.py$"
     ),
     "download_all_examples": False,
     # Locally we execute (default). On CI (e.g. GitHub Actions sets CI=true) we
