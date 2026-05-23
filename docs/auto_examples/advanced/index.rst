@@ -35,7 +35,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Computes the Jacobian d(flux)/d(theta) of the forward model and displays it as a heatmap showing which photometric bands are sensitive to which physical parameters.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Computes the Jacobian d(flux)/d(theta) of the forward model and displays it as a heatmap showing which photometric bands are sensitive to which physical parameters. Each column shows normalized sensitivity to one parameter; dark blue/red indicates strong dependence.">
 
 .. only:: html
 
@@ -52,7 +52,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sets up a small population of mock galaxies sharing the same burstiness PSD parameters (sigma, tau), runs PopulationFitter briefly, and displays the shared PSD posterior vs truth.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sets up a small population of mock galaxies sharing the same burstiness PSD parameters (sigma, tau). Runs PopulationFitter with VI to recover the shared PSD hyperparameters from per-galaxy photometry, demonstrating hierarchical Bayesian shrinkage on the intrinsic SFH scatter.">
 
 .. only:: html
 
@@ -69,7 +69,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates tengri&#x27;s Observation API for joint fitting. Creates a mock galaxy with both SDSS photometry and a low-resolution spectrum, fits with MAP, and shows the combined constraint power. Requires SSP data.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates tengri&#x27;s Observation API for joint fitting across two data streams. Creates a mock galaxy with SDSS photometry and low-resolution spectroscopy, then recovers parameters via MAP. Shows how spectroscopy breaks photometric degeneracies.">
 
 .. only:: html
 
@@ -86,7 +86,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Build a full multiwavelength SED — stellar + nebular + AGN + dust + radio + X-ray + IGM — without going through tengri.SEDModel, using tengri.forward.build_components and tengri.forward.run_components (Phase II-2.6 public API).">
+    <div class="sphx-glr-thumbcontainer" tooltip="TODO[examples-sweep]: This script uses low-level component orchestration (build_components, run_components) which is experimental Phase II-2.6 API intended for infrastructure use, not recommended for user-facing examples.">
 
 .. only:: html
 
@@ -97,13 +97,13 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Component orchestrator end-to-end</div>
+      <div class="sphx-glr-thumbnail-title">Component Orchestrator End-to-End</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Build a full galaxy SED spanning X-ray to radio wavelengths. Shows stellar emission, dust attenuation, dust IR emission, radio synchrotron, and X-ray binary contributions. No SSP data required for the multi-wavelength components.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Build a full galaxy SED spanning X-ray to radio wavelengths. Shows stellar emission, dust attenuation, dust IR emission, radio synchrotron, and X-ray binary contributions. Demonstrates tengri&#x27;s multiwavelength physics modules for radio and X-ray—no SSP data required for these components.">
 
 .. only:: html
 

@@ -1,5 +1,21 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Standardized forward model for unified inference.
+"""Standardized forward model — the canonical inference path.
+
+This module implements the **standardized parameterisation** (ξ ~ N(0, I))
+that every backend in :mod:`tengri.inference` ultimately consumes. It is
+the principled formulation of single-Hamiltonian inference: priors live
+inside per-parameter coordinate transforms so the loss collapses to
+:math:`\\mathcal{H}(\\xi) = \\tfrac{1}{2}\\chi^2 + \\tfrac{1}{2}\\xi^\\top\\xi`,
+independent of which distribution each free parameter was given.
+
+Production inference currently routes through
+:class:`tengri.Fitter` + :func:`tengri.inference.loss_functions.build_loss_fn`,
+which implements the same standardization inline (the
+:func:`~tengri.inference.loss_functions._unstandardize_parameters` helper).
+:class:`StandardizedForwardModel` here is the standalone, sampler-agnostic
+encapsulation — used by the unit tests as the canonical reference for the
+ξ-mapping math, and by future backends (Ray Tracing, vanilla MAP/Pathfinder)
+that want a coordinate-mapping object without the full Fitter envelope.
 
 Maps ξ ~ N(0, I) → predicted observables, absorbing ALL prior
 structure into the forward model. The loss is always:
@@ -248,12 +264,12 @@ class StandardizedForwardModel:
         params = self.xi_to_params(xi)
 
         if data_type == "photometry":
-            return self.model.predict_photometry(params, mode="traced")
+            return self.model.predict_photometry(params)
         elif data_type == "spectroscopy":
-            return self.model.predict_spectrum(params, wave_obs, mode="traced")
+            return self.model.predict_spectrum(params, wave_obs)
         elif data_type == "joint":
-            phot = self.model.predict_photometry(params, mode="traced")
-            spec = self.model.predict_spectrum(params, wave_obs, mode="traced")
+            phot = self.model.predict_photometry(params)
+            spec = self.model.predict_spectrum(params, wave_obs)
             return jnp.concatenate([phot, spec])
         else:
             raise ValueError(f"Unknown data_type: {data_type}")

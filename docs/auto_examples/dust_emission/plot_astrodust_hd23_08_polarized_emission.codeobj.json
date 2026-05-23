@@ -1,299 +1,5 @@
 {
- "ax1": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes._axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Axes"
-  }
- ],
- "ax1.plot": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes._axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes.plot"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes.plot"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Axes.plot"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes._base",
-   "module_short": "matplotlib.axes._base",
-   "name": "_AxesBase.plot"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "_AxesBase.plot"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "_AxesBase.plot"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.artist",
-   "module_short": "matplotlib.artist",
-   "name": "Artist.plot"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Artist.plot"
-  }
- ],
- "ax1.set": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes._axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes.set"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes.set"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Axes.set"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes._base",
-   "module_short": "matplotlib.axes._base",
-   "name": "_AxesBase.set"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "_AxesBase.set"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "_AxesBase.set"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.artist",
-   "module_short": "matplotlib.artist",
-   "name": "Artist.set"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Artist.set"
-  }
- ],
- "ax2": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes._axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Axes"
-  }
- ],
- "ax2.plot": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes._axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes.plot"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes.plot"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Axes.plot"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes._base",
-   "module_short": "matplotlib.axes._base",
-   "name": "_AxesBase.plot"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "_AxesBase.plot"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "_AxesBase.plot"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.artist",
-   "module_short": "matplotlib.artist",
-   "name": "Artist.plot"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Artist.plot"
-  }
- ],
- "ax2.set": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes._axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes.set"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes.set"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Axes.set"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes._base",
-   "module_short": "matplotlib.axes._base",
-   "name": "_AxesBase.set"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "_AxesBase.set"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "_AxesBase.set"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.artist",
-   "module_short": "matplotlib.artist",
-   "name": "Artist.set"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Artist.set"
-  }
- ],
- "c_cgs": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "float"
-  }
- ],
  "data_path": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -302,128 +8,7 @@
    "name": "data_path"
   }
  ],
- "factor": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
- "fig": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.figure",
-   "module_short": "matplotlib.figure",
-   "name": "Figure"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Figure"
-  }
- ],
- "fig.tight_layout": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.figure",
-   "module_short": "matplotlib.figure",
-   "name": "Figure.tight_layout"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Figure.tight_layout"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.figure",
-   "module_short": "matplotlib.figure",
-   "name": "FigureBase.tight_layout"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "FigureBase.tight_layout"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.artist",
-   "module_short": "matplotlib.artist",
-   "name": "Artist.tight_layout"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Artist.tight_layout"
-  }
- ],
- "i": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "int"
-  }
- ],
- "lam_cm": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
- "lambda_P_lambda": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
- "lgU": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
- "li_astrodust": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
  "load_astrodust_hd23_or_raise": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -438,24 +23,10 @@
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "ufunc"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
    "name": "abs"
   }
  ],
  "np.argmin": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "_ArrayFunctionDispatcher"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -468,26 +39,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
    "name": "asarray"
   }
  ],
  "np.errstate": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "errstate"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -500,26 +57,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "float"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
    "name": "nan"
   }
  ],
  "np.pi": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "float"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -534,65 +77,10 @@
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "_ArrayFunctionDispatcher"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
    "name": "where"
   }
  ],
- "p_frac": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
- "plt.savefig": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "savefig"
-  }
- ],
- "plt.show": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "show"
-  }
- ],
  "plt.subplots": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -605,119 +93,18 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "tengri.analysis.plotting",
    "module_short": "tengri.analysis.plotting",
    "name": "setup_style"
   }
  ],
- "tpl": [
+ "warnings.filterwarnings": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.dust.astrodust_hd23",
-   "module_short": "tengri.components.dust.astrodust_hd23",
-   "name": "AstrodustHD23Templates"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.components.dust",
-   "module_short": "tengri.components.dust",
-   "name": "AstrodustHD23Templates"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.components",
-   "module_short": "tengri.components",
-   "name": "AstrodustHD23Templates"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "AstrodustHD23Templates"
-  }
- ],
- "tpl.L_nu_astrodust": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib._jax",
-   "module_short": "jaxlib._jax",
-   "name": "ArrayImpl"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib",
-   "module_short": "jaxlib",
-   "name": "ArrayImpl"
-  }
- ],
- "tpl.lambda_P_lambda_polarized": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib._jax",
-   "module_short": "jaxlib._jax",
-   "name": "ArrayImpl"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib",
-   "module_short": "jaxlib",
-   "name": "ArrayImpl"
-  }
- ],
- "tpl.lgU": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib._jax",
-   "module_short": "jaxlib._jax",
-   "name": "ArrayImpl"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib",
-   "module_short": "jaxlib",
-   "name": "ArrayImpl"
-  }
- ],
- "tpl.wavelength_um": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib._jax",
-   "module_short": "jaxlib._jax",
-   "name": "ArrayImpl"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib",
-   "module_short": "jaxlib",
-   "name": "ArrayImpl"
-  }
- ],
- "wave_um": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
   }
  ]
 }

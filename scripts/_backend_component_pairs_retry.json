@@ -1,0 +1,54 @@
+[
+  {
+    "truth_model": "dense_basis+calzetti",
+    "fit_model": "dpl+calzetti",
+    "n_free_fit": 6,
+    "truth_derived": {
+      "log_stellar_mass": 9.96682853310721,
+      "log_sfr_100myr": -0.027894256473699013
+    },
+    "status": "failed",
+    "error_type": "ConcretizationTypeError",
+    "error_msg": "Abstract tracer value encountered where concrete value is expected: traced array with shape float64[]\nThe problem arose with the `float` function. If trying to convert the data type of a value, try using `x.astype(float)` or `jnp.array(x, float)` instead.\nThe error occurred while tracing the function single_step at /Users/suchethacooray/Projects/tengri/src/tengri/inference/backends/map_dispatch.py",
+    "traceback": "engri/src/tengri/inference/backends/map_dispatch.py:143 for jit. This value became a tracer due to JAX operations on these lines:\n\n  operation a:f64[] = sub 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:50 (Uniform.unstandardize)\n\n  operation a:f64[] = mul 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:26 (Uniform.unstandardize)\n\n  operation a:f64[] = add 0.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:15 (Uniform.unstandardize)\n\n  operation a:f64[] = sub 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:50 (Uniform.unstandardize)\n\n  operation a:f64[] = mul 2.2:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:26 (Uniform.unstandardize)\n\n(Additional originating lines are not shown.)\n\nSee https://docs.jax.dev/en/latest/errors.html#jax.errors.ConcretizationTypeError\n--------------------\nFor simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.\n"
+  },
+  {
+    "truth_model": "tsnorm+calzetti",
+    "fit_model": "dpl+calzetti",
+    "n_free_fit": 6,
+    "truth_derived": {
+      "log_stellar_mass": 10.507534574992976,
+      "log_sfr_100myr": -0.42098029493985156
+    },
+    "status": "failed",
+    "error_type": "ConcretizationTypeError",
+    "error_msg": "Abstract tracer value encountered where concrete value is expected: traced array with shape float64[]\nThe problem arose with the `float` function. If trying to convert the data type of a value, try using `x.astype(float)` or `jnp.array(x, float)` instead.\nThe error occurred while tracing the function single_step at /Users/suchethacooray/Projects/tengri/src/tengri/inference/backends/map_dispatch.py",
+    "traceback": "engri/src/tengri/inference/backends/map_dispatch.py:143 for jit. This value became a tracer due to JAX operations on these lines:\n\n  operation a:f64[] = sub 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:50 (Uniform.unstandardize)\n\n  operation a:f64[] = mul 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:26 (Uniform.unstandardize)\n\n  operation a:f64[] = add 0.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:15 (Uniform.unstandardize)\n\n  operation a:f64[] = sub 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:50 (Uniform.unstandardize)\n\n  operation a:f64[] = mul 2.2:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:26 (Uniform.unstandardize)\n\n(Additional originating lines are not shown.)\n\nSee https://docs.jax.dev/en/latest/errors.html#jax.errors.ConcretizationTypeError\n--------------------\nFor simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.\n"
+  },
+  {
+    "truth_model": "dpl+calzetti",
+    "fit_model": "dense_basis+calzetti",
+    "n_free_fit": 7,
+    "truth_derived": {
+      "log_stellar_mass": 10.575201503885898,
+      "log_sfr_100myr": -2.609984518756726
+    },
+    "status": "failed",
+    "error_type": "ConcretizationTypeError",
+    "error_msg": "Abstract tracer value encountered where concrete value is expected: traced array with shape float64[]\nThe problem arose with the `float` function. If trying to convert the data type of a value, try using `x.astype(float)` or `jnp.array(x, float)` instead.\nThe error occurred while tracing the function single_step at /Users/suchethacooray/Projects/tengri/src/tengri/inference/backends/map_dispatch.py",
+    "traceback": "engri/src/tengri/inference/backends/map_dispatch.py:143 for jit. This value became a tracer due to JAX operations on these lines:\n\n  operation a:f64[] = sub 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:50 (Uniform.unstandardize)\n\n  operation a:f64[] = mul 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:26 (Uniform.unstandardize)\n\n  operation a:f64[] = add 0.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:15 (Uniform.unstandardize)\n\n  operation a:f64[] = sub 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:50 (Uniform.unstandardize)\n\n  operation a:f64[] = mul 2.2:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:26 (Uniform.unstandardize)\n\n(Additional originating lines are not shown.)\n\nSee https://docs.jax.dev/en/latest/errors.html#jax.errors.ConcretizationTypeError\n--------------------\nFor simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.\n"
+  },
+  {
+    "truth_model": "dpl+smc",
+    "fit_model": "dpl+calzetti",
+    "n_free_fit": 6,
+    "truth_derived": {
+      "log_stellar_mass": 10.575201503885898,
+      "log_sfr_100myr": -2.609984518756726
+    },
+    "status": "failed",
+    "error_type": "ConcretizationTypeError",
+    "error_msg": "Abstract tracer value encountered where concrete value is expected: traced array with shape float64[]\nThe problem arose with the `float` function. If trying to convert the data type of a value, try using `x.astype(float)` or `jnp.array(x, float)` instead.\nThe error occurred while tracing the function single_step at /Users/suchethacooray/Projects/tengri/src/tengri/inference/backends/map_dispatch.py",
+    "traceback": "engri/src/tengri/inference/backends/map_dispatch.py:143 for jit. This value became a tracer due to JAX operations on these lines:\n\n  operation a:f64[] = sub 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:50 (Uniform.unstandardize)\n\n  operation a:f64[] = mul 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:26 (Uniform.unstandardize)\n\n  operation a:f64[] = add 0.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:15 (Uniform.unstandardize)\n\n  operation a:f64[] = sub 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:50 (Uniform.unstandardize)\n\n  operation a:f64[] = mul 2.2:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:26 (Uniform.unstandardize)\n\n(Additional originating lines are not shown.)\n\nSee https://docs.jax.dev/en/latest/errors.html#jax.errors.ConcretizationTypeError\n--------------------\nFor simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.\n"
+  }
+]

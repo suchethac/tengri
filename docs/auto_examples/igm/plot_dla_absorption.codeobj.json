@@ -3,7 +3,7 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri",
+   "module": "tengri.igm",
    "module_short": "tengri",
    "name": "dla_transmission_obs"
   }
@@ -26,6 +26,15 @@
    "name": "logspace"
   }
  ],
+ "mpl.colors.Normalize": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.colors",
+   "module_short": "matplotlib.colors",
+   "name": "Normalize"
+  }
+ ],
  "np.array": [
   {
    "is_class": false,
@@ -33,15 +42,6 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "array"
-  }
- ],
- "np.linspace": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "linspace"
   }
  ],
  "np.log10": [
@@ -53,40 +53,22 @@
    "name": "log10"
   }
  ],
- "np.ones_like": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ones_like"
-  }
- ],
- "plt.cm.Oranges": [
+ "plt.cm.ScalarMappable": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.pyplot.cm",
    "module_short": "matplotlib.pyplot.cm",
-   "name": "Oranges"
+   "name": "ScalarMappable"
   }
  ],
- "plt.savefig": [
+ "plt.get_cmap": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
-   "name": "savefig"
-  }
- ],
- "plt.show": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "show"
+   "name": "get_cmap"
   }
  ],
  "plt.subplots": [
@@ -105,6 +87,15 @@
    "module": "tengri.analysis.plotting",
    "module_short": "tengri.analysis.plotting",
    "name": "setup_style"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
   }
  ]
 }

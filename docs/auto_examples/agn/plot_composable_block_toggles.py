@@ -12,6 +12,8 @@ isolate the contribution. The dashed grey curve is the all-blocks-on
 reference.
 """
 
+# TODO: refactor to SEDModel.build API (currently uses low-level internal API)
+
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -138,4 +140,3 @@ fig.suptitle(
     fontsize=11,
 )
 fig.tight_layout()
-plt.show()

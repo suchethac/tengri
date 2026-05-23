@@ -32,10 +32,12 @@ of higher-velocity stellar populations.
    :alt: plot_velocity_dispersion_sweep
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-115
+.. GENERATED FROM PYTHON SOURCE LINES 17-116
 
 .. code-block:: Python
 
+
+    import warnings
 
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
@@ -46,6 +48,7 @@ of higher-velocity stellar populations.
     from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 
     ssp = load_ssp()
@@ -127,13 +130,11 @@ of higher-velocity stellar populations.
 
     ax.set_xlabel(r"Rest Wavelength [$\AA$]")
     ax.set_ylabel("Normalized Flux")
-    ax.set_title("Mg b Feature: Velocity Dispersion Broadening")
     ax.set_xlim(5050, 5250)
     ax.set_ylim(0.8, 1.02)
     ax.legend(frameon=False, loc="lower left", fontsize=10)
     fig.tight_layout()
-    plt.savefig("plot_velocity_dispersion_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_velocity_dispersion_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_velocity_dispersion_sweep.py:

@@ -447,8 +447,18 @@ class TestPredict:
         with pytest.raises(ValueError, match="Unknown data_type"):
             smodel.predict(xi, data_type="hyperspectral")
 
-    def test_predict_usestraced_mode(self):
-        """predict() must call predict_photometry with mode='traced'."""
+    def test_predict_does_not_pass_legacy_mode_kwarg(self):
+        """``predict()`` must not pass the removed ``mode=`` kwarg.
+
+        Phase 6-prep (2026-05-20) collapsed the historical kernel-cascade
+        modes (auto / exact / hybrid / compositional / traced) into a
+        single delegate routing through :meth:`predict_observables_jit`
+        — the JIT entry point. The ``mode=`` kwarg was subsequently
+        removed entirely; the JIT-safe property that ``mode='traced'``
+        once selected is now structurally enforced (no other path
+        exists), so this test guards against any future code path that
+        re-introduces a non-orchestrator call.
+        """
         from tengri.inference.standardized import StandardizedForwardModel
 
         spec = _make_spec()
@@ -459,9 +469,7 @@ class TestPredict:
         smodel.predict(xi, data_type="photometry")
 
         call_kwargs = model.predict_photometry.call_args
-        assert call_kwargs.kwargs.get("mode") == "traced" or (
-            len(call_kwargs.args) >= 2 and call_kwargs.args[1] == "traced"
-        )
+        assert "mode" not in call_kwargs.kwargs
 
 
 # ── Custom PSD model injection ────────────────────────────────────

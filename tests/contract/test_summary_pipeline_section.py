@@ -99,12 +99,12 @@ def _minimal_model(*, chain_raises: bool = False, chain=None):
     model.ssp_data.ssp_flux.shape = (10, 20, 30)
     model.ssp_data.ssp_wave = [1000.0, 30000.0]
     model.filter_waves = None
-    model._z_fixed = 0.05
+    model.z_fixed = 0.05
     model._forward_dtype = "float64"
-    model._precomputed.photometry = None
-    model._precomputed.spectroscopy = None
-    model._precomputed.photometry_ztable = None
-    model._hybrid.photometry = None
+    model.precomputed.photometry = None
+    model.precomputed.spectroscopy = None
+    model.precomputed.photometry_ztable = None
+    model.hybrid.photometry = None
     model._compositional.photometry = None
     model._dust_emission_model = None
     model._agn_model = None
@@ -112,8 +112,8 @@ def _minimal_model(*, chain_raises: bool = False, chain=None):
     model._uses_radio = False
     model._uses_xray = False
     model._uses_shock = False
-    model._uses_stochastic_sfh = False
-    model._n_grid = 0
+    model.uses_stochastic_sfh = False
+    model.n_grid = 0
 
     if chain_raises:
         model._build_component_chain.side_effect = RuntimeError("broken model")

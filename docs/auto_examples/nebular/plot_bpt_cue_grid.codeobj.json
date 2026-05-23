@@ -1,47 +1,11 @@
 {
- "Fixed": [
+ "jax.random.PRNGKey": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Fixed"
-  }
- ],
- "Parameters": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Parameters"
-  }
- ],
- "Path": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "Path"
-  }
- ],
- "SEDModel": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "SEDModel"
-  }
- ],
- "load_ssp_data": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "load_ssp_data"
+   "module": "jax.random",
+   "module_short": "jax.random",
+   "name": "PRNGKey"
   }
  ],
  "np.array": [
@@ -51,24 +15,6 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "array"
-  }
- ],
- "np.asarray": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "asarray"
-  }
- ],
- "np.empty": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "empty"
   }
  ],
  "np.linspace": [
@@ -89,22 +35,31 @@
    "name": "log10"
   }
  ],
- "np.nan": [
+ "np.where": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "nan"
+   "name": "where"
   }
  ],
- "plt.Line2D": [
+ "plt.Normalize": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
-   "name": "Line2D"
+   "name": "Normalize"
+  }
+ ],
+ "plt.cm.ScalarMappable": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot.cm",
+   "module_short": "matplotlib.pyplot.cm",
+   "name": "ScalarMappable"
   }
  ],
  "plt.cm.viridis": [
@@ -114,24 +69,6 @@
    "module": "matplotlib.pyplot.cm",
    "module_short": "matplotlib.pyplot.cm",
    "name": "viridis"
-  }
- ],
- "plt.savefig": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "savefig"
-  }
- ],
- "plt.show": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "show"
   }
  ],
  "plt.subplots": [
@@ -150,6 +87,51 @@
    "module": "tengri.analysis.plotting",
    "module_short": "tengri.analysis.plotting",
    "name": "setup_style"
+  }
+ ],
+ "tengri.FIXED": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "FIXED"
+  }
+ ],
+ "tengri.Fixed": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Fixed"
+  }
+ ],
+ "tengri.SEDModel.build": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.SEDModel",
+   "module_short": "tengri.SEDModel",
+   "name": "build"
+  }
+ ],
+ "tengri.load_ssp": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "load_ssp"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
   }
  ]
 }

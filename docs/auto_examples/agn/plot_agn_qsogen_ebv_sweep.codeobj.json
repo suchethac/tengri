@@ -1,20 +1,38 @@
 {
- "jnp.logspace": [
+ "jax.random.PRNGKey": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jax.random",
+   "module_short": "jax.random",
+   "name": "PRNGKey"
+  }
+ ],
+ "jnp.float64": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "jax.numpy",
    "module_short": "jax.numpy",
-   "name": "logspace"
+   "name": "float64"
   }
  ],
- "np.array": [
+ "mpl.colors.Normalize": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.colors",
+   "module_short": "matplotlib.colors",
+   "name": "Normalize"
+  }
+ ],
+ "np.asarray": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "array"
+   "name": "asarray"
   }
  ],
  "np.linspace": [
@@ -26,58 +44,22 @@
    "name": "linspace"
   }
  ],
- "np.log10": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "log10"
-  }
- ],
- "np.nan": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "nan"
-  }
- ],
- "np.where": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "where"
-  }
- ],
- "plt.cm.viridis": [
+ "plt.cm.ScalarMappable": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.pyplot.cm",
    "module_short": "matplotlib.pyplot.cm",
-   "name": "viridis"
+   "name": "ScalarMappable"
   }
  ],
- "plt.savefig": [
+ "plt.get_cmap": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
-   "name": "savefig"
-  }
- ],
- "plt.show": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "show"
+   "name": "get_cmap"
   }
  ],
  "plt.subplots": [
@@ -89,15 +71,6 @@
    "name": "subplots"
   }
  ],
- "qsogen": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.components.agn",
-   "module_short": "tengri.components.agn",
-   "name": "qsogen"
-  }
- ],
  "setup_style": [
   {
    "is_class": false,
@@ -105,6 +78,51 @@
    "module": "tengri.analysis.plotting",
    "module_short": "tengri.analysis.plotting",
    "name": "setup_style"
+  }
+ ],
+ "tengri.FIXED": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "FIXED"
+  }
+ ],
+ "tengri.Fixed": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Fixed"
+  }
+ ],
+ "tengri.SEDModel.build": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.SEDModel",
+   "module_short": "tengri.SEDModel",
+   "name": "build"
+  }
+ ],
+ "tengri.load_ssp": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "load_ssp"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
   }
  ]
 }

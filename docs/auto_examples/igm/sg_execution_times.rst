@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:02.579** total execution time for 2 files **from auto_examples/igm**:
+**00:01.086** total execution time for 5 files **from auto_examples/igm**:
 
 .. container::
 
@@ -32,9 +32,18 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_redshift.py` (``plot_igm_redshift.py``)
-     - 00:01.703
+   * - :ref:`sphx_glr_auto_examples_igm_plot_sed_with_igm.py` (``plot_sed_with_igm.py``)
+     - 00:01.086
      - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_dla_absorption.py` (``plot_dla_absorption.py``)
-     - 00:00.876
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_model_comparison.py` (``plot_igm_model_comparison.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_redshift.py` (``plot_igm_redshift.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_z_evolution.py` (``plot_igm_z_evolution.py``)
+     - 00:00.000
      - 0.0

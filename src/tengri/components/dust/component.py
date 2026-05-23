@@ -243,7 +243,7 @@ class DustAttenuationSEDComponent:
         # Phase 3c-3c-ii: filter-level A(λ_eff) and A'(λ_eff) LUTs.
         # Published only when an upstream component (stellar) has put
         # ``filter_eff_waves`` into ``state.derived`` — i.e. only when
-        # ``approx={'wave_precomp': True}`` is set on SEDModel.
+        # ``approx=WavePrecomp()`` is set on SEDModel.
         derived_overrides = dict(
             dust_attenuation_factor=attenuation,
             L_ir=l_ir,

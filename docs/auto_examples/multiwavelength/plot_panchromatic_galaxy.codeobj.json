@@ -1,49 +1,4 @@
 {
- "Fixed": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Fixed"
-  }
- ],
- "Observation": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Observation"
-  }
- ],
- "Parameters": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Parameters"
-  }
- ],
- "SEDModel": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "SEDModel"
-  }
- ],
- "Spectroscopy": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Spectroscopy"
-  }
- ],
  "jax.random.PRNGKey": [
   {
    "is_class": false,
@@ -71,15 +26,6 @@
    "name": "logspace"
   }
  ],
- "load_ssp": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "load_ssp"
-  }
- ],
  "np.array": [
   {
    "is_class": false,
@@ -89,22 +35,13 @@
    "name": "array"
   }
  ],
- "plt.savefig": [
+ "np.asarray": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "savefig"
-  }
- ],
- "plt.show": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "show"
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "asarray"
   }
  ],
  "plt.subplots": [
@@ -116,7 +53,52 @@
    "name": "subplots"
   }
  ],
- "radio_star_forming": [
+ "setup_style": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.analysis.plotting",
+   "module_short": "tengri.analysis.plotting",
+   "name": "setup_style"
+  }
+ ],
+ "tengri.FIXED": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "FIXED"
+  }
+ ],
+ "tengri.Fixed": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Fixed"
+  }
+ ],
+ "tengri.SEDModel.build": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.SEDModel",
+   "module_short": "tengri.SEDModel",
+   "name": "build"
+  }
+ ],
+ "tengri.load_ssp": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "load_ssp"
+  }
+ ],
+ "tengri.radio.radio_star_forming": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -125,13 +107,13 @@
    "name": "radio_star_forming"
   }
  ],
- "setup_style": [
+ "warnings.filterwarnings": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "setup_style"
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
   }
  ]
 }

@@ -349,7 +349,7 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
 
     Notes
     -----
-    **Does not require SSP data.** Unlike :class:`~tengri.SEDModel.from_groups()`,
+    **Does not require SSP data.** Unlike :meth:`~tengri.SEDModel.build`,
     which needs SSP data to build the full model, this function only translates
     the recipe structure to a :class:`~tengri.Parameters` object and introspects
     its parameter names — the heaviest operation is a pure-Python dict traversal.

@@ -18,95 +18,81 @@
 .. _sphx_glr_auto_examples_sfh_plot_psd_sigma_sweep.py:
 
 
-Stochastic SFH: Burstiness Amplitude σ
-========================================
+PSD amplitude σ controls burst magnitude in stochastic SFHs
+===========================================================
 
-σ controls how violently star formation fluctuates around the smooth trend.
-Small σ ≈ smooth; large σ = dramatic bursts.
+The amplitude σ of the power spectral density sets how dramatically star
+formation fluctuates around the smooth trend: σ ≈ 0 means nearly constant SFR,
+large σ produces dramatic bursts that leave imprints in UV slope, optical
+colors, and stellar masses. We vary σ across its prior range with the timescale
+τ fixed.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_psd_sigma_sweep_001.png
-   :alt: plot_psd_sigma_sweep
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 15-66
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_psd_sigma_sweep_001.png
-   :alt: Stochastic SFH: Burstiness Amplitude $\sigma$
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_psd_sigma_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-batch-2/src/tengri/forward/sed_model.py:643: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
-      self._nebular_backend = BakedInBackend()
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 11-73
 
 .. code-block:: Python
 
 
-    import jax
-    import matplotlib.pyplot as plt
+    import warnings
 
-    from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp, setup_style
-    from tengri.analysis.plotting import sfh_sed_comparison
+    import jax
+    import jax.numpy as jnp
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    import tengri
+    from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-
-    ssp = load_ssp()
-
-    # Build Parameters with tsnorm + GP field for stochastic SFH
-    spec = Parameters(
-        mean_sfh_type=["tsnorm", "field"],
-        sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-        sfh_tsnorm_peak_lbt_gyr=Fixed(3.0),
-        sfh_tsnorm_width_gyr=Fixed(2.0),
-        sfh_tsnorm_skew=Fixed(0.3),
-        sfh_tsnorm_trunc=Fixed(2.0),
-        sfh_field_psd_sigma=Uniform(0.1, 3.5),  # will be overridden
-        sfh_field_psd_tau_myr=Fixed(100.0),
-        met_logzsol=Fixed(-0.3),
-        dust_tau_bc=Fixed(0.3),
-        dust_tau_diff=Fixed(0.2),
-        dust_slope=Fixed(-0.7),
-        redshift=Fixed(0.1),
+    ssp = tengri.load_ssp()
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh={
+            "type": "field_psd",
+            "*": tengri.FIXED,
+            "mean": "tsnorm",
+            "tsnorm_log_peak_sfr": 1.0,
+            "tsnorm_peak_lbt_gyr": 3.0,
+            "tsnorm_width_gyr": 2.0,
+            "tsnorm_skew": 0.3,
+            "tsnorm_trunc": 2.0,
+            "psd_sigma": tengri.Uniform(0.1, 3.5),
+            "psd_tau_myr": 100.0,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+        redshift=tengri.Fixed(0.1),
     )
+    baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-    model = SEDModel(spec, ssp)
+    sigma_values = np.array([0.1, 0.5, 1.0, 2.0, 3.5])
+    norm = mpl.colors.Normalize(vmin=sigma_values.min(), vmax=sigma_values.max())
+    cmap = plt.get_cmap("viridis")
 
-    # Sweep parameter with stochastic samples
-    key = jax.random.PRNGKey(0)
-    values = [0.1, 0.5, 1.0, 2.0, 3.5]
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    key_base = jax.random.PRNGKey(0)
+    for i, sigma in enumerate(sigma_values):
+        for k in range(3):
+            params = {**baseline, "sfh_field_psd_sigma": jnp.float64(sigma)}
+            key = jax.random.fold_in(key_base, i * 10 + k)
+            # Sample from the stochastic field
+            out = model.predict_rest_sed(params, key=key)
+            wave = np.asarray(out.wavelength)
+            nu = 2.998e18 / wave  # Å/s -> Hz
+            nu_l_nu = nu * np.asarray(out.sed)
+            ax.loglog(wave, nu_l_nu, color=cmap(norm(sigma)), lw=0.8, alpha=0.6)
 
-    fig = sfh_sed_comparison(
-        model, "sfh_field_psd_sigma", values, cmap="viridis", n_stochastic=5, key=key
-    )
-    # Broad zoomed-out view: full age range and full panchromatic SED. Lets the
-    # eye see the bursts in context of the full SFH and the SED across all bands.
-    ax_sfh, ax_sed = fig.axes
-    ax_sfh.set_xlim(0, 13.7)
-    ax_sfh.set_ylim(0, 100)
+    ax.set_xlim(800, 3e4)
+    ax.set_ylim(1e40, 5e43)
+    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+    ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
-    ax_sed.set_xlim(900, 1e7)
-    ax_sed.set_ylim(1e0, 1e8)
+    cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+    cbar.set_label(r"PSD amplitude $\sigma$")
 
-    fig.suptitle(r"Stochastic SFH: Burstiness Amplitude $\sigma$", fontsize=14, y=1.00)
-    plt.tight_layout()
-    plt.savefig("plot_psd_sigma_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.tight_layout()
+    fig.savefig("plot_psd_sigma_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_psd_sigma_sweep.py:

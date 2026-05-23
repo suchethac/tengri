@@ -80,19 +80,153 @@ class ForwardModel:
         """
         return self.populations[0].sed.spec
 
-    def predict_photometry(self, params, **kwargs):
+    def _inner_sed_for_delegation(self):
+        """Resolve the underlying SEDModel held by the first population.
+
+        For plain SEDModel forwards, the inner SED is ``populations[0].sed``;
+        for PopulationSEDModel-wrapped forwards, it's
+        ``populations[0].sed.sed`` (the template). Migration-2 properties
+        share this resolver to avoid duplicating the walk.
+        """
+        sub = self.populations[0].sed
+        return getattr(sub, "sed", sub)
+
+    @property
+    def wave_obs(self):
+        """Observed-frame spectroscopy wavelength grid, or ``None``.
+
+        Delegates to the first population's inner SED — single-population
+        and hierarchical fits share one spectroscopy grid across the
+        channel. Migration 2 step 1 promotes this from the legacy
+        ``__getattr__`` fall-through to a first-class property.
+        """
+        return getattr(self._inner_sed_for_delegation(), "wave_obs", None)
+
+    @property
+    def precomputed(self):
+        """Forward-model precompute container delegated from the inner SED."""
+        return getattr(self._inner_sed_for_delegation(), "precomputed", None)
+
+    @property
+    def hybrid(self):
+        """Hybrid kernel container delegated from the inner SED."""
+        return getattr(self._inner_sed_for_delegation(), "hybrid", None)
+
+    @property
+    def z_fixed(self):
+        """Fixed redshift, or ``None``, delegated from the inner SED."""
+        return getattr(self._inner_sed_for_delegation(), "z_fixed", None)
+
+    @property
+    def dl_cm_fixed(self):
+        """Fixed luminosity distance [cm], or ``None``, delegated from the inner SED."""
+        return getattr(self._inner_sed_for_delegation(), "dl_cm_fixed", None)
+
+    @property
+    def n_grid(self):
+        """PSD-grid resolution, or ``0``, delegated from the inner SED."""
+        return getattr(self._inner_sed_for_delegation(), "n_grid", 0)
+
+    @property
+    def uses_stochastic_sfh(self) -> bool:
+        """Stochastic-SFH flag delegated from the inner SED."""
+        return bool(getattr(self._inner_sed_for_delegation(), "uses_stochastic_sfh", False))
+
+    # ── Explicit delegates (Migration 2 step 4) ──────────────────────
+    # These methods/properties forward to the first population's inner
+    # SED so callers (Fitter, loss_functions, jit_engine, hierarchical,
+    # standardized) don't rely on the legacy ``__getattr__`` fall-through.
+    # Single-population semantics; multi-population fits use the
+    # namespace machinery in :meth:`predict` directly.
+
+    @property
+    def wavelengths(self):
+        """Rest-frame wavelength grid delegated from the inner SED."""
+        return self._inner_sed_for_delegation().wavelengths
+
+    def compile_signature(self):
+        """Structural signature of the inner SED (used for JIT cache keys)."""
+        return self._inner_sed_for_delegation().compile_signature()
+
+    def predict_spectrum(self, params, wave_obs=None, wave_chunk_size=None):
+        """Delegate to :meth:`SEDModel.predict_spectrum` on the inner SED."""
+        return self._inner_sed_for_delegation().predict_spectrum(
+            params, wave_obs=wave_obs, wave_chunk_size=wave_chunk_size
+        )
+
+    def predict_photometry_components(self, params):
+        """Delegate to :meth:`SEDModel.predict_photometry_components` on the inner SED."""
+        return self._inner_sed_for_delegation().predict_photometry_components(params)
+
+    def predict_spectrum_components(self, params, wave_obs=None):
+        """Delegate to :meth:`SEDModel.predict_spectrum_components` on the inner SED."""
+        return self._inner_sed_for_delegation().predict_spectrum_components(
+            params, wave_obs=wave_obs
+        )
+
+    def predict_line_fluxes(self, params, target_wavelengths):
+        """Delegate to :meth:`SEDModel.predict_line_fluxes` on the inner SED."""
+        return self._inner_sed_for_delegation().predict_line_fluxes(
+            params, target_wavelengths=target_wavelengths
+        )
+
+    def predict_spectral_indices(self, params, index_defs):
+        """Delegate to :meth:`SEDModel.predict_spectral_indices` on the inner SED."""
+        return self._inner_sed_for_delegation().predict_spectral_indices(params, index_defs)
+
+    def predict_state(self, params):
+        """Delegate to :meth:`SEDModel.predict_state` on the inner SED."""
+        return self._inner_sed_for_delegation().predict_state(params)
+
+    def predict_derived(self, params):
+        """Delegate to :meth:`SEDModel.predict_derived` on the inner SED."""
+        return self._inner_sed_for_delegation().predict_derived(params)
+
+    def predict_sfh(self, params, *args, **kwargs):
+        """Delegate to :meth:`SEDModel.predict_sfh` on the inner SED."""
+        return self._inner_sed_for_delegation().predict_sfh(params, *args, **kwargs)
+
+    def predict_sfh_quantities(self, params, *args, **kwargs):
+        """Delegate to :meth:`SEDModel.predict_sfh_quantities` on the inner SED."""
+        return self._inner_sed_for_delegation().predict_sfh_quantities(params, *args, **kwargs)
+
+    def predict_rest_sed(self, params, *args, **kwargs):
+        """Delegate to :meth:`SEDModel.predict_rest_sed` on the inner SED."""
+        return self._inner_sed_for_delegation().predict_rest_sed(params, *args, **kwargs)
+
+    def predict_magnitudes(self, params):
+        """Delegate to :meth:`SEDModel.predict_magnitudes` on the inner SED."""
+        return self._inner_sed_for_delegation().predict_magnitudes(params)
+
+    def xi_to_params(self, xi):
+        """Delegate to :meth:`SEDModel.xi_to_params` on the inner SED."""
+        return self._inner_sed_for_delegation().xi_to_params(xi)
+
+    def ensure_photometry_precomputed(self) -> bool:
+        """Lazily precompute photometry on the inner SED if not yet done.
+
+        Delegates to :meth:`SEDModel.ensure_photometry_precomputed` on
+        the first population's inner SED. Returns the inner method's
+        result (``True`` if precomputation ran on this call). Multi-
+        population galaxy decompositions iterate across populations.
+        """
+        ran = False
+        for pop in self.populations:
+            sub = pop.sed
+            inner = getattr(sub, "sed", sub)
+            fn = getattr(inner, "ensure_photometry_precomputed", None)
+            if fn is not None:
+                ran = bool(fn()) or ran
+        return ran
+
+    def predict_photometry(self, params):
         """Channel-specific prediction: ``phot_fnu`` extracted from :meth:`predict`.
 
         Single-galaxy fits return shape ``(n_filters,)``; hierarchical
         fits (PopulationSEDModel) return shape ``(N_gal, n_filters)``.
         The Fitter's legacy loss_fn calls this directly; providing it
-        on ForwardModel ensures the batched output flows through
-        instead of falling back to the scalar SEDModel via
-        ``__getattr__``.
-
-        The ``mode=`` kwarg is silently accepted and ignored for
-        back-compat (loss_functions.py passes it; deprecated since
-        2026-05).
+        on ForwardModel ensures the batched output flows through rather
+        than reaching for the inner scalar SED.
         """
         pred = self.predict(params)
         for key in ("phot_fnu", "fnu_obs"):
@@ -102,42 +236,6 @@ class ForwardModel:
             f"predict_photometry: no photometric channel in prediction dict "
             f"(saw keys: {list(pred)})"
         )
-
-    def _inner_sed(self):
-        """Return the underlying :class:`SEDModel` for legacy attribute access.
-
-        For PopulationSEDModel-wrapped forwards, the inner SED is
-        ``pop.sed.sed`` (the template); for plain SEDModel forwards,
-        it's ``pop.sed`` directly.
-        """
-        sub = self.populations[0].sed
-        return getattr(sub, "sed", sub)
-
-    def __getattr__(self, name: str):
-        """Fallback to the inner SEDModel for legacy attribute access.
-
-        Only consulted when normal attribute lookup fails — i.e. when
-        the Fitter (or other legacy caller) reaches for an attribute
-        that lives on the underlying :class:`SEDModel`. Names that
-        ForwardModel defines explicitly (predict, spec, populations,
-        observation, …) take precedence.
-
-        This delegation is the bridge that lets the Fitter consume a
-        ForwardModel as a drop-in for an SEDModel during the migration
-        from the legacy SEDModel-direct path to the canonical
-        ``Fitter(forward).run(...)`` pattern.
-        """
-        # Avoid infinite recursion if populations isn't set yet
-        if name in ("populations", "observation"):
-            raise AttributeError(name)
-        try:
-            sub = self.populations[0].sed
-        except (AttributeError, IndexError):
-            raise AttributeError(name)  # noqa: B904
-        # Walk one level deeper if the SubModel is a composer
-        if hasattr(sub, "sed"):
-            return getattr(sub.sed, name)
-        return getattr(sub, name)
 
     @classmethod
     def build(

@@ -125,57 +125,49 @@ print(
       1. SSP data file (e.g., ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5)
       2. Filter transmission curves (auto-downloaded on first run)
 
-    Minimal recipe (from docs/spine/00_quickstart.py):
+    Minimal recipe:
 
-        # Load SSP data
         from pathlib import Path
-        from tengri import (
-            Fitter,
-            Observation,
-            Parameters,
-            Photometry,
-            SEDModel,
-            load_ssp_data,
-        )
+        import jax
+        import tengri
+
         repo_root = Path.cwd()
         ssp_file = (
-            repo_root
-            / "data"
-            / "ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+            repo_root / "data" / "ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
         )
-        ssp = load_ssp_data(str(ssp_file))
+        ssp = tengri.load_ssp_data(str(ssp_file))
 
-        # Build parameter spec
-        params = Parameters(
-            z=0.05,
-            mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=tengri.Uniform(-1, 2.5),
-            agn_model="my_toy_torus",
-            agn_log_lbol=tengri.Uniform(44, 47),
-            agn_frac=tengri.Uniform(0.01, 0.3),
+        # Build model using SEDModel.build() with the new nested-dict API
+        obs = tengri.Observation(
+            photometry=tengri.Photometry.from_names(
+                ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+            )
         )
 
-        # Build mock observation
-        obs = Observation(photometry=Photometry.from_names(
-            ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-        ))
+        model = tengri.SEDModel.build(
+            ssp,
+            observation=obs,
+            sfh={"type": "tsnorm", "*": tengri.FREE},
+            agn={"model": "my_toy_torus", "*": tengri.FREE},
+            redshift=tengri.Fixed(0.05),
+        )
 
-        # Build model and generate mock data
-        model = SEDModel(ssp=ssp, params=params, observation=obs)
-        truth_params = {
-            "z": 0.05,
-            "mean_sfh_type": "tsnorm",
+        # Generate mock data
+        key = jax.random.PRNGKey(42)
+        truth = dict(model.spec.sample(key))
+        truth.update({
             "sfh_tsnorm_log_peak_sfr": 0.5,
-            "agn_model": "my_toy_torus",
             "agn_log_lbol": 45.0,
             "agn_frac": 0.1,
-        }
-        mock_data = tengri.generate_mock(model, truth_params, snr=100.0)
+        })
+        mock = model.mock(truth, snr=100.0, key=key)
 
         # Fit with MAP
-        fitter = Fitter(model, mock_data["flux_obs"], mock_data["noise"])
-        result = fitter.run("map", n_steps=50, learning_rate=0.01)
-        print(result)
+        forward = tengri.ForwardModel.build(sed=model, observation=obs)
+        posterior = forward.fit(
+            mock.flux_obs, mock.noise, method="map", n_steps=50, verbose=False
+        )
+        print(posterior.summary())
     """
 )
 

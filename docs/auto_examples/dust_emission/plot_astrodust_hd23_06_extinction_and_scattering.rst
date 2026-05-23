@@ -24,27 +24,12 @@ Astrodust+PAH extinction, scattering, and albedo
 Extinction opacity, polarized extinction, and single-scattering albedo for
 the Hensley & Draine 2023 fiducial size distribution.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_astrodust_hd23_06_extinction_and_scattering_001.png
-   :alt: plot_astrodust_hd23_06_extinction_and_scattering
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 15-86
-
-
-
-.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_06_extinction_and_scattering_001.png
-   :alt: Extinction (HDU 2), Polarized extinction (Astrodust, HDU 4), Albedo (HDU 3 / HDU 2)
-   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_06_extinction_and_scattering_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 8-79
 
 .. code-block:: Python
 
+
+    import warnings
 
     import h5py
     import matplotlib.pyplot as plt
@@ -54,6 +39,8 @@ the Hensley & Draine 2023 fiducial size distribution.
     from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    warnings.filterwarnings("ignore", message=".*deprecated.*")
 
     with h5py.File(data_path("astrodust_templates.h5"), "r") as f:
         ext = np.asarray(f["extinction"])
@@ -80,7 +67,6 @@ the Hensley & Draine 2023 fiducial size distribution.
         ylabel=r"$\tau_\lambda/N_{\rm H}\ [\mathrm{cm}^2\,\mathrm{H}^{-1}]$",
         xlim=(0.1, 40.0),
         ylim=(5.0e-25, 3.0e-21),
-        title="Extinction (HDU 2)",
     )
     ax1.legend(loc="upper right", frameon=False, fontsize=9)
 
@@ -92,7 +78,6 @@ the Hensley & Draine 2023 fiducial size distribution.
         ylabel=r"$(p_\lambda/N_{\rm H})^{\rm max}\ [\mathrm{cm}^2\,\mathrm{H}^{-1}]$",
         xlim=(0.1, 40.0),
         ylim=(5.0e-25, 3.0e-23),
-        title="Polarized extinction (Astrodust, HDU 4)",
     )
 
     with np.errstate(invalid="ignore", divide="ignore"):
@@ -109,13 +94,11 @@ the Hensley & Draine 2023 fiducial size distribution.
         ylabel="Albedo  $\\omega$",
         xlim=(0.0, 8.0),
         ylim=(0.0, 1.0),
-        title="Albedo (HDU 3 / HDU 2)",
     )
     ax3.legend(loc="upper left", frameon=False, fontsize=9)
 
     fig.tight_layout()
-    plt.savefig("plot_astrodust_hd23_06_extinction_and_scattering.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_astrodust_hd23_06_extinction_and_scattering.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_06_extinction_and_scattering.py:

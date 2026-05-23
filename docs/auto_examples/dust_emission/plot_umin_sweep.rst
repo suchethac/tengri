@@ -25,38 +25,12 @@ Minimum radiation field intensity U_min controls diffuse dust heating.
 Higher U_min implies hotter dust and FIR peak shifted blueward toward
 shorter wavelengths.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_umin_sweep_001.png
-   :alt: plot_umin_sweep
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 16-55
-
-
-
-.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_umin_sweep_001.png
-   :alt: Draine & Li: Radiation Field Intensity Impact
-   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_umin_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/dust-emission-pilot/src/tengri/forward/sed_model.py:643: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
-      self._nebular_backend = BakedInBackend()
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 9-50
 
 .. code-block:: Python
 
+
+    import warnings
 
     import matplotlib.pyplot as plt
 
@@ -64,6 +38,8 @@ shorter wavelengths.
     from tengri.analysis.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    warnings.filterwarnings("ignore", message=".*deprecated.*")
 
     recipe = recipes.dust_demo()
     recipe["dust"]["emission"] = {
@@ -73,7 +49,7 @@ shorter wavelengths.
         "gamma_dl": 0.01,
         "qpah": 2.5,
     }
-    model = SEDModel.from_groups(ssp_data=load_ssp(), **recipe)
+    model = SEDModel.build(ssp_data=load_ssp(), **recipe)
 
     fig, ax = plt.subplots(figsize=(8, 5))
     sweep_parameter(
@@ -90,12 +66,10 @@ shorter wavelengths.
         xscale="log",
         yscale="log",
         ylim=(1e32, 1e40),
-        title="Draine & Li: Radiation Field Intensity Impact",
         ylabel=r"$\lambda F_\lambda$ (not normalized)",
     )
     fig.tight_layout()
-    plt.savefig("plot_umin_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_umin_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_umin_sweep.py:

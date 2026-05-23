@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.670** total execution time for 16 files **from auto_examples/sfh**:
+**00:02.673** total execution time for 17 files **from auto_examples/sfh**:
 
 .. container::
 
@@ -32,8 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_parametric_sfh.py` (``plot_parametric_sfh.py``)
-     - 00:00.670
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_nonparametric_compare.py` (``plot_sfh_nonparametric_compare.py``)
+     - 00:02.673
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_bursty_recovery.py` (``plot_bursty_recovery.py``)
      - 00:00.000
@@ -56,6 +56,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_sfh_plot_lnorm_peak_sweep.py` (``plot_lnorm_peak_sweep.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_parametric_sfh.py` (``plot_parametric_sfh.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_psd_alternatives.py` (``plot_psd_alternatives.py``)
      - 00:00.000
      - 0.0
@@ -71,12 +74,12 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_double_burst.py` (``plot_sfh_double_burst.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_form_compare.py` (``plot_sfh_form_compare.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_quenching_compare.py` (``plot_sfh_quenching_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_stochastic_sfh.py` (``plot_stochastic_sfh.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_wrong_model_trap.py` (``plot_wrong_model_trap.py``)
      - 00:00.000
      - 0.0

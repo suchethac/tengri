@@ -31,10 +31,12 @@ Each tier adds physical complexity. No SSP data required.
    :alt: plot_agn_hierarchy
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-26
+.. GENERATED FROM PYTHON SOURCE LINES 16-28
 
 .. code-block:: Python
 
+
+    # TODO: refactor to SEDModel.build API (currently uses low-level internal API)
 
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
@@ -46,11 +48,11 @@ Each tier adds physical complexity. No SSP data required.
     setup_style()
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 27-28
+.. GENERATED FROM PYTHON SOURCE LINES 29-30
 
 Wavelength grid: 100 Angstrom (UV) to 500 micron (MIR)
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-34
+.. GENERATED FROM PYTHON SOURCE LINES 30-36
 
 .. code-block:: Python
 
@@ -61,7 +63,7 @@ Wavelength grid: 100 Angstrom (UV) to 500 micron (MIR)
     log_lbol = 12.0
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-42
+.. GENERATED FROM PYTHON SOURCE LINES 37-44
 
 Evaluate each registered AGN model
 ------------------------------------
@@ -71,7 +73,7 @@ Models shown in order of increasing physical complexity.
 "relagn" is self-normalizing from BH physics (M, Mdot, spin): parameters
 chosen so that log_Lbol ≈ 12.1 Lsun matches the reference.
 
-.. GENERATED FROM PYTHON SOURCE LINES 42-102
+.. GENERATED FROM PYTHON SOURCE LINES 44-103
 
 .. code-block:: Python
 
@@ -134,7 +136,6 @@ chosen so that log_Lbol ≈ 12.1 Lsun matches the reference.
     #   self-normalizing from BH physics — shown at log_Lbol ≈ 12.1 (8 params)
 
     plt.savefig("plot_agn_hierarchy.png", dpi=150, bbox_inches="tight")
-    plt.show()
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_hierarchy.py:

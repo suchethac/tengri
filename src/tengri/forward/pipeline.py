@@ -160,7 +160,7 @@ def _closure_a_sfh_prep(model, p, sfr, t_obs_gyr_for_weights):
     _n_grid = int(getattr(model.spec, "n_grid", 64))
     _log_age_grid = make_log_age_grid(_n_grid)
     sfh_lbt_grid_orch = jnp.power(10.0, _log_age_grid)
-    if model._uses_stochastic_sfh:
+    if model.uses_stochastic_sfh:
         # Stochastic ``sfr`` is the GP draw on the spec's ``n_grid`` —
         # which equals ``_n_grid`` here, so reuse directly.
         _sfr_orch_grid = sfr

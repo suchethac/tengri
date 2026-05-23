@@ -53,24 +53,6 @@
    "name": "viridis"
   }
  ],
- "plt.savefig": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "savefig"
-  }
- ],
- "plt.show": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "show"
-  }
- ],
  "plt.subplots": [
   {
    "is_class": false,
@@ -96,6 +78,15 @@
    "module": "tengri.nebular",
    "module_short": "tengri.nebular",
    "name": "shock_line_ratios"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
   }
  ]
 }

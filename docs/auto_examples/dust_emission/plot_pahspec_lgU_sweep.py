@@ -5,14 +5,9 @@ Draine+2021 PAHspec: log U sweep at fixed (starlight, ion, size)
 Sweep ionization parameter across the Draine+2021 PAHspec library at fixed
 starlight spectrum and size distribution. Low U: FIR-cooling regime; high U:
 mid-IR peak shift and PAH-feature strengthening.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_pahspec_lgU_sweep_001.png
-   :alt: plot_pahspec_lgU_sweep
-   :class: sphx-glr-single-img
-
 """
+
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -25,6 +20,8 @@ from tengri.components.dust.draine2021_pah import (
 )
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 tpl = load_pahspec_or_raise(data_path("pahspec_draine2021.h5"))
 nu_pnu = select_pahspec_axes(
@@ -58,9 +55,7 @@ ax.set(
     ylabel=r"$\lambda I_\lambda / N_{\rm H}\ [\mathrm{erg\,s^{-1}\,sr^{-1}\,H^{-1}}]$",
     xlim=(1.0, 1.0e3),
     ylim=(1.0e-26, 1.0e-17),
-    title="Draine+2021 PAHspec — mMMP starlight, std ionization, std size dist",
 )
 ax.legend(loc="lower right", frameon=False, fontsize=7, ncol=3)
 fig.tight_layout()
-plt.savefig("plot_pahspec_lgU_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_pahspec_lgU_sweep.png", dpi=150, bbox_inches="tight")

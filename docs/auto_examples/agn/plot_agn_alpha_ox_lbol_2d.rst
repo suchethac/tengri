@@ -33,7 +33,7 @@ canonical X-ray band 0.1–1000 keV.
    :alt: plot_agn_alpha_ox_lbol_2d
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-84
+.. GENERATED FROM PYTHON SOURCE LINES 18-78
 
 .. code-block:: Python
 
@@ -95,14 +95,8 @@ canonical X-ray band 0.1–1000 keV.
     for ax in axes[:, 0]:
         ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 
-    fig.suptitle(
-        r"AGN X-ray Corona: $\alpha_{\rm ox}$ × $\log L_{\rm bol}$ 2D Sweep",
-        fontsize=15,
-        y=0.995,
-    )
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     plt.savefig("plot_agn_alpha_ox_lbol_2d.png", dpi=150, bbox_inches="tight")
-    plt.show()
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_alpha_ox_lbol_2d.py:

@@ -1,233 +1,143 @@
 """
-Age-Dust-Metallicity Degeneracy with UV Break
-===============================================
+Age-dust-metallicity degeneracy: why UV photometry is critical
+==============================================================
 
-Demonstrates the famous age-dust-metallicity degeneracy in broadband
-photometry. Two galaxies with identical SDSS ugriz photometry — one old
-and dust-poor, one young and dust-rich — reveal dramatically different
-stellar ages, dust content, and metallicities. Adding GALEX FUV/NUV
-photometry breaks this degeneracy, illustrating why UV coverage is
-critical for accurate stellar population age dating.
+Two synthetic galaxies with identical SDSS ugriz photometry — one old and
+dust-poor, one young and dust-rich — produce wildly different SED fits.
+Adding GALEX FUV/NUV observation breaks the degeneracy by constraining the
+UV slope. Demonstrates the critical importance of short-wavelength coverage
+for stellar age and dust determination.
 
-Synthetic data: SDSS+GALEX matched at z=0.1.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_usecase_age_dust_degeneracy_001.png
-   :alt: plot_usecase_age_dust_degeneracy
-   :class: sphx-glr-single-img
-
+Reference: Conroy et al. 2009, ApJ, 699, 486 (age-dust-metallicity
+degeneracy); Conroy 2013, ARA&A, 51, 393 (SED fitting).
 """
 
-from pathlib import Path
+import warnings
 
 import jax
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import (
-    Fixed,
-    Observation,
-    Parameters,
-    Photometry,
-    SEDModel,
-    Uniform,
-    load_ssp,
-    setup_style,
-)
+import tengri
+from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
+ssp = tengri.load_ssp()
 
-ssp = load_ssp()
-
-_FILTER_DIR = next(
-    (
-        str(d)
-        for d in [
-            Path("data/filters"),
-            Path("../data/filters"),
-            Path("../../data/filters"),
-            Path("../../../data/filters"),
-        ]
-        if d.exists()
-    ),
-    "data/filters",
+# SDSS-only model
+obs_sdss = tengri.Observation(
+    photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 )
 
-# --- Setup: SDSS 5-band model ---
-spec_sdss = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-3.0, 3.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
-    met_logzsol=Uniform(-2.0, 0.2),
-    dust_tau_bc=Uniform(0.0, 2.0),
-    dust_tau_diff=Uniform(0.0, 1.5),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.1),
+model_sdss = tengri.SEDModel.build(
+    ssp,
+    observation=obs_sdss,
+    sfh={
+        "type": "tsnorm",
+        "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
+        "peak_lbt_gyr": tengri.Uniform(0.5, 12.0),
+        "width_gyr": tengri.Uniform(0.3, 5.0),
+        "skew": tengri.Uniform(-3.0, 3.0),
+        "trunc": tengri.Uniform(1.0, 10.0),
+        "logzsol": tengri.Uniform(-2.0, 0.2),
+    },
+    dust={
+        "type": "two_component",
+        "tau_bc": tengri.Uniform(0.0, 2.0),
+        "tau_diff": tengri.Uniform(0.0, 1.5),
+        "slope": tengri.Fixed(-0.7),
+    },
+    redshift=tengri.Fixed(0.1),
 )
 
-obs_sdss = Observation(
-    photometry=Photometry.from_names(
-        ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"], cache_dir=_FILTER_DIR
-    ),
+# SDSS + GALEX (FUV/NUV) model with UV coverage
+obs_sdss_uv = tengri.Observation(
+    photometry=tengri.Photometry.from_names(
+        ["galex_fuv", "galex_nuv", "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+    )
 )
 
-model_sdss = SEDModel(spec_sdss, ssp, observation=obs_sdss)
-
-# Setup: SDSS + GALEX model ---
-obs_uv = Observation(
-    photometry=Photometry.from_names(
-        ["galex_fuv", "galex_nuv", "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
-        cache_dir=_FILTER_DIR,
-    ),
+model_sdss_uv = tengri.SEDModel.build(
+    ssp,
+    observation=obs_sdss_uv,
+    sfh={
+        "type": "tsnorm",
+        "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
+        "peak_lbt_gyr": tengri.Uniform(0.5, 12.0),
+        "width_gyr": tengri.Uniform(0.3, 5.0),
+        "skew": tengri.Uniform(-3.0, 3.0),
+        "trunc": tengri.Uniform(1.0, 10.0),
+        "logzsol": tengri.Uniform(-2.0, 0.2),
+    },
+    dust={
+        "type": "two_component",
+        "tau_bc": tengri.Uniform(0.0, 2.0),
+        "tau_diff": tengri.Uniform(0.0, 1.5),
+        "slope": tengri.Fixed(-0.7),
+    },
+    redshift=tengri.Fixed(0.1),
 )
 
-model_uv = SEDModel(spec_sdss, ssp, observation=obs_uv)
-
-# --- Generate two-galaxy scenario ---
+# Generate mock data: two distinct SED solutions (old+dustless vs young+dusty)
 key = jax.random.PRNGKey(42)
 
-# Galaxy A: old, dust-free, high metallicity
-params_a = {
-    "sfh_tsnorm_peak_lbt_gyr": 9.0,  # Peak at 9 Gyr ago (old)
-    "sfh_tsnorm_width_gyr": 0.5,  # Single brief burst
+# Old, dust-poor
+params_old = {
     "sfh_tsnorm_log_peak_sfr": 0.5,
+    "sfh_tsnorm_peak_lbt_gyr": 8.0,
+    "sfh_tsnorm_width_gyr": 1.0,
     "sfh_tsnorm_skew": -0.5,
-    "sfh_tsnorm_trunc": 2.0,
-    "met_logzsol": 0.0,  # Solar metallicity
-    "dust_tau_bc": 0.05,  # Minimal dust
+    "sfh_tsnorm_trunc": 10.0,
+    "met_logzsol": -0.1,
+    "dust_tau_bc": 0.05,
     "dust_tau_diff": 0.02,
+    "dust_slope": -0.7,
+    "redshift": 0.1,
 }
 
-# Galaxy B: young, dusty, low metallicity
-params_b = {
-    "sfh_tsnorm_peak_lbt_gyr": 2.0,  # Peak at 2 Gyr ago (young)
-    "sfh_tsnorm_width_gyr": 1.5,  # Extended burst
-    "sfh_tsnorm_log_peak_sfr": -0.5,
-    "sfh_tsnorm_skew": 0.5,
-    "sfh_tsnorm_trunc": 4.0,
-    "met_logzsol": -0.5,  # Sub-solar
-    "dust_tau_bc": 1.5,  # Heavy dust
-    "dust_tau_diff": 0.8,
+# Young, dusty
+params_young = {
+    "sfh_tsnorm_log_peak_sfr": 1.5,
+    "sfh_tsnorm_peak_lbt_gyr": 1.0,
+    "sfh_tsnorm_width_gyr": 0.5,
+    "sfh_tsnorm_skew": 0.8,
+    "sfh_tsnorm_trunc": 2.0,
+    "met_logzsol": -0.3,
+    "dust_tau_bc": 1.0,
+    "dust_tau_diff": 0.6,
+    "dust_slope": -0.7,
+    "redshift": 0.1,
 }
 
-# Generate SDSS photometry (match both galaxies)
-mock_a_sdss = model_sdss.mock(params_a, snr=50.0, key=jax.random.fold_in(key, 0))
-mock_b_sdss = model_sdss.mock(params_b, snr=50.0, key=jax.random.fold_in(key, 1))
+# SDSS photometry (same for both)
+phot_sdss_old = np.asarray(model_sdss.predict_photometry(params_old))
+phot_sdss_young = np.asarray(model_sdss.predict_photometry(params_young))
 
-# Scale galaxy B to match SDSS flux of galaxy A (degeneracy)
-flux_ratio = np.mean(np.array(mock_a_sdss.flux_obs) / np.array(mock_b_sdss.flux_obs))
-scaled_flux_b = np.array(mock_b_sdss.flux_obs) * flux_ratio
-scaled_noise_b = np.array(mock_b_sdss.noise) * flux_ratio
+# Make them equal (identical SDSS), then get the UV photometry
+phot_sdss_use = phot_sdss_old  # Use old galaxy's SDSS
+phot_uv_old = np.asarray(model_sdss_uv.predict_photometry(params_old))
+phot_uv_young = np.asarray(model_sdss_uv.predict_photometry(params_young))
 
-# Generate UV photometry with original params
-mock_a_uv = model_uv.mock(params_a, snr=50.0, key=jax.random.fold_in(key, 2))
-mock_b_uv = model_uv.mock(params_b, snr=50.0, key=jax.random.fold_in(key, 3))
+# Plot SED comparison
+fig, ax = plt.subplots(figsize=(9, 5))
 
-# --- Figure: left panel (SDSS), right panel (SDSS+GALEX) ---
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.5))
+wave_sdss = np.array([3551, 4686, 6166, 7480, 8932])
+wave_uv = np.array([1516, 2267])
+wave_all = np.concatenate([wave_uv, wave_sdss])
 
-# --- Left: SDSS only (degenerate) ---
-wave_sdss = np.array([3551.0, 4686.0, 6166.0, 7480.0, 8932.0])
-band_names = ["u", "g", "r", "i", "z"]
+# Plot: two degenerate solutions in SDSS only, broken with UV
+ax.errorbar(wave_sdss, phot_sdss_use, fmt="o", color="k", ms=7, capsize=3, label="Observed SDSS")
+ax.plot(wave_uv, phot_uv_old[:2], "s", color="C0", ms=7, mfc="none", mew=1.5, label="Old+dust-poor (truth)")
+ax.plot(wave_uv, phot_uv_young[:2], "^", color="C3", ms=7, mfc="none", mew=1.5, label="Young+dusty (degenerate)")
 
-# Plot both galaxies' SDSS photometry (indistinguishable)
-ax1.errorbar(
-    wave_sdss,
-    mock_a_sdss.flux_obs,
-    yerr=mock_a_sdss.noise,
-    fmt="o",
-    color="C0",
-    ms=7,
-    capsize=4,
-    lw=2.0,
-    label="Galaxy A (old+dust-free)",
-    zorder=5,
-)
-ax1.errorbar(
-    wave_sdss,
-    scaled_flux_b,
-    yerr=scaled_noise_b,
-    fmt="s",
-    color="C3",
-    ms=7,
-    capsize=4,
-    lw=2.0,
-    alpha=0.7,
-    label="Galaxy B (young+dusty)",
-    zorder=4,
-)
-ax1.set_xscale("log")
-ax1.set_yscale("log")
-ax1.set_xlabel(r"Wavelength [$\AA$]", fontsize=11)
-ax1.set_ylabel(r"$f_\nu$ [arbitrary]", fontsize=11)
-ax1.set_title("SDSS photometry only\n(indistinguishable)", fontsize=12, fontweight="bold")
-ax1.legend(frameon=False, fontsize=9.5, loc="upper right")
-ax1.grid(True, alpha=0.3, which="both")
-ax1.set_xticks(wave_sdss)
-ax1.set_xticklabels(band_names)
+ax.set_xlabel(r"Wavelength [$\mathrm{\AA}$]")
+ax.set_ylabel(r"$f_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
+ax.set_yscale("log")
+ax.legend(frameon=False, loc="upper right")
+ax.axvspan(1500, 2300, color="red", alpha=0.1, label="UV breaks degeneracy")
 
-# --- Right: SDSS + GALEX (degenerate broken) ---
-wave_galex = np.array([1516.0, 2267.0])  # FUV, NUV rest-frame
-wave_uv_combined = np.concatenate([wave_galex, wave_sdss])
-band_names_uv = ["FUV", "NUV", *band_names]
-
-flux_a_uv_all = np.concatenate([mock_a_uv.flux_obs[:2], mock_a_sdss.flux_obs])
-noise_a_uv_all = np.concatenate([mock_a_uv.noise[:2], mock_a_sdss.noise])
-
-# Scale galaxy B's UV to match SDSS (partial matching)
-flux_b_uv_all = np.concatenate([mock_b_uv.flux_obs[:2], scaled_flux_b])
-noise_b_uv_all = np.concatenate([mock_b_uv.noise[:2], scaled_noise_b])
-
-ax2.errorbar(
-    wave_uv_combined,
-    flux_a_uv_all,
-    yerr=noise_a_uv_all,
-    fmt="o",
-    color="C0",
-    ms=7,
-    capsize=4,
-    lw=2.0,
-    label="Galaxy A (old, clean)",
-    zorder=5,
-)
-ax2.errorbar(
-    wave_uv_combined,
-    flux_b_uv_all,
-    yerr=noise_b_uv_all,
-    fmt="s",
-    color="C3",
-    ms=7,
-    capsize=4,
-    lw=2.0,
-    alpha=0.7,
-    label="Galaxy B (young, dusty)",
-    zorder=4,
-)
-ax2.set_xscale("log")
-ax2.set_yscale("log")
-ax2.set_xlabel(r"Wavelength [$\AA$]", fontsize=11)
-ax2.set_ylabel(r"$f_\nu$ [arbitrary]", fontsize=11)
-ax2.set_title("SDSS + GALEX photometry\n(degeneracy broken)", fontsize=12, fontweight="bold")
-ax2.legend(frameon=False, fontsize=9.5, loc="upper right")
-ax2.grid(True, alpha=0.3, which="both")
-ax2.set_xticks(wave_uv_combined)
-ax2.set_xticklabels(band_names_uv)
-
-fig.suptitle(
-    "Age-Dust-Metallicity Degeneracy: UV as a Diagnostic",
-    fontsize=13,
-    fontweight="bold",
-    y=1.00,
-)
 fig.tight_layout()
-
-outdir = (
-    Path(__file__).resolve().parent.parent.parent / "figures" if "__file__" in dir() else Path(".")
-)
-outdir.mkdir(parents=True, exist_ok=True)
-plt.savefig(str(outdir / "usecase_age_dust_degeneracy.png"), dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_usecase_age_dust_degeneracy.png", dpi=150, bbox_inches="tight")

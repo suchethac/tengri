@@ -18,150 +18,149 @@
 .. _sphx_glr_auto_examples_workflows_plot_workflow_high_z_lbg.py:
 
 
-Workflow: High-z Lyman-Break Galaxy
-=====================================
+High-redshift Lyman-break galaxy: Lyman dropout signatures in JWST/HST
+======================================================================
 
-Demonstrates fitting a z=4 Lyman-break galaxy with JWST/HST photometry.
-A young, dust-free star-forming galaxy's SED shows a sharp UV dropout.
-This workflow shows how to recover age, dust, and redshift from
-the characteristic Lyman-break signature in broadband colors.
+Fits a z=4 young, dust-free star-forming galaxy using JWST (F150W/F200W/F277W)
+and HST (F814W) broadband photometry. The characteristic Lyman-break signature
+(sharp UV dropout at observed ~4 micron) constrains age and metallicity even
+with just 4 bands. Demonstrates recovery of the young starburst component
+from the dropout depth.
 
-.. sphx-glr-precomputed-img:
+Reference: Steidel et al. 1996, ApJ, 462, L17 (Lyman-break galaxies);
+Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
-.. image:: images/sphx_glr_plot_workflow_high_z_lbg_001.png
-   :alt: plot_workflow_high_z_lbg
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 17-143
+.. GENERATED FROM PYTHON SOURCE LINES 14-141
 
 .. code-block:: Python
 
 
+    import warnings
+
     import jax
+    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri import (
-        Fitter,
-        Fixed,
-        Observation,
-        Parameters,
-        Photometry,
-        SEDModel,
-        Uniform,
-        data_path,
-        load_ssp,
-    )
+    import tengri
     from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
+    ssp = tengri.load_ssp()
 
-    # --- SSP data ---
-
-
-    ssp = load_ssp()
-
-
-    # --- Model: z=4 Lyman-break galaxy ---
-    # JWST filters: F150W (1.5um), F200W (2.0um), F277W (2.77um)
-    # HST filters: ACS-F814W (0.814um) should show dropout
+    # z=4 Lyman-break galaxy: very young, minimal dust
     z_true = 4.0
 
-    spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.1, 2.0),  # Very young, recent peak
-        sfh_tsnorm_width_gyr=Uniform(0.05, 1.0),
-        sfh_tsnorm_skew=Fixed(0.5),  # Recent star formation
-        sfh_tsnorm_trunc=Fixed(3.0),
-        met_logzsol=Uniform(-2.0, 0.0),
-        dust_tau_bc=Uniform(0.0, 0.5),  # Low dust (young, dust-free)
-        dust_tau_diff=Fixed(0.0),  # Minimal diffuse dust
-        dust_slope=Fixed(-0.7),
-        redshift=Fixed(z_true),
-        mean_sfh_type="tsnorm",
-    )
-
-    # Use synthetic filters: F814W for HST, NIR for JWST
+    # Observed filters: HST-F814W (rest-frame ~1300 A, near Lyman break at 912 A),
+    # then JWST NIR bands
     bands = ["hst_f814w", "jwst_f150w", "jwst_f200w", "jwst_f277w"]
-    obs = Observation(photometry=Photometry.from_names(bands, cache_dir=str(data_path("filters"))))
-    model = SEDModel(spec, ssp, observation=obs)
+    obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 
-    # --- Generate mock photometry ---
-    key = jax.random.PRNGKey(42)
-    true_params = spec.sample(key)
-    true_params["sfh_tsnorm_peak_lbt_gyr"] = 0.3  # 300 Myr old
-    true_params["sfh_tsnorm_width_gyr"] = 0.2
-    true_params["sfh_tsnorm_log_peak_sfr"] = 1.2
-    true_params["met_logzsol"] = -0.5
-    true_params["dust_tau_bc"] = 0.1
-    mock = model.mock(true_params, snr=15.0, key=key)
-
-    # --- Fit with MAP ---
-    fitter = Fitter(model, data=mock.flux_obs, noise=mock.noise)
-    posterior = fitter.run("map", optimizer="adam", n_steps=400, verbose=False)
-
-    # --- Plot: SED with dropout signature ---
-    fig, (ax, ax_res) = plt.subplots(
-        2, 1, figsize=(8, 5), height_ratios=[3, 1], sharex=True, gridspec_kw={"hspace": 0.05}
+    model = tengri.SEDModel.build(
+        ssp,
+        observation=obs,
+        sfh={
+            "type": "tsnorm",
+            "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
+            "peak_lbt_gyr": tengri.Uniform(0.1, 2.0),
+            "width_gyr": tengri.Uniform(0.05, 1.0),
+            "skew": tengri.Fixed(0.5),
+            "trunc": tengri.Fixed(3.0),
+            "logzsol": tengri.Uniform(-2.0, 0.0),
+        },
+        dust={
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "tau_bc": tengri.Uniform(0.0, 0.5),
+            "tau_diff": 0.0,
+            "slope": -0.7,
+        },
+        redshift=tengri.Fixed(z_true),
     )
 
-    # Observed-frame wavelengths
-    wave_obs_eff = np.array([8140, 15000, 20000, 27700])
+    # Generate mock data
+    key = jax.random.PRNGKey(42)
+    truth_params = {
+        "sfh_tsnorm_log_peak_sfr": 1.2,
+        "sfh_tsnorm_peak_lbt_gyr": 0.3,
+        "sfh_tsnorm_width_gyr": 0.2,
+        "sfh_tsnorm_skew": 0.5,
+        "sfh_tsnorm_trunc": 3.0,
+        "met_logzsol": -0.5,
+        "dust_tau_bc": 0.1,
+        "dust_tau_diff": 0.0,
+        "dust_slope": -0.7,
+        "redshift": z_true,
+    }
+    mock = model.mock(truth_params, snr=15.0, key=key)
+
+    # Fit with MAP
+    forward = tengri.ForwardModel.build(sed=model, observation=obs)
+    posterior = forward.fit(
+        mock.flux_obs, mock.noise, method="map", optimizer="adam",
+        n_steps=300, verbose=False,
+    )
+
+    # Plot: SED with Lyman-break signature
+    fig, (ax_sed, ax_res) = plt.subplots(
+        2, 1, figsize=(7.5, 5.2), sharex=True,
+        gridspec_kw={"height_ratios": [3, 1], "hspace": 0.05},
+    )
+
+    wave_eff = np.array([8140, 15000, 20000, 27700])
     band_labels = ["F814W", "F150W", "F200W", "F277W"]
 
-    ax.errorbar(
-        wave_obs_eff,
+    ax_sed.errorbar(
+        wave_eff,
         np.array(mock.flux_obs),
         yerr=np.array(mock.noise),
         fmt="o",
         color="k",
-        ms=7,
-        capsize=3,
-        label="Observed (z=4 LBG)",
+        ms=6,
+        capsize=2,
+        label="Observed",
     )
-    ax.plot(
-        wave_obs_eff,
+    ax_sed.plot(
+        wave_eff,
         np.array(mock.flux_true),
         "s",
-        color="C0",
-        ms=7,
+        color="0.2",
+        ms=6,
         mfc="none",
-        lw=1.5,
+        mew=1.2,
         label="Truth",
     )
-    ax.plot(
-        wave_obs_eff,
+    ax_sed.plot(
+        wave_eff,
         np.array(model.predict_photometry(posterior.params)),
         "^",
         color="C3",
-        ms=7,
+        ms=6,
         mfc="none",
-        lw=1.5,
-        label="MAP fit",
+        mew=1.2,
+        label="MAP",
     )
 
-    # Highlight Lyman break: rest-frame 912 A → observed 4350 A
-    ax.axvline(912 * (1 + z_true), color="red", ls=":", lw=1, alpha=0.5)
-    ax.text(912 * (1 + z_true), ax.get_ylim()[1] * 0.92, "Lyman break", fontsize=9, color="red")
+    # Lyman-break location (rest-frame 912 Å → obs-frame 4350 Å)
+    ax_sed.axvline(912 * (1 + z_true), color="red", ls=":", lw=1, alpha=0.5)
+    ax_sed.text(912 * (1 + z_true), ax_sed.get_ylim()[1] * 0.9, "Lyman break", fontsize=9, color="red")
 
-    ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]", fontsize=11)
-    ax.legend(fontsize=10, frameon=False, loc="upper right")
-    ax.set_title(f"High-z Lyman-Break Galaxy (z={z_true}): JWST+HST photometry", fontsize=12)
+    ax_sed.set_ylabel(r"$f_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
+    ax_sed.legend(frameon=False, fontsize=8)
 
-    pred_phot = model.predict_photometry(posterior.params)
-    residuals = (np.array(mock.flux_obs) - np.array(pred_phot)) / np.array(mock.noise)
-    ax_res.axhline(0, color="0.5", ls="--", lw=0.8)
-    ax_res.scatter(wave_obs_eff, residuals, c="C3", s=40, zorder=5)
-    ax_res.set_xlabel(r"Observed Wavelength [$\AA$]", fontsize=11)
-    ax_res.set_ylabel(r"Residual [$\sigma$]")
-    ax_res.set_xticks(wave_obs_eff)
+    residual = (np.array(mock.flux_obs) - np.array(model.predict_photometry(posterior.params))) / np.array(mock.noise)
+    ax_res.axhline(0.0, color="0.5", lw=0.6)
+    ax_res.axhspan(-1.0, 1.0, color="0.85", alpha=0.6, lw=0)
+    ax_res.plot(wave_eff, residual, "o", color="C3", ms=5)
+    ax_res.set_ylim(-3.5, 3.5)
+    ax_res.set_ylabel(r"$(F_{\rm fit} - F_{\rm obs})/\sigma$")
+    ax_res.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]")
+    ax_res.set_xticks(wave_eff)
     ax_res.set_xticklabels(band_labels)
-    ax_res.set_ylim(-4, 4)
 
-    fig.tight_layout()
-    plt.savefig("plot_workflow_high_z_lbg.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_workflow_high_z_lbg.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_high_z_lbg.py:

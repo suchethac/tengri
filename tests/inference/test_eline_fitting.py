@@ -279,10 +279,10 @@ class TestFittedMode:
         continuum = jnp.ones(len(wave)) * 10.0
         return types.SimpleNamespace(
             spec=model_spec,
-            _wave_obs=wave,
+            wave_obs=wave,
             _spectral_resolution=2000.0,
             _spectroscopy_config=spec_cfg,
-            predict_spectrum=lambda params, w, **kwargs: continuum,
+            predict_spectrum=lambda params, w=None, **kwargs: continuum,
             observation=None,
         )
 
@@ -462,10 +462,10 @@ class TestFittedMode:
             )
         model = types.SimpleNamespace(
             spec=model_spec,
-            _wave_obs=wave,
+            wave_obs=wave,
             _spectral_resolution=2000.0,
             _spectroscopy_config=cfg,
-            predict_spectrum=lambda params, w, **kwargs: continuum,
+            predict_spectrum=lambda params, w=None, **kwargs: continuum,
             observation=None,
         )
 

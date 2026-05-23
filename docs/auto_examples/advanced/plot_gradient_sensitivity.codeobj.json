@@ -1,58 +1,4 @@
 {
- "Fixed": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Fixed"
-  }
- ],
- "Observation": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Observation"
-  }
- ],
- "Parameters": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Parameters"
-  }
- ],
- "Photometry.from_names": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.Photometry",
-   "module_short": "tengri.Photometry",
-   "name": "from_names"
-  }
- ],
- "SEDModel": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "SEDModel"
-  }
- ],
- "Uniform": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Uniform"
-  }
- ],
  "jax.jacobian": [
   {
    "is_class": false,
@@ -69,15 +15,6 @@
    "module": "jax.numpy",
    "module_short": "jax.numpy",
    "name": "array"
-  }
- ],
- "load_ssp": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "load_ssp"
   }
  ],
  "np.abs": [
@@ -98,24 +35,6 @@
    "name": "array"
   }
  ],
- "plt.savefig": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "savefig"
-  }
- ],
- "plt.show": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "show"
-  }
- ],
  "plt.subplots": [
   {
    "is_class": false,
@@ -129,9 +48,81 @@
   {
    "is_class": false,
    "is_explicit": false,
+   "module": "tengri.analysis.plotting",
+   "module_short": "tengri.analysis.plotting",
+   "name": "setup_style"
+  }
+ ],
+ "tengri.FIXED": [
+  {
+   "is_class": false,
+   "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "setup_style"
+   "name": "FIXED"
+  }
+ ],
+ "tengri.FREE": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "FREE"
+  }
+ ],
+ "tengri.Fixed": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Fixed"
+  }
+ ],
+ "tengri.Observation": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Observation"
+  }
+ ],
+ "tengri.Photometry.from_names": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.Photometry",
+   "module_short": "tengri.Photometry",
+   "name": "from_names"
+  }
+ ],
+ "tengri.SEDModel.build": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.SEDModel",
+   "module_short": "tengri.SEDModel",
+   "name": "build"
+  }
+ ],
+ "tengri.load_ssp": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "load_ssp"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
   }
  ]
 }

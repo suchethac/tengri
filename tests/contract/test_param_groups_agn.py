@@ -376,3 +376,229 @@ class TestAGNComplexScenarios:
         assert params.agn_lines_block == "none"
         assert params.agn_feii_block == "none"
         assert params.agn_attenuation_block == "none"
+
+
+class TestAGNCrossLevelPlacement:
+    """Two-level AGN grammar: top-level vs sub-block placement of a param.
+
+    Regression: until 2026-05-23, the nested-dict resolver only looked
+    at the canonical location for each AGN parameter (top level for
+    shared params, the matching sub-block for sub-block params). Users
+    who naturally placed ``agn_log_lbol`` inside ``disc`` (or
+    ``tau_skirtor`` at the top level) silently fell back to the registry
+    default. These tests pin the friendlier "accept either location"
+    contract with conflict detection.
+    """
+
+    def test_shared_param_inside_sub_block_is_honoured(self):
+        """``agn_log_lbol`` (shared) supplied inside ``disc`` must apply."""
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            agn={
+                "disc": {"type": "qsogen", "*": FIXED, "agn_log_lbol": Uniform(43, 47)},
+                "torus": {"type": "none"},
+                "lines": {"type": "none"},
+                "feii": {"type": "none"},
+                "atten": {"type": "none"},
+            },
+            redshift=Fixed(0.1),
+        )
+        dist = params.get_distribution("agn_log_lbol")
+        assert not dist.is_fixed
+        assert dist.bounds == (43.0, 47.0)
+        assert params._group_provenance.get("agn_log_lbol") == "user_prior"
+
+    def test_sub_block_param_at_top_level_is_honoured(self):
+        """``tau_skirtor`` (torus-only) supplied at the top level must apply."""
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            agn={
+                "*": FIXED,
+                "tau_skirtor": 7.5,
+                "disc": {"type": "qsogen", "*": FIXED},
+                "torus": {"type": "skirtor", "*": FIXED},
+                "lines": {"type": "none"},
+                "feii": {"type": "none"},
+                "atten": {"type": "none"},
+            },
+            redshift=Fixed(0.1),
+        )
+        dist = params.get_distribution("agn_tau_skirtor")
+        assert dist.is_fixed
+        assert float(dist.value) == 7.5
+
+    def test_param_in_two_locations_raises(self):
+        """Same param at top level and inside a sub-block ⇒ ValueError."""
+        with pytest.raises(ValueError, match="set in multiple locations"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                agn={
+                    "agn_log_lbol": Uniform(43, 47),
+                    "disc": {"type": "qsogen", "*": FIXED, "agn_log_lbol": Uniform(44, 46)},
+                    "torus": {"type": "none"},
+                    "lines": {"type": "none"},
+                    "feii": {"type": "none"},
+                    "atten": {"type": "none"},
+                },
+                redshift=Fixed(0.1),
+            )
+
+    def test_shared_param_in_sub_block_short_name_works(self):
+        """Short-name form (``log_lbol``) inside a sub-block must also work,
+        not only the full-prefix form (``agn_log_lbol``).
+        """
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            agn={
+                "disc": {"type": "qsogen", "*": FIXED, "log_lbol": Uniform(43, 47)},
+                "torus": {"type": "none"},
+                "lines": {"type": "none"},
+                "feii": {"type": "none"},
+                "atten": {"type": "none"},
+            },
+            redshift=Fixed(0.1),
+        )
+        dist = params.get_distribution("agn_log_lbol")
+        assert not dist.is_fixed
+        assert dist.bounds == (43.0, 47.0)
+
+
+class TestUniversalKeyValidator:
+    """Every group dict now rejects unknown keys with a "Did you mean ...?"
+    hint. Before this validator existed (2026-05-23), typos in any group
+    (and parameters placed in the wrong group) silently fell back to the
+    registry default — the dominant "AI slop" failure mode of the nested
+    grammar.
+    """
+
+    @pytest.mark.parametrize(
+        ("group_name", "group_dict"),
+        [
+            ("sfh", {"type": "dpl", "*": FIXED, "pretend_param": 5}),
+            (
+                "dust",
+                {"type": "two_component", "*": FIXED, "completely_fake_key": 99},
+            ),
+            ("neb", {"type": "none", "phantom_neb_key": 3}),
+            ("igm", {"type": "madau", "typo_igm_key": 1}),
+            ("radio", {"type": "none", "synth_radio_key": 1}),
+            ("xray", {"type": "none", "typo_xray_key": 1}),
+        ],
+    )
+    def test_unknown_key_in_top_level_group_raises(self, group_name, group_dict):
+        with pytest.raises(ValueError, match=r"Unknown key '[^']+' in group"):
+            parse_groups(**{group_name: group_dict, "redshift": Fixed(0.1)})
+
+    def test_unknown_key_in_dust_emission_subblock_raises(self):
+        with pytest.raises(ValueError, match=r"Unknown key '[^']+' in group 'dust.emission'"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                dust={
+                    "type": "two_component",
+                    "*": FIXED,
+                    "emission": {
+                        "type": "draine_li2007",
+                        "*": FIXED,
+                        "phantom_emission_key": 77,
+                    },
+                },
+                redshift=Fixed(0.1),
+            )
+
+    def test_unknown_key_in_agn_subblock_raises(self):
+        with pytest.raises(ValueError, match=r"Unknown key '[^']+' in group 'agn.disc'"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                agn={
+                    "disc": {"type": "qsogen", "*": FIXED, "totally_made_up_key": 99},
+                    "torus": {"type": "none"},
+                    "lines": {"type": "none"},
+                    "feii": {"type": "none"},
+                    "atten": {"type": "none"},
+                },
+                redshift=Fixed(0.1),
+            )
+
+    def test_did_you_mean_suggestion_in_message(self):
+        """The error should include difflib suggestions when a typo is close
+        to a real parameter name."""
+        with pytest.raises(ValueError, match=r"Did you mean:.*tau_skirtor"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                agn={
+                    "torus": {"type": "skirtor", "*": FIXED, "tau_skirto": 5.0},
+                    "disc": {"type": "qsogen", "*": FIXED},
+                    "lines": {"type": "none"},
+                    "feii": {"type": "none"},
+                    "atten": {"type": "none"},
+                },
+                redshift=Fixed(0.1),
+            )
+
+
+class TestComposableAGNRuntimeWiring:
+    """Regression: composable AGN block selectors must reach the runtime
+    forward model, not just the spec. Issue #258.
+
+    Before this PR, ``AGNSEDComponent.apply`` called
+    ``composable_agn_l_nu(wave, agn_log_lbol=..., agn_frac=..., ...)``
+    without the five block selectors. Every block defaulted to
+    ``"none"`` and the composable AGN SED came out identically zero
+    regardless of the user's spec. The bug was downstream of
+    parameter resolution — the spec showed the right block selectors,
+    but the runtime never read them.
+
+    These tests verify (a) the AGNSEDComponentConfig now carries the
+    selectors and (b) the composable AGN actually produces non-zero
+    SED through the standard ``SEDModel.build → predict_rest_sed`` path.
+    Needs SSP data; skips when unavailable.
+    """
+
+    def _build_composable_model(self):
+        import pathlib
+
+        ssp_path = (
+            pathlib.Path(__file__).parents[2]
+            / "data"
+            / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+        )
+        if not ssp_path.exists():
+            pytest.skip(f"SSP file not available at {ssp_path}")
+
+        import tengri
+
+        return tengri.SEDModel.build(
+            tengri.load_ssp(),
+            sfh={"type": "const", "*": FIXED, "log_sfr": -10.0},
+            dust={"type": "two_component", "*": FIXED, "tau_diff": 0, "tau_bc": 0},
+            agn={
+                "type": "composable",
+                "*": FIXED,
+                "frac": 1.0,
+                "log_lbol": 12.5,
+                "disc": {"type": "multicolor", "*": FIXED},
+                "torus": {"type": "skirtor", "*": FIXED},
+                "lines": {"type": "nlr", "*": FIXED},
+            },
+            redshift=Fixed(0.05),
+        )
+
+    def test_composable_agn_emits_nonzero_sed(self):
+        """``predict_rest_sed`` on a composable-AGN model must produce a
+        non-zero SED dominated by the AGN (BBB peak in the UV)."""
+        import jax
+        import numpy as np
+
+        model = self._build_composable_model()
+        p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+        result = model.predict_rest_sed(p)
+        sed = np.asarray(result.sed)
+        wave = np.asarray(result.wavelength)
+        peak_nu_L = (2.998e18 / wave * sed).max()
+        # AGN BBB should dominate at ~1e46 erg/s. The stellar host-Hα floor
+        # is ~1e34 — we set a safety margin of 1e40 to detect the AGN even
+        # if the disc model implementation drifts slightly.
+        assert peak_nu_L > 1e40, (
+            f"composable AGN appears suppressed: peak ν·L = {peak_nu_L:.3e}; "
+            "block selectors may not be reaching the runtime."
+        )

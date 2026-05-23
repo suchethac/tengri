@@ -20,6 +20,8 @@ wavelength grid; the headline is that the user only changes selector
 strings between them, not the call site.
 """
 
+# TODO: refactor to SEDModel.build API (currently uses low-level internal API)
+
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -116,4 +118,3 @@ ax.set_title(
     "same call site, four selector tuples"
 )
 fig.tight_layout()
-plt.show()

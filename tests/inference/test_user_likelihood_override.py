@@ -70,7 +70,7 @@ class _MockModel:
         self._fnu_pred = jnp.asarray(fnu_pred)
         self.spec = None  # set after construction
 
-    def predict_photometry(self, params, mode=None):
+    def predict_photometry(self, params):
         # Scale prediction by the first free parameter so we can verify
         # that gradient-relevant params actually flow through.
         scale = params.get("flux_scale", 1.0)
@@ -126,7 +126,7 @@ def test_legacy_default_path_now_raises():
     adapter for the configurations it supports. The raise surfaces
     missing auto-build coverage loudly rather than silently degrading."""
     fitter, *_ = _make_fitter(user_likelihood=None)
-    loss_fn = build_loss_fn(fitter, mode="auto")
+    loss_fn = build_loss_fn(fitter)
     with pytest.raises(AssertionError, match="auto-build"):
         loss_fn({"flux_scale": 1.0}, fitter._data_args)
 
@@ -137,7 +137,7 @@ def test_user_likelihood_replaces_chi2():
     user_lik = PhotometryLikelihood(fnu_obs=fnu_obs, fnu_err=fnu_err)
     fitter, *_ = _make_fitter(user_likelihood=user_lik)
 
-    loss_fn = build_loss_fn(fitter, mode="auto")
+    loss_fn = build_loss_fn(fitter)
     result = loss_fn({"flux_scale": 1.0}, fitter._data_args)
 
     # User likelihood is exactly diag_gaussian_log_prob, so loss must match
@@ -153,7 +153,7 @@ def test_user_likelihood_loglikelihood_path():
     user_lik = PhotometryLikelihood(fnu_obs=fnu_obs, fnu_err=fnu_err)
     fitter, *_ = _make_fitter(user_likelihood=user_lik)
 
-    loglik_fn = build_loglikelihood_fn(fitter, mode="auto")
+    loglik_fn = build_loglikelihood_fn(fitter)
     result = loglik_fn({"flux_scale": 1.0}, fitter._data_args)
 
     expected = diag_gaussian_log_prob(fnu_pred, fnu_obs, fnu_err)
@@ -183,7 +183,7 @@ def test_custom_user_likelihood_changes_result():
     fitter, fnu_obs, fnu_err, fnu_pred = _make_fitter(
         user_likelihood=_AbsoluteResidualLikelihood(fnu_obs=fnu_obs_arr, err=err_arr)
     )
-    loglik_fn = build_loglikelihood_fn(fitter, mode="auto")
+    loglik_fn = build_loglikelihood_fn(fitter)
     result = loglik_fn({"flux_scale": 1.0}, fitter._data_args)
 
     # L1 sum of residuals.
@@ -258,7 +258,7 @@ def test_prior_term_added_for_free_params_and_psd_xi():
 
     # Drive loss_fn with non-trivial ξ and psd_xi values.
     xi = {"a": 0.5, "b": -1.0, "c": 2.0, "psd_xi": jnp.array([0.1, 0.2, 0.3])}
-    loss_fn = build_loss_fn(fitter, mode="auto")
+    loss_fn = build_loss_fn(fitter)
     actual = float(loss_fn(xi, fitter._data_args))
 
     # Expected: −log_prob_data + ½ (ξᵀξ + psd_xiᵀpsd_xi)
@@ -310,7 +310,7 @@ def test_prior_includes_only_free_params_when_not_stochastic():
     # Even if a "psd_xi" key sneaks into params_unbounded, the
     # non-stochastic branch must NOT include it in the prior.
     xi = {"a": 1.5, "psd_xi": jnp.array([99.0, 99.0])}
-    loss_fn = build_loss_fn(fitter, mode="auto")
+    loss_fn = build_loss_fn(fitter)
     actual = float(loss_fn(xi, fitter._data_args))
 
     log_prob_data = float(diag_gaussian_log_prob(fnu_pred, fnu_obs, fnu_err))
@@ -327,7 +327,7 @@ def test_composite_likelihood_through_fitter():
     composite = CompositeLikelihood(PhotometryLikelihood(fnu_obs=fnu_obs, fnu_err=fnu_err))
     fitter, *_ = _make_fitter(user_likelihood=composite)
 
-    loglik_fn = build_loglikelihood_fn(fitter, mode="auto")
+    loglik_fn = build_loglikelihood_fn(fitter)
     result = loglik_fn({"flux_scale": 1.0}, fitter._data_args)
 
     expected = diag_gaussian_log_prob(fnu_pred, fnu_obs, fnu_err)

@@ -1,99 +1,66 @@
 """
-SKIRTOR Torus: Opening Angle Sweep
-===================================
+SKIRTOR torus: opening angle controls exposed disc fraction
+============================================================
 
-Sweep `agn_oa_skirtor` from 20° to 60° at fixed inclination, optical
-depth, and power. A more open torus exposes more of the disc and shifts
-the IR emission peak.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_agn_oa_sweep_001.png
-   :alt: plot_agn_oa_sweep
-   :class: sphx-glr-single-img
-
+The torus opening angle (``oa_skirtor``) sets how much of the central
+disc is visible. A narrower torus (smaller opening angle) hides the disc
+and relies on reprocessed torus emission; a more open torus exposes the
+hot disc continuum and shifts the SED blueward.
 """
 
-from pathlib import Path
+import warnings
 
+import jax
 import jax.numpy as jnp
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Locate SKIRTOR grid file
-_grid_path = None
-for p in [
-    Path("data/skirtor_templates_v3.h5"),
-    Path("../data/skirtor_templates_v3.h5"),
-    Path("../../data/skirtor_templates_v3.h5"),
-    Path("../../../data/skirtor_templates_v3.h5"),
-    Path("data/skirtor_templates_v2.h5"),
-    Path("../data/skirtor_templates_v2.h5"),
-    Path("../../data/skirtor_templates_v2.h5"),
-    Path("../../../data/skirtor_templates_v2.h5"),
-]:
-    if p.exists():
-        _grid_path = str(p)
-        break
-
-if _grid_path is None:
-    raise SystemExit(
-        "Skipping: SKIRTOR grid not found. Run: python scripts/download_skirtor_templates.py"
-    )
-
+import tengri
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn import create_skirtor_from_grid
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-# Load the SKIRTOR interpolator
-skirtor_fn = create_skirtor_from_grid(_grid_path)
+ssp = tengri.load_ssp()
+model = tengri.SEDModel.build(
+    ssp,
+    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 3.0, "log_peak_sfr": 0.5,
+         "alpha": 2.0, "beta": 2.5},
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
+    agn={
+        "type": "composable",
+        "disc": {"type": "multicolor", "*": tengri.FIXED},
+        "torus": {"type": "skirtor", "*": tengri.FIXED, "oa": tengri.Uniform(20, 60)},
+        "lines": {"type": "nlr", "*": tengri.FIXED},
+        "*": tengri.FIXED,
+        "log_lbol": 11.0,
+    },
+    redshift=tengri.Fixed(0.05),
+)
+baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-# Wavelength grid: 0.5 - 500 micron (IR torus dominated)
-wavelength = jnp.logspace(np.log10(5e3), np.log10(5e6), 512)
-wave_um = np.array(wavelength) / 1e4
+oa_values = np.array([20.0, 30.0, 40.0, 50.0, 60.0])
+norm = mpl.colors.Normalize(vmin=oa_values.min(), vmax=oa_values.max())
+cmap = plt.get_cmap("viridis")
 
-# Opening angle values to sweep (degrees)
-oa_values = [20, 30, 40, 50, 60]
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
+for oa in oa_values:
+    params = {**baseline, "agn_oa_skirtor": jnp.float64(oa)}
+    out = model.predict_rest_sed(params)
+    wave = np.asarray(out.wavelength)
+    nu = 2.998e18 / wave
+    nu_l_nu = nu * np.asarray(out.sed)
+    ax.loglog(wave, nu_l_nu, color=cmap(norm(oa)), lw=1.4)
 
-# Create figure with single panel
-fig, ax = plt.subplots(figsize=(8, 5))
+ax.set_xlim(100, 1e6)
+ax.set_ylim(1e40, 1e45)
+ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
-# Generate colors from colormap
-colors = plt.cm.viridis(np.linspace(0.0, 0.85, len(oa_values)))
-
-# Fixed parameters: typical values
-cos_inc = 0.5  # Edge-on orientation (60 degrees)
-agn_log_lbol = 11.0
-agn_tau_skirtor = 7.0
-agn_p_skirtor = 1.0  # Radial power
-agn_q_skirtor = 1.0
-
-# Sweep opening angle
-for oa, color in zip(oa_values, colors):
-    try:
-        sed = skirtor_fn(
-            wavelength,
-            agn_log_lbol=agn_log_lbol,
-            agn_tau_skirtor=agn_tau_skirtor,
-            agn_p_skirtor=agn_p_skirtor,
-            agn_q_skirtor=agn_q_skirtor,
-            agn_oa_skirtor=float(oa),
-            agn_cos_inc=cos_inc,
-        )
-        label = rf"$\theta_{{\mathrm{{oa}}}} = {oa}°$"
-        ax.loglog(wave_um, np.array(sed), lw=2.0, color=color, label=label)
-    except Exception:
-        continue
-
-ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title("SKIRTOR torus: opening-angle sweep", fontsize=12)
-ax.legend(fontsize=10, frameon=False, loc="best")
-ax.set_xlim(0.5, 500)
-ax.set_ylim(1e21, 1e32)
-ax.grid(False)
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+cbar.set_label(r"Opening angle $\theta_{\rm oa}$ [°]")
 
 fig.tight_layout()
-plt.savefig("plot_agn_oa_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_agn_oa_sweep.png", dpi=150, bbox_inches="tight")

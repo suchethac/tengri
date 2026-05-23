@@ -1,97 +1,112 @@
 """
-First Photometric Fit
-=====================
+Recovering a star-forming galaxy from 5-band SDSS photometry
+============================================================
 
-The shortest tengri workflow: define a parametric SFH + Calzetti dust
-model, mock SDSS photometry, fit with MAP optimization, overplot. Start
-here.
+The simplest end-to-end tengri workflow. We build a model with a
+truncated-skew-normal SFH and a two-component Calzetti dust attenuation,
+mock SDSS *ugriz* photometry at S/N = 20, then run a MAP fit to recover the
+input parameters. The figure shows the full rest-frame SED behind the five
+observed bands and the residuals of the MAP fit relative to the noise level.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_first_fit_001.png
-   :alt: plot_first_fit
-   :class: sphx-glr-single-img
-
+Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview); Calzetti
+et al. 2000, ApJ, 533, 682 (attenuation law).
 """
+
+import warnings
 
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import (
-    FIXED,
-    FREE,
-    Fitter,
-    Fixed,
-    Observation,
-    Photometry,
-    SEDModel,
-    Uniform,
-    data_path,
-    load_ssp,
-)
+import tengri
 from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-# --- Build the model with the recommended nested-dict grammar ---
-bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-obs = Observation(
-    photometry=Photometry.from_names(bands, cache_dir=str(data_path("filters"))),
-)
-model = SEDModel.from_groups(
-    ssp_data=load_ssp(),
+BANDS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+
+obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
+model = tengri.SEDModel.build(
+    tengri.load_ssp(),
     observation=obs,
-    sfh={"type": "tsnorm", "*": FREE},
+    sfh={"type": "tsnorm", "*": tengri.FREE},
     dust={
         "type": "two_component",
-        "law_bc": "calzetti",
-        "*": FIXED,
-        "tau_diff": Uniform(0.0, 1.5),  # free; everything else fixed
+        "*": tengri.FIXED,
+        "tau_diff": tengri.Uniform(0.0, 1.5),
         "slope": -0.7,
     },
-    redshift=Fixed(0.05),
+    redshift=tengri.Fixed(0.05),
 )
 
-# --- Mock a star-forming galaxy at z=0.05 (SNR=20) ---
 key = jax.random.PRNGKey(42)
-truth = model.spec.sample(key)
-truth.update(  # nudge the random draw toward a clear SF galaxy
+truth = dict(model.spec.sample(key))
+truth.update(
     sfh_tsnorm_peak_lbt_gyr=3.0,
     sfh_tsnorm_width_gyr=2.0,
     sfh_tsnorm_log_peak_sfr=1.0,
     sfh_tsnorm_skew=0.3,
+    sfh_tsnorm_trunc=10.0,
+    dust_tau_diff=0.3,
 )
 mock = model.mock(truth, snr=20.0, key=key)
 
-# --- Fit with MAP (Adam) ---
-fitter = Fitter(model, data=mock.flux_obs, noise=mock.noise)
-posterior = fitter.run("map", optimizer="adam", n_steps=300, verbose=False)
-
-# --- Plot: data, truth, MAP fit ---
-wave_eff = np.array([float(jnp.mean(w)) for w in obs.photometry.filter_waves])
-fig, ax = plt.subplots(figsize=(7, 4))
-ax.errorbar(
-    wave_eff, mock.flux_obs, yerr=mock.noise, fmt="o", color="k", ms=5, label="Observed (SNR=20)"
+forward = tengri.ForwardModel.build(sed=model, observation=obs)
+posterior = forward.fit(
+    mock.flux_obs, mock.noise, method="map", optimizer="adam",
+    n_steps=300, verbose=False,
 )
-ax.plot(wave_eff, mock.flux_true, "s", color="C0", ms=7, mfc="none", label="Truth")
-ax.plot(
-    wave_eff,
-    model.predict_photometry(posterior.params),
-    "^",
-    color="C3",
-    ms=7,
-    mfc="none",
-    label="MAP fit",
+fit_params = posterior.params
+
+flux_truth = np.asarray(mock.flux_true)
+flux_fit = np.asarray(model.predict_photometry(fit_params))
+flux_obs = np.asarray(mock.flux_obs)
+noise = np.asarray(mock.noise)
+wave_eff = np.array(
+    [float(jnp.mean(w)) for w in obs.photometry.filter_waves]
 )
 
-ax.set(
-    xlabel="Wavelength [Å]",
-    ylabel=r"Flux density [erg/s/cm$^2$/Hz]",
-    title="First Photometric Fit with tengri",
+sed_truth = model.predict_rest_sed(truth)
+sed_fit = model.predict_rest_sed(fit_params)
+wave_rest = np.asarray(sed_truth.wavelength)
+z = 0.05
+wave_obs = wave_rest * (1.0 + z)
+# Anchor the L_nu SED to the observed flux scale by matching the r-band
+# integral: keeps the shape but lands the curve on the data points so a
+# reader can read the SED off the same axis as the photometry.
+def _band_anchor(sed):
+    idx = np.argmin(np.abs(wave_obs - wave_eff[2]))
+    return sed[idx]
+scale_truth = flux_truth[2] / _band_anchor(np.asarray(sed_truth.sed))
+fnu_truth = scale_truth * np.asarray(sed_truth.sed)
+fnu_fit = scale_truth * np.asarray(sed_fit.sed)
+
+fig, (ax_sed, ax_res) = plt.subplots(
+    2, 1, figsize=(7.0, 5.2), sharex=True,
+    gridspec_kw={"height_ratios": [3, 1], "hspace": 0.05},
 )
-ax.legend(fontsize=10, frameon=False)
-fig.tight_layout()
-plt.savefig("plot_first_fit.png", dpi=150, bbox_inches="tight")
-plt.show()
+
+vis = (wave_obs > 2.5e3) & (wave_obs < 1.2e4)
+ax_sed.plot(wave_obs[vis], fnu_truth[vis], color="0.55", lw=0.8, label="Truth SED")
+ax_sed.plot(wave_obs[vis], fnu_fit[vis], color="C3", lw=0.8, alpha=0.8, label="MAP SED")
+ax_sed.errorbar(
+    wave_eff, flux_obs, yerr=noise, fmt="o", color="k", ms=5, capsize=2,
+    label=f"SDSS mock (S/N = 20)",
+)
+ax_sed.plot(wave_eff, flux_truth, "s", color="0.2", ms=6, mfc="none", mew=1.2, label="Truth bands")
+ax_sed.plot(wave_eff, flux_fit, "^", color="C3", ms=6, mfc="none", mew=1.2, label="MAP bands")
+ax_sed.set_yscale("log")
+ax_sed.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
+ax_sed.legend(frameon=False, fontsize=8, ncol=2, loc="lower right")
+
+residual = (flux_fit - flux_obs) / noise
+ax_res.axhline(0.0, color="0.5", lw=0.6)
+ax_res.axhspan(-1.0, 1.0, color="0.85", alpha=0.6, lw=0)
+ax_res.plot(wave_eff, residual, "o", color="C3", ms=5)
+ax_res.set_ylim(-3.5, 3.5)
+ax_res.set_ylabel(r"$(F_{\rm fit} - F_{\rm obs})/\sigma$")
+ax_res.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]")
+
+fig.savefig("plot_first_fit.png", dpi=150, bbox_inches="tight")

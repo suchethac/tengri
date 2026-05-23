@@ -18,50 +18,63 @@
 .. _sphx_glr_auto_examples_nebular_plot_neb_bpt_logu_grid.py:
 
 
-BPT Diagram: Ionization Parameter Sequence
-===========================================
+BPT diagram ionization sequence from ages
+==========================================
 
-The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies the ionising source.
-Varying log U and metallicity moves the predicted location along the
-star-forming → composite → Seyfert sequence.
+The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies ionizing sources.
+We show how stellar population age controls ionization parameter:
+younger (hotter) populations move the locus toward higher [OIII]/Hβ,
+steering from star-forming toward composite/Seyfert regions.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_neb_bpt_logu_grid_001.png
-   :alt: plot_neb_bpt_logu_grid
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 16-115
+.. GENERATED FROM PYTHON SOURCE LINES 10-99
 
 .. code-block:: Python
 
 
+    import warnings
+
+    import jax
+    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri import Fixed, Parameters, SEDModel, load_ssp
+    import tengri
     from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-
-    ssp = load_ssp()
-
-    # BPT diagnostic lines (Kewley+2001 and Kauffmann+2003)
     log_nii_ha_grid = np.linspace(-1.5, 0.3, 200)
     log_oiii_hb_kewley = 0.61 / (log_nii_ha_grid - 0.47) + 1.19
     log_oiii_hb_kauff = 0.61 / (log_nii_ha_grid - 0.05) + 1.3
 
-    fig, ax = plt.subplots(figsize=(8.5, 7))
+    ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh={
+            "type": "dpl",
+            "*": tengri.FIXED,
+            "alpha": 1.0,
+            "beta": 2.5,
+            "tau_gyr": tengri.Uniform(0.1, 2.0),
+            "log_peak_sfr": 1.0,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        neb={"type": "cue", "*": tengri.FIXED},
+        redshift=tengri.Fixed(0.0),
+    )
+    baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-    # Demarcation lines
+    fig, ax = plt.subplots(figsize=(8, 6.5))
+
     mask_k = log_nii_ha_grid < 0.47
     ax.plot(
         log_nii_ha_grid[mask_k],
         log_oiii_hb_kewley[mask_k],
         "k-",
         lw=1.5,
-        label="Kewley+2001 (max starburst)",
+        label="Kewley+2001",
     )
     mask_kauff = log_nii_ha_grid < 0.05
     ax.plot(
@@ -69,71 +82,43 @@ star-forming → composite → Seyfert sequence.
         log_oiii_hb_kauff[mask_kauff],
         "k--",
         lw=1.2,
-        label="Kauffmann+2003 (empirical SF)",
+        label="Kauffmann+2003",
     )
 
-    # Typical star-forming galaxy sequence
-    # Sweep ionization by varying the stellar population age
-    spec_template = Parameters(
-        sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-        sfh_tsnorm_peak_lbt_gyr=Fixed(0.5),
-        sfh_tsnorm_width_gyr=Fixed(0.3),
-        sfh_tsnorm_skew=Fixed(0.2),
-        sfh_tsnorm_trunc=Fixed(3.0),
-        met_logzsol=Fixed(-0.3),
-        dust_tau_bc=Fixed(0.0),
-        dust_tau_diff=Fixed(0.0),
-        dust_slope=Fixed(-0.7),
-        redshift=Fixed(0.0),
-    )
+    ages = np.linspace(0.1, 2.0, 7)
+    colors = plt.cm.viridis(np.linspace(0, 1, len(ages)))
 
-    model = SEDModel(spec_template, ssp)
+    for age, color in zip(ages, colors):
+        params = {**baseline, "sfh_dpl_tau_gyr": jnp.float64(age)}
+        out = model.predict_rest_sed(params)
+        lines = out.emission_lines
+        if lines is not None:
+            lines_dict = dict(lines)
+            ha = lines_dict.get(6562.79, 1e-20)
+            hb = lines_dict.get(4860.2, 1e-20)
+            nii = lines_dict.get(6583.34, 1e-20)
+            oiii = lines_dict.get(5008.24, 1e-20)
+            if ha > 0 and hb > 0 and oiii > 0 and nii > 0:
+                log_n2_ha = np.log10(nii / ha)
+                log_o3_hb = np.log10(oiii / hb)
+                ax.scatter(log_n2_ha, log_o3_hb, s=80, c=[color], edgecolors="k", lw=0.5, zorder=5)
 
-    # Plot scatter of line ratios at different ages (simulating ionization variation)
-    ages = np.linspace(0.1, 2.0, 6)
-    colors_age = plt.cm.viridis(np.linspace(0.0, 0.85, len(ages)))
-
-    for i, age_gyr in enumerate(ages):
-        params = {
-            "sfh_tsnorm_log_peak_sfr": 1.0,
-            "sfh_tsnorm_peak_lbt_gyr": age_gyr,
-            "sfh_tsnorm_width_gyr": 0.3,
-            "sfh_tsnorm_skew": 0.2,
-            "sfh_tsnorm_trunc": 3.0,
-            "met_logzsol": -0.3,
-            "dust_tau_bc": 0.0,
-            "dust_tau_diff": 0.0,
-            "dust_slope": -0.7,
-            "redshift": 0.0,
-        }
-        ax.scatter(
-            [-0.8 + i * 0.15],
-            [0.2 - i * 0.12],
-            s=100,
-            c=[colors_age[i]],
-            marker="o",
-            edgecolors="k",
-            lw=0.5,
-            alpha=0.8,
-            zorder=5,
-            label=f"Age = {age_gyr:.1f} Gyr",
-        )
-
-    # Region labels
-    ax.text(-1.3, -0.5, "Star\nForming", fontsize=10, color="#1f77b4", ha="center")
+    ax.text(-1.3, -0.5, "SF", fontsize=10, color="#1f77b4", ha="center")
     ax.text(0.1, 0.8, "Composite", fontsize=10, color="#ff7f0e", ha="center")
-    ax.text(0.35, 1.2, "Seyfert/\nLINER", fontsize=10, color="#d62728", ha="center")
+    ax.text(0.35, 1.2, "Seyfert", fontsize=10, color="#d62728", ha="center")
 
-    ax.set_xlabel(r"log [NII]6583 / H$\alpha$", fontsize=11)
-    ax.set_ylabel(r"log [OIII]5007 / H$\beta$", fontsize=11)
-    ax.set_title("BPT Diagram: Ionization Control on Line Ratios", fontsize=12)
+    ax.set_xlabel(r"$\log$ [NII] / H$\alpha$")
+    ax.set_ylabel(r"$\log$ [OIII] / H$\beta$")
     ax.set_xlim(-1.6, 0.7)
     ax.set_ylim(-1.2, 1.5)
-    ax.legend(fontsize=9, frameon=False, loc="lower right", ncol=2)
+    ax.legend(fontsize=10, frameon=False, loc="lower right")
+
+    sm = plt.cm.ScalarMappable(cmap=plt.cm.viridis, norm=plt.Normalize(vmin=ages.min(), vmax=ages.max()))
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, label="Age [Gyr]")
 
     fig.tight_layout()
-    plt.savefig("plot_neb_bpt_logu_grid.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_neb_bpt_logu_grid.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_neb_bpt_logu_grid.py:

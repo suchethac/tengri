@@ -258,6 +258,23 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="All seven shipped dust IR-emission libraries reprocessing the same absorbed UV power into the IR, normalised so the integrated L_IR(8–1000 μm) is identical across curves. The differences then sit entirely in the SED shape — peak wavelength (T_dust proxy), PAH-feature amplitude in the 3–20 μm window, and how steeply the sub-mm tail falls.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_ir_library_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_emission/plot_ir_library_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Dust IR-emission library comparison at fixed L_dust</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Sweep ionization parameter across the Draine+2021 PAHspec library at fixed starlight spectrum and size distribution. Low U: FIR-cooling regime; high U: mid-IR peak shift and PAH-feature strengthening.">
 
 .. only:: html
@@ -399,6 +416,7 @@ Astrodust (HD23) template grids.
    /auto_examples/dust_emission/plot_dust_T_sweep
    /auto_examples/dust_emission/plot_dust_emission_models
    /auto_examples/dust_emission/plot_dust_qpah_umin_grid
+   /auto_examples/dust_emission/plot_ir_library_compare
    /auto_examples/dust_emission/plot_pahspec_lgU_sweep
    /auto_examples/dust_emission/plot_pahspec_starlight_sweep
    /auto_examples/dust_emission/plot_qpah_sweep

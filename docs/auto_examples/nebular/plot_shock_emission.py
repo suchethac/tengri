@@ -1,18 +1,15 @@
 """
-Nebular Shock Emission (MAPPINGS V)
-====================================
+MAPPINGS V shocks: velocity, density, and magnetic field effects
+==================================================================
 
-Plot shock emission line diagnostics from MAPPINGS V photoionization models.
-Shows how shock velocity, density, and magnetic field affect line ratios
-and can mimic AGN-like emission in diagnostic diagrams.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_shock_emission_001.png
-   :alt: plot_shock_emission
-   :class: sphx-glr-single-img
-
+Shock emission (MAPPINGS V models) can mimic AGN on the BPT diagram.
+We show how shock velocity, gas density, and magnetic field strength
+affect line ratios and diagnostic positions. Four-panel layout shows
+velocity and density sequences on BPT, line ratios vs velocity, and
+magnetic field strength.
 """
+
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,14 +18,11 @@ from tengri.analysis.plotting import setup_style
 from tengri.nebular import shock_line_ratios
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-# --- Panel structure ---
-fig, axes = plt.subplots(2, 2, figsize=(12, 9))
+fig, axes = plt.subplots(2, 2, figsize=(11, 9))
 
-# --- Panel 1: BPT diagnostic [O III]/Hβ vs [N II]/Hα ---
 ax = axes[0, 0]
-
-# Vary shock velocity (km/s) at fixed density
 v_shock_range = np.linspace(200, 500, 15)
 colors = plt.cm.viridis(np.linspace(0, 1, len(v_shock_range)))
 
@@ -39,29 +33,24 @@ for v_shock, color in zip(v_shock_range, colors):
             shock_log_density=2.0,
             shock_b_over_sqrt_n=1.0,
         )
-        # Extract [O III]/Hβ and [N II]/Hα
         log_oiii_hb = np.log10(line_ratios["O3_5007A"] / line_ratios["Hb_4861A"])
         log_nii_ha = np.log10(line_ratios["NII_6583A"] / line_ratios["HA_6563A"])
         ax.scatter(log_nii_ha, log_oiii_hb, color=color, s=80, alpha=0.7, edgecolors="k", lw=0.3)
     except Exception:
         pass
 
-ax.set_xlabel(r"log([N II]$\lambda$6584 / H$\alpha$)")
-ax.set_ylabel(r"log([O III]$\lambda$5007 / H$\beta$)")
-ax.set_title("BPT Diagram: Shock Velocity Sequence")
-ax.grid(True, alpha=0.3)
-
-# Add AGN/SF dividing lines (schematic)
 x_bpt = np.linspace(-1.5, 0.5, 100)
-y_bpt_agn = 0.61 / (x_bpt - 0.05) + 1.3  # Kewley+2001 AGN line
+y_bpt_agn = 0.61 / (x_bpt - 0.05) + 1.3
 ax.plot(x_bpt, y_bpt_agn, "k--", lw=1.5, alpha=0.4, label="AGN/SF boundary")
+ax.set_xlabel(r"$\log$ [NII] / H$\alpha$")
+ax.set_ylabel(r"$\log$ [OIII] / H$\beta$")
+ax.set_title("BPT: Shock Velocity (200–500 km/s)")
+ax.grid(True, alpha=0.3)
 ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(-1.5, 0.5)
 ax.set_ylim(-1.2, 1.5)
 
-# --- Panel 2: Shock density dependence ---
 ax = axes[0, 1]
-
 density_range = np.logspace(0, 4, 12)
 colors = plt.cm.plasma(np.linspace(0, 1, len(density_range)))
 
@@ -78,22 +67,20 @@ for dens, color in zip(density_range, colors):
     except Exception:
         pass
 
-ax.set_xlabel(r"log([N II]$\lambda$6584 / H$\alpha$)")
-ax.set_ylabel(r"log([O III]$\lambda$5007 / H$\beta$)")
-ax.set_title("BPT Diagram: Density Sequence (v_s=200 km/s)")
-ax.grid(True, alpha=0.3)
 ax.plot(x_bpt, y_bpt_agn, "k--", lw=1.5, alpha=0.4)
+ax.set_xlabel(r"$\log$ [NII] / H$\alpha$")
+ax.set_ylabel(r"$\log$ [OIII] / H$\beta$")
+ax.set_title("BPT: Density (200 km/s)")
+ax.grid(True, alpha=0.3)
 ax.set_xlim(-1.5, 0.5)
 ax.set_ylim(-1.2, 1.5)
 
-# --- Panel 3: Line flux ratios vs shock velocity ---
 ax = axes[1, 0]
-
 v_shock_dense = np.linspace(200, 500, 20)
 line_flux_dict = {
-    "[O III]5007/Hβ": [],
-    "[O I]6300/Hα": [],
-    "[S II]6724/Hα": [],
+    "[OIII]/Hβ": [],
+    "[OI]/Hα": [],
+    "[SII]/Hα": [],
 }
 
 for v_shock in v_shock_dense:
@@ -103,9 +90,9 @@ for v_shock in v_shock_dense:
             shock_log_density=2.0,
             shock_b_over_sqrt_n=1.0,
         )
-        line_flux_dict["[O III]5007/Hβ"].append(line_ratios["O3_5007A"] / line_ratios["Hb_4861A"])
-        line_flux_dict["[O I]6300/Hα"].append(line_ratios["OI_6300A"] / line_ratios["HA_6563A"])
-        line_flux_dict["[S II]6724/Hα"].append(
+        line_flux_dict["[OIII]/Hβ"].append(line_ratios["O3_5007A"] / line_ratios["Hb_4861A"])
+        line_flux_dict["[OI]/Hα"].append(line_ratios["OI_6300A"] / line_ratios["HA_6563A"])
+        line_flux_dict["[SII]/Hα"].append(
             (line_ratios["SII_6716A"] + line_ratios["SII_6731A"]) / line_ratios["HA_6563A"]
         )
     except Exception:
@@ -115,16 +102,13 @@ for label, ratios in line_flux_dict.items():
     if ratios:
         ax.semilogy(v_shock_dense[: len(ratios)], ratios, "o-", lw=1.5, label=label, markersize=4)
 
-ax.set_xlabel(r"Shock Velocity [km/s]")
+ax.set_xlabel("Shock Velocity [km/s]")
 ax.set_ylabel("Line Flux Ratio")
-ax.set_title("Shock Emission: Line Ratios vs Velocity")
 ax.legend(fontsize=10, frameon=False)
 ax.grid(True, alpha=0.3, which="both")
 
-# --- Panel 4: Magnetic field dependence ---
 ax = axes[1, 1]
-
-b_param_range = np.logspace(-3, 1, 12)  # μG, 0.001 to 10
+b_param_range = np.logspace(-3, 1, 12)
 colors = plt.cm.cool(np.linspace(0, 1, len(b_param_range)))
 
 for b_param, color in zip(b_param_range, colors):
@@ -140,15 +124,13 @@ for b_param, color in zip(b_param_range, colors):
     except Exception:
         pass
 
-ax.set_xlabel(r"log([N II]$\lambda$6584 / H$\alpha$)")
-ax.set_ylabel(r"log([O III]$\lambda$5007 / H$\beta$)")
-ax.set_title("BPT Diagram: Magnetic Field Strength (v_s=250 km/s)")
-ax.grid(True, alpha=0.3)
 ax.plot(x_bpt, y_bpt_agn, "k--", lw=1.5, alpha=0.4)
+ax.set_xlabel(r"$\log$ [NII] / H$\alpha$")
+ax.set_ylabel(r"$\log$ [OIII] / H$\beta$")
+ax.set_title("BPT: Magnetic Field (250 km/s)")
+ax.grid(True, alpha=0.3)
 ax.set_xlim(-1.5, 0.5)
 ax.set_ylim(-1.2, 1.5)
 
-fig.suptitle("Shock Emission Diagnostics: MAPPINGS V Models", fontsize=12)
-fig.tight_layout(rect=[0, 0, 1, 0.97])
-plt.savefig("plot_shock_emission.png", dpi=100, bbox_inches="tight")
-plt.show()
+fig.tight_layout()
+fig.savefig("plot_shock_emission.png", dpi=150, bbox_inches="tight")

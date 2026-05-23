@@ -3,8 +3,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.core.component",
-   "module_short": "tengri.core",
+   "module": "tengri.protocols.component",
+   "module_short": "tengri.protocols",
    "name": "PipelineState"
   }
  ],
@@ -80,42 +80,6 @@
    "name": "trapezoid"
   }
  ],
- "load_ssp": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.components.stellar.sps.dsps_wrapper",
-   "module_short": "tengri.components.stellar.sps",
-   "name": "load_ssp"
-  }
- ],
- "os.environ.setdefault": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "os.environ",
-   "module_short": "os.environ",
-   "name": "setdefault"
-  }
- ],
- "plt.savefig": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "savefig"
-  }
- ],
- "plt.show": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "show"
-  }
- ],
  "plt.subplots": [
   {
    "is_class": false,
@@ -143,31 +107,22 @@
    "name": "setup_style"
   }
  ],
- "tengri.SEDModel": [
+ "tengri.load_ssp": [
   {
    "is_class": false,
-   "is_explicit": true,
+   "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "SEDModel"
+   "name": "load_ssp"
   }
  ],
- "tengri.forward.build_components": [
+ "warnings.filterwarnings": [
   {
    "is_class": false,
-   "is_explicit": true,
-   "module": "tengri.forward",
-   "module_short": "tengri.forward",
-   "name": "build_components"
-  }
- ],
- "tengri.forward.run_components": [
-  {
-   "is_class": false,
-   "is_explicit": true,
-   "module": "tengri.forward",
-   "module_short": "tengri.forward",
-   "name": "run_components"
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
   }
  ]
 }
