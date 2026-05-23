@@ -1,0 +1,209 @@
+[
+  {
+    "truth_model": "dpl+calzetti",
+    "fit_model": "dpl+calzetti",
+    "n_free_fit": 6,
+    "truth_derived": {
+      "log_stellar_mass": 10.575201503885898,
+      "log_sfr_100myr": -2.609984518756726
+    },
+    "wall_s": 8.04514304100303,
+    "fit_derived": {
+      "log_stellar_mass": {
+        "median": 10.628264400051837,
+        "p16": 10.58242349318047,
+        "p84": 10.683740180387865
+      },
+      "log_sfr_100myr": {
+        "median": -3.3973784271495857,
+        "p16": -4.405601701074502,
+        "p84": -2.398331444811514
+      }
+    },
+    "bias_dex": {
+      "log_stellar_mass": 0.05306289616593851,
+      "log_sfr_100myr": -0.7873939083928598
+    },
+    "within_0.5_dex": {
+      "log_stellar_mass": true,
+      "log_sfr_100myr": false
+    },
+    "status": "ok"
+  },
+  {
+    "truth_model": "dense_basis+calzetti",
+    "fit_model": "dense_basis+calzetti",
+    "n_free_fit": 7,
+    "truth_derived": {
+      "log_stellar_mass": 9.96682853310721,
+      "log_sfr_100myr": -0.027894256473699013
+    },
+    "wall_s": 9.747557792004955,
+    "fit_derived": {
+      "log_stellar_mass": {
+        "median": 10.061730923331027,
+        "p16": 9.988147434712051,
+        "p84": 10.118842266006743
+      },
+      "log_sfr_100myr": {
+        "median": -0.10723754879366948,
+        "p16": -0.2493713771352558,
+        "p84": -0.04766321241498535
+      }
+    },
+    "bias_dex": {
+      "log_stellar_mass": 0.09490239022381708,
+      "log_sfr_100myr": -0.07934329231997046
+    },
+    "within_0.5_dex": {
+      "log_stellar_mass": true,
+      "log_sfr_100myr": true
+    },
+    "status": "ok"
+  },
+  {
+    "truth_model": "tsnorm+calzetti",
+    "fit_model": "tsnorm+calzetti",
+    "n_free_fit": 7,
+    "truth_derived": {
+      "log_stellar_mass": 10.507534574992976,
+      "log_sfr_100myr": -0.42098029493985156
+    },
+    "wall_s": 7.654403708002064,
+    "fit_derived": {
+      "log_stellar_mass": {
+        "median": 10.582305810981314,
+        "p16": 10.538675821431887,
+        "p84": 10.625837483662753
+      },
+      "log_sfr_100myr": {
+        "median": -0.41495060746850987,
+        "p16": -0.6291027662433534,
+        "p84": -0.2756735851034691
+      }
+    },
+    "bias_dex": {
+      "log_stellar_mass": 0.07477123598833835,
+      "log_sfr_100myr": 0.006029687471341694
+    },
+    "within_0.5_dex": {
+      "log_stellar_mass": true,
+      "log_sfr_100myr": true
+    },
+    "status": "ok"
+  },
+  {
+    "truth_model": "dpl+smc",
+    "fit_model": "dpl+smc",
+    "n_free_fit": 6,
+    "truth_derived": {
+      "log_stellar_mass": 10.575201503885898,
+      "log_sfr_100myr": -2.609984518756726
+    },
+    "wall_s": 7.631092874995375,
+    "fit_derived": {
+      "log_stellar_mass": {
+        "median": 10.628316647074978,
+        "p16": 10.57083391421398,
+        "p84": 10.673988655109099
+      },
+      "log_sfr_100myr": {
+        "median": -3.32014078072893,
+        "p16": -4.2876141696304835,
+        "p84": -2.495899117969212
+      }
+    },
+    "bias_dex": {
+      "log_stellar_mass": 0.05311514318908017,
+      "log_sfr_100myr": -0.7101562619722039
+    },
+    "within_0.5_dex": {
+      "log_stellar_mass": true,
+      "log_sfr_100myr": false
+    },
+    "status": "ok"
+  },
+  {
+    "truth_model": "dexp+calzetti",
+    "fit_model": "dexp+calzetti",
+    "n_free_fit": 4,
+    "truth_derived": {
+      "log_stellar_mass": 10.988945655876966,
+      "log_sfr_100myr": -0.9386961709909328
+    },
+    "wall_s": 8.114214209002967,
+    "fit_derived": {
+      "log_stellar_mass": {
+        "median": 11.021225838951857,
+        "p16": 10.984490355545196,
+        "p84": 11.045851544598493
+      },
+      "log_sfr_100myr": {
+        "median": -1.0252883350560928,
+        "p16": -1.0966544477322693,
+        "p84": -0.9190760544556705
+      }
+    },
+    "bias_dex": {
+      "log_stellar_mass": 0.032280183074890445,
+      "log_sfr_100myr": -0.08659216406516002
+    },
+    "within_0.5_dex": {
+      "log_stellar_mass": true,
+      "log_sfr_100myr": true
+    },
+    "status": "ok"
+  },
+  {
+    "truth_model": "dense_basis+calzetti",
+    "fit_model": "dpl+calzetti",
+    "n_free_fit": 6,
+    "truth_derived": {
+      "log_stellar_mass": 9.96682853310721,
+      "log_sfr_100myr": -0.027894256473699013
+    },
+    "status": "failed",
+    "error_type": "ConcretizationTypeError",
+    "error_msg": "Abstract tracer value encountered where concrete value is expected: traced array with shape float64[]\nThe problem arose with the `float` function. If trying to convert the data type of a value, try using `x.astype(float)` or `jnp.array(x, float)` instead.\nThe error occurred while tracing the function single_step at /Users/suchethacooray/Projects/tengri/src/tengri/inference/backends/map_dispatch.py",
+    "traceback": "engri/src/tengri/inference/backends/map_dispatch.py:143 for jit. This value became a tracer due to JAX operations on these lines:\n\n  operation a:f64[] = sub 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:50 (Uniform.unstandardize)\n\n  operation a:f64[] = mul 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:26 (Uniform.unstandardize)\n\n  operation a:f64[] = add 0.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:15 (Uniform.unstandardize)\n\n  operation a:f64[] = sub 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:50 (Uniform.unstandardize)\n\n  operation a:f64[] = mul 2.2:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:26 (Uniform.unstandardize)\n\n(Additional originating lines are not shown.)\n\nSee https://docs.jax.dev/en/latest/errors.html#jax.errors.ConcretizationTypeError\n--------------------\nFor simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.\n"
+  },
+  {
+    "truth_model": "tsnorm+calzetti",
+    "fit_model": "dpl+calzetti",
+    "n_free_fit": 6,
+    "truth_derived": {
+      "log_stellar_mass": 10.507534574992976,
+      "log_sfr_100myr": -0.42098029493985156
+    },
+    "status": "failed",
+    "error_type": "ConcretizationTypeError",
+    "error_msg": "Abstract tracer value encountered where concrete value is expected: traced array with shape float64[]\nThe problem arose with the `float` function. If trying to convert the data type of a value, try using `x.astype(float)` or `jnp.array(x, float)` instead.\nThe error occurred while tracing the function single_step at /Users/suchethacooray/Projects/tengri/src/tengri/inference/backends/map_dispatch.py",
+    "traceback": "engri/src/tengri/inference/backends/map_dispatch.py:143 for jit. This value became a tracer due to JAX operations on these lines:\n\n  operation a:f64[] = sub 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:50 (Uniform.unstandardize)\n\n  operation a:f64[] = mul 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:26 (Uniform.unstandardize)\n\n  operation a:f64[] = add 0.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:15 (Uniform.unstandardize)\n\n  operation a:f64[] = sub 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:50 (Uniform.unstandardize)\n\n  operation a:f64[] = mul 2.2:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:26 (Uniform.unstandardize)\n\n(Additional originating lines are not shown.)\n\nSee https://docs.jax.dev/en/latest/errors.html#jax.errors.ConcretizationTypeError\n--------------------\nFor simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.\n"
+  },
+  {
+    "truth_model": "dpl+calzetti",
+    "fit_model": "dense_basis+calzetti",
+    "n_free_fit": 7,
+    "truth_derived": {
+      "log_stellar_mass": 10.575201503885898,
+      "log_sfr_100myr": -2.609984518756726
+    },
+    "status": "failed",
+    "error_type": "ConcretizationTypeError",
+    "error_msg": "Abstract tracer value encountered where concrete value is expected: traced array with shape float64[]\nThe problem arose with the `float` function. If trying to convert the data type of a value, try using `x.astype(float)` or `jnp.array(x, float)` instead.\nThe error occurred while tracing the function single_step at /Users/suchethacooray/Projects/tengri/src/tengri/inference/backends/map_dispatch.py",
+    "traceback": "engri/src/tengri/inference/backends/map_dispatch.py:143 for jit. This value became a tracer due to JAX operations on these lines:\n\n  operation a:f64[] = sub 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:50 (Uniform.unstandardize)\n\n  operation a:f64[] = mul 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:26 (Uniform.unstandardize)\n\n  operation a:f64[] = add 0.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:15 (Uniform.unstandardize)\n\n  operation a:f64[] = sub 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:50 (Uniform.unstandardize)\n\n  operation a:f64[] = mul 2.2:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:26 (Uniform.unstandardize)\n\n(Additional originating lines are not shown.)\n\nSee https://docs.jax.dev/en/latest/errors.html#jax.errors.ConcretizationTypeError\n--------------------\nFor simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.\n"
+  },
+  {
+    "truth_model": "dpl+smc",
+    "fit_model": "dpl+calzetti",
+    "n_free_fit": 6,
+    "truth_derived": {
+      "log_stellar_mass": 10.575201503885898,
+      "log_sfr_100myr": -2.609984518756726
+    },
+    "status": "failed",
+    "error_type": "ConcretizationTypeError",
+    "error_msg": "Abstract tracer value encountered where concrete value is expected: traced array with shape float64[]\nThe problem arose with the `float` function. If trying to convert the data type of a value, try using `x.astype(float)` or `jnp.array(x, float)` instead.\nThe error occurred while tracing the function single_step at /Users/suchethacooray/Projects/tengri/src/tengri/inference/backends/map_dispatch.py",
+    "traceback": "engri/src/tengri/inference/backends/map_dispatch.py:143 for jit. This value became a tracer due to JAX operations on these lines:\n\n  operation a:f64[] = sub 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:50 (Uniform.unstandardize)\n\n  operation a:f64[] = mul 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:26 (Uniform.unstandardize)\n\n  operation a:f64[] = add 0.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:15 (Uniform.unstandardize)\n\n  operation a:f64[] = sub 1.0:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:50 (Uniform.unstandardize)\n\n  operation a:f64[] = mul 2.2:f64[] b\n    from line /Users/suchethacooray/Projects/tengri/src/tengri/parameters/priors.py:348:26 (Uniform.unstandardize)\n\n(Additional originating lines are not shown.)\n\nSee https://docs.jax.dev/en/latest/errors.html#jax.errors.ConcretizationTypeError\n--------------------\nFor simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.\n"
+  }
+]

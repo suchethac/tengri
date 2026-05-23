@@ -74,7 +74,7 @@ class AGNSEDComponentConfig(SEDComponentConfig):
 class AGNSEDComponentState(SEDComponentState):
     """State for AGN component.
 
-    Holds optional filter passbands when ``approx={'wave_precomp': True}``
+    Holds optional filter passbands when ``approx=WavePrecomp()``
     is set on the parent SEDModel. The component uses them at
     :meth:`AGNSEDComponent.apply` time to filter-integrate the
     analytically computed AGN SED and publish ``agn_phot_lnu_precomp``.
@@ -149,7 +149,7 @@ class AGNSEDComponent:
     ) -> AGNSEDComponentState:
         r"""Cache filter passbands and SKIRTOR templates for precomputation.
 
-        When ``approx={'wave_precomp': True}`` is set:
+        When ``approx=WavePrecomp()`` is set:
         - Stores filter passbands so :meth:`apply` can publish
           ``agn_phot_lnu_precomp`` (filter-integrated AGN photometry).
         - If the AGN model is "skirtor", pre-loads the template grids
