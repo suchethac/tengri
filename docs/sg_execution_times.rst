@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:06.086** total execution time for 165 files **from all galleries**:
+**00:04.921** total execution time for 167 files **from all galleries**:
 
 .. container::
 
@@ -32,14 +32,11 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_uv_ir_energy_balance.py` (``../examples/dust_attenuation/plot_uv_ir_energy_balance.py``)
-     - 00:02.572
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_nonparametric_compare.py` (``../examples/sfh/plot_sfh_nonparametric_compare.py``)
+     - 00:02.673
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_components_breakdown.py` (``../examples/agn/plot_agn_components_breakdown.py``)
-     - 00:02.070
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_ir_library_compare.py` (``../examples/dust_emission/plot_ir_library_compare.py``)
-     - 00:01.444
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_lbg_observed_evolution.py` (``../examples/multiwavelength/plot_lbg_observed_evolution.py``)
+     - 00:02.248
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
      - 00:00.000
@@ -60,6 +57,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_alpha_ox_lbol_2d.py` (``../examples/agn/plot_agn_alpha_ox_lbol_2d.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_components_breakdown.py` (``../examples/agn/plot_agn_components_breakdown.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_cos_inc_sweep.py` (``../examples/agn/plot_agn_cos_inc_sweep.py``)
@@ -146,6 +146,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_uv_bump_sweep.py` (``../examples/dust_attenuation/plot_uv_bump_sweep.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_uv_ir_energy_balance.py` (``../examples/dust_attenuation/plot_uv_ir_energy_balance.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_01_size_distribution.py` (``../examples/dust_emission/plot_astrodust_hd23_01_size_distribution.py``)
      - 00:00.000
      - 0.0
@@ -186,6 +189,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_qpah_umin_grid.py` (``../examples/dust_emission/plot_dust_qpah_umin_grid.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_ir_library_compare.py` (``../examples/dust_emission/plot_ir_library_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_pahspec_lgU_sweep.py` (``../examples/dust_emission/plot_pahspec_lgU_sweep.py``)

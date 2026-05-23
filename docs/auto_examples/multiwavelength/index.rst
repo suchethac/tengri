@@ -37,6 +37,23 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="A single intrinsic LBG (young dust-poor star-forming galaxy) shown in the observer frame at four redshifts. The Lyman break sweeps redward into the u- and then g- and r-band dropout regimes, the Inoue+2014 IGM transmission removes more and more flux blueward of Lyα, and the apparent magnitude faint-end falls by ~2.5 mag from z = 2 → 8 due to luminosity distance alone.">
+
+.. only:: html
+
+  .. image:: /auto_examples/multiwavelength/images/thumb/sphx_glr_plot_lbg_observed_evolution_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/multiwavelength/plot_lbg_observed_evolution`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Observed SED of a Lyman-break galaxy at z = 2, 4, 6, 8</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Panchromatic SED spanning hard X-rays through centimeter radio of a luminous quasar with radio-loud jets. Combines AGN disc continuum, X-ray corona, and radio components, showing how AGN dominate across 0.1 keV through centimeter wavelengths.">
 
 .. only:: html
@@ -131,6 +148,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
    :hidden:
 
    /auto_examples/multiwavelength/plot_fir_radio_correlation
+   /auto_examples/multiwavelength/plot_lbg_observed_evolution
    /auto_examples/multiwavelength/plot_panchromatic_agn
    /auto_examples/multiwavelength/plot_panchromatic_agn_fraction
    /auto_examples/multiwavelength/plot_panchromatic_dust_balance

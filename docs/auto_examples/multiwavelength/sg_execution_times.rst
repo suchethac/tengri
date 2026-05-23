@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:04.379** total execution time for 3 files **from auto_examples/multiwavelength**:
+**00:02.248** total execution time for 7 files **from auto_examples/multiwavelength**:
 
 .. container::
 
@@ -32,12 +32,24 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_agn.py` (``plot_panchromatic_agn.py``)
-     - 00:02.433
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_galaxy.py` (``plot_panchromatic_galaxy.py``)
-     - 00:01.297
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_lbg_observed_evolution.py` (``plot_lbg_observed_evolution.py``)
+     - 00:02.248
      - 0.0
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_fir_radio_correlation.py` (``plot_fir_radio_correlation.py``)
-     - 00:00.649
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_agn.py` (``plot_panchromatic_agn.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_agn_fraction.py` (``plot_panchromatic_agn_fraction.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_dust_balance.py` (``plot_panchromatic_dust_balance.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_galaxy.py` (``plot_panchromatic_galaxy.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_redshift_sweep.py` (``plot_panchromatic_redshift_sweep.py``)
+     - 00:00.000
      - 0.0
