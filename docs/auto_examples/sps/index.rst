@@ -36,6 +36,23 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The conversion from observed flux to stellar mass — the mass-to-light ratio M/L — depends on stellar age and the photometric band used. For a single-burst stellar population, M/L rises monotonically with age in every band; the rise is steepest in the blue, where massive bright stars dominate young populations, and shallowest in the K band, where light is dominated by red giants at every age past ~1 Gyr.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_mass_to_light_ratios_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_mass_to_light_ratios`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Stellar mass-to-light ratios vs SSP age, per band</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Different stellar population synthesis codes use different stellar spectral libraries, isochrone families, and binary treatments. The SED of a ~1 Gyr-old, solar-metallicity simple stellar population already shows visible differences in the UV (BPASS binaries add a hot continuum) and in the NIR (treatment of TP-AGB).">
 
 .. only:: html
@@ -147,6 +164,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
    :hidden:
 
    /auto_examples/sps/plot_ionising_lum
+   /auto_examples/sps/plot_mass_to_light_ratios
    /auto_examples/sps/plot_sps_library_compare
    /auto_examples/sps/plot_ssp_age_sweep
    /auto_examples/sps/plot_ssp_color_compare

@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:02.248** total execution time for 7 files **from auto_examples/multiwavelength**:
+**00:20.225** total execution time for 8 files **from auto_examples/multiwavelength**:
 
 .. container::
 
@@ -32,10 +32,13 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_lbg_observed_evolution.py` (``plot_lbg_observed_evolution.py``)
-     - 00:02.248
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_components_isolated.py` (``plot_components_isolated.py``)
+     - 00:20.225
      - 0.0
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_fir_radio_correlation.py` (``plot_fir_radio_correlation.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_lbg_observed_evolution.py` (``plot_lbg_observed_evolution.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_agn.py` (``plot_panchromatic_agn.py``)

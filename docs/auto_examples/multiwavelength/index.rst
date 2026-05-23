@@ -20,6 +20,23 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Six physics blocks evaluated one at a time on the same baseline galaxy so the reader sees what each component contributes to a panchromatic SED. Use this card to ask &quot;if my data only constrain wavelength X, which component(s) matter?&quot;">
+
+.. only:: html
+
+  .. image:: /auto_examples/multiwavelength/images/thumb/sphx_glr_plot_components_isolated_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/multiwavelength/plot_components_isolated`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Each tengri SED component shown in isolation</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The FIR–radio correlation (van der Kruit 1971; Helou et al. 1985) holds over five decades in galaxy luminosity. Sweeps IR luminosity and radio spectral index to show the tight linear correlation and how the empirical parameter q_IR varies with model calibration.">
 
 .. only:: html
@@ -147,6 +164,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 .. toctree::
    :hidden:
 
+   /auto_examples/multiwavelength/plot_components_isolated
    /auto_examples/multiwavelength/plot_fir_radio_correlation
    /auto_examples/multiwavelength/plot_lbg_observed_evolution
    /auto_examples/multiwavelength/plot_panchromatic_agn
