@@ -100,7 +100,7 @@ def _default_cache_dir() -> Path:
 def enable_persistent_cache(
     cache_dir: str | os.PathLike[str] | None = None,
     *,
-    min_compile_time_secs: float = 0.5,
+    min_compile_time_secs: float = 0.05,
     max_size_bytes: int | None = None,
 ) -> Path:
     """Enable JAX's persistent on-disk compilation cache.
@@ -116,11 +116,16 @@ def enable_persistent_cache(
         :func:`_default_cache_dir` (env var → XDG → ``~/.cache``).
     min_compile_time_secs : float
         Minimum compile time before a cached entry is persisted to disk.
-        Default 0.5 captures the orchestrator-component pipelines
-        (~500–800 ms cold) and the slower expensive compiles
-        (geoVI, MGVI while_loop, MCMC warmups). Was 5.0 before
-        2026-05-04, which skipped the orchestrator chain entirely
-        and forced a full recompile per process restart.
+        Default 0.05 captures the per-filter ``compute_flux_density``
+        micro-kernels (~150–250 ms each) and other orchestrator-component
+        ops that dispatch individually under the eager
+        :meth:`SEDModel.predict_observables` path. Persisting these is
+        what makes a fresh-process ``predict_observables`` go from
+        ~12 s cold to ~1 s warm-disk.
+
+        Threshold history: 5.0 (≤ 2026-05-04, missed orchestrator),
+        0.5 (≤ 2026-05-22, missed per-filter micro-compiles),
+        0.05 (current).
     max_size_bytes : int or None
         If provided and supported by the installed JAX, sets
         ``jax_compilation_cache_max_size`` so JAX evicts old entries
