@@ -125,13 +125,13 @@ def test_exact_mode_chunk_sizes_match_unchunked(model_exact, wave_obs_460):
     params = model_exact.spec.sample(jax.random.PRNGKey(42))
 
     flux_unchunked = model_exact.predict_spectrum(
-        params, wave_obs_460, mode="exact", wave_chunk_size=None
+        params, wave_obs_460, wave_chunk_size=None
     )
 
     # Test various chunk sizes
     for chunk_size in [16, 32, 64, 128, 460]:
         flux_chunked = model_exact.predict_spectrum(
-            params, wave_obs_460, mode="exact", wave_chunk_size=chunk_size
+            params, wave_obs_460, wave_chunk_size=chunk_size
         )
 
         # Bitwise match (rtol=1e-12, atol=1e-15 for float64)
@@ -149,12 +149,12 @@ def test_compositional_mode_chunk_sizes_match(model_compositional, wave_obs_460)
     params = model_compositional.spec.sample(jax.random.PRNGKey(43))
 
     flux_unchunked = model_compositional.predict_spectrum(
-        params, wave_obs_460, mode="compositional", wave_chunk_size=None
+        params, wave_obs_460, wave_chunk_size=None
     )
 
     for chunk_size in [32, 64, 128]:
         flux_chunked = model_compositional.predict_spectrum(
-            params, wave_obs_460, mode="compositional", wave_chunk_size=chunk_size
+            params, wave_obs_460, wave_chunk_size=chunk_size
         )
 
         np.testing.assert_allclose(
@@ -171,12 +171,12 @@ def test_auto_mode_chunk_sizes_match(model_compositional, wave_obs_460):
     params = model_compositional.spec.sample(jax.random.PRNGKey(44))
 
     flux_unchunked = model_compositional.predict_spectrum(
-        params, wave_obs_460, mode="auto", wave_chunk_size=None
+        params, wave_obs_460, wave_chunk_size=None
     )
 
     for chunk_size in [32, 64]:
         flux_chunked = model_compositional.predict_spectrum(
-            params, wave_obs_460, mode="auto", wave_chunk_size=chunk_size
+            params, wave_obs_460, wave_chunk_size=chunk_size
         )
 
         np.testing.assert_allclose(
@@ -193,12 +193,12 @@ def test_dust_variation_chunked_match(model_with_dust_variation, wave_obs_460):
     params = model_with_dust_variation.spec.sample(jax.random.PRNGKey(45))
 
     flux_unchunked = model_with_dust_variation.predict_spectrum(
-        params, wave_obs_460, mode="exact", wave_chunk_size=None
+        params, wave_obs_460, wave_chunk_size=None
     )
 
     for chunk_size in [32, 64]:
         flux_chunked = model_with_dust_variation.predict_spectrum(
-            params, wave_obs_460, mode="exact", wave_chunk_size=chunk_size
+            params, wave_obs_460, wave_chunk_size=chunk_size
         )
 
         np.testing.assert_allclose(
@@ -216,12 +216,12 @@ def test_chunk_size_larger_than_array(model_exact, wave_obs_460):
     n_pix = wave_obs_460.shape[0]
 
     flux_unchunked = model_exact.predict_spectrum(
-        params, wave_obs_460, mode="exact", wave_chunk_size=None
+        params, wave_obs_460, wave_chunk_size=None
     )
 
     # Chunk size = 1000 > 460
     flux_large_chunk = model_exact.predict_spectrum(
-        params, wave_obs_460, mode="exact", wave_chunk_size=1000
+        params, wave_obs_460, wave_chunk_size=1000
     )
 
     np.testing.assert_allclose(flux_large_chunk, flux_unchunked, rtol=1e-12, atol=1e-15)
@@ -232,11 +232,11 @@ def test_chunk_size_1_pixel(model_exact, wave_obs_460):
     params = model_exact.spec.sample(jax.random.PRNGKey(47))
 
     flux_unchunked = model_exact.predict_spectrum(
-        params, wave_obs_460, mode="exact", wave_chunk_size=None
+        params, wave_obs_460, wave_chunk_size=None
     )
 
     flux_single_pix = model_exact.predict_spectrum(
-        params, wave_obs_460, mode="exact", wave_chunk_size=1
+        params, wave_obs_460, wave_chunk_size=1
     )
 
     np.testing.assert_allclose(flux_single_pix, flux_unchunked, rtol=1e-12, atol=1e-15)
@@ -248,11 +248,11 @@ def test_instance_wave_chunk_size_default(ssp, spec_photometry_only, wave_obs_46
     params = model_chunked.spec.sample(jax.random.PRNGKey(48))
 
     # Should use instance default (64) without explicit kwarg
-    flux_from_default = model_chunked.predict_spectrum(params, wave_obs_460, mode="exact")
+    flux_from_default = model_chunked.predict_spectrum(params, wave_obs_460)
 
     # Explicit None should override instance default
     flux_unchunked = model_chunked.predict_spectrum(
-        params, wave_obs_460, mode="exact", wave_chunk_size=None
+        params, wave_obs_460, wave_chunk_size=None
     )
 
     # They should differ (one is chunked, one is not)
@@ -275,10 +275,10 @@ def test_multiple_samples_chunked_consistent(model_exact, wave_obs_460):
         params = model_exact.spec.sample(key)
 
         flux_unchunked = model_exact.predict_spectrum(
-            params, wave_obs_460, mode="exact", wave_chunk_size=None
+            params, wave_obs_460, wave_chunk_size=None
         )
         flux_chunked = model_exact.predict_spectrum(
-            params, wave_obs_460, mode="exact", wave_chunk_size=chunk_size
+            params, wave_obs_460, wave_chunk_size=chunk_size
         )
 
         np.testing.assert_allclose(flux_chunked, flux_unchunked, rtol=1e-12, atol=1e-15)

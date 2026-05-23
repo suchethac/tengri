@@ -71,21 +71,21 @@ def _build_prediction(
         if use_components:
             predicted = model.predict_photometry_components(params)
         else:
-            predicted = model.predict_photometry(params, mode=mode)
+            predicted = model.predict_photometry(params)
         pred_phot, pred_spec = predicted, None
     elif data_type == "spectroscopy":
         if use_components:
             predicted = model.predict_spectrum_components(params, model._wave_obs)
         else:
-            predicted = model.predict_spectrum(params, model._wave_obs, mode=mode)
+            predicted = model.predict_spectrum(params, model._wave_obs)
         pred_phot, pred_spec = None, predicted
     elif data_type == "joint":
         if use_components:
             pred_phot = model.predict_photometry_components(params)
             pred_spec = model.predict_spectrum_components(params, model._wave_obs)
         else:
-            pred_phot = model.predict_photometry(params, mode=mode)
-            pred_spec = model.predict_spectrum(params, model._wave_obs, mode=mode)
+            pred_phot = model.predict_photometry(params)
+            pred_spec = model.predict_spectrum(params, model._wave_obs)
         predicted = jnp.concatenate([pred_phot, pred_spec])
     else:
         raise ValueError(f"Unknown data_type: {data_type}")
@@ -100,7 +100,7 @@ def _build_prediction(
             params, target_wavelengths=data_args["line_flux_waves"]
         )
     if has_indices:
-        prediction["indices"] = model.predict_spectral_indices(params, index_defs, mode=mode)
+        prediction["indices"] = model.predict_spectral_indices(params, index_defs)
 
     return prediction, predicted, pred_phot, pred_spec
 
@@ -206,7 +206,7 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="traced"):
             )
             e_lh = e_lh + 0.5 * chi2_lines
         if has_indices:
-            model_idx = model.predict_spectral_indices(params, index_defs, mode=mode)
+            model_idx = model.predict_spectral_indices(params, index_defs)
             chi2_idx = jnp.sum(
                 ((data_args["index_obs"] - model_idx) / data_args["index_err"]) ** 2
             )

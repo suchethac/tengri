@@ -578,18 +578,18 @@ def _build_signal_response(fitter):
         if data_type == "photometry":
             if use_components:
                 return model.predict_photometry_components(params)
-            return model.predict_photometry(params, mode="traced")
+            return model.predict_photometry(params)
         elif data_type == "spectroscopy":
             if use_components:
                 return model.predict_spectrum_components(params, model._wave_obs)
-            return model.predict_spectrum(params, model._wave_obs, mode="traced")
+            return model.predict_spectrum(params, model._wave_obs)
         elif data_type == "joint":
             if use_components:
                 p = model.predict_photometry_components(params)
                 s = model.predict_spectrum_components(params, model._wave_obs)
             else:
-                p = model.predict_photometry(params, mode="traced")
-                s = model.predict_spectrum(params, model._wave_obs, mode="traced")
+                p = model.predict_photometry(params)
+                s = model.predict_spectrum(params, model._wave_obs)
             return jnp.concatenate([p, s])
         raise ValueError(f"Unknown data_type: {data_type}")
 
@@ -732,19 +732,19 @@ def build_jit_engine(fitter, pos_dict):
                 if use_components:
                     predicted = model.predict_photometry_components(params)
                 else:
-                    predicted = model.predict_photometry(params, mode="traced")
+                    predicted = model.predict_photometry(params)
             elif data_type == "spectroscopy":
                 if use_components:
                     predicted = model.predict_spectrum_components(params, model._wave_obs)
                 else:
-                    predicted = model.predict_spectrum(params, model._wave_obs, mode="traced")
+                    predicted = model.predict_spectrum(params, model._wave_obs)
             elif data_type == "joint":
                 if use_components:
                     p = model.predict_photometry_components(params)
                     s = model.predict_spectrum_components(params, model._wave_obs)
                 else:
-                    p = model.predict_photometry(params, mode="traced")
-                    s = model.predict_spectrum(params, model._wave_obs, mode="traced")
+                    p = model.predict_photometry(params)
+                    s = model.predict_spectrum(params, model._wave_obs)
                 predicted = jnp.concatenate([p, s])
             else:
                 raise ValueError(f"Unknown data_type: {data_type}")

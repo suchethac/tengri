@@ -67,7 +67,7 @@ class _DualPathModel:
         self.orchestrator_calls = 0
         self._wave_obs = jnp.array([4000.0, 5000.0, 6000.0])
 
-    def predict_photometry(self, params, mode=None):
+    def predict_photometry(self, params):
         self.legacy_calls += 1
         return jnp.array([1.0, 2.0, 3.0])
 
@@ -75,7 +75,7 @@ class _DualPathModel:
         self.orchestrator_calls += 1
         return jnp.array([10.0, 20.0, 30.0])
 
-    def predict_spectrum(self, params, wave_obs, mode=None):
+    def predict_spectrum(self, params, wave_obs):
         self.legacy_calls += 1
         return jnp.array([1.0, 2.0, 3.0])
 
