@@ -34,6 +34,23 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="A single log L_bol = 12.5 composable AGN built up component by component — disc alone, +torus, +narrow lines, +broad lines — so the reader can see what each block contributes to the total spectrum. The bottom panel shows the same decomposition stacked so the layers add up to the full SED.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_components_breakdown_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_agn_components_breakdown`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">AGN composite SED: per-block decomposition</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The torus inclination angle determines how much cold dust emission we observe. Face-on (high cos_inc) views show a smooth thermal bump; edge-on (low cos_inc) views expose more reprocessed mid-infrared flux and can show silicate absorption features.">
 
 .. only:: html
@@ -366,6 +383,7 @@ AGN disc and torus SED templates.
    :hidden:
 
    /auto_examples/agn/plot_agn_alpha_ox_lbol_2d
+   /auto_examples/agn/plot_agn_components_breakdown
    /auto_examples/agn/plot_agn_cos_inc_sweep
    /auto_examples/agn/plot_agn_disc_compare
    /auto_examples/agn/plot_agn_hierarchy

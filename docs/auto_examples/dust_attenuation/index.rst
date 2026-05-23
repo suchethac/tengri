@@ -170,6 +170,23 @@ depths, two-component geometry, and law comparisons.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Charlot &amp; Fall 2000 two-component dust model conserves energy: every UV photon attenuated by the dust must come back out as IR re-emission. We sweep τ_diff from 0 to 2 mag and on each step plot two quantities — the absorbed UV power L_abs(λ&lt;3000 Å) inferred from the difference of (no-dust) minus (with-dust) attenuated SEDs, and the integrated IR luminosity L_IR(8–1000 μm) from the IR re-emission template (Dale+2014 here).">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_uv_ir_energy_balance_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_uv_ir_energy_balance`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">UV-IR energy balance: absorbed = re-emitted</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -189,4 +206,5 @@ depths, two-component geometry, and law comparisons.
    /auto_examples/dust_attenuation/plot_tau_diff_sweep
    /auto_examples/dust_attenuation/plot_two_component
    /auto_examples/dust_attenuation/plot_uv_bump_sweep
+   /auto_examples/dust_attenuation/plot_uv_ir_energy_balance
 
