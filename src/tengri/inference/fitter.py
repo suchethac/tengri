@@ -652,6 +652,15 @@ class Fitter:
         These are passed as explicit arguments (not closed over) so that
         engines compiled for one galaxy can be reused for another with
         the same model + parameter structure.
+
+        Phase 4-D (2026-05-23, issue #250 follow-up): also threads the
+        big template arrays (SSP grid, nebular templates, dust IR / AGN
+        template data, fixed-value dict) so the **outer** JIT used by
+        loss-fn-based samplers (HMC, NUTS, raytrace) sees them as
+        Parameters, not Constants. Without this, the outer JIT inlines
+        ``model.predict_observables_jit(params)`` and bakes the SSP
+        flux grid (15×93×5994 floats) into the HLO as a constant —
+        ballooning compile time from <5 s to 40 s on photometry.
         """
         noise_inv = 1.0 / self.noise**2
         args = {
@@ -680,6 +689,21 @@ class Fitter:
             if index_cfg is not None:
                 args["index_obs"] = index_cfg.values
                 args["index_err"] = index_cfg.errors
+
+        # Outer-JIT threading: big arrays go in here so loss-fn callers
+        # (HMC/NUTS) see them as outer Parameters, not Constants. Stored
+        # under a private "_jit_inputs" sub-dict so existing data_args
+        # consumers don't have to skip new keys.
+        # Some test/dummy models don't implement the threading API —
+        # the `with` suppresses cleanly without falling through.
+        import contextlib
+
+        with contextlib.suppress(AttributeError, TypeError):
+            args["_jit_inputs"] = {
+                "fixed_values": model.spec.get_fixed_values(),
+                "ssp_data": model.ssp_data,
+                "template_data": model._template_data_for_jit(),
+            }
 
         return args
 

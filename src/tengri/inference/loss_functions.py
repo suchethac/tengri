@@ -148,21 +148,51 @@ def _build_data_neg_log_likelihood_fn(fitter):
     user_likelihood = getattr(fitter, "_user_likelihood", None)
     use_components = bool(getattr(fitter, "use_components", False))
 
+    # Phase 4-D (#250 follow-up): photometry-only fits use the
+    # threaded ``_impl`` directly so the outer JIT trace (HMC/NUTS
+    # loss_fn) sees ssp_data + template_data + fixed_values as
+    # outer-level Parameters. Without this, the outer JIT inlines
+    # ``model.predict_photometry`` → ``predict_observables_jit`` and
+    # bakes the SSP grid (15×93×5994 floats) into the HLO as a
+    # constant — ballooning HMC cold compile to 40 s. Threaded path:
+    # HMC cold ≈ 3-5 s.
+    _photometry_only_threaded = (
+        data_type == "photometry"
+        and not use_components
+        and not has_line_fluxes
+        and not has_indices
+        and hasattr(model, "_get_or_build_predict_observables_jit")
+    )
+    _threaded_impl = (
+        model._get_or_build_predict_observables_jit() if _photometry_only_threaded else None
+    )
+
     def neg_log_lik(params, data_args):
         """-log p(d | params). Caller supplies physical params + data_args."""
         data = data_args["data"]
         noise = data_args["noise"]
 
-        prediction, predicted, _pred_phot, _pred_spec = _build_prediction(
-            model,
-            params,
-            data_type,
-            has_line_fluxes=has_line_fluxes,
-            has_indices=has_indices,
-            index_defs=index_defs,
-            data_args=data_args,
-            use_components=use_components,
-        )
+        if _threaded_impl is not None and "_jit_inputs" in data_args:
+            jit_in = data_args["_jit_inputs"]
+            predicted = _threaded_impl(
+                params,
+                jit_in["fixed_values"],
+                jit_in["ssp_data"],
+                jit_in["template_data"],
+            ).phot_fnu
+            prediction = {"phot_fnu": predicted}
+            _pred_phot, _pred_spec = predicted, None
+        else:
+            prediction, predicted, _pred_phot, _pred_spec = _build_prediction(
+                model,
+                params,
+                data_type,
+                has_line_fluxes=has_line_fluxes,
+                has_indices=has_indices,
+                index_defs=index_defs,
+                data_args=data_args,
+                use_components=use_components,
+            )
 
         # Auto-built / user-supplied Likelihood adapter handles the data
         # term (and any extras composed via CompositeLikelihood).
