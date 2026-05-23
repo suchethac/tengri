@@ -132,6 +132,23 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="tengri.recipes ships several curated starting-point model configs that map common astronomer use-cases onto the nested-dict SEDModel.build grammar. This card overlays the rest-frame SED of every shipped recipe so users can pick by eye:">
+
+.. only:: html
+
+  .. image:: /auto_examples/recipes/images/thumb/sphx_glr_plot_recipe_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/recipes/plot_recipe_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">What each shipped tengri recipe produces</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Metallicity is often poorly constrained by optical photometry. This recipe compares two fits: one with a Uniform prior on met_logzsol (weak constraint) and one with a Gaussian prior (informative from external data). We show how the posterior distribution changes, and that the same mock data leads to different inferences depending on the prior.">
 
 .. only:: html
@@ -2724,6 +2741,23 @@ Spectroscopic fitting and spectral features.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Key Spectral Features as Age and Metallicity Probes</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Three of the most-used optical absorption / emission diagnostics evaluated on a single-burst stellar population from 30 Myr to 13 Gyr, at solar metallicity, no dust. The figure makes obvious which diagnostic responds on which timescale:">
+
+.. only:: html
+
+  .. image:: /auto_examples/spectroscopy/images/thumb/sphx_glr_plot_spectral_indices_vs_age_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/spectroscopy/plot_spectral_indices_vs_age`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Classic spectral indices vs single-burst age</div>
     </div>
 
 

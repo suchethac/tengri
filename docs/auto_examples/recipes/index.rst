@@ -19,6 +19,23 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="tengri.recipes ships several curated starting-point model configs that map common astronomer use-cases onto the nested-dict SEDModel.build grammar. This card overlays the rest-frame SED of every shipped recipe so users can pick by eye:">
+
+.. only:: html
+
+  .. image:: /auto_examples/recipes/images/thumb/sphx_glr_plot_recipe_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/recipes/plot_recipe_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">What each shipped tengri recipe produces</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Metallicity is often poorly constrained by optical photometry. This recipe compares two fits: one with a Uniform prior on met_logzsol (weak constraint) and one with a Gaussian prior (informative from external data). We show how the posterior distribution changes, and that the same mock data leads to different inferences depending on the prior.">
 
 .. only:: html
@@ -112,6 +129,7 @@ saving/loading a posterior to disk.
 .. toctree::
    :hidden:
 
+   /auto_examples/recipes/plot_recipe_compare
    /auto_examples/recipes/plot_recipe_compare_priors
    /auto_examples/recipes/plot_recipe_custom_filter
    /auto_examples/recipes/plot_recipe_load_real_csv

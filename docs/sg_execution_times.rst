@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:04.921** total execution time for 167 files **from all galleries**:
+**00:31.554** total execution time for 169 files **from all galleries**:
 
 .. container::
 
@@ -32,11 +32,11 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_nonparametric_compare.py` (``../examples/sfh/plot_sfh_nonparametric_compare.py``)
-     - 00:02.673
+   * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_compare.py` (``../examples/recipes/plot_recipe_compare.py``)
+     - 00:30.626
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_lbg_observed_evolution.py` (``../examples/multiwavelength/plot_lbg_observed_evolution.py``)
-     - 00:02.248
+   * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_spectral_indices_vs_age.py` (``../examples/spectroscopy/plot_spectral_indices_vs_age.py``)
+     - 00:00.928
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
      - 00:00.000
@@ -257,6 +257,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_fir_radio_correlation.py` (``../examples/multiwavelength/plot_fir_radio_correlation.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_lbg_observed_evolution.py` (``../examples/multiwavelength/plot_lbg_observed_evolution.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_agn.py` (``../examples/multiwavelength/plot_panchromatic_agn.py``)
      - 00:00.000
      - 0.0
@@ -423,6 +426,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_form_compare.py` (``../examples/sfh/plot_sfh_form_compare.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_nonparametric_compare.py` (``../examples/sfh/plot_sfh_nonparametric_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_quenching_compare.py` (``../examples/sfh/plot_sfh_quenching_compare.py``)
