@@ -28,7 +28,7 @@ Chabrier, Kroupa, and Salpeter at 1 Gyr, solar metallicity. The NIR
 
 Reference: Conroy 2012, ApJ, 747, 69; Conroy, Gunn & White 2009.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-54
+.. GENERATED FROM PYTHON SOURCE LINES 12-56
 
 .. code-block:: Python
 
@@ -63,7 +63,9 @@ Reference: Conroy 2012, ApJ, 747, 69; Conroy, Gunn & White 2009.
     for name, ml, c in imfs:
         lfl = (wave * flux[z_solar, age_1gyr]) / ml
         safe = np.where(lfl > 0, lfl, np.nan)
-        ax.loglog(wave / 1e4, safe / np.nanmax(safe), lw=1.4, color=c, label=f"{name} (M/L = {ml:.2f})")
+        ax.loglog(
+            wave / 1e4, safe / np.nanmax(safe), lw=1.4, color=c, label=f"{name} (M/L = {ml:.2f})"
+        )
 
     ax.set_xlim(0.05, 5.0)
     ax.set_ylim(1e-3, 2.0)

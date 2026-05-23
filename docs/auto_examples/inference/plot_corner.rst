@@ -29,7 +29,7 @@ use 10× more VI iterations and samples.
 
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-73
+.. GENERATED FROM PYTHON SOURCE LINES 13-84
 
 .. code-block:: Python
 
@@ -38,8 +38,6 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
     import corner
     import jax
-    import jax.numpy as jnp
-    import matplotlib.pyplot as plt
     import numpy as np
 
     import tengri
@@ -56,7 +54,12 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FREE, "skew": tengri.Fixed(0.3), "trunc": tengri.Fixed(10.0)},
+        sfh={
+            "type": "tsnorm",
+            "*": tengri.FREE,
+            "skew": tengri.Fixed(0.3),
+            "trunc": tengri.Fixed(10.0),
+        },
         dust={
             "type": "two_component",
             "*": tengri.FIXED,
@@ -78,7 +81,11 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
     forward = tengri.ForwardModel.build(sed=model, observation=obs)
     posterior = forward.fit(
-        mock.flux_obs, mock.noise, method="native_vi_nonlinear", n_iterations=500, n_samples=3,
+        mock.flux_obs,
+        mock.noise,
+        method="native_vi_nonlinear",
+        n_iterations=500,
+        n_samples=3,
         verbose=False,
     )
 
@@ -88,8 +95,12 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     truths = [float(truth[p]) for p in param_names]
 
     fig = corner.corner(
-        samples_array, labels=param_names, truths=truths, color="C0",
-        hist_kwargs={"density": True}, show_titles=False,
+        samples_array,
+        labels=param_names,
+        truths=truths,
+        color="C0",
+        hist_kwargs={"density": True},
+        show_titles=False,
     )
 
     fig.savefig("plot_corner.png", dpi=150, bbox_inches="tight")

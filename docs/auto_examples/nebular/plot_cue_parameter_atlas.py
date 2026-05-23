@@ -43,13 +43,21 @@ LOGZ_GRID = np.linspace(-1.5, 0.4, 22)
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 0.3,
-         "log_peak_sfr": 1.5, "alpha": 3.0, "beta": 2.0},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": 0.05, "tau_bc": 0.1},
-    neb={"type": "cue", "*": tengri.FIXED,
-         "logU": tengri.Uniform(-4.0, -1.0),
-         "logZ_gas": tengri.Uniform(-2.0, 0.5)},
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "tau_gyr": 0.3,
+        "log_peak_sfr": 1.5,
+        "alpha": 3.0,
+        "beta": 2.0,
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
+    neb={
+        "type": "cue",
+        "*": tengri.FIXED,
+        "logU": tengri.Uniform(-4.0, -1.0),
+        "logZ_gas": tengri.Uniform(-2.0, 0.5),
+    },
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -58,40 +66,45 @@ baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 SHAPE = (LOGU_GRID.size, LOGZ_GRID.size)
 o3_hb = np.empty(SHAPE)
 n2_ha = np.empty(SHAPE)
-o32   = np.empty(SHAPE)
-n2o2  = np.empty(SHAPE)
+o32 = np.empty(SHAPE)
+n2o2 = np.empty(SHAPE)
 
 for i, logu in enumerate(LOGU_GRID):
     for j, logz in enumerate(LOGZ_GRID):
-        p = {**baseline,
-             "neb_logU": jnp.float64(logu),
-             "neb_logZ_gas": jnp.float64(logz)}
+        p = {**baseline, "neb_logU": jnp.float64(logu), "neb_logZ_gas": jnp.float64(logz)}
         lines = model.predict_emission_lines(p)
         o3_hb[i, j] = float(lines.oiii_5007 / lines.hbeta)
         n2_ha[i, j] = float(lines.nii_6584 / lines.halpha)
-        o32[i, j]   = float(lines.oiii_5007 / lines.oii)
-        n2o2[i, j]  = float(lines.nii_6584 / lines.oii)
+        o32[i, j] = float(lines.oiii_5007 / lines.oii)
+        n2o2[i, j] = float(lines.nii_6584 / lines.oii)
 
 
 def _panel(ax, arr, vmin, vmax, label):
     arr = np.where(arr > 0, np.log10(arr), np.nan)
-    mesh = ax.pcolormesh(LOGZ_GRID, LOGU_GRID, arr, cmap="RdYlBu_r",
-                         vmin=vmin, vmax=vmax, shading="auto")
-    cs = ax.contour(LOGZ_GRID, LOGU_GRID, arr,
-                    levels=8, colors="0.15", linewidths=0.5, alpha=0.7)
+    mesh = ax.pcolormesh(
+        LOGZ_GRID, LOGU_GRID, arr, cmap="RdYlBu_r", vmin=vmin, vmax=vmax, shading="auto"
+    )
+    cs = ax.contour(LOGZ_GRID, LOGU_GRID, arr, levels=8, colors="0.15", linewidths=0.5, alpha=0.7)
     ax.clabel(cs, fmt="%.1f", fontsize=7, inline=True, inline_spacing=2)
-    ax.text(0.05, 0.92, label, transform=ax.transAxes,
-            fontsize=9, color="0.15",
-            bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="0.7", lw=0.5))
+    ax.text(
+        0.05,
+        0.92,
+        label,
+        transform=ax.transAxes,
+        fontsize=9,
+        color="0.15",
+        bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="0.7", lw=0.5),
+    )
     return mesh
 
 
-fig, axes = plt.subplots(2, 2, figsize=(8.6, 6.6),
-                          sharex=True, sharey=True)
+fig, axes = plt.subplots(2, 2, figsize=(8.6, 6.6), sharex=True, sharey=True)
 m1 = _panel(axes[0, 0], o3_hb, -1.0, 1.2, r"$\log\,[\mathrm{O\,III}]\,5007\,/\,\mathrm{H}\beta$")
 m2 = _panel(axes[0, 1], n2_ha, -2.0, 0.5, r"$\log\,[\mathrm{N\,II}]\,6583\,/\,\mathrm{H}\alpha$")
-m3 = _panel(axes[1, 0], o32,   -1.0, 1.6, r"$\log\,O_{32}$ ($[\mathrm{O\,III}]/[\mathrm{O\,II}]$)")
-m4 = _panel(axes[1, 1], n2o2,  -2.0, 0.5, r"$\log\,N_{2}O_{2}$ ($[\mathrm{N\,II}]/[\mathrm{O\,II}]$)")
+m3 = _panel(axes[1, 0], o32, -1.0, 1.6, r"$\log\,O_{32}$ ($[\mathrm{O\,III}]/[\mathrm{O\,II}]$)")
+m4 = _panel(
+    axes[1, 1], n2o2, -2.0, 0.5, r"$\log\,N_{2}O_{2}$ ($[\mathrm{N\,II}]/[\mathrm{O\,II}]$)"
+)
 
 for ax in axes[-1]:
     ax.set_xlabel(r"gas metallicity $\log\,Z_{\rm gas}/Z_\odot$")

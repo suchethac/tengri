@@ -41,17 +41,6 @@ when the data resolve > 5 SFR-bins.
 
 .. GENERATED FROM PYTHON SOURCE LINES 23-78
 
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_sfh_form_compare_001.png
-   :alt: plot sfh form compare
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_sfh_form_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 
@@ -68,15 +57,15 @@ when the data resolve > 5 SFR-bins.
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     FORMS = [
-        ("const",       "constant SFR"),
-        ("exp",         "exponential rise"),
-        ("dexp",        "delayed exponential"),
-        ("tau",         "declining exponential (τ)"),
-        ("lnorm",       "log-normal"),
-        ("snorm",       "skew-normal"),
-        ("tsnorm",      "truncated skew-normal"),
-        ("dpl",         "double power-law"),
-        ("delayed_bq",  "delayed + burst/quench"),
+        ("const", "constant SFR"),
+        ("exp", "exponential rise"),
+        ("dexp", "delayed exponential"),
+        ("tau", "declining exponential (τ)"),
+        ("lnorm", "log-normal"),
+        ("snorm", "skew-normal"),
+        ("tsnorm", "truncated skew-normal"),
+        ("dpl", "double power-law"),
+        ("delayed_bq", "delayed + burst/quench"),
     ]
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.95, len(FORMS)))
 

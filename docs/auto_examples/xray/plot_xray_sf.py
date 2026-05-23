@@ -19,7 +19,6 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tengri
 from tengri.analysis.plotting import setup_style
 from tengri.xray import xray_xrb
 
@@ -45,12 +44,11 @@ ax.set_xlim(0.1, 100)
 ax.set_ylim(1e20, 1e32)
 ax.set_xlabel(r"Energy [keV]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
-ax.text(0.05, 0.95, "a) SFR variation", transform=ax.transAxes,
-        verticalalignment="top", fontsize=10)
-
-cbar1 = fig.colorbar(
-    plt.cm.ScalarMappable(norm=norm_sfr, cmap=cmap), ax=ax, pad=0.01
+ax.text(
+    0.05, 0.95, "a) SFR variation", transform=ax.transAxes, verticalalignment="top", fontsize=10
 )
+
+cbar1 = fig.colorbar(plt.cm.ScalarMappable(norm=norm_sfr, cmap=cmap), ax=ax, pad=0.01)
 cbar1.set_label(r"SFR [M$_\odot$/yr]")
 
 # Panel 2: M_* sweep at fixed SFR
@@ -66,12 +64,16 @@ ax.set_xlim(0.1, 100)
 ax.set_ylim(1e20, 1e32)
 ax.set_xlabel(r"Energy [keV]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
-ax.text(0.05, 0.95, "b) Stellar mass variation", transform=ax.transAxes,
-        verticalalignment="top", fontsize=10)
-
-cbar2 = fig.colorbar(
-    plt.cm.ScalarMappable(norm=norm_mstar, cmap=cmap), ax=ax, pad=0.01
+ax.text(
+    0.05,
+    0.95,
+    "b) Stellar mass variation",
+    transform=ax.transAxes,
+    verticalalignment="top",
+    fontsize=10,
 )
+
+cbar2 = fig.colorbar(plt.cm.ScalarMappable(norm=norm_mstar, cmap=cmap), ax=ax, pad=0.01)
 cbar2.set_label(r"$M_*$ [M$_\odot$]")
 
 # Panel 3: Fine SFR grid
@@ -87,12 +89,11 @@ ax.set_xlim(0.1, 100)
 ax.set_ylim(1e20, 1e32)
 ax.set_xlabel(r"Energy [keV]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
-ax.text(0.05, 0.95, "c) Fine SFR sweep", transform=ax.transAxes,
-        verticalalignment="top", fontsize=10)
-
-cbar3 = fig.colorbar(
-    plt.cm.ScalarMappable(norm=norm_fine, cmap=cmap), ax=ax, pad=0.01
+ax.text(
+    0.05, 0.95, "c) Fine SFR sweep", transform=ax.transAxes, verticalalignment="top", fontsize=10
 )
+
+cbar3 = fig.colorbar(plt.cm.ScalarMappable(norm=norm_fine, cmap=cmap), ax=ax, pad=0.01)
 cbar3.set_label(r"SFR [M$_\odot$/yr]")
 
 # Panel 4: Fine M_* grid
@@ -108,12 +109,16 @@ ax.set_xlim(0.1, 100)
 ax.set_ylim(1e20, 1e32)
 ax.set_xlabel(r"Energy [keV]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
-ax.text(0.05, 0.95, "d) Fine stellar mass sweep", transform=ax.transAxes,
-        verticalalignment="top", fontsize=10)
-
-cbar4 = fig.colorbar(
-    plt.cm.ScalarMappable(norm=norm_mfine, cmap=cmap), ax=ax, pad=0.01
+ax.text(
+    0.05,
+    0.95,
+    "d) Fine stellar mass sweep",
+    transform=ax.transAxes,
+    verticalalignment="top",
+    fontsize=10,
 )
+
+cbar4 = fig.colorbar(plt.cm.ScalarMappable(norm=norm_mfine, cmap=cmap), ax=ax, pad=0.01)
 cbar4.set_label(r"$M_*$ [M$_\odot$]")
 
 fig.tight_layout()

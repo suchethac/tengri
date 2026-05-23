@@ -37,18 +37,7 @@ Models compared (the six production disc selectors under
 - ``powerlaw``     — generic power-law disc
 - ``adaf``         — radiatively inefficient accretion flow (Mahadevan 1997)
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-76
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_disc_compare_001.png
-   :alt: plot agn disc compare
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_disc_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 21-79
 
 .. code-block:: Python
 
@@ -66,12 +55,12 @@ Models compared (the six production disc selectors under
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     DISC_MODELS = [
-        ("qsogen",       "QSOGEN (Temple+2021)"),
-        ("multicolor",   "multicolor disc (K&D 2018)"),
-        ("kubota_done",  "Kubota & Done 2018 (full)"),
-        ("grahsp_sbpl",  "GRAHSP broken power-law"),
-        ("powerlaw",     "power-law disc"),
-        ("adaf",         "ADAF (Mahadevan 1997)"),
+        ("qsogen", "QSOGEN (Temple+2021)"),
+        ("multicolor", "multicolor disc (K&D 2018)"),
+        ("kubota_done", "Kubota & Done 2018 (full)"),
+        ("grahsp_sbpl", "GRAHSP broken power-law"),
+        ("powerlaw", "power-law disc"),
+        ("adaf", "ADAF (Mahadevan 1997)"),
     ]
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(DISC_MODELS)))
 
@@ -83,10 +72,13 @@ Models compared (the six production disc selectors under
         model = tengri.SEDModel.build(
             ssp,
             sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_diff": 0.0, "tau_bc": 0.0},
-            agn={"disc": {"type": disc, "*": tengri.FIXED},
-                 "*": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0},
+            dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+            agn={
+                "disc": {"type": disc, "*": tengri.FIXED},
+                "*": tengri.FIXED,
+                "log_lbol": 12.5,
+                "frac": 1.0,
+            },
             redshift=tengri.Fixed(0.05),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -107,11 +99,6 @@ Models compared (the six production disc selectors under
 
     fig.tight_layout()
     fig.savefig("plot_agn_disc_compare.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 4.871 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_disc_compare.py:

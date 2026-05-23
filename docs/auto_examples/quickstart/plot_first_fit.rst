@@ -30,7 +30,7 @@ observed bands and the residuals of the MAP fit relative to the noise level.
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview); Calzetti
 et al. 2000, ApJ, 533, 682 (attenuation law).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-113
+.. GENERATED FROM PYTHON SOURCE LINES 14-128
 
 .. code-block:: Python
 
@@ -78,8 +78,12 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
 
     forward = tengri.ForwardModel.build(sed=model, observation=obs)
     posterior = forward.fit(
-        mock.flux_obs, mock.noise, method="map", optimizer="adam",
-        n_steps=300, verbose=False,
+        mock.flux_obs,
+        mock.noise,
+        method="map",
+        optimizer="adam",
+        n_steps=300,
+        verbose=False,
     )
     fit_params = posterior.params
 
@@ -87,27 +91,32 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
     flux_fit = np.asarray(model.predict_photometry(fit_params))
     flux_obs = np.asarray(mock.flux_obs)
     noise = np.asarray(mock.noise)
-    wave_eff = np.array(
-        [float(jnp.mean(w)) for w in obs.photometry.filter_waves]
-    )
+    wave_eff = np.array([float(jnp.mean(w)) for w in obs.photometry.filter_waves])
 
     sed_truth = model.predict_rest_sed(truth)
     sed_fit = model.predict_rest_sed(fit_params)
     wave_rest = np.asarray(sed_truth.wavelength)
     z = 0.05
     wave_obs = wave_rest * (1.0 + z)
+
+
     # Anchor the L_nu SED to the observed flux scale by matching the r-band
     # integral: keeps the shape but lands the curve on the data points so a
     # reader can read the SED off the same axis as the photometry.
     def _band_anchor(sed):
         idx = np.argmin(np.abs(wave_obs - wave_eff[2]))
         return sed[idx]
+
+
     scale_truth = flux_truth[2] / _band_anchor(np.asarray(sed_truth.sed))
     fnu_truth = scale_truth * np.asarray(sed_truth.sed)
     fnu_fit = scale_truth * np.asarray(sed_fit.sed)
 
     fig, (ax_sed, ax_res) = plt.subplots(
-        2, 1, figsize=(7.0, 5.2), sharex=True,
+        2,
+        1,
+        figsize=(7.0, 5.2),
+        sharex=True,
         gridspec_kw={"height_ratios": [3, 1], "hspace": 0.05},
     )
 
@@ -115,8 +124,14 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
     ax_sed.plot(wave_obs[vis], fnu_truth[vis], color="0.55", lw=0.8, label="Truth SED")
     ax_sed.plot(wave_obs[vis], fnu_fit[vis], color="C3", lw=0.8, alpha=0.8, label="MAP SED")
     ax_sed.errorbar(
-        wave_eff, flux_obs, yerr=noise, fmt="o", color="k", ms=5, capsize=2,
-        label=f"SDSS mock (S/N = 20)",
+        wave_eff,
+        flux_obs,
+        yerr=noise,
+        fmt="o",
+        color="k",
+        ms=5,
+        capsize=2,
+        label="SDSS mock (S/N = 20)",
     )
     ax_sed.plot(wave_eff, flux_truth, "s", color="0.2", ms=6, mfc="none", mew=1.2, label="Truth bands")
     ax_sed.plot(wave_eff, flux_fit, "^", color="C3", ms=6, mfc="none", mew=1.2, label="MAP bands")

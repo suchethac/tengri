@@ -21,7 +21,6 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tengri
 from tengri.analysis.plotting import setup_style
 from tengri.xray import xray_agn_corona
 
@@ -38,15 +37,20 @@ ax = axes[0, 0]
 log_lbol_vals = np.array([43.0, 44.0, 45.0, 46.0])
 for log_lbol in log_lbol_vals:
     l_xray = xray_agn_corona(wavelength, L_agn_bol=10.0**log_lbol)
-    ax.loglog(wave_keV, np.array(l_xray), lw=1.4,
-              label=r"$\log L_{\rm bol}=" + f"{log_lbol:.0f}$")
+    ax.loglog(wave_keV, np.array(l_xray), lw=1.4, label=r"$\log L_{\rm bol}=" + f"{log_lbol:.0f}$")
 
 ax.set_xlim(0.1, 1000)
 ax.set_ylim(1e22, 1e27)
 ax.set_xlabel(r"Energy [keV]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
-ax.text(0.05, 0.95, "a) Luminosity sequence", transform=ax.transAxes,
-        verticalalignment="top", fontsize=10)
+ax.text(
+    0.05,
+    0.95,
+    "a) Luminosity sequence",
+    transform=ax.transAxes,
+    verticalalignment="top",
+    fontsize=10,
+)
 ax.legend(fontsize=9, frameon=False, loc="lower left")
 
 # Panel 2: Spectral features
@@ -64,8 +68,14 @@ ax.set_xlim(0.1, 1000)
 ax.set_ylim(1e22, 1e27)
 ax.set_xlabel(r"Energy [keV]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
-ax.text(0.05, 0.95, "b) Key spectral features", transform=ax.transAxes,
-        verticalalignment="top", fontsize=10)
+ax.text(
+    0.05,
+    0.95,
+    "b) Key spectral features",
+    transform=ax.transAxes,
+    verticalalignment="top",
+    fontsize=10,
+)
 ax.text(1.2, 0.55e22, "soft excess\n(0.5–2 keV)", fontsize=8, color="C1")
 ax.text(5.0, 0.55e22, "hard PL\n(2–10 keV)", fontsize=8, color="C2")
 ax.text(50.0, 0.55e22, "reflection\n(>10 keV)", fontsize=8, color="C3")
@@ -75,15 +85,20 @@ ax = axes[1, 0]
 log_lbol_mid = np.array([45.0, 45.5, 46.0, 46.5])
 for log_lbol in log_lbol_mid:
     l_xray = xray_agn_corona(wavelength, L_agn_bol=10.0**log_lbol)
-    ax.loglog(wave_keV, np.array(l_xray), lw=1.4,
-              label=r"$\log L_{\rm bol}=" + f"{log_lbol:.1f}$")
+    ax.loglog(wave_keV, np.array(l_xray), lw=1.4, label=r"$\log L_{\rm bol}=" + f"{log_lbol:.1f}$")
 
 ax.set_xlim(0.1, 1000)
 ax.set_ylim(1e22, 1e27)
 ax.set_xlabel(r"Energy [keV]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
-ax.text(0.05, 0.95, "c) Ultra-luminous range", transform=ax.transAxes,
-        verticalalignment="top", fontsize=10)
+ax.text(
+    0.05,
+    0.95,
+    "c) Ultra-luminous range",
+    transform=ax.transAxes,
+    verticalalignment="top",
+    fontsize=10,
+)
 ax.legend(fontsize=9, frameon=False, loc="lower left")
 
 # Panel 4: Full luminosity continuum
@@ -95,19 +110,19 @@ cmap = plt.get_cmap("viridis")
 for log_lbol in log_lbol_range:
     l_xray = xray_agn_corona(wavelength, L_agn_bol=10.0**log_lbol)
     mask = np.array(l_xray) > 0
-    ax.loglog(wave_keV[mask], np.array(l_xray)[mask], lw=1.0,
-              color=cmap(norm(log_lbol)), alpha=0.7)
+    ax.loglog(
+        wave_keV[mask], np.array(l_xray)[mask], lw=1.0, color=cmap(norm(log_lbol)), alpha=0.7
+    )
 
 ax.set_xlim(0.1, 1000)
 ax.set_ylim(1e22, 1e27)
 ax.set_xlabel(r"Energy [keV]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
-ax.text(0.05, 0.95, "d) Full SED family", transform=ax.transAxes,
-        verticalalignment="top", fontsize=10)
-
-cbar = fig.colorbar(
-    plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
+ax.text(
+    0.05, 0.95, "d) Full SED family", transform=ax.transAxes, verticalalignment="top", fontsize=10
 )
+
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
 cbar.set_label(r"$\log(L_{\rm bol})$ [erg s$^{-1}$]")
 
 fig.tight_layout()

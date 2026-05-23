@@ -29,20 +29,18 @@ observed wavelengths at higher z, suppressing flux blueward of the break.
 
 Reference: Inoue et al. 2014, MNRAS, 442, 1805 (IGM transmission model).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-52
+.. GENERATED FROM PYTHON SOURCE LINES 13-50
 
 .. code-block:: Python
 
 
     import warnings
 
-    import jax
     import jax.numpy as jnp
     import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
 
-    import tengri
     from tengri.analysis.plotting import setup_style
     from tengri.igm import igm_transmission
 

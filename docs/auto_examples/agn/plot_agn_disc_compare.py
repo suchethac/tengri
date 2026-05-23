@@ -32,12 +32,12 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 DISC_MODELS = [
-    ("qsogen",       "QSOGEN (Temple+2021)"),
-    ("multicolor",   "multicolor disc (K&D 2018)"),
-    ("kubota_done",  "Kubota & Done 2018 (full)"),
-    ("grahsp_sbpl",  "GRAHSP broken power-law"),
-    ("powerlaw",     "power-law disc"),
-    ("adaf",         "ADAF (Mahadevan 1997)"),
+    ("qsogen", "QSOGEN (Temple+2021)"),
+    ("multicolor", "multicolor disc (K&D 2018)"),
+    ("kubota_done", "Kubota & Done 2018 (full)"),
+    ("grahsp_sbpl", "GRAHSP broken power-law"),
+    ("powerlaw", "power-law disc"),
+    ("adaf", "ADAF (Mahadevan 1997)"),
 ]
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(DISC_MODELS)))
 
@@ -49,10 +49,13 @@ for (disc, label), color in zip(DISC_MODELS, COLORS):
     model = tengri.SEDModel.build(
         ssp,
         sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.0, "tau_bc": 0.0},
-        agn={"disc": {"type": disc, "*": tengri.FIXED},
-             "*": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0},
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        agn={
+            "disc": {"type": disc, "*": tengri.FIXED},
+            "*": tengri.FIXED,
+            "log_lbol": 12.5,
+            "frac": 1.0,
+        },
         redshift=tengri.Fixed(0.05),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))

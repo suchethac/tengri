@@ -26,7 +26,7 @@ produces a SED that blends young hot and old cool stellar populations. Left pane
 shows the optical-to-NIR region in linear scale; right panel shows the full
 panchromatic SED in log-log, revealing the emission from both young and old stars.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-133
+.. GENERATED FROM PYTHON SOURCE LINES 10-132
 
 .. code-block:: Python
 
@@ -34,7 +34,6 @@ panchromatic SED in log-log, revealing the emission from both young and old star
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 

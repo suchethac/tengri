@@ -36,27 +36,14 @@ into the grid at fixed ``log U``) and bare-stellar variants; we use
 bare-stellar wherever available so the differences trace stellar
 physics, not nebular treatment.
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-87
-
-
-
-.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_sps_library_compare_001.png
-   :alt: plot sps library compare
-   :srcset: /auto_examples/sps/images/sphx_glr_plot_sps_library_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 20-88
 
 .. code-block:: Python
 
 
     import warnings
-    from pathlib import Path
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -87,11 +74,16 @@ physics, not nebular treatment.
             continue
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "tsnorm", "*": tengri.FIXED,
-                 "peak_lbt_gyr": 1.0, "width_gyr": 0.05,
-                 "log_peak_sfr": 1.0, "skew": 0.0, "trunc": 13.0},
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_diff": 0.0, "tau_bc": 0.0},
+            sfh={
+                "type": "tsnorm",
+                "*": tengri.FIXED,
+                "peak_lbt_gyr": 1.0,
+                "width_gyr": 0.05,
+                "log_peak_sfr": 1.0,
+                "skew": 0.0,
+                "trunc": 13.0,
+            },
+            dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
             redshift=tengri.Fixed(0.01),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -105,11 +97,9 @@ physics, not nebular treatment.
         ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
 
     ax.axvline(1216, color="0.55", lw=0.6, ls=":")
-    ax.text(1216, 0.012, r"Ly$\alpha$", color="0.4", fontsize=8,
-            rotation=90, va="bottom", ha="right")
+    ax.text(1216, 0.012, r"Ly$\alpha$", color="0.4", fontsize=8, rotation=90, va="bottom", ha="right")
     ax.axvline(912, color="0.55", lw=0.6, ls=":")
-    ax.text(912, 0.012, "Lyman limit", color="0.4", fontsize=8,
-            rotation=90, va="bottom", ha="right")
+    ax.text(912, 0.012, "Lyman limit", color="0.4", fontsize=8, rotation=90, va="bottom", ha="right")
     ax.set_xlim(700, 5e4)
     ax.set_ylim(1e-2, 5.0)
     ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
@@ -118,11 +108,6 @@ physics, not nebular treatment.
 
     fig.tight_layout()
     fig.savefig("plot_sps_library_compare.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 7.447 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_sps_library_compare.py:

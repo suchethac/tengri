@@ -29,7 +29,7 @@ passive galaxies — a key degeneracy-breaking diagnostic.
 Reference: Williams et al. 2009, ApJ, 691, 1879 (UVJ color-color diagram);
 Wuyts et al. 2007, ApJ, 655, 51.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-159
+.. GENERATED FROM PYTHON SOURCE LINES 13-156
 
 .. code-block:: Python
 
@@ -37,7 +37,6 @@ Wuyts et al. 2007, ApJ, 655, 51.
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -73,9 +72,7 @@ Wuyts et al. 2007, ApJ, 655, 51.
     # Rest-frame UVJ: Johnson U/V + 2MASS J. z=0.01 keeps colors rest-frame
     # (1% shift) while avoiding D_L → 0 singularity at z=0.
     obs = tengri.Observation(
-        photometry=tengri.Photometry.from_names(
-            ["johnson_u", "johnson_v", "2mass_j"]
-        ),
+        photometry=tengri.Photometry.from_names(["johnson_u", "johnson_v", "2mass_j"]),
     )
 
     # Star-forming population: ongoing SF, modest dust, broad SFH

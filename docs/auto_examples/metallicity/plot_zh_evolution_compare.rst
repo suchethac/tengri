@@ -33,7 +33,7 @@ different final metal content.
 Reference: Maeder 1992, A&A, 264, 105 (chemical evolution); Schmidt 1959 (solar
 neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics).
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-132
+.. GENERATED FROM PYTHON SOURCE LINES 17-155
 
 .. code-block:: Python
 
@@ -41,7 +41,6 @@ neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics)
     import matplotlib.pyplot as plt
     import numpy as np
 
-    import tengri
     from tengri.analysis.plotting import setup_style
     from tengri.components.stellar.sfh import closed_box_metallicity
     from tengri.utils.cosmology import age_at_z0
@@ -67,9 +66,15 @@ neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics)
 
     ax.set_xlabel("Look-back Time [Gyr]", fontsize=9)
     ax.set_ylabel(r"$Z/Z_\odot$", fontsize=9)
-    ax.text(0.05, 0.95, "Closed-box enrichment timescale", transform=ax.transAxes,
-           fontsize=9, verticalalignment='top', bbox=dict(boxstyle='round',
-           facecolor='white', alpha=0.85))
+    ax.text(
+        0.05,
+        0.95,
+        "Closed-box enrichment timescale",
+        transform=ax.transAxes,
+        fontsize=9,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+    )
     ax.legend(fontsize=8, frameon=False)
     ax.grid(True, alpha=0.2)
     ax.set_xlim(0, 13)
@@ -88,9 +93,15 @@ neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics)
 
     ax.set_xlabel("Look-back Time [Gyr]", fontsize=9)
     ax.set_ylabel(r"$Z/Z_\odot$", fontsize=9)
-    ax.text(0.05, 0.95, r"Leaky-box: outflow rate $\eta$ (τ = 3 Gyr)", transform=ax.transAxes,
-           fontsize=9, verticalalignment='top', bbox=dict(boxstyle='round',
-           facecolor='white', alpha=0.85))
+    ax.text(
+        0.05,
+        0.95,
+        r"Leaky-box: outflow rate $\eta$ (τ = 3 Gyr)",
+        transform=ax.transAxes,
+        fontsize=9,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+    )
     ax.legend(fontsize=8, frameon=False)
     ax.grid(True, alpha=0.2)
     ax.set_xlim(0, 13)
@@ -113,9 +124,15 @@ neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics)
 
     ax.set_xlabel("Look-back Time [Gyr]", fontsize=9)
     ax.set_ylabel(r"$Z/Z_\odot$", fontsize=9)
-    ax.text(0.05, 0.95, "Constant SFR: closed vs leaky box", transform=ax.transAxes,
-           fontsize=9, verticalalignment='top', bbox=dict(boxstyle='round',
-           facecolor='white', alpha=0.85))
+    ax.text(
+        0.05,
+        0.95,
+        "Constant SFR: closed vs leaky box",
+        transform=ax.transAxes,
+        fontsize=9,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+    )
     ax.legend(fontsize=8, frameon=False)
     ax.grid(True, alpha=0.2)
     ax.set_xlim(0, 13)
@@ -143,9 +160,15 @@ neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics)
 
     ax.set_xlabel("Assembly Look-back Time [Gyr]", fontsize=9)
     ax.set_ylabel(r"$Z/Z_\odot$ at assembly", fontsize=9)
-    ax.text(0.05, 0.95, "Assembly-metallicity relation", transform=ax.transAxes,
-           fontsize=9, verticalalignment='top', bbox=dict(boxstyle='round',
-           facecolor='white', alpha=0.85))
+    ax.text(
+        0.05,
+        0.95,
+        "Assembly-metallicity relation",
+        transform=ax.transAxes,
+        fontsize=9,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+    )
     ax.grid(True, alpha=0.2)
     ax.set_xlim(0, 11)
     ax.set_ylim(0, 1.0)

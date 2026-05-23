@@ -29,7 +29,7 @@ Calzetti is redder), and parametric extensions (Kriek & Conroy).
 
 Reference: Cardelli et al. 1989, ApJ, 345, 245 (MW); Pei 1992, ApJ, 395, 130 (SMC).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-43
+.. GENERATED FROM PYTHON SOURCE LINES 13-42
 
 .. code-block:: Python
 
@@ -39,7 +39,6 @@ Reference: Cardelli et al. 1989, ApJ, 345, 245 (MW); Pei 1992, ApJ, 395, 130 (SM
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
 
-    import tengri
     from tengri.analysis.plotting import setup_style
     from tengri.dust import list_laws
 

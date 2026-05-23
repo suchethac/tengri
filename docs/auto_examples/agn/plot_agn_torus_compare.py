@@ -32,12 +32,12 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 TORI = [
-    ("skirtor",          "SKIRTOR (Stalevski+2016)"),
-    ("cat3d_wind",       "CAT3D-WIND (Hönig & Kishimoto 2017)"),
-    ("nenkova",          "CLUMPY (Nenkova+2008)"),
-    ("silva04",          "Silva+2004"),
-    ("qsogen",           "QSOGEN MIR"),
-    ("two_temperature",  "two-T blackbody"),
+    ("skirtor", "SKIRTOR (Stalevski+2016)"),
+    ("cat3d_wind", "CAT3D-WIND (Hönig & Kishimoto 2017)"),
+    ("nenkova", "CLUMPY (Nenkova+2008)"),
+    ("silva04", "Silva+2004"),
+    ("qsogen", "QSOGEN MIR"),
+    ("two_temperature", "two-T blackbody"),
 ]
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(TORI)))
 
@@ -49,12 +49,13 @@ for (torus, label), color in zip(TORI, COLORS):
     model = tengri.SEDModel.build(
         ssp,
         sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         agn={
-            "disc":  {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": torus,        "*": tengri.FIXED},
-            "*": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0,
+            "disc": {"type": "multicolor", "*": tengri.FIXED},
+            "torus": {"type": torus, "*": tengri.FIXED},
+            "*": tengri.FIXED,
+            "log_lbol": 12.5,
+            "frac": 1.0,
         },
         redshift=tengri.Fixed(0.05),
     )
@@ -71,8 +72,7 @@ ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 # Annotate MIR/FIR band markers
 for um, name in [(3.0, "L"), (10.0, "N"), (24.0, "MIPS-24"), (70.0, "FIR")]:
     ax.axvline(um * 1.0e4, color="0.85", lw=0.4, alpha=0.6)
-    ax.text(um * 1.0e4, 5e46 * 0.5, f"{name}", fontsize=7, color="0.5",
-            ha="center", va="top")
+    ax.text(um * 1.0e4, 5e46 * 0.5, f"{name}", fontsize=7, color="0.5", ha="center", va="top")
 ax.legend(frameon=False, fontsize=8, loc="lower left")
 
 fig.tight_layout()

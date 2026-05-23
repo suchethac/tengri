@@ -29,7 +29,8 @@ bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 
 model = tengri.SEDModel.build(
-    ssp, observation=obs,
+    ssp,
+    observation=obs,
     sfh={"type": "tsnorm", "*": tengri.FREE},
     met={"type": "fixed"},
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.5, "tau_bc": 0.3},

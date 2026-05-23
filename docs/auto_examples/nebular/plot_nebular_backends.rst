@@ -25,7 +25,7 @@ Compare Cue (neural emulator; current recommended path) against
 traditional photoionization grids (CloudyGrid) and SSP-embedded nebular.
 Shows [OIII] and H-alpha regions on a young starburst.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-74
+.. GENERATED FROM PYTHON SOURCE LINES 9-73
 
 .. code-block:: Python
 
@@ -33,7 +33,6 @@ Shows [OIII] and H-alpha regions on a young starburst.
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -72,7 +71,7 @@ Shows [OIII] and H-alpha regions on a young starburst.
         (axes[1], 6400, 6750, r"H$\alpha$ region", None, 6564.61),
     ]
 
-    for ax, wmin, wmax, title, lam_hbeta, lam_main in regions:
+    for ax, wmin, wmax, _title, lam_hbeta, lam_main in regions:
         mask = (wave > wmin) & (wave < wmax)
         ax.plot(
             np.array(wave[mask]),

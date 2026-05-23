@@ -30,7 +30,7 @@ Each panel highlights one block; the others are switched to ``"none"`` to
 isolate the contribution. The dashed grey curve is the all-blocks-on
 reference.
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-143
+.. GENERATED FROM PYTHON SOURCE LINES 14-139
 
 .. code-block:: Python
 
@@ -158,10 +158,6 @@ reference.
         ax.legend(loc="lower center", fontsize=8, frameon=False)
 
     axes[0].set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
-    fig.suptitle(
-        "Composable AGN: cumulative block contributions (all-GRAHSP recipe)",
-        fontsize=11,
-    )
     fig.tight_layout()
 
 

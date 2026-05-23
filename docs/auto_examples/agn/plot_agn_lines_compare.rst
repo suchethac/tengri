@@ -36,17 +36,6 @@ not shipped with the gallery):
 
 .. GENERATED FROM PYTHON SOURCE LINES 18-87
 
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_lines_compare_001.png
-   :alt: plot agn lines compare
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_lines_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 
@@ -63,8 +52,8 @@ not shipped with the gallery):
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     LINES_MODELS = [
-        ("nlr",    "NLR (Feltre+2016)"),
-        ("blr",    "BLR (Cracco+2016)"),
+        ("nlr", "NLR (Feltre+2016)"),
+        ("blr", "BLR (Cracco+2016)"),
         ("qsogen", "QSOGEN empirical"),
     ]
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.9, len(LINES_MODELS)))
@@ -77,13 +66,14 @@ not shipped with the gallery):
         model = tengri.SEDModel.build(
             ssp,
             sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_diff": 0.0, "tau_bc": 0.0},
+            dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
             agn={
-                "disc":  {"type": "multicolor", "*": tengri.FIXED},
-                "torus": {"type": "skirtor",    "*": tengri.FIXED},
-                "lines": {"type": line_kind,    "*": tengri.FIXED},
-                "*": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0,
+                "disc": {"type": "multicolor", "*": tengri.FIXED},
+                "torus": {"type": "skirtor", "*": tengri.FIXED},
+                "lines": {"type": line_kind, "*": tengri.FIXED},
+                "*": tengri.FIXED,
+                "log_lbol": 12.5,
+                "frac": 1.0,
             },
             redshift=tengri.Fixed(0.05),
         )
@@ -111,18 +101,12 @@ not shipped with the gallery):
     ]
     for lam, name in LINE_MARKS:
         ax.axvline(lam, color="0.85", lw=0.4, alpha=0.5)
-        ax.text(lam, 4e46, name, fontsize=7, color="0.5",
-                ha="center", va="bottom", rotation=90)
+        ax.text(lam, 4e46, name, fontsize=7, color="0.5", ha="center", va="bottom", rotation=90)
 
     ax.legend(frameon=False, fontsize=8, loc="lower right")
 
     fig.tight_layout()
     fig.savefig("plot_agn_lines_compare.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.481 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_lines_compare.py:

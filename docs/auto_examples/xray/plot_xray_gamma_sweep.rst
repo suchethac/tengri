@@ -29,7 +29,7 @@ photons to high energies; steep spectra (high γ ~2.4) drop quickly. We vary
 Reference: Wilkins et al. 2020, MNRAS, 493, 5548 (α_ox relation and
 photon index dependence).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-54
+.. GENERATED FROM PYTHON SOURCE LINES 13-49
 
 .. code-block:: Python
 
@@ -41,7 +41,6 @@ photon index dependence).
     import matplotlib.pyplot as plt
     import numpy as np
 
-    import tengri
     from tengri.analysis.plotting import setup_style
     from tengri.xray import xray_agn_corona
 
@@ -57,9 +56,7 @@ photon index dependence).
 
     fig, ax = plt.subplots(figsize=(6.5, 4.2))
     for gamma in gamma_values:
-        l_xray = xray_agn_corona(
-            wavelength, L_agn_bol=1e45, gamma=gamma, E_cut=300.0, alpha_ox=-1.4
-        )
+        l_xray = xray_agn_corona(wavelength, L_agn_bol=1e45, gamma=gamma, E_cut=300.0, alpha_ox=-1.4)
         ax.loglog(wave_keV, np.array(l_xray), lw=1.4, color=cmap(norm(gamma)))
 
     ax.set_xlim(0.1, 1000)
@@ -67,9 +64,7 @@ photon index dependence).
     ax.set_xlabel(r"Energy [keV]")
     ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
 
-    cbar = fig.colorbar(
-        plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
-    )
+    cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
     cbar.set_label(r"Photon index $\gamma$")
 
     fig.tight_layout()

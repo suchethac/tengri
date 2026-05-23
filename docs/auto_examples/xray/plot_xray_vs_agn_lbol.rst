@@ -31,18 +31,7 @@ The colour gradient shows where the AGN corona overtakes the XRB
 emission band by band — the central diagnostic for AGN selection in
 deep X-ray surveys (Lehmer+2010, 2016).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-80
-
-
-
-.. image-sg:: /auto_examples/xray/images/sphx_glr_plot_xray_vs_agn_lbol_001.png
-   :alt: plot xray vs agn lbol
-   :srcset: /auto_examples/xray/images/sphx_glr_plot_xray_vs_agn_lbol_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 15-75
 
 .. code-block:: Python
 
@@ -70,12 +59,10 @@ deep X-ray surveys (Lehmer+2010, 2016).
     ssp = tengri.load_ssp()
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED,
-             "log_sfr": 0.5, "start_gyr": 13.0, "end_gyr": 0.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.3, "tau_bc": 0.5},
+        sfh={"type": "const", "*": tengri.FIXED, "log_sfr": 0.5, "start_gyr": 13.0, "end_gyr": 0.0},
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.3, "tau_bc": 0.5},
         agn={
-            "disc":  {"type": "qsogen",  "*": tengri.FIXED},
+            "disc": {"type": "qsogen", "*": tengri.FIXED},
             "torus": {"type": "skirtor", "*": tengri.FIXED},
             "*": tengri.FIXED,
             "log_lbol": tengri.Uniform(8.0, 14.0),
@@ -88,8 +75,7 @@ deep X-ray surveys (Lehmer+2010, 2016).
 
     fig, ax = plt.subplots(figsize=(7.0, 4.6))
     for log_lbol in log_lbol_grid:
-        out = model.predict_rest_sed({**baseline,
-                                      "agn_log_lbol": jnp.float64(log_lbol)})
+        out = model.predict_rest_sed({**baseline, "agn_log_lbol": jnp.float64(log_lbol)})
         wave = np.asarray(out.wavelength)
         nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
         ax.loglog(wave, nu_l_nu, color=cmap(norm(log_lbol)), lw=1.4)
@@ -99,23 +85,16 @@ deep X-ray surveys (Lehmer+2010, 2016).
     ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
     ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
-    for kev, name in [(0.5, "0.5 keV"), (2.0, "2 keV"), (10.0, "10 keV"),
-                      (50.0, "50 keV")]:
+    for kev, name in [(0.5, "0.5 keV"), (2.0, "2 keV"), (10.0, "10 keV"), (50.0, "50 keV")]:
         lam = 12398.4 / (kev * 1000.0)
         ax.axvline(lam, color="0.65", lw=0.4, ls=":")
-        ax.text(lam, 1e38 * 3.0, name, fontsize=7, color="0.4",
-                ha="center", rotation=90, va="bottom")
+        ax.text(lam, 1e38 * 3.0, name, fontsize=7, color="0.4", ha="center", rotation=90, va="bottom")
 
     cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
     cbar.set_label(r"$\log\,L_{\rm bol}^{\rm AGN}\,/\,L_\odot$")
 
     fig.tight_layout()
     fig.savefig("plot_xray_vs_agn_lbol.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 4.004 seconds)
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_vs_agn_lbol.py:

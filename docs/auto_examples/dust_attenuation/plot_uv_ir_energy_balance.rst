@@ -34,18 +34,7 @@ optical/NIR window that the model treats separately. Deviations from
 the diagonal indicate either model approximations or numerical
 integration error.
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-97
-
-
-
-.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_uv_ir_energy_balance_001.png
-   :alt: plot uv ir energy balance
-   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_uv_ir_energy_balance_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 18-103
 
 .. code-block:: Python
 
@@ -53,7 +42,6 @@ integration error.
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -71,11 +59,20 @@ integration error.
     def _build(tau_diff):
         return tengri.SEDModel.build(
             ssp,
-            sfh={"type": "const", "*": tengri.FIXED, "log_sfr": 1.0,
-                 "start_gyr": 13.0, "end_gyr": 0.0},
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_diff": tau_diff, "tau_bc": 1.5 * tau_diff,
-                  "emission": {"type": "dale2014", "*": tengri.FIXED}},
+            sfh={
+                "type": "const",
+                "*": tengri.FIXED,
+                "log_sfr": 1.0,
+                "start_gyr": 13.0,
+                "end_gyr": 0.0,
+            },
+            dust={
+                "type": "two_component",
+                "*": tengri.FIXED,
+                "tau_diff": tau_diff,
+                "tau_bc": 1.5 * tau_diff,
+                "emission": {"type": "dale2014", "*": tengri.FIXED},
+            },
             redshift=tengri.Fixed(0.05),
         )
 
@@ -108,14 +105,12 @@ integration error.
         out = model.predict_rest_sed(p)
         sed = np.asarray(out.sed)
         L_abs[i] = L_uv_ref - _power_in_band(sed, uv_band)
-        L_ir[i]  = _power_in_band(sed, ir_band)
+        L_ir[i] = _power_in_band(sed, ir_band)
 
     fig, ax = plt.subplots(figsize=(6.0, 5.0))
     diag = np.array([1e42, 1e46])
-    ax.plot(diag, diag, color="0.55", lw=0.7, ls="--",
-            label=r"$L_{\rm IR} = L_{\rm abs}^{\rm UV}$")
-    sc = ax.scatter(L_abs, L_ir, c=tau_grid, cmap="viridis",
-                    s=44, lw=0.4, edgecolor="0.2", zorder=4)
+    ax.plot(diag, diag, color="0.55", lw=0.7, ls="--", label=r"$L_{\rm IR} = L_{\rm abs}^{\rm UV}$")
+    sc = ax.scatter(L_abs, L_ir, c=tau_grid, cmap="viridis", s=44, lw=0.4, edgecolor="0.2", zorder=4)
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlim(1e42, 1e46)
@@ -128,11 +123,6 @@ integration error.
 
     fig.tight_layout()
     fig.savefig("plot_uv_ir_energy_balance.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.572 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_uv_ir_energy_balance.py:

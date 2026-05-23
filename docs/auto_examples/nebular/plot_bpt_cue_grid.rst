@@ -26,7 +26,7 @@ Show how the Cue neural emulator (Li+2025) maps the 2D parameter space
 constant log U (varying metallicity) and constant log Z (varying ionization)
 show the full grid's coverage and demarcation positions.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-94
+.. GENERATED FROM PYTHON SOURCE LINES 10-101
 
 .. code-block:: Python
 
@@ -34,7 +34,6 @@ show the full grid's coverage and demarcation positions.
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -59,7 +58,13 @@ show the full grid's coverage and demarcation positions.
     mask_k = log_nii_ha_grid < 0.47
     ax.plot(log_nii_ha_grid[mask_k], log_oiii_hb_kewley[mask_k], "k-", lw=1.5, label="Kewley+2001")
     mask_kauff = log_nii_ha_grid < 0.05
-    ax.plot(log_nii_ha_grid[mask_kauff], log_oiii_hb_kauff[mask_kauff], "k--", lw=1.2, label="Kauffmann+2003")
+    ax.plot(
+        log_nii_ha_grid[mask_kauff],
+        log_oiii_hb_kauff[mask_kauff],
+        "k--",
+        lw=1.2,
+        label="Kauffmann+2003",
+    )
 
     for logu in logu_grid:
         for logz in logz_grid:
@@ -108,7 +113,9 @@ show the full grid's coverage and demarcation positions.
     ax.set_ylim(-1.2, 1.5)
     ax.legend(fontsize=10, frameon=False, loc="lower right")
 
-    sm = plt.cm.ScalarMappable(cmap=plt.cm.viridis, norm=plt.Normalize(vmin=logu_grid.min(), vmax=logu_grid.max()))
+    sm = plt.cm.ScalarMappable(
+        cmap=plt.cm.viridis, norm=plt.Normalize(vmin=logu_grid.min(), vmax=logu_grid.max())
+    )
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=ax, label=r"$\log U$")
 

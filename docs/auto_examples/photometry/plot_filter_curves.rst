@@ -31,7 +31,7 @@ registry.
    :alt: plot_filter_curves
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-68
+.. GENERATED FROM PYTHON SOURCE LINES 16-67
 
 .. code-block:: Python
 
@@ -86,7 +86,6 @@ registry.
     fig.tight_layout()
 
     plt.savefig("plot_filter_curves.png", dpi=150, bbox_inches="tight")
-    plt.show()
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_filter_curves.py:

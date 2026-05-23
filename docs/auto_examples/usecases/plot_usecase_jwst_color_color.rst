@@ -30,7 +30,7 @@ rest-frame UV-to-IR with minimal prior knowledge.
 Reference: Whitaker et al. 2011, ApJ, 735, 86 (high-z color selection);
 Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-175
+.. GENERATED FROM PYTHON SOURCE LINES 14-174
 
 .. code-block:: Python
 
@@ -38,7 +38,6 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -65,7 +64,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
     z_all = {"sf": [], "passive": [], "dusty": []}
 
     # Star-forming (z=1-7, young, extended SFH)
-    for i in range(50):
+    for _i in range(50):
         z = np.random.uniform(1.0, 7.0)
         model = tengri.SEDModel.build(
             ssp,
@@ -98,7 +97,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
             z_all["sf"].append(z)
 
     # Passive (z=1-3, old, narrow SFH)
-    for i in range(50):
+    for _i in range(50):
         z = np.random.uniform(1.0, 3.0)
         model = tengri.SEDModel.build(
             ssp,
@@ -132,7 +131,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
             z_all["passive"].append(z)
 
     # Dusty/AGN (z=2-4, high dust, high SFR)
-    for i in range(50):
+    for _i in range(50):
         z = np.random.uniform(2.0, 4.0)
         model = tengri.SEDModel.build(
             ssp,

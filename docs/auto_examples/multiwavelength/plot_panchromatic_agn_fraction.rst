@@ -26,7 +26,7 @@ luminosity fraction from pure starburst to pure AGN, showing the
 transition in SED morphology as the accretion disc continuum
 increasingly dominates stellar and dust emission.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-94
+.. GENERATED FROM PYTHON SOURCE LINES 10-92
 
 .. code-block:: Python
 
@@ -74,9 +74,7 @@ increasingly dominates stellar and dust emission.
     # AGN continuum at fixed L_bol
     log_lbol_agn = 11.0
     sed_agn = np.array(
-        tengri.components.agn.compute_qsogen_sed(
-            jnp.asarray(wave), agn_log_lbol=log_lbol_agn
-        )
+        tengri.components.agn.compute_qsogen_sed(jnp.asarray(wave), agn_log_lbol=log_lbol_agn)
     )
 
     # Normalize AGN to match stellar luminosity scale

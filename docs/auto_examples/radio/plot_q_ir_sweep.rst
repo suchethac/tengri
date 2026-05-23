@@ -29,7 +29,7 @@ demonstrating how radio loudness evolves (Bell 2003).
 
 Reference: Bell 2003, ApJ 586, 794.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-53
+.. GENERATED FROM PYTHON SOURCE LINES 13-52
 
 .. code-block:: Python
 
@@ -41,7 +41,6 @@ Reference: Bell 2003, ApJ 586, 794.
     import matplotlib.pyplot as plt
     import numpy as np
 
-    import tengri
     from tengri.analysis.plotting import setup_style
 
     setup_style()

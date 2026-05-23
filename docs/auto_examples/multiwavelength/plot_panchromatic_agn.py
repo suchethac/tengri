@@ -43,7 +43,9 @@ l_xray_agn = np.array(tengri.xray.xray_agn_corona(wave, L_agn_bol=l_agn_bol_erg)
 l_xrb = np.array(tengri.xray.xray_xrb(wave, sfr=sfr, stellar_mass=stellar_mass))
 
 # Radio: AGN jets + host star formation
-l_radio_agn = np.array(tengri.radio.radio_agn(wave, L_agn_bol=l_agn_bol_erg, radio_loudness=radio_loudness))
+l_radio_agn = np.array(
+    tengri.radio.radio_agn(wave, L_agn_bol=l_agn_bol_erg, radio_loudness=radio_loudness)
+)
 l_radio_sf = np.array(tengri.radio.radio_star_forming(wave, L_ir=l_ir, alpha_sf=0.8))
 
 fig, ax = plt.subplots(figsize=(11, 5.2))

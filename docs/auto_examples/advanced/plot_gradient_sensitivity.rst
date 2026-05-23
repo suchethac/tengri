@@ -29,7 +29,7 @@ parameter; dark blue/red indicates strong dependence.
 Reference: Automatic differentiation via JAX enables exact gradients
 for SED model validation and Fisher analysis (Conroy 2013, ARA&A, 51, 393).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-79
+.. GENERATED FROM PYTHON SOURCE LINES 13-80
 
 .. code-block:: Python
 
@@ -52,7 +52,8 @@ for SED model validation and Fisher analysis (Conroy 2013, ARA&A, 51, 393).
     obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 
     model = tengri.SEDModel.build(
-        ssp, observation=obs,
+        ssp,
+        observation=obs,
         sfh={"type": "tsnorm", "*": tengri.FREE},
         met={"type": "fixed"},
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.5, "tau_bc": 0.3},

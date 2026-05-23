@@ -38,18 +38,7 @@ References:
 - Balogh, Morris, Yee, Carlberg & Ellingson 1999, ApJ, 527, 54
 - Kauffmann et al. 2003, MNRAS, 341, 33
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-100
-
-
-
-.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_d4000_age_001.png
-   :alt: plot usecase d4000 age
-   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_d4000_age_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 22-107
 
 .. code-block:: Python
 
@@ -94,8 +83,7 @@ References:
             "trunc": 13.5,
             "log_peak_sfr": 1.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(0.0),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -104,10 +92,12 @@ References:
     d4000_grid = np.empty_like(age_gyr)
 
     for i, age in enumerate(age_gyr):
-        out = model.predict_rest_sed({
-            **baseline,
-            "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age),
-        })
+        out = model.predict_rest_sed(
+            {
+                **baseline,
+                "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age),
+            }
+        )
         d4000_grid[i] = _d4000(np.asarray(out.wavelength), np.asarray(out.sed))
 
     # Schematic SDSS quenched-galaxy locus (Kauffmann+2003 figure 6, hand-traced).
@@ -115,13 +105,19 @@ References:
     sdss_d4000 = np.array([1.10, 1.20, 1.45, 1.75, 1.92, 2.00])
 
     fig, ax = plt.subplots(figsize=(6.5, 4.4))
-    ax.plot(age_gyr, d4000_grid, color="C0", lw=1.6,
-            label="tengri SSP (single burst)")
-    ax.plot(sdss_age, sdss_d4000, "s", color="0.4", ms=6, mfc="white",
-            mew=1.0, label="SDSS quenched locus (schematic)")
+    ax.plot(age_gyr, d4000_grid, color="C0", lw=1.6, label="tengri SSP (single burst)")
+    ax.plot(
+        sdss_age,
+        sdss_d4000,
+        "s",
+        color="0.4",
+        ms=6,
+        mfc="white",
+        mew=1.0,
+        label="SDSS quenched locus (schematic)",
+    )
     ax.axhspan(1.5, 1.6, color="0.92", alpha=0.6, lw=0)
-    ax.text(11.5, 1.55, "green-valley cut\n(Kauffmann+2003)",
-            fontsize=8, color="0.35", ha="right")
+    ax.text(11.5, 1.55, "green-valley cut\n(Kauffmann+2003)", fontsize=8, color="0.35", ha="right")
     ax.set_xscale("log")
     ax.set_xlim(0.02, 14.0)
     ax.set_ylim(1.05, 2.25)

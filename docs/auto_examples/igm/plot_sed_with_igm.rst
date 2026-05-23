@@ -38,18 +38,7 @@ References:
 - Inoue et al. 2014, MNRAS, 442, 1805
 - Steidel et al. 1996, AJ, 112, 352 (LBG dropout origins)
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-86
-
-
-
-.. image-sg:: /auto_examples/igm/images/sphx_glr_plot_sed_with_igm_001.png
-   :alt: plot sed with igm
-   :srcset: /auto_examples/igm/images/sphx_glr_plot_sed_with_igm_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 22-93
 
 .. code-block:: Python
 
@@ -76,11 +65,15 @@ References:
     for z, color in zip(REDSHIFTS, COLORS):
         model = tengri.SEDModel.build(
             tengri.load_ssp(),
-            sfh={"type": "dpl", "*": tengri.FIXED,
-                 "tau_gyr": 0.3, "log_peak_sfr": 1.5,
-                 "alpha": 3.0, "beta": 2.0},
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_diff": 0.1, "tau_bc": 0.1},
+            sfh={
+                "type": "dpl",
+                "*": tengri.FIXED,
+                "tau_gyr": 0.3,
+                "log_peak_sfr": 1.5,
+                "alpha": 3.0,
+                "beta": 2.0,
+            },
+            dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
             igm={"type": "inoue14"},
             redshift=tengri.Fixed(z),
         )
@@ -95,19 +88,22 @@ References:
     # Mark Lyman break and Lyα at each z so the eye sees them move.
     for z, color in zip(REDSHIFTS, COLORS):
         ax.axvline(912.0 * (1.0 + z), color=color, lw=0.4, ls=":", alpha=0.6)
-    ax.text(912 * 2, 4e29, "← Lyman break (912 Å)\n at each z", fontsize=8,
-            color="0.4")
+    ax.text(912 * 2, 4e29, "← Lyman break (912 Å)\n at each z", fontsize=8, color="0.4")
 
     # Mark SDSS / Euclid band centres for context
     BANDS = {
-        "u": 3543, "g": 4770, "r": 6231, "i": 7625, "z": 9134,
-        "Y": 10200, "J": 12300, "H": 16400,
+        "u": 3543,
+        "g": 4770,
+        "r": 6231,
+        "i": 7625,
+        "z": 9134,
+        "Y": 10200,
+        "J": 12300,
+        "H": 16400,
     }
     for name, lam in BANDS.items():
         ax.axvline(lam, color="0.85", lw=0.4, alpha=0.4)
-    for name, lam in BANDS.items():
-        ax.text(lam, 1.5e30, name, fontsize=7, color="0.5",
-                ha="center", va="bottom")
+        ax.text(lam, 1.5e30, name, fontsize=7, color="0.5", ha="center", va="bottom")
 
     ax.set_xlim(500, 2e4)
     ax.set_ylim(1e29, 5e32)

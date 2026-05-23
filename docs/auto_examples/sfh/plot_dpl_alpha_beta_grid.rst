@@ -26,7 +26,7 @@ together control the full SFH morphology. Early-time α determines assembly
 speed; late-time β sets the post-peak decay. The optical SED responds across
 each cell, revealing how parameter space maps to stellar age.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-79
+.. GENERATED FROM PYTHON SOURCE LINES 10-77
 
 .. code-block:: Python
 
@@ -34,8 +34,6 @@ each cell, revealing how parameter space maps to stellar age.
     import warnings
 
     import jax
-    import jax.numpy as jnp
-    import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
 

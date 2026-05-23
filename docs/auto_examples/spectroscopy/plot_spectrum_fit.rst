@@ -27,7 +27,7 @@ strengths depend on mean stellar age, holding metallicity and dust fixed.
 
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-88
+.. GENERATED FROM PYTHON SOURCE LINES 11-100
 
 .. code-block:: Python
 
@@ -89,10 +89,22 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     wave_rest_array = np.asarray(WAVE_REST)
     fig, ax = plt.subplots(figsize=(10, 5))
 
-    ax.loglog(wave_rest_array, np.asarray(young_spectrum) / np.median(young_spectrum),
-              color="C1", lw=1.5, label=r"Young (Age $\sim$ 0.1 Gyr)", alpha=0.8)
-    ax.loglog(wave_rest_array, np.asarray(old_spectrum) / np.median(old_spectrum),
-              color="C0", lw=1.5, label=r"Old (Age $\sim$ 5 Gyr)", alpha=0.8)
+    ax.loglog(
+        wave_rest_array,
+        np.asarray(young_spectrum) / np.median(young_spectrum),
+        color="C1",
+        lw=1.5,
+        label=r"Young (Age $\sim$ 0.1 Gyr)",
+        alpha=0.8,
+    )
+    ax.loglog(
+        wave_rest_array,
+        np.asarray(old_spectrum) / np.median(old_spectrum),
+        color="C0",
+        lw=1.5,
+        label=r"Old (Age $\sim$ 5 Gyr)",
+        alpha=0.8,
+    )
 
     # Feature annotations
     ax.axvline(4102, color="grey", ls=":", lw=0.8, alpha=0.5)

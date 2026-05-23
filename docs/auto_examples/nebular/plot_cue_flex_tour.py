@@ -25,7 +25,6 @@ import warnings
 
 import jax
 import jax.numpy as jnp
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -38,23 +37,33 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 0.3,
-         "log_peak_sfr": 1.5, "alpha": 3.0, "beta": 2.0},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": 0.05, "tau_bc": 0.1},
-    neb={"type": "cue", "*": tengri.FIXED,
-         "logU": tengri.Uniform(-4.0, -1.0),
-         "logZ_gas": tengri.Uniform(-2.0, 0.5),
-         "fesc": tengri.Uniform(0.0, 1.0),
-         "fesc_lya": tengri.Uniform(0.0, 1.0),
-         "dig_frac": tengri.Uniform(0.0, 1.0),
-         "dig_delta_logU": tengri.Uniform(-4.0, 0.0)},
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "tau_gyr": 0.3,
+        "log_peak_sfr": 1.5,
+        "alpha": 3.0,
+        "beta": 2.0,
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
+    neb={
+        "type": "cue",
+        "*": tengri.FIXED,
+        "logU": tengri.Uniform(-4.0, -1.0),
+        "logZ_gas": tengri.Uniform(-2.0, 0.5),
+        "fesc": tengri.Uniform(0.0, 1.0),
+        "fesc_lya": tengri.Uniform(0.0, 1.0),
+        "dig_frac": tengri.Uniform(0.0, 1.0),
+        "dig_delta_logU": tengri.Uniform(-4.0, 0.0),
+    },
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
+
 def _halpha_lum(params):
     return float(model.predict_emission_lines(params).halpha)
+
 
 # Define the six sweeps: (param_name, label_string, n_values, lower, upper)
 SWEEPS = [
@@ -66,8 +75,9 @@ SWEEPS = [
     ("neb_dig_delta_logU", r"DIG $\Delta\log\,U$", 7, -2.0, 0.0),
 ]
 
-fig, axes = plt.subplots(2, 3, figsize=(11, 6.6), sharey=True,
-                         gridspec_kw={"hspace": 0.35, "wspace": 0.15})
+fig, axes = plt.subplots(
+    2, 3, figsize=(11, 6.6), sharey=True, gridspec_kw={"hspace": 0.35, "wspace": 0.15}
+)
 axes_flat = axes.ravel()
 colors = ["C0", "C1", "C2", "C3", "C4", "C5"]
 
@@ -79,16 +89,20 @@ ha_baseline = _halpha_lum(baseline)
 for ax_idx, (param_name, label, n_vals, lo, hi) in enumerate(SWEEPS):
     ax = axes_flat[ax_idx]
     values = np.linspace(lo, hi, n_vals)
-    halpha_vals = np.array([
-        _halpha_lum({**baseline, param_name: jnp.float64(v)}) for v in values
-    ])
+    halpha_vals = np.array([_halpha_lum({**baseline, param_name: jnp.float64(v)}) for v in values])
     delta_dex = np.log10(halpha_vals / ha_baseline)
     ax.plot(values, delta_dex, "o-", color=colors[ax_idx], lw=1.6, markersize=5)
     ax.axhline(0.0, color="0.75", lw=0.5, ls=":")
     ax.set_xlabel(label, fontsize=9)
-    ax.text(0.05, 0.93, param_name.replace("neb_", ""), transform=ax.transAxes,
-            fontsize=8, color="0.4",
-            bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="0.7", lw=0.4))
+    ax.text(
+        0.05,
+        0.93,
+        param_name.replace("neb_", ""),
+        transform=ax.transAxes,
+        fontsize=8,
+        color="0.4",
+        bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="0.7", lw=0.4),
+    )
 
 for ax in axes[:, 0]:
     ax.set_ylabel(r"$\Delta \log_{10}\,L_{\rm H\alpha}$  [dex]", fontsize=9)

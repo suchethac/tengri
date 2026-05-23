@@ -33,7 +33,7 @@ underlying SED (blue).
    :alt: plot_filter_set_comparison
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-122
+.. GENERATED FROM PYTHON SOURCE LINES 18-121
 
 .. code-block:: Python
 
@@ -140,7 +140,6 @@ underlying SED (blue).
     axes[-1].set_xlabel(r"Wavelength [$\AA$]")
     fig.tight_layout()
     plt.savefig("plot_filter_set_comparison.png", dpi=150, bbox_inches="tight")
-    plt.show()
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_filter_set_comparison.py:

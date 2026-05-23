@@ -16,7 +16,6 @@ Bell et al. 2003, ApJS, 149, 289 (stellar mass completeness).
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -60,7 +59,7 @@ detected_array = []
 n_gal = 150
 mass_bins = np.linspace(7, 12, 11)
 
-for i in range(n_gal):
+for _i in range(n_gal):
     key, subkey = jax.random.split(key)
     params = model.spec.sample(subkey)
     # Assign log-mass uniformly

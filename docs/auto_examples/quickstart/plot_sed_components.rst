@@ -26,7 +26,7 @@ with attenuation, then predict without dust absorption to isolate the
 absorbed UV-optical flux. The filled region shows how much light dust
 removes from the intrinsic stellar continuum.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-86
+.. GENERATED FROM PYTHON SOURCE LINES 10-84
 
 .. code-block:: Python
 
@@ -83,9 +83,7 @@ removes from the intrinsic stellar continuum.
     mask = (wave_um > 0.09) & (wave_um < 3.0)
 
     fig, ax = plt.subplots(figsize=(7.0, 4.2))
-    ax.plot(
-        wave_um[mask], sed_intrinsic[mask], color="C0", lw=1.4, label="Intrinsic (no dust)"
-    )
+    ax.plot(wave_um[mask], sed_intrinsic[mask], color="C0", lw=1.4, label="Intrinsic (no dust)")
     ax.plot(wave_um[mask], sed_total[mask], color="C3", lw=1.4, label="Attenuated (total)")
     ax.fill_between(
         wave_um[mask],

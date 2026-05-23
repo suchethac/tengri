@@ -32,18 +32,7 @@ data come from?" — broad-line decompositions need ``blr``, NLR
 fitters need ``nlr``, NIR/MIR colour fitters need ``torus`` (and
 disc choice barely matters longward of 1 μm), etc.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-108
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_components_breakdown_001.png
-   :alt: plot agn components breakdown
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_components_breakdown_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 16-133
 
 .. code-block:: Python
 
@@ -65,8 +54,7 @@ disc choice barely matters longward of 1 μm), etc.
     ssp = tengri.load_ssp()
     COMMON = dict(
         sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(0.05),
     )
     BASE_AGN = dict(disc={"type": "multicolor", "*": tengri.FIXED})
@@ -84,29 +72,40 @@ disc choice barely matters longward of 1 μm), etc.
 
     # Cumulative builds: disc → +torus → +nlr → +blr.
     configs = [
-        ("disc only",         (),
-         "#8b4513"),
-        ("+ torus (SKIRTOR)", (("torus", {"type": "skirtor", "*": tengri.FIXED}),),
-         "#cc7733"),
-        ("+ NLR",             (("torus", {"type": "skirtor", "*": tengri.FIXED}),
-                               ("lines", {"type": "nlr",    "*": tengri.FIXED})),
-         "#5588cc"),
-        ("+ BLR",             (("torus", {"type": "skirtor", "*": tengri.FIXED}),
-                               ("lines", {"type": "blr",    "*": tengri.FIXED})),
-         "#4477aa"),
+        ("disc only", (), "#8b4513"),
+        ("+ torus (SKIRTOR)", (("torus", {"type": "skirtor", "*": tengri.FIXED}),), "#cc7733"),
+        (
+            "+ NLR",
+            (
+                ("torus", {"type": "skirtor", "*": tengri.FIXED}),
+                ("lines", {"type": "nlr", "*": tengri.FIXED}),
+            ),
+            "#5588cc",
+        ),
+        (
+            "+ BLR",
+            (
+                ("torus", {"type": "skirtor", "*": tengri.FIXED}),
+                ("lines", {"type": "blr", "*": tengri.FIXED}),
+            ),
+            "#4477aa",
+        ),
     ]
 
     waves, seds = {}, {}
     for label, blocks, _ in configs:
         w, s = _agn(blocks)
         waves[label] = w
-        seds[label]  = s
+        seds[label] = s
 
     wave = waves["disc only"]
     nu = C_AA_PER_S / wave
 
     fig, (ax_top, ax_bot) = plt.subplots(
-        2, 1, figsize=(7.4, 6.8), sharex=True,
+        2,
+        1,
+        figsize=(7.4, 6.8),
+        sharex=True,
         gridspec_kw={"hspace": 0.05, "height_ratios": [3, 2]},
     )
 
@@ -119,19 +118,34 @@ disc choice barely matters longward of 1 μm), etc.
 
     # Bottom panel: per-block contribution, computed by differencing the
     # cumulative builds.  Stacked as a step plot.
-    disc_only       = seds["disc only"]
-    torus_contrib   = seds["+ torus (SKIRTOR)"] - disc_only
-    nlr_contrib     = seds["+ NLR"]              - seds["+ torus (SKIRTOR)"]
-    blr_contrib     = seds["+ BLR"]              - seds["+ torus (SKIRTOR)"]
+    disc_only = seds["disc only"]
+    torus_contrib = seds["+ torus (SKIRTOR)"] - disc_only
+    nlr_contrib = seds["+ NLR"] - seds["+ torus (SKIRTOR)"]
+    blr_contrib = seds["+ BLR"] - seds["+ torus (SKIRTOR)"]
 
-    ax_bot.loglog(wave, nu * disc_only,
-                  color="#8b4513", lw=1.2, label="disc")
-    ax_bot.loglog(wave, nu * np.where(torus_contrib > 0, torus_contrib, np.nan),
-                  color="#cc7733", lw=1.2, label="torus")
-    ax_bot.loglog(wave, nu * np.where(nlr_contrib > 0, nlr_contrib, np.nan),
-                  color="#5588cc", lw=1.2, label="NLR lines")
-    ax_bot.loglog(wave, nu * np.where(blr_contrib > 0, blr_contrib, np.nan),
-                  color="#4477aa", lw=1.2, ls=":", label="BLR lines")
+    ax_bot.loglog(wave, nu * disc_only, color="#8b4513", lw=1.2, label="disc")
+    ax_bot.loglog(
+        wave,
+        nu * np.where(torus_contrib > 0, torus_contrib, np.nan),
+        color="#cc7733",
+        lw=1.2,
+        label="torus",
+    )
+    ax_bot.loglog(
+        wave,
+        nu * np.where(nlr_contrib > 0, nlr_contrib, np.nan),
+        color="#5588cc",
+        lw=1.2,
+        label="NLR lines",
+    )
+    ax_bot.loglog(
+        wave,
+        nu * np.where(blr_contrib > 0, blr_contrib, np.nan),
+        color="#4477aa",
+        lw=1.2,
+        ls=":",
+        label="BLR lines",
+    )
     ax_bot.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
     ax_bot.set_ylabel(r"$\nu L_\nu^{\rm block}$  [erg s$^{-1}$]")
     ax_bot.set_xlim(80, 2e6)
@@ -139,11 +153,6 @@ disc choice barely matters longward of 1 μm), etc.
     ax_bot.legend(frameon=False, fontsize=8, loc="lower right")
 
     fig.savefig("plot_agn_components_breakdown.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.070 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_components_breakdown.py:

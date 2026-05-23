@@ -25,29 +25,7 @@ The Lyα-specific escape fraction ``f_esc_lya`` sets what fraction of Lyα
 photons can escape the ISM without scattering. Higher ``f_esc_lya`` suppresses
 the Lyα emission line while leaving other nebular lines unchanged.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-75
-
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_fesc_lya_sweep_001.png
-   :alt: plot fesc lya sweep
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_fesc_lya_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/.claude-squad/worktrees/cs/examples-sweep_18b2090a1299ea18/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 9-83
 
 .. code-block:: Python
 
@@ -109,19 +87,22 @@ the Lyα emission line while leaving other nebular lines unchanged.
     ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
     ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
     ax.axvline(1215.67, color="0.55", lw=0.5, ls=":")
-    ax.text(1215.67, ymax * 0.4, r"Ly$\alpha$",
-            color="0.4", fontsize=8, rotation=90, va="center", ha="right")
+    ax.text(
+        1215.67,
+        ymax * 0.4,
+        r"Ly$\alpha$",
+        color="0.4",
+        fontsize=8,
+        rotation=90,
+        va="center",
+        ha="right",
+    )
 
     cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
     cbar.set_label(r"$f_{\mathrm{esc,Ly}\alpha}$")
 
     fig.tight_layout()
     fig.savefig("plot_fesc_lya_sweep.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 10.543 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_fesc_lya_sweep.py:

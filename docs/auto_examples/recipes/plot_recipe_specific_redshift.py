@@ -12,7 +12,6 @@ parameter recovery.
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -44,8 +43,16 @@ true_params = {
 model_template = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "tsnorm", "*": tengri.FIXED, **{k: v for k, v in true_params.items() if k.startswith("sfh_")}},
-    dust={"type": "two_component", "*": tengri.FIXED, **{k: v for k, v in true_params.items() if k.startswith("dust_")}},
+    sfh={
+        "type": "tsnorm",
+        "*": tengri.FIXED,
+        **{k: v for k, v in true_params.items() if k.startswith("sfh_")},
+    },
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        **{k: v for k, v in true_params.items() if k.startswith("dust_")},
+    },
     redshift=tengri.Fixed(TRUE_REDSHIFT),
 )
 mock = model_template.mock(true_params, snr=25.0, key=key)
@@ -60,8 +67,7 @@ model_fixed = tengri.SEDModel.build(
 )
 forward_fixed = tengri.ForwardModel.build(sed=model_fixed, observation=obs)
 posterior_fixed = forward_fixed.fit(
-    mock.flux_obs, mock.noise, method="map",
-    optimizer="adam", n_steps=200, verbose=False
+    mock.flux_obs, mock.noise, method="map", optimizer="adam", n_steps=200, verbose=False
 )
 
 # Fit 2: Redshift FREE (photometry only)
@@ -74,39 +80,44 @@ model_free = tengri.SEDModel.build(
 )
 forward_free = tengri.ForwardModel.build(sed=model_free, observation=obs)
 posterior_free = forward_free.fit(
-    mock.flux_obs, mock.noise, method="map",
-    optimizer="adam", n_steps=200, verbose=False
+    mock.flux_obs, mock.noise, method="map", optimizer="adam", n_steps=200, verbose=False
 )
 
 # Plot: SFH comparison
 sfh_fixed = model_fixed.predict_sfh(posterior_fixed.params)
 sfh_free = model_free.predict_sfh(posterior_free.params)
 
-fig, (ax_fixed, ax_free) = plt.subplots(
-    1, 2, figsize=(10.0, 3.5), sharey=True
-)
+fig, (ax_fixed, ax_free) = plt.subplots(1, 2, figsize=(10.0, 3.5), sharey=True)
 
 t_gyr = np.array(sfh_fixed["t_gyr"])
 mask = t_gyr < 2.0
 
-ax_fixed.plot(t_gyr[mask], np.array(sfh_fixed["sfr_mean"])[mask],
-              color="C0", lw=1.4, label="MAP SFR")
+ax_fixed.plot(
+    t_gyr[mask], np.array(sfh_fixed["sfr_mean"])[mask], color="C0", lw=1.4, label="MAP SFR"
+)
 ax_fixed.set_xlabel("Lookback time [Gyr]")
 ax_fixed.set_ylabel(r"SFR [$M_\odot$/yr]")
 ax_fixed.set_ylim(bottom=0)
 ax_fixed.legend(frameon=False, fontsize=8)
-ax_text = ax_fixed.text(0.05, 0.95, "Redshift fixed", transform=ax_fixed.transAxes,
-                         fontsize=9, verticalalignment="top")
+ax_text = ax_fixed.text(
+    0.05, 0.95, "Redshift fixed", transform=ax_fixed.transAxes, fontsize=9, verticalalignment="top"
+)
 
 t_gyr_free = np.array(sfh_free["t_gyr"])
 mask_free = t_gyr_free < 2.0
-ax_free.plot(t_gyr_free[mask_free], np.array(sfh_free["sfr_mean"])[mask_free],
-             color="C3", lw=1.4, label="MAP SFR")
+ax_free.plot(
+    t_gyr_free[mask_free],
+    np.array(sfh_free["sfr_mean"])[mask_free],
+    color="C3",
+    lw=1.4,
+    label="MAP SFR",
+)
 ax_free.set_xlabel("Lookback time [Gyr]")
 ax_free.set_ylim(bottom=0)
 ax_free.legend(frameon=False, fontsize=8)
-ax_text = ax_free.text(0.05, 0.95, "Redshift free", transform=ax_free.transAxes,
-                        fontsize=9, verticalalignment="top")
+ax_text = ax_free.text(
+    0.05, 0.95, "Redshift free", transform=ax_free.transAxes, fontsize=9, verticalalignment="top"
+)
 
 fig.tight_layout()
 fig.savefig("plot_recipe_specific_redshift.png", dpi=150, bbox_inches="tight")

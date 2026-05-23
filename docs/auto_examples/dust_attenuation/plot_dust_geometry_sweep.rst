@@ -29,7 +29,7 @@ how each law transforms a stellar continuum.
 
 Reference: Witt & Gordon 2000, ApJ, 528, 799 (dust geometry classification).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-53
+.. GENERATED FROM PYTHON SOURCE LINES 13-52
 
 .. code-block:: Python
 
@@ -40,7 +40,6 @@ Reference: Witt & Gordon 2000, ApJ, 528, 799 (dust geometry classification).
     import matplotlib.pyplot as plt
     import numpy as np
 
-    import tengri
     from tengri.analysis.plotting import setup_style
     from tengri.dust import resolve_dust_law
 

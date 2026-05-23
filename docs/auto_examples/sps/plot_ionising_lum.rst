@@ -34,17 +34,6 @@ grids and overlay the curves.
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-93
 
-
-
-.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_ionising_lum_001.png
-   :alt: plot ionising lum
-   :srcset: /auto_examples/sps/images/sphx_glr_plot_ionising_lum_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 
@@ -59,9 +48,9 @@ grids and overlay the curves.
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-    H_PLANCK = 6.626e-27         # erg s
-    C_AA_PER_S = 2.998e18        # Å / s
-    L_SUN_ERG_S = 3.839e33       # erg / s  (IAU 2015)
+    H_PLANCK = 6.626e-27  # erg s
+    C_AA_PER_S = 2.998e18  # Å / s
+    L_SUN_ERG_S = 3.839e33  # erg / s  (IAU 2015)
 
     GRIDS = [
         ("fsps_prsc_miles_chabrier", "FSPS-Padova / MILES (Chabrier)"),

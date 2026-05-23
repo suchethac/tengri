@@ -11,7 +11,6 @@ young stars atop an old population. The SED reveals the full assembly history.
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 

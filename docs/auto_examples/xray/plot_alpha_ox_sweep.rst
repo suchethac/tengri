@@ -30,7 +30,7 @@ showing the anticorrelation of X-ray strength and UV continuum slope.
 
 Reference: Wilkins et al. 2020, MNRAS, 493, 5548 (α_ox correlation study).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-55
+.. GENERATED FROM PYTHON SOURCE LINES 14-50
 
 .. code-block:: Python
 
@@ -42,7 +42,6 @@ Reference: Wilkins et al. 2020, MNRAS, 493, 5548 (α_ox correlation study).
     import matplotlib.pyplot as plt
     import numpy as np
 
-    import tengri
     from tengri.analysis.plotting import setup_style
     from tengri.xray import xray_agn_corona
 
@@ -58,9 +57,7 @@ Reference: Wilkins et al. 2020, MNRAS, 493, 5548 (α_ox correlation study).
 
     fig, ax = plt.subplots(figsize=(6.5, 4.2))
     for alpha_ox in alpha_ox_values:
-        l_xray = xray_agn_corona(
-            wavelength, L_agn_bol=1e45, gamma=1.8, E_cut=300.0, alpha_ox=alpha_ox
-        )
+        l_xray = xray_agn_corona(wavelength, L_agn_bol=1e45, gamma=1.8, E_cut=300.0, alpha_ox=alpha_ox)
         ax.loglog(wave_keV, np.array(l_xray), lw=1.4, color=cmap(norm(alpha_ox)))
 
     ax.set_xlim(0.1, 1000)
@@ -68,9 +65,7 @@ Reference: Wilkins et al. 2020, MNRAS, 493, 5548 (α_ox correlation study).
     ax.set_xlabel(r"Energy [keV]")
     ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
 
-    cbar = fig.colorbar(
-        plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
-    )
+    cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
     cbar.set_label(r"UV-to-X-ray slope $\alpha_{\rm ox}$")
 
     fig.tight_layout()

@@ -29,13 +29,13 @@ breaks photometric degeneracies.
 Reference: Conroy 2013 (ARA&A, 51, 393); Leja et al. 2019 on spectroscopic
 constraints for star formation histories.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-116
+.. GENERATED FROM PYTHON SOURCE LINES 13-121
 
 .. code-block:: Python
 
 
-    from pathlib import Path
     import warnings
+    from pathlib import Path
 
     import jax
     import jax.numpy as jnp
@@ -75,7 +75,8 @@ constraints for star formation histories.
     obs = tengri.Observation(photometry=phot, spectroscopy=spec_config)
 
     model = tengri.SEDModel.build(
-        ssp, observation=obs,
+        ssp,
+        observation=obs,
         sfh={"type": "tsnorm", "*": tengri.FREE, "skew": 0.3, "trunc": 5.0},
         met={"type": "fixed"},
         dust={"type": "two_component", "*": tengri.FIXED},
@@ -104,8 +105,12 @@ constraints for star formation histories.
 
     forward = tengri.ForwardModel.build(sed=model, observation=obs)
     posterior = forward.fit(
-        flux_obs, noise, method="map", optimizer="adam",
-        n_steps=300, verbose=False,
+        flux_obs,
+        noise,
+        method="map",
+        optimizer="adam",
+        n_steps=300,
+        verbose=False,
     )
     fit_params = posterior.params
 

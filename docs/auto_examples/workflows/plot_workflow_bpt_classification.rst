@@ -29,7 +29,7 @@ ionization mechanisms across the diagnostic plane.
 Reference: Kewley et al. 2001, ApJ, 556, 121 (theoretical classification);
 Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-138
+.. GENERATED FROM PYTHON SOURCE LINES 13-137
 
 .. code-block:: Python
 
@@ -37,7 +37,6 @@ Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 

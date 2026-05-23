@@ -29,7 +29,7 @@ model flexibility directly impacts star formation history inference.
 Reference: Cid Fernandes et al. 2005, MNRAS, 358, 363 (post-starburst
 classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-160
+.. GENERATED FROM PYTHON SOURCE LINES 13-167
 
 .. code-block:: Python
 
@@ -37,7 +37,6 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -99,8 +98,12 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
     )
     forward_correct = tengri.ForwardModel.build(sed=model_correct, observation=obs)
     post_correct = forward_correct.fit(
-        mock.flux_obs, mock.noise, method="map", optimizer="adam",
-        n_steps=300, verbose=False,
+        mock.flux_obs,
+        mock.noise,
+        method="map",
+        optimizer="adam",
+        n_steps=300,
+        verbose=False,
     )
 
     # --- Fit 2: wrong model (DPL, smooth) ---
@@ -126,8 +129,12 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
     )
     forward_wrong = tengri.ForwardModel.build(sed=model_wrong, observation=obs)
     post_wrong = forward_wrong.fit(
-        mock.flux_obs, mock.noise, method="map", optimizer="adam",
-        n_steps=300, verbose=False,
+        mock.flux_obs,
+        mock.noise,
+        method="map",
+        optimizer="adam",
+        n_steps=300,
+        verbose=False,
     )
 
     # --- Plot: SFH comparison ---

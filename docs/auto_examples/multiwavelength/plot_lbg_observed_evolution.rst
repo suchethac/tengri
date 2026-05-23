@@ -32,18 +32,7 @@ This is the figure that motivates how each dropout band is chosen for
 each redshift bracket — *u* dropout at ``z ~ 3``, *g* at ``z ~ 4-5``,
 *r* at ``z ~ 6``, *i / z* at ``z ~ 7-8``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-84
-
-
-
-.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_lbg_observed_evolution_001.png
-   :alt: plot lbg observed evolution
-   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_lbg_observed_evolution_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 16-88
 
 .. code-block:: Python
 
@@ -72,11 +61,15 @@ each redshift bracket — *u* dropout at ``z ~ 3``, *g* at ``z ~ 4-5``,
     for z, color in zip(REDSHIFTS, COLORS):
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "dpl", "*": tengri.FIXED,
-                 "tau_gyr": 0.2, "log_peak_sfr": 1.5,
-                 "alpha": 3.0, "beta": 2.0},
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_diff": 0.1, "tau_bc": 0.1},
+            sfh={
+                "type": "dpl",
+                "*": tengri.FIXED,
+                "tau_gyr": 0.2,
+                "log_peak_sfr": 1.5,
+                "alpha": 3.0,
+                "beta": 2.0,
+            },
+            dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
             igm={"type": "inoue14"},
             redshift=tengri.Fixed(z),
         )
@@ -95,13 +88,13 @@ each redshift bracket — *u* dropout at ``z ~ 3``, *g* at ``z ~ 4-5``,
 
     # Mark the canonical SDSS / Euclid dropout bands as shaded bars.
     BANDS = [
-        ("u",     3000, 4000, "#3355bb"),
-        ("g",     4000, 5500, "#33bb55"),
-        ("r",     5500, 7000, "#bb3333"),
-        ("i",     7000, 8500, "#bb6633"),
-        ("z",     8500, 10000, "#9933bb"),
-        ("Y/J",   10000, 14000, "#553388"),
-        ("H",     14000, 19000, "#225588"),
+        ("u", 3000, 4000, "#3355bb"),
+        ("g", 4000, 5500, "#33bb55"),
+        ("r", 5500, 7000, "#bb3333"),
+        ("i", 7000, 8500, "#bb6633"),
+        ("z", 8500, 10000, "#9933bb"),
+        ("Y/J", 10000, 14000, "#553388"),
+        ("H", 14000, 19000, "#225588"),
     ]
     for name, lo, hi, color in BANDS:
         ax.axvspan(lo, hi, color=color, alpha=0.08, lw=0)
@@ -115,11 +108,6 @@ each redshift bracket — *u* dropout at ``z ~ 3``, *g* at ``z ~ 4-5``,
 
     fig.tight_layout()
     fig.savefig("plot_lbg_observed_evolution.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.248 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_lbg_observed_evolution.py:
