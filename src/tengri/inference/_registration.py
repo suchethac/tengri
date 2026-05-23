@@ -217,31 +217,50 @@ register_backend(
 register_backend(
     "mcmc_hmc",
     tier="primary",
-    short_doc="Hamiltonian Monte Carlo (cold ~21s, warm ~10s, ~5 GB on D=6-7)",
+    short_doc=(
+        "Hamiltonian Monte Carlo (cold ~21s, ~5 GB on D=6-7). "
+        "Convergence-validated only with dense_mass_matrix=True, "
+        "n_warmup≥1000, n_leapfrog_steps≥20 on D=6 DPL "
+        "(R-hat 1.008, ESS 411). Default n_warmup=300 / dense=True "
+        "gives R-hat ≫ 1 — do not lower the warmup for science."
+    ),
     requires=("blackjax",),
     legacy_fitter=False,
 )(_ctx_run_hmc)
 
 register_backend(
     "mcmc_dynamic_hmc",
-    tier="primary",
-    short_doc="Dynamic HMC with adaptive step size (cold ~19s, warm ~8s, ~5 GB)",
+    tier="experimental",
+    short_doc=(
+        "Dynamic HMC — fast (cold ~19s) but chains under-mix at default "
+        "settings (R-hat ≈ 1.11-1.25, ESS ≈ 1-30 on D=6-7 mocks, 1000 "
+        "warmup + 2000 samples). Needs tuning before science use."
+    ),
     requires=("blackjax",),
     legacy_fitter=False,
 )(_ctx_run_dynamic_hmc)
 
 register_backend(
     "mcmc_ghmc",
-    tier="primary",
-    short_doc="Generalized HMC (cold ~17s, warm ~6s, ~5 GB — fastest in HMC family)",
+    tier="experimental",
+    short_doc=(
+        "[POOR MIXING] Generalized HMC — fast (cold ~17s) but R-hat ≈ "
+        "2.5-3.1 and ESS ≈ 1 on D=6-7 mocks even with 1000 warmup + 2000 "
+        "samples. Do not use for science until adapter is fixed; see "
+        "docs/dev/benchmarks/2026-05-22_inference_backend_validation.md."
+    ),
     requires=("blackjax",),
     legacy_fitter=False,
 )(_ctx_run_ghmc)
 
 register_backend(
     "mcmc_mclmc",
-    tier="primary",
-    short_doc="Microcanonical Langevin MC (cold ~20s, warm ~2s, ~5 GB — fastest warm call)",
+    tier="experimental",
+    short_doc=(
+        "[POOR MIXING] Microcanonical Langevin MC — fast warm call (~2s) "
+        "but R-hat ≈ 1.7 / 1.13 and ESS ≈ 1 on D=6-7 mocks at 4000 samples. "
+        "Do not use for science until tuning is investigated."
+    ),
     requires=("blackjax",),
     legacy_fitter=False,
 )(_ctx_run_mclmc)

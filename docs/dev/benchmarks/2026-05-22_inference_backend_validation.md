@@ -97,11 +97,45 @@ Need model comparison (evidence)?
 - The **IFT field SFH** (137-D). Explicitly out of scope per user
   request — many backends will not scale there.
 
-## Caveats on the tier promotions
+## Convergence-checked round 2 (2026-05-23, follow-up)
 
-The promotions to `primary` are based on **wiring + cold/warm time +
-memory + no-crash**, not on posterior quality. The HMC family
-(`mcmc_hmc`, `mcmc_dynamic_hmc`, `mcmc_ghmc`) and `mcmc_mclmc`
-should run a full convergence-checked recovery pass (R-hat < 1.01,
-ESS > 400) before any Paper I result depends on them. Treat the
-`primary` tier as "won't waste your day" not "Paper I ready".
+`scripts/validate_backends_231_convergence.py` re-ran the four MCMC
+backends I had promoted, with realistic budgets and per-variant
+tuning:
+
+- `mcmc_hmc`: `n_warmup=1000`, `n_burnin=200`, `n_samples=2000`,
+  `dense_mass_matrix=True`, `n_leapfrog_steps=20`
+- `mcmc_dynamic_hmc` / `mcmc_ghmc`: `n_warmup=1000`,
+  `n_burnin=200`, `n_samples=2000`
+- `mcmc_mclmc`: `n_samples=4000`
+
+Pass criterion: split-R-hat < 1.01 AND minimum-ESS > 400 (Vehtari 2021).
+
+| Backend | DPL (D=6) R-hat / ESS | dense_basis (D=7) R-hat / ESS | Verdict |
+|---|---|---|---|
+| `mcmc_hmc` | **1.008 / 411** | 1.051 / 17 | DPL ✓ / dense_basis needs more samples |
+| `mcmc_dynamic_hmc` | 1.113 / 27 | 1.255 / 1 | both fail |
+| `mcmc_ghmc` | 2.487 / 1 | 3.115 / 1 | both fail catastrophically |
+| `mcmc_mclmc` | 1.729 / 1 | 1.129 / 1 | both fail |
+
+**Action:** demoted `mcmc_dynamic_hmc`, `mcmc_ghmc`, `mcmc_mclmc`
+back to `experimental` and tagged `mcmc_ghmc` / `mcmc_mclmc` with
+`[POOR MIXING]` in `short_doc`. `mcmc_hmc` stays primary with a
+docstring requirement to use `dense_mass_matrix=True`, `n_warmup≥1000`,
+`n_leapfrog_steps≥20` for convergence — the defaults that the round-1
+speed sweep used (`n_warmup=100`, `dense_mass_matrix=False`) gave
+junk chains.
+
+Why `mcmc_hmc` works while `mcmc_dynamic_hmc` doesn't, despite both
+being from BlackJAX: the static HMC's fixed `n_leapfrog_steps=20`
+trajectory was long enough to cross the SED-degeneracy banana,
+whereas `dynamic_hmc`'s adaptive trajectory tuning at BlackJAX
+defaults underestimates the required path length on these
+correlated geometries. Investigating per-backend defaults that
+match the SED geometry is a follow-up.
+
+The same caveat that flagged this sweep also applies looking
+forward: numbers from `validate_backends_231.py` measure wiring +
+speed + memory, NOT posterior quality. Always run
+`posterior.check_convergence()` plus a split-R-hat / ESS check
+before publishing.
