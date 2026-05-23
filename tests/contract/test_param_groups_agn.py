@@ -534,3 +534,71 @@ class TestUniversalKeyValidator:
                 },
                 redshift=Fixed(0.1),
             )
+
+
+class TestComposableAGNRuntimeWiring:
+    """Regression: composable AGN block selectors must reach the runtime
+    forward model, not just the spec. Issue #258.
+
+    Before this PR, ``AGNSEDComponent.apply`` called
+    ``composable_agn_l_nu(wave, agn_log_lbol=..., agn_frac=..., ...)``
+    without the five block selectors. Every block defaulted to
+    ``"none"`` and the composable AGN SED came out identically zero
+    regardless of the user's spec. The bug was downstream of
+    parameter resolution — the spec showed the right block selectors,
+    but the runtime never read them.
+
+    These tests verify (a) the AGNSEDComponentConfig now carries the
+    selectors and (b) the composable AGN actually produces non-zero
+    SED through the standard ``SEDModel.build → predict_rest_sed`` path.
+    Needs SSP data; skips when unavailable.
+    """
+
+    def _build_composable_model(self):
+        import pathlib
+
+        ssp_path = (
+            pathlib.Path(__file__).parents[2]
+            / "data"
+            / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+        )
+        if not ssp_path.exists():
+            pytest.skip(f"SSP file not available at {ssp_path}")
+
+        import tengri
+
+        return tengri.SEDModel.build(
+            tengri.load_ssp(),
+            sfh={"type": "const", "*": FIXED, "log_sfr": -10.0},
+            dust={"type": "two_component", "*": FIXED, "tau_diff": 0, "tau_bc": 0},
+            agn={
+                "type": "composable",
+                "*": FIXED,
+                "frac": 1.0,
+                "log_lbol": 12.5,
+                "disc": {"type": "multicolor", "*": FIXED},
+                "torus": {"type": "skirtor", "*": FIXED},
+                "lines": {"type": "nlr", "*": FIXED},
+            },
+            redshift=Fixed(0.05),
+        )
+
+    def test_composable_agn_emits_nonzero_sed(self):
+        """``predict_rest_sed`` on a composable-AGN model must produce a
+        non-zero SED dominated by the AGN (BBB peak in the UV)."""
+        import jax
+        import numpy as np
+
+        model = self._build_composable_model()
+        p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+        result = model.predict_rest_sed(p)
+        sed = np.asarray(result.sed)
+        wave = np.asarray(result.wavelength)
+        peak_nu_L = (2.998e18 / wave * sed).max()
+        # AGN BBB should dominate at ~1e46 erg/s. The stellar host-Hα floor
+        # is ~1e34 — we set a safety margin of 1e40 to detect the AGN even
+        # if the disc model implementation drifts slightly.
+        assert peak_nu_L > 1e40, (
+            f"composable AGN appears suppressed: peak ν·L = {peak_nu_L:.3e}; "
+            "block selectors may not be reaching the runtime."
+        )

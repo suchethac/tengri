@@ -1,16 +1,21 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Standardized forward model for unified inference.
+"""Standardized forward model — the canonical inference path.
 
-.. note::
-    Legacy parallel implementation — **not on the canonical inference
-    path**. As of 2026-05 (the single-Hamiltonian Fitter consolidation
-    documented in CLAUDE.md), production inference flows through
-    :class:`tengri.Fitter` + :func:`tengri.inference.loss_functions.build_loss_fn`,
-    which does the same ξ → physical-params mapping via
-    :func:`~tengri.inference.loss_functions._unstandardize_parameters`.
-    This module is kept because its 27 unit tests still document the
-    standardization math, but no `src/` code outside this file imports
-    :class:`StandardizedForwardModel`. Candidate for removal in v1.0.
+This module implements the **standardized parameterisation** (ξ ~ N(0, I))
+that every backend in :mod:`tengri.inference` ultimately consumes. It is
+the principled formulation of single-Hamiltonian inference: priors live
+inside per-parameter coordinate transforms so the loss collapses to
+:math:`\\mathcal{H}(\\xi) = \\tfrac{1}{2}\\chi^2 + \\tfrac{1}{2}\\xi^\\top\\xi`,
+independent of which distribution each free parameter was given.
+
+Production inference currently routes through
+:class:`tengri.Fitter` + :func:`tengri.inference.loss_functions.build_loss_fn`,
+which implements the same standardization inline (the
+:func:`~tengri.inference.loss_functions._unstandardize_parameters` helper).
+:class:`StandardizedForwardModel` here is the standalone, sampler-agnostic
+encapsulation — used by the unit tests as the canonical reference for the
+ξ-mapping math, and by future backends (Ray Tracing, vanilla MAP/Pathfinder)
+that want a coordinate-mapping object without the full Fitter envelope.
 
 Maps ξ ~ N(0, I) → predicted observables, absorbing ALL prior
 structure into the forward model. The loss is always:

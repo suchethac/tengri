@@ -62,12 +62,26 @@ class AGNSEDComponentConfig(SEDComponentConfig):
         AGN model registry key. One of ``"multicolor_agn"`` (Kubota & Done
         outer-zone disc + 2-T torus), ``"kubota_done_full"`` (full 3-zone
         disc), ``"adaf"``, ``"unified_nlr_blr"``, ``"skirtor"``,
-        ``"silva04"``, ``"cat3d_wind"``, ``"relagn"``, ``"qsogen"``.
+        ``"silva04"``, ``"cat3d_wind"``, ``"relagn"``, ``"qsogen"``, or
+        ``"composable"`` (block-composed via the selectors below).
         Default ``"multicolor_agn"``.
+    agn_disc_block, agn_torus_block, agn_lines_block, agn_feii_block,
+    agn_attenuation_block : str
+        Composable-AGN block selectors. Only consulted when
+        ``model == "composable"`` — the runner reads them from this config
+        (they are static strings, not traced JAX values, so they cannot
+        ride in ``params``). Each defaults to ``"none"`` so non-composable
+        AGN models receive harmless no-op selectors that the underlying
+        registry function absorbs via ``**kwargs``.
     """
 
     name: str = "agn"
     model: str = "multicolor_agn"
+    agn_disc_block: str = "none"
+    agn_torus_block: str = "none"
+    agn_lines_block: str = "none"
+    agn_feii_block: str = "none"
+    agn_attenuation_block: str = "none"
 
 
 @dataclass(frozen=True)
@@ -251,7 +265,14 @@ class AGNSEDComponent:
             agn_data = template_data.get("agn")
             if agn_data is not None and isinstance(agn_data, dict):
                 skirtor_template = agn_data.get("skirtor")
-        # Build kwargs, adding _template for SKIRTOR threading if available
+        # Build kwargs, adding _template for SKIRTOR threading if available.
+        # The agn_kwargs dict is built in two passes:
+        #   1. Explicit defaults for the AGN params the registered models
+        #      most commonly read (kept here so missing keys don't break
+        #      multicolor / skirtor / kubota_done at trace time).
+        #   2. Forward every additional ``agn_*`` key from ``params`` so
+        #      block-specific params (skirtor, grahsp, cat3d_wind, etc.)
+        #      reach the registered function via its ``**kwargs`` tail.
         agn_kwargs = {
             "agn_frac": jnp.asarray(params.get("agn_frac", 1.0)),
             "agn_alpha": jnp.asarray(params.get("agn_alpha", -1.0)),
@@ -269,6 +290,23 @@ class AGNSEDComponent:
             "agn_polar_oa": jnp.asarray(params.get("agn_polar_oa", 40.0)),
             "agn_ebv_disc": jnp.asarray(params.get("agn_ebv_disc", 0.0)),
         }
+        # Sweep every remaining ``agn_*`` key in params (skirtor / grahsp /
+        # kubota_done full-disc / cat3d_wind / radiation-physics extras)
+        # through to the model function. ``agn_log_lbol`` is passed
+        # explicitly below and so excluded here.
+        for key, val in params.items():
+            if key.startswith("agn_") and key != "agn_log_lbol" and key not in agn_kwargs:
+                agn_kwargs[key] = jnp.asarray(val)
+        # Composable-AGN block selectors are static Python strings (not
+        # traced JAX values). They live on the config so the runner can
+        # close over them at trace-build time and pick the right per-stage
+        # callable. For non-composable AGN models the registered function
+        # absorbs them via ``**kwargs`` and they have no effect.
+        agn_kwargs["agn_disc_block"] = self.config.agn_disc_block
+        agn_kwargs["agn_torus_block"] = self.config.agn_torus_block
+        agn_kwargs["agn_lines_block"] = self.config.agn_lines_block
+        agn_kwargs["agn_feii_block"] = self.config.agn_feii_block
+        agn_kwargs["agn_attenuation_block"] = self.config.agn_attenuation_block
         if skirtor_template is not None:
             agn_kwargs["_template"] = skirtor_template
 
