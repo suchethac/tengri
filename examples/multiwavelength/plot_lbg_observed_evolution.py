@@ -1,0 +1,83 @@
+"""
+Observed SED of a Lyman-break galaxy at z = 2, 4, 6, 8
+========================================================
+
+A single intrinsic LBG (young dust-poor star-forming galaxy) shown in
+the observer frame at four redshifts. The Lyman break sweeps redward
+into the *u-* and then *g-* and *r-*band dropout regimes, the
+Inoue+2014 IGM transmission removes more and more flux blueward of
+Lyα, and the apparent magnitude faint-end falls by ~2.5 mag from
+``z = 2 → 8`` due to luminosity distance alone.
+
+This is the figure that motivates how each dropout band is chosen for
+each redshift bracket — *u* dropout at ``z ~ 3``, *g* at ``z ~ 4-5``,
+*r* at ``z ~ 6``, *i / z* at ``z ~ 7-8``.
+"""
+
+import warnings
+
+import jax
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+REDSHIFTS = [2.0, 4.0, 6.0, 8.0]
+COLORS = plt.cm.viridis(np.linspace(0.05, 0.85, len(REDSHIFTS)))
+
+C_AA_PER_S = 2.998e18
+ssp = tengri.load_ssp()
+
+fig, ax = plt.subplots(figsize=(7.6, 4.8))
+
+ANCHOR_OBS_AA = 18000.0  # NIR anchor where the LBG continuum is clean at all z
+for z, color in zip(REDSHIFTS, COLORS):
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh={"type": "dpl", "*": tengri.FIXED,
+             "tau_gyr": 0.2, "log_peak_sfr": 1.5,
+             "alpha": 3.0, "beta": 2.0},
+        dust={"type": "two_component", "*": tengri.FIXED,
+              "tau_diff": 0.1, "tau_bc": 0.1},
+        igm={"type": "inoue14"},
+        redshift=tengri.Fixed(z),
+    )
+    p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    out = model.predict_rest_sed(p)
+    wave_rest = np.asarray(out.wavelength)
+    wave_obs = wave_rest * (1.0 + z)
+    nu_obs = C_AA_PER_S / wave_obs
+    nu_f_nu = nu_obs * np.asarray(out.sed)
+    # Normalise at the NIR anchor so each curve sits at the same level on
+    # the continuum — the only differences visible are the IGM trough and
+    # the Lyman/Lyα features moving redward with z.
+    i_a = int(np.argmin(np.abs(wave_obs - ANCHOR_OBS_AA)))
+    nu_f_nu = nu_f_nu / nu_f_nu[i_a]
+    ax.loglog(wave_obs, nu_f_nu, color=color, lw=1.5, label=f"$z = {z:g}$")
+
+# Mark the canonical SDSS / Euclid dropout bands as shaded bars.
+BANDS = [
+    ("u",     3000, 4000, "#3355bb"),
+    ("g",     4000, 5500, "#33bb55"),
+    ("r",     5500, 7000, "#bb3333"),
+    ("i",     7000, 8500, "#bb6633"),
+    ("z",     8500, 10000, "#9933bb"),
+    ("Y/J",   10000, 14000, "#553388"),
+    ("H",     14000, 19000, "#225588"),
+]
+for name, lo, hi, color in BANDS:
+    ax.axvspan(lo, hi, color=color, alpha=0.08, lw=0)
+    ax.text(0.5 * (lo + hi), 3.0, name, ha="center", fontsize=8, color="0.35")
+
+ax.set_xlim(1500, 2e4)
+ax.set_ylim(1e-3, 5.0)
+ax.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]")
+ax.set_ylabel(r"$\nu L_\nu\,/\,\nu L_\nu(1.8\,\mu\mathrm{m})$")
+ax.legend(frameon=False, fontsize=9, loc="lower right")
+
+fig.tight_layout()
+fig.savefig("plot_lbg_observed_evolution.png", dpi=150, bbox_inches="tight")

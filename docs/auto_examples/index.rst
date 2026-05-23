@@ -753,6 +753,23 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The parametric SFH atlas (``plot_sfh_form_compare.py``) shows seven classical analytic SFH shapes. Beyond those, tengri ships three non-parametric families that bin the mass formed in successive lookback intervals — useful when the data resolve more than ~5 SFR bins and you want a flexible prior that doesn&#x27;t impose a strong shape.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_sfh_nonparametric_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_sfh_nonparametric_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Non-parametric SFH families compared</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Four quenching scenarios—constant SFR, exponential decline, sharp truncation, and recent burst—produce distinct SED shapes. Constant SFR yields a young, blue galaxy; sharp quenching creates old red colors; a recent burst injects young stars atop an old population. The SED reveals the full assembly history.">
 
 .. only:: html
@@ -2780,6 +2797,23 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">FIR–radio correlation across IR luminosity and spectral shape</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A single intrinsic LBG (young dust-poor star-forming galaxy) shown in the observer frame at four redshifts. The Lyman break sweeps redward into the u- and then g- and r-band dropout regimes, the Inoue+2014 IGM transmission removes more and more flux blueward of Lyα, and the apparent magnitude faint-end falls by ~2.5 mag from z = 2 → 8 due to luminosity distance alone.">
+
+.. only:: html
+
+  .. image:: /auto_examples/multiwavelength/images/thumb/sphx_glr_plot_lbg_observed_evolution_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/multiwavelength/plot_lbg_observed_evolution`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Observed SED of a Lyman-break galaxy at z = 2, 4, 6, 8</div>
     </div>
 
 

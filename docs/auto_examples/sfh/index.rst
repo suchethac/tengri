@@ -255,6 +255,23 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The parametric SFH atlas (``plot_sfh_form_compare.py``) shows seven classical analytic SFH shapes. Beyond those, tengri ships three non-parametric families that bin the mass formed in successive lookback intervals — useful when the data resolve more than ~5 SFR bins and you want a flexible prior that doesn&#x27;t impose a strong shape.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_sfh_nonparametric_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_sfh_nonparametric_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Non-parametric SFH families compared</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Four quenching scenarios—constant SFR, exponential decline, sharp truncation, and recent burst—produce distinct SED shapes. Constant SFR yields a young, blue galaxy; sharp quenching creates old red colors; a recent burst injects young stars atop an old population. The SED reveals the full assembly history.">
 
 .. only:: html
@@ -311,6 +328,7 @@ Parametric and stochastic star formation history models.
    /auto_examples/sfh/plot_psd_tau_sweep
    /auto_examples/sfh/plot_sfh_double_burst
    /auto_examples/sfh/plot_sfh_form_compare
+   /auto_examples/sfh/plot_sfh_nonparametric_compare
    /auto_examples/sfh/plot_sfh_quenching_compare
    /auto_examples/sfh/plot_stochastic_sfh
 
