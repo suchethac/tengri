@@ -37,18 +37,7 @@ Models compared (the six production disc selectors under
 - ``powerlaw``     — generic power-law disc
 - ``adaf``         — radiatively inefficient accretion flow (Mahadevan 1997)
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-76
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_disc_compare_001.png
-   :alt: plot agn disc compare
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_disc_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 21-77
 
 .. code-block:: Python
 
@@ -76,15 +65,17 @@ Models compared (the six production disc selectors under
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(DISC_MODELS)))
 
     C_AA_PER_S = 2.998e18
+    SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+
     ssp = tengri.load_ssp()
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
     for (disc, label), color in zip(DISC_MODELS, COLORS):
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_diff": 0.0, "tau_bc": 0.0},
+            sfh=SFH,
+            dust=DUST,
             agn={"disc": {"type": disc, "*": tengri.FIXED},
                  "*": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0},
             redshift=tengri.Fixed(0.05),
@@ -95,10 +86,9 @@ Models compared (the six production disc selectors under
         nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
         ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
 
-    ax.set_xlim(20, 3e5)
-    ax.set_ylim(1e41, 5e47)
-    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-    ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+    ax.set(xlim=(20, 3e5), ylim=(1e41, 5e47),
+           xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+           ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
     ax.axvspan(1, 100, color="0.93", alpha=0.6, lw=0)
     ax.text(30, 2e47, "X-ray", color="0.4", fontsize=8, va="top")
     ax.text(2000, 2e47, "UV/optical BBB", color="0.4", fontsize=8, va="top")
@@ -107,11 +97,6 @@ Models compared (the six production disc selectors under
 
     fig.tight_layout()
     fig.savefig("plot_agn_disc_compare.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 4.871 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_disc_compare.py:

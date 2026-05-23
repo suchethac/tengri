@@ -32,18 +32,7 @@ data come from?" — broad-line decompositions need ``blr``, NLR
 fitters need ``nlr``, NIR/MIR colour fitters need ``torus`` (and
 disc choice barely matters longward of 1 μm), etc.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-108
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_components_breakdown_001.png
-   :alt: plot agn components breakdown
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_components_breakdown_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 16-102
 
 .. code-block:: Python
 
@@ -82,7 +71,6 @@ disc choice barely matters longward of 1 μm), etc.
         return np.asarray(out.wavelength), np.asarray(out.sed)
 
 
-    # Cumulative builds: disc → +torus → +nlr → +blr.
     configs = [
         ("disc only",         (),
          "#8b4513"),
@@ -110,15 +98,11 @@ disc choice barely matters longward of 1 μm), etc.
         gridspec_kw={"hspace": 0.05, "height_ratios": [3, 2]},
     )
 
-    # Top panel: overlay each cumulative build.
     for label, _, color in configs:
         ax_top.loglog(wave, nu * seds[label], color=color, lw=1.5, label=label)
-    ax_top.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
-    ax_top.set_ylim(1e42, 5e46)
+    ax_top.set(ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]", ylim=(1e42, 5e46))
     ax_top.legend(frameon=False, fontsize=8, loc="lower center")
 
-    # Bottom panel: per-block contribution, computed by differencing the
-    # cumulative builds.  Stacked as a step plot.
     disc_only       = seds["disc only"]
     torus_contrib   = seds["+ torus (SKIRTOR)"] - disc_only
     nlr_contrib     = seds["+ NLR"]              - seds["+ torus (SKIRTOR)"]
@@ -132,18 +116,12 @@ disc choice barely matters longward of 1 μm), etc.
                   color="#5588cc", lw=1.2, label="NLR lines")
     ax_bot.loglog(wave, nu * np.where(blr_contrib > 0, blr_contrib, np.nan),
                   color="#4477aa", lw=1.2, ls=":", label="BLR lines")
-    ax_bot.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-    ax_bot.set_ylabel(r"$\nu L_\nu^{\rm block}$  [erg s$^{-1}$]")
-    ax_bot.set_xlim(80, 2e6)
-    ax_bot.set_ylim(1e42, 5e46)
+    ax_bot.set(xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+               ylabel=r"$\nu L_\nu^{\rm block}$  [erg s$^{-1}$]",
+               xlim=(80, 2e6), ylim=(1e42, 5e46))
     ax_bot.legend(frameon=False, fontsize=8, loc="lower right")
 
     fig.savefig("plot_agn_components_breakdown.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.070 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_components_breakdown.py:

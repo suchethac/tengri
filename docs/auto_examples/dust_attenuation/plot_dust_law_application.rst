@@ -36,18 +36,7 @@ Laws cover starburst (Calzetti, Conroy+10, Salim+18, Narayanan+18,
 TEA), extinction-curve (Cardelli MW, SMC, LMC, Pei 1992),
 grain-physics (Draine 2003, WD01), and birth-cloud (Wild+07).
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-95
-
-
-
-.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_law_application_001.png
-   :alt: plot dust law application
-   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_law_application_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 20-92
 
 .. code-block:: Python
 
@@ -78,15 +67,15 @@ grain-physics (Draine 2003, WD01), and birth-cloud (Wild+07).
     COLORS = plt.cm.tab10(np.linspace(0.0, 0.9, len(LAWS)))
 
     C_AA_PER_S = 2.998e18
+    SFH = {"type": "tsnorm", "*": tengri.FIXED, "peak_lbt_gyr": 2.0,
+           "width_gyr": 1.0, "log_peak_sfr": 1.0, "skew": 0.0, "trunc": 13.0}
+
     ssp = tengri.load_ssp()
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
-    # Intrinsic SED reference (tau_diff = 0)
     ref_model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "tsnorm", "*": tengri.FIXED, "peak_lbt_gyr": 2.0,
-             "width_gyr": 1.0, "log_peak_sfr": 1.0,
-             "skew": 0.0, "trunc": 13.0},
+        sfh=SFH,
         dust={"type": "two_component", "law_diff": "calzetti",
               "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(0.05),
@@ -102,9 +91,7 @@ grain-physics (Draine 2003, WD01), and birth-cloud (Wild+07).
         try:
             model = tengri.SEDModel.build(
                 ssp,
-                sfh={"type": "tsnorm", "*": tengri.FIXED, "peak_lbt_gyr": 2.0,
-                     "width_gyr": 1.0, "log_peak_sfr": 1.0,
-                     "skew": 0.0, "trunc": 13.0},
+                sfh=SFH,
                 dust={"type": "two_component", "law_diff": law,
                       "*": tengri.FIXED, "tau_diff": 1.0, "tau_bc": 0.3},
                 redshift=tengri.Fixed(0.05),
@@ -115,10 +102,9 @@ grain-physics (Draine 2003, WD01), and birth-cloud (Wild+07).
         sed = np.asarray(model.predict_rest_sed(p).sed)
         ax.loglog(wave, nu * sed, color=color, lw=1.4, label=label)
 
-    ax.set_xlim(900, 3e4)
-    ax.set_ylim(1e40, 8e43)
-    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-    ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+    ax.set(xlim=(900, 3e4), ylim=(1e40, 8e43),
+           xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+           ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
     ax.axvline(2175, color="0.55", lw=0.4, ls=":")
     ax.text(2175, 1.5e40, "2175 Å bump", fontsize=8, color="0.4",
             rotation=90, va="bottom", ha="right")

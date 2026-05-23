@@ -25,29 +25,7 @@ The Lyα-specific escape fraction ``f_esc_lya`` sets what fraction of Lyα
 photons can escape the ISM without scattering. Higher ``f_esc_lya`` suppresses
 the Lyα emission line while leaving other nebular lines unchanged.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-75
-
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_fesc_lya_sweep_001.png
-   :alt: plot fesc lya sweep
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_fesc_lya_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/.claude-squad/worktrees/cs/examples-sweep_18b2090a1299ea18/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 9-71
 
 .. code-block:: Python
 
@@ -68,17 +46,14 @@ the Lyα emission line while leaving other nebular lines unchanged.
     warnings.filterwarnings("ignore", message=".*deprecated.*")
 
     ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
+    SFH = {"type": "dpl", "*": tengri.FIXED,
+           "alpha": 3.0, "beta": 2.0, "tau_gyr": 0.3, "log_peak_sfr": 1.5}
+    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1}
+
     model = tengri.SEDModel.build(
         ssp,
-        sfh={
-            "type": "dpl",
-            "*": tengri.FIXED,
-            "alpha": 3.0,
-            "beta": 2.0,
-            "tau_gyr": 0.3,
-            "log_peak_sfr": 1.5,
-        },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
+        sfh=SFH,
+        dust=DUST,
         neb={"type": "cue", "*": tengri.FIXED, "neb_fesc_lya": tengri.Uniform(0.0, 1.0)},
         redshift=tengri.Fixed(0.05),
     )
@@ -104,10 +79,9 @@ the Lyα emission line while leaving other nebular lines unchanged.
             ymin = min(ymin, float(np.min(pos)))
         ax.semilogy(wave, nu_l_nu, color=cmap(norm(fesc_lya)), lw=1.4)
 
-    ax.set_xlim(1100, 1300)
-    ax.set_ylim(0.3 * ymin, 3.0 * ymax)
-    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-    ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+    ax.set(xlim=(1100, 1300), ylim=(0.3 * ymin, 3.0 * ymax),
+           xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+           ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
     ax.axvline(1215.67, color="0.55", lw=0.5, ls=":")
     ax.text(1215.67, ymax * 0.4, r"Ly$\alpha$",
             color="0.4", fontsize=8, rotation=90, va="center", ha="right")
@@ -117,11 +91,6 @@ the Lyα emission line while leaving other nebular lines unchanged.
 
     fig.tight_layout()
     fig.savefig("plot_fesc_lya_sweep.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 10.543 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_fesc_lya_sweep.py:

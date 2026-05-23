@@ -411,7 +411,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The conversion from observed flux to stellar mass — the mass-to-light ratio M/L — depends on stellar age and the photometric band used. For a single-burst stellar population, M/L rises monotonically with age in every band; the rise is steepest in the blue, where massive bright stars dominate young populations, and shallowest in the K band, where light is dominated by red giants at every age past ~1 Gyr.">
+    <div class="sphx-glr-thumbcontainer" tooltip="M_★/L_band rises with stellar age in every band; the rise is steepest in g, where massive young stars dominate, and shallowest in K_s, where red giants contribute at every age past the first ~100 Myr.">
 
 .. only:: html
 
@@ -2608,6 +2608,23 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="For a young high-z galaxy, the [O III]+Hβ complex can boost the broadband flux by several tenths of a magnitude when it lands inside a wide filter. We mock the same young SF galaxy at z = 1, 3, 6 and show the JWST NIRCam F277W / F356W / F444W flux with and without the nebular block on, so the reader can see which redshift puts which strong line where.">
+
+.. only:: html
+
+  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_emission_line_contamination_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/photometry/plot_emission_line_contamination`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Emission-line contamination of broadband photometry</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Plot the ugriz filter transmission curves from the SDSS photometric system. Filters are loaded from the SVO Filter Profile Service via tengri&#x27;s filter registry.">
 
 .. only:: html
@@ -2836,7 +2853,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Six physics blocks evaluated one at a time on the same baseline galaxy so the reader sees what each component contributes to a panchromatic SED. Use this card to ask &quot;if my data only constrain wavelength X, which component(s) matter?&quot;">
+    <div class="sphx-glr-thumbcontainer" tooltip="Six physics blocks added cumulatively to the same star-forming host so the contribution of each is visible at every wavelength.">
 
 .. only:: html
 
@@ -2967,6 +2984,23 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Rest-to-observer-frame transformation of panchromatic SEDs with redshift</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="An archetype obscured starburst built up from the tengri component toolkit: a 100 Myr ongoing burst with τ_diff = 2 mag of diffuse dust and a 1 mag birth-cloud opacity. The Dale+2014 IR template re-emits the absorbed UV/optical power into a 60 μm peak; the Condon-92 radio extends to the GHz with the right FIR–radio ratio; the SDSS r-band sits ~3 magnitudes below the FIR peak because almost all the UV/optical has been reprocessed.">
+
+.. only:: html
+
+  .. image:: /auto_examples/multiwavelength/images/thumb/sphx_glr_plot_ulirg_arp220_analog_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/multiwavelength/plot_ulirg_arp220_analog`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Arp 220 analog: panchromatic SED of a heavily obscured ULIRG</div>
     </div>
 
 

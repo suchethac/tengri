@@ -34,18 +34,7 @@ not shipped with the gallery):
 - ``blr``     — Broad-line region (Cracco+2016 photoionization grid)
 - ``qsogen``  — Temple+2021 empirical type-1 lines
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-87
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_lines_compare_001.png
-   :alt: plot agn lines compare
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_lines_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 18-86
 
 .. code-block:: Python
 
@@ -70,15 +59,17 @@ not shipped with the gallery):
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.9, len(LINES_MODELS)))
 
     C_AA_PER_S = 2.998e18
+    SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+
     ssp = tengri.load_ssp()
     fig, ax = plt.subplots(figsize=(7.4, 4.6))
 
     for (line_kind, label), color in zip(LINES_MODELS, COLORS):
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_diff": 0.0, "tau_bc": 0.0},
+            sfh=SFH,
+            dust=DUST,
             agn={
                 "disc":  {"type": "multicolor", "*": tengri.FIXED},
                 "torus": {"type": "skirtor",    "*": tengri.FIXED},
@@ -93,13 +84,10 @@ not shipped with the gallery):
         nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
         ax.semilogy(wave, nu_l_nu, color=color, lw=1.0, label=label, alpha=0.85)
 
-    # Zoom on the rest-frame optical/UV where the lines actually live.
-    ax.set_xlim(1000, 7500)
-    ax.set_ylim(1e44, 5e46)
-    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-    ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+    ax.set(xlim=(1000, 7500), ylim=(1e44, 5e46),
+           xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+           ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
 
-    # Mark the canonical AGN lines.
     LINE_MARKS = [
         (1216, r"Ly$\alpha$"),
         (1549, "C IV"),
@@ -118,11 +106,6 @@ not shipped with the gallery):
 
     fig.tight_layout()
     fig.savefig("plot_agn_lines_compare.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.481 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_lines_compare.py:

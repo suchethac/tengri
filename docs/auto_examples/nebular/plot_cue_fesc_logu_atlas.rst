@@ -32,29 +32,7 @@ Cue (Li, Leja & Speagle 2023) on a young SF galaxy with a bare-stellar
 SSP (the wNE grids bake nebular emission in at fixed conditions and
 cannot vary these knobs).
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-93
-
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_cue_fesc_logu_atlas_001.png
-   :alt: plot cue fesc logu atlas
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_cue_fesc_logu_atlas_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/.claude-squad/worktrees/cs/examples-sweep_18b2090a1299ea18/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 16-96
 
 .. code-block:: Python
 
@@ -76,12 +54,15 @@ cannot vary these knobs).
     LOGU_GRID = np.linspace(-3.8, -1.5, 22)
 
     ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
+    SFH = {"type": "dpl", "*": tengri.FIXED, "tau_gyr": 0.3,
+           "log_peak_sfr": 1.5, "alpha": 3.0, "beta": 2.0}
+    DUST = {"type": "two_component", "*": tengri.FIXED,
+            "tau_diff": 0.05, "tau_bc": 0.1}
+
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 0.3,
-             "log_peak_sfr": 1.5, "alpha": 3.0, "beta": 2.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.05, "tau_bc": 0.1},
+        sfh=SFH,
+        dust=DUST,
         neb={"type": "cue", "*": tengri.FIXED,
              "fesc": tengri.Uniform(0.0, 1.0),
              "logU": tengri.Uniform(-4.0, -1.0)},
@@ -135,11 +116,6 @@ cannot vary these knobs).
         fig.colorbar(mesh, ax=ax, pad=0.02)
 
     fig.savefig("plot_cue_fesc_logu_atlas.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (1 minutes 6.025 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_cue_fesc_logu_atlas.py:

@@ -36,7 +36,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The conversion from observed flux to stellar mass — the mass-to-light ratio M/L — depends on stellar age and the photometric band used. For a single-burst stellar population, M/L rises monotonically with age in every band; the rise is steepest in the blue, where massive bright stars dominate young populations, and shallowest in the K band, where light is dominated by red giants at every age past ~1 Gyr.">
+    <div class="sphx-glr-thumbcontainer" tooltip="M_★/L_band rises with stellar age in every band; the rise is steepest in g, where massive young stars dominate, and shallowest in K_s, where red giants contribute at every age past the first ~100 Myr.">
 
 .. only:: html
 

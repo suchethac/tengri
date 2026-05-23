@@ -20,7 +20,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Six physics blocks evaluated one at a time on the same baseline galaxy so the reader sees what each component contributes to a panchromatic SED. Use this card to ask &quot;if my data only constrain wavelength X, which component(s) matter?&quot;">
+    <div class="sphx-glr-thumbcontainer" tooltip="Six physics blocks added cumulatively to the same star-forming host so the contribution of each is visible at every wavelength.">
 
 .. only:: html
 
@@ -154,6 +154,23 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="An archetype obscured starburst built up from the tengri component toolkit: a 100 Myr ongoing burst with τ_diff = 2 mag of diffuse dust and a 1 mag birth-cloud opacity. The Dale+2014 IR template re-emits the absorbed UV/optical power into a 60 μm peak; the Condon-92 radio extends to the GHz with the right FIR–radio ratio; the SDSS r-band sits ~3 magnitudes below the FIR peak because almost all the UV/optical has been reprocessed.">
+
+.. only:: html
+
+  .. image:: /auto_examples/multiwavelength/images/thumb/sphx_glr_plot_ulirg_arp220_analog_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/multiwavelength/plot_ulirg_arp220_analog`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Arp 220 analog: panchromatic SED of a heavily obscured ULIRG</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -172,4 +189,5 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
    /auto_examples/multiwavelength/plot_panchromatic_dust_balance
    /auto_examples/multiwavelength/plot_panchromatic_galaxy
    /auto_examples/multiwavelength/plot_panchromatic_redshift_sweep
+   /auto_examples/multiwavelength/plot_ulirg_arp220_analog
 

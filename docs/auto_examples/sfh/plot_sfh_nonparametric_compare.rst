@@ -38,18 +38,7 @@ reference. The dispersion of each family is the visual prior — wide
 clouds mean the form is permissive, narrow clouds mean the form is
 restrictive.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-85
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_sfh_nonparametric_compare_001.png
-   :alt: plot sfh nonparametric compare
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_sfh_nonparametric_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 22-83
 
 .. code-block:: Python
 
@@ -77,7 +66,6 @@ restrictive.
     fig, axes = plt.subplots(1, 3, figsize=(11.5, 4.0), sharex=True, sharey=True,
                              gridspec_kw={"wspace": 0.08})
 
-    # Reference parametric SFH for visual anchor.
     ref = tengri.SEDModel.build(
         ssp, sfh={"type": "dpl", "*": tengri.FIXED}, redshift=tengri.Fixed(0.0)
     )
@@ -85,7 +73,6 @@ restrictive.
     sfh_ref = ref.predict_sfh(p_ref)
     t_ref = np.asarray(sfh_ref["t_gyr"])
     sfr_ref = np.asarray(sfh_ref["sfr_mean"])
-    # Normalise by total stellar mass.
     mass_ref = np.trapezoid(sfr_ref, t_ref * 1.0e9)
     sfr_ref = sfr_ref / mass_ref if mass_ref > 0 else sfr_ref
 
@@ -116,11 +103,6 @@ restrictive.
     axes[0].legend(frameon=False, fontsize=8, loc="lower left")
 
     fig.savefig("plot_sfh_nonparametric_compare.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.673 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_sfh_nonparametric_compare.py:

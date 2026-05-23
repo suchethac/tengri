@@ -42,15 +42,17 @@ TORI = [
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(TORI)))
 
 C_AA_PER_S = 2.998e18
+SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+
 ssp = tengri.load_ssp()
 fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
 for (torus, label), color in zip(TORI, COLORS):
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.0, "tau_bc": 0.0},
+        sfh=SFH,
+        dust=DUST,
         agn={
             "disc":  {"type": "multicolor", "*": tengri.FIXED},
             "torus": {"type": torus,        "*": tengri.FIXED},
@@ -64,11 +66,9 @@ for (torus, label), color in zip(TORI, COLORS):
     nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
     ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
 
-ax.set_xlim(1e3, 3e6)
-ax.set_ylim(1e42, 5e46)
-ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
-# Annotate MIR/FIR band markers
+ax.set(xlim=(1e3, 3e6), ylim=(1e42, 5e46),
+       xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+       ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
 for um, name in [(3.0, "L"), (10.0, "N"), (24.0, "MIPS-24"), (70.0, "FIR")]:
     ax.axvline(um * 1.0e4, color="0.85", lw=0.4, alpha=0.6)
     ax.text(um * 1.0e4, 5e46 * 0.5, f"{name}", fontsize=7, color="0.5",

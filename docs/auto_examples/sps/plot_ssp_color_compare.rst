@@ -33,18 +33,7 @@ TP-AGB treatment, where BC03 and FSPS-MIST differ most).
 This is the systematic an SED fitter inherits from its assumed SSP
 grid even before any prior or noise is involved.
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-93
-
-
-
-.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_ssp_color_compare_001.png
-   :alt: plot ssp color compare
-   :srcset: /auto_examples/sps/images/sphx_glr_plot_ssp_color_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 17-94
 
 .. code-block:: Python
 
@@ -80,21 +69,22 @@ grid even before any prior or noise is involved.
 
     obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 
-    # Per-library colors
     data = {}
     for ssp_name, label in LIBRARIES:
         try:
             ssp = tengri.load_ssp(ssp_name)
         except (FileNotFoundError, Exception):
             continue
+        sfh = {"type": "tsnorm", "*": tengri.FIXED,
+               "peak_lbt_gyr": 3.0, "width_gyr": 2.0,
+               "log_peak_sfr": 1.0, "skew": 0.3, "trunc": 10.0}
+        dust = {"type": "two_component", "*": tengri.FIXED,
+                "tau_diff": 0.2, "tau_bc": 0.3, "slope": -0.7}
         model = tengri.SEDModel.build(
             ssp,
             observation=obs,
-            sfh={"type": "tsnorm", "*": tengri.FIXED,
-                 "peak_lbt_gyr": 3.0, "width_gyr": 2.0,
-                 "log_peak_sfr": 1.0, "skew": 0.3, "trunc": 10.0},
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_diff": 0.2, "tau_bc": 0.3, "slope": -0.7},
+            sfh=sfh,
+            dust=dust,
             redshift=tengri.Fixed(0.05),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -124,11 +114,6 @@ grid even before any prior or noise is involved.
 
     fig.tight_layout()
     fig.savefig("plot_ssp_color_compare.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 4.651 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_ssp_color_compare.py:

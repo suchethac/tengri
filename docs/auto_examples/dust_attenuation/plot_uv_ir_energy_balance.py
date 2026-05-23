@@ -46,7 +46,6 @@ def _build(tau_diff):
     )
 
 
-# Pristine baseline (no dust) for the absorbed-UV reference.
 ref_model = _build(0.0)
 p_ref = dict(ref_model.spec.sample(jax.random.PRNGKey(0)))
 out_ref = ref_model.predict_rest_sed(p_ref)
@@ -82,12 +81,10 @@ ax.plot(diag, diag, color="0.55", lw=0.7, ls="--",
         label=r"$L_{\rm IR} = L_{\rm abs}^{\rm UV}$")
 sc = ax.scatter(L_abs, L_ir, c=tau_grid, cmap="viridis",
                 s=44, lw=0.4, edgecolor="0.2", zorder=4)
-ax.set_xscale("log")
-ax.set_yscale("log")
-ax.set_xlim(1e42, 1e46)
-ax.set_ylim(1e42, 1e46)
-ax.set_xlabel(r"$L_{\rm abs}^{\rm UV(912-3000\,\AA)}$  [erg s$^{-1}$]")
-ax.set_ylabel(r"$L_{\rm IR}^{(8-1000\,\mu\mathrm{m})}$  [erg s$^{-1}$]")
+ax.set(xscale="log", yscale="log",
+       xlim=(1e42, 1e46), ylim=(1e42, 1e46),
+       xlabel=r"$L_{\rm abs}^{\rm UV(912-3000\,\AA)}$  [erg s$^{-1}$]",
+       ylabel=r"$L_{\rm IR}^{(8-1000\,\mu\mathrm{m})}$  [erg s$^{-1}$]")
 ax.legend(frameon=False, fontsize=9, loc="upper left")
 cbar = fig.colorbar(sc, ax=ax, pad=0.02)
 cbar.set_label(r"$\tau_{\rm diff}$  [mag]")

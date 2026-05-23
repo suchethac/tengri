@@ -39,29 +39,7 @@ Per-panel summary:
 References:
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue)
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-97
-
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_cue_flex_tour_001.png
-   :alt: plot cue flex tour
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_cue_flex_tour_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/.claude-squad/worktrees/cs/examples-sweep_18b2090a1299ea18/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 23-96
 
 .. code-block:: Python
 
@@ -81,12 +59,15 @@ References:
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
+    SFH = {"type": "dpl", "*": tengri.FIXED, "tau_gyr": 0.3,
+           "log_peak_sfr": 1.5, "alpha": 3.0, "beta": 2.0}
+    DUST = {"type": "two_component", "*": tengri.FIXED,
+            "tau_diff": 0.05, "tau_bc": 0.1}
+
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 0.3,
-             "log_peak_sfr": 1.5, "alpha": 3.0, "beta": 2.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.05, "tau_bc": 0.1},
+        sfh=SFH,
+        dust=DUST,
         neb={"type": "cue", "*": tengri.FIXED,
              "logU": tengri.Uniform(-4.0, -1.0),
              "logZ_gas": tengri.Uniform(-2.0, 0.5),
@@ -101,7 +82,6 @@ References:
     def _halpha_lum(params):
         return float(model.predict_emission_lines(params).halpha)
 
-    # Define the six sweeps: (param_name, label_string, n_values, lower, upper)
     SWEEPS = [
         ("neb_logU", r"$\log\,U$", 7, -3.8, -1.5),
         ("neb_logZ_gas", r"$\log\,Z_{\rm gas}/Z_\odot$", 7, -1.5, 0.4),
@@ -116,9 +96,6 @@ References:
     axes_flat = axes.ravel()
     colors = ["C0", "C1", "C2", "C3", "C4", "C5"]
 
-    # Baseline value for normalisation: each curve plotted as
-    # log10(L_Hα(v) / L_Hα(baseline)) — dimensionless response so weak knobs
-    # read as near-zero while strong knobs show their dynamic range.
     ha_baseline = _halpha_lum(baseline)
 
     for ax_idx, (param_name, label, n_vals, lo, hi) in enumerate(SWEEPS):
@@ -139,11 +116,6 @@ References:
         ax.set_ylabel(r"$\Delta \log_{10}\,L_{\rm H\alpha}$  [dex]", fontsize=9)
 
     fig.savefig("plot_cue_flex_tour.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 14.854 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_cue_flex_tour.py:

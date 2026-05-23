@@ -43,7 +43,6 @@ ssp = tengri.load_ssp()
 fig, axes = plt.subplots(1, 3, figsize=(11.5, 4.0), sharex=True, sharey=True,
                          gridspec_kw={"wspace": 0.08})
 
-# Reference parametric SFH for visual anchor.
 ref = tengri.SEDModel.build(
     ssp, sfh={"type": "dpl", "*": tengri.FIXED}, redshift=tengri.Fixed(0.0)
 )
@@ -51,7 +50,6 @@ p_ref = dict(ref.spec.sample(jax.random.PRNGKey(99)))
 sfh_ref = ref.predict_sfh(p_ref)
 t_ref = np.asarray(sfh_ref["t_gyr"])
 sfr_ref = np.asarray(sfh_ref["sfr_mean"])
-# Normalise by total stellar mass.
 mass_ref = np.trapezoid(sfr_ref, t_ref * 1.0e9)
 sfr_ref = sfr_ref / mass_ref if mass_ref > 0 else sfr_ref
 

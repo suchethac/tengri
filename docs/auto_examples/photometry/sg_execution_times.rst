@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:03.524** total execution time for 7 files **from auto_examples/photometry**:
+**00:04.092** total execution time for 8 files **from auto_examples/photometry**:
 
 .. container::
 
@@ -32,16 +32,19 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_color_tracks_redshift.py` (``plot_color_tracks_redshift.py``)
-     - 00:02.249
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_emission_line_contamination.py` (``plot_emission_line_contamination.py``)
+     - 00:04.092
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_galaxy_with_filters.py` (``plot_galaxy_with_filters.py``)
-     - 00:01.275
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_color_tracks_redshift.py` (``plot_color_tracks_redshift.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_filter_curves.py` (``plot_filter_curves.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_filter_set_comparison.py` (``plot_filter_set_comparison.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_galaxy_with_filters.py` (``plot_galaxy_with_filters.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_photometric_fit.py` (``plot_photometric_fit.py``)
