@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:31.554** total execution time for 169 files **from all galleries**:
+**00:23.807** total execution time for 171 files **from all galleries**:
 
 .. container::
 
@@ -32,11 +32,11 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_compare.py` (``../examples/recipes/plot_recipe_compare.py``)
-     - 00:30.626
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_components_isolated.py` (``../examples/multiwavelength/plot_components_isolated.py``)
+     - 00:20.225
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_spectral_indices_vs_age.py` (``../examples/spectroscopy/plot_spectral_indices_vs_age.py``)
-     - 00:00.928
+   * - :ref:`sphx_glr_auto_examples_sps_plot_mass_to_light_ratios.py` (``../examples/sps/plot_mass_to_light_ratios.py``)
+     - 00:03.582
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
      - 00:00.000
@@ -371,6 +371,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_radio_plot_radio_vs_agn_lbol.py` (``../examples/radio/plot_radio_vs_agn_lbol.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_compare.py` (``../examples/recipes/plot_recipe_compare.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_compare_priors.py` (``../examples/recipes/plot_recipe_compare_priors.py``)
      - 00:00.000
      - 0.0
@@ -441,6 +444,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_spectral_features.py` (``../examples/spectroscopy/plot_spectral_features.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_spectral_indices_vs_age.py` (``../examples/spectroscopy/plot_spectral_indices_vs_age.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_spectrum_fit.py` (``../examples/spectroscopy/plot_spectrum_fit.py``)

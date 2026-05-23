@@ -1,0 +1,106 @@
+"""
+Each tengri SED component shown in isolation
+==============================================
+
+Six physics blocks evaluated one at a time on the same baseline
+galaxy so the reader sees what each component contributes to a
+panchromatic SED. Use this card to ask "if my data only constrain
+wavelength X, which component(s) matter?"
+
+Components (one per panel, all on the same axes):
+- ``stellar``  — bare SSP-weighted stellar continuum (no other block active)
+- ``+ nebular`` — Cue HII region emission added at the source
+- ``+ dust (atten + IR)`` — full Charlot & Fall attenuation + Dale+2014
+  re-emission
+- ``+ AGN``    — composable disc + SKIRTOR torus + NLR overlaid on host
+- ``+ radio``  — Condon-92 GHz synchrotron + free-free
+- ``+ X-ray``  — Mineo HMXB + LMXB X-ray binaries
+"""
+
+import warnings
+
+import jax
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+C_AA_PER_S = 2.998e18
+
+BASE = dict(
+    sfh={"type": "dpl", "*": tengri.FIXED,
+         "tau_gyr": 1.5, "log_peak_sfr": 1.3, "alpha": 2.5, "beta": 2.0},
+    redshift=tengri.Fixed(0.05),
+)
+
+# Each call returns (wave, nu*L_nu) for a model with the given
+# blocks switched on (everything else off).
+def _run(**extra_blocks):
+    bare = tengri.load_ssp("fsps_prsc_miles_chabrier")
+    cfg = {
+        "ssp_data": bare,
+        "dust": {"type": "two_component", "*": tengri.FIXED,
+                 "tau_diff": 0.0, "tau_bc": 0.0},
+        **BASE,
+    }
+    cfg.update(extra_blocks)  # let caller override dust/etc.
+    model = tengri.SEDModel.build(**cfg)
+    p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    out = model.predict_rest_sed(p)
+    wave = np.asarray(out.wavelength)
+    return wave, C_AA_PER_S / wave * np.asarray(out.sed)
+
+
+# Cumulative builds.
+runs = [
+    ("stellar (no extras)", "#666666",
+     _run()),
+    ("+ nebular (Cue)", "#33aa55",
+     _run(neb={"type": "cue", "*": tengri.FIXED})),
+    ("+ dust atten + IR (Charlot & Fall, Dale+14)", "#cc6633",
+     _run(dust={"type": "two_component", "*": tengri.FIXED,
+                "tau_diff": 0.4, "tau_bc": 0.6,
+                "emission": {"type": "dale2014", "*": tengri.FIXED}})),
+    ("+ AGN (multicolor + SKIRTOR + NLR)", "#cc3399",
+     _run(dust={"type": "two_component", "*": tengri.FIXED,
+                "tau_diff": 0.4, "tau_bc": 0.6,
+                "emission": {"type": "dale2014", "*": tengri.FIXED}},
+          agn={"disc":  {"type": "multicolor", "*": tengri.FIXED},
+               "torus": {"type": "skirtor",    "*": tengri.FIXED},
+               "lines": {"type": "nlr",        "*": tengri.FIXED},
+               "*": tengri.FIXED, "log_lbol": 11.5, "frac": 0.5})),
+    ("+ radio (Condon-92)", "#3377cc",
+     _run(dust={"type": "two_component", "*": tengri.FIXED,
+                "tau_diff": 0.4, "tau_bc": 0.6,
+                "emission": {"type": "dale2014", "*": tengri.FIXED}},
+          radio={"type": "condon92", "*": tengri.FIXED})),
+    ("+ X-ray (Mineo XRB)", "#9933cc",
+     _run(dust={"type": "two_component", "*": tengri.FIXED,
+                "tau_diff": 0.4, "tau_bc": 0.6,
+                "emission": {"type": "dale2014", "*": tengri.FIXED}},
+          xray={"type": "simple", "*": tengri.FIXED})),
+]
+
+fig, ax = plt.subplots(figsize=(8.0, 5.0))
+for label, color, (wave, nuL) in runs:
+    ax.loglog(wave, nuL, color=color, lw=1.4, label=label)
+
+# Wavelength region annotations
+for x, name in [(50, "X-ray"), (1000, "UV"), (5500, "optical"),
+                (3e4, "NIR"), (1e5, "MIR"), (1e6, "FIR"),
+                (1e8, "radio")]:
+    ax.text(x, 4e44, name, fontsize=7, color="0.5", ha="center",
+            rotation=0, alpha=0.7)
+
+ax.set_xlim(1e1, 3e9)
+ax.set_ylim(1e35, 1e45)
+ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+ax.legend(frameon=False, fontsize=7.5, loc="lower center", ncol=2)
+
+fig.tight_layout()
+fig.savefig("plot_components_isolated.png", dpi=150, bbox_inches="tight")

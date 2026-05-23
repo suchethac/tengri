@@ -411,6 +411,23 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The conversion from observed flux to stellar mass — the mass-to-light ratio M/L — depends on stellar age and the photometric band used. For a single-burst stellar population, M/L rises monotonically with age in every band; the rise is steepest in the blue, where massive bright stars dominate young populations, and shallowest in the K band, where light is dominated by red giants at every age past ~1 Gyr.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_mass_to_light_ratios_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_mass_to_light_ratios`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Stellar mass-to-light ratios vs SSP age, per band</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Different stellar population synthesis codes use different stellar spectral libraries, isochrone families, and binary treatments. The SED of a ~1 Gyr-old, solar-metallicity simple stellar population already shows visible differences in the UV (BPASS binaries add a hot continuum) and in the NIR (treatment of TP-AGB).">
 
 .. only:: html
@@ -2816,6 +2833,23 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
     <div class="sphx-glr-thumbnails">
 
 .. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Six physics blocks evaluated one at a time on the same baseline galaxy so the reader sees what each component contributes to a panchromatic SED. Use this card to ask &quot;if my data only constrain wavelength X, which component(s) matter?&quot;">
+
+.. only:: html
+
+  .. image:: /auto_examples/multiwavelength/images/thumb/sphx_glr_plot_components_isolated_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/multiwavelength/plot_components_isolated`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Each tengri SED component shown in isolation</div>
+    </div>
+
 
 .. raw:: html
 
