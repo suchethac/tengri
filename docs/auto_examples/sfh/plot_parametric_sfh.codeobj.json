@@ -1,40 +1,4 @@
 {
- "constant": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "constant"
-  }
- ],
- "delayed_exponential": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "delayed_exponential"
-  }
- ],
- "dpl": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "dpl"
-  }
- ],
- "exponential": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "exponential"
-  }
- ],
  "jnp.linspace": [
   {
    "is_class": false,
@@ -44,24 +8,6 @@
    "name": "linspace"
   }
  ],
- "lnorm": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "lnorm"
-  }
- ],
- "norm": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "norm"
-  }
- ],
  "np.array": [
   {
    "is_class": false,
@@ -69,24 +15,6 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "array"
-  }
- ],
- "plt.savefig": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "savefig"
-  }
- ],
- "plt.show": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "show"
   }
  ],
  "plt.subplots": [
@@ -107,7 +35,61 @@
    "name": "setup_style"
   }
  ],
- "snorm": [
+ "tengri.constant": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "constant"
+  }
+ ],
+ "tengri.delayed_exponential": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "delayed_exponential"
+  }
+ ],
+ "tengri.dpl": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "dpl"
+  }
+ ],
+ "tengri.exponential": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "exponential"
+  }
+ ],
+ "tengri.lnorm": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "lnorm"
+  }
+ ],
+ "tengri.norm": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "norm"
+  }
+ ],
+ "tengri.snorm": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -116,13 +98,22 @@
    "name": "snorm"
   }
  ],
- "tsnorm": [
+ "tengri.tsnorm": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
    "name": "tsnorm"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
   }
  ]
 }

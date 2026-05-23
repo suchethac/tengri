@@ -20,6 +20,8 @@ Requires the precomputed grid ``data/relagn_disc_grid.h5``.
 
 """
 
+# TODO: refactor to SEDModel.build API (currently uses low-level internal API)
+
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -116,4 +118,3 @@ fig.tight_layout()
 # the Novikov-Thorne outer disc uses the non-relativistic formula beyond that.
 
 plt.savefig("plot_relagn_spin.png", dpi=150, bbox_inches="tight")
-plt.show()

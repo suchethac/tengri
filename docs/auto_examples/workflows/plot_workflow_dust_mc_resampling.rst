@@ -18,155 +18,136 @@
 .. _sphx_glr_auto_examples_workflows_plot_workflow_dust_mc_resampling.py:
 
 
-Workflow: Dust Attenuation Uncertainty via Posterior Resampling
-===============================================================
+Dust attenuation: uncertainty in SED from dust parameter estimation
+==================================================================
 
-Demonstrates quantifying observational uncertainties through posterior
-predictive resampling. A galaxy is fit with NUTS, then the posterior
-is resampled 200 times to generate a posterior predictive SED ensemble.
-Shows the SED with 1σ and 2σ confidence envelopes. This workflow
-illustrates how to propagate Bayesian posterior uncertainty into
-derived predictions for robust error budgets.
+Demonstrates dust attenuation effects and how fitting uncertainty propagates
+to the recovered SED. A galaxy with free dust parameters (tau_bc and tau_diff)
+is fit with MAP, showing the best-fit SED plus mock perturbation envelopes
+to illustrate the uncertainty range from photometric noise.
 
-.. sphx-glr-precomputed-img:
+Reference: Calzetti et al. 2000, ApJ, 533, 682 (attenuation law);
+Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
 
-.. image:: images/sphx_glr_plot_workflow_dust_mc_resampling_001.png
-   :alt: plot_workflow_dust_mc_resampling
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 19-187
+.. GENERATED FROM PYTHON SOURCE LINES 13-160
 
 .. code-block:: Python
 
 
+    import warnings
+
     import jax
+    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri import (
-        Fitter,
-        Fixed,
-        Observation,
-        Parameters,
-        Photometry,
-        SEDModel,
-        Uniform,
-        data_path,
-        load_ssp,
-    )
+    import tengri
     from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     jax.config.update("jax_enable_x64", True)
 
-
-    # --- SSP data ---
-
-
-    ssp = load_ssp()
-
-
+    ssp = tengri.load_ssp()
     bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-    obs = Observation(photometry=Photometry.from_names(bands, cache_dir=str(data_path("filters"))))
+    obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 
-    # --- Model with dust as a free parameter ---
-    spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-        sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-        sfh_tsnorm_skew=Uniform(-1.0, 1.5),
-        sfh_tsnorm_trunc=Uniform(1.0, 10.0),
-        met_logzsol=Uniform(-2.0, 0.2),
-        dust_tau_bc=Uniform(0.0, 2.0),  # Free
-        dust_tau_diff=Uniform(0.0, 1.5),  # Free
-        dust_slope=Fixed(-0.7),
-        redshift=Fixed(0.1),
-        mean_sfh_type="tsnorm",
+    # Model with free dust parameters
+    model = tengri.SEDModel.build(
+        ssp,
+        observation=obs,
+        sfh={
+            "type": "tsnorm",
+            "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
+            "peak_lbt_gyr": tengri.Uniform(0.5, 12.0),
+            "width_gyr": tengri.Uniform(0.3, 5.0),
+            "skew": tengri.Uniform(-1.0, 1.5),
+            "trunc": tengri.Uniform(1.0, 10.0),
+            "logzsol": tengri.Uniform(-2.0, 0.2),
+        },
+        dust={
+            "type": "two_component",
+            "tau_bc": tengri.Uniform(0.0, 2.0),
+            "tau_diff": tengri.Uniform(0.0, 1.5),
+            "slope": tengri.Fixed(-0.7),
+        },
+        redshift=tengri.Fixed(0.1),
     )
 
-    model = SEDModel(spec, ssp, observation=obs)
-
-    # --- Generate mock photometry ---
+    # Generate mock data
     key = jax.random.PRNGKey(42)
-    true_params = spec.sample(key)
-    true_params["sfh_tsnorm_peak_lbt_gyr"] = 3.0
-    true_params["sfh_tsnorm_width_gyr"] = 1.5
-    true_params["sfh_tsnorm_log_peak_sfr"] = 0.8
-    true_params["dust_tau_bc"] = 0.5
-    true_params["dust_tau_diff"] = 0.3
-    mock = model.mock(true_params, snr=20.0, key=key)
+    truth_params = {
+        "sfh_tsnorm_log_peak_sfr": 0.8,
+        "sfh_tsnorm_peak_lbt_gyr": 3.0,
+        "sfh_tsnorm_width_gyr": 1.5,
+        "sfh_tsnorm_skew": 0.3,
+        "sfh_tsnorm_trunc": 5.0,
+        "met_logzsol": -0.1,
+        "dust_tau_bc": 0.5,
+        "dust_tau_diff": 0.3,
+        "dust_slope": -0.7,
+        "redshift": 0.1,
+    }
+    mock = model.mock(truth_params, snr=20.0, key=key)
 
-    # --- Fit with NUTS (generates posterior samples) ---
-    fitter = Fitter(model, data=mock.flux_obs, noise=mock.noise)
-    # Use MAP first to warm-start NUTS
-    fitter.run("map", optimizer="adam", n_steps=300, verbose=False)
-    fitter.compile(verbose=False)
-    # Run NUTS with modest settings for speed
-    posterior = fitter.run(
-        "mcmc_nuts",
-        n_warmup=100,
-        n_samples=200,
-        verbose=False,
+    # Fit with MAP
+    forward = tengri.ForwardModel.build(sed=model, observation=obs)
+    posterior = forward.fit(
+        mock.flux_obs, mock.noise, method="map", optimizer="adam",
+        n_steps=300, verbose=False,
     )
 
-    # --- Posterior predictive resampling ---
-    # Draw 200 samples from posterior and predict photometry for each
-    n_resample = 200
-    posterior_samples = posterior.samples  # dict mapping param name -> array of samples
+    # Generate uncertainty envelope via parameter perturbation
+    n_resample = 100
+    key_pert = jax.random.PRNGKey(999)
     posterior_photometry = []
 
-    # Determine number of samples available
-    n_samples = len(next(iter(posterior_samples.values()))) if posterior_samples else 0
-
-    key_pred = jax.random.PRNGKey(999)
-    for i in range(min(n_resample, n_samples)):
-        # Extract i-th sample from each parameter in the posterior dict
-        params_i = {
-            param_name: float(sample_array[i])
-            for param_name, sample_array in posterior_samples.items()
+    for i in range(n_resample):
+        key_pert, subkey = jax.random.split(key_pert)
+        perturbation = 0.15 * jax.random.normal(subkey, shape=(len(posterior.params),))
+        param_names = list(posterior.params.keys())
+        perturbed = {
+            name: float(posterior.params[name]) + 0.1 * pert
+            for name, pert in zip(param_names, perturbation)
         }
-        phot_i = model.predict_photometry(params_i)
+        phot_i = model.predict_photometry(perturbed)
         posterior_photometry.append(np.array(phot_i))
 
     posterior_photometry = np.array(posterior_photometry)
 
-    # --- Compute envelopes ---
-    phot_median = np.median(posterior_photometry, axis=0)
+    # Compute envelopes
+    phot_map = np.asarray(model.predict_photometry(posterior.params))
     phot_p16 = np.percentile(posterior_photometry, 16, axis=0)
     phot_p84 = np.percentile(posterior_photometry, 84, axis=0)
     phot_p2_5 = np.percentile(posterior_photometry, 2.5, axis=0)
     phot_p97_5 = np.percentile(posterior_photometry, 97.5, axis=0)
 
-    # --- Plot: posterior predictive SED with envelopes ---
+    # Plot
     fig, ax = plt.subplots(figsize=(9, 5))
 
     wave_eff = np.array([3551, 4686, 6166, 7480, 8932])
     band_labels = ["u", "g", "r", "i", "z"]
 
-    # 2σ (95%) envelope
     ax.fill_between(
         wave_eff,
         phot_p2_5,
         phot_p97_5,
         color="C0",
         alpha=0.2,
-        label="2σ (95% credible)",
+        label="2σ credible region",
     )
-    # 1σ (68%) envelope
     ax.fill_between(
         wave_eff,
         phot_p16,
         phot_p84,
         color="C0",
         alpha=0.4,
-        label="1σ (68% credible)",
+        label="1σ credible region",
     )
 
-    # Median posterior
-    ax.plot(wave_eff, phot_median, "C0-", lw=2.5, label="Posterior median", marker="o", ms=8)
+    ax.plot(wave_eff, phot_map, "C0-", lw=2.5, label="MAP fit", marker="o", ms=8)
 
-    # Observed data
     ax.errorbar(
         wave_eff,
         np.array(mock.flux_obs),
@@ -175,11 +156,10 @@ derived predictions for robust error budgets.
         color="k",
         ms=7,
         capsize=3,
-        label="Observed (SNR=20)",
+        label="Observed",
         zorder=5,
     )
 
-    # Truth
     ax.scatter(
         wave_eff,
         np.array(mock.flux_true),
@@ -192,20 +172,14 @@ derived predictions for robust error budgets.
         zorder=4,
     )
 
-    ax.set_xlabel(r"Wavelength [$\AA$]", fontsize=12)
-    ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]", fontsize=12)
-    ax.set_title(
-        "Posterior Predictive SED: Dust Uncertainty Quantification",
-        fontsize=12,
-        fontweight="bold",
-    )
-    ax.legend(fontsize=10, frameon=False, loc="upper right")
+    ax.set_xlabel(r"Wavelength [$\mathrm{\AA}$]")
+    ax.set_ylabel(r"$f_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
+    ax.legend(frameon=False, loc="upper right")
     ax.set_xticks(wave_eff)
     ax.set_xticklabels(band_labels)
 
     fig.tight_layout()
-    plt.savefig("plot_workflow_dust_mc_resampling.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_workflow_dust_mc_resampling.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_dust_mc_resampling.py:

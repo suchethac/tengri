@@ -17,7 +17,7 @@ Getting started with tengri — first fit and SED visualization.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The shortest tengri workflow: define a parametric SFH + Calzetti dust model, mock SDSS photometry, fit with MAP optimization, overplot. Start here.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The simplest end-to-end tengri workflow. We build a model with a truncated-skew-normal SFH and a two-component Calzetti dust attenuation, mock SDSS ugriz photometry at S/N = 20, then run a MAP fit to recover the input parameters. The figure shows the full rest-frame SED behind the five observed bands and the residuals of the MAP fit relative to the noise level.">
 
 .. only:: html
 
@@ -28,13 +28,13 @@ Getting started with tengri — first fit and SED visualization.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">First Photometric Fit</div>
+      <div class="sphx-glr-thumbnail-title">Recovering a star-forming galaxy from 5-band SDSS photometry</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Predict a galaxy SED at fixed parameters, then re-predict with dust optical depths set to zero. Overplot to see how much UV-optical light the dust absorbed.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Build a model with both stellar and dust components. Predict the full SED with attenuation, then predict without dust absorption to isolate the absorbed UV-optical flux. The filled region shows how much light dust removes from the intrinsic stellar continuum.">
 
 .. only:: html
 
@@ -45,7 +45,7 @@ Getting started with tengri — first fit and SED visualization.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">SED Components</div>
+      <div class="sphx-glr-thumbnail-title">Dust attenuation across the SED: intrinsic, attenuated, and absorbed</div>
     </div>
 
 

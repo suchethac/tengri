@@ -25,27 +25,12 @@ Dust IR SED: q_PAH × U_min Grid
 hardness independently shape the mid- and far-infrared SED. Uses Draine & Li
 2007 templates across parameter space.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_dust_qpah_umin_grid_001.png
-   :alt: plot_dust_qpah_umin_grid
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 16-89
-
-
-
-.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_dust_qpah_umin_grid_001.png
-   :alt: Dust Emission: q$_{\rm PAH}$ × U$_{\rm min}$ Grid (Draine & Li 2007), q$_{\rm PAH}$ = 0.5%, U$_{\rm min}$ = 0.5, q$_{\rm PAH}$ = 2.5%, U$_{\rm min}$ = 0.5, q$_{\rm PAH}$ = 4.5%, U$_{\rm min}$ = 0.5, q$_{\rm PAH}$ = 0.5%, U$_{\rm min}$ = 2.0, q$_{\rm PAH}$ = 2.5%, U$_{\rm min}$ = 2.0, q$_{\rm PAH}$ = 4.5%, U$_{\rm min}$ = 2.0, q$_{\rm PAH}$ = 0.5%, U$_{\rm min}$ = 10.0, q$_{\rm PAH}$ = 2.5%, U$_{\rm min}$ = 10.0, q$_{\rm PAH}$ = 4.5%, U$_{\rm min}$ = 10.0
-   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_dust_qpah_umin_grid_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 9-73
 
 .. code-block:: Python
 
+
+    import warnings
 
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
@@ -55,6 +40,8 @@ hardness independently shape the mid- and far-infrared SED. Uses Draine & Li
     from tengri.dust import draine_li2007
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    warnings.filterwarnings("ignore", message=".*deprecated.*")
 
     wave_aa = jnp.logspace(np.log10(1e4), np.log10(1e7), 2000)
     wave_um = np.array(wave_aa) * 1e-4
@@ -66,11 +53,6 @@ hardness independently shape the mid- and far-infrared SED. Uses Draine & Li
     colors_grid = plt.cm.viridis(np.linspace(0.0, 0.85, 3))
 
     fig, axes = plt.subplots(3, 3, figsize=(15, 13))
-    fig.suptitle(
-        r"Dust Emission: q$_{\rm PAH}$ × U$_{\rm min}$ Grid (Draine & Li 2007)",
-        fontsize=13,
-        y=0.995,
-    )
 
     for i, umin in enumerate(umin_values):
         for j, qpah in enumerate(qpah_values):
@@ -105,20 +87,12 @@ hardness independently shape the mid- and far-infrared SED. Uses Draine & Li
                 ylim=(1e29, 1e32),
             )
             ax.tick_params(labelsize=11)
-
-            ax.set_title(
-                f"q$_{{\\rm PAH}}$ = {qpah:.1f}%, U$_{{\\rm min}}$ = {umin:.1f}",
-                fontsize=13,
-                fontweight="bold",
-            )
-
             if i == 0 and j == 0:
                 for wl_um, _wl_label in [(3, "PAH"), (25, "mid-IR"), (100, "far-IR")]:
                     ax.axvline(wl_um, color="grey", ls=":", lw=0.5, alpha=0.4)
 
     fig.tight_layout()
-    plt.savefig("plot_dust_qpah_umin_grid.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_dust_qpah_umin_grid.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_dust_qpah_umin_grid.py:

@@ -38,21 +38,12 @@ All four are evaluated through ``composable_agn_l_nu`` on the same
 wavelength grid; the headline is that the user only changes selector
 strings between them, not the call site.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-120
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_composable_recipes_001.png
-   :alt: Composable AGN recipes ($\log_{10}(L_\mathrm{bol}/L_\odot) = 12$): same call site, four selector tuples
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_composable_recipes_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 22-121
 
 .. code-block:: Python
 
+
+    # TODO: refactor to SEDModel.build API (currently uses low-level internal API)
 
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
@@ -150,12 +141,6 @@ strings between them, not the call site.
         "same call site, four selector tuples"
     )
     fig.tight_layout()
-    plt.show()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.285 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_composable_recipes.py:

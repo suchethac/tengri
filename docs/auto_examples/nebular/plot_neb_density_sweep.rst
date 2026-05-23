@@ -18,66 +18,72 @@
 .. _sphx_glr_auto_examples_nebular_plot_neb_density_sweep.py:
 
 
-Nebular Gas Density: Metallicity Variation
-===========================================
+Nebular density affects recombination and cooling
+==================================================
 
-Gas phase metallicity affects ionization balance and emission line strengths.
-Higher metallicity increases cooling efficiency, affecting the nebular continuum
-and emission-line ratios through recombination rate changes.
+Nebular gas density controls ionization balance and recombination rates,
+affecting emission line strengths. Higher density increases cooling efficiency,
+shifting line ratios through recombination rate changes.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_neb_density_sweep_001.png
-   :alt: plot_neb_density_sweep
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 16-59
+.. GENERATED FROM PYTHON SOURCE LINES 9-64
 
 .. code-block:: Python
 
 
-    import matplotlib.pyplot as plt
+    import warnings
 
-    from tengri import Fixed, Parameters, SEDModel, load_ssp
-    from tengri.analysis.plotting import setup_style, sweep_parameter
+    import jax
+    import jax.numpy as jnp
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    import tengri
+    from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-
-    ssp = load_ssp()
-
-    # --- Build model: young star-forming galaxy with variable metallicity ---
-    spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-        sfh_tsnorm_peak_lbt_gyr=Fixed(0.5),  # Peak ~500 Myr ago (young)
-        sfh_tsnorm_width_gyr=Fixed(0.3),
-        sfh_tsnorm_skew=Fixed(0.2),
-        sfh_tsnorm_trunc=Fixed(3.0),
-        met_logzsol=Fixed(-0.3),  # Will sweep this
-        dust_tau_bc=Fixed(0.1),
-        dust_tau_diff=Fixed(0.1),
-        dust_slope=Fixed(-0.7),
-        redshift=Fixed(0.1),
+    ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh={
+            "type": "dpl",
+            "*": tengri.FIXED,
+            "alpha": 1.0,
+            "beta": 2.5,
+            "tau_gyr": 0.3,
+            "log_peak_sfr": 1.5,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
+        neb={"type": "cue", "*": tengri.FIXED, "neb_n_h": tengri.Uniform(1.0, 1e3)},
+        redshift=tengri.Fixed(0.05),
     )
-    model = SEDModel(spec, ssp)
+    baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-    # --- Sweep stellar metallicity (proxy for nebular Z) ---
-    values = [-1.0, -0.7, -0.3, 0.0, 0.2]
+    nh_values = np.logspace(0, 3, 7)
+    norm = mpl.colors.LogNorm(vmin=nh_values.min(), vmax=nh_values.max())
+    cmap = plt.get_cmap("viridis")
 
-    fig, ax = sweep_parameter(
-        model,
-        "met_logzsol",
-        values,
-        cmap="viridis",
-        label_fmt=r"$\log(Z/Z_\odot)$ = {:.1f}",
-        wave_range=(4000, 8000),
-    )
-    ax.set_title("Metallicity Impact on Stellar SED and Nebular Lines", fontsize=12)
-    ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)")
-    ax.set_ylim(0, 50_000)
-    plt.tight_layout()
-    plt.savefig("plot_neb_density_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    for nh in nh_values:
+        params = {**baseline, "neb_n_h": jnp.float64(nh)}
+        out = model.predict_rest_sed(params)
+        wave = np.asarray(out.wavelength)
+        nu = 2.998e18 / wave
+        nu_l_nu = nu * np.asarray(out.sed)
+        ax.semilogy(wave, nu_l_nu, color=cmap(norm(nh)), lw=1.4)
+
+    ax.set_xlim(4000, 7500)
+    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+    ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+
+    cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+    cbar.set_label(r"$n_H$ [cm$^{-3}$]")
+
+    fig.tight_layout()
+    fig.savefig("plot_neb_density_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_neb_density_sweep.py:

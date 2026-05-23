@@ -5,14 +5,9 @@ Draine & Li Minimum Radiation Field (U_min)
 Minimum radiation field intensity U_min controls diffuse dust heating.
 Higher U_min implies hotter dust and FIR peak shifted blueward toward
 shorter wavelengths.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_umin_sweep_001.png
-   :alt: plot_umin_sweep
-   :class: sphx-glr-single-img
-
 """
+
+import warnings
 
 import matplotlib.pyplot as plt
 
@@ -20,6 +15,8 @@ from tengri import FIXED, SEDModel, load_ssp, recipes
 from tengri.analysis.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 recipe = recipes.dust_demo()
 recipe["dust"]["emission"] = {
@@ -46,9 +43,7 @@ ax.set(
     xscale="log",
     yscale="log",
     ylim=(1e32, 1e40),
-    title="Draine & Li: Radiation Field Intensity Impact",
     ylabel=r"$\lambda F_\lambda$ (not normalized)",
 )
 fig.tight_layout()
-plt.savefig("plot_umin_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_umin_sweep.png", dpi=150, bbox_inches="tight")

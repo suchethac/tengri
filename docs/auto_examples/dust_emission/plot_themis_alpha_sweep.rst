@@ -25,27 +25,12 @@ Sweep radiation-field distribution slope across the THEMIS grid at fixed
 grain content and minimum intensity. Lower alpha shifts weight toward high U,
 warming dust and shifting FIR peak blueward; higher alpha approaches single-U.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_themis_alpha_sweep_001.png
-   :alt: plot_themis_alpha_sweep
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 16-65
-
-
-
-.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_themis_alpha_sweep_001.png
-   :alt: THEMIS (Jones+2017) at $q_{\rm HAC}=0.17$, $U_{\rm min}=1.00$
-   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_themis_alpha_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 9-59
 
 .. code-block:: Python
 
+
+    import warnings
 
     import h5py
     import matplotlib.pyplot as plt
@@ -55,6 +40,8 @@ warming dust and shifting FIR peak blueward; higher alpha approaches single-U.
     from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    warnings.filterwarnings("ignore", message=".*deprecated.*")
 
     with h5py.File(data_path("themis_templates.h5"), "r") as f:
         wave_aa = np.asarray(f["wavelength_aa"][:])
@@ -88,13 +75,10 @@ warming dust and shifting FIR peak blueward; higher alpha approaches single-U.
         ylabel=r"$\nu L_\nu\ [\mathrm{normalised}\ \int L_\nu d\nu = 1]$",
         xlim=(2.0, 1.0e3),
         ylim=(1.0e-26, 1.0e-22),
-        title=rf"THEMIS (Jones+2017) at $q_{{\rm HAC}}={qhac_grid[i_qhac]:.2f}$, "
-        rf"$U_{{\rm min}}={umin_grid[i_umin]:.2f}$",
     )
     ax.legend(loc="lower center", frameon=False, fontsize=8, ncol=3)
     fig.tight_layout()
-    plt.savefig("plot_themis_alpha_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_themis_alpha_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_themis_alpha_sweep.py:

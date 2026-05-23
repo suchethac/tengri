@@ -1,22 +1,4 @@
 {
- "Path": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "Path"
-  }
- ],
- "SWEEP_CMAPS": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.analysis.plotting",
-   "module_short": "tengri.analysis.plotting",
-   "name": "SWEEP_CMAPS"
-  }
- ],
  "jnp.logspace": [
   {
    "is_class": false,
@@ -26,13 +8,13 @@
    "name": "logspace"
   }
  ],
- "matplotlib.use": [
+ "mpl.colors.Normalize": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "use"
+   "module": "matplotlib.colors",
+   "module_short": "matplotlib.colors",
+   "name": "Normalize"
   }
  ],
  "np.array": [
@@ -44,13 +26,13 @@
    "name": "array"
   }
  ],
- "plt.close": [
+ "plt.cm.ScalarMappable": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "close"
+   "module": "matplotlib.pyplot.cm",
+   "module_short": "matplotlib.pyplot.cm",
+   "name": "ScalarMappable"
   }
  ],
  "plt.get_cmap": [
@@ -60,15 +42,6 @@
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
    "name": "get_cmap"
-  }
- ],
- "plt.savefig": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "savefig"
   }
  ],
  "plt.subplots": [
@@ -96,6 +69,15 @@
    "module": "tengri.analysis.plotting",
    "module_short": "tengri.analysis.plotting",
    "name": "setup_style"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
   }
  ]
 }

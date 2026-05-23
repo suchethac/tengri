@@ -53,24 +53,6 @@
    "name": "array"
   }
  ],
- "plt.savefig": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "savefig"
-  }
- ],
- "plt.show": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "show"
-  }
- ],
  "plt.subplots": [
   {
    "is_class": false,
@@ -84,9 +66,18 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
+   "module": "tengri.analysis.plotting",
+   "module_short": "tengri.analysis.plotting",
    "name": "setup_style"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
   }
  ]
 }

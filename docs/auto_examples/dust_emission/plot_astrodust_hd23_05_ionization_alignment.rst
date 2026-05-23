@@ -24,27 +24,12 @@ Astrodust+PAH ionization fraction and alignment
 Ionization fraction and alignment efficiency versus grain size for the
 Hensley & Draine 2023 fiducial size distribution.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_astrodust_hd23_05_ionization_alignment_001.png
-   :alt: plot_astrodust_hd23_05_ionization_alignment
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 15-51
-
-
-
-.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_05_ionization_alignment_001.png
-   :alt: PAH ionization fraction (Eq. 20), Astrodust alignment efficiency
-   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_05_ionization_alignment_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 8-46
 
 .. code-block:: Python
 
+
+    import warnings
 
     import h5py
     import matplotlib.pyplot as plt
@@ -54,6 +39,8 @@ Hensley & Draine 2023 fiducial size distribution.
     from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    warnings.filterwarnings("ignore", message=".*deprecated.*")
 
     with h5py.File(data_path("astrodust_templates.h5"), "r") as f:
         size_dist = np.asarray(f["size_distribution"])
@@ -77,10 +64,8 @@ Hensley & Draine 2023 fiducial size distribution.
         )
 
     ax1.set_title("PAH ionization fraction (Eq. 20)", fontsize=10)
-    ax2.set_title("Astrodust alignment efficiency", fontsize=10)
     fig.tight_layout()
-    plt.savefig("plot_astrodust_hd23_05_ionization_alignment.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_astrodust_hd23_05_ionization_alignment.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_05_ionization_alignment.py:

@@ -18,71 +18,72 @@
 .. _sphx_glr_auto_examples_nebular_plot_dig_frac_sweep.py:
 
 
-Diffuse Ionized Gas Fraction (f_DIG)
-====================================
+Diffuse ionized gas suppresses strong optical lines
+===================================================
 
-Diffuse ionized gas (DIG) has lower ionization parameter than HII regions.
-When present, DIG shifts galaxies toward the LINER region on the BPT diagram
-by suppressing [OIII] relative to [NII]. f_DIG = 0 is pure HII gas;
-f_DIG = 1 is pure DIG.
+Diffuse ionized gas (DIG) has lower ionization parameter than HII regions,
+shifting galaxies toward the LINER region on the BPT diagram. We vary the
+DIG fraction from pure HII (0) to mixed gas (0.8).
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_dig_frac_sweep_001.png
-   :alt: plot_dig_frac_sweep
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 17-64
+.. GENERATED FROM PYTHON SOURCE LINES 9-64
 
 .. code-block:: Python
 
 
-    import matplotlib.pyplot as plt
+    import warnings
 
-    from tengri import Fixed, Parameters, SEDModel, load_ssp
-    from tengri.analysis.plotting import setup_style, sweep_parameter
+    import jax
+    import jax.numpy as jnp
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    import tengri
+    from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-
-    ssp = load_ssp()
-
-    # --- Build model: young star-forming galaxy ---
-    spec = Parameters(
-        nebular_cue=True,
-        sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-        sfh_tsnorm_peak_lbt_gyr=Fixed(0.5),  # Peak ~500 Myr ago (young)
-        sfh_tsnorm_width_gyr=Fixed(0.3),
-        sfh_tsnorm_skew=Fixed(0.2),
-        sfh_tsnorm_trunc=Fixed(3.0),
-        met_logzsol=Fixed(-0.3),  # Solar-ish
-        dust_tau_bc=Fixed(0.0),  # No dust
-        dust_tau_diff=Fixed(0.0),
-        dust_slope=Fixed(-0.7),
-        redshift=Fixed(0.1),
-        neb_logU=Fixed(-3.0),  # Fixed ionization
-        neb_logZ_gas=Fixed(-0.3),
-        neb_dig_frac=Fixed(0.0),  # Will sweep this
-        neb_dig_delta_logU=Fixed(-1.0),  # DIG is 1 dex lower in ionization
+    ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh={
+            "type": "dpl",
+            "*": tengri.FIXED,
+            "alpha": 1.0,
+            "beta": 2.5,
+            "tau_gyr": 0.3,
+            "log_peak_sfr": 1.5,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        neb={"type": "cue", "*": tengri.FIXED, "neb_dig_frac": tengri.Uniform(0.0, 0.8)},
+        redshift=tengri.Fixed(0.05),
     )
-    model = SEDModel(spec, ssp)
+    baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-    # --- Sweep DIG fraction ---
-    values = [0.0, 0.2, 0.4, 0.6, 0.8]
+    dig_values = np.linspace(0.0, 0.8, 5)
+    norm = mpl.colors.Normalize(vmin=dig_values.min(), vmax=dig_values.max())
+    cmap = plt.get_cmap("BuPu")
 
-    fig, ax = sweep_parameter(
-        model,
-        "neb_dig_frac",
-        values,
-        cmap="BuPu",
-        label_fmt=r"$f_{{\mathrm{{DIG}}}}$ = {:.1f}",
-        wave_range=(4500, 7500),
-    )
-    ax.set_title("Diffuse Ionized Gas: Impact on Optical Diagnostic Lines", fontsize=12)
-    ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)")
-    plt.tight_layout()
-    plt.savefig("plot_dig_frac_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    for dig in dig_values:
+        params = {**baseline, "neb_dig_frac": jnp.float64(dig)}
+        out = model.predict_rest_sed(params)
+        wave = np.asarray(out.wavelength)
+        nu = 2.998e18 / wave
+        nu_l_nu = nu * np.asarray(out.sed)
+        ax.semilogy(wave, nu_l_nu, color=cmap(norm(dig)), lw=1.4)
+
+    ax.set_xlim(4000, 7500)
+    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+    ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+
+    cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+    cbar.set_label(r"DIG fraction")
+
+    fig.tight_layout()
+    fig.savefig("plot_dig_frac_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_dig_frac_sweep.py:

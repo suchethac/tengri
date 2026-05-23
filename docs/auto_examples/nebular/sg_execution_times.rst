@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:44.352** total execution time for 8 files **from auto_examples/nebular**:
+**02:47.920** total execution time for 18 files **from auto_examples/nebular**:
 
 .. container::
 
@@ -32,27 +32,57 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_dig_frac_sweep.py` (``plot_dig_frac_sweep.py``)
-     - 00:09.707
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_parameter_atlas.py` (``plot_cue_parameter_atlas.py``)
+     - 01:16.498
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_fesc_sweep.py` (``plot_fesc_sweep.py``)
-     - 00:08.265
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_fesc_logu_atlas.py` (``plot_cue_fesc_logu_atlas.py``)
+     - 01:06.025
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_logu_sweep.py` (``plot_logu_sweep.py``)
-     - 00:08.054
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_flex_tour.py` (``plot_cue_flex_tour.py``)
+     - 00:14.854
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_logz_gas_sweep.py` (``plot_logz_gas_sweep.py``)
-     - 00:07.754
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_fesc_lya_sweep.py` (``plot_fesc_lya_sweep.py``)
+     - 00:10.543
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_line_sigma_sweep.py` (``plot_line_sigma_sweep.py``)
-     - 00:07.659
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_bpt_cue_flexibility.py` (``plot_bpt_cue_flexibility.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_bpt_cue_grid.py` (``plot_bpt_cue_grid.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_bpt_diagnostics.py` (``plot_bpt_diagnostics.py``)
-     - 00:01.262
+     - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_shock_emission.py` (``plot_shock_emission.py``)
-     - 00:01.111
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_dig_frac_sweep.py` (``plot_dig_frac_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_fesc_sweep.py` (``plot_fesc_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_line_sigma_sweep.py` (``plot_line_sigma_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_logu_sweep.py` (``plot_logu_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_logz_gas_sweep.py` (``plot_logz_gas_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_neb_age_dependence.py` (``plot_neb_age_dependence.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_neb_backend_compare.py` (``plot_neb_backend_compare.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_neb_bpt_logu_grid.py` (``plot_neb_bpt_logu_grid.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_neb_density_sweep.py` (``plot_neb_density_sweep.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_nebular_backends.py` (``plot_nebular_backends.py``)
-     - 00:00.540
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_shock_emission.py` (``plot_shock_emission.py``)
+     - 00:00.000
      - 0.0

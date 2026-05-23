@@ -17,7 +17,7 @@ Comparing inference methods and convergence diagnostics.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Runs a quick fit and displays convergence diagnostics: ESS per parameter, summary table, and trace plots for a subset of parameters.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The convergence diagnostic shows how the negative log posterior (loss) decays across optimizer iterations. We fit mock photometry using MAP (maximum a posteriori) optimization with Adam and display the loss curve, showing when the optimizer has effectively converged. The right panel overlays the recovered SFH against the truth.">
 
 .. only:: html
 
@@ -28,13 +28,13 @@ Comparing inference methods and convergence diagnostics.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Convergence Diagnostics</div>
+      <div class="sphx-glr-thumbnail-title">MAP fit convergence: loss decay across iterations</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Fits mock photometry and displays a corner plot with injected truth values marked. Uses tengri&#x27;s safe_corner utility.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates parameter degeneracies and individual 1-D marginalized posteriors after fitting mock 5-band SDSS photometry. The corner plot shows the full 2-D covariance structure between parameters; blue lines mark the injected truth. Note: for demonstration scale; production runs use 10× more VI iterations and samples.">
 
 .. only:: html
 
@@ -45,13 +45,13 @@ Comparing inference methods and convergence diagnostics.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Corner Plot with Truth Overlay</div>
+      <div class="sphx-glr-thumbnail-title">Posterior corner plot from variational inference</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compares point-estimate (MAP) and variational (vi/geoVI) inference on mock 5-band photometry. Overlays posteriors as a corner plot.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates convergence behavior of two inference methods: MAP (point-estimate via optimization) and pure-JAX geometric variational inference (native VI). Both are initialized from the same MAP fit, then evolve independently to show how they explore the posterior. The SFH panel on the right shows the recovered star-formation history from each method overlaid on the truth.">
 
 .. only:: html
 
@@ -62,7 +62,7 @@ Comparing inference methods and convergence diagnostics.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">MAP vs geoVI Posterior Comparison</div>
+      <div class="sphx-glr-thumbnail-title">Comparing MAP and pure-JAX variational inference</div>
     </div>
 
 

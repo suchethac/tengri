@@ -32,18 +32,22 @@ Mg b traces metallicity on the RGB/AGB branch.
    :alt: plot_spectral_features
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-93
+.. GENERATED FROM PYTHON SOURCE LINES 17-94
 
 .. code-block:: Python
 
+
+    import warnings
 
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri import load_ssp, setup_style
+    from tengri import load_ssp
+    from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 
     ssp = load_ssp()
@@ -98,20 +102,17 @@ Mg b traces metallicity on the RGB/AGB branch.
         axes[1].plot(ages_gyr, hd_vals, color=color, lw=1.8, label=label)
         axes[2].plot(ages_gyr, mgb_vals, color=color, lw=1.8, label=label)
 
-    for ax, title, ylabel in [
-        (axes[0], "D4000 Break", "D4000"),
-        (axes[1], r"H$\delta$ EW", r"H$\delta$ EW [$\AA$]"),
-        (axes[2], "Mg b Index", r"Mg b EW [$\AA$]"),
+    for ax, ylabel in [
+        (axes[0], "D4000"),
+        (axes[1], r"H$\delta$ EW [$\AA$]"),
+        (axes[2], r"Mg b EW [$\AA$]"),
     ]:
         ax.set_xlabel(r"$\log_{10}$(Age / Gyr)")
         ax.set_ylabel(ylabel)
-        ax.set_title(title)
         ax.legend(fontsize=10, frameon=False)
 
-    fig.suptitle("Spectral Features: Age and Metallicity Probes", fontsize=11, y=1.02)
     fig.tight_layout()
-    plt.savefig("plot_spectral_features.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_spectral_features.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_spectral_features.py:

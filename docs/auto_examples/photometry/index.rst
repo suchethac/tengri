@@ -17,6 +17,23 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="How does a galaxy&#x27;s location in colour–colour space evolve with redshift? We compute SDSS g − r and r − z colours for two galaxy populations — a young star-forming and an old quiescent — across z = 0 to 3, with arrows marking the integer redshift stops. This is the reference picture for photometric redshift classifiers and for stellar-template grids.">
+
+.. only:: html
+
+  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_color_tracks_redshift_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/photometry/plot_color_tracks_redshift`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Photometric colour tracks vs redshift</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Plot the ugriz filter transmission curves from the SDSS photometric system. Filters are loaded from the SVO Filter Profile Service via tengri&#x27;s filter registry.">
 
 .. only:: html
@@ -46,6 +63,23 @@ Filter curves and photometric fitting.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Filter Set Comparison</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="What each photometric system measures depends on where its filters sit relative to the rest-frame spectral features. We overlay six common filter sets (GALEX NUV, SDSS ugriz, 2MASS JHK, WISE W1/W2/W3, Euclid YJH, JWST NIRCam wide bands) on top of an observed-frame star-forming galaxy SED at z = 0.5.">
+
+.. only:: html
+
+  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_galaxy_with_filters_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/photometry/plot_galaxy_with_filters`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Galaxy SED with photometric filter coverage</div>
     </div>
 
 
@@ -110,8 +144,10 @@ Filter curves and photometric fitting.
 .. toctree::
    :hidden:
 
+   /auto_examples/photometry/plot_color_tracks_redshift
    /auto_examples/photometry/plot_filter_curves
    /auto_examples/photometry/plot_filter_set_comparison
+   /auto_examples/photometry/plot_galaxy_with_filters
    /auto_examples/photometry/plot_photometric_fit
    /auto_examples/photometry/plot_redshift_filter_grid
    /auto_examples/photometry/plot_snr_sweep

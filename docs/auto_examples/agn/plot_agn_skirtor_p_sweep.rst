@@ -18,106 +18,75 @@
 .. _sphx_glr_auto_examples_agn_plot_agn_skirtor_p_sweep.py:
 
 
-SKIRTOR Torus: Radial Dust Power-Law Sweep
-===========================================
+SKIRTOR torus: radial density profile tunes IR emission peak
+=============================================================
 
-Sweep the radial dust density power index `p` from 0.0 to 1.5 at fixed
-inclination = 0.5 and τ₉.₇ = 7. Steeper profiles concentrate the dust
-closer to the disc and push the mid-to-far-IR peak hotter.
+The SKIRTOR clumpy torus has a radial dust-density profile with power-law
+index ``p``. Steeper profiles (higher p) concentrate more dust closer to the
+disc, reducing the mid-IR peak temperature and shifting flux toward the far-IR.
+Flatter profiles distribute dust more uniformly and hotter on average.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_agn_skirtor_p_sweep_001.png
-   :alt: plot_agn_skirtor_p_sweep
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 16-99
+.. GENERATED FROM PYTHON SOURCE LINES 10-67
 
 .. code-block:: Python
 
 
-    from pathlib import Path
+    import warnings
 
+    import jax
     import jax.numpy as jnp
+    import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
 
-    # Locate SKIRTOR grid file
-    _grid_path = None
-    for p in [
-        Path("data/skirtor_templates_v3.h5"),
-        Path("../data/skirtor_templates_v3.h5"),
-        Path("../../data/skirtor_templates_v3.h5"),
-        Path("../../../data/skirtor_templates_v3.h5"),
-        Path("data/skirtor_templates_v2.h5"),
-        Path("../data/skirtor_templates_v2.h5"),
-        Path("../../data/skirtor_templates_v2.h5"),
-        Path("../../../data/skirtor_templates_v2.h5"),
-    ]:
-        if p.exists():
-            _grid_path = str(p)
-            break
-
-    if _grid_path is None:
-        raise SystemExit(
-            "Skipping: SKIRTOR grid not found. Run: python scripts/download_skirtor_templates.py"
-        )
-
+    import tengri
     from tengri.analysis.plotting import setup_style
-    from tengri.components.agn import create_skirtor_from_grid
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-    # Load the SKIRTOR interpolator
-    skirtor_fn = create_skirtor_from_grid(_grid_path)
+    ssp = tengri.load_ssp()
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 3.0, "log_peak_sfr": 0.5,
+             "alpha": 2.0, "beta": 2.5},
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
+        agn={
+            "type": "composable",
+            "disc": {"type": "multicolor", "*": tengri.FIXED},
+            "torus": {"type": "skirtor", "*": tengri.FIXED, "p": tengri.Uniform(0, 1.5)},
+            "lines": {"type": "nlr", "*": tengri.FIXED},
+            "*": tengri.FIXED,
+            "log_lbol": 11.0,
+        },
+        redshift=tengri.Fixed(0.05),
+    )
+    baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-    # Wavelength grid: mid-IR to far-IR torus region
-    wavelength = jnp.logspace(np.log10(5e3), np.log10(5e6), 512)
-    wave_um = np.array(wavelength) / 1e4
+    p_values = np.array([0.0, 0.5, 1.0, 1.5])
+    norm = mpl.colors.Normalize(vmin=p_values.min(), vmax=p_values.max())
+    cmap = plt.get_cmap("viridis")
 
-    # Radial power-law index values to sweep
-    p_values = [0.0, 0.5, 1.0, 1.5]
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    for p in p_values:
+        params = {**baseline, "agn_p_skirtor": jnp.float64(p)}
+        out = model.predict_rest_sed(params)
+        wave = np.asarray(out.wavelength)
+        nu = 2.998e18 / wave
+        nu_l_nu = nu * np.asarray(out.sed)
+        ax.loglog(wave, nu_l_nu, color=cmap(norm(p)), lw=1.4)
 
-    # Create figure with single panel
-    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.set_xlim(100, 1e6)
+    ax.set_ylim(1e40, 1e45)
+    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+    ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
-    # Generate colors from colormap
-    colors = plt.cm.viridis(np.linspace(0.0, 0.85, len(p_values)))
-
-    # Fixed parameters
-    agn_log_lbol = 11.0
-    agn_tau_skirtor = 7.0
-    agn_q_skirtor = 1.0
-    agn_oa_skirtor = 40.0
-    cos_inc = 0.5  # 60 degrees inclination
-
-    # Sweep radial power index
-    for p_val, color in zip(p_values, colors):
-        try:
-            sed = skirtor_fn(
-                wavelength,
-                agn_log_lbol=agn_log_lbol,
-                agn_tau_skirtor=agn_tau_skirtor,
-                agn_p_skirtor=float(p_val),
-                agn_q_skirtor=agn_q_skirtor,
-                agn_oa_skirtor=agn_oa_skirtor,
-                agn_cos_inc=cos_inc,
-            )
-            ax.loglog(wave_um, np.array(sed), lw=2.0, color=color, label=rf"p = {p_val}")
-        except Exception:
-            continue
-
-    ax.set_xlabel(r"Wavelength [$\mu$m]")
-    ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-    ax.set_title("SKIRTOR torus: radial dust density power-law sweep", fontsize=12)
-    ax.legend(fontsize=10, frameon=False, loc="best")
-    ax.set_xlim(0.5, 500)
-    ax.set_ylim(1e21, 1e32)
-    ax.grid(False)
+    cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+    cbar.set_label(r"Radial power index $p$")
 
     fig.tight_layout()
-    plt.savefig("plot_agn_skirtor_p_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_agn_skirtor_p_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_skirtor_p_sweep.py:

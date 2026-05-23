@@ -19,7 +19,41 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Five representative ages from the DSPS SSP grid at solar metallicity. A single stellar population transitions from UV-dominated (young, hot) to NIR-dominated (old, red); peak-normalized λF_λ on log-log axes makes the temperature inversion visible.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The hydrogen-ionising photon production rate Q_H of a simple stellar population drops by ~5 dex from 1 Myr to 100 Myr as O stars die. Different SSP libraries predict different Q_H(t) because they differ in upper-IMF treatment, stellar rotation, and (most dramatically) whether massive binaries are included — BPASS extends the Q_H-producing phase to ~30 Myr.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_ionising_lum_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_ionising_lum`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Ionising-photon production rate vs SSP age</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Different stellar population synthesis codes use different stellar spectral libraries, isochrone families, and binary treatments. The SED of a ~1 Gyr-old, solar-metallicity simple stellar population already shows visible differences in the UV (BPASS binaries add a hot continuum) and in the NIR (treatment of TP-AGB).">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_sps_library_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_sps_library_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SSP library comparison at a fixed age and metallicity</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A single stellar population transitions from UV-dominated (young, hot) to NIR-dominated (old, red) with age. Peak-normalized λF_λ on log-log axes makes the temperature inversion visible across five representative ages at solar metallicity.">
 
 .. only:: html
 
@@ -36,7 +70,24 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Four-panel tour of the DSPS SSP grid: age sequence at fixed Z, metallicity sequence at fixed age, broadband flux vs age, and a mock UV-optical vs optical-NIR color-color diagram across the full grid.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The choice of SSP library propagates into the colors a photometric fitter recovers — a single fixed galaxy SFH and dust law, rebuilt with FSPS-MIST, FSPS-Padova/MILES, BPASS, BC03, and CB19 in turn, produces a noticeable spread in NUV − r, u − g, g − r, and r − K.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_ssp_color_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_ssp_color_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Galaxy broadband colors depend on the SSP library</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Four-panel overview of the DSPS SSP grid: age evolution at fixed metallicity, metallicity evolution at fixed age, monochromatic flux vs age, and color-color diagram across the full grid. Shows how stellar populations age from UV-hot to IR-red as they cool.">
 
 .. only:: html
 
@@ -53,7 +104,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="SSP grids typically ship with one IMF (here, Chabrier). To illustrate the IMF effect on the spectrum shape we rescale the same Chabrier SSP by literature M/L ratios for Chabrier / Kroupa / Salpeter at 1 Gyr and solar Z. M/L ratios from Conroy 2012 — most diagnostic in the near-IR where massive stars dominate the mass budget.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Different Initial Mass Functions produce different M/L ratios at fixed age and metallicity. We rescale a Chabrier SSP by literature M/L values for Chabrier, Kroupa, and Salpeter at 1 Gyr, solar metallicity. The NIR (where massive stars dominate the mass budget) is most diagnostic of IMF choice.">
 
 .. only:: html
 
@@ -70,7 +121,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Five metallicity points spanning the SSP grid at fixed age 1 Gyr. Metallicity reddens the optical and shifts iron-peak features in the near-IR. Peak-normalized λF_λ shows shape changes without the absolute luminosity scale washing them out.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Metallicity reddens the optical continuum and shifts iron-peak absorption features in the near-IR. We show five metallicity points spanning the SSP grid at fixed age (1 Gyr). Peak-normalized λF_λ makes spectral shape variations visible without large luminosity differences obscuring them.">
 
 .. only:: html
 
@@ -95,7 +146,10 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 .. toctree::
    :hidden:
 
+   /auto_examples/sps/plot_ionising_lum
+   /auto_examples/sps/plot_sps_library_compare
    /auto_examples/sps/plot_ssp_age_sweep
+   /auto_examples/sps/plot_ssp_color_compare
    /auto_examples/sps/plot_ssp_grid
    /auto_examples/sps/plot_ssp_imf_compare
    /auto_examples/sps/plot_ssp_metallicity_sweep

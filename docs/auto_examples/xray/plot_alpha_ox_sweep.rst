@@ -18,69 +18,63 @@
 .. _sphx_glr_auto_examples_xray_plot_alpha_ox_sweep.py:
 
 
-X-ray Normalisation via UV-to-X-ray Slope
-===========================================
+AGN UV-to-X-ray power-law slope α_ox controls relative X-ray normalisation
+===========================================================================
 
-Sweep the UV-to-X-ray slope α_ox ∈ {-1.0, -1.2, -1.4, -1.6, -1.8} at
-fixed bolometric luminosity. More negative α_ox depresses the X-ray
-relative to the UV — the canonical X-ray-quiet quasar regime.
+The UV-to-X-ray spectral slope α_ox (defined as log(F_X) − log(F_UV) /
+log(ν_X) − log(ν_UV)) separates "X-ray loud" quasars (α_ox ~ −1.2, strong
+X-ray relative to UV continuum) from "X-ray quiet" systems (α_ox ~ −1.8,
+suppressed X-ray). More negative α_ox suppresses the X-ray continuum and
+weakens the high-energy tail. We vary α_ox at fixed bolometric luminosity,
+showing the anticorrelation of X-ray strength and UV continuum slope.
 
-.. sphx-glr-precomputed-img:
+Reference: Wilkins et al. 2020, MNRAS, 493, 5548 (α_ox correlation study).
 
-.. image:: images/sphx_glr_plot_alpha_ox_sweep_001.png
-   :alt: plot_alpha_ox_sweep
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 16-62
+.. GENERATED FROM PYTHON SOURCE LINES 14-55
 
 .. code-block:: Python
 
 
+    import warnings
+
     import jax.numpy as jnp
+    import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
 
+    import tengri
     from tengri.analysis.plotting import setup_style
     from tengri.xray import xray_agn_corona
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-    # Wavelength grid spans 0.1 keV (124 A) to 1000 keV (0.0124 A).
-    # E[keV] = 12.398 / lambda[A].
-    wavelength = jnp.logspace(np.log10(0.0124), np.log10(124.0), 512)  # Angstrom
+    wavelength = jnp.logspace(np.log10(0.0124), np.log10(124.0), 512)
     wave_keV = 12.398 / np.array(wavelength)
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    alpha_ox_values = np.array([-1.0, -1.2, -1.4, -1.6, -1.8])
+    norm = mpl.colors.Normalize(vmin=alpha_ox_values.min(), vmax=alpha_ox_values.max())
+    cmap = plt.get_cmap("viridis")
 
-    # UV-to-X-ray slope sweep
-    alpha_ox_values = [-1.0, -1.2, -1.4, -1.6, -1.8]
-    L_bol = 1e45  # erg/s (fixed)
-    n_curves = len(alpha_ox_values)
-
-    colors = plt.cm.viridis(np.linspace(0.0, 0.85, n_curves))
-
-    for alpha_ox, color in zip(alpha_ox_values, colors):
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    for alpha_ox in alpha_ox_values:
         l_xray = xray_agn_corona(
-            wavelength, L_agn_bol=L_bol, gamma=1.8, E_cut=300.0, alpha_ox=alpha_ox
+            wavelength, L_agn_bol=1e45, gamma=1.8, E_cut=300.0, alpha_ox=alpha_ox
         )
-        ax.loglog(wave_keV, np.array(l_xray), lw=2.0, color=color, label=f"α_ox = {alpha_ox}")
+        ax.loglog(wave_keV, np.array(l_xray), lw=1.4, color=cmap(norm(alpha_ox)))
 
-    ax.set_xlabel("Energy [keV]")
-    ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-    ax.set_title(
-        r"AGN X-ray Corona: UV-to-X-ray Slope α$_{\mathrm{ox}}$ Variation"
-        "\n"
-        r"(L$_{\mathrm{bol}}=10^{45}$ erg/s)"
-    )
     ax.set_xlim(0.1, 1000)
-    # Span ~7 decades so every alpha_ox curve stays on-axis across 0.1-1000 keV.
     ax.set_ylim(1e20, 1e27)
-    ax.legend(fontsize=11, frameon=False)
-    ax.grid(True, alpha=0.3, which="both")
+    ax.set_xlabel(r"Energy [keV]")
+    ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
+
+    cbar = fig.colorbar(
+        plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
+    )
+    cbar.set_label(r"UV-to-X-ray slope $\alpha_{\rm ox}$")
 
     fig.tight_layout()
-    plt.savefig("plot_alpha_ox_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_alpha_ox_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_alpha_ox_sweep.py:

@@ -20,7 +20,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The FIR–radio correlation (van der Kruit 1971; Helou et al. 1985) is one of the tightest empirical relations in galaxy physics, holding over five decades in luminosity. Parameterized by q_{\rm IR}:">
+    <div class="sphx-glr-thumbcontainer" tooltip="The FIR–radio correlation (van der Kruit 1971; Helou et al. 1985) holds over five decades in galaxy luminosity. Sweeps IR luminosity and radio spectral index to show the tight linear correlation and how the empirical parameter q_IR varies with model calibration.">
 
 .. only:: html
 
@@ -31,13 +31,13 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">FIR–Radio Correlation</div>
+      <div class="sphx-glr-thumbnail-title">FIR–radio correlation across IR luminosity and spectral shape</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Full SED of an AGN host galaxy from hard X-ray (1 keV) to radio (1 GHz), assembled analytically from four physically distinct emission regions. No SSP data required.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Panchromatic SED spanning hard X-rays through centimeter radio of a luminous quasar with radio-loud jets. Combines AGN disc continuum, X-ray corona, and radio components, showing how AGN dominate across 0.1 keV through centimeter wavelengths.">
 
 .. only:: html
 
@@ -48,13 +48,13 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Panchromatic AGN Host SED</div>
+      <div class="sphx-glr-thumbnail-title">X-ray to radio SED of a luminous AGN</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Active galactic nuclei (AGN) can dominate galaxy SEDs across UV to IR wavelengths. This script sweeps the AGN fraction f_AGN ∈ {0.0, 0.1, 0.3, 0.5, 0.8, 1.0} blending a star-forming galaxy stellar continuum with an AGN accretion disc spectrum. Shows the transition from star-formation-dominated to AGN-dominated SED morphology.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Active galactic nuclei dominate UV to infrared SEDs. Sweeps AGN luminosity fraction from pure starburst to pure AGN, showing the transition in SED morphology as the accretion disc continuum increasingly dominates stellar and dust emission.">
 
 .. only:: html
 
@@ -65,13 +65,13 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">AGN Contribution to Composite SEDs</div>
+      <div class="sphx-glr-thumbnail-title">Blending star-forming galaxy and AGN accretion disc continua</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Dust absorbs UV and optical photons and re-emits at infrared wavelengths. This script demonstrates energy conservation between attenuation and emission: sweeping dust optical depth τ_diff ∈ {0.0, 0.3, 0.7, 1.5, 3.0} on a panchromatic SED shows how UV absorption transfers energy to the IR.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Dust absorbs UV and optical photons and re-emits at infrared wavelengths. Sweeping diffuse ISM optical depth τ_diff shows how UV absorption transfers energy into the infrared, demonstrating energy conservation between the attenuation and emission components.">
 
 .. only:: html
 
@@ -82,13 +82,13 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Dust Energy Balance: UV Attenuation ↔ IR Emission</div>
+      <div class="sphx-glr-thumbnail-title">UV attenuation and infrared re-emission balance dust energy</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A star-forming galaxy SED from the far-UV to radio, built by combining tengri&#x27;s differentiable stellar population model with analytical radio synchrotron and free-free emission. Decomposed into stellar continuum, dust-attenuated emission, dust IR, and radio components.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Full panchromatic SED combining stellar continuum, dust absorption, dust infrared emission, and radio synchrotron. Demonstrates how a unified model spans from ultraviolet through centimeter wavelengths with continuous physics from stellar populations through dust and synchrotron emission.">
 
 .. only:: html
 
@@ -99,13 +99,13 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Panchromatic Star-Forming Galaxy</div>
+      <div class="sphx-glr-thumbnail-title">UV-to-radio SED of a star-forming galaxy</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Take a star-forming galaxy SED and observe how it transforms in observed-frame wavelength when placed at increasing redshifts (z=0.1, 0.5, 1.0, 2.0, 4.0). The same rest-frame panchromatic structure (UV, optical, IR, radio) shifts to longer observed wavelengths, enabling photometric surveys to probe different physical regions at different epochs.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Same galaxy rest-frame panchromatic SED (UV through radio) observed at increasing redshifts. Cosmological redshift transforms rest-frame wavelengths and dims luminosity, shifting spectral features to infrared bands at high redshift where ground-based surveys probe star formation epochs.">
 
 .. only:: html
 
@@ -116,7 +116,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Panchromatic SED: Redshift Evolution</div>
+      <div class="sphx-glr-thumbnail-title">Rest-to-observer-frame transformation of panchromatic SEDs with redshift</div>
     </div>
 
 
