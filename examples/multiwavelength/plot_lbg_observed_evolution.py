@@ -38,11 +38,15 @@ ANCHOR_OBS_AA = 18000.0  # NIR anchor where the LBG continuum is clean at all z
 for z, color in zip(REDSHIFTS, COLORS):
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": tengri.FIXED,
-             "tau_gyr": 0.2, "log_peak_sfr": 1.5,
-             "alpha": 3.0, "beta": 2.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.1, "tau_bc": 0.1},
+        sfh={
+            "type": "dpl",
+            "*": tengri.FIXED,
+            "tau_gyr": 0.2,
+            "log_peak_sfr": 1.5,
+            "alpha": 3.0,
+            "beta": 2.0,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
         igm={"type": "inoue14"},
         redshift=tengri.Fixed(z),
     )
@@ -61,13 +65,13 @@ for z, color in zip(REDSHIFTS, COLORS):
 
 # Mark the canonical SDSS / Euclid dropout bands as shaded bars.
 BANDS = [
-    ("u",     3000, 4000, "#3355bb"),
-    ("g",     4000, 5500, "#33bb55"),
-    ("r",     5500, 7000, "#bb3333"),
-    ("i",     7000, 8500, "#bb6633"),
-    ("z",     8500, 10000, "#9933bb"),
-    ("Y/J",   10000, 14000, "#553388"),
-    ("H",     14000, 19000, "#225588"),
+    ("u", 3000, 4000, "#3355bb"),
+    ("g", 4000, 5500, "#33bb55"),
+    ("r", 5500, 7000, "#bb3333"),
+    ("i", 7000, 8500, "#bb6633"),
+    ("z", 8500, 10000, "#9933bb"),
+    ("Y/J", 10000, 14000, "#553388"),
+    ("H", 14000, 19000, "#225588"),
 ]
 for name, lo, hi, color in BANDS:
     ax.axvspan(lo, hi, color=color, alpha=0.08, lw=0)

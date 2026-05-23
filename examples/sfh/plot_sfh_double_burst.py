@@ -11,7 +11,6 @@ panchromatic SED in log-log, revealing the emission from both young and old star
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 

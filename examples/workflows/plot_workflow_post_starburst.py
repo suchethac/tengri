@@ -14,7 +14,6 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -76,8 +75,12 @@ model_correct = tengri.SEDModel.build(
 )
 forward_correct = tengri.ForwardModel.build(sed=model_correct, observation=obs)
 post_correct = forward_correct.fit(
-    mock.flux_obs, mock.noise, method="map", optimizer="adam",
-    n_steps=300, verbose=False,
+    mock.flux_obs,
+    mock.noise,
+    method="map",
+    optimizer="adam",
+    n_steps=300,
+    verbose=False,
 )
 
 # --- Fit 2: wrong model (DPL, smooth) ---
@@ -103,8 +106,12 @@ model_wrong = tengri.SEDModel.build(
 )
 forward_wrong = tengri.ForwardModel.build(sed=model_wrong, observation=obs)
 post_wrong = forward_wrong.fit(
-    mock.flux_obs, mock.noise, method="map", optimizer="adam",
-    n_steps=300, verbose=False,
+    mock.flux_obs,
+    mock.noise,
+    method="map",
+    optimizer="adam",
+    n_steps=300,
+    verbose=False,
 )
 
 # --- Plot: SFH comparison ---

@@ -29,7 +29,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 

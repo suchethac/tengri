@@ -44,11 +44,22 @@ obs = tengri.Observation(photometry=phot)
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "tsnorm", "*": tengri.FIXED,
-         "log_peak_sfr": 1.0, "peak_lbt_gyr": 2.0, "width_gyr": 1.5,
-         "skew": 0.2, "trunc": 5.0},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_bc": 0.1, "tau_diff": 0.2, "slope": -0.7},
+    sfh={
+        "type": "tsnorm",
+        "*": tengri.FIXED,
+        "log_peak_sfr": 1.0,
+        "peak_lbt_gyr": 2.0,
+        "width_gyr": 1.5,
+        "skew": 0.2,
+        "trunc": 5.0,
+    },
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_bc": 0.1,
+        "tau_diff": 0.2,
+        "slope": -0.7,
+    },
     redshift=tengri.Fixed(0.05),
 )
 
@@ -60,8 +71,7 @@ phot_wave = np.array([float(jnp.mean(w)) for w in phot.filter_waves])
 
 # Plot: SED with photometry and filter responses
 fig, (ax_sed, ax_filters) = plt.subplots(
-    2, 1, figsize=(8.0, 5.5), sharex=False,
-    gridspec_kw={"height_ratios": [2, 1], "hspace": 0.35}
+    2, 1, figsize=(8.0, 5.5), sharex=False, gridspec_kw={"height_ratios": [2, 1], "hspace": 0.35}
 )
 
 # Top: SED + photometric points

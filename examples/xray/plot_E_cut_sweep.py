@@ -18,7 +18,6 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tengri
 from tengri.analysis.plotting import setup_style
 from tengri.xray import xray_agn_corona
 
@@ -34,9 +33,7 @@ cmap = plt.get_cmap("viridis")
 
 fig, ax = plt.subplots(figsize=(6.5, 4.2))
 for ecut in ecut_values:
-    l_xray = xray_agn_corona(
-        wavelength, L_agn_bol=1e45, gamma=1.8, E_cut=ecut, alpha_ox=-1.4
-    )
+    l_xray = xray_agn_corona(wavelength, L_agn_bol=1e45, gamma=1.8, E_cut=ecut, alpha_ox=-1.4)
     ax.loglog(wave_keV, np.array(l_xray), lw=1.4, color=cmap(norm(ecut)))
 
 ax.set_xlim(0.1, 1000)
@@ -44,9 +41,7 @@ ax.set_ylim(1e21, 5e24)
 ax.set_xlabel(r"Energy [keV]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
 
-cbar = fig.colorbar(
-    plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
-)
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
 cbar.set_label(r"Cutoff energy $E_{\rm cut}$ [keV]")
 
 fig.tight_layout()

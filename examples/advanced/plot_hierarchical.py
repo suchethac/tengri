@@ -37,7 +37,8 @@ N_GAL = 4
 def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
     """Create a SEDModel with fixed PSD."""
     return tengri.SEDModel.build(
-        ssp, observation=obs,
+        ssp,
+        observation=obs,
         sfh={
             "type": "field",
             "*": tengri.FREE,
@@ -81,9 +82,7 @@ elapsed = time.perf_counter() - t0
 print(f"Hierarchical fit: {elapsed:.1f}s")
 
 keys = list(result.shared_samples.keys())
-sig_key = next(
-    k for k in keys if "psd" in k and ("sigma" in k or "_u" in k or "amp" in k)
-)
+sig_key = next(k for k in keys if "psd" in k and ("sigma" in k or "_u" in k or "amp" in k))
 tau_key = next(k for k in keys if "psd" in k and ("tau" in k))
 sig_samples = np.array(result.shared_samples[sig_key])
 tau_samples = np.array(result.shared_samples[tau_key])
@@ -102,6 +101,5 @@ ax2.set_xlabel(r"$\tau_{\rm PS}$ [Myr]")
 ax2.set_ylabel("Density")
 ax2.legend(frameon=False)
 
-fig.suptitle(f"Hierarchical PSD recovery ({N_GAL} galaxies, {elapsed:.0f}s)")
 fig.tight_layout()
 fig.savefig("plot_hierarchical.png", dpi=150, bbox_inches="tight")

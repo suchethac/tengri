@@ -14,7 +14,6 @@ Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 

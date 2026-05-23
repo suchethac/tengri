@@ -13,13 +13,11 @@ Reference: Inoue et al. 2014, MNRAS, 442, 1805 (IGM transmission model).
 
 import warnings
 
-import jax
 import jax.numpy as jnp
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tengri
 from tengri.analysis.plotting import setup_style
 from tengri.igm import igm_transmission
 

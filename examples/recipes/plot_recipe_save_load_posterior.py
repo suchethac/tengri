@@ -13,9 +13,7 @@ import warnings
 from pathlib import Path
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
-import numpy as np
 
 import tengri
 from tengri.analysis.plotting import setup_style
@@ -39,17 +37,18 @@ model = tengri.SEDModel.build(
 
 key = jax.random.PRNGKey(42)
 true_params = dict(model.spec.sample(key))
-true_params.update({
-    "sfh_tsnorm_peak_lbt_gyr": 2.5,
-    "sfh_tsnorm_log_peak_sfr": 1.0,
-})
+true_params.update(
+    {
+        "sfh_tsnorm_peak_lbt_gyr": 2.5,
+        "sfh_tsnorm_log_peak_sfr": 1.0,
+    }
+)
 mock = model.mock(true_params, snr=25.0, key=key)
 
 # Fit with MAP
 forward = tengri.ForwardModel.build(sed=model, observation=obs)
 posterior = forward.fit(
-    mock.flux_obs, mock.noise, method="map",
-    optimizer="adam", n_steps=150, verbose=False
+    mock.flux_obs, mock.noise, method="map", optimizer="adam", n_steps=150, verbose=False
 )
 
 # Save to temporary file and reload

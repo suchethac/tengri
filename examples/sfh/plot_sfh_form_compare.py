@@ -34,15 +34,15 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 FORMS = [
-    ("const",       "constant SFR"),
-    ("exp",         "exponential rise"),
-    ("dexp",        "delayed exponential"),
-    ("tau",         "declining exponential (τ)"),
-    ("lnorm",       "log-normal"),
-    ("snorm",       "skew-normal"),
-    ("tsnorm",      "truncated skew-normal"),
-    ("dpl",         "double power-law"),
-    ("delayed_bq",  "delayed + burst/quench"),
+    ("const", "constant SFR"),
+    ("exp", "exponential rise"),
+    ("dexp", "delayed exponential"),
+    ("tau", "declining exponential (τ)"),
+    ("lnorm", "log-normal"),
+    ("snorm", "skew-normal"),
+    ("tsnorm", "truncated skew-normal"),
+    ("dpl", "double power-law"),
+    ("delayed_bq", "delayed + burst/quench"),
 ]
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.95, len(FORMS)))
 

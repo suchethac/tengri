@@ -16,7 +16,6 @@ import warnings
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
-import tengri
 from tengri.analysis.plotting import setup_style
 from tengri.dust import list_laws
 

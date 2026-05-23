@@ -11,8 +11,6 @@ and colour of the UV–optical SED.
 import warnings
 
 import jax
-import jax.numpy as jnp
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -26,8 +24,14 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 3.0, "log_peak_sfr": 0.5,
-         "alpha": 2.0, "beta": 2.5},
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "tau_gyr": 3.0,
+        "log_peak_sfr": 0.5,
+        "alpha": 2.0,
+        "beta": 2.5,
+    },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
     agn={
         "type": "composable",
@@ -55,8 +59,15 @@ ax.set_xlim(100, 1e6)
 ax.set_ylim(1e40, 1e45)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
-ax.text(0.5, 0.95, "QSOgen with default line scaling",
-        transform=ax.transAxes, ha="center", va="top", fontsize=10)
+ax.text(
+    0.5,
+    0.95,
+    "QSOgen with default line scaling",
+    transform=ax.transAxes,
+    ha="center",
+    va="top",
+    fontsize=10,
+)
 
 fig.tight_layout()
 fig.savefig("plot_agn_qsogen_emline_sweep.png", dpi=150, bbox_inches="tight")

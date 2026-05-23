@@ -90,7 +90,9 @@ ax.set_xlim(-1.6, 0.7)
 ax.set_ylim(-1.2, 1.5)
 ax.legend(fontsize=10, frameon=False, loc="lower right")
 
-sm = plt.cm.ScalarMappable(cmap=plt.cm.viridis, norm=plt.Normalize(vmin=ages.min(), vmax=ages.max()))
+sm = plt.cm.ScalarMappable(
+    cmap=plt.cm.viridis, norm=plt.Normalize(vmin=ages.min(), vmax=ages.max())
+)
 sm.set_array([])
 cbar = fig.colorbar(sm, ax=ax, label="Age [Gyr]")
 

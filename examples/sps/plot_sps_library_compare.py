@@ -19,10 +19,8 @@ physics, not nebular treatment.
 """
 
 import warnings
-from pathlib import Path
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -53,11 +51,16 @@ for (ssp_name, label), color in zip(LIBRARIES, COLORS):
         continue
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "tsnorm", "*": tengri.FIXED,
-             "peak_lbt_gyr": 1.0, "width_gyr": 0.05,
-             "log_peak_sfr": 1.0, "skew": 0.0, "trunc": 13.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.0, "tau_bc": 0.0},
+        sfh={
+            "type": "tsnorm",
+            "*": tengri.FIXED,
+            "peak_lbt_gyr": 1.0,
+            "width_gyr": 0.05,
+            "log_peak_sfr": 1.0,
+            "skew": 0.0,
+            "trunc": 13.0,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(0.01),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -71,11 +74,9 @@ for (ssp_name, label), color in zip(LIBRARIES, COLORS):
     ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
 
 ax.axvline(1216, color="0.55", lw=0.6, ls=":")
-ax.text(1216, 0.012, r"Ly$\alpha$", color="0.4", fontsize=8,
-        rotation=90, va="bottom", ha="right")
+ax.text(1216, 0.012, r"Ly$\alpha$", color="0.4", fontsize=8, rotation=90, va="bottom", ha="right")
 ax.axvline(912, color="0.55", lw=0.6, ls=":")
-ax.text(912, 0.012, "Lyman limit", color="0.4", fontsize=8,
-        rotation=90, va="bottom", ha="right")
+ax.text(912, 0.012, "Lyman limit", color="0.4", fontsize=8, rotation=90, va="bottom", ha="right")
 ax.set_xlim(700, 5e4)
 ax.set_ylim(1e-2, 5.0)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")

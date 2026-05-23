@@ -29,8 +29,8 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 LINES_MODELS = [
-    ("nlr",    "NLR (Feltre+2016)"),
-    ("blr",    "BLR (Cracco+2016)"),
+    ("nlr", "NLR (Feltre+2016)"),
+    ("blr", "BLR (Cracco+2016)"),
     ("qsogen", "QSOGEN empirical"),
 ]
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.9, len(LINES_MODELS)))
@@ -43,13 +43,14 @@ for (line_kind, label), color in zip(LINES_MODELS, COLORS):
     model = tengri.SEDModel.build(
         ssp,
         sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         agn={
-            "disc":  {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": "skirtor",    "*": tengri.FIXED},
-            "lines": {"type": line_kind,    "*": tengri.FIXED},
-            "*": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0,
+            "disc": {"type": "multicolor", "*": tengri.FIXED},
+            "torus": {"type": "skirtor", "*": tengri.FIXED},
+            "lines": {"type": line_kind, "*": tengri.FIXED},
+            "*": tengri.FIXED,
+            "log_lbol": 12.5,
+            "frac": 1.0,
         },
         redshift=tengri.Fixed(0.05),
     )
@@ -77,8 +78,7 @@ LINE_MARKS = [
 ]
 for lam, name in LINE_MARKS:
     ax.axvline(lam, color="0.85", lw=0.4, alpha=0.5)
-    ax.text(lam, 4e46, name, fontsize=7, color="0.5",
-            ha="center", va="bottom", rotation=90)
+    ax.text(lam, 4e46, name, fontsize=7, color="0.5", ha="center", va="bottom", rotation=90)
 
 ax.legend(frameon=False, fontsize=8, loc="lower right")
 

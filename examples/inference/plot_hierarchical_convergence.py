@@ -33,6 +33,7 @@ obs = tengri.Observation(
 TRUE_SIGMA = 1.5
 TRUE_TAU_MYR = 40.0
 
+
 def make_model(psd_sigma=TRUE_SIGMA, psd_tau_myr=TRUE_TAU_MYR):
     return tengri.SEDModel.build(
         ssp,
@@ -54,6 +55,7 @@ def make_model(psd_sigma=TRUE_SIGMA, psd_tau_myr=TRUE_TAU_MYR):
         redshift=tengri.Fixed(0.1),
     )
 
+
 N_GAL = 3
 galaxies_data = []
 model_gen = make_model()
@@ -72,11 +74,15 @@ for i in range(N_GAL):
 individual_sigma = []
 individual_tau = []
 
-for i, data in enumerate(galaxies_data):
+for data in galaxies_data:
     model_i = make_model()
     forward_i = tengri.ForwardModel.build(sed=model_i, observation=obs)
     post_i = forward_i.fit(
-        data["flux_obs"], data["noise"], method="map", n_steps=200, verbose=False,
+        data["flux_obs"],
+        data["noise"],
+        method="map",
+        n_steps=200,
+        verbose=False,
     )
     # For this simplified demo, we'll just show the posterior mean parameters,
     # not actual PSD constraints (which require stochastic SFH).
@@ -85,10 +91,10 @@ for i, data in enumerate(galaxies_data):
 
 fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
-for i, (ax, data, truth, label, unit) in enumerate([
+for ax, data, truth, label, unit in [
     (axes[0], individual_sigma, 1.5, r"$\alpha$ (DPL rising slope)", ""),
     (axes[1], individual_tau, 1.2, r"$\beta$ (DPL decay slope)", ""),
-]):
+]:
     ax.scatter(range(N_GAL), data, s=60, color="C0", alpha=0.6, label="Individual fits")
     ax.axhline(truth, color="red", lw=2.0, ls="--", label=f"Truth = {truth:.1f}")
     ax.axhline(np.mean(data), color="orange", lw=1.5, ls="-", label=f"Mean = {np.mean(data):.1f}")

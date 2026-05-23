@@ -21,7 +21,6 @@ grain-physics (Draine 2003, WD01), and birth-cloud (Wild+07).
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -32,14 +31,14 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 LAWS = [
-    ("calzetti",      "Calzetti+2000 (starburst)"),
-    ("cardelli",      "Cardelli+1989 (MW)"),
-    ("smc",           "SMC (Pei 1992)"),
-    ("kriek_conroy",  "Kriek & Conroy 2013"),
-    ("salim",         "Salim+2018"),
-    ("noll09",        "Noll+2009 (mod. Calzetti)"),
-    ("narayanan_z",   "Narayanan+2018 (SIMBA)"),
-    ("hd23_mwrv31",   "Hensley & Draine 2023"),
+    ("calzetti", "Calzetti+2000 (starburst)"),
+    ("cardelli", "Cardelli+1989 (MW)"),
+    ("smc", "SMC (Pei 1992)"),
+    ("kriek_conroy", "Kriek & Conroy 2013"),
+    ("salim", "Salim+2018"),
+    ("noll09", "Noll+2009 (mod. Calzetti)"),
+    ("narayanan_z", "Narayanan+2018 (SIMBA)"),
+    ("hd23_mwrv31", "Hensley & Draine 2023"),
 ]
 COLORS = plt.cm.tab10(np.linspace(0.0, 0.9, len(LAWS)))
 
@@ -50,29 +49,50 @@ fig, ax = plt.subplots(figsize=(7.2, 4.6))
 # Intrinsic SED reference (tau_diff = 0)
 ref_model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "tsnorm", "*": tengri.FIXED, "peak_lbt_gyr": 2.0,
-         "width_gyr": 1.0, "log_peak_sfr": 1.0,
-         "skew": 0.0, "trunc": 13.0},
-    dust={"type": "two_component", "law_diff": "calzetti",
-          "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    sfh={
+        "type": "tsnorm",
+        "*": tengri.FIXED,
+        "peak_lbt_gyr": 2.0,
+        "width_gyr": 1.0,
+        "log_peak_sfr": 1.0,
+        "skew": 0.0,
+        "trunc": 13.0,
+    },
+    dust={
+        "type": "two_component",
+        "law_diff": "calzetti",
+        "*": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    },
     redshift=tengri.Fixed(0.05),
 )
 p_ref = dict(ref_model.spec.sample(jax.random.PRNGKey(0)))
 sed_ref = np.asarray(ref_model.predict_rest_sed(p_ref).sed)
 wave = np.asarray(ref_model.predict_rest_sed(p_ref).wavelength)
 nu = C_AA_PER_S / wave
-ax.loglog(wave, nu * sed_ref, color="0.05", lw=2.0, label="intrinsic",
-          zorder=10, ls="--")
+ax.loglog(wave, nu * sed_ref, color="0.05", lw=2.0, label="intrinsic", zorder=10, ls="--")
 
 for (law, label), color in zip(LAWS, COLORS):
     try:
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "tsnorm", "*": tengri.FIXED, "peak_lbt_gyr": 2.0,
-                 "width_gyr": 1.0, "log_peak_sfr": 1.0,
-                 "skew": 0.0, "trunc": 13.0},
-            dust={"type": "two_component", "law_diff": law,
-                  "*": tengri.FIXED, "tau_diff": 1.0, "tau_bc": 0.3},
+            sfh={
+                "type": "tsnorm",
+                "*": tengri.FIXED,
+                "peak_lbt_gyr": 2.0,
+                "width_gyr": 1.0,
+                "log_peak_sfr": 1.0,
+                "skew": 0.0,
+                "trunc": 13.0,
+            },
+            dust={
+                "type": "two_component",
+                "law_diff": law,
+                "*": tengri.FIXED,
+                "tau_diff": 1.0,
+                "tau_bc": 0.3,
+            },
             redshift=tengri.Fixed(0.05),
         )
     except Exception:
@@ -86,8 +106,7 @@ ax.set_ylim(1e40, 8e43)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 ax.axvline(2175, color="0.55", lw=0.4, ls=":")
-ax.text(2175, 1.5e40, "2175 Å bump", fontsize=8, color="0.4",
-        rotation=90, va="bottom", ha="right")
+ax.text(2175, 1.5e40, "2175 Å bump", fontsize=8, color="0.4", rotation=90, va="bottom", ha="right")
 ax.legend(frameon=False, fontsize=7.5, loc="lower right", ncol=2)
 
 fig.tight_layout()
