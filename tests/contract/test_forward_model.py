@@ -188,3 +188,40 @@ def test_multi_population_params_slice_by_namespace(sed_model_minimal, simple_ob
     phot = pred.get("phot_fnu", pred.get("fnu_obs"))
     assert phot is not None
     assert jnp.all(jnp.isfinite(phot))
+
+
+def test_multi_population_cross_pop_namespaced_extras(sed_model_minimal) -> None:
+    """Pass 2 of `ForwardModel.predict` injects every other population's derived
+    bundle under namespaced keys (``"<pop>.<key>"``) into each population's
+    ``state.derived._extras``, so downstream components / observations can read
+    cross-population products (e.g. AGN ``L_bolometric``). This is the plumbing
+    that backs ADR-0012 §6.2 and architecture spec §9.1.
+    """
+
+    captured: dict[str, dict] = {}
+
+    class _CapturingObservation:
+        def predict_summed(self, per_pop_states, per_pop_params):
+            for name, state in per_pop_states.items():
+                captured[name] = dict(state.derived._extras)
+            # Trivial return — test inspects ``captured`` not the result.
+            return {"phot_fnu": 0.0}
+
+    forward = ForwardModel.build(
+        populations=[
+            Population(name="a", sed=sed_model_minimal),
+            Population(name="b", sed=sed_model_minimal),
+        ],
+        observation=_CapturingObservation(),
+    )
+    forward.predict({"redshift": 0.05})
+
+    assert set(captured) == {"a", "b"}
+    # Every typed-derived key published by population "a" must surface in
+    # "b"'s _extras under the "a." prefix, and vice versa.
+    a_namespaced = {k for k in captured["a"] if k.startswith("b.")}
+    b_namespaced = {k for k in captured["b"] if k.startswith("a.")}
+    assert a_namespaced, "Pop 'a' should see 'b.*' namespaced keys after Pass 2"
+    assert b_namespaced, "Pop 'b' should see 'a.*' namespaced keys after Pass 2"
+    # Symmetric: identical SubModels publish identical key sets.
+    assert {k[2:] for k in a_namespaced} == {k[2:] for k in b_namespaced}

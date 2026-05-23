@@ -103,16 +103,6 @@ class ForwardModel:
             f"(saw keys: {list(pred)})"
         )
 
-    def _inner_sed(self):
-        """Return the underlying :class:`SEDModel` for legacy attribute access.
-
-        For PopulationSEDModel-wrapped forwards, the inner SED is
-        ``pop.sed.sed`` (the template); for plain SEDModel forwards,
-        it's ``pop.sed`` directly.
-        """
-        sub = self.populations[0].sed
-        return getattr(sub, "sed", sub)
-
     def __getattr__(self, name: str):
         """Fallback to the inner SEDModel for legacy attribute access.
 
