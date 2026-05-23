@@ -111,7 +111,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "sfr_history": "Msun/yr",
     "log_metallicity_history": "dex",
     # Stellar — photometry LUT (Phase 3b; only published when
-    # ``approx={'wave_precomp': True}`` is set on SEDModel).
+    # ``approx=WavePrecomp()`` is set on SEDModel).
     "stellar_phot_lnu_precomp": "erg/s/Hz",
     # Stellar — Taylor moment (Phase 3c-3c). Same conditions as
     # stellar_phot_lnu_precomp. Used by Phase 3c-3c-ii dust integration.
@@ -154,7 +154,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "line_waves": "Angstrom",
     "line_lums": "erg/s",
     # Nebular — photometry LUT (Phase 3c-3b; only non-BakedIn backends
-    # publish, when ``approx={'wave_precomp': True}`` is set).
+    # publish, when ``approx=WavePrecomp()`` is set).
     "nebular_phot_lnu_precomp": "erg/s/Hz",
     # Spectrum LUT (Phase 5; published when approx=SpectrumPrecomp() is set).
     # Per-pixel rest-frame Lν at spectrum pixel centres.

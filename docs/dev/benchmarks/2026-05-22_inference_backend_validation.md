@@ -193,8 +193,82 @@ mean shift at SNR = 20 (not a backend bug).
 
 **What this does NOT prove:**
 
-- That the same agreement holds on every model variant — only DPL
-  was tested. The dense_basis cross-method consistency check is a
-  follow-up.
 - That this is true on real data — only the noised mock was used,
   with truth known by construction.
+
+## dense_basis cross-method consistency (2026-05-23)
+
+Same approach on the dense_basis SFH mock (D=7), all four methods on
+the same mock + key, now with `approx=WavePrecomp()`:
+
+- map 1 s · laplace 3 s · mcmc_hmc 5 s · nss 13 s · all four pass
+
+(Full table in `scripts/_backend_consistency_db_results.json`.) All
+methods agree on `log10(M*)` within < 0.5 dex and on `log10(SFR_100Myr)`
+within < 0.5 dex on this self-fit. NSS dropped from 354 s → 13 s with
+WavePrecomp — a 27× speedup. The same WavePrecomp run on `mcmc_hmc`:
+default approx 58.4 s cold → `WavePrecomp()` 3.5 s cold, **17× speedup**.
+
+## Component-pair self-consistency + misspecification (2026-05-23)
+
+`scripts/validate_backends_231_component_pairs.py` — five SFH × dust
+combinations, all photometry, all with `approx=WavePrecomp()`,
+`mcmc_hmc` only.
+
+**Self-consistency** (truth model = fit model):
+
+| Scenario | wall | Δlog M⁎ | Δlog SFR₁₀₀ |
+|---|---|---|---|
+| `dpl+calzetti` | 8.0 s | +0.05 ✓ | -0.79 ✗ |
+| `dense_basis+calzetti` | 9.7 s | +0.09 ✓ | -0.08 ✓ |
+| `tsnorm+calzetti` | 7.7 s | +0.07 ✓ | +0.01 ✓ |
+| `dpl+smc` | 7.6 s | +0.05 ✓ | -0.71 ✗ |
+| `dexp+calzetti` | 8.1 s | +0.03 ✓ | -0.09 ✓ |
+
+The DPL self-fits miss `Δlog SFR₁₀₀` by 0.7-0.8 dex because the DPL
+prior **midpoint** corresponds to a `log10(SFR_100Myr) = -2.61`
+(quenched) galaxy — fractional error on a tiny absolute SFR. This is
+a "pathological truth" not a backend bug; with a star-forming truth
+the same DPL recovers SFR. The other four SFH parametrisations pick
+midpoints near typical star-forming SFRs and recover both quantities
+within 0.5 dex.
+
+**Misspecification** (truth model ≠ fit model):
+
+| Truth → Fit | wall | Δlog M⁎ | Δlog SFR₁₀₀ |
+|---|---|---|---|
+| `dense_basis → dpl` | 4.9 s | -0.11 ✓ | -0.48 ✓ |
+| `tsnorm → dpl` | 4.8 s | +0.01 ✓ | -1.68 ✗ |
+| `dpl → dense_basis` | 6.4 s | +0.07 ✓ | -27.4 ✗ (SFR floor) |
+| `dpl+smc → dpl+calzetti` | 4.4 s | +0.15 ✓ | -1.94 ✗ |
+
+**Headline**: stellar mass is robust to SFH/dust misspecification on
+broad-band photometry — all four cases recover `log M⁎` within
+±0.15 dex. SFR₁₀₀ is fragile: only the `dense_basis → dpl` case
+stays inside 0.5 dex; the cases where truth has a near-zero SFR
+hit the log floor, and wrong dust law propagates into SFR. The
+inference is doing the right thing; the science conclusion is that
+broad-band photometry alone constrains M⁎ but not SFR₁₀₀ once the
+SFH parametrisation is wrong.
+
+## Bug discovered: HMC MAP-init tracing pathology (#262)
+
+Setting up the misspec runs surfaced a real tengri bug: calling
+`Fitter(model, flux_obs, noise).run(method='mcmc_hmc')` before any
+Python-side forward evaluation on the same `SEDModel` instance
+crashes with `ConcretizationTypeError` in
+`Uniform.unstandardize` during the MAP-init JIT trace. Workaround:
+a single `model.predict_photometry(some_params)` call before the
+HMC fit. Tracked in #262. The component-pairs harness now
+pre-warms inside `fit_only`.
+
+## Related issues fixed in passing
+
+- **#229** (legacy `approx=` docstring references): swept all
+  `approx={'wave_precomp': True}` mentions in component / protocol /
+  forward / observation docstrings to the current `approx=WavePrecomp()`
+  form.
+- **#230** (vi vs vi_native PSD divergence): partially superseded —
+  this PR's segfault finding on `native_vi_*` means the "reconcile"
+  path is blocked on a more fundamental stability bug. The doc-only
+  half of #230 should still happen once `native_vi_*` is stable.

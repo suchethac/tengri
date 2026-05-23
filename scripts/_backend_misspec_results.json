@@ -1,0 +1,110 @@
+[
+  {
+    "fit_model": "dpl+calzetti",
+    "n_free_fit": 6,
+    "wall_s": 4.851093666999077,
+    "fit_derived": {
+      "log_stellar_mass": {
+        "median": 9.85702198274784,
+        "p16": 9.782762465916692,
+        "p84": 9.942106332150239
+      },
+      "log_sfr_100myr": {
+        "median": -0.5070595029691243,
+        "p16": -0.7865800858862456,
+        "p84": -0.3394661255205751
+      }
+    },
+    "status": "ok",
+    "truth_model": "dense_basis+calzetti",
+    "truth_derived": {
+      "log_stellar_mass": 9.96682853310721,
+      "log_sfr_100myr": -0.027894256473699013
+    },
+    "bias_dex": {
+      "log_stellar_mass": -0.10980655035936948,
+      "log_sfr_100myr": -0.47916524649542525
+    }
+  },
+  {
+    "fit_model": "dpl+calzetti",
+    "n_free_fit": 6,
+    "wall_s": 4.776178457999777,
+    "fit_derived": {
+      "log_stellar_mass": {
+        "median": 10.517801770036257,
+        "p16": 10.452651626055738,
+        "p84": 10.585400075407014
+      },
+      "log_sfr_100myr": {
+        "median": -2.0998684409606696,
+        "p16": -3.1634191598073866,
+        "p84": -1.3687675595763587
+      }
+    },
+    "status": "ok",
+    "truth_model": "tsnorm+calzetti",
+    "truth_derived": {
+      "log_stellar_mass": 10.507534574992976,
+      "log_sfr_100myr": -0.42098029493985156
+    },
+    "bias_dex": {
+      "log_stellar_mass": 0.010267195043281774,
+      "log_sfr_100myr": -1.678888146020818
+    }
+  },
+  {
+    "fit_model": "dense_basis+calzetti",
+    "n_free_fit": 7,
+    "wall_s": 6.3701232919993345,
+    "fit_derived": {
+      "log_stellar_mass": {
+        "median": 10.640774929260209,
+        "p16": 10.591280931970328,
+        "p84": 10.694714594044537
+      },
+      "log_sfr_100myr": {
+        "median": -30.0,
+        "p16": -30.0,
+        "p84": -0.9271538791349385
+      }
+    },
+    "status": "ok",
+    "truth_model": "dpl+calzetti",
+    "truth_derived": {
+      "log_stellar_mass": 10.575201503885898,
+      "log_sfr_100myr": -2.609984518756726
+    },
+    "bias_dex": {
+      "log_stellar_mass": 0.06557342537431055,
+      "log_sfr_100myr": -27.390015481243275
+    }
+  },
+  {
+    "fit_model": "dpl+calzetti",
+    "n_free_fit": 6,
+    "wall_s": 4.40321912500076,
+    "fit_derived": {
+      "log_stellar_mass": {
+        "median": 10.722961956346852,
+        "p16": 10.698258451151368,
+        "p84": 10.741214796253358
+      },
+      "log_sfr_100myr": {
+        "median": -4.546859309389486,
+        "p16": -5.077369670925552,
+        "p84": -3.953664612472722
+      }
+    },
+    "status": "ok",
+    "truth_model": "dpl+smc",
+    "truth_derived": {
+      "log_stellar_mass": 10.575201503885898,
+      "log_sfr_100myr": -2.609984518756726
+    },
+    "bias_dex": {
+      "log_stellar_mass": 0.14776045246095393,
+      "log_sfr_100myr": -1.9368747906327601
+    }
+  }
+]

@@ -236,7 +236,7 @@ class DustSEDComponent:
     ) -> DustSEDComponentState:
         r"""Optionally pre-load dust IR emission templates for JIT threading.
 
-        When ``approx={'wave_precomp': True}``, loads the dust IR emission
+        When ``approx=WavePrecomp()``, loads the dust IR emission
         template grids into a JAX pytree so they become JIT ``Parameter``
         ops rather than baked-in ``Constant`` ops.
 

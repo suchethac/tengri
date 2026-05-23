@@ -46,6 +46,7 @@ from tengri import (
     load_filter_set,
     load_ssp_data,
 )
+from tengri.forward.sed_model import WavePrecomp
 from tengri.inference._backend_registry import _BACKENDS
 
 DATA = Path("/Users/suchethacooray/Projects/tengri/data")
@@ -67,6 +68,7 @@ def build_model_and_mock():
               "law_bc": "calzetti", "tau_bc": Uniform(0.0, 1.0)},
         neb={"type": "none"},
         redshift=Fixed(0.05),
+        approx=WavePrecomp(),  # photometry-only LUT — ~18× speedup
     )
     truth = {}
     for name in model.spec.free_params:

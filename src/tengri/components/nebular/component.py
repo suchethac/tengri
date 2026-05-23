@@ -71,7 +71,7 @@ class NebularSEDComponentState(SEDComponentState):
     BakedIn has no precomputed tensors — the backend handle is held on
     the component itself. Non-BakedIn backends (Cue / CloudyGrid /
     Shock) optionally cache filter passbands when
-    ``approx={'wave_precomp': True}`` is set on the parent SEDModel;
+    ``approx=WavePrecomp()`` is set on the parent SEDModel;
     :meth:`NebularSEDComponent.apply` uses them to filter-integrate the
     nebular SED contribution and publish ``nebular_phot_lnu_precomp``.
     """

@@ -198,7 +198,7 @@ class StellarSEDComponent:
       per-time-bin metallicity (constant for ``metallicity_model="delta"``).
     - ``stellar_phot_lnu_precomp`` (ndarray, shape ``(n_filter,)``, erg/s/Hz) —
       stellar contribution to photometry from the LUT. Published only when
-      ``approx={'wave_precomp': True}`` is set at model construction.
+      ``approx=WavePrecomp()`` is set at model construction.
     """
 
     config: StellarSEDComponentConfig = field(default_factory=StellarSEDComponentConfig)
@@ -288,7 +288,7 @@ class StellarSEDComponent:
         filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
         redshift_spec: dict[str, Any] | None = None,
     ) -> StellarSEDComponentState:
-        """Build SSP×filter LUT when approx={'wave_precomp': True} is set.
+        """Build SSP×filter LUT when approx=WavePrecomp() is set.
 
         Reads the wave_precomp flag from approx. When True AND filters are
         provided AND the component has an SSP grid, calls either
