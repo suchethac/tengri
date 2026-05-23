@@ -5,7 +5,7 @@ Tengri's forward model is split into two clearly separated layers.
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  Inference (Fitter / MAP / NUTS / VI / …)               │
-│  Talks only to ForwardModel.predict(params).            │
+│  Talks only to ForwardModel.predict_observables(params).            │
 └────────────────────────┬────────────────────────────────┘
                          ▼
 ┌─────────────────────────────────────────────────────────┐
@@ -109,7 +109,7 @@ ForwardModel.build(
 
 Pick exactly one of `sed=`, `population=`, or `populations=`. Returns
 a frozen dataclass. The only API users typically call afterwards is
-`forward.predict(params) → dict`. Everything else is via `Fitter` or
+`forward.predict_observables(params) → dict`. Everything else is via `Fitter` or
 posterior helpers.
 
 ## Hierarchical population fits

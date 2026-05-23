@@ -302,7 +302,7 @@ class ForwardModel:
         ...
 ```
 
-`ForwardModel.predict(params)` is the **only** API inference uses.
+`ForwardModel.predict_observables(params)` is the **only** API inference uses.
 Whether the sub-model inside is `SEDModel`, `SpatialModel`, or
 `SpatialSEDModel`, and whether there is one population or three, is
 invisible at the inference layer. This is the JAX-purity story: the
@@ -436,7 +436,7 @@ forward = ForwardModel.build(...)
 # Inference time — pure JAX. Only `params` is traced.
 @jax.jit
 def loss(params):
-    prediction = forward.predict(params)
+    prediction = forward.predict_observables(params)
     return -likelihood.log_prob(prediction)
 ```
 
@@ -461,7 +461,7 @@ that fits the workload.
 
 ### 9.1 Per-population orchestration — populations are separate functions, JIT boundary is the caller's choice
 
-`ForwardModel.predict(params)` runs each population's sub-model
+`ForwardModel.predict_observables(params)` runs each population's sub-model
 through an independently-callable sub-function. Populations are
 summed at the observation layer in linear flux, with Python-level
 orchestration over the per-population calls — **not** via `vmap` or
@@ -570,7 +570,7 @@ useful proxy for "how much hidden state is this function carrying?".
 These two rules constrain the implementation, not just the
 abstractions:
 
-- `ForwardModel.predict` composes Python-level over populations,
+- `ForwardModel.predict_observables` composes Python-level over populations,
   exposing each as an independently-callable function. Multi-population
   fusion (when the caller end-to-end-JITs) happens *through* this
   structure, not by collapsing it.
@@ -615,7 +615,7 @@ the top:
 | Spatial | Sketch in `spatial_model_extension.md` | Implemented as a peer of `SEDModel` |
 | Multi-population | Single | `populations: tuple[Population, ...]` |
 | Parameter namespace | Flat `<prefix>_<param>` | `<population>.<prefix>_<param>` |
-| Inference entry point | `SEDModel.predict` (today) → `Fitter` helpers | `ForwardModel.predict` (only) |
+| Inference entry point | `SEDModel.predict` (today) → `Fitter` helpers | `ForwardModel.predict_observables` (only) |
 
 Implementation order, breaking changes, and migration story are out
 of scope for this design doc — they will be captured in an

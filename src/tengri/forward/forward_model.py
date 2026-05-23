@@ -220,7 +220,7 @@ class ForwardModel:
         return ran
 
     def predict_photometry(self, params):
-        """Channel-specific prediction: ``phot_fnu`` extracted from :meth:`predict`.
+        """Channel-specific prediction: ``phot_fnu`` extracted from :meth:`predict_observables`.
 
         Single-galaxy fits return shape ``(n_filters,)``; hierarchical
         fits (PopulationSEDModel) return shape ``(N_gal, n_filters)``.
@@ -228,7 +228,7 @@ class ForwardModel:
         on ForwardModel ensures the batched output flows through rather
         than reaching for the inner scalar SED.
         """
-        pred = self.predict(params)
+        pred = self.predict_observables(params)
         for key in ("phot_fnu", "fnu_obs"):
             if key in pred:
                 return pred[key]
@@ -331,7 +331,65 @@ class ForwardModel:
 
         return cls(populations=pops, observation=observation)
 
-    def predict(
+    def predict(self, params: Mapping[str, Any]) -> Any:
+        """Lazy :class:`~tengri.forward.prediction.Prediction` for derived quantities.
+
+        Symmetric with :meth:`SEDModel.predict`. Delegates to the inner
+        SED's ``predict``, so the rich attribute groups
+        (``.sfh``, ``.sed``, ``.lines``, ``.radio``, ``.xray``,
+        ``.ionizing``, ``.photometry``, ``.spectrum``, ``.magnitudes``)
+        are available directly on a ``ForwardModel``.
+
+        For the JIT-safe channel dict consumed by the inference path
+        (loss functions, ``Observation.predict_summed``,
+        ``fiber_spectroscopy``), use :meth:`predict_observables`
+        instead — that's the path the Fitter dispatches into.
+
+        Parameters
+        ----------
+        params : mapping of str -> array
+            Free parameter values. Single-population fits use bare
+            names (``"sfh_dpl_alpha"``).
+
+        Returns
+        -------
+        Prediction
+            Lazy caching wrapper with ``.sfh``, ``.sed``, ``.lines``,
+            ``.radio``, ``.xray``, ``.ionizing``, ``.photometry``,
+            ``.spectrum``, and ``.magnitudes`` property groups.
+
+        Raises
+        ------
+        NotImplementedError
+            For multi-population forward models. ``Prediction`` is a
+            single-population shape; explicit galaxy decompositions
+            (AGN + bulge + disc) should iterate populations and call
+            ``.predict`` on each, or use :meth:`predict_observables`
+            for the combined channel dict.
+
+        Notes
+        -----
+        **JIT-compatible**: no — :class:`Prediction` uses Python-side
+        caching. Use :meth:`predict_observables` inside JIT.
+        """
+        if len(self.populations) != 1:
+            raise NotImplementedError(
+                "ForwardModel.predict() (lazy Prediction) is single-population only. "
+                "Multi-population galaxy decompositions should call .predict() on "
+                "each population's inner SED, or use .predict_observables() for the "
+                "combined channel dict."
+            )
+        sub = self.populations[0].sed
+        inner = getattr(sub, "sed", sub)
+        if not hasattr(inner, "predict"):
+            raise AttributeError(
+                f"Inner population SED ({type(inner).__name__}) does not implement "
+                "predict(); cannot produce a Prediction. Use .predict_observables() "
+                "for the channel dict instead."
+            )
+        return inner.predict(params)
+
+    def predict_observables(
         self,
         params: Mapping[str, jnp.ndarray],
     ) -> Mapping[str, jnp.ndarray]:

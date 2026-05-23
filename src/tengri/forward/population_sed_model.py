@@ -113,7 +113,7 @@ class PopulationSEDModel:
     -----
     Satisfies the :class:`tengri.protocols.SubModel` Protocol. The
     forward-time ``.run`` path is a stub today — the batched-vmap
-    implementation lands when ``ForwardModel.predict`` learns the
+    implementation lands when ``ForwardModel.predict_observables`` learns the
     PopulationSEDModel case (issue #211). Inference is routed at the
     :class:`tengri.Fitter` layer.
     """
@@ -210,7 +210,7 @@ class PopulationSEDModel:
         The likelihood's :math:`\\chi^2` broadcasts naturally over
         the leading galaxy axis against the prediction dict's
         ``(N_galaxies, n_filters)`` arrays returned by
-        :meth:`ForwardModel.predict`.
+        :meth:`ForwardModel.predict_observables`.
 
         Returns
         -------
@@ -256,7 +256,7 @@ class PopulationSEDModel:
         array. Single-galaxy SubModels (``SEDModel``, ``SpatialModel``,
         …) return ``{}``.
 
-        Used by :meth:`ForwardModel.predict` and by the inference layer
+        Used by :meth:`ForwardModel.predict_observables` and by the inference layer
         to compose batching (vmap / pmap / shard_map) without hidden
         nested vmaps. See :meth:`predict_one` for the un-batched
         primitive.

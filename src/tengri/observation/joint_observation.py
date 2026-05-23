@@ -82,7 +82,7 @@ class JointObservation:
         dicts key-by-key (linear flux sum). Returns the merged dict.
 
         This is the multi-population entry point used by
-        :meth:`tengri.ForwardModel.predict` when more than one
+        :meth:`tengri.ForwardModel.predict_observables` when more than one
         :class:`Population` is wired up.
 
         Parameters

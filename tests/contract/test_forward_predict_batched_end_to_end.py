@@ -38,7 +38,7 @@ def _template(synthetic_ssp, simple_observation):
 
 
 def test_forward_predict_batched_for_population(synthetic_ssp, simple_observation) -> None:
-    """forward.predict returns (N_gal, n_filters) prediction dict for PopulationSEDModel."""
+    """forward.predict_observables returns (N_gal, n_filters) for PopulationSEDModel."""
     template = _template(synthetic_ssp, simple_observation)
     N = 3
     pop = PopulationSEDModel(
@@ -52,7 +52,7 @@ def test_forward_predict_batched_for_population(synthetic_ssp, simple_observatio
         name: jnp.array([0.5] * N) for name in template.spec.free_params
     }
 
-    pred = forward.predict(params)
+    pred = forward.predict_observables(params)
     assert isinstance(pred, dict)
     # Must have a photometric channel
     phot_key = next((k for k in ("phot_fnu", "fnu_obs") if k in pred), None)
@@ -67,7 +67,7 @@ def test_forward_predict_batched_for_population(synthetic_ssp, simple_observatio
 
 
 def test_forward_predict_single_galaxy_unchanged(synthetic_ssp, simple_observation) -> None:
-    """forward.predict for a single-galaxy SEDModel still returns (n_filters,).
+    """forward.predict_observables for a single-galaxy SEDModel still returns (n_filters,).
 
     The standardization contract: regardless of SubModel, the prediction
     dict's per-channel shapes line up with the data the likelihood is fed.
@@ -75,7 +75,7 @@ def test_forward_predict_single_galaxy_unchanged(synthetic_ssp, simple_observati
     template = _template(synthetic_ssp, simple_observation)
     forward = ForwardModel.build(sed=template, observation=simple_observation)
     params = {name: jnp.float64(0.5) for name in template.spec.free_params}
-    pred = forward.predict(params)
+    pred = forward.predict_observables(params)
     phot_key = next((k for k in ("phot_fnu", "fnu_obs") if k in pred), None)
     assert phot_key is not None
     phot = pred[phot_key]
@@ -86,7 +86,7 @@ def test_forward_predict_single_galaxy_unchanged(synthetic_ssp, simple_observati
 def test_forward_predict_batched_matches_per_galaxy_predict_one(
     synthetic_ssp, simple_observation
 ) -> None:
-    """Batched forward.predict == calling predict_one + observation.predict per galaxy.
+    """Batched forward.predict_observables == calling predict_one + observation.predict per galaxy.
 
     Numerical-equivalence gate: the vmap'd batched path should produce
     the same numbers as iterating predict_one over each galaxy and
@@ -102,7 +102,7 @@ def test_forward_predict_batched_matches_per_galaxy_predict_one(
     )
     forward = ForwardModel.build(population=pop, observation=simple_observation)
     params_batched = {name: jnp.array([0.5, 0.7]) for name in template.spec.free_params}
-    pred_batched = forward.predict(params_batched)
+    pred_batched = forward.predict_observables(params_batched)
 
     # Per-galaxy reference: call predict_one + observation.predict directly
     state = ForwardState(wave=jnp.zeros(1))

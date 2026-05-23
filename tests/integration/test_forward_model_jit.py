@@ -2,7 +2,7 @@
 """End-to-end JIT through ForwardModel (forward-model architecture §9.1).
 
 The new shell must be transparent under jax.jit. A loss function that
-wraps forward.predict + a likelihood computation must JIT, run, and
+wraps forward.predict_observables + a likelihood computation must JIT, run, and
 take gradients without error.
 """
 
@@ -41,7 +41,7 @@ def test_forward_model_end_to_end_jit(sed_model_minimal, simple_observation) -> 
 
     @jax.jit
     def loss(params):
-        pred = forward.predict(params)
+        pred = forward.predict_observables(params)
         # Expect {"phot_fnu": array(...)}
         if "phot_fnu" in pred:
             return jnp.sum(pred["phot_fnu"] ** 2)
@@ -63,7 +63,7 @@ def test_forward_model_predict_output_structure(sed_model_minimal, simple_observ
     forward = ForwardModel.build(sed=sed_model_minimal, observation=simple_observation)
     params = {name: jnp.float64(0.5) for name in sed_model_minimal.spec.free_params}
 
-    pred = forward.predict(params)
+    pred = forward.predict_observables(params)
 
     assert isinstance(pred, dict), f"Expected dict, got {type(pred)}"
     assert "phot_fnu" in pred, f"Missing 'phot_fnu'; got keys: {list(pred.keys())}"
@@ -78,8 +78,8 @@ def test_forward_model_predict_deterministic(sed_model_minimal, simple_observati
     forward = ForwardModel.build(sed=sed_model_minimal, observation=simple_observation)
     params = {name: jnp.float64(0.5) for name in sed_model_minimal.spec.free_params}
 
-    pred1 = forward.predict(params)
-    pred2 = forward.predict(params)
+    pred1 = forward.predict_observables(params)
+    pred2 = forward.predict_observables(params)
 
     assert jnp.allclose(pred1["phot_fnu"], pred2["phot_fnu"])
 

@@ -72,7 +72,7 @@ def test_fitter_loss_fn_evaluates_on_hierarchical(synthetic_ssp, simple_observat
 
     The chi² broadcasts over the galaxy axis naturally; the prior
     term sums ξᵀξ where ξ has (N,) leading shape for per-galaxy
-    free params. End-to-end: forward.predict → χ² → scalar.
+    free params. End-to-end: forward.predict_observables → χ² → scalar.
 
     Couplings fixed (incremental, across PRs):
     - PopulationSEDModel.__hash__ → id(self) (compile-cache hashability)
