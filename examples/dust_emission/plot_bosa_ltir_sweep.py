@@ -5,14 +5,9 @@ BOSA: log L_TIR sweep at fixed log sSFR
 Sweep infrared luminosity across the BOSA grid at fixed specific star
 formation rate. Increasing L_TIR heats dust, shifting FIR peak blueward
 and enhancing PAH relative to continuum.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_bosa_ltir_sweep_001.png
-   :alt: plot_bosa_ltir_sweep
-   :class: sphx-glr-single-img
-
 """
+
+import warnings
 
 import h5py
 import matplotlib.pyplot as plt
@@ -22,6 +17,8 @@ from tengri import data_path
 from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 with h5py.File(data_path("bosa_templates.h5"), "r") as f:
     wave_aa = np.asarray(f["wavelength_aa"][:])
@@ -53,9 +50,7 @@ ax.set(
     ylabel=r"$\nu L_\nu\ [\mathrm{normalised}\ \int L_\nu d\nu = 1]$",
     xlim=(3.0, 1.0e3),
     ylim=(1.0e-3, 2.0e0),
-    title=rf"BOSA at $\log_{{10}} \mathrm{{sSFR}}={log_ssfr[i_ssfr]:.1f}$",
 )
 ax.legend(loc="lower left", frameon=False, fontsize=8, ncol=2)
 fig.tight_layout()
-plt.savefig("plot_bosa_ltir_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_bosa_ltir_sweep.png", dpi=150, bbox_inches="tight")

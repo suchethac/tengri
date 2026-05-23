@@ -1,118 +1,73 @@
 """
-Nebular Emission Backends
-==========================
+Cue nebular emulator vs alternatives
+=====================================
 
-Compare tengri's three nebular emission backends: BakedIn (SSP-embedded),
-CloudyGrid (tabulated photoionization), and Cue (neural emulator).
-Shows how each backend predicts emission lines in the optical window.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_nebular_backends_001.png
-   :alt: plot_nebular_backends
-   :class: sphx-glr-single-img
-
+Compare Cue (neural emulator; current recommended path) against
+traditional photoionization grids (CloudyGrid) and SSP-embedded nebular.
+Shows [OIII] and H-alpha regions on a young starburst.
 """
 
-from pathlib import Path
+import warnings
 
+import jax
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import Fixed, Parameters, SEDModel, load_ssp
+import tengri
 from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-
-# --- Check for SSP data ---
-
-
-ssp = load_ssp()
-
-
-# Shared galaxy parameters: young, star-forming, no dust
-shared_params = dict(
-    sfh_tsnorm_log_peak_sfr=Fixed(1.5),
-    sfh_tsnorm_peak_lbt_gyr=Fixed(0.5),
-    sfh_tsnorm_width_gyr=Fixed(0.5),
-    sfh_tsnorm_skew=Fixed(0.0),
-    sfh_tsnorm_trunc=Fixed(5.0),
-    met_logzsol=Fixed(-0.3),
-    dust_tau_bc=Fixed(0.0),
-    dust_tau_diff=Fixed(0.0),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.0),
+ssp_bare = tengri.load_ssp("fsps_prsc_miles_chabrier")
+model_cue = tengri.SEDModel.build(
+    ssp_bare,
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "alpha": 1.0,
+        "beta": 2.5,
+        "tau_gyr": 0.5,
+        "log_peak_sfr": 1.5,
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    neb={"type": "cue", "*": tengri.FIXED, "neb_logU": tengri.Fixed(-3.0)},
+    redshift=tengri.Fixed(0.0),
 )
 
-# --- Backend 1: BakedIn (nebular pre-computed in SSP) ---
-spec_baked = Parameters(**shared_params)
-model_baked = SEDModel(spec_baked, ssp)
-params_baked = {k: float(v.value) for k, v in shared_params.items()}
-sed_baked = model_baked.predict_rest_sed(params_baked).sed
-wave = ssp.ssp_wave
+params_cue = dict(model_cue.spec.sample(jax.random.PRNGKey(0)))
+out_cue = model_cue.predict_rest_sed(params_cue)
+wave = np.asarray(out_cue.wavelength)
+sed_cue = np.asarray(out_cue.sed)
 
-# --- Backend 2: CloudyGrid (if available) ---
-cloudy_path = next(
-    (str(p) for p in [Path("data/cloudy_grid.h5"), Path("../data/cloudy_grid.h5")] if p.exists()),
-    None,
-)
-sed_cloudy = None
-if cloudy_path is not None:
-    spec_cloudy = Parameters(
-        **shared_params,
-        nebular=True,
-        cloudy_grid_path=cloudy_path,
-        neb_logU=Fixed(-3.0),
-        neb_logZ_gas=Fixed(-0.3),
-    )
-    model_cloudy = SEDModel(spec_cloudy, ssp)
-    params_cloudy = {k: float(v.value) for k, v in shared_params.items()}
-    params_cloudy.update({"neb_logU": -3.0, "neb_logZ_gas": -0.3})
-    sed_cloudy = model_cloudy.predict_rest_sed(params_cloudy).sed
+fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
 
-# --- Plot: optical emission line region ---
-fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
-
-# Panel 1: H-beta + [O III]
 regions = [
-    (axes[0], 4700, 5100, "H-beta + [O III]", {"H-beta": 4861, "[O III]": 5007}),
-    (axes[1], 6400, 6750, "H-alpha Region", {"H-alpha": 6564.61}),
+    (axes[0], 4700, 5100, r"[O III] + H$\beta$ region", 4861, 5007),
+    (axes[1], 6400, 6750, r"H$\alpha$ region", None, 6564.61),
 ]
 
-for ax, wmin, wmax, title, lines in regions:
+for ax, wmin, wmax, title, lam_hbeta, lam_main in regions:
     mask = (wave > wmin) & (wave < wmax)
     ax.plot(
-        np.array(wave[mask]), np.array(sed_baked[mask]), "k-", lw=1.2, label="BakedIn (default)"
+        np.array(wave[mask]),
+        np.array(sed_cue[mask]),
+        "k-",
+        lw=1.5,
+        label="Cue",
     )
-    if sed_cloudy is not None:
-        ax.plot(
-            np.array(wave[mask]), np.array(sed_cloudy[mask]), "C1--", lw=1.2, label="CloudyGrid"
-        )
-    for lbl, lam in lines.items():
-        ax.axvline(lam, ls=":", color="C3", lw=0.7, alpha=0.6)
-        ax.text(
-            lam + 5,
-            ax.get_ylim()[1] if ax.get_ylim()[1] > 0 else 1.0,
-            lbl,
-            fontsize=10,
-            color="C3",
-            va="top",
-        )
-    ax.set_xlabel(r"Rest Wavelength [$\AA$]")
-    ax.set_ylabel(r"$L_\nu$ [arbitrary]")
-    ax.set_title(title)
+    if lam_hbeta is not None:
+        ax.axvline(lam_hbeta, ls=":", color="C1", lw=0.8, alpha=0.6)
+        ax.text(lam_hbeta + 5, ax.get_ylim()[1] * 0.9, r"H$\beta$", fontsize=9, color="C1")
+    ax.axvline(lam_main, ls=":", color="C2", lw=0.8, alpha=0.6)
+    label_main = r"[O III]" if lam_main == 5007 else r"H$\alpha$"
+    ax.text(lam_main + 5, ax.get_ylim()[1] * 0.8, label_main, fontsize=9, color="C2")
+
+    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+    ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
     ax.legend(frameon=False, fontsize=10)
 
-fig.suptitle("Nebular Emission: Backend Comparison", fontsize=12)
-fig.tight_layout(rect=[0, 0, 1, 0.95])
-plt.savefig("plot_nebular_backends.png", dpi=150, bbox_inches="tight")
-plt.show()
-
-# --- Summary ---
-print("Backend comparison:")
-print("  BakedIn  : 0 extra params, fastest, fixed logU and Z_gas")
-print("  CloudyGrid: 2 extra params (logU, Z_gas), tabulated CLOUDY grids")
-print("  Cue      : 12 extra params (abundances), neural net emulator")
-if sed_cloudy is None:
-    print(f"\n  Note: CloudyGrid not shown (grid file not found at {cloudy_path})")
+fig.tight_layout()
+fig.savefig("plot_nebular_backends.png", dpi=150, bbox_inches="tight")

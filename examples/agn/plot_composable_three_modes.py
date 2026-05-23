@@ -199,16 +199,6 @@ for bar, t_ms, sp in zip(bars, times_ms, speedups):
 # the kernel weights three neighbouring grid points, so even at a grid
 # centre it produces a slightly different value than the raw spectrum
 # evaluation. This is by design (smoothness for gradients), not a bug.
-print()
-print("filter photometry (r-band toy filter, log L_bol/L_sun = 12, l5100 = 1e44):")
-print(f"  exact:        {phot_eager:.3e}")
-print(f"  JIT:          {float(phot_jit):.3e}")
-print(f"  precompute:   {phot_pre:.3e}  (triweight-smoothed)")
-print(f"  rel-err exact→JIT:        {abs(phot_eager - float(phot_jit)) / phot_eager:.2e}")
-print(
-    f"  rel-err exact→precompute: {abs(phot_eager - phot_pre) / phot_eager:.2e}  (~few % typical)"
-)
 
-fig.suptitle("Composable AGN: three evaluation modes for the same recipe", fontsize=11)
 fig.tight_layout()
-plt.show()
+fig.savefig("plot_composable_three_modes.png", dpi=150, bbox_inches="tight")

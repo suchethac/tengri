@@ -150,6 +150,16 @@ def build_components(
     nebular_backend_instance: Any | None = None,
     # AGN
     agn_model: str | None = None,
+    # Composable-AGN block selectors (only consulted when agn_model="composable").
+    # They are static Python strings, threaded into the AGNSEDComponent's
+    # config so the runner can pick the right per-stage callable at trace-
+    # build time. For other AGN models the registered function absorbs
+    # them via ``**kwargs`` and they have no effect.
+    agn_disc_block: str = "none",
+    agn_torus_block: str = "none",
+    agn_lines_block: str = "none",
+    agn_feii_block: str = "none",
+    agn_attenuation_block: str = "none",
     # Dust two-component
     dust_law_bc: str = "power_law",
     dust_law_diff: str = "power_law",
@@ -263,7 +273,18 @@ def build_components(
 
     # 3. AGN (optional)
     if agn_model is not None:
-        components.append(AGNSEDComponent(config=AGNSEDComponentConfig(model=agn_model)))
+        components.append(
+            AGNSEDComponent(
+                config=AGNSEDComponentConfig(
+                    model=agn_model,
+                    agn_disc_block=agn_disc_block,
+                    agn_torus_block=agn_torus_block,
+                    agn_lines_block=agn_lines_block,
+                    agn_feii_block=agn_feii_block,
+                    agn_attenuation_block=agn_attenuation_block,
+                )
+            )
+        )
 
     # 4. Dust (optional). Two-component (Charlot & Fall 2000) is the
     # default; ``dust_model="single_component"`` picks the simpler

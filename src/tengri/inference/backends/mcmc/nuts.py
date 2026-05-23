@@ -133,10 +133,13 @@ def run_nuts(
     except ImportError:
         raise ImportError("blackjax required for NUTS: pip install blackjax") from None
 
+    from tengri.inference.context import InferenceContext
     from tengri.inference.posterior import Posterior
 
     # ``_shared.py`` helpers still take a Fitter; reach through the
-    # context until they migrate.
+    # context until they migrate. Normalize first so callers can pass
+    # either a Fitter or an InferenceContext (matches HMC/raytrace).
+    context = InferenceContext.from_target(context)
     fitter = context.fitter
 
     # Warn about high dimensionality

@@ -15,6 +15,8 @@ feature as resolution increases. High-res spectroscopy reveals kinematics.
 
 """
 
+import warnings
+
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,6 +26,7 @@ from tengri import Fixed, Observation, Parameters, SEDModel, Spectroscopy, load_
 from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 
 ssp = load_ssp()
@@ -91,13 +94,11 @@ for r, color in zip(resolution_vals, colors):
         alpha=0.85,
     )
 
-# Set limits FIRST so the H-alpha annotation places at the right y-coord.
-ax.set_xlabel(r"Rest Wavelength [$\AA$]")
-ax.set_ylabel("Normalized Flux")
-ax.set_title(r"H$\alpha$ Line: Instrumental Resolution Effects")
 # Zoom out enough to show the full Hα + [N II] λλ6549,6585 complex with
 # continuum context either side. Log-y keeps the bright emission peaks on
 # the same panel as the ~1% absorption-line wiggles in the continuum.
+ax.set_xlabel(r"Rest Wavelength [$\AA$]")
+ax.set_ylabel("Normalized Flux")
 ax.set_xlim(6450, 6700)
 ax.set_yscale("log")
 ax.set_ylim(0.7, 30.0)
@@ -117,5 +118,4 @@ ax.text(
 )
 ax.legend(frameon=False, loc="upper right", fontsize=10)
 fig.tight_layout()
-plt.savefig("plot_resolution_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_resolution_sweep.png", dpi=150, bbox_inches="tight")

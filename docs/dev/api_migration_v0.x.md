@@ -665,7 +665,7 @@ a `DeprecationWarning`; they are removed in v1.0.
 
 | Old                                     | New                                              | Status (v0.x)        |
 | --------------------------------------- | ------------------------------------------------ | -------------------- |
-| `SEDModel.from_groups(...)`             | `SEDModel.build(...)`                            | Both work; old warns |
+| `SEDModel.from_groups(...)`             | `SEDModel.build(...)`                            | Removed 2026-05-23   |
 | `SEDComponent.publishes()`              | `SEDComponent.outputs()`                         | Both work; old warns |
 | `SEDComponent.requires()`               | `SEDComponent.inputs()`                          | Both work; old warns |
 | `SEDComponent.requires_optional()`      | `SEDComponent.optional_inputs()`                 | Both work; old warns |

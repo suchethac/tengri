@@ -143,7 +143,7 @@ def tree(model: SEDModel) -> str:
     z_info = f"z={z_fixed:.4f} [fixed]" if z_fixed is not None else "z [free]"
     if filter_waves is not None:
         n_filt = len(filter_waves)
-        precomp = model._precomputed.photometry
+        precomp = model.precomputed.photometry
         precomp_str = "YES (21.6x speedup)" if precomp is not None else "NO"
         lines.append(f"{last} Observation: Photometry [{n_filt} bands] at {z_info}")
         lines.append(f"    Precomputed: {precomp_str}")
@@ -200,24 +200,24 @@ def summary(model: SEDModel) -> str:
         lines.append("  Filters:     none")
 
     # Redshift
-    if model._z_fixed is not None:
-        lines.append(f"  Redshift:    {model._z_fixed:.4f} (fixed)")
+    if model.z_fixed is not None:
+        lines.append(f"  Redshift:    {model.z_fixed:.4f} (fixed)")
     else:
         lines.append("  Redshift:    free")
 
     # Dtype and precomputation
     lines.append(f"  Dtype:       {model._forward_dtype}")
     precomp_parts: list[str] = []
-    if model._precomputed.photometry is not None:
+    if model.precomputed.photometry is not None:
         precomp_parts.append("photometry")
-    if model._precomputed.spectroscopy is not None:
+    if model.precomputed.spectroscopy is not None:
         precomp_parts.append("spectroscopy")
-    if model._precomputed.photometry_ztable is not None:
+    if model.precomputed.photometry_ztable is not None:
         precomp_parts.append("z-table")
     lines.append(f"  Precomputed: {', '.join(precomp_parts) if precomp_parts else 'none'}")
 
     # Kernel status
-    hybrid = "active" if model._hybrid.photometry is not None else "off"
+    hybrid = "active" if model.hybrid.photometry is not None else "off"
     compositional = "active" if model._compositional.photometry is not None else "off"
     lines.append(f"  Hybrid kernel: {hybrid}")
     lines.append(f"  Compositional kernel: {compositional}")
@@ -268,7 +268,7 @@ def summary(model: SEDModel) -> str:
 
     # Dimensionality
     n_free = model.spec.n_free
-    n_grid = model._n_grid if model._uses_stochastic_sfh else 0
+    n_grid = model.n_grid if model.uses_stochastic_sfh else 0
     lines.append("")
     lines.append(f"  Parameters:  {n_free} free" + (f" + {n_grid} latent (ξ)" if n_grid else ""))
 

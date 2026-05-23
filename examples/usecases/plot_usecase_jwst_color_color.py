@@ -1,226 +1,174 @@
 """
-JWST NIRCam Color-Color Diagram for High-z Classification
-===========================================================
+JWST NIRCam color-color diagnostics for high-z galaxy classification
+====================================================================
 
-Generates 200 mock high-redshift galaxies spanning star-forming (z=1–7),
-quiescent/passive (z=1–3), and AGN/dusty-starburst (z=2–4) classes.
-Computes JWST NIRCam F150W–F277W vs F277W–F444W colors and plots the
-diagnostic diagram. Demonstrates how JWST color-color plots separate
-UV-to-IR spectral types for high-redshift source classification.
+Generates 150 mock galaxies spanning star-forming (z=1-7), passive (z=1-3),
+and dusty/AGN (z=2-4) populations. Computes JWST NIRCam F150W-F277W vs
+F277W-F444W colors and plots the diagnostic plane. Shows how JWST color-color
+diagnostics separate spectral types and enable redshift estimation in the
+rest-frame UV-to-IR with minimal prior knowledge.
 
-Synthetic data: Pure SEDs at fixed redshifts, no noise.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_usecase_jwst_color_color_001.png
-   :alt: plot_usecase_jwst_color_color
-   :class: sphx-glr-single-img
-
+Reference: Whitaker et al. 2011, ApJ, 735, 86 (high-z color selection);
+Conroy 2013, ARA&A, 51, 393 (SED fitting).
 """
 
-from pathlib import Path
+import warnings
 
 import jax
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import (
-    Fixed,
-    Observation,
-    Parameters,
-    Photometry,
-    SEDModel,
-    Uniform,
-    load_ssp,
-    setup_style,
-)
+import tengri
+from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
+ssp = tengri.load_ssp()
 
-ssp = load_ssp()
-
-_FILTER_DIR = next(
-    (
-        str(d)
-        for d in [
-            Path("data/filters"),
-            Path("../data/filters"),
-            Path("../../data/filters"),
-            Path("../../../data/filters"),
-        ]
-        if d.exists()
-    ),
-    "data/filters",
-)
-
-# --- JWST NIRCam filters ---
+# Build JWST filter observation
 try:
-    obs = Observation(
-        photometry=Photometry.from_names(
-            ["jwst_f150w", "jwst_f277w", "jwst_f444w"], cache_dir=_FILTER_DIR
-        ),
+    obs = tengri.Observation(
+        photometry=tengri.Photometry.from_names(["jwst_f150w", "jwst_f277w", "jwst_f444w"])
     )
 except Exception:
-    # Fallback: if exact JWST names differ, use approximate central wavelengths
-    print("Warning: JWST filter names may differ; using synthetic data only")
+    # Fallback if filter names differ
     obs = None
 
+# Generate three galaxy classes
 key = jax.random.PRNGKey(123)
+colors_all = {"sf": [], "passive": [], "dusty": []}
+z_all = {"sf": [], "passive": [], "dusty": []}
 
-# --- Generate three classes of galaxies ---
-colors_sf = []
-colors_passive = []
-colors_agn = []
-
-# Class 1: Star-forming (z=1–7, young, extended SFH)
-for i in range(70):
+# Star-forming (z=1-7, young, extended SFH)
+for i in range(50):
     z = np.random.uniform(1.0, 7.0)
-    spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Uniform(-0.5, 1.5),  # Recent, active
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.2, 2.0),  # Recent star formation
-        sfh_tsnorm_width_gyr=Uniform(0.5, 3.0),
-        sfh_tsnorm_skew=Uniform(-1.0, 1.0),
-        sfh_tsnorm_trunc=Uniform(1.5, 5.0),
-        met_logzsol=Uniform(-1.0, 0.1),
-        dust_tau_bc=Uniform(0.0, 0.8),  # Moderate dust
-        dust_tau_diff=Uniform(0.0, 0.5),
-        dust_slope=Fixed(-0.7),
-        redshift=Fixed(z),
+    model = tengri.SEDModel.build(
+        ssp,
+        observation=obs,
+        sfh={
+            "type": "tsnorm",
+            "log_peak_sfr": tengri.Uniform(-0.5, 1.5),
+            "peak_lbt_gyr": tengri.Uniform(0.2, 2.0),
+            "width_gyr": tengri.Uniform(0.5, 3.0),
+            "skew": tengri.Uniform(-1.0, 1.0),
+            "trunc": tengri.Uniform(1.5, 5.0),
+            "logzsol": tengri.Uniform(-1.0, 0.1),
+        },
+        dust={
+            "type": "two_component",
+            "tau_bc": tengri.Uniform(0.0, 0.8),
+            "tau_diff": tengri.Uniform(0.0, 0.5),
+            "slope": tengri.Fixed(-0.7),
+        },
+        redshift=tengri.Fixed(z),
     )
-    if obs is not None:
-        model = SEDModel(spec, ssp, observation=obs)
-        k = jax.random.fold_in(key, i)
-        params = spec.sample(k)
-        pred = model.predict_photometry(params)
-        # Simple color: f277w / f150w (rest-frame UV slope) and f444w / f277w (IR)
-        try:
-            f1 = float(pred[1])
-            f0 = float(pred[0])
-            f2 = float(pred[2])
-            color1 = -2.5 * np.log10(f1 / f0) if f1 > 0 else 0
-            color2 = -2.5 * np.log10(f2 / f1) if f2 > 0 else 0
-            colors_sf.append([color1, color2])
-        except Exception:
-            pass
+    key, subkey = jax.random.split(key)
+    params = model.spec.sample(subkey)
+    phot = np.asarray(model.predict_photometry(params))
+    if len(phot) == 3:
+        f0, f1, f2 = phot[0], phot[1], phot[2]
+        color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+        color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+        colors_all["sf"].append((color1, color2))
+        z_all["sf"].append(z)
 
-# Class 2: Passive/quiescent (z=1–3, old, minimal dust)
-for i in range(35):
+# Passive (z=1-3, old, narrow SFH)
+for i in range(50):
     z = np.random.uniform(1.0, 3.0)
-    spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Uniform(-2.0, -0.5),  # Old, quenched
-        # Peak before the galaxy's age at z=1-3 (~3-6 Gyr after Big Bang)
-        # so the SFH actually places mass; >8 Gyr lookback gives zero flux.
-        sfh_tsnorm_peak_lbt_gyr=Uniform(2.0, 4.5),
-        sfh_tsnorm_width_gyr=Uniform(0.2, 1.0),
-        sfh_tsnorm_skew=Uniform(-2.0, 0.0),
-        sfh_tsnorm_trunc=Uniform(1.0, 3.0),
-        met_logzsol=Uniform(-0.5, 0.2),  # Higher metallicity
-        dust_tau_bc=Uniform(0.0, 0.2),  # Very low dust
-        dust_tau_diff=Uniform(0.0, 0.1),
-        dust_slope=Fixed(-0.7),
-        redshift=Fixed(z),
+    model = tengri.SEDModel.build(
+        ssp,
+        observation=obs,
+        sfh={
+            "type": "tsnorm",
+            "log_peak_sfr": tengri.Uniform(-0.5, 0.5),
+            "peak_lbt_gyr": tengri.Uniform(7.0, 11.0),
+            "width_gyr": tengri.Uniform(0.5, 1.5),
+            "skew": tengri.Uniform(-1.5, 0.0),
+            "trunc": tengri.Uniform(1.5, 3.0),
+            "logzsol": tengri.Uniform(-0.2, 0.3),
+        },
+        dust={
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "tau_bc": 0.05,
+            "tau_diff": 0.02,
+            "slope": -0.7,
+        },
+        redshift=tengri.Fixed(z),
     )
-    if obs is not None:
-        model = SEDModel(spec, ssp, observation=obs)
-        k = jax.random.fold_in(key, 100 + i)
-        params = spec.sample(k)
-        pred = model.predict_photometry(params)
-        try:
-            f1 = float(pred[1])
-            f0 = float(pred[0])
-            f2 = float(pred[2])
-            color1 = -2.5 * np.log10(f1 / f0) if f1 > 0 else 0
-            color2 = -2.5 * np.log10(f2 / f1) if f2 > 0 else 0
-            colors_passive.append([color1, color2])
-        except Exception:
-            pass
+    key, subkey = jax.random.split(key)
+    params = model.spec.sample(subkey)
+    phot = np.asarray(model.predict_photometry(params))
+    if len(phot) == 3:
+        f0, f1, f2 = phot[0], phot[1], phot[2]
+        color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+        color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+        colors_all["passive"].append((color1, color2))
+        z_all["passive"].append(z)
 
-# Class 3: AGN / dusty starbursts (z=2–4, heavily obscured, high dust)
-for i in range(45):
+# Dusty/AGN (z=2-4, high dust, high SFR)
+for i in range(50):
     z = np.random.uniform(2.0, 4.0)
-    spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Uniform(0.5, 2.0),  # Very intense star formation
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 1.5),  # Recent
-        sfh_tsnorm_width_gyr=Uniform(0.3, 1.5),
-        sfh_tsnorm_skew=Uniform(-0.5, 1.5),
-        sfh_tsnorm_trunc=Uniform(2.0, 6.0),
-        met_logzsol=Uniform(-0.5, 0.2),
-        dust_tau_bc=Uniform(1.2, 2.0),  # Heavy dust (Compton-thick analog)
-        dust_tau_diff=Uniform(0.6, 1.2),
-        dust_slope=Fixed(-0.7),
-        redshift=Fixed(z),
+    model = tengri.SEDModel.build(
+        ssp,
+        observation=obs,
+        sfh={
+            "type": "tsnorm",
+            "log_peak_sfr": tengri.Uniform(1.0, 2.5),
+            "peak_lbt_gyr": tengri.Uniform(0.5, 3.0),
+            "width_gyr": tengri.Uniform(1.0, 4.0),
+            "skew": tengri.Uniform(-0.5, 1.0),
+            "trunc": tengri.Uniform(2.0, 6.0),
+            "logzsol": tengri.Uniform(-0.5, 0.2),
+        },
+        dust={
+            "type": "two_component",
+            "tau_bc": tengri.Uniform(0.8, 2.0),
+            "tau_diff": tengri.Uniform(0.5, 1.5),
+            "slope": tengri.Fixed(-0.7),
+        },
+        redshift=tengri.Fixed(z),
     )
-    if obs is not None:
-        model = SEDModel(spec, ssp, observation=obs)
-        k = jax.random.fold_in(key, 200 + i)
-        params = spec.sample(k)
-        pred = model.predict_photometry(params)
-        try:
-            f1 = float(pred[1])
-            f0 = float(pred[0])
-            f2 = float(pred[2])
-            color1 = -2.5 * np.log10(f1 / f0) if f1 > 0 else 0
-            color2 = -2.5 * np.log10(f2 / f1) if f2 > 0 else 0
-            colors_agn.append([color1, color2])
-        except Exception:
-            pass
+    key, subkey = jax.random.split(key)
+    params = model.spec.sample(subkey)
+    phot = np.asarray(model.predict_photometry(params))
+    if len(phot) == 3:
+        f0, f1, f2 = phot[0], phot[1], phot[2]
+        color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+        color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+        colors_all["dusty"].append((color1, color2))
+        z_all["dusty"].append(z)
 
-# --- Figure ---
-fig, ax = plt.subplots(figsize=(9, 7))
+# Plot
+fig, ax = plt.subplots(figsize=(8, 7))
 
-if len(colors_sf) > 0:
-    c_sf = np.array(colors_sf)
-    ax.scatter(
-        c_sf[:, 0],
-        c_sf[:, 1],
-        c="C0",
-        s=60,
-        alpha=0.6,
-        label="Star-forming (z=1–7)",
-        lw=1.5,
-    )
+# Plot each class
+for key_name, marker, color, label in [
+    ("sf", "o", "#1f77b4", "Star-forming"),
+    ("passive", "s", "#d62728", "Passive"),
+    ("dusty", "^", "#ff7f0e", "Dusty/AGN"),
+]:
+    if colors_all[key_name]:
+        colors_arr = np.array(colors_all[key_name])
+        ax.scatter(
+            colors_arr[:, 0],
+            colors_arr[:, 1],
+            marker=marker,
+            s=60,
+            alpha=0.7,
+            edgecolors="k",
+            lw=0.5,
+            color=color,
+            label=label,
+        )
 
-if len(colors_passive) > 0:
-    c_p = np.array(colors_passive)
-    ax.scatter(
-        c_p[:, 0],
-        c_p[:, 1],
-        c="C1",
-        s=60,
-        alpha=0.6,
-        marker="s",
-        label="Passive (z=1–3)",
-        lw=1.5,
-    )
-
-if len(colors_agn) > 0:
-    c_agn = np.array(colors_agn)
-    ax.scatter(
-        c_agn[:, 0],
-        c_agn[:, 1],
-        c="C3",
-        s=60,
-        alpha=0.6,
-        marker="^",
-        label="Dusty/AGN (z=2–4)",
-        lw=1.5,
-    )
-
-ax.set_xlabel(r"$F150W - F277W$ [mag]", fontsize=12, fontweight="bold")
-ax.set_ylabel(r"$F277W - F444W$ [mag]", fontsize=12, fontweight="bold")
-ax.set_title(
-    "JWST NIRCam Color-Color Diagram\nHigh-z Galaxy Classification",
-    fontsize=13,
-    fontweight="bold",
-)
-ax.grid(True, alpha=0.3, linestyle="--")
-ax.legend(frameon=False, fontsize=11, loc="best")
-# Frame on the actual color cluster with breathing room either side.
-ax.set_xlim(-1.5, 0.5)
-ax.set_ylim(-0.5, 0.5)
+ax.set_xlabel(r"F150W - F277W [mag]")
+ax.set_ylabel(r"F277W - F444W [mag]")
+ax.legend(frameon=False, loc="upper left")
+ax.set_xlim([-0.5, 3.0])
+ax.set_ylim([-0.5, 2.0])
 
 fig.tight_layout()
-
-plt.savefig("plot_usecase_jwst_color_color.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_usecase_jwst_color_color.png", dpi=150, bbox_inches="tight")

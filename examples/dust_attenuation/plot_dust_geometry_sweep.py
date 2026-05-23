@@ -1,28 +1,28 @@
 """
-Dust Geometry: Screen vs Mixed vs Clumpy
-========================================
+Dust geometry shapes the extinction: screen vs mixed vs clumpy
+==============================================================
 
-Three dust geometries proxied by their characteristic laws (Witt & Gordon
-2000): foreground screen (power law), mixed slab (Calzetti), clumpy two-phase
-(SMC). At fixed τ_V = 1, geometry controls the spectral shape — screens are
-reddest, clumpy is greyest.
+Three dust geometries—foreground screen (power-law), mixed slab (Calzetti),
+and clumpy two-phase (SMC)—proxy different physical arrangements via their
+attenuation laws. At fixed τ_V = 1, geometry controls the spectral shape:
+screens are reddest, clumpy geometries are greyest. Transmission curves show
+how each law transforms a stellar continuum.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_dust_geometry_sweep_001.png
-   :alt: plot_dust_geometry_sweep
-   :class: sphx-glr-single-img
-
+Reference: Witt & Gordon 2000, ApJ, 528, 799 (dust geometry classification).
 """
+
+import warnings
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+import tengri
 from tengri.analysis.plotting import setup_style
 from tengri.dust import resolve_dust_law
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 wave = jnp.linspace(1000.0, 10000.0, 2000)
 tau_v = 1.0
@@ -33,22 +33,20 @@ geometries = {
     "Clumpy (two-phase)": resolve_dust_law("smc")(wave),
 }
 
-fig, ax = plt.subplots(figsize=(10, 6))
-for label, k in geometries.items():
-    ax.plot(wave / 1e4, np.exp(-tau_v * np.array(k)), lw=2.0, label=label)
+colors = ["C0", "C1", "C2"]
 
-ax.axhline(1.0, ls="--", color="black", lw=0.8, alpha=0.3, label="No dust")
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
+for (label, k), color in zip(geometries.items(), colors):
+    ax.plot(wave / 1e4, np.exp(-tau_v * np.array(k)), lw=1.4, color=color, label=label)
+
+ax.axhline(1.0, ls="--", color="black", lw=0.8, alpha=0.3)
 ax.axvline(0.55, ls=":", color="grey", lw=0.8, alpha=0.5)
-ax.text(0.56, 0.05, "V-band", fontsize=9, color="grey")
 
-ax.set(
-    xlabel=r"Wavelength [$\mu$m]",
-    ylabel=r"Transmission: $\exp(-\tau_V \, k(\lambda))$",
-    title=f"Dust Geometry Effects (τ_V = {tau_v:.1f})",
-    xlim=(0.1, 1.0),
-    ylim=(0, 1.1),
-)
-ax.legend(fontsize=10, frameon=False, loc="lower left")
+ax.set_xlim(0.08, 1.0)
+ax.set_ylim(0, 1.1)
+ax.set_xlabel(r"Wavelength [$\mu$m]")
+ax.set_ylabel(r"Transmission: $\exp(-\tau_V \, k(\lambda))$")
+ax.legend(fontsize=9, frameon=False, loc="lower left")
+
 fig.tight_layout()
-plt.savefig("plot_dust_geometry_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_dust_geometry_sweep.png", dpi=150, bbox_inches="tight")

@@ -50,7 +50,6 @@ def _build_prediction(
     model,
     params,
     data_type,
-    mode,
     *,
     has_line_fluxes,
     has_indices,
@@ -71,21 +70,21 @@ def _build_prediction(
         if use_components:
             predicted = model.predict_photometry_components(params)
         else:
-            predicted = model.predict_photometry(params, mode=mode)
+            predicted = model.predict_photometry(params)
         pred_phot, pred_spec = predicted, None
     elif data_type == "spectroscopy":
         if use_components:
-            predicted = model.predict_spectrum_components(params, model._wave_obs)
+            predicted = model.predict_spectrum_components(params)
         else:
-            predicted = model.predict_spectrum(params, model._wave_obs, mode=mode)
+            predicted = model.predict_spectrum(params)
         pred_phot, pred_spec = None, predicted
     elif data_type == "joint":
         if use_components:
             pred_phot = model.predict_photometry_components(params)
-            pred_spec = model.predict_spectrum_components(params, model._wave_obs)
+            pred_spec = model.predict_spectrum_components(params)
         else:
-            pred_phot = model.predict_photometry(params, mode=mode)
-            pred_spec = model.predict_spectrum(params, model._wave_obs, mode=mode)
+            pred_phot = model.predict_photometry(params)
+            pred_spec = model.predict_spectrum(params)
         predicted = jnp.concatenate([pred_phot, pred_spec])
     else:
         raise ValueError(f"Unknown data_type: {data_type}")
@@ -100,7 +99,7 @@ def _build_prediction(
             params, target_wavelengths=data_args["line_flux_waves"]
         )
     if has_indices:
-        prediction["indices"] = model.predict_spectral_indices(params, index_defs, mode=mode)
+        prediction["indices"] = model.predict_spectral_indices(params, index_defs)
 
     return prediction, predicted, pred_phot, pred_spec
 
@@ -108,7 +107,7 @@ def _build_prediction(
 # ── Builders ─────────────────────────────────────────────────────────────
 
 
-def _build_data_neg_log_likelihood_fn(fitter, mode="traced"):
+def _build_data_neg_log_likelihood_fn(fitter):
     """Build the data-term function ``neg_log_lik(params, data_args) -> -log p(d|params)``.
 
     Single source of truth for the data term. All three public builders
@@ -158,7 +157,6 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="traced"):
             model,
             params,
             data_type,
-            mode,
             has_line_fluxes=has_line_fluxes,
             has_indices=has_indices,
             index_defs=index_defs,
@@ -206,7 +204,7 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="traced"):
             )
             e_lh = e_lh + 0.5 * chi2_lines
         if has_indices:
-            model_idx = model.predict_spectral_indices(params, index_defs, mode=mode)
+            model_idx = model.predict_spectral_indices(params, index_defs)
             chi2_idx = jnp.sum(
                 ((data_args["index_obs"] - model_idx) / data_args["index_err"]) ** 2
             )
@@ -217,7 +215,7 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="traced"):
     return neg_log_lik
 
 
-def build_loss_fn(fitter, mode="traced"):
+def build_loss_fn(fitter):
     """Build the information Hamiltonian (loss function) from Fitter state.
 
     Constructs a JAX-differentiable loss function encapsulating the likelihood
@@ -243,13 +241,6 @@ def build_loss_fn(fitter, mode="traced"):
     ----------
     fitter : Fitter
         Fitter instance with model, data, parameters, and configuration.
-
-    mode : str, optional
-        Forward model prediction mode. Default ``"traced"`` is safe
-        inside JIT scopes (used by NIFTy geoVI). Use ``"auto"`` (~1.5×
-        speedup) for non-JIT methods (MAP, Laplace, Pathfinder, NUTS,
-        Ray Tracing, NSS). See
-        :doc:`docs/dev/jit-optimization-report-2026-04-18.md`.
 
     Returns
     -------
@@ -300,7 +291,7 @@ def build_loss_fn(fitter, mode="traced"):
     fixed_values = fitter._fixed_values
     spec = fitter.spec
     stochastic = spec.stochastic
-    neg_log_lik = _build_data_neg_log_likelihood_fn(fitter, mode=mode)
+    neg_log_lik = _build_data_neg_log_likelihood_fn(fitter)
 
     def loss_fn(params_unbounded, data_args):
         """Compute loss: -log_lik + ½ξᵀξ prior on standardized params."""
@@ -409,7 +400,7 @@ def build_logprior_fn(fitter):
     return logprior_fn
 
 
-def build_loglikelihood_fn(fitter, mode="traced"):
+def build_loglikelihood_fn(fitter):
     """Build log-likelihood function in physical parameter space.
 
     Constructs a JAX-differentiable function that computes the log-likelihood
@@ -421,11 +412,6 @@ def build_loglikelihood_fn(fitter, mode="traced"):
     ----------
     fitter : Fitter
         Fitter instance with model, data, parameters, and likelihood config.
-
-    mode : str, optional
-        Forward model prediction mode. Default ``"traced"`` is safe
-        inside JIT (used by NIFTy geoVI). Use ``"auto"`` (~1.5× speedup)
-        for non-JIT methods (MAP, Laplace, Pathfinder, NUTS, Ray Tracing, NSS).
 
     Returns
     -------
@@ -461,7 +447,7 @@ def build_loglikelihood_fn(fitter, mode="traced"):
     """
     fixed_values = fitter._fixed_values
     spec = fitter.spec
-    neg_log_lik = _build_data_neg_log_likelihood_fn(fitter, mode=mode)
+    neg_log_lik = _build_data_neg_log_likelihood_fn(fitter)
 
     def loglikelihood_fn(free_params, data_args):
         """Compute log p(d | params) — physical params, no prior."""
@@ -474,7 +460,7 @@ def build_loglikelihood_fn(fitter, mode="traced"):
     return loglikelihood_fn
 
 
-def build_loglikelihood_unbounded_fn(fitter, mode="traced"):
+def build_loglikelihood_unbounded_fn(fitter):
     """Build a log-likelihood function in unbounded parameter space.
 
     For Elliptical Slice Sampling, which handles the N(0,I) prior
@@ -483,10 +469,6 @@ def build_loglikelihood_unbounded_fn(fitter, mode="traced"):
     Parameters
     ----------
     fitter : Fitter
-    mode : str, optional
-        Forward model prediction mode. Default "traced" is safe inside
-        JIT scopes (used by NIFTy VI/geoVI). Use "auto" for better performance
-        with MAP, Laplace, Pathfinder, NUTS, Raytrace, NSS (~1.5x speedup).
 
     Returns
     -------
@@ -505,7 +487,7 @@ def build_loglikelihood_unbounded_fn(fitter, mode="traced"):
     fixed_values = fitter._fixed_values
     spec = fitter.spec
     stochastic = spec.stochastic
-    neg_log_lik = _build_data_neg_log_likelihood_fn(fitter, mode=mode)
+    neg_log_lik = _build_data_neg_log_likelihood_fn(fitter)
 
     def loglik_unbounded(params_unbounded, data_args):
         """Compute log-likelihood after unstandardizing unbounded parameters to physical space."""

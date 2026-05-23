@@ -770,7 +770,7 @@ class Observation:
         if not precomp_contribs:
             raise ValueError(
                 "predict_via_precomp requires at least one *_phot_lnu_precomp in state.derived. "
-                "Build the model with approx={'wave_precomp': True}."
+                "Build the model with approx=WavePrecomp()."
             )
         if self.can_do_spectroscopy or self.has_line_fluxes or self.has_spectral_indices:
             raise NotImplementedError(

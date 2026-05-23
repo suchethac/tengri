@@ -14,6 +14,8 @@ Each tier adds physical complexity. No SSP data required.
 
 """
 
+# TODO: refactor to SEDModel.build API (currently uses low-level internal API)
+
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -98,4 +100,3 @@ fig.tight_layout()
 #   self-normalizing from BH physics — shown at log_Lbol ≈ 12.1 (8 params)
 
 plt.savefig("plot_agn_hierarchy.png", dpi=150, bbox_inches="tight")
-plt.show()

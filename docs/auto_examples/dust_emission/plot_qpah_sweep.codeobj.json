@@ -29,27 +29,27 @@
    "name": "FIXED"
   }
  ],
- "SEDModel.from_groups": [
+ "SEDModel.build": [
   {
    "is_class": true,
    "is_explicit": false,
    "module": "tengri.forward.sed_model",
    "module_short": "tengri.forward.sed_model",
-   "name": "SEDModel.from_groups"
+   "name": "SEDModel.build"
   },
   {
    "is_class": true,
    "is_explicit": false,
    "module": "tengri.forward",
    "module_short": "tengri.forward",
-   "name": "SEDModel.from_groups"
+   "name": "SEDModel.build"
   },
   {
    "is_class": true,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "SEDModel.from_groups"
+   "name": "SEDModel.build"
   },
   {
    "is_class": false,

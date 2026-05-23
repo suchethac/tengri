@@ -415,15 +415,15 @@ def parse_groups(**kwargs) -> Parameters:
                 group_dict = group_dict[subkey]
             else:
                 group_dict = {}
-        elif group.startswith("agn."):
-            # AGN sub-block (e.g., "agn.disc", "agn.torus")
-            parent_group = "agn"
-            group_dict = kwargs.get(parent_group, {})
-            subkey = group.replace("agn.", "")
-            if isinstance(group_dict, dict) and subkey in group_dict:
-                group_dict = group_dict[subkey]
-            else:
-                group_dict = {}
+        elif group == "agn" or group.startswith("agn."):
+            # AGN params live in a two-level nest: shared (`agn` itself) and
+            # five sub-blocks (`agn.disc`, `agn.torus`, `agn.lines`, `agn.feii`,
+            # `agn.atten`). Users naturally place a shared parameter inside
+            # a sub-block (`agn={'disc': {'agn_log_lbol': Uniform(...)}}`)
+            # or — less commonly — a sub-block parameter at the top level.
+            # Both should work. Build a merged search view across the
+            # canonical location and the sibling locations; conflicts raise.
+            group_dict = _build_agn_search_view(param_name, kwargs.get("agn", {}), group)
         else:
             group_dict = kwargs.get(group, {})
 
@@ -440,6 +440,14 @@ def parse_groups(**kwargs) -> Parameters:
         if group_dict or group == "_toplevel":
             resolved_kwargs[param_name] = final_dist
             provenance[param_name] = tag
+
+    # ── Validate every key the user supplied was recognised ───────────
+    # The resolution loop above silently uses the registry default when
+    # a parameter override is not found, so typos like
+    # ``dust={'tau_qpah': 5}`` (instead of ``dust_qpah``) used to vanish
+    # without trace. Walk the user's dicts now and raise a friendly
+    # "Did you mean ...?" error on any unrecognised key.
+    _validate_user_keys(kwargs, structural_params, param_partition)
 
     # ── Construct final Parameters ────────────────────────────────────
 
@@ -670,6 +678,259 @@ def _translate_xray(xray_dict: dict, result: dict) -> None:
         raise ValueError(f"Unknown X-ray type '{xray_type}'.{suggest_str}")
 
     result["xray"] = xray_type != "none"
+
+
+#: AGN sub-block keys recognised by the nested-dict grammar. Used when
+#: walking a user's top-level ``agn`` dict to tell sub-block dicts apart
+#: from per-parameter overrides.
+_AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "lines", "feii", "atten"})
+
+#: Per-group structural keys the grammar accepts on top of declared params.
+#: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
+_GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
+    "sfh": frozenset({"type", "*"}),
+    "dust": frozenset({"type", "*", "law_bc", "law_diff", "emission"}),
+    "dust.emission": frozenset({"type", "*"}),
+    "neb": frozenset({"type", "*"}),
+    "igm": frozenset({"type", "*", "patchy", "dla"}),
+    "radio": frozenset({"type", "*"}),
+    "xray": frozenset({"type", "*"}),
+    "agn": frozenset({"type", "*"}) | _AGN_SUBBLOCK_KEYS,
+    "agn.disc": frozenset({"type", "*"}),
+    "agn.torus": frozenset({"type", "*"}),
+    "agn.lines": frozenset({"type", "*"}),
+    "agn.feii": frozenset({"type", "*"}),
+    "agn.atten": frozenset({"type", "*"}),
+}
+
+
+def _short_names_for_group(group: str, param_partition: dict[str, str]) -> set[str]:
+    """Return the set of short and full names every declared param exposes
+    under ``group`` (e.g. ``"agn.torus"`` → ``{"tau_skirtor", "agn_tau_skirtor", ...}``).
+
+    Used by :func:`_validate_user_keys` to recognise per-parameter overrides
+    when walking a user's group dict.
+    """
+    out: set[str] = set()
+    for full_name, owner in param_partition.items():
+        if owner != group:
+            continue
+        out.add(full_name)
+        out.add(_extract_short_name(full_name, {}))
+    return out
+
+
+def _validate_user_keys(
+    kwargs: dict,
+    structural_params: Parameters,
+    param_partition: dict[str, str],
+) -> None:
+    """Validate that every key the user supplied is recognised.
+
+    Walks each group dict (and any sub-block dicts) and checks each key
+    against the union of:
+
+    1. Structural keys for that group (``"type"``, ``"*"``, etc.).
+    2. Short and full names of every parameter partitioned to that group.
+    3. For AGN: short/full names of *shared* AGN params (cross-level
+       acceptance — see :func:`_build_agn_search_view`).
+
+    Unknown keys raise :class:`ValueError` with a "Did you mean ...?"
+    hint generated via :mod:`difflib`. Silent typos were the dominant
+    "AI slop" failure mode of the nested-dict API before this validator
+    was added (issue tracked in the forward-model cleanup arc).
+    """
+    dust_emission_active = structural_params.dust_emission is not None
+    valid_top_groups = {"sfh", "dust", "neb", "igm", "radio", "xray", "agn"}
+
+    # Build the AGN cross-level acceptance set (shared params land in any sub-block).
+    agn_shared_names = _short_names_for_group("agn", param_partition)
+
+    for top_key, top_val in kwargs.items():
+        if top_key in _TOP_LEVEL_SETTINGS:
+            continue
+        if top_key in structural_params._distributions:
+            # A top-level free-form override like ``redshift=Fixed(0.1)``.
+            continue
+        if top_key not in valid_top_groups:
+            # _translate_structural already raised on unknown top-level keys;
+            # this branch only fires when a dist/sentinel slipped through.
+            continue
+
+        if not isinstance(top_val, dict):
+            continue
+
+        # Validate the top-level group dict.
+        group_allowed = _GROUP_STRUCTURAL_KEYS.get(top_key, frozenset({"type", "*"}))
+        param_names = _short_names_for_group(top_key, param_partition)
+        if top_key == "agn":
+            # AGN top-level also accepts shared param short/full names
+            # *and* names from every sub-block (cross-level acceptance —
+            # see :func:`_build_agn_search_view`). Sub-block dicts are
+            # still tagged separately below.
+            param_names = param_names | agn_shared_names
+            for sub_name in _AGN_SUBBLOCK_KEYS:
+                param_names = param_names | _short_names_for_group(
+                    f"agn.{sub_name}", param_partition
+                )
+        elif top_key == "dust" and dust_emission_active:
+            # Dust top-level accepts the dust.emission param short names
+            # for legacy code that flattens emission params at the dust
+            # level. Treat as a soft acceptance (still resolved via the
+            # dust.emission group path).
+            param_names = param_names | _short_names_for_group("dust.emission", param_partition)
+
+        _check_dict_keys(top_key, top_val, group_allowed | param_names, param_partition)
+
+        # Recurse into sub-block dicts.
+        if top_key == "dust" and isinstance(top_val.get("emission"), dict):
+            sub_allowed = _GROUP_STRUCTURAL_KEYS["dust.emission"]
+            sub_params = _short_names_for_group("dust.emission", param_partition)
+            _check_dict_keys(
+                "dust.emission", top_val["emission"], sub_allowed | sub_params, param_partition
+            )
+        elif top_key == "agn":
+            for sub_name in _AGN_SUBBLOCK_KEYS:
+                sub = top_val.get(sub_name)
+                if not isinstance(sub, dict):
+                    continue
+                sub_group = f"agn.{sub_name}"
+                sub_allowed = _GROUP_STRUCTURAL_KEYS[sub_group]
+                sub_params = _short_names_for_group(sub_group, param_partition)
+                # Cross-level: sub-block dict may also legitimately carry
+                # shared AGN param names.
+                _check_dict_keys(
+                    sub_group,
+                    sub,
+                    sub_allowed | sub_params | agn_shared_names,
+                    param_partition,
+                )
+
+
+def _check_dict_keys(
+    group: str,
+    user_dict: dict,
+    allowed: set,
+    param_partition: dict[str, str],
+) -> None:
+    """Raise ``ValueError`` on any unrecognised key in ``user_dict``."""
+    for key in user_dict:
+        if key in allowed:
+            continue
+        # Suggestion pool: same group's allowed keys + every short name
+        # across all groups (helps the "wrong group, right name" case).
+        suggestion_pool = set(allowed)
+        for full_name in param_partition:
+            suggestion_pool.add(_extract_short_name(full_name, {}))
+            suggestion_pool.add(full_name)
+        suggestions = difflib.get_close_matches(str(key), list(suggestion_pool), n=2, cutoff=0.6)
+        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+        raise ValueError(
+            f"Unknown key {key!r} in group {group!r}.{suggest_str} "
+            f"Valid structural keys for this group are: "
+            f"{sorted(_GROUP_STRUCTURAL_KEYS.get(group, frozenset({'type', '*'})))}."
+        )
+
+
+def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
+    """Build the resolution view for one AGN parameter.
+
+    AGN parameters live in a two-level nest: the top-level ``agn`` dict
+    plus up to five sub-block dicts (``disc``/``torus``/``lines``/``feii``/
+    ``atten``). To keep the API friendly, a parameter can be supplied at
+    *either* level — the partition table records the canonical location,
+    but a user who writes ``agn={'disc': {'agn_log_lbol': Uniform(...)}}``
+    expects the value to take effect even though ``agn_log_lbol`` is
+    nominally a shared (top-level) param.
+
+    This helper assembles a single dict the caller can pass to
+    :func:`_resolve_value`:
+
+    1. The canonical location for ``param_name`` (top level if
+       ``group == "agn"``; the matching sub-block if ``group.startswith("agn.")``).
+    2. Every sibling location that also carries an override for the same
+       short name.
+
+    If a parameter appears in more than one location with conflicting
+    values, raise :class:`ValueError` to flag the ambiguity instead of
+    silently picking one.
+
+    Parameters
+    ----------
+    param_name : str
+        Full parameter name (e.g. ``"agn_log_lbol"``).
+    agn_dict : dict
+        User's top-level ``agn`` dict.
+    group : str
+        Partition group for ``param_name`` (``"agn"`` for shared,
+        ``"agn.<subblock>"`` for sub-block).
+
+    Returns
+    -------
+    dict
+        Search dict for :func:`_resolve_value`. The wildcard ``'*'``
+        from the canonical location is preserved when present.
+    """
+    if not isinstance(agn_dict, dict):
+        return {}
+
+    # The short name the resolver expects (`_extract_short_name` strips
+    # the `agn_` prefix from full AGN param names; pre-compute it here
+    # so we can search every candidate dict by either spelling).
+    short_name = param_name[4:] if param_name.startswith("agn_") else param_name
+
+    # Canonical and sibling dicts to scan.
+    canonical_subkey = group.replace("agn.", "") if group.startswith("agn.") else None
+    canonical_dict = (
+        agn_dict.get(canonical_subkey, {}) if canonical_subkey is not None else agn_dict
+    )
+    if not isinstance(canonical_dict, dict):
+        canonical_dict = {}
+
+    siblings = []
+    if canonical_subkey is None:
+        # Shared param: check every sub-block dict for a stray override.
+        for k in _AGN_SUBBLOCK_KEYS:
+            sub = agn_dict.get(k)
+            if isinstance(sub, dict):
+                siblings.append((k, sub))
+    else:
+        # Sub-block param: also accept it at the top level.
+        siblings.append(("<top>", agn_dict))
+
+    # Collect (location, value) for every place this param appears.
+    hits = []
+    for key in (short_name, param_name):
+        if key in canonical_dict and key not in ("type", "*"):
+            hits.append(("<canonical>", canonical_dict[key]))
+            break
+    for location, sub in siblings:
+        for key in (short_name, param_name):
+            if key in sub and key not in ("type", "*"):
+                hits.append((location, sub[key]))
+                break
+
+    if len(hits) > 1:
+        locs = ", ".join(h[0] for h in hits)
+        raise ValueError(
+            f"AGN parameter {param_name!r} is set in multiple locations ({locs}). "
+            f"Set it in exactly one place — either the top-level ``agn`` dict "
+            f"or one sub-block dict — to avoid ambiguity."
+        )
+
+    if not hits:
+        # Nothing found anywhere; surface the canonical dict so the
+        # wildcard ('*') from the canonical location still applies.
+        return canonical_dict
+
+    # Single hit: return a synthetic dict carrying that one override
+    # plus the wildcard from the canonical location (so '*': FREE inside
+    # a sub-block still controls shared params landed via this view).
+    _, found_val = hits[0]
+    view: dict = {short_name: found_val}
+    if "*" in canonical_dict:
+        view["*"] = canonical_dict["*"]
+    return view
 
 
 def _translate_agn(agn_dict: dict, result: dict) -> None:
