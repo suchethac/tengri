@@ -32,10 +32,12 @@ luminosity.
    :alt: plot_qsogen_spectrum
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-119
+.. GENERATED FROM PYTHON SOURCE LINES 17-120
 
 .. code-block:: Python
 
+
+    # TODO: refactor to SEDModel.build API (currently uses low-level internal API)
 
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
@@ -137,7 +139,6 @@ luminosity.
     fig.suptitle("QSOgen: Empirical Quasar SED Template (Temple+2021)", fontsize=12)
     fig.tight_layout(rect=[0, 0.04, 1, 0.97])
     plt.savefig("plot_qsogen_spectrum.png", dpi=100, bbox_inches="tight")
-    plt.show()
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_qsogen_spectrum.py:

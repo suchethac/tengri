@@ -1,120 +1,93 @@
 """
-AGN Contribution to Composite SEDs
-===================================
+Blending star-forming galaxy and AGN accretion disc continua
+=============================================================
 
-Active galactic nuclei (AGN) can dominate galaxy SEDs across UV to IR wavelengths.
-This script sweeps the AGN fraction f_AGN ∈ {0.0, 0.1, 0.3, 0.5, 0.8, 1.0}
-blending a star-forming galaxy stellar continuum with an AGN accretion disc
-spectrum. Shows the transition from star-formation-dominated to AGN-dominated
-SED morphology.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_panchromatic_agn_fraction_001.png
-   :alt: plot_panchromatic_agn_fraction
-   :class: sphx-glr-single-img
-
+Active galactic nuclei dominate UV to infrared SEDs. Sweeps AGN
+luminosity fraction from pure starburst to pure AGN, showing the
+transition in SED morphology as the accretion disc continuum
+increasingly dominates stellar and dust emission.
 """
 
-from pathlib import Path
+import warnings
 
 import jax
 import jax.numpy as jnp
-import matplotlib
-
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import (
-    Fixed,
-    Observation,
-    Parameters,
-    SEDModel,
-    Spectroscopy,
-    load_ssp,
-    setup_style,
-)
-from tengri.components.agn import qsogen
+import tengri
+from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-
-ssp = load_ssp()
-
-# Wavelength grid: UV through near-IR
-wave_sed = jnp.logspace(jnp.log10(1000.0), jnp.log10(1e6), 600)  # 0.1 µm – 100 µm [Å]
-obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_sed))
-
-# Base stellar SED (star-forming)
-spec = Parameters(
-    mean_sfh_type="tsnorm",
-    dust_emission="draine_li2007",
-    sfh_tsnorm_log_peak_sfr=Fixed(1.0),  # peak SFR ~ 10 Msun/yr
-    sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),
-    sfh_tsnorm_width_gyr=Fixed(1.5),
-    sfh_tsnorm_skew=Fixed(0.0),
-    sfh_tsnorm_trunc=Fixed(2.0),
-    met_logzsol=Fixed(0.0),
-    dust_tau_bc=Fixed(0.3),
-    dust_tau_diff=Fixed(0.2),
-    dust_slope=Fixed(-0.7),
-    dust_umin=Fixed(2.0),
-    dust_qpah=Fixed(3.5),
-    dust_gamma_dl=Fixed(0.02),
-    redshift=Fixed(0.05),
+ssp = tengri.load_ssp()
+model = tengri.SEDModel.build(
+    ssp,
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "alpha": 2.0,
+        "beta": 2.5,
+        "tau_gyr": 1.0,
+        "log_peak_sfr": 1.0,
+    },
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_bc": 0.3,
+        "tau_diff": 0.2,
+        "emission": {"type": "dale2014", "*": tengri.FIXED},
+    },
+    redshift=tengri.Fixed(0.05),
 )
 
-model = SEDModel(spec, ssp, observation=obs)
-key = jax.random.PRNGKey(42)
-params = spec.sample(key)
-pred_stellar = model.predict_rest_sed(params)
+baseline = dict(model.spec.sample(jax.random.PRNGKey(42)))
+out_star = model.predict_rest_sed(baseline)
+wave = np.asarray(out_star.wavelength)
+sed_stellar = np.asarray(out_star.sed)
+wave_um = wave / 1e4
 
-wave_rest_um = np.array(pred_stellar.wavelength) / 1e4
-sed_stellar = np.array(pred_stellar.sed)
-wave_rest_aa = np.array(pred_stellar.wavelength)  # Keep in Angstrom for AGN function
+# AGN continuum at fixed L_bol
+log_lbol_agn = 11.0
+sed_agn = np.array(
+    tengri.components.agn.compute_qsogen_sed(
+        jnp.asarray(wave), agn_log_lbol=log_lbol_agn
+    )
+)
 
-# AGN SED (QSOgen disc at moderate bolometric luminosity)
-# Evaluate on the same wavelength grid as the stellar SED
-log_lbol_agn = 11.0  # L_bol ~ 10^11 L_sun
-wave_sed_agn = jnp.array(wave_rest_aa)  # Use stellar wavelength grid
-sed_agn = np.array(qsogen(wave_sed_agn, agn_log_lbol=log_lbol_agn))
+# Normalize AGN to match stellar luminosity scale
+agn_peak = np.nanmax(sed_agn[sed_agn > 0])
+stellar_peak = np.nanmax(sed_stellar[sed_stellar > 0])
+sed_agn_norm = sed_agn * (stellar_peak / agn_peak)
 
 # AGN fractions to sweep
-agn_fracs = [0.0, 0.1, 0.3, 0.5, 0.8, 1.0]
-cmap = plt.cm.viridis
-colors = [cmap(i / (len(agn_fracs) - 1)) for i in range(len(agn_fracs))]
+agn_fracs = np.array([0.0, 0.1, 0.3, 0.5, 0.8, 1.0])
+cmap = plt.get_cmap("viridis")
+norm = plt.Normalize(vmin=agn_fracs.min(), vmax=agn_fracs.max())
 
-fig, ax = plt.subplots(figsize=(10, 6))
+fig, ax = plt.subplots(figsize=(10, 5.2))
 
-for agn_frac, color in zip(agn_fracs, colors):
-    # Blend stellar + AGN: L_nu = (1 - f_AGN) * L_stellar + f_AGN * L_AGN
-    # Normalize AGN to match stellar luminosity scale
-    agn_peak = np.nanmax(sed_agn[sed_agn > 0])
-    stellar_peak = np.nanmax(sed_stellar[sed_stellar > 0])
-    sed_agn_normalized = sed_agn * (stellar_peak / agn_peak)
-
-    sed_composite = (1.0 - agn_frac) * sed_stellar + agn_frac * sed_agn_normalized
+for agn_frac in agn_fracs:
+    sed_composite = (1.0 - agn_frac) * sed_stellar + agn_frac * sed_agn_norm
+    nu = 2.998e18 / wave
+    nu_l_nu = nu * sed_composite
 
     mask = sed_composite > 0
     ax.loglog(
-        wave_rest_um[mask],
-        sed_composite[mask],
-        color=color,
+        wave_um[mask],
+        nu_l_nu[mask],
+        color=cmap(norm(agn_frac)),
         lw=2.0,
-        label=rf"$f_{{\mathrm{{AGN}}}} = {agn_frac}$",
     )
 
-ax.set_xlabel(r"Wavelength [$\mu$m]", fontsize=12)
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]", fontsize=12)
-ax.set_title("Galaxy + AGN Composite: AGN Fraction Sweep", fontsize=14)
-ax.legend(fontsize=11, frameon=False, loc="upper right")
-ax.grid(True, alpha=0.3, which="both")
 ax.set_xlim(0.08, 1e2)
-ax.set_ylim(1e22, 1e34)
+ax.set_ylim(1e24, 1e36)
+ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mu$m]")
+ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
+
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+cbar.set_label(r"AGN luminosity fraction $f_{\rm AGN}$")
 
 fig.tight_layout()
-# Save to script directory
-script_dir = Path(__file__).resolve().parent if "__file__" in dir() else Path(".")
-plt.savefig(str(script_dir / "plot_panchromatic_agn_fraction.png"), dpi=150, bbox_inches="tight")
-plt.close()
+fig.savefig("plot_panchromatic_agn_fraction.png", dpi=150, bbox_inches="tight")

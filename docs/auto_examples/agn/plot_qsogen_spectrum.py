@@ -15,6 +15,8 @@ luminosity.
 
 """
 
+# TODO: refactor to SEDModel.build API (currently uses low-level internal API)
+
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -115,4 +117,3 @@ cbar.set_label(r"$\log(L_{\mathrm{bol}} / L_\odot)$")
 fig.suptitle("QSOgen: Empirical Quasar SED Template (Temple+2021)", fontsize=12)
 fig.tight_layout(rect=[0, 0.04, 1, 0.97])
 plt.savefig("plot_qsogen_spectrum.png", dpi=100, bbox_inches="tight")
-plt.show()

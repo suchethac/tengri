@@ -15,6 +15,8 @@ of higher-velocity stellar populations.
 
 """
 
+import warnings
+
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,6 +26,7 @@ from tengri import Fixed, Observation, Parameters, SEDModel, Spectroscopy, load_
 from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 
 ssp = load_ssp()
@@ -105,10 +108,8 @@ ax.text(
 
 ax.set_xlabel(r"Rest Wavelength [$\AA$]")
 ax.set_ylabel("Normalized Flux")
-ax.set_title("Mg b Feature: Velocity Dispersion Broadening")
 ax.set_xlim(5050, 5250)
 ax.set_ylim(0.8, 1.02)
 ax.legend(frameon=False, loc="lower left", fontsize=10)
 fig.tight_layout()
-plt.savefig("plot_velocity_dispersion_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_velocity_dispersion_sweep.png", dpi=150, bbox_inches="tight")

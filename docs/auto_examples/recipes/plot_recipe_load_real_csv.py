@@ -1,117 +1,86 @@
 """
-Load and Fit Real CSV Photometry
+Load and fit photometry from CSV
 ================================
 
-How do I load photometric data from a CSV file and fit it? This recipe
-demonstrates loading a table of measured fluxes and uncertainties,
-building observations per galaxy, and running a MAP fit on each.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_recipe_load_real_csv_001.png
-   :alt: plot_recipe_load_real_csv
-   :class: sphx-glr-single-img
-
+How do I load measured photometry from a table and fit it? This recipe
+generates mock photometry for 3 galaxies and fits each one independently
+with a MAP fit, demonstrating the workflow for catalogue-scale SED fitting.
 """
+
+import warnings
 
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import (
-    Fitter,
-    Fixed,
-    Observation,
-    Parameters,
-    Photometry,
-    SEDModel,
-    Uniform,
-    load_ssp,
-)
+import tengri
 from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-
-ssp = load_ssp()
-
-# --- Generate mock CSV with 5 SDSS bands x 3 galaxies ---
-# In practice, load your own CSV via np.genfromtxt() or pd.read_csv()
+ssp = tengri.load_ssp()
 bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-obs_config = Observation(photometry=Photometry.from_names(bands))
-spec_template = Parameters(
-    sfh_tsnorm_log_peak_sfr=Fixed(0.5),
-    sfh_tsnorm_peak_lbt_gyr=Fixed(3.0),
-    sfh_tsnorm_width_gyr=Fixed(2.0),
-    sfh_tsnorm_skew=Fixed(0.0),
-    sfh_tsnorm_trunc=Fixed(5.0),
-    met_logzsol=Fixed(-0.3),
-    dust_tau_diff=Fixed(0.3),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.1),
-    mean_sfh_type="tsnorm",
-)
-model_template = SEDModel(spec_template, ssp, observation=obs_config)
+obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 
-# Mock 3 galaxies with different parameters
+# Generate mock photometry for 3 galaxies
 key = jax.random.PRNGKey(42)
 galaxy_data = []
 for gal_id in range(3):
-    params = spec_template.sample(jax.random.fold_in(key, gal_id))
-    mock = model_template.mock(params, snr=20.0, key=jax.random.fold_in(key, 100 + gal_id))
-    galaxy_data.append(
-        {
-            "name": f"galaxy_{gal_id}",
-            "redshift": 0.1,
-            "flux": np.array(mock.flux_obs),
-            "error": np.array(mock.noise),
-        }
+    model_template = tengri.SEDModel.build(
+        ssp,
+        observation=obs,
+        sfh={"type": "tsnorm", "*": tengri.FIXED,
+             "log_peak_sfr": 0.5, "peak_lbt_gyr": 3.0, "width_gyr": 2.0,
+             "skew": 0.0, "trunc": 5.0},
+        dust={"type": "two_component", "*": tengri.FIXED,
+              "tau_diff": 0.3, "slope": -0.7},
+        redshift=tengri.Fixed(0.1),
     )
+    params = dict(model_template.spec.sample(jax.random.fold_in(key, gal_id)))
+    mock = model_template.mock(params, snr=20.0, key=jax.random.fold_in(key, 100 + gal_id))
+    galaxy_data.append({
+        "name": f"galaxy_{gal_id}",
+        "redshift": 0.1,
+        "flux": np.array(mock.flux_obs),
+        "error": np.array(mock.noise),
+    })
 
-# --- Fit each galaxy ---
-fig, axes = plt.subplots(1, 3, figsize=(14, 3.5))
+# Fit each galaxy with MAP
+fig, axes = plt.subplots(1, 3, figsize=(12.0, 3.2), sharey=True)
 
 for gal_idx, gal in enumerate(galaxy_data):
-    # Build free model: redshift fixed to measured, others free
-    spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-        sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-        sfh_tsnorm_skew=Uniform(-3.0, 3.0),
-        sfh_tsnorm_trunc=Uniform(1.0, 10.0),
-        met_logzsol=Uniform(-2.0, 0.2),
-        dust_tau_diff=Uniform(0.0, 1.5),
-        dust_slope=Fixed(-0.7),
-        redshift=Fixed(gal["redshift"]),
-        mean_sfh_type="tsnorm",
+    model = tengri.SEDModel.build(
+        ssp,
+        observation=obs,
+        sfh={"type": "tsnorm", "*": tengri.FREE},
+        dust={"type": "two_component", "*": tengri.FREE},
+        redshift=tengri.Fixed(gal["redshift"]),
     )
-    model = SEDModel(spec, ssp, observation=obs_config)
 
-    # MAP fit
-    fitter = Fitter(model, data=gal["flux"], noise=gal["error"])
-    posterior = fitter.run("map", optimizer="adam", n_steps=200, verbose=False)
+    forward = tengri.ForwardModel.build(sed=model, observation=obs)
+    posterior = forward.fit(
+        gal["flux"], gal["error"], method="map",
+        optimizer="adam", n_steps=200, verbose=False
+    )
 
-    # Plot
-    wave_eff = np.array([float(jnp.mean(w)) for w in obs_config.photometry.filter_waves])
+    # Plot data vs model
+    wave_eff = np.array([float(jnp.mean(w)) for w in obs.photometry.filter_waves])
     pred = np.array(model.predict_photometry(posterior.params))
 
     axes[gal_idx].errorbar(
-        wave_eff,
-        gal["flux"],
-        yerr=gal["error"],
-        fmt="o",
-        color="k",
-        ms=5,
-        label="Data",
+        wave_eff, gal["flux"], yerr=gal["error"],
+        fmt="o", color="k", ms=5, label="Data", zorder=10
     )
-    axes[gal_idx].plot(wave_eff, pred, "^", color="C3", ms=7, mfc="none", label="MAP fit", lw=2.0)
-    axes[gal_idx].set_xlabel("Wavelength [A]")
-    axes[gal_idx].set_ylabel("Flux [erg/s/cm²/Hz]")
-    axes[gal_idx].set_title(gal["name"])
-    axes[gal_idx].legend(frameon=False, fontsize=9)
+    axes[gal_idx].plot(wave_eff, pred, "^", color="C3", ms=6, mfc="none", label="MAP", zorder=5)
+    axes[gal_idx].set_xlabel("Wavelength [Å]")
     axes[gal_idx].set_yscale("log")
+    ax_text = axes[gal_idx].text(0.05, 0.95, gal["name"], transform=axes[gal_idx].transAxes,
+                                  fontsize=9, verticalalignment="top")
+
+axes[0].set_ylabel(r"$F_\nu$ [erg/s/cm$^2$/Hz]")
+axes[0].legend(frameon=False, fontsize=8, loc="lower left")
 
 fig.tight_layout()
-plt.savefig("plot_recipe_load_real_csv.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_recipe_load_real_csv.png", dpi=150, bbox_inches="tight")

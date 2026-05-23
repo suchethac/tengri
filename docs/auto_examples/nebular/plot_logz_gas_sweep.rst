@@ -18,69 +18,72 @@
 .. _sphx_glr_auto_examples_nebular_plot_logz_gas_sweep.py:
 
 
-Gas Metallicity (log Z/Zsun)
-=============================
+Gas metallicity shifts optical emission line ratios
+===================================================
 
-Gas metallicity controls [NII]/Hα and [OIII]/Hβ — the primary optical
-metallicity diagnostics. These ratios move galaxies on the BPT diagram and
-are used to measure oxygen abundances in star-forming galaxies.
+Gas metallicity controls [NII]/Hα and [OIII]/Hβ ratios, the primary
+optical metallicity diagnostics. We vary nebular metallicity across
+the abundance range.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_logz_gas_sweep_001.png
-   :alt: plot_logz_gas_sweep
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 16-62
+.. GENERATED FROM PYTHON SOURCE LINES 9-64
 
 .. code-block:: Python
 
 
-    import matplotlib.pyplot as plt
+    import warnings
 
-    from tengri import Fixed, Parameters, SEDModel, load_ssp
-    from tengri.analysis.plotting import setup_style, sweep_parameter
+    import jax
+    import jax.numpy as jnp
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    import tengri
+    from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-
-    ssp = load_ssp()
-
-    # --- Build model: young star-forming galaxy ---
-    spec = Parameters(
-        nebular_cue=True,
-        sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-        sfh_tsnorm_peak_lbt_gyr=Fixed(0.5),  # Peak ~500 Myr ago (young)
-        sfh_tsnorm_width_gyr=Fixed(0.3),
-        sfh_tsnorm_skew=Fixed(0.2),
-        sfh_tsnorm_trunc=Fixed(3.0),
-        met_logzsol=Fixed(-0.3),  # Solar-ish stellar metallicity
-        dust_tau_bc=Fixed(0.0),  # No dust
-        dust_tau_diff=Fixed(0.0),
-        dust_slope=Fixed(-0.7),
-        redshift=Fixed(0.1),
-        neb_logU=Fixed(-3.0),  # Fixed ionization
-        neb_logZ_gas=Fixed(-0.3),  # Will sweep this
+    ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh={
+            "type": "dpl",
+            "*": tengri.FIXED,
+            "alpha": 1.0,
+            "beta": 2.5,
+            "tau_gyr": 0.3,
+            "log_peak_sfr": 1.5,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        neb={"type": "cue", "*": tengri.FIXED, "neb_logZ_gas": tengri.Uniform(-1.5, 0.3)},
+        redshift=tengri.Fixed(0.05),
     )
-    model = SEDModel(spec, ssp)
+    baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-    # --- Sweep gas metallicity ---
-    values = [-1.5, -0.7, -0.3, 0.0, 0.3]
+    logz_values = np.linspace(-1.5, 0.3, 7)
+    norm = mpl.colors.Normalize(vmin=logz_values.min(), vmax=logz_values.max())
+    cmap = plt.get_cmap("YlGn")
 
-    fig, ax = sweep_parameter(
-        model,
-        "neb_logZ_gas",
-        values,
-        cmap="YlGn",
-        label_fmt=r"$\log Z/Z_\odot$ = {:.1f}",
-        wave_range=(4500, 7500),
-    )
-    ax.set_title("Gas Metallicity: Impact on Optical Forbidden Lines", fontsize=12)
-    ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)")
-    ax.set_ylim(0, 30_000)
-    plt.tight_layout()
-    plt.savefig("plot_logz_gas_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    for logz in logz_values:
+        params = {**baseline, "neb_logZ_gas": jnp.float64(logz)}
+        out = model.predict_rest_sed(params)
+        wave = np.asarray(out.wavelength)
+        nu = 2.998e18 / wave
+        nu_l_nu = nu * np.asarray(out.sed)
+        ax.semilogy(wave, nu_l_nu, color=cmap(norm(logz)), lw=1.4)
+
+    ax.set_xlim(4000, 7500)
+    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+    ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+
+    cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+    cbar.set_label(r"$\log(Z/Z_\odot)$")
+
+    fig.tight_layout()
+    fig.savefig("plot_logz_gas_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_logz_gas_sweep.py:

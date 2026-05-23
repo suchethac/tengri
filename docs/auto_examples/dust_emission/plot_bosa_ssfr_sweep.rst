@@ -25,27 +25,12 @@ Sweep specific star formation rate across the BOSA grid at fixed infrared
 luminosity. Higher sSFR produces harder mid-IR colors and stronger PAH
 features; quiescent galaxies exhibit colder FIR peaks.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_bosa_ssfr_sweep_001.png
-   :alt: plot_bosa_ssfr_sweep
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 16-62
-
-
-
-.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_bosa_ssfr_sweep_001.png
-   :alt: BOSA (Boquien & Salim 2021) at $\log_{10} L_{\rm TIR}=11.0$
-   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_bosa_ssfr_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 9-57
 
 .. code-block:: Python
 
+
+    import warnings
 
     import h5py
     import matplotlib.pyplot as plt
@@ -55,6 +40,8 @@ features; quiescent galaxies exhibit colder FIR peaks.
     from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    warnings.filterwarnings("ignore", message=".*deprecated.*")
 
     with h5py.File(data_path("bosa_templates.h5"), "r") as f:
         wave_aa = np.asarray(f["wavelength_aa"][:])
@@ -86,12 +73,10 @@ features; quiescent galaxies exhibit colder FIR peaks.
         ylabel=r"$\nu L_\nu\ [\mathrm{normalised}\ \int L_\nu d\nu = 1]$",
         xlim=(3.0, 1.0e3),
         ylim=(1.0e-3, 2.0e0),
-        title=rf"BOSA (Boquien & Salim 2021) at $\log_{{10}} L_{{\rm TIR}}={log_ltir[i_ltir]:.1f}$",
     )
     ax.legend(loc="lower left", frameon=False, fontsize=8, ncol=3)
     fig.tight_layout()
-    plt.savefig("plot_bosa_ssfr_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_bosa_ssfr_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_bosa_ssfr_sweep.py:

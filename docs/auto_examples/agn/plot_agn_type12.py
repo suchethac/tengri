@@ -14,6 +14,8 @@ torus blocks the accretion disc) depending purely on viewing angle.
 
 """
 
+# TODO: refactor to SEDModel.build API (currently uses low-level internal API)
+
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -71,4 +73,3 @@ ax.set_title("Type 1 vs Type 2 AGN: Same Physics, Different Viewing Angle")
 ax.legend(fontsize=10, frameon=False)
 fig.tight_layout()
 plt.savefig("plot_agn_type12.png", dpi=150, bbox_inches="tight")
-plt.show()

@@ -18,78 +18,71 @@
 .. _sphx_glr_auto_examples_sfh_plot_lnorm_peak_sweep.py:
 
 
-Log-Normal SFH: Peak Lookback Time
-===================================
+Log-normal peak lookback time shifts stellar age and SED morphology
+===================================================================
 
-When did this galaxy form most of its stars? The peak lookback time shifts
-the SFH and changes UV slope, 4000 Å break, and NIR mass.
+The peak lookback time of a log-normal SFH controls when most stars formed,
+shifting the age structure and dramatically affecting UV slope, 4000 Å break
+strength, and NIR luminosity. We vary the peak time across its prior range with
+every other parameter fixed.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_lnorm_peak_sweep_001.png
-   :alt: plot_lnorm_peak_sweep
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 15-49
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_lnorm_peak_sweep_001.png
-   :alt: Log-Normal SFH: Peak Lookback Time
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_lnorm_peak_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-batch-2/src/tengri/forward/sed_model.py:643: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
-      self._nebular_backend = BakedInBackend()
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 10-63
 
 .. code-block:: Python
 
 
-    import matplotlib.pyplot as plt
+    import warnings
 
-    from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp, setup_style
-    from tengri.analysis.plotting import sfh_sed_comparison
+    import jax
+    import jax.numpy as jnp
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    import tengri
+    from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-
-    ssp = load_ssp()
-
-    # Build Parameters with log-normal SFH
-    spec = Parameters(
-        mean_sfh_type="lnorm",
-        sfh_lnorm_log_peak_sfr=Fixed(1.0),
-        sfh_lnorm_peak_lbt_gyr=Uniform(1.0, 11.0),  # will be overridden
-        sfh_lnorm_width_gyr=Fixed(0.3),
-        met_logzsol=Fixed(-0.3),
-        dust_tau_bc=Fixed(0.3),
-        dust_tau_diff=Fixed(0.2),
-        dust_slope=Fixed(-0.7),
-        redshift=Fixed(0.1),
+    ssp = tengri.load_ssp()
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh={
+            "type": "lnorm",
+            "*": tengri.FIXED,
+            "peak_lbt_gyr": tengri.Uniform(1.0, 11.0),
+            "log_peak_sfr": 1.0,
+            "width_gyr": 0.3,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+        redshift=tengri.Fixed(0.1),
     )
+    baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-    model = SEDModel(spec, ssp)
+    peak_values = np.linspace(1.0, 11.0, 7)
+    norm = mpl.colors.Normalize(vmin=peak_values.min(), vmax=peak_values.max())
+    cmap = plt.get_cmap("viridis")
 
-    # Sweep parameter
-    values = [1.0, 3.0, 5.0, 8.0, 11.0]
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    for peak in peak_values:
+        params = {**baseline, "sfh_lnorm_peak_lbt_gyr": jnp.float64(peak)}
+        out = model.predict_rest_sed(params)
+        wave = np.asarray(out.wavelength)
+        nu = 2.998e18 / wave  # Å/s -> Hz
+        nu_l_nu = nu * np.asarray(out.sed)
+        ax.loglog(wave, nu_l_nu, color=cmap(norm(peak)), lw=1.4)
 
-    fig = sfh_sed_comparison(model, "sfh_lnorm_peak_lbt_gyr", values, cmap="Purples")
-    fig.suptitle("Log-Normal SFH: Peak Lookback Time", fontsize=12, y=1.00)
-    plt.tight_layout()
-    plt.savefig("plot_lnorm_peak_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    ax.set_xlim(800, 3e4)
+    ax.set_ylim(1e40, 5e43)
+    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+    ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+
+    cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+    cbar.set_label(r"Peak lookback time [Gyr]")
+
+    fig.tight_layout()
+    fig.savefig("plot_lnorm_peak_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_lnorm_peak_sweep.py:

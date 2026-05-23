@@ -17,7 +17,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Cue (Li+2025) emulates a 12-dimensional photoionization grid. This figure sweeps each Cue parameter individually at fixed fiducial values for the rest, showing how each one moves a single galaxy&#x27;s locus on the BPT-N plane (``log [O III]/Hβ`` vs log [N II]/Hα).">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Cue neural emulator responds to 12+ parameters. We show how each knob (ionization, metallicity, density, abundances, ionizing slope) moves a galaxy on the BPT-N plane log [OIII]/Hβ vs log [NII]/Hα. Each panel sweeps one parameter while holding fiducial values fixed. Kewley+2001 and Kauffmann+2003 demarcations shown for reference.">
 
 .. only:: html
 
@@ -28,13 +28,13 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">BPT with Cue: Every Knob, One Panel Each</div>
+      <div class="sphx-glr-thumbnail-title">Cue nebular knobs affect BPT positions individually</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compute three classical BPT line-ratio diagrams using the Cue emulator (Li+2025) and overplot the standard 2D nebular grid: lines of constant log U (varying gas metallicity) and lines of constant log Z_gas (varying ionization parameter). This is the canonical view in Kewley+2001/2013, Dopita+2013, and similar nebular-grid papers.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Show how the Cue neural emulator (Li+2025) maps the 2D parameter space (log U, log Z_gas) onto three classical BPT diagnostic diagrams. Lines of constant log U (varying metallicity) and constant log Z (varying ionization) show the full grid&#x27;s coverage and demarcation positions.">
 
 .. only:: html
 
@@ -45,13 +45,13 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">BPT Diagrams with Cue: 2D Grid in (log U, log Z_gas)</div>
+      <div class="sphx-glr-thumbnail-title">Cue nebular grid on BPT diagram</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The BPT diagram ([OIII]/Hβ vs [NII]/Hα) separates three sources of ionizing photons. Shocks (MAPPINGS V, Allen+2008) move emission-line galaxies into the composite and Seyfert regions as shock velocity increases.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The BPT diagram ([OIII]/Hβ vs [NII]/Hα) separates ionizing sources. Shocks (MAPPINGS V, Allen+2008) trace a sequence from HII regions through composite regions into Seyfert regions as velocity increases. We plot shock models alongside the standard demarcation lines.">
 
 .. only:: html
 
@@ -62,13 +62,64 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">BPT Diagnostics: Star Formation, Shocks, and AGN</div>
+      <div class="sphx-glr-thumbnail-title">BPT diagram separates star formation from shocks and AGN</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Diffuse ionized gas (DIG) has lower ionization parameter than HII regions. When present, DIG shifts galaxies toward the LINER region on the BPT diagram by suppressing [OIII] relative to [NII]. f_DIG = 0 is pure HII gas; f_DIG = 1 is pure DIG.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Cue knobs fesc (ionizing-photon escape fraction) and logU (HII region ionization parameter) jointly govern the line spectrum of a star-forming galaxy: escape fraction sets how many ionizing photons reach the gas, logU shifts the resulting ionization balance of the gas they ionize. We map the response of three diagnostic lines/ratios on a 2-D grid.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_cue_fesc_logu_atlas_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_cue_fesc_logu_atlas`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Cue 2-D atlas: ionizing escape fraction × ionization parameter</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Cue has six tuning knobs that control HII-region ionization and the diffuse ionized gas. This six-panel tour sweeps each knob individually and reports the L_Hα response relative to the baseline, in dex. A flat line means the parameter has no effect on Hα at fixed other knobs.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_cue_flex_tour_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_cue_flex_tour`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Cue knob flexibility: six dimensions of HII region control</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Cue (Li, Leja &amp; Speagle 2023) maps a four-dimensional HII region control space — ionization parameter log U, gas-phase metallicity log Z_gas, ionizing-spectrum shape, and dust-to-metal ratio — onto an emission-line spectrum. A two-dimensional sweep over the two knobs most users will turn (``log U`` and log Z_gas) is shown for four diagnostic line ratios.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_cue_parameter_atlas_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_cue_parameter_atlas`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Comprehensive sweep of the Cue nebular parameters</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Diffuse ionized gas (DIG) has lower ionization parameter than HII regions, shifting galaxies toward the LINER region on the BPT diagram. We vary the DIG fraction from pure HII (0) to mixed gas (0.8).">
 
 .. only:: html
 
@@ -79,13 +130,30 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Diffuse Ionized Gas Fraction (f_DIG)</div>
+      <div class="sphx-glr-thumbnail-title">Diffuse ionized gas suppresses strong optical lines</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The escape fraction sets how many ionizing photons reach the ISM vs escape into the IGM. Higher f_esc suppresses all nebular emission lines since fewer photons remain to ionize the interstellar gas. f_esc = 0 (all photons stay), f_esc = 1 (all photons escape).">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Lyα-specific escape fraction f_esc_lya sets what fraction of Lyα photons can escape the ISM without scattering. Higher f_esc_lya suppresses the Lyα emission line while leaving other nebular lines unchanged.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_fesc_lya_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_fesc_lya_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Lyα escape fraction controls Lyman-alpha strength</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Escape fraction f_esc sets what fraction of ionizing photons reach the ISM. Higher f_esc suppresses all nebular emission lines since fewer photons remain to ionize gas.">
 
 .. only:: html
 
@@ -96,13 +164,13 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Ionizing Photon Escape Fraction (f_esc)</div>
+      <div class="sphx-glr-thumbnail-title">Ionizing photon escape suppresses nebular emission</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Emission line velocity dispersion broadens lines from a few km/s (narrow, kinematically resolved) to hundreds of km/s (unresolved at typical spectroscopic resolution). Line broadening is crucial for fitting restframe UV emission lines and measuring dynamics in high-redshift galaxies.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Emission line velocity dispersion broadens lines from a few km/s (narrow, kinematically resolved) to hundreds of km/s (unresolved at typical spectroscopic resolution). We show the [OIII] region broadened across the dynamical range.">
 
 .. only:: html
 
@@ -113,13 +181,13 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Emission Line Width (σ in km/s)</div>
+      <div class="sphx-glr-thumbnail-title">Emission line broadening traces gas kinematics</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Higher ionisation parameter log U drives stronger [OIII] emission and pulls the galaxy toward the Seyfert region on the BPT diagram.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Higher ionisation parameter log U drives stronger [OIII] and [NII] emission, steering the galaxy toward the Seyfert region on the BPT diagram. We vary log U across the typical range for star-forming galaxies.">
 
 .. only:: html
 
@@ -130,13 +198,13 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Ionization Parameter (logU)</div>
+      <div class="sphx-glr-thumbnail-title">Ionization parameter controls optical line strength</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Gas metallicity controls [NII]/Hα and [OIII]/Hβ — the primary optical metallicity diagnostics. These ratios move galaxies on the BPT diagram and are used to measure oxygen abundances in star-forming galaxies.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Gas metallicity controls [NII]/Hα and [OIII]/Hβ ratios, the primary optical metallicity diagnostics. We vary nebular metallicity across the abundance range.">
 
 .. only:: html
 
@@ -147,13 +215,13 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Gas Metallicity (log Z/Zsun)</div>
+      <div class="sphx-glr-thumbnail-title">Gas metallicity shifts optical emission line ratios</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Ionizing photon production declines rapidly with stellar population age (~t^-1). Compare young vs old populations to see how nebular line strength evolves.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Ionizing photon production declines rapidly with stellar population age (~t^-1). We show how nebular line strength evolves from young (50 Myr) to old (5 Gyr) populations.">
 
 .. only:: html
 
@@ -164,7 +232,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Nebular Emission: Dependence on Stellar Population Age</div>
+      <div class="sphx-glr-thumbnail-title">Nebular emission fades with stellar population age</div>
     </div>
 
 
@@ -187,7 +255,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies the ionising source. Varying log U and metallicity moves the predicted location along the star-forming → composite → Seyfert sequence.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies ionizing sources. We show how stellar population age controls ionization parameter: younger (hotter) populations move the locus toward higher [OIII]/Hβ, steering from star-forming toward composite/Seyfert regions.">
 
 .. only:: html
 
@@ -198,13 +266,13 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">BPT Diagram: Ionization Parameter Sequence</div>
+      <div class="sphx-glr-thumbnail-title">BPT diagram ionization sequence from ages</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Gas phase metallicity affects ionization balance and emission line strengths. Higher metallicity increases cooling efficiency, affecting the nebular continuum and emission-line ratios through recombination rate changes.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Nebular gas density controls ionization balance and recombination rates, affecting emission line strengths. Higher density increases cooling efficiency, shifting line ratios through recombination rate changes.">
 
 .. only:: html
 
@@ -215,13 +283,13 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Nebular Gas Density: Metallicity Variation</div>
+      <div class="sphx-glr-thumbnail-title">Nebular density affects recombination and cooling</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare tengri&#x27;s three nebular emission backends: BakedIn (SSP-embedded), CloudyGrid (tabulated photoionization), and Cue (neural emulator). Shows how each backend predicts emission lines in the optical window.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Compare Cue (neural emulator; current recommended path) against traditional photoionization grids (CloudyGrid) and SSP-embedded nebular. Shows [OIII] and H-alpha regions on a young starburst.">
 
 .. only:: html
 
@@ -232,13 +300,13 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Nebular Emission Backends</div>
+      <div class="sphx-glr-thumbnail-title">Cue nebular emulator vs alternatives</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Plot shock emission line diagnostics from MAPPINGS V photoionization models. Shows how shock velocity, density, and magnetic field affect line ratios and can mimic AGN-like emission in diagnostic diagrams.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Shock emission (MAPPINGS V models) can mimic AGN on the BPT diagram. We show how shock velocity, gas density, and magnetic field strength affect line ratios and diagnostic positions. Four-panel layout shows velocity and density sequences on BPT, line ratios vs velocity, and magnetic field strength.">
 
 .. only:: html
 
@@ -249,7 +317,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Nebular Shock Emission (MAPPINGS V)</div>
+      <div class="sphx-glr-thumbnail-title">MAPPINGS V shocks: velocity, density, and magnetic field effects</div>
     </div>
 
 
@@ -266,7 +334,11 @@ Nebular emission backends comparison.
    /auto_examples/nebular/plot_bpt_cue_flexibility
    /auto_examples/nebular/plot_bpt_cue_grid
    /auto_examples/nebular/plot_bpt_diagnostics
+   /auto_examples/nebular/plot_cue_fesc_logu_atlas
+   /auto_examples/nebular/plot_cue_flex_tour
+   /auto_examples/nebular/plot_cue_parameter_atlas
    /auto_examples/nebular/plot_dig_frac_sweep
+   /auto_examples/nebular/plot_fesc_lya_sweep
    /auto_examples/nebular/plot_fesc_sweep
    /auto_examples/nebular/plot_line_sigma_sweep
    /auto_examples/nebular/plot_logu_sweep

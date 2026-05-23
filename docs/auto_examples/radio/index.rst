@@ -17,7 +17,7 @@ Star-formation radio emission and the FIR–radio correlation.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The synchrotron spectral index \alpha_{\rm sf} sets how steeply the radio spectrum falls off with frequency. Typical star-forming galaxies have \alpha_{\rm sf} \approx 0.7–0.8. Flat-spectrum sources (\alpha \approx 0) have strong free-free contributions; steeper spectra (:math:`\alpha &gt; 1`) suggest ageing of the cosmic ray electron population.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The synchrotron spectral index α_sf controls how steeply the radio spectrum falls with frequency. Star-forming galaxies typically have α_sf ≈ 0.7–0.8. Flat spectra (α ≈ 0) signal strong free-free contribution; steep spectra (α &gt; 1) indicate cosmic-ray electron aging. We vary α_sf ∈ [0.3, 1.2] at fixed L_IR = 10^11 L_sun and show normalized spectra (reference 1.4 GHz).">
 
 .. only:: html
 
@@ -28,13 +28,13 @@ Star-formation radio emission and the FIR–radio correlation.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Radio Spectral Index (α_sf)</div>
+      <div class="sphx-glr-thumbnail-title">Synchrotron spectral index: steeper α_sf dims the high-frequency tail</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The FIR-radio correlation links a galaxy&#x27;s infrared luminosity to its 1.4 GHz synchrotron emission via the dimensionless parameter q_{\rm IR} = \log_{10}(L_{\rm IR} / 3.75\times10^{12} \, L_{\rm 1.4GHz}). Higher q_{\rm IR} means relatively less radio per unit star formation. The canonical value for star-forming galaxies is 2.64 (Bell 2003).">
+    <div class="sphx-glr-thumbcontainer" tooltip="The dimensionless parameter q_IR characterizes the FIR-radio correlation, linking far-infrared luminosity to 1.4 GHz synchrotron emission. Higher q_IR means relatively weaker radio per unit star formation. We vary q_IR across the observationally motivated range 2.0–3.3 at fixed L_IR = 10^11 L_sun, demonstrating how radio loudness evolves (Bell 2003).">
 
 .. only:: html
 
@@ -45,13 +45,13 @@ Star-formation radio emission and the FIR–radio correlation.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">FIR-Radio Correlation (q_IR)</div>
+      <div class="sphx-glr-thumbnail-title">FIR-radio correlation: q_IR sets radio loudness</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The FIR-radio correlation links far-infrared luminosity (reprocessed dust emission from star formation) to 1.4 GHz radio synchrotron emission. This script sweeps infrared luminosity L_IR ∈ {10, 11, 12, 13} L_sun and shows resulting synchrotron + thermal radio SEDs using the canonical q_IR = 2.64 parameter, demonstrating how more luminous starbursts produce stronger radio.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The FIR-radio correlation links far-infrared luminosity (dust-reprocessed star-formation energy) to 1.4 GHz synchrotron emission. The dimensionless q_IR parameter relates the two via L_IR ∝ L_1.4GHz^(10^q_IR/2.5). Brighter starbursts emit stronger radio across all frequencies. We sweep L_IR over 10^10–10^13 L_sun at fixed q_IR = 2.64 (canonical; Bell 2003).">
 
 .. only:: html
 
@@ -62,13 +62,13 @@ Star-formation radio emission and the FIR–radio correlation.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">FIR-Radio Correlation: L_IR Luminosity Sweep</div>
+      <div class="sphx-glr-thumbnail-title">FIR-radio correlation: L_IR × q_IR sets radio loudness scale</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Radio loudness R = \log_{10}(L_{5\,\rm GHz} / L_B) quantifies the ratio of radio to optical AGN luminosity. Radio-quiet AGN have R \lesssim 1; radio-loud AGN (blazars, FR I/II) can reach R \sim 3–5. Each decade in R adds an order of magnitude to the jet radio luminosity at fixed bolometric AGN power.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Radio loudness R = log_10(L_5GHz / L_B) quantifies the ratio of AGN radio to optical luminosity. Radio-quiet AGN have R ≲ 1; radio-loud sources (FR I/II, blazars) reach R ∼ 3–5. Each decade in R corresponds to an order of magnitude increase in jet radio luminosity at fixed bolometric AGN power. We sweep R ∈ [0, 4] at fixed L_bol = 10^44 erg/s (Seyfert-1-like) and α_agn = 0.7.">
 
 .. only:: html
 
@@ -79,7 +79,24 @@ Star-formation radio emission and the FIR–radio correlation.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">AGN Radio Loudness (R)</div>
+      <div class="sphx-glr-thumbnail-title">AGN radio loudness R: orders of magnitude in jet power</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="At fixed host (constant SFR = 3 M_sun/yr, Condon-92 synchrotron + free-free) we sweep the composable AGN&#x27;s bolometric luminosity agn_log_lbol from 9 to 13 (in log L_sun). The host alone produces a power-law GHz continuum; the AGN superposes a flatter-spectrum jet component that takes over above log L_bol ≳ 11.5 — the classic radio-loud / radio-quiet division emerges from this competition.">
+
+.. only:: html
+
+  .. image:: /auto_examples/radio/images/thumb/sphx_glr_plot_radio_vs_agn_lbol_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/radio/plot_radio_vs_agn_lbol`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Radio SED response to AGN bolometric luminosity</div>
     </div>
 
 
@@ -97,4 +114,5 @@ Star-formation radio emission and the FIR–radio correlation.
    /auto_examples/radio/plot_q_ir_sweep
    /auto_examples/radio/plot_radio_lir_relation
    /auto_examples/radio/plot_radio_loudness_sweep
+   /auto_examples/radio/plot_radio_vs_agn_lbol
 

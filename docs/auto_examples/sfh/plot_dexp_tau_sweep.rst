@@ -18,83 +18,71 @@
 .. _sphx_glr_auto_examples_sfh_plot_dexp_tau_sweep.py:
 
 
-Delayed-τ SFH: Star Formation Timescale
-========================================
+Delayed-exponential timescale τ controls decay after peak SFR
+=============================================================
 
-The delayed-exponential timescale `τ` sets how quickly the SFH falls
-after its peak. Shorter `τ` means faster quenching, older mean stellar age.
+The timescale τ of a delayed-exponential SFH sets how quickly star formation
+falls after its peak: short τ means rapid decline and old stars, long τ means
+a sustained tail and younger mean age. We vary τ across the prior range with
+every other parameter fixed.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_dexp_tau_sweep_001.png
-   :alt: plot_dexp_tau_sweep
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 15-49
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_dexp_tau_sweep_001.png
-   :alt: Delayed Exponential SFH: Timescale τ
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_dexp_tau_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-batch-2/src/tengri/forward/sed_model.py:643: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
-      self._nebular_backend = BakedInBackend()
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 10-63
 
 .. code-block:: Python
 
 
-    import matplotlib.pyplot as plt
+    import warnings
 
-    from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp, setup_style
-    from tengri.analysis.plotting import sfh_sed_comparison
+    import jax
+    import jax.numpy as jnp
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    import tengri
+    from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-
-    ssp = load_ssp()
-
-    # Build Parameters with delayed exponential SFH
-    spec = Parameters(
-        mean_sfh_type="dexp",
-        sfh_dexp_log_peak_sfr=Fixed(1.0),
-        sfh_dexp_tau_gyr=Uniform(0.1, 10.0),  # will be overridden
-        sfh_dexp_start_gyr=Fixed(10.0),
-        met_logzsol=Fixed(-0.3),
-        dust_tau_bc=Fixed(0.3),
-        dust_tau_diff=Fixed(0.2),
-        dust_slope=Fixed(-0.7),
-        redshift=Fixed(0.1),
+    ssp = tengri.load_ssp()
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh={
+            "type": "dexp",
+            "*": tengri.FIXED,
+            "tau_gyr": tengri.Uniform(0.1, 10.0),
+            "log_peak_sfr": 1.0,
+            "start_gyr": 10.0,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+        redshift=tengri.Fixed(0.1),
     )
+    baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-    model = SEDModel(spec, ssp)
+    tau_values = np.linspace(0.5, 10.0, 7)
+    norm = mpl.colors.Normalize(vmin=tau_values.min(), vmax=tau_values.max())
+    cmap = plt.get_cmap("viridis")
 
-    # Sweep parameter
-    values = [0.5, 1.0, 2.0, 5.0, 10.0]
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    for tau in tau_values:
+        params = {**baseline, "sfh_dexp_tau_gyr": jnp.float64(tau)}
+        out = model.predict_rest_sed(params)
+        wave = np.asarray(out.wavelength)
+        nu = 2.998e18 / wave  # Å/s -> Hz
+        nu_l_nu = nu * np.asarray(out.sed)
+        ax.loglog(wave, nu_l_nu, color=cmap(norm(tau)), lw=1.4)
 
-    fig = sfh_sed_comparison(model, "sfh_dexp_tau_gyr", values, cmap="Blues")
-    fig.suptitle("Delayed Exponential SFH: Timescale τ", fontsize=12, y=1.00)
-    plt.tight_layout()
-    plt.savefig("plot_dexp_tau_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    ax.set_xlim(800, 3e4)
+    ax.set_ylim(1e40, 5e43)
+    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+    ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
+    cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+    cbar.set_label(r"Timescale $\tau$ [Gyr]")
 
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.653 seconds)
+    fig.tight_layout()
+    fig.savefig("plot_dexp_tau_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_dexp_tau_sweep.py:

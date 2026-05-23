@@ -51,7 +51,7 @@ Spectroscopic fitting and spectral features.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Generate a mock galaxy spectrum and fit it with tengri&#x27;s MAP optimizer. Shows the observed and model spectra with a residual panel below.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Compare the rest-frame spectrum of a young and old galaxy at fixed redshift. Shows how the optical continuum color, Balmer decrement, and absorption line strengths depend on mean stellar age, holding metallicity and dust fixed.">
 
 .. only:: html
 
@@ -62,7 +62,7 @@ Spectroscopic fitting and spectral features.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Spectroscopic SED Fit</div>
+      <div class="sphx-glr-thumbnail-title">Rest-frame spectrum with stellar population ages</div>
     </div>
 
 

@@ -25,27 +25,12 @@ Sweep minimum radiation field strength across the THEMIS grid at fixed
 hydrocarbon grain content. Higher U warms dust, shifting FIR peak
 blueward and strengthening mid-IR grain emission relative to far-IR.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_themis_umin_sweep_001.png
-   :alt: plot_themis_umin_sweep
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 16-62
-
-
-
-.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_themis_umin_sweep_001.png
-   :alt: THEMIS (Jones+2017) at $q_{\rm HAC}=0.17$, $\alpha=2$
-   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_themis_umin_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 9-57
 
 .. code-block:: Python
 
+
+    import warnings
 
     import h5py
     import matplotlib.pyplot as plt
@@ -55,6 +40,8 @@ blueward and strengthening mid-IR grain emission relative to far-IR.
     from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    warnings.filterwarnings("ignore", message=".*deprecated.*")
 
     with h5py.File(data_path("themis_templates.h5"), "r") as f:
         wave_aa = np.asarray(f["wavelength_aa"][:])
@@ -86,12 +73,10 @@ blueward and strengthening mid-IR grain emission relative to far-IR.
         ylabel=r"$\nu L_\nu\ [\mathrm{normalised}\ \int L_\nu d\nu = 1]$",
         xlim=(2.0, 1.0e3),
         ylim=(1.0e-26, 1.0e-22),
-        title=rf"THEMIS (Jones+2017) at $q_{{\rm HAC}}={qhac_grid[i_qhac]:.2f}$, $\alpha=2$",
     )
     ax.legend(loc="upper left", frameon=False, fontsize=8, ncol=2)
     fig.tight_layout()
-    plt.savefig("plot_themis_umin_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_themis_umin_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_themis_umin_sweep.py:

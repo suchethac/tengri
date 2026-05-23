@@ -5,18 +5,18 @@ Examples gallery
    :hidden:
 
    /auto_examples/quickstart/index.rst
-   /auto_examples/workflows/index.rst
    /auto_examples/recipes/index.rst
+   /auto_examples/workflows/index.rst
    /auto_examples/sps/index.rst
    /auto_examples/sfh/index.rst
    /auto_examples/metallicity/index.rst
+   /auto_examples/nebular/index.rst
    /auto_examples/dust_attenuation/index.rst
    /auto_examples/dust_emission/index.rst
-   /auto_examples/nebular/index.rst
-   /auto_examples/igm/index.rst
    /auto_examples/agn/index.rst
    /auto_examples/radio/index.rst
    /auto_examples/xray/index.rst
+   /auto_examples/igm/index.rst
    /auto_examples/photometry/index.rst
    /auto_examples/spectroscopy/index.rst
    /auto_examples/multiwavelength/index.rst
@@ -77,7 +77,7 @@ Getting started with tengri — first fit and SED visualization.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The shortest tengri workflow: define a parametric SFH + Calzetti dust model, mock SDSS photometry, fit with MAP optimization, overplot. Start here.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The simplest end-to-end tengri workflow. We build a model with a truncated-skew-normal SFH and a two-component Calzetti dust attenuation, mock SDSS ugriz photometry at S/N = 20, then run a MAP fit to recover the input parameters. The figure shows the full rest-frame SED behind the five observed bands and the residuals of the MAP fit relative to the noise level.">
 
 .. only:: html
 
@@ -88,13 +88,13 @@ Getting started with tengri — first fit and SED visualization.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">First Photometric Fit</div>
+      <div class="sphx-glr-thumbnail-title">Recovering a star-forming galaxy from 5-band SDSS photometry</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Predict a galaxy SED at fixed parameters, then re-predict with dust optical depths set to zero. Overplot to see how much UV-optical light the dust absorbed.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Build a model with both stellar and dust components. Predict the full SED with attenuation, then predict without dust absorption to isolate the absorbed UV-optical flux. The filled region shows how much light dust removes from the intrinsic stellar continuum.">
 
 .. only:: html
 
@@ -105,112 +105,7 @@ Getting started with tengri — first fit and SED visualization.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">SED Components</div>
-    </div>
-
-
-.. thumbnail-parent-div-close
-
-.. raw:: html
-
-    </div>
-
-Workflows
-=========
-
-End-to-end fitting workflows — BPT classification, dust Monte-Carlo
-resampling, high-z LBG fits, method comparison, and post-starburst recovery.
-
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbnails">
-
-.. thumbnail-parent-div-open
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates computing emission-line ratios for a mock galaxy catalog with mixed star-forming and AGN fractions. Plots the BPT diagram ([OIII]/Hβ vs [NII]/Hα) and overlays Kewley+2001 and Kauffmann+2003 demarcation lines to show how emission-line diagnostics separate ionization mechanisms.">
-
-.. only:: html
-
-  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_bpt_classification_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/workflows/plot_workflow_bpt_classification`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Workflow: BPT Emission-Line Classification</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates quantifying observational uncertainties through posterior predictive resampling. A galaxy is fit with NUTS, then the posterior is resampled 200 times to generate a posterior predictive SED ensemble. Shows the SED with 1σ and 2σ confidence envelopes. This workflow illustrates how to propagate Bayesian posterior uncertainty into derived predictions for robust error budgets.">
-
-.. only:: html
-
-  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_dust_mc_resampling_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/workflows/plot_workflow_dust_mc_resampling`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Workflow: Dust Attenuation Uncertainty via Posterior Resampling</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates fitting a z=4 Lyman-break galaxy with JWST/HST photometry. A young, dust-free star-forming galaxy&#x27;s SED shows a sharp UV dropout. This workflow shows how to recover age, dust, and redshift from the characteristic Lyman-break signature in broadband colors.">
-
-.. only:: html
-
-  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_high_z_lbg_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/workflows/plot_workflow_high_z_lbg`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Workflow: High-z Lyman-Break Galaxy</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Compares MAP (point estimate) against NUTS (gold-standard MCMC) on identical mock data. MAP underestimates posterior uncertainty by design; NUTS is the reference. VI is omitted from the demo for runtime — see examples/inference/plot_method_comparison.py for a 3-method version.">
-
-.. only:: html
-
-  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_method_comparison_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/workflows/plot_workflow_method_comparison`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Workflow: Inference Method Comparison</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates identifying post-starburst galaxies through model comparison. A post-starburst has a truncated SFH with a recent burst followed by quenching. When fit with a smooth tau model (incorrect), the fit poorly recovers the truth. This shows how model misspecification can bias SFH inference and why flexible models matter for interpreting star formation histories.">
-
-.. only:: html
-
-  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_post_starburst_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/workflows/plot_workflow_post_starburst`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Workflow: Post-Starburst (E+A) Galaxy Diagnosis</div>
+      <div class="sphx-glr-thumbnail-title">Dust attenuation across the SED: intrinsic, attenuated, and absorbed</div>
     </div>
 
 
@@ -237,7 +132,7 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does prior choice affect the posterior? This recipe compares fitting with a Uniform prior vs Gaussian prior on metallicity, showing how prior assumptions constrain the posterior.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Metallicity is often poorly constrained by optical photometry. This recipe compares two fits: one with a Uniform prior on met_logzsol (weak constraint) and one with a Gaussian prior (informative from external data). We show how the posterior distribution changes, and that the same mock data leads to different inferences depending on the prior.">
 
 .. only:: html
 
@@ -248,13 +143,13 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Prior Sensitivity: Gaussian vs Uniform</div>
+      <div class="sphx-glr-thumbnail-title">Prior sensitivity: uniform vs Gaussian on metallicity</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How do I register a custom photometric filter and use it in SED modeling? This recipe generates a synthetic filter response and uses it to compute photometry through a model SED.">
+    <div class="sphx-glr-thumbcontainer" tooltip="How do I combine a custom photometric filter with standard filters? This recipe generates a synthetic Gaussian filter at 2 μm and pairs it with SDSS optical bands, then predicts the full SED and photometry.">
 
 .. only:: html
 
@@ -265,13 +160,13 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Register and Use Custom Filters</div>
+      <div class="sphx-glr-thumbnail-title">Register and use a custom photometric filter</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How do I load photometric data from a CSV file and fit it? This recipe demonstrates loading a table of measured fluxes and uncertainties, building observations per galaxy, and running a MAP fit on each.">
+    <div class="sphx-glr-thumbcontainer" tooltip="How do I load measured photometry from a table and fit it? This recipe generates mock photometry for 3 galaxies and fits each one independently with a MAP fit, demonstrating the workflow for catalogue-scale SED fitting.">
 
 .. only:: html
 
@@ -282,13 +177,13 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Load and Fit Real CSV Photometry</div>
+      <div class="sphx-glr-thumbnail-title">Load and fit photometry from CSV</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How do I save a posterior to disk and load it later? This recipe demonstrates running a NUTS fit, saving the Posterior to an HDF5 file, reloading it, and analyzing the saved results.">
+    <div class="sphx-glr-thumbcontainer" tooltip="How do I persist a posterior between sessions? This recipe runs a MAP fit, saves the result to HDF5, reloads it, and demonstrates basic analysis. Posterior objects can be checkpointed for long-running fits or multi-stage analysis pipelines.">
 
 .. only:: html
 
@@ -299,13 +194,13 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Save and Load a Posterior</div>
+      <div class="sphx-glr-thumbnail-title">Save and load a posterior to disk</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How do I fit a spectrum when redshift is known from spectroscopy? This recipe shows how fixing redshift with Fixed() constrains other parameters more tightly compared to letting it vary.">
+    <div class="sphx-glr-thumbcontainer" tooltip="When redshift is known from spectroscopy, the SED fit is more precise than when inferring redshift from photometry alone. This recipe generates mock photometry at a known redshift, then fits it with redshift fixed (spectroscopic) and redshift free (photometric only), showing how redshift degeneracies affect parameter recovery.">
 
 .. only:: html
 
@@ -316,7 +211,146 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Fix Redshift to a Known Value</div>
+      <div class="sphx-glr-thumbnail-title">Redshift constraint: spectroscopy vs photometry alone</div>
+    </div>
+
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+
+Workflows
+=========
+
+End-to-end fitting workflows — BPT classification, dust Monte-Carlo
+resampling, high-z LBG fits, method comparison, and post-starburst recovery.
+
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates BPT ([OIII]/Hbeta vs [NII]/Halpha) line-ratio diagnostics on a mock galaxy catalog with varying AGN fraction. Overlays Kewley+2001 and Kauffmann+2003 demarcation lines to show the clean separation of ionization mechanisms across the diagnostic plane.">
+
+.. only:: html
+
+  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_bpt_classification_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/workflows/plot_workflow_bpt_classification`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">BPT diagram: emission lines separate star-forming from AGN ionization</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates dust attenuation effects and how fitting uncertainty propagates to the recovered SED. A galaxy with free dust parameters (tau_bc and tau_diff) is fit with MAP, showing the best-fit SED plus mock perturbation envelopes to illustrate the uncertainty range from photometric noise.">
+
+.. only:: html
+
+  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_dust_mc_resampling_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/workflows/plot_workflow_dust_mc_resampling`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Dust attenuation: uncertainty in SED from dust parameter estimation</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Fits a z=4 young, dust-free star-forming galaxy using JWST (F150W/F200W/F277W) and HST (F814W) broadband photometry. The characteristic Lyman-break signature (sharp UV dropout at observed ~4 micron) constrains age and metallicity even with just 4 bands. Demonstrates recovery of the young starburst component from the dropout depth.">
+
+.. only:: html
+
+  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_high_z_lbg_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/workflows/plot_workflow_high_z_lbg`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">High-redshift Lyman-break galaxy: Lyman dropout signatures in JWST/HST</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates running MAP inference on SDSS photometry and comparing the MAP fit to the ground truth SFH. MAP provides a point estimate of the posterior without sampling overhead; for uncertainty quantification, posterior sampling methods (NUTS, VI) would be needed.">
+
+.. only:: html
+
+  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_method_comparison_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/workflows/plot_workflow_method_comparison`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Inference method comparison: MAP as reference for SFH recovery</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Two galaxies with very different physical properties — a dusty star-forming galaxy at z=0.3 and an unobscured Lyman-break galaxy at z=3.5 — can produce nearly identical ugrizY broadband fluxes. The 4000 Å break of the dusty low-z galaxy and the Lyman break of the high-z galaxy land at the same observed wavelength, so without intermediate bands or IR coverage the photo-z is bimodal.">
+
+.. only:: html
+
+  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_photoz_degeneracy_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/workflows/plot_workflow_photoz_degeneracy`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">The photo-z degeneracy: dusty z≈0.3 vs unobscured z≈3.5</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A post-starburst galaxy shows a recent burst followed by quenching. When fit with smooth tau-model (incorrect), the fit biases the recovered SFH. This workflow compares two models on the same mock data to show how model flexibility directly impacts star formation history inference.">
+
+.. only:: html
+
+  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_post_starburst_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/workflows/plot_workflow_post_starburst`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Model misspecification: post-starburst galaxies reveal wrong SFH</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="When did star formation in a galaxy stop? Optical-only color, the 4000 Å break, and Hα equivalent width respond on different timescales: NUV − r reddens within ~100 Myr of quenching (loss of O/B stars), D_n(4000) continues to rise over 1–3 Gyr as A stars evolve, and Hα EW drops fastest of all (within ~10 Myr) since it tracks only the youngest ionizing photons.">
+
+.. only:: html
+
+  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_quenching_diagnostics_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/workflows/plot_workflow_quenching_diagnostics`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Three diagnostics of quenching epoch in one figure</div>
     </div>
 
 
@@ -343,7 +377,41 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Five representative ages from the DSPS SSP grid at solar metallicity. A single stellar population transitions from UV-dominated (young, hot) to NIR-dominated (old, red); peak-normalized λF_λ on log-log axes makes the temperature inversion visible.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The hydrogen-ionising photon production rate Q_H of a simple stellar population drops by ~5 dex from 1 Myr to 100 Myr as O stars die. Different SSP libraries predict different Q_H(t) because they differ in upper-IMF treatment, stellar rotation, and (most dramatically) whether massive binaries are included — BPASS extends the Q_H-producing phase to ~30 Myr.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_ionising_lum_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_ionising_lum`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Ionising-photon production rate vs SSP age</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Different stellar population synthesis codes use different stellar spectral libraries, isochrone families, and binary treatments. The SED of a ~1 Gyr-old, solar-metallicity simple stellar population already shows visible differences in the UV (BPASS binaries add a hot continuum) and in the NIR (treatment of TP-AGB).">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_sps_library_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_sps_library_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SSP library comparison at a fixed age and metallicity</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A single stellar population transitions from UV-dominated (young, hot) to NIR-dominated (old, red) with age. Peak-normalized λF_λ on log-log axes makes the temperature inversion visible across five representative ages at solar metallicity.">
 
 .. only:: html
 
@@ -360,7 +428,24 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Four-panel tour of the DSPS SSP grid: age sequence at fixed Z, metallicity sequence at fixed age, broadband flux vs age, and a mock UV-optical vs optical-NIR color-color diagram across the full grid.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The choice of SSP library propagates into the colors a photometric fitter recovers — a single fixed galaxy SFH and dust law, rebuilt with FSPS-MIST, FSPS-Padova/MILES, BPASS, BC03, and CB19 in turn, produces a noticeable spread in NUV − r, u − g, g − r, and r − K.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_ssp_color_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_ssp_color_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Galaxy broadband colors depend on the SSP library</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Four-panel overview of the DSPS SSP grid: age evolution at fixed metallicity, metallicity evolution at fixed age, monochromatic flux vs age, and color-color diagram across the full grid. Shows how stellar populations age from UV-hot to IR-red as they cool.">
 
 .. only:: html
 
@@ -377,7 +462,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="SSP grids typically ship with one IMF (here, Chabrier). To illustrate the IMF effect on the spectrum shape we rescale the same Chabrier SSP by literature M/L ratios for Chabrier / Kroupa / Salpeter at 1 Gyr and solar Z. M/L ratios from Conroy 2012 — most diagnostic in the near-IR where massive stars dominate the mass budget.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Different Initial Mass Functions produce different M/L ratios at fixed age and metallicity. We rescale a Chabrier SSP by literature M/L values for Chabrier, Kroupa, and Salpeter at 1 Gyr, solar metallicity. The NIR (where massive stars dominate the mass budget) is most diagnostic of IMF choice.">
 
 .. only:: html
 
@@ -394,7 +479,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Five metallicity points spanning the SSP grid at fixed age 1 Gyr. Metallicity reddens the optical and shifts iron-peak features in the near-IR. Peak-normalized λF_λ shows shape changes without the absolute luminosity scale washing them out.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Metallicity reddens the optical continuum and shifts iron-peak absorption features in the near-IR. We show five metallicity points spanning the SSP grid at fixed age (1 Gyr). Peak-normalized λF_λ makes spectral shape variations visible without large luminosity differences obscuring them.">
 
 .. only:: html
 
@@ -430,7 +515,7 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Four burstiness regimes — Smooth, Moderate, Bursty, Extreme — each defined by the PSD amplitude σ and correlation time τ. Forward-model SFH draws show the range of histories each regime produces before inference.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Four representative (σ, τ) pairs define burstiness regimes: Smooth (σ=0.3, τ=100 Myr), Moderate (σ=1.0, τ=50 Myr), Bursty (σ=2.0, τ=20 Myr), and Extreme (σ=3.0, τ=5 Myr). Each panel shows one forward-model draw with the smooth mean SFH overlaid, illustrating the range of morphologies that each regime produces before inference.">
 
 .. only:: html
 
@@ -441,13 +526,13 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">SFH Recovery Across Four Burstiness Regimes</div>
+      <div class="sphx-glr-thumbnail-title">Four regimes of stochastic-SFH burstiness from smooth to extreme</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Plot metallicity evolution Z(t) from closed-box and leaky-box chemical evolution models. Shows how star formation history and gas outflows shape the history of metal enrichment in galaxies.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Four perspectives on chemical evolution: (1) closed-box model with varying SFR timescales; (2) cumulative metallicity from different exponential SFHs; (3) leaky-box model showing how outflow rates suppress Z; and (4) age-metallicity relation across galactic radii. Together they show how star formation and galactic winds control the Z(t) history.">
 
 .. only:: html
 
@@ -458,13 +543,13 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Chemical Evolution: Metallicity History Models</div>
+      <div class="sphx-glr-thumbnail-title">Chemical evolution: How SFH and outflows shape metal enrichment history</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The delayed-exponential timescale τ sets how quickly the SFH falls after its peak. Shorter τ means faster quenching, older mean stellar age.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The timescale τ of a delayed-exponential SFH sets how quickly star formation falls after its peak: short τ means rapid decline and old stars, long τ means a sustained tail and younger mean age. We vary τ across the prior range with every other parameter fixed.">
 
 .. only:: html
 
@@ -475,13 +560,13 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Delayed-τ SFH: Star Formation Timescale</div>
+      <div class="sphx-glr-thumbnail-title">Delayed-exponential timescale τ controls decay after peak SFR</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Visualize a 3×3 grid of double power-law SFH shapes, sweeping the rising slope α and falling slope β to show how the parameter space controls SFH morphology.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A 3×3 grid showing how the rising slope α (columns) and falling slope β (rows) together control the full SFH morphology. Early-time α determines assembly speed; late-time β sets the post-peak decay. The optical SED responds across each cell, revealing how parameter space maps to stellar age.">
 
 .. only:: html
 
@@ -492,13 +577,13 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Double Power-Law SFH: 2D Parameter Grid (α × β)</div>
+      <div class="sphx-glr-thumbnail-title">Double power-law SFH parameter space: early growth α vs late quenching β</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The rising slope α controls how quickly star formation builds up before the peak. Steeper α = more abrupt onset, younger mean age.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The rising slope α of a double-power-law star formation history controls how rapidly the galaxy assembled its mass before the peak. Larger α means a more abrupt onset of star formation, leaving a younger O/B-star population at the time of observation and a steeper rest-frame UV slope. We vary α across the prior range with every other parameter fixed.">
 
 .. only:: html
 
@@ -509,13 +594,13 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Double Power-Law SFH: Rising Slope α</div>
+      <div class="sphx-glr-thumbnail-title">Early-time SFH slope α shapes the UV continuum</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The falling slope β controls post-peak quenching. Large β gives rapid quenching; small β gives a gentle tail.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The falling slope β of a double-power-law SFH controls quenching after the peak. Large β means rapid quenching and an old stellar population; small β means a gentle tail and more mixed ages. We vary β across its prior range with every other parameter fixed.">
 
 .. only:: html
 
@@ -526,13 +611,13 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Double Power-Law SFH: Falling Slope β</div>
+      <div class="sphx-glr-thumbnail-title">Post-peak quenching slope β shapes stellar age distribution</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="When did this galaxy form most of its stars? The peak lookback time shifts the SFH and changes UV slope, 4000 Å break, and NIR mass.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The peak lookback time of a log-normal SFH controls when most stars formed, shifting the age structure and dramatically affecting UV slope, 4000 Å break strength, and NIR luminosity. We vary the peak time across its prior range with every other parameter fixed.">
 
 .. only:: html
 
@@ -543,13 +628,13 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Log-Normal SFH: Peak Lookback Time</div>
+      <div class="sphx-glr-thumbnail-title">Log-normal peak lookback time shifts stellar age and SED morphology</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare all parametric star formation history models available in tengri. Each model is evaluated on a lookback-time grid and plotted with representative parameters. No SSP data required.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Compare all parametric SFH models available in tengri. Each is evaluated on a lookback-time grid with representative parameters, showing the range of morphologies from smooth exponentials to sharp truncations. No SSP data required.">
 
 .. only:: html
 
@@ -560,13 +645,13 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Parametric SFH Models</div>
+      <div class="sphx-glr-thumbnail-title">Catalog of parametric star-formation-history models</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare the three PSD models available for stochastic SFHs: the default Damped Random Walk (DRW/Lorentzian), the Matern covariance family, and the extended regulator model. No SSP data required.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Three PSD models govern the frequency structure of stochastic SFHs: the default damped random walk (DRW), the Matern family (which includes DRW as a special case), and the extended regulator model. Plotted in frequency space at representative parameters. No SSP data required.">
 
 .. only:: html
 
@@ -577,13 +662,13 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Alternative PSD Models</div>
+      <div class="sphx-glr-thumbnail-title">Comparison of power-spectral-density models for stochastic SFHs</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Visualize how the two DRW PSD parameters -- sigma (amplitude) and tau (damping timescale) -- map to different levels of SFH burstiness. A 3x3 grid of GP-modulated SFHs shows the effect of each parameter.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A 3×3 grid showing five stochastic-SFH realizations for each combination of amplitude σ (vertical axis) and damping timescale τ (horizontal axis). Larger σ produces more dramatic bursts; longer τ sustains those bursts. Each panel shows the mean smooth SFH (dashed) and colored realizations, revealing how the two PSD parameters together map to observable burstiness regimes.">
 
 .. only:: html
 
@@ -594,13 +679,13 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">PSD Parameter Space and Burstiness</div>
+      <div class="sphx-glr-thumbnail-title">PSD parameter space: amplitude σ (rows) and timescale τ (columns) control burstiness</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="σ controls how violently star formation fluctuates around the smooth trend. Small σ ≈ smooth; large σ = dramatic bursts.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The amplitude σ of the power spectral density sets how dramatically star formation fluctuates around the smooth trend: σ ≈ 0 means nearly constant SFR, large σ produces dramatic bursts that leave imprints in UV slope, optical colors, and stellar masses. We vary σ across its prior range with the timescale τ fixed.">
 
 .. only:: html
 
@@ -611,13 +696,13 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Stochastic SFH: Burstiness Amplitude σ</div>
+      <div class="sphx-glr-thumbnail-title">PSD amplitude σ controls burst magnitude in stochastic SFHs</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="τ (in Myr) controls how long bursts last. Short τ = fast flickering; long τ = sustained episodes.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The damping timescale τ (in Myr) of the power spectral density governs how long star-formation bursts persist. Short τ means rapid flickering; long τ means sustained episodes that leave their imprint on the SED. We vary τ across the prior range with the burst amplitude σ fixed.">
 
 .. only:: html
 
@@ -628,13 +713,13 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Stochastic SFH: Burstiness Timescale τ</div>
+      <div class="sphx-glr-thumbnail-title">PSD timescale τ controls burst duration in stochastic SFHs</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrate a galaxy with two distinct star formation events: an old burst + a recent burst. Show how the SED reflects both young and old stellar populations.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A galaxy with two separated bursts—one at 10 Gyr (old) and one at 0.3 Gyr (recent)— produces a SED that blends young hot and old cool stellar populations. Left panel shows the optical-to-NIR region in linear scale; right panel shows the full panchromatic SED in log-log, revealing the emission from both young and old stars.">
 
 .. only:: html
 
@@ -645,13 +730,30 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">SFH with Double Bursts: Old and Recent Star Formation</div>
+      <div class="sphx-glr-thumbnail-title">Dual-epoch star formation: old and recent bursts leave distinct SED signatures</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare four galaxy quenching scenarios: unquenched (constant SFH), exponential decline, sharp truncation, and a recent burst on top of quenching.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Each parametric SFH in tengri encodes a different prior on when a galaxy forms its stars. We overlay the SFR(t) shape of nine production-status forms at their default parameter values, all integrated to the same total stellar mass, so the differences are entirely in the shape — not the normalisation.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_sfh_form_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_sfh_form_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Parametric SFH form atlas</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Four quenching scenarios—constant SFR, exponential decline, sharp truncation, and recent burst—produce distinct SED shapes. Constant SFR yields a young, blue galaxy; sharp quenching creates old red colors; a recent burst injects young stars atop an old population. The SED reveals the full assembly history.">
 
 .. only:: html
 
@@ -662,13 +764,13 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">SFH Quenching Scenarios: Constant, Exponential, Sharp, and Burst+Decay</div>
+      <div class="sphx-glr-thumbnail-title">Quenching morphology sets the age mix and resulting SED colors</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Generate stochastic star formation histories using the Fourier-space GP correlated field model. The DRW (damped random walk) PSD governs the burstiness: larger sigma means more variance, shorter tau means more rapid fluctuations.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Generate stochastic star-formation histories using the Fourier-space GP correlated field model, governed by a damped-random-walk power spectrum. Left panel shows mild burstiness (σ=0.3, τ=300 Myr); right shows strong burstiness (σ=1.0, τ=100 Myr). Five realizations appear in each panel, with the smooth mean SFH overlaid.">
 
 .. only:: html
 
@@ -679,24 +781,7 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Stochastic SFH from GP Correlated Fields</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="A smooth (parametric) model fits a bursty galaxy with χ² ≈ 1 but systematically underestimates recent SFR by up to 10×. The trap: good residuals do not guarantee unbiased physical parameters.">
-
-.. only:: html
-
-  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_wrong_model_trap_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/sfh/plot_wrong_model_trap`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">The Wrong-SEDModel Trap: Parametric Bias in Derived Quantities</div>
+      <div class="sphx-glr-thumbnail-title">Stochastic SFH samples from GP-correlated fields with different burstiness</div>
     </div>
 
 
@@ -721,7 +806,7 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="[α/Fe] records the chemical enrichment history: high [α/Fe] signals rapid enrichment by core-collapse SNe before Type Ia SNe can dilute the alpha elements. In the SED, enhanced alpha suppresses iron absorption features in the optical.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The [α/Fe] abundance ratio encodes the chemical enrichment history: rapid enrichment by core-collapse supernovae before Type Ia SNe begin leads to high [α/Fe]. In the SED, enhanced alpha-elements suppress iron absorption lines in the optical (especially around 4000–5000 Å) because the higher abundance of alpha elements shifts the line-blanketing opacity. We sweep [α/Fe] on a quiescent passively evolving galaxy where iron features dominate the continuum absorption.">
 
 .. only:: html
 
@@ -732,13 +817,13 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">α/Fe Enhancement (met_alpha_fe)</div>
+      <div class="sphx-glr-thumbnail-title">Alpha-element enhancement suppresses iron absorption features</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep met_logzsol ∈ {−1.5, −0.7, 0, +0.5} on a composite SED from 912 Å (Lyman limit) to 30 μm (mid-IR), with modified-blackbody dust emission turned on so the metallicity-vs-energy-balance interaction is visible.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Stellar metallicity affects the stellar continuum shape and overall energy balance. Dust emission responds to absorbed stellar photons: metal-poor hot stars emit bluer light with less IR-absorbed energy, while metal-rich cooler stars are less bright in the UV but more absorbed in the optical/NIR. We sweep stellar metallicity on a young star-forming galaxy at z = 0.2 with dust attenuation and thermal emission from warm dust.">
 
 .. only:: html
 
@@ -749,13 +834,13 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Metallicity Sweep: Panchromatic SED</div>
+      <div class="sphx-glr-thumbnail-title">Metallicity shapes panchromatic SED with dust emission</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Stellar metallicity sets the UV-optical SED shape: metal-poor stars are hotter and bluer (less line blanketing), metal-rich are redder. Sweep met_logzsol from −2 (0.01 Z_⊙) to +0.2 (1.6 Z_⊙) at fixed SFH and dust.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Metal-poor stars are hotter and bluer (less line blanketing), while metal-rich stars are redder due to increased opacity. We sweep stellar metallicity across the prior range with every other parameter fixed on a typical intermediate-age galaxy with modest dust attenuation.">
 
 .. only:: html
 
@@ -766,13 +851,13 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Stellar Metallicity (log Z/Z_⊙)</div>
+      <div class="sphx-glr-thumbnail-title">Stellar metallicity drives UV-optical SED colour</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="3×4 panel grid showing how the stellar continuum responds to metallicity at three ages. Demonstrates the classic age-metallicity degeneracy: a metal-rich young population can mimic a metal-poor old population in the optical continuum.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Metal-rich young populations and metal-poor old populations can produce similar optical colours — a fundamental degeneracy in galaxy fitting. This 3×4 grid shows normalised rest-frame continua at nine points in the age–metallicity plane, with each row fixed at one lookback-formation age and each column fixed at one metallicity. Dust is zeroed to expose the clean stellar continuum shape.">
 
 .. only:: html
 
@@ -783,13 +868,13 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Stellar Continuum: Metallicity × Age Grid</div>
+      <div class="sphx-glr-thumbnail-title">Age-metallicity degeneracy in the stellar continuum</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare metallicity evolution Z(t) from closed-box and leaky-box chemical evolution models. Shows how star formation history and gas outflows shape the enrichment history. Demonstrates how different feedback mechanisms alter metal abundance relative to a closed box (maximum enrichment).">
+    <div class="sphx-glr-thumbcontainer" tooltip="Metallicity evolution Z(t) depends on the balance between metal production (in supernovae) and metal removal (via outflows). This four-panel figure shows how different star formation timescales and outflow efficiencies η alter the enrichment history relative to a closed box (zero outflow). Top-left: closed-box enrichment timescale dependence. Top-right: impact of variable outflow rates. Bottom-left: closed vs leaky enrichment under constant SFR. Bottom-right: age-metallicity relation analogue — how different assembly epochs lead to different final metal content.">
 
 .. only:: html
 
@@ -800,7 +885,332 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Chemical Evolution: Model Comparison</div>
+      <div class="sphx-glr-thumbnail-title">Chemical evolution: closed-box vs leaky-box enrichment histories</div>
+    </div>
+
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+
+Nebular Emission
+================
+
+Nebular emission backends comparison.
+
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Cue neural emulator responds to 12+ parameters. We show how each knob (ionization, metallicity, density, abundances, ionizing slope) moves a galaxy on the BPT-N plane log [OIII]/Hβ vs log [NII]/Hα. Each panel sweeps one parameter while holding fiducial values fixed. Kewley+2001 and Kauffmann+2003 demarcations shown for reference.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_bpt_cue_flexibility_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_bpt_cue_flexibility`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Cue nebular knobs affect BPT positions individually</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Show how the Cue neural emulator (Li+2025) maps the 2D parameter space (log U, log Z_gas) onto three classical BPT diagnostic diagrams. Lines of constant log U (varying metallicity) and constant log Z (varying ionization) show the full grid&#x27;s coverage and demarcation positions.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_bpt_cue_grid_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_bpt_cue_grid`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Cue nebular grid on BPT diagram</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The BPT diagram ([OIII]/Hβ vs [NII]/Hα) separates ionizing sources. Shocks (MAPPINGS V, Allen+2008) trace a sequence from HII regions through composite regions into Seyfert regions as velocity increases. We plot shock models alongside the standard demarcation lines.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_bpt_diagnostics_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_bpt_diagnostics`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">BPT diagram separates star formation from shocks and AGN</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Cue knobs fesc (ionizing-photon escape fraction) and logU (HII region ionization parameter) jointly govern the line spectrum of a star-forming galaxy: escape fraction sets how many ionizing photons reach the gas, logU shifts the resulting ionization balance of the gas they ionize. We map the response of three diagnostic lines/ratios on a 2-D grid.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_cue_fesc_logu_atlas_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_cue_fesc_logu_atlas`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Cue 2-D atlas: ionizing escape fraction × ionization parameter</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Cue has six tuning knobs that control HII-region ionization and the diffuse ionized gas. This six-panel tour sweeps each knob individually and reports the L_Hα response relative to the baseline, in dex. A flat line means the parameter has no effect on Hα at fixed other knobs.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_cue_flex_tour_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_cue_flex_tour`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Cue knob flexibility: six dimensions of HII region control</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Cue (Li, Leja &amp; Speagle 2023) maps a four-dimensional HII region control space — ionization parameter log U, gas-phase metallicity log Z_gas, ionizing-spectrum shape, and dust-to-metal ratio — onto an emission-line spectrum. A two-dimensional sweep over the two knobs most users will turn (``log U`` and log Z_gas) is shown for four diagnostic line ratios.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_cue_parameter_atlas_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_cue_parameter_atlas`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Comprehensive sweep of the Cue nebular parameters</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Diffuse ionized gas (DIG) has lower ionization parameter than HII regions, shifting galaxies toward the LINER region on the BPT diagram. We vary the DIG fraction from pure HII (0) to mixed gas (0.8).">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_dig_frac_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_dig_frac_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Diffuse ionized gas suppresses strong optical lines</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Lyα-specific escape fraction f_esc_lya sets what fraction of Lyα photons can escape the ISM without scattering. Higher f_esc_lya suppresses the Lyα emission line while leaving other nebular lines unchanged.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_fesc_lya_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_fesc_lya_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Lyα escape fraction controls Lyman-alpha strength</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Escape fraction f_esc sets what fraction of ionizing photons reach the ISM. Higher f_esc suppresses all nebular emission lines since fewer photons remain to ionize gas.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_fesc_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_fesc_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Ionizing photon escape suppresses nebular emission</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Emission line velocity dispersion broadens lines from a few km/s (narrow, kinematically resolved) to hundreds of km/s (unresolved at typical spectroscopic resolution). We show the [OIII] region broadened across the dynamical range.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_line_sigma_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_line_sigma_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Emission line broadening traces gas kinematics</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Higher ionisation parameter log U drives stronger [OIII] and [NII] emission, steering the galaxy toward the Seyfert region on the BPT diagram. We vary log U across the typical range for star-forming galaxies.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_logu_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_logu_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Ionization parameter controls optical line strength</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Gas metallicity controls [NII]/Hα and [OIII]/Hβ ratios, the primary optical metallicity diagnostics. We vary nebular metallicity across the abundance range.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_logz_gas_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_logz_gas_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Gas metallicity shifts optical emission line ratios</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Ionizing photon production declines rapidly with stellar population age (~t^-1). We show how nebular line strength evolves from young (50 Myr) to old (5 Gyr) populations.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_neb_age_dependence_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_neb_age_dependence`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Nebular emission fades with stellar population age</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Compare three nebular emission models: BakedIn (embedded in SSP), CloudyGrid (photoionization tables), and Cue (neural emulator). Shows how backend choice affects emission line strengths.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_neb_backend_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_neb_backend_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Nebular Backends: BakedIn vs CloudyGrid vs Cue</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies ionizing sources. We show how stellar population age controls ionization parameter: younger (hotter) populations move the locus toward higher [OIII]/Hβ, steering from star-forming toward composite/Seyfert regions.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_neb_bpt_logu_grid_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_neb_bpt_logu_grid`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">BPT diagram ionization sequence from ages</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Nebular gas density controls ionization balance and recombination rates, affecting emission line strengths. Higher density increases cooling efficiency, shifting line ratios through recombination rate changes.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_neb_density_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_neb_density_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Nebular density affects recombination and cooling</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Compare Cue (neural emulator; current recommended path) against traditional photoionization grids (CloudyGrid) and SSP-embedded nebular. Shows [OIII] and H-alpha regions on a young starburst.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_nebular_backends_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_nebular_backends`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Cue nebular emulator vs alternatives</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Shock emission (MAPPINGS V models) can mimic AGN on the BPT diagram. We show how shock velocity, gas density, and magnetic field strength affect line ratios and diagnostic positions. Four-panel layout shows velocity and density sequences on BPT, line ratios vs velocity, and magnetic field strength.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_shock_emission_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_shock_emission`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">MAPPINGS V shocks: velocity, density, and magnetic field effects</div>
     </div>
 
 
@@ -827,7 +1237,7 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The six headline attenuation laws at fixed τ_V = 1, UV through NIR. Highlights the 2175 Å bump and the slope differences between Milky Way, SMC, and starburst families.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The tengri library offers six attenuation laws covering the morphology-geometry spectrum: Milky Way (Cardelli), SMC (Pei), starburst (Calzetti, Conroy), and theoretical models (Kriek &amp; Conroy, power law). At fixed τ_V = 1, their curves expose the 2175 Å bump (MW/Cardelli), slope differences (SMC is greyer, Calzetti is redder), and parametric extensions (Kriek &amp; Conroy).">
 
 .. only:: html
 
@@ -838,13 +1248,13 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Attenuation Law Comparison</div>
+      <div class="sphx-glr-thumbnail-title">The six headline dust attenuation laws span MW, SMC, and starburst geometries</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Same six headline laws as plot_attenuation_law_compare, but plotted over the full UV-through-NIR range (0.1–3 μm) instead of zooming into the UV bump region.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The six headline dust attenuation laws plotted over the full UV-through-NIR range (0.1–3 μm), extending beyond the 2175 Å bump region to show how curves flatten in the infrared. Red-shifted galaxies observe longer wavelengths at rest frame, so the IR slope controls K-correction factors and SED fitting degeneracies.">
 
 .. only:: html
 
@@ -855,13 +1265,13 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Dust Attenuation Curves (UV to NIR)</div>
+      <div class="sphx-glr-thumbnail-title">Dust attenuation laws from UV through near-infrared</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Three dust geometries proxied by their characteristic laws (Witt &amp; Gordon 2000): foreground screen (power law), mixed slab (Calzetti), clumpy two-phase (SMC). At fixed τ_V = 1, geometry controls the spectral shape — screens are reddest, clumpy is greyest.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Three dust geometries—foreground screen (power-law), mixed slab (Calzetti), and clumpy two-phase (SMC)—proxy different physical arrangements via their attenuation laws. At fixed τ_V = 1, geometry controls the spectral shape: screens are reddest, clumpy geometries are greyest. Transmission curves show how each law transforms a stellar continuum.">
 
 .. only:: html
 
@@ -872,13 +1282,30 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Dust Geometry: Screen vs Mixed vs Clumpy</div>
+      <div class="sphx-glr-thumbnail-title">Dust geometry shapes the extinction: screen vs mixed vs clumpy</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The power-law slope δ steepens (negative) or flattens (positive) UV attenuation relative to the optical. Controls whether dust absorbs more or less light at short wavelengths.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Each of the bundled dust-attenuation laws applied to the same intrinsic SED at the same V-band optical depth — so the differences between the curves are entirely in the wavelength dependence of the attenuation. The intrinsic (unreddened) SED is shown in black for reference.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_dust_law_application_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_dust_law_application`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">The same galaxy reddened by every attenuation law in the registry</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The power-law slope δ steepens (negative) or flattens (positive) UV attenuation relative to the optical, controlling whether dust absorbs more or less light at short wavelengths. We vary δ with elevated τ_bc and τ_diff to make slope effects visible (low dust opacities wash out the continuum slope).">
 
 .. only:: html
 
@@ -889,13 +1316,13 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Attenuation Curve Slope (δ)</div>
+      <div class="sphx-glr-thumbnail-title">Dust attenuation curve slope controls UV vs optical hardness</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Birth-cloud dust τ_BC controls how much of the youngest stellar light escapes the cocoon. Higher τ_BC reddens the UV and suppresses nebular emission from embedded HII regions.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Birth-cloud dust optical depth τ_bc attenuates only the youngest stellar light (age &lt; ~10 Myr), controlling nebular emission from embedded HII regions. τ_bc effects are clearest on young star-forming populations; we use a 500 Myr starburst and vary τ_bc across the prior range.">
 
 .. only:: html
 
@@ -906,13 +1333,13 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Birth Cloud Optical Depth (τ_BC)</div>
+      <div class="sphx-glr-thumbnail-title">Birth cloud dust suppresses young-stellar UV and nebular emission</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Diffuse ISM dust τ_diff attenuates all stellar light (young + old). Higher τ_diff reddens the optical continuum and weakens the 4000 Å break — a signature of aging stellar populations.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Diffuse ISM dust optical depth τ_diff attenuates all stellar light (young + old). Higher τ_diff reddens the optical continuum and weakens the 4000 Å break, signaling aging stellar populations. We vary τ_diff across a range with every other parameter fixed on a typical star-forming galaxy.">
 
 .. only:: html
 
@@ -923,13 +1350,13 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Diffuse ISM Optical Depth (τ_diff)</div>
+      <div class="sphx-glr-thumbnail-title">Diffuse ISM dust attenuates all stellar populations</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Birth-cloud dust attenuates only young stars (age &lt; ~10 Myr), the diffuse ISM dust attenuates all stars. Two views:">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Charlot &amp; Fall two-component dust model separates birth-cloud dust (young stars only, age &lt; ~10 Myr) from diffuse ISM dust (all stars). Two panels show: (left) V-band transmission versus age for three (τ_bc, τ_diff) combinations, revealing the sharp ~10 Myr transition; (right) full transmission spectra for 1 Myr and 1 Gyr stars under the same dust column.">
 
 .. only:: html
 
@@ -940,13 +1367,13 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Two-Component Dust (Charlot & Fall 2000)</div>
+      <div class="sphx-glr-thumbnail-title">Two-component dust: birth cloud obscures only young stars</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The 2175 Å UV bump (PAHs / small graphite grains) sweeps from zero to MW-like via the Kriek &amp; Conroy 2013 dust_bump_strength knob. At zero the curve is a smooth power law; at MW-like values the bump dominates the UV.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The 2175 Å UV bump from PAHs and small graphite grains sweeps from absent to Milky-Way strength via the dust_bump_strength knob. At zero, the attenuation curve is a smooth power law; at MW-like values, the bump dominates the UV. We show the attenuation law (not a galaxy SED) to isolate the curve shape.">
 
 .. only:: html
 
@@ -957,7 +1384,7 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">UV Bump Strength</div>
+      <div class="sphx-glr-thumbnail-title">The 2175 Å UV bump traces small-grain dust populations</div>
     </div>
 
 
@@ -1346,350 +1773,6 @@ Astrodust (HD23) template grids.
 
     </div>
 
-Nebular Emission
-================
-
-Nebular emission backends comparison.
-
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbnails">
-
-.. thumbnail-parent-div-open
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Cue (Li+2025) emulates a 12-dimensional photoionization grid. This figure sweeps each Cue parameter individually at fixed fiducial values for the rest, showing how each one moves a single galaxy&#x27;s locus on the BPT-N plane (``log [O III]/Hβ`` vs log [N II]/Hα).">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_bpt_cue_flexibility_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_bpt_cue_flexibility`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">BPT with Cue: Every Knob, One Panel Each</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Compute three classical BPT line-ratio diagrams using the Cue emulator (Li+2025) and overplot the standard 2D nebular grid: lines of constant log U (varying gas metallicity) and lines of constant log Z_gas (varying ionization parameter). This is the canonical view in Kewley+2001/2013, Dopita+2013, and similar nebular-grid papers.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_bpt_cue_grid_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_bpt_cue_grid`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">BPT Diagrams with Cue: 2D Grid in (log U, log Z_gas)</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The BPT diagram ([OIII]/Hβ vs [NII]/Hα) separates three sources of ionizing photons. Shocks (MAPPINGS V, Allen+2008) move emission-line galaxies into the composite and Seyfert regions as shock velocity increases.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_bpt_diagnostics_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_bpt_diagnostics`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">BPT Diagnostics: Star Formation, Shocks, and AGN</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Diffuse ionized gas (DIG) has lower ionization parameter than HII regions. When present, DIG shifts galaxies toward the LINER region on the BPT diagram by suppressing [OIII] relative to [NII]. f_DIG = 0 is pure HII gas; f_DIG = 1 is pure DIG.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_dig_frac_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_dig_frac_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Diffuse Ionized Gas Fraction (f_DIG)</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The escape fraction sets how many ionizing photons reach the ISM vs escape into the IGM. Higher f_esc suppresses all nebular emission lines since fewer photons remain to ionize the interstellar gas. f_esc = 0 (all photons stay), f_esc = 1 (all photons escape).">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_fesc_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_fesc_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Ionizing Photon Escape Fraction (f_esc)</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Emission line velocity dispersion broadens lines from a few km/s (narrow, kinematically resolved) to hundreds of km/s (unresolved at typical spectroscopic resolution). Line broadening is crucial for fitting restframe UV emission lines and measuring dynamics in high-redshift galaxies.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_line_sigma_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_line_sigma_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Emission Line Width (σ in km/s)</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Higher ionisation parameter log U drives stronger [OIII] emission and pulls the galaxy toward the Seyfert region on the BPT diagram.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_logu_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_logu_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Ionization Parameter (logU)</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Gas metallicity controls [NII]/Hα and [OIII]/Hβ — the primary optical metallicity diagnostics. These ratios move galaxies on the BPT diagram and are used to measure oxygen abundances in star-forming galaxies.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_logz_gas_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_logz_gas_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Gas Metallicity (log Z/Zsun)</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Ionizing photon production declines rapidly with stellar population age (~t^-1). Compare young vs old populations to see how nebular line strength evolves.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_neb_age_dependence_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_neb_age_dependence`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Nebular Emission: Dependence on Stellar Population Age</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare three nebular emission models: BakedIn (embedded in SSP), CloudyGrid (photoionization tables), and Cue (neural emulator). Shows how backend choice affects emission line strengths.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_neb_backend_compare_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_neb_backend_compare`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Nebular Backends: BakedIn vs CloudyGrid vs Cue</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies the ionising source. Varying log U and metallicity moves the predicted location along the star-forming → composite → Seyfert sequence.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_neb_bpt_logu_grid_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_neb_bpt_logu_grid`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">BPT Diagram: Ionization Parameter Sequence</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Gas phase metallicity affects ionization balance and emission line strengths. Higher metallicity increases cooling efficiency, affecting the nebular continuum and emission-line ratios through recombination rate changes.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_neb_density_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_neb_density_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Nebular Gas Density: Metallicity Variation</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare tengri&#x27;s three nebular emission backends: BakedIn (SSP-embedded), CloudyGrid (tabulated photoionization), and Cue (neural emulator). Shows how each backend predicts emission lines in the optical window.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_nebular_backends_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_nebular_backends`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Nebular Emission Backends</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Plot shock emission line diagnostics from MAPPINGS V photoionization models. Shows how shock velocity, density, and magnetic field affect line ratios and can mimic AGN-like emission in diagnostic diagrams.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_shock_emission_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_shock_emission`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Nebular Shock Emission (MAPPINGS V)</div>
-    </div>
-
-
-.. thumbnail-parent-div-close
-
-.. raw:: html
-
-    </div>
-
-IGM
-===
-
-Intergalactic medium absorption and Lyman-forest effects on observed SEDs.
-
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbnails">
-
-.. thumbnail-parent-div-open
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Plot DLA transmission curves at high redshift (z &gt; 2), showing Lyman-alpha forest absorption and strong DLA features that sculpt the UV-to-optical SED. Demonstrates wavelength-dependent attenuation.">
-
-.. only:: html
-
-  .. image:: /auto_examples/igm/images/thumb/sphx_glr_plot_dla_absorption_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/igm/plot_dla_absorption`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Damped Lyman-Alpha (DLA) Absorption</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare available IGM transmission models at a fixed redshift (z=4.0). The Inoue et al. (2014) model captures Lyman-series absorption and Lyman-continuum opacity; the Madau (1995) model provides a simpler analytical approximation. This script shows how they differ in the UV to optical regime.">
-
-.. only:: html
-
-  .. image:: /auto_examples/igm/images/thumb/sphx_glr_plot_igm_model_comparison_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/igm/plot_igm_model_comparison`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">IGM Transmission Model Comparison</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The intergalactic medium (IGM) imprints wavelength-dependent opacity on observed galaxy SEDs via Lyman-series and Lyman-continuum absorption (Inoue et al. 2014). At z &gt; 2 the Lyman break at 912 Å rest-frame shifts into the optical, enabling photometric redshift estimation via the &quot;dropout&quot; technique.">
-
-.. only:: html
-
-  .. image:: /auto_examples/igm/images/thumb/sphx_glr_plot_igm_redshift_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/igm/plot_igm_redshift`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">IGM Transmission vs Redshift</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The intergalactic medium (IGM) opacity increases dramatically with redshift due to the expanding neutral hydrogen fraction. This script sweeps redshift z ∈ {2, 3, 4, 5, 6, 7, 8} on Inoue+2014 IGM transmission curves, showing how the Lyman alpha forest deepens and the Lyman break (912 Å rest-frame) sharpens at higher z, affecting photometric redshift estimation via dropout techniques.">
-
-.. only:: html
-
-  .. image:: /auto_examples/igm/images/thumb/sphx_glr_plot_igm_z_evolution_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/igm/plot_igm_z_evolution`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">IGM Absorption Evolution with Redshift</div>
-    </div>
-
-
-.. thumbnail-parent-div-close
-
-.. raw:: html
-
-    </div>
-
 AGN Models
 ==========
 
@@ -1722,7 +1805,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep agn_cos_inc from 0.95 (face-on) to 0.05 (edge-on) and watch the infrared emission profile change as the line of sight cuts through more of the SKIRTOR torus.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The torus inclination angle determines how much cold dust emission we observe. Face-on (high cos_inc) views show a smooth thermal bump; edge-on (low cos_inc) views expose more reprocessed mid-infrared flux and can show silicate absorption features.">
 
 .. only:: html
 
@@ -1733,7 +1816,24 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">SKIRTOR Torus: Viewing Angle Sweep</div>
+      <div class="sphx-glr-thumbnail-title">SKIRTOR torus: viewing angle tunes IR profile shape</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Six accretion-disc backbones at fixed bolometric luminosity log L_bol = 12.5 (in log L_sun), evaluated in isolation with the host suppressed and no torus/lines/dust. The differences between the curves are entirely how each model partitions the disc power across wavelength: pure blackbody vs warm Comptonization, relativistic vs Newtonian potential, empirical-fit vs first-principles continuum.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_disc_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_agn_disc_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">AGN disc continuum: model comparison at fixed L_bol</div>
     </div>
 
 
@@ -1756,7 +1856,24 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep log L_bol / L_sun from 43 to 47 on the QSOgen disc continuum. The continuum normalisation tracks luminosity directly; the disc temperature shifts more subtly with the implied accretion rate.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Four production line backbones layered on top of the same disc + torus at fixed log L_bol = 12.5. The line backbone controls which optical/UV emission features the model produces — narrow-line region forbidden lines, broad-line permitted lines, or pre-canned empirical line lists.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_lines_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_agn_lines_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">AGN emission-line backbones compared</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The disc continuum normalisation tracks bolometric luminosity directly; the disc temperature shifts more subtly with the implied accretion rate. Varying agn_log_lbol from 10 to 14 (in log10 L_sun) sweeps four orders of magnitude in disc luminosity, comparable to typical Seyfert through bright-QSO regimes. The spectral shape (slope, peak position) remains nearly fixed.">
 
 .. only:: html
 
@@ -1767,13 +1884,13 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">QSOgen Disc Continuum: Bolometric Luminosity</div>
+      <div class="sphx-glr-thumbnail-title">QSOgen disc: bolometric luminosity controls overall flux</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep agn_oa_skirtor from 20° to 60° at fixed inclination, optical depth, and power. A more open torus exposes more of the disc and shifts the IR emission peak.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The torus opening angle (``oa_skirtor``) sets how much of the central disc is visible. A narrower torus (smaller opening angle) hides the disc and relies on reprocessed torus emission; a more open torus exposes the hot disc continuum and shifts the SED blueward.">
 
 .. only:: html
 
@@ -1784,30 +1901,13 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">SKIRTOR Torus: Opening Angle Sweep</div>
+      <div class="sphx-glr-thumbnail-title">SKIRTOR torus: opening angle controls exposed disc fraction</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep polar-dust temperature from 1000 to 2000 K. The polar component is a narrow warm cone decoupled from the equatorial torus; hotter polar dust enhances the mid-IR bump in edge-on systems.">
-
-.. only:: html
-
-  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_polar_dust_temp_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/agn/plot_agn_polar_dust_temp_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Polar Dust: Temperature Sweep in AGN Torus</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep agn_ebv from 0.0 to 0.4 on a QSOgen disc at log L_bol = 45. The transition from unobscured UV/optical slopes to reddened spectra traces the obscured-quasar regime.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Dust-free quasar spectra are intrinsically blue in the UV and optical. Intrinsic dust reddening ebv (E(B−V)) reddens the continuum via extinction. Varying ebv from 0 to 0.4 shows the transition from unobscured type-1 QSO colours to moderately dust-enshrouded systems.">
 
 .. only:: html
 
@@ -1818,13 +1918,13 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">QSOgen Dust Reddening: Intrinsic AGN Obscuration</div>
+      <div class="sphx-glr-thumbnail-title">QSOgen disc: dust reddening tunes UV to optical colour</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep agn_emline_scale from 0.0 to 2.0 on QSOgen at log L_bol = 45. The scale knob controls the contribution of UV/optical line forests and the broad Balmer continuum on top of the underlying disc.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The QSOgen model includes a UV/optical emission-line forest and broad Balmer continuum on top of the underlying disc. The relative strength of these line features with respect to the continuum controls the slope and colour of the UV–optical SED.">
 
 .. only:: html
 
@@ -1835,13 +1935,13 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">QSOgen Emission Line Scaling: Rest-UV to Optical SED</div>
+      <div class="sphx-glr-thumbnail-title">QSOgen lines: emission-line contributions vary with luminosity</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep the radial dust density power index p from 0.0 to 1.5 at fixed inclination = 0.5 and τ₉.₇ = 7. Steeper profiles concentrate the dust closer to the disc and push the mid-to-far-IR peak hotter.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The SKIRTOR clumpy torus has a radial dust-density profile with power-law index p. Steeper profiles (higher p) concentrate more dust closer to the disc, reducing the mid-IR peak temperature and shifting flux toward the far-IR. Flatter profiles distribute dust more uniformly and hotter on average.">
 
 .. only:: html
 
@@ -1852,13 +1952,13 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">SKIRTOR Torus: Radial Dust Power-Law Sweep</div>
+      <div class="sphx-glr-thumbnail-title">SKIRTOR torus: radial density profile tunes IR emission peak</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep agn_tau_skirtor from 3 to 11 at fixed inclination, opening angle, and radial power. The transition from optically thin to thick shifts the silicate feature from emission to absorption.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The 9.7 μm optical depth tau_97 controls the strength of silicate dust absorption/emission in the mid-infrared. Thin tori (tau ~3) show weak features and more continuum; thick tori (tau ~11) develop deep absorption troughs or bright emission depending on viewing angle.">
 
 .. only:: html
 
@@ -1869,24 +1969,24 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">SKIRTOR Torus: Optical Depth Sweep</div>
+      <div class="sphx-glr-thumbnail-title">SKIRTOR torus: optical depth governs silicate feature strength</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Plot AGN spectral energy distributions showing the accretion disc and dust torus components at different bolometric luminosities.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Six dusty-torus libraries reprocessing the same accretion-disc continuum at fixed log L_bol = 12.5 (in log L_sun) and standard inclination. The disc is held at multicolor (Kubota &amp; Done 2018) so the differences in the curves are entirely how each torus library geometrically distributes hot grains and re-emits the absorbed UV in the MIR.">
 
 .. only:: html
 
-  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_templates_thumb.png
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_torus_compare_thumb.png
     :alt:
 
-  :doc:`/auto_examples/agn/plot_agn_templates`
+  :doc:`/auto_examples/agn/plot_agn_torus_compare`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">AGN SED Templates</div>
+      <div class="sphx-glr-thumbnail-title">AGN dusty torus: library comparison at fixed L_bol</div>
     </div>
 
 
@@ -1977,23 +2077,6 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Plot polar dust emission from the narrow-line region (Stalevski et al. 2016). Shows how warm dust in a geometry decoupled from the equatorial torus creates a secondary IR peak that can dominate the near-to-mid-IR continuum.">
-
-.. only:: html
-
-  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_polar_dust_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/agn/plot_polar_dust`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Polar Dust in AGN: IR Bump from Polar Dust Torus</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Plot QSOgen (Temple, Hewett &amp; Banerji 2021) empirical quasar SEDs. Shows how an empirically-trained surrogate matches observed quasar spectra across the UV through near-IR, with parametric control over redshift and luminosity.">
 
 .. only:: html
@@ -2028,7 +2111,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Plot the SKIRTOR (Stalevski et al. 2016) clumpy torus model varying viewing angle (inclination) and optical depth at 9.7 μm (tau_97). Shows how geometric effects and dust clumping transform the torus SED.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The SKIRTOR clumpy torus model (Stalevski et al. 2016) emits thermal IR radiation that depends strongly on two parameters: viewing angle (inclination θ via cos_inc) and optical depth (``tau_97`` at 9.7 μm). Face-on systems show a smooth thermal continuum; edge-on systems develop deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.">
 
 .. only:: html
 
@@ -2039,24 +2122,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">SKIRTOR Clumpy Torus: Inclination and Optical Depth</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare torus models spanning simple parametric (two-temperature MBB), smooth-torus (Silva+04), and test the effects of covering factor and optical depth on the infrared SED.">
-
-.. only:: html
-
-  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_torus_comparison_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/agn/plot_torus_comparison`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Torus Models Comparison: Nenkova vs Silva04</div>
+      <div class="sphx-glr-thumbnail-title">SKIRTOR torus: viewing angle and optical depth effects</div>
     </div>
 
 
@@ -2081,7 +2147,7 @@ Star-formation radio emission and the FIR–radio correlation.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The synchrotron spectral index \alpha_{\rm sf} sets how steeply the radio spectrum falls off with frequency. Typical star-forming galaxies have \alpha_{\rm sf} \approx 0.7–0.8. Flat-spectrum sources (\alpha \approx 0) have strong free-free contributions; steeper spectra (:math:`\alpha &gt; 1`) suggest ageing of the cosmic ray electron population.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The synchrotron spectral index α_sf controls how steeply the radio spectrum falls with frequency. Star-forming galaxies typically have α_sf ≈ 0.7–0.8. Flat spectra (α ≈ 0) signal strong free-free contribution; steep spectra (α &gt; 1) indicate cosmic-ray electron aging. We vary α_sf ∈ [0.3, 1.2] at fixed L_IR = 10^11 L_sun and show normalized spectra (reference 1.4 GHz).">
 
 .. only:: html
 
@@ -2092,13 +2158,13 @@ Star-formation radio emission and the FIR–radio correlation.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Radio Spectral Index (α_sf)</div>
+      <div class="sphx-glr-thumbnail-title">Synchrotron spectral index: steeper α_sf dims the high-frequency tail</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The FIR-radio correlation links a galaxy&#x27;s infrared luminosity to its 1.4 GHz synchrotron emission via the dimensionless parameter q_{\rm IR} = \log_{10}(L_{\rm IR} / 3.75\times10^{12} \, L_{\rm 1.4GHz}). Higher q_{\rm IR} means relatively less radio per unit star formation. The canonical value for star-forming galaxies is 2.64 (Bell 2003).">
+    <div class="sphx-glr-thumbcontainer" tooltip="The dimensionless parameter q_IR characterizes the FIR-radio correlation, linking far-infrared luminosity to 1.4 GHz synchrotron emission. Higher q_IR means relatively weaker radio per unit star formation. We vary q_IR across the observationally motivated range 2.0–3.3 at fixed L_IR = 10^11 L_sun, demonstrating how radio loudness evolves (Bell 2003).">
 
 .. only:: html
 
@@ -2109,13 +2175,13 @@ Star-formation radio emission and the FIR–radio correlation.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">FIR-Radio Correlation (q_IR)</div>
+      <div class="sphx-glr-thumbnail-title">FIR-radio correlation: q_IR sets radio loudness</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The FIR-radio correlation links far-infrared luminosity (reprocessed dust emission from star formation) to 1.4 GHz radio synchrotron emission. This script sweeps infrared luminosity L_IR ∈ {10, 11, 12, 13} L_sun and shows resulting synchrotron + thermal radio SEDs using the canonical q_IR = 2.64 parameter, demonstrating how more luminous starbursts produce stronger radio.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The FIR-radio correlation links far-infrared luminosity (dust-reprocessed star-formation energy) to 1.4 GHz synchrotron emission. The dimensionless q_IR parameter relates the two via L_IR ∝ L_1.4GHz^(10^q_IR/2.5). Brighter starbursts emit stronger radio across all frequencies. We sweep L_IR over 10^10–10^13 L_sun at fixed q_IR = 2.64 (canonical; Bell 2003).">
 
 .. only:: html
 
@@ -2126,13 +2192,13 @@ Star-formation radio emission and the FIR–radio correlation.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">FIR-Radio Correlation: L_IR Luminosity Sweep</div>
+      <div class="sphx-glr-thumbnail-title">FIR-radio correlation: L_IR × q_IR sets radio loudness scale</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Radio loudness R = \log_{10}(L_{5\,\rm GHz} / L_B) quantifies the ratio of radio to optical AGN luminosity. Radio-quiet AGN have R \lesssim 1; radio-loud AGN (blazars, FR I/II) can reach R \sim 3–5. Each decade in R adds an order of magnitude to the jet radio luminosity at fixed bolometric AGN power.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Radio loudness R = log_10(L_5GHz / L_B) quantifies the ratio of AGN radio to optical luminosity. Radio-quiet AGN have R ≲ 1; radio-loud sources (FR I/II, blazars) reach R ∼ 3–5. Each decade in R corresponds to an order of magnitude increase in jet radio luminosity at fixed bolometric AGN power. We sweep R ∈ [0, 4] at fixed L_bol = 10^44 erg/s (Seyfert-1-like) and α_agn = 0.7.">
 
 .. only:: html
 
@@ -2143,7 +2209,24 @@ Star-formation radio emission and the FIR–radio correlation.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">AGN Radio Loudness (R)</div>
+      <div class="sphx-glr-thumbnail-title">AGN radio loudness R: orders of magnitude in jet power</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="At fixed host (constant SFR = 3 M_sun/yr, Condon-92 synchrotron + free-free) we sweep the composable AGN&#x27;s bolometric luminosity agn_log_lbol from 9 to 13 (in log L_sun). The host alone produces a power-law GHz continuum; the AGN superposes a flatter-spectrum jet component that takes over above log L_bol ≳ 11.5 — the classic radio-loud / radio-quiet division emerges from this competition.">
+
+.. only:: html
+
+  .. image:: /auto_examples/radio/images/thumb/sphx_glr_plot_radio_vs_agn_lbol_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/radio/plot_radio_vs_agn_lbol`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Radio SED response to AGN bolometric luminosity</div>
     </div>
 
 
@@ -2156,10 +2239,20 @@ Star-formation radio emission and the FIR–radio correlation.
 X-ray Emission
 ==============
 
-Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB), and AGN coronae.
+Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB) and AGN coronae.
 
-- ``plot_xray_sf.py`` — X-ray binary population from star formation rate
-- ``plot_xray_agn.py`` — AGN X-ray spectrum and Compton reflection
+Star-Forming Galaxies
+^^^^^^^^^^^^^^^^^^^^^
+
+- ``plot_xray_sf.py`` — X-ray binary scaling with SFR and stellar mass
+
+AGN Coronae
+^^^^^^^^^^^
+
+- ``plot_xray_agn.py`` — AGN X-ray coronae: luminosity sequence and spectral hardness
+- ``plot_xray_gamma_sweep.py`` — Photon index γ controls power-law steepness
+- ``plot_E_cut_sweep.py`` — Exponential cutoff E_cut governs hard-tail rollover
+- ``plot_alpha_ox_sweep.py`` — UV-to-X-ray slope α_ox controls normalisation
 
 
 
@@ -2171,7 +2264,7 @@ Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB), and AGN coronae
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep the exponential cutoff E_cut ∈ {100, 200, 300, 500, 1000} keV at fixed γ = 1.8, α_ox = −1.4, L_bol = 10⁴⁵ erg/s. The spectrum departs from the power-law above ~0.3 × E_cut and rolls over rapidly at higher energies.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The X-ray power-law spectrum steepens above an exponential cutoff E_cut. Compact coronae with low optical depth have low E_cut (~100 keV); thick, optically-deep coronae extend to higher E_cut (~1 TeV). Variation of E_cut at fixed γ=1.8 and α_ox=−1.4 shows how the hard X-ray tail responds to changes in coronal geometry or magnetic field.">
 
 .. only:: html
 
@@ -2182,13 +2275,13 @@ Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB), and AGN coronae
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">High-Energy Cutoff Variation</div>
+      <div class="sphx-glr-thumbnail-title">AGN X-ray hard-tail rollover: exponential cutoff E_cut governs high-energy turnover</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep the UV-to-X-ray slope α_ox ∈ {-1.0, -1.2, -1.4, -1.6, -1.8} at fixed bolometric luminosity. More negative α_ox depresses the X-ray relative to the UV — the canonical X-ray-quiet quasar regime.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The UV-to-X-ray spectral slope α_ox (defined as log(F_X) − log(F_UV) / log(ν_X) − log(ν_UV)) separates &quot;X-ray loud&quot; quasars (α_ox ~ −1.2, strong X-ray relative to UV continuum) from &quot;X-ray quiet&quot; systems (α_ox ~ −1.8, suppressed X-ray). More negative α_ox suppresses the X-ray continuum and weakens the high-energy tail. We vary α_ox at fixed bolometric luminosity, showing the anticorrelation of X-ray strength and UV continuum slope.">
 
 .. only:: html
 
@@ -2199,13 +2292,13 @@ Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB), and AGN coronae
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">X-ray Normalisation via UV-to-X-ray Slope</div>
+      <div class="sphx-glr-thumbnail-title">AGN UV-to-X-ray power-law slope α_ox controls relative X-ray normalisation</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Plot the X-ray spectrum from AGN coronae showing power-law continuum, reflection hump, and iron K-alpha line. Demonstrates how the X-ray spectrum depends on AGN bolometric luminosity and accretion efficiency.">
+    <div class="sphx-glr-thumbcontainer" tooltip="AGN coronae are compact hot regions where the hard X-ray power law (photon index ~1.7–2.0) is produced via Compton scattering off hot electrons. The X-ray spectrum reflects the coronal temperature, optical depth, and geometry. This demo varies L_bol across six decades (10⁴²–10⁴⁶·⁵ erg/s) to show the gradual brightening of the X-ray continuum and the persistence of the power-law form across the luminosity sequence. A separate panel isolates key spectral features: soft excess (0.5–2 keV), hard continuum (2–10 keV), Compton reflection hump (10–100 keV), and the iron K-α line (6.4 keV).">
 
 .. only:: html
 
@@ -2216,13 +2309,13 @@ Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB), and AGN coronae
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">AGN X-ray Emission and Corona</div>
+      <div class="sphx-glr-thumbnail-title">AGN X-ray coronae: luminosity sequence and spectral hardness at high energies</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep the X-ray photon index γ ∈ {1.4, 1.6, 1.8, 2.0, 2.2, 2.4} at fixed bolometric luminosity. Flat spectra (low γ) push photons to higher energies; steep spectra (high γ) drop off quickly above a few keV.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The X-ray photon index γ controls how rapidly the AGN corona&#x27;s power-law spectrum falls off above a few keV. Flat spectra (low γ ~1.4) extend more photons to high energies; steep spectra (high γ ~2.4) drop quickly. We vary γ across its typical observational range at fixed bolometric luminosity.">
 
 .. only:: html
 
@@ -2233,13 +2326,13 @@ Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB), and AGN coronae
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">X-ray Spectral Index Variation</div>
+      <div class="sphx-glr-thumbnail-title">AGN X-ray spectral hardness: photon index γ controls power-law steepness</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Plot X-ray luminosity from high and low-mass X-ray binaries (HMXB + LMXB) as a function of star formation rate and stellar mass. Shows the different scaling relations for HMXB (SFR-dependent) vs LMXB (mass-dependent).">
+    <div class="sphx-glr-thumbcontainer" tooltip="X-ray binaries (XRBs) are among the brightest X-ray sources in galaxies. High-mass XRBs (HMXBs) form copiously during starbursts and scale ~SFR, while low-mass XRBs (LMXBs) are long-lived remnants scaling with integrated stellar mass. This demo isolates the SFR and M_* dependencies separately on a starburst galaxy template to show how the XRB spectral luminosity responds to both the recent star formation rate and the accumulated stellar mass.">
 
 .. only:: html
 
@@ -2250,7 +2343,128 @@ Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB), and AGN coronae
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">X-ray Binary Population from Star Formation</div>
+      <div class="sphx-glr-thumbnail-title">X-ray binary scaling: HMXB traces current SFR, LMXB traces stellar mass</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="At fixed host (constant SFR = 3 M_sun/yr, Mineo+12 HMXB contribution) we sweep the composable AGN&#x27;s bolometric luminosity agn_log_lbol from 9 to 13 (in log L_sun). The host XRB component is a flat power-law below ~10 keV; the AGN corona contributes a much harder power-law that dominates above log L_bol ≳ 11.">
+
+.. only:: html
+
+  .. image:: /auto_examples/xray/images/thumb/sphx_glr_plot_xray_vs_agn_lbol_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/xray/plot_xray_vs_agn_lbol`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">X-ray SED response to AGN bolometric luminosity</div>
+    </div>
+
+
+.. thumbnail-parent-div-close
+
+.. raw:: html
+
+    </div>
+
+IGM
+===
+
+Intergalactic medium absorption and Lyman-forest effects on observed SEDs.
+
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbnails">
+
+.. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Damped Lyman-alpha (DLA) systems imprint strong absorption features blueward of the Lyman-alpha line (1216 Å rest-frame). We sweep column density log(N_H) ∈ {19.0, 19.5, 20.0, 20.3, 20.8} cm^{-2} at fixed redshift z=3, showing how higher column density systems deepen the Lyman forest and suppress flux in the UV-to-optical SED.">
+
+.. only:: html
+
+  .. image:: /auto_examples/igm/images/thumb/sphx_glr_plot_dla_absorption_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/igm/plot_dla_absorption`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">DLA column density sculpts the Lyman alpha forest at z=3</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Two commonly-used IGM absorption models differ significantly in the Lyman-continuum regime. The Inoue et al. (2014) model captures Lyman-series absorption and Lyman-continuum opacity in detail; the Madau (1995) model provides a simpler analytical approximation. At fixed z=4, we show both models on the same axis to reveal their differences blueward of 912 Å rest-frame, where the discontinuity matters most for photometric SED fitting.">
+
+.. only:: html
+
+  .. image:: /auto_examples/igm/images/thumb/sphx_glr_plot_igm_model_comparison_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/igm/plot_igm_model_comparison`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Inoue+2014 vs Madau+1995: IGM transmission models diverge at Lyman limit</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The intergalactic medium (IGM) imprints wavelength-dependent opacity on observed galaxy SEDs via Lyman-series and Lyman-continuum absorption. The Lyman break at 912 Å rest-frame shifts to longer observed wavelengths at higher z, enabling photometric redshift estimation via the dropout technique. We vary redshift z ∈ {0.5, 1, 2, 3, 4, 6, 8} across the Inoue et al. (2014) transmission model to show how IGM opacity increases with z.">
+
+.. only:: html
+
+  .. image:: /auto_examples/igm/images/thumb/sphx_glr_plot_igm_redshift_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/igm/plot_igm_redshift`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">IGM transmission curves evolve sharply with redshift as Lyman forest deepens</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The intergalactic medium (IGM) opacity increases dramatically with redshift due to the expanding neutral hydrogen fraction. We sweep redshift z ∈ {2, 3, 4, 5, 6, 7, 8} on Inoue et al. (2014) IGM transmission curves, showing how the Lyman alpha forest deepens and the Lyman break (912 Å rest-frame) shifts to longer observed wavelengths at higher z, suppressing flux blueward of the break.">
+
+.. only:: html
+
+  .. image:: /auto_examples/igm/images/thumb/sphx_glr_plot_igm_z_evolution_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/igm/plot_igm_z_evolution`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Lyman forest deepens with redshift: high-z IGM opacity suppresses UV flux</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A young Lyman-break galaxy SED is built once at rest frame, then redshifted to a sequence of observed-frame epochs (``z = 1, 3, 5, 7``) with the Inoue et al. 2014 IGM transmission stamped on top. The characteristic spectral signatures move with redshift:">
+
+.. only:: html
+
+  .. image:: /auto_examples/igm/images/thumb/sphx_glr_plot_sed_with_igm_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/igm/plot_sed_with_igm`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Full galaxy SED with IGM absorption applied at multiple redshifts</div>
     </div>
 
 
@@ -2272,6 +2486,23 @@ Filter curves and photometric fitting.
     <div class="sphx-glr-thumbnails">
 
 .. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="How does a galaxy&#x27;s location in colour–colour space evolve with redshift? We compute SDSS g − r and r − z colours for two galaxy populations — a young star-forming and an old quiescent — across z = 0 to 3, with arrows marking the integer redshift stops. This is the reference picture for photometric redshift classifiers and for stellar-template grids.">
+
+.. only:: html
+
+  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_color_tracks_redshift_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/photometry/plot_color_tracks_redshift`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Photometric colour tracks vs redshift</div>
+    </div>
+
 
 .. raw:: html
 
@@ -2304,6 +2535,23 @@ Filter curves and photometric fitting.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Filter Set Comparison</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="What each photometric system measures depends on where its filters sit relative to the rest-frame spectral features. We overlay six common filter sets (GALEX NUV, SDSS ugriz, 2MASS JHK, WISE W1/W2/W3, Euclid YJH, JWST NIRCam wide bands) on top of an observed-frame star-forming galaxy SED at z = 0.5.">
+
+.. only:: html
+
+  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_galaxy_with_filters_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/photometry/plot_galaxy_with_filters`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Galaxy SED with photometric filter coverage</div>
     </div>
 
 
@@ -2413,7 +2661,7 @@ Spectroscopic fitting and spectral features.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Generate a mock galaxy spectrum and fit it with tengri&#x27;s MAP optimizer. Shows the observed and model spectra with a residual panel below.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Compare the rest-frame spectrum of a young and old galaxy at fixed redshift. Shows how the optical continuum color, Balmer decrement, and absorption line strengths depend on mean stellar age, holding metallicity and dust fixed.">
 
 .. only:: html
 
@@ -2424,7 +2672,7 @@ Spectroscopic fitting and spectral features.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Spectroscopic SED Fit</div>
+      <div class="sphx-glr-thumbnail-title">Rest-frame spectrum with stellar population ages</div>
     </div>
 
 
@@ -2469,7 +2717,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The FIR–radio correlation (van der Kruit 1971; Helou et al. 1985) is one of the tightest empirical relations in galaxy physics, holding over five decades in luminosity. Parameterized by q_{\rm IR}:">
+    <div class="sphx-glr-thumbcontainer" tooltip="The FIR–radio correlation (van der Kruit 1971; Helou et al. 1985) holds over five decades in galaxy luminosity. Sweeps IR luminosity and radio spectral index to show the tight linear correlation and how the empirical parameter q_IR varies with model calibration.">
 
 .. only:: html
 
@@ -2480,13 +2728,13 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">FIR–Radio Correlation</div>
+      <div class="sphx-glr-thumbnail-title">FIR–radio correlation across IR luminosity and spectral shape</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Full SED of an AGN host galaxy from hard X-ray (1 keV) to radio (1 GHz), assembled analytically from four physically distinct emission regions. No SSP data required.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Panchromatic SED spanning hard X-rays through centimeter radio of a luminous quasar with radio-loud jets. Combines AGN disc continuum, X-ray corona, and radio components, showing how AGN dominate across 0.1 keV through centimeter wavelengths.">
 
 .. only:: html
 
@@ -2497,13 +2745,13 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Panchromatic AGN Host SED</div>
+      <div class="sphx-glr-thumbnail-title">X-ray to radio SED of a luminous AGN</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Active galactic nuclei (AGN) can dominate galaxy SEDs across UV to IR wavelengths. This script sweeps the AGN fraction f_AGN ∈ {0.0, 0.1, 0.3, 0.5, 0.8, 1.0} blending a star-forming galaxy stellar continuum with an AGN accretion disc spectrum. Shows the transition from star-formation-dominated to AGN-dominated SED morphology.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Active galactic nuclei dominate UV to infrared SEDs. Sweeps AGN luminosity fraction from pure starburst to pure AGN, showing the transition in SED morphology as the accretion disc continuum increasingly dominates stellar and dust emission.">
 
 .. only:: html
 
@@ -2514,13 +2762,13 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">AGN Contribution to Composite SEDs</div>
+      <div class="sphx-glr-thumbnail-title">Blending star-forming galaxy and AGN accretion disc continua</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Dust absorbs UV and optical photons and re-emits at infrared wavelengths. This script demonstrates energy conservation between attenuation and emission: sweeping dust optical depth τ_diff ∈ {0.0, 0.3, 0.7, 1.5, 3.0} on a panchromatic SED shows how UV absorption transfers energy to the IR.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Dust absorbs UV and optical photons and re-emits at infrared wavelengths. Sweeping diffuse ISM optical depth τ_diff shows how UV absorption transfers energy into the infrared, demonstrating energy conservation between the attenuation and emission components.">
 
 .. only:: html
 
@@ -2531,13 +2779,13 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Dust Energy Balance: UV Attenuation ↔ IR Emission</div>
+      <div class="sphx-glr-thumbnail-title">UV attenuation and infrared re-emission balance dust energy</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A star-forming galaxy SED from the far-UV to radio, built by combining tengri&#x27;s differentiable stellar population model with analytical radio synchrotron and free-free emission. Decomposed into stellar continuum, dust-attenuated emission, dust IR, and radio components.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Full panchromatic SED combining stellar continuum, dust absorption, dust infrared emission, and radio synchrotron. Demonstrates how a unified model spans from ultraviolet through centimeter wavelengths with continuous physics from stellar populations through dust and synchrotron emission.">
 
 .. only:: html
 
@@ -2548,13 +2796,13 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Panchromatic Star-Forming Galaxy</div>
+      <div class="sphx-glr-thumbnail-title">UV-to-radio SED of a star-forming galaxy</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Take a star-forming galaxy SED and observe how it transforms in observed-frame wavelength when placed at increasing redshifts (z=0.1, 0.5, 1.0, 2.0, 4.0). The same rest-frame panchromatic structure (UV, optical, IR, radio) shifts to longer observed wavelengths, enabling photometric surveys to probe different physical regions at different epochs.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Same galaxy rest-frame panchromatic SED (UV through radio) observed at increasing redshifts. Cosmological redshift transforms rest-frame wavelengths and dims luminosity, shifting spectral features to infrared bands at high redshift where ground-based surveys probe star formation epochs.">
 
 .. only:: html
 
@@ -2565,7 +2813,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Panchromatic SED: Redshift Evolution</div>
+      <div class="sphx-glr-thumbnail-title">Rest-to-observer-frame transformation of panchromatic SEDs with redshift</div>
     </div>
 
 
@@ -2590,7 +2838,7 @@ Comparing inference methods and convergence diagnostics.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Runs a quick fit and displays convergence diagnostics: ESS per parameter, summary table, and trace plots for a subset of parameters.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The convergence diagnostic shows how the negative log posterior (loss) decays across optimizer iterations. We fit mock photometry using MAP (maximum a posteriori) optimization with Adam and display the loss curve, showing when the optimizer has effectively converged. The right panel overlays the recovered SFH against the truth.">
 
 .. only:: html
 
@@ -2601,13 +2849,13 @@ Comparing inference methods and convergence diagnostics.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Convergence Diagnostics</div>
+      <div class="sphx-glr-thumbnail-title">MAP fit convergence: loss decay across iterations</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Fits mock photometry and displays a corner plot with injected truth values marked. Uses tengri&#x27;s safe_corner utility.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates parameter degeneracies and individual 1-D marginalized posteriors after fitting mock 5-band SDSS photometry. The corner plot shows the full 2-D covariance structure between parameters; blue lines mark the injected truth. Note: for demonstration scale; production runs use 10× more VI iterations and samples.">
 
 .. only:: html
 
@@ -2618,13 +2866,13 @@ Comparing inference methods and convergence diagnostics.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Corner Plot with Truth Overlay</div>
+      <div class="sphx-glr-thumbnail-title">Posterior corner plot from variational inference</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compares point-estimate (MAP) and variational (vi/geoVI) inference on mock 5-band photometry. Overlays posteriors as a corner plot.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates convergence behavior of two inference methods: MAP (point-estimate via optimization) and pure-JAX geometric variational inference (native VI). Both are initialized from the same MAP fit, then evolve independently to show how they explore the posterior. The SFH panel on the right shows the recovered star-formation history from each method overlaid on the truth.">
 
 .. only:: html
 
@@ -2635,7 +2883,7 @@ Comparing inference methods and convergence diagnostics.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">MAP vs geoVI Posterior Comparison</div>
+      <div class="sphx-glr-thumbnail-title">Comparing MAP and pure-JAX variational inference</div>
     </div>
 
 
@@ -2662,7 +2910,24 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates the famous age-dust-metallicity degeneracy in broadband photometry. Two galaxies with identical SDSS ugriz photometry — one old and dust-poor, one young and dust-rich — reveal dramatically different stellar ages, dust content, and metallicities. Adding GALEX FUV/NUV photometry breaks this degeneracy, illustrating why UV coverage is critical for accurate stellar population age dating.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A 5 Gyr stellar population with no dust is nearly indistinguishable from a 1 Gyr population reddened by τ_diff = 0.4 when observed in optical broadband colors alone. This is the central degeneracy that limits SED-fitting accuracy from optical-only photometry, and the reason FUV/NUV (sensitive to recent star formation) or rest-frame IR (sensitive to dust mass) bands break the ambiguity.">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_age_dust_2d_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_age_dust_2d`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">The age–dust degeneracy on the optical g − r color</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Two synthetic galaxies with identical SDSS ugriz photometry — one old and dust-poor, one young and dust-rich — produce wildly different SED fits. Adding GALEX FUV/NUV observation breaks the degeneracy by constraining the UV slope. Demonstrates the critical importance of short-wavelength coverage for stellar age and dust determination.">
 
 .. only:: html
 
@@ -2673,13 +2938,30 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Age-Dust-Metallicity Degeneracy with UV Break</div>
+      <div class="sphx-glr-thumbnail-title">Age-dust-metallicity degeneracy: why UV photometry is critical</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Computes a Pearson correlation matrix between five classical emission-line ratios ([OIII]/Hβ, Hα/Hβ, [NII]/Hα, [SII]/Hα, [SII]/[OIII]) across a grid of 1000 mock galaxies varying ionization parameter (log U ∈ [-4, -1]), gas metallicity (log Z/Zsun ∈ [-1, +0.2]), and age (1–5 Gyr). Shows which line ratios are independent diagnostics (low correlation) vs degenerate (high correlation), directly applicable to BPT-like classification schemes.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The 4000 Å break D_n(4000) — Bruzual 1983, Balogh+1999 — measures the discontinuity around 4000 Å produced by the line-blanketing of ionised metals in the atmospheres of old stars. It rises monotonically with the mass-weighted age of the stellar population and is one of the most widely used age indicators in SDSS-style optical-only data (Kauffmann+2003).">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_d4000_age_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_d4000_age`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">The 4000 Å break as a stellar age proxy</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates emission-line diagnostics using [OIII]/Hbeta, [NII]/Halpha ratios across a population mock sample. At different redshifts, nebular lines shift into different broadband filters creating photometric signatures useful for photo-z and ionization state estimation.">
 
 .. only:: html
 
@@ -2690,13 +2972,30 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Emission Line Ratio Correlation Matrix for Nebular Diagnostics</div>
+      <div class="sphx-glr-thumbnail-title">Emission-line pseudo-color-color diagram for redshift classification</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Generates 200 mock high-redshift galaxies spanning star-forming (z=1–7), quiescent/passive (z=1–3), and AGN/dusty-starburst (z=2–4) classes. Computes JWST NIRCam F150W–F277W vs F277W–F444W colors and plots the diagnostic diagram. Demonstrates how JWST color-color plots separate UV-to-IR spectral types for high-redshift source classification.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Coleman, Wu &amp; Weedman 1980 spectral templates remain the textbook illustration of how the integrated SED morphs along the Hubble sequence — from quiescent ellipticals with deep 4000 Å breaks to gas-rich irregulars dominated by ongoing star formation and nebular emission.">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_hubble_sequence_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_hubble_sequence`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">A morphological atlas: E, Sa, Sb, Sc, Im galaxy SEDs</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Generates 150 mock galaxies spanning star-forming (z=1-7), passive (z=1-3), and dusty/AGN (z=2-4) populations. Computes JWST NIRCam F150W-F277W vs F277W-F444W colors and plots the diagnostic plane. Shows how JWST color-color diagnostics separate spectral types and enable redshift estimation in the rest-frame UV-to-IR with minimal prior knowledge.">
 
 .. only:: html
 
@@ -2707,13 +3006,13 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">JWST NIRCam Color-Color Diagram for High-z Classification</div>
+      <div class="sphx-glr-thumbnail-title">JWST NIRCam color-color diagnostics for high-z galaxy classification</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates mass completeness limits for SDSS-like photometric surveys (ugriz depths comparable to SDSS). Mocks a population of 150 galaxies spanning log M* ∈ [7, 12] at z=0.1, injects realistic photometric noise, and measures the 95% completeness threshold: the stellar mass below which ≥5% of sources are undetected due to noise. Critical for survey design and sample construction.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Measures the 95% stellar mass completeness threshold for SDSS-like photometry. Mocks a population of 150 star-forming and passive galaxies spanning log M* [7-12] at z=0.1, injects realistic photometric noise, and measures below which stellar mass more than 5% of sources drop below detection limit. Critical for constructing mass-limited galaxy samples and understanding survey selection effects.">
 
 .. only:: html
 
@@ -2724,13 +3023,13 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Stellar Mass Completeness in Photometric Surveys</div>
+      <div class="sphx-glr-thumbnail-title">Mass completeness limit in SDSS-like photometric surveys</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compares four classical SFR indicators on the same set of 30 mock galaxies spanning burstiness amplitudes from σ=0.1 (smooth) to σ=3.0 (bursty). Indicators: UV continuum (1500 Å), Hα emission, FIR bolometric (8–1000 µm), and total bolometric SFR. Demonstrates how stochastic SFHs bias different indicators, with Hα showing highest variance and bolometric most stable.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Compares four classical SFR indicators (UV continuum, Hα emission, FIR, bolometric) on a population of mock galaxies spanning burstiness amplitudes. Stochastic SFHs introduce variance that differs between indicators. Hα shows highest scatter while bolometric is most stable — a key consideration for survey design.">
 
 .. only:: html
 
@@ -2741,13 +3040,30 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">SFR Indicator Comparison: UV, Hα, FIR, Bolometric</div>
+      <div class="sphx-glr-thumbnail-title">SFR indicators: comparing UV, Hα, FIR under stochastic star formation</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Generates a mock galaxy population (star-forming + passive) and plots each galaxy on the rest-frame UVJ color-color plane (U-V vs V-J). The UVJ diagram (Wuyts+2007, Williams+2009) is the workhorse diagnostic for separating quiescent galaxies from dusty star-forming galaxies, which are degenerate in single-color cuts.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The infrared excess (IRX = L_IR / L_FUV) versus UV-continuum slope β diagram (Meurer+1999) is the standard tool for inferring attenuation in unresolved star-forming galaxies. We mock a population of star-forming galaxies with a fixed SFH and a range of diffuse dust optical depths, measure each galaxy&#x27;s β by fitting a power-law to its rest-frame UV continuum (1268–2580 Å, Calzetti+1994 windows), and overplot the empirical Meurer+1999 starburst relation.">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_uv_slope_beta_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_uv_slope_beta`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">The IRX–β relation emerges from the dust model</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Generates a mock star-forming and quiescent galaxy population and plots each on the rest-frame UVJ color-color plane (U-V vs V-J). The Williams+2009 quiescent wedge (z &lt; 1) marks the boundary between dusty star-forming and passive galaxies — a key degeneracy-breaking diagnostic.">
 
 .. only:: html
 
@@ -2758,7 +3074,7 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">UVJ Diagram: Star-Forming vs Passive Galaxy Population</div>
+      <div class="sphx-glr-thumbnail-title">UVJ diagram: rest-frame colors separate star-forming from quiescent</div>
     </div>
 
 
@@ -2801,7 +3117,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Computes the Jacobian d(flux)/d(theta) of the forward model and displays it as a heatmap showing which photometric bands are sensitive to which physical parameters.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Computes the Jacobian d(flux)/d(theta) of the forward model and displays it as a heatmap showing which photometric bands are sensitive to which physical parameters. Each column shows normalized sensitivity to one parameter; dark blue/red indicates strong dependence.">
 
 .. only:: html
 
@@ -2818,7 +3134,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sets up a small population of mock galaxies sharing the same burstiness PSD parameters (sigma, tau), runs PopulationFitter briefly, and displays the shared PSD posterior vs truth.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sets up a small population of mock galaxies sharing the same burstiness PSD parameters (sigma, tau). Runs PopulationFitter with VI to recover the shared PSD hyperparameters from per-galaxy photometry, demonstrating hierarchical Bayesian shrinkage on the intrinsic SFH scatter.">
 
 .. only:: html
 
@@ -2835,7 +3151,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates tengri&#x27;s Observation API for joint fitting. Creates a mock galaxy with both SDSS photometry and a low-resolution spectrum, fits with MAP, and shows the combined constraint power. Requires SSP data.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates tengri&#x27;s Observation API for joint fitting across two data streams. Creates a mock galaxy with SDSS photometry and low-resolution spectroscopy, then recovers parameters via MAP. Shows how spectroscopy breaks photometric degeneracies.">
 
 .. only:: html
 
@@ -2852,7 +3168,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Build a full multiwavelength SED — stellar + nebular + AGN + dust + radio + X-ray + IGM — without going through tengri.SEDModel, using tengri.forward.build_components and tengri.forward.run_components (Phase II-2.6 public API).">
+    <div class="sphx-glr-thumbcontainer" tooltip="TODO[examples-sweep]: This script uses low-level component orchestration (build_components, run_components) which is experimental Phase II-2.6 API intended for infrastructure use, not recommended for user-facing examples.">
 
 .. only:: html
 
@@ -2863,13 +3179,13 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Component orchestrator end-to-end</div>
+      <div class="sphx-glr-thumbnail-title">Component Orchestrator End-to-End</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Build a full galaxy SED spanning X-ray to radio wavelengths. Shows stellar emission, dust attenuation, dust IR emission, radio synchrotron, and X-ray binary contributions. No SSP data required for the multi-wavelength components.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Build a full galaxy SED spanning X-ray to radio wavelengths. Shows stellar emission, dust attenuation, dust IR emission, radio synchrotron, and X-ray binary contributions. Demonstrates tengri&#x27;s multiwavelength physics modules for radio and X-ray—no SSP data required for these components.">
 
 .. only:: html
 

@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.196** total execution time for 1 file **from auto_examples/photometry**:
+**00:03.524** total execution time for 7 files **from auto_examples/photometry**:
 
 .. container::
 
@@ -32,6 +32,24 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_color_tracks_redshift.py` (``plot_color_tracks_redshift.py``)
+     - 00:02.249
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_galaxy_with_filters.py` (``plot_galaxy_with_filters.py``)
+     - 00:01.275
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_filter_curves.py` (``plot_filter_curves.py``)
-     - 00:00.196
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_filter_set_comparison.py` (``plot_filter_set_comparison.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_photometric_fit.py` (``plot_photometric_fit.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_redshift_filter_grid.py` (``plot_redshift_filter_grid.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_snr_sweep.py` (``plot_snr_sweep.py``)
+     - 00:00.000
      - 0.0

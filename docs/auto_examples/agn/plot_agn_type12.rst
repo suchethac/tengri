@@ -31,10 +31,12 @@ torus blocks the accretion disc) depending purely on viewing angle.
    :alt: plot_agn_type12
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-75
+.. GENERATED FROM PYTHON SOURCE LINES 16-76
 
 .. code-block:: Python
 
+
+    # TODO: refactor to SEDModel.build API (currently uses low-level internal API)
 
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
@@ -93,7 +95,6 @@ torus blocks the accretion disc) depending purely on viewing angle.
     ax.legend(fontsize=10, frameon=False)
     fig.tight_layout()
     plt.savefig("plot_agn_type12.png", dpi=150, bbox_inches="tight")
-    plt.show()
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_type12.py:

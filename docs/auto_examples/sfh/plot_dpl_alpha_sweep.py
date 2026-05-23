@@ -1,49 +1,66 @@
 """
-Double Power-Law SFH: Rising Slope α
-=====================================
+Early-time SFH slope α shapes the UV continuum
+==============================================
 
-The rising slope α controls how quickly star formation builds up before the peak.
-Steeper α = more abrupt onset, younger mean age.
+The rising slope ``α`` of a double-power-law star formation history controls
+how rapidly the galaxy assembled its mass before the peak. Larger α means a
+more abrupt onset of star formation, leaving a younger O/B-star population
+at the time of observation and a steeper rest-frame UV slope. We vary α
+across the prior range with every other parameter fixed.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_dpl_alpha_sweep_001.png
-   :alt: plot_dpl_alpha_sweep
-   :class: sphx-glr-single-img
-
+Reference: Behroozi et al. 2013, ApJ, 770, 57 (functional form, Eq. 1).
 """
 
-import matplotlib.pyplot as plt
+import warnings
 
-from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp, setup_style
-from tengri.analysis.plotting import sfh_sed_comparison
+import jax
+import jax.numpy as jnp
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-
-ssp = load_ssp()
-
-# Build Parameters with double power-law SFH
-spec = Parameters(
-    mean_sfh_type="dpl",
-    sfh_dpl_alpha=Uniform(0.3, 6.0),  # will be overridden
-    sfh_dpl_beta=Fixed(1.0),
-    sfh_dpl_tau_gyr=Fixed(3.0),
-    sfh_dpl_log_peak_sfr=Fixed(1.0),
-    met_logzsol=Fixed(-0.3),
-    dust_tau_bc=Fixed(0.3),
-    dust_tau_diff=Fixed(0.2),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.1),
+ssp = tengri.load_ssp()
+model = tengri.SEDModel.build(
+    ssp,
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "alpha": tengri.Uniform(0.3, 6.0),
+        "beta": 2.5,
+        "tau_gyr": 1.5,
+        "log_peak_sfr": 1.0,
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    redshift=tengri.Fixed(0.1),
 )
+baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-model = SEDModel(spec, ssp)
+alpha_values = np.linspace(0.5, 6.0, 7)
+norm = mpl.colors.Normalize(vmin=alpha_values.min(), vmax=alpha_values.max())
+cmap = plt.get_cmap("viridis")
 
-# Sweep parameter
-values = [0.3, 0.7, 1.5, 3.0, 6.0]
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
+for alpha in alpha_values:
+    params = {**baseline, "sfh_dpl_alpha": jnp.float64(alpha)}
+    out = model.predict_rest_sed(params)
+    wave = np.asarray(out.wavelength)
+    nu = 2.998e18 / wave  # Å/s -> Hz
+    nu_l_nu = nu * np.asarray(out.sed)
+    ax.loglog(wave, nu_l_nu, color=cmap(norm(alpha)), lw=1.4)
 
-fig = sfh_sed_comparison(model, "sfh_dpl_alpha", values, cmap="Oranges")
-fig.suptitle("Double Power-Law SFH: Rising Slope α", fontsize=12, y=1.00)
-plt.tight_layout()
-plt.savefig("plot_dpl_alpha_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()
+ax.set_xlim(800, 3e4)
+ax.set_ylim(1e40, 5e43)
+ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+cbar.set_label(r"DPL rising slope $\alpha$")
+
+fig.tight_layout()
+fig.savefig("plot_dpl_alpha_sweep.png", dpi=150, bbox_inches="tight")

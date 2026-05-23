@@ -31,7 +31,7 @@ Shows how backend choice affects emission line strengths.
    :alt: plot_neb_backend_compare
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-119
+.. GENERATED FROM PYTHON SOURCE LINES 16-115
 
 .. code-block:: Python
 
@@ -119,7 +119,6 @@ Shows how backend choice affects emission line strengths.
     )
     ax.set_xlabel(r"Rest Wavelength [$\AA$]", fontsize=11)
     ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=11)
-    ax.set_title(r"H$\beta$ + [OIII] Region", fontsize=11)
     ax.legend(frameon=False, fontsize=10, loc="upper right")
     ax.grid(True, alpha=0.2)
 
@@ -129,12 +128,9 @@ Shows how backend choice affects emission line strengths.
     ax.loglog(wave, np.array(sed_old), "C1--", lw=2.0, label="Old galaxy")
     ax.set_xlabel(r"Wavelength [$\AA$]", fontsize=11)
     ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=11)
-    ax.set_title("Full SED Comparison", fontsize=11)
     ax.set_xlim(1000, 1e6)
     ax.legend(frameon=False, fontsize=10, loc="lower left")
     ax.grid(True, alpha=0.2, which="both")
-
-    fig.suptitle("Nebular Emission: Age and Metallicity Effects", fontsize=12, y=1.00)
     fig.tight_layout()
     plt.savefig("plot_neb_backend_compare.png", dpi=150, bbox_inches="tight")
     plt.show()
