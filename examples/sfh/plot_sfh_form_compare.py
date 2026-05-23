@@ -60,17 +60,14 @@ for (form, label), color in zip(FORMS, COLORS):
     sfh = model.predict_sfh(p)
     t_gyr = np.asarray(sfh["t_gyr"])
     sfr = np.asarray(sfh["sfr_mean"])
-    # Renormalise to unit total stellar mass so the differences are in shape.
     if sfr.sum() > 0:
         mass = np.trapezoid(sfr, t_gyr * 1.0e9)
         sfr = sfr / mass if mass > 0 else sfr
     ax.plot(t_gyr, sfr, color=color, lw=1.6, label=label)
 
-ax.set_xlabel(r"Lookback time $t_{\rm lbt}$  [Gyr]")
-ax.set_ylabel(r"SFR$(t)$ / $M_\star^{\rm tot}$  [yr$^{-1}$]")
-ax.set_yscale("log")
-ax.set_xlim(0.0, 13.5)
-ax.set_ylim(1e-12, 5e-9)
+ax.set(xlabel=r"Lookback time $t_{\rm lbt}$  [Gyr]",
+       ylabel=r"SFR$(t)$ / $M_\star^{\rm tot}$  [yr$^{-1}$]",
+       yscale="log", xlim=(0.0, 13.5), ylim=(1e-12, 5e-9))
 ax.legend(frameon=False, fontsize=8, loc="upper right", ncol=2)
 
 fig.tight_layout()
