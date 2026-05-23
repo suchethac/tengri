@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:01.670** total execution time for 1 file **from auto_examples/spectroscopy**:
+**00:00.928** total execution time for 5 files **from auto_examples/spectroscopy**:
 
 .. container::
 
@@ -32,6 +32,18 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
+   * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_spectral_indices_vs_age.py` (``plot_spectral_indices_vs_age.py``)
+     - 00:00.928
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_resolution_sweep.py` (``plot_resolution_sweep.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_spectral_features.py` (``plot_spectral_features.py``)
-     - 00:01.670
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_spectrum_fit.py` (``plot_spectrum_fit.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_velocity_dispersion_sweep.py` (``plot_velocity_dispersion_sweep.py``)
+     - 00:00.000
      - 0.0
