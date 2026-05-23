@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:03.582** total execution time for 8 files **from auto_examples/sps**:
+**00:04.241** total execution time for 9 files **from auto_examples/sps**:
 
 .. container::
 
@@ -32,10 +32,13 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_sps_plot_mass_to_light_ratios.py` (``plot_mass_to_light_ratios.py``)
-     - 00:03.582
+   * - :ref:`sphx_glr_auto_examples_sps_plot_uv_slope_age.py` (``plot_uv_slope_age.py``)
+     - 00:04.241
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_ionising_lum.py` (``plot_ionising_lum.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_mass_to_light_ratios.py` (``plot_mass_to_light_ratios.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_sps_library_compare.py` (``plot_sps_library_compare.py``)

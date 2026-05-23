@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:07.806** total execution time for 173 files **from all galleries**:
+**00:05.509** total execution time for 174 files **from all galleries**:
 
 .. container::
 
@@ -32,11 +32,11 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_emission_line_contamination.py` (``../examples/photometry/plot_emission_line_contamination.py``)
-     - 00:04.092
+   * - :ref:`sphx_glr_auto_examples_sps_plot_uv_slope_age.py` (``../examples/sps/plot_uv_slope_age.py``)
+     - 00:04.241
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_ulirg_arp220_analog.py` (``../examples/multiwavelength/plot_ulirg_arp220_analog.py``)
-     - 00:03.714
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_birth_cloud_vs_diffuse.py` (``../examples/dust_attenuation/plot_birth_cloud_vs_diffuse.py``)
+     - 00:01.268
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
      - 00:00.000
@@ -276,6 +276,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_redshift_sweep.py` (``../examples/multiwavelength/plot_panchromatic_redshift_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_ulirg_arp220_analog.py` (``../examples/multiwavelength/plot_ulirg_arp220_analog.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_bpt_cue_flexibility.py` (``../examples/nebular/plot_bpt_cue_flexibility.py``)
