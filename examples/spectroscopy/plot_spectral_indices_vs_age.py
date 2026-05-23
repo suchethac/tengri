@@ -40,8 +40,6 @@ def _balogh_d4000(wave, l_nu):
 
 
 def _mgb_ew(wave, l_nu):
-    """Trager+1998 Mg b index: integrated absorption in 5160-5193 Å vs
-    pseudo-continuum bracketed by 5142-5161 and 5191-5206 Å."""
     line = (wave >= 5160) & (wave <= 5193)
     blue = (wave >= 5142) & (wave <= 5161)
     red = (wave >= 5191) & (wave <= 5206)
@@ -67,18 +65,13 @@ def _halpha_ew(wave, l_nu):
     return float(np.sum((f_lam[line] - cont)) * delta) / max(cont, 1e-30)
 
 
+SFH = {"type": "tsnorm", "*": tengri.FIXED,
+       "peak_lbt_gyr": tengri.Uniform(0.03, 13.0), "width_gyr": 0.05,
+       "log_peak_sfr": 1.0, "skew": 0.0, "trunc": 13.0}
+DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+
 ssp = tengri.load_ssp()
-model = tengri.SEDModel.build(
-    ssp,
-    sfh={"type": "tsnorm", "*": tengri.FIXED,
-         "peak_lbt_gyr": tengri.Uniform(0.03, 13.0),
-         "width_gyr": 0.05,
-         "log_peak_sfr": 1.0,
-         "skew": 0.0, "trunc": 13.0},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": 0.0, "tau_bc": 0.0},
-    redshift=tengri.Fixed(0.0),
-)
+model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, redshift=tengri.Fixed(0.0))
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
 ages = np.geomspace(0.03, 11.0, 28)

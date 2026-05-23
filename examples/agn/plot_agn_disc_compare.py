@@ -42,15 +42,17 @@ DISC_MODELS = [
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(DISC_MODELS)))
 
 C_AA_PER_S = 2.998e18
+SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+
 ssp = tengri.load_ssp()
 fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
 for (disc, label), color in zip(DISC_MODELS, COLORS):
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.0, "tau_bc": 0.0},
+        sfh=SFH,
+        dust=DUST,
         agn={"disc": {"type": disc, "*": tengri.FIXED},
              "*": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0},
         redshift=tengri.Fixed(0.05),
@@ -61,10 +63,9 @@ for (disc, label), color in zip(DISC_MODELS, COLORS):
     nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
     ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
 
-ax.set_xlim(20, 3e5)
-ax.set_ylim(1e41, 5e47)
-ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+ax.set(xlim=(20, 3e5), ylim=(1e41, 5e47),
+       xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+       ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
 ax.axvspan(1, 100, color="0.93", alpha=0.6, lw=0)
 ax.text(30, 2e47, "X-ray", color="0.4", fontsize=8, va="top")
 ax.text(2000, 2e47, "UV/optical BBB", color="0.4", fontsize=8, va="top")
