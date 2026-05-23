@@ -17,7 +17,7 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="[α/Fe] records the chemical enrichment history: high [α/Fe] signals rapid enrichment by core-collapse SNe before Type Ia SNe can dilute the alpha elements. In the SED, enhanced alpha suppresses iron absorption features in the optical.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The [α/Fe] abundance ratio encodes the chemical enrichment history: rapid enrichment by core-collapse supernovae before Type Ia SNe begin leads to high [α/Fe]. In the SED, enhanced alpha-elements suppress iron absorption lines in the optical (especially around 4000–5000 Å) because the higher abundance of alpha elements shifts the line-blanketing opacity. We sweep [α/Fe] on a quiescent passively evolving galaxy where iron features dominate the continuum absorption.">
 
 .. only:: html
 
@@ -28,13 +28,13 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">α/Fe Enhancement (met_alpha_fe)</div>
+      <div class="sphx-glr-thumbnail-title">Alpha-element enhancement suppresses iron absorption features</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep met_logzsol ∈ {−1.5, −0.7, 0, +0.5} on a composite SED from 912 Å (Lyman limit) to 30 μm (mid-IR), with modified-blackbody dust emission turned on so the metallicity-vs-energy-balance interaction is visible.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Stellar metallicity affects the stellar continuum shape and overall energy balance. Dust emission responds to absorbed stellar photons: metal-poor hot stars emit bluer light with less IR-absorbed energy, while metal-rich cooler stars are less bright in the UV but more absorbed in the optical/NIR. We sweep stellar metallicity on a young star-forming galaxy at z = 0.2 with dust attenuation and thermal emission from warm dust.">
 
 .. only:: html
 
@@ -45,13 +45,13 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Metallicity Sweep: Panchromatic SED</div>
+      <div class="sphx-glr-thumbnail-title">Metallicity shapes panchromatic SED with dust emission</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Stellar metallicity sets the UV-optical SED shape: metal-poor stars are hotter and bluer (less line blanketing), metal-rich are redder. Sweep met_logzsol from −2 (0.01 Z_⊙) to +0.2 (1.6 Z_⊙) at fixed SFH and dust.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Metal-poor stars are hotter and bluer (less line blanketing), while metal-rich stars are redder due to increased opacity. We sweep stellar metallicity across the prior range with every other parameter fixed on a typical intermediate-age galaxy with modest dust attenuation.">
 
 .. only:: html
 
@@ -62,13 +62,13 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Stellar Metallicity (log Z/Z_⊙)</div>
+      <div class="sphx-glr-thumbnail-title">Stellar metallicity drives UV-optical SED colour</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="3×4 panel grid showing how the stellar continuum responds to metallicity at three ages. Demonstrates the classic age-metallicity degeneracy: a metal-rich young population can mimic a metal-poor old population in the optical continuum.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Metal-rich young populations and metal-poor old populations can produce similar optical colours — a fundamental degeneracy in galaxy fitting. This 3×4 grid shows normalised rest-frame continua at nine points in the age–metallicity plane, with each row fixed at one lookback-formation age and each column fixed at one metallicity. Dust is zeroed to expose the clean stellar continuum shape.">
 
 .. only:: html
 
@@ -79,13 +79,13 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Stellar Continuum: Metallicity × Age Grid</div>
+      <div class="sphx-glr-thumbnail-title">Age-metallicity degeneracy in the stellar continuum</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare metallicity evolution Z(t) from closed-box and leaky-box chemical evolution models. Shows how star formation history and gas outflows shape the enrichment history. Demonstrates how different feedback mechanisms alter metal abundance relative to a closed box (maximum enrichment).">
+    <div class="sphx-glr-thumbcontainer" tooltip="Metallicity evolution Z(t) depends on the balance between metal production (in supernovae) and metal removal (via outflows). This four-panel figure shows how different star formation timescales and outflow efficiencies η alter the enrichment history relative to a closed box (zero outflow). Top-left: closed-box enrichment timescale dependence. Top-right: impact of variable outflow rates. Bottom-left: closed vs leaky enrichment under constant SFR. Bottom-right: age-metallicity relation analogue — how different assembly epochs lead to different final metal content.">
 
 .. only:: html
 
@@ -96,7 +96,7 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Chemical Evolution: Model Comparison</div>
+      <div class="sphx-glr-thumbnail-title">Chemical evolution: closed-box vs leaky-box enrichment histories</div>
     </div>
 
 

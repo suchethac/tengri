@@ -24,27 +24,12 @@ Astrodust+PAH size distribution
 Per-H grain volume distribution versus grain radius for the Hensley & Draine
 2023 fiducial size distribution (MW high-latitude :math:`R_V=3.1` sightline).
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_astrodust_hd23_01_size_distribution_001.png
-   :alt: plot_astrodust_hd23_01_size_distribution
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 15-55
-
-
-
-.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_01_size_distribution_001.png
-   :alt: Hensley & Draine 2023 fiducial size distribution
-   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_01_size_distribution_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 8-50
 
 .. code-block:: Python
 
+
+    import warnings
 
     import h5py
     import matplotlib.pyplot as plt
@@ -54,6 +39,8 @@ Per-H grain volume distribution versus grain radius for the Hensley & Draine
     from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    warnings.filterwarnings("ignore", message=".*deprecated.*")
 
     with h5py.File(data_path("astrodust_templates.h5"), "r") as f:
         size_dist = np.asarray(f["size_distribution"])
@@ -79,12 +66,10 @@ Per-H grain volume distribution versus grain radius for the Hensley & Draine
         ylabel=r"$(4\pi/3)\,a^3\,dn/d\ln a / n_{\rm H}\ [\mathrm{cm}^3\,\mathrm{H}^{-1}]$",
         xlim=(3.0e-4, 1.0),
         ylim=(1.0e-30, 1.0e-26),
-        title="Hensley & Draine 2023 fiducial size distribution",
     )
     ax.legend(loc="upper left", frameon=False)
     fig.tight_layout()
-    plt.savefig("plot_astrodust_hd23_01_size_distribution.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_astrodust_hd23_01_size_distribution.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_01_size_distribution.py:

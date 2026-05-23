@@ -5,14 +5,9 @@ Dust Emission Models: Overview
 Compares all dust emission models available in tengri at a fixed infrared
 luminosity and fiducial temperature. Template-based models gracefully skip
 if data files are unavailable.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_dust_emission_models_001.png
-   :alt: plot_dust_emission_models
-   :class: sphx-glr-single-img
-
 """
+
+import warnings
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -29,6 +24,8 @@ from tengri.dust import (
 )
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 wave_aa = jnp.logspace(np.log10(1e4), np.log10(1e7), 2000)
 wave_um = np.array(wave_aa) * 1e-4
@@ -90,7 +87,6 @@ ax.set(
     ylim=(1e27, 5e31),
     xlabel=r"Wavelength [$\mu$m]",
     ylabel=r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]",
-    title=r"Dust Emission Models ($L_{\rm abs} = 10^{10}\,L_\odot$, $T = 35$ K)",
 )
 ax.legend(fontsize=10, frameon=False, ncol=2)
 
@@ -108,5 +104,4 @@ for wl_um, name in [(8, "PAH"), (25, "mid-IR"), (100, "far-IR peak"), (850, "sub
     )
 
 fig.tight_layout()
-plt.savefig("plot_dust_emission_models.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_dust_emission_models.png", dpi=150, bbox_inches="tight")

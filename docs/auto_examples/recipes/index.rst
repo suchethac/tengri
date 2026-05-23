@@ -19,7 +19,24 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does prior choice affect the posterior? This recipe compares fitting with a Uniform prior vs Gaussian prior on metallicity, showing how prior assumptions constrain the posterior.">
+    <div class="sphx-glr-thumbcontainer" tooltip="tengri.recipes ships several curated starting-point model configs that map common astronomer use-cases onto the nested-dict SEDModel.build grammar. This card overlays the rest-frame SED of every shipped recipe so users can pick by eye:">
+
+.. only:: html
+
+  .. image:: /auto_examples/recipes/images/thumb/sphx_glr_plot_recipe_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/recipes/plot_recipe_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">What each shipped tengri recipe produces</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Metallicity is often poorly constrained by optical photometry. This recipe compares two fits: one with a Uniform prior on met_logzsol (weak constraint) and one with a Gaussian prior (informative from external data). We show how the posterior distribution changes, and that the same mock data leads to different inferences depending on the prior.">
 
 .. only:: html
 
@@ -30,13 +47,13 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Prior Sensitivity: Gaussian vs Uniform</div>
+      <div class="sphx-glr-thumbnail-title">Prior sensitivity: uniform vs Gaussian on metallicity</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How do I register a custom photometric filter and use it in SED modeling? This recipe generates a synthetic filter response and uses it to compute photometry through a model SED.">
+    <div class="sphx-glr-thumbcontainer" tooltip="How do I combine a custom photometric filter with standard filters? This recipe generates a synthetic Gaussian filter at 2 μm and pairs it with SDSS optical bands, then predicts the full SED and photometry.">
 
 .. only:: html
 
@@ -47,13 +64,13 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Register and Use Custom Filters</div>
+      <div class="sphx-glr-thumbnail-title">Register and use a custom photometric filter</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How do I load photometric data from a CSV file and fit it? This recipe demonstrates loading a table of measured fluxes and uncertainties, building observations per galaxy, and running a MAP fit on each.">
+    <div class="sphx-glr-thumbcontainer" tooltip="How do I load measured photometry from a table and fit it? This recipe generates mock photometry for 3 galaxies and fits each one independently with a MAP fit, demonstrating the workflow for catalogue-scale SED fitting.">
 
 .. only:: html
 
@@ -64,13 +81,13 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Load and Fit Real CSV Photometry</div>
+      <div class="sphx-glr-thumbnail-title">Load and fit photometry from CSV</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How do I save a posterior to disk and load it later? This recipe demonstrates running a NUTS fit, saving the Posterior to an HDF5 file, reloading it, and analyzing the saved results.">
+    <div class="sphx-glr-thumbcontainer" tooltip="How do I persist a posterior between sessions? This recipe runs a MAP fit, saves the result to HDF5, reloads it, and demonstrates basic analysis. Posterior objects can be checkpointed for long-running fits or multi-stage analysis pipelines.">
 
 .. only:: html
 
@@ -81,13 +98,13 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Save and Load a Posterior</div>
+      <div class="sphx-glr-thumbnail-title">Save and load a posterior to disk</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How do I fit a spectrum when redshift is known from spectroscopy? This recipe shows how fixing redshift with Fixed() constrains other parameters more tightly compared to letting it vary.">
+    <div class="sphx-glr-thumbcontainer" tooltip="When redshift is known from spectroscopy, the SED fit is more precise than when inferring redshift from photometry alone. This recipe generates mock photometry at a known redshift, then fits it with redshift fixed (spectroscopic) and redshift free (photometric only), showing how redshift degeneracies affect parameter recovery.">
 
 .. only:: html
 
@@ -98,7 +115,7 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Fix Redshift to a Known Value</div>
+      <div class="sphx-glr-thumbnail-title">Redshift constraint: spectroscopy vs photometry alone</div>
     </div>
 
 
@@ -112,6 +129,7 @@ saving/loading a posterior to disk.
 .. toctree::
    :hidden:
 
+   /auto_examples/recipes/plot_recipe_compare
    /auto_examples/recipes/plot_recipe_compare_priors
    /auto_examples/recipes/plot_recipe_custom_filter
    /auto_examples/recipes/plot_recipe_load_real_csv

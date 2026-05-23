@@ -1,13 +1,4 @@
 {
- "compute_qsogen_sed": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.components.agn.qsogen",
-   "module_short": "tengri.components.agn",
-   "name": "compute_qsogen_sed"
-  }
- ],
  "jnp.asarray": [
   {
    "is_class": false,
@@ -44,24 +35,6 @@
    "name": "array"
   }
  ],
- "plt.savefig": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "savefig"
-  }
- ],
- "plt.show": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "show"
-  }
- ],
  "plt.subplots": [
   {
    "is_class": false,
@@ -69,24 +42,6 @@
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
    "name": "subplots"
-  }
- ],
- "radio_agn": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.radio",
-   "module_short": "tengri.radio",
-   "name": "radio_agn"
-  }
- ],
- "radio_star_forming": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.radio",
-   "module_short": "tengri.radio",
-   "name": "radio_star_forming"
   }
  ],
  "setup_style": [
@@ -98,7 +53,34 @@
    "name": "setup_style"
   }
  ],
- "xray_agn_corona": [
+ "tengri.components.agn.compute_qsogen_sed": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.agn",
+   "module_short": "tengri.components.agn",
+   "name": "compute_qsogen_sed"
+  }
+ ],
+ "tengri.radio.radio_agn": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.radio",
+   "module_short": "tengri.radio",
+   "name": "radio_agn"
+  }
+ ],
+ "tengri.radio.radio_star_forming": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.radio",
+   "module_short": "tengri.radio",
+   "name": "radio_star_forming"
+  }
+ ],
+ "tengri.xray.xray_agn_corona": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -107,13 +89,22 @@
    "name": "xray_agn_corona"
   }
  ],
- "xray_xrb": [
+ "tengri.xray.xray_xrb": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.xray",
    "module_short": "tengri.xray",
    "name": "xray_xrb"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
   }
  ]
 }

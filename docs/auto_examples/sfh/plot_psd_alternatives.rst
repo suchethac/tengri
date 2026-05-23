@@ -18,23 +18,20 @@
 .. _sphx_glr_auto_examples_sfh_plot_psd_alternatives.py:
 
 
-Alternative PSD Models
-======================
+Comparison of power-spectral-density models for stochastic SFHs
+==============================================================
 
-Compare the three PSD models available for stochastic SFHs: the default
-Damped Random Walk (DRW/Lorentzian), the Matern covariance family, and the
-extended regulator model. No SSP data required.
+Three PSD models govern the frequency structure of stochastic SFHs: the default
+damped random walk (DRW), the Matern family (which includes DRW as a special
+case), and the extended regulator model. Plotted in frequency space at
+representative parameters. No SSP data required.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_psd_alternatives_001.png
-   :alt: plot_psd_alternatives
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 16-26
+.. GENERATED FROM PYTHON SOURCE LINES 10-91
 
 .. code-block:: Python
 
+
+    import warnings
 
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
@@ -44,43 +41,16 @@ extended regulator model. No SSP data required.
     from tengri.sfh import psd_drw
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 27-28
-
-Frequency grid (angular frequency in rad/yr)
-
-.. GENERATED FROM PYTHON SOURCE LINES 28-34
-
-.. code-block:: Python
-
+    # Frequency grid (angular frequency in rad/yr)
     omega = jnp.logspace(-4, -1, 500)
 
     # DRW parameters
     sigma = 0.3
     tau_yr = 200e6  # 200 Myr
 
-
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 35-36
-
-DRW (Lorentzian) — the default model
-
-.. GENERATED FROM PYTHON SOURCE LINES 36-98
-
-.. code-block:: Python
-
+    # DRW (Lorentzian) — the default model
     drw = psd_drw(omega, psd_sigma=sigma, psd_tau_yr=tau_yr)
 
     fig, ax = plt.subplots(figsize=(9, 6))
@@ -136,24 +106,11 @@ DRW (Lorentzian) — the default model
     # Annotate and finalize
     ax.set_xlabel(r"Angular frequency $\omega$ [rad yr$^{-1}$]")
     ax.set_ylabel(r"PSD $P(\omega)$")
-    ax.set_title(r"PSD Models ($\sigma=0.3$, $\tau=200$ Myr)")
     ax.set_ylim(1e-10, 1e0)
     ax.legend(frameon=False, fontsize=10)
     fig.tight_layout()
 
-    plt.savefig("plot_psd_alternatives.png", dpi=150, bbox_inches="tight")
-    plt.show()
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_psd_alternatives_001.png
-   :alt: PSD Models ($\sigma=0.3$, $\tau=200$ Myr)
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_psd_alternatives_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+    fig.savefig("plot_psd_alternatives.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_psd_alternatives.py:

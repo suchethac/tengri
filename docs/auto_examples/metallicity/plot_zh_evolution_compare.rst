@@ -18,43 +18,22 @@
 .. _sphx_glr_auto_examples_metallicity_plot_zh_evolution_compare.py:
 
 
-Chemical Evolution: Model Comparison
-=====================================
+Chemical evolution: closed-box vs leaky-box enrichment histories
+================================================================
 
-Compare metallicity evolution Z(t) from closed-box and leaky-box chemical
-evolution models. Shows how star formation history and gas outflows shape
-the enrichment history. Demonstrates how different feedback mechanisms
-alter metal abundance relative to a closed box (maximum enrichment).
+Metallicity evolution Z(t) depends on the balance between metal production
+(in supernovae) and metal removal (via outflows). This four-panel figure shows
+how different star formation timescales and outflow efficiencies η alter the
+enrichment history relative to a closed box (zero outflow). Top-left: closed-box
+enrichment timescale dependence. Top-right: impact of variable outflow rates.
+Bottom-left: closed vs leaky enrichment under constant SFR. Bottom-right:
+age-metallicity relation analogue — how different assembly epochs lead to
+different final metal content.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_zh_evolution_compare_001.png
-   :alt: plot_zh_evolution_compare
-   :class: sphx-glr-single-img
+Reference: Maeder 1992, A&A, 264, 105 (chemical evolution); Schmidt 1959 (solar
+neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics).
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-132
-
-
-
-.. image-sg:: /auto_examples/metallicity/images/sphx_glr_plot_zh_evolution_compare_001.png
-   :alt: Chemical Evolution: Model Comparison, Closed-Box: SFR Timescale Dependence, Leaky-Box: Outflow Rate η Dependence (τ = 3 Gyr), Constant SFR: Closed vs Leaky Box, Age-Metallicity Relation Analogue
-   :srcset: /auto_examples/metallicity/images/sphx_glr_plot_zh_evolution_compare_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-batch-2/examples/metallicity/plot_zh_evolution_compare.py:22: DeprecationWarning: tengri.components.sfh has been relocated to tengri.components.stellar.sfh and will be removed in tengri v1.0.
-      from tengri.components.sfh import closed_box_metallicity
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -62,41 +41,41 @@ alter metal abundance relative to a closed box (maximum enrichment).
     import matplotlib.pyplot as plt
     import numpy as np
 
+    import tengri
     from tengri.analysis.plotting import setup_style
-    from tengri.components.sfh import closed_box_metallicity
+    from tengri.components.stellar.sfh import closed_box_metallicity
     from tengri.utils.cosmology import age_at_z0
 
     setup_style()
 
-    # --- Time axis: cosmological age (look-back time in Gyr) ---
+    # Time axis: cosmological age (look-back time in Gyr)
     age_uni_gyr = float(age_at_z0())
     t_gyr = np.linspace(0, min(13.5, age_uni_gyr), 200)
     t_yr = t_gyr * 1e9
+    age_from_start = age_uni_gyr - t_gyr
 
-    Z_sun = 10.0 ** (-1.848)
+    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
 
-    fig, axes = plt.subplots(2, 2, figsize=(12, 9))
-    fig.suptitle("Chemical Evolution: Model Comparison", fontsize=13, y=0.995)
-
-    # --- Panel 1: Closed-box with varying timescales ---
+    # Panel 1: Closed-box with varying timescales
     ax = axes[0, 0]
     colors = plt.cm.viridis(np.linspace(0.0, 0.85, 4))
-    age_from_start = age_uni_gyr - t_gyr
     for tau_gyr, color in zip([1.0, 2.0, 5.0, 10.0], colors):
         sfr = np.exp(-age_from_start / tau_gyr)
         log_z = closed_box_metallicity(t_yr, sfr, yield_y=0.03, eta_outflow=0.0, f_gas_init=0.9)
         z_ratio = 10.0 ** np.array(log_z)
         ax.plot(t_gyr, z_ratio, lw=2.0, color=color, label=f"τ = {tau_gyr:.1f} Gyr")
 
-    ax.set_xlabel("Look-back Time [Gyr]")
-    ax.set_ylabel(r"Metallicity (Z / Z$_\odot$)")
-    ax.set_title("Closed-Box: SFR Timescale Dependence", fontsize=11)
-    ax.legend(fontsize=9, frameon=False)
-    ax.grid(True, alpha=0.3)
+    ax.set_xlabel("Look-back Time [Gyr]", fontsize=9)
+    ax.set_ylabel(r"$Z/Z_\odot$", fontsize=9)
+    ax.text(0.05, 0.95, "Closed-box enrichment timescale", transform=ax.transAxes,
+           fontsize=9, verticalalignment='top', bbox=dict(boxstyle='round',
+           facecolor='white', alpha=0.85))
+    ax.legend(fontsize=8, frameon=False)
+    ax.grid(True, alpha=0.2)
     ax.set_xlim(0, 13)
     ax.set_ylim(0, 2.0)
 
-    # --- Panel 2: Closed-box vs leaky-box at τ = 3 Gyr ---
+    # Panel 2: Closed-box vs leaky-box at τ = 3 Gyr
     ax = axes[0, 1]
     sfr_ref = np.exp(-age_from_start / 3.0)
     eta_values = [0.0, 0.2, 0.5, 0.8]
@@ -107,15 +86,17 @@ alter metal abundance relative to a closed box (maximum enrichment).
         z_ratio = 10.0 ** np.array(log_z)
         ax.plot(t_gyr, z_ratio, lw=2.0, color=color, label=f"η = {eta:.1f}")
 
-    ax.set_xlabel("Look-back Time [Gyr]")
-    ax.set_ylabel(r"Metallicity (Z / Z$_\odot$)")
-    ax.set_title(r"Leaky-Box: Outflow Rate η Dependence (τ = 3 Gyr)", fontsize=11)
-    ax.legend(fontsize=9, frameon=False)
-    ax.grid(True, alpha=0.3)
+    ax.set_xlabel("Look-back Time [Gyr]", fontsize=9)
+    ax.set_ylabel(r"$Z/Z_\odot$", fontsize=9)
+    ax.text(0.05, 0.95, r"Leaky-box: outflow rate $\eta$ (τ = 3 Gyr)", transform=ax.transAxes,
+           fontsize=9, verticalalignment='top', bbox=dict(boxstyle='round',
+           facecolor='white', alpha=0.85))
+    ax.legend(fontsize=8, frameon=False)
+    ax.grid(True, alpha=0.2)
     ax.set_xlim(0, 13)
     ax.set_ylim(0, 2.0)
 
-    # --- Panel 3: Constant SFR comparison ---
+    # Panel 3: Constant SFR comparison
     ax = axes[1, 0]
     sfr_const = np.ones_like(t_yr)
     models = [
@@ -130,20 +111,18 @@ alter metal abundance relative to a closed box (maximum enrichment).
         z_ratio = 10.0 ** np.array(log_z)
         ax.plot(t_gyr, z_ratio, lw=2.0, color=color, label=label)
 
-    ax.set_xlabel("Look-back Time [Gyr]")
-    ax.set_ylabel(r"Metallicity (Z / Z$_\odot$)")
-    ax.set_title("Constant SFR: Closed vs Leaky Box", fontsize=11)
-    ax.legend(fontsize=9, frameon=False)
-    ax.grid(True, alpha=0.3)
+    ax.set_xlabel("Look-back Time [Gyr]", fontsize=9)
+    ax.set_ylabel(r"$Z/Z_\odot$", fontsize=9)
+    ax.text(0.05, 0.95, "Constant SFR: closed vs leaky box", transform=ax.transAxes,
+           fontsize=9, verticalalignment='top', bbox=dict(boxstyle='round',
+           facecolor='white', alpha=0.85))
+    ax.legend(fontsize=8, frameon=False)
+    ax.grid(True, alpha=0.2)
     ax.set_xlim(0, 13)
     ax.set_ylim(0, 3.0)
 
-    # --- Panel 4: Age-metallicity relation analogue ---
+    # Panel 4: Assembly-metallicity analogue
     ax = axes[1, 1]
-    # Analogy: different lookback times ↔ different metallicities within a single galaxy
-    # Early-assembled regions have lower [Z/Z_sun] (less enrichment time)
-    # Recently assembled regions have higher [Z/Z_sun] (continuous enrichment)
-
     t_assembly = np.array([1.0, 3.0, 7.0, 10.0])  # Lookback time of assembly (Gyr)
     z_assembly = []
 
@@ -159,25 +138,20 @@ alter metal abundance relative to a closed box (maximum enrichment).
             else:
                 z_assembly.append(0.0)
 
-    ax.scatter(t_assembly, z_assembly, s=100, color="#9467bd", alpha=0.7, edgecolors="black", lw=1.5)
-    ax.plot(t_assembly, z_assembly, lw=2.0, color="#9467bd", alpha=0.5, label="Assembly sequence")
+    ax.scatter(t_assembly, z_assembly, s=80, color="#9467bd", alpha=0.7, edgecolors="black", lw=1.2)
+    ax.plot(t_assembly, z_assembly, lw=2.0, color="#9467bd", alpha=0.4)
 
-    ax.set_xlabel("Assembly Look-back Time [Gyr]")
-    ax.set_ylabel(r"Metallicity at Assembly (Z / Z$_\odot$)")
-    ax.set_title("Age-Metallicity Relation Analogue", fontsize=11)
-    ax.legend(fontsize=9, frameon=False)
-    ax.grid(True, alpha=0.3)
+    ax.set_xlabel("Assembly Look-back Time [Gyr]", fontsize=9)
+    ax.set_ylabel(r"$Z/Z_\odot$ at assembly", fontsize=9)
+    ax.text(0.05, 0.95, "Assembly-metallicity relation", transform=ax.transAxes,
+           fontsize=9, verticalalignment='top', bbox=dict(boxstyle='round',
+           facecolor='white', alpha=0.85))
+    ax.grid(True, alpha=0.2)
     ax.set_xlim(0, 11)
     ax.set_ylim(0, 1.0)
 
     fig.tight_layout()
-    plt.savefig("plot_zh_evolution_compare.png", dpi=150, bbox_inches="tight")
-    plt.show()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.916 seconds)
+    fig.savefig("plot_zh_evolution_compare.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_zh_evolution_compare.py:

@@ -30,10 +30,12 @@ Each panel highlights one block; the others are switched to ``"none"`` to
 isolate the contribution. The dashed grey curve is the all-blocks-on
 reference.
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-142
+.. GENERATED FROM PYTHON SOURCE LINES 14-143
 
 .. code-block:: Python
 
+
+    # TODO: refactor to SEDModel.build API (currently uses low-level internal API)
 
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
@@ -161,7 +163,6 @@ reference.
         fontsize=11,
     )
     fig.tight_layout()
-    plt.show()
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_composable_block_toggles.py:

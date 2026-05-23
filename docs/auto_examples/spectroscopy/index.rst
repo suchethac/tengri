@@ -51,7 +51,24 @@ Spectroscopic fitting and spectral features.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Generate a mock galaxy spectrum and fit it with tengri&#x27;s MAP optimizer. Shows the observed and model spectra with a residual panel below.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Three of the most-used optical absorption / emission diagnostics evaluated on a single-burst stellar population from 30 Myr to 13 Gyr, at solar metallicity, no dust. The figure makes obvious which diagnostic responds on which timescale:">
+
+.. only:: html
+
+  .. image:: /auto_examples/spectroscopy/images/thumb/sphx_glr_plot_spectral_indices_vs_age_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/spectroscopy/plot_spectral_indices_vs_age`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Classic spectral indices vs single-burst age</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Compare the rest-frame spectrum of a young and old galaxy at fixed redshift. Shows how the optical continuum color, Balmer decrement, and absorption line strengths depend on mean stellar age, holding metallicity and dust fixed.">
 
 .. only:: html
 
@@ -62,7 +79,7 @@ Spectroscopic fitting and spectral features.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Spectroscopic SED Fit</div>
+      <div class="sphx-glr-thumbnail-title">Rest-frame spectrum with stellar population ages</div>
     </div>
 
 
@@ -95,6 +112,7 @@ Spectroscopic fitting and spectral features.
 
    /auto_examples/spectroscopy/plot_resolution_sweep
    /auto_examples/spectroscopy/plot_spectral_features
+   /auto_examples/spectroscopy/plot_spectral_indices_vs_age
    /auto_examples/spectroscopy/plot_spectrum_fit
    /auto_examples/spectroscopy/plot_velocity_dispersion_sweep
 

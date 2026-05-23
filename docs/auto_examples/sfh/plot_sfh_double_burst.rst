@@ -18,158 +18,117 @@
 .. _sphx_glr_auto_examples_sfh_plot_sfh_double_burst.py:
 
 
-SFH with Double Bursts: Old and Recent Star Formation
-====================================================
+Dual-epoch star formation: old and recent bursts leave distinct SED signatures
+==============================================================================
 
-Demonstrate a galaxy with two distinct star formation events:
-an old burst + a recent burst. Show how the SED reflects
-both young and old stellar populations.
+A galaxy with two separated bursts—one at 10 Gyr (old) and one at 0.3 Gyr (recent)—
+produces a SED that blends young hot and old cool stellar populations. Left panel
+shows the optical-to-NIR region in linear scale; right panel shows the full
+panchromatic SED in log-log, revealing the emission from both young and old stars.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_sfh_double_burst_001.png
-   :alt: plot_sfh_double_burst
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 16-155
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_sfh_double_burst_001.png
-   :alt: Double Burst: Old + Recent Star Formation, Linear Scale (Optical to NIR), Log Scale (Full SED)
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_sfh_double_burst_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-batch-2/src/tengri/forward/sed_model.py:643: BakedInNebularWarning: BakedInBackend: nebular emission is baked into the SSP file at a FIXED logU and FIXED escape fraction determined when the SSP grid was generated (commonly logU = −3, but depends on the SSP file). The ionization parameter and escape fraction are NOT free parameters — varying neb_logU or neb_fesc in your Parameters will have no effect. Check your SSP file's nebular assumptions. Switch to CloudyGridBackend or CueBackend to vary nebular properties. To suppress: pass ionizing_source_warning='suppress'.
-      self._nebular_backend = BakedInBackend()
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 10-133
 
 .. code-block:: Python
 
 
+    import warnings
+
+    import jax
+    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri import Fixed, Parameters, SEDModel, load_ssp
+    import tengri
     from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-
-    ssp = load_ssp()
-
-    # Shared baseline
-    shared = dict(
-        met_logzsol=Fixed(-0.3),
-        dust_tau_bc=Fixed(0.2),
-        dust_tau_diff=Fixed(0.15),
-        dust_slope=Fixed(-0.7),
-        redshift=Fixed(0.1),
-    )
+    ssp = tengri.load_ssp()
 
     # Old burst only (10 Gyr ago)
-    spec_old = Parameters(
-        mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-        sfh_tsnorm_peak_lbt_gyr=Fixed(10.0),
-        sfh_tsnorm_width_gyr=Fixed(0.5),
-        sfh_tsnorm_skew=Fixed(0.1),
-        sfh_tsnorm_trunc=Fixed(2.0),
-        **shared,
+    model_old = tengri.SEDModel.build(
+        ssp,
+        sfh={
+            "type": "tsnorm",
+            "*": tengri.FIXED,
+            "log_peak_sfr": 1.0,
+            "peak_lbt_gyr": 10.0,
+            "width_gyr": 0.5,
+            "skew": 0.1,
+            "trunc": 2.0,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.15, "tau_bc": 0.2},
+        redshift=tengri.Fixed(0.1),
     )
-    model_old = SEDModel(spec_old, ssp)
 
     # Recent burst only (0.3 Gyr ago)
-    spec_recent = Parameters(
-        mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-        sfh_tsnorm_peak_lbt_gyr=Fixed(0.3),
-        sfh_tsnorm_width_gyr=Fixed(0.5),
-        sfh_tsnorm_skew=Fixed(0.3),
-        sfh_tsnorm_trunc=Fixed(2.0),
-        **shared,
+    model_recent = tengri.SEDModel.build(
+        ssp,
+        sfh={
+            "type": "tsnorm",
+            "*": tengri.FIXED,
+            "log_peak_sfr": 1.0,
+            "peak_lbt_gyr": 0.3,
+            "width_gyr": 0.5,
+            "skew": 0.3,
+            "trunc": 2.0,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.15, "tau_bc": 0.2},
+        redshift=tengri.Fixed(0.1),
     )
-    model_recent = SEDModel(spec_recent, ssp)
 
-    # Double burst: weighted sum of old and recent
-    spec_double = Parameters(
-        mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-        sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),  # representative peak
-        sfh_tsnorm_width_gyr=Fixed(1.5),  # broad
-        sfh_tsnorm_skew=Fixed(0.2),
-        sfh_tsnorm_trunc=Fixed(2.5),
-        **shared,
+    # Double burst: broad peak at intermediate time
+    model_double = tengri.SEDModel.build(
+        ssp,
+        sfh={
+            "type": "tsnorm",
+            "*": tengri.FIXED,
+            "log_peak_sfr": 1.0,
+            "peak_lbt_gyr": 2.0,
+            "width_gyr": 1.5,
+            "skew": 0.2,
+            "trunc": 2.5,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.15, "tau_bc": 0.2},
+        redshift=tengri.Fixed(0.1),
     )
-    model_double = SEDModel(spec_double, ssp)
 
     # Evaluate
-    params_eval = {k: float(v.value) for k, v in shared.items()}
+    baseline_old = dict(model_old.spec.sample(jax.random.PRNGKey(0)))
+    baseline_recent = dict(model_recent.spec.sample(jax.random.PRNGKey(1)))
+    baseline_double = dict(model_double.spec.sample(jax.random.PRNGKey(2)))
 
-    sed_old = model_old.predict_rest_sed(
-        {
-            **params_eval,
-            "sfh_tsnorm_log_peak_sfr": 1.0,
-            "sfh_tsnorm_peak_lbt_gyr": 10.0,
-            "sfh_tsnorm_width_gyr": 0.5,
-            "sfh_tsnorm_skew": 0.1,
-            "sfh_tsnorm_trunc": 2.0,
-        }
-    ).sed
-    sed_recent = model_recent.predict_rest_sed(
-        {
-            **params_eval,
-            "sfh_tsnorm_log_peak_sfr": 1.0,
-            "sfh_tsnorm_peak_lbt_gyr": 0.3,
-            "sfh_tsnorm_width_gyr": 0.5,
-            "sfh_tsnorm_skew": 0.3,
-            "sfh_tsnorm_trunc": 2.0,
-        }
-    ).sed
-    sed_double = model_double.predict_rest_sed(
-        {
-            **params_eval,
-            "sfh_tsnorm_log_peak_sfr": 1.0,
-            "sfh_tsnorm_peak_lbt_gyr": 2.0,
-            "sfh_tsnorm_width_gyr": 1.5,
-            "sfh_tsnorm_skew": 0.2,
-            "sfh_tsnorm_trunc": 2.5,
-        }
-    ).sed
+    out_old = model_old.predict_rest_sed(baseline_old)
+    out_recent = model_recent.predict_rest_sed(baseline_recent)
+    out_double = model_double.predict_rest_sed(baseline_double)
 
-    wave = ssp.ssp_wave
+    wave = np.asarray(out_old.wavelength)
+    sed_old = np.asarray(out_old.sed)
+    sed_recent = np.asarray(out_recent.sed)
+    sed_double = np.asarray(out_double.sed)
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
     # Left: Linear (optical to NIR)
+    mask_opt = (wave > 3000) & (wave < 3e4)
     ax1.plot(
-        np.array(wave[(wave > 3000) & (wave < 3e4)]),
-        np.array(sed_old[(wave > 3000) & (wave < 3e4)]),
+        wave[mask_opt],
+        sed_old[mask_opt],
         "C0-",
         lw=2.0,
         label="Old burst only (10 Gyr ago)",
     )
     ax1.plot(
-        np.array(wave[(wave > 3000) & (wave < 3e4)]),
-        np.array(sed_recent[(wave > 3000) & (wave < 3e4)]),
+        wave[mask_opt],
+        sed_recent[mask_opt],
         "C1-",
         lw=2.0,
         label="Recent burst only (0.3 Gyr ago)",
     )
     ax1.plot(
-        np.array(wave[(wave > 3000) & (wave < 3e4)]),
-        np.array(sed_double[(wave > 3000) & (wave < 3e4)]),
+        wave[mask_opt],
+        sed_double[mask_opt],
         "k--",
         lw=2.0,
         label="Double burst (combined)",
@@ -181,9 +140,9 @@ both young and old stellar populations.
     ax1.grid(True, alpha=0.2)
 
     # Right: Log-log (full SED)
-    ax2.loglog(wave, np.array(sed_old), "C0-", lw=2.0, label="Old burst only")
-    ax2.loglog(wave, np.array(sed_recent), "C1-", lw=2.0, label="Recent burst only")
-    ax2.loglog(wave, np.array(sed_double), "k--", lw=2.0, label="Double burst")
+    ax2.loglog(wave, sed_old, "C0-", lw=2.0, label="Old burst only")
+    ax2.loglog(wave, sed_recent, "C1-", lw=2.0, label="Recent burst only")
+    ax2.loglog(wave, sed_double, "k--", lw=2.0, label="Double burst")
     ax2.set_xlabel(r"Wavelength [$\AA$]", fontsize=11)
     ax2.set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=11)
     ax2.set_title("Log Scale (Full SED)", fontsize=11)
@@ -192,10 +151,8 @@ both young and old stellar populations.
     ax2.legend(fontsize=10, frameon=False, loc="lower left")
     ax2.grid(True, alpha=0.2, which="both")
 
-    fig.suptitle("Double Burst: Old + Recent Star Formation", fontsize=12, y=1.00)
     fig.tight_layout()
-    plt.savefig("plot_sfh_double_burst.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_sfh_double_burst.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_sfh_double_burst.py:

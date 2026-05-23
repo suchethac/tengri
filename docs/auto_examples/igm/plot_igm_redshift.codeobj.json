@@ -1,13 +1,4 @@
 {
- "SWEEP_CMAPS": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.analysis.plotting",
-   "module_short": "tengri.analysis.plotting",
-   "name": "SWEEP_CMAPS"
-  }
- ],
  "igm_transmission": [
   {
    "is_class": false,
@@ -15,15 +6,6 @@
    "module": "tengri.igm",
    "module_short": "tengri.igm",
    "name": "igm_transmission"
-  }
- ],
- "jnp.array": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jax.numpy",
-   "module_short": "jax.numpy",
-   "name": "array"
   }
  ],
  "jnp.linspace": [
@@ -35,6 +17,15 @@
    "name": "linspace"
   }
  ],
+ "mpl.colors.Normalize": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.colors",
+   "module_short": "matplotlib.colors",
+   "name": "Normalize"
+  }
+ ],
  "np.array": [
   {
    "is_class": false,
@@ -44,22 +35,13 @@
    "name": "array"
   }
  ],
- "np.linspace": [
+ "plt.cm.ScalarMappable": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "linspace"
-  }
- ],
- "np.log10": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "log10"
+   "module": "matplotlib.pyplot.cm",
+   "module_short": "matplotlib.pyplot.cm",
+   "name": "ScalarMappable"
   }
  ],
  "plt.get_cmap": [
@@ -71,24 +53,6 @@
    "name": "get_cmap"
   }
  ],
- "plt.savefig": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "savefig"
-  }
- ],
- "plt.show": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "show"
-  }
- ],
  "plt.subplots": [
   {
    "is_class": false,
@@ -98,15 +62,6 @@
    "name": "subplots"
   }
  ],
- "plt.tight_layout": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "tight_layout"
-  }
- ],
  "setup_style": [
   {
    "is_class": false,
@@ -114,6 +69,15 @@
    "module": "tengri.analysis.plotting",
    "module_short": "tengri.analysis.plotting",
    "name": "setup_style"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
   }
  ]
 }

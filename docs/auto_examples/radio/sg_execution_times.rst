@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:01.008** total execution time for 3 files **from auto_examples/radio**:
+**00:03.858** total execution time for 5 files **from auto_examples/radio**:
 
 .. container::
 
@@ -32,12 +32,18 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
+   * - :ref:`sphx_glr_auto_examples_radio_plot_radio_vs_agn_lbol.py` (``plot_radio_vs_agn_lbol.py``)
+     - 00:03.858
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_radio_plot_alpha_sf_sweep.py` (``plot_alpha_sf_sweep.py``)
-     - 00:00.451
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_radio_plot_q_ir_sweep.py` (``plot_q_ir_sweep.py``)
-     - 00:00.283
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_radio_plot_radio_lir_relation.py` (``plot_radio_lir_relation.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_radio_plot_radio_loudness_sweep.py` (``plot_radio_loudness_sweep.py``)
-     - 00:00.274
+     - 00:00.000
      - 0.0

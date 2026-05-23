@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.670** total execution time for 144 files **from all galleries**:
+**00:23.807** total execution time for 171 files **from all galleries**:
 
 .. container::
 
@@ -32,8 +32,11 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_parametric_sfh.py` (``../examples/sfh/plot_parametric_sfh.py``)
-     - 00:00.670
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_components_isolated.py` (``../examples/multiwavelength/plot_components_isolated.py``)
+     - 00:20.225
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_mass_to_light_ratios.py` (``../examples/sps/plot_mass_to_light_ratios.py``)
+     - 00:03.582
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
      - 00:00.000
@@ -56,19 +59,25 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_alpha_ox_lbol_2d.py` (``../examples/agn/plot_agn_alpha_ox_lbol_2d.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_components_breakdown.py` (``../examples/agn/plot_agn_components_breakdown.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_cos_inc_sweep.py` (``../examples/agn/plot_agn_cos_inc_sweep.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_disc_compare.py` (``../examples/agn/plot_agn_disc_compare.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_hierarchy.py` (``../examples/agn/plot_agn_hierarchy.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_lines_compare.py` (``../examples/agn/plot_agn_lines_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_log_lbol_sweep.py` (``../examples/agn/plot_agn_log_lbol_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_oa_sweep.py` (``../examples/agn/plot_agn_oa_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_polar_dust_temp_sweep.py` (``../examples/agn/plot_agn_polar_dust_temp_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_qsogen_ebv_sweep.py` (``../examples/agn/plot_agn_qsogen_ebv_sweep.py``)
@@ -83,7 +92,7 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_tau_skirtor_sweep.py` (``../examples/agn/plot_agn_tau_skirtor_sweep.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_templates.py` (``../examples/agn/plot_agn_templates.py``)
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_torus_compare.py` (``../examples/agn/plot_agn_torus_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_type12.py` (``../examples/agn/plot_agn_type12.py``)
@@ -101,9 +110,6 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_nlr_blr_lines.py` (``../examples/agn/plot_nlr_blr_lines.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_polar_dust.py` (``../examples/agn/plot_polar_dust.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_qsogen_spectrum.py` (``../examples/agn/plot_qsogen_spectrum.py``)
      - 00:00.000
      - 0.0
@@ -113,9 +119,6 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_variants.py` (``../examples/agn/plot_skirtor_variants.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_torus_comparison.py` (``../examples/agn/plot_torus_comparison.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_attenuation_law_compare.py` (``../examples/dust_attenuation/plot_attenuation_law_compare.py``)
      - 00:00.000
      - 0.0
@@ -123,6 +126,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_geometry_sweep.py` (``../examples/dust_attenuation/plot_dust_geometry_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_law_application.py` (``../examples/dust_attenuation/plot_dust_law_application.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_slope_sweep.py` (``../examples/dust_attenuation/plot_dust_slope_sweep.py``)
@@ -138,6 +144,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_uv_bump_sweep.py` (``../examples/dust_attenuation/plot_uv_bump_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_uv_ir_energy_balance.py` (``../examples/dust_attenuation/plot_uv_ir_energy_balance.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_01_size_distribution.py` (``../examples/dust_emission/plot_astrodust_hd23_01_size_distribution.py``)
@@ -182,6 +191,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_qpah_umin_grid.py` (``../examples/dust_emission/plot_dust_qpah_umin_grid.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_ir_library_compare.py` (``../examples/dust_emission/plot_ir_library_compare.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_pahspec_lgU_sweep.py` (``../examples/dust_emission/plot_pahspec_lgU_sweep.py``)
      - 00:00.000
      - 0.0
@@ -215,6 +227,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_igm_plot_igm_z_evolution.py` (``../examples/igm/plot_igm_z_evolution.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_sed_with_igm.py` (``../examples/igm/plot_sed_with_igm.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_inference_plot_convergence.py` (``../examples/inference/plot_convergence.py``)
      - 00:00.000
      - 0.0
@@ -242,6 +257,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_fir_radio_correlation.py` (``../examples/multiwavelength/plot_fir_radio_correlation.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_lbg_observed_evolution.py` (``../examples/multiwavelength/plot_lbg_observed_evolution.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_agn.py` (``../examples/multiwavelength/plot_panchromatic_agn.py``)
      - 00:00.000
      - 0.0
@@ -266,7 +284,19 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_nebular_plot_bpt_diagnostics.py` (``../examples/nebular/plot_bpt_diagnostics.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_fesc_logu_atlas.py` (``../examples/nebular/plot_cue_fesc_logu_atlas.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_flex_tour.py` (``../examples/nebular/plot_cue_flex_tour.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_parameter_atlas.py` (``../examples/nebular/plot_cue_parameter_atlas.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_dig_frac_sweep.py` (``../examples/nebular/plot_dig_frac_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_fesc_lya_sweep.py` (``../examples/nebular/plot_fesc_lya_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_fesc_sweep.py` (``../examples/nebular/plot_fesc_sweep.py``)
@@ -299,10 +329,16 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_nebular_plot_shock_emission.py` (``../examples/nebular/plot_shock_emission.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_color_tracks_redshift.py` (``../examples/photometry/plot_color_tracks_redshift.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_filter_curves.py` (``../examples/photometry/plot_filter_curves.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_filter_set_comparison.py` (``../examples/photometry/plot_filter_set_comparison.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_galaxy_with_filters.py` (``../examples/photometry/plot_galaxy_with_filters.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_photometric_fit.py` (``../examples/photometry/plot_photometric_fit.py``)
@@ -330,6 +366,12 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_radio_plot_radio_loudness_sweep.py` (``../examples/radio/plot_radio_loudness_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_radio_plot_radio_vs_agn_lbol.py` (``../examples/radio/plot_radio_vs_agn_lbol.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_compare.py` (``../examples/recipes/plot_recipe_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_compare_priors.py` (``../examples/recipes/plot_recipe_compare_priors.py``)
@@ -368,6 +410,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_sfh_plot_lnorm_peak_sweep.py` (``../examples/sfh/plot_lnorm_peak_sweep.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_parametric_sfh.py` (``../examples/sfh/plot_parametric_sfh.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_psd_alternatives.py` (``../examples/sfh/plot_psd_alternatives.py``)
      - 00:00.000
      - 0.0
@@ -383,13 +428,16 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_double_burst.py` (``../examples/sfh/plot_sfh_double_burst.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_form_compare.py` (``../examples/sfh/plot_sfh_form_compare.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_nonparametric_compare.py` (``../examples/sfh/plot_sfh_nonparametric_compare.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_quenching_compare.py` (``../examples/sfh/plot_sfh_quenching_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_stochastic_sfh.py` (``../examples/sfh/plot_stochastic_sfh.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_wrong_model_trap.py` (``../examples/sfh/plot_wrong_model_trap.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_resolution_sweep.py` (``../examples/spectroscopy/plot_resolution_sweep.py``)
@@ -398,13 +446,25 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_spectral_features.py` (``../examples/spectroscopy/plot_spectral_features.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_spectral_indices_vs_age.py` (``../examples/spectroscopy/plot_spectral_indices_vs_age.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_spectrum_fit.py` (``../examples/spectroscopy/plot_spectrum_fit.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_velocity_dispersion_sweep.py` (``../examples/spectroscopy/plot_velocity_dispersion_sweep.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_ionising_lum.py` (``../examples/sps/plot_ionising_lum.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_sps_library_compare.py` (``../examples/sps/plot_sps_library_compare.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_ssp_age_sweep.py` (``../examples/sps/plot_ssp_age_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_ssp_color_compare.py` (``../examples/sps/plot_ssp_color_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_ssp_grid.py` (``../examples/sps/plot_ssp_grid.py``)
@@ -416,10 +476,19 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_sps_plot_ssp_metallicity_sweep.py` (``../examples/sps/plot_ssp_metallicity_sweep.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_age_dust_2d.py` (``../examples/usecases/plot_usecase_age_dust_2d.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_age_dust_degeneracy.py` (``../examples/usecases/plot_usecase_age_dust_degeneracy.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_d4000_age.py` (``../examples/usecases/plot_usecase_d4000_age.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_emission_line_pcc.py` (``../examples/usecases/plot_usecase_emission_line_pcc.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_hubble_sequence.py` (``../examples/usecases/plot_usecase_hubble_sequence.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_jwst_color_color.py` (``../examples/usecases/plot_usecase_jwst_color_color.py``)
@@ -429,6 +498,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_sfr_indicator_compare.py` (``../examples/usecases/plot_usecase_sfr_indicator_compare.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_uv_slope_beta.py` (``../examples/usecases/plot_usecase_uv_slope_beta.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_uvj_diagram.py` (``../examples/usecases/plot_usecase_uvj_diagram.py``)
@@ -446,7 +518,13 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_method_comparison.py` (``../examples/workflows/plot_workflow_method_comparison.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_photoz_degeneracy.py` (``../examples/workflows/plot_workflow_photoz_degeneracy.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_post_starburst.py` (``../examples/workflows/plot_workflow_post_starburst.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_quenching_diagnostics.py` (``../examples/workflows/plot_workflow_quenching_diagnostics.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_xray_plot_E_cut_sweep.py` (``../examples/xray/plot_E_cut_sweep.py``)
@@ -462,5 +540,8 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_xray_plot_xray_sf.py` (``../examples/xray/plot_xray_sf.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_vs_agn_lbol.py` (``../examples/xray/plot_xray_vs_agn_lbol.py``)
      - 00:00.000
      - 0.0

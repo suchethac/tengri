@@ -18,65 +18,61 @@
 .. _sphx_glr_auto_examples_radio_plot_q_ir_sweep.py:
 
 
-FIR-Radio Correlation (q_IR)
-=============================
+FIR-radio correlation: q_IR sets radio loudness
+================================================
 
-The FIR-radio correlation links a galaxy's infrared luminosity to its
-1.4 GHz synchrotron emission via the dimensionless parameter
-:math:`q_{\rm IR} = \log_{10}(L_{\rm IR} / 3.75\times10^{12} \, L_{\rm 1.4GHz})`.
-Higher :math:`q_{\rm IR}` means relatively less radio per unit star formation.
-The canonical value for star-forming galaxies is 2.64 (Bell 2003).
+The dimensionless parameter q_IR characterizes the FIR-radio correlation,
+linking far-infrared luminosity to 1.4 GHz synchrotron emission. Higher q_IR
+means relatively weaker radio per unit star formation. We vary q_IR across
+the observationally motivated range 2.0–3.3 at fixed L_IR = 10^11 L_sun,
+demonstrating how radio loudness evolves (Bell 2003).
 
-.. sphx-glr-precomputed-img:
+Reference: Bell 2003, ApJ 586, 794.
 
-.. image:: images/sphx_glr_plot_q_ir_sweep_001.png
-   :alt: plot_q_ir_sweep
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 18-58
+.. GENERATED FROM PYTHON SOURCE LINES 13-53
 
 .. code-block:: Python
 
 
+    import warnings
+
     import jax.numpy as jnp
+    import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri.analysis.plotting import SWEEP_CMAPS, setup_style
-    from tengri.radio import radio_star_forming
+    import tengri
+    from tengri.analysis.plotting import setup_style
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-    # --- Wavelength grid: radio regime (1 mm to 10 m) ---
+    from tengri.radio import radio_star_forming
+
     wave = jnp.logspace(7, 11, 600)  # Angstrom: 1 mm = 1e7 Å, 10 m = 1e11 Å
-
     L_ir = 1e11  # L_sun — ULIRG-like
 
-    q_ir_values = [2.0, 2.3, 2.64, 3.0, 3.3]
-    cmap = plt.get_cmap(SWEEP_CMAPS["radio"])
-    colors = [cmap(i / max(len(q_ir_values) - 1, 1)) for i in range(len(q_ir_values))]
+    q_ir_values = np.array([2.0, 2.3, 2.64, 3.0, 3.3])
+    norm = mpl.colors.Normalize(vmin=q_ir_values.min(), vmax=q_ir_values.max())
+    cmap = plt.get_cmap("viridis")
 
-    fig, ax = plt.subplots(figsize=(7, 4))
-
-    for q_ir, color in zip(q_ir_values, colors):
-        # radio_star_forming takes q_ir as a parameter
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    for q_ir in q_ir_values:
         L_nu = radio_star_forming(wave, L_ir=L_ir, q_ir=q_ir, alpha_sf=0.8)
         nu_ghz = (3e18 / np.array(wave)) / 1e9  # convert Å → Hz → GHz
-        ax.loglog(nu_ghz, np.array(L_nu), color=color, lw=2.0, label=rf"$q_{{\rm IR}}={q_ir}$")
+        ax.loglog(nu_ghz, np.array(L_nu), color=cmap(norm(q_ir)), lw=1.4)
 
-    ax.set_xlabel("Frequency [GHz]", fontsize=12)
-    ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]", fontsize=12)
+    ax.set_xlabel(r"Frequency $\nu$ [GHz]")
+    ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
     ax.invert_xaxis()
     ax.set_xlim(200, 0.1)
     ax.set_ylim(1e-8, 1e2)
-    ax.legend(fontsize=10, frameon=False)
-    ax.set_title(
-        r"FIR-Radio Correlation: $q_{\rm IR}$ sweep ($L_{\rm IR}=10^{11}\,L_\odot$)",
-        fontsize=12,
-    )
-    plt.tight_layout()
-    plt.savefig("plot_q_ir_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
+
+    cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+    cbar.set_label(r"q$_{\rm IR}$")
+
+    fig.tight_layout()
+    fig.savefig("plot_q_ir_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_q_ir_sweep.py:

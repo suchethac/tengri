@@ -25,27 +25,12 @@ Sweep across the 13 published PAHspec starlight spectra (mMMP, m31bulge,
 BC03/BPASS SSPs) at fixed ionization parameter. Demonstrates strong
 dependence of PAH features on starlight hardness.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_pahspec_starlight_sweep_001.png
-   :alt: plot_pahspec_starlight_sweep
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 16-69
-
-
-
-.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_pahspec_starlight_sweep_001.png
-   :alt: Draine+2021 PAHspec — starlight sweep at $\log_{10} U = 1$
-   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_pahspec_starlight_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 9-64
 
 .. code-block:: Python
 
+
+    import warnings
 
     import matplotlib.pyplot as plt
     import numpy as np
@@ -58,6 +43,8 @@ dependence of PAH features on starlight hardness.
     )
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    warnings.filterwarnings("ignore", message=".*deprecated.*")
 
     tpl = load_pahspec_or_raise(data_path("pahspec_draine2021.h5"))
     wave_um = np.asarray(tpl.wavelength_um)
@@ -93,12 +80,10 @@ dependence of PAH features on starlight hardness.
         ylabel=r"$\lambda I_\lambda / N_{\rm H}\ [\mathrm{erg\,s^{-1}\,sr^{-1}\,H^{-1}}]$",
         xlim=(2.0, 1.0e3),
         ylim=(1.0e-27, 5.0e-24),
-        title=r"Draine+2021 PAHspec — starlight sweep at $\log_{10} U = 1$",
     )
     ax.legend(loc="lower left", frameon=False, fontsize=8, ncol=1)
     fig.tight_layout()
-    plt.savefig("plot_pahspec_starlight_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
+    fig.savefig("plot_pahspec_starlight_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_pahspec_starlight_sweep.py:

@@ -18,7 +18,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates computing emission-line ratios for a mock galaxy catalog with mixed star-forming and AGN fractions. Plots the BPT diagram ([OIII]/Hβ vs [NII]/Hα) and overlays Kewley+2001 and Kauffmann+2003 demarcation lines to show how emission-line diagnostics separate ionization mechanisms.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates BPT ([OIII]/Hbeta vs [NII]/Halpha) line-ratio diagnostics on a mock galaxy catalog with varying AGN fraction. Overlays Kewley+2001 and Kauffmann+2003 demarcation lines to show the clean separation of ionization mechanisms across the diagnostic plane.">
 
 .. only:: html
 
@@ -29,13 +29,13 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Workflow: BPT Emission-Line Classification</div>
+      <div class="sphx-glr-thumbnail-title">BPT diagram: emission lines separate star-forming from AGN ionization</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates quantifying observational uncertainties through posterior predictive resampling. A galaxy is fit with NUTS, then the posterior is resampled 200 times to generate a posterior predictive SED ensemble. Shows the SED with 1σ and 2σ confidence envelopes. This workflow illustrates how to propagate Bayesian posterior uncertainty into derived predictions for robust error budgets.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates dust attenuation effects and how fitting uncertainty propagates to the recovered SED. A galaxy with free dust parameters (tau_bc and tau_diff) is fit with MAP, showing the best-fit SED plus mock perturbation envelopes to illustrate the uncertainty range from photometric noise.">
 
 .. only:: html
 
@@ -46,13 +46,13 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Workflow: Dust Attenuation Uncertainty via Posterior Resampling</div>
+      <div class="sphx-glr-thumbnail-title">Dust attenuation: uncertainty in SED from dust parameter estimation</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates fitting a z=4 Lyman-break galaxy with JWST/HST photometry. A young, dust-free star-forming galaxy&#x27;s SED shows a sharp UV dropout. This workflow shows how to recover age, dust, and redshift from the characteristic Lyman-break signature in broadband colors.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Fits a z=4 young, dust-free star-forming galaxy using JWST (F150W/F200W/F277W) and HST (F814W) broadband photometry. The characteristic Lyman-break signature (sharp UV dropout at observed ~4 micron) constrains age and metallicity even with just 4 bands. Demonstrates recovery of the young starburst component from the dropout depth.">
 
 .. only:: html
 
@@ -63,13 +63,13 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Workflow: High-z Lyman-Break Galaxy</div>
+      <div class="sphx-glr-thumbnail-title">High-redshift Lyman-break galaxy: Lyman dropout signatures in JWST/HST</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compares MAP (point estimate) against NUTS (gold-standard MCMC) on identical mock data. MAP underestimates posterior uncertainty by design; NUTS is the reference. VI is omitted from the demo for runtime — see examples/inference/plot_method_comparison.py for a 3-method version.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates running MAP inference on SDSS photometry and comparing the MAP fit to the ground truth SFH. MAP provides a point estimate of the posterior without sampling overhead; for uncertainty quantification, posterior sampling methods (NUTS, VI) would be needed.">
 
 .. only:: html
 
@@ -80,13 +80,30 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Workflow: Inference Method Comparison</div>
+      <div class="sphx-glr-thumbnail-title">Inference method comparison: MAP as reference for SFH recovery</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates identifying post-starburst galaxies through model comparison. A post-starburst has a truncated SFH with a recent burst followed by quenching. When fit with a smooth tau model (incorrect), the fit poorly recovers the truth. This shows how model misspecification can bias SFH inference and why flexible models matter for interpreting star formation histories.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Two galaxies with very different physical properties — a dusty star-forming galaxy at z=0.3 and an unobscured Lyman-break galaxy at z=3.5 — can produce nearly identical ugrizY broadband fluxes. The 4000 Å break of the dusty low-z galaxy and the Lyman break of the high-z galaxy land at the same observed wavelength, so without intermediate bands or IR coverage the photo-z is bimodal.">
+
+.. only:: html
+
+  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_photoz_degeneracy_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/workflows/plot_workflow_photoz_degeneracy`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">The photo-z degeneracy: dusty z≈0.3 vs unobscured z≈3.5</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A post-starburst galaxy shows a recent burst followed by quenching. When fit with smooth tau-model (incorrect), the fit biases the recovered SFH. This workflow compares two models on the same mock data to show how model flexibility directly impacts star formation history inference.">
 
 .. only:: html
 
@@ -97,7 +114,24 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Workflow: Post-Starburst (E+A) Galaxy Diagnosis</div>
+      <div class="sphx-glr-thumbnail-title">Model misspecification: post-starburst galaxies reveal wrong SFH</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="When did star formation in a galaxy stop? Optical-only color, the 4000 Å break, and Hα equivalent width respond on different timescales: NUV − r reddens within ~100 Myr of quenching (loss of O/B stars), D_n(4000) continues to rise over 1–3 Gyr as A stars evolve, and Hα EW drops fastest of all (within ~10 Myr) since it tracks only the youngest ionizing photons.">
+
+.. only:: html
+
+  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_quenching_diagnostics_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/workflows/plot_workflow_quenching_diagnostics`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Three diagnostics of quenching epoch in one figure</div>
     </div>
 
 
@@ -115,5 +149,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
    /auto_examples/workflows/plot_workflow_dust_mc_resampling
    /auto_examples/workflows/plot_workflow_high_z_lbg
    /auto_examples/workflows/plot_workflow_method_comparison
+   /auto_examples/workflows/plot_workflow_photoz_degeneracy
    /auto_examples/workflows/plot_workflow_post_starburst
+   /auto_examples/workflows/plot_workflow_quenching_diagnostics
 

@@ -37,10 +37,12 @@ Requires the precomputed grid ``data/relagn_disc_grid.h5``.
    :alt: plot_relagn_spin
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-32
+.. GENERATED FROM PYTHON SOURCE LINES 22-34
 
 .. code-block:: Python
 
+
+    # TODO: refactor to SEDModel.build API (currently uses low-level internal API)
 
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
@@ -52,11 +54,11 @@ Requires the precomputed grid ``data/relagn_disc_grid.h5``.
     setup_style()
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 33-34
+.. GENERATED FROM PYTHON SOURCE LINES 35-36
 
 Wavelength grid: 100 Å (UV) to 3 µm (NIR)
 
-.. GENERATED FROM PYTHON SOURCE LINES 34-47
+.. GENERATED FROM PYTHON SOURCE LINES 36-49
 
 .. code-block:: Python
 
@@ -74,11 +76,11 @@ Wavelength grid: 100 Å (UV) to 3 µm (NIR)
     colors = plt.cm.plasma(np.linspace(0.1, 0.9, len(astar_values)))
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 48-49
+.. GENERATED FROM PYTHON SOURCE LINES 50-51
 
 Load RELAGN model from registry
 
-.. GENERATED FROM PYTHON SOURCE LINES 49-96
+.. GENERATED FROM PYTHON SOURCE LINES 51-98
 
 .. code-block:: Python
 
@@ -130,14 +132,14 @@ Load RELAGN model from registry
     ax_sed.legend(frameon=False, fontsize=9)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 97-101
+.. GENERATED FROM PYTHON SOURCE LINES 99-103
 
 Panel 2: UV spectral slope α vs spin
 α becomes less negative (harder) as spin increases because the shrinking ISCO
 pushes the inner-disc temperature blueward, contributing more flux at
 912–3000 Å.  α = d log L_ν / d log ν; Rayleigh-Jeans limit → α = +2.
 
-.. GENERATED FROM PYTHON SOURCE LINES 101-120
+.. GENERATED FROM PYTHON SOURCE LINES 103-121
 
 .. code-block:: Python
 
@@ -159,7 +161,6 @@ pushes the inner-disc temperature blueward, contributing more flux at
     # the Novikov-Thorne outer disc uses the non-relativistic formula beyond that.
 
     plt.savefig("plot_relagn_spin.png", dpi=150, bbox_inches="tight")
-    plt.show()
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_relagn_spin.py:

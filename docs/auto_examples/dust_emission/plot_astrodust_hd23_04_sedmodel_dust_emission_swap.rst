@@ -25,27 +25,12 @@ Compare dust emission templates at fixed infrared luminosity. Shows how
 spectral shape changes across modified-blackbody, Draine+2021 PAHspec, and
 Hensley & Draine 2023 Astrodust while bolometric output remains conserved.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_astrodust_hd23_04_sedmodel_dust_emission_swap_001.png
-   :alt: plot_astrodust_hd23_04_sedmodel_dust_emission_swap
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 16-108
-
-
-
-.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_04_sedmodel_dust_emission_swap_001.png
-   :alt: Same $L_{\rm ir}=10^{44}\,\mathrm{erg\,s^{-1}}$, three templates
-   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_04_sedmodel_dust_emission_swap_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 9-103
 
 .. code-block:: Python
 
+
+    import warnings
 
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
@@ -57,9 +42,11 @@ Hensley & Draine 2023 Astrodust while bolometric output remains conserved.
         DustEmissionSEDComponent,
         DustEmissionSEDComponentConfig,
     )
-    from tengri.core.component import PipelineState
+    from tengri.protocols.component import PipelineState
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 
     def _eval(comp: DustEmissionSEDComponent, wave_aa: jnp.ndarray, params: dict) -> np.ndarray:
@@ -132,17 +119,10 @@ Hensley & Draine 2023 Astrodust while bolometric output remains conserved.
         ylabel=r"$\nu L_\nu\ [\mathrm{erg\,s^{-1}}]$",
         xlim=(1.0, 1.0e3),
         ylim=(1.0e40, 5.0e43),
-        title=r"Same $L_{\rm ir}=10^{44}\,\mathrm{erg\,s^{-1}}$, three templates",
     )
     ax.legend(loc="lower center", frameon=False, fontsize=10)
     fig.tight_layout()
-    plt.savefig("plot_astrodust_hd23_04_sedmodel_dust_emission_swap.png", dpi=150, bbox_inches="tight")
-    plt.show()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.068 seconds)
+    fig.savefig("plot_astrodust_hd23_04_sedmodel_dust_emission_swap.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_04_sedmodel_dust_emission_swap.py:
