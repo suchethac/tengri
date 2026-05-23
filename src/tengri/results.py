@@ -11,6 +11,7 @@ import contextlib
 import datetime as _dt
 import platform as _platform
 import sys as _sys
+import warnings as _warnings
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -253,6 +254,16 @@ class FitResult:
     citation_keys: list[str] = field(default_factory=list)
     backend: str | None = None
     preset: str | None = None
+
+    @property
+    def provenance(self) -> FitRecord:
+        """Deprecated alias for :attr:`record`. Will be removed in tengri v1.0."""
+        _warnings.warn(
+            "FitResult.provenance is deprecated; use FitResult.record instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.record
 
     def __getattr__(self, name: str) -> Any:
         """Forward attribute access to inner result object.

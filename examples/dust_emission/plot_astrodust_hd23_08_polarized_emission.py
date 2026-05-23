@@ -4,14 +4,9 @@ Astrodust+PAH polarized emission and polarization fraction
 
 Polarized emission and polarization fraction from Astrodust grains at the
 Hensley & Draine 2023 fiducial ionization parameter.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_astrodust_hd23_08_polarized_emission_001.png
-   :alt: plot_astrodust_hd23_08_polarized_emission
-   :class: sphx-glr-single-img
-
 """
+
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,6 +16,8 @@ from tengri.analysis.plotting import setup_style
 from tengri.components.dust.astrodust_hd23 import load_astrodust_hd23_or_raise
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 tpl = load_astrodust_hd23_or_raise(data_path("astrodust_templates.h5"))
 wave_um = np.asarray(tpl.wavelength_um)
@@ -47,7 +44,6 @@ ax1.set(
     ylabel=r"$\lambda\,P_\lambda/N_{\rm H}\ [\mathrm{erg\,s^{-1}\,sr^{-1}\,H^{-1}}]$",
     xlim=(10.0, 1.0e4),
     ylim=(1.0e-32, 1.0e-25),
-    title=rf"Polarized emission at $\log_{{10}}U={lgU[i]:.1f}$",
 )
 
 ax2.plot(wave_um, p_frac, color="k", lw=1.5)
@@ -57,9 +53,7 @@ ax2.set(
     ylabel=r"$P_\lambda / I_\lambda^{\rm Astrodust}$",
     xlim=(50.0, 3.0e3),
     ylim=(0.0, 0.30),
-    title="Astrodust polarization fraction",
 )
 
 fig.tight_layout()
-plt.savefig("plot_astrodust_hd23_08_polarized_emission.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_astrodust_hd23_08_polarized_emission.png", dpi=150, bbox_inches="tight")

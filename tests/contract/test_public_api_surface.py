@@ -174,10 +174,15 @@ DEMOTED_BUT_IMPORTABLE: frozenset[str] = frozenset(
         "lean",
         "persistent",
         # SEDComponent extension surface — demoted to `tengri.protocols.*`
+        # Both renamed names and back-compat aliases resolve here.
         "ComponentIOError",
         "DerivedKey",
         "DerivedState",
         "ForwardState",
+        # Back-compat aliases for renamed classes — emit DeprecationWarning
+        "DerivedBundle",
+        "PipelineContractError",
+        "Provenance",
         # ── Phase 2 (2026-05) — relocated to sub-namespaces ─────────
         # Resolve via `__getattr__` deprecation shim, emit DeprecationWarning.
         # Result classes → tengri.results

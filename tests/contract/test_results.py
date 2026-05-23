@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import dataclasses
 import tempfile
+import warnings
 from pathlib import Path
 
 import pytest
@@ -122,6 +123,15 @@ class TestFitResult:
         result = FitResult(inner={}, record=rec)
         summary = result.summary()
         assert "123.4" in summary
+
+    def test_provenance_attribute_is_deprecated(self):
+        """Old `.provenance` attribute still works but warns."""
+        rec = FitRecord.capture()
+        result = FitResult(inner={}, record=rec)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            assert result.provenance is rec
+        assert any(issubclass(w.category, DeprecationWarning) for w in caught)
 
     @pytest.mark.skipif(
         __import__("importlib.util").util.find_spec("h5py") is None,

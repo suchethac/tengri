@@ -5,14 +5,9 @@ Hensley & Draine 2023 Astrodust+PAH: log U sweep
 Sweep ionization parameter across the published :math:`[-3, +6]` range of the
 Hensley & Draine 2023 grid. Shows FIR peak shift toward shorter wavelengths
 and rising MIR PAH features as radiation field intensifies.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_astrodust_hd23_lgU_sweep_001.png
-   :alt: plot_astrodust_hd23_lgU_sweep
-   :class: sphx-glr-single-img
-
 """
+
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -22,6 +17,8 @@ from tengri.analysis.plotting import setup_style
 from tengri.components.dust.astrodust_hd23 import load_astrodust_hd23_or_raise
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 tpl = load_astrodust_hd23_or_raise(data_path("astrodust_templates.h5"))
 wave_um = np.asarray(tpl.wavelength_um)
@@ -51,9 +48,7 @@ ax.set(
     ylabel=r"$\lambda I_\lambda / N_{\rm H}\ [\mathrm{erg\,s^{-1}\,sr^{-1}\,H^{-1}}]$",
     xlim=(1.0, 1.0e3),
     ylim=(1.0e-29, 1.0e-18),
-    title="Hensley & Draine 2023 Astrodust+PAH — log U sweep",
 )
 ax.legend(loc="lower right", frameon=False, fontsize=9, ncol=2)
 fig.tight_layout()
-plt.savefig("plot_astrodust_hd23_lgU_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_astrodust_hd23_lgU_sweep.png", dpi=150, bbox_inches="tight")

@@ -17,7 +17,8 @@ components target:
   component uses to declare its inputs, outputs, and free parameters.
 - :class:`Likelihood`, :class:`ObservationModel` — analogous shapes
   for the observation layer.
-- :class:`ComponentIOError` — raised when one block's declared inputs disagree with
+- :class:`ComponentIOError` (alias :data:`PipelineContractError`,
+  deprecated) — raised when one block's declared inputs disagree with
   what an upstream block publishes.
 
 See ``docs/architecture/`` and the in-tree ADRs for the wider design.
@@ -31,6 +32,7 @@ from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
     ParamDeclaration,
+    PipelineContractError,  # deprecated alias of ComponentIOError; removed in v1.0
     PipelineState,  # soft alias of ForwardState; removed in v1.0
     SEDComponent,
     SEDComponentConfig,
@@ -58,3 +60,20 @@ __all__ = [
     "SpatialComponent",
     "SubModel",
 ]
+
+
+_RENAMED_SYMBOLS = {
+    "DerivedBundle": ("DerivedState", "tengri.protocols.DerivedState"),
+}
+
+
+def __getattr__(name: str) -> object:
+    if name in _RENAMED_SYMBOLS:
+        new_name, new_path = _RENAMED_SYMBOLS[name]
+        from tengri._deprecated import deprecated_attribute
+
+        new_obj = globals()[new_name]
+        return deprecated_attribute(
+            new_obj, old_name=f"tengri.protocols.{name}", new_name=new_path
+        )
+    raise AttributeError(f"module 'tengri.protocols' has no attribute {name!r}")

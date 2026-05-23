@@ -1,99 +1,66 @@
 """
-SKIRTOR Torus: Viewing Angle Sweep
-===================================
+SKIRTOR torus: viewing angle tunes IR profile shape
+====================================================
 
-Sweep `agn_cos_inc` from 0.95 (face-on) to 0.05 (edge-on) and watch the
-infrared emission profile change as the line of sight cuts through more of
-the SKIRTOR torus.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_agn_cos_inc_sweep_001.png
-   :alt: plot_agn_cos_inc_sweep
-   :class: sphx-glr-single-img
-
+The torus inclination angle determines how much cold dust emission we
+observe. Face-on (high ``cos_inc``) views show a smooth thermal bump;
+edge-on (low ``cos_inc``) views expose more reprocessed mid-infrared
+flux and can show silicate absorption features.
 """
 
-from pathlib import Path
+import warnings
 
+import jax
 import jax.numpy as jnp
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Locate SKIRTOR grid file
-_grid_path = None
-for p in [
-    Path("data/skirtor_templates_v3.h5"),
-    Path("../data/skirtor_templates_v3.h5"),
-    Path("../../data/skirtor_templates_v3.h5"),
-    Path("../../../data/skirtor_templates_v3.h5"),
-    Path("data/skirtor_templates_v2.h5"),
-    Path("../data/skirtor_templates_v2.h5"),
-    Path("../../data/skirtor_templates_v2.h5"),
-    Path("../../../data/skirtor_templates_v2.h5"),
-]:
-    if p.exists():
-        _grid_path = str(p)
-        break
-
-if _grid_path is None:
-    raise SystemExit(
-        "Skipping: SKIRTOR grid not found. Run: python scripts/download_skirtor_templates.py"
-    )
-
+import tengri
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn import create_skirtor_from_grid
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-# Load the SKIRTOR interpolator
-skirtor_fn = create_skirtor_from_grid(_grid_path)
+ssp = tengri.load_ssp()
+model = tengri.SEDModel.build(
+    ssp,
+    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 3.0, "log_peak_sfr": 0.5,
+         "alpha": 2.0, "beta": 2.5},
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
+    agn={
+        "type": "composable",
+        "disc": {"type": "multicolor", "*": tengri.FIXED},
+        "torus": {"type": "skirtor", "*": tengri.FIXED, "tau_skirtor": 7.0},
+        "lines": {"type": "nlr", "*": tengri.FIXED},
+        "*": tengri.FIXED,
+        "log_lbol": 11.0,
+    },
+    redshift=tengri.Fixed(0.05),
+)
+baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-# Wavelength grid: 0.5 - 500 micron (IR torus dominated)
-wavelength = jnp.logspace(np.log10(5e3), np.log10(5e6), 512)
-wave_um = np.array(wavelength) / 1e4
+cos_inc_values = np.array([0.95, 0.75, 0.5, 0.25, 0.05])
+norm = mpl.colors.Normalize(vmin=cos_inc_values.min(), vmax=cos_inc_values.max())
+cmap = plt.get_cmap("viridis")
 
-# Cosine of inclination values to sweep
-cos_inc_values = [0.95, 0.75, 0.50, 0.25, 0.05]
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
+for cos_inc in cos_inc_values:
+    params = {**baseline, "agn_cos_inc": jnp.float64(cos_inc)}
+    out = model.predict_rest_sed(params)
+    wave = np.asarray(out.wavelength)
+    nu = 2.998e18 / wave
+    nu_l_nu = nu * np.asarray(out.sed)
+    ax.loglog(wave, nu_l_nu, color=cmap(norm(cos_inc)), lw=1.4)
 
-# Create figure with single panel
-fig, ax = plt.subplots(figsize=(8, 5))
+ax.set_xlim(100, 1e6)
+ax.set_ylim(1e40, 1e45)
+ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
-# Generate colors from colormap
-colors = plt.cm.viridis(np.linspace(0.0, 0.85, len(cos_inc_values)))
-
-# Fixed parameters: typical values
-agn_log_lbol = 11.0
-agn_tau_skirtor = 7.0
-agn_p_skirtor = 1.0  # Radial power
-agn_q_skirtor = 1.0
-agn_oa_skirtor = 40.0
-
-# Sweep viewing angle
-for cos_inc, color in zip(cos_inc_values, colors):
-    try:
-        inc_deg = np.degrees(np.arccos(cos_inc))
-        sed = skirtor_fn(
-            wavelength,
-            agn_log_lbol=agn_log_lbol,
-            agn_tau_skirtor=agn_tau_skirtor,
-            agn_p_skirtor=agn_p_skirtor,
-            agn_q_skirtor=agn_q_skirtor,
-            agn_oa_skirtor=agn_oa_skirtor,
-            agn_cos_inc=cos_inc,
-        )
-        ax.loglog(wave_um, np.array(sed), lw=2.0, color=color, label=rf"$i = {inc_deg:.0f}°$")
-    except Exception:
-        continue
-
-ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title("SKIRTOR torus: viewing-angle sweep", fontsize=12)
-ax.legend(fontsize=10, frameon=False, loc="best")
-ax.set_xlim(0.5, 500)
-ax.set_ylim(1e21, 1e32)
-ax.grid(False)
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+cbar.set_label(r"$\cos \theta_{\rm torus}$")
 
 fig.tight_layout()
-plt.savefig("plot_agn_cos_inc_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_agn_cos_inc_sweep.png", dpi=150, bbox_inches="tight")
