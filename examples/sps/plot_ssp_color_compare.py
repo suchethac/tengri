@@ -46,32 +46,33 @@ COLORS_TO_PLOT = [
 
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 
-# Per-library colors
 data = {}
 for ssp_name, label in LIBRARIES:
     try:
         ssp = tengri.load_ssp(ssp_name)
     except (FileNotFoundError, Exception):
         continue
+    sfh = {
+        "type": "tsnorm",
+        "*": tengri.FIXED,
+        "peak_lbt_gyr": 3.0,
+        "width_gyr": 2.0,
+        "log_peak_sfr": 1.0,
+        "skew": 0.3,
+        "trunc": 10.0,
+    }
+    dust = {
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_diff": 0.2,
+        "tau_bc": 0.3,
+        "slope": -0.7,
+    }
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={
-            "type": "tsnorm",
-            "*": tengri.FIXED,
-            "peak_lbt_gyr": 3.0,
-            "width_gyr": 2.0,
-            "log_peak_sfr": 1.0,
-            "skew": 0.3,
-            "trunc": 10.0,
-        },
-        dust={
-            "type": "two_component",
-            "*": tengri.FIXED,
-            "tau_diff": 0.2,
-            "tau_bc": 0.3,
-            "slope": -0.7,
-        },
+        sfh=sfh,
+        dust=dust,
         redshift=tengri.Fixed(0.05),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))

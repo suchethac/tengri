@@ -66,9 +66,7 @@ colors = plt.cm.Reds(np.linspace(0.3, 0.9, len(outflow_rates)))
 
 sfr_const = np.ones_like(t_yr)
 for eta, color in zip(outflow_rates, colors):
-    log_z = closed_box_metallicity(
-        t_yr, sfr_const, yield_y=0.03, eta_outflow=eta, f_gas_init=0.9
-    )
+    log_z = closed_box_metallicity(t_yr, sfr_const, yield_y=0.03, eta_outflow=eta, f_gas_init=0.9)
     ax.plot(t_gyr, 10.0 ** np.array(log_z), lw=1.5, color=color, label=f"η={eta:.1f}")
 
 ax.set_xlabel("Look-back Time [Gyr]")

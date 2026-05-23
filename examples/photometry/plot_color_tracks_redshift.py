@@ -41,7 +41,6 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_g", "sds
 
 
 def _build_population(peak_lbt, width, tau_diff):
-    """Return a model with the given SFH peak time / width / dust."""
     return tengri.SEDModel.build(
         tengri.load_ssp(),
         observation=obs,
@@ -61,7 +60,6 @@ def _build_population(peak_lbt, width, tau_diff):
             "tau_bc": 0.3,
             "slope": -0.7,
         },
-        # redshift will be reassigned per evaluation below
         redshift=tengri.Uniform(0.001, 3.5),
     )
 
@@ -85,7 +83,6 @@ for label, peak, width, tau_diff, color in POPULATIONS:
         rz[i] = -2.5 * np.log10(flux[1] / flux[2])
     ax.plot(rz, gr, color=color, lw=1.6, label=label, zorder=3)
 
-    # mark integer-z stops
     for z_mark in [0.1, 0.5, 1.0, 1.5, 2.0]:
         i_m = int(np.argmin(np.abs(z_grid - z_mark)))
         ax.scatter(rz[i_m], gr[i_m], s=22, color=color, zorder=4)
@@ -98,10 +95,9 @@ for label, peak, width, tau_diff, color in POPULATIONS:
             color=color,
         )
 
-ax.set_xlabel(r"$r - z$  [AB mag]")
-ax.set_ylabel(r"$g - r$  [AB mag]")
-ax.set_xlim(-0.2, 2.0)
-ax.set_ylim(-0.2, 2.6)
+ax.set(
+    xlabel=r"$r - z$  [AB mag]", ylabel=r"$g - r$  [AB mag]", xlim=(-0.2, 2.0), ylim=(-0.2, 2.6)
+)
 ax.legend(frameon=False, fontsize=9, loc="upper left")
 
 fig.tight_layout()

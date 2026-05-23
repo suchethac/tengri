@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:12.721** total execution time for 7 files **from auto_examples/sps**:
+**00:03.582** total execution time for 8 files **from auto_examples/sps**:
 
 .. container::
 
@@ -32,16 +32,19 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_sps_plot_sps_library_compare.py` (``plot_sps_library_compare.py``)
-     - 00:07.447
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_sps_plot_ssp_color_compare.py` (``plot_ssp_color_compare.py``)
-     - 00:04.651
+   * - :ref:`sphx_glr_auto_examples_sps_plot_mass_to_light_ratios.py` (``plot_mass_to_light_ratios.py``)
+     - 00:03.582
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_ionising_lum.py` (``plot_ionising_lum.py``)
-     - 00:00.623
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_sps_library_compare.py` (``plot_sps_library_compare.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_ssp_age_sweep.py` (``plot_ssp_age_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_ssp_color_compare.py` (``plot_ssp_color_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_ssp_grid.py` (``plot_ssp_grid.py``)

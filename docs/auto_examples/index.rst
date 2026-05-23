@@ -132,6 +132,23 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="tengri.recipes ships several curated starting-point model configs that map common astronomer use-cases onto the nested-dict SEDModel.build grammar. This card overlays the rest-frame SED of every shipped recipe so users can pick by eye:">
+
+.. only:: html
+
+  .. image:: /auto_examples/recipes/images/thumb/sphx_glr_plot_recipe_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/recipes/plot_recipe_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">What each shipped tengri recipe produces</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Metallicity is often poorly constrained by optical photometry. This recipe compares two fits: one with a Uniform prior on met_logzsol (weak constraint) and one with a Gaussian prior (informative from external data). We show how the posterior distribution changes, and that the same mock data leads to different inferences depending on the prior.">
 
 .. only:: html
@@ -389,6 +406,23 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Ionising-photon production rate vs SSP age</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The conversion from observed flux to stellar mass — the mass-to-light ratio M/L — depends on stellar age and the photometric band used. For a single-burst stellar population, M/L rises monotonically with age in every band; the rise is steepest in the blue, where massive bright stars dominate young populations, and shallowest in the K band, where light is dominated by red giants at every age past ~1 Gyr.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_mass_to_light_ratios_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_mass_to_light_ratios`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Stellar mass-to-light ratios vs SSP age, per band</div>
     </div>
 
 
@@ -2729,6 +2763,23 @@ Spectroscopic fitting and spectral features.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Three of the most-used optical absorption / emission diagnostics evaluated on a single-burst stellar population from 30 Myr to 13 Gyr, at solar metallicity, no dust. The figure makes obvious which diagnostic responds on which timescale:">
+
+.. only:: html
+
+  .. image:: /auto_examples/spectroscopy/images/thumb/sphx_glr_plot_spectral_indices_vs_age_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/spectroscopy/plot_spectral_indices_vs_age`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Classic spectral indices vs single-burst age</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Compare the rest-frame spectrum of a young and old galaxy at fixed redshift. Shows how the optical continuum color, Balmer decrement, and absorption line strengths depend on mean stellar age, holding metallicity and dust fixed.">
 
 .. only:: html
@@ -2782,6 +2833,23 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
     <div class="sphx-glr-thumbnails">
 
 .. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Six physics blocks evaluated one at a time on the same baseline galaxy so the reader sees what each component contributes to a panchromatic SED. Use this card to ask &quot;if my data only constrain wavelength X, which component(s) matter?&quot;">
+
+.. only:: html
+
+  .. image:: /auto_examples/multiwavelength/images/thumb/sphx_glr_plot_components_isolated_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/multiwavelength/plot_components_isolated`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Each tengri SED component shown in isolation</div>
+    </div>
+
 
 .. raw:: html
 

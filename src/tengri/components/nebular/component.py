@@ -450,6 +450,20 @@ class NebularSEDComponent:
             "neb_fesc": jnp.asarray(params.get("neb_fesc", 0.0)),
             "neb_fesc_lya": jnp.asarray(params.get("neb_fesc_lya", 0.0)),
         }
+        # ── Diffuse-ionised-gas (DIG) mixing (issue #259) ─────────────
+        # The DIG component is a second photoionisation regime with a
+        # lower ionization parameter (log U_DIG = log U_HII + Δlog U,
+        # where Δlog U < 0). Linear mass-fraction mix of the two
+        # backend evaluations. Python-literal short-circuit on
+        # ``dig_frac == 0`` keeps the no-DIG cost at one backend call.
+        # Tracked values always pay two calls under JIT.
+        _dig_frac = params.get("neb_dig_frac", 0.0)
+        _dig_delta_logU = params.get("neb_dig_delta_logU", -1.0)
+        _dig_frac_is_zero = isinstance(_dig_frac, (int, float)) and float(_dig_frac) == 0.0
+        _dig_kwargs = None  # built on demand only when needed
+        if not _dig_frac_is_zero:
+            _dig_kwargs = dict(common_kwargs)
+            _dig_kwargs["neb_logU"] = common_kwargs["neb_logU"] + jnp.asarray(_dig_delta_logU)
 
         if self.config.backend == "cue":
             # Forward Cue's full 12-parameter surface. Backend signature
@@ -492,6 +506,12 @@ class NebularSEDComponent:
             nebular_sed = self.backend.predict_nebular_sed(
                 **common_kwargs, **cue_extras, template_data=template_data
             )
+            if _dig_kwargs is not None:
+                nebular_sed_dig = self.backend.predict_nebular_sed(
+                    **_dig_kwargs, **cue_extras, template_data=template_data
+                )
+                _f = jnp.asarray(_dig_frac)
+                nebular_sed = (1.0 - _f) * nebular_sed + _f * nebular_sed_dig
         else:  # cloudy_grid, cb19, mappings
             ssp_ages_yr = state.derived.get("ssp_ages_yr")
             age_weights = state.derived.get("age_weights")
@@ -510,6 +530,15 @@ class NebularSEDComponent:
                 template_data=template_data,
                 **common_kwargs,
             )
+            if _dig_kwargs is not None:
+                nebular_sed_dig = self.backend.predict_nebular_sed(
+                    ssp_weights=ssp_weights,
+                    ssp_log_ages_yr=ssp_log_ages_yr,
+                    template_data=template_data,
+                    **_dig_kwargs,
+                )
+                _f = jnp.asarray(_dig_frac)
+                nebular_sed = (1.0 - _f) * nebular_sed + _f * nebular_sed_dig
 
         # Publish the discrete line catalogue (``line_waves`` /
         # ``line_lums``) when the backend supports it. This is what the
@@ -520,6 +549,12 @@ class NebularSEDComponent:
                     line_waves, line_lums = self.backend.predict_nebular_line_luminosities(
                         **common_kwargs, **cue_extras, template_data=template_data
                     )
+                    if _dig_kwargs is not None:
+                        _, line_lums_dig = self.backend.predict_nebular_line_luminosities(
+                            **_dig_kwargs, **cue_extras, template_data=template_data
+                        )
+                        _f = jnp.asarray(_dig_frac)
+                        line_lums = (1.0 - _f) * line_lums + _f * line_lums_dig
                 else:  # cloudy_grid, cb19, mappings
                     line_waves, line_lums = self.backend.predict_nebular_line_luminosities(
                         ssp_weights=ssp_weights,
@@ -527,6 +562,15 @@ class NebularSEDComponent:
                         template_data=template_data,
                         **common_kwargs,
                     )
+                    if _dig_kwargs is not None:
+                        _, line_lums_dig = self.backend.predict_nebular_line_luminosities(
+                            ssp_weights=ssp_weights,
+                            ssp_log_ages_yr=ssp_log_ages_yr,
+                            template_data=template_data,
+                            **_dig_kwargs,
+                        )
+                        _f = jnp.asarray(_dig_frac)
+                        line_lums = (1.0 - _f) * line_lums + _f * line_lums_dig
                 # CLAUDE.md contract: vacuum wavelengths throughout.
                 #
                 # Upstream Cue (yi-jia-li/cue) ships TWO disagreeing files:

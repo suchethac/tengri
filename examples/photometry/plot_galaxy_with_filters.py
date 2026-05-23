@@ -28,35 +28,35 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 C_AA_PER_S = 2.998e18
 
-# Build a star-forming galaxy with dust emission so the panel can stretch
-# from the FUV (GALEX) to the FIR (WISE) and show what each band catches.
+SFH = {
+    "type": "tsnorm",
+    "*": tengri.FIXED,
+    "peak_lbt_gyr": 2.0,
+    "width_gyr": 1.5,
+    "log_peak_sfr": 1.3,
+    "skew": 0.2,
+    "trunc": 13.0,
+}
+DUST = {
+    "type": "two_component",
+    "*": tengri.FIXED,
+    "tau_diff": 0.4,
+    "tau_bc": 0.6,
+    "emission": {"type": "dale2014", "*": tengri.FIXED},
+}
+
 model = tengri.SEDModel.build(
     tengri.load_ssp(),
-    sfh={
-        "type": "tsnorm",
-        "*": tengri.FIXED,
-        "peak_lbt_gyr": 2.0,
-        "width_gyr": 1.5,
-        "log_peak_sfr": 1.3,
-        "skew": 0.2,
-        "trunc": 13.0,
-    },
-    dust={
-        "type": "two_component",
-        "*": tengri.FIXED,
-        "tau_diff": 0.4,
-        "tau_bc": 0.6,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
-    },
+    sfh=SFH,
+    dust=DUST,
     redshift=tengri.Fixed(0.5),
 )
 p = dict(model.spec.sample(jax.random.PRNGKey(0)))
 out = model.predict_rest_sed(p)
 wave_rest = np.asarray(out.wavelength)
-wave_obs = wave_rest * 1.5  # z = 0.5 → multiply rest λ by 1.5
+wave_obs = wave_rest * 1.5
 nu_l_nu = C_AA_PER_S / wave_obs * np.asarray(out.sed)
 
-# Filter sets to show.  Each list is one row in the legend.
 FILTERS_BY_GROUP = [
     ("GALEX", ["galex_fuv", "galex_nuv"], "#4477aa"),
     ("SDSS", ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"], "#66ccaa"),
@@ -80,11 +80,10 @@ fig, (ax_sed, ax_filt) = plt.subplots(
 
 vis = (wave_obs > 1.0e3) & (wave_obs < 2e6)
 ax_sed.loglog(wave_obs[vis], nu_l_nu[vis], color="0.15", lw=1.2)
-ax_sed.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
-ax_sed.set_ylim(1e40, 5e44)
+ax_sed.set(ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]", ylim=(1e40, 5e44))
 
 for label, names, color in FILTERS_BY_GROUP:
-    for _j, name in enumerate(names):
+    for name in names:
         try:
             f = load_filter(name)
         except Exception:
@@ -95,9 +94,9 @@ for label, names, color in FILTERS_BY_GROUP:
     # one transparent rectangle for the legend handle
     ax_filt.fill_between([], [], color=color, alpha=0.6, label=label)
 
-ax_filt.set_ylim(0, 0.7)
-ax_filt.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]")
-ax_filt.set_ylabel("transmission")
+ax_filt.set(
+    ylim=(0, 0.7), xlabel=r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]", ylabel="transmission"
+)
 ax_filt.legend(frameon=False, fontsize=8, loc="upper right", ncol=2)
 ax_sed.set_xlim(1.0e3, 1.5e6)
 

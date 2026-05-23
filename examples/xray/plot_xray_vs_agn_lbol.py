@@ -33,11 +33,14 @@ log_lbol_grid = np.linspace(9.0, 13.0, 7)
 norm = mpl.colors.Normalize(vmin=log_lbol_grid.min(), vmax=log_lbol_grid.max())
 cmap = plt.get_cmap("viridis")
 
+SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": 0.5, "start_gyr": 13.0, "end_gyr": 0.0}
+DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.3, "tau_bc": 0.5}
+
 ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "const", "*": tengri.FIXED, "log_sfr": 0.5, "start_gyr": 13.0, "end_gyr": 0.0},
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.3, "tau_bc": 0.5},
+    sfh=SFH,
+    dust=DUST,
     agn={
         "disc": {"type": "qsogen", "*": tengri.FIXED},
         "torus": {"type": "skirtor", "*": tengri.FIXED},
@@ -57,10 +60,12 @@ for log_lbol in log_lbol_grid:
     nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
     ax.loglog(wave, nu_l_nu, color=cmap(norm(log_lbol)), lw=1.4)
 
-ax.set_xlim(0.5, 1e3)
-ax.set_ylim(1e38, 5e46)
-ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+ax.set(
+    xlim=(0.5, 1e3),
+    ylim=(1e38, 5e46),
+    xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+    ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
+)
 
 for kev, name in [(0.5, "0.5 keV"), (2.0, "2 keV"), (10.0, "10 keV"), (50.0, "50 keV")]:
     lam = 12398.4 / (kev * 1000.0)

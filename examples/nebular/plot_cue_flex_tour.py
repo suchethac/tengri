@@ -35,17 +35,20 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
+SFH = {
+    "type": "dpl",
+    "*": tengri.FIXED,
+    "tau_gyr": 0.3,
+    "log_peak_sfr": 1.5,
+    "alpha": 3.0,
+    "beta": 2.0,
+}
+DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1}
+
 model = tengri.SEDModel.build(
     ssp,
-    sfh={
-        "type": "dpl",
-        "*": tengri.FIXED,
-        "tau_gyr": 0.3,
-        "log_peak_sfr": 1.5,
-        "alpha": 3.0,
-        "beta": 2.0,
-    },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
+    sfh=SFH,
+    dust=DUST,
     neb={
         "type": "cue",
         "*": tengri.FIXED,
@@ -65,7 +68,6 @@ def _halpha_lum(params):
     return float(model.predict_emission_lines(params).halpha)
 
 
-# Define the six sweeps: (param_name, label_string, n_values, lower, upper)
 SWEEPS = [
     ("neb_logU", r"$\log\,U$", 7, -3.8, -1.5),
     ("neb_logZ_gas", r"$\log\,Z_{\rm gas}/Z_\odot$", 7, -1.5, 0.4),
@@ -81,9 +83,6 @@ fig, axes = plt.subplots(
 axes_flat = axes.ravel()
 colors = ["C0", "C1", "C2", "C3", "C4", "C5"]
 
-# Baseline value for normalisation: each curve plotted as
-# log10(L_Hα(v) / L_Hα(baseline)) — dimensionless response so weak knobs
-# read as near-zero while strong knobs show their dynamic range.
 ha_baseline = _halpha_lum(baseline)
 
 for ax_idx, (param_name, label, n_vals, lo, hi) in enumerate(SWEEPS):
