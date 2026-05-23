@@ -41,11 +41,10 @@ import tengri
 # Columns:
 #   name, redshift, then one (flux, error) pair per band in [erg/s/cm²/Hz].
 #
-# This row is roughly NGC 4258 published photometry, but the exact
-# numbers are not the point — substitute your own galaxy.
+# This row is mock SDSS photometry. In real usage, substitute your own CSV.
 CSV = """\
-name,redshift,sdss_g,sdss_g_err,sdss_r,sdss_r_err,sdss_i,sdss_i_err,sdss_z,sdss_z_err,2mass_j,2mass_j_err,2mass_h,2mass_h_err,2mass_ks,2mass_ks_err,wise_w1,wise_w1_err,wise_w2,wise_w2_err,wise_w3,wise_w3_err,wise_w4,wise_w4_err
-NGC_4258,0.0015,2.3e-26,1e-27,3.5e-26,1e-27,4.4e-26,1e-27,5.1e-26,2e-27,7.0e-26,3e-27,8.6e-26,3e-27,8.4e-26,3e-27,9.0e-26,4e-27,7.5e-26,4e-27,2.5e-25,2e-26,5.0e-25,5e-26
+name,redshift,sdss_u,sdss_u_err,sdss_g,sdss_g_err,sdss_r,sdss_r_err,sdss_i,sdss_i_err,sdss_z,sdss_z_err
+mock_galaxy,0.05,3.0e-27,5e-28,2.3e-26,1e-27,3.5e-26,1e-27,4.4e-26,1e-27,5.1e-26,2e-27
 """
 
 
@@ -60,30 +59,9 @@ def _read_one_row(csv_text: str) -> dict:
 
 # ---------------------------------------------------------------------------
 # 2.  Pick the bandset that matches the CSV columns.
-#
-#     The astronomer-conventional survey names just work via the smart
-#     ``survey=`` alias on ``list_filters()`` — see __init__.py docstring.
 # ---------------------------------------------------------------------------
-SDSS_BANDS = tengri.list_filters(survey="SDSS").filter(band__in=("g", "r", "i", "z")).names()
-TWOMASS = tengri.list_filters(instrument="2MASS").names()
-WISE = tengri.list_filters().filter(survey="WISE").names()
-
-# Order matches the CSV column order
-filter_names = SDSS_BANDS + TWOMASS + WISE
-# CSV column suffixes that pair with each filter (must be in column order)
-csv_keys = [
-    "sdss_g",
-    "sdss_r",
-    "sdss_i",
-    "sdss_z",
-    "2mass_j",
-    "2mass_h",
-    "2mass_ks",
-    "wise_w1",
-    "wise_w2",
-    "wise_w3",
-    "wise_w4",
-]
+filter_names = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+csv_keys = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 
 
 def main() -> int:
@@ -110,39 +88,36 @@ def main() -> int:
 
     obs = tengri.Observation(photometry=photometry)
 
-    # --- Build a default-ish Parameters with redshift fixed to the row -
-    # Pick a simple model; ``tengri.describe('dpl')`` shows the priors.
-    parameters = tengri.Parameters(
-        mean_sfh_type="dpl",
-        redshift=tengri.Fixed(z),
-    )
-    print(f"\nParameters: {parameters.n_free} free, mean_sfh_type={parameters.mean_sfh_type}")
-
-    # --- Locate a bundled SSP file -------------------------------------
+    # --- Build model using SEDModel.build with recipes ---
+    # Prefer tengri.recipes for standard workflows; use nested-dict API
+    # for custom parameter choices.
     ssp_candidates = list(Path("data").glob("ssp_*.h5"))
     if not ssp_candidates:
         print("\n[skipping live fit — no SSP file in ./data/]")
         return 0
     ssp = tengri.load_ssp_data(str(ssp_candidates[0]))
 
-    # --- Build model + fitter ------------------------------------------
-    model = tengri.SEDModel(parameters, ssp, observation=obs)
-    print(f"\n{model!r}")
+    model = tengri.SEDModel.build(
+        ssp,
+        observation=obs,
+        sfh={"type": "dpl", "*": tengri.FREE},
+        redshift=tengri.Fixed(z),
+    )
+    print(f"\nModel: {model.spec.n_free} free parameters")
 
-    fitter = tengri.Fitter(model, data=fluxes, noise=errors)
-    print(f"{fitter!r}")
-
-    # --- MAP first (cheapest) ------------------------------------------
+    # --- Fit with MAP (the workhorse for fast iteration) ----
     print("\nRunning MAP optimization (Adam, 200 steps)…")
-    posterior = fitter.run("map", key=jax.random.PRNGKey(0), n_steps=200)
+    forward = tengri.ForwardModel.build(sed=model, observation=obs)
+    posterior = forward.fit(
+        fluxes, errors, method="map", optimizer="adam", n_steps=200, verbose=False
+    )
     posterior.summary()
 
-    # --- For posterior-quality fits, swap to NUTS or VI ---------------
+    # --- For posterior-quality fits, swap to NUTS or VI -----
     print(
         "\nFor posterior-quality work:\n"
-        "    posterior = fitter.run('nuts',  init_from=map_result)   # exact, ≲20-D\n"
-        "    posterior = fitter.run('vi',    init_from=map_result)   # scalable, geoVI\n"
-        "    posterior = fitter.run('mcmc')                          # auto-pick by D\n"
+        "    forward.fit(data, noise, method='nuts',   n_steps=1000)  # exact, ≲20-D\n"
+        "    forward.fit(data, noise, method='vi_native', n_iter=50)   # scalable\n"
     )
     return 0
 

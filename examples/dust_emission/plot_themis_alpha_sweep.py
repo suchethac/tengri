@@ -5,14 +5,9 @@ THEMIS: power-law slope alpha sweep
 Sweep radiation-field distribution slope across the THEMIS grid at fixed
 grain content and minimum intensity. Lower alpha shifts weight toward high U,
 warming dust and shifting FIR peak blueward; higher alpha approaches single-U.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_themis_alpha_sweep_001.png
-   :alt: plot_themis_alpha_sweep
-   :class: sphx-glr-single-img
-
 """
+
+import warnings
 
 import h5py
 import matplotlib.pyplot as plt
@@ -22,6 +17,8 @@ from tengri import data_path
 from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 with h5py.File(data_path("themis_templates.h5"), "r") as f:
     wave_aa = np.asarray(f["wavelength_aa"][:])
@@ -55,10 +52,7 @@ ax.set(
     ylabel=r"$\nu L_\nu\ [\mathrm{normalised}\ \int L_\nu d\nu = 1]$",
     xlim=(2.0, 1.0e3),
     ylim=(1.0e-26, 1.0e-22),
-    title=rf"THEMIS (Jones+2017) at $q_{{\rm HAC}}={qhac_grid[i_qhac]:.2f}$, "
-    rf"$U_{{\rm min}}={umin_grid[i_umin]:.2f}$",
 )
 ax.legend(loc="lower center", frameon=False, fontsize=8, ncol=3)
 fig.tight_layout()
-plt.savefig("plot_themis_alpha_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()
+fig.savefig("plot_themis_alpha_sweep.png", dpi=150, bbox_inches="tight")
