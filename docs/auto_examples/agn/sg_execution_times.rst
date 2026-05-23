@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:08.733** total execution time for 20 files **from auto_examples/agn**:
+**00:02.070** total execution time for 21 files **from auto_examples/agn**:
 
 .. container::
 
@@ -32,14 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_disc_compare.py` (``plot_agn_disc_compare.py``)
-     - 00:04.871
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_lines_compare.py` (``plot_agn_lines_compare.py``)
-     - 00:02.481
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_torus_compare.py` (``plot_agn_torus_compare.py``)
-     - 00:01.381
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_components_breakdown.py` (``plot_agn_components_breakdown.py``)
+     - 00:02.070
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_alpha_ox_lbol_2d.py` (``plot_agn_alpha_ox_lbol_2d.py``)
      - 00:00.000
@@ -47,7 +41,13 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_cos_inc_sweep.py` (``plot_agn_cos_inc_sweep.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_disc_compare.py` (``plot_agn_disc_compare.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_hierarchy.py` (``plot_agn_hierarchy.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_lines_compare.py` (``plot_agn_lines_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_log_lbol_sweep.py` (``plot_agn_log_lbol_sweep.py``)
@@ -66,6 +66,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_tau_skirtor_sweep.py` (``plot_agn_tau_skirtor_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_torus_compare.py` (``plot_agn_torus_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_type12.py` (``plot_agn_type12.py``)
