@@ -2,19 +2,13 @@
 Each tengri SED component shown in isolation
 ==============================================
 
-Six physics blocks evaluated one at a time on the same baseline
-galaxy so the reader sees what each component contributes to a
-panchromatic SED. Use this card to ask "if my data only constrain
-wavelength X, which component(s) matter?"
+Six physics blocks added cumulatively to the same star-forming host
+so the contribution of each is visible at every wavelength.
 
-Components (one per panel, all on the same axes):
-- ``stellar``  — bare SSP-weighted stellar continuum (no other block active)
-- ``+ nebular`` — Cue HII region emission added at the source
-- ``+ dust (atten + IR)`` — full Charlot & Fall attenuation + Dale+2014
-  re-emission
-- ``+ AGN``    — composable disc + SKIRTOR torus + NLR overlaid on host
-- ``+ radio``  — Condon-92 GHz synchrotron + free-free
-- ``+ X-ray``  — Mineo HMXB + LMXB X-ray binaries
+Reading order: stellar continuum (grey), then nebular (HII region
+lines added at the source), then dust (UV attenuated, reprocessed
+into the FIR), then AGN (disc + torus + NLR), then radio, then X-ray.
+The colour at each wavelength tells you which block matters most.
 """
 
 import warnings
@@ -29,78 +23,58 @@ from tengri.analysis.plotting import setup_style
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-C_AA_PER_S = 2.998e18
 
-BASE = dict(
+SSP = tengri.load_ssp("fsps_prsc_miles_chabrier")
+HOST = dict(
     sfh={"type": "dpl", "*": tengri.FIXED,
          "tau_gyr": 1.5, "log_peak_sfr": 1.3, "alpha": 2.5, "beta": 2.0},
     redshift=tengri.Fixed(0.05),
 )
+DUST_ON = {"type": "two_component", "*": tengri.FIXED,
+           "tau_diff": 0.4, "tau_bc": 0.6,
+           "emission": {"type": "dale2014", "*": tengri.FIXED}}
+DUST_OFF = {"type": "two_component", "*": tengri.FIXED,
+            "tau_diff": 0.0, "tau_bc": 0.0}
 
-# Each call returns (wave, nu*L_nu) for a model with the given
-# blocks switched on (everything else off).
-def _run(**extra_blocks):
-    bare = tengri.load_ssp("fsps_prsc_miles_chabrier")
-    cfg = {
-        "ssp_data": bare,
-        "dust": {"type": "two_component", "*": tengri.FIXED,
-                 "tau_diff": 0.0, "tau_bc": 0.0},
-        **BASE,
-    }
-    cfg.update(extra_blocks)  # let caller override dust/etc.
-    model = tengri.SEDModel.build(**cfg)
+
+def _nuLnu(**blocks):
+    model = tengri.SEDModel.build(SSP, **HOST, **blocks)
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     out = model.predict_rest_sed(p)
     wave = np.asarray(out.wavelength)
-    return wave, C_AA_PER_S / wave * np.asarray(out.sed)
+    return wave, 2.998e18 / wave * np.asarray(out.sed)
 
 
-# Cumulative builds.
-runs = [
-    ("stellar (no extras)", "#666666",
-     _run()),
-    ("+ nebular (Cue)", "#33aa55",
-     _run(neb={"type": "cue", "*": tengri.FIXED})),
-    ("+ dust atten + IR (Charlot & Fall, Dale+14)", "#cc6633",
-     _run(dust={"type": "two_component", "*": tengri.FIXED,
-                "tau_diff": 0.4, "tau_bc": 0.6,
-                "emission": {"type": "dale2014", "*": tengri.FIXED}})),
-    ("+ AGN (multicolor + SKIRTOR + NLR)", "#cc3399",
-     _run(dust={"type": "two_component", "*": tengri.FIXED,
-                "tau_diff": 0.4, "tau_bc": 0.6,
-                "emission": {"type": "dale2014", "*": tengri.FIXED}},
-          agn={"disc":  {"type": "multicolor", "*": tengri.FIXED},
-               "torus": {"type": "skirtor",    "*": tengri.FIXED},
-               "lines": {"type": "nlr",        "*": tengri.FIXED},
-               "*": tengri.FIXED, "log_lbol": 11.5, "frac": 0.5})),
-    ("+ radio (Condon-92)", "#3377cc",
-     _run(dust={"type": "two_component", "*": tengri.FIXED,
-                "tau_diff": 0.4, "tau_bc": 0.6,
-                "emission": {"type": "dale2014", "*": tengri.FIXED}},
-          radio={"type": "condon92", "*": tengri.FIXED})),
-    ("+ X-ray (Mineo XRB)", "#9933cc",
-     _run(dust={"type": "two_component", "*": tengri.FIXED,
-                "tau_diff": 0.4, "tau_bc": 0.6,
-                "emission": {"type": "dale2014", "*": tengri.FIXED}},
-          xray={"type": "simple", "*": tengri.FIXED})),
+RUNS = [
+    ("stellar",        "#666666", dict(dust=DUST_OFF)),
+    ("+ nebular",      "#33aa55", dict(dust=DUST_OFF,
+                                       neb={"type": "cue", "*": tengri.FIXED})),
+    ("+ dust",         "#cc6633", dict(dust=DUST_ON)),
+    ("+ AGN",          "#cc3399", dict(dust=DUST_ON,
+                                       agn={"disc":  {"type": "multicolor", "*": tengri.FIXED},
+                                            "torus": {"type": "skirtor",    "*": tengri.FIXED},
+                                            "lines": {"type": "nlr",        "*": tengri.FIXED},
+                                            "*": tengri.FIXED,
+                                            "log_lbol": 11.5, "frac": 0.5})),
+    ("+ radio",        "#3377cc", dict(dust=DUST_ON,
+                                       radio={"type": "condon92", "*": tengri.FIXED})),
+    ("+ X-ray (XRBs)", "#9933cc", dict(dust=DUST_ON,
+                                       xray={"type": "simple", "*": tengri.FIXED})),
 ]
 
 fig, ax = plt.subplots(figsize=(8.0, 5.0))
-for label, color, (wave, nuL) in runs:
+for label, color, blocks in RUNS:
+    wave, nuL = _nuLnu(**blocks)
     ax.loglog(wave, nuL, color=color, lw=1.4, label=label)
 
-# Wavelength region annotations
-for x, name in [(50, "X-ray"), (1000, "UV"), (5500, "optical"),
-                (3e4, "NIR"), (1e5, "MIR"), (1e6, "FIR"),
-                (1e8, "radio")]:
-    ax.text(x, 4e44, name, fontsize=7, color="0.5", ha="center",
-            rotation=0, alpha=0.7)
+for x, name in [(1000, "UV"), (5500, "optical"),
+                (1e5, "MIR"), (1e8, "radio")]:
+    ax.text(x, 4e44, name, fontsize=7, color="0.5", ha="center", alpha=0.7)
 
-ax.set_xlim(1e1, 3e9)
-ax.set_ylim(1e35, 1e45)
-ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
-ax.legend(frameon=False, fontsize=7.5, loc="lower center", ncol=2)
+ax.set(xlim=(10, 3e9), ylim=(1e35, 1e45),
+       xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+       ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
+ax.legend(frameon=False, fontsize=8, loc="lower center", ncol=2)
 
 fig.tight_layout()
 fig.savefig("plot_components_isolated.png", dpi=150, bbox_inches="tight")
