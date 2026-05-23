@@ -58,7 +58,7 @@ class _MockModel:
     def __init__(self, fnu_pred):
         self._fnu_pred = jnp.asarray(fnu_pred)
 
-    def predict_photometry(self, params, mode=None):
+    def predict_photometry(self, params):
         scale = params.get("flux_scale", 1.0)
         return self._fnu_pred * scale
 
@@ -119,9 +119,9 @@ def test_three_builders_share_one_data_term():
     _, fnu_obs, fnu_err, fnu_pred = _make_fitter()
     user_lik = PhotometryLikelihood(fnu_obs=fnu_obs, fnu_err=fnu_err)
     fitter, *_ = _make_fitter(user_likelihood=user_lik)
-    loss_fn = build_loss_fn(fitter, mode="auto")
-    loglik_fn = build_loglikelihood_fn(fitter, mode="auto")
-    loglik_unbounded_fn = build_loglikelihood_unbounded_fn(fitter, mode="auto")
+    loss_fn = build_loss_fn(fitter)
+    loglik_fn = build_loglikelihood_fn(fitter)
+    loglik_unbounded_fn = build_loglikelihood_unbounded_fn(fitter)
     xi = {"flux_scale": 0.7}  # IdentityDist makes physical = unbounded
     data_args = fitter._data_args
     loss = float(loss_fn(xi, data_args))
@@ -143,7 +143,7 @@ def test_legacy_default_path_now_raises():
     branch). The raise surfaces missing auto-build coverage loudly.
     """
     fitter, *_ = _make_fitter(user_likelihood=None)
-    loss_fn = build_loss_fn(fitter, mode="auto")
+    loss_fn = build_loss_fn(fitter)
     with pytest.raises(AssertionError, match="auto-build"):
         loss_fn({"flux_scale": 1.0}, fitter._data_args)
 
@@ -164,8 +164,8 @@ def test_loglik_handles_censored_likelihood_via_user_path():
     mask = jnp.array([True, False, True])  # band 1 is an upper limit
     censored_lik = CensoredLikelihood(obs=fnu_obs, err=fnu_err, mask=mask, channel="phot_fnu")
     fitter, *_ = _make_fitter(user_likelihood=censored_lik, data_mask=mask)
-    ll = float(build_loglikelihood_fn(fitter, mode="auto")({"flux_scale": 1.0}, fitter._data_args))
-    loss = float(build_loss_fn(fitter, mode="auto")({"flux_scale": 1.0}, fitter._data_args))
+    ll = float(build_loglikelihood_fn(fitter)({"flux_scale": 1.0}, fitter._data_args))
+    loss = float(build_loss_fn(fitter)({"flux_scale": 1.0}, fitter._data_args))
     assert jnp.isfinite(ll)
     assert jnp.isfinite(loss)
     # If the masked band were silently treated as detected, the
@@ -178,8 +178,6 @@ def test_loglik_handles_censored_likelihood_via_user_path():
     plain_lik = PhotometryLikelihood(fnu_obs=fnu_obs, fnu_err=fnu_err)
     fitter_no_mask, *_ = _make_fitter(user_likelihood=plain_lik, data_mask=None)
     ll_no_mask = float(
-        build_loglikelihood_fn(fitter_no_mask, mode="auto")(
-            {"flux_scale": 1.0}, fitter_no_mask._data_args
-        )
+        build_loglikelihood_fn(fitter_no_mask)({"flux_scale": 1.0}, fitter_no_mask._data_args)
     )
     assert ll != pytest.approx(ll_no_mask)

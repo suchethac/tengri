@@ -7,9 +7,9 @@ style**: one knob varied per figure, one physical effect made obvious, no chrome
 
 ## Hard rules (never violate)
 
-1. **Use the current public API.** Build models with `SEDModel.build(...)`, never
-   `SEDModel.from_groups(...)`. The latter is a deprecated alias and emits a
-   warning that pollutes sphinx-gallery output.
+1. **Use the current public API.** Build models with `SEDModel.build(...)`.
+   `SEDModel.from_groups(...)` was removed 2026-05-23 — calling it now raises
+   `AttributeError`. Treat any reference in older docs as historical.
 2. **No deprecated names.** `Parameters` (not `ParamSpec`), `PopulationFitter`
    (not `HierarchicalFitter`), `SEDModel` (not `Model`), `Spectroscopy`,
    `NoiseModel`, `LineList`. See `docs/dev/NAMING_CONTRACT.md`.

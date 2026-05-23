@@ -72,7 +72,7 @@ visible.
     recipe["dust"].update(tau_bc=1.0, tau_diff=0.5)
     recipe["dust"]["emission"] = {"type": "modified_blackbody", "*": FIXED, "T": 30.0, "beta_ir": 1.8}
     recipe["redshift"] = Fixed(0.2)
-    model = SEDModel.from_groups(ssp_data=load_ssp(), **recipe)
+    model = SEDModel.build(ssp_data=load_ssp(), **recipe)
 
     fig, ax = plt.subplots(figsize=(8, 5))
     sweep_parameter(

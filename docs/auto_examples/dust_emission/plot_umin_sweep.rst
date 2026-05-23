@@ -73,7 +73,7 @@ shorter wavelengths.
         "gamma_dl": 0.01,
         "qpah": 2.5,
     }
-    model = SEDModel.from_groups(ssp_data=load_ssp(), **recipe)
+    model = SEDModel.build(ssp_data=load_ssp(), **recipe)
 
     fig, ax = plt.subplots(figsize=(8, 5))
     sweep_parameter(

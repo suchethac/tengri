@@ -67,7 +67,7 @@ class _DualPathModel:
         self.orchestrator_calls = 0
         self._wave_obs = jnp.array([4000.0, 5000.0, 6000.0])
 
-    def predict_photometry(self, params, mode=None):
+    def predict_photometry(self, params):
         self.legacy_calls += 1
         return jnp.array([1.0, 2.0, 3.0])
 
@@ -75,11 +75,11 @@ class _DualPathModel:
         self.orchestrator_calls += 1
         return jnp.array([10.0, 20.0, 30.0])
 
-    def predict_spectrum(self, params, wave_obs, mode=None):
+    def predict_spectrum(self, params, wave_obs=None):
         self.legacy_calls += 1
         return jnp.array([1.0, 2.0, 3.0])
 
-    def predict_spectrum_components(self, params, wave_obs):
+    def predict_spectrum_components(self, params, wave_obs=None):
         self.orchestrator_calls += 1
         return jnp.array([10.0, 20.0, 30.0])
 
@@ -113,7 +113,7 @@ def _make_fitter(*, use_components: bool):
 
 def test_default_routes_through_legacy_path():
     fitter, model = _make_fitter(use_components=False)
-    loglik = build_loglikelihood_fn(fitter, mode="auto")
+    loglik = build_loglikelihood_fn(fitter)
     _ = loglik({"flux_scale": 1.0}, fitter._data_args)
     assert model.legacy_calls == 1
     assert model.orchestrator_calls == 0
@@ -121,7 +121,7 @@ def test_default_routes_through_legacy_path():
 
 def test_use_components_routes_through_component_path():
     fitter, model = _make_fitter(use_components=True)
-    loglik = build_loglikelihood_fn(fitter, mode="auto")
+    loglik = build_loglikelihood_fn(fitter)
     _ = loglik({"flux_scale": 1.0}, fitter._data_args)
     assert model.legacy_calls == 0
     assert model.orchestrator_calls == 1
@@ -164,7 +164,6 @@ def test_use_components_routes_spectrum_through_component_path():
         model,
         {"flux_scale": 1.0},
         "spectroscopy",
-        "traced",
         has_line_fluxes=False,
         has_indices=False,
         index_defs=None,

@@ -292,18 +292,12 @@ class SEDModel:
     **Gradient-safe**: yes — all physical parameters are differentiable
     for inference via HMC, VI, and score-based methods.
 
-    **Approximation scheme**: The forward model uses a three-tier kernel
-    hierarchy to balance speed and accuracy:
-
-    1. **Compositional** (preferred): Full-resolution JIT SED from all
-       components → filter integration. XLA fuses entire graph (SFH → SED → photometry).
-       Bit-exact and fastest.
-    2. **Hybrid** (fallback): Precomputed SSP×filter stellar + exact
-       non-stellar at full wavelength resolution.
-    3. **Exact** (reference): Raw pipeline, no approximations or precomputation.
-
-    Mode selection in :meth:`predict_photometry` and :meth:`predict_spectrum`:
-    ``mode="auto"`` (default) cascades through available modes.
+    **Approximation scheme**: All prediction methods route through the
+    single JIT-safe orchestrator :meth:`predict_observables_jit` (Phase
+    4-B, with SSP threading). Historical mode-cascade strategies
+    (compositional / hybrid / exact) collapsed into this one path in
+    Phase 6-prep (2026-05-20); the orchestrator itself remains XLA-fused
+    and bit-exact for the configured ``approx=`` policy.
 
     **Physical units** (internal):
 
@@ -362,10 +356,6 @@ class SEDModel:
         "ztable": False,
         "igm": True,
     }
-
-    _PREDICTION_MODES: ClassVar[frozenset] = frozenset(
-        {"auto", "exact", "hybrid", "compositional"}
-    )
 
     # ── Construction ──────────────────────────────────────────────────
 
@@ -652,6 +642,82 @@ class SEDModel:
         if self.observation is not None and self.observation.can_do_photometry:
             return list(self.observation.photometry.filter_trans)
         return None
+
+    @property
+    def wave_obs(self):
+        """Configured observed-frame spectroscopy wavelength grid, or ``None``.
+
+        Public accessor for the internal ``_wave_obs`` attribute. Returns
+        ``None`` if no spectroscopy grid has been precomputed or configured.
+
+        Returns
+        -------
+        ndarray or None
+            Observed-frame wavelength grid [Angstrom], shape ``(n_pix,)``.
+        """
+        return getattr(self, "_wave_obs", None)
+
+    @property
+    def precomputed(self):
+        """Container of precomputed forward-model tables (photometry, spectroscopy, …).
+
+        Public accessor for the internal ``_precomputed`` attribute. The
+        container exposes ``photometry``, ``spectroscopy``, ``photometry_ztable``,
+        and ``dust_age_weights`` slots; any may be ``None`` if not configured.
+        Used by inference / diagnostics to query precompute state.
+        """
+        return self._precomputed
+
+    @property
+    def hybrid(self):
+        """Container of hybrid (precomputed × on-the-fly) kernels, or ``None``.
+
+        Public accessor for the internal ``_hybrid`` attribute. Returns
+        ``None`` when no hybrid kernels were built (e.g. when the model
+        is constructed without ``precompute=True``). Slots (``photometry``,
+        ``spectroscopy``) on the returned container are individually
+        ``None`` when that channel's hybrid path is unavailable.
+        """
+        return getattr(self, "_hybrid", None)
+
+    @property
+    def z_fixed(self):
+        """Fixed redshift value if redshift is not a free parameter, else ``None``.
+
+        Public accessor for the internal ``_z_fixed`` attribute. Set at
+        construction from ``spec.get_fixed_values().get('redshift')``.
+        """
+        return getattr(self, "_z_fixed", None)
+
+    @property
+    def dl_cm_fixed(self):
+        """Fixed luminosity distance [cm] when redshift is fixed, else ``None``.
+
+        Public accessor for the internal ``_dl_cm_fixed`` attribute. Used
+        by inference to detect a redshift-fixed forward model eligible
+        for the fast precomputed-photometry path.
+        """
+        return getattr(self, "_dl_cm_fixed", None)
+
+    @property
+    def n_grid(self):
+        """PSD-grid resolution for stochastic SFH, else ``0``.
+
+        Public accessor for the internal ``_n_grid`` attribute. Non-zero
+        only when the model uses a stochastic SFH (correlated-field
+        prior on the SFH); used by inference to size the latent grid.
+        """
+        return getattr(self, "_n_grid", 0)
+
+    @property
+    def uses_stochastic_sfh(self) -> bool:
+        """``True`` if the SFH is a stochastic correlated-field model.
+
+        Public accessor for the internal ``_uses_stochastic_sfh`` flag.
+        Stochastic SFH adds an additional ``psd_xi`` latent of shape
+        ``(n_grid,)`` to the free-parameter set.
+        """
+        return bool(getattr(self, "_uses_stochastic_sfh", False))
 
     @property
     def Observables(self) -> type:
@@ -1219,6 +1285,40 @@ class SEDModel:
                 _load_cat3d_default()
             except Exception:
                 pass
+
+    def ensure_photometry_precomputed(self) -> bool:
+        """Lazily run photometry precomputation if not yet done.
+
+        Encapsulates the lazy precompute path previously open-coded in
+        :meth:`Fitter._auto_precompute_photometry`. Returns ``True`` if
+        the table was built by this call, ``False`` if it was already
+        present or any of the required inputs (fixed redshift, filters)
+        is missing.
+
+        Migration-2 contract: callers (Fitter, diagnostics, …) should
+        invoke this method instead of mutating ``self._precomputed``
+        directly. The method is idempotent — calling it twice is a no-op.
+
+        Returns
+        -------
+        bool
+            ``True`` if precomputation ran on this call, ``False`` otherwise.
+        """
+        if self._precomputed.photometry is not None:
+            return False
+        if self._z_fixed is None or self.filter_waves is None:
+            return False
+
+        from tengri.components.stellar.sps.precompute import precompute_photometry
+
+        self._precomputed.photometry = precompute_photometry(
+            self.ssp_data,
+            self.filter_waves,
+            self.filter_trans,
+            self._z_fixed,
+            self._dl_cm_fixed,
+        )
+        return True
 
     def _build_precomputed_data(self, ssp_data, precompute):
         """Build Level 1: precomputed SSP tensors."""
@@ -2641,14 +2741,13 @@ class SEDModel:
             spec_fixed_id,
         )
 
-    def predict_photometry(self, params, mode="auto"):
+    def predict_photometry(self, params):
         """Compute observed photometric flux densities through all filters.
 
         Convolves the SED (redshifted and IGM-absorbed) through filter
         transmission curves, returning flux densities in the AB system
-        at the source. Supports three prediction modes for speed/accuracy
-        tradeoff: compositional (exact, XLA-fused), hybrid (precomputed
-        stellar + exact non-stellar), and exact (full pipeline, slowest).
+        at the source. Routes through :meth:`predict_observables_jit`,
+        the JIT-safe orchestrator with SSP threading (Phase 4-B).
 
         **Raw forward-pass output.** For interactive use with cached
         derived quantities, see ``model.predict(params).photometry``.
@@ -2661,19 +2760,7 @@ class SEDModel:
             Parameter values using public parameter names (e.g.,
             ``sfh_tsnorm_log_peak_sfr``, ``met_logzsol``, ``redshift``).
             See :class:`Parameters` for canonical names.
-        mode : str, optional
-            Prediction strategy. Default ``"auto"`` selects fastest available.
 
-            - ``"auto"`` — cascade through available: compositional → hybrid → exact
-            - ``"compositional"`` — full-resolution JIT SED kernel (bit-exact,
-              fastest). All components evaluated at full wavelength, integrated
-              through filters in single XLA-fused graph. Preferred when available.
-            - ``"hybrid"`` — precomputed SSP×filter photometry (stellar, ~0.4% error)
-              + exact non-stellar (emission, AGN, dust) at full wavelength, integrated
-              through filters. Fallback when compositional unavailable (e.g.,
-              variable-redshift, evolving metallicity, tabulated SFH).
-            - ``"exact"`` — raw forward pipeline, no kernel JIT, no precomputation.
-              Reference accuracy, slowest (~5–10× slower than compositional).
         Returns
         -------
         flux_density : array, shape (n_filters,)
@@ -2689,18 +2776,13 @@ class SEDModel:
 
         Notes
         -----
-        **JIT-compatible**: yes — compositional and hybrid modes are
-        JIT'd at initialization. Exact mode is not JIT'd. All modes
-        are safe inside :func:`jax.grad` for parameter gradients.
+        **JIT-compatible**: yes. Safe inside :func:`jax.grad` for
+        parameter gradients.
 
-        **Approximate accuracy**: Compositional and hybrid modes produce
-        predictions within 0.1%–0.4% of exact (see CLAUDE.md for
-        mode-specific tolerances). Differences driven by:
-
-        - Compositional: None (bit-exact vs. exact)
-        - Hybrid: ~0.4% stellar photometry (Zacharegkas+2025 [1]_)
-        - Approximations enabled via ``approx``: see :class:`SEDModel`
-          for individual component tolerances
+        **Approximation accuracy**: Driven by the build-time ``approx=``
+        policy (e.g. :class:`WavePrecomp` swaps in the SSP×filter LUT
+        for ~0.4 % stellar photometry, Zacharegkas+2025 [1]_). The
+        orchestrator path is itself bit-exact for the configured policy.
 
         **Filter wavelengths**: All filters loaded via :func:`load_filter_set`
         or :class:`Photometry` are assumed to be in observed frame (redshifted).
@@ -2726,33 +2808,12 @@ class SEDModel:
         """
         if self.filter_waves is None:
             raise ValueError("No filters set. Pass filters or observation= to SEDModel().")
-
-        if mode not in self._PREDICTION_MODES and mode != "traced":
-            raise ValueError(
-                f"Unknown mode {mode!r}. Choose from: {sorted(self._PREDICTION_MODES)}"
-            )
-
-        # Phase 6-prep (2026-05-20): all ``mode=`` values now route through
-        # ``predict_observables_jit`` — the JIT-safe orchestrator path with
-        # SSP threading (Phase 4-B). The historical kernel-cascade methods
-        # (``_predict_photometry_compositional/hybrid/exact/auto/traced``)
-        # are reduced to a single delegate. ``mode=`` retains its values
-        # for backward compatibility but no longer changes routing.
-        if mode != "auto":
-            warnings.warn(
-                "predict_photometry(mode=...) is deprecated and no longer "
-                "changes routing — every value now delegates to "
-                "predict_observables_jit. Drop the mode= kwarg.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
         return self.predict_observables_jit(params).phot_fnu
 
     def predict_spectrum(
         self,
         params,
         wave_obs=None,
-        mode="auto",
         wave_chunk_size=None,
     ):
         """Compute observed spectrum at given wavelengths with LSF convolution.
@@ -2777,9 +2838,6 @@ class SEDModel:
             2. Grid from ``observation.spectroscopy.wave_obs`` if set
             3. Raises ValueError if neither available
 
-        mode : str, optional
-            Prediction mode (same as :meth:`predict_photometry`).
-            Default ``"auto"`` cascades through available kernels.
         wave_chunk_size : int, optional
             If specified, split observed-frame wavelength axis into chunks of
             this size and evaluate via ``jax.lax.map`` to reduce per-chunk HLO
@@ -2800,8 +2858,8 @@ class SEDModel:
 
         Notes
         -----
-        **JIT-compatible**: compositional and hybrid modes are JIT'd.
-        Exact mode is not JIT'd.
+        **JIT-compatible**: yes — routes through
+        :meth:`predict_observables_jit` (Phase 4-B orchestrator).
 
         **Velocity dispersion**: When ``sigma_v`` is in free params,
         applies line-of-sight broadening via Gaussian convolution at
@@ -2860,24 +2918,8 @@ class SEDModel:
         if wave_chunk_size is None:
             wave_chunk_size = self._wave_chunk_size
 
-        if mode not in self._PREDICTION_MODES and mode != "traced":
-            raise ValueError(
-                f"Unknown mode {mode!r}. Choose from: {sorted(self._PREDICTION_MODES)}"
-            )
-
-        # Phase 6-prep (2026-05-20): all ``mode=`` values now route through
-        # ``predict_observables_jit``. See the matching block in
-        # ``predict_photometry`` for the rationale. ``wave_obs`` /
-        # ``wave_chunk_size`` are honoured by the orchestrator path via the
-        # configured spectroscopy grid.
-        if mode != "auto":
-            warnings.warn(
-                "predict_spectrum(mode=...) is deprecated and no longer "
-                "changes routing — every value now delegates to "
-                "predict_observables_jit. Drop the mode= kwarg.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+        # ``wave_obs`` / ``wave_chunk_size`` are honoured by the orchestrator
+        # path via the configured spectroscopy grid (Phase 6-prep, 2026-05-20).
         del wave_obs, wave_chunk_size
         return self.predict_observables_jit(params).spec_fnu
 
@@ -3074,15 +3116,13 @@ class SEDModel:
         flux = selected_lums * L_SUN / (4.0 * jnp.pi * dl_cm**2)
         return flux
 
-    def predict_spectral_indices(self, params, index_defs, mode="traced"):
+    def predict_spectral_indices(self, params, index_defs):
         """Predict spectral index values from the model SED.
 
         Generates a rest-frame spectrum covering the index wavelength
-        ranges and measures each index (EW or break ratio).
-
-        **Use this method for** JIT/batch loops (with ``mode='_traceable'``).
-        **For interactive use**, access individual indices via
-        ``model.predict(params).sed.dn4000`` etc.
+        ranges and measures each index (EW or break ratio). Suitable
+        for JIT/batch loops; for interactive use, access individual
+        indices via ``model.predict(params).sed.dn4000`` etc.
 
         Parameters
         ----------
@@ -3090,8 +3130,6 @@ class SEDModel:
             Parameter values (public names).
         index_defs : tuple of SpectralIndexDef
             Index definitions to measure.
-        mode : str, optional
-            Forward model prediction mode.
 
         Returns
         -------
@@ -3100,7 +3138,8 @@ class SEDModel:
 
         Notes
         -----
-        **JIT-compatible**: depends on ``mode`` (``"traced"`` by default).
+        **JIT-compatible**: yes — routes through
+        :meth:`predict_spectrum` → :meth:`predict_observables_jit`.
 
         Measures spectral indices (equivalent width or break ratio) from a
         rest-frame spectrum covering all wavelength ranges in ``index_defs``.
@@ -3117,7 +3156,7 @@ class SEDModel:
             2000,
         )
 
-        flux_obs = self.predict_spectrum(params, wave_obs, mode=mode)
+        flux_obs = self.predict_spectrum(params, wave_obs)
         wave_rest = wave_obs / (1.0 + z)
 
         indices = []
@@ -4698,25 +4737,6 @@ class SEDModel:
             observation=observation,
             **model_kwargs,
         )
-
-    @classmethod
-    def from_groups(cls, *args, **kwargs) -> SEDModel:
-        """Deprecated alias for :meth:`SEDModel.build`.
-
-        .. deprecated:: 0.x
-            Use :meth:`SEDModel.build` instead. ``from_groups`` will be
-            removed in tengri v1.0. The ``from_*`` namespace is reserved
-            for future deserialization entry points.
-        """
-        import warnings
-
-        warnings.warn(
-            "`SEDModel.from_groups` is deprecated and will be removed in "
-            "tengri v1.0; use `SEDModel.build` instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return cls.build(*args, **kwargs)
 
     def prior_predictive(self, n: int = 500, seed: int = 42) -> PriorPredictive:
         """Sample from the prior and evaluate forward model on each draw.

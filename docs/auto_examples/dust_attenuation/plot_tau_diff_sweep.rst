@@ -65,7 +65,7 @@ Higher τ_diff reddens the optical continuum and weakens the 4000 Å break
 
     setup_style()
 
-    model = SEDModel.from_groups(ssp_data=load_ssp(), **recipes.dust_demo())
+    model = SEDModel.build(ssp_data=load_ssp(), **recipes.dust_demo())
 
     fig, ax = plt.subplots(figsize=(8, 5))
     sweep_parameter(

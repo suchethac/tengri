@@ -168,7 +168,7 @@ def test_calibration_marginalize_auto_builds_calibration_likelihood():
         data_type="spectroscopy",
         has_cal=True,
     )
-    fitter.model._wave_obs = jnp.array([5000.0, 6000.0])
+    fitter.model.wave_obs = jnp.array([5000.0, 6000.0])
     lk = Fitter._maybe_build_default_likelihood(fitter)
     assert isinstance(lk, CalibrationMarginalisedLikelihood)
     assert lk.n_poly == 3
@@ -189,7 +189,7 @@ def test_eline_marginalize_auto_builds_eline_likelihood_with_builder():
     )
     fitter._eline_wavelengths = jnp.array([6564.6, 4861.3])
     fitter._eline_constraint_matrix = jnp.eye(2)
-    fitter.model._wave_obs = jnp.linspace(4000.0, 8000.0, 3)
+    fitter.model.wave_obs = jnp.linspace(4000.0, 8000.0, 3)
     fitter.model._spectral_resolution = 2000.0
     lk = Fitter._maybe_build_default_likelihood(fitter)
     assert isinstance(lk, ELineMarginalisedLikelihood)
@@ -214,7 +214,7 @@ def test_eline_cloudy_prior_auto_builds_cloudy_likelihood():
     fitter._eline_independent_wavelengths = jnp.array([6564.6, 4861.3])
     fitter._eline_constraint_matrix = jnp.eye(2)
     fitter._eline_prior_width_dex = 0.5
-    fitter.model._wave_obs = jnp.linspace(4000.0, 8000.0, 3)
+    fitter.model.wave_obs = jnp.linspace(4000.0, 8000.0, 3)
     fitter.model._spectral_resolution = 2000.0
     lk = Fitter._maybe_build_default_likelihood(fitter)
     assert isinstance(lk, CloudyELineMarginalisedLikelihood)
@@ -335,7 +335,7 @@ def test_eline_fitted_auto_builds_fitted_likelihood():
     fitter._eline_wavelengths = jnp.array([6564.6, 4861.3])
     fitter._eline_constraint_matrix = jnp.eye(2)
     fitter._eline_amplitude_names = ["eline_amp_Halpha", "eline_amp_Hbeta"]
-    fitter.model._wave_obs = jnp.linspace(4000.0, 8000.0, 3)
+    fitter.model.wave_obs = jnp.linspace(4000.0, 8000.0, 3)
     fitter.model._spectral_resolution = 2000.0
     lk = Fitter._maybe_build_default_likelihood(fitter)
     assert isinstance(lk, ELineFittedLikelihood)
@@ -383,7 +383,7 @@ def test_cal_marg_plus_eline_marg_auto_builds_combined_adapter():
     fitter._eline_constraint_matrix = jnp.eye(2)
     fitter._eline_prior_sigma = 1e10
     fitter._eline_prior_width_dex = 0.5
-    fitter.model._wave_obs = jnp.linspace(4000.0, 8000.0, 3)
+    fitter.model.wave_obs = jnp.linspace(4000.0, 8000.0, 3)
     fitter.model._spectral_resolution = 2000.0
     lk = Fitter._maybe_build_default_likelihood(fitter)
     assert isinstance(lk, CalibrationELineMarginalisedLikelihood)
@@ -409,7 +409,7 @@ def test_cal_marg_plus_eline_cloudy_auto_builds_combined_adapter_cloudy():
     fitter._eline_independent_wavelengths = jnp.array([6564.6, 4861.3])
     fitter._eline_constraint_matrix = jnp.eye(2)
     fitter._eline_prior_width_dex = 0.5
-    fitter.model._wave_obs = jnp.linspace(4000.0, 8000.0, 3)
+    fitter.model.wave_obs = jnp.linspace(4000.0, 8000.0, 3)
     fitter.model._spectral_resolution = 2000.0
     lk = Fitter._maybe_build_default_likelihood(fitter)
     assert isinstance(lk, CalibrationELineMarginalisedLikelihood)

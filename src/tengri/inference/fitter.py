@@ -526,31 +526,24 @@ class Fitter:
     def _auto_precompute_photometry(self, model: Any) -> None:
         """Auto-trigger photometry precomputation if conditions are met.
 
-        Fires when: fixed redshift + filters present + not yet precomputed.
-        Lets users create a Model without ``precompute=True`` and still get
-        the fast fused path when they construct a Fitter.
+        Fires when: photometry / joint data_type + the model declares an
+        :meth:`ensure_photometry_precomputed` method. Lets users build a
+        Model without ``precompute=True`` and still get the fast fused
+        path when they construct a Fitter.
+
+        The actual gate (fixed redshift + filters + not-yet-precomputed)
+        lives inside :meth:`SEDModel.ensure_photometry_precomputed` so
+        Fitter doesn't reach into model internals. Migration 2 step 3:
+        prior open-coded version touched ``model._precomputed``,
+        ``model._z_fixed``, ``model._dl_cm_fixed`` and a no-op
+        ``model._build_hybrid_kernels()`` call (the method has been
+        absent for a long time and the result was silently dropped).
         """
-        if (
-            self.data_type not in ("photometry", "joint")
-            or model._precomputed.photometry is not None
-            or getattr(model, "_z_fixed", None) is None
-            or getattr(model, "filter_waves", None) is None
-        ):
+        if self.data_type not in ("photometry", "joint"):
             return
-
-        import contextlib
-
-        from tengri.components.stellar.sps.precompute import precompute_photometry
-
-        model._precomputed.photometry = precompute_photometry(
-            model.ssp_data,
-            model.filter_waves,
-            model.filter_trans,
-            model._z_fixed,
-            model._dl_cm_fixed,
-        )
-        with contextlib.suppress(Exception):
-            model._hybrid = model._build_hybrid_kernels()
+        ensure = getattr(model, "ensure_photometry_precomputed", None)
+        if ensure is not None:
+            ensure()
 
     def _init_emission_lines(self, model, eline_marginalize, eline_prior_type):
         """Configure emission line marginalization and fitted-amplitude modes."""
@@ -1185,41 +1178,28 @@ class Fitter:
 
     # ── Loss and likelihood builders ──────────────────────────────────
 
-    def _build_loss_fn(self, mode: str = "traced") -> Callable:
+    def _build_loss_fn(self) -> Callable:
         """Build a differentiable loss function.
 
         See ``tengri.inference.loss_functions.build_loss_fn`` for full docs.
         Returns ``loss_fn(params_unbounded, data_args) -> scalar``.
-
-        Parameters
-        ----------
-        mode : str, optional
-            Forward model prediction mode. Default "traced" is for
-            internal tracing mode (NIFTy VI path). Use "auto" for ~1.5x speedup with
-            non-NIFTy methods.
         """
-        return build_loss_fn(self, mode=mode)
+        return build_loss_fn(self)
 
-    def _get_or_build_loss_fn(self, mode: str = "traced") -> Callable:
+    def _get_or_build_loss_fn(self) -> Callable:
         """Return the cached loss function, building it if needed.
 
-        The loss function is cached on the Model object keyed by
-        ``_engine_cache_key()`` + mode so that multiple Fitters with the same
-        model structure share the same compiled XLA program.
-
-        Parameters
-        ----------
-        mode : str, optional
-            Forward model prediction mode. Default "traced" for backward
-            compatibility. Pass "auto" for ~1.5x speedup with non-NIFTy methods.
+        Cached on the Model object keyed by ``_engine_cache_key()`` so
+        multiple Fitters with the same model structure share one
+        compiled XLA program.
         """
         from tengri.inference.jit_engine import get_or_build_cached
 
-        cache_key = (self._engine_cache_key(), mode)
+        cache_key = self._engine_cache_key()
         per_model = get_model_cache(self.model).setdefault("loss_fn", {})
         if cache_key in per_model:
             return per_model[cache_key]
-        loss_fn = get_or_build_cached(self, mode, "loss", lambda: self._build_loss_fn(mode=mode))
+        loss_fn = get_or_build_cached(self, "loss", self._build_loss_fn)
         per_model[cache_key] = loss_fn
         return loss_fn
 
@@ -1227,32 +1207,30 @@ class Fitter:
         """Build a log-prior function. See ``loss_functions.build_logprior_fn``."""
         return build_logprior_fn(self)
 
-    def _build_loglikelihood_fn(self, mode: str = "traced") -> Callable:
+    def _build_loglikelihood_fn(self) -> Callable:
         """Build log-likelihood function. See ``loss_functions.build_loglikelihood_fn``."""
-        return build_loglikelihood_fn(self, mode=mode)
+        return build_loglikelihood_fn(self)
 
-    def _get_or_build_loglikelihood_fn(self, mode: str = "traced") -> Callable:
+    def _get_or_build_loglikelihood_fn(self) -> Callable:
         """Return the cached log-likelihood function, building if needed."""
         from tengri.inference.jit_engine import get_or_build_cached
 
-        cache_key = (self._engine_cache_key(), mode)
+        cache_key = self._engine_cache_key()
         per_model = get_model_cache(self.model).setdefault("loglik_fn", {})
         if cache_key in per_model:
             return per_model[cache_key]
-        loglik_fn = get_or_build_cached(
-            self, mode, "loglik", lambda: self._build_loglikelihood_fn(mode=mode)
-        )
+        loglik_fn = get_or_build_cached(self, "loglik", self._build_loglikelihood_fn)
         per_model[cache_key] = loglik_fn
         return loglik_fn
 
-    def _build_loglikelihood_unbounded_fn(self, mode: str = "traced") -> Callable:
+    def _build_loglikelihood_unbounded_fn(self) -> Callable:
         """Build unbounded-space log-likelihood.
 
         See ``loss_functions.build_loglikelihood_unbounded_fn``.
         """
-        return build_loglikelihood_unbounded_fn(self, mode=mode)
+        return build_loglikelihood_unbounded_fn(self)
 
-    def _get_or_build_loglikelihood_unbounded_fn(self, mode: str = "traced") -> Callable:
+    def _get_or_build_loglikelihood_unbounded_fn(self) -> Callable:
         """Return the cached unbounded-space log-likelihood, building if needed.
 
         Caches per-model (no shared cross-fitter cache, unlike ``loss_fn``);
@@ -1260,15 +1238,15 @@ class Fitter:
         plus :func:`_unstandardize_parameters`, so the compile cost is
         marginal and the cache key would mirror the loss cache anyway.
         """
-        cache_key = (self._engine_cache_key(), mode)
+        cache_key = self._engine_cache_key()
         per_model = get_model_cache(self.model).setdefault("loglik_unbounded_fn", {})
         if cache_key in per_model:
             return per_model[cache_key]
-        fn = self._build_loglikelihood_unbounded_fn(mode=mode)
+        fn = self._build_loglikelihood_unbounded_fn()
         per_model[cache_key] = fn
         return fn
 
-    def _get_or_build_grad_fn(self, mode: str = "traced") -> Callable:
+    def _get_or_build_grad_fn(self) -> Callable:
         """Return cached JIT-compiled value_and_grad of the loss function.
 
         The gradient function takes ``(params_unbounded, data_args)`` as
@@ -1277,12 +1255,12 @@ class Fitter:
         """
         from tengri.inference.jit_engine import get_or_build_cached
 
-        cache_key = (self._engine_cache_key(), mode)
+        cache_key = self._engine_cache_key()
         per_model = get_model_cache(self.model).setdefault("grad_fn", {})
         if cache_key in per_model:
             return per_model[cache_key]
 
-        loss_fn = self._get_or_build_loss_fn(mode=mode)
+        loss_fn = self._get_or_build_loss_fn()
 
         def _build():
             @jax.jit
@@ -1292,24 +1270,24 @@ class Fitter:
 
             return val_and_grad
 
-        val_and_grad = get_or_build_cached(self, mode, "grad", _build)
+        val_and_grad = get_or_build_cached(self, "grad", _build)
         per_model[cache_key] = val_and_grad
         return val_and_grad
 
-    def _get_or_build_logdensity_fn(self, mode: str = "traced") -> Callable:
+    def _get_or_build_logdensity_fn(self) -> Callable:
         """Return cached JIT-compiled log-density for MCMC/Pathfinder.
 
         Returns ``logdensity(params_u, data_args) -> scalar``.  Callers
         should partial-apply ``data_args`` for blackjax compatibility.
         """
-        cache_key = (self._engine_cache_key(), mode)
+        cache_key = self._engine_cache_key()
         from tengri.inference.jit_engine import get_or_build_cached
 
         per_model = get_model_cache(self.model).setdefault("logdensity_fn", {})
         if cache_key in per_model:
             return per_model[cache_key]
 
-        loss_fn = self._get_or_build_loss_fn(mode=mode)
+        loss_fn = self._get_or_build_loss_fn()
 
         def _build():
             @jax.jit
@@ -1319,7 +1297,7 @@ class Fitter:
 
             return logdensity
 
-        logdensity = get_or_build_cached(self, mode, "logdensity", _build)
+        logdensity = get_or_build_cached(self, "logdensity", _build)
         per_model[cache_key] = logdensity
         return logdensity
 
@@ -1795,7 +1773,7 @@ class Fitter:
 
         # Dimensionality
         n_free = len(self._free_names)
-        n_grid = self.model._n_grid if self.model._uses_stochastic_sfh else 0
+        n_grid = self.model.n_grid if self.model.uses_stochastic_sfh else 0
         dim_str = f"{n_free} free"
         if n_grid:
             dim_str += f" + {n_grid} latent (ξ)"
@@ -1822,33 +1800,6 @@ class Fitter:
 
         lines.append(sep)
         return "\n".join(lines)
-
-    def _get_mode_for_method(self, method: str) -> str:
-        """Determine forward model prediction mode based on inference method.
-
-        PERFORMANCE NOTE (2026-04-18): Profiling shows mode="traced" is
-        12.64x FASTER than mode="auto" (5.9ms vs 74.4ms) with stable timing.
-        mode="auto" has pathological variance (std=504ms, 6.8x the mean) causing
-        occasional 500ms+ outliers. Always use mode="traced" for inference.
-
-        Parameters
-        ----------
-        method : str
-            Inference method name (e.g., "vi", "mcmc_nuts", "map")
-
-        Returns
-        -------
-        str
-            Always returns "traced" for optimal performance across all
-            inference methods. Previous "auto" mode had severe variance issues.
-
-        See Also
-        --------
-        docs/dev/jit-optimization-report-2026-04-18.md : Full profiling analysis
-        """
-        # ALL methods now use traced for 12.64x speedup + stable timing
-        # (mode="auto" variance pathology fixed 2026-04-18)
-        return "traced"
 
     # ── Private method runners ────────────────────────────────────────
 
@@ -2381,7 +2332,7 @@ class Fitter:
             for g in batch
         )
         _use_vmap_map = (
-            method == "map" and self.model._precomputed.photometry is not None and _same_shape
+            method == "map" and self.model.precomputed.photometry is not None and _same_shape
         )
 
         if _use_vmap_map:
@@ -2396,7 +2347,7 @@ class Fitter:
         }
         _use_vmap_mcmc = (
             method in _mcmc_methods
-            and self.model._precomputed.photometry is not None
+            and self.model.precomputed.photometry is not None
             and _same_shape
             and not self.spec.stochastic
         )
