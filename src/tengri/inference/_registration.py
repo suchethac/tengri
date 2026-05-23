@@ -81,7 +81,10 @@ register_backend(
 register_backend(
     "vi",
     tier="primary",
-    short_doc="NIFTy geoVI variational inference",
+    short_doc=(
+        "NIFTy geoVI variational inference (cold ~100s, ~20 GB RSS at D=6-7 — "
+        "memory-heavy; consider mcmc_ghmc for faster turnaround on D<10)"
+    ),
     aliases=("vi_nonlinear",),
     requires=("nifty8",),
     legacy_fitter=False,
@@ -142,7 +145,10 @@ register_backend(
 register_backend(
     "native_vi_nonlinear",
     tier="experimental",
-    short_doc="Pure JAX geoVI variational inference",
+    short_doc=(
+        "[UNSTABLE] Pure JAX geoVI — segfaults on DPL/dense_basis "
+        "photometry mocks (validated 2026-05-22, issue #231). Use 'vi' instead."
+    ),
     legacy_fitter=False,
 )(
     lambda context, *, key, init_from=None, **kw: _ctx_run_native_vi(
@@ -156,7 +162,10 @@ register_backend(
 register_backend(
     "native_vi_linear",
     tier="experimental",
-    short_doc="Pure JAX MGVI via lax.while_loop",
+    short_doc=(
+        "[UNSTABLE] Pure JAX MGVI — segfaults on DPL/dense_basis "
+        "photometry mocks (validated 2026-05-22, issue #231). Use 'vi_linear' instead."
+    ),
     legacy_fitter=False,
 )(
     lambda context, *, key, init_from=None, **kw: _ctx_run_native_vi(
@@ -180,7 +189,10 @@ register_backend(
 register_backend(
     "mcmc_nuts",
     tier="primary",
-    short_doc="No-U-Turn Sampler",
+    short_doc=(
+        "No-U-Turn Sampler (cold ~90s at D=6 DPL; warmup blows past 5 min on "
+        "dense_basis D=7 — prefer mcmc_hmc or mcmc_ghmc for dense_basis SFH)"
+    ),
     requires=("blackjax",),
     legacy_fitter=False,
 )(_ctx_run_nuts)
@@ -192,43 +204,53 @@ register_backend(
     legacy_fitter=False,
 )(_ctx_run_raytrace)
 
-# ── Experimental backends ────────────────────────────────────────────────
+# ── Promoted from experimental ──────────────────────────────────────────
+# Validated against DPL (D=6) and dense_basis (D=7) photometry mocks
+# on 2026-05-22 (issue #231). See docs/dev/benchmarks/2026-05-22_inference_backend_validation.md.
+register_backend(
+    "laplace",
+    tier="primary",
+    short_doc="Laplace approximation around the MAP (cold ~5-9s, warm ~1-2s, ~3 GB)",
+    legacy_fitter=False,
+)(_ctx_run_laplace)
+
 register_backend(
     "mcmc_hmc",
-    tier="experimental",
-    short_doc="Hamiltonian Monte Carlo",
+    tier="primary",
+    short_doc="Hamiltonian Monte Carlo (cold ~21s, warm ~10s, ~5 GB on D=6-7)",
     requires=("blackjax",),
     legacy_fitter=False,
 )(_ctx_run_hmc)
 
 register_backend(
     "mcmc_dynamic_hmc",
-    tier="experimental",
-    short_doc="Dynamic HMC with adaptive step size",
+    tier="primary",
+    short_doc="Dynamic HMC with adaptive step size (cold ~19s, warm ~8s, ~5 GB)",
     requires=("blackjax",),
     legacy_fitter=False,
 )(_ctx_run_dynamic_hmc)
 
 register_backend(
     "mcmc_ghmc",
-    tier="experimental",
-    short_doc="Generalized HMC",
+    tier="primary",
+    short_doc="Generalized HMC (cold ~17s, warm ~6s, ~5 GB — fastest in HMC family)",
     requires=("blackjax",),
     legacy_fitter=False,
 )(_ctx_run_ghmc)
 
 register_backend(
     "mcmc_mclmc",
-    tier="experimental",
-    short_doc="Microcanonical Langevin Monte Carlo",
+    tier="primary",
+    short_doc="Microcanonical Langevin MC (cold ~20s, warm ~2s, ~5 GB — fastest warm call)",
     requires=("blackjax",),
     legacy_fitter=False,
 )(_ctx_run_mclmc)
 
+# ── Experimental backends ────────────────────────────────────────────────
 register_backend(
     "mcmc_adjusted_mclmc",
     tier="experimental",
-    short_doc="Adjusted microcanonical Langevin sampler",
+    short_doc="Adjusted microcanonical Langevin (cold ~60s, ~3x compile premium over mclmc)",
     requires=("blackjax",),
     legacy_fitter=False,
 )(_ctx_run_adjusted_mclmc)
@@ -236,7 +258,10 @@ register_backend(
 register_backend(
     "mcmc_ess",
     tier="experimental",
-    short_doc="Elliptical slice sampling",
+    short_doc=(
+        "Elliptical slice sampling — cheap (cold ~10s, ~2 GB) but assumes a "
+        "Gaussian prior; bias on uniform/bounded priors not yet validated"
+    ),
     requires=("blackjax",),
     legacy_fitter=False,
 )(_ctx_run_elliptical_slice)
@@ -244,21 +269,20 @@ register_backend(
 register_backend(
     "nss",
     tier="experimental",
-    short_doc="Nested sampling for model comparison",
+    short_doc=(
+        "Nested sampling — slow (cold ~240s at D=6, timeout >600s at D=7); "
+        "use for evidence/model comparison, not point estimates"
+    ),
     legacy_fitter=False,
 )(_ctx_run_nss)
 
 register_backend(
-    "laplace",
-    tier="experimental",
-    short_doc="Laplace approximation",
-    legacy_fitter=False,
-)(_ctx_run_laplace)
-
-register_backend(
     "pathfinder",
     tier="experimental",
-    short_doc="Pathfinder variational inference",
+    short_doc=(
+        "[UNSTABLE] Pathfinder VI — segfaults on DPL/dense_basis photometry "
+        "mocks (validated 2026-05-22, issue #231); use 'laplace' or 'vi' instead"
+    ),
     requires=("blackjax",),
     legacy_fitter=False,
 )(_ctx_run_pathfinder)
