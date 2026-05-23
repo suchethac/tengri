@@ -38,17 +38,6 @@ physics, not nebular treatment.
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-87
 
-
-
-.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_sps_library_compare_001.png
-   :alt: plot sps library compare
-   :srcset: /auto_examples/sps/images/sphx_glr_plot_sps_library_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 
@@ -78,6 +67,11 @@ physics, not nebular treatment.
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(LIBRARIES)))
 
     C_AA_PER_S = 2.998e18
+    SFH = {"type": "tsnorm", "*": tengri.FIXED,
+           "peak_lbt_gyr": 1.0, "width_gyr": 0.05,
+           "log_peak_sfr": 1.0, "skew": 0.0, "trunc": 13.0}
+    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
     for (ssp_name, label), color in zip(LIBRARIES, COLORS):
@@ -87,18 +81,14 @@ physics, not nebular treatment.
             continue
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "tsnorm", "*": tengri.FIXED,
-                 "peak_lbt_gyr": 1.0, "width_gyr": 0.05,
-                 "log_peak_sfr": 1.0, "skew": 0.0, "trunc": 13.0},
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_diff": 0.0, "tau_bc": 0.0},
+            sfh=SFH,
+            dust=DUST,
             redshift=tengri.Fixed(0.01),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         out = model.predict_rest_sed(p)
         wave = np.asarray(out.wavelength)
         nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
-        # Normalise at 5500 Å so the chromatic differences read first.
         norm = nu_l_nu[np.argmin(np.abs(wave - 5500.0))]
         if norm > 0:
             nu_l_nu = nu_l_nu / norm
@@ -110,19 +100,13 @@ physics, not nebular treatment.
     ax.axvline(912, color="0.55", lw=0.6, ls=":")
     ax.text(912, 0.012, "Lyman limit", color="0.4", fontsize=8,
             rotation=90, va="bottom", ha="right")
-    ax.set_xlim(700, 5e4)
-    ax.set_ylim(1e-2, 5.0)
-    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-    ax.set_ylabel(r"$\nu L_\nu / \nu L_\nu(5500\,\mathrm{\AA})$")
+    ax.set(xlim=(700, 5e4), ylim=(1e-2, 5.0),
+           xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+           ylabel=r"$\nu L_\nu / \nu L_\nu(5500\,\mathrm{\AA})$")
     ax.legend(frameon=False, fontsize=8, loc="lower right")
 
     fig.tight_layout()
     fig.savefig("plot_sps_library_compare.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 7.447 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_sps_library_compare.py:

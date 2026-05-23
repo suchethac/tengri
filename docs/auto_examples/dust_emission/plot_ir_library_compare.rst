@@ -37,18 +37,7 @@ Libraries compared:
 - ``astrodust`` — Hensley & Draine 2023 unified grain model
 - ``bosa``      — BOSA template set (Boquien et al. CIGALE)
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-92
-
-
-
-.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_ir_library_compare_001.png
-   :alt: plot ir library compare
-   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_ir_library_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 21-93
 
 .. code-block:: Python
 
@@ -78,6 +67,8 @@ Libraries compared:
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(LIBS)))
 
     C_AA_PER_S = 2.998e18
+    SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": 1.0}
+
     ssp = tengri.load_ssp()
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
@@ -85,7 +76,7 @@ Libraries compared:
         try:
             model = tengri.SEDModel.build(
                 ssp,
-                sfh={"type": "const", "*": tengri.FIXED, "log_sfr": 1.0},
+                sfh=SFH,
                 dust={"type": "two_component", "*": tengri.FIXED,
                       "tau_diff": 1.0, "tau_bc": 1.5,
                       "emission": {"type": lib, "*": tengri.FIXED}},
@@ -108,10 +99,9 @@ Libraries compared:
             nu_l_nu = nu_l_nu / l_ir
         ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
 
-    ax.set_xlim(1e4, 1e7)        # 1 μm → 1 mm
-    ax.set_ylim(2e-3, 3.0)
-    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-    ax.set_ylabel(r"$\nu L_\nu\,/\,L_{\rm IR}$  [Hz$^{-1}$]")
+    ax.set(xlim=(1e4, 1e7), ylim=(2e-3, 3.0),
+           xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+           ylabel=r"$\nu L_\nu\,/\,L_{\rm IR}$  [Hz$^{-1}$]")
 
     for um, name in [(8, "8 μm"), (24, "MIPS 24"), (70, "FIR 70"), (160, "FIR 160")]:
         lam = um * 1.0e4

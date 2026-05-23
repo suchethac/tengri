@@ -34,18 +34,7 @@ optical/NIR window that the model treats separately. Deviations from
 the diagonal indicate either model approximations or numerical
 integration error.
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-97
-
-
-
-.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_uv_ir_energy_balance_001.png
-   :alt: plot uv ir energy balance
-   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_uv_ir_energy_balance_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 18-94
 
 .. code-block:: Python
 
@@ -80,7 +69,6 @@ integration error.
         )
 
 
-    # Pristine baseline (no dust) for the absorbed-UV reference.
     ref_model = _build(0.0)
     p_ref = dict(ref_model.spec.sample(jax.random.PRNGKey(0)))
     out_ref = ref_model.predict_rest_sed(p_ref)
@@ -116,23 +104,16 @@ integration error.
             label=r"$L_{\rm IR} = L_{\rm abs}^{\rm UV}$")
     sc = ax.scatter(L_abs, L_ir, c=tau_grid, cmap="viridis",
                     s=44, lw=0.4, edgecolor="0.2", zorder=4)
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlim(1e42, 1e46)
-    ax.set_ylim(1e42, 1e46)
-    ax.set_xlabel(r"$L_{\rm abs}^{\rm UV(912-3000\,\AA)}$  [erg s$^{-1}$]")
-    ax.set_ylabel(r"$L_{\rm IR}^{(8-1000\,\mu\mathrm{m})}$  [erg s$^{-1}$]")
+    ax.set(xscale="log", yscale="log",
+           xlim=(1e42, 1e46), ylim=(1e42, 1e46),
+           xlabel=r"$L_{\rm abs}^{\rm UV(912-3000\,\AA)}$  [erg s$^{-1}$]",
+           ylabel=r"$L_{\rm IR}^{(8-1000\,\mu\mathrm{m})}$  [erg s$^{-1}$]")
     ax.legend(frameon=False, fontsize=9, loc="upper left")
     cbar = fig.colorbar(sc, ax=ax, pad=0.02)
     cbar.set_label(r"$\tau_{\rm diff}$  [mag]")
 
     fig.tight_layout()
     fig.savefig("plot_uv_ir_energy_balance.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.572 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_uv_ir_energy_balance.py:

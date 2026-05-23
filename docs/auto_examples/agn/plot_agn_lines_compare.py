@@ -36,15 +36,17 @@ LINES_MODELS = [
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.9, len(LINES_MODELS)))
 
 C_AA_PER_S = 2.998e18
+SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+
 ssp = tengri.load_ssp()
 fig, ax = plt.subplots(figsize=(7.4, 4.6))
 
 for (line_kind, label), color in zip(LINES_MODELS, COLORS):
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.0, "tau_bc": 0.0},
+        sfh=SFH,
+        dust=DUST,
         agn={
             "disc":  {"type": "multicolor", "*": tengri.FIXED},
             "torus": {"type": "skirtor",    "*": tengri.FIXED},
@@ -59,13 +61,10 @@ for (line_kind, label), color in zip(LINES_MODELS, COLORS):
     nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
     ax.semilogy(wave, nu_l_nu, color=color, lw=1.0, label=label, alpha=0.85)
 
-# Zoom on the rest-frame optical/UV where the lines actually live.
-ax.set_xlim(1000, 7500)
-ax.set_ylim(1e44, 5e46)
-ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+ax.set(xlim=(1000, 7500), ylim=(1e44, 5e46),
+       xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+       ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
 
-# Mark the canonical AGN lines.
 LINE_MARKS = [
     (1216, r"Ly$\alpha$"),
     (1549, "C IV"),

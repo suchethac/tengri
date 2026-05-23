@@ -31,18 +31,7 @@ The colour gradient shows where the AGN corona overtakes the XRB
 emission band by band — the central diagnostic for AGN selection in
 deep X-ray surveys (Lehmer+2010, 2016).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-80
-
-
-
-.. image-sg:: /auto_examples/xray/images/sphx_glr_plot_xray_vs_agn_lbol_001.png
-   :alt: plot xray vs agn lbol
-   :srcset: /auto_examples/xray/images/sphx_glr_plot_xray_vs_agn_lbol_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 15-81
 
 .. code-block:: Python
 
@@ -67,13 +56,15 @@ deep X-ray surveys (Lehmer+2010, 2016).
     norm = mpl.colors.Normalize(vmin=log_lbol_grid.min(), vmax=log_lbol_grid.max())
     cmap = plt.get_cmap("viridis")
 
+    SFH = {"type": "const", "*": tengri.FIXED,
+           "log_sfr": 0.5, "start_gyr": 13.0, "end_gyr": 0.0}
+    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.3, "tau_bc": 0.5}
+
     ssp = tengri.load_ssp()
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED,
-             "log_sfr": 0.5, "start_gyr": 13.0, "end_gyr": 0.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.3, "tau_bc": 0.5},
+        sfh=SFH,
+        dust=DUST,
         agn={
             "disc":  {"type": "qsogen",  "*": tengri.FIXED},
             "torus": {"type": "skirtor", "*": tengri.FIXED},
@@ -94,10 +85,9 @@ deep X-ray surveys (Lehmer+2010, 2016).
         nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
         ax.loglog(wave, nu_l_nu, color=cmap(norm(log_lbol)), lw=1.4)
 
-    ax.set_xlim(0.5, 1e3)
-    ax.set_ylim(1e38, 5e46)
-    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-    ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+    ax.set(xlim=(0.5, 1e3), ylim=(1e38, 5e46),
+           xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+           ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
 
     for kev, name in [(0.5, "0.5 keV"), (2.0, "2 keV"), (10.0, "10 keV"),
                       (50.0, "50 keV")]:
@@ -111,11 +101,6 @@ deep X-ray surveys (Lehmer+2010, 2016).
 
     fig.tight_layout()
     fig.savefig("plot_xray_vs_agn_lbol.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 4.004 seconds)
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_vs_agn_lbol.py:

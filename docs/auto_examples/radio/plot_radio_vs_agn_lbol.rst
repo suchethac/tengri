@@ -31,18 +31,7 @@ radio-loud / radio-quiet division emerges from this competition.
 This is the figure that motivates separating SF-driven from
 AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-79
-
-
-
-.. image-sg:: /auto_examples/radio/images/sphx_glr_plot_radio_vs_agn_lbol_001.png
-   :alt: plot radio vs agn lbol
-   :srcset: /auto_examples/radio/images/sphx_glr_plot_radio_vs_agn_lbol_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 15-80
 
 .. code-block:: Python
 
@@ -67,14 +56,16 @@ AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
     norm = mpl.colors.Normalize(vmin=log_lbol_grid.min(), vmax=log_lbol_grid.max())
     cmap = plt.get_cmap("viridis")
 
+    SFH = {"type": "const", "*": tengri.FIXED,
+           "log_sfr": 0.5, "start_gyr": 13.0, "end_gyr": 0.0}
+    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.3, "tau_bc": 0.5,
+            "emission": {"type": "dale2014", "*": tengri.FIXED}}
+
     ssp = tengri.load_ssp()
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED,
-             "log_sfr": 0.5, "start_gyr": 13.0, "end_gyr": 0.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.3, "tau_bc": 0.5,
-              "emission": {"type": "dale2014", "*": tengri.FIXED}},
+        sfh=SFH,
+        dust=DUST,
         agn={
             "disc":  {"type": "qsogen",  "*": tengri.FIXED},
             "torus": {"type": "skirtor", "*": tengri.FIXED},
@@ -95,10 +86,9 @@ AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
         nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
         ax.loglog(wave, nu_l_nu, color=cmap(norm(log_lbol)), lw=1.4)
 
-    ax.set_xlim(1e6, 3e9)
-    ax.set_ylim(1e36, 1e44)
-    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-    ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+    ax.set(xlim=(1e6, 3e9), ylim=(1e36, 1e44),
+           xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+           ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
     for nu_ghz, name in [(0.150, "150 MHz"), (1.4, "1.4 GHz"), (10.0, "10 GHz")]:
         lam = 2.998e10 / (nu_ghz * 1.0e9) * 1.0e10
         ax.axvline(lam, color="0.65", lw=0.4, ls=":")
@@ -110,11 +100,6 @@ AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
 
     fig.tight_layout()
     fig.savefig("plot_radio_vs_agn_lbol.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.858 seconds)
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_radio_vs_agn_lbol.py:

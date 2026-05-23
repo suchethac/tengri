@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:20.225** total execution time for 8 files **from auto_examples/multiwavelength**:
+**00:03.714** total execution time for 9 files **from auto_examples/multiwavelength**:
 
 .. container::
 
@@ -32,8 +32,11 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_ulirg_arp220_analog.py` (``plot_ulirg_arp220_analog.py``)
+     - 00:03.714
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_components_isolated.py` (``plot_components_isolated.py``)
-     - 00:20.225
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_fir_radio_correlation.py` (``plot_fir_radio_correlation.py``)
      - 00:00.000
