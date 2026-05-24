@@ -21,6 +21,11 @@
 AGN dusty torus: library comparison at fixed L_bol
 =====================================================
 
+.. image:: images/sphx_glr_plot_agn_torus_compare_001.png
+   :alt: plot agn torus compare
+   :class: sphx-glr-single-img
+
+
 Six dusty-torus libraries reprocessing the same accretion-disc
 continuum at fixed ``log L_bol = 12.5`` (in log L_sun) and standard
 inclination. The disc is held at ``multicolor`` (Kubota & Done 2018)

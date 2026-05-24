@@ -21,6 +21,11 @@
 Metallicity shapes panchromatic SED with dust emission
 ======================================================
 
+.. image:: images/sphx_glr_plot_logzsol_panchromatic_001.png
+   :alt: plot logzsol panchromatic
+   :class: sphx-glr-single-img
+
+
 Stellar metallicity affects the stellar continuum shape and overall energy
 balance. Dust emission responds to absorbed stellar photons: metal-poor hot
 stars emit bluer light with less IR-absorbed energy, while metal-rich cooler

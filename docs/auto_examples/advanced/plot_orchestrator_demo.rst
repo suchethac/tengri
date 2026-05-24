@@ -21,6 +21,11 @@
 Component Orchestrator End-to-End
 ==================================
 
+.. image:: images/sphx_glr_plot_orchestrator_demo_001.png
+   :alt: plot orchestrator demo
+   :class: sphx-glr-single-img
+
+
 TODO[examples-sweep]: This script uses low-level component orchestration
 (build_components, run_components) which is experimental Phase II-2.6 API
 intended for infrastructure use, not recommended for user-facing examples.

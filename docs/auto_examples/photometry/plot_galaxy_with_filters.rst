@@ -21,6 +21,11 @@
 Galaxy SED with photometric filter coverage
 ==============================================
 
+.. image:: images/sphx_glr_plot_galaxy_with_filters_001.png
+   :alt: plot galaxy with filters
+   :class: sphx-glr-single-img
+
+
 What each photometric system measures depends on where its filters
 sit relative to the rest-frame spectral features. We overlay six
 common filter sets (GALEX *NUV*, SDSS *ugriz*, 2MASS *JHK*, WISE

@@ -21,6 +21,11 @@
 Nebular emission fades with stellar population age
 ====================================================
 
+.. image:: images/sphx_glr_plot_neb_age_dependence_001.png
+   :alt: plot neb age dependence
+   :class: sphx-glr-single-img
+
+
 Ionizing photon production declines rapidly with stellar population age
 (~t^-1). We show how nebular line strength evolves from young (50 Myr)
 to old (5 Gyr) populations.

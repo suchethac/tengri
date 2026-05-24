@@ -21,6 +21,11 @@
 The IRX–β relation emerges from the dust model
 ==============================================
 
+.. image:: images/sphx_glr_plot_usecase_uv_slope_beta_001.png
+   :alt: plot usecase uv slope beta
+   :class: sphx-glr-single-img
+
+
 The infrared excess (IRX = L_IR / L_FUV) versus UV-continuum slope β
 diagram (Meurer+1999) is the standard tool for inferring attenuation
 in unresolved star-forming galaxies. We mock a population of
