@@ -1,9 +1,9 @@
 # Population VI scaling
 
-This page documents how `PopulationFitter`'s pure-JAX variational engines —
+How `PopulationFitter`'s pure-JAX variational engines —
 `native_vi_linear` (MGVI) and `native_vi_nonlinear` (geoVI) — scale in
 **wall time**, **peak memory**, **convergence**, and **hyperparameter
-recovery** as the catalog size $N$ and the forward-chunk size $K$ change.
+recovery** as the catalogue size $N$ and the forward-chunk size $K$ change.
 
 The data is produced once by
 
@@ -57,23 +57,19 @@ $\sigma_{\rm PSD}$ 68% half-width vs $N$ against a $1/\sqrt{N}$
 reference.
 ```
 
-**What to take away from the basic run**:
+Memory is essentially flat in $N$ for `native_vi_linear` (5–8 GB ΔRSS
+from $N=4$ to $N=8192$, well under the 30 GB budget). Wall time goes
+linear in $N$ past $N \sim 128$ for both engines, with geoVI ~3× slower
+per iteration than MGVI; both plateau at 6 iterations once $N \gtrsim 64$.
 
-* **Memory.** `native_vi_linear` peak ΔRSS is essentially flat in $N$
-  across three orders of magnitude (5–8 GB band from $N=4$ to
-  $N=8192$). Memory budget at 30 GB is never approached.
-* **Wall time.** Linear in $N$ past $N \sim 128$ for both engines;
-  geoVI is $\sim 3\times$ slower per iteration than MGVI.
-* **Iterations.** Both engines plateau at 6 iterations once $N \gtrsim
-  64$ — the population-shared posterior tightens and stops moving.
-* **Hyperparameter recovery (red flag).** With SDSS-only photometry
-  the $\tau_{\rm PSD}$ marginal sits at $\sim 150$ Myr, *not* at the
-  injected truth of 20 Myr — i.e. the posterior is the prior. The
-  $\sigma_{\rm PSD}$ marginal lands on truth only because its prior
-  mean ($2.05$) happens to be near truth. **Photometric SDSS
-  broadband data carries almost no information about stochastic-SFH
-  PSD on Myr timescales.** The constraint half-width does not follow
-  $1/\sqrt N$ — it follows the prior.
+The headline scientific result is a negative one: with SDSS-only
+photometry the $\tau_{\rm PSD}$ marginal sits at ~150 Myr versus the
+injected truth of 20 Myr — the posterior collapses to the prior. The
+$\sigma_{\rm PSD}$ marginal lands near truth only because its prior mean
+($2.05$) happens to be near truth. The constraint half-width does not
+follow $1/\sqrt{N}$; it follows the prior. **Photometric SDSS broadband
+data carries almost no information about stochastic-SFH PSD on Myr
+timescales.**
 
 ## Rich run — FUV/NUV + SDSS + JHK at 5% noise
 
