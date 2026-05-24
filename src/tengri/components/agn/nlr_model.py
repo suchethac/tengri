@@ -71,9 +71,9 @@ class AGNNebular(SEDModelComponent):
     name = "agn_nlr"
     parameter_prefix = "agn_nlr_"
 
-    cov_frac = Uniform(0.0, 0.5, description="NLR covering fraction", units="")
+    cov_frac = Uniform(0.0, 0.5, description="NLR covering fraction", units="dimensionless")
     fwhm_kms = Fixed(500.0, description="NLR line FWHM", units="km/s")
-    line_eff = Fixed(0.10, description="line-emission efficiency", units="")
+    line_eff = Fixed(0.10, description="line-emission efficiency", units="dimensionless")
 
     inputs: dict[str, str] = {"L_agn_bol": "erg/s"}  # noqa: RUF012
     outputs: dict[str, str] = {"L_nlr": "erg/s"}  # noqa: RUF012

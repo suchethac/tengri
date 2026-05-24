@@ -98,9 +98,14 @@ class PowerLawDisc(SEDModelComponent):
 
     # Free parameters — auto-discovered
     log_lbol = Uniform(8.0, 14.0, description="AGN bolometric luminosity", units="dex (L_sun)")
-    alpha = Uniform(-1.5, -0.5, description="Power-law spectral index", units="")
+    alpha = Uniform(-1.5, -0.5, description="Power-law spectral index", units="dimensionless")
     T_max = Uniform(1e4, 1e6, description="UV cutoff temperature", units="K")
-    frac = Uniform(0.0, 1.0, description="Disc luminosity fraction of L_bol", units="")
+    frac = Uniform(
+        0.0,
+        1.0,
+        description="Disc luminosity fraction of L_bol",
+        units="dimensionless",
+    )
 
     # Cross-component output
     outputs: ClassVar[dict[str, str]] = {"L_agn_disc": "erg/s"}

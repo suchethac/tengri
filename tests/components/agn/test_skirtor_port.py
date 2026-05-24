@@ -94,7 +94,7 @@ class TestSKIRTORParameterDiscovery:
         assert decls["agn_log_lbol"].units == "dex (L_sun)"
         assert decls["agn_oa_skirtor"].units == "deg"
         # Others dimensionless
-        assert decls["agn_tau_skirtor"].units == ""
+        assert decls["agn_tau_skirtor"].units == "dimensionless"
 
     def test_parameter_descriptions_nonempty(self):
         """All parameters have descriptions."""
