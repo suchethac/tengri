@@ -582,8 +582,7 @@ def _translate_stellar(stellar_dict: dict, result: dict) -> None:
         suggestions = difflib.get_close_matches(met_mode, valid_modes, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(
-            f"Unknown met_mode '{met_mode}'. "
-            f"Valid modes: {', '.join(valid_modes)}.{suggest_str}"
+            f"Unknown met_mode '{met_mode}'. Valid modes: {', '.join(valid_modes)}.{suggest_str}"
         )
 
     result["met_mode"] = met_mode

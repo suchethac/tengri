@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = pytest.mark.regression_bug
+
 import tengri
 from tengri import FIXED, Fixed
 
