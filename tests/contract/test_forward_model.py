@@ -72,7 +72,7 @@ def test_build_rejects_duplicate_population_names(sed_model_minimal, simple_obse
 def test_predict_returns_mapping_with_expected_keys(sed_model_minimal, simple_observation) -> None:
     forward = ForwardModel.build(sed=sed_model_minimal, observation=simple_observation)
     params = {name: 0.5 for name in sed_model_minimal.spec.free_params}
-    pred = forward.predict(params)
+    pred = forward.predict_observables(params)
     assert isinstance(pred, dict)
     # Must publish at least one photometric-channel key.
     assert any(k in pred for k in ("phot_fnu", "fnu_obs"))
@@ -124,7 +124,7 @@ def test_predict_with_spatial_threads_state(sed_model_minimal, simple_observatio
             "spatial_pa_deg": jnp.float64(0.0),
         }
     )
-    pred = forward.predict(params)
+    pred = forward.predict_observables(params)
     # Photometry still works (no observation adapter consumes the spatial
     # profile yet — that's the next slice of item #6).
     new_phot = pred.get("phot_fnu", pred.get("fnu_obs"))
@@ -138,7 +138,7 @@ def test_predict_matches_legacy_sedmodel(sed_model_minimal, simple_observation) 
 
     forward = ForwardModel.build(sed=sed_model_minimal, observation=simple_observation)
     params = {name: 0.5 for name in sed_model_minimal.spec.free_params}
-    pred_new = forward.predict(params)
+    pred_new = forward.predict_observables(params)
     pred_old = sed_model_minimal.predict_photometry(params)
 
     new_phot = pred_new.get("phot_fnu", pred_new.get("fnu_obs"))
@@ -163,8 +163,8 @@ def test_multi_population_predict_sums_in_linear_flux(
         ],
         observation=simple_observation,
     )
-    pred_single = single.predict({})
-    pred_twin = twin.predict({})
+    pred_single = single.predict_observables({})
+    pred_twin = twin.predict_observables({})
 
     single_phot = pred_single.get("phot_fnu", pred_single.get("fnu_obs"))
     twin_phot = pred_twin.get("phot_fnu", pred_twin.get("fnu_obs"))
@@ -184,7 +184,7 @@ def test_multi_population_params_slice_by_namespace(sed_model_minimal, simple_ob
     )
     # No free params in this minimal model, but the namespace path should
     # still produce finite output (this exercises _params_for_population).
-    pred = forward.predict({"redshift": 0.05})
+    pred = forward.predict_observables({"redshift": 0.05})
     phot = pred.get("phot_fnu", pred.get("fnu_obs"))
     assert phot is not None
     assert jnp.all(jnp.isfinite(phot))
@@ -214,7 +214,7 @@ def test_multi_population_cross_pop_namespaced_extras(sed_model_minimal) -> None
         ],
         observation=_CapturingObservation(),
     )
-    forward.predict({"redshift": 0.05})
+    forward.predict_observables({"redshift": 0.05})
 
     assert set(captured) == {"a", "b"}
     # Every typed-derived key published by population "a" must surface in

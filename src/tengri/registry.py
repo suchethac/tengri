@@ -1341,7 +1341,7 @@ _CORE_CLASSES: dict[str, dict[str, str]] = {
         "module": "tengri.forward.forward_model",
         "purpose": (
             "Thin outer shell that inference talks to. Owns an SED chain and "
-            "an observation; exposes .predict(params) → channel dict."
+            "an observation; exposes .predict / .predict_observables(params) → channel dict."
         ),
         "see_also": "tengri.ForwardModel.build(sed=..., observation=...)",
     },
@@ -1409,7 +1409,10 @@ def summary() -> None:
     _display("\ntengri — what's available:\n")
     _display("  Core classes (the four nouns inference talks to):")
     _display("    tengri.SEDModel         differentiable SED forward chain")
-    _display("    tengri.ForwardModel     outer shell — owns SED + observation, exposes .predict")
+    _display(
+        "    tengri.ForwardModel     outer shell — owns SED + observation, "
+        "exposes .predict / .predict_observables"
+    )
     _display("    tengri.Parameters       priors + fixed values")
     _display("    tengri.Fitter           inference driver")
     _display("")

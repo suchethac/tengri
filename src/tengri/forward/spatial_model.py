@@ -14,7 +14,7 @@ the others being ``SEDModel`` (already in place) and
 The wave-grid field of the incoming :class:`ForwardState` is preserved
 as a placeholder; spatial sub-models operate on
 ``state.derived["spatial_grid_xy_kpc"]`` which the caller (typically
-:class:`ForwardModel.predict`) inserts before running.
+:class:`ForwardModel.predict_observables`) inserts before running.
 """
 
 from __future__ import annotations

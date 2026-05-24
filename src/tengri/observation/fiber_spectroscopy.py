@@ -31,7 +31,7 @@ Example
 
     spatial = SpatialModel(components=[Sersic()])
     forward = ForwardModel.build(sed=..., spatial=spatial, observation=obs)
-    pred = forward.predict(params)
+    pred = forward.predict_observables(params)
     # pred["spec_fnu"] is now the aperture-fraction-scaled spectrum;
     # pred["phot_fnu"] (if present) is unchanged (total-flux convention).
 """
