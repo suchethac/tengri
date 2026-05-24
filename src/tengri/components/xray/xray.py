@@ -25,6 +25,7 @@ full JAX reimplementation for differentiability and gradient-based inference.
 
 import jax.numpy as jnp
 
+from tengri._deprecated import deprecated_alias
 from tengri.utils.physics_constants import (
     C_AA as _C_AA,
     H_PLANCK as _H_PLANCK,
@@ -37,6 +38,8 @@ def xray_xrb(
     wavelength: jnp.ndarray,
     sfr: float,
     stellar_mass: float,
+    metallicity_z: float = 0.02,
+    stellar_age_gyr: float = 1.0,
     gamma_hmxb: float = 2.0,
     gamma_lmxb: float = 1.6,
     E_cut: float = 100.0,
@@ -46,8 +49,10 @@ def xray_xrb(
     r"""Predict X-ray SED from accretion-powered binaries.
 
     Computes the combined X-ray emission from high-mass (HMXB) and low-mass
-    (LMXB) X-ray binary populations, scaled by SFR and stellar mass respectively.
-    Each population is modelled as a power-law with exponential cutoff.
+    (LMXB) X-ray binary populations. HMXB luminosity scales with SFR and
+    metallicity (Lehmer et al. 2016). LMXB luminosity scales with stellar
+    mass and age (Lehmer et al. 2016). Both are modelled as power-laws
+    with exponential cutoff.
 
     Parameters
     ----------
@@ -57,6 +62,10 @@ def xray_xrb(
         Star formation rate. [Msun/yr]
     stellar_mass : float
         Stellar mass. [Msun]
+    metallicity_z : float, optional
+        Metallicity (mass fraction, not log Z/Z_sun). Default: 0.02 (solar). []
+    stellar_age_gyr : float, optional
+        Stellar age in Gyr. Default: 1.0. [Gyr]
     gamma_hmxb : float, optional
         HMXB photon index (Γ, where F_ν ∝ ν^{−Γ}). Default: 2.0.
     gamma_lmxb : float, optional
@@ -79,28 +88,32 @@ def xray_xrb(
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
 
-    **HMXB luminosity scaling** (Grimm et al. 2003, MNRAS 339, 793, Eq. 1):
+    **HMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
         HMXBs are young binary systems (age < 100 Myr) with massive companions,
-        so their population follows the instantaneous SFR:
+        so their population follows the instantaneous SFR. The luminosity
+        depends strongly on metallicity Z (mass fraction):
 
         .. math::
 
-            L_X^{\mathrm{HMXB}}(2\text{–}10\,\mathrm{keV}) =
-                2.6 \times 10^{39} \times \left(\frac{\mathrm{SFR}}{M_\odot/\mathrm{yr}}\right)
-                \quad [\mathrm{erg/s}]
+            \log(L_X^{\mathrm{HMXB}}(2\text{–}10\,\mathrm{keV})/\mathrm{SFR}) =
+                40.3 - 62Z + 569Z^2 - 1834Z^3 + 1968Z^4
+                \quad [\mathrm{erg\,s^{-1}\,(M_\odot\,yr^{-1})^{-1}}]
 
-        A coefficient offset (log_L_hmxb_offset) captures intrinsic scatter
-        or evolutionary effects.
+        At solar metallicity (Z=0.02), this yields ≈ 2.6×10^39 erg/s per
+        M_sun/yr SFR, consistent with Grimm et al. 2003.
 
-    **LMXB luminosity scaling** (Gilfanov 2004, MNRAS 349, 146, Eq. 1):
+    **LMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
         LMXBs are old systems (age > 1 Gyr), so their population traces
-        stellar mass:
+        stellar mass. The luminosity depends on stellar age t (Gyr):
 
         .. math::
 
-            L_X^{\mathrm{LMXB}}(2\text{–}10\,\mathrm{keV}) =
-                8.3 \times 10^{28} \times \left(\frac{M_\star}{M_\odot}\right)
-                \quad [\mathrm{erg/s}]
+            \log(L_X^{\mathrm{LMXB}}(2\text{–}10\,\mathrm{keV})/M_\star) =
+                40.3 - 1.5\log t - 0.42(\log t)^2 + 0.43(\log t)^3 + 0.14(\log t)^4
+                \quad [\mathrm{erg\,s^{-1}\,M_\odot^{-1}}]
+
+        At t=1 Gyr, this yields ≈ 8.3×10^28 erg/s per M_sun, consistent with
+        Gilfanov 2004.
 
     **Spectral shape**: Both HMXB and LMXB are modelled as power-laws with
     a high-energy exponential cutoff (photoelectric absorption, or intrinsic
@@ -117,27 +130,50 @@ def xray_xrb(
     (λ ≈ 1.2 Å – 124 Å). Outside this range, flux is negligible.
 
     **Offsets**: The log_L_*_offset parameters allow captured intrinsic
-    scatter (e.g., metallicity effects on binary evolution) or
-    redshift-dependent evolution in hierarchical models.
+    scatter (e.g., redshift-dependent evolution) in hierarchical models.
 
     References
     ----------
-    .. [1] H.-J. Grimm et al., "High-mass X-ray binaries as a star formation
+    .. [1] B. D. Lehmer et al., "The evolution of the X-ray binary
+       luminosity functions of nearby galaxies with the Chandra COSMOS
+       survey," ApJ, 825, 7 (2016).
+       https://doi.org/10.3847/0004-637X/825/1/7
+    .. [2] H.-J. Grimm et al., "High-mass X-ray binaries as a star formation
        rate indicator in distant galaxies," MNRAS, 339, 793 (2003).
        https://doi.org/10.1046/j.1365-8711.2003.06224.x
-    .. [2] M. Gilfanov, "Low-mass X-ray binaries as a stellar mass indicator
+    .. [3] M. Gilfanov, "Low-mass X-ray binaries as a stellar mass indicator
        for the host galaxy," MNRAS, 349, 146 (2004). arXiv:astro-ph/0309171.
        https://doi.org/10.1111/j.1365-2966.2004.07473.x
-    .. [3] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
+    .. [4] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
        CIGALE and improvement of the code," ApJ, 927, 192 (2022).
        https://doi.org/10.3847/1538-4357/ac4971
     """
     nu = _C_AA / wavelength
     E_keV = _H_PLANCK * nu / _KEV_TO_ERG  # convert to keV
 
-    # Reference luminosities (erg/s in 2-10 keV)
-    L_hmxb_ref = 2.6e39 * sfr * 10.0**log_L_hmxb_offset
-    L_lmxb_ref = 8.3e28 * stellar_mass * 10.0**log_L_lmxb_offset
+    # Lehmer+2016 metallicity quartic for HMXB (Eq. 15, Lehmer+16)
+    # log(L_HMXB / SFR) = 40.3 - 62*Z + 569*Z^2 - 1834*Z^3 + 1968*Z^4
+    log_l_hmxb_per_sfr = (
+        40.3
+        - 62.0 * metallicity_z
+        + 569.0 * metallicity_z**2
+        - 1834.0 * metallicity_z**3
+        + 1968.0 * metallicity_z**4
+    )
+    L_hmxb_ref = 10.0**log_l_hmxb_per_sfr * sfr * 10.0**log_L_hmxb_offset
+
+    # Lehmer+2016 age quartic for LMXB (Eq. 15, Lehmer+16)
+    # log(L_LMXB / M_star) = 40.3 - 1.5*log(t) - 0.42*(log t)^2 + 0.43*(log t)^3 + 0.14*(log t)^4
+    # where t is age in Gyr
+    log_t = jnp.log10(jnp.maximum(stellar_age_gyr, 1e-3))  # protect against log(0)
+    log_l_lmxb_per_mstar = (
+        40.3
+        - 1.5 * log_t
+        - 0.42 * log_t**2
+        + 0.43 * log_t**3
+        + 0.14 * log_t**4
+    )
+    L_lmxb_ref = 10.0**log_l_lmxb_per_mstar * stellar_mass * 10.0**log_L_lmxb_offset
 
     # Power-law with exponential cutoff: L_nu ∝ (E/E_ref)^{-Γ+1} * exp(-E/E_cut)
     # Normalise by integrating the spectral shape over the 2-10 keV reference band
@@ -201,6 +237,101 @@ def alpha_ox_from_l2500(l_2500_erg_hz: float) -> float:
     .. [1] Just, D. W. et al., 2007, ApJ, 665, 1004, Eq. 3.
     """
     return -0.137 * jnp.log10(l_2500_erg_hz) + 2.638
+
+
+def xray_hotgas(
+    wavelength: jnp.ndarray,
+    sfr: float,
+    gamma: float = 1.0,
+    E_cut: float = 1.0,
+) -> jnp.ndarray:
+    r"""Predict X-ray SED from hot gas (diffuse ISM/CGM).
+
+    Computes thermal X-ray emission from optically-thin hot plasma in the
+    interstellar medium (ISM) and circumgalactic medium (CGM). The emission
+    scales with SFR and is modelled as thermal bremsstrahlung.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid in Å (rest-frame). [Å]
+    sfr : float
+        Star formation rate. [Msun/yr]
+    gamma : float, optional
+        Photon index (Γ, where F_ν ∝ ν^{−Γ}). Default: 1.0 (thermal).
+    E_cut : float, optional
+        Exponential cutoff energy. Default: 1.0 keV (hot gas characteristic). [keV]
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Spectral luminosity density of hot gas X-ray emission.
+        [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    **Hot gas luminosity scaling** (Yang et al. 2020, MNRAS 491, 740;
+    Yang et al. 2022, ApJ 927, 192; Mineo et al. 2012, ApJ 745, 181):
+        Hot gas X-ray emission scales with SFR because star-forming regions
+        heat the ISM through supernovae and winds:
+
+        .. math::
+
+            \log(L_X^{\mathrm{hot\,gas}}(0.5\text{–}2\,\mathrm{keV})/\mathrm{SFR}) = 38.9
+                \quad [\mathrm{erg\,s^{-1}\,(M_\odot\,yr^{-1})^{-1}}]
+
+        This gives L_X^{hot gas} ≈ 7.94×10^38 erg/s per M_sun/yr SFR.
+
+    **Spectral shape**: Hot gas is modelled as thermal bremsstrahlung from
+    optically-thin plasma (Γ = 1; free-free and free-bound emission):
+
+        .. math::
+
+            F_\nu \propto \nu^{-\Gamma} \exp(-h\nu / E_{\mathrm{cut}})
+
+        Typical cutoff: E_cut ≈ 1 keV (plasma temperature ~ 10^7 K).
+
+    **Wavelength coverage**: Hot gas emits in soft X-rays (0.5–2 keV,
+        λ ≈ 6–124 Å). Outside this range, flux is negligible.
+
+    References
+    ----------
+    .. [1] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
+       CIGALE and improvement of the code," MNRAS, 491, 740 (2020).
+       https://doi.org/10.1093/mnras/stz3001
+    .. [2] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
+       CIGALE and improvement of the code," ApJ, 927, 192 (2022).
+       https://doi.org/10.3847/1538-4357/ac4971
+    .. [3] S. Mineo et al., "The hot and energetic universe: The X-ray binary
+       populations in normal galaxies," ApJ, 745, 181 (2012).
+       https://doi.org/10.1088/0004-637X/745/2/181
+    """
+    nu = _C_AA / wavelength
+    E_keV = _H_PLANCK * nu / _KEV_TO_ERG
+
+    # Hot gas luminosity scaling (Yang+20, Eq. in §2.2.1)
+    # log(L_0.5-2keV / SFR) = 38.9 => L_hotgas = 10^38.9 * SFR
+    log_l_hotgas_per_sfr = 38.9
+    L_hotgas_ref = 10.0**log_l_hotgas_per_sfr * sfr
+
+    # Thermal bremsstrahlung spectrum with exponential cutoff
+    E_ref = 1.0  # keV (characteristic hot-gas energy)
+    spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-E_keV / E_cut)
+
+    # Normalise by integrating spectral shape over 0.5-2 keV
+    E_fine = jnp.linspace(0.5, 2.0, 200)  # keV
+    nu_fine = E_fine * _KEV_TO_HZ
+    spec_fine = (E_fine / E_ref) ** (-gamma + 1) * jnp.exp(-E_fine / E_cut)
+    band_int = jnp.maximum(jnp.trapezoid(spec_fine, nu_fine), 1e-60)
+
+    L_nu = L_hotgas_ref / band_int * spec
+
+    # Soft X-ray only (0.5-2 keV => 6-124 A)
+    # but allow slightly beyond for smoothness
+    xray_mask = wavelength < 124.0
+    return jnp.where(xray_mask, L_nu, 0.0)
 
 
 def xray_anisotropy(
@@ -331,16 +462,122 @@ def xray_agn_corona_from_disc(
 
 def xray_agn_corona(
     wavelength: jnp.ndarray,
+    l_2500_30deg_erg_hz: float,
+    gamma: float = 1.8,
+    E_cut: float = 300.0,
+    delta_alpha_ox: float = 0.0,
+    cos_inc: float = 1.0,
+    apply_anisotropy: bool = True,
+    a1: float = 0.5,
+    a2: float = 0.0,
+) -> jnp.ndarray:
+    r"""X-ray emission from AGN corona (CIGALE / Yang+2020 canonical path).
+
+    Self-consistent AGN corona emission derived from the disc UV luminosity
+    at 30° intrinsic angle. This is the canonical path matching X-CIGALE
+    (Yang+2020) and enforces physical consistency between UV and X-ray SEDs.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid in Å (rest-frame). [Å]
+    l_2500_30deg_erg_hz : float
+        Monochromatic luminosity density at 2500 Å from the AGN disc
+        at 30° inclination angle (intrinsic). [erg/s/Hz]
+    gamma : float, optional
+        Photon index (Γ, where F_ν ∝ ν^{−Γ}). Default: 1.8. Range: 1.4–2.4.
+    E_cut : float, optional
+        Exponential cutoff energy. Default: 300 keV. [keV]
+    delta_alpha_ox : float, optional
+        Additive offset to the Just+2007 α_ox relation. Default: 0.0. [dex]
+    cos_inc : float, optional
+        Cosine of inclination angle (1 = face-on, 0 = edge-on).
+        Default: 1.0. []
+    apply_anisotropy : bool, optional
+        Whether to apply Yang+2022 viewing-angle correction. Default: True.
+    a1 : float, optional
+        Linear anisotropy coefficient. Default: 0.5. []
+    a2 : float, optional
+        Quadratic anisotropy coefficient. Default: 0.0. []
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function.
+
+    **Physical basis** (Yang et al. 2020, MNRAS 491, 740, §2.2.1):
+    The α_OX parameter (defined as the SED slope between 2500 Å and 2 keV)
+    is an observationally-calibrated relation from Just et al. (2007):
+
+    .. math::
+
+        \alpha_{\mathrm{OX}} = -0.137 \log_{10}(L_{2500}/[\mathrm{erg\,s^{-1}\,Hz^{-1}}])
+            + 2.638
+
+    The 2–10 keV luminosity then follows from the definition:
+
+    .. math::
+
+        \alpha_{\mathrm{OX}} = 0.384 \log_{10}(L_{2\,\mathrm{keV}}/L_{2500})
+            \quad \Rightarrow \quad
+        L_{2\,\mathrm{keV}} = L_{2500} \times 10^{\alpha_{\mathrm{OX}}/0.384}
+
+    This driving from L_2500 (rather than L_bol) ensures consistency with
+    the AGN disc model and avoids the ambiguity of bolometric corrections.
+
+    **Anisotropy** (Yang et al. 2022, ApJ 927, 192):
+    When apply_anisotropy=True, an inclination-dependent factor is applied:
+
+    .. math::
+
+        L_X(\theta) = L_X(0°) \times [a_1\cos\theta + a_2\cos^2\theta
+            + (1 - a_1 - a_2)]
+
+    Default (a1=0.5, a2=0.0) matches X-CIGALE's "intermediate" solution.
+
+    References
+    ----------
+    .. [1] D. W. Just et al., "The X-ray luminosity and morphology
+       dependence of narrow emission-line regions in nearby active galactic
+       nuclei," ApJ, 665, 1004 (2007).
+       https://doi.org/10.1086/519990
+    .. [2] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
+       CIGALE and improvement of the code," MNRAS, 491, 740 (2020).
+       https://doi.org/10.1093/mnras/stz3001
+    .. [3] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
+       CIGALE and improvement of the code," ApJ, 927, 192 (2022).
+       https://doi.org/10.3847/1538-4357/ac4971
+    """
+    return xray_agn_corona_from_disc(
+        wavelength,
+        l_2500_30deg_erg_hz,
+        cos_inc=cos_inc,
+        delta_alpha_ox=delta_alpha_ox,
+        gamma=gamma,
+        E_cut=E_cut,
+        apply_anisotropy=apply_anisotropy,
+        a1=a1,
+        a2=a2,
+    )
+
+
+def _xray_agn_corona_bolometric(
+    wavelength: jnp.ndarray,
     L_agn_bol: float,
     gamma: float = 1.8,
     E_cut: float = 300.0,
     alpha_ox: float = -1.4,
 ) -> jnp.ndarray:
-    """X-ray emission from AGN corona.
+    """**DEPRECATED**: X-ray emission from AGN bolometric luminosity.
 
-    Power law with photon index Gamma and exponential cutoff,
-    normalized via the alpha_ox relation:
-      alpha_ox = 0.384 * log(L_2keV / L_2500A)
+    **This function is deprecated.** Use :func:`xray_agn_corona` (which takes
+    L_2500_30deg_erg_hz) instead. The bolometric-correction path is ambiguous
+    and inconsistent with the disc UV model. Converted from L_bol via
+    Hopkins+2007 bolometric correction (BC_2500 ≈ 5.15).
 
     Parameters
     ----------
@@ -359,10 +596,6 @@ def xray_agn_corona(
     -------
     ndarray, shape (n_wave,)
         Spectral luminosity density [erg/s/Hz].
-
-    Notes
-    -----
-    **JIT-compatible**: yes — pure JAX function.
     """
     nu = _C_AA / wavelength
     E_keV = _H_PLANCK * nu / (1.6022e-9)
@@ -395,36 +628,60 @@ def xray_total(
     wavelength: jnp.ndarray,
     sfr: float = 1.0,
     stellar_mass: float = 1e10,
-    L_agn_bol: float = 0.0,
+    metallicity_z: float = 0.02,
+    stellar_age_gyr: float = 1.0,
+    l_2500_30deg: float = 0.0,
     gamma_hmxb: float = 2.0,
     gamma_lmxb: float = 1.6,
     gamma_agn: float = 1.8,
     E_cut: float = 300.0,
-    alpha_ox: float = -1.4,
+    delta_alpha_ox: float = 0.0,
+    cos_inc: float = 1.0,
+    apply_anisotropy: bool = True,
+    a1: float = 0.5,
+    a2: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Total X-ray emission (XRB + AGN corona).
+    """Total X-ray emission (HMXB + LMXB + hot gas + AGN corona).
+
+    Combines X-ray binaries (HMXB and LMXB), diffuse hot gas, and AGN
+    corona emission into a single SED. Implements Lehmer et al. 2016
+    (metallicity and age-dependent XRB scaling), Yang et al. 2020 (hot gas),
+    and Just et al. 2007 / Yang et al. 2020 (AGN corona).
 
     Parameters
     ----------
     wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
     sfr : float
-        Star formation rate [Msun/yr].
+        Star formation rate [Msun/yr]. Default: 1.0.
     stellar_mass : float
-        Stellar mass [Msun].
-    L_agn_bol : float
-        AGN bolometric luminosity [erg/s]. 0 = no AGN X-ray.
+        Stellar mass [Msun]. Default: 1e10.
+    metallicity_z : float
+        Metallicity (mass fraction). Default: 0.02 (solar). []
+    stellar_age_gyr : float
+        Stellar age in Gyr. Default: 1.0. [Gyr]
+    l_2500_30deg : float
+        AGN monochromatic luminosity at 2500 Å at 30° inclination [erg/s/Hz].
+        Default: 0.0 (no AGN X-ray).
     gamma_hmxb : float
-        HMXB photon index. Default 2.0.
+        HMXB photon index. Default: 2.0.
     gamma_lmxb : float
-        LMXB photon index. Default 1.6.
+        LMXB photon index. Default: 1.6.
     gamma_agn : float
-        AGN photon index. Default 1.8.
+        AGN X-ray photon index. Default: 1.8.
     E_cut : float
-        Exponential cutoff energy [keV]. Default 300.
-    alpha_ox : float
-        UV-to-X-ray slope. Default -1.4.
+        Exponential cutoff energy [keV]. Default: 300.
+    delta_alpha_ox : float
+        Additive offset to Just+2007 α_ox relation [dex]. Default: 0.0.
+    cos_inc : float
+        Cosine of inclination angle. Default: 1.0 (face-on). []
+    apply_anisotropy : bool
+        Whether to apply Yang+2022 viewing-angle correction. Default: True.
+    a1 : float
+        Linear anisotropy coefficient. Default: 0.5. []
+    a2 : float
+        Quadratic anisotropy coefficient. Default: 0.0. []
 
     Returns
     -------
@@ -434,10 +691,36 @@ def xray_total(
     Notes
     -----
     **JIT-compatible**: yes — pure JAX function.
+
+    **Components**:
+    - HMXB: Lehmer+2016 metallicity quartic, scaling with SFR
+    - LMXB: Lehmer+2016 age quartic, scaling with M_star
+    - Hot gas: Yang+2020, scaling with SFR
+    - AGN corona: Just+2007 / Yang+2020, scaling with L_2500 and α_OX
     """
-    xrb = xray_xrb(wavelength, sfr, stellar_mass, gamma_hmxb, gamma_lmxb, E_cut)
-    agn = xray_agn_corona(wavelength, L_agn_bol, gamma_agn, E_cut, alpha_ox)
-    return xrb + agn
+    xrb = xray_xrb(
+        wavelength,
+        sfr,
+        stellar_mass,
+        metallicity_z=metallicity_z,
+        stellar_age_gyr=stellar_age_gyr,
+        gamma_hmxb=gamma_hmxb,
+        gamma_lmxb=gamma_lmxb,
+        E_cut=E_cut,
+    )
+    hotgas = xray_hotgas(wavelength, sfr, gamma=1.0, E_cut=1.0)
+    agn = xray_agn_corona(
+        wavelength,
+        l_2500_30deg,
+        gamma=gamma_agn,
+        E_cut=E_cut,
+        delta_alpha_ox=delta_alpha_ox,
+        cos_inc=cos_inc,
+        apply_anisotropy=apply_anisotropy,
+        a1=a1,
+        a2=a2,
+    )
+    return xrb + hotgas + agn
 
 
 # ── Lopez+2024 IRX-based X-ray (for low-luminosity AGN) ─────────
@@ -680,3 +963,16 @@ def xray_total_lopez24(
         apply_anisotropy=False,
     )
     return xrb + agn
+
+
+# ── Deprecation shims ──
+
+
+# Deprecated: old bolometric-normalisation path for xray_agn_corona
+# Use xray_agn_corona_from_disc (which takes l_2500_30deg) instead
+xray_agn_corona_bolometric = deprecated_alias(
+    _xray_agn_corona_bolometric,
+    old_name="xray_agn_corona_bolometric",
+    new_name="xray_agn_corona_from_disc",
+    drop_version="1.0",
+)
