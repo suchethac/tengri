@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**01:46.793** total execution time for 177 files **from all galleries**:
+**00:04.038** total execution time for 178 files **from all galleries**:
 
 .. container::
 
@@ -32,11 +32,11 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_balmer_decrement_dust.py` (``../examples/nebular/plot_balmer_decrement_dust.py``)
-     - 01:45.754
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_attenuation_curves_klam.py` (``../examples/dust_attenuation/plot_attenuation_curves_klam.py``)
+     - 00:03.174
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_law_uv_slope_response.py` (``../examples/dust_attenuation/plot_dust_law_uv_slope_response.py``)
-     - 00:01.039
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_kennicutt_sfr_calibrations.py` (``../examples/usecases/plot_usecase_kennicutt_sfr_calibrations.py``)
+     - 00:00.864
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
      - 00:00.000
@@ -129,6 +129,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_law_application.py` (``../examples/dust_attenuation/plot_dust_law_application.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_law_uv_slope_response.py` (``../examples/dust_attenuation/plot_dust_law_uv_slope_response.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_slope_sweep.py` (``../examples/dust_attenuation/plot_dust_slope_sweep.py``)

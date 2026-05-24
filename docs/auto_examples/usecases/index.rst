@@ -121,6 +121,23 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Three of the most-used star-formation-rate indicators agree only for specific assumed SFHs. We mock a constant-SFR galaxy across SFR = 0.01 to 100 M☉/yr and read each indicator out:">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_kennicutt_sfr_calibrations_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_kennicutt_sfr_calibrations`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Kennicutt+1998 SFR calibrations: UV, Hα, and L_IR</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Measures the 95% stellar mass completeness threshold for SDSS-like photometry. Mocks a population of 150 star-forming and passive galaxies spanning log M* [7-12] at z=0.1, injects realistic photometric noise, and measures below which stellar mass more than 5% of sources drop below detection limit. Critical for constructing mass-limited galaxy samples and understanding survey selection effects.">
 
 .. only:: html
@@ -203,6 +220,7 @@ emission-line Pearson coefficients.
    /auto_examples/usecases/plot_usecase_emission_line_pcc
    /auto_examples/usecases/plot_usecase_hubble_sequence
    /auto_examples/usecases/plot_usecase_jwst_color_color
+   /auto_examples/usecases/plot_usecase_kennicutt_sfr_calibrations
    /auto_examples/usecases/plot_usecase_mass_completeness
    /auto_examples/usecases/plot_usecase_sfr_indicator_compare
    /auto_examples/usecases/plot_usecase_uv_slope_beta

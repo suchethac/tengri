@@ -21,6 +21,11 @@
 X-ray binary scaling: HMXB traces current SFR, LMXB traces stellar mass
 ======================================================================
 
+.. image:: images/sphx_glr_plot_xray_sf_001.png
+   :alt: plot xray sf
+   :class: sphx-glr-single-img
+
+
 X-ray binaries (XRBs) are among the brightest X-ray sources in galaxies.
 High-mass XRBs (HMXBs) form copiously during starbursts and scale ~SFR,
 while low-mass XRBs (LMXBs) are long-lived remnants scaling with integrated

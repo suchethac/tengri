@@ -978,23 +978,6 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="In Case B recombination at T = 10⁴ K, n_e ≈ 10² cm⁻³, intrinsic Hα/Hβ = 2.86. Any larger ratio in the observed flux is interpreted as a dust reddening signal — the workhorse measurement for E(B−V) in star-forming galaxies.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_balmer_decrement_dust_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_balmer_decrement_dust`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Balmer decrement Hα/Hβ as a dust meter</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="The Cue neural emulator responds to 12+ parameters. We show how each knob (ionization, metallicity, density, abundances, ionizing slope) moves a galaxy on the BPT-N plane log [OIII]/Hβ vs log [NII]/Hα. Each panel sweeps one parameter while holding fiducial values fixed. Kewley+2001 and Kauffmann+2003 demarcations shown for reference.">
 
 .. only:: html
@@ -1336,6 +1319,23 @@ depths, two-component geometry, and law comparisons.
     <div class="sphx-glr-thumbnails">
 
 .. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Direct view of the attenuation k(λ) function (in mag of attenuation per E(B−V), normalised to k(V) = R_V) for the production attenuation laws. The shape of each curve is what determines how the underlying intrinsic SED gets reshaped by a given amount of dust; plot_dust_law_application.py and plot_dust_law_uv_slope_response.py show downstream consequences on the SED and on β.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_attenuation_curves_klam_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_attenuation_curves_klam`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Attenuation curves k(λ) for the shipped law family</div>
+    </div>
+
 
 .. raw:: html
 
@@ -3279,6 +3279,23 @@ emission-line Pearson coefficients.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">JWST NIRCam color-color diagnostics for high-z galaxy classification</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Three of the most-used star-formation-rate indicators agree only for specific assumed SFHs. We mock a constant-SFR galaxy across SFR = 0.01 to 100 M☉/yr and read each indicator out:">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_kennicutt_sfr_calibrations_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_kennicutt_sfr_calibrations`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Kennicutt+1998 SFR calibrations: UV, Hα, and L_IR</div>
     </div>
 
 

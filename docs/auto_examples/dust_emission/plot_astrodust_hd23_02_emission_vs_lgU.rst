@@ -21,6 +21,11 @@
 Astrodust+PAH emission vs log U
 ================================
 
+.. image:: images/sphx_glr_plot_astrodust_hd23_02_emission_vs_lgU_001.png
+   :alt: plot astrodust hd23 02 emission vs lgU
+   :class: sphx-glr-single-img
+
+
 Emission per H per ionization parameter U across the Hensley & Draine 2023
 grid. Dividing by U reveals its effect: PAH-to-FIR ratio plateaus in FIR
 (U-independent) but rises steeply with U in MIR.

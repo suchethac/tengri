@@ -21,6 +21,11 @@
 AGN emission-line backbones compared
 ======================================
 
+.. image:: images/sphx_glr_plot_agn_lines_compare_001.png
+   :alt: plot agn lines compare
+   :class: sphx-glr-single-img
+
+
 Four production line backbones layered on top of the same disc +
 torus at fixed ``log L_bol = 12.5``. The line backbone controls
 which optical/UV emission features the model produces — narrow-line

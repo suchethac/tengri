@@ -21,6 +21,11 @@
 Gradient Sensitivity Heatmap
 =============================
 
+.. image:: images/sphx_glr_plot_gradient_sensitivity_001.png
+   :alt: plot gradient sensitivity
+   :class: sphx-glr-single-img
+
+
 Computes the Jacobian d(flux)/d(theta) of the forward model and displays
 it as a heatmap showing which photometric bands are sensitive to which
 physical parameters. Each column shows normalized sensitivity to one

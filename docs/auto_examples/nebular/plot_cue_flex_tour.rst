@@ -21,6 +21,11 @@
 Cue knob flexibility: six dimensions of HII region control
 ===========================================================
 
+.. image:: images/sphx_glr_plot_cue_flex_tour_001.png
+   :alt: plot cue flex tour
+   :class: sphx-glr-single-img
+
+
 Cue has six tuning knobs that control HII-region ionization and the
 diffuse ionized gas. This six-panel tour sweeps each knob individually
 and reports the ``L_Hα`` response *relative to the baseline*, in dex.

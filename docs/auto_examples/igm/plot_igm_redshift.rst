@@ -21,6 +21,11 @@
 IGM transmission curves evolve sharply with redshift as Lyman forest deepens
 ===========================================================================
 
+.. image:: images/sphx_glr_plot_igm_redshift_001.png
+   :alt: plot igm redshift
+   :class: sphx-glr-single-img
+
+
 The intergalactic medium (IGM) imprints wavelength-dependent opacity on
 observed galaxy SEDs via Lyman-series and Lyman-continuum absorption.
 The Lyman break at 912 Å rest-frame shifts to longer observed wavelengths

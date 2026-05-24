@@ -21,6 +21,11 @@
 SSP library comparison at a fixed age and metallicity
 ======================================================
 
+.. image:: images/sphx_glr_plot_sps_library_compare_001.png
+   :alt: plot sps library compare
+   :class: sphx-glr-single-img
+
+
 Different stellar population synthesis codes use different stellar
 spectral libraries, isochrone families, and binary treatments. The
 SED of a ~1 Gyr-old, solar-metallicity simple stellar population

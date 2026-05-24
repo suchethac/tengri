@@ -21,6 +21,11 @@
 Dust attenuation laws from UV through near-infrared
 ====================================================
 
+.. image:: images/sphx_glr_plot_dust_curves_001.png
+   :alt: plot dust curves
+   :class: sphx-glr-single-img
+
+
 The six headline dust attenuation laws plotted over the full UV-through-NIR
 range (0.1–3 μm), extending beyond the 2175 Å bump region to show how curves
 flatten in the infrared. Red-shifted galaxies observe longer wavelengths at

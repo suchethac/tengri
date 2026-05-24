@@ -21,6 +21,11 @@
 Alpha-element enhancement suppresses iron absorption features
 =============================================================
 
+.. image:: images/sphx_glr_plot_alpha_fe_sweep_001.png
+   :alt: plot alpha fe sweep
+   :class: sphx-glr-single-img
+
+
 The [α/Fe] abundance ratio encodes the chemical enrichment history: rapid
 enrichment by core-collapse supernovae before Type Ia SNe begin leads to high
 [α/Fe]. In the SED, enhanced alpha-elements suppress iron absorption lines in
