@@ -70,6 +70,7 @@ from tengri.parameters.translate import (
     _EVOLVING_ALPHA_PARAM_MAP,
     LOG10_ZSUN,
     _build_param_map,
+    check_unknown_params,
     get_internal_params,
 )
 from tengri.utils.grid import (
@@ -4204,6 +4205,9 @@ class SEDModel:
         passed as JIT runtime inputs. Backend grids become ``Parameter`` ops
         instead of ``Constant`` ops, reducing compile size for Cue and CloudyGrid.
         """
+        # Validate param keys before entering JIT — silent drops of unknown
+        # override keys produce plausible-looking but wrong physics (issue #314).
+        check_unknown_params(params, self._param_map)
         return self._get_or_build_predict_observables_jit()(
             params, self.spec.get_fixed_values(), self.ssp_data, self._template_data_for_jit()
         )
