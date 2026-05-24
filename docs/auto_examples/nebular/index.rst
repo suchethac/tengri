@@ -136,6 +136,23 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Zoomed rest-frame spectrum of an ionised-gas-dominated SF galaxy with the strongest optical / near-UV emission lines labelled. Wavelengths are vacuum; line positions follow NIST/Atomic Line List.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_emission_line_atlas_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_emission_line_atlas`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Optical emission-line atlas of a young star-forming galaxy</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The Lyα-specific escape fraction f_esc_lya sets what fraction of Lyα photons can escape the ISM without scattering. Higher f_esc_lya suppresses the Lyα emission line while leaving other nebular lines unchanged.">
 
 .. only:: html
@@ -338,6 +355,7 @@ Nebular emission backends comparison.
    /auto_examples/nebular/plot_cue_flex_tour
    /auto_examples/nebular/plot_cue_parameter_atlas
    /auto_examples/nebular/plot_dig_frac_sweep
+   /auto_examples/nebular/plot_emission_line_atlas
    /auto_examples/nebular/plot_fesc_lya_sweep
    /auto_examples/nebular/plot_fesc_sweep
    /auto_examples/nebular/plot_line_sigma_sweep

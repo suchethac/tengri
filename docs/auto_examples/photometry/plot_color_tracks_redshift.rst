@@ -38,7 +38,7 @@ Useful intuition this figure makes obvious:
   z = 0.5 SF galaxy from an unobscured z = 3 LBG (the LBG dropout
   degeneracy demonstrated in workflows/plot_workflow_photoz_degeneracy)
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-90
+.. GENERATED FROM PYTHON SOURCE LINES 22-105
 
 .. code-block:: Python
 
@@ -60,20 +60,29 @@ Useful intuition this figure makes obvious:
         return np.asarray(model.predict_photometry(params))
 
 
-    obs = tengri.Observation(
-        photometry=tengri.Photometry.from_names(["sdss_g", "sdss_r", "sdss_z"])
-    )
+    obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_g", "sdss_r", "sdss_z"]))
 
 
     def _build_population(peak_lbt, width, tau_diff):
         return tengri.SEDModel.build(
             tengri.load_ssp(),
             observation=obs,
-            sfh={"type": "tsnorm", "*": tengri.FIXED,
-                 "peak_lbt_gyr": peak_lbt, "width_gyr": width,
-                 "log_peak_sfr": 1.0, "skew": 0.0, "trunc": 13.0},
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_diff": tau_diff, "tau_bc": 0.3, "slope": -0.7},
+            sfh={
+                "type": "tsnorm",
+                "*": tengri.FIXED,
+                "peak_lbt_gyr": peak_lbt,
+                "width_gyr": width,
+                "log_peak_sfr": 1.0,
+                "skew": 0.0,
+                "trunc": 13.0,
+            },
+            dust={
+                "type": "two_component",
+                "*": tengri.FIXED,
+                "tau_diff": tau_diff,
+                "tau_bc": 0.3,
+                "slope": -0.7,
+            },
             redshift=tengri.Uniform(0.001, 3.5),
         )
 
@@ -81,8 +90,8 @@ Useful intuition this figure makes obvious:
     z_grid = np.linspace(0.05, 2.5, 80)
 
     POPULATIONS = [
-        ("Star-forming",    1.5, 2.5, 0.4, "#3377cc"),
-        ("Quiescent",       9.0, 1.5, 0.05, "#cc3333"),
+        ("Star-forming", 1.5, 2.5, 0.4, "#3377cc"),
+        ("Quiescent", 9.0, 1.5, 0.05, "#cc3333"),
     ]
 
     fig, ax = plt.subplots(figsize=(6.4, 5.4))
@@ -100,12 +109,18 @@ Useful intuition this figure makes obvious:
         for z_mark in [0.1, 0.5, 1.0, 1.5, 2.0]:
             i_m = int(np.argmin(np.abs(z_grid - z_mark)))
             ax.scatter(rz[i_m], gr[i_m], s=22, color=color, zorder=4)
-            ax.annotate(f"z={z_mark:.1f}", (rz[i_m], gr[i_m]),
-                        textcoords="offset points", xytext=(6, 2),
-                        fontsize=7, color=color)
+            ax.annotate(
+                f"z={z_mark:.1f}",
+                (rz[i_m], gr[i_m]),
+                textcoords="offset points",
+                xytext=(6, 2),
+                fontsize=7,
+                color=color,
+            )
 
-    ax.set(xlabel=r"$r - z$  [AB mag]", ylabel=r"$g - r$  [AB mag]",
-           xlim=(-0.2, 2.0), ylim=(-0.2, 2.6))
+    ax.set(
+        xlabel=r"$r - z$  [AB mag]", ylabel=r"$g - r$  [AB mag]", xlim=(-0.2, 2.0), ylim=(-0.2, 2.6)
+    )
     ax.legend(frameon=False, fontsize=9, loc="upper left")
 
     fig.tight_layout()

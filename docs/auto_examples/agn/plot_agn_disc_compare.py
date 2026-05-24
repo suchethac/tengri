@@ -32,12 +32,12 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 DISC_MODELS = [
-    ("qsogen",       "QSOGEN (Temple+2021)"),
-    ("multicolor",   "multicolor disc (K&D 2018)"),
-    ("kubota_done",  "Kubota & Done 2018 (full)"),
-    ("grahsp_sbpl",  "GRAHSP broken power-law"),
-    ("powerlaw",     "power-law disc"),
-    ("adaf",         "ADAF (Mahadevan 1997)"),
+    ("qsogen", "QSOGEN (Temple+2021)"),
+    ("multicolor", "multicolor disc (K&D 2018)"),
+    ("kubota_done", "Kubota & Done 2018 (full)"),
+    ("grahsp_sbpl", "GRAHSP broken power-law"),
+    ("powerlaw", "power-law disc"),
+    ("adaf", "ADAF (Mahadevan 1997)"),
 ]
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(DISC_MODELS)))
 
@@ -53,8 +53,12 @@ for (disc, label), color in zip(DISC_MODELS, COLORS):
         ssp,
         sfh=SFH,
         dust=DUST,
-        agn={"disc": {"type": disc, "*": tengri.FIXED},
-             "*": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0},
+        agn={
+            "disc": {"type": disc, "*": tengri.FIXED},
+            "*": tengri.FIXED,
+            "log_lbol": 12.5,
+            "frac": 1.0,
+        },
         redshift=tengri.Fixed(0.05),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -63,9 +67,12 @@ for (disc, label), color in zip(DISC_MODELS, COLORS):
     nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
     ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
 
-ax.set(xlim=(20, 3e5), ylim=(1e41, 5e47),
-       xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-       ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
+ax.set(
+    xlim=(20, 3e5),
+    ylim=(1e41, 5e47),
+    xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+    ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
+)
 ax.axvspan(1, 100, color="0.93", alpha=0.6, lw=0)
 ax.text(30, 2e47, "X-ray", color="0.4", fontsize=8, va="top")
 ax.text(2000, 2e47, "UV/optical BBB", color="0.4", fontsize=8, va="top")

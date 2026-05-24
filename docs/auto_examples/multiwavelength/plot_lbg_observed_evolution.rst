@@ -32,7 +32,7 @@ This is the figure that motivates how each dropout band is chosen for
 each redshift bracket — *u* dropout at ``z ~ 3``, *g* at ``z ~ 4-5``,
 *r* at ``z ~ 6``, *i / z* at ``z ~ 7-8``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-79
+.. GENERATED FROM PYTHON SOURCE LINES 16-88
 
 .. code-block:: Python
 
@@ -53,8 +53,14 @@ each redshift bracket — *u* dropout at ``z ~ 3``, *g* at ``z ~ 4-5``,
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.85, len(REDSHIFTS)))
 
     C_AA_PER_S = 2.998e18
-    SFH = {"type": "dpl", "*": tengri.FIXED,
-           "tau_gyr": 0.2, "log_peak_sfr": 1.5, "alpha": 3.0, "beta": 2.0}
+    SFH = {
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "tau_gyr": 0.2,
+        "log_peak_sfr": 1.5,
+        "alpha": 3.0,
+        "beta": 2.0,
+    }
     DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1}
 
     ssp = tengri.load_ssp()
@@ -80,21 +86,24 @@ each redshift bracket — *u* dropout at ``z ~ 3``, *g* at ``z ~ 4-5``,
         ax.loglog(wave_obs, nu_f_nu, color=color, lw=1.5, label=f"$z = {z:g}$")
 
     BANDS = [
-        ("u",     3000, 4000, "#3355bb"),
-        ("g",     4000, 5500, "#33bb55"),
-        ("r",     5500, 7000, "#bb3333"),
-        ("i",     7000, 8500, "#bb6633"),
-        ("z",     8500, 10000, "#9933bb"),
-        ("Y/J",   10000, 14000, "#553388"),
-        ("H",     14000, 19000, "#225588"),
+        ("u", 3000, 4000, "#3355bb"),
+        ("g", 4000, 5500, "#33bb55"),
+        ("r", 5500, 7000, "#bb3333"),
+        ("i", 7000, 8500, "#bb6633"),
+        ("z", 8500, 10000, "#9933bb"),
+        ("Y/J", 10000, 14000, "#553388"),
+        ("H", 14000, 19000, "#225588"),
     ]
     for name, lo, hi, color in BANDS:
         ax.axvspan(lo, hi, color=color, alpha=0.08, lw=0)
         ax.text(0.5 * (lo + hi), 3.0, name, ha="center", fontsize=8, color="0.35")
 
-    ax.set(xlim=(1500, 2e4), ylim=(1e-3, 5.0),
-           xlabel=r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]",
-           ylabel=r"$\nu L_\nu\,/\,\nu L_\nu(1.8\,\mu\mathrm{m})$")
+    ax.set(
+        xlim=(1500, 2e4),
+        ylim=(1e-3, 5.0),
+        xlabel=r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]",
+        ylabel=r"$\nu L_\nu\,/\,\nu L_\nu(1.8\,\mu\mathrm{m})$",
+    )
     ax.legend(frameon=False, fontsize=9, loc="lower right")
 
     fig.tight_layout()

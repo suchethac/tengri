@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**02:47.920** total execution time for 18 files **from auto_examples/nebular**:
+**00:11.273** total execution time for 19 files **from auto_examples/nebular**:
 
 .. container::
 
@@ -32,17 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_parameter_atlas.py` (``plot_cue_parameter_atlas.py``)
-     - 01:16.498
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_fesc_logu_atlas.py` (``plot_cue_fesc_logu_atlas.py``)
-     - 01:06.025
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_flex_tour.py` (``plot_cue_flex_tour.py``)
-     - 00:14.854
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_fesc_lya_sweep.py` (``plot_fesc_lya_sweep.py``)
-     - 00:10.543
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_emission_line_atlas.py` (``plot_emission_line_atlas.py``)
+     - 00:11.273
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_bpt_cue_flexibility.py` (``plot_bpt_cue_flexibility.py``)
      - 00:00.000
@@ -53,7 +44,19 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_nebular_plot_bpt_diagnostics.py` (``plot_bpt_diagnostics.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_fesc_logu_atlas.py` (``plot_cue_fesc_logu_atlas.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_flex_tour.py` (``plot_cue_flex_tour.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_parameter_atlas.py` (``plot_cue_parameter_atlas.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_dig_frac_sweep.py` (``plot_dig_frac_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_fesc_lya_sweep.py` (``plot_fesc_lya_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_fesc_sweep.py` (``plot_fesc_sweep.py``)

@@ -32,7 +32,7 @@ from inverting tengri's photometric prediction back to ``L_ν``
 (using a fixed ``d_L`` at ``z = 0.01``) and multiplying by the
 band's effective frequency.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-85
+.. GENERATED FROM PYTHON SOURCE LINES 16-86
 
 .. code-block:: Python
 
@@ -51,32 +51,32 @@ band's effective frequency.
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     L_SUN_ERG_S = 3.839e33
-    D_L_CM = 43.6 * 3.086e24   # luminosity distance at z = 0.01
+    D_L_CM = 43.6 * 3.086e24  # luminosity distance at z = 0.01
 
     BANDS = [
-        ("sdss_g",   "g (SDSS)"),
-        ("sdss_r",   "r (SDSS)"),
-        ("sdss_i",   "i (SDSS)"),
+        ("sdss_g", "g (SDSS)"),
+        ("sdss_r", "r (SDSS)"),
+        ("sdss_i", "i (SDSS)"),
         ("2mass_ks", "K_s (2MASS)"),
     ]
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(BANDS)))
 
-    obs = tengri.Observation(
-        photometry=tengri.Photometry.from_names([b for b, _ in BANDS])
-    )
-    nu_eff = 2.998e18 / np.array(
-        [float(jnp.mean(w)) for w in obs.photometry.filter_waves]
-    )
+    obs = tengri.Observation(photometry=tengri.Photometry.from_names([b for b, _ in BANDS]))
+    nu_eff = 2.998e18 / np.array([float(jnp.mean(w)) for w in obs.photometry.filter_waves])
 
     model = tengri.SEDModel.build(
         tengri.load_ssp(),
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FIXED,
-             "peak_lbt_gyr": tengri.Uniform(0.03, 13.0),
-             "width_gyr": 0.05, "log_peak_sfr": 1.0,
-             "skew": 0.0, "trunc": 13.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.0, "tau_bc": 0.0},
+        sfh={
+            "type": "tsnorm",
+            "*": tengri.FIXED,
+            "peak_lbt_gyr": tengri.Uniform(0.03, 13.0),
+            "width_gyr": 0.05,
+            "log_peak_sfr": 1.0,
+            "skew": 0.0,
+            "trunc": 13.0,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(0.01),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -89,8 +89,7 @@ band's effective frequency.
     for j, age in enumerate(ages):
         p = {**baseline, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age)}
         sfh = model.predict_sfh(p)
-        m_star = float(np.trapezoid(np.asarray(sfh["sfr_mean"]),
-                                    np.asarray(sfh["t_gyr"]) * 1e9))
+        m_star = float(np.trapezoid(np.asarray(sfh["sfr_mean"]), np.asarray(sfh["t_gyr"]) * 1e9))
         flux = np.asarray(model.predict_photometry(p))
         L_band = flux * 4 * np.pi * D_L_CM**2 * nu_eff / L_SUN_ERG_S
         ml[:, j] = m_star / np.maximum(L_band, 1e-12)
@@ -98,9 +97,11 @@ band's effective frequency.
     fig, ax = plt.subplots(figsize=(7.0, 4.6))
     for (_, label), color, m_l in zip(BANDS, COLORS, ml):
         ax.loglog(ages, m_l, color=color, lw=1.6, label=label)
-    ax.set(xlabel="Stellar burst age  [Gyr]",
-           ylabel=r"$M_\star\,/\,L$  [$M_\odot\,/\,L_\odot$]",
-           ylim=(0.03, 3.0))
+    ax.set(
+        xlabel="Stellar burst age  [Gyr]",
+        ylabel=r"$M_\star\,/\,L$  [$M_\odot\,/\,L_\odot$]",
+        ylim=(0.03, 3.0),
+    )
     ax.legend(frameon=False, fontsize=9, loc="upper left")
 
     fig.tight_layout()

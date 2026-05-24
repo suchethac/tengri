@@ -275,6 +275,23 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Casey 2012 modified blackbody dust SEDs across the canonical fitter&#x27;s two knobs — dust temperature T_dust and emissivity index β. Each curve in the top panel is a fixed β = 1.8 MBB swept in T; the bottom panel fixes T = 30 K and sweeps β. The peak shifts by ~40 μm per 10 K of warming; the sub-mm slope steepens by one power-law index per Δβ = 1.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_mbb_temperature_beta_grid_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_emission/plot_mbb_temperature_beta_grid`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Modified blackbody: T_dust × β grid</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Sweep ionization parameter across the Draine+2021 PAHspec library at fixed starlight spectrum and size distribution. Low U: FIR-cooling regime; high U: mid-IR peak shift and PAH-feature strengthening.">
 
 .. only:: html
@@ -417,6 +434,7 @@ Astrodust (HD23) template grids.
    /auto_examples/dust_emission/plot_dust_emission_models
    /auto_examples/dust_emission/plot_dust_qpah_umin_grid
    /auto_examples/dust_emission/plot_ir_library_compare
+   /auto_examples/dust_emission/plot_mbb_temperature_beta_grid
    /auto_examples/dust_emission/plot_pahspec_lgU_sweep
    /auto_examples/dust_emission/plot_pahspec_starlight_sweep
    /auto_examples/dust_emission/plot_qpah_sweep

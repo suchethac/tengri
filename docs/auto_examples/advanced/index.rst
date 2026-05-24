@@ -52,23 +52,6 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sets up a small population of mock galaxies sharing the same burstiness PSD parameters (sigma, tau). Runs PopulationFitter with VI to recover the shared PSD hyperparameters from per-galaxy photometry, demonstrating hierarchical Bayesian shrinkage on the intrinsic SFH scatter.">
-
-.. only:: html
-
-  .. image:: /auto_examples/advanced/images/thumb/sphx_glr_plot_hierarchical_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/advanced/plot_hierarchical`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Hierarchical PSD Inference</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates tengri&#x27;s Observation API for joint fitting across two data streams. Creates a mock galaxy with SDSS photometry and low-resolution spectroscopy, then recovers parameters via MAP. Shows how spectroscopy breaks photometric degeneracies.">
 
 .. only:: html
@@ -130,7 +113,6 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
    /auto_examples/advanced/plot_fisher_degeneracy
    /auto_examples/advanced/plot_gradient_sensitivity
-   /auto_examples/advanced/plot_hierarchical
    /auto_examples/advanced/plot_joint_fit
    /auto_examples/advanced/plot_orchestrator_demo
    /auto_examples/advanced/plot_radio_xray

@@ -35,7 +35,7 @@ diagnostic responds on which timescale:
 
 The age axis is shared so the responses can be compared.
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-116
+.. GENERATED FROM PYTHON SOURCE LINES 19-130
 
 .. code-block:: Python
 
@@ -75,7 +75,7 @@ The age axis is shared so the responses can be compared.
         slope = (cont_red - cont_blue) / (lam_red - lam_blue)
         cont = cont_blue + slope * (wave[line] - lam_blue)
         delta = wave[line][1] - wave[line][0] if line.sum() > 1 else 1.0
-        return float(np.sum((1.0 - f_lam[line] / cont)) * delta)
+        return float(np.sum(1.0 - f_lam[line] / cont) * delta)
 
 
     def _halpha_ew(wave, l_nu):
@@ -85,12 +85,18 @@ The age axis is shared so the responses can be compared.
         f_lam = l_nu * C_AA_PER_S / wave**2
         cont = np.median(np.concatenate([f_lam[cont_lo], f_lam[cont_hi]]))
         delta = wave[line][1] - wave[line][0] if line.sum() > 1 else 1.0
-        return float(np.sum((f_lam[line] - cont)) * delta) / max(cont, 1e-30)
+        return float(np.sum(f_lam[line] - cont) * delta) / max(cont, 1e-30)
 
 
-    SFH = {"type": "tsnorm", "*": tengri.FIXED,
-           "peak_lbt_gyr": tengri.Uniform(0.03, 13.0), "width_gyr": 0.05,
-           "log_peak_sfr": 1.0, "skew": 0.0, "trunc": 13.0}
+    SFH = {
+        "type": "tsnorm",
+        "*": tengri.FIXED,
+        "peak_lbt_gyr": tengri.Uniform(0.03, 13.0),
+        "width_gyr": 0.05,
+        "log_peak_sfr": 1.0,
+        "skew": 0.0,
+        "trunc": 13.0,
+    }
     DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     ssp = tengri.load_ssp()
@@ -111,26 +117,34 @@ The age axis is shared so the responses can be compared.
         mgb_arr[i] = _mgb_ew(wave, l_nu)
         ha_arr[i] = _halpha_ew(wave, l_nu)
 
-    fig, axes = plt.subplots(3, 1, figsize=(6.8, 6.6), sharex=True,
-                             gridspec_kw={"hspace": 0.08})
+    fig, axes = plt.subplots(3, 1, figsize=(6.8, 6.6), sharex=True, gridspec_kw={"hspace": 0.08})
     ax_d, ax_m, ax_h = axes
 
     ax_d.plot(ages, d4000_arr, color="C0", lw=1.6)
     ax_d.axhspan(1.5, 1.6, color="0.92", alpha=0.7, lw=0)
     ax_d.set_ylabel(r"$D_n(4000)$")
-    ax_d.text(0.97, 0.92, "Balogh+1999 break", transform=ax_d.transAxes,
-              ha="right", fontsize=8, color="0.4")
+    ax_d.text(
+        0.97, 0.92, "Balogh+1999 break", transform=ax_d.transAxes, ha="right", fontsize=8, color="0.4"
+    )
 
     ax_m.plot(ages, mgb_arr, color="C2", lw=1.6)
     ax_m.set_ylabel(r"Mg b EW  [$\mathrm{\AA}$]")
-    ax_m.text(0.97, 0.92, "Trager+1998 windows", transform=ax_m.transAxes,
-              ha="right", fontsize=8, color="0.4")
+    ax_m.text(
+        0.97,
+        0.92,
+        "Trager+1998 windows",
+        transform=ax_m.transAxes,
+        ha="right",
+        fontsize=8,
+        color="0.4",
+    )
 
     ax_h.plot(ages, np.abs(ha_arr), color="C3", lw=1.6)
     ax_h.set_ylabel(r"|H$\alpha$| EW  [$\mathrm{\AA}$]")
     ax_h.set_yscale("log")
-    ax_h.text(0.97, 0.92, "narrow 6545-6580 Å", transform=ax_h.transAxes,
-              ha="right", fontsize=8, color="0.4")
+    ax_h.text(
+        0.97, 0.92, "narrow 6545-6580 Å", transform=ax_h.transAxes, ha="right", fontsize=8, color="0.4"
+    )
 
     ax_h.set_xscale("log")
     ax_h.set_xlabel(r"Stellar burst age  [Gyr]")
