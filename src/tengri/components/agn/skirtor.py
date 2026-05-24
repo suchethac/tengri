@@ -232,9 +232,11 @@ def _compute_intrinsic_30deg_luminosity(
     norm_fac = aniso_factor * norm
     lumin_intrin_disk = integral_disk * norm_fac
 
-    # L_ν(2500 Å) at 30°, convert from L_λ to L_ν
+    # L_ν(2500 Å) at 30°, convert from L_λ to L_ν (skirtor2016.py:410–411)
+    # Wavelength grid is in Å (not nm as in CIGALE skirtor2016.py:410),
+    # so interpolate at 2500.0 Å (= 250 nm).
     l_lam_2500 = jnp.interp(2500.0, wave_grid, disk_template)
-    # L_ν = L_λ × (λ²/c) where c is in Å/s
+    # L_ν = L_λ × (λ²/c) where c is in Å/s and λ in Å.
     c_aa_per_s = 2.99792458e18  # Angstrom per second
     l_nu_2500 = l_lam_2500 * (2500.0**2 / c_aa_per_s) * norm_fac
 
