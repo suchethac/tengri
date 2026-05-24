@@ -19,6 +19,7 @@ from tengri.inference.backends.mcmc._shared import (
     _ghmc_chain_scan,
     _ghmc_full_scan,
     _set_cached_adaptation,
+    _vmap_chains,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ def run_ghmc(
     n_warmup=300,
     n_burnin=100,
     n_samples=1000,
+    n_chains=1,
     alpha=0.8,
     delta=0.65,
     target_accept_rate=0.85,
@@ -114,8 +116,6 @@ def run_ghmc(
         def ld_1arg(pos):
             return log_posterior_flat_2arg(pos, data_args)
 
-        key, ghmc_init_key = jax.random.split(key)
-        state = blackjax.mcmc.ghmc.init(init_flat, ghmc_init_key, ld_1arg)
         if verbose:
             logger.info(
                 "  Reusing cached warmup (%.1fs). Step size: %.4f",
@@ -123,20 +123,54 @@ def run_ghmc(
                 float(parameters["step_size"]),
             )
         key, chain_key = jax.random.split(key)
-        chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
-        positions, divergent = _ghmc_chain_scan(
-            state,
-            chain_keys,
-            log_posterior_flat_2arg,
-            data_args,
-            parameters["step_size"],
-            parameters["inverse_mass_matrix"],
-            alpha,
-            delta,
-            alpha,
-            delta,
-        )
+        if n_chains > 1:
+
+            def _init(p, init_key):
+                return blackjax.mcmc.ghmc.init(p, init_key, ld_1arg)
+
+            def _scan(s, ks):
+                return _ghmc_chain_scan(
+                    s,
+                    ks,
+                    log_posterior_flat_2arg,
+                    data_args,
+                    parameters["step_size"],
+                    parameters["inverse_mass_matrix"],
+                    alpha,
+                    delta,
+                    alpha,
+                    delta,
+                )
+
+            positions, divergent = _vmap_chains(
+                _init,
+                _scan,
+                init_flat=init_flat,
+                chain_key=chain_key,
+                n_chains=n_chains,
+                n_iter=n_burnin + n_samples,
+                n_burnin=n_burnin,
+            )
+            _multichain_burnin_done = True
+        else:
+            key, ghmc_init_key = jax.random.split(chain_key)
+            state = blackjax.mcmc.ghmc.init(init_flat, ghmc_init_key, ld_1arg)
+            chain_keys = jax.random.split(key, n_burnin + n_samples)
+            positions, divergent = _ghmc_chain_scan(
+                state,
+                chain_keys,
+                log_posterior_flat_2arg,
+                data_args,
+                parameters["step_size"],
+                parameters["inverse_mass_matrix"],
+                alpha,
+                delta,
+                alpha,
+                delta,
+            )
+            _multichain_burnin_done = False
     else:
+        _multichain_burnin_done = False
         key, warmup_key = jax.random.split(key)
         key, ghmc_init_key = jax.random.split(key)
         key, chain_key = jax.random.split(key)
@@ -162,9 +196,9 @@ def run_ghmc(
                 float(step_size),
             )
 
-    # Burnin discarded Python-side so n_burnin is not part of the
-    # JIT compile key.
-    if n_burnin > 0:
+    # Burnin discarded Python-side. Multichain branch already handled
+    # per-chain burnin before flatten; skip the global slice there.
+    if n_burnin > 0 and not _multichain_burnin_done:
         positions = positions[n_burnin:]
         divergent = divergent[n_burnin:]
     n_divergent = int(jnp.sum(divergent))
@@ -188,6 +222,7 @@ def run_ghmc(
             "n_warmup": n_warmup,
             "n_burnin": n_burnin,
             "n_samples": n_samples,
+            "n_chains": n_chains,
             "alpha": alpha,
             "delta": delta,
             "n_divergent": n_divergent,

@@ -748,6 +748,7 @@ def run_raytrace(
     init_from=None,
     n_burnin=100,
     n_steps=500,
+    n_chains=1,
     n_leapfrog_steps=10,
     step_size=None,
     refresh_rate=0.0,
@@ -767,9 +768,14 @@ def run_raytrace(
     Parameters
     ----------
     n_burnin : int
-        Burn-in steps (discarded).
+        Per-chain burn-in steps (discarded).
     n_steps : int
-        Post-burn-in samples to collect.
+        Post-burn-in samples per chain to collect.
+    n_chains : int, default 1
+        Number of independent ray-tracing chains run in parallel via
+        ``jax.vmap``. Each chain starts from ``init + small jitter`` and
+        gets its own RNG. Final posterior has ``n_chains * n_steps``
+        samples. Wall ≈ one chain's worth on CPU SIMD.
     n_leapfrog_steps : int
         Leapfrog integration steps per trajectory.
     step_size : float, optional
@@ -822,24 +828,49 @@ def run_raytrace(
     t0 = time.time()
 
     key, sample_key = jax.random.split(key)
-    chain, log_likelihood, accept_prob = sample_raytrace(
-        key=sample_key,
-        params_init=init_flat,
-        log_prob_fn=log_prob_flat,
-        n_steps=total_steps,
-        n_leapfrog_steps=n_leapfrog_steps,
-        step_size=float(step_size),
-        refresh_rate=float(refresh_rate),
-        metro_check=1,
-        sample_hmc=False,
-    )
+    if n_chains > 1:
+        keys = jax.random.split(sample_key, n_chains + 1)
+        jitter = 1e-3 * jax.random.normal(keys[0], shape=(n_chains, init_flat.shape[0]))
+        init_batch = init_flat[None, :] + jitter
+        chain_keys = keys[1:]  # one per chain
+
+        def _one_chain(k, init):
+            return sample_raytrace(
+                key=k,
+                params_init=init,
+                log_prob_fn=log_prob_flat,
+                n_steps=total_steps,
+                n_leapfrog_steps=n_leapfrog_steps,
+                step_size=float(step_size),
+                refresh_rate=float(refresh_rate),
+                metro_check=1,
+                sample_hmc=False,
+            )
+
+        chains, log_lik, accept = jax.vmap(_one_chain)(chain_keys, init_batch)
+        # Per-chain burnin discard, then flatten (n_chains, n_iter, D) → (..., D)
+        chain = chains[:, n_burnin:].reshape(-1, chains.shape[-1])
+        log_likelihood = log_lik[:, n_burnin:].reshape(-1)
+        accept_prob_post = accept[:, n_burnin:].reshape(-1)
+        accept_prob = accept.reshape(-1)
+    else:
+        chain, log_likelihood, accept_prob = sample_raytrace(
+            key=sample_key,
+            params_init=init_flat,
+            log_prob_fn=log_prob_flat,
+            n_steps=total_steps,
+            n_leapfrog_steps=n_leapfrog_steps,
+            step_size=float(step_size),
+            refresh_rate=float(refresh_rate),
+            metro_check=1,
+            sample_hmc=False,
+        )
+        # Discard burn-in
+        chain = chain[n_burnin:]
+        log_likelihood = log_likelihood[n_burnin:]
+        accept_prob_post = accept_prob[n_burnin:]
 
     wall_time = time.time() - t0
-
-    # Discard burn-in
-    chain = chain[n_burnin:]
-    log_likelihood = log_likelihood[n_burnin:]
-    accept_prob_post = accept_prob[n_burnin:]
     n_samples_out = chain.shape[0]
 
     mean_accept = float(jnp.mean(accept_prob))
@@ -866,6 +897,7 @@ def run_raytrace(
         diagnostics={
             "n_burnin": n_burnin,
             "n_steps": n_steps,
+            "n_chains": n_chains,
             "n_samples": n_samples_out,
             "n_leapfrog_steps": n_leapfrog_steps,
             "step_size": float(step_size),

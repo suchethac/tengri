@@ -19,6 +19,7 @@ from tengri.inference.backends.mcmc._shared import (
     _hmc_chain_scan,
     _hmc_full_scan,
     _set_cached_adaptation,
+    _vmap_chains,
 )
 from tengri.utils.compile_log import compile_timer
 
@@ -33,6 +34,7 @@ def run_hmc(
     n_warmup=300,
     n_burnin=100,
     n_samples=1000,
+    n_chains=1,
     n_leapfrog_steps=10,
     target_accept_rate=0.85,
     dense_mass_matrix=True,
@@ -53,7 +55,13 @@ def run_hmc(
         rather than inside JIT, so changing this does NOT trigger a
         recompile when ``n_burnin + n_samples`` is unchanged.
     n_samples : int
-        Posterior samples to collect.
+        Posterior samples per chain to collect.
+    n_chains : int, default 1
+        Number of independent HMC chains run in parallel via ``jax.vmap``,
+        sharing the cached step size and mass matrix. Only honoured when
+        the warmup is already cached (i.e. a previous ``run_hmc`` call
+        populated the cache). Final posterior has ``n_chains * n_samples``
+        samples; wall ≈ one chain's worth on CPU SIMD.
     n_leapfrog_steps : int
         Number of leapfrog integration steps per proposal.
     target_accept_rate : float
@@ -108,7 +116,6 @@ def run_hmc(
         def ld_1arg(pos):
             return log_posterior_flat_2arg(pos, data_args)
 
-        state = blackjax.mcmc.hmc.init(init_flat, ld_1arg)
         if verbose:
             logger.info(
                 "  Reusing cached warmup (%.1fs). Step size: %.4f",
@@ -116,19 +123,53 @@ def run_hmc(
                 float(parameters["step_size"]),
             )
         key, chain_key = jax.random.split(key)
-        chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
-        with compile_timer("hmc_chain_scan", fitter.compile_signature(), method="mcmc_hmc"):
-            positions, divergent = _hmc_chain_scan(
-                state,
-                chain_keys,
-                log_posterior_flat_2arg,
-                data_args,
-                parameters["step_size"],
-                parameters["inverse_mass_matrix"],
-                n_leapfrog_steps,
-            )
-            jax.block_until_ready(positions)
+        if n_chains > 1:
+
+            def _init(p):
+                return blackjax.mcmc.hmc.init(p, ld_1arg)
+
+            def _scan(s, ks):
+                return _hmc_chain_scan(
+                    s,
+                    ks,
+                    log_posterior_flat_2arg,
+                    data_args,
+                    parameters["step_size"],
+                    parameters["inverse_mass_matrix"],
+                    n_leapfrog_steps,
+                )
+
+            with compile_timer(
+                "hmc_chain_scan_vmap", fitter.compile_signature(), method="mcmc_hmc"
+            ):
+                positions, divergent = _vmap_chains(
+                    _init,
+                    _scan,
+                    init_flat=init_flat,
+                    chain_key=chain_key,
+                    n_chains=n_chains,
+                    n_iter=n_burnin + n_samples,
+                    n_burnin=n_burnin,
+                )
+                jax.block_until_ready(positions)
+            _multichain_burnin_done = True
+        else:
+            state = blackjax.mcmc.hmc.init(init_flat, ld_1arg)
+            chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
+            with compile_timer("hmc_chain_scan", fitter.compile_signature(), method="mcmc_hmc"):
+                positions, divergent = _hmc_chain_scan(
+                    state,
+                    chain_keys,
+                    log_posterior_flat_2arg,
+                    data_args,
+                    parameters["step_size"],
+                    parameters["inverse_mass_matrix"],
+                    n_leapfrog_steps,
+                )
+                jax.block_until_ready(positions)
+            _multichain_burnin_done = False
     else:
+        _multichain_burnin_done = False
         key, warmup_key = jax.random.split(key)
         key, chain_key = jax.random.split(key)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
@@ -154,10 +195,9 @@ def run_hmc(
                 float(step_size),
             )
 
-    # Burnin discard happens Python-side (not inside JIT) so changing
-    # n_burnin doesn't trigger a recompile when n_burnin + n_samples is
-    # held constant.
-    if n_burnin > 0:
+    # Burnin discard happens Python-side. Multichain branch already
+    # discarded per-chain before flattening; skip the global slice there.
+    if n_burnin > 0 and not _multichain_burnin_done:
         positions = positions[n_burnin:]
         divergent = divergent[n_burnin:]
     n_divergent = int(jnp.sum(divergent))
@@ -181,6 +221,7 @@ def run_hmc(
             "n_warmup": n_warmup,
             "n_burnin": n_burnin,
             "n_samples": n_samples,
+            "n_chains": n_chains,
             "n_leapfrog_steps": n_leapfrog_steps,
             "n_divergent": n_divergent,
             "step_size": float(parameters["step_size"]),
