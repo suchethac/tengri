@@ -267,9 +267,11 @@ class TestToGroupsWildcardCollapse:
 
         sfh_dict = result["sfh"]
         # DPL params should be explicit
-        # Note: met_logzsol and met_alpha_fe are also in sfh group by partition
+        # met_logzsol and met_alpha_fe stay in the sfh group when
+        # met_mode == "delta" (default) — only specs that opt into a
+        # non-delta chemical-evolution mode (#311) emit a stellar block.
         dpl_keys = {"alpha", "beta", "tau_gyr", "log_peak_sfr"}
-        met_keys = {"logzsol", "alpha_fe"}  # From met_ prefix
+        met_keys = {"logzsol", "alpha_fe"}
         expected_keys = {"type"} | dpl_keys | met_keys
         assert set(sfh_dict.keys()) == expected_keys
 
