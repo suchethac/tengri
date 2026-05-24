@@ -36,6 +36,7 @@ import os
 import warnings
 
 import matplotlib
+
 matplotlib.use("Agg")
 import jax
 import matplotlib.pyplot as plt

@@ -15,6 +15,7 @@ import warnings
 
 import corner
 import jax
+import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri

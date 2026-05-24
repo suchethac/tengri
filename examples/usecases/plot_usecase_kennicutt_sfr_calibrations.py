@@ -19,7 +19,6 @@ assumption — see also ``plot_usecase_sfr_indicator_compare.py``.
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 

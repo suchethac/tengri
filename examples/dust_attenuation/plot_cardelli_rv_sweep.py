@@ -15,7 +15,6 @@ on the same intrinsic SED at τ_V = 1.
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np

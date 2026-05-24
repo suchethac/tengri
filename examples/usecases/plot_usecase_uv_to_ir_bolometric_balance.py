@@ -24,23 +24,19 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
 """
 
 import warnings
+from pathlib import Path
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
 
 from tengri import (
     FIXED,
-    FREE,
     Fixed,
     Observation,
     Photometry,
     SEDModel,
-    Uniform,
     load_ssp_data,
-    recipes,
 )
 from tengri.analysis.plotting import setup_style
 
