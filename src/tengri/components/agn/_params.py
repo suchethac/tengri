@@ -56,10 +56,18 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_torus_frac",
         Fixed(0.5),
-        "AGN torus covering factor (fraction of L_bol re-emitted by torus)",
+        "AGN torus covering factor — DEPRECATED; use agn_frac_agn",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
     ),
+    ParamDeclaration(
+        "agn_frac_agn",
+        Fixed(0.5),
+        "AGN fraction (L_AGN / L_total in a configurable band, CIGALE convention)",
+        lambda lo, hi: lo >= 0 and hi <= 1,
+        "must be in [0, 1]",
+    ),
+    # (5-line gap reserved for PR 2 xray parameter block)
     ParamDeclaration(
         "agn_log_mbh",
         Fixed(7.0),
@@ -207,6 +215,24 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Fixed(0.1),
         "NLR Gaussian covering fraction — fraction of disc luminosity intercepted by NLR. "
         "Physical bound [0, 1]; typical values 0.05-0.2.",
+        lambda lo, hi: lo >= 0 and hi <= 1.0,
+        "must be in [0, 1]",
+    ),
+    ParamDeclaration(
+        "agn_nlr_line_efficiency",
+        Fixed(0.10),
+        "NLR line radiative efficiency — fraction of intercepted disc luminosity "
+        "re-emitted as emission-line luminosity. Physical bound [0, 1]; "
+        "typical values 0.01-0.30.",
+        lambda lo, hi: lo >= 0 and hi <= 1.0,
+        "must be in [0, 1]",
+    ),
+    ParamDeclaration(
+        "agn_blr_line_efficiency",
+        Fixed(0.08),
+        "BLR line radiative efficiency — fraction of intercepted disc luminosity "
+        "re-emitted as broad-line luminosity. Physical bound [0, 1]; "
+        "typical values 0.05-0.15.",
         lambda lo, hi: lo >= 0 and hi <= 1.0,
         "must be in [0, 1]",
     ),

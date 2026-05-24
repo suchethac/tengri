@@ -48,7 +48,7 @@ import jax.numpy as jnp
 
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.components.xray.xray import xray_total
-from tengri.parameters.priors import Fixed, Uniform
+from tengri.parameters.priors import Uniform
 from tengri.protocols.component import (
     ParamDeclaration,
     SEDComponentConfig,
@@ -71,24 +71,35 @@ class XRayAirdSEDComponentConfig(SEDComponentConfig):
 
 
 class XRayAirdSEDComponent(SEDModelComponent):
-    """SEDComponent for X-ray emission (XRB + AGN corona).
+    """SEDComponent for X-ray emission (Lehmer+2016 / Yang+2020 canonical).
 
-    Computes X-ray continuum from star-formation rate (X-ray binaries)
-    and AGN luminosity (corona). Implements Lehmer+2010/2016 (XRB scaling)
-    and Lusso & Risaliti 2016 (AGN X-ray).
+    Computes total X-ray continuum from X-ray binaries (HMXB + LMXB),
+    hot gas, and AGN corona. Implements Lehmer et al. 2016 (metallicity-
+    and age-dependent XRB scaling), Yang et al. 2020 (hot gas and AGN
+    anisotropy), and Just et al. 2007 (α_OX–L_2500 relation).
 
-    Free parameters (5):
+    Free parameters (3):
     - xray_gamma_hmxb: HMXB spectral index
     - xray_gamma_lmxb: LMXB spectral index
-    - xray_gamma_agn: AGN spectral index
-    - xray_E_cut: high-energy cutoff [keV]
-    - xray_alpha_ox: alpha_ox AGN parameter
+    - xray_gamma_agn: AGN X-ray spectral index
+
+    The α_OX parameter is not a free parameter here; it is a PRIOR that
+    couples AGN UV (L_2500) and X-ray emission self-consistently
+    (Just+2007, Yang+2020).
 
     Notes
     -----
     **JIT-compatible**: yes.
-    **Optional inputs**: reads sfr, log_mstar, L_agn_bol with sensible defaults.
-    Component works without stellar/AGN components (defaults to XRB-only).
+
+    **Optional inputs**: reads sfr, log_mstar, metallicity_z, stellar_age_gyr,
+    L_2500_30deg with sensible defaults. Component gracefully handles missing
+    AGN/stellar inputs and defaults to XRB + hot gas only.
+
+    **Models**:
+    - HMXB: Lehmer+2016 metallicity quartic, scaling with SFR
+    - LMXB: Lehmer+2016 age quartic, scaling with M_star
+    - Hot gas: Yang+2020, scaling with SFR
+    - AGN corona: Just+2007 / Yang+2020 α_OX, scaling with L_2500
     """
 
     def __init__(self) -> None:
@@ -102,8 +113,10 @@ class XRayAirdSEDComponent(SEDModelComponent):
     gamma_hmxb = Uniform(1.0, 3.0, description="HMXB spectral index", units="dimensionless")
     gamma_lmxb = Uniform(1.0, 3.0, description="LMXB spectral index", units="dimensionless")
     gamma_agn = Uniform(1.0, 3.0, description="AGN X-ray spectral index", units="dimensionless")
-    E_cut = Fixed(300.0, description="High-energy cutoff", units="keV")
-    alpha_ox = Fixed(-0.5, description="Lusso & Risaliti alpha_ox", units="dimensionless")
+    # alpha_ox is deliberately NOT a free parameter here — PR #329 promotes it to
+    # an empirical prior derived from L_2500 via alpha_ox_from_l2500()
+    # (Just+2007 / Lusso–Risaliti). Offsets from the empirical value are exposed
+    # via delta_alpha_ox in xray_agn_corona{,_from_disc}. See ADR-0015.
 
     # No required cross-component inputs (all have fallbacks)
     inputs: ClassVar[dict[str, str]] = {}
@@ -116,7 +129,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
         return None
 
     def declared_parameters(self) -> list[ParamDeclaration]:
-        """Declare the 5 free parameters owned by X-ray."""
+        """Declare the 3 free parameters owned by X-ray."""
         return super().declared_parameters()
 
     def predict(
@@ -126,20 +139,23 @@ class XRayAirdSEDComponent(SEDModelComponent):
         wave: jnp.ndarray,
         **inputs: Any,
     ) -> tuple[jnp.ndarray, Mapping[str, jnp.ndarray]]:
-        """Predict X-ray SED via XRB + AGN corona model.
+        """Predict X-ray SED via Lehmer+Yang canonical path.
 
         Parameters
         ----------
         p : mapping[str, ndarray]
-            Parameters with prefix stripped: gamma_hmxb, gamma_lmxb,
-            gamma_agn, E_cut, alpha_ox.
+            Parameters with prefix stripped: gamma_hmxb, gamma_lmxb, gamma_agn.
         sed_in : ndarray
             Input SED (stellar + nebular + AGN + radio).
         wave : ndarray
             Rest-frame wavelength grid in Angstrom.
         **inputs : ndarray
-            Opportunistic cross-component reads: sfr, log_mstar, L_agn_bol
-            (with defaults if not present).
+            Opportunistic cross-component reads:
+            - sfr [Msun/yr] (default: 1.0)
+            - log_mstar [log10(Msun)] (default: 10.0)
+            - metallicity_z [mass fraction] (default: 0.02 = solar)
+            - stellar_age_gyr [Gyr] (default: 1.0)
+            - L_2500_30deg [erg/s/Hz] (default: 0.0 = no AGN)
 
         Returns
         -------
@@ -147,23 +163,31 @@ class XRayAirdSEDComponent(SEDModelComponent):
             - sed_out: sed_in + X-ray continuum.
             - published: Dict with "sed_xray".
         """
-        # Read cross-component inputs with fallbacks
+        # Read cross-component inputs with sensible defaults
         sfr = jnp.asarray(inputs.get("sfr", 1.0))
         log_mstar = jnp.asarray(inputs.get("log_mstar", 10.0))
         stellar_mass = 10.0**log_mstar
-        L_agn_bol = jnp.asarray(inputs.get("L_agn_bol", 0.0))
+        metallicity_z = jnp.asarray(inputs.get("metallicity_z", 0.02))
+        stellar_age_gyr = jnp.asarray(inputs.get("stellar_age_gyr", 1.0))
+        l_2500_30deg = jnp.asarray(inputs.get("L_2500_30deg", 0.0))
 
-        # Call xray_total
+        # Call xray_total with new signature
         L_xray = xray_total(
             wave,
             sfr=sfr,
             stellar_mass=stellar_mass,
-            L_agn_bol=L_agn_bol,
+            metallicity_z=metallicity_z,
+            stellar_age_gyr=stellar_age_gyr,
+            l_2500_30deg=l_2500_30deg,
             gamma_hmxb=jnp.asarray(p["gamma_hmxb"]),
             gamma_lmxb=jnp.asarray(p["gamma_lmxb"]),
             gamma_agn=jnp.asarray(p["gamma_agn"]),
-            E_cut=jnp.asarray(p["E_cut"]),
-            alpha_ox=jnp.asarray(p["alpha_ox"]),
+            E_cut=300.0,  # fixed cutoff
+            delta_alpha_ox=0.0,  # no offset from Just+2007
+            cos_inc=1.0,  # face-on by default
+            apply_anisotropy=False,  # disable by default (XRayAirdSEDComponent is simple)
+            a1=0.5,
+            a2=0.0,
         )
 
         return sed_in + L_xray, {

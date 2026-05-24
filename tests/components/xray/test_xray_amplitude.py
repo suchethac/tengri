@@ -21,7 +21,11 @@ class TestXrayAgnCorona:
         From alpha_ox = -1.4, L_2500 = L_bol / (BC * nu_2500),
         L_2keV = L_2500 * 10^(alpha_ox/0.384).
         """
-        from tengri.components.xray.xray import xray_agn_corona
+        # PR #329 changed xray_agn_corona's signature to take L_2500_30deg
+        # directly (matching X-CIGALE yang20.py). The legacy L_bol-driven path
+        # lives behind the xray_agn_corona_bolometric deprecation shim, which is
+        # what these physics-pinning tests target.
+        from tengri.components.xray.xray import xray_agn_corona_bolometric as xray_agn_corona
 
         wl = jnp.array([6.2])
         L = float(np.array(xray_agn_corona(wl, L_agn_bol=1e44))[0])
@@ -29,7 +33,11 @@ class TestXrayAgnCorona:
 
     def test_powerlaw_slope_gamma_1p8(self):
         """Gamma=1.8 ⇒ F_nu ∝ nu^(1-Gamma) ⇒ L(10)/L(1) ≈ 10^(-0.8) ≈ 0.158."""
-        from tengri.components.xray.xray import xray_agn_corona
+        # PR #329 changed xray_agn_corona's signature to take L_2500_30deg
+        # directly (matching X-CIGALE yang20.py). The legacy L_bol-driven path
+        # lives behind the xray_agn_corona_bolometric deprecation shim, which is
+        # what these physics-pinning tests target.
+        from tengri.components.xray.xray import xray_agn_corona_bolometric as xray_agn_corona
 
         wl = jnp.array([12.4, 1.24])  # 1 keV, 10 keV
         L = np.array(xray_agn_corona(wl, L_agn_bol=1e44, gamma=1.8))
@@ -37,7 +45,11 @@ class TestXrayAgnCorona:
         assert 0.12 < ratio < 0.25, f"10/1 keV ratio = {ratio:.3f}"
 
     def test_linearity_in_Lbol(self):
-        from tengri.components.xray.xray import xray_agn_corona
+        # PR #329 changed xray_agn_corona's signature to take L_2500_30deg
+        # directly (matching X-CIGALE yang20.py). The legacy L_bol-driven path
+        # lives behind the xray_agn_corona_bolometric deprecation shim, which is
+        # what these physics-pinning tests target.
+        from tengri.components.xray.xray import xray_agn_corona_bolometric as xray_agn_corona
 
         wl = jnp.array([6.2])
         a = float(np.array(xray_agn_corona(wl, L_agn_bol=1e44))[0])

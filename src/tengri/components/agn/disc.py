@@ -75,12 +75,18 @@ def powerlaw_disc(
     agn_T_max: float = 1e5,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Simple power-law accretion disc with exponential UV cutoff.
+    """Simple power-law accretion disc with exponential UV cutoff (deprecated).
 
     A phenomenological single-component AGN disc model that approximates the
     optical/UV emission as a power law with an exponential cutoff at high
     frequencies. This is a faster alternative to multi-color disc models when
     fine spectral details are not required.
+
+    .. deprecated::
+       This bare power-law disc lacks physical motivation and citations.
+       For science fits, use :func:`multicolor_disc` (Shakura-Sunyaev thin disc)
+       or :func:`kubota_done_disc` (K&D 3-zone model) instead.
+       Will be removed in tengri v1.0.
 
     Parameters
     ----------
@@ -130,6 +136,15 @@ def powerlaw_disc(
     not capture the soft X-ray excess or hard X-ray corona. Use this model
     only when computational speed is prioritized over spectral fidelity.
     """
+    import warnings
+
+    warnings.warn(
+        "powerlaw_disc is deprecated (no physical derivation; bare phenomenological "
+        "model) and will be removed in tengri v1.0. For science fits, use "
+        "multicolor_disc (Shakura-Sunyaev) or kubota_done_disc (K&D 3-zone) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
     nu = _wavelength_to_nu(wavelength)
 
