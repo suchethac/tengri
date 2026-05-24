@@ -123,45 +123,21 @@ _ensure_registry_loaded()
 #: Dust emission parameter names that belong to the 'dust.emission' subgroup.
 _DUST_EMISSION_PARAM_NAMES = frozenset(_resolve_lazy_bucket("_DUST_EMISSION_PARAMS").keys())
 
-#: Valid SFH model types (from the registry).
-_VALID_SFH_TYPES = {
-    # Smooth (additive)
-    "tsnorm",
-    "snorm",
-    "snorm_burst",
-    "tsnorm_burst",
-    "norm",
-    "lnorm",
-    "dpl",
-    "const",
-    "exp",
-    "dexp",
-    "tau",
-    "const_exp",
-    "delayed_bq",
-    "periodic",
-    "buat08",
-    "psb",
-    "top_hat",
-    "gaussian_burst",
-    "continuity",
-    "continuity_flex",
-    "bursty_continuity",
-    "psb_suess2022",
-    "prospector_beta",
-    "dirichlet",
-    "dense_basis",
-    "dense_basis_pure",
-    "table",
-    # Compositors
-    "burst",
-    "field",
-    # Aliases
-    "constant_then_exponential",
-    "psb_wild2020",
-    "db",
-    "dbp",
-}
+
+def _valid_sfh_types() -> frozenset[str]:
+    """Return the set of accepted ``sfh.type`` values, derived from the registry.
+
+    Mirrors ``SFH_REGISTRY.keys()`` so the dict-grammar validator and the
+    auto-generated ``tengri.builders.sfh.*`` factories share one source of
+    truth (per ADR-0005 / ADR-0008). Includes alias keys (``psb_wild2020``,
+    ``db``, ``dbp``) because they live in the registry as duplicate keys
+    pointing at the same spec. Looked up at call time so newly-registered
+    SFHs (e.g. plugins) are picked up without re-importing this module.
+    """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    return frozenset(SFH_REGISTRY.keys())
+
 
 #: Valid dust model types.
 _VALID_DUST_TYPES = {
@@ -551,19 +527,18 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
         result["mean_sfh_type"] = ["dpl", "field"]
         return
 
+    valid = _valid_sfh_types()
     if isinstance(sfh_type, list):
         for type_name in sfh_type:
-            if type_name not in _VALID_SFH_TYPES:
-                suggestions = difflib.get_close_matches(
-                    type_name, _VALID_SFH_TYPES, n=3, cutoff=0.6
-                )
+            if type_name not in valid:
+                suggestions = difflib.get_close_matches(type_name, valid, n=3, cutoff=0.6)
                 suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
                 raise ValueError(f"Unknown SFH type '{type_name}' in composition.{suggest_str}")
         result["mean_sfh_type"] = sfh_type
         return
 
-    if sfh_type not in _VALID_SFH_TYPES:
-        suggestions = difflib.get_close_matches(sfh_type, _VALID_SFH_TYPES, n=3, cutoff=0.6)
+    if sfh_type not in valid:
+        suggestions = difflib.get_close_matches(sfh_type, valid, n=3, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown SFH type '{sfh_type}'.{suggest_str}")
 
