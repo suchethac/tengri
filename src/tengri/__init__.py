@@ -148,6 +148,7 @@ from tengri.components.stellar.sfh.gp_sfh import (
     gp_from_xi,
     make_log_age_grid,
 )
+from tengri.components.stellar.sfh.nonparametric import make_agebins_from_zred
 from tengri.components.stellar.sfh.psd_models import drw_acf, drw_variance, psd_drw
 from tengri.components.stellar.sfh.registry import (
     FIELD_MODEL_REGISTRY,
