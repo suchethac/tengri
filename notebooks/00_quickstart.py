@@ -151,62 +151,62 @@ wave_eff_um = (
 # %% [markdown]
 # ## One-time JIT compile
 #
-# First touch of the forward model and its gradient triggers XLA compilation.
-# On a cold cache this is a few seconds; on a warm cache (`~/.cache/tengri_jax_cache`
-# from a previous session) it's milliseconds. Subsequent calls are pure
-# numeric throughput — no Python in the hot path.
+# First touch of the photometric forward kernel and its gradient triggers
+# XLA compilation against the precomputed SSP × filter LUT (the
+# `WavePrecomp` knob set above). Cold cache is a few seconds; warm cache
+# (`~/.cache/tengri_jax_cache`) is milliseconds. Subsequent calls are
+# pure numeric throughput — no Python in the hot path.
 
 # %%
 import time
 
 p0 = {**sed_model.spec.get_fixed_values(), **truth}
+predict_phot = jax.jit(sed_model.predict_photometry)
 grad_fn = jax.jit(
-    jax.grad(lambda p: 0.5 * jnp.sum(((forward.predict(p)["phot_fnu"] - flux_obs) / noise) ** 2))
+    jax.grad(lambda p: 0.5 * jnp.sum(((sed_model.predict_photometry(p) - flux_obs) / noise) ** 2))
 )
 
 t = time.perf_counter()
-_ = forward.predict(p0)["phot_fnu"].block_until_ready()
-print(f"  forward pass   first call: {time.perf_counter() - t:6.3f} s  (compile + run)")
+_ = predict_phot(p0).block_until_ready()
+print(f"  forward kernel   first call: {time.perf_counter() - t:8.4f} s  (compile + run)")
 t = time.perf_counter()
-_ = forward.predict(p0)["phot_fnu"].block_until_ready()
-print(f"  forward pass   warm:        {time.perf_counter() - t:6.3f} s")
+_ = predict_phot(p0).block_until_ready()
+print(f"  forward kernel   warm:       {time.perf_counter() - t:8.4f} s")
 
 t = time.perf_counter()
 jax.tree.map(lambda x: x.block_until_ready(), grad_fn(p0))
-print(f"  ∇log-likelihood first call: {time.perf_counter() - t:6.3f} s  (compile + run)")
+print(f"  ∇log-likelihood  first call: {time.perf_counter() - t:8.4f} s  (compile + run)")
 t = time.perf_counter()
 jax.tree.map(lambda x: x.block_until_ready(), grad_fn(p0))
-print(f"  ∇log-likelihood warm:        {time.perf_counter() - t:6.3f} s")
+print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 
 # %% [markdown]
-# ## MAP — the point estimate
+# ## Fit
 #
-# ADAM on the posterior. With the JIT cache hot from the previous cell,
-# 200 steps land in about a second.
+# MAP (ADAM) for a point estimate, then NUTS for the full posterior.
+# Each NUTS leapfrog step is one gradient evaluation above, and the
+# warmup + sampling loop is jit-fused via `lax.scan` inside BlackJAX —
+# Hamiltonian step throughput sets the wall.
+#
+# *Note*: the canonical entry is `forward.fit(...)` (issue #211), but it
+# currently bypasses the WavePrecomp LUT (issue #281, ~16× slowdown on
+# this model). Fitting through the SEDModel directly is the documented
+# workaround until #281 lands.
 
 # %%
+from tengri.inference.fitter import Fitter
+
 t = time.perf_counter()
-map_result = forward.fit(flux_obs, noise, method="map", key=key_fit, n_steps=200)
+map_result = Fitter(sed_model, flux_obs, noise, data_type="photometry").run(
+    method="map", key=key_fit, n_steps=200
+)
 print(f"  MAP wall: {time.perf_counter() - t:6.2f} s")
 
-# %% [markdown]
-# ## NUTS — the full posterior
-#
-# Geometry-adaptive HMC. With 7 free parameters and 14 photometric
-# bands the warmup + sampling is the dominant cost — each leapfrog step
-# is one forward+gradient (~2 ms above), the U-turn check fires after
-# ~30–100 leapfrogs per iteration. Hamiltonian step throughput sets the
-# wall.
-
-# %%
-posterior = forward.fit(
-    flux_obs,
-    noise,
-    method="mcmc_nuts",
-    key=key_fit,
-    n_warmup=400,
-    n_samples=400,
+t = time.perf_counter()
+posterior = Fitter(sed_model, flux_obs, noise, data_type="photometry").run(
+    method="mcmc_nuts", key=key_fit, n_warmup=400, n_samples=400
 )
+print(f"  NUTS wall: {time.perf_counter() - t:6.2f} s")
 posterior.summary()
 
 # %% [markdown]
