@@ -92,4 +92,4 @@ ax.set_xlim(-1.5, 0.5)
 ax.set_ylim(-1.0, 1.0)
 
 fig.tight_layout()
-fig.savefig("plot_usecase_emission_line_pcc.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_usecase_emission_line_pcc.png", dpi=150, bbox_inches="tight")

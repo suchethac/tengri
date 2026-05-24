@@ -87,4 +87,4 @@ cb_diff = fig.colorbar(plt.cm.ScalarMappable(norm=norm_diff, cmap="viridis"),
                        ax=ax_diff, pad=0.01)
 cb_diff.set_label(r"$\tau_{\rm diff}$  [mag]")
 
-fig.savefig("plot_birth_cloud_vs_diffuse.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_birth_cloud_vs_diffuse.png", dpi=150, bbox_inches="tight")

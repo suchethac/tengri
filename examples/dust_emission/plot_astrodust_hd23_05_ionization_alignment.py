@@ -42,4 +42,4 @@ for ax, y, lab in (
 
 ax1.set_title("PAH ionization fraction (Eq. 20)", fontsize=10)
 fig.tight_layout()
-fig.savefig("plot_astrodust_hd23_05_ionization_alignment.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_astrodust_hd23_05_ionization_alignment.png", dpi=150, bbox_inches="tight")

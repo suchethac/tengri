@@ -73,4 +73,4 @@ ax.set(xscale="log", xlim=(10, 1000),
        ylabel=r"UV continuum slope  $\beta$  (Calzetti+1994 windows)")
 
 fig.tight_layout()
-fig.savefig("plot_uv_slope_age.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_uv_slope_age.png", dpi=150, bbox_inches="tight")

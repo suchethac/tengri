@@ -56,4 +56,4 @@ ax2.set(
 )
 
 fig.tight_layout()
-fig.savefig("plot_astrodust_hd23_08_polarized_emission.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_astrodust_hd23_08_polarized_emission.png", dpi=150, bbox_inches="tight")

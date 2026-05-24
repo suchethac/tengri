@@ -105,4 +105,4 @@ for ax, data, truth, label, unit in [
     ax.grid(True, alpha=0.3, axis="y")
 
 fig.tight_layout()
-fig.savefig("plot_hierarchical_convergence.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_hierarchical_convergence.png", dpi=150, bbox_inches="tight")

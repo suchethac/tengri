@@ -94,4 +94,4 @@ ax_uv.set_ylabel(r"$F_\lambda$ [arbitrary]")
 ax_opt.set(xlabel=r"Rest-frame wavelength [$\mathrm{\AA}$]",
            ylabel=r"$F_\lambda$ [arbitrary]")
 
-fig.savefig("plot_emission_line_atlas.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_emission_line_atlas.png", dpi=150, bbox_inches="tight")

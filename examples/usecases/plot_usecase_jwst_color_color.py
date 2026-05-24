@@ -170,4 +170,4 @@ ax.set_xlim([-0.5, 3.0])
 ax.set_ylim([-0.5, 2.0])
 
 fig.tight_layout()
-fig.savefig("plot_usecase_jwst_color_color.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_usecase_jwst_color_color.png", dpi=150, bbox_inches="tight")

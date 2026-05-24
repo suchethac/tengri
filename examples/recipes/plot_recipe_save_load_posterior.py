@@ -73,4 +73,4 @@ with tempfile.TemporaryDirectory() as tmpdir:
     ax.set_ylabel(r"$\log_{10}(Z/Z_\odot)$")
 
     fig.tight_layout()
-    fig.savefig("plot_recipe_save_load_posterior.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_recipe_save_load_posterior.png", dpi=150, bbox_inches="tight")

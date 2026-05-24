@@ -69,4 +69,4 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"$\tau_{9.7}$")
 
 fig.tight_layout()
-fig.savefig("plot_agn_tau_skirtor_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_agn_tau_skirtor_sweep.png", dpi=150, bbox_inches="tight")

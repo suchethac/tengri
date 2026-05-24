@@ -60,4 +60,4 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"$\log(Z/Z_\odot)$")
 
 fig.tight_layout()
-fig.savefig("plot_logz_gas_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_logz_gas_sweep.png", dpi=150, bbox_inches="tight")

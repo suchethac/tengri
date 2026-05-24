@@ -71,4 +71,4 @@ ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.legend(frameon=False, fontsize=9, ncol=2)
 
 fig.tight_layout()
-fig.savefig("plot_panchromatic_agn.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_panchromatic_agn.png", dpi=150, bbox_inches="tight")

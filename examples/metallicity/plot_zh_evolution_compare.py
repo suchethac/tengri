@@ -151,4 +151,4 @@ ax.set_xlim(0, 11)
 ax.set_ylim(0, 1.0)
 
 fig.tight_layout()
-fig.savefig("plot_zh_evolution_compare.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_zh_evolution_compare.png", dpi=150, bbox_inches="tight")

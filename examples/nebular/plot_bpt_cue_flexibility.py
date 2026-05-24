@@ -91,4 +91,4 @@ for ax, (_label, (param_name, param_values)) in zip(axes, sweeps.items()):
     ax.grid(True, alpha=0.2)
 
 fig.tight_layout()
-fig.savefig("plot_bpt_cue_flexibility.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_bpt_cue_flexibility.png", dpi=150, bbox_inches="tight")

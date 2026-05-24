@@ -53,4 +53,4 @@ ax.set(
 )
 ax.legend(loc="lower left", frameon=False, fontsize=8, ncol=3)
 fig.tight_layout()
-fig.savefig("plot_bosa_ssfr_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_bosa_ssfr_sweep.png", dpi=150, bbox_inches="tight")
