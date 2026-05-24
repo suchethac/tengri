@@ -388,6 +388,16 @@ class NebularSEDComponent:
         # ``jax.jit`` traces. The backend identity is in
         # ``self.config.backend`` (eager-time inspection only).
 
+        # SEDModel._template_data_for_jit wraps the backend's weights/grid
+        # bundle in a namespaced dict ``{"nebular": <bundle>, ...}`` so the
+        # JIT closure can thread heterogeneous template payloads (nebular +
+        # dust IR + AGN). Backends expect the unwrapped bundle, so peel
+        # the ``"nebular"`` slot off here. ``None`` is preserved (no
+        # threading active → backend falls back to the closure-captured
+        # ``self.weights`` / ``self.grid``).
+        if isinstance(template_data, dict) and "nebular" in template_data:
+            template_data = template_data["nebular"]
+
         # Always publish both ``sed_nebular`` and ``sed_shock`` so
         # downstream consumers (e.g. ``Posterior.sed_components``) can
         # read them uniformly without conditioning on the active backend.
