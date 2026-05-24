@@ -30,6 +30,8 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+pytestmark = pytest.mark.regression_bug
+
 import tengri
 from tengri import FIXED, Fixed
 from tengri.forward.prediction import EmissionLines
