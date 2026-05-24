@@ -32,6 +32,204 @@ from tengri.utils.physics_constants import (
     KEV_TO_HZ as _KEV_TO_HZ,
 )
 
+# ── Morrison & McCammon (1983) photoelectric cross-section, Table 2 ──
+# σ(E) · E³ = c0 + c1·E + c2·E² with σ in 10⁻²⁴ cm² and E in keV.
+# Fit valid for 0.030 ≤ E ≤ 10 keV; above 10 keV the cross-section is
+# negligible (drops faster than E⁻³) and we return transmission = 1.
+_MM83_E_EDGES = jnp.array(
+    [
+        0.030,
+        0.100,
+        0.284,
+        0.400,
+        0.532,
+        0.707,
+        0.867,
+        1.303,
+        1.840,
+        2.471,
+        3.210,
+        4.038,
+        7.111,
+        8.331,
+        10.000,
+    ]
+)
+_MM83_C0 = jnp.array(
+    [
+        17.3,
+        34.6,
+        78.1,
+        71.4,
+        95.5,
+        308.9,
+        120.6,
+        141.3,
+        202.7,
+        342.7,
+        352.2,
+        433.9,
+        629.0,
+        701.2,
+    ]
+)
+_MM83_C1 = jnp.array(
+    [
+        608.1,
+        267.9,
+        18.8,
+        66.8,
+        145.8,
+        -380.6,
+        169.3,
+        146.8,
+        104.7,
+        18.7,
+        18.7,
+        -2.4,
+        30.9,
+        25.2,
+    ]
+)
+_MM83_C2 = jnp.array(
+    [
+        -2150.0,
+        -476.1,
+        4.3,
+        -51.4,
+        -61.1,
+        294.0,
+        -47.7,
+        -31.5,
+        -17.0,
+        0.0,
+        0.0,
+        0.75,
+        0.0,
+        0.0,
+    ]
+)
+
+
+def tbabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
+    r"""Photoelectric absorption transmission ``T(E) = exp(−σ(E)·N_H)``.
+
+    Implements the Morrison & McCammon (1983) ``wabs`` cross-section
+    via the published polynomial fit:
+
+    .. math::
+
+        \sigma(E)\,E^3 = c_0 + c_1\,E + c_2\,E^2
+        \quad
+        (\sigma \,\,\mathrm{in}\,\,10^{-24}\,\mathrm{cm}^2,\;
+         E \,\,\mathrm{in}\,\,\mathrm{keV})
+
+    The fit is valid for 0.030 ≤ E ≤ 10 keV. Outside that range the
+    cross-section is negligible (E ≫ 10 keV) or outside the X-ray band
+    we model (E ≪ 0.1 keV), so transmission is set to 1 there.
+
+    Parameters
+    ----------
+    E_keV : array_like, shape (n,)
+        Photon energy. [keV]
+    log_nh : float
+        Equivalent hydrogen column density. [log10(cm⁻²)]
+        Typical AGN range: 20 (unobscured) → 24 (Compton-thick).
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        Transmission ``T(E) ∈ [0, 1]``. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure ``jnp`` primitives.
+
+    **Gradient**: smooth with respect to ``log_nh`` (single ``exp``);
+    bin-edge selection uses ``searchsorted`` which has zero gradient
+    with respect to ``E_keV`` — adequate because ``E_keV`` is the
+    wavelength grid, not a free parameter.
+
+    **Convention**: matches XSPEC ``wabs``. The newer ``tbabs`` model
+    of Wilms et al. (2000) gives 30–50 % higher cross-sections in the
+    0.5–2 keV band due to updated metal abundances; we use ``wabs``
+    here because its closed-form polynomial fit is exactly
+    differentiable and the systematic is well below typical N_H
+    posterior uncertainty.
+
+    References
+    ----------
+    .. [1] R. Morrison and D. McCammon, "Interstellar photoelectric
+       absorption cross-sections, 0.03–10 keV," ApJ, 270, 119 (1983),
+       Table 2. https://doi.org/10.1086/161102
+    .. [2] J. Wilms, A. Allen and R. McCray, "On the absorption of X-rays
+       in the interstellar medium," ApJ, 542, 914 (2000). arXiv:astro-ph/0008425.
+    """
+    E = jnp.asarray(E_keV)
+    # Only the lower bound is enforced strictly; above 10 keV we let the
+    # last bin extrapolate (σ ∝ E⁻³ asymptotically, so τ → 0 quickly and
+    # T → 1 naturally). A hard upper cutoff would create a spurious
+    # discontinuity at exactly E = 10 keV under floating round-trip.
+    in_range = E >= 0.030
+
+    idx = jnp.clip(jnp.searchsorted(_MM83_E_EDGES, E, side="right") - 1, 0, 13)
+    c0 = _MM83_C0[idx]
+    c1 = _MM83_C1[idx]
+    c2 = _MM83_C2[idx]
+    sigma_e3 = c0 + c1 * E + c2 * E**2  # 10⁻²⁴ cm² · keV³
+    sigma = sigma_e3 / jnp.maximum(E, 1e-30) ** 3 * 1e-24  # cm²
+
+    tau = sigma * 10.0**log_nh
+    return jnp.where(in_range, jnp.exp(-jnp.maximum(tau, 0.0)), 1.0)
+
+
+# Thomson scattering cross-section per hydrogen atom (one free electron).
+# σ_T = 6.6524587e-25 cm² (NIST 2018). XSPEC ``cabs`` applies exactly this
+# as exp(−σ_T·N_H), an energy-independent attenuation that captures
+# Compton down-scattering of photons out of the line of sight.
+_SIGMA_THOMSON_CM2 = 6.6524587e-25
+
+
+def compton_scattering_transmission(log_nh: float) -> float:
+    r"""Energy-independent Compton (Thomson) attenuation ``exp(−σ_T·N_H)``.
+
+    Matches XSPEC ``cabs``: photons removed from the line of sight by
+    Thomson scattering off bound electrons in the absorber. Becomes the
+    dominant suppression mechanism above the photoelectric edge once
+    ``log_nh ≳ 24`` (Compton-thick regime).
+
+    Parameters
+    ----------
+    log_nh : float
+        Equivalent hydrogen column density. [log10(cm⁻²)]
+
+    Returns
+    -------
+    float
+        Transmission ``T ∈ [0, 1]``. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — single ``jnp.exp``.
+
+    **Why this matters**: the photoelectric edge alone (Morrison &
+    McCammon ``wabs``) underestimates the suppression of hard-band
+    flux at log_nh ≥ 24. At log_nh = 24, σ_T·N_H ≈ 0.67, giving an
+    extra factor exp(−0.67) ≈ 0.51 of attenuation that the
+    photoelectric model misses entirely above ~10 keV.
+
+    References
+    ----------
+    .. [1] C. Ricci et al., "The Close Environments of Accreting Massive
+       Black Holes are Shaped by Radiative Feedback," Nature, 549, 488
+       (2017). Underlying XSPEC spectral model used in obscured-AGN
+       fits (Eq. B6 of Matsumoto+2026).
+    .. [2] N. Matsumoto et al., "MIR Search for Luminous Heavily
+       Obscured AGN at z > 3," ApJ submitted (2026), Appendix B.
+    """
+    tau_T = _SIGMA_THOMSON_CM2 * 10.0**log_nh
+    return jnp.exp(-jnp.maximum(tau_T, 0.0))
+
 
 def xray_xrb(
     wavelength: jnp.ndarray,
@@ -263,6 +461,7 @@ def xray_agn_corona_from_disc(
     apply_anisotropy: bool = True,
     a1: float = 0.5,
     a2: float = 0.0,
+    log_nh: float = 20.0,
 ) -> jnp.ndarray:
     """Self-consistent AGN corona emission derived from disc UV luminosity.
 
@@ -319,6 +518,17 @@ def xray_agn_corona_from_disc(
     # multiplying by the dimensionless ``spec`` (=1 at E=E_ref) gives L_nu(E).
     l_nu = l_2kev_erg_hz * spec
 
+    # Ricci+2017 / Matsumoto+2026 Eq. B6: photoelectric + Compton
+    # scattering applied to the primary continuum, plus a small
+    # constant scattered fraction (defaulting to 1 %).
+    l_intr = l_nu
+    l_nu = (
+        tbabs_transmission(E_keV, log_nh)
+        * compton_scattering_transmission(log_nh)
+        * l_intr
+        + 0.01 * l_intr
+    )
+
     # X-ray mask (E > 0.1 keV => lambda < 124 A)
     l_nu = jnp.where(wavelength < 124.0, l_nu, 0.0)
 
@@ -335,12 +545,33 @@ def xray_agn_corona(
     gamma: float = 1.8,
     E_cut: float = 300.0,
     alpha_ox: float = -1.4,
+    log_nh: float = 20.0,
+    scattered_frac: float = 0.01,
 ) -> jnp.ndarray:
-    """X-ray emission from AGN corona.
+    r"""X-ray emission from AGN corona with photoelectric + Compton absorption.
 
-    Power law with photon index Gamma and exponential cutoff,
-    normalized via the alpha_ox relation:
-      alpha_ox = 0.384 * log(L_2keV / L_2500A)
+    Follows the XSPEC spectral model of Ricci et al. (2017) used by
+    Vijarnwannaluk et al. (2022) and Matsumoto et al. (2026, Eq. B6):
+
+    .. math::
+
+        L_\nu(E) =
+            T_{\rm phabs}(E, N_H)\,
+            T_{\rm cabs}(N_H)\,
+            L_\nu^{\rm intr}(E)
+            + f_{\rm scat}\, L_\nu^{\rm intr}(E)
+
+    where the line-of-sight absorber attenuates the primary continuum
+    through photoelectric absorption (:func:`tbabs_transmission`) and
+    Compton down-scattering (:func:`compton_scattering_transmission`),
+    while a constant fraction ``scattered_frac`` of the intrinsic
+    spectrum reaches the observer via warm-electron scattering on
+    scales beyond the obscurer. The scattered term is what makes
+    Compton-thick AGN remain marginally detectable in the soft band.
+
+    The intrinsic continuum is a power law with photon index Γ and
+    exponential cutoff, normalized via the α_ox relation
+    ``α_ox = 0.384 · log(L_2keV / L_2500A)`` (Tananbaum+1979).
 
     Parameters
     ----------
@@ -354,6 +585,14 @@ def xray_agn_corona(
         Cutoff energy [keV]. Default 300.
     alpha_ox : float
         UV-to-X-ray slope. Default -1.4. Range: -2.0 to -1.0.
+    log_nh : float
+        Line-of-sight equivalent hydrogen column density. [log10(cm⁻²)]
+        Default 20.0 (unobscured). Range 20.0 – 26.0.
+    scattered_frac : float
+        Fraction of the intrinsic continuum reaching the observer via
+        warm-electron scattering on scales beyond the obscurer. [dimensionless]
+        Default 0.01 (Ricci+2017, typical for type-2 AGN). Range 0.0 – 0.1.
+        Set to 0 to disable.
 
     Returns
     -------
@@ -385,7 +624,16 @@ def xray_agn_corona(
     # Normalise at 2 keV. ``L_2keV`` is already L_nu(2 keV) in erg/s/Hz
     # (alpha_ox is defined on monochromatic L_nu values, Tananbaum+1979), so
     # multiplying by the dimensionless ``spec`` (=1 at E=E_ref) gives L_nu(E).
-    L_nu = L_2keV * spec
+    L_intr = L_2keV * spec
+
+    # Ricci+2017 / Matsumoto+2026 Eq. B6:
+    #   primary = zphabs(N_H) × cabs(N_H) × intrinsic
+    #   scattered = scattered_frac × intrinsic
+    # Applied to the AGN corona only — XRBs and hot gas are outside the
+    # torus line of sight and are unobscured by host N_H.
+    T_phabs = tbabs_transmission(E_keV, log_nh)
+    T_cabs = compton_scattering_transmission(log_nh)
+    L_nu = T_phabs * T_cabs * L_intr + scattered_frac * L_intr
 
     xray_mask = wavelength < 124.0
     return jnp.where(xray_mask, L_nu, 0.0)
@@ -401,6 +649,7 @@ def xray_total(
     gamma_agn: float = 1.8,
     E_cut: float = 300.0,
     alpha_ox: float = -1.4,
+    log_nh: float = 20.0,
     **_kwargs,
 ) -> jnp.ndarray:
     """Total X-ray emission (XRB + AGN corona).
@@ -436,7 +685,7 @@ def xray_total(
     **JIT-compatible**: yes — pure JAX function.
     """
     xrb = xray_xrb(wavelength, sfr, stellar_mass, gamma_hmxb, gamma_lmxb, E_cut)
-    agn = xray_agn_corona(wavelength, L_agn_bol, gamma_agn, E_cut, alpha_ox)
+    agn = xray_agn_corona(wavelength, L_agn_bol, gamma_agn, E_cut, alpha_ox, log_nh=log_nh)
     return xrb + agn
 
 
@@ -505,6 +754,7 @@ def xray_agn_corona_lopez24(
     apply_anisotropy: bool = True,
     a1: float = 0.5,
     a2: float = 0.0,
+    log_nh: float = 20.0,
 ) -> jnp.ndarray:
     r"""AGN corona X-ray emission from 12μm luminosity (Lopez et al. 2024).
 
@@ -608,6 +858,16 @@ def xray_agn_corona_lopez24(
 
     l_nu = l_x_2_10 / band_integral * spec
 
+    # Ricci+2017 / Matsumoto+2026 Eq. B6: photoelectric + Compton
+    # scattering + 1 % scattered.
+    l_intr = l_nu
+    l_nu = (
+        tbabs_transmission(E_keV, log_nh)
+        * compton_scattering_transmission(log_nh)
+        * l_intr
+        + 0.01 * l_intr
+    )
+
     # X-ray mask (E > 0.1 keV => λ < 124 Å)
     l_nu = jnp.where(wavelength < 124.0, l_nu, 0.0)
 
@@ -628,6 +888,7 @@ def xray_total_lopez24(
     gamma_lmxb: float = 1.6,
     gamma_agn: float = 1.8,
     E_cut: float = 300.0,
+    log_nh: float = 20.0,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""Total X-ray emission using IRX-based AGN (Lopez+2024) + XRBs.
@@ -678,5 +939,6 @@ def xray_total_lopez24(
         gamma_agn,
         E_cut,
         apply_anisotropy=False,
+        log_nh=log_nh,
     )
     return xrb + agn

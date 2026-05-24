@@ -86,6 +86,7 @@ class TestXRayAirdPort:
             "gamma_agn": jnp.array(1.9),
             "E_cut": jnp.array(300.0),
             "alpha_ox": jnp.array(-0.5),
+            "log_nh": jnp.array(20.0),
         }
         sed_out, published = comp.predict(p, sed_in, wave)
         assert isinstance(sed_out, jnp.ndarray)

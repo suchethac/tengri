@@ -77,12 +77,19 @@ class XRayAirdSEDComponent(SEDModelComponent):
     and AGN luminosity (corona). Implements Lehmer+2010/2016 (XRB scaling)
     and Lusso & Risaliti 2016 (AGN X-ray).
 
-    Free parameters (5):
+    Free parameters (6):
     - xray_gamma_hmxb: HMXB spectral index
     - xray_gamma_lmxb: LMXB spectral index
     - xray_gamma_agn: AGN spectral index
     - xray_E_cut: high-energy cutoff [keV]
     - xray_alpha_ox: alpha_ox AGN parameter
+    - xray_log_nh: line-of-sight column density [log10(cm⁻²)],
+      applied to the AGN corona only as
+      ``zphabs(N_H) × cabs(N_H) × intrinsic + 0.01 × intrinsic``
+      (Ricci+2017; Matsumoto+2026 Eq. B6). zphabs uses
+      Morrison & McCammon (1983) wabs cross-sections; cabs is
+      Thomson down-scattering. Galactic absorption is not modelled
+      (assume user provides intrinsic-frame fluxes).
 
     Notes
     -----
@@ -104,6 +111,16 @@ class XRayAirdSEDComponent(SEDModelComponent):
     gamma_agn = Uniform(1.0, 3.0, description="AGN X-ray spectral index", units="")
     E_cut = Fixed(300.0, description="High-energy cutoff", units="keV")
     alpha_ox = Fixed(-0.5, description="Lusso & Risaliti alpha_ox", units="")
+    log_nh = Uniform(
+        20.0,
+        26.0,
+        description=(
+            "Line-of-sight column density; applied as zphabs × cabs to AGN "
+            "corona (Ricci+2017; Matsumoto+2026 Eq. B6). Compton-thick "
+            "regime starts at log_nh = 24."
+        ),
+        units="log10(cm^-2)",
+    )
 
     # No required cross-component inputs (all have fallbacks)
     inputs: ClassVar[dict[str, str]] = {}
@@ -164,6 +181,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
             gamma_agn=jnp.asarray(p["gamma_agn"]),
             E_cut=jnp.asarray(p["E_cut"]),
             alpha_ox=jnp.asarray(p["alpha_ox"]),
+            log_nh=jnp.asarray(p["log_nh"]),
         )
 
         return sed_in + L_xray, {
