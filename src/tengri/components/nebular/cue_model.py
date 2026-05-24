@@ -163,12 +163,12 @@ class CueNebularSEDComponent(SEDModelComponent):
     fesc = Fixed(
         0.0,
         description="Ionizing photon escape fraction",
-        units="",
+        units="dimensionless",
     )
     fesc_lya = Fixed(
         0.0,
         description="Lyman-alpha escape fraction",
-        units="",
+        units="dimensionless",
     )
 
     # Cue ionizing spectrum parameters (7 additional free params)

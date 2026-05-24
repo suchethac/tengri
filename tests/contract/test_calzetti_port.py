@@ -39,8 +39,8 @@ def test_declared_parameters_units():
     assert "dust_tau_v" in names
     assert "dust_delta" in names
     assert isinstance(names["dust_tau_v"].prior, Uniform)
-    assert names["dust_tau_v"].units == ""
-    assert names["dust_delta"].units == ""
+    assert names["dust_tau_v"].units == "dimensionless"
+    assert names["dust_delta"].units == "dimensionless"
 
 
 def test_outputs_contract():

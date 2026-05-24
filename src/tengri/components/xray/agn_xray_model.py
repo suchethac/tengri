@@ -94,8 +94,8 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
     parameter_prefix: str = "agn_xray_"
 
     # Free parameters
-    gamma = Uniform(1.4, 2.4, description="X-ray photon index", units="")
-    alpha_ox = Fixed(-1.4, description="Lusso & Risaliti alpha_ox", units="")
+    gamma = Uniform(1.4, 2.4, description="X-ray photon index", units="dimensionless")
+    alpha_ox = Fixed(-1.4, description="Lusso & Risaliti alpha_ox", units="dimensionless")
     e_cut = Fixed(300.0, description="High-energy cutoff", units="keV")
 
     # Reads AGN bolometric luminosity with fallback

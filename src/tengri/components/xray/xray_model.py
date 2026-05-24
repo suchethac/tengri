@@ -99,11 +99,11 @@ class XRayAirdSEDComponent(SEDModelComponent):
     parameter_prefix: str = "xray_"
 
     # Free parameters
-    gamma_hmxb = Uniform(1.0, 3.0, description="HMXB spectral index", units="")
-    gamma_lmxb = Uniform(1.0, 3.0, description="LMXB spectral index", units="")
-    gamma_agn = Uniform(1.0, 3.0, description="AGN X-ray spectral index", units="")
+    gamma_hmxb = Uniform(1.0, 3.0, description="HMXB spectral index", units="dimensionless")
+    gamma_lmxb = Uniform(1.0, 3.0, description="LMXB spectral index", units="dimensionless")
+    gamma_agn = Uniform(1.0, 3.0, description="AGN X-ray spectral index", units="dimensionless")
     E_cut = Fixed(300.0, description="High-energy cutoff", units="keV")
-    alpha_ox = Fixed(-0.5, description="Lusso & Risaliti alpha_ox", units="")
+    alpha_ox = Fixed(-0.5, description="Lusso & Risaliti alpha_ox", units="dimensionless")
 
     # No required cross-component inputs (all have fallbacks)
     inputs: ClassVar[dict[str, str]] = {}

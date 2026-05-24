@@ -73,7 +73,7 @@ class ModifiedBlackbodySED(SEDModelComponent):
 
     # Free parameters — auto-discovered by base class
     T = Uniform(20.0, 80.0, description="Dust temperature", units="K")
-    beta_ir = Uniform(1.0, 3.0, description="Dust emissivity index", units="")
+    beta_ir = Uniform(1.0, 3.0, description="Dust emissivity index", units="dimensionless")
 
     # Cross-component contract
     inputs: ClassVar = {"L_ir": "erg/s"}

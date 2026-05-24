@@ -91,13 +91,23 @@ class CharlotFall(SEDModelComponent):
     parameter_prefix = "dust_"
 
     # ─── Free parameters
-    tau_bc = Uniform(0.0, 4.0, description="birth-cloud V-band optical depth", units="")
-    tau_diff = Uniform(0.0, 4.0, description="diffuse-ISM V-band optical depth", units="")
+    tau_bc = Uniform(
+        0.0,
+        4.0,
+        description="birth-cloud V-band optical depth",
+        units="dimensionless",
+    )
+    tau_diff = Uniform(
+        0.0,
+        4.0,
+        description="diffuse-ISM V-band optical depth",
+        units="dimensionless",
+    )
 
     # ─── Slope/bump knobs (Fixed by default; user overrides per fit)
-    slope = Fixed(-0.7, description="diffuse-ISM attenuation slope", units="")
-    delta = Fixed(0.0, description="UV slope deviation (Noll+2009)", units="")
-    bump_strength = Fixed(0.0, description="2175 Å bump strength", units="")
+    slope = Fixed(-0.7, description="diffuse-ISM attenuation slope", units="dimensionless")
+    delta = Fixed(0.0, description="UV slope deviation (Noll+2009)", units="dimensionless")
+    bump_strength = Fixed(0.0, description="2175 Å bump strength", units="dimensionless")
 
     inputs: dict[str, str] = {  # noqa: RUF012
         "lnu_age": "erg/s/Hz",

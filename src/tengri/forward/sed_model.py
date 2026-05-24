@@ -3808,9 +3808,30 @@ class SEDModel:
         EmissionLines
             11 standard survey-diagnostic lines (lya, civ_1549, oii,
             hbeta, oiii_4959/5007, nii_6548/6584, halpha, sii_6717/6731).
-            Returns all-NaN when the active nebular backend does not
-            publish a discrete line catalogue (BakedIn, shock).
+
+        Raises
+        ------
+        NotImplementedError
+            When the active nebular backend does not publish a discrete
+            line catalogue (BakedIn or shock). Switch to ``neb={'type':
+            'cue', ...}`` or ``neb={'type': 'cloudy_grid', ...}`` for
+            discrete line predictions, or read the continuous nebular
+            SED from ``model.predict_rest_sed(params).sed`` directly.
         """
+        from tengri.components.nebular import BakedInBackend
+
+        if isinstance(self._nebular_backend, BakedInBackend):
+            raise NotImplementedError(
+                "predict_emission_lines is not supported for the BakedIn "
+                "nebular backend: emission is baked into the SSP grid and "
+                "no discrete line catalogue is published. To predict line "
+                "luminosities, build the model with a photoionisation "
+                "backend, e.g. neb={'type': 'cue', '*': FIXED} (requires "
+                "a bare-stellar SSP) or neb={'type': 'cloudy_grid', ...}. "
+                "For a quick narrow-band measurement on the BakedIn SED, "
+                "integrate model.predict_rest_sed(params).sed across the "
+                "line wavelength range yourself."
+            )
         from tengri.forward import state_to_emission_lines
 
         return state_to_emission_lines(self.predict_state(params))
