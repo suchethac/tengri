@@ -169,19 +169,36 @@ _VALID_DUST_TYPES = {
     "single_component",
 }
 
-#: Valid dust emission types.
-_VALID_DUST_EMISSION_TYPES = {
-    "modified_blackbody",
-    "casey2012",
-    "dale2014",
-    "draine_li2007",
-    "draine_li2014",
-    "dl07_tabulated",
-    "astrodust",
-    "bosa",
-    "themis",
-    "draine2021_pah",
-}
+#: Dust emission types that register lazily via ``register_*_tabulated``
+#: helpers (template data loaded from HDF5 only on first call). These names
+#: are valid even before any tabulated grid has been resolved, so they must
+#: be unioned into the live ``DUST_EMISSION_MODELS`` view when the validator
+#: builds its accepted set. Keeping them as a small, explicit constant
+#: rather than introspecting the loader plumbing keeps the validator path
+#: a pure function of static state.
+_LAZY_DUST_EMISSION_TYPES = frozenset(
+    {
+        "dl07_tabulated",
+        "draine2021_pah",
+    }
+)
+
+
+def _valid_dust_emission_types() -> frozenset[str]:
+    """Return accepted ``dust.emission.type`` values, derived from the registry.
+
+    Union of (i) every name currently in ``DUST_EMISSION_MODELS`` (populated
+    at import time by ``@register_emission_model`` decorators plus the
+    lazy-loader wrappers in ``components/dust/emission.py``) and (ii) the
+    closed set of names that only appear after an explicit
+    ``register_*_tabulated`` call. Together these cover both the
+    eager-registered and lazy-registered branches without the drift footgun
+    a hand-maintained allowlist creates (see ADR-0005 / ADR-0008).
+    """
+    from tengri.components.dust.emission import DUST_EMISSION_MODELS
+
+    return frozenset(DUST_EMISSION_MODELS.keys()) | _LAZY_DUST_EMISSION_TYPES
+
 
 #: Valid nebular types.
 _VALID_NEBULAR_TYPES = {
@@ -211,17 +228,19 @@ _VALID_XRAY_TYPES = {
     "simple",
 }
 
-#: Valid dust attenuation laws.
-_VALID_DUST_LAWS = {
-    "power_law",
-    "calzetti",
-    "kriek_conroy",
-    "smc",
-    "cardelli",
-    "salim",
-    "li08",
-    "noll09",
-}
+
+def _valid_dust_laws() -> frozenset[str]:
+    """Return accepted ``dust.law_bc`` / ``dust.law_diff`` values from the registry.
+
+    Mirrors ``DUST_LAWS.keys()``, which the ``@register_dust_law`` decorator
+    populates eagerly at import time of ``components.dust.attenuation``.
+    No lazy-load wrinkle here (cf. dust emission), so the derivation is a
+    direct view per ADR-0005 / ADR-0008.
+    """
+    from tengri.components.dust.attenuation import DUST_LAWS
+
+    return frozenset(DUST_LAWS.keys())
+
 
 #: Valid AGN disc block types.
 _VALID_AGN_DISC_TYPES = {
@@ -632,18 +651,17 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
     dust_law_bc = dust_dict.get("law_bc", "power_law")
     dust_law_diff = dust_dict.get("law_diff")
 
-    if dust_law_bc not in _VALID_DUST_LAWS:
-        suggestions = difflib.get_close_matches(dust_law_bc, _VALID_DUST_LAWS, n=2, cutoff=0.6)
+    valid_laws = _valid_dust_laws()
+    if dust_law_bc not in valid_laws:
+        suggestions = difflib.get_close_matches(dust_law_bc, valid_laws, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown dust law '{dust_law_bc}'.{suggest_str}")
 
     result["dust_law_bc"] = dust_law_bc
 
     if dust_law_diff is not None:
-        if dust_law_diff not in _VALID_DUST_LAWS:
-            suggestions = difflib.get_close_matches(
-                dust_law_diff, _VALID_DUST_LAWS, n=2, cutoff=0.6
-            )
+        if dust_law_diff not in valid_laws:
+            suggestions = difflib.get_close_matches(dust_law_diff, valid_laws, n=2, cutoff=0.6)
             suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
             raise ValueError(f"Unknown dust law '{dust_law_diff}'.{suggest_str}")
         result["dust_law_diff"] = dust_law_diff
@@ -659,9 +677,10 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
                     result["dust_emission"] = emission_type
                     return
 
-                if emission_type not in _VALID_DUST_EMISSION_TYPES:
+                valid_emission_types = _valid_dust_emission_types()
+                if emission_type not in valid_emission_types:
                     suggestions = difflib.get_close_matches(
-                        emission_type, _VALID_DUST_EMISSION_TYPES, n=3, cutoff=0.6
+                        emission_type, valid_emission_types, n=3, cutoff=0.6
                     )
                     suggest_str = (
                         f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
