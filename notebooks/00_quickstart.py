@@ -288,42 +288,73 @@ spec_truth = obs_fnu(truth_full)
 phot_draws = np.asarray(jax.vmap(lambda p: forward.predict(p)["phot_fnu"])(draws))
 phot_med = np.median(phot_draws, axis=0)
 
-fig = plt.figure(figsize=(7.4, 5.6))
-gs = fig.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0.05)
+fig = plt.figure(figsize=(8.6, 5.4))
+gs = fig.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0.04)
 ax, ax_res = fig.add_subplot(gs[0]), fig.add_subplot(gs[1])
 
 wave_um = WAVE_OBS / 1e4
-ax.fill_between(wave_um, spec_lo, spec_hi, color=C_POST, alpha=0.25, lw=0, label="posterior 68%")
-ax.plot(wave_um, spec_med, color=C_POST, lw=1.2, label="posterior median")
-ax.plot(wave_um, spec_truth, color=C_TRUTH, lw=1.0, ls="--", label="truth")
+
+# Filter transmission curves shaded behind the spectrum — Bagpipes/Prospector
+# style. Use the matplotlib default qualitative palette across bands.
+band_palette = plt.cm.viridis(np.linspace(0.05, 0.95, len(phot.filter_waves)))
+ymin, ymax = 0.3 * spec_truth.min(), 3 * spec_truth.max()
+for fw, ft, color in zip(phot.filter_waves, phot.filter_trans, band_palette):
+    fw_um = np.asarray(fw) / 1e4
+    ft_norm = np.asarray(ft) / np.max(ft)
+    # Map transmission to the bottom 12 % of the log-y axis.
+    band = ymin * (ymax / ymin) ** (0.12 * ft_norm)
+    ax.fill_between(fw_um, ymin, band, color=color, alpha=0.35, lw=0)
+
+ax.fill_between(wave_um, spec_lo, spec_hi, color=C_POST, alpha=0.30, lw=0, label="posterior 68%")
+ax.plot(wave_um, spec_med, color=C_POST, lw=1.4, label="posterior median")
+ax.plot(wave_um, spec_truth, color=C_TRUTH, lw=1.1, ls="--", label="truth")
 ax.errorbar(
     wave_eff_um,
     flux_obs,
     yerr=noise,
     fmt="o",
     color=C_DATA,
-    ms=5,
+    ms=5.5,
     capsize=2,
     elinewidth=1.0,
+    mec="white",
+    mew=0.6,
     label="observed",
     zorder=5,
 )
 ax.set_xscale("log")
 ax.set_yscale("log")
+ax.set_ylim(ymin, ymax)
+ax.set_xlim(wave_um.min(), wave_um.max())
 ax.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
-ax.set_ylim(0.3 * spec_truth.min(), 3 * spec_truth.max())
-ax.legend(frameon=False, fontsize=9, loc="lower right")
+ax.legend(frameon=False, fontsize=9, loc="upper left")
 plt.setp(ax.get_xticklabels(), visible=False)
+
+# Rest-frame wavelength axis on top.
+ax_rest = ax.twiny()
+ax_rest.set_xscale("log")
+ax_rest.set_xlim(wave_um.min() / (1.0 + z_truth), wave_um.max() / (1.0 + z_truth))
+ax_rest.set_xlabel(rf"rest-frame wavelength  [$\mu$m]   (z = {z_truth:.2f})", fontsize=9)
 
 resid = (flux_obs - phot_med) / noise
 ax_res.axhspan(-1, 1, alpha=0.08, color="0.5")
 ax_res.axhline(0, color="0.4", lw=0.8)
-ax_res.bar(wave_eff_um, resid, width=wave_eff_um * 0.12, color=C_DATA, alpha=0.8)
+ax_res.bar(
+    wave_eff_um,
+    resid,
+    width=wave_eff_um * 0.12,
+    color=C_DATA,
+    alpha=0.85,
+    edgecolor="white",
+    linewidth=0.5,
+)
 ax_res.set_xscale("log")
+ax_res.set_xlim(wave_um.min(), wave_um.max())
 ax_res.set_ylim(-3.5, 3.5)
 ax_res.set_xlabel(r"observed wavelength  [$\mu$m]")
 ax_res.set_ylabel(r"$(d-m)/\sigma$")
 fig.savefig(FIG_DIR / "00_posterior_sed.png", dpi=300, bbox_inches="tight")
+fig.savefig(FIG_DIR / "00_posterior_sed.pdf", bbox_inches="tight")
 
 # %% [markdown]
 # ## Star-formation history
@@ -348,16 +379,35 @@ sfr_draws = np.stack(sfr_draws)
 sfr_lo, sfr_med, sfr_hi = np.percentile(sfr_draws, [16, 50, 84], axis=0)
 lbt_t, sfr_t = sfh(truth_full)
 
-fig_sfh, ax_sfh = plt.subplots(figsize=(7.2, 3.6))
-ax_sfh.fill_between(lbt, sfr_lo, sfr_hi, color=C_POST, alpha=0.25, lw=0, label="68% band")
-ax_sfh.plot(lbt, sfr_med, color=C_POST, lw=1.4, label="posterior median")
-ax_sfh.plot(lbt_t, sfr_t, color=C_TRUTH, ls="--", lw=1.2, label="truth")
-ax_sfh.invert_xaxis()
-ax_sfh.set_xlim(13.5, 0)
-ax_sfh.set_xlabel("lookback time  [Gyr]")
+# Two-panel SFH: SFR(t) on top, cumulative formed mass on bottom.
+fig_sfh, (ax_sfh, ax_cum) = plt.subplots(
+    2, 1, figsize=(7.2, 5.4), sharex=True, gridspec_kw=dict(height_ratios=[2, 1], hspace=0.05)
+)
+
+ax_sfh.fill_between(lbt, sfr_lo, sfr_hi, color=C_POST, alpha=0.30, lw=0, label="posterior 68%")
+ax_sfh.plot(lbt, sfr_med, color=C_POST, lw=1.6, label="posterior median")
+ax_sfh.plot(lbt_t, sfr_t, color=C_TRUTH, ls="--", lw=1.3, label="truth")
 ax_sfh.set_ylabel(r"SFR  [$M_\odot$ yr$^{-1}$]")
-ax_sfh.legend(frameon=False, fontsize=9)
+ax_sfh.legend(frameon=False, fontsize=9, loc="upper left")
+plt.setp(ax_sfh.get_xticklabels(), visible=False)
+
+# Cumulative formed stellar mass — integrate SFR(t) backwards from now.
+dt_yr = np.gradient(lbt * 1e9)  # Gyr → yr, signed
+cum_draws = np.flip(np.cumsum(np.flip(sfr_draws * dt_yr[None, :], axis=1), axis=1), axis=1)
+cum_lo, cum_med, cum_hi = np.percentile(cum_draws, [16, 50, 84], axis=0)
+cum_truth = np.flip(np.cumsum(np.flip(sfr_t * dt_yr), axis=0), axis=0)
+ax_cum.fill_between(lbt, cum_lo / 1e10, cum_hi / 1e10, color=C_POST, alpha=0.30, lw=0)
+ax_cum.plot(lbt, cum_med / 1e10, color=C_POST, lw=1.6)
+ax_cum.plot(lbt_t, cum_truth / 1e10, color=C_TRUTH, ls="--", lw=1.3)
+ax_cum.set_ylabel(r"cumulative $M_\star$  [$10^{10}\,M_\odot$]")
+
+for axx in (ax_sfh, ax_cum):
+    axx.invert_xaxis()
+    axx.set_xlim(13.5, 0)
+ax_cum.set_xlabel("lookback time  [Gyr]")
+
 fig_sfh.savefig(FIG_DIR / "00_sfh.png", dpi=300, bbox_inches="tight")
+fig_sfh.savefig(FIG_DIR / "00_sfh.pdf", bbox_inches="tight")
 
 # %% [markdown]
 # ## Corner
@@ -368,3 +418,4 @@ fig_sfh.savefig(FIG_DIR / "00_sfh.png", dpi=300, bbox_inches="tight")
 # %%
 fig_corner = posterior.plot_corner(truths=truth_full, color=C_POST)
 fig_corner.savefig(FIG_DIR / "00_corner.png", dpi=300, bbox_inches="tight")
+fig_corner.savefig(FIG_DIR / "00_corner.pdf", bbox_inches="tight")
