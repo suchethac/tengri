@@ -1,11 +1,20 @@
 """
-BPT diagram ionization sequence from ages
-==========================================
+Stellar-population age moves a galaxy on the BPT diagram
+=========================================================
 
-The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies ionizing sources.
-We show how stellar population age controls ionization parameter:
-younger (hotter) populations move the locus toward higher [OIII]/Hβ,
-steering from star-forming toward composite/Seyfert regions.
+Young massive stars produce harder ionising continua and drive the
+nebular emission toward higher [O III]/Hbeta. We sweep the SFH
+timescale ``tau_gyr`` from 0.1 to 2 Gyr on a single dual power-law
+model and plot the resulting line ratios against the Kewley+2001 /
+Kauffmann+2003 demarcation curves. The locus migrates from the
+star-forming wing into the composite region as the population ages —
+SFH timescale is the upstream knob behind the BPT ionisation sequence.
+
+Distinct from ``plot_bpt_cue_grid.py`` (log U × log Z_gas grid at
+fixed age) and ``plot_cue_logu_line_ratios.py`` (1-D log U sweep).
+
+Reference: Kewley et al. 2001, ApJ, 556, 121;
+Kauffmann et al. 2003, MNRAS, 346, 1055.
 """
 
 import warnings

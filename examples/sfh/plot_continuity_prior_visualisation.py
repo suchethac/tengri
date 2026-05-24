@@ -15,13 +15,11 @@ as percentile bands (5th, 25th, 50th, 75th, 95th) versus lookback time.
 
 """
 
+import jax.random as jr
 import matplotlib.pyplot as plt
 import numpy as np
-import jax
-import jax.numpy as jnp
-import jax.random as jr
 
-from tengri import Fixed, FREE, SEDModel, load_ssp, setup_style, Parameters, Uniform
+from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp, setup_style
 
 setup_style()
 

@@ -1,10 +1,14 @@
 """
-Gas metallicity shifts optical emission line ratios
-===================================================
+Gas metallicity reshapes the optical nebular continuum and line forest
+======================================================================
 
-Gas metallicity controls [NII]/Hα and [OIII]/Hβ ratios, the primary
-optical metallicity diagnostics. We vary nebular metallicity across
-the abundance range.
+A 1-D log Z_gas sweep on the SED scale, complementing the 2-D atlas in
+``plot_cue_parameter_atlas.py`` and the line-ratio projection in
+``plot_strong_line_metallicity_diagnostics.py``. Reader sees how every
+strong optical line moves together as Z_gas climbs, with [N II]/Halpha
+and [O III]/Hbeta the textbook diagnostics.
+
+Reference: Kewley & Ellison 2008, ApJ, 681, 1183.
 """
 
 import warnings

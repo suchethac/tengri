@@ -1,10 +1,15 @@
 """
-Ionizing photon escape suppresses nebular emission
-===================================================
+Escape fraction suppresses the optical line ratios, not just amplitudes
+========================================================================
 
-Escape fraction ``f_esc`` sets what fraction of ionizing photons reach the
-ISM. Higher ``f_esc`` suppresses all nebular emission lines since fewer
-photons remain to ionize gas.
+We sweep the ionising-photon escape fraction f_esc from 0 to 0.9 at
+fixed log U and metallicity, and read out the response in
+diagnostic-ratio space ([O III]/Hbeta etc.). Companion to
+``plot_lyman_continuum_escape.py``, which shows the same physics in
+SED space focused on the Lyman edge.
+
+Reference: Inoue et al. 2014, MNRAS, 442, 1805 (escape fraction
+formalism).
 """
 
 import warnings

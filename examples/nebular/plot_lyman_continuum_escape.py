@@ -1,15 +1,12 @@
 """
-Lyman continuum escape fraction effect on ionizing photons
-==========================================================
+Lyman-continuum escape fraction reshapes the SED around the 912 A edge
+=======================================================================
 
-The Lyman continuum (λ < 912 Å rest) is the primary source of ionizing photons
-for nebular emission. Escape fraction ``f_esc`` sets the fraction of ionizing
-photons that escape the ISM without being absorbed. Higher ``f_esc`` increases
-ionizing photon loss and suppresses nebular line emission.
-
-This example focuses on the LyC region (rest 800–1300 Å) to clearly show
-how ionizing photon escape changes the SED around the Lyman edge for a
-star-forming galaxy at z = 0.05.
+We zoom on the Lyman-continuum region (rest 800-1300 A) and sweep
+the escape fraction f_esc to show how the 912 A discontinuity
+deepens as more ionising photons leave the ISM unabsorbed. Companion
+to ``plot_fesc_sweep.py``, which projects the same physics into
+optical line-ratio diagnostics.
 
 References
 ----------
