@@ -71,10 +71,10 @@ def test_dust_demo_does_not_wire_waveprecomp():
 @pytest.mark.parametrize("recipe_name", PHOTOMETRY_RECIPES)
 def test_recipe_dict_still_splattable_into_parameters(recipe_name):
     """Adding approx= must not break the legacy
-    ``Parameters.from_groups(**recipe_dict)`` splat — parse_groups should
+    ``parse_groups(**recipe_dict)`` splat — parse_groups should
     silently drop SEDModel-only passthrough kwargs."""
     recipe_dict = getattr(recipes, recipe_name)()
-    spec = tengri.Parameters.from_groups(**recipe_dict)
+    spec = tengri.parse_groups(**recipe_dict)
     assert spec.n_free > 0
 
 

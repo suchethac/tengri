@@ -31,7 +31,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import FIXED, Parameters, Uniform, builders
+from tengri import FIXED, Uniform, builders, parse_groups
 
 
 @pytest.mark.parametrize(
@@ -66,7 +66,7 @@ def test_module_surface_and_default_dict(
 
 def test_radio_q_ir_override_round_trips() -> None:
     """An explicit Distribution on a radio param must surface as FREE."""
-    spec = Parameters.from_groups(
+    spec = parse_groups(
         sfh={"type": "dpl"},
         radio=builders.radio.condon92(q_ir=Uniform(2.0, 3.0)),
     )
@@ -74,7 +74,7 @@ def test_radio_q_ir_override_round_trips() -> None:
 
 
 def test_xray_alpha_ox_override_round_trips() -> None:
-    spec = Parameters.from_groups(
+    spec = parse_groups(
         sfh={"type": "dpl"},
         xray=builders.xray.simple(alpha_ox=Uniform(-2.0, -1.0)),
     )
@@ -125,7 +125,7 @@ def test_igm_dla_param_auto_enables_dla_flag() -> None:
 
 def test_igm_dla_param_round_trips_to_free() -> None:
     """A DLA param override must produce a free ``dla_*`` parameter."""
-    spec = Parameters.from_groups(
+    spec = parse_groups(
         sfh={"type": "dpl"},
         igm=builders.igm.inoue14(log_n_hi=Uniform(20.0, 22.0)),
     )

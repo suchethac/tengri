@@ -322,7 +322,7 @@ _TOP_LEVEL_SETTINGS = {
 #:
 #: Some recipes (and user-facing nested dicts) carry build-time SEDModel
 #: kwargs like ``approx=WavePrecomp()`` so that the same dict can be splatted
-#: into either ``Parameters.from_groups(**d)`` (parameters only) or
+#: into either ``parse_groups(**d)`` (parameters only) or
 #: ``SEDModel.build(**d)`` (parameters + model construction). These keys
 #: are valid at the SEDModel layer but have no meaning for Parameters; we
 #: drop them here rather than raise ``Unknown group key`` so the splat-both
@@ -1259,9 +1259,9 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
 def parameters_to_groups(spec: Parameters) -> dict:
     """Convert a Parameters back to nested-dict form.
 
-    Inverts Parameters.from_groups() by reconstructing the nested-dict
+    Inverts parse_groups() by reconstructing the nested-dict
     structure that would reproduce the same Parameters when passed back to
-    from_groups(). Uses provenance tags (if available) to collapse wildcard-
+    parse_groups(). Uses provenance tags (if available) to collapse wildcard-
     expanded parameters and preserve explicit overrides.
 
     Parameters
@@ -1272,7 +1272,7 @@ def parameters_to_groups(spec: Parameters) -> dict:
     Returns
     -------
     dict
-        Nested-dict suitable for re-passing to Parameters.from_groups(**result).
+        Nested-dict suitable for re-passing to parse_groups(**result).
 
     Notes
     -----
@@ -1285,17 +1285,17 @@ def parameters_to_groups(spec: Parameters) -> dict:
     all parameters are listed explicitly (no wildcard).
 
     **Roundtrip guarantee**: The output dict, when passed to
-    Parameters.from_groups(**output), produces a Parameters with identical
+    parse_groups(**output), produces a Parameters with identical
     free/fixed partitions and distributions.
 
     Examples
     --------
-    >>> spec = Parameters.from_groups(
+    >>> spec = parse_groups(
     ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
     ...     redshift=Fixed(0.05),
     ... )
     >>> groups = spec.to_groups()
-    >>> roundtripped = Parameters.from_groups(**groups)
+    >>> roundtripped = parse_groups(**groups)
     >>> spec.free_params == roundtripped.free_params
     True
     """
@@ -1409,7 +1409,7 @@ def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | 
     elif group_name == "neb":
         # ``Parameters`` stores ``nebular_mode == "off"`` to mean "no nebular
         # contribution"; the dict grammar's canonical name for that state is
-        # ``"none"``. Map at the boundary so to_groups() / from_groups()
+        # ``"none"``. Map at the boundary so to_groups() / parse_groups()
         # round-trip cleanly.
         return "none" if spec.nebular_mode == "off" else spec.nebular_mode
     elif group_name == "igm":

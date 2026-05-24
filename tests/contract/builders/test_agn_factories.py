@@ -9,7 +9,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import FIXED, FREE, Parameters, Uniform, builders
+from tengri import FIXED, FREE, Uniform, builders, parse_groups
 from tengri.parameters.groups import (
     _VALID_AGN_ATTEN_TYPES,
     _VALID_AGN_DISC_TYPES,
@@ -147,7 +147,7 @@ def test_axis_factory_unknown_kwarg_rejected() -> None:
 
 
 def test_composable_round_trips_to_free_log_lbol() -> None:
-    spec = Parameters.from_groups(
+    spec = parse_groups(
         sfh={"type": "dpl"},
         agn=builders.agn.composable(
             log_lbol=Uniform(43, 47),
@@ -274,7 +274,7 @@ def test_top_level_models_share_signature() -> None:
 
 def test_top_level_round_trip_makes_log_lbol_free() -> None:
     """Round-trip through parser must recognize top-level factory params."""
-    spec = Parameters.from_groups(
+    spec = parse_groups(
         sfh={"type": "dpl"},
         agn=builders.agn.simple(log_lbol=Uniform(43, 47)),
     )

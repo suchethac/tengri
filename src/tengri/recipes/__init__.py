@@ -5,7 +5,7 @@
 
 Provides ready-to-use model configurations for typical galaxy fitting workflows.
 Each recipe returns a nested-dict suitable for splat ting into
-:func:`~tengri.parameters.Parameters.from_groups()` or
+:func:`~tengri.parameters.parse_groups()` or
 :func:`~tengri.forward.SEDModel.build()`.
 
 Examples
@@ -64,7 +64,7 @@ def star_forming_photometry() -> dict:
     Returns
     -------
     dict
-        Nested-dict ready for Parameters.from_groups() or SEDModel.build().
+        Nested-dict ready for parse_groups() or SEDModel.build().
 
     Notes
     -----
@@ -113,7 +113,7 @@ def quiescent_z0() -> dict:
     Returns
     -------
     dict
-        Nested-dict ready for Parameters.from_groups() or SEDModel.build().
+        Nested-dict ready for parse_groups() or SEDModel.build().
 
     Notes
     -----
@@ -167,7 +167,7 @@ def agn_panchromatic() -> dict:
     Returns
     -------
     dict
-        Nested-dict ready for Parameters.from_groups() or SEDModel.build().
+        Nested-dict ready for parse_groups() or SEDModel.build().
 
     Notes
     -----
@@ -223,7 +223,7 @@ def stochastic_sfh_jwst() -> dict:
     Returns
     -------
     dict
-        Nested-dict ready for Parameters.from_groups() or SEDModel.build().
+        Nested-dict ready for parse_groups() or SEDModel.build().
 
     Notes
     -----
@@ -274,7 +274,7 @@ def mock_recovery_minimal() -> dict:
     Returns
     -------
     dict
-        Nested-dict ready for Parameters.from_groups() or SEDModel.build().
+        Nested-dict ready for parse_groups() or SEDModel.build().
 
     Notes
     -----
@@ -286,7 +286,7 @@ def mock_recovery_minimal() -> dict:
     --------
     >>> from tengri import recipes, Parameters
     >>> params_dict = recipes.mock_recovery_minimal()
-    >>> spec = Parameters.from_groups(**params_dict)
+    >>> spec = parse_groups(**params_dict)
     >>> assert 4 <= spec.n_free <= 8  # ~5 SFH + dust + met
     >>> assert "redshift" in spec.fixed_params
     """
@@ -343,7 +343,7 @@ def dust_demo() -> dict:
             wave_range=(1000, 10000),
         )
     """
-    # Metallicity is not a from_groups key; its default Gaussian(-0.3, 0.2)
+    # Metallicity is not a parse_groups key; its default Gaussian(-0.3, 0.2)
     # prior centres at the value we want, so we leave it FREE — sweep_parameter
     # uses the prior median (= -0.3) for every iteration anyway.
     return dict(

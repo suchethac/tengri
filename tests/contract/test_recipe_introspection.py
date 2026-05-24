@@ -14,7 +14,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import recipes
+from tengri import parse_groups, recipes
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.registry import ParameterRecord, recipe_parameters
 from tengri.parameters.sentinels import FIXED, FREE
@@ -133,10 +133,9 @@ class TestRecipeParametersConsistency:
     """Test consistency between recipe_parameters and Parameters."""
 
     def test_matches_parameters_free_params(self):
-        from tengri.parameters.parameters import Parameters
 
         recipe = recipes.star_forming_photometry()
-        params = Parameters.from_groups(**recipe)
+        params = parse_groups(**recipe)
         recipe_params = recipe_parameters(recipe, free_only=True)
         recipe_names = {p.name for p in recipe_params}
         expected_names = set(params.free_params)
@@ -150,10 +149,9 @@ class TestRecipeParametersConsistency:
         assert any(n.startswith("dust_") or n == "redshift" for n in recipe_names)
 
     def test_matches_parameters_all_params(self):
-        from tengri.parameters.parameters import Parameters
 
         recipe = recipes.mock_recovery_minimal()
-        params = Parameters.from_groups(**recipe)
+        params = parse_groups(**recipe)
         recipe_params = recipe_parameters(recipe, free_only=False)
         recipe_names = {p.name for p in recipe_params}
         expected_names = set(params.all_params)

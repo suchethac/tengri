@@ -10,7 +10,7 @@ The contract these tests pin down:
    one keyword-only parameter per short-form name — i.e. real
    per-variant signatures that IDEs and type checkers can introspect.
 3. Factory output matches the hand-written nested-dict form byte-for-byte
-   in shape and round-trips through :meth:`Parameters.from_groups` to
+   in shape and round-trips through :func:`parse_groups` to
    an identical :class:`Parameters` (same free params, same priors).
 4. Unknown kwargs and invalid wildcard values raise with helpful
    messages — typos surface at call time, not at construction time.
@@ -24,7 +24,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import FIXED, FREE, Fixed, Parameters, Uniform, builders
+from tengri import FIXED, FREE, Fixed, Uniform, builders, parse_groups
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 
 # ── Coverage: every canonical variant gets a factory ──────────────
@@ -126,8 +126,8 @@ def test_invalid_wildcard_raises_valueerror() -> None:
 
 def test_factory_output_round_trips_through_parse_groups() -> None:
     """The factory must produce a Parameters identical to the dict path."""
-    via_factory = Parameters.from_groups(sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1.0, 3.0)))
-    via_dict = Parameters.from_groups(sfh={"type": "dpl", "*": FREE, "beta": Uniform(1.0, 3.0)})
+    via_factory = parse_groups(sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1.0, 3.0)))
+    via_dict = parse_groups(sfh={"type": "dpl", "*": FREE, "beta": Uniform(1.0, 3.0)})
     assert sorted(via_factory.free_params) == sorted(via_dict.free_params)
     # Spot-check that the user-overridden prior survived.
     assert "sfh_dpl_beta" in via_factory.free_params
@@ -139,7 +139,7 @@ def test_const_exp_short_names_resolve_correctly() -> None:
     ``const_exp`` parameters use the ``sfh_cexp_`` prefix, so the short
     forms exposed by the factory must match what the parser extracts.
     """
-    spec = Parameters.from_groups(sfh=builders.sfh.const_exp(_=FREE))
+    spec = parse_groups(sfh=builders.sfh.const_exp(_=FREE))
     expected = {
         "sfh_cexp_log_sfr",
         "sfh_cexp_tau_gyr",
@@ -174,7 +174,7 @@ def test_every_additive_factory_default_call_parses_cleanly(variant: str) -> Non
     variants compose with a smooth SFH and are not valid standalone.
     """
     factory = getattr(builders.sfh, variant)
-    Parameters.from_groups(sfh=factory())
+    parse_groups(sfh=factory())
 
 
 def test_burst_and_field_factories_emit_valid_dicts() -> None:

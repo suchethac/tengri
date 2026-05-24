@@ -9,7 +9,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import FIXED, Parameters, Uniform, builders
+from tengri import FIXED, Uniform, builders, parse_groups
 from tengri.parameters.groups import _VALID_NEBULAR_TYPES
 
 
@@ -56,7 +56,7 @@ def test_default_call_returns_canonical_shape() -> None:
 
 def test_per_param_override_round_trips_to_free() -> None:
     """An explicit Distribution on a nebular param must surface as FREE."""
-    spec = Parameters.from_groups(
+    spec = parse_groups(
         sfh={"type": "dpl"},
         neb=builders.neb.cue(fesc=Uniform(0.0, 0.5)),
     )
@@ -72,6 +72,6 @@ def test_typo_rejection_lists_valid_names() -> None:
 
 
 def test_ssp_neb_round_trips_without_activating_params() -> None:
-    spec = Parameters.from_groups(sfh={"type": "dpl"}, neb=builders.neb.ssp())
+    spec = parse_groups(sfh={"type": "dpl"}, neb=builders.neb.ssp())
     neb_free = [p for p in spec.free_params if p.startswith("neb_")]
     assert neb_free == []

@@ -233,6 +233,7 @@ from tengri.observation.noise import (
     uses_student_t,
     variable_noise_hamiltonian,
 )
+from tengri.parameters.groups import parse_groups
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
 from tengri.parameters.registry import (
@@ -415,6 +416,7 @@ __all__ = [
     "list_sfh_models",
     "nebular",
     "observation",
+    "parse_groups",
     "pipeline",
     "plot",
     "preprocessing",
@@ -520,6 +522,7 @@ _CURATED_DIR = (
     "explain",
     # 2.  Build a fit
     "Parameters",
+    "parse_groups",
     "SEDModel",
     "WavePrecomp",
     "Fitter",

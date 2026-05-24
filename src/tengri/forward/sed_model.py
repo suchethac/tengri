@@ -4700,7 +4700,7 @@ class SEDModel:
 
         Convenience constructor that translates grouped dicts (one per physics
         block) into a ``Parameters`` via
-        :meth:`tengri.Parameters.from_groups`, then constructs the
+        :func:`tengri.parse_groups`, then constructs the
         ``SEDModel``. Anything left unspecified auto-fills from the registry.
 
         The ``from_*`` namespace is reserved for future deserialization
@@ -4730,11 +4730,12 @@ class SEDModel:
         -------
         SEDModel
             Fully initialised model, identical to one built via
-            ``SEDModel(Parameters.from_groups(**groups), ssp_data, ...)``.
+            ``SEDModel(parse_groups(**groups), ssp_data, ...)``.
 
         See Also
         --------
-        tengri.Parameters.from_groups : The underlying Parameters builder.
+        tengri.parse_groups : The underlying nested-dict parser that returns
+            a :class:`Parameters` spec.
         SEDModel.from_config : String-based grouped configuration with
             defaults from ``defaults.toml``.
 
@@ -4765,9 +4766,9 @@ class SEDModel:
             ).items()
             if v is not None
         }
-        from tengri.parameters.parameters import Parameters
+        from tengri.parameters.groups import parse_groups
 
-        spec = Parameters.from_groups(**groups)
+        spec = parse_groups(**groups)
         return cls(
             spec,
             ssp_data,
