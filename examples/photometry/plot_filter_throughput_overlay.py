@@ -20,10 +20,8 @@ IGM attenuation.
 """
 
 import warnings
-from pathlib import Path
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -43,28 +41,28 @@ z = 1.0
 sfh_config = {
     "type": "tsnorm",
     "*": tengri.FIXED,
-    "peak_lbt_gyr": 0.1,      # Peak 100 Myr ago (recent burst)
-    "width_gyr": 0.1,          # Duration 100 Myr
-    "log_peak_sfr": 1.5,       # SFR ≈ 30 M_sun/yr
-    "skew": 0.0,               # Symmetric
-    "trunc": 13.0,             # Truncate at z_form ~ z+1
+    "peak_lbt_gyr": 0.1,  # Peak 100 Myr ago (recent burst)
+    "width_gyr": 0.1,  # Duration 100 Myr
+    "log_peak_sfr": 1.5,  # SFR ≈ 30 M_sun/yr
+    "skew": 0.0,  # Symmetric
+    "trunc": 13.0,  # Truncate at z_form ~ z+1
 }
 
 dust_config = {
     "type": "two_component",
     "*": tengri.FIXED,
-    "tau_diff": 0.3,           # Diffuse attenuation
-    "tau_bc": 0.5,             # Dust clouds
-    "law_bc": "calzetti",      # Starburst attenuation law
+    "tau_diff": 0.3,  # Diffuse attenuation
+    "tau_bc": 0.5,  # Dust clouds
+    "law_bc": "calzetti",  # Starburst attenuation law
     "emission": {"type": "dale2014", "*": tengri.FIXED},
 }
 
-# Build the model
+# Build the model using bare-stellar SSP with Cue nebular backend
 model = tengri.SEDModel.build(
-    ssp_data=tengri.load_ssp(),
+    ssp_data=tengri.load_ssp("fsps_prsc_miles_chabrier"),
     sfh=sfh_config,
     dust=dust_config,
-    neb={"type": "nebular_sfr", "*": tengri.FIXED, "log_neb_logz": -0.5},
+    neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -0.5, "logU": -2.0},
     redshift=tengri.Fixed(z),
 )
 
@@ -129,9 +127,7 @@ for label, filter_names, color in FILTERS_BY_GROUP:
             continue
 
     # Legend handle: one opaque rectangle per group
-    ax_filt.fill_between(
-        [], [], color=color, alpha=0.6, label=label, edgecolor="none"
-    )
+    ax_filt.fill_between([], [], color=color, alpha=0.6, label=label, edgecolor="none")
 
 ax_filt.set_ylim(0, 0.8)
 ax_filt.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]", fontsize=11)

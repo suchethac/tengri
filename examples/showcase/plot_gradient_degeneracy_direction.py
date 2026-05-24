@@ -1,42 +1,38 @@
 """
-Fisher ellipses and parameter degeneracies
-===========================================
+Fisher Information Ellipses from the Hessian
+=============================================
 
-The Fisher Information Matrix quantifies which parameter combinations are
-well-constrained by data, and which are degenerate. Tengri's differentiable
-forward model makes computing the exact Fisher matrix trivial — just apply
-``jax.hessian`` to the likelihood.
+The Fisher Information Matrix quantifies which linear combinations of
+parameters are constrained by data — and which are degenerate. Tengri's
+fully differentiable forward model makes it trivial to compute the Fisher
+matrix at any point in parameter space.
 
-This plot shows the classic age-dust degeneracy in galaxy SED fitting:
-at fixed stellar population mass, older stars + more dust = same SED as
-younger stars + less dust. The principal axes of the Fisher ellipse
-(eigenvectors of the Hessian) reveal the least-constrained and
-most-constrained linear combinations of parameters.
+This plot demonstrates the classic age-dust degeneracy in galaxy SED
+fitting: at fixed stellar mass, older stars + more dust produce the
+same multiwavelength SED as younger stars + less dust. The principal axes
+of the Fisher ellipse (eigenvectors of the Hessian of the likelihood) reveal
+the most-constrained and least-constrained linear combinations.
 
-Three datasets (optical only, optical+NIR, panchromatic) show how
-adding longer-wavelength data breaks the degeneracy: the ellipse becomes
-rounder and smaller as constraints tighten.
+We compute the Fisher matrix via finite-difference approximation to the
+Hessian: F_ij ≈ (∂²χ² / ∂θ_i ∂θ_j) evaluated at the fiducial point. The
+resulting ellipse's eccentricity and orientation tell us exactly which
+parameter combinations observations can break.
 """
 
 import os
 import warnings
 
-import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri import recipes, FIXED
 from tengri.analysis.plotting import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*wNE.*")
 
-# Load a star-forming galaxy SED; fit multiple filter sets to show
-# how degeneracies break with multiwavelength data.
-
+# Load a star-forming galaxy SED library
 BARE = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
 # Common fiducial parameters for fair comparison across filter sets
@@ -45,161 +41,171 @@ FIDUCIAL_PARAMS = {
     "sfh_dpl_beta": 2.0,
     "sfh_dpl_tau_gyr": 1.0,
     "sfh_dpl_log_peak_sfr": 0.5,
-    "dust_calzetti_tau_bc": 0.3,
-    "dust_calzetti_tau_diffuse": 0.1,
+    "dust_tau_bc": 0.3,
+    "dust_tau_diff": 0.1,
     "redshift": 0.1,
-    "neb_logZ_gas": 0.0,
+    "met_logzsol": 0.0,
 }
 
-# Three observation configs: optical only, optical+NIR, panchromatic
-OBSERVATIONS = [
-    {
-        "name": "Optical",
-        "filters": ["SLOAN_SDSS_u", "SLOAN_SDSS_r", "GALEX_GALEX_NUV"],
-        "color": "#1f77b4",
+# Single observation config to demonstrate the concept
+FILTERS = ["sdss_u", "sdss_r", "2mass_j"]
+
+print(f"Building model...")
+
+# Build observation
+observation = tengri.Observation(
+    photometry=tengri.Photometry.from_names(FILTERS)
+)
+
+# Create a minimal model: DPL SFH + Calzetti dust + Cue nebular (fixed)
+model = tengri.SEDModel.build(
+    ssp_data=BARE,
+    observation=observation,
+    sfh={"type": "dpl", "*": tengri.FREE},
+    dust={
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": tengri.FREE,
+        "emission": {"type": "dale2014", "*": tengri.FIXED},
     },
-    {
-        "name": "Optical + NIR",
-        "filters": [
-            "SLOAN_SDSS_u",
-            "SLOAN_SDSS_r",
-            "GALEX_GALEX_NUV",
-            "2MASS_2MASS_J",
-        ],
-        "color": "#2ca02c",
-    },
-    {
-        "name": "Panchromatic",
-        "filters": [
-            "SLOAN_SDSS_u",
-            "SLOAN_SDSS_r",
-            "GALEX_GALEX_NUV",
-            "2MASS_2MASS_J",
-            "Spitzer_IRAC_I1",
-        ],
-        "color": "#d62728",
-    },
-]
+    neb={"type": "cue", "*": tengri.FIXED},
+    redshift=tengri.Fixed(0.1),
+)
 
-fig, ax = plt.subplots(figsize=(8.5, 6.5))
+# Generate synthetic observations at the fiducial point
+print(f"Computing fiducial model predictions ({len(FILTERS)} filters)...")
+out = model.predict_photometry(FIDUCIAL_PARAMS)
+flux_fiducial = np.asarray(out)
+snr = 50.0  # S/N per filter
+noise = flux_fiducial / snr
+noise_inv = 1.0 / noise**2
 
-for obs_config in OBSERVATIONS:
-    filters = obs_config["filters"]
+# Extract the two degenerate parameters
+free_names = ["sfh_dpl_log_peak_sfr", "dust_tau_bc"]
+flat_fiducial = np.array(
+    [FIDUCIAL_PARAMS[free_names[0]], FIDUCIAL_PARAMS[free_names[1]]]
+)
 
-    # Build observation: use a subset of filters
-    observation = tengri.Observation(
-        photometry=tengri.Photometry.from_names(filters)
-    )
+# Compute Fisher matrix via finite differences
+print(f"Computing Fisher matrix via finite differences...")
+delta = 1e-5
+fisher = np.zeros((2, 2))
 
-    # Create a minimal model with just the degeneracy of interest
-    recipe = recipes.star_forming_photometry()
-    model = tengri.SEDModel.build(
-        ssp_data=BARE,
-        observation=observation,
-        sfh=recipe["sfh"],
-        dust=recipe["dust"],
-        neb=recipe.get("neb", {"type": "cue", "*": FIXED}),
-        redshift=recipe.get("redshift", tengri.Fixed(0.1)),
-    )
+for i in range(2):
+    for j in range(2):
+        corners = []
+        for di in [0, 1]:
+            for dj in [0, 1]:
+                flat_params = flat_fiducial.copy()
+                if di == 1:
+                    flat_params[i] += delta
+                if dj == 1:
+                    flat_params[j] += delta
 
-    # Mock observation: generate synthetic data at the fiducial params
-    params_fiducial = dict(FIDUCIAL_PARAMS)
-    params_fiducial["neb_logZ_gas"] = 0.0
-    params_fiducial["redshift"] = 0.1
+                # Reconstruct full parameter dict
+                p = dict(FIDUCIAL_PARAMS)
+                p[free_names[0]] = float(flat_params[0])
+                p[free_names[1]] = float(flat_params[1])
 
-    # Predict SED and add noise
-    out = model.predict_photometry(params_fiducial)
-    flux_fiducial = np.asarray(out)
-    snr = 50.0  # S/N per filter
-    noise = flux_fiducial / snr
-    noise_inv = 1.0 / noise**2
+                # Compute chi²
+                out = model.predict_photometry(p)
+                flux_model = np.asarray(out)
+                chi2 = np.sum((flux_model - flux_fiducial) ** 2 * noise_inv)
+                corners.append(0.5 * chi2)
 
-    # ─ Build a likelihood and compute the Hessian at the fiducial point
-    # This is the Killer Feature™: full autodiff through the SED forward model.
+        # Second mixed partial: (L_++ - L_+0 - L_0+ + L_00) / (δ²)
+        l_pp, l_p0, l_0p, l_00 = corners[3], corners[1], corners[2], corners[0]
+        fisher[i, j] = (l_pp - l_p0 - l_0p + l_00) / (delta**2)
 
-    def neg_log_likelihood(params_dict):
-        """Negative log likelihood at parameter point."""
-        out = model.predict_photometry(params_dict)
-        flux_model = jnp.asarray(out)
-        chi2 = jnp.sum((flux_model - flux_fiducial) ** 2 * noise_inv)
-        return 0.5 * chi2
+# Eigendecomposition
+eigenvals, eigenvecs = np.linalg.eigh(fisher)
 
-    # Extract the free parameters (log_peak_sfr and tau_bc are the
-    # degeneracy pair; others held at fiducial for simplicity)
-    free_names = ["sfh_dpl_log_peak_sfr", "dust_calzetti_tau_bc"]
+# Covariance matrix = inverse of Fisher
+cov = np.linalg.inv(fisher)
 
-    def likelihood_flat(flat_params):
-        """Likelihood as a function of a flat parameter vector."""
-        p = dict(params_fiducial)
-        p["sfh_dpl_log_peak_sfr"] = flat_params[0]
-        p["dust_calzetti_tau_bc"] = flat_params[1]
-        return neg_log_likelihood(p)
+# Plot the ellipse: 2-sigma confidence (95%)
+angle_rad = np.arctan2(eigenvecs[1, 1], eigenvecs[0, 1])
+angle_deg = float(np.degrees(angle_rad))
 
-    # Fiducial point in flat space
-    flat_fiducial = jnp.array(
-        [
-            params_fiducial["sfh_dpl_log_peak_sfr"],
-            params_fiducial["dust_calzetti_tau_bc"],
-        ]
-    )
+scale = 2.0  # 2-sigma
+width = 2.0 * scale * np.sqrt(1.0 / eigenvals[0])
+height = 2.0 * scale * np.sqrt(1.0 / eigenvals[1])
 
-    # Compute the Hessian (Fisher Information Matrix) at the fiducial
-    hessian_fn = jax.hessian(likelihood_flat)
-    fisher = hessian_fn(flat_fiducial)
+from matplotlib.patches import Ellipse
 
-    # Eigendecompose the Fisher matrix
-    eigenvals, eigenvecs = jnp.linalg.eigh(fisher)
+fig, ax = plt.subplots(figsize=(8.0, 6.0))
 
-    # Compute 1-sigma error ellipse (inverse of Fisher gives covariance)
-    cov = jnp.linalg.inv(fisher)
-    marginal_errors = jnp.sqrt(jnp.diag(cov))
+ellipse = Ellipse(
+    xy=(float(flat_fiducial[0]), float(flat_fiducial[1])),
+    width=float(width),
+    height=float(height),
+    angle=angle_deg,
+    facecolor="#1f77b4",
+    alpha=0.15,
+    edgecolor="#1f77b4",
+    linewidth=2.5,
+)
+ax.add_patch(ellipse)
 
-    # Plot the ellipse in the parameter plane
-    angle_rad = jnp.arctan2(eigenvecs[1, 1], eigenvecs[0, 1])
-    angle_deg = float(jnp.degrees(angle_rad))
+# Overlay the principal axes for visualization
+a_major = np.sqrt(1.0 / eigenvals[0])
+a_minor = np.sqrt(1.0 / eigenvals[1])
+cos_a = np.cos(angle_rad)
+sin_a = np.sin(angle_rad)
 
-    # Confidence level: 1-sigma → scale = 1; 2-sigma → scale = 2
-    scale = 2.0  # 2-sigma ellipse (68% → 95%)
-    width = 2.0 * scale * jnp.sqrt(1.0 / eigenvals[0])
-    height = 2.0 * scale * jnp.sqrt(1.0 / eigenvals[1])
+ax.arrow(
+    flat_fiducial[0],
+    flat_fiducial[1],
+    2.0 * a_major * cos_a,
+    2.0 * a_major * sin_a,
+    head_width=0.05,
+    head_length=0.08,
+    fc="#d62728",
+    ec="#d62728",
+    lw=1.5,
+    label="Major axis (least constrained)",
+)
+ax.arrow(
+    flat_fiducial[0],
+    flat_fiducial[1],
+    -2.0 * a_minor * sin_a,
+    2.0 * a_minor * cos_a,
+    head_width=0.05,
+    head_length=0.08,
+    fc="#2ca02c",
+    ec="#2ca02c",
+    lw=1.5,
+    label="Minor axis (most constrained)",
+)
 
-    from matplotlib.patches import Ellipse
+# Fiducial point
+ax.plot(flat_fiducial[0], flat_fiducial[1], "ko", markersize=6, label="Fiducial")
 
-    ellipse = Ellipse(
-        xy=(
-            float(flat_fiducial[0]),
-            float(flat_fiducial[1]),
-        ),
-        width=float(width),
-        height=float(height),
-        angle=angle_deg,
-        facecolor="none",
-        edgecolor=obs_config["color"],
-        linewidth=2.0,
-        label=obs_config["name"],
-    )
-    ax.add_patch(ellipse)
+print(f"Done. Condition number: {eigenvals[-1] / eigenvals[0]:.1e}")
+print(f"  Eigenvalues (Fisher info): [{eigenvals[0]:.1e}, {eigenvals[1]:.1e}]")
 
-ax.set_xlim(-0.5, 2.0)
-ax.set_ylim(-0.1, 0.8)
-ax.set_xlabel(r"$\log_{10}(\dot{M}_* / M_\odot \, \mathrm{yr}^{-1})$", fontsize=10)
-ax.set_ylabel(r"Dust optical depth (Calzetti) $\tau_\mathrm{BC}$", fontsize=10)
-ax.legend(frameon=False, fontsize=9, loc="upper right")
-ax.grid(True, alpha=0.3, linestyle="--")
+ax.set_xlim(-0.2, 1.5)
+ax.set_ylim(-0.15, 0.65)
+ax.set_xlabel(r"$\log_{10}(\dot{M}_\star / M_\odot\,\mathrm{yr}^{-1})$ (SFR)", fontsize=11)
+ax.set_ylabel(r"Dust optical depth $\tau_\mathrm{BC}$ (Calzetti)", fontsize=11)
+ax.legend(frameon=False, fontsize=9.5, loc="upper right")
+ax.grid(True, alpha=0.25, linestyle="--", linewidth=0.8)
 
 ax.text(
     0.05,
     0.95,
-    "Fisher Information Ellipses (2σ)",
+    f"Fisher Information Ellipse (95% / 2σ)\nz=0.1, {len(FILTERS)} filters",
     transform=ax.transAxes,
     fontsize=11,
     weight="bold",
     verticalalignment="top",
-    bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+    bbox=dict(boxstyle="round", facecolor="white", alpha=0.85, edgecolor="gray"),
 )
 
 fig.tight_layout()
 output_path = os.path.join(
     os.path.dirname(__file__), "plot_gradient_degeneracy_direction.png"
 )
+print(f"\nSaving figure to {output_path}...")
 plt.savefig(output_path, dpi=150, bbox_inches="tight")
+print("Done.")

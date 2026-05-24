@@ -19,11 +19,10 @@ ApJ 748, 142 [2]_.
 
 """
 
-from pathlib import Path
 import warnings
+from pathlib import Path
 
 import jax
-import jax.numpy as jnp
 import jax.random as jr
 import matplotlib.pyplot as plt
 import numpy as np
@@ -58,7 +57,7 @@ def sample_sf_galaxy(ssp, key, redshift):
     Sample a star-forming galaxy with random params drawn from broad priors.
     Returns photometry in IRAC bands.
     """
-    subkey1, subkey2 = jr.split(key)
+    subkey1, _ = jr.split(key)
 
     model = tengri.SEDModel.build(
         ssp_data=ssp,

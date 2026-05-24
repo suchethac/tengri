@@ -21,10 +21,10 @@ stronger UV absorption and altered optical/near-IR colors.
 Reference: Searle, L. 1971, ApJ, 168, 327 (galactic chemical evolution foundations).
 """
 
+import os
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -41,37 +41,45 @@ AGE_UNIVERSE_GYR = 13.8  # Age of universe in Gyr
 ssp = tengri.load_ssp()
 
 # ─────────────────────────────────────────────────────────────────────────
+# NOTE: met_mode is currently only exposed via the flat-kwarg Parameters()
+# constructor, not via the nested-dict SEDModel.build() API. This example
+# uses Parameters() directly to construct each scenario's specification.
+# See: https://github.com/suchethacooray/tengri/issues/XXX (future public-API
+# exposure).
+# ─────────────────────────────────────────────────────────────────────────
+
 # Scenario 1: Constant solar metallicity (Z = 1 Zsun)
-# ─────────────────────────────────────────────────────────────────────────
-model_delta = tengri.SEDModel.build(
-    ssp,
-    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 1.0, "log_peak_sfr": 1.0},
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1},
+spec_delta = tengri.Parameters(
+    mean_sfh_type="dpl",
+    sfh_dpl_tau_gyr=1.0,
+    sfh_dpl_log_peak_sfr=1.0,
+    dust_tau_diff=0.1,
     met_mode="delta",
-    redshift=tengri.Fixed(0.0),
+    redshift=0.0,
 )
+model_delta = tengri.SEDModel(spec_delta, ssp)
 
-# ─────────────────────────────────────────────────────────────────────────
 # Scenario 2: Linear ramp from low to solar metallicity
-# ─────────────────────────────────────────────────────────────────────────
-model_ramp = tengri.SEDModel.build(
-    ssp,
-    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 1.0, "log_peak_sfr": 1.0},
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1},
+spec_ramp = tengri.Parameters(
+    mean_sfh_type="dpl",
+    sfh_dpl_tau_gyr=1.0,
+    sfh_dpl_log_peak_sfr=1.0,
+    dust_tau_diff=0.1,
     met_mode="ramp",
-    redshift=tengri.Fixed(0.0),
+    redshift=0.0,
 )
+model_ramp = tengri.SEDModel(spec_ramp, ssp)
 
-# ─────────────────────────────────────────────────────────────────────────
 # Scenario 3: Two-step metallicity (low then high)
-# ─────────────────────────────────────────────────────────────────────────
-model_twostep = tengri.SEDModel.build(
-    ssp,
-    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 1.0, "log_peak_sfr": 1.0},
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1},
+spec_twostep = tengri.Parameters(
+    mean_sfh_type="dpl",
+    sfh_dpl_tau_gyr=1.0,
+    sfh_dpl_log_peak_sfr=1.0,
+    dust_tau_diff=0.1,
     met_mode="two_step",
-    redshift=tengri.Fixed(0.0),
+    redshift=0.0,
 )
+model_twostep = tengri.SEDModel(spec_twostep, ssp)
 
 # ─────────────────────────────────────────────────────────────────────────
 # Set up parameters for each scenario
@@ -113,9 +121,10 @@ sed_twostep = np.asarray(pred_twostep.sed)
 # ─────────────────────────────────────────────────────────────────────────
 # Extract age grid for Z(t) tracks (in Gyr, present = 0)
 # ─────────────────────────────────────────────────────────────────────────
-# Model stores ages in years; convert to Gyr and compute lookback times
-ssp_ages_gyr = np.asarray(ssp["ssp_age_gyr"])
-ssp_ages_yr = np.asarray(ssp["ssp_age_yr"])
+# SSP data stores ages in log10(Gyr); convert to linear Gyr for interpolation
+ssp_lg_ages_gyr = np.asarray(ssp.ssp_lg_age_gyr)
+ssp_ages_gyr = 10.0 ** ssp_lg_ages_gyr
+ssp_ages_yr = ssp_ages_gyr * 1e9
 lookback_time_gyr = AGE_UNIVERSE_GYR - ssp_ages_gyr
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -235,5 +244,9 @@ ax_sed.legend(frameon=False, fontsize=9, loc="upper right")
 ax_sed.grid(True, alpha=0.25, which="both", axis="both")
 
 fig.tight_layout()
-plt.savefig("plot_chemical_evolution_ramp.png", dpi=150, bbox_inches="tight")
-print("Saved: plot_chemical_evolution_ramp.png")
+
+# Save figure to the script directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+output_path = os.path.join(script_dir, "plot_chemical_evolution_ramp.png")
+plt.savefig(output_path, dpi=150, bbox_inches="tight")
+print(f"Saved: {output_path}")
