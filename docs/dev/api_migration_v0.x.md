@@ -486,7 +486,7 @@ Five curated recipes ship with tengri:
 - `stochastic_sfh_jwst()` — DPL + stochastic field, JWST high-z
 - `mock_recovery_minimal()` — Minimal model for benchmarks and tests
 
-Each returns a nested dict ready to splice into `from_groups()`:
+Each returns a nested dict ready to splice into `parse_groups()`:
 
 ```python
 from tengri import recipes
@@ -512,7 +512,7 @@ spec = Parameters(
 )
 
 # New (recommended)
-spec = Parameters.from_groups(
+spec = parse_groups(
     sfh={'type': 'dpl', '*': FREE},
     dust={'type': 'two_component', 'law_bc': 'calzetti', '*': FREE},
 )
@@ -666,6 +666,7 @@ a `DeprecationWarning`; they are removed in v1.0.
 | Old                                     | New                                              | Status (v0.x)        |
 | --------------------------------------- | ------------------------------------------------ | -------------------- |
 | `SEDModel.from_groups(...)`             | `SEDModel.build(...)`                            | Removed 2026-05-23   |
+| `Parameters.from_groups(...)`           | `tengri.parse_groups(...)` or `SEDModel.build(...)` | Removed 2026-05-24   |
 | `SEDComponent.publishes()`              | `SEDComponent.outputs()`                         | Both work; old warns |
 | `SEDComponent.requires()`               | `SEDComponent.inputs()`                          | Both work; old warns |
 | `SEDComponent.requires_optional()`      | `SEDComponent.optional_inputs()`                 | Both work; old warns |
@@ -678,7 +679,7 @@ namespace on `SEDModel` is reserved for future deserialization entry
 points (`from_file`, `from_yaml`, `from_dict`) — this is the reason
 for picking the verb `build` rather than another `from_*` variant.
 
-`Parameters.from_groups` is **not** renamed in this phase; only the
+`parse_groups` is **not** renamed in this phase; only the
 `SEDModel`-level entry point. The `_groups` suffix on `Parameters` is
 historically accurate to the grammar it parses.
 

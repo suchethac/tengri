@@ -37,6 +37,7 @@ EXPECTED_ALL = frozenset(
         "ForwardModel",
         "Galaxy",
         "Parameters",
+        "parse_groups",
         "Population",
         "PopulationSEDModel",
         "SEDModel",

@@ -6,7 +6,7 @@ pytestmark = pytest.mark.contract
 
 """Tests for provenance tagging in Parameters.summary() output.
 
-When a Parameters is built via parse_groups (or Parameters.from_groups),
+When a Parameters is built via parse_groups (or parse_groups),
 each parameter carries a provenance tag (user override, wildcard, registry
 default). summary() renders those tags so the user can see why each value
 ended up where it did.
@@ -19,13 +19,13 @@ params.
 
 import pytest
 
-from tengri import FIXED, FREE, Fixed, Parameters, Uniform
+from tengri import FIXED, FREE, Fixed, Parameters, Uniform, parse_groups
 
 
 @pytest.fixture
 def grouped_spec():
     """Reference spec exercising every provenance tag."""
-    return Parameters.from_groups(
+    return parse_groups(
         sfh={
             "type": "dpl",
             "*": FREE,

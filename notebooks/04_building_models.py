@@ -23,7 +23,7 @@
 #
 # This notebook demonstrates:
 #
-# 1. **Three equivalent construction paths** — recipes, from_groups direct,
+# 1. **Three equivalent construction paths** — recipes, parse_groups direct,
 #    and round-trip edits — showing they all produce identical results.
 # 2. **Parameter provenance** — the `summary()` method displays how each
 #    parameter got its value: user-specified, wildcard-free, or registry default.
@@ -55,6 +55,7 @@ from tengri import (
     Uniform,
     builders,
     load_ssp_data,
+    parse_groups,
     recipes,
 )
 from tengri import cosmology, plot, units
@@ -112,8 +113,8 @@ print(f"  Model: {model1.spec.n_free} free params from recipe")
 print(f"  SFH family: {recipe_dict['sfh']['type']}")
 print()
 
-# Path 2: From-groups direct (hand-built nested dict)
-print("PATH 2: From-groups direct")
+# Path 2: Nested-dict direct (hand-built nested dict)
+print("PATH 2: Nested-dict direct")
 groups_dict = {
     "sfh": {"type": "dpl", "*": FREE, "logzsol": Fixed(-0.1)},
     "dust": {
@@ -198,7 +199,7 @@ groups_sfh_tour = {
     "neb": {"type": "cue", "*": FIXED},
     "redshift": Fixed(0.05),
 }
-spec_sfh_tour = Parameters.from_groups(**groups_sfh_tour)
+spec_sfh_tour = parse_groups(**groups_sfh_tour)
 print(
     f"tsnorm variant free params: {[p for p in spec_sfh_tour.free_params if p.startswith('sfh_')]}"
 )
@@ -224,7 +225,7 @@ groups_dust_tour = {
     "neb": {"type": "cue", "*": FIXED},
     "redshift": Fixed(0.05),
 }
-spec_dust_tour = Parameters.from_groups(**groups_dust_tour)
+spec_dust_tour = parse_groups(**groups_dust_tour)
 print(
     f"two_component + dale2014: {[p for p in spec_dust_tour.free_params if 'dust' in p][:5]} ..."
 )
@@ -248,7 +249,7 @@ try:
         "neb": builders.neb.cb19(_=FREE, log_nH=Uniform(1.0, 4.0)),
         "redshift": Fixed(0.05),
     }
-    spec_neb_tour = Parameters.from_groups(**groups_neb_tour)
+    spec_neb_tour = parse_groups(**groups_neb_tour)
     neb_params = [p for p in spec_neb_tour.free_params if "neb" in p]
     print(f"cb19 backend free params: {neb_params}")
 except Exception as e:
@@ -260,7 +261,7 @@ except Exception as e:
         "neb": builders.neb.cue(_=FIXED),
         "redshift": Fixed(0.05),
     }
-    spec_neb_tour = Parameters.from_groups(**groups_neb_tour)
+    spec_neb_tour = parse_groups(**groups_neb_tour)
     neb_params = [p for p in spec_neb_tour.free_params if "neb" in p]
     print(f"Fallback: Cue backend (always available): {neb_params}")
 print()
@@ -331,7 +332,7 @@ base_groups = {
     "redshift": Fixed(0.05),
     "apply_igm": False,
 }
-spec = Parameters.from_groups(**base_groups)
+spec = parse_groups(**base_groups)
 print("Parameter Summary with Provenance Tags:")
 print(spec.summary_str())
 
@@ -418,7 +419,7 @@ for sfh_name, _ in sfh_families:
     groups_variant = base_groups_sfh.copy()
     groups_variant["sfh"] = {"type": sfh_name, "*": FIXED, "logzsol": Fixed(-0.1)}
 
-    spec_sfh = Parameters.from_groups(**groups_variant)
+    spec_sfh = parse_groups(**groups_variant)
     sfh_params = [p for p in spec_sfh.free_params if p.startswith("sfh_")]
     print(f"{sfh_name:20s}  {len(sfh_params):2d} SFH params (all fixed for this demo)")
 
@@ -457,7 +458,7 @@ for row, (sfh_name, truth_sfh) in enumerate(sfh_families):
         "redshift": Fixed(z),
         "apply_igm": False,
     }
-    spec = Parameters.from_groups(**groups_sfh_fig)
+    spec = parse_groups(**groups_sfh_fig)
     model = SEDModel(spec, ssp, observation=observation)
 
     # Build truth dict
@@ -558,7 +559,7 @@ for dust_law in dust_laws:
     groups_dust_var["dust"] = base_groups_dust["dust"].copy()
     groups_dust_var["dust"]["law_bc"] = dust_law
 
-    spec = Parameters.from_groups(**groups_dust_var)
+    spec = parse_groups(**groups_dust_var)
     free_dust = [p for p in spec.free_params if p.startswith("dust_")]
     print(f"{dust_law:20s}  dust free params: {free_dust}")
 
@@ -608,7 +609,7 @@ groups_nodust = {
     "redshift": Fixed(z),
     "apply_igm": False,
 }
-spec_nodust = Parameters.from_groups(**groups_nodust)
+spec_nodust = parse_groups(**groups_nodust)
 model_nodust = SEDModel(spec_nodust, ssp, observation=observation)
 
 truth_nodust = {
@@ -668,7 +669,7 @@ for idx, dust_law in enumerate(dust_laws):
         "redshift": Fixed(z),
         "apply_igm": False,
     }
-    spec = Parameters.from_groups(**groups_dustlaw_fig)
+    spec = parse_groups(**groups_dustlaw_fig)
     model = SEDModel(spec, ssp, observation=observation)
 
     truth = {
@@ -752,7 +753,7 @@ for emission in dust_emissions:
         groups_emission_var["dust"] = base_groups_emission["dust"].copy()
         groups_emission_var["dust"]["emission"] = {"type": emission}
 
-        spec = Parameters.from_groups(**groups_emission_var)
+        spec = parse_groups(**groups_emission_var)
         emission_params = [p for p in spec.free_params if p.startswith("dust_")]
         print(f"{emission:20s}  dust free params: {emission_params}")
     except Exception as e:
@@ -808,7 +809,7 @@ for idx, emission in enumerate(dust_emissions):
         "redshift": Fixed(z),
         "apply_igm": False,
     }
-    spec = Parameters.from_groups(**groups_emission_fig)
+    spec = parse_groups(**groups_emission_fig)
     model = SEDModel(spec, ssp, observation=observation)
 
     sed = model.predict_rest_sed(truth_base)
@@ -856,7 +857,7 @@ for emission in dust_emissions:
         "redshift": Fixed(z),
         "apply_igm": False,
     }
-    spec = Parameters.from_groups(**groups_energy_fig)
+    spec = parse_groups(**groups_energy_fig)
     model = SEDModel(spec, ssp, observation=observation)
     derived = model.predict_derived(truth_base)
     l_ir = derived.get("L_ir_rest", 1.0)  # Use fallback 1.0 if not available
@@ -914,7 +915,7 @@ groups_ref = {
     "redshift": Uniform(0.01, 0.1),
     "apply_igm": False,
 }
-spec_ref = Parameters.from_groups(**groups_ref)
+spec_ref = parse_groups(**groups_ref)
 print("\nModel Summary (using Parameters.summary_str()):")
 print(spec_ref.summary_str())
 
@@ -931,7 +932,7 @@ groups_free_z = {
     "redshift": Uniform(0.01, 0.1),  # FREE
     "apply_igm": False,
 }
-spec_free_z = Parameters.from_groups(**groups_free_z)
+spec_free_z = parse_groups(**groups_free_z)
 
 # Model 2: fixed redshift
 groups_fixed_z = {
@@ -946,7 +947,7 @@ groups_fixed_z = {
     "redshift": Fixed(0.05),  # FIXED
     "apply_igm": False,
 }
-spec_fixed_z = Parameters.from_groups(**groups_fixed_z)
+spec_fixed_z = parse_groups(**groups_fixed_z)
 
 print(f"\nFree redshift       : {len(spec_free_z.free_params):2d} free params")
 print(f"  {spec_free_z.free_params}")
@@ -987,7 +988,7 @@ groups_perf = {
     "redshift": Fixed(0.05),
     "apply_igm": False,
 }
-spec_perf = Parameters.from_groups(**groups_perf)
+spec_perf = parse_groups(**groups_perf)
 model_perf = SEDModel(spec_perf, ssp, observation=observation)
 
 # Base truth dict
