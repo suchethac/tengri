@@ -34,6 +34,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "ForwardModel",
         "Galaxy",
         "Parameters",
+        "parse_groups",
         "Population",
         "PopulationSEDModel",
         "SEDModel",
