@@ -27,6 +27,7 @@ Fit a quiescent galaxy at z~0.05::
 from __future__ import annotations
 
 import tengri.builders as builders
+from tengri.forward.sed_model import WavePrecomp
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.sentinels import FIXED, FREE
 
@@ -88,6 +89,7 @@ def star_forming_photometry() -> dict:
         neb=builders.neb.cue(defaults=FIXED),
         redshift=Uniform(0.01, 6.0),
         apply_igm=True,
+        approx=WavePrecomp(),
     )
 
 
@@ -136,6 +138,7 @@ def quiescent_z0() -> dict:
         ),
         neb=builders.neb.cue(defaults=FIXED),
         redshift=Fixed(0.05),
+        approx=WavePrecomp(),
     )
 
 
@@ -195,6 +198,7 @@ def agn_panchromatic() -> dict:
         radio=True,
         xray=True,
         redshift=Uniform(0.01, 6.0),
+        approx=WavePrecomp(),
     )
 
 
@@ -246,6 +250,7 @@ def stochastic_sfh_jwst() -> dict:
         neb=builders.neb.cue(defaults=FIXED),
         redshift=Uniform(0.5, 12.0),
         apply_igm=True,
+        approx=WavePrecomp(),
     )
 
 
@@ -294,6 +299,7 @@ def mock_recovery_minimal() -> dict:
         ),
         neb=builders.neb.none(),
         redshift=Fixed(0.05),
+        approx=WavePrecomp(),
     )
 
 

@@ -318,6 +318,22 @@ _TOP_LEVEL_SETTINGS = {
     "n_grid",
 }
 
+#: Top-level kwargs that are SEDModel-only settings (silently ignored here).
+#:
+#: Some recipes (and user-facing nested dicts) carry build-time SEDModel
+#: kwargs like ``approx=WavePrecomp()`` so that the same dict can be splatted
+#: into either ``Parameters.from_groups(**d)`` (parameters only) or
+#: ``SEDModel.build(**d)`` (parameters + model construction). These keys
+#: are valid at the SEDModel layer but have no meaning for Parameters; we
+#: drop them here rather than raise ``Unknown group key`` so the splat-both
+#: pattern stays ergonomic.
+_SEDMODEL_PASSTHROUGH = {
+    "approx",
+    "filters",
+    "observation",
+    "ssp_data",
+}
+
 
 # ── Main API ───────────────────────────────────────────────────────────────
 
@@ -469,6 +485,10 @@ def _translate_structural(groups: dict) -> dict:
 
     for group_name, group_dict in groups.items():
         if group_name in _TOP_LEVEL_SETTINGS:
+            continue
+        if group_name in _SEDMODEL_PASSTHROUGH:
+            # SEDModel-only kwarg (e.g. ``approx=WavePrecomp()``) splatted
+            # in from a recipe — ignore at the parameters layer.
             continue
 
         if group_name not in valid_groups:
@@ -748,6 +768,8 @@ def _validate_user_keys(
 
     for top_key, top_val in kwargs.items():
         if top_key in _TOP_LEVEL_SETTINGS:
+            continue
+        if top_key in _SEDMODEL_PASSTHROUGH:
             continue
         if top_key in structural_params._distributions:
             # A top-level free-form override like ``redshift=Fixed(0.1)``.

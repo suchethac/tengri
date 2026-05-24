@@ -29,7 +29,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from tengri.components.stellar.sfh.gp_sfh import make_log_age_grid
+from tengri.components.stellar.sfh.gp_sfh import log_age_grid_step, make_log_age_grid
 from tengri.components.stellar.sfh.metallicity_history import (
     metallicity_bins_continuity_on_ssp_grid,
     metallicity_bins_on_ssp_grid,
@@ -505,7 +505,10 @@ class StellarSEDComponent:
             psd_tau_myr = jnp.asarray(params["sfh_field_psd_tau_myr"])
             xi = jnp.asarray(params.get("sfh_field_xi", jnp.zeros(n_grid)))
             psd_tau_yr = psd_tau_myr * 1e6
-            d_log_age = float(log_age_grid[1] - log_age_grid[0])
+            # JIT-safe: ``log_age_grid`` is traced under jit so indexing +
+            # float() would raise ConcretizationTypeError. ``log_age_grid_step``
+            # recomputes the step from static ``n_grid`` and module constants.
+            d_log_age = log_age_grid_step(n_grid)
             gp_x, k0_half = compute_field_gp(
                 xi, psd_sigma, psd_tau_yr, n_grid, d_log_age, field_model="drw"
             )
