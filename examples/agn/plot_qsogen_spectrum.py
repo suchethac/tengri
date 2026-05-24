@@ -1,118 +1,71 @@
 """
-QSOgen Empirical Quasar Template
-=================================
+QSOgen empirical quasar SED across four decades of bolometric luminosity
+=========================================================================
 
-Plot QSOgen (Temple, Hewett & Banerji 2021) empirical quasar SEDs.
-Shows how an empirically-trained surrogate matches observed quasar spectra
-across the UV through near-IR, with parametric control over redshift and
-luminosity.
+The Temple, Hewett & Banerji (2021) QSOgen empirical template, used as
+the ``agn.disc.type="qsogen"`` selector. We sweep log L_bol from 10.0
+to 13.5 (in L_sun units) at fixed redshift to show that the template's
+spectral *shape* is approximately self-similar across the quasar
+luminosity function — the only knob that moves features (the
+Baldwin-effect drop in C IV/Ly-alpha equivalent width) is the
+bolometric normalisation.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_qsogen_spectrum_001.png
-   :alt: plot_qsogen_spectrum
-   :class: sphx-glr-single-img
-
+Reference: Temple, Hewett & Banerji 2021, MNRAS, 508, 737.
 """
 
-# TODO: refactor to SEDModel.build API (currently uses low-level internal API)
+import warnings
 
+import jax
 import jax.numpy as jnp
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
+import tengri
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn import qsogen
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-# Wavelength grid: 100 - 10000 Angstrom (UV to near-IR)
-wavelength = jnp.logspace(np.log10(100), np.log10(1e4), 512)
-wave_um = np.array(wavelength) / 1e4
+C_AA_PER_S = 2.998e18
+SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
-fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-
-# --- Panel 1: Luminosity sequence at z=0 ---
-ax = axes[0, 0]
-
-z = 0.0
-# agn_log_lbol expects log10(L_bol / L_sun). Quasar regime: L_bol ~ 10^44-10^47 erg/s
-# → log10(L_bol/Lsun) ≈ 10.4–13.4  (since log10(Lsun_erg/s) = 33.58).
-for log_lbol in [10.5, 11.5, 12.5, 13.5]:
-    sed = qsogen(wavelength, agn_log_lbol=log_lbol, z=z)
-    ax.loglog(wave_um, np.array(sed), lw=1.5, label=f"log(L_bol/L⊙)={log_lbol:.1f}")
-
-ax.set_xlabel(r"Rest Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title(f"QSOgen Luminosity Sequence (z={z})")
-ax.legend(fontsize=10, frameon=False)
-ax.set_xlim(0.01, 10)
-ax.set_ylim(1e22, 1e32)
-
-# --- Panel 2: Redshift evolution (fixed luminosity) ---
-ax = axes[0, 1]
-
-log_lbol = 11.5  # log10(L_bol / L_sun) ≈ 10^45 erg/s (bright quasar)
-for z in [0.0, 0.5, 1.0, 2.0]:
-    sed = qsogen(wavelength, agn_log_lbol=log_lbol, z=z)
-    ax.loglog(wave_um, np.array(sed), lw=1.5, label=f"z={z:.1f}")
-
-ax.set_xlabel(r"Rest Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title(f"QSOgen Redshift Evolution (log L_bol/L⊙={log_lbol})")
-ax.legend(fontsize=10, frameon=False)
-ax.set_xlim(0.01, 10)
-ax.set_ylim(1e24, 1e32)
-
-# --- Panel 3: νLν space (luminosity-normalized) ---
-ax = axes[1, 0]
-
-z = 0.5
-for log_lbol in [10.0, 10.5, 11.0, 11.5]:
-    sed = qsogen(wavelength, agn_log_lbol=log_lbol, z=z)
-    nu = 3e18 / np.array(wavelength)
-    nu_lnu = np.array(sed) * nu
-    ax.loglog(wave_um, nu_lnu, lw=1.5, label=f"log(L_bol/L⊙)={log_lbol:.1f}")
-
-ax.set_xlabel(r"Rest Wavelength [$\mu$m]")
-ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
-ax.set_title(f"Quasar SED Shape Consistency (z={z})")
-ax.legend(fontsize=10, frameon=False)
-ax.set_xlim(0.01, 10)
-ax.set_ylim(1e41, 1e46)
-
-# --- Panel 4: Extreme luminosity range ---
-ax = axes[1, 1]
-
-z = 1.5
-log_lbol_vals = np.linspace(9.0, 13.0, 10)  # log10(L_bol / L_sun)
-colors = plt.cm.plasma(np.linspace(0, 1, len(log_lbol_vals)))
-
-for log_lbol, color in zip(log_lbol_vals, colors):
-    sed = qsogen(wavelength, agn_log_lbol=log_lbol, z=z)
-    mask = np.array(sed) > 0
-    ax.loglog(
-        wave_um[mask],
-        np.array(sed)[mask],
-        lw=1.0,
-        color=color,
-        alpha=0.7,
-    )
-
-ax.set_xlabel(r"Rest Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title(f"Wide Luminosity Range (z={z})")
-ax.set_xlim(0.01, 10)
-ax.set_ylim(1e22, 1e32)
-
-# Add colorbar-like legend
-sm = plt.cm.ScalarMappable(
-    cmap=plt.cm.plasma,
-    norm=plt.Normalize(vmin=log_lbol_vals.min(), vmax=log_lbol_vals.max()),
+ssp = tengri.load_ssp()
+model = tengri.SEDModel.build(
+    ssp,
+    sfh=SFH,
+    dust=DUST,
+    agn={
+        "*": tengri.FIXED,
+        "log_lbol": tengri.Uniform(10.0, 13.5),
+        "frac": 1.0,
+        "disc": {"type": "qsogen", "*": tengri.FIXED},
+    },
+    redshift=tengri.Fixed(0.0),
 )
-sm.set_array([])
-cbar = fig.colorbar(sm, ax=ax, orientation="horizontal", pad=0.12, aspect=25)
-cbar.set_label(r"$\log(L_{\mathrm{bol}} / L_\odot)$")
+baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-fig.tight_layout(rect=[0, 0.04, 1, 0.97])
+log_lbol_values = np.linspace(10.0, 13.5, 8)
+norm = mpl.colors.Normalize(vmin=log_lbol_values.min(), vmax=log_lbol_values.max())
+cmap = plt.get_cmap("plasma")
+
+fig, ax = plt.subplots(figsize=(7.0, 4.6))
+for lbol in log_lbol_values:
+    params = {**baseline, "agn_log_lbol": jnp.float64(lbol)}
+    out = model.predict_rest_sed(params)
+    wave_um = np.asarray(out.wavelength) * 1.0e-4
+    nu_l_nu = C_AA_PER_S / np.asarray(out.wavelength) * np.asarray(out.sed)
+    ax.loglog(wave_um, nu_l_nu, color=cmap(norm(lbol)), lw=1.4)
+
+ax.set(
+    xlim=(0.01, 10.0),
+    ylim=(1.0e41, 1.0e47),
+    xlabel=r"Rest-frame wavelength [$\mu$m]",
+    ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
+)
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+cbar.set_label(r"$\log_{10}(L_{\rm bol} / L_\odot)$")
+
+fig.tight_layout()
 plt.savefig("plot_qsogen_spectrum.png", dpi=150, bbox_inches="tight")
