@@ -29,7 +29,10 @@ def test_predict_photometry_z0_returns_finite_fluxes():
         FilterCurve(wave=w, trans=t, name=f"b{i}") for i, (w, t) in enumerate(zip(waves, trans))
     )
     obs = tengri.Observation(photometry=tengri.Photometry(filters=curves))
-    ssp = tengri.load_ssp()
+    try:
+        ssp = tengri.load_ssp()
+    except FileNotFoundError:
+        pytest.skip("default wNE SSP not available")
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")

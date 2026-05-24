@@ -21,7 +21,10 @@ def test_bakedin_predict_emission_lines_raises():
     pytest.importorskip("tengri")
     import tengri
 
-    ssp = tengri.load_ssp()  # default wNE → BakedInBackend
+    try:
+        ssp = tengri.load_ssp()  # default wNE → BakedInBackend
+    except FileNotFoundError:
+        pytest.skip("default wNE SSP not available")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         model = tengri.SEDModel.build(
