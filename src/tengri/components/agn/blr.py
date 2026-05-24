@@ -45,41 +45,41 @@ from tengri.utils.physics_constants import (
 # ── BLR emission-line template ────────────────────────────────────
 
 # Key broad emission lines: (rest wavelength [Angstrom], relative strength)
-# Line strengths derived from the Vanden Berk et al. (2001) SDSS
-# composite quasar spectrum, which provides equivalent widths (EWs) for
-# the major broad-line features. Relative strengths are calibrated to
-# the composite continuum and normalized so that H-beta = 1.0.
-# Include Netzer (1990) and Boroson & Green (1992) permitted lines.
+# Line strengths extracted from Vanden Berk et al. (2001) Table 2
+# ("Composite Quasar Emission Line Features"), derived from SDSS composite.
+# Relative strengths are normalized to H-beta = 1.0 by dividing the VB01
+# "Rel. Flux" column (F/F_Lyα) by the H-beta flux value (8.649).
+# Vacuum wavelengths per SDSS convention; comments cite VB01 flux values.
 _BLR_LINES = jnp.array(
     [
-        # UV lines (Lyα to ~2500 A)
-        [1025.7, 0.17],   # Lyβ (Lyman beta)
-        [1215.7, 1.40],   # Lyα (Lyman alpha; strongest UV line)
-        [1240.0, 0.06],   # N V 1240
-        [1305.0, 0.04],   # Si II 1305
-        [1335.0, 0.08],   # C II 1335
-        [1397.0, 0.04],   # Si IV 1397
-        [1402.0, 0.04],   # Si IV 1402
-        [1549.0, 0.28],   # C IV 1549 (major UV line)
-        [1640.0, 0.08],   # He II 1640
-        [1661.0, 0.10],   # O III] 1661
-        [1666.0, 0.04],   # O III] 1666
-        [1859.0, 0.04],   # Al III 1859
-        [1908.7, 0.15],   # C III] 1909 (major UV line)
-        [1943.7, 0.03],   # C III 1943
-        [2143.0, 0.05],   # N III 2143
-        [2326.0, 0.08],   # C II] 2326
-        [2423.0, 0.04],   # Ne IV 2423
-        [2500.0, 0.04],   # Ne V 2500 (approx, blended)
-        # Optical lines (Balmer + higher-order hydrogen)
-        [2799.9, 0.33],   # Mg II 2800 (major optical line)
-        [3970.0, 0.06],   # H-epsilon (Balmer epsilon)
-        [4102.0, 0.12],   # H-delta (Balmer delta)
-        [4340.5, 0.20],   # H-gamma (Balmer gamma)
-        [4862.7, 1.00],   # H-beta (Balmer beta; reference line)
-        [6562.8, 2.15],   # H-alpha (Balmer alpha; strongest optical line)
-        [9015.0, 0.18],   # Pa-beta (Paschen beta)
-        [10050.0, 0.08],  # Pa-gamma (Paschen gamma)
+        # Lyman series
+        [1025.72, 1.1112],  # Lyβ (1033.03 obs, VB01 rel flux 9.615)
+        [1215.67, 11.5660], # Lyα (1216.25 obs, VB01 rel flux 100.0, reference)
+        # UV forbidden/resonance lines
+        [1240.14, 0.2847],  # N V (1239.85 obs, VB01 rel flux 2.461)
+        [1306.82, 0.2303],  # Si II (1305.42 obs, VB01 rel flux 1.992)
+        [1335.30, 0.0796],  # C II (1336.60 obs, VB01 rel flux 0.688)
+        [1396.76, 1.0313],  # Si IV (1398.33 obs, VB01 rel flux 8.916)
+        [1402.06, 1.0313],  # O IV] (1398.33 obs, blended with Si IV)
+        [1549.06, 2.9237],  # C IV (1546.15 obs, VB01 rel flux 25.291, major UV)
+        [1640.42, 0.0602],  # He II (1637.84 obs, VB01 rel flux 0.521)
+        [1663.48, 0.0555],  # O III] (1664.74 obs, VB01 rel flux 0.480)
+        [1857.40, 0.0385],  # Al III (1856.76 obs, VB01 rel flux 0.333)
+        [1892.03, 0.0183],  # Si III] (1892.64 obs, VB01 rel flux 0.158)
+        [1908.73, 1.8436],  # C III] (1905.97 obs, VB01 rel flux 15.943, major UV)
+        [2326.44, 0.0212],  # C II] (2327.34 obs, VB01 rel flux 0.183)
+        [2423.83, 0.0505],  # [Ne IV] (2423.46 obs, VB01 rel flux 0.437)
+        # MgII and UV FeII blends
+        [2798.75, 1.7033],  # Mg II (2800.26 obs, VB01 rel flux 14.725, major opt)
+        # Balmer series
+        [3970.20, 0.0546],  # H-epsilon (3968.43 obs, blended with [Ne III])
+        [4102.89, 0.1233],  # H-delta (4102.73 obs, VB01 rel flux 1.066)
+        [4341.68, 0.3025],  # H-gamma (4346.42 obs, VB01 rel flux 2.616)
+        [4862.68, 1.0000],  # H-beta (4853.13 obs, VB01 rel flux 8.649, reference)
+        [6564.61, 3.5666],  # H-alpha (6564.93 obs, VB01 rel flux 30.832, strongest opt)
+        # Paschen series (IR Balmer)
+        [9015.0, 0.1500],   # Pa-beta (approx from Balmer scaling)
+        [10050.0, 0.0600],  # Pa-gamma (approx from Balmer scaling)
     ]
 )
 
