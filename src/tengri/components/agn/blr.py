@@ -60,8 +60,8 @@ _BLR_LINES = jnp.array(
         [1240.14, 0.2847],  # N V (1239.85 obs, VB01 rel flux 2.461)
         [1306.82, 0.2303],  # Si II (1305.42 obs, VB01 rel flux 1.992)
         [1335.30, 0.0796],  # C II (1336.60 obs, VB01 rel flux 0.688)
-        [1396.76, 1.0313],  # Si IV (1398.33 obs, VB01 rel flux 8.916)
-        [1402.06, 1.0313],  # O IV] (1398.33 obs, blended with Si IV)
+        [1396.76, 0.5156],  # Si IV (1398.33 VB01 blend, half-strength, VB01 Table 2)
+        [1402.06, 0.5156],  # O IV] (1398.33 VB01 blend, half-strength, VB01 Table 2)
         [1549.06, 2.9237],  # C IV (1546.15 obs, VB01 rel flux 25.291, major UV)
         [1640.42, 0.0602],  # He II (1637.84 obs, VB01 rel flux 0.521)
         [1663.48, 0.0555],  # O III] (1664.74 obs, VB01 rel flux 0.480)
@@ -83,6 +83,7 @@ _BLR_LINES = jnp.array(
         [10050.0, 0.0600],  # Pa-gamma (approx from Balmer scaling)
     ]
 )
+# Total of 23 lines (Si IV and O IV] split from VB01 Table 2 blend at 1398.33 Å)
 
 _BLR_LINE_WAVELENGTHS = _BLR_LINES[:, 0]
 _BLR_LINE_STRENGTHS = _BLR_LINES[:, 1]
