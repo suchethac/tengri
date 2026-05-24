@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**01:45.754** total execution time for 20 files **from auto_examples/nebular**:
+**00:18.884** total execution time for 20 files **from auto_examples/nebular**:
 
 .. container::
 
@@ -32,8 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_balmer_decrement_dust.py` (``plot_balmer_decrement_dust.py``)
-     - 01:45.754
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_strong_line_metallicity_diagnostics.py` (``plot_strong_line_metallicity_diagnostics.py``)
+     - 00:18.884
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_bpt_cue_flexibility.py` (``plot_bpt_cue_flexibility.py``)
      - 00:00.000

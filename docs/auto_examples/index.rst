@@ -1299,6 +1299,23 @@ Nebular emission backends comparison.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Four widely-used optical strong-line metallicity diagnostics evaluated across the Cue logZ_gas prior. Each one carries a different systematic — Pettini &amp; Pagel 2004 O3N2 saturates at high Z, the R23 ratio is double-valued, N2 (Marino+2013) is monotonic but small dynamic range, and the [Ne III]/[O II] diagnostic is weakly Z-dependent.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_strong_line_metallicity_diagnostics_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_strong_line_metallicity_diagnostics`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Strong-line gas-phase metallicity diagnostics</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -1319,23 +1336,6 @@ depths, two-component geometry, and law comparisons.
     <div class="sphx-glr-thumbnails">
 
 .. thumbnail-parent-div-open
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Direct view of the attenuation k(λ) function (in mag of attenuation per E(B−V), normalised to k(V) = R_V) for the production attenuation laws. The shape of each curve is what determines how the underlying intrinsic SED gets reshaped by a given amount of dust; plot_dust_law_application.py and plot_dust_law_uv_slope_response.py show downstream consequences on the SED and on β.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_attenuation_curves_klam_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_attenuation_curves_klam`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Attenuation curves k(λ) for the shipped law family</div>
-    </div>
-
 
 .. raw:: html
 
@@ -1368,6 +1368,23 @@ depths, two-component geometry, and law comparisons.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Birth-cloud vs diffuse-ISM dust: which knob does what?</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Cardelli+1989 Milky Way attenuation curve is a family parameterised by R_V = A_V / E(B-V). Smaller R_V (≲ 3) gives a steeper UV rise and stronger 2175 Å bump (denser lines of sight, small grains dominate); larger R_V (≳ 4.5) flattens the UV slope (processed grains, larger sizes).">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_cardelli_rv_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_cardelli_rv_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Cardelli MW attenuation: sweeping R_V</div>
     </div>
 
 
