@@ -6,6 +6,7 @@ from tengri.components.xray.xray import (
     xray_agn_corona,
     xray_agn_corona_from_disc,
     xray_anisotropy,
+    xray_hotgas,
     xray_total,
     xray_xrb,
 )
@@ -21,6 +22,7 @@ __all__ = [
     "xray_agn_corona",
     "xray_agn_corona_from_disc",
     "xray_anisotropy",
+    "xray_hotgas",
     "xray_total",
     "xray_xrb",
 ]

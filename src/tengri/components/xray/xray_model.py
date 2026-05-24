@@ -147,13 +147,18 @@ class XRayAirdSEDComponent(SEDModelComponent):
             - sed_out: sed_in + X-ray continuum.
             - published: Dict with "sed_xray".
         """
-        # Read cross-component inputs with fallbacks
+        # Read cross-component inputs with fallbacks. metallicity_z and
+        # stellar_age_gyr drive the Lehmer+2016 XRB quartics; fall back
+        # to solar / mid-age values when the stellar component does not
+        # publish them.
         sfr = jnp.asarray(inputs.get("sfr", 1.0))
         log_mstar = jnp.asarray(inputs.get("log_mstar", 10.0))
         stellar_mass = 10.0**log_mstar
         L_agn_bol = jnp.asarray(inputs.get("L_agn_bol", 0.0))
+        metallicity_z = jnp.asarray(inputs.get("metallicity_z", 0.02))
+        stellar_age_gyr = jnp.asarray(inputs.get("stellar_age_gyr", 5.0))
 
-        # Call xray_total
+        # Call xray_total (Lehmer+2016 XRB + Mineo+2012 hotgas + corona)
         L_xray = xray_total(
             wave,
             sfr=sfr,
@@ -164,6 +169,8 @@ class XRayAirdSEDComponent(SEDModelComponent):
             gamma_agn=jnp.asarray(p["gamma_agn"]),
             E_cut=jnp.asarray(p["E_cut"]),
             alpha_ox=jnp.asarray(p["alpha_ox"]),
+            metallicity_z=metallicity_z,
+            stellar_age_gyr=stellar_age_gyr,
         )
 
         return sed_in + L_xray, {
