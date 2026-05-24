@@ -44,6 +44,7 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     compute_surviving_mass,
     effective_metallicity,
     has_alpha_grid,
+    interpolate_alpha_only,
     interpolate_mass_remaining,
 )
 
@@ -526,27 +527,36 @@ class StellarSEDComponent:
         # ramp: linear interpolation between two endpoints.
         # chem_evol: closed-box gas regulator — Z(t) derived from SFH self-
         # consistently. Mirrors legacy sed_model.py:3578-3592.
+        # 4D α-enhanced SSPs: collapse the [α/Fe] axis to a single
+        # plane once, here, then pass the resulting 3D ssp_flux to the
+        # downstream DSPS kernel (closes #226). The Z marginalisation
+        # remains the standard lognormal MDF for every met_mode, so the
+        # 4D and 3D paths share the same Z bookkeeping — only the
+        # ``ssp_flux`` that DSPS sees differs.
+        _alpha_collapse_active = has_alpha_grid(ssp)
+        if _alpha_collapse_active:
+            _alpha_fe_value = jnp.asarray(params.get("met_alpha_fe", 0.0))
+            ssp_flux_for_csp = interpolate_alpha_only(
+                ssp.ssp_flux, ssp.ssp_alpha_fe, _alpha_fe_value
+            )
+        else:
+            ssp_flux_for_csp = ssp.ssp_flux
+
         if self.config.metallicity_model == "delta":
-            # Apply alpha-Fe enhancement via effective_metallicity for 3D
-            # SSP grids (no native α axis). Mirrors the legacy
+            # Apply alpha-Fe enhancement via effective_metallicity for
+            # 3D SSP grids (no native α axis). Mirrors the legacy
             # ``interp_met_alpha_dispatch`` fallback in
             # ``forward/pipeline.py:239``: when no α grid is available,
             # the α-shift is folded into log_z via Salaris+05 / DSPS
-            # canonical relation. 4D α-grid SSPs require true bilinear
-            # collapse before the lognormal-MDF kernel — not yet wired
-            # here.
-            if has_alpha_grid(ssp):
-                raise NotImplementedError(
-                    "StellarSEDComponent: 4D SSP grids with native [α/Fe] axis "
-                    "are not yet supported. The legacy monolith uses "
-                    "interpolate_met_alpha to collapse the α axis before the "
-                    "lognormal-MDF kernel — add this path when needed. For now, "
-                    "use a 3D SSP grid (effective_metallicity fallback covers "
-                    "met_alpha_fe scientifically)."
-                )
+            # canonical relation. For 4D α-grid SSPs the α axis has
+            # already been collapsed above, so we use ``met_logzsol``
+            # directly without the effective-Z approximation.
             alpha_fe = jnp.asarray(params.get("met_alpha_fe", 0.0))
-            log_z_eff = effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe)
-            log_z_abs_scalar = log_z_eff + LOG10_ZSUN
+            if _alpha_collapse_active:
+                log_z_abs_scalar = jnp.asarray(params["met_logzsol"]) + LOG10_ZSUN
+            else:
+                log_z_eff = effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe)
+                log_z_abs_scalar = log_z_eff + LOG10_ZSUN
             log_metallicity_history = jnp.full(n_grid, log_z_abs_scalar)
             lgmet_on_ssp_ages = jnp.full_like(ssp_ages_yr, log_z_abs_scalar)
             log_z_for_mr = log_z_abs_scalar
@@ -746,7 +756,7 @@ class StellarSEDComponent:
                 gal_lgmet_scatter=self.config.lgmet_scatter,
                 ssp_lgmet=ssp.ssp_lgmet,
                 ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
-                ssp_flux=ssp.ssp_flux,
+                ssp_flux=ssp_flux_for_csp,
                 t_obs=t_obs_gyr,
             )
         else:  # ramp / chem_evol — per-age metallicity table
@@ -759,7 +769,7 @@ class StellarSEDComponent:
                 gal_lgmet_scatter=self.config.lgmet_scatter,
                 ssp_lgmet=ssp.ssp_lgmet,
                 ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
-                ssp_flux=ssp.ssp_flux,
+                ssp_flux=ssp_flux_for_csp,
                 t_obs=t_obs_gyr,
             )
 
@@ -771,7 +781,7 @@ class StellarSEDComponent:
         # SSP grid.
         joint_weights = dsps_result.weights  # (n_met, n_age)
         # Per-age × per-Msun-formed weighted SSP flux (Lsun/Hz/Msun):
-        ssp_flux_at_age = jnp.einsum("ma,maw->aw", joint_weights, ssp.ssp_flux)
+        ssp_flux_at_age = jnp.einsum("ma,maw->aw", joint_weights, ssp_flux_for_csp)
         # Per-age "mass" for downstream per-age operations (dust BC mask).
         # This is the marginalised age distribution × total_mass.
         age_weights = joint_weights.sum(axis=0) * total_mass  # (n_age,) Msun
