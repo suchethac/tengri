@@ -19,6 +19,7 @@ from tengri.inference.backends.mcmc._shared import (
     _get_flat_logdensity,
     _mclmc_sample_scan,
     _set_cached_adaptation,
+    _vmap_chains,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ def run_mclmc(
     init_from=None,
     n_warmup=500,
     n_samples=2000,
+    n_chains=1,
     verbose=True,
 ):
     """Microcanonical Langevin Monte Carlo (MCLMC) via BlackJAX.
@@ -129,15 +131,33 @@ def run_mclmc(
             )
 
     key, sample_key = jax.random.split(key)
-    sample_keys = jax.random.split(sample_key, n_samples)
+    if n_chains > 1:
 
-    _, positions = _mclmc_sample_scan(
-        state,
-        sample_keys,
-        kernel,
-        params.L,
-        params.step_size,
-    )
+        def _init(p, init_key):
+            return blackjax.mcmc.mclmc.init(p, ld_1arg, init_key)
+
+        def _scan(s, ks):
+            _, p = _mclmc_sample_scan(s, ks, kernel, params.L, params.step_size)
+            return p
+
+        positions = _vmap_chains(
+            _init,
+            _scan,
+            init_flat=init_flat,
+            chain_key=sample_key,
+            n_chains=n_chains,
+            n_iter=n_samples,
+            n_burnin=0,
+        )
+    else:
+        sample_keys = jax.random.split(sample_key, n_samples)
+        _, positions = _mclmc_sample_scan(
+            state,
+            sample_keys,
+            kernel,
+            params.L,
+            params.step_size,
+        )
 
     wall_time = time.time() - t0
 
@@ -155,6 +175,7 @@ def run_mclmc(
         diagnostics={
             "n_warmup": n_warmup,
             "n_samples": n_samples,
+            "n_chains": n_chains,
             "L": float(params.L),
             "step_size": float(params.step_size),
         },
@@ -170,6 +191,7 @@ def run_adjusted_mclmc(
     init_from=None,
     n_warmup=500,
     n_samples=2000,
+    n_chains=1,
     target_accept_rate=0.65,
     verbose=True,
 ):
@@ -293,15 +315,33 @@ def run_adjusted_mclmc(
     n_integration_steps = jnp.ceil(L / step_size).astype(int)
 
     key, sample_key = jax.random.split(key)
-    sample_keys = jax.random.split(sample_key, n_samples)
+    if n_chains > 1:
 
-    _, (positions, divergent) = _adjusted_mclmc_sample_scan(
-        state,
-        sample_keys,
-        kernel,
-        step_size,
-        n_integration_steps,
-    )
+        def _init(p):
+            return blackjax.mcmc.adjusted_mclmc.init(p, ld_1arg)
+
+        def _scan(s, ks):
+            _, (p, d) = _adjusted_mclmc_sample_scan(s, ks, kernel, step_size, n_integration_steps)
+            return p, d
+
+        positions, divergent = _vmap_chains(
+            _init,
+            _scan,
+            init_flat=init_flat,
+            chain_key=sample_key,
+            n_chains=n_chains,
+            n_iter=n_samples,
+            n_burnin=0,
+        )
+    else:
+        sample_keys = jax.random.split(sample_key, n_samples)
+        _, (positions, divergent) = _adjusted_mclmc_sample_scan(
+            state,
+            sample_keys,
+            kernel,
+            step_size,
+            n_integration_steps,
+        )
     n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
@@ -325,6 +365,7 @@ def run_adjusted_mclmc(
         diagnostics={
             "n_warmup": n_warmup,
             "n_samples": n_samples,
+            "n_chains": n_chains,
             "n_divergent": n_divergent,
             "L": float(params.L),
             "step_size": float(params.step_size),

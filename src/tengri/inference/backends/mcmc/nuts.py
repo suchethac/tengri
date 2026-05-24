@@ -20,6 +20,7 @@ from tengri.inference.backends.mcmc._shared import (
     _nuts_chain_scan,
     _nuts_full_scan,
     _set_cached_adaptation,
+    _vmap_chains,
 )
 from tengri.utils.compile_log import compile_timer
 
@@ -225,38 +226,34 @@ def run_nuts(
             )
         key, chain_key = jax.random.split(key)
         if n_chains > 1:
-            # Vmap multiple chains over independent seeds + jittered inits.
-            # Each chain shares the same cached adaptation; runs in parallel
-            # via XLA SIMD. Wall ≈ one chain's worth (CPU) up to the
-            # arithmetic ceiling.
-            init_keys = jax.random.split(chain_key, n_chains + 1)
-            chain_key = init_keys[0]
-            jitter = 1e-3 * jax.random.normal(init_keys[1], shape=(n_chains, init_flat.shape[0]))
-            init_flat_batch = init_flat[None, :] + jitter
-            states = jax.vmap(lambda x: blackjax.mcmc.nuts.init(x, ld_1arg))(init_flat_batch)
-            per_chain_keys = jax.random.split(chain_key, n_chains * (n_burnin + n_samples))
-            per_chain_keys = per_chain_keys.reshape(n_chains, n_burnin + n_samples, 2)
+
+            def _init(p):
+                return blackjax.mcmc.nuts.init(p, ld_1arg)
+
+            def _scan(s, ks):
+                return _nuts_chain_scan(
+                    s,
+                    ks,
+                    log_posterior_flat_2arg,
+                    data_args,
+                    parameters["step_size"],
+                    parameters["inverse_mass_matrix"],
+                    max_num_doublings,
+                )
+
             with compile_timer(
                 "nuts_chain_scan_vmap", fitter.compile_signature(), method="mcmc_nuts"
             ):
-                positions, divergent = jax.vmap(
-                    lambda s, ks: _nuts_chain_scan(
-                        s,
-                        ks,
-                        log_posterior_flat_2arg,
-                        data_args,
-                        parameters["step_size"],
-                        parameters["inverse_mass_matrix"],
-                        max_num_doublings,
-                    )
-                )(states, per_chain_keys)
+                positions, divergent = _vmap_chains(
+                    _init,
+                    _scan,
+                    init_flat=init_flat,
+                    chain_key=chain_key,
+                    n_chains=n_chains,
+                    n_iter=n_burnin + n_samples,
+                    n_burnin=n_burnin,
+                )
                 jax.block_until_ready(positions)
-            # Per-chain burnin discard, then flatten to (n_chains*n_samples, D).
-            if n_burnin > 0:
-                positions = positions[:, n_burnin:, :]
-                divergent = divergent[:, n_burnin:]
-            positions = positions.reshape(-1, positions.shape[-1])
-            divergent = divergent.reshape(-1)
             _multichain_burnin_done = True
         else:
             state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
