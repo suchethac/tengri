@@ -73,4 +73,4 @@ for ax, reg in zip(axes_flat, REGIMES):
     ax.set_ylim(bottom=0)
 
 fig.tight_layout()
-fig.savefig("plot_bursty_recovery.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_bursty_recovery.png", dpi=150, bbox_inches="tight")

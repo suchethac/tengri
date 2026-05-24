@@ -120,4 +120,4 @@ ax_text = ax_free.text(
 )
 
 fig.tight_layout()
-fig.savefig("plot_recipe_specific_redshift.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_recipe_specific_redshift.png", dpi=150, bbox_inches="tight")

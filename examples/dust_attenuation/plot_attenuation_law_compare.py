@@ -38,4 +38,4 @@ ax.set_ylabel(r"$k(\lambda)$ (normalized at 5500 $\mathrm{\AA}$)")
 ax.legend(fontsize=9, frameon=False, loc="upper left")
 
 fig.tight_layout()
-fig.savefig("plot_attenuation_law_compare.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_attenuation_law_compare.png", dpi=150, bbox_inches="tight")

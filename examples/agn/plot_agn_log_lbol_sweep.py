@@ -69,4 +69,4 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"$\log L_{\mathrm{bol}}/L_\odot$")
 
 fig.tight_layout()
-fig.savefig("plot_agn_log_lbol_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_agn_log_lbol_sweep.png", dpi=150, bbox_inches="tight")

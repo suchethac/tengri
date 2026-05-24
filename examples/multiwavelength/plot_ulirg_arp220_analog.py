@@ -72,4 +72,4 @@ ax.text(0.97, 0.05,
         bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="0.7", lw=0.5))
 
 fig.tight_layout()
-fig.savefig("plot_ulirg_arp220_analog.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_ulirg_arp220_analog.png", dpi=150, bbox_inches="tight")

@@ -159,4 +159,4 @@ ax.set_xticks(wave_eff)
 ax.set_xticklabels(band_labels)
 
 fig.tight_layout()
-fig.savefig("plot_workflow_dust_mc_resampling.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_workflow_dust_mc_resampling.png", dpi=150, bbox_inches="tight")

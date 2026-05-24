@@ -113,4 +113,4 @@ ax2.set_ylabel("Density")
 ax2.legend(frameon=False)
 
 fig.tight_layout()
-fig.savefig("plot_hierarchical.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_hierarchical.png", dpi=150, bbox_inches="tight")

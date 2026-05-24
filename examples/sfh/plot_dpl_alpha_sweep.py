@@ -63,4 +63,4 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"DPL rising slope $\alpha$")
 
 fig.tight_layout()
-fig.savefig("plot_dpl_alpha_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_dpl_alpha_sweep.png", dpi=150, bbox_inches="tight")

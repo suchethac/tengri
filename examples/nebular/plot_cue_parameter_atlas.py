@@ -115,4 +115,4 @@ for mesh, ax in zip([m1, m2, m3, m4], axes.ravel()):
     fig.colorbar(mesh, ax=ax, pad=0.01)
 
 fig.tight_layout()
-fig.savefig("plot_cue_parameter_atlas.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_cue_parameter_atlas.png", dpi=150, bbox_inches="tight")

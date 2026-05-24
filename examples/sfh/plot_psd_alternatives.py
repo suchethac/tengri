@@ -87,4 +87,4 @@ ax.set_ylim(1e-10, 1e0)
 ax.legend(frameon=False, fontsize=10)
 fig.tight_layout()
 
-fig.savefig("plot_psd_alternatives.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_psd_alternatives.png", dpi=150, bbox_inches="tight")

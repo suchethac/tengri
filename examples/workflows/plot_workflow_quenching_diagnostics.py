@@ -127,4 +127,4 @@ ax.text(
 ax.set_xscale("log")
 ax.set_xlabel(r"Lookback time since quenching $t_{\rm q}$  [Gyr]")
 
-fig.savefig("plot_workflow_quenching_diagnostics.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_workflow_quenching_diagnostics.png", dpi=150, bbox_inches="tight")

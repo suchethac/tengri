@@ -201,4 +201,4 @@ for bar, t_ms, sp in zip(bars, times_ms, speedups):
 # evaluation. This is by design (smoothness for gradients), not a bug.
 
 fig.tight_layout()
-fig.savefig("plot_composable_three_modes.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_composable_three_modes.png", dpi=150, bbox_inches="tight")

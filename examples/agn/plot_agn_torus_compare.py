@@ -80,4 +80,4 @@ for um, name in [(3.0, "L"), (10.0, "N"), (24.0, "MIPS-24"), (70.0, "FIR")]:
 ax.legend(frameon=False, fontsize=8, loc="lower left")
 
 fig.tight_layout()
-fig.savefig("plot_agn_torus_compare.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_agn_torus_compare.png", dpi=150, bbox_inches="tight")

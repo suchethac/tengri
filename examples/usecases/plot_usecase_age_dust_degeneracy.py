@@ -157,4 +157,4 @@ ax.legend(frameon=False, loc="upper right")
 ax.axvspan(1500, 2300, color="red", alpha=0.1, label="UV breaks degeneracy")
 
 fig.tight_layout()
-fig.savefig("plot_usecase_age_dust_degeneracy.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_usecase_age_dust_degeneracy.png", dpi=150, bbox_inches="tight")

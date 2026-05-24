@@ -106,4 +106,4 @@ for ax_idx, (param_name, label, n_vals, lo, hi) in enumerate(SWEEPS):
 for ax in axes[:, 0]:
     ax.set_ylabel(r"$\Delta \log_{10}\,L_{\rm H\alpha}$  [dex]", fontsize=9)
 
-fig.savefig("plot_cue_flex_tour.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_cue_flex_tour.png", dpi=150, bbox_inches="tight")
