@@ -116,7 +116,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
     # alpha_ox is deliberately NOT a free parameter here — PR #329 promotes it to
     # an empirical prior derived from L_2500 via alpha_ox_from_l2500()
     # (Just+2007 / Lusso–Risaliti). Offsets from the empirical value are exposed
-    # via delta_alpha_ox in xray_agn_corona{,_from_disc}. See ADR-0013.
+    # via delta_alpha_ox in xray_agn_corona{,_from_disc}. See ADR-0015.
 
     # No required cross-component inputs (all have fallbacks)
     inputs: ClassVar[dict[str, str]] = {}
