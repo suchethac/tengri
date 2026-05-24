@@ -35,29 +35,7 @@ so users can pick by eye:
 
 Each is built with no overrides and evaluated at default parameter values.
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-78
-
-
-
-.. image-sg:: /auto_examples/recipes/images/sphx_glr_plot_recipe_compare_001.png
-   :alt: plot recipe compare
-   :srcset: /auto_examples/recipes/images/sphx_glr_plot_recipe_compare_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/.claude-squad/worktrees/cs/examples-sweep_18b2090a1299ea18/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 19-75
 
 .. code-block:: Python
 
@@ -78,8 +56,6 @@ Each is built with no overrides and evaluated at default parameter values.
 
     C_AA_PER_S = 2.998e18
 
-    # Cue-using recipes need a bare-stellar SSP; otherwise default is fine.
-    # Every recipe that uses Cue (most of them) needs the bare-stellar SSP.
     BARE = tengri.load_ssp("fsps_prsc_miles_chabrier")
     SSPS = {
         "star_forming_photometry": BARE,
@@ -112,19 +88,13 @@ Each is built with no overrides and evaluated at default parameter values.
         nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
         ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=name)
 
-    ax.set_xlim(700, 5e6)
-    ax.set_ylim(1e38, 5e45)
-    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-    ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+    ax.set(xlim=(700, 5e6), ylim=(1e38, 5e45),
+           xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+           ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
     ax.legend(frameon=False, fontsize=8, loc="lower right")
 
     fig.tight_layout()
     fig.savefig("plot_recipe_compare.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 30.626 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_compare.py:

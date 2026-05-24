@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:23.807** total execution time for 171 files **from all galleries**:
+**00:07.806** total execution time for 173 files **from all galleries**:
 
 .. container::
 
@@ -32,11 +32,11 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_components_isolated.py` (``../examples/multiwavelength/plot_components_isolated.py``)
-     - 00:20.225
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_emission_line_contamination.py` (``../examples/photometry/plot_emission_line_contamination.py``)
+     - 00:04.092
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_sps_plot_mass_to_light_ratios.py` (``../examples/sps/plot_mass_to_light_ratios.py``)
-     - 00:03.582
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_ulirg_arp220_analog.py` (``../examples/multiwavelength/plot_ulirg_arp220_analog.py``)
+     - 00:03.714
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
      - 00:00.000
@@ -254,6 +254,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_metallicity_plot_zh_evolution_compare.py` (``../examples/metallicity/plot_zh_evolution_compare.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_components_isolated.py` (``../examples/multiwavelength/plot_components_isolated.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_fir_radio_correlation.py` (``../examples/multiwavelength/plot_fir_radio_correlation.py``)
      - 00:00.000
      - 0.0
@@ -456,6 +459,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_ionising_lum.py` (``../examples/sps/plot_ionising_lum.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_mass_to_light_ratios.py` (``../examples/sps/plot_mass_to_light_ratios.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_sps_library_compare.py` (``../examples/sps/plot_sps_library_compare.py``)

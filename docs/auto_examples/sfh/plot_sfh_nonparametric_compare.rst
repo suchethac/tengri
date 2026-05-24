@@ -38,7 +38,7 @@ reference. The dispersion of each family is the visual prior — wide
 clouds mean the form is permissive, narrow clouds mean the form is
 restrictive.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-95
+.. GENERATED FROM PYTHON SOURCE LINES 22-83
 
 .. code-block:: Python
 
@@ -56,18 +56,16 @@ restrictive.
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     FORMS = [
-        ("continuity", "continuity (Leja+2019)", "#cc4477"),
-        ("dirichlet", "Dirichlet (Leja+2017)", "#ee8833"),
+        ("continuity",  "continuity (Leja+2019)", "#cc4477"),
+        ("dirichlet",   "Dirichlet (Leja+2017)",  "#ee8833"),
         ("dense_basis", "dense basis (Iyer+2019)", "#3388aa"),
     ]
     N_DRAWS = 24
 
     ssp = tengri.load_ssp()
-    fig, axes = plt.subplots(
-        1, 3, figsize=(11.5, 4.0), sharex=True, sharey=True, gridspec_kw={"wspace": 0.08}
-    )
+    fig, axes = plt.subplots(1, 3, figsize=(11.5, 4.0), sharex=True, sharey=True,
+                             gridspec_kw={"wspace": 0.08})
 
-    # Reference parametric SFH for visual anchor.
     ref = tengri.SEDModel.build(
         ssp, sfh={"type": "dpl", "*": tengri.FIXED}, redshift=tengri.Fixed(0.0)
     )
@@ -75,18 +73,15 @@ restrictive.
     sfh_ref = ref.predict_sfh(p_ref)
     t_ref = np.asarray(sfh_ref["t_gyr"])
     sfr_ref = np.asarray(sfh_ref["sfr_mean"])
-    # Normalise by total stellar mass.
     mass_ref = np.trapezoid(sfr_ref, t_ref * 1.0e9)
     sfr_ref = sfr_ref / mass_ref if mass_ref > 0 else sfr_ref
 
     key0 = jax.random.PRNGKey(7)
     for ax, (form, label, color) in zip(axes, FORMS):
         model = tengri.SEDModel.build(
-            ssp,
-            sfh={"type": form, "*": tengri.FREE},
-            redshift=tengri.Fixed(0.0),
+            ssp, sfh={"type": form, "*": tengri.FREE}, redshift=tengri.Fixed(0.0),
         )
-        for _i, sub_key in enumerate(jax.random.split(key0, N_DRAWS)):
+        for i, sub_key in enumerate(jax.random.split(key0, N_DRAWS)):
             p = dict(model.spec.sample(sub_key))
             sfh = model.predict_sfh(p)
             t = np.asarray(sfh["t_gyr"])
@@ -96,16 +91,9 @@ restrictive.
                 sfr = sfr / mass
             ax.plot(t, sfr, color=color, lw=0.6, alpha=0.4)
         ax.plot(t_ref, sfr_ref, color="0.15", lw=1.6, ls="--", label="dpl reference")
-        ax.text(
-            0.95,
-            0.93,
-            label,
-            transform=ax.transAxes,
-            fontsize=8,
-            color="0.15",
-            ha="right",
-            bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="0.7", lw=0.5),
-        )
+        ax.text(0.95, 0.93, label, transform=ax.transAxes, fontsize=8, color="0.15",
+                ha="right",
+                bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="0.7", lw=0.5))
         ax.set_yscale("log")
         ax.set_xlabel(r"lookback time  [Gyr]")
         ax.set_xlim(0, 13.5)

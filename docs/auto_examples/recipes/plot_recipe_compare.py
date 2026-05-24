@@ -33,8 +33,6 @@ warnings.filterwarnings("ignore", message=".*wNE.*")
 
 C_AA_PER_S = 2.998e18
 
-# Cue-using recipes need a bare-stellar SSP; otherwise default is fine.
-# Every recipe that uses Cue (most of them) needs the bare-stellar SSP.
 BARE = tengri.load_ssp("fsps_prsc_miles_chabrier")
 SSPS = {
     "star_forming_photometry": BARE,
@@ -67,10 +65,9 @@ for name, recipe_fn, color in RECIPE_FNS:
     nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
     ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=name)
 
-ax.set_xlim(700, 5e6)
-ax.set_ylim(1e38, 5e45)
-ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+ax.set(xlim=(700, 5e6), ylim=(1e38, 5e45),
+       xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+       ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
 ax.legend(frameon=False, fontsize=8, loc="lower right")
 
 fig.tight_layout()

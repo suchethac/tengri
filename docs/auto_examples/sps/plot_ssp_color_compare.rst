@@ -33,7 +33,7 @@ TP-AGB treatment, where BC03 and FSPS-MIST differ most).
 This is the systematic an SED fitter inherits from its assumed SSP
 grid even before any prior or noise is involved.
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-116
+.. GENERATED FROM PYTHON SOURCE LINES 17-94
 
 .. code-block:: Python
 
@@ -62,44 +62,35 @@ grid even before any prior or noise is involved.
     BANDS = ["galex_nuv", "sdss_u", "sdss_g", "sdss_r", "2mass_ks"]
     COLORS_TO_PLOT = [
         ("NUV - r", 0, 3),
-        ("u - g", 1, 2),
-        ("g - r", 2, 3),
-        ("r - K", 3, 4),
+        ("u - g",   1, 2),
+        ("g - r",   2, 3),
+        ("r - K",   3, 4),
     ]
 
     obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 
-    # Per-library colors
     data = {}
     for ssp_name, label in LIBRARIES:
         try:
             ssp = tengri.load_ssp(ssp_name)
         except (FileNotFoundError, Exception):
             continue
+        sfh = {"type": "tsnorm", "*": tengri.FIXED,
+               "peak_lbt_gyr": 3.0, "width_gyr": 2.0,
+               "log_peak_sfr": 1.0, "skew": 0.3, "trunc": 10.0}
+        dust = {"type": "two_component", "*": tengri.FIXED,
+                "tau_diff": 0.2, "tau_bc": 0.3, "slope": -0.7}
         model = tengri.SEDModel.build(
             ssp,
             observation=obs,
-            sfh={
-                "type": "tsnorm",
-                "*": tengri.FIXED,
-                "peak_lbt_gyr": 3.0,
-                "width_gyr": 2.0,
-                "log_peak_sfr": 1.0,
-                "skew": 0.3,
-                "trunc": 10.0,
-            },
-            dust={
-                "type": "two_component",
-                "*": tengri.FIXED,
-                "tau_diff": 0.2,
-                "tau_bc": 0.3,
-                "slope": -0.7,
-            },
+            sfh=sfh,
+            dust=dust,
             redshift=tengri.Fixed(0.05),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         flux = np.asarray(model.predict_photometry(p))
-        colors = {name: -2.5 * np.log10(flux[i] / flux[j]) for name, i, j in COLORS_TO_PLOT}
+        colors = {name: -2.5 * np.log10(flux[i] / flux[j])
+                  for name, i, j in COLORS_TO_PLOT}
         data[label] = colors
 
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
@@ -109,30 +100,17 @@ grid even before any prior or noise is involved.
 
     for i, (label, color) in enumerate(zip(data, colors_cmap)):
         vals = [data[label][name] for name, _, _ in COLORS_TO_PLOT]
-        ax.bar(
-            x + (i - len(data) / 2) * width,
-            vals,
-            width,
-            color=color,
-            label=label,
-            edgecolor="0.15",
-            lw=0.4,
-        )
+        ax.bar(x + (i - len(data) / 2) * width, vals,
+               width, color=color, label=label, edgecolor="0.15", lw=0.4)
 
     ax.set_xticks(x)
     ax.set_xticklabels([name for name, _, _ in COLORS_TO_PLOT])
     ax.set_ylabel(r"AB colour  [mag]")
     ax.axhline(0.0, color="0.55", lw=0.6)
     ax.legend(frameon=False, fontsize=8, loc="upper left", ncol=2)
-    ax.text(
-        0.97,
-        0.05,
-        "same SFH, dust, redshift —\nonly the SSP library changes",
-        transform=ax.transAxes,
-        ha="right",
-        fontsize=8,
-        color="0.4",
-    )
+    ax.text(0.97, 0.05,
+            "same SFH, dust, redshift —\nonly the SSP library changes",
+            transform=ax.transAxes, ha="right", fontsize=8, color="0.4")
 
     fig.tight_layout()
     fig.savefig("plot_ssp_color_compare.png", dpi=150, bbox_inches="tight")

@@ -34,7 +34,7 @@ optical/NIR window that the model treats separately. Deviations from
 the diagonal indicate either model approximations or numerical
 integration error.
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-103
+.. GENERATED FROM PYTHON SOURCE LINES 18-94
 
 .. code-block:: Python
 
@@ -42,6 +42,7 @@ integration error.
     import warnings
 
     import jax
+    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -59,25 +60,15 @@ integration error.
     def _build(tau_diff):
         return tengri.SEDModel.build(
             ssp,
-            sfh={
-                "type": "const",
-                "*": tengri.FIXED,
-                "log_sfr": 1.0,
-                "start_gyr": 13.0,
-                "end_gyr": 0.0,
-            },
-            dust={
-                "type": "two_component",
-                "*": tengri.FIXED,
-                "tau_diff": tau_diff,
-                "tau_bc": 1.5 * tau_diff,
-                "emission": {"type": "dale2014", "*": tengri.FIXED},
-            },
+            sfh={"type": "const", "*": tengri.FIXED, "log_sfr": 1.0,
+                 "start_gyr": 13.0, "end_gyr": 0.0},
+            dust={"type": "two_component", "*": tengri.FIXED,
+                  "tau_diff": tau_diff, "tau_bc": 1.5 * tau_diff,
+                  "emission": {"type": "dale2014", "*": tengri.FIXED}},
             redshift=tengri.Fixed(0.05),
         )
 
 
-    # Pristine baseline (no dust) for the absorbed-UV reference.
     ref_model = _build(0.0)
     p_ref = dict(ref_model.spec.sample(jax.random.PRNGKey(0)))
     out_ref = ref_model.predict_rest_sed(p_ref)
@@ -105,18 +96,18 @@ integration error.
         out = model.predict_rest_sed(p)
         sed = np.asarray(out.sed)
         L_abs[i] = L_uv_ref - _power_in_band(sed, uv_band)
-        L_ir[i] = _power_in_band(sed, ir_band)
+        L_ir[i]  = _power_in_band(sed, ir_band)
 
     fig, ax = plt.subplots(figsize=(6.0, 5.0))
     diag = np.array([1e42, 1e46])
-    ax.plot(diag, diag, color="0.55", lw=0.7, ls="--", label=r"$L_{\rm IR} = L_{\rm abs}^{\rm UV}$")
-    sc = ax.scatter(L_abs, L_ir, c=tau_grid, cmap="viridis", s=44, lw=0.4, edgecolor="0.2", zorder=4)
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlim(1e42, 1e46)
-    ax.set_ylim(1e42, 1e46)
-    ax.set_xlabel(r"$L_{\rm abs}^{\rm UV(912-3000\,\AA)}$  [erg s$^{-1}$]")
-    ax.set_ylabel(r"$L_{\rm IR}^{(8-1000\,\mu\mathrm{m})}$  [erg s$^{-1}$]")
+    ax.plot(diag, diag, color="0.55", lw=0.7, ls="--",
+            label=r"$L_{\rm IR} = L_{\rm abs}^{\rm UV}$")
+    sc = ax.scatter(L_abs, L_ir, c=tau_grid, cmap="viridis",
+                    s=44, lw=0.4, edgecolor="0.2", zorder=4)
+    ax.set(xscale="log", yscale="log",
+           xlim=(1e42, 1e46), ylim=(1e42, 1e46),
+           xlabel=r"$L_{\rm abs}^{\rm UV(912-3000\,\AA)}$  [erg s$^{-1}$]",
+           ylabel=r"$L_{\rm IR}^{(8-1000\,\mu\mathrm{m})}$  [erg s$^{-1}$]")
     ax.legend(frameon=False, fontsize=9, loc="upper left")
     cbar = fig.colorbar(sc, ax=ax, pad=0.02)
     cbar.set_label(r"$\tau_{\rm diff}$  [mag]")

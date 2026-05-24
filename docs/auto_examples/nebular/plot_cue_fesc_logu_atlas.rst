@@ -32,7 +32,7 @@ Cue (Li, Leja & Speagle 2023) on a young SF galaxy with a bare-stellar
 SSP (the wNE grids bake nebular emission in at fixed conditions and
 cannot vary these knobs).
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-101
+.. GENERATED FROM PYTHON SOURCE LINES 16-96
 
 .. code-block:: Python
 
@@ -54,23 +54,18 @@ cannot vary these knobs).
     LOGU_GRID = np.linspace(-3.8, -1.5, 22)
 
     ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
+    SFH = {"type": "dpl", "*": tengri.FIXED, "tau_gyr": 0.3,
+           "log_peak_sfr": 1.5, "alpha": 3.0, "beta": 2.0}
+    DUST = {"type": "two_component", "*": tengri.FIXED,
+            "tau_diff": 0.05, "tau_bc": 0.1}
+
     model = tengri.SEDModel.build(
         ssp,
-        sfh={
-            "type": "dpl",
-            "*": tengri.FIXED,
-            "tau_gyr": 0.3,
-            "log_peak_sfr": 1.5,
-            "alpha": 3.0,
-            "beta": 2.0,
-        },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
-        neb={
-            "type": "cue",
-            "*": tengri.FIXED,
-            "fesc": tengri.Uniform(0.0, 1.0),
-            "logU": tengri.Uniform(-4.0, -1.0),
-        },
+        sfh=SFH,
+        dust=DUST,
+        neb={"type": "cue", "*": tengri.FIXED,
+             "fesc": tengri.Uniform(0.0, 1.0),
+             "logU": tengri.Uniform(-4.0, -1.0)},
         redshift=tengri.Fixed(0.05),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -82,7 +77,9 @@ cannot vary these knobs).
 
     for i, logu in enumerate(LOGU_GRID):
         for j, fesc in enumerate(FESC_GRID):
-            p = {**baseline, "neb_logU": jnp.float64(logu), "neb_fesc": jnp.float64(fesc)}
+            p = {**baseline,
+                 "neb_logU": jnp.float64(logu),
+                 "neb_fesc": jnp.float64(fesc)}
             lines = model.predict_emission_lines(p)
             log_halpha[i, j] = np.log10(max(float(lines.halpha), 1e-30))
             o3_hb[i, j] = np.log10(max(float(lines.oiii_5007 / lines.hbeta), 1e-6))
@@ -92,29 +89,27 @@ cannot vary these knobs).
     def _panel(ax, arr, label, cmap):
         vmin = float(np.nanpercentile(arr, 2))
         vmax = float(np.nanpercentile(arr, 98))
-        mesh = ax.pcolormesh(
-            FESC_GRID, LOGU_GRID, arr, cmap=cmap, vmin=vmin, vmax=vmax, shading="auto"
-        )
-        cs = ax.contour(FESC_GRID, LOGU_GRID, arr, levels=7, colors="0.2", linewidths=0.5, alpha=0.55)
+        mesh = ax.pcolormesh(FESC_GRID, LOGU_GRID, arr,
+                             cmap=cmap, vmin=vmin, vmax=vmax, shading="auto")
+        cs = ax.contour(FESC_GRID, LOGU_GRID, arr,
+                        levels=7, colors="0.2", linewidths=0.5, alpha=0.55)
         ax.clabel(cs, fmt="%.2f", fontsize=7, inline=True, inline_spacing=2)
-        ax.text(
-            0.04,
-            0.93,
-            label,
-            transform=ax.transAxes,
-            fontsize=9,
-            color="0.15",
-            bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="0.7", lw=0.5),
-        )
+        ax.text(0.04, 0.93, label, transform=ax.transAxes, fontsize=9,
+                color="0.15",
+                bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="0.7", lw=0.5))
         ax.set_xlabel(r"escape fraction $f_{\rm esc}$")
         return mesh
 
 
-    fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.6), gridspec_kw={"wspace": 0.32})
+    fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.6),
+                             gridspec_kw={"wspace": 0.32})
 
-    m1 = _panel(axes[0], log_halpha, r"$\log\,L_{\rm H\alpha}$  [erg s$^{-1}$]", "viridis")
-    m2 = _panel(axes[1], o3_hb, r"$\log\,[\mathrm{O\,III}]\,5007 / \mathrm{H}\beta$", "RdYlBu_r")
-    m3 = _panel(axes[2], n2_ha, r"$\log\,[\mathrm{N\,II}]\,6584 / \mathrm{H}\alpha$", "RdYlBu_r")
+    m1 = _panel(axes[0], log_halpha,
+                r"$\log\,L_{\rm H\alpha}$  [erg s$^{-1}$]", "viridis")
+    m2 = _panel(axes[1], o3_hb,
+                r"$\log\,[\mathrm{O\,III}]\,5007 / \mathrm{H}\beta$", "RdYlBu_r")
+    m3 = _panel(axes[2], n2_ha,
+                r"$\log\,[\mathrm{N\,II}]\,6584 / \mathrm{H}\alpha$", "RdYlBu_r")
 
     axes[0].set_ylabel(r"ionization parameter $\log\,U$")
     for ax, mesh in zip(axes, [m1, m2, m3]):
