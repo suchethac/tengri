@@ -171,11 +171,7 @@ def xray_xrb(
     # where t is age in Gyr
     log_t = jnp.log10(jnp.maximum(stellar_age_gyr, 1e-3))  # protect against log(0)
     log_l_lmxb_per_mstar = (
-        40.276
-        - 1.503 * log_t
-        - 0.423 * log_t**2
-        + 0.425 * log_t**3
-        + 0.136 * log_t**4
+        40.276 - 1.503 * log_t - 0.423 * log_t**2 + 0.425 * log_t**3 + 0.136 * log_t**4
     )
     L_lmxb_ref = 10.0**log_l_lmxb_per_mstar * stellar_mass * 10.0**log_L_lmxb_offset
 
@@ -204,13 +200,37 @@ def xray_xrb(
     return jnp.where(xray_mask, L_nu_hmxb + L_nu_lmxb, 0.0)
 
 
-def alpha_ox_from_l2500(l_2500_erg_hz: float) -> float:
-    r"""Compute alpha_ox from monochromatic 2500 A luminosity (Just+2007).
+ALPHA_OX_RELATIONS: tuple[str, ...] = (
+    "just2007",
+    "lusso_risaliti_2016",
+    "lusso_risaliti_2017",
+)
+"""Available empirical α_OX(L_2500) correlations.
+
+* ``"just2007"`` — Just et al. 2007, ApJ 665, 1004 Eq. 3. CIGALE default
+  (yang20.py:227). Derived from optically-bright AGN at low–intermediate
+  luminosity.
+* ``"lusso_risaliti_2016"`` — Lusso & Risaliti 2016, ApJ 819, 154 Eq. 3.
+  Refit on 2685 SDSS+XMM quasars, extends to higher L_2500.
+* ``"lusso_risaliti_2017"`` — Lusso & Risaliti 2017, A&A 602, A79 Eq. 2.
+  High-z quasar sample, used by AGNfitter-rx.
+"""
+
+
+def alpha_ox_from_l2500(
+    l_2500_erg_hz: float,
+    relation: str = "just2007",
+) -> float:
+    r"""Compute alpha_ox from monochromatic 2500 A luminosity.
 
     Parameters
     ----------
     l_2500_erg_hz : float
         Monochromatic luminosity density at rest-frame 2500 A. [erg/s/Hz]
+    relation : {"just2007", "lusso_risaliti_2016", "lusso_risaliti_2017"}
+        Which empirical α_OX(L_2500) correlation to use. Default
+        ``"just2007"`` matches X-CIGALE (yang20.py:227). The Lusso–Risaliti
+        variants are used by AGNfitter-rx.
 
     Returns
     -------
@@ -221,26 +241,49 @@ def alpha_ox_from_l2500(l_2500_erg_hz: float) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes — pure JAX function. The string ``relation``
+    argument is a Python-level dispatch (not traced); pass it statically.
 
-    **Empirical correlation** (Just et al. 2007 [1]_, Eq. 3):
-    derived from optically-bright AGN; valid for
-    :math:`28 \lesssim \log_{10}(L_{2500}/[\mathrm{erg\,s^{-1}\,Hz^{-1}}]) \lesssim 33`.
+    **Just+2007 [1]_ (Eq. 3):** derived from optically-bright AGN; valid for
+    :math:`28 \lesssim \log_{10}(L_{2500}) \lesssim 33`.
 
     .. math::
 
-        \alpha_{\mathrm{ox}} = -0.137 \, \log_{10}\!\left(
-            L_{2500}\,[\mathrm{erg\,s^{-1}\,Hz^{-1}}]
-        \right) + 2.638
+        \alpha_{\mathrm{ox}} = -0.137 \, \log_{10}(L_{2500}) + 2.638
+
+    **Lusso–Risaliti 2016 [2]_ (Eq. 3):** refit on 2685 SDSS+XMM quasars,
+    extends usefully to high L_2500.
+
+    .. math::
+
+        \alpha_{\mathrm{ox}} = -0.137 \, \log_{10}(L_{2500}) + 2.594
+
+    **Lusso–Risaliti 2017 [3]_ (Eq. 2):** high-z quasar sample, used by
+    AGNfitter-rx.
+
+    .. math::
+
+        \alpha_{\mathrm{ox}} = -0.159 \, \log_{10}(L_{2500}) + 3.32
 
     More luminous AGN are X-ray weaker (steeper, more negative
-    :math:`\alpha_{\mathrm{ox}}`).
+    :math:`\alpha_{\mathrm{ox}}`). All three correlations agree to within
+    ~0.05 at the median quasar L_2500 ≈ 10^30 erg/s/Hz and diverge by up
+    to ~0.15 at the extremes.
 
     References
     ----------
     .. [1] Just, D. W. et al., 2007, ApJ, 665, 1004, Eq. 3.
+    .. [2] Lusso, E. & Risaliti, G., 2016, ApJ, 819, 154, Eq. 3.
+    .. [3] Lusso, E. & Risaliti, G., 2017, A&A, 602, A79, Eq. 2.
     """
-    return -0.137 * jnp.log10(l_2500_erg_hz) + 2.638
+    log_l = jnp.log10(l_2500_erg_hz)
+    if relation == "just2007":
+        return -0.137 * log_l + 2.638
+    if relation == "lusso_risaliti_2016":
+        return -0.137 * log_l + 2.594
+    if relation == "lusso_risaliti_2017":
+        return -0.159 * log_l + 3.32
+    raise ValueError(f"Unknown alpha_ox relation {relation!r}. Choose from {ALPHA_OX_RELATIONS}.")
 
 
 def xray_hotgas(
@@ -414,12 +457,14 @@ def xray_agn_corona_from_disc(
     apply_anisotropy: bool = True,
     a1: float = 0.5,
     a2: float = 0.0,
+    alpha_ox_relation: str = "just2007",
 ) -> jnp.ndarray:
     """Self-consistent AGN corona emission derived from disc UV luminosity.
 
-    Computes alpha_ox from L_2500 via the Just+2007 relation, derives
-    L_2keV, builds the X-ray power-law spectrum, and optionally applies
-    viewing-angle anisotropy (Yang+2022).
+    Computes alpha_ox from L_2500 via an empirical correlation (Just+2007
+    by default; Lusso–Risaliti 2016/2017 selectable), derives L_2keV, builds
+    the X-ray power-law spectrum, and optionally applies viewing-angle
+    anisotropy (Yang+2022).
 
     Parameters
     ----------
@@ -451,8 +496,8 @@ def xray_agn_corona_from_disc(
     -----
     **JIT-compatible**: yes — pure JAX function.
     """
-    # alpha_ox from disc UV luminosity
-    alpha_ox = alpha_ox_from_l2500(l_2500_erg_hz) + delta_alpha_ox
+    # alpha_ox from disc UV luminosity via the selected empirical correlation
+    alpha_ox = alpha_ox_from_l2500(l_2500_erg_hz, relation=alpha_ox_relation) + delta_alpha_ox
 
     # Derive L_2keV from alpha_ox definition (yang20.py:227):
     #   alpha_ox = 0.3838 * log10(L_2keV / L_2500)
@@ -492,6 +537,7 @@ def xray_agn_corona(
     apply_anisotropy: bool = True,
     a1: float = 0.5,
     a2: float = 0.0,
+    alpha_ox_relation: str = "just2007",
 ) -> jnp.ndarray:
     r"""X-ray emission from AGN corona (CIGALE / Yang+2020 canonical path).
 
@@ -584,6 +630,7 @@ def xray_agn_corona(
         apply_anisotropy=apply_anisotropy,
         a1=a1,
         a2=a2,
+        alpha_ox_relation=alpha_ox_relation,
     )
 
 

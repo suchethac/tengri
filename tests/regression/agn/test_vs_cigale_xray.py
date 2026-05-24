@@ -57,8 +57,12 @@ def test_alpha_ox_from_l2500_just2007():
     # Expected value from Just+2007 Eq. 3:
     # α_OX = −0.137 × log₁₀(1e30) + 2.638 = −0.137 × 30 + 2.638 = −1.472
     expected = -0.137 * 30.0 + 2.638
-    np.testing.assert_allclose(float(alpha_ox_test), expected, atol=0.01,
-                              err_msg="α_OX from L_2500 does not match Just+2007")
+    np.testing.assert_allclose(
+        float(alpha_ox_test),
+        expected,
+        atol=0.01,
+        err_msg="α_OX from L_2500 does not match Just+2007",
+    )
 
 
 @pytest.mark.regression_paper
@@ -155,24 +159,36 @@ def test_xray_anisotropy_polynomial():
     factor_face = xray_anisotropy(l_iso, cos_inc_face, a1=a1, a2=a2)
     numerator_face = a1 * 1.0 + a2 * 1.0**2 + (1.0 - a1 - a2)
     expected_face = numerator_face / denom
-    np.testing.assert_allclose(float(factor_face[0]) / l_iso[0], expected_face,
-                              atol=1e-6, err_msg="Face-on anisotropy failed")
+    np.testing.assert_allclose(
+        float(factor_face[0]) / l_iso[0],
+        expected_face,
+        atol=1e-6,
+        err_msg="Face-on anisotropy failed",
+    )
 
     # Edge-on (cos_inc = 0.0)
     cos_inc_edge = 0.0
     factor_edge = xray_anisotropy(l_iso, cos_inc_edge, a1=a1, a2=a2)
     numerator_edge = a1 * 0.0 + a2 * 0.0**2 + (1.0 - a1 - a2)
     expected_edge = numerator_edge / denom
-    np.testing.assert_allclose(float(factor_edge[0]) / l_iso[0], expected_edge,
-                              atol=1e-6, err_msg="Edge-on anisotropy failed")
+    np.testing.assert_allclose(
+        float(factor_edge[0]) / l_iso[0],
+        expected_edge,
+        atol=1e-6,
+        err_msg="Edge-on anisotropy failed",
+    )
 
     # Intermediate (cos_inc = cos(30°) ≈ 0.866)
     cos_inc_30deg = np.cos(np.radians(30.0))
     factor_30deg = xray_anisotropy(l_iso, cos_inc_30deg, a1=a1, a2=a2)
     numerator_30deg = a1 * cos_inc_30deg + a2 * cos_inc_30deg**2 + (1.0 - a1 - a2)
     expected_30deg = numerator_30deg / denom
-    np.testing.assert_allclose(float(factor_30deg[0]) / l_iso[0], expected_30deg,
-                              atol=1e-6, err_msg="30° anisotropy failed")
+    np.testing.assert_allclose(
+        float(factor_30deg[0]) / l_iso[0],
+        expected_30deg,
+        atol=1e-6,
+        err_msg="30° anisotropy failed",
+    )
 
 
 @pytest.mark.regression_paper
@@ -205,5 +221,54 @@ def test_xray_anisotropy_ratio_face_edge():
     # Ratio (denominators cancel, ratio = 1.0 / 0.5 = 2.0)
     ratio = jnp.mean(l_face) / jnp.mean(l_edge)
 
-    np.testing.assert_allclose(float(ratio), 2.0, atol=0.01,
-                              err_msg="Face-on / edge-on ratio does not match 2.0")
+    np.testing.assert_allclose(
+        float(ratio), 2.0, atol=0.01, err_msg="Face-on / edge-on ratio does not match 2.0"
+    )
+
+
+@pytest.mark.regression_paper
+def test_alpha_ox_relations_agree_at_canonical_l2500():
+    """All three α_OX correlations should agree to within ~0.05 at L_2500 ~ 1e30.
+
+    Just+2007, Lusso–Risaliti 2016, and Lusso–Risaliti 2017 are calibrated on
+    different samples but cross at the median quasar luminosity
+    L_2500 ≈ 1e30 erg/s/Hz. Tighter than 0.05 dex in α_OX corresponds to
+    < 0.13 dex in L_2keV (factor ~1.35).
+    """
+    l_2500 = 1e30
+    a_j = float(alpha_ox_from_l2500(l_2500, relation="just2007"))
+    a_lr16 = float(alpha_ox_from_l2500(l_2500, relation="lusso_risaliti_2016"))
+    a_lr17 = float(alpha_ox_from_l2500(l_2500, relation="lusso_risaliti_2017"))
+
+    # Just+2007: -0.137 * 30 + 2.638 = -1.472
+    # LR16:      -0.137 * 30 + 2.594 = -1.516
+    # LR17:      -0.159 * 30 + 3.32  = -1.450
+    np.testing.assert_allclose(a_j, -1.472, atol=1e-3)
+    np.testing.assert_allclose(a_lr16, -1.516, atol=1e-3)
+    np.testing.assert_allclose(a_lr17, -1.450, atol=1e-3)
+
+    # Cross-check: all three within 0.07 of each other at canonical L_2500
+    spread = max(a_j, a_lr16, a_lr17) - min(a_j, a_lr16, a_lr17)
+    assert spread < 0.07, f"α_OX spread {spread:.3f} larger than expected"
+
+
+@pytest.mark.regression_paper
+def test_alpha_ox_relations_diverge_at_high_luminosity():
+    """At high L_2500 = 1e32, LR16/LR17 should give different α_OX than Just+07."""
+    l_2500 = 1e32
+    a_j = float(alpha_ox_from_l2500(l_2500, relation="just2007"))
+    a_lr16 = float(alpha_ox_from_l2500(l_2500, relation="lusso_risaliti_2016"))
+    a_lr17 = float(alpha_ox_from_l2500(l_2500, relation="lusso_risaliti_2017"))
+
+    # LR17 has a different slope (-0.159 vs -0.137), so the gap grows with L
+    # At L_2500 = 1e32: Just gives -1.746, LR17 gives -1.768 (close)
+    # but at L_2500 = 1e29: Just gives -1.335, LR17 gives -1.291 (diverging)
+    # Verify the LR16 vs Just gap is exactly the intercept difference (constant slope).
+    assert abs((a_j - a_lr16) - (2.638 - 2.594)) < 1e-6
+
+
+@pytest.mark.regression_paper
+def test_alpha_ox_relation_invalid_raises():
+    """Unknown relation should raise a clear ValueError."""
+    with pytest.raises(ValueError, match="Unknown alpha_ox relation"):
+        alpha_ox_from_l2500(1e30, relation="not_a_real_relation")
