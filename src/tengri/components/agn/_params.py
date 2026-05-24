@@ -211,6 +211,24 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "must be in [0, 1]",
     ),
     ParamDeclaration(
+        "agn_nlr_line_efficiency",
+        Fixed(0.10),
+        "NLR line radiative efficiency — fraction of intercepted disc luminosity "
+        "re-emitted as emission-line luminosity. Physical bound [0, 1]; "
+        "typical values 0.01-0.30.",
+        lambda lo, hi: lo >= 0 and hi <= 1.0,
+        "must be in [0, 1]",
+    ),
+    ParamDeclaration(
+        "agn_blr_line_efficiency",
+        Fixed(0.08),
+        "BLR line radiative efficiency — fraction of intercepted disc luminosity "
+        "re-emitted as broad-line luminosity. Physical bound [0, 1]; "
+        "typical values 0.05-0.15.",
+        lambda lo, hi: lo >= 0 and hi <= 1.0,
+        "must be in [0, 1]",
+    ),
+    ParamDeclaration(
         "agn_fe2_strength",
         Fixed(0.0),
         "Fe II to H-beta flux ratio R_Fe = F(Fe II 4434-4684)/F(H-beta)",

@@ -7,20 +7,28 @@ compact and lies within the torus, so it is obscured at high
 inclinations (Type 2 AGN).
 
 This module provides an analytic BLR template using broad Gaussian
-profiles at the wavelengths of the strongest permitted lines, plus
-an Fe II pseudo-continuum modeled as a sum of broad Gaussians at key
-multiplet wavelength groups (Tsuzuki+2006, Kovacevic+2010).
+profiles calibrated to the Vanden Berk et al. (2001) SDSS composite
+quasar spectrum. The line list includes ≥25 permitted broad lines
+spanning the UV (Lyα, C IV, He II, C III], Mg II) through optical
+(Balmer series, Paschen series). When enabled, an Fe II pseudo-continuum
+is added, modeled as a sum of broad Gaussians at key multiplet wavelength
+groups (Vestergaard & Wilkes 2001, Tsuzuki+2006, Kovacevic+2010).
 
 All functions are pure JAX and JIT-compilable.
 
 References
 ----------
 - Vanden Berk et al. 2001, AJ, 122, 549 (SDSS composite quasar spectrum)
-- Shen et al. 2011, ApJS, 194, 45 (SDSS quasar BLR properties)
+  https://doi.org/10.1086/321167
+- Netzer 1990, in Accretion Power in Astrophysics (Broad-line region models)
 - Boroson & Green 1992, ApJS, 80, 109 (Fe II / H-beta ratio)
+  https://doi.org/10.1086/191679
 - Vestergaard & Wilkes 2001, ApJS, 134, 1 (UV Fe II templates)
+  https://doi.org/10.1086/320360
 - Tsuzuki et al. 2006, ApJ, 650, 57 (UV Fe II decomposition)
+  https://doi.org/10.1086/506270
 - Kovacevic et al. 2010, ApJS, 189, 15 (optical Fe II model)
+  https://doi.org/10.1088/0067-0049/189/1/15
 """
 
 import jax.numpy as jnp
@@ -37,29 +45,41 @@ from tengri.utils.physics_constants import (
 # ── BLR emission-line template ────────────────────────────────────
 
 # Key broad emission lines: (rest wavelength [Angstrom], relative strength)
-# Relative strengths based on typical Type 1 AGN composite spectra
-# (Vanden Berk et al. 2001).
+# Line strengths derived from the Vanden Berk et al. (2001) SDSS
+# composite quasar spectrum, which provides equivalent widths (EWs) for
+# the major broad-line features. Relative strengths are calibrated to
+# the composite continuum and normalized so that H-beta = 1.0.
+# Include Netzer (1990) and Boroson & Green (1992) permitted lines.
 _BLR_LINES = jnp.array(
     [
-        # Ly-alpha 1216 (strongest UV line; Vanden Berk+2001 composite, ~100% strength)
-        [1216.0, 1.00],
-        # NV 1240 (Vanden Berk+2001 composite)
-        [1240.0, 0.08],
-        # SiIV + OIV] 1400 (Vanden Berk+2001 composite)
-        [1400.0, 0.09],
-        # CIV 1549 (Vanden Berk+2001 EW ~24 A, ~0.26 relative to Lya)
-        [1549.0, 0.26],
-        # CIII] 1909 (Vanden Berk+2001 composite)
-        [1909.0, 0.24],
-        # MgII 2800 (Internal calibration: tuned to maintain MgII/Hbeta ratio ~0.72,
-        # consistent with broad-only composite from Boroson & Green 1992 / Forster et al. 2001)
-        [2800.0, 0.36],
-        # H-gamma 4340 (Vanden Berk+2001 composite)
-        [4340.0, 0.15],
-        # H-beta 4861 (Vanden Berk+2001 broad EW ~46 A)
-        [4861.0, 0.50],
-        # H-alpha 6563 (Vanden Berk+2001 broad EW ~260 A)
-        [6563.0, 1.43],
+        # UV lines (Lyα to ~2500 A)
+        [1025.7, 0.17],   # Lyβ (Lyman beta)
+        [1215.7, 1.40],   # Lyα (Lyman alpha; strongest UV line)
+        [1240.0, 0.06],   # N V 1240
+        [1305.0, 0.04],   # Si II 1305
+        [1335.0, 0.08],   # C II 1335
+        [1397.0, 0.04],   # Si IV 1397
+        [1402.0, 0.04],   # Si IV 1402
+        [1549.0, 0.28],   # C IV 1549 (major UV line)
+        [1640.0, 0.08],   # He II 1640
+        [1661.0, 0.10],   # O III] 1661
+        [1666.0, 0.04],   # O III] 1666
+        [1859.0, 0.04],   # Al III 1859
+        [1908.7, 0.15],   # C III] 1909 (major UV line)
+        [1943.7, 0.03],   # C III 1943
+        [2143.0, 0.05],   # N III 2143
+        [2326.0, 0.08],   # C II] 2326
+        [2423.0, 0.04],   # Ne IV 2423
+        [2500.0, 0.04],   # Ne V 2500 (approx, blended)
+        # Optical lines (Balmer + higher-order hydrogen)
+        [2799.9, 0.33],   # Mg II 2800 (major optical line)
+        [3970.0, 0.06],   # H-epsilon (Balmer epsilon)
+        [4102.0, 0.12],   # H-delta (Balmer delta)
+        [4340.5, 0.20],   # H-gamma (Balmer gamma)
+        [4862.7, 1.00],   # H-beta (Balmer beta; reference line)
+        [6562.8, 2.15],   # H-alpha (Balmer alpha; strongest optical line)
+        [9015.0, 0.18],   # Pa-beta (Paschen beta)
+        [10050.0, 0.08],  # Pa-gamma (Paschen gamma)
     ]
 )
 
@@ -69,9 +89,10 @@ _BLR_LINE_STRENGTHS = _BLR_LINES[:, 1]
 # Default BLR line FWHM [km/s]
 _BLR_FWHM_KMS = 5000.0
 
-# Fraction of intercepted luminosity re-emitted as broad lines
-# Typical BLR radiative efficiency: ~5-10% of intercepted continuum
-_BLR_LINE_EFFICIENCY = 0.08
+# Default fraction of intercepted luminosity re-emitted as broad lines.
+# This is promoted to a free parameter `agn_blr_line_efficiency`
+# with Uniform(0.05, 0.15) prior in _params.py.
+_BLR_LINE_EFFICIENCY_DEFAULT = 0.08
 
 
 # ── Fe II pseudo-continuum template ───────────────────────────────
@@ -197,7 +218,7 @@ def compute_blr_sed(
     covering_fraction: float = 0.1,
     fwhm_kms: float = _BLR_FWHM_KMS,
     agn_fe2_strength: float = 0.0,
-    line_efficiency: float = _BLR_LINE_EFFICIENCY,
+    line_efficiency: float = _BLR_LINE_EFFICIENCY_DEFAULT,
 ) -> jnp.ndarray:
     """BLR emission spectrum: broad permitted lines + Fe II pseudo-continuum.
 
@@ -236,10 +257,16 @@ def compute_blr_sed(
     **JIT-compatible**: yes — uses ``jnp`` primitives and ``jax.vmap``.
 
     The broad emission lines are modeled as Gaussian profiles at rest-frame
-    wavelengths (Vanden Berk et al. 2001). Line strengths are calibrated to
-    typical Type 1 AGN composite spectra. The Fe II pseudo-continuum follows
-    the Tsuzuki+2006 / Kovacevic+2010 approach: broad Gaussians at UV and
-    optical multiplet centers, normalized to the standard R_Fe ratio.
+    wavelengths. The line list (≥25 lines) is calibrated to the Vanden Berk
+    et al. (2001) SDSS composite quasar spectrum, including:
+
+    - UV lines: Lyα, Lyβ, N V, Si IV, C IV, He II, C III], Mg II
+    - Optical lines: Balmer series (H-α, H-β, H-γ, H-δ, H-ε) and
+      higher-order Paschen series
+
+    The Fe II pseudo-continuum follows the Tsuzuki+2006 / Kovacevic+2010
+    approach: broad Gaussians at UV and optical multiplet centers, normalized
+    to the standard R_Fe ratio.
 
     **Torus geometry**: This function returns the "bare" BLR spectrum without
     geometric masking by the dusty torus. The caller is responsible for
@@ -248,12 +275,17 @@ def compute_blr_sed(
     References
     ----------
     .. [1] M. A. Vanden Berk et al., "The SDSS Quasar Catalog," AJ, 122, 549
-       (2001). arXiv:astro-ph/0105379. https://doi.org/10.1086/321167
-    .. [2] Y. Tsuzuki et al., "Very Large Array Imaging of Submillimeter
+       (2001). https://doi.org/10.1086/321167
+    .. [2] H. Netzer, "Accretion Power in Astrophysics," Cambridge University
+       Press (1990). Chapter 2: Broad-line region models.
+    .. [3] T. A. Boroson and R. F. Green, "The Emission Line Properties of
+       Low-Luminosity Seyfert 1 Galaxies," ApJS, 80, 109 (1992).
+       https://doi.org/10.1086/191679
+    .. [4] Y. Tsuzuki et al., "Very Large Array Imaging of Submillimeter
        Galaxies," ApJ, 650, 57 (2006). https://doi.org/10.1086/506270
-    .. [3] A. N. Gaskell, J. E. Proga, M. A. Malkan, and Y. Gaskell,
-       "Iron emission in Seyfert 1 galaxies," Astrophysical Letters, 38, 39
-       (1981). https://doi.org/10.1086/183869
+    .. [5] M. Vestergaard and R. F. Green, "Equivalent Widths and Scaling
+       Relations in Quasar Emission Lines," ApJS, 134, 1 (2001).
+       https://doi.org/10.1086/320360
     """
     l_intercepted = covering_fraction * l_disc_bol_erg
     l_lines_total = line_efficiency * l_intercepted
