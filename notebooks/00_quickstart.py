@@ -181,52 +181,45 @@ jax.tree.map(lambda x: x.block_until_ready(), grad_fn(p0))
 print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 
 # %% [markdown]
-# ## Fit
+# ## Pre-warm
 #
-# MAP (ADAM) for a point estimate, then NUTS for the full posterior.
-# Each NUTS leapfrog step is one gradient evaluation above, and the
-# warmup + sampling loop is jit-fused via `lax.scan` inside BlackJAX —
-# Hamiltonian step throughput sets the wall.
+# `Fitter.prewarm` compiles the loss / sampler stack and runs the NUTS
+# window adaptation once. After this call the model carries a cached
+# step size, mass matrix, and MAP point estimate. Subsequent `.run()`
+# calls skip both the XLA compile and the warmup; only the actual
+# sampling work remains.
 #
-# *Note*: the canonical entry is `forward.fit(...)` (issue #211), but it
-# currently bypasses the WavePrecomp LUT (issue #281, ~16× slowdown on
-# this model). Fitting through the SEDModel directly is the documented
-# workaround until #281 lands.
+# *Note*: routing through `Fitter(sed_model, ...)` instead of
+# `forward.fit(...)` is a temporary workaround for issue #281
+# (`ForwardModel.predict` bypasses the WavePrecomp LUT, ~16× slowdown).
+# Will be removed once #281 closes.
 
 # %%
 from tengri.inference.fitter import Fitter
 
+fitter = Fitter(sed_model, flux_obs, noise, data_type="photometry")
 t = time.perf_counter()
-map_result = Fitter(sed_model, flux_obs, noise, data_type="photometry").run(
-    method="map", key=key_fit, n_steps=200
-)
-print(f"  MAP wall: {time.perf_counter() - t:6.2f} s")
+fitter.prewarm(method="mcmc_nuts", n_chains=4)
+print(f"  prewarm wall: {time.perf_counter() - t:6.2f} s")
+
+# Optional: persist the cache to disk. A fresh notebook session can then
+# `fitter.load_cache(...)` and skip warmup + MAP init entirely.
+# fitter.save_cache("00_quickstart_cache.pkl")
 
 # %% [markdown]
-# ### Pre-warm + cached warmup
+# ## Fit
 #
-# A tiny throwaway NUTS call compiles the chain kernel and runs window
-# adaptation once. The result is cached on the model, so the *real* NUTS
-# call below reuses the step size and mass matrix — no second warmup.
+# MAP (ADAM) for the point estimate; NUTS with four parallel chains via
+# `jax.vmap` for the full posterior. Both calls reuse the prewarmed
+# adaptation cache.
 
 # %%
 t = time.perf_counter()
-_ = Fitter(sed_model, flux_obs, noise, data_type="photometry").run(
-    method="mcmc_nuts", key=key_fit, n_warmup=400, n_samples=20, n_burnin=0, verbose=False
-)
-print(f"  pre-warm wall: {time.perf_counter() - t:6.2f} s")
+map_result = fitter.run(method="map", key=key_fit, n_steps=200)
+print(f"  MAP wall:  {time.perf_counter() - t:6.2f} s")
 
-# %% [markdown]
-# ### NUTS — four chains in parallel via vmap
-#
-# `n_chains=4` runs four independent chains over jittered initial
-# positions, sharing the cached adaptation. They scan in parallel via
-# `jax.vmap` and XLA SIMD — wall ≈ one chain's worth on CPU, 4× more
-# samples for ~the same cost. 1 600 samples lands in a couple of seconds.
-
-# %%
 t = time.perf_counter()
-posterior = Fitter(sed_model, flux_obs, noise, data_type="photometry").run(
+posterior = fitter.run(
     method="mcmc_nuts",
     key=key_fit,
     n_warmup=400,
@@ -234,7 +227,7 @@ posterior = Fitter(sed_model, flux_obs, noise, data_type="photometry").run(
     n_chains=4,
     n_burnin=0,
 )
-print(f"  NUTS wall (4 chains × 400 samples): {time.perf_counter() - t:6.2f} s")
+print(f"  NUTS wall (4 chains × 400 = 1600 samples): {time.perf_counter() - t:6.2f} s")
 posterior.summary()
 
 # %% [markdown]

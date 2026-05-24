@@ -1497,8 +1497,13 @@ class Fitter:
 
         mc = get_model_cache(self.model)
         adaptation = mc.get("adaptation", {})
+        # Cached MAP point estimate (if a previous .run() or .prewarm()
+        # populated it). Saving it skips MAP init on the next load_cache
+        # session — same speedup the adaptation cache gives for warmup.
+        map_params = mc.get("map_params_physical")
         payload = {
             "adaptation": adaptation,
+            "map_params_physical": map_params,
             "spec_fingerprint": self._spec_fingerprint(),
         }
         p = _Path(path)
@@ -1541,6 +1546,8 @@ class Fitter:
             )
         mc = get_model_cache(self.model)
         mc.setdefault("adaptation", {}).update(payload["adaptation"])
+        if payload.get("map_params_physical") is not None:
+            mc["map_params_physical"] = payload["map_params_physical"]
 
     def _spec_fingerprint(self) -> str:
         """Content hash of free parameter names + ordered fixed values.

@@ -92,11 +92,32 @@ def _maybe_map_init(
 ) -> tuple[dict, Array]:
     """Return (init_params_unbounded, updated_key).
 
-    If init_from is given, converts it to unbounded coordinates.
-    Otherwise runs a short MAP optimisation to find a good starting point.
+    Resolution order:
+
+    1. Explicit ``init_from`` from caller — converted to unbounded.
+    2. Cached MAP point on the model (populated by a previous fit or by
+       :meth:`Fitter.load_cache`) — used directly, no fresh MAP run.
+    3. Run a short MAP optimisation to find a good starting point.
+       Caches the result so subsequent calls / sessions can skip step 3.
     """
     if init_from is not None:
         return fitter._unbounded_from_posterior(init_from), key
+
+    # Cached MAP point (from a prior fit or load_cache)?
+    from tengri.inference._model_cache import get_model_cache
+
+    mc = get_model_cache(fitter.model)
+    cached_map = mc.get("map_params_physical")
+    if cached_map is not None:
+        # Build a minimal posterior-like shim to reuse _unbounded_from_posterior.
+        class _Shim:
+            def __init__(self, params):
+                self.params = params
+
+        if verbose:
+            print("  MAP initialization: reusing cached MAP point")
+        return fitter._unbounded_from_posterior(_Shim(cached_map)), key
+
     # Pre-warm: one eager forward call resolves a tracing pathology in
     # ``Uniform.unstandardize`` that crashes the MAP-init JIT trace on
     # models whose forward pass has never been exercised in Python (e.g.
@@ -108,6 +129,8 @@ def _maybe_map_init(
         print(f"  MAP initialization ({n_map_steps} steps)...")
     key, map_key = jax.random.split(key)
     map_result = fitter._run_map(key=map_key, n_steps=n_map_steps, verbose=False)
+    # Cache the physical MAP params so future runs/sessions skip MAP.
+    mc["map_params_physical"] = {k: jnp.asarray(v) for k, v in map_result.params.items()}
     init_params = fitter._unbounded_from_posterior(map_result)
     if verbose:
         print(f"  MAP init done (loss={map_result.diagnostics['final_loss']:.2f})")
