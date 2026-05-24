@@ -211,8 +211,14 @@ class TestSKIRTORModelComponent:
     def test_model_parameter_sanity(self, skirtor_component):
         """Test that model has required parameters."""
         # Check that the component has the core SKIRTOR parameters
-        required_params = ["log_lbol", "tau_skirtor", "p_skirtor",
-                          "q_skirtor", "oa_skirtor", "cos_inc"]
+        required_params = [
+            "log_lbol",
+            "tau_skirtor",
+            "p_skirtor",
+            "q_skirtor",
+            "oa_skirtor",
+            "cos_inc",
+        ]
         for param_name in required_params:
             assert hasattr(skirtor_component, param_name), (
                 f"SKIRTORTorus should have parameter {param_name}"
