@@ -51,4 +51,4 @@ ax.set(
 )
 ax.legend(loc="lower right", frameon=False, fontsize=9, ncol=2)
 fig.tight_layout()
-fig.savefig("plot_astrodust_hd23_lgU_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_astrodust_hd23_lgU_sweep.png", dpi=150, bbox_inches="tight")

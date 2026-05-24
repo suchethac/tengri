@@ -129,7 +129,7 @@ Useful intuition this figure makes obvious:
     ax.legend(frameon=False, fontsize=9, loc="upper left")
 
     fig.tight_layout()
-    fig.savefig("plot_color_tracks_redshift.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_color_tracks_redshift.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_color_tracks_redshift.py:

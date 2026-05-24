@@ -123,7 +123,7 @@ SDSS optical bands, then predicts the full SED and photometry.
     ax_filters.legend(frameon=False, ncol=2, fontsize=7)
     ax_filters.set_xlim(2e3, 2.5e4)
 
-    fig.savefig("plot_recipe_custom_filter.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_recipe_custom_filter.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_custom_filter.py:

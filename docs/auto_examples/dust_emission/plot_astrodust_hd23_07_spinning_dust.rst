@@ -80,7 +80,7 @@ Spinning dust microwave emission across 10–100 GHz, decomposed by grain
     ax.set_xticklabels(["10", "30", "60", "100"])
     ax.legend(loc="upper right", frameon=False, fontsize=9)
     fig.tight_layout()
-    fig.savefig("plot_astrodust_hd23_07_spinning_dust.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_astrodust_hd23_07_spinning_dust.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_07_spinning_dust.py:

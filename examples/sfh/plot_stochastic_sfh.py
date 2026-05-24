@@ -60,4 +60,4 @@ for ax, cfg in zip(axes, configs):
 axes[0].set_ylabel("SFR [M$_\\odot$/yr]")
 axes[0].legend(fontsize=10, frameon=False)
 fig.tight_layout()
-fig.savefig("plot_stochastic_sfh.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_stochastic_sfh.png", dpi=150, bbox_inches="tight")

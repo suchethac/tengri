@@ -120,7 +120,7 @@ alongside the standard demarcation lines.
     ax.set_ylim(-1.2, 1.5)
     ax.legend(fontsize=10, frameon=False, loc="lower left")
     fig.tight_layout()
-    fig.savefig("plot_bpt_diagnostics.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_bpt_diagnostics.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_bpt_diagnostics.py:

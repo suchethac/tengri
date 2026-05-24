@@ -119,4 +119,4 @@ for i, (param_name, param_label, (prior_min, prior_max)) in enumerate(
     ax.grid(True, alpha=0.3, axis="y")
 
 fig.tight_layout()
-fig.savefig("plot_prior_posterior_compare.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_prior_posterior_compare.png", dpi=150, bbox_inches="tight")

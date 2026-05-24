@@ -53,4 +53,4 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"Column density $\log N_{\mathrm{H}}$ [cm$^{-2}$]")
 
 fig.tight_layout()
-fig.savefig("plot_dla_absorption.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_dla_absorption.png", dpi=150, bbox_inches="tight")

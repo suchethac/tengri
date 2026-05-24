@@ -89,4 +89,4 @@ ax.text(0.6, 1.5e42, "O-star epoch", color="0.4", fontsize=8)
 ax.legend(frameon=False, fontsize=8, loc="upper right")
 
 fig.tight_layout()
-fig.savefig("plot_ionising_lum.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_ionising_lum.png", dpi=150, bbox_inches="tight")

@@ -83,7 +83,7 @@ warming dust and shifting FIR peak blueward; higher alpha approaches single-U.
     )
     ax.legend(loc="lower center", frameon=False, fontsize=8, ncol=3)
     fig.tight_layout()
-    fig.savefig("plot_themis_alpha_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_themis_alpha_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_themis_alpha_sweep.py:

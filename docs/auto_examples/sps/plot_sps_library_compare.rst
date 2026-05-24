@@ -116,7 +116,7 @@ physics, not nebular treatment.
     ax.legend(frameon=False, fontsize=8, loc="lower right")
 
     fig.tight_layout()
-    fig.savefig("plot_sps_library_compare.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_sps_library_compare.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_sps_library_compare.py:

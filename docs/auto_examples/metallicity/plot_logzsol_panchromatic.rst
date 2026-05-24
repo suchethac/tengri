@@ -102,7 +102,7 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
     cbar.set_label(r"Stellar metallicity $\log Z_\star/Z_\odot$")
 
     fig.tight_layout()
-    fig.savefig("plot_logzsol_panchromatic.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_logzsol_panchromatic.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_logzsol_panchromatic.py:

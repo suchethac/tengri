@@ -76,7 +76,7 @@ Reference: Witt & Gordon 2000, ApJ, 528, 799 (dust geometry classification).
     ax.legend(fontsize=9, frameon=False, loc="lower left")
 
     fig.tight_layout()
-    fig.savefig("plot_dust_geometry_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_dust_geometry_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_dust_geometry_sweep.py:

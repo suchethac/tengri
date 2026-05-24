@@ -229,7 +229,7 @@ acceptable.
     # evaluation. This is by design (smoothness for gradients), not a bug.
 
     fig.tight_layout()
-    fig.savefig("plot_composable_three_modes.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_composable_three_modes.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_composable_three_modes.py:

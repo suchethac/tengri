@@ -81,7 +81,7 @@ Reference: Wolfe et al. 2005, ARA&A, 43, 861 (DLA review and cross-sections).
     cbar.set_label(r"Column density $\log N_{\mathrm{H}}$ [cm$^{-2}$]")
 
     fig.tight_layout()
-    fig.savefig("plot_dla_absorption.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_dla_absorption.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_igm_plot_dla_absorption.py:

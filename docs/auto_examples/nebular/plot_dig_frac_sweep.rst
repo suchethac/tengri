@@ -88,7 +88,7 @@ DIG fraction from pure HII (0) to mixed gas (0.8).
     cbar.set_label(r"DIG fraction")
 
     fig.tight_layout()
-    fig.savefig("plot_dig_frac_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_dig_frac_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_dig_frac_sweep.py:

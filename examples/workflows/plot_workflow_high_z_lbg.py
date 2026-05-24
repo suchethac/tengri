@@ -145,4 +145,4 @@ ax_res.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]")
 ax_res.set_xticks(wave_eff)
 ax_res.set_xticklabels(band_labels)
 
-fig.savefig("plot_workflow_high_z_lbg.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_workflow_high_z_lbg.png", dpi=150, bbox_inches="tight")

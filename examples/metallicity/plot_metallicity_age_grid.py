@@ -103,4 +103,4 @@ for i, age_gyr in enumerate(age_gyr_grid):
             ax.set_yticklabels([])
 
 fig.tight_layout()
-fig.savefig("plot_metallicity_age_grid.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_metallicity_age_grid.png", dpi=150, bbox_inches="tight")

@@ -104,4 +104,4 @@ axes[1].legend(frameon=False, fontsize=9)
 axes[1].grid(True, alpha=0.3)
 
 fig.tight_layout()
-fig.savefig("plot_convergence.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_convergence.png", dpi=150, bbox_inches="tight")

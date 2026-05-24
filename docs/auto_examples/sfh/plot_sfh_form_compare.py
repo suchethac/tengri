@@ -75,4 +75,4 @@ ax.set(
 ax.legend(frameon=False, fontsize=8, loc="upper right", ncol=2)
 
 fig.tight_layout()
-fig.savefig("plot_sfh_form_compare.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_sfh_form_compare.png", dpi=150, bbox_inches="tight")

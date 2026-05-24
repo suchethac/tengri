@@ -102,4 +102,4 @@ for lam_um, name in [(8, "PAH"), (24, "MIPS 24"), (100, "FIR peak"), (850, "subm
     )
 
 fig.tight_layout()
-fig.savefig("plot_dust_emission_models.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_dust_emission_models.png", dpi=150, bbox_inches="tight")

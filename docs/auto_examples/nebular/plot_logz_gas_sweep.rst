@@ -88,7 +88,7 @@ the abundance range.
     cbar.set_label(r"$\log(Z/Z_\odot)$")
 
     fig.tight_layout()
-    fig.savefig("plot_logz_gas_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_logz_gas_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_logz_gas_sweep.py:

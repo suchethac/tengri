@@ -152,7 +152,7 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
     ax_res.set_ylabel(r"$(F_{\rm fit} - F_{\rm obs})/\sigma$")
     ax_res.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]")
 
-    fig.savefig("plot_first_fit.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_first_fit.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_first_fit.py:

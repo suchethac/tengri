@@ -97,7 +97,7 @@ unobscured type-1 QSO colours to moderately dust-enshrouded systems.
     cbar.set_label(r"$E(B-V)$ [mag]")
 
     fig.tight_layout()
-    fig.savefig("plot_agn_qsogen_ebv_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_agn_qsogen_ebv_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_qsogen_ebv_sweep.py:

@@ -88,7 +88,7 @@ to old (5 Gyr) populations.
     cbar.set_label(r"Peak age [Gyr]")
 
     fig.tight_layout()
-    fig.savefig("plot_neb_age_dependence.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_neb_age_dependence.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_neb_age_dependence.py:

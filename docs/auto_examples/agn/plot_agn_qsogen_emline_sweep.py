@@ -70,4 +70,4 @@ ax.text(
 )
 
 fig.tight_layout()
-fig.savefig("plot_agn_qsogen_emline_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_agn_qsogen_emline_sweep.png", dpi=150, bbox_inches="tight")

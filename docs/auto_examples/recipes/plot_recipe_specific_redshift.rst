@@ -148,7 +148,7 @@ parameter recovery.
     )
 
     fig.tight_layout()
-    fig.savefig("plot_recipe_specific_redshift.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_recipe_specific_redshift.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_specific_redshift.py:

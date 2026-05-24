@@ -106,7 +106,7 @@ Reference: Conroy et al. 2010 (FSPS; radio connections); Fabbiano 2006
         ax.text(x * 1.3, ax.get_ylim()[1] * 0.3, label, fontsize=10, color="grey")
 
     fig.tight_layout()
-    fig.savefig("plot_radio_xray.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_radio_xray.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_radio_xray.py:

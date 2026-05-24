@@ -133,4 +133,4 @@ ax.set_xlim(-1.5, 0.5)
 ax.set_ylim(-1.2, 1.5)
 
 fig.tight_layout()
-fig.savefig("plot_shock_emission.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_shock_emission.png", dpi=150, bbox_inches="tight")

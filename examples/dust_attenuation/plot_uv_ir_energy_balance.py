@@ -100,4 +100,4 @@ cbar = fig.colorbar(sc, ax=ax, pad=0.02)
 cbar.set_label(r"$\tau_{\rm diff}$  [mag]")
 
 fig.tight_layout()
-fig.savefig("plot_uv_ir_energy_balance.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_uv_ir_energy_balance.png", dpi=150, bbox_inches="tight")

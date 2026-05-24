@@ -97,7 +97,7 @@ flux and can show silicate absorption features.
     cbar.set_label(r"$\cos \theta_{\rm torus}$")
 
     fig.tight_layout()
-    fig.savefig("plot_agn_cos_inc_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_agn_cos_inc_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_cos_inc_sweep.py:

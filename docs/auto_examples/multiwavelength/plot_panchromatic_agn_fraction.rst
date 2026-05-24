@@ -116,7 +116,7 @@ increasingly dominates stellar and dust emission.
     cbar.set_label(r"AGN luminosity fraction $f_{\rm AGN}$")
 
     fig.tight_layout()
-    fig.savefig("plot_panchromatic_agn_fraction.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_panchromatic_agn_fraction.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_panchromatic_agn_fraction.py:

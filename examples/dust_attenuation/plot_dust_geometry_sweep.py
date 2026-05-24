@@ -48,4 +48,4 @@ ax.set_ylabel(r"Transmission: $\exp(-\tau_V \, k(\lambda))$")
 ax.legend(fontsize=9, frameon=False, loc="lower left")
 
 fig.tight_layout()
-fig.savefig("plot_dust_geometry_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_dust_geometry_sweep.png", dpi=150, bbox_inches="tight")

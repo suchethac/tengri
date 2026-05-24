@@ -142,7 +142,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting).
     ax_sed.grid(True, alpha=0.3, which="both")
 
     fig.tight_layout()
-    fig.savefig("plot_method_comparison.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_method_comparison.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_inference_plot_method_comparison.py:

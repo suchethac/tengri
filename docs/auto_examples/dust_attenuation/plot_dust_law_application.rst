@@ -133,7 +133,7 @@ grain-physics (Draine 2003, WD01), and birth-cloud (Wild+07).
     ax.legend(frameon=False, fontsize=7.5, loc="lower right", ncol=2)
 
     fig.tight_layout()
-    fig.savefig("plot_dust_law_application.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_dust_law_application.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_dust_law_application.py:

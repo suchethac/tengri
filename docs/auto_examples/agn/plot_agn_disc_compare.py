@@ -80,4 +80,4 @@ ax.text(2e5, 2e47, "NIR cutoff", color="0.4", fontsize=8, va="top", ha="right")
 ax.legend(frameon=False, fontsize=8, loc="lower center")
 
 fig.tight_layout()
-fig.savefig("plot_agn_disc_compare.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_agn_disc_compare.png", dpi=150, bbox_inches="tight")

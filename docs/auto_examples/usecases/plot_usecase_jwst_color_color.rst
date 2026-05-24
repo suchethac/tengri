@@ -198,7 +198,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
     ax.set_ylim([-0.5, 2.0])
 
     fig.tight_layout()
-    fig.savefig("plot_usecase_jwst_color_color.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_usecase_jwst_color_color.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_jwst_color_color.py:

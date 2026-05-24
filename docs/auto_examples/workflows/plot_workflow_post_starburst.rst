@@ -191,7 +191,7 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
     ax.set_ylim(bottom=0)
 
     fig.tight_layout()
-    fig.savefig("plot_workflow_post_starburst.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_workflow_post_starburst.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_post_starburst.py:

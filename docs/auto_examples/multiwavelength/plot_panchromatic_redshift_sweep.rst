@@ -129,7 +129,7 @@ redshift where ground-based surveys probe star formation epochs.
     cbar.set_label(r"Redshift $z$")
 
     fig.tight_layout()
-    fig.savefig("plot_panchromatic_redshift_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_panchromatic_redshift_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_panchromatic_redshift_sweep.py:

@@ -65,7 +65,7 @@ Reference: Cardelli et al. 1989, ApJ, 345, 245 (extended optical extinction).
     ax.legend(fontsize=8, frameon=False, loc="upper right", ncol=1)
 
     fig.tight_layout()
-    fig.savefig("plot_dust_curves.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_dust_curves.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_dust_curves.py:

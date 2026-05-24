@@ -120,7 +120,7 @@ Kewley et al. 2001, ApJ, 556, 121 (BPT diagnostics).
     ax.set_ylim(-1.0, 1.0)
 
     fig.tight_layout()
-    fig.savefig("plot_usecase_emission_line_pcc.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_usecase_emission_line_pcc.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_emission_line_pcc.py:

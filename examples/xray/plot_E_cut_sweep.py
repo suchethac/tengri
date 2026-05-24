@@ -45,4 +45,4 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"Cutoff energy $E_{\rm cut}$ [keV]")
 
 fig.tight_layout()
-fig.savefig("plot_E_cut_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_E_cut_sweep.png", dpi=150, bbox_inches="tight")

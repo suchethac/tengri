@@ -128,7 +128,7 @@ cannot vary these knobs).
     for ax, mesh in zip(axes, [m1, m2, m3]):
         fig.colorbar(mesh, ax=ax, pad=0.02)
 
-    fig.savefig("plot_cue_fesc_logu_atlas.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_cue_fesc_logu_atlas.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_cue_fesc_logu_atlas.py:

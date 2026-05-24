@@ -254,6 +254,23 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Builds a star-forming host with a moderate-luminosity AGN (``log L_bol = 12``) at z = 0.1 and shows the full panchromatic SED alongside each block&#x27;s individual contribution. Stellar + nebular + dust gives a typical SF galaxy; adding the composable AGN&#x27;s disc and torus pushes the SED up by ~1 dex in the optical/UV and adds a clear mid-IR torus bump on top of the stellar+dust IR.">
+
+.. only:: html
+
+  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_agn_host_decomposition_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/workflows/plot_workflow_agn_host_decomposition`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">AGN + host decomposition: panchromatic SED with each component peeled off</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates BPT ([OIII]/Hbeta vs [NII]/Halpha) line-ratio diagnostics on a mock galaxy catalog with varying AGN fraction. Overlays Kewley+2001 and Kauffmann+2003 demarcation lines to show the clean separation of ionization mechanisms across the diagnostic plane.">
 
 .. only:: html
@@ -1752,6 +1769,23 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The single most-used number an observer reads off a sub-mm SED is L_IR(8–1000 μm). Converting it to a dust mass requires assuming a dust temperature and emissivity; the standard analytic estimator is">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_dust_mass_from_lir_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_emission/plot_dust_mass_from_lir`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Dust mass inferred from L_IR and modified-blackbody temperature</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="2D grid of dust IR emission showing how PAH mass fraction and radiation-field hardness independently shape the mid- and far-infrared SED. Uses Draine &amp; Li 2007 templates across parameter space.">
 
 .. only:: html
@@ -2671,6 +2705,23 @@ Filter curves and photometric fitting.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Photometric colour tracks vs redshift</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Where the brightest optical-UV emission lines land in the observer frame as z grows from 0 to 12. Six lines are tracked simultaneously; the SDSS ugriz, Euclid Y/J/H, JWST NIRCam wide bands, and JWST MIRI bands are shaded so the reader can read off &quot;Hα is in F277W at z = 3.5&quot; or &quot;[O III] enters MIRI by z ≈ 8&quot;.">
+
+.. only:: html
+
+  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_emission_line_redshift_evolution_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/photometry/plot_emission_line_redshift_evolution`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Strong emission lines vs redshift, with observed-frame filter bands</div>
     </div>
 
 

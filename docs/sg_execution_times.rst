@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:12.258** total execution time for 175 files **from all galleries**:
+**00:04.795** total execution time for 178 files **from all galleries**:
 
 .. container::
 
@@ -32,11 +32,14 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_emission_line_atlas.py` (``../examples/nebular/plot_emission_line_atlas.py``)
-     - 00:11.273
+   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_agn_host_decomposition.py` (``../examples/workflows/plot_workflow_agn_host_decomposition.py``)
+     - 00:03.447
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_mbb_temperature_beta_grid.py` (``../examples/dust_emission/plot_mbb_temperature_beta_grid.py``)
-     - 00:00.985
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_mass_from_lir.py` (``../examples/dust_emission/plot_dust_mass_from_lir.py``)
+     - 00:01.136
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_emission_line_redshift_evolution.py` (``../examples/photometry/plot_emission_line_redshift_evolution.py``)
+     - 00:00.212
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
      - 00:00.000
@@ -194,6 +197,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_ir_library_compare.py` (``../examples/dust_emission/plot_ir_library_compare.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_mbb_temperature_beta_grid.py` (``../examples/dust_emission/plot_mbb_temperature_beta_grid.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_pahspec_lgU_sweep.py` (``../examples/dust_emission/plot_pahspec_lgU_sweep.py``)
      - 00:00.000
      - 0.0
@@ -300,6 +306,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_dig_frac_sweep.py` (``../examples/nebular/plot_dig_frac_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_emission_line_atlas.py` (``../examples/nebular/plot_emission_line_atlas.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_fesc_lya_sweep.py` (``../examples/nebular/plot_fesc_lya_sweep.py``)

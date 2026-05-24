@@ -39,17 +39,6 @@ Two panels for a young (peak 0.3 Gyr) burst:
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-91
 
-
-
-.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_birth_cloud_vs_diffuse_001.png
-   :alt: plot birth cloud vs diffuse
-   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_birth_cloud_vs_diffuse_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 
@@ -126,7 +115,7 @@ Two panels for a young (peak 0.3 Gyr) burst:
                            ax=ax_diff, pad=0.01)
     cb_diff.set_label(r"$\tau_{\rm diff}$  [mag]")
 
-    fig.savefig("plot_birth_cloud_vs_diffuse.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_birth_cloud_vs_diffuse.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_birth_cloud_vs_diffuse.py:

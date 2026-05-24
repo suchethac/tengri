@@ -118,7 +118,7 @@ deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.
     axes[1, 0].set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
     fig.tight_layout()
-    fig.savefig("plot_skirtor_variants.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_skirtor_variants.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_variants.py:

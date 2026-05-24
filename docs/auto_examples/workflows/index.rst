@@ -18,6 +18,23 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Builds a star-forming host with a moderate-luminosity AGN (``log L_bol = 12``) at z = 0.1 and shows the full panchromatic SED alongside each block&#x27;s individual contribution. Stellar + nebular + dust gives a typical SF galaxy; adding the composable AGN&#x27;s disc and torus pushes the SED up by ~1 dex in the optical/UV and adds a clear mid-IR torus bump on top of the stellar+dust IR.">
+
+.. only:: html
+
+  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_agn_host_decomposition_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/workflows/plot_workflow_agn_host_decomposition`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">AGN + host decomposition: panchromatic SED with each component peeled off</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates BPT ([OIII]/Hbeta vs [NII]/Halpha) line-ratio diagnostics on a mock galaxy catalog with varying AGN fraction. Overlays Kewley+2001 and Kauffmann+2003 demarcation lines to show the clean separation of ionization mechanisms across the diagnostic plane.">
 
 .. only:: html
@@ -145,6 +162,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 .. toctree::
    :hidden:
 
+   /auto_examples/workflows/plot_workflow_agn_host_decomposition
    /auto_examples/workflows/plot_workflow_bpt_classification
    /auto_examples/workflows/plot_workflow_dust_mc_resampling
    /auto_examples/workflows/plot_workflow_high_z_lbg

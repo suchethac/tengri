@@ -69,4 +69,4 @@ for i, umin in enumerate(umin_values):
                 ax.axvline(wl_um, color="grey", ls=":", lw=0.5, alpha=0.4)
 
 fig.tight_layout()
-fig.savefig("plot_dust_qpah_umin_grid.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_dust_qpah_umin_grid.png", dpi=150, bbox_inches="tight")

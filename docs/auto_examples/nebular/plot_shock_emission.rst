@@ -161,7 +161,7 @@ magnetic field strength.
     ax.set_ylim(-1.2, 1.5)
 
     fig.tight_layout()
-    fig.savefig("plot_shock_emission.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_shock_emission.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_shock_emission.py:

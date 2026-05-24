@@ -95,7 +95,7 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718 (two-component dust model).
     cbar.set_label(r"Birth cloud optical depth $\tau_{\rm bc}$")
 
     fig.tight_layout()
-    fig.savefig("plot_tau_bc_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_tau_bc_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_tau_bc_sweep.py:

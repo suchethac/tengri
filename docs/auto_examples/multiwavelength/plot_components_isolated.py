@@ -94,4 +94,4 @@ ax.set(
 ax.legend(frameon=False, fontsize=8, loc="lower center", ncol=2)
 
 fig.tight_layout()
-fig.savefig("plot_components_isolated.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_components_isolated.png", dpi=150, bbox_inches="tight")

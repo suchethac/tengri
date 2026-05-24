@@ -117,7 +117,7 @@ restrictive.
     axes[0].set_ylabel(r"SFR$(t)$ / $M_\star^{\rm tot}$  [yr$^{-1}$]")
     axes[0].legend(frameon=False, fontsize=8, loc="lower left")
 
-    fig.savefig("plot_sfh_nonparametric_compare.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_sfh_nonparametric_compare.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_sfh_nonparametric_compare.py:

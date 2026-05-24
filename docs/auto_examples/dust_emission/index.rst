@@ -241,6 +241,23 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The single most-used number an observer reads off a sub-mm SED is L_IR(8–1000 μm). Converting it to a dust mass requires assuming a dust temperature and emissivity; the standard analytic estimator is">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_dust_mass_from_lir_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_emission/plot_dust_mass_from_lir`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Dust mass inferred from L_IR and modified-blackbody temperature</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="2D grid of dust IR emission showing how PAH mass fraction and radiation-field hardness independently shape the mid- and far-infrared SED. Uses Draine &amp; Li 2007 templates across parameter space.">
 
 .. only:: html
@@ -432,6 +449,7 @@ Astrodust (HD23) template grids.
    /auto_examples/dust_emission/plot_bosa_ssfr_sweep
    /auto_examples/dust_emission/plot_dust_T_sweep
    /auto_examples/dust_emission/plot_dust_emission_models
+   /auto_examples/dust_emission/plot_dust_mass_from_lir
    /auto_examples/dust_emission/plot_dust_qpah_umin_grid
    /auto_examples/dust_emission/plot_ir_library_compare
    /auto_examples/dust_emission/plot_mbb_temperature_beta_grid

@@ -70,7 +70,7 @@ Hensley & Draine 2023 fiducial size distribution.
 
     ax1.set_title("PAH ionization fraction (Eq. 20)", fontsize=10)
     fig.tight_layout()
-    fig.savefig("plot_astrodust_hd23_05_ionization_alignment.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_astrodust_hd23_05_ionization_alignment.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_05_ionization_alignment.py:

@@ -80,4 +80,4 @@ ax.set(
 )
 ax.legend(frameon=False, fontsize=8)
 fig.tight_layout()
-fig.savefig("plot_sed_components.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_sed_components.png", dpi=150, bbox_inches="tight")

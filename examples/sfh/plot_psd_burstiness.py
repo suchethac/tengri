@@ -81,4 +81,4 @@ for i, sigma in enumerate(sigmas):
             ax.set_xlabel("Lookback time [Gyr]")
 
 fig.tight_layout(rect=[0, 0, 1, 0.96])
-fig.savefig("plot_psd_burstiness.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_psd_burstiness.png", dpi=150, bbox_inches="tight")

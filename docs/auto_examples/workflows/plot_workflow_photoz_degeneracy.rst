@@ -190,7 +190,7 @@ References:
     ax_phot.set_xlim(2.5e3, 1.2e4)
     ax_phot.legend(frameon=False, fontsize=8, loc="lower right")
 
-    fig.savefig("plot_workflow_photoz_degeneracy.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_workflow_photoz_degeneracy.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_photoz_degeneracy.py:

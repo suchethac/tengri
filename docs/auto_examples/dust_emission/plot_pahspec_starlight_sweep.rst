@@ -90,7 +90,7 @@ dependence of PAH features on starlight hardness.
     cbar.ax.set_yticklabels(list(starlights), fontsize=7)
     cbar.set_label("Starlight spectrum (softer → harder)", fontsize=9)
     fig.tight_layout()
-    fig.savefig("plot_pahspec_starlight_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_pahspec_starlight_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_pahspec_starlight_sweep.py:

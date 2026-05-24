@@ -97,4 +97,4 @@ sm.set_array([])
 cbar = fig.colorbar(sm, ax=ax, label=r"$\log U$")
 
 fig.tight_layout()
-fig.savefig("plot_bpt_cue_grid.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_bpt_cue_grid.png", dpi=150, bbox_inches="tight")

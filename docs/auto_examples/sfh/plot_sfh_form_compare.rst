@@ -103,7 +103,7 @@ when the data resolve > 5 SFR-bins.
     ax.legend(frameon=False, fontsize=8, loc="upper right", ncol=2)
 
     fig.tight_layout()
-    fig.savefig("plot_sfh_form_compare.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_sfh_form_compare.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_sfh_form_compare.py:

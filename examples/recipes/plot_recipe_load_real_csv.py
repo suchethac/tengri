@@ -94,4 +94,4 @@ axes[0].set_ylabel(r"$F_\nu$ [erg/s/cm$^2$/Hz]")
 axes[0].legend(frameon=False, fontsize=8, loc="lower left")
 
 fig.tight_layout()
-fig.savefig("plot_recipe_load_real_csv.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_recipe_load_real_csv.png", dpi=150, bbox_inches="tight")

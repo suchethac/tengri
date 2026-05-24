@@ -34,6 +34,23 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Where the brightest optical-UV emission lines land in the observer frame as z grows from 0 to 12. Six lines are tracked simultaneously; the SDSS ugriz, Euclid Y/J/H, JWST NIRCam wide bands, and JWST MIRI bands are shaded so the reader can read off &quot;Hα is in F277W at z = 3.5&quot; or &quot;[O III] enters MIRI by z ≈ 8&quot;.">
+
+.. only:: html
+
+  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_emission_line_redshift_evolution_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/photometry/plot_emission_line_redshift_evolution`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Strong emission lines vs redshift, with observed-frame filter bands</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Plot the ugriz filter transmission curves from the SDSS photometric system. Filters are loaded from the SVO Filter Profile Service via tengri&#x27;s filter registry.">
 
 .. only:: html
@@ -145,6 +162,7 @@ Filter curves and photometric fitting.
    :hidden:
 
    /auto_examples/photometry/plot_color_tracks_redshift
+   /auto_examples/photometry/plot_emission_line_redshift_evolution
    /auto_examples/photometry/plot_filter_curves
    /auto_examples/photometry/plot_filter_set_comparison
    /auto_examples/photometry/plot_galaxy_with_filters

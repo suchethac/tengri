@@ -69,4 +69,4 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"Radial power index $p$")
 
 fig.tight_layout()
-fig.savefig("plot_agn_skirtor_p_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_agn_skirtor_p_sweep.png", dpi=150, bbox_inches="tight")

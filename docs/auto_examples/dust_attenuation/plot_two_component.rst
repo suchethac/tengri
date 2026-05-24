@@ -84,7 +84,7 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718 (age-dependent dust attenuation).
     ax_spec.legend(fontsize=9, frameon=False)
 
     fig.tight_layout()
-    fig.savefig("plot_two_component.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_two_component.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_two_component.py:

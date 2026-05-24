@@ -137,4 +137,4 @@ cbar = fig.colorbar(sc, ax=ax, pad=0.01)
 cbar.set_label(r"$\tau_{\rm diff}$  [mag]")
 
 fig.tight_layout()
-fig.savefig("plot_usecase_uv_slope_beta.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_usecase_uv_slope_beta.png", dpi=150, bbox_inches="tight")

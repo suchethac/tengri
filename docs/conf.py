@@ -278,9 +278,65 @@ def _fix_gallery_index_toctree(app, *_args, **_kwargs):
     path.write_text("\n".join(new_lines) + "\n")
 
 
+def _inject_missing_image_directives(app, *_args, **_kwargs):
+    """Inject ``.. image::`` blocks into RSTs that lack one.
+
+    Sphinx-gallery only writes the image directive into a script's RST
+    when it *executes* the script. Our ``filename_pattern`` skips any
+    script whose ``images/sphx_glr_<stem>_001.png`` is already on disk
+    (the speed-up that lets the docs build land in 5 min instead of
+    half an hour). So every regen produces RSTs without the directive
+    for the skipped scripts, and the deployed HTML for those pages
+    silently loses its figure.
+
+    Patch surgically: for every ``plot_*.rst`` whose matching image is
+    on disk but whose RST has no ``.. image::`` line, insert a standard
+    sphinx-gallery image block right after the section title underline.
+    """
+    from pathlib import Path
+
+    auto = Path(app.srcdir) / "auto_examples"
+    if not auto.exists():
+        return
+    fixed = 0
+    for rst in auto.glob("*/plot_*.rst"):
+        text = rst.read_text()
+        if ".. image::" in text:
+            continue
+        stem = rst.stem
+        img = f"images/sphx_glr_{stem}_001.png"
+        if not (rst.parent / img).exists():
+            continue
+        lines = text.splitlines()
+        out = []
+        inserted = False
+        for i, line in enumerate(lines):
+            out.append(line)
+            if (not inserted and i + 1 < len(lines)
+                    and lines[i + 1].strip() and set(lines[i + 1].strip()) <= {"="}):
+                out.append(lines[i + 1])
+                out += ["",
+                        f".. image:: {img}",
+                        f"   :alt: {stem.replace('_', ' ')}",
+                        "   :class: sphx-glr-single-img",
+                        ""]
+                for j in range(i + 2, len(lines)):
+                    out.append(lines[j])
+                inserted = True
+                break
+        if inserted:
+            rst.write_text("\n".join(out) + "\n")
+            fixed += 1
+    if fixed:
+        print(f"[conf.py] injected .. image:: directives into {fixed} skipped RSTs")
+
+
 def setup(app):
     # Priority 1000 runs *after* sphinx-gallery's own builder-inited handler.
     app.connect("builder-inited", _fix_gallery_index_toctree, priority=1000)
+    # Run after sphinx-gallery emits the per-script RSTs but before sphinx
+    # reads source files into doctrees.
+    app.connect("builder-inited", _inject_missing_image_directives, priority=1001)
 
 # -- MyST configuration ------------------------------------------------------
 

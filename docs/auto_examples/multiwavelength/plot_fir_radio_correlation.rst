@@ -98,7 +98,7 @@ how the empirical parameter q_IR varies with model calibration.
     ax_qir.set_ylim(1.5, 3.5)
 
     fig.tight_layout()
-    fig.savefig("plot_fir_radio_correlation.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_fir_radio_correlation.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_fir_radio_correlation.py:

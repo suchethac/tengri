@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:06.930** total execution time for 7 files **from auto_examples/workflows**:
+**00:03.447** total execution time for 8 files **from auto_examples/workflows**:
 
 .. container::
 
@@ -32,11 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_photoz_degeneracy.py` (``plot_workflow_photoz_degeneracy.py``)
-     - 00:04.906
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_quenching_diagnostics.py` (``plot_workflow_quenching_diagnostics.py``)
-     - 00:02.024
+   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_agn_host_decomposition.py` (``plot_workflow_agn_host_decomposition.py``)
+     - 00:03.447
      - 0.0
    * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_bpt_classification.py` (``plot_workflow_bpt_classification.py``)
      - 00:00.000
@@ -50,6 +47,12 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_method_comparison.py` (``plot_workflow_method_comparison.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_photoz_degeneracy.py` (``plot_workflow_photoz_degeneracy.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_post_starburst.py` (``plot_workflow_post_starburst.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_quenching_diagnostics.py` (``plot_workflow_quenching_diagnostics.py``)
      - 00:00.000
      - 0.0

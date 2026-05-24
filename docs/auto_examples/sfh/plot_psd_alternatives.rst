@@ -115,7 +115,7 @@ representative parameters. No SSP data required.
     ax.legend(frameon=False, fontsize=10)
     fig.tight_layout()
 
-    fig.savefig("plot_psd_alternatives.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_psd_alternatives.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_psd_alternatives.py:

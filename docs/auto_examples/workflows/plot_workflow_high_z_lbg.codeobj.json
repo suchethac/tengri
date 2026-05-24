@@ -17,6 +17,15 @@
    "name": "array"
   }
  ],
+ "plt.savefig": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "savefig"
+  }
+ ],
  "plt.subplots": [
   {
    "is_class": false,

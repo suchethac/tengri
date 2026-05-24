@@ -140,7 +140,7 @@ feature as resolution increases. High-res spectroscopy reveals kinematics.
     )
     ax.legend(frameon=False, loc="upper right", fontsize=10)
     fig.tight_layout()
-    fig.savefig("plot_resolution_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_resolution_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_resolution_sweep.py:

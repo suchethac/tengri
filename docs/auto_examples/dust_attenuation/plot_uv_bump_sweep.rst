@@ -77,7 +77,7 @@ Reference: Kriek & Conroy 2013, ApJ, 775, L16 (extended attenuation model).
     cbar.set_label(r"UV bump strength")
 
     fig.tight_layout()
-    fig.savefig("plot_uv_bump_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_uv_bump_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_uv_bump_sweep.py:

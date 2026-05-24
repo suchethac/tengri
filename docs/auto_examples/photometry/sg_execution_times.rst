@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:04.092** total execution time for 8 files **from auto_examples/photometry**:
+**00:00.212** total execution time for 8 files **from auto_examples/photometry**:
 
 .. container::
 
@@ -32,8 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_emission_line_contamination.py` (``plot_emission_line_contamination.py``)
-     - 00:04.092
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_emission_line_redshift_evolution.py` (``plot_emission_line_redshift_evolution.py``)
+     - 00:00.212
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_color_tracks_redshift.py` (``plot_color_tracks_redshift.py``)
      - 00:00.000

@@ -112,7 +112,7 @@ each redshift bracket — *u* dropout at ``z ~ 3``, *g* at ``z ~ 4-5``,
     ax.legend(frameon=False, fontsize=9, loc="lower right")
 
     fig.tight_layout()
-    fig.savefig("plot_lbg_observed_evolution.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_lbg_observed_evolution.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_lbg_observed_evolution.py:

@@ -97,7 +97,7 @@ hardness independently shape the mid- and far-infrared SED. Uses Draine & Li
                     ax.axvline(wl_um, color="grey", ls=":", lw=0.5, alpha=0.4)
 
     fig.tight_layout()
-    fig.savefig("plot_dust_qpah_umin_grid.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_dust_qpah_umin_grid.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_dust_qpah_umin_grid.py:
