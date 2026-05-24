@@ -1034,6 +1034,50 @@ def has_alpha_grid(ssp_data: SSPData) -> bool:
 
 
 @jax.jit
+def interpolate_alpha_only(
+    ssp_flux: jnp.ndarray,
+    ssp_alpha_fe: jnp.ndarray,
+    alpha_fe: float,
+) -> jnp.ndarray:
+    """Linear interpolation along the [α/Fe] axis only — 4D → 3D.
+
+    Collapses the [α/Fe] dimension of a 4D SSP grid at a single target
+    value, leaving the metallicity axis intact. The result feeds the
+    standard 3D DSPS lognormal-MDF kernel, so the Z marginalisation
+    behaves identically to a no-α-grid run with the same met scatter.
+
+    Parameters
+    ----------
+    ssp_flux : array, shape (n_met, n_alpha, n_age, n_wave)
+        SSP flux on the full 4D (Z, [α/Fe]) grid. [Lsun/Hz/Msun]
+    ssp_alpha_fe : array, shape (n_alpha,)
+        [α/Fe] grid values, relative to solar.
+    alpha_fe : float
+        Target [α/Fe] (dimensionless, relative to solar). Clipped to
+        the grid bounds before interpolation.
+
+    Returns
+    -------
+    array, shape (n_met, n_age, n_wave)
+        α-collapsed SSP flux, ready for the 3D MDF kernel.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes — linear interpolation is differentiable.
+
+    Complements :func:`interpolate_met_alpha`, which collapses both
+    axes to a single (Z, [α/Fe]) point. Samplers that want lognormal
+    MDF marginalisation over metallicity should use this α-only path
+    so the 4D and 3D code paths share the same Z kernel.
+    """
+    afe = jnp.clip(alpha_fe, ssp_alpha_fe[0], ssp_alpha_fe[-1])
+    ia = jnp.clip(jnp.searchsorted(ssp_alpha_fe, afe) - 1, 0, ssp_alpha_fe.shape[0] - 2)
+    fa = (afe - ssp_alpha_fe[ia]) / (ssp_alpha_fe[ia + 1] - ssp_alpha_fe[ia])
+    return (1.0 - fa) * ssp_flux[:, ia] + fa * ssp_flux[:, ia + 1]
+
+
+@jax.jit
 def interpolate_met_alpha(
     ssp_flux: jnp.ndarray,
     ssp_lgmet: jnp.ndarray,
