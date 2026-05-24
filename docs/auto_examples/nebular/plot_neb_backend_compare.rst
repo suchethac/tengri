@@ -21,11 +21,6 @@
 Nebular backends side-by-side: BakedIn vs Cue
 ==============================================
 
-.. image:: images/sphx_glr_plot_neb_backend_compare_001.png
-   :alt: plot neb backend compare
-   :class: sphx-glr-single-img
-
-
 Two nebular backends, same SFH, same dust, same metallicity. BakedIn pulls
 line ratios from the SSP grid (Conroy + Byler wNE templates); Cue (Li, Leja
 & Speagle 2023) is a neural emulator over the CLOUDY parameter space, run

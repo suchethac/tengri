@@ -21,11 +21,6 @@
 Inoue+2014 vs Madau+1995: IGM transmission models diverge at Lyman limit
 =========================================================================
 
-.. image:: images/sphx_glr_plot_igm_model_comparison_001.png
-   :alt: plot igm model comparison
-   :class: sphx-glr-single-img
-
-
 Two commonly-used IGM absorption models differ significantly in the
 Lyman-continuum regime. The Inoue et al. (2014) model captures Lyman-series
 absorption and Lyman-continuum opacity in detail; the Madau (1995) model

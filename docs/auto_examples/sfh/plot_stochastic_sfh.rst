@@ -21,11 +21,6 @@
 Stochastic SFH samples from GP-correlated fields with different burstiness
 ==========================================================================
 
-.. image:: images/sphx_glr_plot_stochastic_sfh_001.png
-   :alt: plot stochastic sfh
-   :class: sphx-glr-single-img
-
-
 Generate stochastic star-formation histories using the Fourier-space GP
 correlated field model, governed by a damped-random-walk power spectrum.
 Left panel shows mild burstiness (σ=0.3, τ=300 Myr); right shows strong

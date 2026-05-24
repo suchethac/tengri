@@ -21,11 +21,6 @@
 UVJ diagram: rest-frame colors separate star-forming from quiescent
 ==================================================================
 
-.. image:: images/sphx_glr_plot_usecase_uvj_diagram_001.png
-   :alt: plot usecase uvj diagram
-   :class: sphx-glr-single-img
-
-
 Generates a mock star-forming and quiescent galaxy population and plots
 each on the rest-frame UVJ color-color plane (U-V vs V-J). The Williams+2009
 quiescent wedge (z < 1) marks the boundary between dusty star-forming and

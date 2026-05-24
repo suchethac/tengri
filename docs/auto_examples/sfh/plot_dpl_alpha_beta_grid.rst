@@ -21,11 +21,6 @@
 Double power-law SFH parameter space: early growth α vs late quenching β
 =====================================================================
 
-.. image:: images/sphx_glr_plot_dpl_alpha_beta_grid_001.png
-   :alt: plot dpl alpha beta grid
-   :class: sphx-glr-single-img
-
-
 A 3×3 grid showing how the rising slope α (columns) and falling slope β (rows)
 together control the full SFH morphology. Early-time α determines assembly
 speed; late-time β sets the post-peak decay. The optical SED responds across

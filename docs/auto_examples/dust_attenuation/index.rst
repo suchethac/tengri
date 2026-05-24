@@ -104,6 +104,23 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="For a fixed star-forming galaxy with τ_V = 1 (a moderate attenuation), six common attenuation laws produce six visibly different reddened UV slopes β. The intrinsic SED has β ≈ −2.3; SMC steepens β to ≈ +0.4; Calzetti / Salim leave a flatter β ≈ −0.5. The spread (~1 mag of UV slope at fixed τ_V) is the systematic an SED fitter inherits if its dust-law assumption is wrong.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_dust_law_uv_slope_response_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_dust_law_uv_slope_response`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Attenuation law leaves a distinct UV-slope fingerprint</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The power-law slope δ steepens (negative) or flattens (positive) UV attenuation relative to the optical, controlling whether dust absorbs more or less light at short wavelengths. We vary δ with elevated τ_bc and τ_diff to make slope effects visible (low dust opacities wash out the continuum slope).">
 
 .. only:: html
@@ -219,6 +236,7 @@ depths, two-component geometry, and law comparisons.
    /auto_examples/dust_attenuation/plot_dust_curves
    /auto_examples/dust_attenuation/plot_dust_geometry_sweep
    /auto_examples/dust_attenuation/plot_dust_law_application
+   /auto_examples/dust_attenuation/plot_dust_law_uv_slope_response
    /auto_examples/dust_attenuation/plot_dust_slope_sweep
    /auto_examples/dust_attenuation/plot_tau_bc_sweep
    /auto_examples/dust_attenuation/plot_tau_diff_sweep

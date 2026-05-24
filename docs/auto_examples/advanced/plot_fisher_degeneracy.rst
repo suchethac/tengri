@@ -21,11 +21,6 @@
 Age-Dust-Metallicity Degeneracy: Fisher Analysis
 =================================================
 
-.. image:: images/sphx_glr_plot_fisher_degeneracy_001.png
-   :alt: plot fisher degeneracy
-   :class: sphx-glr-single-img
-
-
 The Cramér-Rao bound from the Fisher Information Matrix shows that SDSS
 5-band photometry alone cannot separately constrain age, dust, and
 metallicity. Adding NIR or MIR bands breaks the degeneracy by factors of

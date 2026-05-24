@@ -21,11 +21,6 @@
 Panchromatic SED: UV to Radio
 ==============================
 
-.. image:: images/sphx_glr_plot_radio_xray_001.png
-   :alt: plot radio xray
-   :class: sphx-glr-single-img
-
-
 Build a full galaxy SED spanning X-ray to radio wavelengths. Shows stellar
 emission, dust attenuation, dust IR emission, radio synchrotron, and X-ray
 binary contributions. Demonstrates tengri's multiwavelength physics modules

@@ -21,11 +21,6 @@
 PSD parameter space: amplitude σ (rows) and timescale τ (columns) control burstiness
 ===================================================================================
 
-.. image:: images/sphx_glr_plot_psd_burstiness_001.png
-   :alt: plot psd burstiness
-   :class: sphx-glr-single-img
-
-
 A 3×3 grid showing five stochastic-SFH realizations for each combination of
 amplitude σ (vertical axis) and damping timescale τ (horizontal axis). Larger σ
 produces more dramatic bursts; longer τ sustains those bursts. Each panel shows
