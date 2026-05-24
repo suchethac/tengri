@@ -528,6 +528,23 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Dust-free UV continuum slope of an SSP swept from 10 Myr to 1 Gyr. β is fit in the Calzetti+1994 windows (1268–2580 Å) to F_λ ∝ λ^β.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_uv_slope_age_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_uv_slope_age`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Intrinsic UV continuum slope β vs single-burst age</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -1300,6 +1317,23 @@ depths, two-component geometry, and law comparisons.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">The six headline dust attenuation laws span MW, SMC, and starburst geometries</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Charlot &amp; Fall 2000 two-component dust model splits attenuation into a birth-cloud component (``τ_bc``) that only the youngest stellar ages see, and a diffuse-ISM component (``τ_diff``) that attenuates all stellar light. The two are degenerate for an old population (every star is &quot;old&quot; by the BC clock, so τ_bc has no effect) but separate cleanly for a young one.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_birth_cloud_vs_diffuse_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_birth_cloud_vs_diffuse`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Birth-cloud vs diffuse-ISM dust: which knob does what?</div>
     </div>
 
 
@@ -2603,23 +2637,6 @@ Filter curves and photometric fitting.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Photometric colour tracks vs redshift</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="For a young high-z galaxy, the [O III]+Hβ complex can boost the broadband flux by several tenths of a magnitude when it lands inside a wide filter. We mock the same young SF galaxy at z = 1, 3, 6 and show the JWST NIRCam F277W / F356W / F444W flux with and without the nebular block on, so the reader can see which redshift puts which strong line where.">
-
-.. only:: html
-
-  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_emission_line_contamination_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/photometry/plot_emission_line_contamination`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Emission-line contamination of broadband photometry</div>
     </div>
 
 

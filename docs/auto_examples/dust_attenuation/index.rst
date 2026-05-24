@@ -36,6 +36,23 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The Charlot &amp; Fall 2000 two-component dust model splits attenuation into a birth-cloud component (``τ_bc``) that only the youngest stellar ages see, and a diffuse-ISM component (``τ_diff``) that attenuates all stellar light. The two are degenerate for an old population (every star is &quot;old&quot; by the BC clock, so τ_bc has no effect) but separate cleanly for a young one.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_birth_cloud_vs_diffuse_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_birth_cloud_vs_diffuse`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Birth-cloud vs diffuse-ISM dust: which knob does what?</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The six headline dust attenuation laws plotted over the full UV-through-NIR range (0.1–3 μm), extending beyond the 2175 Å bump region to show how curves flatten in the infrared. Red-shifted galaxies observe longer wavelengths at rest frame, so the IR slope controls K-correction factors and SED fitting degeneracies.">
 
 .. only:: html
@@ -198,6 +215,7 @@ depths, two-component geometry, and law comparisons.
    :hidden:
 
    /auto_examples/dust_attenuation/plot_attenuation_law_compare
+   /auto_examples/dust_attenuation/plot_birth_cloud_vs_diffuse
    /auto_examples/dust_attenuation/plot_dust_curves
    /auto_examples/dust_attenuation/plot_dust_geometry_sweep
    /auto_examples/dust_attenuation/plot_dust_law_application

@@ -153,6 +153,23 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Dust-free UV continuum slope of an SSP swept from 10 Myr to 1 Gyr. β is fit in the Calzetti+1994 windows (1268–2580 Å) to F_λ ∝ λ^β.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_uv_slope_age_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_uv_slope_age`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Intrinsic UV continuum slope β vs single-burst age</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -171,4 +188,5 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
    /auto_examples/sps/plot_ssp_grid
    /auto_examples/sps/plot_ssp_imf_compare
    /auto_examples/sps/plot_ssp_metallicity_sweep
+   /auto_examples/sps/plot_uv_slope_age
 

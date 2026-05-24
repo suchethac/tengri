@@ -34,23 +34,6 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="For a young high-z galaxy, the [O III]+Hβ complex can boost the broadband flux by several tenths of a magnitude when it lands inside a wide filter. We mock the same young SF galaxy at z = 1, 3, 6 and show the JWST NIRCam F277W / F356W / F444W flux with and without the nebular block on, so the reader can see which redshift puts which strong line where.">
-
-.. only:: html
-
-  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_emission_line_contamination_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/photometry/plot_emission_line_contamination`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Emission-line contamination of broadband photometry</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Plot the ugriz filter transmission curves from the SDSS photometric system. Filters are loaded from the SVO Filter Profile Service via tengri&#x27;s filter registry.">
 
 .. only:: html
@@ -162,7 +145,6 @@ Filter curves and photometric fitting.
    :hidden:
 
    /auto_examples/photometry/plot_color_tracks_redshift
-   /auto_examples/photometry/plot_emission_line_contamination
    /auto_examples/photometry/plot_filter_curves
    /auto_examples/photometry/plot_filter_set_comparison
    /auto_examples/photometry/plot_galaxy_with_filters
