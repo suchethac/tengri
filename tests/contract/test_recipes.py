@@ -2,7 +2,7 @@
 """Tests for tengri.recipes module.
 
 Verifies that each curated recipe returns a valid dict that can be passed
-to Parameters.from_groups() and that the resulting Parameters has the
+to parse_groups() and that the resulting Parameters has the
 expected structural and parameter properties.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from tengri import recipes
+from tengri import parse_groups, recipes
 from tengri.parameters.parameters import Parameters
 
 pytestmark = pytest.mark.contract
@@ -54,9 +54,9 @@ class TestStarFormingPhotometry:
         assert isinstance(result, dict)
 
     def test_star_forming_builds_parameters(self):
-        """Recipe output passes to Parameters.from_groups()."""
+        """Recipe output passes to parse_groups()."""
         recipe_dict = recipes.star_forming_photometry()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         assert isinstance(spec, Parameters)
 
     def test_star_forming_has_dpl_sfh(self):
@@ -68,7 +68,7 @@ class TestStarFormingPhotometry:
     def test_star_forming_has_free_sfh(self):
         """DPL params are free (via wildcard)."""
         recipe_dict = recipes.star_forming_photometry()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         # DPL should have ~4 free params (alpha, beta, tau_gyr, log_peak_sfr)
         dpl_free = [p for p in spec.free_params if p.startswith("sfh_dpl_")]
         assert len(dpl_free) >= 3, f"Expected at least 3 free DPL params, got {len(dpl_free)}"
@@ -99,14 +99,14 @@ class TestStarFormingPhotometry:
     def test_star_forming_cue_is_fixed(self):
         """Cue nebular params are fixed."""
         recipe_dict = recipes.star_forming_photometry()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         neb_free = [p for p in spec.free_params if p.startswith("neb_")]
         assert len(neb_free) == 0, f"Expected no free nebular params, got {neb_free}"
 
     def test_star_forming_free_redshift(self):
         """Redshift is free with reasonable bounds."""
         recipe_dict = recipes.star_forming_photometry()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         assert "redshift" in spec.free_params
 
     def test_star_forming_apply_igm(self):
@@ -117,7 +117,7 @@ class TestStarFormingPhotometry:
     def test_star_forming_free_param_count(self):
         """Recipe has reasonable number of free parameters."""
         recipe_dict = recipes.star_forming_photometry()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         # DPL (~4) + dust tau_bc, tau_diff (~2) + redshift (1) + met_logzsol (1) ~ 8-10
         assert 5 <= spec.n_free <= 20, f"Expected 5-20 free params, got {spec.n_free}"
 
@@ -131,9 +131,9 @@ class TestQuiescentZ0:
         assert isinstance(result, dict)
 
     def test_quiescent_z0_builds_parameters(self):
-        """Recipe output passes to Parameters.from_groups()."""
+        """Recipe output passes to parse_groups()."""
         recipe_dict = recipes.quiescent_z0()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         assert isinstance(spec, Parameters)
 
     def test_quiescent_z0_has_dexp_sfh(self):
@@ -145,21 +145,21 @@ class TestQuiescentZ0:
     def test_quiescent_z0_has_free_sfh(self):
         """DExp params are free."""
         recipe_dict = recipes.quiescent_z0()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         dexp_free = [p for p in spec.free_params if p.startswith("sfh_dexp_")]
         assert len(dexp_free) >= 2, f"Expected at least 2 free DExp params, got {len(dexp_free)}"
 
     def test_quiescent_z0_dust_free(self):
         """Dust attenuation params are free."""
         recipe_dict = recipes.quiescent_z0()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         dust_free = [p for p in spec.free_params if p.startswith("dust_")]
         assert len(dust_free) >= 1, f"Expected free dust params, got {dust_free}"
 
     def test_quiescent_z0_no_dust_emission(self):
         """Recipe disables dust emission."""
         recipe_dict = recipes.quiescent_z0()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         # Should not have dust emission params in free list
         dust_emission_free = [
             p
@@ -182,14 +182,14 @@ class TestQuiescentZ0:
     def test_quiescent_z0_fixed_redshift(self):
         """Redshift is fixed at z=0.05."""
         recipe_dict = recipes.quiescent_z0()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         assert "redshift" in spec.fixed_params
         assert spec.get_distribution("redshift") == recipes.Fixed(0.05)
 
     def test_quiescent_z0_free_param_count(self):
         """Recipe has reasonable number of free parameters."""
         recipe_dict = recipes.quiescent_z0()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         # DExp (~3) + dust tau_bc, tau_diff (~2) + met_logzsol (1) ~ 6-8
         assert 4 <= spec.n_free <= 15, f"Expected 4-15 free params, got {spec.n_free}"
 
@@ -203,9 +203,9 @@ class TestAgnPanchromatic:
         assert isinstance(result, dict)
 
     def test_agn_panchromatic_builds_parameters(self):
-        """Recipe output passes to Parameters.from_groups()."""
+        """Recipe output passes to parse_groups()."""
         recipe_dict = recipes.agn_panchromatic()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         assert isinstance(spec, Parameters)
 
     def test_agn_panchromatic_has_dpl_sfh(self):
@@ -240,7 +240,7 @@ class TestAgnPanchromatic:
     def test_agn_panchromatic_free_param_count(self):
         """Recipe has reasonable number of free parameters."""
         recipe_dict = recipes.agn_panchromatic()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         # DPL + dust + AGN blocks should be substantial
         assert 8 <= spec.n_free <= 50, f"Expected 8-50 free params, got {spec.n_free}"
 
@@ -254,9 +254,9 @@ class TestStochasticSfhJwst:
         assert isinstance(result, dict)
 
     def test_stochastic_sfh_jwst_builds_parameters(self):
-        """Recipe output passes to Parameters.from_groups()."""
+        """Recipe output passes to parse_groups()."""
         recipe_dict = recipes.stochastic_sfh_jwst()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         assert isinstance(spec, Parameters)
 
     def test_stochastic_sfh_jwst_has_composition(self):
@@ -268,7 +268,7 @@ class TestStochasticSfhJwst:
     def test_stochastic_sfh_jwst_high_z_range(self):
         """Redshift is in JWST high-z range (0.5-12)."""
         recipe_dict = recipes.stochastic_sfh_jwst()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         # Redshift should be free and in high-z range
         assert "redshift" in spec.free_params
 
@@ -280,14 +280,14 @@ class TestStochasticSfhJwst:
     def test_stochastic_sfh_jwst_has_field_params(self):
         """Recipe includes field (stochastic) SFH params."""
         recipe_dict = recipes.stochastic_sfh_jwst()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         field_params = [p for p in spec.all_params if p.startswith("sfh_field_")]
         assert len(field_params) > 0, "Expected field SFH params"
 
     def test_stochastic_sfh_jwst_free_param_count(self):
         """Recipe has reasonable number of free parameters."""
         recipe_dict = recipes.stochastic_sfh_jwst()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         # DPL (~4) + field (~2) + dust + met + redshift ~ 10-15
         assert 8 <= spec.n_free <= 25, f"Expected 8-25 free params, got {spec.n_free}"
 
@@ -301,9 +301,9 @@ class TestMockRecoveryMinimal:
         assert isinstance(result, dict)
 
     def test_mock_recovery_minimal_builds_parameters(self):
-        """Recipe output passes to Parameters.from_groups()."""
+        """Recipe output passes to parse_groups()."""
         recipe_dict = recipes.mock_recovery_minimal()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         assert isinstance(spec, Parameters)
 
     def test_mock_recovery_minimal_has_tsnorm_sfh(self):
@@ -315,7 +315,7 @@ class TestMockRecoveryMinimal:
     def test_mock_recovery_minimal_minimal_free_params(self):
         """Recipe has minimal (~5-6) free parameters."""
         recipe_dict = recipes.mock_recovery_minimal()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         # Tsnorm (~4) + dust tau_bc (1) + met_logzsol (1) = ~6
         assert 4 <= spec.n_free <= 8, f"Expected 4-8 free params, got {spec.n_free}"
 
@@ -328,7 +328,7 @@ class TestMockRecoveryMinimal:
     def test_mock_recovery_minimal_fixed_redshift(self):
         """Redshift is fixed at z=0.05 for local mocks."""
         recipe_dict = recipes.mock_recovery_minimal()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         assert "redshift" in spec.fixed_params
         assert spec.get_distribution("redshift") == recipes.Fixed(0.05)
 
@@ -341,7 +341,7 @@ class TestMockRecoveryMinimal:
     def test_mock_recovery_minimal_no_dust_emission(self):
         """Recipe disables dust emission (for speed)."""
         recipe_dict = recipes.mock_recovery_minimal()
-        spec = Parameters.from_groups(**recipe_dict)
+        spec = parse_groups(**recipe_dict)
         # Should not have dust emission params free
         dust_emission_free = [
             p
@@ -366,7 +366,7 @@ class TestRecipesIntegration:
     """Integration tests: recipes work with SEDModel (if SSP data available)."""
 
     def test_all_recipes_compose_with_splatting(self):
-        """All recipes can be splatted into Parameters.from_groups()."""
+        """All recipes can be splatted into parse_groups()."""
         for recipe_func in [
             recipes.star_forming_photometry,
             recipes.quiescent_z0,
@@ -375,6 +375,6 @@ class TestRecipesIntegration:
             recipes.mock_recovery_minimal,
         ]:
             recipe_dict = recipe_func()
-            spec = Parameters.from_groups(**recipe_dict)
+            spec = parse_groups(**recipe_dict)
             assert isinstance(spec, Parameters)
             assert spec.n_free > 0, f"{recipe_func.__name__} has no free params"

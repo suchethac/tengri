@@ -110,9 +110,13 @@ class XRayAirdSEDComponent(SEDModelComponent):
     parameter_prefix: str = "xray_"
 
     # Free parameters
-    gamma_hmxb = Uniform(1.0, 3.0, description="HMXB spectral index", units="")
-    gamma_lmxb = Uniform(1.0, 3.0, description="LMXB spectral index", units="")
-    gamma_agn = Uniform(1.0, 3.0, description="AGN X-ray spectral index", units="")
+    gamma_hmxb = Uniform(1.0, 3.0, description="HMXB spectral index", units="dimensionless")
+    gamma_lmxb = Uniform(1.0, 3.0, description="LMXB spectral index", units="dimensionless")
+    gamma_agn = Uniform(1.0, 3.0, description="AGN X-ray spectral index", units="dimensionless")
+    # alpha_ox is deliberately NOT a free parameter here — PR #329 promotes it to
+    # an empirical prior derived from L_2500 via alpha_ox_from_l2500()
+    # (Just+2007 / Lusso–Risaliti). Offsets from the empirical value are exposed
+    # via delta_alpha_ox in xray_agn_corona{,_from_disc}. See ADR-0013.
 
     # No required cross-component inputs (all have fallbacks)
     inputs: ClassVar[dict[str, str]] = {}

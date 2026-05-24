@@ -148,6 +148,7 @@ from tengri.components.stellar.sfh.gp_sfh import (
     gp_from_xi,
     make_log_age_grid,
 )
+from tengri.components.stellar.sfh.nonparametric import make_agebins_from_zred
 from tengri.components.stellar.sfh.psd_models import drw_acf, drw_variance, psd_drw
 from tengri.components.stellar.sfh.registry import (
     FIELD_MODEL_REGISTRY,
@@ -233,6 +234,7 @@ from tengri.observation.noise import (
     uses_student_t,
     variable_noise_hamiltonian,
 )
+from tengri.parameters.groups import parse_groups
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
 from tengri.parameters.registry import (
@@ -306,6 +308,13 @@ from tengri._tutorials import examples, explain, tutorial
 from tengri.registry import (
     cite_components,
     describe,
+    describe_agn_model,
+    describe_dust_emission_model,
+    describe_dust_law,
+    describe_inference_method,
+    describe_nebular_backend,
+    describe_recipe,
+    describe_sfh_model,
     help,
     list_agn_models,
     list_all,
@@ -316,6 +325,7 @@ from tengri.registry import (
     list_inference_methods,
     list_nebular_backends,
     list_plots,
+    list_recipes,
     list_sfh_models,
     print_components_bibtex,
     search,
@@ -389,7 +399,14 @@ __all__ = [
     "cosmology",
     "data_path",
     "describe",
+    "describe_agn_model",
+    "describe_dust_emission_model",
+    "describe_dust_law",
+    "describe_inference_method",
+    "describe_nebular_backend",
     "describe_parameter",
+    "describe_recipe",
+    "describe_sfh_model",
     "doctor",
     "download_ssp",
     "dust",
@@ -412,9 +429,11 @@ __all__ = [
     "list_nebular_backends",
     "list_parameters",
     "list_plots",
+    "list_recipes",
     "list_sfh_models",
     "nebular",
     "observation",
+    "parse_groups",
     "pipeline",
     "plot",
     "preprocessing",
@@ -511,6 +530,7 @@ _CURATED_DIR = (
     "list_plots",
     "list_components",
     "list_inference_methods",
+    "list_recipes",
     "list_all",
     "search",
     "suggest_parameters",
@@ -520,6 +540,7 @@ _CURATED_DIR = (
     "explain",
     # 2.  Build a fit
     "Parameters",
+    "parse_groups",
     "SEDModel",
     "WavePrecomp",
     "Fitter",

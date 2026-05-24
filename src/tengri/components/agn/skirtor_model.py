@@ -160,14 +160,22 @@ class SKIRTORTorus(SEDModelComponent):
     # Free parameters — auto-discovered
     log_lbol = Uniform(8.0, 14.0, description="AGN bolometric luminosity", units="dex (L_sun)")
     tau_skirtor = Uniform(
-        3.0, 11.0, description="9.7 µm optical depth (Stalevski et al.)", units=""
+        3.0,
+        11.0,
+        description="9.7 µm optical depth (Stalevski et al.)",
+        units="dimensionless",
     )
-    p_skirtor = Uniform(0.0, 1.5, description="Radial dust density gradient", units="")
-    q_skirtor = Uniform(0.0, 1.5, description="Polar dust density gradient", units="")
+    p_skirtor = Uniform(
+        0.0, 1.5, description="Radial dust density gradient", units="dimensionless"
+    )
+    q_skirtor = Uniform(0.0, 1.5, description="Polar dust density gradient", units="dimensionless")
     oa_skirtor = Uniform(20.0, 60.0, description="Torus half-opening angle", units="deg")
-    cos_inc = Uniform(0.0, 1.0, description="Cosine of inclination", units="")
+    cos_inc = Uniform(0.0, 1.0, description="Cosine of inclination", units="dimensionless")
     frac_agn = Uniform(
-        0.0, 1.0, description="AGN fraction (L_AGN / L_total, CIGALE convention)", units=""
+        0.0,
+        1.0,
+        description="AGN fraction (L_AGN / L_total, CIGALE convention)",
+        units="dimensionless",
     )
 
     # Cross-component outputs

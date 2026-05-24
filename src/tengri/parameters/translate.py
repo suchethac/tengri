@@ -412,25 +412,83 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
         elif "psd_xi" in params:
             internal["xi"] = params["psd_xi"]
 
-    # Warn about unrecognized keys (silent bugs when wrong names used)
-    recognized = set(param_map.keys())
-    recognized.update(_REVERSE_ALIASES.keys())
-    recognized.update({"sfh_field_xi", "psd_xi"})
-    # Array-data inputs consumed by ``forward/pipeline.py`` directly (not via
-    # the scalar param-map): tabulated SFH (``sfh_t_gyr`` + ``sfh_sfr``) and
-    # tabulated metallicity history (``met_history``) for chem-evolution runs.
-    recognized.update({"sfh_t_gyr", "sfh_sfr", "met_history"})
-    # Also recognize internal names (for backwards compat)
-    recognized.update(int_name for _, (int_name, _, _) in param_map.items())
-    unrecognized = set(params.keys()) - recognized
+    # Raise/warn about unrecognized keys (silent bugs when wrong names used)
+    unrecognized = _unknown_param_keys(params, param_map)
     if unrecognized:
-        msg = (
-            f"Unrecognized parameter names passed to Model: {sorted(unrecognized)}. "
-            f"Did you mean one of: {sorted(param_map.keys())}? "
-            f"(Pass strict_unknown_params=False to downgrade to a warning.)"
-        )
+        msg = _unknown_param_msg(unrecognized, param_map)
         if strict_unknown_params:
-            raise ValueError(msg)
+            from tengri.config.exceptions import UnknownParameterError
+
+            raise UnknownParameterError(msg)
         warnings.warn(msg, UserWarning, stacklevel=3)
 
     return internal
+
+
+def _recognized_param_keys(param_map):
+    """Set of keys ``params`` may legally contain for a given param_map.
+
+    Combines public names, short-form aliases, latent-vector slots, array-data
+    inputs (tabulated SFH, metallicity history), and internal names (for
+    backwards compat). Pure-Python; cheap enough to call per predict.
+    """
+    recognized = set(param_map.keys())
+    recognized.update(_REVERSE_ALIASES.keys())
+    recognized.update({"sfh_field_xi", "psd_xi"})
+    recognized.update({"sfh_t_gyr", "sfh_sfr", "met_history"})
+    recognized.update(int_name for _, (int_name, _, _) in param_map.items())
+    return recognized
+
+
+def _unknown_param_keys(params, param_map):
+    """Return sorted list of param keys not recognized for ``param_map``."""
+    return sorted(set(params.keys()) - _recognized_param_keys(param_map))
+
+
+def _unknown_param_msg(unrecognized, param_map):
+    """Build the ``UnknownParameterError`` message with did-you-mean hints."""
+    import difflib
+
+    public = sorted(param_map.keys())
+    hints = []
+    for bad in unrecognized:
+        close = difflib.get_close_matches(bad, public, n=3, cutoff=0.6)
+        if close:
+            hints.append(f"  {bad!r} → did you mean {close}?")
+        else:
+            hints.append(f"  {bad!r} → no close match (this param is not in the live model)")
+    return (
+        "Unrecognized parameter names passed to Model: "
+        f"{list(unrecognized)}.\n"
+        + "\n".join(hints)
+        + "\n\nValid free + fixed parameter names: see ``model.spec.summary()`` "
+        "or ``list(model.spec.param_map_public_keys())``."
+    )
+
+
+def check_unknown_params(params, param_map):
+    """Validate ``params`` keys against the live param_map; raise on unknowns.
+
+    Lightweight set-difference validator suitable for use at JIT entry points
+    (no value translation, no tracing concerns). Used by
+    :meth:`SEDModel.predict_observables_jit` and friends to surface typo /
+    stale-override bugs that the JIT path would otherwise silently drop.
+
+    Parameters
+    ----------
+    params : Mapping
+        User-supplied parameter dict.
+    param_map : Mapping
+        ``public_name -> (internal_name, scale, offset)`` from the SEDModel.
+
+    Raises
+    ------
+    UnknownParameterError
+        If any key in ``params`` is not a recognized public, alias, latent,
+        array-data, or internal name.
+    """
+    unrecognized = _unknown_param_keys(params, param_map)
+    if unrecognized:
+        from tengri.config.exceptions import UnknownParameterError
+
+        raise UnknownParameterError(_unknown_param_msg(unrecognized, param_map))

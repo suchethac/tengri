@@ -41,7 +41,7 @@ class TestSMCRegistry:
         names = {d.name: d for d in decls}
         assert "dust_tau_v" in names
         assert isinstance(names["dust_tau_v"].prior, Uniform)
-        assert names["dust_tau_v"].units == ""
+        assert names["dust_tau_v"].units == "dimensionless"
 
     def test_outputs_contract(self):
         """SMC publishes L_absorbed."""
@@ -82,8 +82,8 @@ class TestMilkyWayRegistry:
         assert "dust_dust_Rv" in names
         assert isinstance(names["dust_tau_v"].prior, Uniform)
         assert isinstance(names["dust_dust_Rv"].prior, Uniform)
-        assert names["dust_tau_v"].units == ""
-        assert names["dust_dust_Rv"].units == ""
+        assert names["dust_tau_v"].units == "dimensionless"
+        assert names["dust_dust_Rv"].units == "dimensionless"
 
     def test_outputs_contract(self):
         """MilkyWay publishes L_absorbed."""

@@ -54,7 +54,7 @@ Tutorial pages in the sidebar are those **`.ipynb`** files rendered as HTML. Opt
 ## Quick start
 
 ```python
-from tengri import Model, Parameters, Fitter, Uniform, Gaussian
+from tengri import SEDModel, Parameters, Fitter, Uniform, Gaussian
 from tengri import Observation, Photometry, load_ssp_data
 
 ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
@@ -73,7 +73,7 @@ spec = Parameters(
     redshift=0.1,
 )
 
-model = Model(spec, ssp, observation=obs)
+model = SEDModel(spec, ssp, observation=obs)
 fitter = Fitter(model, obs_flux, obs_noise)
 result = fitter.run("vi")
 print(result.summary_table())

@@ -426,9 +426,11 @@ class TestEdgeCases:
 
     def test_z_equals_zero(self):
         """Functions should handle z=0 gracefully."""
-        # Luminosity distance at z=0 should be 0
+        from tengri.utils.physics_constants import TEN_PC_CM
+
+        # Luminosity distance at z=0 should be 10 pc (optical absolute mag convention)
         dl = luminosity_distance(0.0)
-        assert jnp.allclose(dl, 0.0, atol=1e-10)
+        assert jnp.allclose(dl, TEN_PC_CM, rtol=1e-6)
 
         # Comoving distance at z=0 should be 0
         dc = comoving_distance(0.0)

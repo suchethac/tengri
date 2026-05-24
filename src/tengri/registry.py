@@ -1082,6 +1082,7 @@ def describe(name: str) -> _DescribeRecord:
         list_components,
         list_filters,
         list_plots,
+        list_recipes,
     ):
         for entry in fn():
             if entry["name"] == name:
@@ -1090,6 +1091,165 @@ def describe(name: str) -> _DescribeRecord:
         f"Unknown name '{name}'.  Try tengri.summary() for a menu of every "
         "core class, AGN model, dust law, SFH variant, nebular backend, "
         "component, filter, or inference method that exists."
+    )
+
+
+# ── Recipe discovery (#310 proposal 2) ─────────────────────────────────────
+
+
+def list_recipes() -> _RegistryTable:
+    """List every callable in :mod:`tengri.recipes`.
+
+    Each entry carries the recipe name, the first sentence of its docstring,
+    and the SSP-requirement tag (parsed from the ``**SSP requirement:**``
+    line in the docstring, when present). Use :func:`describe_recipe` for the
+    full per-recipe block (component selectors, parameter freedoms,
+    suggested redshift, etc.).
+
+    Returns
+    -------
+    _RegistryTable
+        Rows: ``{name, short_doc, ssp_requirement, kind="recipe"}``.
+
+    Examples
+    --------
+    >>> import tengri
+    >>> tengri.list_recipes()
+    >>> tengri.describe_recipe("star_forming_photometry")
+    """
+    import inspect
+
+    from tengri import recipes as _recipes
+
+    out: list[dict] = []
+    for name in sorted(_recipes.__all__):
+        fn = getattr(_recipes, name, None)
+        if fn is None or not callable(fn):
+            continue
+        doc = inspect.getdoc(fn) or ""
+        short_doc = doc.split("\n\n", 1)[0].strip().replace("\n", " ")
+        ssp_req = _parse_ssp_requirement(doc)
+        out.append(
+            {
+                "name": name,
+                "kind": "recipe",
+                "short_doc": short_doc,
+                "ssp_requirement": ssp_req,
+                "use": f"recipes.{name}() → SEDModel.build(ssp_data=ssp, **recipe)",
+            }
+        )
+    return _RegistryTable(out)
+
+
+def _parse_ssp_requirement(doc: str) -> str:
+    """Pull the ``**SSP requirement:**`` value from a recipe docstring."""
+    for line in doc.splitlines():
+        if "SSP requirement" in line:
+            after = line.split(":", 1)[1] if ":" in line else line
+            return after.replace("*", "").strip()
+    return "any"
+
+
+def describe_recipe(name: str) -> _DescribeRecord:
+    """Return the full descriptor block for a single recipe.
+
+    Parameters
+    ----------
+    name : str
+        Recipe name (see :func:`list_recipes`).
+
+    Returns
+    -------
+    _DescribeRecord
+        Dict-like with ``name``, ``docstring``, ``ssp_requirement``,
+        ``returns`` (the actual nested-dict the recipe builds), and a
+        ready-to-paste ``use`` example.
+
+    Raises
+    ------
+    KeyError
+        If ``name`` is not in :mod:`tengri.recipes`.
+    """
+    import inspect
+
+    from tengri import recipes as _recipes
+
+    fn = getattr(_recipes, name, None)
+    if fn is None or not callable(fn):
+        known = sorted(_recipes.__all__)
+        raise KeyError(f"Unknown recipe '{name}'. Known recipes: {known}")
+    doc = inspect.getdoc(fn) or ""
+    # Materialise the recipe dict so users can see the actual selectors.
+    try:
+        recipe_dict = fn()
+        component_keys = sorted(k for k in recipe_dict if not k.startswith("_"))
+    except Exception:
+        recipe_dict = {}
+        component_keys = []
+    return _DescribeRecord(
+        {
+            "name": name,
+            "kind": "recipe",
+            "short_doc": doc.split("\n\n", 1)[0].strip().replace("\n", " "),
+            "docstring": doc,
+            "ssp_requirement": _parse_ssp_requirement(doc),
+            "components": component_keys,
+            "use": f"model = tengri.SEDModel.build(ssp_data=ssp, **tengri.recipes.{name}())",
+        }
+    )
+
+
+# ── Symmetric describe_* per kind (#310 proposal 1) ────────────────────────
+
+
+def _describe_from_list(name: str, list_fn, kind_label: str, fn_label: str) -> _DescribeRecord:
+    """Common path for ``describe_*(name)`` — look up ``name`` in ``list_fn()``."""
+    for entry in list_fn():
+        if entry["name"] == name:
+            return _DescribeRecord(entry)
+    known = sorted(e["name"] for e in list_fn())
+    raise KeyError(
+        f"Unknown {kind_label} '{name}'. Known names: {known}. See {fn_label}() for the full menu."
+    )
+
+
+def describe_agn_model(name: str) -> _DescribeRecord:
+    """Return the descriptor row for one AGN model (citation, status, short doc).
+
+    Symmetric with :func:`list_agn_models`. Use the generic :func:`describe`
+    for a cross-kind lookup.
+    """
+    return _describe_from_list(name, list_agn_models, "AGN model", "list_agn_models")
+
+
+def describe_dust_law(name: str) -> _DescribeRecord:
+    """Return the descriptor row for one dust **attenuation** law."""
+    return _describe_from_list(name, list_dust_laws, "dust law", "list_dust_laws")
+
+
+def describe_dust_emission_model(name: str) -> _DescribeRecord:
+    """Return the descriptor row for one dust **emission** template family."""
+    return _describe_from_list(
+        name, list_dust_emission_models, "dust emission model", "list_dust_emission_models"
+    )
+
+
+def describe_sfh_model(name: str) -> _DescribeRecord:
+    """Return the descriptor row for one star-formation history model."""
+    return _describe_from_list(name, list_sfh_models, "SFH model", "list_sfh_models")
+
+
+def describe_nebular_backend(name: str) -> _DescribeRecord:
+    """Return the descriptor row for one nebular emission backend."""
+    return _describe_from_list(
+        name, list_nebular_backends, "nebular backend", "list_nebular_backends"
+    )
+
+
+def describe_inference_method(name: str) -> _DescribeRecord:
+    """Return the descriptor row for one inference backend (MAP / VI / NUTS / NSS / …)."""
+    return _describe_from_list(
+        name, list_inference_methods, "inference method", "list_inference_methods"
     )
 
 

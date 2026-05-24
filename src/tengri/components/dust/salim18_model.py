@@ -81,10 +81,18 @@ class Salim18(SEDModelComponent):
     name = "salim18"
     parameter_prefix = "dust_"
 
-    tau_v = Uniform(0.0, 4.0, description="V-band optical depth", units="")
-    dust_bump_strength = Uniform(0.0, 2.0, description="Amplitude of 2175 Å UV bump", units="")
+    tau_v = Uniform(0.0, 4.0, description="V-band optical depth", units="dimensionless")
+    dust_bump_strength = Uniform(
+        0.0,
+        2.0,
+        description="Amplitude of 2175 Å UV bump",
+        units="dimensionless",
+    )
     dust_delta = Uniform(
-        -0.5, 0.5, description="Power-law slope modification (Noll+2009)", units=""
+        -0.5,
+        0.5,
+        description="Power-law slope modification (Noll+2009)",
+        units="dimensionless",
     )
 
     inputs: dict[str, str] = {}  # noqa: RUF012

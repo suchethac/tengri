@@ -90,12 +90,10 @@ This matches the internal computation in ``components/agn/_phys.py``
   ``agn_log_lbol = log10(L_bol_erg) - log10(L_SUN_erg)``,
   i.e. subtract :math:`\\approx 33.58` from synthesizer's value.
 
-Defaults of ``agn_log_lbol=44.0`` in the function signatures of this module
-are inherited from early test fixtures and correspond to
-:math:`L_{\\rm bol}\\!\\approx\\!4\\times 10^{77}` erg/s — **not a physical AGN
-luminosity**. They are kept for backward-compatibility with the existing test
-suite. Always set this parameter explicitly in production fits; do not rely on
-the default.
+Default ``agn_log_lbol=11.0`` in the function signatures of this module
+corresponds to a bolometric luminosity of ~10^44 erg/s,
+a typical bright Seyfert nucleus. This is a physically reasonable default for AGN
+fitting; always set this parameter explicitly in production to match your target.
 
 Usage::
 
@@ -665,7 +663,7 @@ def kubota_done_full_agn(
 )
 def skirtor_agn(
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 44.0,
+    agn_log_lbol: float = 11.0,
     agn_frac: float = 0.1,
     agn_tau_skirtor: float = 7.0,
     agn_p_skirtor: float = 1.0,
@@ -742,7 +740,7 @@ def skirtor_agn(
 )
 def silva04_agn(
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 44.0,
+    agn_log_lbol: float = 11.0,
     agn_frac: float = 0.1,
     agn_log_nh_silva: float = 23.0,
     agn_torus_frac: float = 0.5,
@@ -802,7 +800,7 @@ def silva04_agn(
 )
 def cat3d_wind_agn(
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 44.0,
+    agn_log_lbol: float = 11.0,
     agn_frac: float = 0.1,
     agn_cos_inc: float = 0.5,
     agn_a_cat3d: float = -2.0,
@@ -1143,7 +1141,7 @@ def _sigmoid_mask(
 )
 def unified_nlr_blr(
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 44.0,
+    agn_log_lbol: float = 11.0,
     agn_cos_inc: float = 0.5,
     agn_theta_torus: float = 30.0,
     agn_nlr_cf: float = 0.1,

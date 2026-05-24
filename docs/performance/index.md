@@ -1,24 +1,20 @@
 # Performance
 
-The forward model is pure JAX, so every backend (MAP, NUTS, geoVI, ...)
-runs against the same compiled computation graph. That makes
-"how fast is tengri?" a small set of numbers that travel together.
+The forward model is pure JAX, so every backend (MAP, NUTS, geoVI, …)
+runs against the same compiled graph. "How fast is tengri?" therefore
+reduces to a small set of numbers that travel together.
 
-This page summarises what the existing benchmark suite measures, the
-headline numbers from the last full run, and how to reproduce them on
-your hardware. The full benchmark suite ships under
-[`bench/scripts/benchmark_*.py`](https://github.com/suchethac/tengri/tree/main/bench/scripts)
-and is consolidated behind one entry point — see
-[Health check & dispatcher](#health-check-and-dispatcher) below.
+Headline numbers (last full run May 2026) and how to reproduce them.
+Scripts live under
+[`bench/scripts/benchmark_*.py`](https://github.com/suchethac/tengri/tree/main/bench/scripts);
+the single entry point is [Health check & dispatcher](#health-check-and-dispatcher).
 
 ```{warning}
-The headline numbers below were measured in **April–May 2026**. Several
-have not been re-run after recent forward-model changes and may be
-stale. Treat them as ballpark, not authoritative; re-run the relevant
-script (see [Reproducing the headline numbers](#reproducing-the-headline-numbers))
-before quoting in a paper or PR. The
-[bench/reports/](https://github.com/suchethac/tengri/tree/main/bench/reports)
-directory carries the date of every measurement event.
+Numbers below were measured April–May 2026 on JAX 0.9 / Apple M-series
+and some pre-date recent forward-model changes. Re-run the relevant
+script before quoting in a paper or PR;
+[`bench/reports/`](https://github.com/suchethac/tengri/tree/main/bench/reports)
+carries the date of every measurement.
 ```
 
 ## Headline numbers (Apple M-series CPU, x64, JAX 0.9, last run May 2026)
@@ -91,7 +87,7 @@ prints the JAX backend, default device, persistent compile-cache size,
 and a 1-galaxy + 100-galaxy timing on SDSS *ugriz*. ~30 s on CPU after
 the cache is warm.
 
-Every comprehensive benchmark script under `scripts/` is also reachable
+Every benchmark script under `bench/scripts/` is also reachable
 through one entry point:
 
 ```bash

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for Parameters.from_groups() classmethod bridge.
+"""Tests for parse_groups() classmethod bridge.
 
 This bridge delegates to parse_groups(). The tests here verify the
 classmethod plumbing (identity with parse_groups, importability) rather
@@ -15,11 +15,11 @@ from tengri.parameters.parameters import Parameters
 
 
 class TestFromGroupsBridge:
-    """Verify Parameters.from_groups() delegates correctly to parse_groups()."""
+    """Verify parse_groups() delegates correctly to parse_groups()."""
 
     def test_from_groups_returns_parameters(self):
         """Classmethod returns a Parameters instance."""
-        spec = Parameters.from_groups(
+        spec = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             redshift=Fixed(0.1),
         )
@@ -33,7 +33,7 @@ class TestFromGroupsBridge:
             neb={"type": "cue", "*": FIXED},
             redshift=Fixed(0.05),
         )
-        via_method = Parameters.from_groups(**kwargs)
+        via_method = parse_groups(**kwargs)
         via_function = parse_groups(**kwargs)
 
         assert via_method.free_params == via_function.free_params
@@ -41,7 +41,7 @@ class TestFromGroupsBridge:
 
     def test_from_groups_canonical_example(self):
         """The canonical example from the design doc works end-to-end."""
-        spec = Parameters.from_groups(
+        spec = parse_groups(
             sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
             dust={
                 "type": "two_component",
@@ -61,4 +61,4 @@ class TestFromGroupsBridge:
     def test_from_groups_propagates_validation_errors(self):
         """Unknown group keys raise the same ValueError as parse_groups."""
         with pytest.raises(ValueError, match="Unknown group key"):
-            Parameters.from_groups(foo={"type": "x"})
+            parse_groups(foo={"type": "x"})
