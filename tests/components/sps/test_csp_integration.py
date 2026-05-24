@@ -306,22 +306,35 @@ class TestCspBenchmark:
         _ = w_trapz(sfr, dt_trapz).block_until_ready()
         _ = w_log(sfr, dt_log).block_until_ready()
 
-        n = 1000
-        t0 = time.perf_counter()
-        for _ in range(n):
-            w_trapz(sfr, dt_trapz).block_until_ready()
-        t_trapz = (time.perf_counter() - t0) / n * 1e6
+        # Min-of-N timing: GitHub Actions runners can stall a single ``n=1000``
+        # loop by 3-5× under contention, while the true compute cost is
+        # essentially identical (both kernels are ``sfr * dt``). Taking the
+        # minimum across repeated batches is dominated by actual XLA wall and
+        # drops scheduler jitter that produced flakes on CI runs where the
+        # ratio briefly went to 3.04×.
+        def _min_us(fn, args, n=1000, repeats=5):
+            best = float("inf")
+            for _ in range(repeats):
+                t0 = time.perf_counter()
+                for _ in range(n):
+                    fn(*args).block_until_ready()
+                best = min(best, (time.perf_counter() - t0) / n * 1e6)
+            return best
 
-        t0 = time.perf_counter()
-        for _ in range(n):
-            w_log(sfr, dt_log).block_until_ready()
-        t_log = (time.perf_counter() - t0) / n * 1e6
+        t_trapz = _min_us(w_trapz, (sfr, dt_trapz))
+        t_log = _min_us(w_log, (sfr, dt_log))
 
-        print(f"\n  trapz forward:     {t_trapz:.2f} µs")
-        print(f"  log_trapz forward: {t_log:.2f} µs")
+        print(f"\n  trapz forward (min): {t_trapz:.2f} µs")
+        print(f"  log_trapz forward (min): {t_log:.2f} µs")
 
-        # Should be within 2x of each other (XLA kernel is identical)
-        assert max(t_trapz, t_log) / min(t_trapz, t_log) < 3.0
+        # XLA kernels are identical (sfr * dt with different dt arrays) so
+        # min-timed cost should be within 3×. Tolerance is generous — both
+        # kernels typically agree to within a few percent.
+        assert max(t_trapz, t_log) / min(t_trapz, t_log) < 3.0, (
+            f"trapz {t_trapz:.2f}µs vs log_trapz {t_log:.2f}µs — same XLA kernel "
+            f"should agree to within 3×; if this keeps tripping on CI, drop the "
+            f"check rather than re-tolerating."
+        )
 
 
 # ── Johnson+2021 log_interp matrix tests ──────────────────────────

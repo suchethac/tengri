@@ -16,9 +16,41 @@ import jax
 import jax.numpy as jnp
 from jax import random
 
+# Default log10(age/yr) bounds for the SFH grid: 1 Myr → ~13.8 Gyr.
+# Exposed as module constants so callers that need the static step size
+# (e.g. ``StellarSEDComponent.apply`` under JIT, where indexing a traced
+# ``jnp.linspace`` and calling ``float()`` would raise) can recompute it
+# without re-tracing the grid.
+LOG_AGE_MIN: float = 6.0
+LOG_AGE_MAX: float = 10.14
+
+
+def log_age_grid_step(
+    n_grid: int, log_age_min: float = LOG_AGE_MIN, log_age_max: float = LOG_AGE_MAX
+) -> float:
+    """Return the step size of :func:`make_log_age_grid` as a Python float.
+
+    JIT-safe: takes ``n_grid`` (static config) and constants, never touches
+    a traced array. Use this when a downstream function (e.g.
+    ``compute_field_gp``) needs ``d_log_age`` as a static Python scalar.
+
+    Parameters
+    ----------
+    n_grid : int
+        Number of grid points (must be ≥ 2).
+    log_age_min, log_age_max : float, optional
+        Grid bounds; default to :data:`LOG_AGE_MIN` / :data:`LOG_AGE_MAX`.
+
+    Returns
+    -------
+    float
+        ``(log_age_max - log_age_min) / (n_grid - 1)``.
+    """
+    return (log_age_max - log_age_min) / (n_grid - 1)
+
 
 def make_log_age_grid(
-    n_grid: int = 256, log_age_min: float = 6.0, log_age_max: float = 10.14
+    n_grid: int = 256, log_age_min: float = LOG_AGE_MIN, log_age_max: float = LOG_AGE_MAX
 ) -> jnp.ndarray:
     """Create uniform grid in log10(age/yr).
 

@@ -68,7 +68,7 @@ class SMC(SEDModelComponent):
     name = "smc"
     parameter_prefix = "dust_"
 
-    tau_v = Uniform(0.0, 4.0, description="V-band optical depth", units="")
+    tau_v = Uniform(0.0, 4.0, description="V-band optical depth", units="dimensionless")
 
     inputs: dict[str, str] = {}  # noqa: RUF012
     outputs: dict[str, str] = {"L_absorbed": "erg/s"}  # noqa: RUF012

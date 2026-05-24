@@ -95,7 +95,7 @@ class DL07IRSEDComponent(SEDModelComponent):
     umin = Uniform(
         -1.0, 1.5, description="log U_min (minimum radiation field intensity)", units="dex"
     )
-    gamma = Uniform(0.0, 0.3, description="Power-law mixing fraction", units="")
+    gamma = Uniform(0.0, 0.3, description="Power-law mixing fraction", units="dimensionless")
 
     # Cross-component contract
     inputs: ClassVar = {"L_ir": "erg/s"}

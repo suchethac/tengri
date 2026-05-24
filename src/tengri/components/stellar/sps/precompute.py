@@ -36,7 +36,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.units import lnu_to_fnu
 from tengri.utils.grid_interp import preintegrate_grid
 
 # SSP precompute grid axes: (lgmet, lg_age_gyr). The age axis is never user-fixed
@@ -302,14 +301,30 @@ def precompute_spectroscopy(
     ssp_on_pixels_np = _vectorized_interp(wave_rest_np, wave_ssp_np, ssp_flux_np)
     ssp_on_pixels = jnp.array(ssp_on_pixels_np)
 
-    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
+    # Inline the (1+z)/(4π d_L²) geometric scale rather than calling the
+    # ``@jit``'d ``lnu_to_fnu`` and ``float()``-casting; the latter raises
+    # ConcretizationTypeError when this precompute runs inside a jit trace
+    # (e.g. when the user calls ``predict_*`` for the first time inside a
+    # ``jax.jit`` wrapper without warming the chain). See companion fix in
+    # ``utils/grid_interp.py``.
+    import math as _math
+
+    flux_scale = (1.0 + redshift) / (4.0 * _math.pi * dl_cm**2)
+    # ``redshift`` may itself be a tracer when this path runs inside jit;
+    # keep the conversion defensive in that case too.
+    try:
+        flux_scale_out = float(flux_scale)
+        redshift_out = float(redshift)
+    except (TypeError, jax.errors.ConcretizationTypeError):
+        flux_scale_out = flux_scale
+        redshift_out = redshift
 
     return SpectroscopicPrecomputation(
         ssp_on_pixels=ssp_on_pixels,
         wave_rest_pixels=wave_rest_pixels,
         wave_obs_pixels=wave_obs_pixels,
-        flux_scale=float(flux_scale),
-        redshift=float(redshift),
+        flux_scale=flux_scale_out,
+        redshift=redshift_out,
     )
 
 

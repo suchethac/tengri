@@ -1394,6 +1394,180 @@ class Fitter:
             params["psd_xi"] = params_unbounded["psd_xi"]
         return params
 
+    # ── AOT pre-warm and adaptation persistence ──────────────────────
+
+    def prewarm(self, method: str = "mcmc_nuts", *, n_chains: int | None = None, key=None):
+        """Pre-compile JIT kernels and populate the adaptation cache for ``method``.
+
+        After this returns, a subsequent :meth:`run` call with the same
+        ``method`` skips XLA compilation **and** sampler warmup window
+        adaptation — only the actual sampling work remains.
+
+        Concretely: runs the smallest meaningful inference (a few
+        warmup steps + a handful of samples) to (1) compile every
+        JIT'd kernel in the loss / sampler stack against the current
+        data shape, and (2) write step size + mass matrix (or
+        equivalent) into the per-model adaptation cache. The
+        persistent XLA cache (``~/.cache/tengri_jax_cache``) also
+        captures the compile, so a fresh Python process sees a warm
+        XLA cache too.
+
+        Parameters
+        ----------
+        method : str, default ``"mcmc_nuts"``
+            Inference method to pre-warm. Any name accepted by
+            :meth:`run`.
+        n_chains : int or None
+            If set and greater than 1, also pre-compile the multichain
+            ``jax.vmap`` path for ``n_chains`` so the second multichain
+            call has zero compile latency. Only meaningful for backends
+            that support ``n_chains`` (NUTS / HMC / dHMC / GHMC / MCLMC /
+            adjusted MCLMC / raytrace).
+        key : jax.random.PRNGKey or None
+            Optional seed. Default uses a fixed key — the pre-warm run
+            is throwaway and its randomness does not affect the
+            subsequent real fit.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> from tengri.inference.fitter import Fitter
+        >>> fitter = Fitter(sed_model, flux, noise, data_type="photometry")
+        >>> fitter.prewarm(method="mcmc_nuts", n_chains=4)
+        >>> posterior = fitter.run(method="mcmc_nuts", n_chains=4, n_samples=1000)
+
+        Notes
+        -----
+        Pre-warming is **soft**: any exception raised during the throwaway
+        call is swallowed so the real ``run()`` surfaces the genuine error
+        with a richer traceback. Calling ``prewarm`` redundantly is cheap
+        — both caches are short-circuited.
+        """
+        import jax as _jax
+
+        if key is None:
+            key = _jax.random.PRNGKey(0)
+        sample_kwarg = "n_steps" if method in ("mcmc_raytrace", "raytrace") else "n_samples"
+        warmup_kw = {sample_kwarg: 10}
+        try:
+            self.run(method=method, key=key, verbose=False, **warmup_kw)
+        except Exception:
+            return
+        if n_chains is not None and n_chains > 1:
+            warmup_kw["n_chains"] = n_chains
+            import contextlib
+
+            with contextlib.suppress(Exception):
+                self.run(method=method, key=key, verbose=False, **warmup_kw)
+
+    def save_cache(self, path) -> None:
+        """Persist this model's adaptation cache (step size + mass matrix) to disk.
+
+        Reload in a fresh Python process with :meth:`load_cache` to skip
+        sampler warmup on the next :meth:`run` call. Useful when the same
+        model+data is fit repeatedly across notebook restarts or batch
+        jobs — warmup window adaptation typically dominates first-call
+        wall time on a warm XLA cache.
+
+        Stored payload:
+
+        - ``adaptation`` : dict keyed by ``(engine_key, method_key)`` — the
+          contents of ``get_model_cache(model)["adaptation"]``.
+        - ``spec_fingerprint`` : a content hash of the free-parameter names
+          and prior shape, used by :meth:`load_cache` to refuse to load a
+          cache that was written for a different model.
+
+        Parameters
+        ----------
+        path : str or Path
+            Destination file (``.pkl`` recommended). Parent directory is
+            created if missing.
+
+        Returns
+        -------
+        None
+        """
+        import pickle
+        from pathlib import Path as _Path
+
+        from tengri.inference._model_cache import get_model_cache
+
+        mc = get_model_cache(self.model)
+        adaptation = mc.get("adaptation", {})
+        # Cached MAP point estimate (if a previous .run() or .prewarm()
+        # populated it). Saving it skips MAP init on the next load_cache
+        # session — same speedup the adaptation cache gives for warmup.
+        map_params = mc.get("map_params_physical")
+        payload = {
+            "adaptation": adaptation,
+            "map_params_physical": map_params,
+            "spec_fingerprint": self._spec_fingerprint(),
+        }
+        p = _Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("wb") as f:
+            pickle.dump(payload, f)
+
+    def load_cache(self, path) -> None:
+        """Load an adaptation cache previously written by :meth:`save_cache`.
+
+        Refuses to load if the spec fingerprint disagrees (different
+        free-parameter set), to prevent silently using a stale cache.
+
+        Parameters
+        ----------
+        path : str or Path
+            File written by :meth:`save_cache`.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        ValueError
+            If the cache's ``spec_fingerprint`` does not match this
+            Fitter's model.
+        """
+        import pickle
+        from pathlib import Path as _Path
+
+        from tengri.inference._model_cache import get_model_cache
+
+        with _Path(path).open("rb") as f:
+            payload = pickle.load(f)
+        if payload.get("spec_fingerprint") != self._spec_fingerprint():
+            raise ValueError(
+                f"Adaptation cache at {path} was written for a different model "
+                "(spec fingerprint mismatch). Re-run prewarm + save_cache."
+            )
+        mc = get_model_cache(self.model)
+        mc.setdefault("adaptation", {}).update(payload["adaptation"])
+        if payload.get("map_params_physical") is not None:
+            mc["map_params_physical"] = payload["map_params_physical"]
+
+    def _spec_fingerprint(self) -> str:
+        """Content hash of free parameter names + ordered fixed values.
+
+        Stable across processes; changes if the user reorders / renames
+        parameters or changes which are fixed vs free. Does NOT depend on
+        data tensors — the adaptation cache itself is data-conditional
+        and the user takes responsibility for fitting the same model+data
+        combination after :meth:`load_cache`.
+        """
+        import hashlib
+
+        h = hashlib.sha1()
+        for name in self._free_names:
+            h.update(name.encode())
+        for name, val in sorted(self._fixed_values.items()):
+            h.update(name.encode())
+            h.update(f"{float(val):.10g}".encode())
+        return h.hexdigest()
+
     # ── Inference dispatch ────────────────────────────────────────────
 
     def run(self, method: str = "vi_nonlinear_fast", *, init_from=None, key=None, **kwargs):

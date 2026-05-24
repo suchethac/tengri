@@ -113,6 +113,9 @@ def luminosity_distance(
     Accepts positional h0/om0 or a keyword-only ``cosmo`` object.
     Priority: positional h0/om0 > keyword cosmo > defaults.
 
+    At z=0, returns 10 pc (the standard optical absolute-magnitude distance
+    convention) to enable finite L_ν → F_ν conversion in observation models.
+
     Parameters
     ----------
     z : float
@@ -128,13 +131,15 @@ def luminosity_distance(
     Returns
     -------
     float
-        Luminosity distance in cm.
+        Luminosity distance in cm. At z=0, returns 10 pc (3.086e19 cm).
     """
     # Handle positional args taking priority
     if h0 is not None or om0 is not None:
         cosmo = None  # Ignore cosmo if positional args provided
     c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
     dl_mpc = luminosity_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
+    # At z=0, use 10 pc (1e-5 Mpc) for the optical absolute-magnitude convention
+    dl_mpc = jnp.where(z <= 0.0, 1e-5, dl_mpc)
     return dl_mpc * MPC_CM
 
 

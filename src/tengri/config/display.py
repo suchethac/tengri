@@ -216,12 +216,6 @@ def summary(model: SEDModel) -> str:
         precomp_parts.append("z-table")
     lines.append(f"  Precomputed: {', '.join(precomp_parts) if precomp_parts else 'none'}")
 
-    # Kernel status
-    hybrid = "active" if model.hybrid.photometry is not None else "off"
-    compositional = "active" if model._compositional.photometry is not None else "off"
-    lines.append(f"  Hybrid kernel: {hybrid}")
-    lines.append(f"  Compositional kernel: {compositional}")
-
     # Enabled components
     components: list[str] = []
     if model.spec.nebular_mode != "off":

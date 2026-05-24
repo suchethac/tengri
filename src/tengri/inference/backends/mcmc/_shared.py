@@ -717,3 +717,83 @@ def _set_cached_adaptation(fitter, method_key, params):
     cache = get_model_cache(fitter.model).setdefault("adaptation", {})
     engine_key = fitter._engine_cache_key()
     cache[(engine_key, method_key)] = params
+
+
+def _vmap_chains(
+    init_state_fn,
+    chain_scan_fn,
+    *,
+    init_flat,
+    chain_key,
+    n_chains,
+    n_iter,
+    n_burnin,
+    jitter_scale=1e-3,
+):
+    """Run ``n_chains`` independent MCMC chains in parallel via ``jax.vmap``.
+
+    Shared multi-chain plumbing used by HMC / NUTS / dHMC / GHMC / MCLMC.
+    Each chain starts from ``init_flat + jitter`` and shares the same
+    cached adaptation; the vmap dispatches them across XLA SIMD lanes
+    (CPU) or accelerator cores (GPU/TPU). Per-chain burnin is discarded
+    before the ``(n_chains, n_iter, ...)`` → flattened reshape so
+    ``n_burnin`` correctly applies to *each* chain.
+
+    Parameters
+    ----------
+    init_state_fn : callable(init_pos_for_chain) -> chain_state
+        Builds the sampler's initial state from a chain's starting position.
+        May close over the log-density callable.
+    chain_scan_fn : callable(chain_state, chain_keys) -> outputs
+        Runs the per-chain scan (burn-in + sampling). Outputs may be a
+        single jnp.ndarray (e.g. positions) or a tuple where the leading
+        axis is iterations (e.g. ``(positions, divergent)``).
+    init_flat : jnp.ndarray, shape (D,)
+        Reference initial position; each chain is jittered around this.
+    chain_key : PRNGKey
+        Splits into per-chain init jitter, per-chain init keys, and the
+        flat key block fed to ``chain_scan_fn``.
+    n_chains : int
+        Number of chains to vmap (≥ 2; callers handle the single-chain case).
+    n_iter : int
+        Iterations per chain (caller passes ``n_burnin + n_samples``).
+    n_burnin : int
+        Per-chain burn-in to discard before flatten.
+    jitter_scale : float, default 1e-3
+        Gaussian jitter scale applied to ``init_flat`` for each chain.
+
+    Returns
+    -------
+    same shape as ``chain_scan_fn`` output, with the leading
+    ``(n_chains, n_iter)`` dimensions burnin-discarded and flattened to
+    ``(n_chains * (n_iter - n_burnin),)``.
+    """
+    keys = jax.random.split(chain_key, n_chains + 2)
+    new_chain_key, jitter_key, init_key_seed = keys[0], keys[1], keys[2]
+    per_chain_init_keys = jax.random.split(init_key_seed, n_chains)
+    jitter = jitter_scale * jax.random.normal(jitter_key, shape=(n_chains, init_flat.shape[0]))
+    init_flat_batch = init_flat[None, :] + jitter
+
+    # init_state_fn may be unary (just init_pos) or binary (init_pos, init_key).
+    import inspect as _inspect
+
+    arity = len(_inspect.signature(init_state_fn).parameters)
+    if arity == 1:
+        states = jax.vmap(init_state_fn)(init_flat_batch)
+    else:
+        states = jax.vmap(init_state_fn)(init_flat_batch, per_chain_init_keys)
+
+    per_chain_keys = jax.random.split(new_chain_key, n_chains * n_iter)
+    per_chain_keys = per_chain_keys.reshape(n_chains, n_iter, 2)
+    out = jax.vmap(chain_scan_fn)(states, per_chain_keys)
+
+    def _trim_and_flatten(arr):
+        if n_burnin > 0:
+            arr = arr[:, n_burnin:]
+        if arr.ndim >= 3:
+            return arr.reshape(-1, *arr.shape[2:])
+        return arr.reshape(-1)
+
+    if isinstance(out, tuple):
+        return tuple(_trim_and_flatten(a) for a in out)
+    return _trim_and_flatten(out)
