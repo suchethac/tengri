@@ -19,7 +19,10 @@ from tengri import FIXED, Fixed
 
 @pytest.fixture(scope="module")
 def ssp():
-    return tengri.load_ssp()
+    try:
+        return tengri.load_ssp()
+    except FileNotFoundError:
+        pytest.skip("default wNE SSP not available")
 
 
 def test_two_step(ssp):
