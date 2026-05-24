@@ -382,9 +382,19 @@ def parse_groups(**kwargs) -> Parameters:
     # Build a structural Parameters to get the declared parameter list
     structural_params = Parameters(**structural_kwargs)
 
-    # Partition declared params by owning group
+    # Partition declared params by owning group. ``met_*`` lands in
+    # ``"stellar"`` when the user opted into the new top-level slot
+    # (issue #311); otherwise it stays in ``"sfh"`` so the legacy
+    # ``sfh={'*': FIXED}`` wildcard keeps cascading over met_* params
+    # — preserves pre-#311 behaviour for every fixture/recipe that didn't
+    # pass a ``stellar={}`` block.
     dust_emission_active = structural_params.dust_emission is not None
-    param_partition = _partition_by_group(structural_params.all_params, dust_emission_active)
+    has_stellar_block = isinstance(kwargs.get("stellar"), dict)
+    param_partition = _partition_by_group(
+        structural_params.all_params,
+        dust_emission_active,
+        met_group="stellar" if has_stellar_block else "sfh",
+    )
 
     # Resolve each parameter's final distribution
     resolved_kwargs = dict(structural_kwargs)
@@ -1059,7 +1069,12 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         result[block_to_kwarg[block_name]] = block_type
 
 
-def _partition_by_group(all_param_names: list[str], dust_emission_active: bool) -> dict[str, str]:
+def _partition_by_group(
+    all_param_names: list[str],
+    dust_emission_active: bool,
+    *,
+    met_group: str = "sfh",
+) -> dict[str, str]:
     """Partition parameter names by their owning group.
 
     Returns a dict: param_name -> group_name. For sub-groups, group_name
@@ -1101,7 +1116,7 @@ def _partition_by_group(all_param_names: list[str], dust_emission_active: bool) 
         elif name.startswith("dust_"):
             partition[name] = "dust"
         elif name.startswith("met_"):
-            partition[name] = "stellar"
+            partition[name] = met_group
         elif name.startswith("sfh_"):
             partition[name] = "sfh"
         else:
@@ -1336,7 +1351,16 @@ def parameters_to_groups(spec: Parameters) -> dict:
     True
     """
     result = {}
-    partition = _partition_by_group(spec.all_params, spec.dust_emission is not None)
+    # Emit a ``stellar`` block on the round-trip only when ``met_mode`` is
+    # non-default OR the user explicitly built the spec with a stellar group
+    # (provenance check). Otherwise keep met_* under ``sfh`` for back-compat
+    # with the legacy fixtures that pre-#311 expected.
+    use_stellar = getattr(spec, "met_mode", "delta") != "delta"
+    partition = _partition_by_group(
+        spec.all_params,
+        spec.dust_emission is not None,
+        met_group="stellar" if use_stellar else "sfh",
+    )
     provenance = getattr(spec, "_group_provenance", {})
 
     # Group parameters by their owning group
