@@ -16,14 +16,15 @@
 # %% [markdown]
 # # Quickstart: fit a mock galaxy
 #
-# A star-forming galaxy with six SDSS+WISE bands, fitted with NUTS on a
-# differentiable JAX forward model. About two minutes on a laptop.
+# A star-forming galaxy with 14 broadband fluxes from GALEX, SDSS, 2MASS,
+# and WISE (UV through mid-IR), fitted with NUTS on a differentiable JAX
+# forward model.
 #
-# The recipe here is `mock_recovery_minimal`: truncated-skew-normal SFH,
-# Calzetti birth-cloud dust, nebular off, redshift fixed at 0.05. Seven
-# free parameters. See `04_building_models.py` for the recipe grammar and
-# `02_sed_anatomy.py` for a panchromatic model with nebular, AGN, dust IR,
-# and IGM enabled.
+# Truncated-skew-normal SFH, two-component Calzetti dust with modified-
+# blackbody IR re-emission, nebular off, redshift fixed at 0.05. Seven free
+# parameters. See `04_building_models.py` for the recipe grammar and
+# `02_sed_anatomy.py` for a panchromatic model with nebular, AGN, and
+# IGM enabled.
 
 # %%
 from pathlib import Path
@@ -35,17 +36,21 @@ import numpy as np
 
 import tengri
 from tengri import (
+    FIXED,
+    FREE,
+    Fixed,
     ForwardModel,
     Observation,
     Photometry,
     SEDModel,
+    Uniform,
     WavePrecomp,
+    builders,
     citations,
     cosmology,
     generate_mock,
     load_ssp_data,
     plot,
-    recipes,
 )
 from tengri.utils.conversions import lnu_to_fnu
 
@@ -58,8 +63,8 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 # %% [markdown]
 # ## Stellar library and observation
 #
-# `mock_recovery_minimal` works with any SSP file; the Cue-based recipes
-# would require a bare-stellar grid like the one downloaded below.
+# A bare-stellar SSP grid (Cue-compatible if you later want to add nebular
+# emission). `download_ssp` fetches on first use.
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"
@@ -68,22 +73,48 @@ if not ssp_path.exists():
     ssp_path = Path(tengri.download_ssp(SSP_NAME))
 ssp = load_ssp_data(str(ssp_path))
 
-FILTERS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "wise_w1"]
+FILTERS = [
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
+    "wise_w1",
+    "wise_w2",
+    "wise_w3",
+    "wise_w4",
+]
 obs = Observation(photometry=Photometry.from_names(FILTERS))
 
 # %% [markdown]
 # ## Build the model
 #
-# `model.summary()` prints the assembled pipeline; `citations.print_citations`
-# pulls the bibliography of every physics ingredient straight from the
-# registry — enough for the methods section of a paper.
+# A truncated skew-normal SFH, two-component Calzetti dust with a
+# modified-blackbody IR re-emission (so the WISE mid-IR bands carry signal),
+# nebular emission off, redshift fixed at z = 0.05. Seven free
+# parameters. `model.summary()` prints the assembled pipeline;
+# `citations.print_citations` pulls the bibliography straight from the
+# registry — enough for a methods section.
 
 # %%
 sed_model = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
     approx=WavePrecomp(),
-    **recipes.mock_recovery_minimal(),
+    sfh=builders.sfh.tsnorm(defaults=FREE),
+    dust=builders.dust.two_component(
+        defaults=FIXED,
+        law_bc="calzetti",
+        tau_bc=Uniform(0.0, 1.0),
+        emission=builders.dust.emission.modified_blackbody(defaults=FIXED),
+    ),
+    neb=builders.neb.none(),
+    redshift=Fixed(0.05),
 )
 forward = ForwardModel.build(sed=sed_model, observation=obs)
 
@@ -161,10 +192,11 @@ print(f"  MAP wall: {time.perf_counter() - t:6.2f} s")
 # %% [markdown]
 # ## NUTS — the full posterior
 #
-# Geometry-adaptive HMC. With ~5 free parameters and 6 photometric points
-# the warmup + sampling is the dominant cost — each leapfrog step is one
-# forward+gradient (~2 ms above), the U-turn check fires after ~30–100
-# leapfrogs per iteration. Hamiltonian step throughput sets the wall.
+# Geometry-adaptive HMC. With 7 free parameters and 14 photometric
+# bands the warmup + sampling is the dominant cost — each leapfrog step
+# is one forward+gradient (~2 ms above), the U-turn check fires after
+# ~30–100 leapfrogs per iteration. Hamiltonian step throughput sets the
+# wall.
 
 # %%
 posterior = forward.fit(
@@ -218,7 +250,7 @@ for k in DERIVED_KEYS:
 # posterior median below.
 
 # %%
-WAVE_OBS = np.geomspace(3000.0, 5e4, 600)
+WAVE_OBS = np.geomspace(1300.0, 3e5, 1200)  # 0.13–30 μm covers GALEX → WISE W4
 z_truth = float(truth_full["redshift"])
 dl_cm = cosmology.luminosity_distance(z_truth)
 
@@ -258,7 +290,7 @@ ax.errorbar(
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
-ax.set_ylim(0.3 * flux_obs.min(), 3 * flux_obs.max())
+ax.set_ylim(0.3 * spec_truth.min(), 3 * spec_truth.max())
 ax.legend(frameon=False, fontsize=9, loc="lower right")
 plt.setp(ax.get_xticklabels(), visible=False)
 
