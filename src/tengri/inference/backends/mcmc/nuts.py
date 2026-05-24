@@ -34,6 +34,7 @@ def run_nuts(
     n_warmup=300,
     n_burnin=100,
     n_samples=1000,
+    n_chains=1,
     target_accept_rate=0.85,
     max_num_doublings=10,
     dense_mass_matrix=True,
@@ -79,9 +80,19 @@ def run_nuts(
         the MAP initialization and reach the typical set. Set to 0
         if init_from is already a Posterior from a converged chain.
     n_samples : int
-        Posterior samples to collect. 1000 gives convergence for
-        most SED fitting scenarios at D≤10. Increase if
+        Posterior samples per chain to collect. 1000 gives convergence
+        for most SED fitting scenarios at D≤10. Increase if
         ``check_convergence()`` reports unconverged parameters.
+    n_chains : int, default 1
+        Number of independent NUTS chains to run in parallel via
+        ``jax.vmap`` over chain seeds. Each chain shares the cached
+        warmup adaptation (so this is only honoured on the second
+        ``run_nuts(...)`` call against the same model — the first call
+        populates the cache). Final posterior has ``n_chains * n_samples``
+        total samples. Wall ≈ one chain's worth up to the arithmetic
+        ceiling (CPU SIMD; GPU/TPU scales further). Initial chain
+        positions are MAP + small Gaussian jitter so the chains
+        explore independent neighborhoods.
     target_accept_rate : float
         Target acceptance rate for step size adaptation. 0.85 is
         slightly more conservative than the Stan default (0.8),
@@ -206,7 +217,6 @@ def run_nuts(
         def ld_1arg(pos):
             return log_posterior_flat_2arg(pos, data_args)
 
-        state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
         if verbose:
             logger.info(
                 "  Reusing cached warmup (%.1fs). Step size: %.4f",
@@ -214,19 +224,57 @@ def run_nuts(
                 float(parameters["step_size"]),
             )
         key, chain_key = jax.random.split(key)
-        chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
-        with compile_timer("nuts_chain_scan", fitter.compile_signature(), method="mcmc_nuts"):
-            positions, divergent = _nuts_chain_scan(
-                state,
-                chain_keys,
-                log_posterior_flat_2arg,
-                data_args,
-                parameters["step_size"],
-                parameters["inverse_mass_matrix"],
-                max_num_doublings,
-            )
-            jax.block_until_ready(positions)
+        if n_chains > 1:
+            # Vmap multiple chains over independent seeds + jittered inits.
+            # Each chain shares the same cached adaptation; runs in parallel
+            # via XLA SIMD. Wall ≈ one chain's worth (CPU) up to the
+            # arithmetic ceiling.
+            init_keys = jax.random.split(chain_key, n_chains + 1)
+            chain_key = init_keys[0]
+            jitter = 1e-3 * jax.random.normal(init_keys[1], shape=(n_chains, init_flat.shape[0]))
+            init_flat_batch = init_flat[None, :] + jitter
+            states = jax.vmap(lambda x: blackjax.mcmc.nuts.init(x, ld_1arg))(init_flat_batch)
+            per_chain_keys = jax.random.split(chain_key, n_chains * (n_burnin + n_samples))
+            per_chain_keys = per_chain_keys.reshape(n_chains, n_burnin + n_samples, 2)
+            with compile_timer(
+                "nuts_chain_scan_vmap", fitter.compile_signature(), method="mcmc_nuts"
+            ):
+                positions, divergent = jax.vmap(
+                    lambda s, ks: _nuts_chain_scan(
+                        s,
+                        ks,
+                        log_posterior_flat_2arg,
+                        data_args,
+                        parameters["step_size"],
+                        parameters["inverse_mass_matrix"],
+                        max_num_doublings,
+                    )
+                )(states, per_chain_keys)
+                jax.block_until_ready(positions)
+            # Per-chain burnin discard, then flatten to (n_chains*n_samples, D).
+            if n_burnin > 0:
+                positions = positions[:, n_burnin:, :]
+                divergent = divergent[:, n_burnin:]
+            positions = positions.reshape(-1, positions.shape[-1])
+            divergent = divergent.reshape(-1)
+            _multichain_burnin_done = True
+        else:
+            state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
+            chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
+            with compile_timer("nuts_chain_scan", fitter.compile_signature(), method="mcmc_nuts"):
+                positions, divergent = _nuts_chain_scan(
+                    state,
+                    chain_keys,
+                    log_posterior_flat_2arg,
+                    data_args,
+                    parameters["step_size"],
+                    parameters["inverse_mass_matrix"],
+                    max_num_doublings,
+                )
+                jax.block_until_ready(positions)
+            _multichain_burnin_done = False
     else:
+        _multichain_burnin_done = False
         key, warmup_key = jax.random.split(key)
         key, chain_key = jax.random.split(key)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
@@ -255,8 +303,9 @@ def run_nuts(
 
     # Burnin discard happens Python-side (not inside JIT) so changing
     # n_burnin doesn't trigger a recompile when n_burnin + n_samples is
-    # held constant.
-    if n_burnin > 0:
+    # held constant. The multichain branch already discarded per-chain
+    # before flattening; skip the global slice there.
+    if n_burnin > 0 and not _multichain_burnin_done:
         positions = positions[n_burnin:]
         divergent = divergent[n_burnin:]
     n_divergent = int(jnp.sum(divergent))
@@ -280,6 +329,7 @@ def run_nuts(
             "n_warmup": n_warmup,
             "n_burnin": n_burnin,
             "n_samples": n_samples,
+            "n_chains": n_chains,
             "n_divergent": n_divergent,
             "step_size": float(parameters["step_size"]),
             "warmup": "pathfinder" if pathfinder_warmstart else "window",

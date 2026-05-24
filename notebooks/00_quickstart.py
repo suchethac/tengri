@@ -202,11 +202,39 @@ map_result = Fitter(sed_model, flux_obs, noise, data_type="photometry").run(
 )
 print(f"  MAP wall: {time.perf_counter() - t:6.2f} s")
 
+# %% [markdown]
+# ### Pre-warm + cached warmup
+#
+# A tiny throwaway NUTS call compiles the chain kernel and runs window
+# adaptation once. The result is cached on the model, so the *real* NUTS
+# call below reuses the step size and mass matrix — no second warmup.
+
+# %%
+t = time.perf_counter()
+_ = Fitter(sed_model, flux_obs, noise, data_type="photometry").run(
+    method="mcmc_nuts", key=key_fit, n_warmup=400, n_samples=20, n_burnin=0, verbose=False
+)
+print(f"  pre-warm wall: {time.perf_counter() - t:6.2f} s")
+
+# %% [markdown]
+# ### NUTS — four chains in parallel via vmap
+#
+# `n_chains=4` runs four independent chains over jittered initial
+# positions, sharing the cached adaptation. They scan in parallel via
+# `jax.vmap` and XLA SIMD — wall ≈ one chain's worth on CPU, 4× more
+# samples for ~the same cost. 1 600 samples lands in a couple of seconds.
+
+# %%
 t = time.perf_counter()
 posterior = Fitter(sed_model, flux_obs, noise, data_type="photometry").run(
-    method="mcmc_nuts", key=key_fit, n_warmup=400, n_samples=400
+    method="mcmc_nuts",
+    key=key_fit,
+    n_warmup=400,
+    n_samples=400,
+    n_chains=4,
+    n_burnin=0,
 )
-print(f"  NUTS wall: {time.perf_counter() - t:6.2f} s")
+print(f"  NUTS wall (4 chains × 400 samples): {time.perf_counter() - t:6.2f} s")
 posterior.summary()
 
 # %% [markdown]
