@@ -480,7 +480,7 @@ def parse_groups(**kwargs) -> Parameters:
 
 def _translate_structural(groups: dict) -> dict:
     """Resolve each group's `type` choice into the matching Parameters kwargs."""
-    valid_groups = {"sfh", "dust", "neb", "igm", "radio", "xray", "agn"}
+    valid_groups = {"sfh", "stellar", "dust", "neb", "igm", "radio", "xray", "agn"}
     result = {}
 
     for group_name, group_dict in groups.items():
@@ -504,6 +504,8 @@ def _translate_structural(groups: dict) -> dict:
 
         if group_name == "sfh":
             _translate_sfh(group_dict, result)
+        elif group_name == "stellar":
+            _translate_stellar(group_dict, result)
         elif group_name == "dust":
             _translate_dust(group_dict, result)
         elif group_name == "neb":
@@ -553,6 +555,38 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
         raise ValueError(f"Unknown SFH type '{sfh_type}'.{suggest_str}")
 
     result["mean_sfh_type"] = sfh_type
+
+
+def _translate_stellar(stellar_dict: dict, result: dict) -> None:
+    """Resolve ``stellar.met_mode`` into the matching Parameters kwarg.
+
+    Wires the chemical-evolution mode (``delta``, ``ramp``, ``two_step``,
+    ``psb_two_step``, ``bins``, ``bins_continuity``, ``chem_evol``, ``table``)
+    through the nested-dict builder. Per-mode parameters (``logzsol_old``,
+    ``logzsol_young``, ``step_age_gyr``, etc.) flow through the standard
+    pass-2 resolver, since :func:`_partition_by_group` routes ``met_*``
+    declarations into this group.
+
+    See :func:`tengri.components.stellar.sfh.met_registry` for the full
+    list of registered modes and their per-mode parameters.
+    """
+    from tengri.components.stellar.sfh.met_registry import MET_REGISTRY
+
+    met_mode = stellar_dict.get("met_mode")
+    if met_mode is None:
+        # No explicit mode; let auto-inference (from per-param keys) decide.
+        return
+
+    valid_modes = sorted(MET_REGISTRY.keys())
+    if met_mode not in MET_REGISTRY:
+        suggestions = difflib.get_close_matches(met_mode, valid_modes, n=2, cutoff=0.6)
+        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+        raise ValueError(
+            f"Unknown met_mode '{met_mode}'. "
+            f"Valid modes: {', '.join(valid_modes)}.{suggest_str}"
+        )
+
+    result["met_mode"] = met_mode
 
 
 def _translate_dust(dust_dict: dict, result: dict) -> None:
@@ -709,6 +743,7 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "lines", "feii", "atten"})
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "sfh": frozenset({"type", "*"}),
+    "stellar": frozenset({"met_mode", "*"}),
     "dust": frozenset({"type", "*", "law_bc", "law_diff", "emission"}),
     "dust.emission": frozenset({"type", "*"}),
     "neb": frozenset({"type", "*"}),
@@ -761,7 +796,7 @@ def _validate_user_keys(
     was added (issue tracked in the forward-model cleanup arc).
     """
     dust_emission_active = structural_params.dust_emission is not None
-    valid_top_groups = {"sfh", "dust", "neb", "igm", "radio", "xray", "agn"}
+    valid_top_groups = {"sfh", "stellar", "dust", "neb", "igm", "radio", "xray", "agn"}
 
     # Build the AGN cross-level acceptance set (shared params land in any sub-block).
     agn_shared_names = _short_names_for_group("agn", param_partition)
@@ -1066,7 +1101,9 @@ def _partition_by_group(all_param_names: list[str], dust_emission_active: bool) 
             partition[name] = "dust.emission"
         elif name.startswith("dust_"):
             partition[name] = "dust"
-        elif name.startswith("sfh_") or name.startswith("met_"):
+        elif name.startswith("met_"):
+            partition[name] = "stellar"
+        elif name.startswith("sfh_"):
             partition[name] = "sfh"
         else:
             # _structural (settings like mean_sfh_type, dust_model, etc.)
@@ -1443,6 +1480,12 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
             group_output["law_bc"] = spec.dust_law_bc
         if hasattr(spec, "dust_law_diff") and spec.dust_law_diff != spec.dust_law_bc:
             group_output["law_diff"] = spec.dust_law_diff
+    elif group_name == "stellar":
+        # Emit met_mode whenever it's non-default (default = 'delta').
+        # Always-emit would force a stellar={} entry on every round-trip, which
+        # noisily breaks existing diff-against-from_groups call sites.
+        if getattr(spec, "met_mode", "delta") != "delta":
+            group_output["met_mode"] = spec.met_mode
 
 
 def _analyze_wildcard_intent(

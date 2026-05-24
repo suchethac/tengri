@@ -4684,6 +4684,7 @@ class SEDModel:
         ssp_data,
         *,
         sfh=None,
+        stellar=None,
         dust=None,
         neb=None,
         agn=None,
@@ -4754,6 +4755,7 @@ class SEDModel:
             k: v
             for k, v in dict(
                 sfh=sfh,
+                stellar=stellar,
                 dust=dust,
                 neb=neb,
                 agn=agn,

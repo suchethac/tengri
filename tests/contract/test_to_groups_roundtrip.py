@@ -267,11 +267,12 @@ class TestToGroupsWildcardCollapse:
 
         sfh_dict = result["sfh"]
         # DPL params should be explicit
-        # Note: met_logzsol and met_alpha_fe are also in sfh group by partition
         dpl_keys = {"alpha", "beta", "tau_gyr", "log_peak_sfr"}
-        met_keys = {"logzsol", "alpha_fe"}  # From met_ prefix
-        expected_keys = {"type"} | dpl_keys | met_keys
+        expected_keys = {"type"} | dpl_keys
         assert set(sfh_dict.keys()) == expected_keys
+        # met_* params now live in the dedicated stellar group (#311).
+        stellar_dict = result["stellar"]
+        assert {"logzsol", "alpha_fe"} <= set(stellar_dict.keys())
 
 
 class TestToGroupsFlatBuilt:
