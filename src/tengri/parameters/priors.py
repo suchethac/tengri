@@ -1088,10 +1088,15 @@ class StudentT(Distribution):
         float or ndarray
             Physical-space parameter in [lo, hi].
         """
-        # Scale factor: Var(t) = df/(df-2) for df>2
-        scale = jnp.where(
-            self._df > 2, jnp.sqrt(self._df / (self._df - 2)), 3.0
-        )  # fallback for df<=2
+        # Scale factor: Var(t) = df/(df-2) for df>2. ``self._df`` is a
+        # Python scalar set at construction, so branch in Python instead
+        # of jnp.where (whose unselected branch still evaluates eagerly
+        # and would 1/0 at df=2 — the very value Leja+2019 / Tacchella+2022
+        # specify for the continuity SFH ratio prior).
+        if self._df > 2:
+            scale = float(jnp.sqrt(self._df / (self._df - 2)))
+        else:
+            scale = 3.0
         return jnp.clip(self._mu + self._sigma * scale * xi, self._lo, self._hi)
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
@@ -1107,7 +1112,12 @@ class StudentT(Distribution):
         float or ndarray
             Standardized latent-space value.
         """
-        scale = jnp.where(self._df > 2, jnp.sqrt(self._df / (self._df - 2)), 3.0)
+        # Same df>2 / df<=2 split as unstandardize; branch in Python so
+        # df=2 doesn't 1/0 in the unused branch.
+        if self._df > 2:
+            scale = float(jnp.sqrt(self._df / (self._df - 2)))
+        else:
+            scale = 3.0
         return (theta - self._mu) / (self._sigma * scale)
 
     def __repr__(self) -> str:
