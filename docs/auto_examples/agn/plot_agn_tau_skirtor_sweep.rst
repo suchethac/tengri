@@ -21,6 +21,11 @@
 SKIRTOR torus: optical depth governs silicate feature strength
 ==============================================================
 
+.. image:: images/sphx_glr_plot_agn_tau_skirtor_sweep_001.png
+   :alt: plot agn tau skirtor sweep
+   :class: sphx-glr-single-img
+
+
 The 9.7 μm optical depth ``tau_97`` controls the strength of silicate
 dust absorption/emission in the mid-infrared. Thin tori (tau ~3) show
 weak features and more continuum; thick tori (tau ~11) develop deep

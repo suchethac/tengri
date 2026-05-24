@@ -21,6 +21,11 @@
 Three diagnostics of quenching epoch in one figure
 ====================================================
 
+.. image:: images/sphx_glr_plot_workflow_quenching_diagnostics_001.png
+   :alt: plot workflow quenching diagnostics
+   :class: sphx-glr-single-img
+
+
 When did star formation in a galaxy stop? Optical-only color, the
 4000 Å break, and Hα equivalent width respond on different timescales:
 NUV − r reddens within ~100 Myr of quenching (loss of O/B stars),

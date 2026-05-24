@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:10.532** total execution time for 10 files **from auto_examples/usecases**:
+**00:00.864** total execution time for 11 files **from auto_examples/usecases**:
 
 .. container::
 
@@ -32,22 +32,22 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_kennicutt_sfr_calibrations.py` (``plot_usecase_kennicutt_sfr_calibrations.py``)
+     - 00:00.864
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_age_dust_2d.py` (``plot_usecase_age_dust_2d.py``)
-     - 00:06.628
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_uv_slope_beta.py` (``plot_usecase_uv_slope_beta.py``)
-     - 00:01.509
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_d4000_age.py` (``plot_usecase_d4000_age.py``)
-     - 00:01.453
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_hubble_sequence.py` (``plot_usecase_hubble_sequence.py``)
-     - 00:00.941
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_age_dust_degeneracy.py` (``plot_usecase_age_dust_degeneracy.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_d4000_age.py` (``plot_usecase_d4000_age.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_emission_line_pcc.py` (``plot_usecase_emission_line_pcc.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_hubble_sequence.py` (``plot_usecase_hubble_sequence.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_jwst_color_color.py` (``plot_usecase_jwst_color_color.py``)
@@ -57,6 +57,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_sfr_indicator_compare.py` (``plot_usecase_sfr_indicator_compare.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_uv_slope_beta.py` (``plot_usecase_uv_slope_beta.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_uvj_diagram.py` (``plot_usecase_uvj_diagram.py``)

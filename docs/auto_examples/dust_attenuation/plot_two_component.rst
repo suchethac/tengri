@@ -21,6 +21,11 @@
 Two-component dust: birth cloud obscures only young stars
 ==========================================================
 
+.. image:: images/sphx_glr_plot_two_component_001.png
+   :alt: plot two component
+   :class: sphx-glr-single-img
+
+
 The Charlot & Fall two-component dust model separates birth-cloud dust (young
 stars only, age < ~10 Myr) from diffuse ISM dust (all stars). Two panels show:
 (left) V-band transmission versus age for three (τ_bc, τ_diff) combinations,

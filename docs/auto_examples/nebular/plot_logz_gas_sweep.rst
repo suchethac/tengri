@@ -21,6 +21,11 @@
 Gas metallicity shifts optical emission line ratios
 ===================================================
 
+.. image:: images/sphx_glr_plot_logz_gas_sweep_001.png
+   :alt: plot logz gas sweep
+   :class: sphx-glr-single-img
+
+
 Gas metallicity controls [NII]/Hα and [OIII]/Hβ ratios, the primary
 optical metallicity diagnostics. We vary nebular metallicity across
 the abundance range.

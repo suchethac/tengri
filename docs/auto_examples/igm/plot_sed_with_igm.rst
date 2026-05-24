@@ -21,6 +21,11 @@
 Full galaxy SED with IGM absorption applied at multiple redshifts
 ==================================================================
 
+.. image:: images/sphx_glr_plot_sed_with_igm_001.png
+   :alt: plot sed with igm
+   :class: sphx-glr-single-img
+
+
 A young Lyman-break galaxy SED is built once at rest frame, then
 redshifted to a sequence of observed-frame epochs (``z = 1, 3, 5, 7``)
 with the Inoue et al. 2014 IGM transmission stamped on top. The

@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:01.039** total execution time for 12 files **from auto_examples/dust_attenuation**:
+**00:03.174** total execution time for 13 files **from auto_examples/dust_attenuation**:
 
 .. container::
 
@@ -32,8 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_law_uv_slope_response.py` (``plot_dust_law_uv_slope_response.py``)
-     - 00:01.039
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_attenuation_curves_klam.py` (``plot_attenuation_curves_klam.py``)
+     - 00:03.174
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_attenuation_law_compare.py` (``plot_attenuation_law_compare.py``)
      - 00:00.000
@@ -48,6 +48,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_law_application.py` (``plot_dust_law_application.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_law_uv_slope_response.py` (``plot_dust_law_uv_slope_response.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_slope_sweep.py` (``plot_dust_slope_sweep.py``)
