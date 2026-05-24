@@ -21,11 +21,6 @@
 X-ray to radio SED of a luminous AGN
 ====================================
 
-.. image:: images/sphx_glr_plot_panchromatic_agn_001.png
-   :alt: plot panchromatic agn
-   :class: sphx-glr-single-img
-
-
 Panchromatic SED spanning hard X-rays through centimeter radio of a
 luminous quasar with radio-loud jets. Combines AGN disc continuum,
 X-ray corona, and radio components, showing how AGN dominate across

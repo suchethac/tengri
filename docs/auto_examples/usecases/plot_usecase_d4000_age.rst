@@ -21,11 +21,6 @@
 The 4000 Å break as a stellar age proxy
 =========================================
 
-.. image:: images/sphx_glr_plot_usecase_d4000_age_001.png
-   :alt: plot usecase d4000 age
-   :class: sphx-glr-single-img
-
-
 The 4000 Å break ``D_n(4000)`` — Bruzual 1983, Balogh+1999 — measures
 the discontinuity around 4000 Å produced by the line-blanketing of
 ionised metals in the atmospheres of old stars. It rises monotonically

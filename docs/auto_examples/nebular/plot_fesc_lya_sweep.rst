@@ -21,11 +21,6 @@
 Lyα escape fraction controls Lyman-alpha strength
 =================================================
 
-.. image:: images/sphx_glr_plot_fesc_lya_sweep_001.png
-   :alt: plot fesc lya sweep
-   :class: sphx-glr-single-img
-
-
 The Lyα-specific escape fraction ``f_esc_lya`` sets what fraction of Lyα
 photons can escape the ISM without scattering. Higher ``f_esc_lya`` suppresses
 the Lyα emission line while leaving other nebular lines unchanged.

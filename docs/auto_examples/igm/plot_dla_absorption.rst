@@ -21,11 +21,6 @@
 DLA column density sculpts the Lyman alpha forest at z=3
 ========================================================
 
-.. image:: images/sphx_glr_plot_dla_absorption_001.png
-   :alt: plot dla absorption
-   :class: sphx-glr-single-img
-
-
 Damped Lyman-alpha (DLA) systems imprint strong absorption features
 blueward of the Lyman-alpha line (1216 Å rest-frame). We sweep
 column density log(N_H) ∈ {19.0, 19.5, 20.0, 20.3, 20.8} cm^{-2}

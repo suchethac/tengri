@@ -21,11 +21,6 @@
 Nebular density affects recombination and cooling
 ==================================================
 
-.. image:: images/sphx_glr_plot_neb_density_sweep_001.png
-   :alt: plot neb density sweep
-   :class: sphx-glr-single-img
-
-
 Nebular gas density controls ionization balance and recombination rates,
 affecting emission line strengths. Higher density increases cooling efficiency,
 shifting line ratios through recombination rate changes.

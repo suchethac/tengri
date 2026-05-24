@@ -978,6 +978,23 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="In Case B recombination at T = 10⁴ K, n_e ≈ 10² cm⁻³, intrinsic Hα/Hβ = 2.86. Any larger ratio in the observed flux is interpreted as a dust reddening signal — the workhorse measurement for E(B−V) in star-forming galaxies.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_balmer_decrement_dust_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_balmer_decrement_dust`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Balmer decrement Hα/Hβ as a dust meter</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The Cue neural emulator responds to 12+ parameters. We show how each knob (ionization, metallicity, density, abundances, ionizing slope) moves a galaxy on the BPT-N plane log [OIII]/Hβ vs log [NII]/Hα. Each panel sweeps one parameter while holding fiducial values fixed. Kewley+2001 and Kauffmann+2003 demarcations shown for reference.">
 
 .. only:: html
@@ -1402,6 +1419,23 @@ depths, two-component geometry, and law comparisons.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">The same galaxy reddened by every attenuation law in the registry</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="For a fixed star-forming galaxy with τ_V = 1 (a moderate attenuation), six common attenuation laws produce six visibly different reddened UV slopes β. The intrinsic SED has β ≈ −2.3; SMC steepens β to ≈ +0.4; Calzetti / Salim leave a flatter β ≈ −0.5. The spread (~1 mag of UV slope at fixed τ_V) is the systematic an SED fitter inherits if its dust-law assumption is wrong.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_dust_law_uv_slope_response_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_dust_law_uv_slope_response`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Attenuation law leaves a distinct UV-slope fingerprint</div>
     </div>
 
 

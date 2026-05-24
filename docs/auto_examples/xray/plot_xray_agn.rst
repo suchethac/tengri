@@ -21,11 +21,6 @@
 AGN X-ray coronae: luminosity sequence and spectral hardness at high energies
 =============================================================================
 
-.. image:: images/sphx_glr_plot_xray_agn_001.png
-   :alt: plot xray agn
-   :class: sphx-glr-single-img
-
-
 AGN coronae are compact hot regions where the hard X-ray power law (photon
 index ~1.7–2.0) is produced via Compton scattering off hot electrons.
 The X-ray spectrum reflects the coronal temperature, optical depth, and

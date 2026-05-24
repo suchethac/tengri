@@ -21,11 +21,6 @@
 FIR–radio correlation across IR luminosity and spectral shape
 ==============================================================
 
-.. image:: images/sphx_glr_plot_fir_radio_correlation_001.png
-   :alt: plot fir radio correlation
-   :class: sphx-glr-single-img
-
-
 The FIR–radio correlation (van der Kruit 1971; Helou et al. 1985)
 holds over five decades in galaxy luminosity. Sweeps IR luminosity
 and radio spectral index to show the tight linear correlation and

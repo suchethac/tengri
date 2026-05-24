@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:11.273** total execution time for 19 files **from auto_examples/nebular**:
+**01:45.754** total execution time for 20 files **from auto_examples/nebular**:
 
 .. container::
 
@@ -32,8 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_emission_line_atlas.py` (``plot_emission_line_atlas.py``)
-     - 00:11.273
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_balmer_decrement_dust.py` (``plot_balmer_decrement_dust.py``)
+     - 01:45.754
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_bpt_cue_flexibility.py` (``plot_bpt_cue_flexibility.py``)
      - 00:00.000
@@ -54,6 +54,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_dig_frac_sweep.py` (``plot_dig_frac_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_emission_line_atlas.py` (``plot_emission_line_atlas.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_fesc_lya_sweep.py` (``plot_fesc_lya_sweep.py``)

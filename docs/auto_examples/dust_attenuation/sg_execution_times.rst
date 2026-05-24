@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:01.268** total execution time for 11 files **from auto_examples/dust_attenuation**:
+**00:01.039** total execution time for 12 files **from auto_examples/dust_attenuation**:
 
 .. container::
 
@@ -32,10 +32,13 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_birth_cloud_vs_diffuse.py` (``plot_birth_cloud_vs_diffuse.py``)
-     - 00:01.268
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_law_uv_slope_response.py` (``plot_dust_law_uv_slope_response.py``)
+     - 00:01.039
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_attenuation_law_compare.py` (``plot_attenuation_law_compare.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_birth_cloud_vs_diffuse.py` (``plot_birth_cloud_vs_diffuse.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_curves.py` (``plot_dust_curves.py``)

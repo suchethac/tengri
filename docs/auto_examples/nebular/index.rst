@@ -17,6 +17,23 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="In Case B recombination at T = 10⁴ K, n_e ≈ 10² cm⁻³, intrinsic Hα/Hβ = 2.86. Any larger ratio in the observed flux is interpreted as a dust reddening signal — the workhorse measurement for E(B−V) in star-forming galaxies.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_balmer_decrement_dust_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_balmer_decrement_dust`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Balmer decrement Hα/Hβ as a dust meter</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The Cue neural emulator responds to 12+ parameters. We show how each knob (ionization, metallicity, density, abundances, ionizing slope) moves a galaxy on the BPT-N plane log [OIII]/Hβ vs log [NII]/Hα. Each panel sweeps one parameter while holding fiducial values fixed. Kewley+2001 and Kauffmann+2003 demarcations shown for reference.">
 
 .. only:: html
@@ -348,6 +365,7 @@ Nebular emission backends comparison.
 .. toctree::
    :hidden:
 
+   /auto_examples/nebular/plot_balmer_decrement_dust
    /auto_examples/nebular/plot_bpt_cue_flexibility
    /auto_examples/nebular/plot_bpt_cue_grid
    /auto_examples/nebular/plot_bpt_diagnostics
