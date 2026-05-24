@@ -36,7 +36,6 @@ import tengri
 from tengri import FIXED, Fixed
 from tengri.forward.prediction import EmissionLines
 
-
 _BARE_STELLAR_SSP = pathlib.Path("data/ssp_prsc_miles_chabrier_noNE.h5").resolve()
 
 
