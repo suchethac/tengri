@@ -66,7 +66,13 @@ class TestXrayAnisotropy:
     """Tests for viewing-angle X-ray anisotropy (Yang+2022)."""
 
     def test_face_on_double_edge_on(self):
-        """Default a1=0.5: face-on should be 2x edge-on."""
+        """Default a1=0.5: face-on should be 2x edge-on (denominator cancels).
+
+        With denominator normalization (yang20.py:231-235):
+            f(θ=0°) = [0.5 + 0 + 0.5] / [1 - 0.13397*0.5 - 0] = 1.0 / 0.933
+            f(θ=90°) = [0 + 0 + 0.5] / [1 - 0.13397*0.5 - 0] = 0.5 / 0.933
+            ratio = 1.0 / 0.5 = 2.0 (denominator cancels)
+        """
         l_x = jnp.ones(10)
         face_on = xray_anisotropy(l_x, cos_inc=1.0)
         edge_on = xray_anisotropy(l_x, cos_inc=0.0)
@@ -74,19 +80,35 @@ class TestXrayAnisotropy:
         assert jnp.allclose(ratio, 2.0)
 
     def test_edge_on_half(self):
-        """Default: edge-on factor = (1 - a1) = 0.5."""
+        """Default: edge-on factor = (1 - a1) / denom = 0.5 / 0.933 ≈ 0.536."""
         l_x = jnp.ones(5)
         result = xray_anisotropy(l_x, cos_inc=0.0)
-        assert jnp.allclose(result, 0.5)
+        # (1 - 0.5) / (1 - 0.13397*0.5) = 0.5 / 0.933015 ≈ 0.536
+        expected = 0.5 / (1.0 - 0.13397 * 0.5)
+        assert jnp.allclose(result, expected, rtol=1e-6)
 
     def test_face_on_unity(self):
-        """Face-on factor = a1 + (1 - a1) = 1.0."""
+        """Face-on factor = 1.0 / denom ≈ 1.072 (with denominator normalization).
+
+        The denominator (yang20.py:233) normalizes so bolometric corona
+        luminosity at θ=0° is recovered:
+            f(θ=0°) = [0.5 + 0 + 0.5] / [1 - 0.13397*0.5 - 0]
+                    = 1.0 / 0.933015 ≈ 1.072
+        """
         l_x = jnp.array([1.0, 2.0, 3.0])
         result = xray_anisotropy(l_x, cos_inc=1.0)
-        assert jnp.allclose(result, l_x)
+        # 1.0 / (1 - 0.13397*0.5) ≈ 1.072
+        expected_factor = 1.0 / (1.0 - 0.13397 * 0.5)
+        expected = l_x * expected_factor
+        assert jnp.allclose(result, expected, rtol=1e-6)
 
     def test_intermediate_angle(self):
-        """cos_inc=0.5 (60 deg) should give intermediate luminosity."""
+        """cos_inc=0.5 (60 deg) should give intermediate luminosity.
+
+        With denominator normalization:
+            f(θ, cos(θ)=0.5) = [0.5*0.5 + 0 + 0.5] / [1 - 0.13397*0.5]
+                            = 0.75 / 0.933015 ≈ 0.804
+        """
         l_x = jnp.ones(10)
         face_on = xray_anisotropy(l_x, cos_inc=1.0)
         edge_on = xray_anisotropy(l_x, cos_inc=0.0)
@@ -94,8 +116,10 @@ class TestXrayAnisotropy:
         # Should be between face-on and edge-on
         assert jnp.all(mid > edge_on)
         assert jnp.all(mid < face_on)
-        # Exact: factor = 0.5*0.5 + 0.5 = 0.75
-        assert jnp.allclose(mid, 0.75)
+        # Exact with denominator: 0.75 / 0.933
+        denom = 1.0 - 0.13397 * 0.5
+        expected = (0.5*0.5 + 0.5) / denom
+        assert jnp.allclose(mid, expected, rtol=1e-6)
 
     def test_isotropic_when_a1_zero(self):
         """a1=0, a2=0 => no anisotropy (factor=1 at all angles)."""
@@ -106,14 +130,22 @@ class TestXrayAnisotropy:
         assert jnp.allclose(face_on, l_x)
 
     def test_quadratic_term(self):
-        """Non-zero a2 adds quadratic cos^2 dependence."""
+        """Non-zero a2 adds quadratic cos^2 dependence (with denominator).
+
+        With a1=0.3, a2=0.2:
+            denom = 1 - 0.13397*0.3 - 0.25*0.2 = 1 - 0.04019 - 0.05 = 0.90981
+            f(θ=0°) = (0.3 + 0.2 + 0.5) / 0.90981 = 1.0 / 0.90981 ≈ 1.099
+            f(θ=90°) = (0 + 0 + 0.5) / 0.90981 = 0.5 / 0.90981 ≈ 0.550
+        """
         l_x = jnp.ones(3)
-        # a1=0.3, a2=0.2 => face-on factor = 0.3 + 0.2 + 0.5 = 1.0
-        # edge-on factor = 0 + 0 + 0.5 = 0.5
-        result_face = xray_anisotropy(l_x, cos_inc=1.0, a1=0.3, a2=0.2)
-        result_edge = xray_anisotropy(l_x, cos_inc=0.0, a1=0.3, a2=0.2)
-        assert jnp.allclose(result_face, 1.0)
-        assert jnp.allclose(result_edge, 0.5)
+        a1, a2 = 0.3, 0.2
+        denom = 1.0 - 0.13397 * a1 - 0.25 * a2
+        result_face = xray_anisotropy(l_x, cos_inc=1.0, a1=a1, a2=a2)
+        result_edge = xray_anisotropy(l_x, cos_inc=0.0, a1=a1, a2=a2)
+        expected_face = 1.0 / denom
+        expected_edge = 0.5 / denom
+        assert jnp.allclose(result_face, expected_face * l_x, rtol=1e-6)
+        assert jnp.allclose(result_edge, expected_edge * l_x, rtol=1e-6)
 
 
 # ---- xray_agn_corona_from_disc tests ----

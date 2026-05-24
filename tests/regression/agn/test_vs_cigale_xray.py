@@ -69,8 +69,8 @@ def test_xray_corona_face_on_monochromatic():
     at the 2 keV reference point used by Just et al. 2007.
 
     The α_OX definition directly links L_2keV to L_2500:
-        α_OX = 0.384 × log₁₀(L_2keV / L_2500)
-        => L_2keV = L_2500 × 10^(α_OX / 0.384)
+        α_OX = 0.3838 × log₁₀(L_2keV / L_2500)
+        => L_2keV = L_2500 × 10^(α_OX / 0.3838)
 
     This test computes the SED at 2 keV and verifies consistency.
 
@@ -91,8 +91,8 @@ def test_xray_corona_face_on_monochromatic():
     # Compute α_OX from L_2500
     alpha_ox = alpha_ox_from_l2500(l_2500_erg_hz)
 
-    # Expected L_2keV from α_OX definition
-    l_2kev_expected = l_2500_erg_hz * 10.0 ** (alpha_ox / 0.384)
+    # Expected L_2keV from α_OX definition (yang20.py:227)
+    l_2kev_expected = l_2500_erg_hz * 10.0 ** (alpha_ox / 0.3838)
 
     # Compute X-ray SED
     sed_xray = xray_agn_corona_from_disc(
@@ -123,20 +123,24 @@ def test_xray_corona_face_on_monochromatic():
 
 @pytest.mark.regression_paper
 def test_xray_anisotropy_polynomial():
-    """Test X-ray anisotropy factor polynomial form (Yang+2022).
+    """Test X-ray anisotropy factor polynomial form (Yang+2022 via CIGALE).
 
-    Verifies the 2nd-order polynomial anisotropy model:
-        L_X(θ) / L_X(0°) = a₁ cos θ + a₂ cos² θ + (1 − a₁ − a₂)
+    Verifies the normalized 2nd-order polynomial anisotropy model
+    (yang20.py:231–235):
+        f(μ) = [a₁ cos θ + a₂ cos² θ + (1 − a₁ − a₂)]
+               / [1 − 0.13397 a₁ − 0.25 a₂]
 
-    with default (a₁ = 0.5, a₂ = 0.0) matching X-CIGALE.
+    The denominator normalizes the angular distribution so that the bolometric
+    corona luminosity at θ=0° (face-on) is recovered.
 
-    Constraints:
-    - Face-on (θ = 0°): factor = 1.0 (isotropic baseline)
-    - Edge-on (θ = 90°): factor = (1 − a₁ − a₂) = 0.5 (moderate suppression)
+    With default (a₁ = 0.5, a₂ = 0.0), the denominator = 0.933, giving:
+    - Face-on (θ = 0°): f = 1.0 / 0.933 ≈ 1.072 (recovery factor)
+    - Edge-on (θ = 90°): f = 0.5 / 0.933 ≈ 0.536
 
     References
     ----------
-    Yang, G., et al. 2022, ApJ, 927, 192, Eq. 1.
+    Yang, G., et al. 2022, ApJ, 927, 192.
+    CIGALE yang20.py:231–235 (Lehmer et al. 2016 anisotropy normalization).
     """
     # Test wavelength grid (arbitrary; anisotropy is geometry-independent)
     wavelength = jnp.array([10.0, 50.0, 100.0])
@@ -144,42 +148,49 @@ def test_xray_anisotropy_polynomial():
 
     # Default anisotropy coefficients (X-CIGALE)
     a1, a2 = 0.5, 0.0
+    denom = 1.0 - 0.13397 * a1 - 0.25 * a2  # yang20.py:233
 
     # Face-on (cos_inc = 1.0)
     cos_inc_face = 1.0
     factor_face = xray_anisotropy(l_iso, cos_inc_face, a1=a1, a2=a2)
-    expected_face = a1 * 1.0 + a2 * 1.0**2 + (1.0 - a1 - a2)
+    numerator_face = a1 * 1.0 + a2 * 1.0**2 + (1.0 - a1 - a2)
+    expected_face = numerator_face / denom
     np.testing.assert_allclose(float(factor_face[0]) / l_iso[0], expected_face,
                               atol=1e-6, err_msg="Face-on anisotropy failed")
 
     # Edge-on (cos_inc = 0.0)
     cos_inc_edge = 0.0
     factor_edge = xray_anisotropy(l_iso, cos_inc_edge, a1=a1, a2=a2)
-    expected_edge = a1 * 0.0 + a2 * 0.0**2 + (1.0 - a1 - a2)
+    numerator_edge = a1 * 0.0 + a2 * 0.0**2 + (1.0 - a1 - a2)
+    expected_edge = numerator_edge / denom
     np.testing.assert_allclose(float(factor_edge[0]) / l_iso[0], expected_edge,
                               atol=1e-6, err_msg="Edge-on anisotropy failed")
 
     # Intermediate (cos_inc = cos(30°) ≈ 0.866)
     cos_inc_30deg = np.cos(np.radians(30.0))
     factor_30deg = xray_anisotropy(l_iso, cos_inc_30deg, a1=a1, a2=a2)
-    expected_30deg = a1 * cos_inc_30deg + a2 * cos_inc_30deg**2 + (1.0 - a1 - a2)
+    numerator_30deg = a1 * cos_inc_30deg + a2 * cos_inc_30deg**2 + (1.0 - a1 - a2)
+    expected_30deg = numerator_30deg / denom
     np.testing.assert_allclose(float(factor_30deg[0]) / l_iso[0], expected_30deg,
                               atol=1e-6, err_msg="30° anisotropy failed")
 
 
 @pytest.mark.regression_paper
 def test_xray_anisotropy_ratio_face_edge():
-    """Test face-on to edge-on X-ray flux ratio matches Yang+2022 prediction.
+    """Test face-on to edge-on X-ray flux ratio with CIGALE normalization.
 
-    For default (a₁ = 0.5, a₂ = 0.0):
-        L_X(0°) / L_X(90°) = 1.0 / 0.5 = 2.0
+    For default (a₁ = 0.5, a₂ = 0.0), with denominator correction (yang20.py:233):
+        denom = 1 − 0.13397 × 0.5 − 0.25 × 0.0 = 0.933
+        L_X(0°) / L_X(90°) = [1.0 / denom] / [0.5 / denom] = 2.0
 
-    This predicts that face-on AGN should be 2× brighter in X-rays than
-    edge-on systems, consistent with Yang et al. 2022 observational findings.
+    After the denominator normalization, the ratio remains 2.0, predicting that
+    face-on AGN should be 2× brighter in X-rays than edge-on systems, consistent
+    with Yang et al. 2022 observational findings.
 
     References
     ----------
     Yang, G., et al. 2022, ApJ, 927, 192, Fig. 2 / Table 1.
+    CIGALE yang20.py:231–235.
     """
     wavelength = jnp.linspace(10.0, 100.0, 100)
     l_iso = jnp.ones_like(wavelength) * 1e40
@@ -191,7 +202,7 @@ def test_xray_anisotropy_ratio_face_edge():
     # Edge-on
     l_edge = xray_anisotropy(l_iso, cos_inc=0.0, a1=a1, a2=a2)
 
-    # Ratio
+    # Ratio (denominators cancel, ratio = 1.0 / 0.5 = 2.0)
     ratio = jnp.mean(l_face) / jnp.mean(l_edge)
 
     np.testing.assert_allclose(float(ratio), 2.0, atol=0.01,

@@ -96,7 +96,7 @@ def xray_xrb(
         .. math::
 
             \log(L_X^{\mathrm{HMXB}}(2\text{–}10\,\mathrm{keV})/\mathrm{SFR}) =
-                40.3 - 62Z + 569Z^2 - 1834Z^3 + 1968Z^4
+                40.28 - 62.12Z + 569.44Z^2 - 1833.80Z^3 + 1968.33Z^4
                 \quad [\mathrm{erg\,s^{-1}\,(M_\odot\,yr^{-1})^{-1}}]
 
         At solar metallicity (Z=0.02), this yields ≈ 2.6×10^39 erg/s per
@@ -109,7 +109,7 @@ def xray_xrb(
         .. math::
 
             \log(L_X^{\mathrm{LMXB}}(2\text{–}10\,\mathrm{keV})/M_\star) =
-                40.3 - 1.5\log t - 0.42(\log t)^2 + 0.43(\log t)^3 + 0.14(\log t)^4
+                40.276 - 1.503\log t - 0.423(\log t)^2 + 0.425(\log t)^3 + 0.136(\log t)^4
                 \quad [\mathrm{erg\,s^{-1}\,M_\odot^{-1}}]
 
         At t=1 Gyr, this yields ≈ 8.3×10^28 erg/s per M_sun, consistent with
@@ -151,27 +151,31 @@ def xray_xrb(
     nu = _C_AA / wavelength
     E_keV = _H_PLANCK * nu / _KEV_TO_ERG  # convert to keV
 
-    # Lehmer+2016 metallicity quartic for HMXB (Eq. 15, Lehmer+16)
-    # log(L_HMXB / SFR) = 40.3 - 62*Z + 569*Z^2 - 1834*Z^3 + 1968*Z^4
+    # Lehmer+2016 metallicity quartic for HMXB (yang20.py:207–214)
+    # log(L_HMXB / SFR) = 33.28 - 62.12*Z + 569.44*Z^2 - 1833.80*Z^3 + 1968.33*Z^4
+    # in W units. Convert to erg/s: +7.0 (log10 conversion)
+    # Leading constant 40.28 = 33.28 + 7.0 makes the unit conversion explicit.
     log_l_hmxb_per_sfr = (
-        40.3
-        - 62.0 * metallicity_z
-        + 569.0 * metallicity_z**2
-        - 1834.0 * metallicity_z**3
-        + 1968.0 * metallicity_z**4
+        40.28
+        - 62.12 * metallicity_z
+        + 569.44 * metallicity_z**2
+        - 1833.80 * metallicity_z**3
+        + 1968.33 * metallicity_z**4
     )
     L_hmxb_ref = 10.0**log_l_hmxb_per_sfr * sfr * 10.0**log_L_hmxb_offset
 
-    # Lehmer+2016 age quartic for LMXB (Eq. 15, Lehmer+16)
-    # log(L_LMXB / M_star) = 40.3 - 1.5*log(t) - 0.42*(log t)^2 + 0.43*(log t)^3 + 0.14*(log t)^4
+    # Lehmer+2016 age quartic for LMXB (yang20.py:216–224)
+    # log(L_LMXB / M_star) = 33.276 - 1.503*log(t) - 0.423*(log t)^2
+    #   + 0.425*(log t)^3 + 0.136*(log t)^4 (in W units)
+    # Leading constant 40.276 = 33.276 + 7.0 for erg/s conversion.
     # where t is age in Gyr
     log_t = jnp.log10(jnp.maximum(stellar_age_gyr, 1e-3))  # protect against log(0)
     log_l_lmxb_per_mstar = (
-        40.3
-        - 1.5 * log_t
-        - 0.42 * log_t**2
-        + 0.43 * log_t**3
-        + 0.14 * log_t**4
+        40.276
+        - 1.503 * log_t
+        - 0.423 * log_t**2
+        + 0.425 * log_t**3
+        + 0.136 * log_t**4
     )
     L_lmxb_ref = 10.0**log_l_lmxb_per_mstar * stellar_mass * 10.0**log_L_lmxb_offset
 
@@ -311,9 +315,10 @@ def xray_hotgas(
     nu = _C_AA / wavelength
     E_keV = _H_PLANCK * nu / _KEV_TO_ERG
 
-    # Hot gas luminosity scaling (Yang+20, Eq. in §2.2.1)
-    # log(L_0.5-2keV / SFR) = 38.9 => L_hotgas = 10^38.9 * SFR
-    log_l_hotgas_per_sfr = 38.9
+    # Hot gas luminosity scaling (yang20.py:204)
+    # L_0.5-2keV = 8.3e31 W * SFR. In erg/s: 8.3e38 = 10^38.919.
+    # (yang20.py:204 shows L_hotgas_0p5to2keV = 8.3e31 * sfr)
+    log_l_hotgas_per_sfr = 38.919
     L_hotgas_ref = 10.0**log_l_hotgas_per_sfr * sfr
 
     # Thermal bremsstrahlung spectrum with exponential cutoff
@@ -357,30 +362,45 @@ def xray_anisotropy(
     Returns
     -------
     ndarray, shape (n_wave,)
-        Anisotropy-corrected L_X. [erg/s/Hz]
+        Anisotropy-corrected L_X. [erm/s/Hz]
 
     Notes
     -----
     **JIT-compatible**: yes — pure JAX function.
 
     **Empirical correction** (Yang et al. 2022 [1]_): polynomial in
-    :math:`\mu \equiv \cos\theta`, normalised so face-on
-    (:math:`\mu = 1`) returns the input ``l_x`` unchanged.
+    :math:`\mu \equiv \cos\theta`, normalised so the bolometric
+    corona luminosity at θ=0° (face-on, :math:`\mu = 1`) is recovered.
+
+    The anisotropic luminosity is computed as (yang20.py:231–235):
 
     .. math::
 
-        f(\mu) = a_1\,\mu + a_2\,\mu^2 + (1 - a_1 - a_2),
+        f(\mu) = \frac{a_1\,\mu + a_2\,\mu^2 + (1 - a_1 - a_2)}{1 - 0.13397\,a_1 - 0.25\,a_2},
         \qquad
         L_X^{\rm obs} = f(\mu)\, L_X^{\rm iso}
 
-    The default :math:`a_1 = 0.5,\, a_2 = 0` corresponds to the
-    "intermediate" obscuration solution adopted in CIGALE's X-CIGALE.
+    The denominator is crucial: it normalizes the angular distribution so that
+    multiplying by the numerator and dividing by the denominator at θ=0° gives
+    unity, ensuring the face-on luminosity is unmodified. The default
+    :math:`a_1 = 0.5,\, a_2 = 0` corresponds to the "intermediate" obscuration
+    solution adopted in X-CIGALE (Yang et al. 2022).
+
+    At default (a1=0.5, a2=0), the denominator is 0.933, so the correction
+    factor is ~1.072 at face-on (7% enhancement relative to the polynomial alone,
+    to recover the face-on bolometric luminosity).
 
     References
     ----------
-    .. [1] Yang, G. et al., 2022, ApJ, 927, 42.
+    .. [1] Yang, G. et al., 2022, ApJ, 927, 192.
+       Eq. 231–235; CIGALE yang20.py:231–235.
     """
-    factor = a1 * cos_inc + a2 * cos_inc**2 + (1.0 - a1 - a2)
+    numerator = a1 * cos_inc + a2 * cos_inc**2 + (1.0 - a1 - a2)
+    # Normalization denominator (yang20.py:231–235): ensures face-on
+    # bolometric corona luminosity is recovered. Without this, anisotropy
+    # would suppress the face-on luminosity.
+    denominator = 1.0 - 0.13397 * a1 - 0.25 * a2
+    factor = numerator / denominator
     return l_x * factor
 
 
@@ -434,10 +454,12 @@ def xray_agn_corona_from_disc(
     # alpha_ox from disc UV luminosity
     alpha_ox = alpha_ox_from_l2500(l_2500_erg_hz) + delta_alpha_ox
 
-    # Derive L_2keV from alpha_ox definition:
-    #   alpha_ox = 0.384 * log10(L_2keV / L_2500)
-    #   => L_2keV = L_2500 * 10^(alpha_ox / 0.384)
-    l_2kev_erg_hz = l_2500_erg_hz * 10.0 ** (alpha_ox / 0.384)
+    # Derive L_2keV from alpha_ox definition (yang20.py:227):
+    #   alpha_ox = 0.3838 * log10(L_2keV / L_2500)
+    #   => L_2keV = L_2500 * 10^(alpha_ox / 0.3838)
+    # The divisor 0.3838 = 1 / log10(nu_2keV / nu_2500A) is the exact
+    # frequency ratio between 2 keV (λ ≈ 6.2 Å) and 2500 Å.
+    l_2kev_erg_hz = l_2500_erg_hz * 10.0 ** (alpha_ox / 0.3838)
 
     # Build power-law spectrum with exponential cutoff
     nu = _C_AA / wavelength
@@ -522,9 +544,9 @@ def xray_agn_corona(
 
     .. math::
 
-        \alpha_{\mathrm{OX}} = 0.384 \log_{10}(L_{2\,\mathrm{keV}}/L_{2500})
+        \alpha_{\mathrm{OX}} = 0.3838 \log_{10}(L_{2\,\mathrm{keV}}/L_{2500})
             \quad \Rightarrow \quad
-        L_{2\,\mathrm{keV}} = L_{2500} \times 10^{\alpha_{\mathrm{OX}}/0.384}
+        L_{2\,\mathrm{keV}} = L_{2500} \times 10^{\alpha_{\mathrm{OX}}/0.3838}
 
     This driving from L_2500 (rather than L_bol) ensures consistency with
     the AGN disc model and avoids the ambiguity of bolometric corrections.
@@ -607,9 +629,9 @@ def _xray_agn_corona_bolometric(
     _BC_2500 = 5.15  # Hopkins+2007 bolometric correction at 2500 A
     L_2500 = L_agn_bol / (_BC_2500 * _NU_2500)  # erg/s/Hz
 
-    # alpha_ox = 0.384 * log10(L_2keV / L_2500A)
-    # => L_2keV = L_2500 * 10^(alpha_ox / 0.384)
-    L_2keV = L_2500 * 10.0 ** (alpha_ox / 0.384)
+    # alpha_ox = 0.3838 * log10(L_2keV / L_2500A)
+    # => L_2keV = L_2500 * 10^(alpha_ox / 0.3838)
+    L_2keV = L_2500 * 10.0 ** (alpha_ox / 0.3838)
 
     # Power-law spectrum
     E_ref = 2.0  # keV
