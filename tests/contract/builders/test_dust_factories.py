@@ -11,7 +11,7 @@ pytestmark = pytest.mark.contract
 
 from tengri import FIXED, FREE, Uniform, builders, parse_groups
 from tengri.components.dust.attenuation import DUST_LAWS
-from tengri.parameters.groups import _VALID_DUST_EMISSION_TYPES
+from tengri.parameters.groups import _valid_dust_emission_types
 
 # ── Module surface ────────────────────────────────────────────────
 
@@ -21,7 +21,9 @@ def test_top_level_variants() -> None:
 
 
 def test_emission_variants_match_parser_enum() -> None:
-    assert set(builders.dust.emission.available()) == set(_VALID_DUST_EMISSION_TYPES)
+    # Both sides derive from the registry-backed _valid_dust_emission_types()
+    # helper; this test pins the round-trip.
+    assert set(builders.dust.emission.available()) == set(_valid_dust_emission_types())
 
 
 # ── Signatures ────────────────────────────────────────────────────

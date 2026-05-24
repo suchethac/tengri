@@ -11,12 +11,15 @@ The grammar nests the emission model inside the dust group:
 ...     "emission": {"type": "dale2014", "*": FIXED, "alpha_dale": Fixed(2.0)},
 ... }
 
-Each emission variant in
-:data:`tengri.parameters.groups._VALID_DUST_EMISSION_TYPES` gets a
-factory in this module. The parser activates a single superset of
-dust-emission params regardless of which model is chosen, so all
-factories share an identical signature; the variant string selects
-the physics.
+Each emission variant returned by
+:func:`tengri.parameters.groups._valid_dust_emission_types` gets a
+factory in this module. That helper derives directly from the live
+``DUST_EMISSION_MODELS`` registry (plus a closed set of lazy-loadable
+names like ``dl07_tabulated``) so the validator path and the factory
+namespace share a single source of truth (ADR-0005 / ADR-0008). The
+parser activates a single superset of dust-emission params regardless
+of which model is chosen, so all factories share an identical
+signature; the variant string selects the physics.
 
 Examples
 --------
@@ -30,7 +33,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from tengri.builders._factory import make_factory, short_form
-from tengri.parameters.groups import _VALID_DUST_EMISSION_TYPES
+from tengri.parameters.groups import _valid_dust_emission_types
 from tengri.parameters.registry import recipe_parameters
 from tengri.parameters.sentinels import FREE
 
@@ -80,7 +83,7 @@ def _discover_params(variant: str) -> list[str]:
 
 def _populate_factories() -> dict[str, Callable[..., dict]]:
     factories: dict[str, Callable[..., dict]] = {}
-    for variant in sorted(_VALID_DUST_EMISSION_TYPES):
+    for variant in sorted(_valid_dust_emission_types()):
         factories[variant] = make_factory(
             variant=variant,
             short_params=_discover_params(variant),
