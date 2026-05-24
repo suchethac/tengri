@@ -21,17 +21,23 @@
 Draine+2021 PAHspec: starlight-spectrum sweep at fixed log U
 =============================================================
 
+.. image:: images/sphx_glr_plot_pahspec_starlight_sweep_001.png
+   :alt: plot pahspec starlight sweep
+   :class: sphx-glr-single-img
+
+
 Sweep across the 13 published PAHspec starlight spectra (mMMP, m31bulge,
 BC03/BPASS SSPs) at fixed ionization parameter. Demonstrates strong
 dependence of PAH features on starlight hardness.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-64
+.. GENERATED FROM PYTHON SOURCE LINES 9-66
 
 .. code-block:: Python
 
 
     import warnings
 
+    import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -53,8 +59,10 @@ dependence of PAH features on starlight hardness.
 
     starlights = tuple(tpl.starlight_names)
 
-    fig, ax = plt.subplots(figsize=(7.5, 5.5))
-    cmap = plt.get_cmap("plasma")
+    fig, ax = plt.subplots(figsize=(7.5, 5.0))
+    cmap = plt.get_cmap("viridis")
+    n = max(1, len(starlights) - 1)
+    norm = mpl.colors.Normalize(vmin=0, vmax=n)
     for k, name in enumerate(starlights):
         if name not in tpl.starlight_names:
             continue
@@ -66,13 +74,7 @@ dependence of PAH features on starlight hardness.
             slab=False,
         )
         li = np.asarray(nu_pnu[i_lgU1]) / (4.0 * np.pi)
-        ax.plot(
-            wave_um,
-            li,
-            color=cmap(k / max(1, len(starlights) - 1)),
-            lw=1.3,
-            label=name,
-        )
+        ax.plot(wave_um, li, color=cmap(norm(k)), lw=1.3)
     ax.set(
         xscale="log",
         yscale="log",
@@ -81,7 +83,12 @@ dependence of PAH features on starlight hardness.
         xlim=(2.0, 1.0e3),
         ylim=(1.0e-27, 5.0e-24),
     )
-    ax.legend(loc="lower left", frameon=False, fontsize=8, ncol=1)
+    # Colorbar with starlight-spectrum names as discrete ticks (13 entries, too many for legend).
+    sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, ticks=range(len(starlights)), pad=0.01)
+    cbar.ax.set_yticklabels(list(starlights), fontsize=7)
+    cbar.set_label("Starlight spectrum (softer → harder)", fontsize=9)
     fig.tight_layout()
     fig.savefig("plot_pahspec_starlight_sweep.png", dpi=150, bbox_inches="tight")
 

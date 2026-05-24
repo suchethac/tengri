@@ -33,13 +33,13 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*experimental.*")
 
 LIBS = [
-    ("dale2014",            "Dale+2014"),
-    ("draine_li2007",       "Draine & Li 2007"),
-    ("draine_li2014",       "Draine+2014"),
-    ("modified_blackbody",  "modified BB (Casey 2012)"),
-    ("themis",              "THEMIS (Jones+2017)"),
+    ("dale2014", "Dale+2014"),
+    ("draine_li2007", "Draine & Li 2007"),
+    ("draine_li2014", "Draine+2014"),
+    ("modified_blackbody", "modified BB (Casey 2012)"),
+    ("themis", "THEMIS (Jones+2017)"),
     ("astrodust", "Astrodust (HD23)"),
-    ("bosa",      "BOSA (CIGALE)"),
+    ("bosa", "BOSA (CIGALE)"),
 ]
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(LIBS)))
 
@@ -54,9 +54,13 @@ for (lib, label), color in zip(LIBS, COLORS):
         model = tengri.SEDModel.build(
             ssp,
             sfh=SFH,
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_diff": 1.0, "tau_bc": 1.5,
-                  "emission": {"type": lib, "*": tengri.FIXED}},
+            dust={
+                "type": "two_component",
+                "*": tengri.FIXED,
+                "tau_diff": 1.0,
+                "tau_bc": 1.5,
+                "emission": {"type": lib, "*": tengri.FIXED},
+            },
             redshift=tengri.Fixed(0.05),
         )
     except Exception:
@@ -76,15 +80,17 @@ for (lib, label), color in zip(LIBS, COLORS):
         nu_l_nu = nu_l_nu / l_ir
     ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
 
-ax.set(xlim=(1e4, 1e7), ylim=(2e-3, 3.0),
-       xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-       ylabel=r"$\nu L_\nu\,/\,L_{\rm IR}$  [Hz$^{-1}$]")
+ax.set(
+    xlim=(1e4, 1e7),
+    ylim=(2e-3, 3.0),
+    xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+    ylabel=r"$\nu L_\nu\,/\,L_{\rm IR}$  [Hz$^{-1}$]",
+)
 
 for um, name in [(8, "8 μm"), (24, "MIPS 24"), (70, "FIR 70"), (160, "FIR 160")]:
     lam = um * 1.0e4
     ax.axvline(lam, color="0.85", lw=0.4, alpha=0.6)
-    ax.text(lam, 2.2, name, fontsize=7, color="0.5",
-            ha="center", va="bottom")
+    ax.text(lam, 2.2, name, fontsize=7, color="0.5", ha="center", va="bottom")
 
 ax.legend(frameon=False, fontsize=8, loc="lower left")
 

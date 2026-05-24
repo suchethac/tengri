@@ -21,6 +21,11 @@
 AGN emission-line backbones compared
 ======================================
 
+.. image:: images/sphx_glr_plot_agn_lines_compare_001.png
+   :alt: plot agn lines compare
+   :class: sphx-glr-single-img
+
+
 Four production line backbones layered on top of the same disc +
 torus at fixed ``log L_bol = 12.5``. The line backbone controls
 which optical/UV emission features the model produces — narrow-line
@@ -34,7 +39,7 @@ not shipped with the gallery):
 - ``blr``     — Broad-line region (Cracco+2016 photoionization grid)
 - ``qsogen``  — Temple+2021 empirical type-1 lines
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-86
+.. GENERATED FROM PYTHON SOURCE LINES 18-90
 
 .. code-block:: Python
 
@@ -52,8 +57,8 @@ not shipped with the gallery):
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     LINES_MODELS = [
-        ("nlr",    "NLR (Feltre+2016)"),
-        ("blr",    "BLR (Cracco+2016)"),
+        ("nlr", "NLR (Feltre+2016)"),
+        ("blr", "BLR (Cracco+2016)"),
         ("qsogen", "QSOGEN empirical"),
     ]
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.9, len(LINES_MODELS)))
@@ -71,10 +76,12 @@ not shipped with the gallery):
             sfh=SFH,
             dust=DUST,
             agn={
-                "disc":  {"type": "multicolor", "*": tengri.FIXED},
-                "torus": {"type": "skirtor",    "*": tengri.FIXED},
-                "lines": {"type": line_kind,    "*": tengri.FIXED},
-                "*": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0,
+                "disc": {"type": "multicolor", "*": tengri.FIXED},
+                "torus": {"type": "skirtor", "*": tengri.FIXED},
+                "lines": {"type": line_kind, "*": tengri.FIXED},
+                "*": tengri.FIXED,
+                "log_lbol": 12.5,
+                "frac": 1.0,
             },
             redshift=tengri.Fixed(0.05),
         )
@@ -84,9 +91,12 @@ not shipped with the gallery):
         nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
         ax.semilogy(wave, nu_l_nu, color=color, lw=1.0, label=label, alpha=0.85)
 
-    ax.set(xlim=(1000, 7500), ylim=(1e44, 5e46),
-           xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-           ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
+    ax.set(
+        xlim=(1000, 7500),
+        ylim=(1e44, 5e46),
+        xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+        ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
+    )
 
     LINE_MARKS = [
         (1216, r"Ly$\alpha$"),
@@ -99,8 +109,7 @@ not shipped with the gallery):
     ]
     for lam, name in LINE_MARKS:
         ax.axvline(lam, color="0.85", lw=0.4, alpha=0.5)
-        ax.text(lam, 4e46, name, fontsize=7, color="0.5",
-                ha="center", va="bottom", rotation=90)
+        ax.text(lam, 4e46, name, fontsize=7, color="0.5", ha="center", va="bottom", rotation=90)
 
     ax.legend(frameon=False, fontsize=8, loc="lower right")
 

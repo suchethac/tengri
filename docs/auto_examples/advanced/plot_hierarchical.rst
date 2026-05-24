@@ -21,6 +21,11 @@
 Hierarchical PSD Inference
 ===========================
 
+.. image:: images/sphx_glr_plot_hierarchical_001.png
+   :alt: plot hierarchical
+   :class: sphx-glr-single-img
+
+
 Sets up a small population of mock galaxies sharing the same burstiness
 PSD parameters (sigma, tau). Runs PopulationFitter with VI to recover
 the shared PSD hyperparameters from per-galaxy photometry, demonstrating

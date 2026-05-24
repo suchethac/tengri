@@ -17,6 +17,24 @@
    "name": "load_pahspec_or_raise"
   }
  ],
+ "mpl.cm.ScalarMappable": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.cm",
+   "module_short": "matplotlib.cm",
+   "name": "ScalarMappable"
+  }
+ ],
+ "mpl.colors.Normalize": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.colors",
+   "module_short": "matplotlib.colors",
+   "name": "Normalize"
+  }
+ ],
  "np.abs": [
   {
    "is_class": false,

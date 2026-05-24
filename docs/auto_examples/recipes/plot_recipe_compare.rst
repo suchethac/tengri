@@ -21,6 +21,11 @@
 What each shipped tengri recipe produces
 ==========================================
 
+.. image:: images/sphx_glr_plot_recipe_compare_001.png
+   :alt: plot recipe compare
+   :class: sphx-glr-single-img
+
+
 ``tengri.recipes`` ships several curated starting-point model configs
 that map common astronomer use-cases onto the nested-dict ``SEDModel.build``
 grammar. This card overlays the rest-frame SED of every shipped recipe
@@ -35,7 +40,7 @@ so users can pick by eye:
 
 Each is built with no overrides and evaluated at default parameter values.
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-75
+.. GENERATED FROM PYTHON SOURCE LINES 19-78
 
 .. code-block:: Python
 
@@ -59,19 +64,19 @@ Each is built with no overrides and evaluated at default parameter values.
     BARE = tengri.load_ssp("fsps_prsc_miles_chabrier")
     SSPS = {
         "star_forming_photometry": BARE,
-        "quiescent_z0":            BARE,
-        "agn_panchromatic":        BARE,
-        "stochastic_sfh_jwst":     BARE,
-        "mock_recovery_minimal":   BARE,
-        "dust_demo":               BARE,
+        "quiescent_z0": BARE,
+        "agn_panchromatic": BARE,
+        "stochastic_sfh_jwst": BARE,
+        "mock_recovery_minimal": BARE,
+        "dust_demo": BARE,
     }
     RECIPE_FNS = [
         ("star_forming_photometry", recipes.star_forming_photometry, "#3377cc"),
-        ("quiescent_z0",            recipes.quiescent_z0,            "#cc3333"),
-        ("agn_panchromatic",        recipes.agn_panchromatic,        "#9933aa"),
-        ("stochastic_sfh_jwst",     recipes.stochastic_sfh_jwst,     "#33aa55"),
-        ("mock_recovery_minimal",   recipes.mock_recovery_minimal,   "#aa8833"),
-        ("dust_demo",               recipes.dust_demo,               "#666666"),
+        ("quiescent_z0", recipes.quiescent_z0, "#cc3333"),
+        ("agn_panchromatic", recipes.agn_panchromatic, "#9933aa"),
+        ("stochastic_sfh_jwst", recipes.stochastic_sfh_jwst, "#33aa55"),
+        ("mock_recovery_minimal", recipes.mock_recovery_minimal, "#aa8833"),
+        ("dust_demo", recipes.dust_demo, "#666666"),
     ]
 
     fig, ax = plt.subplots(figsize=(7.4, 4.8))
@@ -88,9 +93,12 @@ Each is built with no overrides and evaluated at default parameter values.
         nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
         ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=name)
 
-    ax.set(xlim=(700, 5e6), ylim=(1e38, 5e45),
-           xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-           ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
+    ax.set(
+        xlim=(700, 5e6),
+        ylim=(1e38, 5e45),
+        xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+        ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
+    )
     ax.legend(frameon=False, fontsize=8, loc="lower right")
 
     fig.tight_layout()

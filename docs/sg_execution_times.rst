@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:05.509** total execution time for 174 files **from all galleries**:
+**00:12.258** total execution time for 175 files **from all galleries**:
 
 .. container::
 
@@ -32,19 +32,16 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_sps_plot_uv_slope_age.py` (``../examples/sps/plot_uv_slope_age.py``)
-     - 00:04.241
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_emission_line_atlas.py` (``../examples/nebular/plot_emission_line_atlas.py``)
+     - 00:11.273
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_birth_cloud_vs_diffuse.py` (``../examples/dust_attenuation/plot_birth_cloud_vs_diffuse.py``)
-     - 00:01.268
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_mbb_temperature_beta_grid.py` (``../examples/dust_emission/plot_mbb_temperature_beta_grid.py``)
+     - 00:00.985
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_gradient_sensitivity.py` (``../examples/advanced/plot_gradient_sensitivity.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_advanced_plot_hierarchical.py` (``../examples/advanced/plot_hierarchical.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_joint_fit.py` (``../examples/advanced/plot_joint_fit.py``)
@@ -120,6 +117,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_attenuation_law_compare.py` (``../examples/dust_attenuation/plot_attenuation_law_compare.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_birth_cloud_vs_diffuse.py` (``../examples/dust_attenuation/plot_birth_cloud_vs_diffuse.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_curves.py` (``../examples/dust_attenuation/plot_dust_curves.py``)
@@ -483,6 +483,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_ssp_metallicity_sweep.py` (``../examples/sps/plot_ssp_metallicity_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_uv_slope_age.py` (``../examples/sps/plot_uv_slope_age.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_age_dust_2d.py` (``../examples/usecases/plot_usecase_age_dust_2d.py``)

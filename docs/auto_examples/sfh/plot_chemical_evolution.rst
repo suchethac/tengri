@@ -21,13 +21,18 @@
 Chemical evolution: How SFH and outflows shape metal enrichment history
 =======================================================================
 
+.. image:: images/sphx_glr_plot_chemical_evolution_001.png
+   :alt: plot chemical evolution
+   :class: sphx-glr-single-img
+
+
 Four perspectives on chemical evolution: (1) closed-box model with varying SFR
 timescales; (2) cumulative metallicity from different exponential SFHs; (3)
 leaky-box model showing how outflow rates suppress Z; and (4) age-metallicity
 relation across galactic radii. Together they show how star formation and
 galactic winds control the Z(t) history.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-101
+.. GENERATED FROM PYTHON SOURCE LINES 11-100
 
 .. code-block:: Python
 
@@ -37,8 +42,9 @@ galactic winds control the Z(t) history.
     import matplotlib.pyplot as plt
     import numpy as np
 
-    import tengri
     from tengri.analysis.plotting import setup_style
+    from tengri.components.stellar.sfh.chemical_evolution import closed_box_metallicity
+    from tengri.cosmology import age_at_z0
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -46,7 +52,7 @@ galactic winds control the Z(t) history.
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
     # Time axis: look-back time in Gyr (cosmology-dependent age)
-    age_uni_gyr = float(tengri.age_at_z0())
+    age_uni_gyr = float(age_at_z0())
     t_gyr = np.linspace(0, age_uni_gyr, 200)
     t_yr = t_gyr * 1e9
 
@@ -58,7 +64,7 @@ galactic winds control the Z(t) history.
     age_from_start = age_uni_gyr - t_gyr
     for tau_gyr, y_label in [(2.0, "τ=2 Gyr"), (5.0, "τ=5 Gyr"), (10.0, "τ=10 Gyr")]:
         sfr = np.exp(-age_from_start / tau_gyr)
-        log_z = tengri.closed_box_metallicity(t_yr, sfr, yield_y=0.03, eta_outflow=0.0, f_gas_init=0.9)
+        log_z = closed_box_metallicity(t_yr, sfr, yield_y=0.03, eta_outflow=0.0, f_gas_init=0.9)
         ax.plot(t_gyr, 10.0 ** np.array(log_z), lw=2.0, label=y_label)
 
     ax.set_xlabel("Look-back Time [Gyr]")
@@ -88,9 +94,7 @@ galactic winds control the Z(t) history.
 
     sfr_const = np.ones_like(t_yr)
     for eta, color in zip(outflow_rates, colors):
-        log_z = tengri.closed_box_metallicity(
-            t_yr, sfr_const, yield_y=0.03, eta_outflow=eta, f_gas_init=0.9
-        )
+        log_z = closed_box_metallicity(t_yr, sfr_const, yield_y=0.03, eta_outflow=eta, f_gas_init=0.9)
         ax.plot(t_gyr, 10.0 ** np.array(log_z), lw=1.5, color=color, label=f"η={eta:.1f}")
 
     ax.set_xlabel("Look-back Time [Gyr]")

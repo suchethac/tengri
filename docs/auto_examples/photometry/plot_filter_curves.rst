@@ -31,7 +31,7 @@ registry.
    :alt: plot_filter_curves
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-67
+.. GENERATED FROM PYTHON SOURCE LINES 16-66
 
 .. code-block:: Python
 
@@ -79,7 +79,6 @@ registry.
 
     ax.set_xlabel(r"Wavelength [$\AA$]")
     ax.set_ylabel("Transmission")
-    ax.set_title("SDSS ugriz Filter Curves")
     ax.set_xlim(2800, 11500)
     ax.set_ylim(0, None)
     ax.legend(frameon=False, ncol=5, loc="upper right")

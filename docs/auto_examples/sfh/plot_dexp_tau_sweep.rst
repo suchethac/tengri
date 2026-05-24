@@ -21,6 +21,11 @@
 Delayed-exponential timescale τ controls decay after peak SFR
 =============================================================
 
+.. image:: images/sphx_glr_plot_dexp_tau_sweep_001.png
+   :alt: plot dexp tau sweep
+   :class: sphx-glr-single-img
+
+
 The timescale τ of a delayed-exponential SFH sets how quickly star formation
 falls after its peak: short τ means rapid decline and old stars, long τ means
 a sustained tail and younger mean age. We vary τ across the prior range with

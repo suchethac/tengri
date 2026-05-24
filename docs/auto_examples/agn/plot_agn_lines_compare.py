@@ -29,8 +29,8 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 LINES_MODELS = [
-    ("nlr",    "NLR (Feltre+2016)"),
-    ("blr",    "BLR (Cracco+2016)"),
+    ("nlr", "NLR (Feltre+2016)"),
+    ("blr", "BLR (Cracco+2016)"),
     ("qsogen", "QSOGEN empirical"),
 ]
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.9, len(LINES_MODELS)))
@@ -48,10 +48,12 @@ for (line_kind, label), color in zip(LINES_MODELS, COLORS):
         sfh=SFH,
         dust=DUST,
         agn={
-            "disc":  {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": "skirtor",    "*": tengri.FIXED},
-            "lines": {"type": line_kind,    "*": tengri.FIXED},
-            "*": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0,
+            "disc": {"type": "multicolor", "*": tengri.FIXED},
+            "torus": {"type": "skirtor", "*": tengri.FIXED},
+            "lines": {"type": line_kind, "*": tengri.FIXED},
+            "*": tengri.FIXED,
+            "log_lbol": 12.5,
+            "frac": 1.0,
         },
         redshift=tengri.Fixed(0.05),
     )
@@ -61,9 +63,12 @@ for (line_kind, label), color in zip(LINES_MODELS, COLORS):
     nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
     ax.semilogy(wave, nu_l_nu, color=color, lw=1.0, label=label, alpha=0.85)
 
-ax.set(xlim=(1000, 7500), ylim=(1e44, 5e46),
-       xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-       ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
+ax.set(
+    xlim=(1000, 7500),
+    ylim=(1e44, 5e46),
+    xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+    ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
+)
 
 LINE_MARKS = [
     (1216, r"Ly$\alpha$"),
@@ -76,8 +81,7 @@ LINE_MARKS = [
 ]
 for lam, name in LINE_MARKS:
     ax.axvline(lam, color="0.85", lw=0.4, alpha=0.5)
-    ax.text(lam, 4e46, name, fontsize=7, color="0.5",
-            ha="center", va="bottom", rotation=90)
+    ax.text(lam, 4e46, name, fontsize=7, color="0.5", ha="center", va="bottom", rotation=90)
 
 ax.legend(frameon=False, fontsize=8, loc="lower right")
 

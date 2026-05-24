@@ -36,19 +36,19 @@ C_AA_PER_S = 2.998e18
 BARE = tengri.load_ssp("fsps_prsc_miles_chabrier")
 SSPS = {
     "star_forming_photometry": BARE,
-    "quiescent_z0":            BARE,
-    "agn_panchromatic":        BARE,
-    "stochastic_sfh_jwst":     BARE,
-    "mock_recovery_minimal":   BARE,
-    "dust_demo":               BARE,
+    "quiescent_z0": BARE,
+    "agn_panchromatic": BARE,
+    "stochastic_sfh_jwst": BARE,
+    "mock_recovery_minimal": BARE,
+    "dust_demo": BARE,
 }
 RECIPE_FNS = [
     ("star_forming_photometry", recipes.star_forming_photometry, "#3377cc"),
-    ("quiescent_z0",            recipes.quiescent_z0,            "#cc3333"),
-    ("agn_panchromatic",        recipes.agn_panchromatic,        "#9933aa"),
-    ("stochastic_sfh_jwst",     recipes.stochastic_sfh_jwst,     "#33aa55"),
-    ("mock_recovery_minimal",   recipes.mock_recovery_minimal,   "#aa8833"),
-    ("dust_demo",               recipes.dust_demo,               "#666666"),
+    ("quiescent_z0", recipes.quiescent_z0, "#cc3333"),
+    ("agn_panchromatic", recipes.agn_panchromatic, "#9933aa"),
+    ("stochastic_sfh_jwst", recipes.stochastic_sfh_jwst, "#33aa55"),
+    ("mock_recovery_minimal", recipes.mock_recovery_minimal, "#aa8833"),
+    ("dust_demo", recipes.dust_demo, "#666666"),
 ]
 
 fig, ax = plt.subplots(figsize=(7.4, 4.8))
@@ -65,9 +65,12 @@ for name, recipe_fn, color in RECIPE_FNS:
     nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
     ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=name)
 
-ax.set(xlim=(700, 5e6), ylim=(1e38, 5e45),
-       xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-       ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
+ax.set(
+    xlim=(700, 5e6),
+    ylim=(1e38, 5e45),
+    xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+    ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
+)
 ax.legend(frameon=False, fontsize=8, loc="lower right")
 
 fig.tight_layout()

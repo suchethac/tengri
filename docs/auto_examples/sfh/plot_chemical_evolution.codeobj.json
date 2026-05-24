@@ -1,4 +1,22 @@
 {
+ "age_at_z0": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.cosmology",
+   "module_short": "tengri.cosmology",
+   "name": "age_at_z0"
+  }
+ ],
+ "closed_box_metallicity": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.stellar.sfh.chemical_evolution",
+   "module_short": "tengri.components.stellar.sfh",
+   "name": "closed_box_metallicity"
+  }
+ ],
  "np.array": [
   {
    "is_class": false,
@@ -69,24 +87,6 @@
    "module": "tengri.analysis.plotting",
    "module_short": "tengri.analysis.plotting",
    "name": "setup_style"
-  }
- ],
- "tengri.age_at_z0": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "age_at_z0"
-  }
- ],
- "tengri.closed_box_metallicity": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "closed_box_metallicity"
   }
  ],
  "warnings.filterwarnings": [

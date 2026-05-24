@@ -1097,6 +1097,23 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Zoomed rest-frame spectrum of an ionised-gas-dominated SF galaxy with the strongest optical / near-UV emission lines labelled. Wavelengths are vacuum; line positions follow NIST/Atomic Line List.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_emission_line_atlas_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_emission_line_atlas`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Optical emission-line atlas of a young star-forming galaxy</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The Lyα-specific escape fraction f_esc_lya sets what fraction of Lyα photons can escape the ISM without scattering. Higher f_esc_lya suppresses the Lyα emission line while leaving other nebular lines unchanged.">
 
 .. only:: html
@@ -1764,6 +1781,23 @@ Astrodust (HD23) template grids.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Dust IR-emission library comparison at fixed L_dust</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Casey 2012 modified blackbody dust SEDs across the canonical fitter&#x27;s two knobs — dust temperature T_dust and emissivity index β. Each curve in the top panel is a fixed β = 1.8 MBB swept in T; the bottom panel fixes T = 30 K and sweeps β. The peak shifts by ~40 μm per 10 K of warming; the sub-mm slope steepens by one power-law index per Δβ = 1.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_mbb_temperature_beta_grid_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_emission/plot_mbb_temperature_beta_grid`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Modified blackbody: T_dust × β grid</div>
     </div>
 
 
@@ -3333,23 +3367,6 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Gradient Sensitivity Heatmap</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Sets up a small population of mock galaxies sharing the same burstiness PSD parameters (sigma, tau). Runs PopulationFitter with VI to recover the shared PSD hyperparameters from per-galaxy photometry, demonstrating hierarchical Bayesian shrinkage on the intrinsic SFH scatter.">
-
-.. only:: html
-
-  .. image:: /auto_examples/advanced/images/thumb/sphx_glr_plot_hierarchical_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/advanced/plot_hierarchical`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Hierarchical PSD Inference</div>
     </div>
 
 

@@ -21,6 +21,11 @@
 Inference method comparison: MAP as reference for SFH recovery
 ==============================================================
 
+.. image:: images/sphx_glr_plot_workflow_method_comparison_001.png
+   :alt: plot workflow method comparison
+   :class: sphx-glr-single-img
+
+
 Demonstrates running MAP inference on SDSS photometry and comparing the
 MAP fit to the ground truth SFH. MAP provides a point estimate of the posterior
 without sampling overhead; for uncertainty quantification, posterior sampling

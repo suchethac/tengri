@@ -21,6 +21,11 @@
 AGN dusty torus: library comparison at fixed L_bol
 =====================================================
 
+.. image:: images/sphx_glr_plot_agn_torus_compare_001.png
+   :alt: plot agn torus compare
+   :class: sphx-glr-single-img
+
+
 Six dusty-torus libraries reprocessing the same accretion-disc
 continuum at fixed ``log L_bol = 12.5`` (in log L_sun) and standard
 inclination. The disc is held at ``multicolor`` (Kubota & Done 2018)
@@ -37,7 +42,7 @@ Torus libraries (the six production selectors under
 - ``qsogen``           — Temple+2021 empirical NIR/MIR pasted on disc
 - ``two_temperature``  — simple two-blackbody phenomenological torus
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-80
+.. GENERATED FROM PYTHON SOURCE LINES 21-84
 
 .. code-block:: Python
 
@@ -55,12 +60,12 @@ Torus libraries (the six production selectors under
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     TORI = [
-        ("skirtor",          "SKIRTOR (Stalevski+2016)"),
-        ("cat3d_wind",       "CAT3D-WIND (Hönig & Kishimoto 2017)"),
-        ("nenkova",          "CLUMPY (Nenkova+2008)"),
-        ("silva04",          "Silva+2004"),
-        ("qsogen",           "QSOGEN MIR"),
-        ("two_temperature",  "two-T blackbody"),
+        ("skirtor", "SKIRTOR (Stalevski+2016)"),
+        ("cat3d_wind", "CAT3D-WIND (Hönig & Kishimoto 2017)"),
+        ("nenkova", "CLUMPY (Nenkova+2008)"),
+        ("silva04", "Silva+2004"),
+        ("qsogen", "QSOGEN MIR"),
+        ("two_temperature", "two-T blackbody"),
     ]
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(TORI)))
 
@@ -77,9 +82,11 @@ Torus libraries (the six production selectors under
             sfh=SFH,
             dust=DUST,
             agn={
-                "disc":  {"type": "multicolor", "*": tengri.FIXED},
-                "torus": {"type": torus,        "*": tengri.FIXED},
-                "*": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0,
+                "disc": {"type": "multicolor", "*": tengri.FIXED},
+                "torus": {"type": torus, "*": tengri.FIXED},
+                "*": tengri.FIXED,
+                "log_lbol": 12.5,
+                "frac": 1.0,
             },
             redshift=tengri.Fixed(0.05),
         )
@@ -89,13 +96,15 @@ Torus libraries (the six production selectors under
         nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
         ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
 
-    ax.set(xlim=(1e3, 3e6), ylim=(1e42, 5e46),
-           xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-           ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
+    ax.set(
+        xlim=(1e3, 3e6),
+        ylim=(1e42, 5e46),
+        xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+        ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
+    )
     for um, name in [(3.0, "L"), (10.0, "N"), (24.0, "MIPS-24"), (70.0, "FIR")]:
         ax.axvline(um * 1.0e4, color="0.85", lw=0.4, alpha=0.6)
-        ax.text(um * 1.0e4, 5e46 * 0.5, f"{name}", fontsize=7, color="0.5",
-                ha="center", va="top")
+        ax.text(um * 1.0e4, 5e46 * 0.5, f"{name}", fontsize=7, color="0.5", ha="center", va="top")
     ax.legend(frameon=False, fontsize=8, loc="lower left")
 
     fig.tight_layout()

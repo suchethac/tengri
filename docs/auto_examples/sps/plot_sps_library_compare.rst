@@ -21,6 +21,11 @@
 SSP library comparison at a fixed age and metallicity
 ======================================================
 
+.. image:: images/sphx_glr_plot_sps_library_compare_001.png
+   :alt: plot sps library compare
+   :class: sphx-glr-single-img
+
+
 Different stellar population synthesis codes use different stellar
 spectral libraries, isochrone families, and binary treatments. The
 SED of a ~1 Gyr-old, solar-metallicity simple stellar population
@@ -36,16 +41,14 @@ into the grid at fixed ``log U``) and bare-stellar variants; we use
 bare-stellar wherever available so the differences trace stellar
 physics, not nebular treatment.
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-87
+.. GENERATED FROM PYTHON SOURCE LINES 20-92
 
 .. code-block:: Python
 
 
     import warnings
-    from pathlib import Path
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -67,9 +70,15 @@ physics, not nebular treatment.
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(LIBRARIES)))
 
     C_AA_PER_S = 2.998e18
-    SFH = {"type": "tsnorm", "*": tengri.FIXED,
-           "peak_lbt_gyr": 1.0, "width_gyr": 0.05,
-           "log_peak_sfr": 1.0, "skew": 0.0, "trunc": 13.0}
+    SFH = {
+        "type": "tsnorm",
+        "*": tengri.FIXED,
+        "peak_lbt_gyr": 1.0,
+        "width_gyr": 0.05,
+        "log_peak_sfr": 1.0,
+        "skew": 0.0,
+        "trunc": 13.0,
+    }
     DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
@@ -95,14 +104,15 @@ physics, not nebular treatment.
         ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
 
     ax.axvline(1216, color="0.55", lw=0.6, ls=":")
-    ax.text(1216, 0.012, r"Ly$\alpha$", color="0.4", fontsize=8,
-            rotation=90, va="bottom", ha="right")
+    ax.text(1216, 0.012, r"Ly$\alpha$", color="0.4", fontsize=8, rotation=90, va="bottom", ha="right")
     ax.axvline(912, color="0.55", lw=0.6, ls=":")
-    ax.text(912, 0.012, "Lyman limit", color="0.4", fontsize=8,
-            rotation=90, va="bottom", ha="right")
-    ax.set(xlim=(700, 5e4), ylim=(1e-2, 5.0),
-           xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-           ylabel=r"$\nu L_\nu / \nu L_\nu(5500\,\mathrm{\AA})$")
+    ax.text(912, 0.012, "Lyman limit", color="0.4", fontsize=8, rotation=90, va="bottom", ha="right")
+    ax.set(
+        xlim=(700, 5e4),
+        ylim=(1e-2, 5.0),
+        xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+        ylabel=r"$\nu L_\nu / \nu L_\nu(5500\,\mathrm{\AA})$",
+    )
     ax.legend(frameon=False, fontsize=8, loc="lower right")
 
     fig.tight_layout()
