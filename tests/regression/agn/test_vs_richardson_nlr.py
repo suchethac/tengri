@@ -6,21 +6,26 @@ the Richardson et al. (2014) emission-line diagnostics used as the canonical
 NLR template in tengri.
 """
 
-import numpy as np
-
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
+from tengri.components.agn._phys import gaussian_line_profile
 from tengri.components.agn.nlr import (
+    _NLR_FWHM_KMS,
     compute_nlr_sed,
     compute_nlr_sed_richardson2014,
-    _RICHARDSON_FLUXES,
-    _RICHARDSON_WAVES,
-    _NLR_FWHM_KMS,
 )
-from tengri.components.agn._phys import gaussian_line_profile
 
 
+@pytest.mark.xfail(
+    reason=(
+        "Methodology bug shared with test_blr_vanden_berk_line_ratios: integrating "
+        "`sed × gaussian_profile` over frequency gives ∫L_ν × profile², not the line "
+        "flux. Need to switch to narrow-band L_ν integration. Tracked separately."
+    ),
+    strict=False,
+)
 @pytest.mark.regression_paper
 def test_richardson_nlr_line_ratios():
     """Test NLR line ratios against Richardson+2014 'a42' template.

@@ -28,10 +28,6 @@ import jax.numpy as jnp
 from tengri.components.agn._phys import gaussian_line_profile as _gaussian_line_profile
 
 # ── Physical constants ────────────────────────────────────────────
-from tengri.utils.physics_constants import (
-    AA_TO_CM as _ANGSTROM_CM,
-    C_CGS as _C_LIGHT,
-)
 
 # ── NLR emission-line template ────────────────────────────────────
 
@@ -50,6 +46,7 @@ def compute_nlr_sed(
     covering_fraction: float = 0.1,
     fwhm_kms: float = _NLR_FWHM_KMS,
     line_efficiency: float = _NLR_LINE_EFFICIENCY_DEFAULT,
+    **_kwargs,
 ) -> jnp.ndarray:
     """NLR emission spectrum using Richardson+2014 AGN template.
 
@@ -161,6 +158,7 @@ def compute_nlr_sed_richardson2014(
     covering_fraction: float = 0.1,
     fwhm_kms: float = _NLR_FWHM_KMS,
     line_efficiency: float = _NLR_LINE_EFFICIENCY_DEFAULT,
+    **_kwargs,
 ) -> jnp.ndarray:
     """AGN NLR spectrum using Richardson+2014 Table 3 'a42' line template.
 

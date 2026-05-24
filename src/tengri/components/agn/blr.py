@@ -273,6 +273,7 @@ def compute_blr_sed(
     fwhm_kms: float = _BLR_FWHM_KMS,
     agn_fe2_strength: float = 0.0,
     line_efficiency: float = _BLR_LINE_EFFICIENCY_DEFAULT,
+    **_kwargs,
 ) -> jnp.ndarray:
     """BLR emission spectrum: broad permitted lines + Fe II pseudo-continuum.
 
