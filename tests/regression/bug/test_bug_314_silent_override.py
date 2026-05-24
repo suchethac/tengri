@@ -22,6 +22,8 @@ import tengri
 from tengri.config.exceptions import UnknownParameterError
 from tengri.observation.photometry import FilterCurve
 
+pytestmark = pytest.mark.regression_bug
+
 
 @pytest.fixture(scope="module")
 def model_with_filters():
