@@ -56,10 +56,18 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_torus_frac",
         Fixed(0.5),
-        "AGN torus covering factor (fraction of L_bol re-emitted by torus)",
+        "AGN torus covering factor — DEPRECATED; use agn_frac_agn",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
     ),
+    ParamDeclaration(
+        "agn_frac_agn",
+        Fixed(0.5),
+        "AGN fraction (L_AGN / L_total in a configurable band, CIGALE convention)",
+        lambda lo, hi: lo >= 0 and hi <= 1,
+        "must be in [0, 1]",
+    ),
+    # (5-line gap reserved for PR 2 xray parameter block)
     ParamDeclaration(
         "agn_log_mbh",
         Fixed(7.0),

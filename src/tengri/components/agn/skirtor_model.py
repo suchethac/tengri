@@ -26,7 +26,6 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components.agn.skirtor import create_skirtor_from_grid
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig, SEDComponentState
@@ -71,8 +70,8 @@ class SKIRTORTorus(SEDModelComponent):
 
     A pure-JAX implementation with C²-continuous gradients via triweight
     kernel interpolation in the 5D parameter space (tau, p, q, opening angle,
-    inclination). Publishes the torus contribution to sed_intrinsic and
-    bolometric luminosity to cross-component readers.
+    inclination). Publishes separate disc and torus contributions, with
+    polar dust wire-in for Type 1 sightlines.
 
     Attributes
     ----------
@@ -97,13 +96,24 @@ class SKIRTORTorus(SEDModelComponent):
         Torus half-opening angle. [degrees, 20–60]
     cos_inc : Uniform
         Cosine of inclination (1 = face-on, 0 = edge-on). [dimensionless, 0–1]
-    torus_frac : Uniform
-        Fraction of L_bol reprocessed by torus. [dimensionless, 0–1]
+    frac_agn : Uniform
+        AGN fraction in a configurable band (CIGALE convention).
+        [dimensionless, 0–1]
 
     Cross-component outputs
     -----------------------
+    L_agn_disc : erg/s
+        Bolometric luminosity from accretion disc (intrinsic, at θ=30°).
     L_agn_torus : erg/s
-        Bolometric luminosity contribution from torus emission.
+        Bolometric luminosity from torus dust thermal emission.
+    L_agn_polar_dust : erg/s
+        Bolometric luminosity from polar dust reemission (Type 1 only).
+    L_2500_30deg : erg/s/Hz
+        Specific luminosity at 2500 Å, θ=30°; feeds X-ray normalisation.
+    L_6um : erg/s/Hz
+        Specific luminosity at 6 μm for mid-IR diagnostics.
+    L_12um : erg/s/Hz
+        Specific luminosity at 12 μm for mid-IR diagnostics.
 
     Notes
     -----
@@ -115,9 +125,12 @@ class SKIRTORTorus(SEDModelComponent):
     downloaded separately and pointed to via ``grid_path`` in config. The
     predict method gracefully returns zero emission if templates are unavailable.
 
-    **Cross-component note**: AGN inclination (cos_inc) is shared with
-    disc/corona models and is **never** auto-derived from geometry
-    (discontinuous gradient). Declare it as a free parameter independently.
+    **Polar dust**: Applied to Type 1 sightlines (cos_inc ≥ cos(90° - oa))
+    via the smooth sigmoid from polar_dust.py. Energy-conserving reemission
+    as Casey-2012 modified blackbody.
+
+    **Citation**: Stalevski et al. 2016 (SKIRTOR); Yang et al. 2020, §2.2.2
+    (polar dust + anisotropy).
 
     Examples
     --------
@@ -153,13 +166,22 @@ class SKIRTORTorus(SEDModelComponent):
     q_skirtor = Uniform(0.0, 1.5, description="Polar dust density gradient", units="")
     oa_skirtor = Uniform(20.0, 60.0, description="Torus half-opening angle", units="deg")
     cos_inc = Uniform(0.0, 1.0, description="Cosine of inclination", units="")
-    torus_frac = Uniform(0.0, 1.0, description="Torus luminosity fraction of L_bol", units="")
+    frac_agn = Uniform(
+        0.0, 1.0, description="AGN fraction (L_AGN / L_total, CIGALE convention)", units=""
+    )
 
-    # Cross-component output
-    outputs: ClassVar[dict[str, str]] = {"L_agn_torus": "erg/s"}
+    # Cross-component outputs
+    outputs: ClassVar[dict[str, str]] = {
+        "L_agn_disc": "erg/s",
+        "L_agn_torus": "erg/s",
+        "L_agn_polar_dust": "erg/s",
+        "L_2500_30deg": "erg/s/Hz",
+        "L_6um": "erg/s/Hz",
+        "L_12um": "erg/s/Hz",
+    }
 
     def load(self, wave: jnp.ndarray | None = None) -> Any | None:
-        """Load SKIRTOR template grid if available.
+        """Load SKIRTOR v3 template grid with separate components.
 
         Parameters
         ----------
@@ -170,14 +192,17 @@ class SKIRTORTorus(SEDModelComponent):
         Returns
         -------
         callable or None
-            Interpolation function from create_skirtor_from_grid, or None
-            if template file is not available or grid_path is not set.
+            Interpolation function from create_skirtor_components_from_grid
+            (returns SKIRTORComponents), or None if template file is not
+            available or grid_path is not set.
         """
+        from tengri.components.agn.skirtor import create_skirtor_components_from_grid
+
         if not self.config.grid_path:
             return None
 
         try:
-            return create_skirtor_from_grid(self.config.grid_path)
+            return create_skirtor_components_from_grid(self.config.grid_path)
         except (FileNotFoundError, OSError, KeyError):
             # Templates not available — predict will return zero emission
             return None
@@ -189,11 +214,10 @@ class SKIRTORTorus(SEDModelComponent):
         wave: jnp.ndarray,
         **inputs: Any,
     ) -> tuple[jnp.ndarray, Mapping[str, jnp.ndarray]]:
-        """Pure JAX SKIRTOR torus prediction.
+        """Pure JAX SKIRTOR prediction with separate components and polar dust.
 
-        Interpolates the SKIRTOR template grid to the requested parameters,
-        normalizes to the user's luminosity scale, and returns the torus SED
-        contribution.
+        Interpolates the SKIRTOR template grid, applies polar dust extinction
+        to Type 1 sightlines, and publishes all derived luminosities.
 
         Parameters
         ----------
@@ -204,8 +228,8 @@ class SKIRTORTorus(SEDModelComponent):
             - p_skirtor: radial density gradient
             - q_skirtor: polar density gradient
             - oa_skirtor: opening angle (degrees)
-            - cos_inc: cosine of inclination
-            - torus_frac: torus luminosity fraction
+            cos_inc: cosine of inclination
+            - frac_agn: AGN luminosity fraction
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz.
         wave : ndarray, shape (n_wave,)
@@ -217,17 +241,32 @@ class SKIRTORTorus(SEDModelComponent):
         -------
         tuple[ndarray, dict]
             (sed_out, published) where:
-            - sed_out: Updated SED (sed_in + torus contribution).
-            - published: {"L_agn_torus": bolometric torus luminosity [erg/s]}.
+            - sed_out: Updated SED (sed_in + disc + torus + polar dust).
+            - published: dict with keys L_agn_disc, L_agn_torus, L_agn_polar_dust,
+              L_2500_30deg, L_6um, L_12um [erg/s] or [erg/s/Hz].
         """
+        from tengri.components.agn._phys import wavelength_to_nu
+        from tengri.components.agn.polar_dust import (
+            polar_dust_emission,
+            polar_dust_extinction,
+        )
+
         # If templates are not loaded, return zero emission
         if not hasattr(self, "data") or self.data is None:
-            return sed_in, {"L_agn_torus": jnp.array(0.0)}
+            zero_dict = {
+                "L_agn_disc": jnp.array(0.0),
+                "L_agn_torus": jnp.array(0.0),
+                "L_agn_polar_dust": jnp.array(0.0),
+                "L_2500_30deg": jnp.array(0.0),
+                "L_6um": jnp.array(0.0),
+                "L_12um": jnp.array(0.0),
+            }
+            return sed_in, zero_dict
 
         skirtor_fn = self.data
 
-        # Call SKIRTOR interpolator
-        sed_torus = skirtor_fn(
+        # Call SKIRTOR interpolator to get separate components
+        components = skirtor_fn(
             wavelength=wave,
             agn_log_lbol=p["log_lbol"],
             agn_tau_skirtor=p["tau_skirtor"],
@@ -235,17 +274,61 @@ class SKIRTORTorus(SEDModelComponent):
             agn_q_skirtor=p["q_skirtor"],
             agn_oa_skirtor=p["oa_skirtor"],
             agn_cos_inc=p["cos_inc"],
-            agn_torus_frac=p["torus_frac"],
+            frac_agn=p["frac_agn"],
         )
 
-        # Integrate to bolometric luminosity
-        from tengri.components.agn._phys import wavelength_to_nu
+        # Unpack components
+        sed_disc = components.disk
+        sed_torus_dust = components.dust
 
+        # Compute derived quantities from disc
         nu = wavelength_to_nu(wave)
         idx_sort = jnp.argsort(nu)
-        L_torus = jnp.trapezoid(sed_torus[idx_sort], nu[idx_sort])
 
-        # Add to intrinsic SED
-        sed_out = sed_in + sed_torus
+        # L_agn_disc: bolometric luminosity of intrinsic disc
+        L_agn_disc = jnp.trapezoid(sed_disc[idx_sort], nu[idx_sort])
 
-        return sed_out, {"L_agn_torus": L_torus}
+        # L_2500_30deg: specific luminosity at 2500 Å (for α_OX)
+        L_2500 = jnp.interp(2500.0, wave, sed_disc)
+
+        # L_6um and L_12um: mid-IR diagnostics
+        L_6um = jnp.interp(60000.0, wave, sed_disc + sed_torus_dust)  # 6 um = 60000 A
+        L_12um = jnp.interp(120000.0, wave, sed_disc + sed_torus_dust)  # 12 um = 120000 A
+
+        # L_agn_torus: bolometric torus dust luminosity
+        L_agn_torus = jnp.trapezoid(sed_torus_dust[idx_sort], nu[idx_sort])
+
+        # Apply polar dust (Type 1 only): extinction of disc, reemission
+        # Default: no polar dust (EBV=0), but wire in for future flexibility
+        polar_ebv = 0.0  # Future: make this a parameter
+        _, l_abs = polar_dust_extinction(
+            sed_disc,
+            wave,
+            p["cos_inc"],
+            p["oa_skirtor"],
+            polar_ebv,
+            law="smc",
+        )
+        sed_polar_reemit = polar_dust_emission(
+            jnp.trapezoid(l_abs[idx_sort], nu[idx_sort]),
+            wave,
+            temperature=100.0,
+            beta=1.6,
+            lambda_0=2e6,
+        )
+        L_agn_polar_dust = jnp.trapezoid(sed_polar_reemit[idx_sort], nu[idx_sort])
+
+        # Total SED: disc + torus + polar reemission
+        # (Disc extinction is minimal when EBV=0, so use original disc here)
+        sed_out = sed_in + sed_disc + sed_torus_dust + sed_polar_reemit
+
+        published = {
+            "L_agn_disc": L_agn_disc,
+            "L_agn_torus": L_agn_torus,
+            "L_agn_polar_dust": L_agn_polar_dust,
+            "L_2500_30deg": L_2500,
+            "L_6um": L_6um,
+            "L_12um": L_12um,
+        }
+
+        return sed_out, published

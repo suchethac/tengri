@@ -184,6 +184,63 @@ def _interpolate_and_normalize(
     return l_scale * sed / integral_safe
 
 
+def _compute_intrinsic_30deg_luminosity(
+    disk_template: jnp.ndarray,
+    wave_grid: jnp.ndarray,
+    norm: float,
+) -> tuple[float, float]:
+    """Compute intrinsic disc luminosity and L_2500A at θ=30° (CIGALE §2.2.1).
+
+    Parameters
+    ----------
+    disk_template : ndarray, shape (n_wave,)
+        De-reddened intrinsic disc spectrum (AGN1 at θ=0°) [erg s^-1 Hz^-1].
+    wave_grid : ndarray, shape (n_wave,)
+        Wavelength grid [Angstrom].
+    norm : float
+        Overall normalization factor from SKIRTOR template.
+
+    Returns
+    -------
+    lumin_intrin_disk : float
+        Intrinsic disc bolometric luminosity at θ=30° [erg/s].
+    l_agn_2500A : float
+        Specific luminosity at 2500 Å, θ=30°, in [erg s^-1 Hz^-1].
+
+    Notes
+    -----
+    **Citation**: Stalevski et al. 2016, §2.2.1; CIGALE skirtor2016.py lines 413–419.
+
+    The anisotropic disc emission varies as L(θ, λ) ∝ cos(θ) × (1 + 2cos(θ)).
+    At θ=30°, this gives the relative anisotropy factor:
+
+    .. math::
+
+        f_{aniso}(θ=30°) = \\frac{cos(30°) × (1 + 2cos(30°))}{3}
+
+    The factor of 3 normalizes the θ=0° (face-on) case.
+
+    **JIT-compatible**: yes.
+    """
+    cos_30 = jnp.cos(jnp.radians(30.0))
+    aniso_factor = cos_30 * (2.0 * cos_30 + 1.0) / 3.0
+
+    # Bolometric intrinsic disc luminosity at 30°
+    nu = _wavelength_to_nu(wave_grid)
+    idx_sort = jnp.argsort(nu)
+    integral_disk = jnp.trapezoid(disk_template[idx_sort], nu[idx_sort])
+    norm_fac = aniso_factor * norm
+    lumin_intrin_disk = integral_disk * norm_fac
+
+    # L_ν(2500 Å) at 30°, convert from L_λ to L_ν
+    l_lam_2500 = jnp.interp(2500.0, wave_grid, disk_template)
+    # L_ν = L_λ × (λ²/c) where c is in Å/s
+    c_aa_per_s = 2.99792458e18  # Angstrom per second
+    l_nu_2500 = l_lam_2500 * (2500.0**2 / c_aa_per_s) * norm_fac
+
+    return lumin_intrin_disk, l_nu_2500
+
+
 def create_skirtor_from_grid(grid_path: str) -> Callable:
     """Load SKIRTOR templates and return an interpolation function.
 
@@ -316,7 +373,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
     callable
         Function with signature::
 
-            fn(wavelength, agn_log_lbol, ..., agn_torus_frac, **kwargs)
+            fn(wavelength, agn_log_lbol, ..., frac_agn, **kwargs)
                 -> SKIRTORComponents(disk, dust, total)
 
         Each component is in [erg s^-1 Hz^-1].
@@ -373,7 +430,8 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
         agn_q_skirtor: float = 1.0,
         agn_oa_skirtor: float = 40.0,
         agn_cos_inc: float = 0.5,
-        agn_torus_frac: float = 0.5,
+        frac_agn: float = 0.5,
+        agn_torus_frac: float | None = None,  # deprecated; falls back to frac_agn
         **_kwargs,
     ) -> SKIRTORComponents:
         """SKIRTOR torus with separate disk and dust components.
@@ -394,8 +452,11 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
             Torus half-opening angle. [degrees]
         agn_cos_inc : float
             Cosine of inclination. [dimensionless]
-        agn_torus_frac : float
-            Fraction of L_bol reprocessed by torus. [dimensionless]
+        frac_agn : float
+            CIGALE-style AGN fraction (L_AGN / L_total) in a configurable band.
+            [dimensionless, 0–1]
+        agn_torus_frac : float, optional
+            **Deprecated**: use frac_agn instead.
 
         Returns
         -------
@@ -403,7 +464,13 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
             Named tuple with ``disk``, ``dust``, ``total`` arrays,
             each shape (n_wave,) in [erg s⁻¹ Hz⁻¹].
         """
-        l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
+        # Handle deprecated parameter
+        if agn_torus_frac is not None:
+            luminosity_frac = agn_torus_frac
+        else:
+            luminosity_frac = frac_agn
+
+        l_scale = 10.0**agn_log_lbol * _L_SUN * luminosity_frac
         point = (
             agn_tau_skirtor,
             agn_p_skirtor,
@@ -552,9 +619,11 @@ def skirtor_components(*args, **kwargs) -> SKIRTORComponents:
     agn_cos_inc : float, optional
         Cosine of inclination angle [dimensionless, 0–1].
         Default: 0.5 (60°).
+    frac_agn : float, optional
+        AGN fraction (CIGALE-style). Preferred parameter. Default: 0.5.
     agn_torus_frac : float, optional
-        Fraction of bolometric luminosity from torus [dimensionless, 0–1].
-        Default: 0.5.
+        **Deprecated**: use frac_agn instead. Falls back to this if
+        frac_agn is not provided.
     _template : callable, optional
         Pre-loaded template function (for JIT threading). When provided,
         uses this instead of the module-level cached loader. Internal use.
@@ -579,6 +648,11 @@ def skirtor_components(*args, **kwargs) -> SKIRTORComponents:
     """
     # Support Phase 4-D: allow template to be threaded as JIT runtime input
     _template = kwargs.pop("_template", None)
+
+    # Handle deprecated agn_torus_frac → frac_agn migration
+    if "frac_agn" not in kwargs and "agn_torus_frac" in kwargs:
+        kwargs["frac_agn"] = kwargs.pop("agn_torus_frac")
+
     if _template is not None:
         fn = _template
     else:
