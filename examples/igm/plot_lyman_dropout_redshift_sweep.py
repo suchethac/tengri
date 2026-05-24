@@ -105,4 +105,3 @@ ax.text(
 
 fig.tight_layout()
 plt.savefig("plot_lyman_dropout_redshift_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()

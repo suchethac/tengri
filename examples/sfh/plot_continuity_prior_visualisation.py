@@ -127,8 +127,4 @@ ax.legend(fontsize=10)
 ax.grid(True, alpha=0.3)
 
 plt.tight_layout()
-import os
-script_dir = os.path.dirname(os.path.abspath(__file__))
-png_path = os.path.join(script_dir, "plot_continuity_prior_visualisation.png")
-plt.savefig(png_path, dpi=150, bbox_inches="tight")
-plt.show()
+plt.savefig("plot_continuity_prior_visualisation.png", dpi=150, bbox_inches="tight")
