@@ -15,7 +15,6 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -58,7 +57,11 @@ mock = model.mock(truth, snr=20.0, key=key)
 
 forward = tengri.ForwardModel.build(sed=model, observation=obs)
 posterior = forward.fit(
-    mock.flux_obs, mock.noise, method="native_vi_nonlinear", n_iterations=500, n_samples=3,
+    mock.flux_obs,
+    mock.noise,
+    method="native_vi_nonlinear",
+    n_iterations=500,
+    n_samples=3,
     verbose=False,
 )
 

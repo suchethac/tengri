@@ -27,12 +27,18 @@ models = {
     "tsnorm (truncated skew-normal)": tengri.tsnorm(
         t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=1.0, trunc=3.0
     ),
-    "snorm (skew-normal)": tengri.snorm(t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=1.5),
+    "snorm (skew-normal)": tengri.snorm(
+        t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=1.5
+    ),
     "norm (Gaussian)": tengri.norm(t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9),
     "lnorm (log-normal)": tengri.lnorm(t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=0.3),
-    "dpl (double power law)": tengri.dpl(t_lookback, alpha=2.0, beta=1.0, tau=5e9, log_peak_sfr=1.0),
+    "dpl (double power law)": tengri.dpl(
+        t_lookback, alpha=2.0, beta=1.0, tau=5e9, log_peak_sfr=1.0
+    ),
     "exponential": tengri.exponential(t_lookback, log_peak_sfr=1.0, tau=3e9, start=1e9),
-    "delayed exponential": tengri.delayed_exponential(t_lookback, log_peak_sfr=1.0, tau=3e9, start=1e9),
+    "delayed exponential": tengri.delayed_exponential(
+        t_lookback, log_peak_sfr=1.0, tau=3e9, start=1e9
+    ),
     "constant": tengri.constant(t_lookback, log_sfr=0.5, start=2e9, end=10e9),
 }
 

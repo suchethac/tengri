@@ -15,7 +15,6 @@ degeneracy); Conroy 2013, ARA&A, 51, 393 (SED fitting).
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -130,8 +129,26 @@ wave_all = np.concatenate([wave_uv, wave_sdss])
 
 # Plot: two degenerate solutions in SDSS only, broken with UV
 ax.errorbar(wave_sdss, phot_sdss_use, fmt="o", color="k", ms=7, capsize=3, label="Observed SDSS")
-ax.plot(wave_uv, phot_uv_old[:2], "s", color="C0", ms=7, mfc="none", mew=1.5, label="Old+dust-poor (truth)")
-ax.plot(wave_uv, phot_uv_young[:2], "^", color="C3", ms=7, mfc="none", mew=1.5, label="Young+dusty (degenerate)")
+ax.plot(
+    wave_uv,
+    phot_uv_old[:2],
+    "s",
+    color="C0",
+    ms=7,
+    mfc="none",
+    mew=1.5,
+    label="Old+dust-poor (truth)",
+)
+ax.plot(
+    wave_uv,
+    phot_uv_young[:2],
+    "^",
+    color="C3",
+    ms=7,
+    mfc="none",
+    mew=1.5,
+    label="Young+dusty (degenerate)",
+)
 
 ax.set_xlabel(r"Wavelength [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$f_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")

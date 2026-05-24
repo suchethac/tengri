@@ -139,6 +139,5 @@ ax.legend(fontsize=10, frameon=False)
 ax.set_xlim(1000, 7000)
 ax.set_ylim(1e-2, 1e30)
 
-fig.suptitle("AGN Emission Lines: NLR vs BLR Behavior", fontsize=12)
 fig.tight_layout(rect=[0, 0, 1, 0.97])
-plt.savefig("plot_nlr_blr_lines.png", dpi=100, bbox_inches="tight")
+plt.savefig("plot_nlr_blr_lines.png", dpi=150, bbox_inches="tight")

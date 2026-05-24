@@ -29,7 +29,7 @@ starbursts emit stronger radio across all frequencies. We sweep L_IR over
 
 Reference: Bell 2003, ApJ 586, 794.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-56
+.. GENERATED FROM PYTHON SOURCE LINES 13-55
 
 .. code-block:: Python
 
@@ -41,7 +41,6 @@ Reference: Bell 2003, ApJ 586, 794.
     import matplotlib.pyplot as plt
     import numpy as np
 
-    import tengri
     from tengri.analysis.plotting import setup_style
 
     setup_style()

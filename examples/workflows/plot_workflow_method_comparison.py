@@ -14,7 +14,6 @@ Nocedal & Wright 1999 (optimization methods).
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -71,8 +70,12 @@ mock = model.mock(truth_params, snr=20.0, key=key)
 # Fit with MAP
 forward = tengri.ForwardModel.build(sed=model, observation=obs)
 posterior_map = forward.fit(
-    mock.flux_obs, mock.noise, method="map", optimizer="adam",
-    n_steps=300, verbose=False,
+    mock.flux_obs,
+    mock.noise,
+    method="map",
+    optimizer="adam",
+    n_steps=300,
+    verbose=False,
 )
 
 # Compare SFH: truth vs MAP

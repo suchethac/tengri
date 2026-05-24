@@ -15,7 +15,6 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -42,7 +41,7 @@ colors_all = {"sf": [], "passive": [], "dusty": []}
 z_all = {"sf": [], "passive": [], "dusty": []}
 
 # Star-forming (z=1-7, young, extended SFH)
-for i in range(50):
+for _i in range(50):
     z = np.random.uniform(1.0, 7.0)
     model = tengri.SEDModel.build(
         ssp,
@@ -75,7 +74,7 @@ for i in range(50):
         z_all["sf"].append(z)
 
 # Passive (z=1-3, old, narrow SFH)
-for i in range(50):
+for _i in range(50):
     z = np.random.uniform(1.0, 3.0)
     model = tengri.SEDModel.build(
         ssp,
@@ -109,7 +108,7 @@ for i in range(50):
         z_all["passive"].append(z)
 
 # Dusty/AGN (z=2-4, high dust, high SFR)
-for i in range(50):
+for _i in range(50):
     z = np.random.uniform(2.0, 4.0)
     model = tengri.SEDModel.build(
         ssp,

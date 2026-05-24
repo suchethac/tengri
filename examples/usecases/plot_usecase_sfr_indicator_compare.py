@@ -15,7 +15,6 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -58,8 +57,8 @@ n_gal_per_burst = 6
 burst_levels = np.array([0.1, 0.5, 1.0, 2.0, 3.0])
 
 sfr_indicators = []
-for burst in burst_levels:
-    for j in range(n_gal_per_burst):
+for _burst in burst_levels:
+    for _j in range(n_gal_per_burst):
         key, subkey = jax.random.split(key)
         params = model.spec.sample(subkey)
         # Set a fixed current SFR for comparison
@@ -78,7 +77,11 @@ for burst in burst_levels:
     sfr_vals = sfr_true[mask]
     burst_vals = np.random.normal(burst, 0.05, size=len(sfr_vals))
     ax.scatter(
-        burst_vals, sfr_vals, alpha=0.6, s=50, label=f"$\\sigma={burst:.1f}$" if burst == burst_levels[0] else ""
+        burst_vals,
+        sfr_vals,
+        alpha=0.6,
+        s=50,
+        label=f"$\\sigma={burst:.1f}$" if burst == burst_levels[0] else "",
     )
 
 ax.set_xlabel("Burstiness amplitude")

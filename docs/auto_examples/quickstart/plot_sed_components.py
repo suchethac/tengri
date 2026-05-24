@@ -60,9 +60,7 @@ wave_um = np.array(model.ssp_data.ssp_wave) / 1e4
 mask = (wave_um > 0.09) & (wave_um < 3.0)
 
 fig, ax = plt.subplots(figsize=(7.0, 4.2))
-ax.plot(
-    wave_um[mask], sed_intrinsic[mask], color="C0", lw=1.4, label="Intrinsic (no dust)"
-)
+ax.plot(wave_um[mask], sed_intrinsic[mask], color="C0", lw=1.4, label="Intrinsic (no dust)")
 ax.plot(wave_um[mask], sed_total[mask], color="C3", lw=1.4, label="Attenuated (total)")
 ax.fill_between(
     wave_um[mask],

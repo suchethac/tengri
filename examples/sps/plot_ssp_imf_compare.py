@@ -40,7 +40,9 @@ fig, ax = plt.subplots(figsize=(6.5, 4.2))
 for name, ml, c in imfs:
     lfl = (wave * flux[z_solar, age_1gyr]) / ml
     safe = np.where(lfl > 0, lfl, np.nan)
-    ax.loglog(wave / 1e4, safe / np.nanmax(safe), lw=1.4, color=c, label=f"{name} (M/L = {ml:.2f})")
+    ax.loglog(
+        wave / 1e4, safe / np.nanmax(safe), lw=1.4, color=c, label=f"{name} (M/L = {ml:.2f})"
+    )
 
 ax.set_xlim(0.05, 5.0)
 ax.set_ylim(1e-3, 2.0)

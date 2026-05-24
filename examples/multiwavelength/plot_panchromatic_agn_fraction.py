@@ -51,9 +51,7 @@ wave_um = wave / 1e4
 # AGN continuum at fixed L_bol
 log_lbol_agn = 11.0
 sed_agn = np.array(
-    tengri.components.agn.compute_qsogen_sed(
-        jnp.asarray(wave), agn_log_lbol=log_lbol_agn
-    )
+    tengri.components.agn.compute_qsogen_sed(jnp.asarray(wave), agn_log_lbol=log_lbol_agn)
 )
 
 # Normalize AGN to match stellar luminosity scale

@@ -30,7 +30,9 @@ t_lookback = 10.0**log_age_grid
 t_gyr = np.array(t_lookback) / 1e9
 
 # --- Smooth mean SFH ---
-mean_sfr = tengri.tsnorm(t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=0.5, trunc=3.0)
+mean_sfr = tengri.tsnorm(
+    t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=0.5, trunc=3.0
+)
 
 # --- Generate GP realizations at two different PSD settings ---
 fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), sharey=True)

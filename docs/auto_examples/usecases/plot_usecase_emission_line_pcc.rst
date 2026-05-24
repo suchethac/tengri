@@ -29,7 +29,7 @@ useful for photo-z and ionization state estimation.
 Reference: Lamareille 2006, A&A, 459, 411 (emission-line photo-z);
 Kewley et al. 2001, ApJ, 556, 121 (BPT diagnostics).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-97
+.. GENERATED FROM PYTHON SOURCE LINES 13-96
 
 .. code-block:: Python
 
@@ -37,7 +37,6 @@ Kewley et al. 2001, ApJ, 556, 121 (BPT diagnostics).
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -78,7 +77,7 @@ Kewley et al. 2001, ApJ, 556, 121 (BPT diagnostics).
     z_vals = []
 
     for z in redshifts:
-        for i in range(5):
+        for _i in range(5):
             key, subkey = jax.random.split(key)
             params = model.spec.sample(subkey)
             params["redshift"] = z

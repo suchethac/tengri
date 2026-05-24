@@ -22,7 +22,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tengri
 from tengri.analysis.plotting import setup_style
 
 setup_style()
@@ -63,7 +62,6 @@ if RESULTS is None:
         family="monospace",
         bbox=dict(boxstyle="round,pad=0.7", fc="#f6f6f6", ec="#999"),
     )
-    plt.show()
     raise SystemExit(0)
 
 with RESULTS.open() as f:
@@ -248,10 +246,4 @@ ax_sig_err.set_title("Constraint scaling")
 ax_sig_err.grid(True, which="both", alpha=0.3)
 ax_sig_err.legend(fontsize=8, loc="best")
 
-fig.suptitle(
-    "PopulationFitter scaling: timing, memory, convergence, and PSD recovery",
-    fontsize=13,
-)
-
 plt.savefig("plot_population_scaling.png", dpi=150, bbox_inches="tight")
-plt.show()

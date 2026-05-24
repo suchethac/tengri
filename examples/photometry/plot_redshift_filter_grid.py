@@ -145,7 +145,6 @@ for i, z in enumerate(redshifts):
         ax.legend(fontsize=9, frameon=False, loc="upper right")
     ax.grid(True, alpha=0.3, which="both")
 
-fig.suptitle("SDSS Filters Sampling SED Across Redshift (k-correction demo)", fontsize=14)
 fig.tight_layout(rect=[0, 0.01, 1, 0.97])
 # Save to script directory
 script_dir = Path(__file__).resolve().parent if "__file__" in dir() else Path(".")

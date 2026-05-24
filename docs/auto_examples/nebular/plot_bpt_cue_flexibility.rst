@@ -27,7 +27,7 @@ galaxy on the BPT-N plane ``log [OIII]/Hβ`` vs ``log [NII]/Hα``. Each
 panel sweeps one parameter while holding fiducial values fixed. Kewley+2001
 and Kauffmann+2003 demarcations shown for reference.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-96
+.. GENERATED FROM PYTHON SOURCE LINES 11-95
 
 .. code-block:: Python
 
@@ -35,7 +35,6 @@ and Kauffmann+2003 demarcations shown for reference.
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -60,7 +59,7 @@ and Kauffmann+2003 demarcations shown for reference.
 
     fig, axes = plt.subplots(1, 3, figsize=(13, 4))
 
-    for ax, (label, (param_name, param_values)) in zip(axes, sweeps.items()):
+    for ax, (_label, (param_name, param_values)) in zip(axes, sweeps.items()):
         log_n2_ha_points = []
         log_o3_hb_points = []
 

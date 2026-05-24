@@ -26,7 +26,7 @@ The BPT diagram ([OIII]/Hβ vs [NII]/Hα) separates ionizing sources. Shocks
 regions into Seyfert regions as velocity increases. We plot shock models
 alongside the standard demarcation lines.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-97
+.. GENERATED FROM PYTHON SOURCE LINES 10-96
 
 .. code-block:: Python
 
@@ -36,7 +36,6 @@ alongside the standard demarcation lines.
     import matplotlib.pyplot as plt
     import numpy as np
 
-    import tengri
     from tengri.analysis.plotting import setup_style
     from tengri.nebular import shock_line_ratios
 

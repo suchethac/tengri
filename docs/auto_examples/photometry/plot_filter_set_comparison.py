@@ -118,4 +118,3 @@ for ax, (survey_name, bands) in zip(axes, filter_sets.items()):
 axes[-1].set_xlabel(r"Wavelength [$\AA$]")
 fig.tight_layout()
 plt.savefig("plot_filter_set_comparison.png", dpi=150, bbox_inches="tight")
-plt.show()

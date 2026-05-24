@@ -29,7 +29,7 @@ fixed L_IR = 10^11 L_sun and show normalized spectra (reference 1.4 GHz).
 
 Reference: Condon 1992, ApJ 388, 113.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-60
+.. GENERATED FROM PYTHON SOURCE LINES 13-57
 
 .. code-block:: Python
 
@@ -41,7 +41,6 @@ Reference: Condon 1992, ApJ 388, 113.
     import matplotlib.pyplot as plt
     import numpy as np
 
-    import tengri
     from tengri.analysis.plotting import setup_style
 
     setup_style()
@@ -61,9 +60,7 @@ Reference: Condon 1992, ApJ 388, 113.
     nu_ref_aa = 3e18 / 1.4e9  # 1.4 GHz in Angstrom
     for alpha in alpha_values:
         L_nu = radio_star_forming(wave, L_ir=L_ir, q_ir=2.64, alpha_sf=alpha)
-        L_nu_ref = radio_star_forming(
-            jnp.array([nu_ref_aa]), L_ir=L_ir, q_ir=2.64, alpha_sf=0.8
-        )
+        L_nu_ref = radio_star_forming(jnp.array([nu_ref_aa]), L_ir=L_ir, q_ir=2.64, alpha_sf=0.8)
         L_nu_norm = np.array(L_nu) / float(L_nu_ref[0])
         nu_ghz = (3e18 / np.array(wave)) / 1e9
         ax.loglog(nu_ghz, L_nu_norm, color=cmap(norm(alpha)), lw=1.4)

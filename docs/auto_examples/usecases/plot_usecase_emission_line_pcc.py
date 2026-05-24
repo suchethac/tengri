@@ -14,7 +14,6 @@ Kewley et al. 2001, ApJ, 556, 121 (BPT diagnostics).
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -55,7 +54,7 @@ log_nii_ha = []
 z_vals = []
 
 for z in redshifts:
-    for i in range(5):
+    for _i in range(5):
         key, subkey = jax.random.split(key)
         params = model.spec.sample(subkey)
         params["redshift"] = z

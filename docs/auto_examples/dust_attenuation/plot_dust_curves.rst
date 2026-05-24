@@ -28,7 +28,7 @@ rest frame, so the IR slope controls K-correction factors and SED fitting degene
 
 Reference: Cardelli et al. 1989, ApJ, 345, 245 (extended optical extinction).
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-42
+.. GENERATED FROM PYTHON SOURCE LINES 12-41
 
 .. code-block:: Python
 
@@ -38,7 +38,6 @@ Reference: Cardelli et al. 1989, ApJ, 345, 245 (extended optical extinction).
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
 
-    import tengri
     from tengri.analysis.plotting import setup_style
     from tengri.dust import list_laws
 

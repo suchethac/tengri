@@ -27,7 +27,7 @@ and one with a Gaussian prior (informative from external data). We show how
 the posterior distribution changes, and that the same mock data leads to
 different inferences depending on the prior.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-123
+.. GENERATED FROM PYTHON SOURCE LINES 11-135
 
 .. code-block:: Python
 
@@ -35,7 +35,6 @@ different inferences depending on the prior.
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -67,8 +66,16 @@ different inferences depending on the prior.
     model_template = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FIXED, **{k: v for k, v in true_params.items() if k.startswith("sfh_")}},
-        dust={"type": "two_component", "*": tengri.FIXED, **{k: v for k, v in true_params.items() if k.startswith("dust_")}},
+        sfh={
+            "type": "tsnorm",
+            "*": tengri.FIXED,
+            **{k: v for k, v in true_params.items() if k.startswith("sfh_")},
+        },
+        dust={
+            "type": "two_component",
+            "*": tengri.FIXED,
+            **{k: v for k, v in true_params.items() if k.startswith("dust_")},
+        },
         redshift=tengri.Fixed(true_params["redshift"]),
     )
     mock = model_template.mock(true_params, snr=20.0, key=key)
@@ -83,8 +90,7 @@ different inferences depending on the prior.
     )
     forward_u = tengri.ForwardModel.build(sed=model_uniform, observation=obs)
     post_u = forward_u.fit(
-        mock.flux_obs, mock.noise, method="vi_native",
-        n_iter=8, n_samples=3, verbose=False
+        mock.flux_obs, mock.noise, method="vi_native", n_iter=8, n_samples=3, verbose=False
     )
 
     # Fit 2: Gaussian prior on metallicity (informative)
@@ -104,8 +110,7 @@ different inferences depending on the prior.
     model_gaussian = tengri.SEDModel(spec_gaussian, ssp, observation=obs)
     forward_g = tengri.ForwardModel.build(sed=model_gaussian, observation=obs)
     post_g = forward_g.fit(
-        mock.flux_obs, mock.noise, method="vi_native",
-        n_iter=8, n_samples=3, verbose=False
+        mock.flux_obs, mock.noise, method="vi_native", n_iter=8, n_samples=3, verbose=False
     )
 
     # Plot: Posterior histograms with prior overlays
@@ -122,8 +127,9 @@ different inferences depending on the prior.
     axes[0].set_xlabel(r"$\log_{10}(Z/Z_\odot)$")
     axes[0].set_ylabel("Probability density")
     axes[0].legend(frameon=False, fontsize=8)
-    ax_text = axes[0].text(0.05, 0.95, "Uniform prior", transform=axes[0].transAxes,
-                            fontsize=9, verticalalignment="top")
+    ax_text = axes[0].text(
+        0.05, 0.95, "Uniform prior", transform=axes[0].transAxes, fontsize=9, verticalalignment="top"
+    )
 
     # Gaussian prior
     axes[1].hist(met_g, bins=20, alpha=0.5, color="C3", density=True, label="Posterior")
@@ -138,8 +144,14 @@ different inferences depending on the prior.
     axes[1].set_xlabel(r"$\log_{10}(Z/Z_\odot)$")
     axes[1].set_ylabel("Probability density")
     axes[1].legend(frameon=False, fontsize=8)
-    ax_text = axes[1].text(0.05, 0.95, "Gaussian N(0, 0.3)", transform=axes[1].transAxes,
-                            fontsize=9, verticalalignment="top")
+    ax_text = axes[1].text(
+        0.05,
+        0.95,
+        "Gaussian N(0, 0.3)",
+        transform=axes[1].transAxes,
+        fontsize=9,
+        verticalalignment="top",
+    )
 
     fig.tight_layout()
     fig.savefig("plot_recipe_compare_priors.png", dpi=150, bbox_inches="tight")

@@ -14,12 +14,10 @@ Reference: Inoue et al. 2014, MNRAS, 442, 1805 and Madau 1995, ApJ, 441, 18.
 
 import warnings
 
-import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tengri
 from tengri.analysis.plotting import setup_style
 from tengri.igm import igm_transmission, igm_transmission_madau
 

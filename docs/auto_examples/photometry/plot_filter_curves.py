@@ -64,4 +64,3 @@ ax.legend(frameon=False, ncol=5, loc="upper right")
 fig.tight_layout()
 
 plt.savefig("plot_filter_curves.png", dpi=150, bbox_inches="tight")
-plt.show()

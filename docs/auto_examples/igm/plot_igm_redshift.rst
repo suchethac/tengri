@@ -30,20 +30,18 @@ et al. (2014) transmission model to show how IGM opacity increases with z.
 
 Reference: Inoue et al. 2014, MNRAS, 442, 1805 (IGM transmission model).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-57
+.. GENERATED FROM PYTHON SOURCE LINES 14-55
 
 .. code-block:: Python
 
 
     import warnings
 
-    import jax
     import jax.numpy as jnp
     import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
 
-    import tengri
     from tengri.analysis.plotting import setup_style
     from tengri.igm import igm_transmission
 

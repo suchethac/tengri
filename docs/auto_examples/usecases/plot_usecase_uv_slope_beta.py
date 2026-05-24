@@ -35,9 +35,16 @@ C_AA_PER_S = 2.998e18
 # in Å. β is the slope of f_λ ∝ λ^β fit through the windows.
 CAL94_WINDOWS = np.array(
     [
-        [1268, 1284], [1309, 1316], [1342, 1371], [1407, 1515],
-        [1562, 1583], [1677, 1740], [1760, 1833], [1866, 1890],
-        [1930, 1950], [2400, 2580],
+        [1268, 1284],
+        [1309, 1316],
+        [1342, 1371],
+        [1407, 1515],
+        [1562, 1583],
+        [1677, 1740],
+        [1760, 1833],
+        [1866, 1890],
+        [1930, 1950],
+        [2400, 2580],
     ]
 )
 
@@ -74,7 +81,8 @@ model = tengri.SEDModel.build(
     sfh={
         "type": "dpl",
         "*": tengri.FIXED,
-        "alpha": 2.0, "beta": 2.5,
+        "alpha": 2.0,
+        "beta": 2.5,
         "tau_gyr": 0.5,  # young starburst -> strong UV
         "log_peak_sfr": 1.5,
     },
@@ -107,11 +115,18 @@ A_FUV_meurer = 4.43 + 1.99 * beta_emp
 irx_meurer = 10 ** (0.4 * A_FUV_meurer) - 1.0
 
 fig, ax = plt.subplots(figsize=(6.5, 4.6))
-ax.plot(beta_emp, irx_meurer, color="0.55", lw=1.0, ls="--",
-        label="Meurer+1999 starburst")
-sc = ax.scatter(beta_arr, irx_arr, c=tau_grid, cmap="viridis",
-                s=42, lw=0.5, edgecolor="0.2", zorder=3,
-                label="tengri models")
+ax.plot(beta_emp, irx_meurer, color="0.55", lw=1.0, ls="--", label="Meurer+1999 starburst")
+sc = ax.scatter(
+    beta_arr,
+    irx_arr,
+    c=tau_grid,
+    cmap="viridis",
+    s=42,
+    lw=0.5,
+    edgecolor="0.2",
+    zorder=3,
+    label="tengri models",
+)
 ax.set_yscale("log")
 ax.set_xlim(-2.6, 0.7)
 ax.set_ylim(1e-2, 2e2)

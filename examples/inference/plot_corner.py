@@ -15,8 +15,6 @@ import warnings
 
 import corner
 import jax
-import jax.numpy as jnp
-import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
@@ -33,7 +31,12 @@ obs = tengri.Observation(
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "tsnorm", "*": tengri.FREE, "skew": tengri.Fixed(0.3), "trunc": tengri.Fixed(10.0)},
+    sfh={
+        "type": "tsnorm",
+        "*": tengri.FREE,
+        "skew": tengri.Fixed(0.3),
+        "trunc": tengri.Fixed(10.0),
+    },
     dust={
         "type": "two_component",
         "*": tengri.FIXED,
@@ -55,7 +58,11 @@ mock = model.mock(truth, snr=25.0, key=key)
 
 forward = tengri.ForwardModel.build(sed=model, observation=obs)
 posterior = forward.fit(
-    mock.flux_obs, mock.noise, method="native_vi_nonlinear", n_iterations=500, n_samples=3,
+    mock.flux_obs,
+    mock.noise,
+    method="native_vi_nonlinear",
+    n_iterations=500,
+    n_samples=3,
     verbose=False,
 )
 
@@ -65,8 +72,12 @@ samples_array = np.array([samples_dict[p] for p in param_names]).T
 truths = [float(truth[p]) for p in param_names]
 
 fig = corner.corner(
-    samples_array, labels=param_names, truths=truths, color="C0",
-    hist_kwargs={"density": True}, show_titles=False,
+    samples_array,
+    labels=param_names,
+    truths=truths,
+    color="C0",
+    hist_kwargs={"density": True},
+    show_titles=False,
 )
 
 fig.savefig("plot_corner.png", dpi=150, bbox_inches="tight")

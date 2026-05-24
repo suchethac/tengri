@@ -224,7 +224,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compares all dust emission models available in tengri at a fixed infrared luminosity and fiducial temperature. Template-based models gracefully skip if data files are unavailable.">
+    <div class="sphx-glr-thumbcontainer" tooltip="All six dust-emission ingredients shipped with tengri, called with the same absorbed bolometric luminosity (1e10 L_sun) and the same warm-dust temperature (35 K). Analytic models (modified BB, Casey 2012, energy-balance split) drop sharply blue-ward of the warm-dust peak; template-based libraries (DL07, DL14, Dale+2014) carry PAH features in the 3-20 μm window. Template models silently skip if the data files aren&#x27;t available.">
 
 .. only:: html
 
@@ -235,7 +235,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Dust Emission Models: Overview</div>
+      <div class="sphx-glr-thumbnail-title">Dust-emission model family at fixed L_abs</div>
     </div>
 
 

@@ -68,7 +68,9 @@ for z in redshifts:
     # Radio component (rest-frame)
     wave_radio_rest = jnp.logspace(7, 11, 150)
     l_ir_erg = 3e11 * 3.839e33
-    l_radio_rest = np.array(tengri.radio.radio_star_forming(wave_radio_rest, L_ir=l_ir_erg, alpha_sf=0.8))
+    l_radio_rest = np.array(
+        tengri.radio.radio_star_forming(wave_radio_rest, L_ir=l_ir_erg, alpha_sf=0.8)
+    )
     wave_radio_obs_um = (wave_radio_rest / 1e4) * (1 + z)
     l_radio_obs = l_radio_rest / (1 + z)
 

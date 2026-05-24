@@ -26,7 +26,7 @@ dust absorption/emission in the mid-infrared. Thin tori (tau ~3) show
 weak features and more continuum; thick tori (tau ~11) develop deep
 absorption troughs or bright emission depending on viewing angle.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-67
+.. GENERATED FROM PYTHON SOURCE LINES 10-73
 
 .. code-block:: Python
 
@@ -49,8 +49,14 @@ absorption troughs or bright emission depending on viewing angle.
     ssp = tengri.load_ssp()
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 3.0, "log_peak_sfr": 0.5,
-             "alpha": 2.0, "beta": 2.5},
+        sfh={
+            "type": "dpl",
+            "*": tengri.FIXED,
+            "tau_gyr": 3.0,
+            "log_peak_sfr": 0.5,
+            "alpha": 2.0,
+            "beta": 2.5,
+        },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
         agn={
             "type": "composable",

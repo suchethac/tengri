@@ -60,8 +60,16 @@ ax.set(xlim=(1100, 1300), ylim=(0.3 * ymin, 3.0 * ymax),
        xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
        ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
 ax.axvline(1215.67, color="0.55", lw=0.5, ls=":")
-ax.text(1215.67, ymax * 0.4, r"Ly$\alpha$",
-        color="0.4", fontsize=8, rotation=90, va="center", ha="right")
+ax.text(
+    1215.67,
+    ymax * 0.4,
+    r"Ly$\alpha$",
+    color="0.4",
+    fontsize=8,
+    rotation=90,
+    va="center",
+    ha="right",
+)
 
 cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
 cbar.set_label(r"$f_{\mathrm{esc,Ly}\alpha}$")

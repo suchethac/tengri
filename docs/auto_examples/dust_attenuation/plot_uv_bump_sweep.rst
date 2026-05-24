@@ -28,7 +28,7 @@ show the attenuation law (not a galaxy SED) to isolate the curve shape.
 
 Reference: Kriek & Conroy 2013, ApJ, 775, L16 (extended attenuation model).
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-54
+.. GENERATED FROM PYTHON SOURCE LINES 12-53
 
 .. code-block:: Python
 
@@ -40,7 +40,6 @@ Reference: Kriek & Conroy 2013, ApJ, 775, L16 (extended attenuation model).
     import matplotlib.pyplot as plt
     import numpy as np
 
-    import tengri
     from tengri.analysis.plotting import setup_style
     from tengri.dust import resolve_dust_law
 

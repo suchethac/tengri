@@ -36,18 +36,7 @@ References:
 - Conroy 2013, ARA&A, 51, 393 (§3)
 - Worthey 1994, ApJS, 95, 107 (age/Z degeneracy origin)
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-84
-
-
-
-.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_age_dust_2d_001.png
-   :alt: plot usecase age dust 2d
-   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_age_dust_2d_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 20-99
 
 .. code-block:: Python
 
@@ -65,19 +54,26 @@ References:
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-    obs = tengri.Observation(
-        photometry=tengri.Photometry.from_names(["sdss_g", "sdss_r"])
-    )
+    obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_g", "sdss_r"]))
     model = tengri.SEDModel.build(
         tengri.load_ssp(),
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FIXED,
-             "peak_lbt_gyr": tengri.Uniform(0.1, 13.0),
-             "width_gyr": 0.3, "log_peak_sfr": 1.0,
-             "skew": 0.0, "trunc": 13.5},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": tengri.Uniform(0.0, 2.0),
-              "tau_bc": 0.3, "slope": -0.7},
+        sfh={
+            "type": "tsnorm",
+            "*": tengri.FIXED,
+            "peak_lbt_gyr": tengri.Uniform(0.1, 13.0),
+            "width_gyr": 0.3,
+            "log_peak_sfr": 1.0,
+            "skew": 0.0,
+            "trunc": 13.5,
+        },
+        dust={
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "tau_diff": tengri.Uniform(0.0, 2.0),
+            "tau_bc": 0.3,
+            "slope": -0.7,
+        },
         redshift=tengri.Fixed(0.01),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -98,28 +94,31 @@ References:
             g_minus_r[i, j] = -2.5 * np.log10(flux[0] / flux[1])
 
     fig, ax = plt.subplots(figsize=(6.8, 4.8))
-    mesh = ax.pcolormesh(age_grid, tau_grid, g_minus_r, cmap="RdYlBu_r",
-                         vmin=0.2, vmax=1.6, shading="auto")
+    mesh = ax.pcolormesh(
+        age_grid, tau_grid, g_minus_r, cmap="RdYlBu_r", vmin=0.2, vmax=1.6, shading="auto"
+    )
     levels = np.arange(0.4, 1.6, 0.1)
-    cs = ax.contour(age_grid, tau_grid, g_minus_r, levels=levels,
-                    colors="0.15", linewidths=0.6, alpha=0.8)
+    cs = ax.contour(
+        age_grid, tau_grid, g_minus_r, levels=levels, colors="0.15", linewidths=0.6, alpha=0.8
+    )
     ax.clabel(cs, fmt="%.1f", fontsize=7, inline=True, inline_spacing=2)
     ax.set_xscale("log")
     ax.set_xlabel(r"Stellar burst age [Gyr]")
     ax.set_ylabel(r"Diffuse dust optical depth $\tau_{\rm diff}$  [mag]")
     cbar = fig.colorbar(mesh, ax=ax, pad=0.01)
     cbar.set_label(r"AB color  $g - r$  [mag]")
-    ax.text(0.05, 0.9, "iso-colour lines trace the\nage–dust degeneracy",
-            transform=ax.transAxes, fontsize=8, color="0.15",
-            bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="0.7", lw=0.5))
+    ax.text(
+        0.05,
+        0.9,
+        "iso-colour lines trace the\nage–dust degeneracy",
+        transform=ax.transAxes,
+        fontsize=8,
+        color="0.15",
+        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="0.7", lw=0.5),
+    )
 
     fig.tight_layout()
     fig.savefig("plot_usecase_age_dust_2d.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 6.628 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_age_dust_2d.py:

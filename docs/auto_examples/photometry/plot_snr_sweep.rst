@@ -31,7 +31,7 @@ affects photometric precision. Higher SNR = tighter error bars.
    :alt: plot_snr_sweep
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-137
+.. GENERATED FROM PYTHON SOURCE LINES 16-136
 
 .. code-block:: Python
 
@@ -155,7 +155,6 @@ affects photometric precision. Higher SNR = tighter error bars.
     ax.legend(frameon=False, loc="upper right")
     fig.tight_layout()
     plt.savefig("plot_snr_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_snr_sweep.py:

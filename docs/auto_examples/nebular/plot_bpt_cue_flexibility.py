@@ -12,7 +12,6 @@ and Kauffmann+2003 demarcations shown for reference.
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -37,7 +36,7 @@ log_oiii_hb_kauff = 0.61 / (nh_grid - 0.05) + 1.3
 
 fig, axes = plt.subplots(1, 3, figsize=(13, 4))
 
-for ax, (label, (param_name, param_values)) in zip(axes, sweeps.items()):
+for ax, (_label, (param_name, param_values)) in zip(axes, sweeps.items()):
     log_n2_ha_points = []
     log_o3_hb_points = []
 

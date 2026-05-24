@@ -33,25 +33,32 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 # (label, peak_lbt_gyr, width_gyr, tau_diff, color)
 ATLAS = [
-    ("Elliptical",       9.0, 1.5, 0.05, "#cc3333"),
+    ("Elliptical", 9.0, 1.5, 0.05, "#cc3333"),
     ("Sa (early spiral)", 7.0, 2.0, 0.20, "#ee8833"),
-    ("Sb (spiral)",       5.0, 2.5, 0.35, "#aabb33"),
-    ("Sc (late spiral)",  3.0, 2.5, 0.50, "#3399aa"),
-    ("Im (irregular)",    1.0, 2.0, 0.10, "#5566cc"),
+    ("Sb (spiral)", 5.0, 2.5, 0.35, "#aabb33"),
+    ("Sc (late spiral)", 3.0, 2.5, 0.50, "#3399aa"),
+    ("Im (irregular)", 1.0, 2.0, 0.10, "#5566cc"),
 ]
 
 ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(
     ssp,
     sfh={
-        "type": "tsnorm", "*": tengri.FIXED,
+        "type": "tsnorm",
+        "*": tengri.FIXED,
         "peak_lbt_gyr": tengri.Uniform(0.1, 13.0),
         "width_gyr": tengri.Uniform(0.1, 5.0),
-        "log_peak_sfr": 1.0, "skew": 0.0, "trunc": 13.5,
+        "log_peak_sfr": 1.0,
+        "skew": 0.0,
+        "trunc": 13.5,
     },
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": tengri.Uniform(0.0, 2.0),
-          "tau_bc": 0.3, "slope": -0.7},
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_diff": tengri.Uniform(0.0, 2.0),
+        "tau_bc": 0.3,
+        "slope": -0.7,
+    },
     redshift=tengri.Fixed(0.0),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -75,11 +82,9 @@ for label, peak, width, tau, color in ATLAS:
     ax.loglog(wave, nu_l_nu / norm, color=color, lw=1.6, label=label)
 
 ax.axvline(4000, color="0.5", lw=0.6, ls=":")
-ax.text(4000, 0.025, "4000 Å break", color="0.4", fontsize=8,
-        rotation=90, va="bottom", ha="right")
+ax.text(4000, 0.025, "4000 Å break", color="0.4", fontsize=8, rotation=90, va="bottom", ha="right")
 ax.axvline(1216, color="0.5", lw=0.6, ls=":")
-ax.text(1216, 0.025, r"Ly$\alpha$", color="0.4", fontsize=8,
-        rotation=90, va="bottom", ha="right")
+ax.text(1216, 0.025, r"Ly$\alpha$", color="0.4", fontsize=8, rotation=90, va="bottom", ha="right")
 ax.set_xlim(900, 5e4)
 ax.set_ylim(2e-2, 30.0)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")

@@ -62,13 +62,13 @@
    "name": "modified_blackbody"
   }
  ],
- "np.array": [
+ "np.asarray": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "array"
+   "name": "asarray"
   }
  ],
  "np.log10": [
@@ -78,6 +78,15 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "log10"
+  }
+ ],
+ "np.nanmax": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "nanmax"
   }
  ],
  "plt.subplots": [

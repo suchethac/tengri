@@ -33,8 +33,7 @@ log_lbol_grid = np.linspace(9.0, 13.0, 7)
 norm = mpl.colors.Normalize(vmin=log_lbol_grid.min(), vmax=log_lbol_grid.max())
 cmap = plt.get_cmap("viridis")
 
-SFH = {"type": "const", "*": tengri.FIXED,
-       "log_sfr": 0.5, "start_gyr": 13.0, "end_gyr": 0.0}
+SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": 0.5, "start_gyr": 13.0, "end_gyr": 0.0}
 DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.3, "tau_bc": 0.5}
 
 ssp = tengri.load_ssp()
@@ -43,7 +42,7 @@ model = tengri.SEDModel.build(
     sfh=SFH,
     dust=DUST,
     agn={
-        "disc":  {"type": "qsogen",  "*": tengri.FIXED},
+        "disc": {"type": "qsogen", "*": tengri.FIXED},
         "torus": {"type": "skirtor", "*": tengri.FIXED},
         "*": tengri.FIXED,
         "log_lbol": tengri.Uniform(8.0, 14.0),
@@ -56,22 +55,22 @@ baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
 fig, ax = plt.subplots(figsize=(7.0, 4.6))
 for log_lbol in log_lbol_grid:
-    out = model.predict_rest_sed({**baseline,
-                                  "agn_log_lbol": jnp.float64(log_lbol)})
+    out = model.predict_rest_sed({**baseline, "agn_log_lbol": jnp.float64(log_lbol)})
     wave = np.asarray(out.wavelength)
     nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
     ax.loglog(wave, nu_l_nu, color=cmap(norm(log_lbol)), lw=1.4)
 
-ax.set(xlim=(0.5, 1e3), ylim=(1e38, 5e46),
-       xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-       ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
+ax.set(
+    xlim=(0.5, 1e3),
+    ylim=(1e38, 5e46),
+    xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+    ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
+)
 
-for kev, name in [(0.5, "0.5 keV"), (2.0, "2 keV"), (10.0, "10 keV"),
-                  (50.0, "50 keV")]:
+for kev, name in [(0.5, "0.5 keV"), (2.0, "2 keV"), (10.0, "10 keV"), (50.0, "50 keV")]:
     lam = 12398.4 / (kev * 1000.0)
     ax.axvline(lam, color="0.65", lw=0.4, ls=":")
-    ax.text(lam, 1e38 * 3.0, name, fontsize=7, color="0.4",
-            ha="center", rotation=90, va="bottom")
+    ax.text(lam, 1e38 * 3.0, name, fontsize=7, color="0.4", ha="center", rotation=90, va="bottom")
 
 cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
 cbar.set_label(r"$\log\,L_{\rm bol}^{\rm AGN}\,/\,L_\odot$")

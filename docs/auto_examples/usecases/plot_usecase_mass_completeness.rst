@@ -31,7 +31,7 @@ survey selection effects.
 Reference: Blanton et al. 2003, ApJ, 594, 186 (SDSS photometry);
 Bell et al. 2003, ApJS, 149, 289 (stellar mass completeness).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-118
+.. GENERATED FROM PYTHON SOURCE LINES 15-117
 
 .. code-block:: Python
 
@@ -39,7 +39,6 @@ Bell et al. 2003, ApJS, 149, 289 (stellar mass completeness).
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -83,7 +82,7 @@ Bell et al. 2003, ApJS, 149, 289 (stellar mass completeness).
     n_gal = 150
     mass_bins = np.linspace(7, 12, 11)
 
-    for i in range(n_gal):
+    for _i in range(n_gal):
         key, subkey = jax.random.split(key)
         params = model.spec.sample(subkey)
         # Assign log-mass uniformly

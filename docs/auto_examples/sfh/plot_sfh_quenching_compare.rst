@@ -26,7 +26,7 @@ and recent burst—produce distinct SED shapes. Constant SFR yields a young,
 blue galaxy; sharp quenching creates old red colors; a recent burst injects
 young stars atop an old population. The SED reveals the full assembly history.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-120
+.. GENERATED FROM PYTHON SOURCE LINES 10-119
 
 .. code-block:: Python
 
@@ -34,7 +34,6 @@ young stars atop an old population. The SED reveals the full assembly history.
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 

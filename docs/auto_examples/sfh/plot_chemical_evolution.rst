@@ -27,7 +27,7 @@ leaky-box model showing how outflow rates suppress Z; and (4) age-metallicity
 relation across galactic radii. Together they show how star formation and
 galactic winds control the Z(t) history.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-99
+.. GENERATED FROM PYTHON SOURCE LINES 11-101
 
 .. code-block:: Python
 
@@ -88,7 +88,9 @@ galactic winds control the Z(t) history.
 
     sfr_const = np.ones_like(t_yr)
     for eta, color in zip(outflow_rates, colors):
-        log_z = tengri.closed_box_metallicity(t_yr, sfr_const, yield_y=0.03, eta_outflow=eta, f_gas_init=0.9)
+        log_z = tengri.closed_box_metallicity(
+            t_yr, sfr_const, yield_y=0.03, eta_outflow=eta, f_gas_init=0.9
+        )
         ax.plot(t_gyr, 10.0 ** np.array(log_z), lw=1.5, color=color, label=f"η={eta:.1f}")
 
     ax.set_xlabel("Look-back Time [Gyr]")
@@ -118,7 +120,7 @@ galactic winds control the Z(t) history.
     ax.set_ylim(-2.5, 0.5)
 
     fig.tight_layout(rect=[0, 0, 1, 0.97])
-    fig.savefig("plot_chemical_evolution.png", dpi=100, bbox_inches="tight")
+    fig.savefig("plot_chemical_evolution.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_chemical_evolution.py:

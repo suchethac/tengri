@@ -79,7 +79,7 @@ mask_radio = l_radio > 0
 ax.loglog(wave_full_um[mask_radio], nu_l_nu_radio[mask_radio], color="C2", lw=2.0, label="Radio")
 
 # Regime labels
-for x_um, lbl in [(0.1, "UV"), (0.5, "Optical"), (10.0, "IR"), (300.0, "FIR"), (1e4, "Radio")]:
+for x_um, _lbl in [(0.1, "UV"), (0.5, "Optical"), (10.0, "IR"), (300.0, "FIR"), (1e4, "Radio")]:
     ax.axvline(x_um, color="0.8", lw=0.6, ls=":", alpha=0.5)
 
 ax.set_xlim(0.08, 3e4)

@@ -32,7 +32,7 @@ textbook source of k-correction sign.
    :alt: plot_redshift_filter_grid
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-153
+.. GENERATED FROM PYTHON SOURCE LINES 17-152
 
 .. code-block:: Python
 
@@ -166,7 +166,6 @@ textbook source of k-correction sign.
             ax.legend(fontsize=9, frameon=False, loc="upper right")
         ax.grid(True, alpha=0.3, which="both")
 
-    fig.suptitle("SDSS Filters Sampling SED Across Redshift (k-correction demo)", fontsize=14)
     fig.tight_layout(rect=[0, 0.01, 1, 0.97])
     # Save to script directory
     script_dir = Path(__file__).resolve().parent if "__file__" in dir() else Path(".")

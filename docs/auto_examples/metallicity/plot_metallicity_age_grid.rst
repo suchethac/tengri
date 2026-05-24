@@ -31,7 +31,7 @@ Physics: older stars redden due to turnoff mass loss; higher metallicity
 increases line blanketing, also reddening. At UV wavelengths the degeneracy
 breaks (young stars are bluer).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-95
+.. GENERATED FROM PYTHON SOURCE LINES 15-107
 
 .. code-block:: Python
 
@@ -95,14 +95,26 @@ breaks (young stars are bluer).
             ax.tick_params(labelsize=7)
 
             if j == 0:
-                ax.text(0.02, 0.98, f"Age = {age_gyr:.1f} Gyr", transform=ax.transAxes,
-                       fontsize=8, verticalalignment='top', bbox=dict(boxstyle='round',
-                       facecolor='white', alpha=0.8))
+                ax.text(
+                    0.02,
+                    0.98,
+                    f"Age = {age_gyr:.1f} Gyr",
+                    transform=ax.transAxes,
+                    fontsize=8,
+                    verticalalignment="top",
+                    bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+                )
             if i == 0:
-                ax.text(0.98, 0.98, rf"$\log Z_\star/Z_\odot$ = {logz:.1f}",
-                       transform=ax.transAxes, fontsize=8, verticalalignment='top',
-                       horizontalalignment='right', bbox=dict(boxstyle='round',
-                       facecolor='white', alpha=0.8))
+                ax.text(
+                    0.98,
+                    0.98,
+                    rf"$\log Z_\star/Z_\odot$ = {logz:.1f}",
+                    transform=ax.transAxes,
+                    fontsize=8,
+                    verticalalignment="top",
+                    horizontalalignment="right",
+                    bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+                )
             if i == len(age_gyr_grid) - 1:
                 ax.set_xlabel(r"$\lambda$ [$\mu$m]", fontsize=8)
             else:

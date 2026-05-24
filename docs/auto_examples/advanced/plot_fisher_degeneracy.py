@@ -11,8 +11,8 @@ Reference: Fisher Information Matrix in parameter estimation; see
 Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 """
 
-from pathlib import Path
 import warnings
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -44,13 +44,26 @@ _FILTER_DIR = next(
 FILTER_SETS = {
     "SDSS (5)": ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
     "+ NIR (8)": [
-        "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-        "2mass_j", "2mass_h", "2mass_ks",
+        "sdss_u",
+        "sdss_g",
+        "sdss_r",
+        "sdss_i",
+        "sdss_z",
+        "2mass_j",
+        "2mass_h",
+        "2mass_ks",
     ],
     "+ MIR (10)": [
-        "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-        "2mass_j", "2mass_h", "2mass_ks",
-        "wise_w1", "wise_w2",
+        "sdss_u",
+        "sdss_g",
+        "sdss_r",
+        "sdss_i",
+        "sdss_z",
+        "2mass_j",
+        "2mass_h",
+        "2mass_ks",
+        "wise_w1",
+        "wise_w2",
     ],
 }
 
@@ -79,7 +92,8 @@ for fname, filters in FILTER_SETS.items():
             photometry=tengri.Photometry.from_names(filters, cache_dir=_FILTER_DIR)
         )
         mdl = tengri.SEDModel.build(
-            ssp, observation=obs,
+            ssp,
+            observation=obs,
             sfh={"type": "tsnorm", "*": tengri.FIXED},
             met={"type": "fixed"},
             dust={"type": "two_component", "*": tengri.FIXED},

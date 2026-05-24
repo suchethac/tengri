@@ -11,8 +11,8 @@ Reference: Conroy 2013 (ARA&A, 51, 393); Leja et al. 2019 on spectroscopic
 constraints for star formation histories.
 """
 
-from pathlib import Path
 import warnings
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -52,7 +52,8 @@ spec_config = tengri.Spectroscopy(wave_obs=wave_obs)
 obs = tengri.Observation(photometry=phot, spectroscopy=spec_config)
 
 model = tengri.SEDModel.build(
-    ssp, observation=obs,
+    ssp,
+    observation=obs,
     sfh={"type": "tsnorm", "*": tengri.FREE, "skew": 0.3, "trunc": 5.0},
     met={"type": "fixed"},
     dust={"type": "two_component", "*": tengri.FIXED},
@@ -81,8 +82,12 @@ flux_obs = flux_true + noise * jax.random.normal(key, shape=flux_true.shape)
 
 forward = tengri.ForwardModel.build(sed=model, observation=obs)
 posterior = forward.fit(
-    flux_obs, noise, method="map", optimizer="adam",
-    n_steps=300, verbose=False,
+    flux_obs,
+    noise,
+    method="map",
+    optimizer="adam",
+    n_steps=300,
+    verbose=False,
 )
 fit_params = posterior.params
 

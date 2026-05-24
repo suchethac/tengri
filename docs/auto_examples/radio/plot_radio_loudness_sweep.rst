@@ -30,7 +30,7 @@ We sweep R ∈ [0, 4] at fixed L_bol = 10^44 erg/s (Seyfert-1-like) and
 
 Reference: Kellermann et al. 1989, ApJ 345, 171.
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-56
+.. GENERATED FROM PYTHON SOURCE LINES 14-55
 
 .. code-block:: Python
 
@@ -42,7 +42,6 @@ Reference: Kellermann et al. 1989, ApJ 345, 171.
     import matplotlib.pyplot as plt
     import numpy as np
 
-    import tengri
     from tengri.analysis.plotting import setup_style
 
     setup_style()

@@ -135,8 +135,4 @@ for ax, (title, _block, kw), color in zip(axes, STAGES, colors):
     ax.legend(loc="lower center", fontsize=8, frameon=False)
 
 axes[0].set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
-fig.suptitle(
-    "Composable AGN: cumulative block contributions (all-GRAHSP recipe)",
-    fontsize=11,
-)
 fig.tight_layout()

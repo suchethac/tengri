@@ -27,7 +27,7 @@ Left panel shows mild burstiness (σ=0.3, τ=300 Myr); right shows strong
 burstiness (σ=1.0, τ=100 Myr). Five realizations appear in each panel,
 with the smooth mean SFH overlaid.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-62
+.. GENERATED FROM PYTHON SOURCE LINES 11-64
 
 .. code-block:: Python
 
@@ -53,7 +53,9 @@ with the smooth mean SFH overlaid.
     t_gyr = np.array(t_lookback) / 1e9
 
     # --- Smooth mean SFH ---
-    mean_sfr = tengri.tsnorm(t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=0.5, trunc=3.0)
+    mean_sfr = tengri.tsnorm(
+        t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=0.5, trunc=3.0
+    )
 
     # --- Generate GP realizations at two different PSD settings ---
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.5), sharey=True)

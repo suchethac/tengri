@@ -14,7 +14,6 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -71,8 +70,12 @@ mock = model.mock(truth_params, snr=20.0, key=key)
 # Fit with MAP
 forward = tengri.ForwardModel.build(sed=model, observation=obs)
 posterior = forward.fit(
-    mock.flux_obs, mock.noise, method="map", optimizer="adam",
-    n_steps=300, verbose=False,
+    mock.flux_obs,
+    mock.noise,
+    method="map",
+    optimizer="adam",
+    n_steps=300,
+    verbose=False,
 )
 
 # Generate uncertainty envelope via parameter perturbation
@@ -80,7 +83,7 @@ n_resample = 100
 key_pert = jax.random.PRNGKey(999)
 posterior_photometry = []
 
-for i in range(n_resample):
+for _i in range(n_resample):
     key_pert, subkey = jax.random.split(key_pert)
     perturbation = 0.15 * jax.random.normal(subkey, shape=(len(posterior.params),))
     param_names = list(posterior.params.keys())

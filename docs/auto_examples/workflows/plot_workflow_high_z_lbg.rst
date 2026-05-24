@@ -30,7 +30,7 @@ from the dropout depth.
 Reference: Steidel et al. 1996, ApJ, 462, L17 (Lyman-break galaxies);
 Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-141
+.. GENERATED FROM PYTHON SOURCE LINES 14-149
 
 .. code-block:: Python
 
@@ -38,7 +38,6 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -99,13 +98,20 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
     # Fit with MAP
     forward = tengri.ForwardModel.build(sed=model, observation=obs)
     posterior = forward.fit(
-        mock.flux_obs, mock.noise, method="map", optimizer="adam",
-        n_steps=300, verbose=False,
+        mock.flux_obs,
+        mock.noise,
+        method="map",
+        optimizer="adam",
+        n_steps=300,
+        verbose=False,
     )
 
     # Plot: SED with Lyman-break signature
     fig, (ax_sed, ax_res) = plt.subplots(
-        2, 1, figsize=(7.5, 5.2), sharex=True,
+        2,
+        1,
+        figsize=(7.5, 5.2),
+        sharex=True,
         gridspec_kw={"height_ratios": [3, 1], "hspace": 0.05},
     )
 
@@ -150,7 +156,9 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
     ax_sed.set_ylabel(r"$f_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
     ax_sed.legend(frameon=False, fontsize=8)
 
-    residual = (np.array(mock.flux_obs) - np.array(model.predict_photometry(posterior.params))) / np.array(mock.noise)
+    residual = (
+        np.array(mock.flux_obs) - np.array(model.predict_photometry(posterior.params))
+    ) / np.array(mock.noise)
     ax_res.axhline(0.0, color="0.5", lw=0.6)
     ax_res.axhspan(-1.0, 1.0, color="0.85", alpha=0.6, lw=0)
     ax_res.plot(wave_eff, residual, "o", color="C3", ms=5)

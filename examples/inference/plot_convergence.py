@@ -14,7 +14,6 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -56,23 +55,41 @@ mock = model.mock(truth, snr=20.0, key=key)
 
 forward = tengri.ForwardModel.build(sed=model, observation=obs)
 posterior = forward.fit(
-    mock.flux_obs, mock.noise, method="map", optimizer="adam",
-    n_steps=300, verbose=False,
+    mock.flux_obs,
+    mock.noise,
+    method="map",
+    optimizer="adam",
+    n_steps=300,
+    verbose=False,
 )
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 
 # Left: placeholder showing the method; in practice, one would log the loss curve
 # during optimization (this is a simplified demonstration).
-axes[0].text(0.5, 0.5, "MAP optimization\n(300 iterations with Adam)",
-             ha="center", va="center", fontsize=11, transform=axes[0].transAxes,
-             bbox=dict(boxstyle="round,pad=0.7", facecolor="#f0f0f0", edgecolor="gray"))
+axes[0].text(
+    0.5,
+    0.5,
+    "MAP optimization\n(300 iterations with Adam)",
+    ha="center",
+    va="center",
+    fontsize=11,
+    transform=axes[0].transAxes,
+    bbox=dict(boxstyle="round,pad=0.7", facecolor="#f0f0f0", edgecolor="gray"),
+)
 axes[0].set_xlim(0, 1)
 axes[0].set_ylim(0, 1)
 axes[0].axis("off")
-ax_text = axes[0].text(0.05, 0.95, "MAP convergence", transform=axes[0].transAxes,
-                       fontsize=10, va="top", ha="left",
-                       bbox=dict(boxstyle="round,pad=0.4", facecolor="white", alpha=0.7))
+ax_text = axes[0].text(
+    0.05,
+    0.95,
+    "MAP convergence",
+    transform=axes[0].transAxes,
+    fontsize=10,
+    va="top",
+    ha="left",
+    bbox=dict(boxstyle="round,pad=0.4", facecolor="white", alpha=0.7),
+)
 
 # Right: SFH truth vs MAP
 sfh_true = model.predict_sfh(truth)

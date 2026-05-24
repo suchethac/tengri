@@ -119,4 +119,3 @@ ax_res.set_xticklabels(band_names)
 
 fig.tight_layout()
 plt.savefig("plot_photometric_fit.png", dpi=150, bbox_inches="tight")
-plt.show()

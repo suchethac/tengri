@@ -33,7 +33,7 @@ Note: VI uses demonstration scale (500 iterations); production requires
 
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-106
+.. GENERATED FROM PYTHON SOURCE LINES 17-118
 
 .. code-block:: Python
 
@@ -41,7 +41,6 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting).
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -59,7 +58,12 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting).
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FREE, "skew": tengri.Fixed(0.3), "trunc": tengri.Fixed(10.0)},
+        sfh={
+            "type": "tsnorm",
+            "*": tengri.FREE,
+            "skew": tengri.Fixed(0.3),
+            "trunc": tengri.Fixed(10.0),
+        },
         dust={
             "type": "two_component",
             "*": tengri.FIXED,
@@ -82,11 +86,19 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting).
     forward = tengri.ForwardModel.build(sed=model, observation=obs)
 
     post_map = forward.fit(
-        mock.flux_obs, mock.noise, method="map", n_steps=300, verbose=False,
+        mock.flux_obs,
+        mock.noise,
+        method="map",
+        n_steps=300,
+        verbose=False,
     )
 
     post_vi = forward.fit(
-        mock.flux_obs, mock.noise, method="native_vi_nonlinear", n_iterations=500, n_samples=3,
+        mock.flux_obs,
+        mock.noise,
+        method="native_vi_nonlinear",
+        n_iterations=500,
+        n_samples=3,
         verbose=False,
     )
 

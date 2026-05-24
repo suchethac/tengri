@@ -29,7 +29,7 @@ to illustrate the uncertainty range from photometric noise.
 Reference: Calzetti et al. 2000, ApJ, 533, 682 (attenuation law);
 Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-160
+.. GENERATED FROM PYTHON SOURCE LINES 13-163
 
 .. code-block:: Python
 
@@ -37,7 +37,6 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -94,8 +93,12 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
     # Fit with MAP
     forward = tengri.ForwardModel.build(sed=model, observation=obs)
     posterior = forward.fit(
-        mock.flux_obs, mock.noise, method="map", optimizer="adam",
-        n_steps=300, verbose=False,
+        mock.flux_obs,
+        mock.noise,
+        method="map",
+        optimizer="adam",
+        n_steps=300,
+        verbose=False,
     )
 
     # Generate uncertainty envelope via parameter perturbation
@@ -103,7 +106,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
     key_pert = jax.random.PRNGKey(999)
     posterior_photometry = []
 
-    for i in range(n_resample):
+    for _i in range(n_resample):
         key_pert, subkey = jax.random.split(key_pert)
         perturbation = 0.15 * jax.random.normal(subkey, shape=(len(posterior.params),))
         param_names = list(posterior.params.keys())

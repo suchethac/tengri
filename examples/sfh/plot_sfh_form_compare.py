@@ -34,15 +34,15 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 FORMS = [
-    ("const",       "constant SFR"),
-    ("exp",         "exponential rise"),
-    ("dexp",        "delayed exponential"),
-    ("tau",         "declining exponential (τ)"),
-    ("lnorm",       "log-normal"),
-    ("snorm",       "skew-normal"),
-    ("tsnorm",      "truncated skew-normal"),
-    ("dpl",         "double power-law"),
-    ("delayed_bq",  "delayed + burst/quench"),
+    ("const", "constant SFR"),
+    ("exp", "exponential rise"),
+    ("dexp", "delayed exponential"),
+    ("tau", "declining exponential (τ)"),
+    ("lnorm", "log-normal"),
+    ("snorm", "skew-normal"),
+    ("tsnorm", "truncated skew-normal"),
+    ("dpl", "double power-law"),
+    ("delayed_bq", "delayed + burst/quench"),
 ]
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.95, len(FORMS)))
 
@@ -65,9 +65,13 @@ for (form, label), color in zip(FORMS, COLORS):
         sfr = sfr / mass if mass > 0 else sfr
     ax.plot(t_gyr, sfr, color=color, lw=1.6, label=label)
 
-ax.set(xlabel=r"Lookback time $t_{\rm lbt}$  [Gyr]",
-       ylabel=r"SFR$(t)$ / $M_\star^{\rm tot}$  [yr$^{-1}$]",
-       yscale="log", xlim=(0.0, 13.5), ylim=(1e-12, 5e-9))
+ax.set(
+    xlabel=r"Lookback time $t_{\rm lbt}$  [Gyr]",
+    ylabel=r"SFR$(t)$ / $M_\star^{\rm tot}$  [yr$^{-1}$]",
+    yscale="log",
+    xlim=(0.0, 13.5),
+    ylim=(1e-12, 5e-9),
+)
 ax.legend(frameon=False, fontsize=8, loc="upper right", ncol=2)
 
 fig.tight_layout()

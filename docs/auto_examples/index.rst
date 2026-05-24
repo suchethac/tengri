@@ -25,7 +25,7 @@ Examples gallery
    /auto_examples/advanced/index.rst
 
 
-120+ standalone scripts demonstrating tengri's physics components, fitting
+170+ standalone scripts demonstrating tengri's physics components, fitting
 workflows, and end-to-end use cases. Each card below links to a per-script
 page with the rendered figure, the full source, and a downloadable Jupyter
 notebook.
@@ -1182,7 +1182,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare three nebular emission models: BakedIn (embedded in SSP), CloudyGrid (photoionization tables), and Cue (neural emulator). Shows how backend choice affects emission line strengths.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Two nebular backends, same SFH, same dust, same metallicity. BakedIn pulls line ratios from the SSP grid (Conroy + Byler wNE templates); Cue (Li, Leja &amp; Speagle 2023) is a neural emulator over the CLOUDY parameter space, run here at log U = -3.0.">
 
 .. only:: html
 
@@ -1193,7 +1193,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Nebular Backends: BakedIn vs CloudyGrid vs Cue</div>
+      <div class="sphx-glr-thumbnail-title">Nebular backends side-by-side: BakedIn vs Cue</div>
     </div>
 
 
@@ -1684,7 +1684,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compares all dust emission models available in tengri at a fixed infrared luminosity and fiducial temperature. Template-based models gracefully skip if data files are unavailable.">
+    <div class="sphx-glr-thumbcontainer" tooltip="All six dust-emission ingredients shipped with tengri, called with the same absorbed bolometric luminosity (1e10 L_sun) and the same warm-dust temperature (35 K). Analytic models (modified BB, Casey 2012, energy-balance split) drop sharply blue-ward of the warm-dust peak; template-based libraries (DL07, DL14, Dale+2014) carry PAH features in the 3-20 μm window. Template models silently skip if the data files aren&#x27;t available.">
 
 .. only:: html
 
@@ -1695,7 +1695,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Dust Emission Models: Overview</div>
+      <div class="sphx-glr-thumbnail-title">Dust-emission model family at fixed L_abs</div>
     </div>
 
 

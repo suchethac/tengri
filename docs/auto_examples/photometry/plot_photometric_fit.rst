@@ -31,7 +31,7 @@ with error bars and residuals.
    :alt: plot_photometric_fit
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-123
+.. GENERATED FROM PYTHON SOURCE LINES 16-122
 
 .. code-block:: Python
 
@@ -141,7 +141,6 @@ with error bars and residuals.
 
     fig.tight_layout()
     plt.savefig("plot_photometric_fit.png", dpi=150, bbox_inches="tight")
-    plt.show()
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_photometric_fit.py:

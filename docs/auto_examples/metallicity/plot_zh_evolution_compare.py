@@ -18,7 +18,6 @@ neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics)
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tengri
 from tengri.analysis.plotting import setup_style
 from tengri.components.stellar.sfh import closed_box_metallicity
 from tengri.utils.cosmology import age_at_z0
@@ -44,9 +43,15 @@ for tau_gyr, color in zip([1.0, 2.0, 5.0, 10.0], colors):
 
 ax.set_xlabel("Look-back Time [Gyr]", fontsize=9)
 ax.set_ylabel(r"$Z/Z_\odot$", fontsize=9)
-ax.text(0.05, 0.95, "Closed-box enrichment timescale", transform=ax.transAxes,
-       fontsize=9, verticalalignment='top', bbox=dict(boxstyle='round',
-       facecolor='white', alpha=0.85))
+ax.text(
+    0.05,
+    0.95,
+    "Closed-box enrichment timescale",
+    transform=ax.transAxes,
+    fontsize=9,
+    verticalalignment="top",
+    bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+)
 ax.legend(fontsize=8, frameon=False)
 ax.grid(True, alpha=0.2)
 ax.set_xlim(0, 13)
@@ -65,9 +70,15 @@ for eta, color in zip(eta_values, colors):
 
 ax.set_xlabel("Look-back Time [Gyr]", fontsize=9)
 ax.set_ylabel(r"$Z/Z_\odot$", fontsize=9)
-ax.text(0.05, 0.95, r"Leaky-box: outflow rate $\eta$ (τ = 3 Gyr)", transform=ax.transAxes,
-       fontsize=9, verticalalignment='top', bbox=dict(boxstyle='round',
-       facecolor='white', alpha=0.85))
+ax.text(
+    0.05,
+    0.95,
+    r"Leaky-box: outflow rate $\eta$ (τ = 3 Gyr)",
+    transform=ax.transAxes,
+    fontsize=9,
+    verticalalignment="top",
+    bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+)
 ax.legend(fontsize=8, frameon=False)
 ax.grid(True, alpha=0.2)
 ax.set_xlim(0, 13)
@@ -90,9 +101,15 @@ for eta, label, color in models:
 
 ax.set_xlabel("Look-back Time [Gyr]", fontsize=9)
 ax.set_ylabel(r"$Z/Z_\odot$", fontsize=9)
-ax.text(0.05, 0.95, "Constant SFR: closed vs leaky box", transform=ax.transAxes,
-       fontsize=9, verticalalignment='top', bbox=dict(boxstyle='round',
-       facecolor='white', alpha=0.85))
+ax.text(
+    0.05,
+    0.95,
+    "Constant SFR: closed vs leaky box",
+    transform=ax.transAxes,
+    fontsize=9,
+    verticalalignment="top",
+    bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+)
 ax.legend(fontsize=8, frameon=False)
 ax.grid(True, alpha=0.2)
 ax.set_xlim(0, 13)
@@ -120,9 +137,15 @@ ax.plot(t_assembly, z_assembly, lw=2.0, color="#9467bd", alpha=0.4)
 
 ax.set_xlabel("Assembly Look-back Time [Gyr]", fontsize=9)
 ax.set_ylabel(r"$Z/Z_\odot$ at assembly", fontsize=9)
-ax.text(0.05, 0.95, "Assembly-metallicity relation", transform=ax.transAxes,
-       fontsize=9, verticalalignment='top', bbox=dict(boxstyle='round',
-       facecolor='white', alpha=0.85))
+ax.text(
+    0.05,
+    0.95,
+    "Assembly-metallicity relation",
+    transform=ax.transAxes,
+    fontsize=9,
+    verticalalignment="top",
+    bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+)
 ax.grid(True, alpha=0.2)
 ax.set_xlim(0, 11)
 ax.set_ylim(0, 1.0)

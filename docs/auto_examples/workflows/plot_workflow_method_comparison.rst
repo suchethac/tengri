@@ -29,7 +29,7 @@ methods (NUTS, VI) would be needed.
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview);
 Nocedal & Wright 1999 (optimization methods).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-110
+.. GENERATED FROM PYTHON SOURCE LINES 13-113
 
 .. code-block:: Python
 
@@ -37,7 +37,6 @@ Nocedal & Wright 1999 (optimization methods).
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -94,8 +93,12 @@ Nocedal & Wright 1999 (optimization methods).
     # Fit with MAP
     forward = tengri.ForwardModel.build(sed=model, observation=obs)
     posterior_map = forward.fit(
-        mock.flux_obs, mock.noise, method="map", optimizer="adam",
-        n_steps=300, verbose=False,
+        mock.flux_obs,
+        mock.noise,
+        method="map",
+        optimizer="adam",
+        n_steps=300,
+        verbose=False,
     )
 
     # Compare SFH: truth vs MAP
