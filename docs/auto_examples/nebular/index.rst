@@ -338,6 +338,23 @@ Nebular emission backends comparison.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Four widely-used optical strong-line metallicity diagnostics evaluated across the Cue logZ_gas prior. Each one carries a different systematic — Pettini &amp; Pagel 2004 O3N2 saturates at high Z, the R23 ratio is double-valued, N2 (Marino+2013) is monotonic but small dynamic range, and the [Ne III]/[O II] diagnostic is weakly Z-dependent.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_strong_line_metallicity_diagnostics_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_strong_line_metallicity_diagnostics`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Strong-line gas-phase metallicity diagnostics</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -367,4 +384,5 @@ Nebular emission backends comparison.
    /auto_examples/nebular/plot_neb_density_sweep
    /auto_examples/nebular/plot_nebular_backends
    /auto_examples/nebular/plot_shock_emission
+   /auto_examples/nebular/plot_strong_line_metallicity_diagnostics
 

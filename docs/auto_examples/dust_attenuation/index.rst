@@ -19,23 +19,6 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Direct view of the attenuation k(λ) function (in mag of attenuation per E(B−V), normalised to k(V) = R_V) for the production attenuation laws. The shape of each curve is what determines how the underlying intrinsic SED gets reshaped by a given amount of dust; plot_dust_law_application.py and plot_dust_law_uv_slope_response.py show downstream consequences on the SED and on β.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_attenuation_curves_klam_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_attenuation_curves_klam`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Attenuation curves k(λ) for the shipped law family</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="The tengri library offers six attenuation laws covering the morphology-geometry spectrum: Milky Way (Cardelli), SMC (Pei), starburst (Calzetti, Conroy), and theoretical models (Kriek &amp; Conroy, power law). At fixed τ_V = 1, their curves expose the 2175 Å bump (MW/Cardelli), slope differences (SMC is greyer, Calzetti is redder), and parametric extensions (Kriek &amp; Conroy).">
 
 .. only:: html
@@ -65,6 +48,23 @@ depths, two-component geometry, and law comparisons.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Birth-cloud vs diffuse-ISM dust: which knob does what?</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Cardelli+1989 Milky Way attenuation curve is a family parameterised by R_V = A_V / E(B-V). Smaller R_V (≲ 3) gives a steeper UV rise and stronger 2175 Å bump (denser lines of sight, small grains dominate); larger R_V (≳ 4.5) flattens the UV slope (processed grains, larger sizes).">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_cardelli_rv_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_cardelli_rv_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Cardelli MW attenuation: sweeping R_V</div>
     </div>
 
 
@@ -248,9 +248,9 @@ depths, two-component geometry, and law comparisons.
 .. toctree::
    :hidden:
 
-   /auto_examples/dust_attenuation/plot_attenuation_curves_klam
    /auto_examples/dust_attenuation/plot_attenuation_law_compare
    /auto_examples/dust_attenuation/plot_birth_cloud_vs_diffuse
+   /auto_examples/dust_attenuation/plot_cardelli_rv_sweep
    /auto_examples/dust_attenuation/plot_dust_curves
    /auto_examples/dust_attenuation/plot_dust_geometry_sweep
    /auto_examples/dust_attenuation/plot_dust_law_application

@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:04.038** total execution time for 178 files **from all galleries**:
+**00:20.102** total execution time for 179 files **from all galleries**:
 
 .. container::
 
@@ -32,11 +32,11 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_attenuation_curves_klam.py` (``../examples/dust_attenuation/plot_attenuation_curves_klam.py``)
-     - 00:03.174
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_strong_line_metallicity_diagnostics.py` (``../examples/nebular/plot_strong_line_metallicity_diagnostics.py``)
+     - 00:18.884
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_kennicutt_sfr_calibrations.py` (``../examples/usecases/plot_usecase_kennicutt_sfr_calibrations.py``)
-     - 00:00.864
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_cardelli_rv_sweep.py` (``../examples/dust_attenuation/plot_cardelli_rv_sweep.py``)
+     - 00:01.218
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
      - 00:00.000
@@ -513,6 +513,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_jwst_color_color.py` (``../examples/usecases/plot_usecase_jwst_color_color.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_kennicutt_sfr_calibrations.py` (``../examples/usecases/plot_usecase_kennicutt_sfr_calibrations.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_mass_completeness.py` (``../examples/usecases/plot_usecase_mass_completeness.py``)
