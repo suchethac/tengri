@@ -171,7 +171,7 @@ class SKIRTORTorus(SEDModelComponent):
     )
 
     # Cross-component outputs
-    outputs = {
+    outputs: ClassVar[dict[str, str]] = {
         "L_agn_disc": "erg/s",
         "L_agn_torus": "erg/s",
         "L_agn_polar_dust": "erg/s",
