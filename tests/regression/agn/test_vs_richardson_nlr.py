@@ -6,6 +6,8 @@ the Richardson et al. (2014) emission-line diagnostics used as the canonical
 NLR template in tengri.
 """
 
+import numpy as np
+
 import jax.numpy as jnp
 import pytest
 
@@ -81,9 +83,7 @@ def test_richardson_nlr_line_ratios():
         _c_aa = 2.99792458e18  # c in Angstrom/s
         nu = _c_aa / jnp.maximum(wavelength, 1.0)
         sort_idx = jnp.argsort(nu)
-        line_flux = jnp.abs(
-            jnp.trapezoid((sed * profile)[sort_idx], nu[sort_idx])
-        )
+        line_flux = jnp.abs(jnp.trapezoid((sed * profile)[sort_idx], nu[sort_idx]))
 
         if line_name == "hbeta":
             hbeta_flux = line_flux
@@ -98,10 +98,10 @@ def test_richardson_nlr_line_ratios():
     for line_name, expected_ratio in expected_ratios.items():
         measured_ratio = measured_ratios[line_name]
         relative_error = jnp.abs(measured_ratio - expected_ratio) / expected_ratio
-        assert (
-            relative_error < 0.05
-        ), f"{line_name}: expected {expected_ratio:.2f}, got {measured_ratio:.2f} "
-        f"({100*relative_error:.1f}% error)"
+        assert relative_error < 0.05, (
+            f"{line_name}: expected {expected_ratio:.2f}, got {measured_ratio:.2f} "
+        )
+        f"({100 * relative_error:.1f}% error)"
 
 
 @pytest.mark.regression_paper

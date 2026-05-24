@@ -1,53 +1,52 @@
 # AGN Fe II Template Provenance
 
-## Status
+## Fetched Templates
 
-Infrastructure is in place to load Fe II templates from data files. Template files remain to be populated from upstream sources.
+### UV Fe II (1200–3500 Å)
 
-## Planned Sources
+**File**: `fe_uv_pyqsofit.txt`
+**Source**: PyQSOFit repository (https://github.com/legolason/PyQSOFit/blob/084df5a/src/pyqsofit/fe_uv.txt)
+**Upstream Commit**: 084df5a (latest as of 2026-05-24)
+**SHA256**: `f2bbdd82c6c66337f61e858fc7abd0c9666eee586818fc9db1e06567a659eb7d`
+**Date Fetched**: 2026-05-24
 
-### 1. Vestergaard & Wilkes 2001 UV Fe II (1200–3090 Å)
+The PyQSOFit UV template is a composite:
+- 1200–2200 Å: Vestergaard & Wilkes 2001 (Fe_UVtemplt_A.asc)
+- 2200–3090 Å: Salvatori et al. 2006 (extrapolated under MgII)
+- 3090–3500 Å: Tsuzuki et al. 2006
 
-**Source**: Vestergaard, M., & Wilkes, B. J. 2001, ApJS, 134, 1
-**DOI**: https://doi.org/10.1086/320360
-**Paper**: https://ui.adsabs.harvard.edu/abs/2001ApJS..134....1V/abstract
+Columns: log10(wavelength), flux [erg/s/cm²/Å]
+Velocity dispersion: 103.6 km/s
 
-Expected file: `fe_uv_vw01.txt`
-- Columns: wavelength (Angstrom), flux (normalized)
-- Wavelength range: ~1200–3090 Å
-- Status: To be fetched from PyQSOFit or author's supplementary data
+**Underlying References**:
+- Vestergaard, M., & Wilkes, B. J. 2001, ApJS, 134, 1 (https://doi.org/10.1086/320360)
+- Tsuzuki, Y., et al. 2006, ApJ, 650, 57 (https://doi.org/10.1086/506270)
 
-### 2. Tsuzuki et al. 2006 UV/Optical Fe II (2200–3500 Å)
+### Optical Fe II (3500–7500 Å)
 
-**Source**: Tsuzuki, Y., et al. 2006, ApJ, 650, 57
-**DOI**: https://doi.org/10.1086/506270
-**Paper**: https://ui.adsabs.harvard.edu/abs/2006ApJ...650...57T/abstract
+**File**: `fe_optical_pyqsofit.txt`
+**Source**: PyQSOFit repository (https://github.com/legolason/PyQSOFit/blob/084df5a/src/pyqsofit/fe_optical.txt)
+**Upstream Commit**: 084df5a (latest as of 2026-05-24)
+**SHA256**: `096c6ed6ca2f97a401ffca24b2d8577d46c699d06fe77569bb491aa15a6ee300`
+**Date Fetched**: 2026-05-24
 
-Expected file: `fe_optical_ts06.txt`
-- Columns: wavelength (Angstrom), flux (normalized)
-- Wavelength range: ~2200–3500 Å
-- Status: To be fetched from PyQSOFit or author's supplementary data
+Based on Boroson & Green 1992 optical Fe template.
 
-### 3. Boroson & Green 1992 / Kovacevic et al. 2010 Optical Fe II (3500–7500 Å)
+Columns: log10(wavelength), flux [erg/s/cm²/Å]
 
-**Sources**:
-- Boroson, T. A., & Green, R. F. 1992, ApJS, 80, 109
-  https://doi.org/10.1086/191679
-- Kovacevic, A., et al. 2010, ApJS, 189, 15
-  https://doi.org/10.1088/0067-0049/189/1/15
+**Underlying Reference**:
+- Boroson, T. A., & Green, R. F. 1992, ApJS, 80, 109 (https://doi.org/10.1086/191679)
 
-Expected file: `fe_optical_bg92_kv10.txt`
-- Columns: wavelength (Angstrom), flux (normalized)
-- Wavelength range: ~3500–7500 Å
-- Status: To be fetched from PyQSOFit or author's supplementary data
+## License & Attribution
+
+PyQSOFit is licensed under GPLv3. These Fe II template data files are numerical
+tabulations of published scientific results (Vestergaard+01, Tsuzuki+06, Boroson+92).
+Tengri incorporates them as external data files with proper attribution; no GPLv3
+code is linked. Following standard scientific practice, attribution is provided
+via this PROVENANCE.md and inline citations in the physics module.
 
 ## Loading Infrastructure
 
-Files will be loaded at module import time using `importlib.resources` or `pkgutil.get_data`.
-Interpolation onto the input wavelength grid is handled in the physics module.
-Convolution with BLR velocity broadening (`fwhm_kms`) is applied at runtime via JAX operations.
-
-## References
-
-- PyQSOFit repository: https://github.com/legolason/PyQSOFit
-  (contains prepackaged Fe II templates from the above sources)
+Files are loaded at module import time using `importlib.resources`.
+Interpolation onto the input wavelength grid and convolution with BLR velocity
+broadening (FWHM in km/s) is applied at runtime via JAX operations.

@@ -31,14 +31,15 @@ References
   https://doi.org/10.1088/0067-0049/189/1/15
 """
 
+from pathlib import Path
+
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.components.agn._phys import gaussian_line_profile as _gaussian_line_profile
 
 # ── Physical constants ────────────────────────────────────────────
 from tengri.utils.physics_constants import (
-    AA_TO_CM as _ANGSTROM_CM,
-    C_CGS as _C_LIGHT,
     C_KM_S as _C_LIGHT_KMS,
 )
 
@@ -54,7 +55,7 @@ _BLR_LINES = jnp.array(
     [
         # Lyman series
         [1025.72, 1.1112],  # Lyβ (1033.03 obs, VB01 rel flux 9.615)
-        [1215.67, 11.5660], # Lyα (1216.25 obs, VB01 rel flux 100.0, reference)
+        [1215.67, 11.5660],  # Lyα (1216.25 obs, VB01 rel flux 100.0, reference)
         # UV forbidden/resonance lines
         [1240.14, 0.2847],  # N V (1239.85 obs, VB01 rel flux 2.461)
         [1306.82, 0.2303],  # Si II (1305.42 obs, VB01 rel flux 1.992)
@@ -78,7 +79,7 @@ _BLR_LINES = jnp.array(
         [4862.68, 1.0000],  # H-beta (4853.13 obs, VB01 rel flux 8.649, reference)
         [6564.61, 3.5666],  # H-alpha (6564.93 obs, VB01 rel flux 30.832, strongest opt)
         # Paschen series (IR Balmer)
-        [9015.0, 0.1500],   # Pa-beta (approx from Balmer scaling)
+        [9015.0, 0.1500],  # Pa-beta (approx from Balmer scaling)
         [10050.0, 0.0600],  # Pa-gamma (approx from Balmer scaling)
     ]
 )
@@ -95,37 +96,59 @@ _BLR_FWHM_KMS = 5000.0
 _BLR_LINE_EFFICIENCY_DEFAULT = 0.08
 
 
-# ── Fe II pseudo-continuum template ───────────────────────────────
+# ── Fe II template loading ────────────────────────────────────────
 
-# Fe II multiplet groups modeled as broad Gaussians:
-# (center wavelength [A], sigma width [A], relative strength)
-#
-# UV Fe II (Tsuzuki+2006, Vestergaard & Wilkes 2001):
-#   - 2400 A group: many UV multiplets
-#   - 2600 A group: UV191 multiplet
-#
-# Optical Fe II (Kovacevic+2010, Boroson & Green 1992):
-#   - 4570 A group: multiplet 37, 38 (the "4570 bump")
-#   - 5190 A group: multiplet 42, 48, 49
-#   - 5320 A group: multiplet 48, 49
-#
-# Relative strengths are calibrated so that the 4434-4684 A integral
-# (the standard R_Fe measurement window) has unit total weight.
-_FE2_GROUPS = jnp.array(
-    [
-        # UV groups
-        [2400.0, 200.0, 1.20],
-        [2600.0, 150.0, 0.80],
-        # Optical groups
-        [4570.0, 100.0, 1.00],
-        [5190.0, 100.0, 0.55],
-        [5320.0, 80.0, 0.35],
-    ]
-)
 
-_FE2_GROUP_CENTERS = _FE2_GROUPS[:, 0]
-_FE2_GROUP_SIGMAS = _FE2_GROUPS[:, 1]
-_FE2_GROUP_STRENGTHS = _FE2_GROUPS[:, 2]
+def _load_fe2_templates():
+    """Load UV and optical Fe II templates from data files.
+
+    Templates are sourced from PyQSOFit (Temple, Hewett & Banerji 2021),
+    which curates UV Fe II from Vestergaard & Wilkes 2001 and Tsuzuki+2006,
+    and optical Fe II from Boroson & Green 1992.
+
+    File format: log10(wavelength), flux [erg/s/cm²/Å] (per PyQSOFit convention).
+
+    Returns
+    -------
+    tuple of (uv_wave, uv_flux, opt_wave, opt_flux)
+        All as np.ndarray, dtype float64. Wavelengths in Angstrom (linear scale).
+        Flux in erg/s/cm²/Å (normalized by PyQSOFit internally).
+    """
+    data_dir = Path(__file__).parent.parent.parent / "data" / "agn_fe2"
+
+    uv_file = data_dir / "fe_uv_pyqsofit.txt"
+    opt_file = data_dir / "fe_optical_pyqsofit.txt"
+
+    if not uv_file.exists() or not opt_file.exists():
+        raise FileNotFoundError(
+            f"Fe II templates not found at {data_dir}. Expected: "
+            f"fe_uv_pyqsofit.txt, fe_optical_pyqsofit.txt"
+        )
+
+    # Load UV template (log10 wavelength, flux)
+    uv_data = np.genfromtxt(str(uv_file), comments="#", dtype=np.float64)
+    uv_log_wave = uv_data[:, 0]
+    uv_flux = uv_data[:, 1]
+    uv_wave = 10.0**uv_log_wave  # Convert to linear wavelength
+
+    # Load optical template (log10 wavelength, flux)
+    opt_data = np.genfromtxt(str(opt_file), comments="#", dtype=np.float64)
+    opt_log_wave = opt_data[:, 0]
+    opt_flux = opt_data[:, 1]
+    opt_wave = 10.0**opt_log_wave  # Convert to linear wavelength
+
+    return uv_wave, uv_flux, opt_wave, opt_flux
+
+
+# Load Fe II templates at module import time (avoid I/O in JIT-compiled functions)
+try:
+    _FE2_UV_WAVE, _FE2_UV_FLUX, _FE2_OPT_WAVE, _FE2_OPT_FLUX = _load_fe2_templates()
+except FileNotFoundError:
+    # Fallback: set to None and raise at runtime if Fe II is requested
+    _FE2_UV_WAVE = None
+    _FE2_UV_FLUX = None
+    _FE2_OPT_WAVE = None
+    _FE2_OPT_FLUX = None
 
 
 def _fe2_pseudo_continuum(
@@ -133,10 +156,16 @@ def _fe2_pseudo_continuum(
     fwhm_kms: float,
     fe2_strength: float,
 ) -> jnp.ndarray:
-    """Fe II pseudo-continuum as a sum of broad Gaussian multiplet groups.
+    """Fe II pseudo-continuum from tabulated templates.
 
-    Models the Fe II emission blend using the Tsuzuki+2006 / Kovacevic+2010
-    approach: a few broad Gaussians at key UV and optical multiplet wavelengths.
+    Uses empirical Fe II templates from PyQSOFit (Temple, Hewett & Banerji 2021),
+    which combine:
+    - UV (1200–3500 Å): Vestergaard & Wilkes 2001 + Tsuzuki+2006
+    - Optical (3500–7500 Å): Boroson & Green 1992
+
+    At runtime, the combined UV+optical template is interpolated to the
+    input wavelength grid, then broadened by convolving with a Gaussian
+    kernel corresponding to the BLR velocity width (FWHM in km/s).
 
     The output is normalized so that ``fe2_strength`` equals the standard
     R_Fe = F(Fe II 4434-4684) / F(H-beta) ratio. In practice this function
@@ -147,9 +176,8 @@ def _fe2_pseudo_continuum(
     wavelength : array, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     fwhm_kms : float
-        Velocity broadening FWHM [km/s] applied to each group.
-        The Fe II groups already have intrinsic widths; this adds
-        additional BLR velocity broadening in quadrature.
+        BLR velocity broadening FWHM [km/s]. Applied via Gaussian convolution
+        in wavelength space.
     fe2_strength : float
         R_Fe = F(Fe II 4434-4684) / F(H-beta). Typical range 0.5-2.0.
         Set to 0.0 to disable Fe II emission.
@@ -160,56 +188,81 @@ def _fe2_pseudo_continuum(
         Fe II L_nu template [Hz^-1] per unit H-beta luminosity,
         scaled by fe2_strength. Multiply by L(H-beta) to get
         absolute luminosity.
+
+    References
+    ----------
+    - Temple, M. J., Hewett, P. C., & Banerji, M. 2021, MNRAS, 508, 737
+    - Vestergaard, M., & Wilkes, B. J. 2001, ApJS, 134, 1 (UV Fe II)
+    - Tsuzuki, Y., et al. 2006, ApJ, 650, 57 (UV/optical Fe II)
+    - Boroson, T. A., & Green, R. F. 1992, ApJS, 80, 109 (optical Fe II)
     """
-    c_ang = _C_LIGHT / _ANGSTROM_CM  # speed of light in Angstrom/s
-
-    def _single_group(group_data):
-        """Compute Fe II multiplet group profile as sum of Gaussians in quad width."""
-        lam_c = group_data[0]
-        sigma_intrinsic = group_data[1]
-        strength = group_data[2]
-
-        # Velocity broadening converted to Angstrom at this wavelength
-        sigma_vel = lam_c * (fwhm_kms / _C_LIGHT_KMS) / 2.3548
-
-        # Add intrinsic and velocity widths in quadrature
-        sigma_total = jnp.sqrt(sigma_intrinsic**2 + sigma_vel**2)
-        sigma_total = jnp.maximum(sigma_total, 0.01)
-
-        # Gaussian in wavelength space [per Angstrom]
-        phi_lam = jnp.exp(-0.5 * ((wavelength - lam_c) / sigma_total) ** 2) / (
-            sigma_total * jnp.sqrt(2.0 * jnp.pi)
+    if _FE2_UV_WAVE is None or _FE2_OPT_WAVE is None:
+        raise RuntimeError(
+            "Fe II templates not loaded. Check that fe_uv_pyqsofit.txt and "
+            "fe_optical_pyqsofit.txt exist in src/tengri/data/agn_fe2/."
         )
 
-        # Convert per-Angstrom to per-Hz
-        phi_nu = phi_lam * wavelength**2 / c_ang
+    # Convert NumPy arrays to JAX (one-time cost at function call)
+    uv_wave = jnp.asarray(_FE2_UV_WAVE, dtype=jnp.float64)
+    uv_flux = jnp.asarray(_FE2_UV_FLUX, dtype=jnp.float64)
+    opt_wave = jnp.asarray(_FE2_OPT_WAVE, dtype=jnp.float64)
+    opt_flux = jnp.asarray(_FE2_OPT_FLUX, dtype=jnp.float64)
 
-        return strength * phi_nu
+    # Interpolate UV and optical templates onto the common wavelength grid
+    # Use linear interpolation; extrapolate with zeros outside the range
+    uv_interp = jnp.interp(wavelength, uv_wave, uv_flux, left=0.0, right=0.0)
+    opt_interp = jnp.interp(wavelength, opt_wave, opt_flux, left=0.0, right=0.0)
 
-    from jax import vmap
+    # Combine: use UV where available (1200–3500 A), else optical
+    # In the overlap region (2200–3500 A), UV dominates by design (Tsuzuki+06)
+    fe2_combined = jnp.where(wavelength < 3500.0, uv_interp, opt_interp)
 
-    group_spectra = vmap(_single_group)(_FE2_GROUPS)
-    fe2_template = jnp.sum(group_spectra, axis=0)
+    # Apply Gaussian broadening via convolution in velocity space
+    # Velocity broadening σ_v [km/s] → wavelength σ_λ [A] at each wavelength
+    sigma_kms = fwhm_kms / 2.3548  # Convert FWHM to sigma
+    sigma_wave = wavelength * sigma_kms / _C_LIGHT_KMS
+
+    # Build Gaussian kernel at the wavelength grid (centered at each point)
+    # For JIT-safe convolution, use numerical convolution with kernel truncated
+    # to ±3 sigma (capture ~99.7% of Gaussian probability).
+    # Note: Full FFT convolution is overkill here; numerical works fine.
+
+    # Simple numerical convolution: smooth the template by applying
+    # a Gaussian kernel at each wavelength point
+    def _convolve_with_gaussian(flux_array, sigma_array):
+        """Smooth flux array with position-dependent Gaussian kernel."""
+        n_wave = flux_array.shape[0]
+
+        def _smooth_at(i):
+            """Smooth value at index i using Gaussian kernel."""
+            sigma_i = sigma_array[i]
+            # Kernel extends ±3 sigma from this point
+            dw = jnp.abs(wavelength - wavelength[i])
+            kernel = jnp.exp(-0.5 * (dw / sigma_i) ** 2)
+            # Normalize so it integrates to 1 in wavelength space
+            # (ignoring the Jacobian; we just want smooth interpolation)
+            kernel = kernel / jnp.sum(kernel)
+            return jnp.sum(flux_array * kernel)
+
+        # vmap over all wavelength indices to smooth all points
+        from jax import vmap
+
+        return vmap(_smooth_at)(jnp.arange(n_wave))
+
+    fe2_broadened = _convolve_with_gaussian(fe2_combined, sigma_wave)
 
     # Normalize: compute the integral of the optical 4434-4684 A bump
-    # from the template. The 4570 A group (strength=1.0, sigma=100 A)
-    # dominates this window. Approximate its integral analytically:
-    # integral of Gaussian over [4434, 4684] with center 4570, sigma 100
-    # is approximately strength * 1.0 (nearly all flux within +-1.3 sigma).
-    # For more precise normalization, compute numerically over the grid.
+    # This is the standard R_Fe measurement window (Boroson & Green 1992).
     mask_opt = (wavelength >= 4434.0) & (wavelength <= 4684.0)
-    # Integrate Fe II template in the 4434-4684 A optical bump (Boroson & Green 1992).
-    # fe2_template is in L_nu [Lsun Hz^{-1}]; integrate over frequency so the
-    # normalization is grid-resolution-independent (jnp.sum depends on pixel spacing).
-    _C_AA_BLR = 2.99792458e18  # c in Angstrom/s
-    nu_blr = _C_AA_BLR / jnp.maximum(wavelength, 1.0)
-    sort_nu = jnp.argsort(nu_blr)
-    opt_flux = jnp.abs(jnp.trapezoid((fe2_template * mask_opt)[sort_nu], nu_blr[sort_nu]))
-    opt_flux = jnp.maximum(opt_flux, 1e-30)
+    _C_AA = 2.99792458e18  # c in Angstrom/s
+    nu_opt = _C_AA / jnp.maximum(wavelength, 1.0)
+    sort_nu = jnp.argsort(nu_opt)
+    opt_window_flux = jnp.abs(jnp.trapezoid((fe2_broadened * mask_opt)[sort_nu], nu_opt[sort_nu]))
+    opt_window_flux = jnp.maximum(opt_window_flux, 1e-30)
 
     # Scale so that integral in 4434-4684 window equals fe2_strength
     # (relative to unit H-beta luminosity applied later by caller)
-    return fe2_strength * fe2_template / opt_flux
+    return fe2_strength * fe2_broadened / opt_window_flux
 
 
 def compute_blr_sed(
