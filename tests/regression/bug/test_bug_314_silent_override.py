@@ -27,7 +27,10 @@ pytestmark = pytest.mark.regression_bug
 
 @pytest.fixture(scope="module")
 def model_with_filters():
-    ssp = tengri.load_ssp()
+    try:
+        ssp = tengri.load_ssp()
+    except FileNotFoundError:
+        pytest.skip("default wNE SSP not available")
     obs = tengri.Observation(
         photometry=tengri.Photometry(
             filters=(
