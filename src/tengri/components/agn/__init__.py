@@ -86,6 +86,10 @@ from tengri.components.agn.powerlaw_disc_model import PowerLawDisc
 
 # QSOgen must be imported after unified (needs register_agn_model)
 from tengri.components.agn.qsogen import compute_qsogen_sed, qsogen
+from tengri.components.agn.richards2006_disc import (
+    richards2006,
+    richards2006_disc,
+)
 from tengri.components.agn.silva04 import create_silva04_from_grid, silva04_analytic
 from tengri.components.agn.silva04_model import Silva04Torus
 from tengri.components.agn.skirtor import create_skirtor_from_grid, skirtor_analytic
@@ -147,6 +151,8 @@ __all__ = [
     "register_agn_model",
     "resolve_agn_block",
     "resolve_agn_model",
+    "richards2006",
+    "richards2006_disc",
     "silva04_analytic",
     "unified_agn",
     "unified_nlr_blr",
