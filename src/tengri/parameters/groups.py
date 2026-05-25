@@ -185,11 +185,21 @@ _VALID_NEBULAR_TYPES = {
     "cb19",
 }
 
-#: Valid IGM types.
+#: Valid IGM types. ``inoue`` is accepted as an alias for ``inoue14`` to match
+#: the canonical name consumed by :meth:`SEDModel._init_igm`.
 _VALID_IGM_TYPES = {
     "none",
     "madau",
+    "inoue",
     "inoue14",
+}
+
+#: Map grammar-layer IGM names to the canonical form consumed by
+#: :meth:`SEDModel._init_igm` (which only accepts ``'inoue'`` / ``'madau'``).
+_IGM_TYPE_ALIASES = {
+    "inoue14": "inoue",
+    "inoue": "inoue",
+    "madau": "madau",
 }
 
 #: Valid radio types.
@@ -705,6 +715,10 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
     else:
         # Both madau and inoue14 -> apply_igm=True
         result["apply_igm"] = True
+        # Propagate the model choice. _init_igm speaks 'inoue'/'madau';
+        # 'inoue14' is the grammar-level name — normalise to the canonical
+        # form here so the user's selection isn't silently dropped (#344).
+        result["igm_model"] = _IGM_TYPE_ALIASES[igm_type]
 
     # Handle optional IGM subkeys
     if igm_dict.get("patchy", False):

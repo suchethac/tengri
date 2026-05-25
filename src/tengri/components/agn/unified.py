@@ -140,7 +140,9 @@ from tengri.components.agn.silva04 import silva04_analytic
 from tengri.components.agn.skirtor import _find_skirtor_grid, create_skirtor_from_grid
 from tengri.components.dust.attenuation import prevot_smc
 from tengri.components.radio.radio import radio_total
-from tengri.components.xray.xray import xray_agn_corona
+from tengri.components.xray.xray import (
+    _xray_agn_corona_bolometric as _xray_agn_corona_legacy,
+)
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 
@@ -1478,9 +1480,15 @@ def unified_nlr_blr(
     l_blr = mask_blr * l_blr_raw * polar_trans
 
     # --- X-ray corona (optional) ---
+    # ``unified_nlr_blr`` exposes ``xray_alpha_ox`` as an explicit user
+    # parameter, matching the original Synthesizer / Yang+2020 interface.
+    # The new canonical ``xray_agn_corona(l_2500_30deg_erg_hz, ...)`` path
+    # derives α_OX from L_2500 via Just+2007 instead of accepting it
+    # directly, so we route through the bolometric helper to preserve the
+    # user-facing semantics here.
     l_xray_contrib = jnp.zeros_like(wavelength)
     if include_xray:
-        l_xray_contrib = xray_agn_corona(
+        l_xray_contrib = _xray_agn_corona_legacy(
             wavelength,
             L_agn_bol=l_bol_erg,
             gamma=xray_gamma_agn,
