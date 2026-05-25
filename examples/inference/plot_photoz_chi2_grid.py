@@ -34,7 +34,7 @@ warnings.filterwarnings("ignore", message=".*FutureWarning.*")
 # dust attenuation. Redshift and stellar mass are the free parameters on the grid.
 
 BANDS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-         "vista_y", "vista_j", "vista_h", "vista_k"]
+         "vista_y", "vista_j", "vista_h", "vista_ks"]
 
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 

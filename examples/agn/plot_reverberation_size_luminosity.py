@@ -215,10 +215,7 @@ fig.suptitle(
 )
 fig.tight_layout()
 
-# Save figure
-figpath = os.path.join(FIG_DIR, "agn_reverberation_size_luminosity.png")
-fig.savefig(figpath, dpi=150, bbox_inches="tight")
-print(f"Saved {figpath}")
+fig.savefig("plot_reverberation_size_luminosity.png", dpi=150, bbox_inches="tight")
 
 plt.show()
 

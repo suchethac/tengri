@@ -109,8 +109,8 @@ noise_level = truth_phot / 20.0  # S/N = 20 per band
 key, subkey = jax.random.split(key)
 mock_flux = truth_phot + jax.random.normal(subkey, shape=truth_phot.shape) * noise_level
 
-print(f"Generated synthetic photometry:")
-print(f"  Bands: {obs.photometry.filter_names}")
+print("Generated synthetic photometry:")
+print(f"  n bands: {len(obs.photometry.filter_waves)}")
 print(f"  SNR: ~20 per band")
 print(f"  Truth SFR (100 Myr): {truth_sfr_100myr:.2f} Msun/yr")
 

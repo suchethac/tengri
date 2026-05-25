@@ -84,7 +84,7 @@ def make_model_template():
 # ── Generate mock population ─────────────────────────────────────────────
 N_GALAXIES = 50
 np.random.seed(42)
-jax.random.seed(99)
+_key = jax.random.PRNGKey(99)
 
 # Sample the true population hyperparameters:
 true_pop_mean = 0.05  # log(Z/Z☉), anchored to SDSS LRG

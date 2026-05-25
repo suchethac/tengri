@@ -48,7 +48,7 @@ log_mstar_true = 9.0  # LAE mass scale (10^9 Msun)
 
 # Mock photometry: JWST/NIRCam F150W, F277W, F356W (rest-frame UV-optical)
 # These filters straddle the Lyman break at z~5, making photo-z degenerate.
-PHOT_BANDS = ["jwst_nircam_f150w", "jwst_nircam_f277w", "jwst_nircam_f356w"]
+PHOT_BANDS = ["jwst_f150w", "jwst_f277w", "jwst_f356w"]
 
 # Emission lines: H-alpha + [OIII]5007 (strongest lines accessible at z~5)
 # Rest-frame H-alpha = 6564.61 A -> observed = 32823 A (beyond JWST NIRCam!)
