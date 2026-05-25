@@ -15,6 +15,7 @@ import warnings
 
 import corner
 import jax
+import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
@@ -67,8 +68,16 @@ posterior = forward.fit(
 )
 
 samples_dict = posterior.samples
-param_names = list(samples_dict.keys())
-samples_array = np.array([samples_dict[p] for p in param_names]).T
+# Keep only parameters with non-trivial posterior variance — fixed params
+# and tightly-constrained ones end up as effectively zero-range columns
+# and corner.corner refuses to plot them.
+EPS = 1e-8
+param_names = [
+    p
+    for p in samples_dict
+    if np.asarray(samples_dict[p]).std() > EPS * abs(np.asarray(samples_dict[p]).mean() + 1.0)
+]
+samples_array = np.array([np.asarray(samples_dict[p]) for p in param_names]).T
 truths = [float(truth[p]) for p in param_names]
 
 fig = corner.corner(

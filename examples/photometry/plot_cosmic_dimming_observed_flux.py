@@ -35,7 +35,6 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
 from pathlib import Path
 
 import jax
-import jax.numpy as jnp
 import matplotlib
 
 matplotlib.use("Agg")

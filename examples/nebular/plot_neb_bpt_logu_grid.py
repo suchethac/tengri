@@ -1,11 +1,20 @@
 """
-BPT diagram ionization sequence from ages
-==========================================
+Stellar-population age moves a galaxy on the BPT diagram
+=========================================================
 
-The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies ionizing sources.
-We show how stellar population age controls ionization parameter:
-younger (hotter) populations move the locus toward higher [OIII]/Hβ,
-steering from star-forming toward composite/Seyfert regions.
+Young massive stars produce harder ionising continua and drive the
+nebular emission toward higher [O III]/Hbeta. We sweep the SFH
+timescale ``tau_gyr`` from 0.1 to 2 Gyr on a single dual power-law
+model and plot the resulting line ratios against the Kewley+2001 /
+Kauffmann+2003 demarcation curves. The locus migrates from the
+star-forming wing into the composite region as the population ages —
+SFH timescale is the upstream knob behind the BPT ionisation sequence.
+
+Distinct from ``plot_bpt_cue_grid.py`` (log U × log Z_gas grid at
+fixed age) and ``plot_cue_logu_line_ratios.py`` (1-D log U sweep).
+
+Reference: Kewley et al. 2001, ApJ, 556, 121;
+Kauffmann et al. 2003, MNRAS, 346, 1055.
 """
 
 import warnings
@@ -67,18 +76,15 @@ colors = plt.cm.viridis(np.linspace(0, 1, len(ages)))
 
 for age, color in zip(ages, colors):
     params = {**baseline, "sfh_dpl_tau_gyr": jnp.float64(age)}
-    out = model.predict_rest_sed(params)
-    lines = out.emission_lines
-    if lines is not None:
-        lines_dict = dict(lines)
-        ha = lines_dict.get(6562.79, 1e-20)
-        hb = lines_dict.get(4860.2, 1e-20)
-        nii = lines_dict.get(6583.34, 1e-20)
-        oiii = lines_dict.get(5008.24, 1e-20)
-        if ha > 0 and hb > 0 and oiii > 0 and nii > 0:
-            log_n2_ha = np.log10(nii / ha)
-            log_o3_hb = np.log10(oiii / hb)
-            ax.scatter(log_n2_ha, log_o3_hb, s=80, c=[color], edgecolors="k", lw=0.5, zorder=5)
+    lines = model.predict_emission_lines(params)
+    ha = float(lines.halpha)
+    hb = float(lines.hbeta)
+    nii = float(lines.nii_6584)
+    oiii = float(lines.oiii_5007)
+    if ha > 0 and hb > 0 and oiii > 0 and nii > 0:
+        log_n2_ha = np.log10(nii / ha)
+        log_o3_hb = np.log10(oiii / hb)
+        ax.scatter(log_n2_ha, log_o3_hb, s=80, c=[color], edgecolors="k", lw=0.5, zorder=5)
 
 ax.text(-1.3, -0.5, "SF", fontsize=10, color="#1f77b4", ha="center")
 ax.text(0.1, 0.8, "Composite", fontsize=10, color="#ff7f0e", ha="center")

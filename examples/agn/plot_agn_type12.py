@@ -1,75 +1,74 @@
 """
-Type 1 vs Type 2 AGN: Geometric Unification
-============================================
+Same AGN, different viewing angle: Type 1 to Type 2 by inclination
+====================================================================
 
-The unified model of AGN activity: the same physical system appears as
-Type 1 (broad-line, blue disc continuum visible) or Type 2 (narrow-line only,
-torus blocks the accretion disc) depending purely on viewing angle.
+The unified AGN model attributes the Type-1 vs Type-2 dichotomy to
+geometry alone. Three inclinations of an identical disc + SKIRTOR
+torus + broad-line region (Type 1, face-on, cos i = 0.95), torus
+edge (intermediate, cos i = 0.5), and edge-on (Type 2, cos i = 0.1).
+The broad UV bump and BLR lines vanish behind the torus at high
+inclination; the mid-IR torus reprocessed emission stays.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_agn_type12_001.png
-   :alt: plot_agn_type12
-   :class: sphx-glr-single-img
-
+Reference: Antonucci 1993, ARA&A, 31, 473 (unified model);
+Urry & Padovani 1995, PASP, 107, 803.
 """
 
-# TODO: refactor to SEDModel.build API (currently uses low-level internal API)
+import warnings
 
-import jax.numpy as jnp
+import jax
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import setup_style
-from tengri.agn import unified_nlr_blr
+import tengri
+from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-# --- Wavelength grid: 1e-3 -- 100 um ---
-wave_aa = np.logspace(np.log10(100.0), np.log10(1e7), 2000)
-wave_um = wave_aa * 1e-4
+C_AA_PER_S = 2.998e18
 
-# --- Three inclination angles ---
-configs = [
-    {"cos_inc": 0.95, "label": "Type 1 (face-on)", "color": "#1f77b4", "lw": 2.2},
-    {"cos_inc": 0.50, "label": "Intermediate", "color": "#ff7f0e", "lw": 1.8},
-    {"cos_inc": 0.10, "label": "Type 2 (edge-on)", "color": "#d62728", "lw": 2.0},
-]
+INCLINATIONS = (
+    ("Type 1 (face-on, cos i = 0.95)", 0.95, "#1f77b4"),
+    ("Intermediate (cos i = 0.50)", 0.50, "#ff7f0e"),
+    ("Type 2 (edge-on, cos i = 0.10)", 0.10, "#d62728"),
+)
+SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
-fig, ax = plt.subplots(figsize=(8, 5))
-
-wave_jnp = jnp.array(wave_aa)
-for cfg in configs:
-    lnu = unified_nlr_blr(
-        wave_jnp,
-        agn_log_lbol=11.0,
-        agn_cos_inc=cfg["cos_inc"],
-        agn_theta_torus=30.0,
-        agn_log_mbh=8.0,
-        agn_frac=1.0,
+ssp = tengri.load_ssp()
+fig, ax = plt.subplots(figsize=(7.5, 4.8))
+for label, cos_inc, color in INCLINATIONS:
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh=SFH,
+        dust=DUST,
+        agn={
+            "*": tengri.FIXED,
+            "log_lbol": 12.5,
+            "frac": 1.0,
+            "cos_inc": cos_inc,
+            "disc": {"type": "multicolor", "*": tengri.FIXED},
+            "torus": {"type": "skirtor", "*": tengri.FIXED},
+            "lines": {"type": "blr", "*": tengri.FIXED},
+        },
+        redshift=tengri.Fixed(0.0),
     )
-    nulnu = np.array(lnu) * 3e18 / wave_aa  # νLν
-    mask = nulnu > 0
-    ax.loglog(wave_um[mask], nulnu[mask], color=cfg["color"], lw=cfg["lw"], label=cfg["label"])
+    p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    out = model.predict_rest_sed(p)
+    wave_um = np.asarray(out.wavelength) * 1.0e-4
+    nu_l_nu = C_AA_PER_S / np.asarray(out.wavelength) * np.asarray(out.sed)
+    ax.loglog(wave_um, nu_l_nu, color=color, lw=1.8, label=label)
 
-# Mark key wavelengths
-for wl, lbl in [(0.1216, r"Ly$\alpha$"), (0.6563, r"H$\alpha$"), (9.7, "Silicate")]:
-    ax.axvline(wl, color="grey", ls=":", lw=0.7, alpha=0.5)
-    ax.text(
-        wl * 1.05,
-        ax.get_ylim()[0] if ax.get_ylim()[0] > 0 else 1e35,
-        lbl,
-        fontsize=10,
-        color="grey",
-        va="bottom",
-        rotation=90,
-    )
+for wl_um, name in [(0.1216, r"Ly$\alpha$"), (0.6563, r"H$\alpha$"), (9.7, "silicate")]:
+    ax.axvline(wl_um, color="0.6", ls=":", lw=0.7)
+    ax.text(wl_um * 1.05, 1.5e41, name, fontsize=8, color="0.45", va="bottom", rotation=90)
 
-ax.set_xlim(1e-3, 100)
-ax.set_ylim(1e41, 1e46)
-ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
-ax.set_title("Type 1 vs Type 2 AGN: Same Physics, Different Viewing Angle")
-ax.legend(fontsize=10, frameon=False)
+ax.set(
+    xlim=(1.0e-3, 100.0),
+    ylim=(1.0e41, 1.0e46),
+    xlabel=r"Rest-frame wavelength $\lambda$ [$\mu$m]",
+    ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
+)
+ax.legend(frameon=False, fontsize=9, loc="lower center")
 fig.tight_layout()
 plt.savefig("plot_agn_type12.png", dpi=150, bbox_inches="tight")

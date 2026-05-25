@@ -1,0 +1,101 @@
+"""
+Three empirical alpha_OX-L_2500 prescriptions diverge at the quasar peak
+==========================================================================
+
+The CIGALE-faithful corona derives the X-ray normalisation from
+``L_2500`` via the empirical alpha_OX-L_2500 correlation. tengri ships
+three published parametrisations:
+
+- ``just2007`` (Just et al. 2007 Eq. 3, the X-CIGALE default)
+- ``lusso_risaliti_2016`` (refit on 2685 SDSS+XMM quasars)
+- ``lusso_risaliti_2017`` (steeper slope, high-z sample, used by AGNfitter-rx)
+
+The three agree at Seyfert luminosities and diverge by tenths of a dex
+at quasar L_2500. The left panel shows the alpha_OX(L_2500) curves; the
+right panel propagates the divergence into the X-ray spectrum at the
+upper end (L_bol = 1e46 erg/s, a luminous quasar), where the three
+predictions for the 2-10 keV luminosity differ by a factor of ~2.
+
+References
+----------
+- Just et al. 2007, ApJ 665, 1004.
+- Lusso & Risaliti 2016, ApJ 819, 154.
+- Lusso & Risaliti 2017, A&A 602, A79.
+"""
+
+import warnings
+
+import jax.numpy as jnp
+import matplotlib.pyplot as plt
+import numpy as np
+
+from tengri.analysis.plotting import setup_style
+from tengri.xray import alpha_ox_from_l2500, xray_agn_corona
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+RELATIONS = [
+    ("just2007", "Just+07 (X-CIGALE default)", "C0"),
+    ("lusso_risaliti_2016", "Lusso & Risaliti 2016", "C2"),
+    ("lusso_risaliti_2017", "Lusso & Risaliti 2017", "C3"),
+]
+
+# Hopkins+2007 BC=5.15 at 2500 A
+_BC_NU = 5.15 * 1.199e15
+
+# Left panel: alpha_OX(L_2500) curves
+log_l2500_grid = np.linspace(27.0, 31.5, 200)
+l2500_grid = 10.0**log_l2500_grid
+
+fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(11.0, 4.4))
+for relation, label, color in RELATIONS:
+    alpha_vals = np.asarray([float(alpha_ox_from_l2500(l, relation=relation)) for l in l2500_grid])
+    ax_a.plot(log_l2500_grid, alpha_vals, color=color, lw=1.6, label=label)
+
+# Mark a few canonical luminosity anchors
+for L_bol, lbl in [(1.0e43, "Sy"), (1.0e45, "QSO"), (1.0e47, "luminous QSO")]:
+    L_2500 = L_bol / _BC_NU
+    ax_a.axvline(np.log10(L_2500), color="0.7", lw=0.5, ls=":")
+    ax_a.text(np.log10(L_2500), -1.05, lbl, fontsize=8, color="0.4", rotation=90, va="bottom")
+
+ax_a.set(
+    xlabel=r"$\log L_{2500}$  [erg s$^{-1}$ Hz$^{-1}$]",
+    ylabel=r"$\alpha_{\rm OX}$",
+    xlim=(27.0, 31.5),
+    ylim=(-2.0, -1.0),
+)
+ax_a.legend(frameon=False, fontsize=9, loc="upper right")
+
+# Right panel: resulting X-ray spectra at L_bol = 1e46 (high quasar regime)
+L_BOL = 1.0e46
+L_2500 = L_BOL / _BC_NU
+wavelength = jnp.logspace(np.log10(0.0124), np.log10(124.0), 512)
+wave_keV = 12.398 / np.asarray(wavelength)
+
+for relation, label, color in RELATIONS:
+    sed = np.asarray(
+        xray_agn_corona(wavelength, l_2500_30deg_erg_hz=L_2500, alpha_ox_relation=relation)
+    )
+    ax_b.loglog(wave_keV, sed, color=color, lw=1.6, label=label)
+
+ax_b.axvspan(2.0, 10.0, alpha=0.10, color="C2")
+ax_b.text(4.0, 5.0e21, "hard band\n(2–10 keV)", fontsize=7, color="C2", ha="center")
+ax_b.set(
+    xlim=(0.1, 1000.0),
+    ylim=(1.0e21, 1.0e27),
+    xlabel="Energy [keV]",
+    ylabel=r"$L_\nu$  [erg s$^{-1}$ Hz$^{-1}$]",
+)
+ax_b.text(
+    0.04,
+    0.95,
+    rf"$L_{{\rm bol}} = 10^{{{int(np.log10(L_BOL))}}}$ erg/s",
+    transform=ax_b.transAxes,
+    va="top",
+    fontsize=9,
+)
+ax_b.legend(frameon=False, fontsize=8, loc="lower right")
+
+fig.tight_layout()
+plt.savefig("plot_alpha_ox_relations.png", dpi=150, bbox_inches="tight")

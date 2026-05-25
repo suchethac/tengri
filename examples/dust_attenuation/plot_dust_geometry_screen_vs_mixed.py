@@ -28,7 +28,8 @@ import warnings
 import jax
 import jax.numpy as jnp
 import matplotlib
-matplotlib.use('Agg')
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -79,8 +80,7 @@ colors_mixed = plt.cm.Oranges(np.linspace(0.4, 0.95, len(tau_v_values)))
 fig, (ax_sed, ax_attn) = plt.subplots(1, 2, figsize=(11.0, 4.5))
 
 ax_sed.loglog(
-    wave, nu * sed_intrinsic, color="0.0", lw=1.5, label="intrinsic",
-    zorder=5, alpha=0.6
+    wave, nu * sed_intrinsic, color="0.0", lw=1.5, label="intrinsic", zorder=5, alpha=0.6
 )
 
 for tau_v, color_s, color_m in zip(tau_v_values, colors_screen, colors_mixed):
@@ -88,20 +88,20 @@ for tau_v, color_s, color_m in zip(tau_v_values, colors_screen, colors_mixed):
     tau_lambda = k_lambda * tau_v
     transmission_screen = np.exp(-tau_lambda)
     sed_screen = sed_intrinsic * transmission_screen
-    ax_sed.loglog(wave, nu * sed_screen, color=color_s, lw=1.3,
-                  label=f"screen τ_V={tau_v:.1f}")
+    ax_sed.loglog(wave, nu * sed_screen, color=color_s, lw=1.3, label=f"screen τ_V={tau_v:.1f}")
 
     # Mixed geometry: transmission = (1 - exp(-tau_lambda)) / tau_lambda
     # For small tau_lambda, use Taylor expansion to avoid division by zero
-    with np.errstate(divide='ignore', invalid='ignore'):
+    with np.errstate(divide="ignore", invalid="ignore"):
         transmission_mixed = np.where(
             tau_lambda > 1e-6,
             (1.0 - np.exp(-tau_lambda)) / tau_lambda,
-            1.0 - tau_lambda * (1.0 - 0.5 * tau_lambda)  # Taylor expansion
+            1.0 - tau_lambda * (1.0 - 0.5 * tau_lambda),  # Taylor expansion
         )
     sed_mixed = sed_intrinsic * transmission_mixed
-    ax_sed.loglog(wave, nu * sed_mixed, color=color_m, lw=1.3,
-                  label=f"mixed τ_V={tau_v:.1f}", ls="--")
+    ax_sed.loglog(
+        wave, nu * sed_mixed, color=color_m, lw=1.3, label=f"mixed τ_V={tau_v:.1f}", ls="--"
+    )
 
 ax_sed.set(
     xlim=(900, 3e4),
@@ -127,15 +127,14 @@ for tau_v, color_s, color_m in zip(tau_v_values, colors_screen, colors_mixed):
     a_v_screen = -2.5 * np.log10(np.exp(-tau_v) + 1e-10)
     a_eff_screen = a_lambda_screen / a_v_screen
 
-    ax_attn.semilogx(wave, a_eff_screen, color=color_s, lw=1.3,
-                     label=f"screen τ_V={tau_v:.1f}")
+    ax_attn.semilogx(wave, a_eff_screen, color=color_s, lw=1.3, label=f"screen τ_V={tau_v:.1f}")
 
     # Mixed transmission
-    with np.errstate(divide='ignore', invalid='ignore'):
+    with np.errstate(divide="ignore", invalid="ignore"):
         transmission_mixed = np.where(
             tau_lambda > 1e-6,
             (1.0 - np.exp(-tau_lambda)) / tau_lambda,
-            1.0 - tau_lambda * (1.0 - 0.5 * tau_lambda)
+            1.0 - tau_lambda * (1.0 - 0.5 * tau_lambda),
         )
     a_lambda_mixed = -2.5 * np.log10(transmission_mixed + 1e-10)
     # For mixed, A_V is different from tau_V; compute from V-band transmission
@@ -143,8 +142,9 @@ for tau_v, color_s, color_m in zip(tau_v_values, colors_screen, colors_mixed):
     a_v_mixed = -2.5 * np.log10(tau_v_mixed + 1e-10)
     a_eff_mixed = a_lambda_mixed / a_v_mixed
 
-    ax_attn.semilogx(wave, a_eff_mixed, color=color_m, lw=1.3,
-                     label=f"mixed τ_V={tau_v:.1f}", ls="--")
+    ax_attn.semilogx(
+        wave, a_eff_mixed, color=color_m, lw=1.3, label=f"mixed τ_V={tau_v:.1f}", ls="--"
+    )
 
 # Calzetti reference curve
 rv = 4.05

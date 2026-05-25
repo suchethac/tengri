@@ -309,6 +309,26 @@ class TestTypeMapping:
         assert params.dla is True
         assert "dla_log_n_hi" in params.all_params
 
+    def test_igm_model_madau_propagated(self):
+        """Regression for #344: igm={'type': 'madau'} must set igm_model='madau'."""
+        params = parse_groups(igm={"type": "madau"}, redshift=Fixed(0.1))
+        assert params.igm_model == "madau"
+
+    def test_igm_model_inoue14_propagated(self):
+        """Regression for #344: igm={'type': 'inoue14'} must select Inoue, not the default."""
+        params = parse_groups(igm={"type": "inoue14"}, redshift=Fixed(0.1))
+        assert params.igm_model == "inoue"
+
+    def test_igm_model_inoue_alias_propagated(self):
+        """The short alias 'inoue' resolves to the canonical 'inoue' name."""
+        params = parse_groups(igm={"type": "inoue"}, redshift=Fixed(0.1))
+        assert params.igm_model == "inoue"
+
+    def test_igm_none_does_not_set_model(self):
+        """igm={'type': 'none'} must not error and must leave igm_model at its default."""
+        params = parse_groups(igm={"type": "none"}, redshift=Fixed(0.1))
+        assert params.apply_igm is False
+
     def test_radio_condon92(self):
         """radio={'type': 'condon92'} should set radio=True."""
         params = parse_groups(

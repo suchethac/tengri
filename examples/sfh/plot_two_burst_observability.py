@@ -19,7 +19,6 @@ Uses rest-frame SED modeling with public API only (no hand-rolled photometry).
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -193,14 +192,14 @@ sed_c_combined = sed_c_a_interp + sed_c_y
 # ────────────────────────────────────────────────────────────────────────────
 # Plot: Top panel = SFH, Bottom panel = rest-frame νL_ν SEDs
 # ────────────────────────────────────────────────────────────────────────────
-fig, axes = plt.subplots(
-    2, 1, figsize=(7, 7), sharex=False, gridspec_kw={"height_ratios": [1, 1]}
-)
+fig, axes = plt.subplots(2, 1, figsize=(7, 7), sharex=False, gridspec_kw={"height_ratios": [1, 1]})
 
 # ── Top panel: SFH ──────────────────────────────────────────────────────────
 ax_sfh = axes[0]
 
-ax_sfh.fill_between(t_gyr, 0, sfh_ancient, alpha=0.5, color="#1f77b4", label="Ancient burst (10 Gyr)")
+ax_sfh.fill_between(
+    t_gyr, 0, sfh_ancient, alpha=0.5, color="#1f77b4", label="Ancient burst (10 Gyr)"
+)
 ax_sfh.plot(t_gyr, sfh_ancient, color="#1f77b4", lw=1.5)
 
 ax_sfh.fill_between(t_gyr, 0, sfh_young, alpha=0.5, color="#ff7f0e", label="Young burst (300 Myr)")
