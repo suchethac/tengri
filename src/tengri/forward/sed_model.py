@@ -4063,6 +4063,15 @@ class SEDModel:
         # chain via ``run_components``. The chain depends only on structural
         # config (spec, ssp_data, filters, approx), all of which are immutable
         # after ``__init__``.
+        # Validate param keys at the orchestrator entry — silent drops
+        # of typo'd or stale override keys produce plausible-looking but
+        # wrong physics. Covers the dict-merge code path that
+        # ``predict_observables_jit`` already guards at line ~4242
+        # (#314). Skip in JIT-runtime threading mode where the JIT
+        # entry point has already validated the caller's dict.
+        if fixed_values is None:
+            check_unknown_params(params, self._param_map)
+
         cached = getattr(self, "_cached_component_chain", None)
         if cached is None:
             cached = self._build_component_chain()

@@ -464,9 +464,20 @@ def _recognized_param_keys(param_map):
     return recognized
 
 
+#: Public-key prefixes that belong to sibling sub-models composed alongside
+#: ``SEDModel`` in higher-level wrappers (``ForwardModel`` + ``SpatialModel``,
+#: etc.) and pass through the params dict on their way to a different
+#: handler. We recognize them so the SED-side validator doesn't false-flag
+#: legitimate sub-model kwargs as typos (#314).
+_PASSTHROUGH_PARAM_PREFIXES: tuple[str, ...] = ("spatial_",)
+
+
 def _unknown_param_keys(params, param_map):
     """Return sorted list of param keys not recognized for ``param_map``."""
-    return sorted(set(params.keys()) - _recognized_param_keys(param_map))
+    recognized = _recognized_param_keys(param_map)
+    return sorted(
+        k for k in params if k not in recognized and not k.startswith(_PASSTHROUGH_PARAM_PREFIXES)
+    )
 
 
 def _unknown_param_msg(unrecognized, param_map):
