@@ -185,14 +185,21 @@ _VALID_NEBULAR_TYPES = {
     "cb19",
 }
 
-#: Valid IGM types. ``inoue`` is accepted as an alias for ``inoue14`` to match
-#: the canonical name consumed by :meth:`SEDModel._init_igm`.
-_VALID_IGM_TYPES = {
-    "none",
-    "madau",
-    "inoue",
-    "inoue14",
-}
+
+def _valid_igm_types() -> frozenset[str]:
+    """Derive accepted ``igm.type`` values from :data:`IGM_MODELS`.
+
+    Following ADR-0005 / ADR-0008 (single source of truth), the
+    grammar-layer validator views the runtime registry directly rather
+    than maintaining a parallel hand-written set. Adding a new IGM
+    transmission model = one ``register_igm_model`` call in
+    ``components/igm/__init__.py``; this validator picks it up
+    automatically.
+    """
+    from tengri.components.igm import IGM_MODELS
+
+    return frozenset(IGM_MODELS.keys())
+
 
 #: Map grammar-layer IGM names to the canonical form consumed by
 #: :meth:`SEDModel._init_igm` (which only accepts ``'inoue'`` / ``'madau'``).
@@ -202,17 +209,19 @@ _IGM_TYPE_ALIASES = {
     "madau": "madau",
 }
 
-#: Valid radio types.
-_VALID_RADIO_TYPES = {
-    "none",
-    "condon92",
-}
 
-#: Valid X-ray types.
-_VALID_XRAY_TYPES = {
-    "none",
-    "simple",
-}
+def _valid_radio_types() -> frozenset[str]:
+    """Derive accepted ``radio.type`` values from :data:`RADIO_MODELS`."""
+    from tengri.components.radio import RADIO_MODELS
+
+    return frozenset(RADIO_MODELS.keys())
+
+
+def _valid_xray_types() -> frozenset[str]:
+    """Derive accepted ``xray.type`` values from :data:`XRAY_MODELS`."""
+    from tengri.components.xray import XRAY_MODELS
+
+    return frozenset(XRAY_MODELS.keys())
 
 
 def _valid_dust_laws() -> frozenset[str]:
@@ -704,8 +713,9 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
     igm_type = igm_dict.get("type", "madau")
 
     # Validate type
-    if igm_type not in _VALID_IGM_TYPES:
-        suggestions = difflib.get_close_matches(igm_type, _VALID_IGM_TYPES, n=2, cutoff=0.6)
+    valid_igm = _valid_igm_types()
+    if igm_type not in valid_igm:
+        suggestions = difflib.get_close_matches(igm_type, valid_igm, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown IGM type '{igm_type}'.{suggest_str}")
 
@@ -733,8 +743,9 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
     radio_type = radio_dict.get("type", "none")
 
     # Validate type
-    if radio_type not in _VALID_RADIO_TYPES:
-        suggestions = difflib.get_close_matches(radio_type, _VALID_RADIO_TYPES, n=2, cutoff=0.6)
+    valid_radio = _valid_radio_types()
+    if radio_type not in valid_radio:
+        suggestions = difflib.get_close_matches(radio_type, valid_radio, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown radio type '{radio_type}'.{suggest_str}")
 
@@ -746,8 +757,9 @@ def _translate_xray(xray_dict: dict, result: dict) -> None:
     xray_type = xray_dict.get("type", "none")
 
     # Validate type
-    if xray_type not in _VALID_XRAY_TYPES:
-        suggestions = difflib.get_close_matches(xray_type, _VALID_XRAY_TYPES, n=2, cutoff=0.6)
+    valid_xray = _valid_xray_types()
+    if xray_type not in valid_xray:
+        suggestions = difflib.get_close_matches(xray_type, valid_xray, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown X-ray type '{xray_type}'.{suggest_str}")
 
